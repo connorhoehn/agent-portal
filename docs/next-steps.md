@@ -432,3 +432,26 @@ The rule everywhere: `INSECURE_DEV_MODE=true` is the opt-in, `NODE_ENV=productio
 7. **ui-components local checkout.** Your own checkout is 50 commits behind origin with 139 uncommitted files; it was deliberately not touched.
 8. **Deploy manifests that now refuse to start.** `k8s/crds/middleware-workload.yaml` sets neither the signing secret nor the policy store (it used to start and deny everything; now it exits 2 naming them). live-video-streaming's `k8s/base/prometheus.yaml` scrapes `/api/metrics` without a token and will get 401 until a bearer token from a secret is configured. realtime-examples callers must move to `signServiceRequest` before service-runtime 0.8.0 drops body-only envelopes.
 9. **Agents' legacy static header.** `agents/_shared/callbacks.py` still sends `x-lab-auth` beside the signed envelope unless `SERVICE_AUTH_LEGACY_HEADERS=refuse`; harmless (the envelope decides on its own, and the middleware now refuses the bare header by default), but the default can flip to refuse once the deployed images are rebuilt.
+10. **Voice navigator.** Specified in `docs/voice-navigator-spec.md` and section 11 below; nothing built. V1 (verify the live API's function calls with the prototype) comes first.
+
+## 11. Voice navigator (8 November 2026)
+
+The owner wants to move through the portal by talking: "open search", "find me the latest kubernetes experts", "open the computer lab and start a VM in each of my active projects", "any issues with the bot sweeps since yesterday", "tell the platform team I'm out today and set my status", "see if my access request got approved". The prototype in `chatgpt-live-voice/` already talks to OpenAI's live voice model over WebRTC with a local key-holding server; the design in `docs/voice-navigator-spec.md` turns it into a dock in the bottom toolbar with a visible activity ring, a fixed catalogue of twelve typed tools, and the same Cedar gates and tenant scope as the buttons those tools stand in for.
+
+The two decisions that shape it: the browser runs the tools (it already holds the session cookie, the gateway socket, the router and the compute context, and the server has no "post as the user" primitive), and the middleware only mints the session (the API key never leaves it) and meters it with a `voice_session` hold against the user's budget. Reads and navigation run without asking; anything that spends money, runs on a machine or reaches other people shows a confirmation card first. `run_command` composes from a phrase table in safe mode only; the model never writes shell text. Transcripts and audio are never stored or logged; the ledger keeps tool names, outcomes and seconds.
+
+The function-calling mechanics of the live API came from the owner's other session, not from any file here, so the first package pins them against the real API with the prototype before the dock is written. Everything after that is provable locally with a scripted event source (`MOCK_VOICE=1`); only OpenAI itself needs the key.
+
+| id | tier | repo / files | model | done when |
+|---|---|---|---|---|
+| V1 | 0 | `chatgpt-live-voice/`, `docs/voice-navigator-spec.md` §1, `docs/voice/live-events.jsonl` | Opus | every **unverified** tag in §1 is replaced by a fact from a recorded session |
+| P1 | 1 | ui-components `voice/`: `VoiceDock`, `VoiceActivityRing`, `VoiceTurnStrip`; 2.510.0 | Sonnet | stories render every phase, DOM-audit clean, index rows |
+| P2 | 1 | middleware `routes/voice.ts`, `lib/voice/*`, schema `voice_sessions`, `voice_tool_calls`, hold source `voice_session`, Cedar `VoiceNavigate` | Opus | §10 middleware lines pass; mint never leaks the key |
+| P3 | 1 | portal `lib/voice/*`, dock in `SocialFooter` behind `features.voiceNavigator`, read and navigate tools, `MOCK_VOICE` fixture | Opus | the dock runs every phase on the fixture; read tools refuse without `can()` |
+| P4 | 2 | portal: `start_computer`, `open_shell`, `run_command` (phrase table, safe mode), `send_chat_message`, `set_status`, confirmation card | Opus | model-supplied command ignored; message sent once per delivery id; cancel sends nothing |
+| P5 | 2 | middleware `sweep_runs` table + `GET /api/work/sweeps/runs?since=` | Sonnet | a failed sweep run is answerable since a date |
+| P6 | 2 | middleware `GET /api/social/resolve?kind=&name=` | Sonnet | team default channel, channel slug and a person's DM resolve |
+| P7 | 3 | aws-agentcore: delete the prototype, `.env.example`, `dev:mock` sets `MOCK_VOICE` without a key, README | Sonnet | fresh clone without a key boots with the dock unavailable |
+| P8 | 3 | infra: key as a Secrets Manager reference, `VOICE_*` context, nag-clean | Sonnet | infra test asserts the key is a secret reference |
+
+Open questions for the owner are in the spec's §11: which tenants get voice first, whether voice has its own daily minutes or shares the user budget, and whether "a VM in each active project" should be capped by profile.

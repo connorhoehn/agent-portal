@@ -1,0 +1,212 @@
+# The voice navigator: talk your way through the portal
+
+Design for the thing the owner asked for on 8 November 2026: a voice assistant picked up from the bottom toolbar that moves through the apps ("open search", "find me the latest kubernetes experts", "open the computer lab and start a VM in each of my active projects", "has there been any issues with any of the bot sweeps since yesterday", "send a message to the X team that I'm out today and set my status", "open the access tenant and see if my request got approved"), with a visible indication that it is live. Written from the prototype in `chatgpt-live-voice/` and the code named below; nothing here is built.
+
+Tags: **fact** = read in this repository (file named); **fact (OpenAI)** = read in the prototype's own code or README; **unverified** = reported by the owner's other session from OpenAI's live-delegation guide and not confirmed against any file here; **decision** = a choice this design makes.
+
+## 1. What exists today
+
+### The prototype
+
+- `chatgpt-live-voice/` is untracked: `index.html` (one page), `server.mjs` (dependency-free Node), `README.md`, `.env` with the key. **fact**
+- Transport. The browser creates an `RTCPeerConnection` with the microphone track and an `oai-events` data channel, posts the SDP offer to the local server's `/api/session`, which forwards `{ session, transport: { type: 'webrtc', sdp } }` to `POST /v1/live/sessions` with the API key and returns the answer. The key never reaches the browser. **fact (OpenAI)** (`server.mjs:102-126`, `index.html:378-418`)
+- Session object. `model` (`LIVE_MODEL`, default `gpt-live-1`), `instructions` (capped at 20,000 characters), `audio.output.voice` (built-in name or a `voice_…` id), and when `LIVE_DELEGATION_MODEL` is set, `delegation: { type: 'responses', responses: { model, tools: [{ type: 'web_search' }], tool_choice: 'auto' } }`. **fact (OpenAI)** (`server.mjs:106-121`)
+- Events the page handles on the data channel: `session.started`, `session.input_transcript.delta` (you), `session.output_transcript.delta` (assistant), `session.usage.updated` (`usage.seconds`), `session.input_audio.muted/unmuted`, `session.closed` (final usage), `error`. The page sends `session.close`, `session.input_audio.mute/unmute` and `session.commentary.append { delegation_id: null, content }` ("inject" box). **fact (OpenAI)** (`index.html:329-358,422-468`)
+- Hang-up. `session.close` then wait for `session.closed`; if the channel dies, `POST /api/hangup` calls `/v1/live/sessions/{id}/hangup` so the session stops billing. **fact (OpenAI)** (`server.mjs:128-136`, `index.html:422-450`)
+- Level meter. A `WebAudio` analyser on the microphone stream drives a width percentage every animation frame. **fact (OpenAI)** (`index.html:294-308`)
+- Cost. The README quotes about $0.05 per minute of voice, billed per second, with a 15-second minimum per WebRTC session; the page's figure uses that rate and calls it an estimate. **fact (OpenAI)** (`README.md`)
+- Function calls. The prototype defines no functions; `web_search` is the only delegated tool. The mechanics the owner's other session relayed from the live-delegation guide, functions under `delegation.responses.tools` in Responses function-calling JSON schema; a call arriving as a `response.event` envelope with a `delegation_id` whose inner `response.output_item.done` item carries `call_id`, `name`, `arguments`; the client answering with `response.item.create` (`type: 'function_call_output'`) then `response.create`; the voice continuing to talk while the tool runs; `session.thinking.append` for silent context and `session.instructions.append` for steering; a "client delegation" mode (`session.delegation.created` answered by `session.commentary.append`) with no structured arguments, are **unverified**. The build's first package pins them against the real API before anything else is written (§12, V1).
+
+### The portal
+
+- The footer. `SocialFooter` is the shell's one footer row: `EmbeddedSocialEntry` and the today strip on the left, then `FooterIdle` (the page's huddle context: Huddle, Message, device settings) or `FooterCall` (the library's `HuddleBar` fed by the call runtime) filling the rest. It is a non-shrinking sibling after the shell body, never an overlay, and publishes its height as `--shell-collaboration-floor` so panels open above it. **fact** (`portal/src/components/shell/SocialFooter.tsx`, `Layout.tsx:645-648`)
+- Beside it, orgiq only: `DevboxQuickSwitch` and the library's `ComputeDock` (the Computer Lab's tabs and shells). **fact** (`Layout.tsx:656-664`)
+- The command palette. `CommandPalette` from the library, fed by `usePortalCommands()`: a static table of every navigable page with tenant, group, roles and keywords, plus dynamic commands (a pasted UUID opens the invocation). The table mirrors the Cedar grant behind each route so the palette never offers a jump that bounces. **fact** (`portal/src/components/shell/portalCommands.ts:16-66`, `commandKeywords.ts`)
+- Routes the examples need: `/iq/search?q=&type=person` (`SearchPage` reads `q`, `type`, `tab`, `sort`, `scope` from the URL and calls `/api/search`), `/iq/local-compute` (the Computer Lab, "Local compute" in the palette), `/iq/projects`, `/admin/bots`, `/iq/work/findings`, `/social/teams` and `/social/channels/:slug`, `/access/requests`. **fact** (`App.tsx`, `portalCommands.ts:105-326`, `pages/search/SearchPage.tsx:138`, `searchModel.ts`)
+- Session. `useSession()` gives `{ sub, name, role, tenant, grants, switchable, availableTenants, masquerading }`; `useCapabilities()` gives `can(action)` for client-side gating that mirrors Cedar. **fact** (`portal/src/lib/auth.tsx:19-32`, `lib/capabilities.tsx:163`)
+- Realtime. The browser holds the gateway socket (`/ws`, token from `GET /api/session/realtime-token`, `lib/realtimeToken.ts:21`) and sends chat with `useChat(channel).sendMessage(text, { displayName, clientDeliveryId })`; presence is `usePresence('social:lobby', { join: true })` with `setStatus('online' | 'away' | 'busy' | 'offline')` and `updateMetadata(meta)`. Posting into a channel from the server does not exist: even the artifact "post" route returns the message to the browser, which sends it over the socket. **fact** (`pages/social/SocialConversation.tsx:184,270`, `components/shell/EmbeddedSocial.tsx:65`, `realtime-modules/dist/client/usePresence.d.ts`, `middleware/src/routes/conversation-artifact.ts:152-160`)
+- Compute. `ComputeHost` mounts the one `ComputeProvider` (client from `createComputeClient`, `canManage = ManageDevbox`, shells only with `OpenDevboxShell`); `useCompute()` exposes `computers`, `projects`, `create({ label, projectId })`, `stop`, `refresh`; `openShell({ id, label, sessionId, cwd })` opens or focuses a PTY tab, refusing at a quota of ten. **fact** (`portal/src/components/compute/ComputeHost.tsx:200-232`, `ui-components/dist/compute.d.ts:199-240,575-579,1351-1358`)
+- Toasts. `toastPending(title, detail)` / `toastUpdate(id, patch)` for background work the user should see finish. **fact** (`portal/src/lib/toastStore.ts:54-62`)
+- Library composites a dock can be built from today: `HuddleBar` (name, phase, statusLabel, startedAt, mic toggle with `level`, extras, onLeave), `AudioLevelMeter` (`level` 0..1, segments, disabled), `StatusPill`, `Toast`, `CommandPalette`, `Drawer`, `Spinner`. There is no voice dock, no transcript strip and no "assistant is speaking" ring. **fact** (`ui-components/docs/COMPONENT_INDEX.md`, `dist/video.d.ts:14-25`, `HuddleBarProps`)
+
+### The middleware
+
+- Search. `GET /api/search?q=&type=person|team|initiative|work|decision|knowledge|asset|recording&sort=relevance|recent&limit=&offset=` behind `requireTenant('orgiq')` and `requireAction('Search')`; results carry `title`, `description`, `subtitle`, `href`. **fact** (`middleware/src/routes/search.ts:7-20`, `providers/search.ts:21-25`)
+- Initiatives. `GET /api/graph/projects?scope=mine` narrows to initiatives the session's linked person owns or contributes to. **fact** (`routes/projects.ts:33-49`)
+- Computer Lab. `POST /api/devbox/boxes { label, projectId }` (the caller must own or contribute to the initiative; the box takes the initiative's profile), `POST /api/devbox/:sessionId/command { command, mode: 'safe' | 'full', cwd }` behind `OpenDevboxShell`: safe mode refuses shell metacharacters and allows only prefixes from `DEVBOX_COMMAND_ALLOWLIST` (default `ls`, `cat `, `head `, `tail `, `wc `, `stat `, `pwd`, `whoami`, `df`, `du`, `uname`, `git status`, `git log`, `git diff`, `git show`, `git branch`, `pytest`, `python -m pytest`, version prints); output streams back as SSE with a trailing cwd marker. `POST /:sessionId/shell-url` mints the PTY URL. **fact** (`routes/devbox.ts:200-270,526-545,901-935,1077`)
+- Work and sweeps. `GET /api/work/findings?status=&sweep=&limit=` (rows: `sweep`, `severity`, `title`, `detail`, `status`, `firstSeenAt`, `lastSeenAt`), `POST /api/work/sweeps/run` (`RunSweeps`, reads the graph only, spends nothing), `GET /api/work/findings/stats`, `POST /api/work/jobs { title, prompt, kind, ... }` (`ManageDevbox`). The sweeps are `bus_factor`, `stale_docs`, `orphan_decisions` plus `lab-signal`; a sweep run is not persisted, only its findings are. **fact** (`routes/work.ts:234-262,387-440`, `providers/org-sweeps.ts:22-37,299,416-422`)
+- Bots. `GET /api/bots/active-runs` (`ActiveRuns`), `GET /api/bots/runs?botIds=` (rows: `status: running|done|failed|skipped`, `costUsd`, `startedAt`, `finishedAt`, `error`), `GET /api/bots/initiative-runs?orgProjectId=`. **fact** (`routes/bots.ts:553-647`, `providers/bots.ts:109-128,510`)
+- Access. `GET /api/access/requests?scope=mine|reports|all&status=&q=` (`ViewAccess`; `mine` = requests the actor is party to; `q` matches the presented row), `GET /api/access/requests/:id`. **fact** (`routes/access.ts:303-336`)
+- Social. `POST /api/social/dms { userId }` opens a DM channel (`PostMessage`); channel membership and posting are gated in the gateway by `PostMessage`; teams and channels are read from `/api/social/teams` and `/api/social/channels`. **fact** (`routes/social.ts:694-712`, `lib/authz.ts` action list)
+- Authz. The Cedar action list the middleware knows (`Search`, `ViewWork`, `ManageDevbox`, `OpenDevboxShell`, `RunDevboxTask`, `RunSweeps`, `ActiveRuns`, `ViewSocial`, `PostMessage`, `ViewAccess`, `RequestAccess`, `RealtimeToken`, …) and `isAllowed(session, action)` with a 60-second cache; no `POLICY_STORE_ID` denies unless `INSECURE_DEV_MODE`. **fact** (`lib/authz.ts:40-160`)
+- Money. `reserveSpend({ initiativeId, actorId, source, sourceId, forecast, confirmed, expiresInMs })` is the one chokepoint; `HoldSource` and the schema checks list `bot_run | job | box_task | agent_loop | agent_project_run | agent_invoke | microvm` (the ledger also has `bff_call`); `recordSpend` settles; `recordBffCall({ feature, model, usage, actorId, initiativeId })` prices a BFF-side model call from the price table; `estimateUsageCost(modelId, usage)` prices token usage from SSM `/orgiq/pricing/model_prices` with defaults. **fact** (`lib/spend-holds.ts:68-80,197,289`, `providers/spend-ledger.ts:27,120,205`, `lib/model-prices.ts:143-232`, `schema/spend_holds_schema.sql:25,43`, `spend_ledger_schema.sql:63`)
+- Headers. The portal's CloudFront `ResponseHeadersPolicy` carries `connect-src` from `-c cspConnectOrigins` plus `media-src 'self' blob:`; the middleware's own responses are `default-src 'none'`. **fact** (`infra/lib/portal-stack.ts:255-276`, `middleware/src/lib/security-headers.ts:20`)
+- Dev mode. `INSECURE_DEV_MODE=true` is the only switch that opens a security default; the demo persona is `sub = 'demo-user'`, cookie-less, and may wear any persona. **fact** (`docs/fail-open-audit.md` §2, `lib/session.ts:114-123,479`)
+
+## 2. The shape
+
+- **decision** The browser runs the tools. The voice session's function calls are executed by the portal, in the user's tab, through the same `fetch` calls, gateway socket and compute context a click would use, with the session cookie and the realtime token the tab already holds. The middleware's only new job is to mint the voice session (§6) and to meter it (§7). Reasons: every tool then inherits exactly the Cedar gate and tenant scope of the button it stands in for (there is no second authorization path to keep in step); chat and presence can only be sent from the browser today, since the server has no "post as the user" primitive (§1); navigation, `openShell` and the toast host are browser state; and the OpenAI data channel terminates in the browser anyway, so a server-side executor would need its own copy of every event. The cost is that a tool result must be shaped in the browser before it goes back to the model, which is where the injection boundary lives (§6).
+- **decision** One session per tab, started and stopped from the dock, never auto-started. It survives route changes because the dock lives in the shell (`Layout.tsx`), outside the page tree. A tenant switch ends it: the tools' tenant is the session's tenant at mint time, and the portal's "entering another workspace fully leaves this one" rule applies to the voice too.
+- **decision** The API key stays in the middleware. `POST /api/voice/sessions` takes the SDP offer and returns the SDP answer, exactly as `server.mjs` does, with the instructions, the tool catalogue and the voice chosen server-side. The browser never sees `OPENAI_API_KEY` and cannot change the tool list or the instructions.
+- **decision** Tools are the catalogue in §4 and nothing else. There is no generic "call this API" tool and no free-text shell. Anything the catalogue cannot express the assistant says it cannot do and offers the nearest page.
+- **decision** The model may act without asking for reads and navigation; it must ask before anything that spends money, runs on a machine, or reaches other people, and the dock shows the pending action as a card with Confirm / Cancel (§5). Confirmation is by voice ("yes") or by click; the tool result records which.
+- **decision** `chatgpt-live-voice/` is retired once package P2 lands: `server.mjs` is replaced by the middleware route, `index.html` by the dock. The folder is deleted, not moved into `portal/prototypes/`; the README's facts are carried into this document (§1) and the `.env` key goes into `middleware/.env` as `OPENAI_API_KEY`.
+
+## 3. Sequence
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as User
+  participant D as VoiceDock (portal)
+  participant M as Middleware
+  participant O as OpenAI live session
+  participant P as Portal pages / router / gateway socket
+  U->>D: click the dock button (or Ctrl+Shift+Space)
+  D->>D: getUserMedia, RTCPeerConnection, data channel, SDP offer
+  D->>M: POST /api/voice/sessions { sdp }
+  M->>M: Cedar VoiceNavigate, tenant, reserveSpend(voice_session)
+  M->>O: POST /v1/live/sessions { session: {model, instructions, voice, delegation.tools}, transport: {webrtc, sdp} }
+  O-->>M: SDP answer, session id
+  M-->>D: { sdp, voiceSessionId, holdId, budget }
+  D->>D: setRemoteDescription; phase = listening
+  U->>O: "find me the latest kubernetes experts"
+  O-->>D: response.event { delegation_id, output_item.done: { name: search_people, arguments } }
+  D->>D: phase = executing; card "Searching people for kubernetes"
+  D->>P: navigate('/iq/search?q=kubernetes&type=person'); GET /api/search?q=kubernetes&type=person
+  P-->>D: records (title, subtitle, href)
+  D->>O: response.item.create { function_call_output: top 5 as data } ; response.create
+  O-->>U: "I found five people ..." (phase = speaking)
+  U->>O: "send a message to the platform team that I'm out today"
+  O-->>D: send_chat_message { team: "platform", text }
+  D->>D: card "Post to #platform: 'Out today'" (Confirm / Cancel)
+  U->>D: "yes"
+  D->>P: useChat(channel).sendMessage(text); usePresence.setStatus('away'); toastPending("Posting to #platform")
+  D->>O: function_call_output { posted: true }
+  D->>M: POST /api/voice/sessions/:id/events (tool call row: name, args hash, outcome, ms)
+  U->>D: Hang up
+  D->>O: session.close ; O-->>D: session.closed { usage.seconds }
+  D->>M: POST /api/voice/sessions/:id/close { seconds } ; M->>M: recordSpend settles the hold
+```
+
+## 4. Tool catalogue
+
+Every tool takes the active tenant from the session and refuses an argument that names another tenant. Arguments are validated against the schema in the browser before any call. "Says" is what the instructions tell the model to say while the tool runs; the dock shows the same line.
+
+| tool | arguments | maps to (today) | gate | spend | idempotent | says | missing |
+|---|---|---|---|---|---|---|---|
+| `navigate` | `{ page: enum of palette page ids, params?: {q?, type?, id?} }` | `useNavigate()` to the palette entry's `path`; the page id list is generated from `portalCommands.ts` PAGES so a page that bounces is never offered | the palette's `roles` and tenant (`portalCommands.ts:16-66`) | none | yes | "Opening search." | a `pageId` on each PAGES entry (today they have label and path only) |
+| `search_people` | `{ query: string, limit?: 1..10 }` | navigate `/iq/search?q=&type=person&tab=answer` and `GET /api/search?q=&type=person&limit=` (`routes/search.ts:10-20`) | `Search` | none | yes | "Searching people for kubernetes." | nothing; "latest" maps to `sort=recent` |
+| `search_records` | `{ query, type?: initiative|work|decision|knowledge|asset|recording, limit? }` | same route with `type` | `Search` | none | yes | "Searching." | nothing |
+| `list_active_initiatives` | `{}` | `GET /api/graph/projects?scope=mine&status=active` (`routes/projects.ts:33`) | mount gate (orgiq) | none | yes | "Looking up your initiatives." | nothing |
+| `open_computer_lab` | `{ initiativeId? }` | navigate `/iq/local-compute` (`portalCommands.ts:142`) | `ViewLocalCompute` / `ManageDevbox` as the route | none | yes | "Opening the Computer Lab." | nothing |
+| `start_computer` | `{ initiativeId }` | `useCompute().create({ label, projectId })` → `POST /api/devbox/boxes` (`routes/devbox.ts:526`) | `ManageDevbox` + stewardship of the initiative (server-side) | the box's own task holds; a running box bills idle time, so **confirm** | no: a second call with the same `initiativeId` reuses a running box from `computers` (`computersForInitiative`, `lib/computeInitiative.ts`) | "Starting a computer for Alpha." | nothing |
+| `open_shell` | `{ computerId, cwd? }` | `openShell({ id, label, sessionId, cwd })` (`compute.d.ts:1351`) | `OpenDevboxShell` (the pane kind refuses otherwise, `ComputeHost.tsx:208`) | none | yes (focuses the open tab) | "Opening a shell on Alpha." | nothing |
+| `run_command` | `{ computerId, command: string }` | `POST /api/devbox/:sessionId/command { command, mode: 'safe', cwd }` (`routes/devbox.ts:901`); the SSE output is captured into the shell tab and summarised (first 20 lines) back to the model | `OpenDevboxShell`; **safe mode only**, the dock never sends `mode: 'full'` | none beyond the box | yes for the allowlisted read-only commands | "Running git log on Alpha." | an allowlist entry for `git log --since` is covered by the `git log` prefix; "print the latest commits since yesterday" becomes `git log --since=yesterday --oneline`, composed by the dock from a small phrase table, never by the model free-form (§6) |
+| `bot_sweep_status` | `{ since: ISO date | 'yesterday' }` | `GET /api/work/findings?status=open&limit=100` filtered by `lastSeenAt >= since` and `severity in (critical, warning)`, plus `GET /api/bots/active-runs` and, per bot on the roster, `GET /api/bots/runs?botIds=` filtered by `status = failed` and `startedAt >= since` (`routes/work.ts:387`, `routes/bots.ts:553,622`) | `ViewWork`, `ActiveRuns`, bots read gate | none | yes | "Checking the sweeps since yesterday." | a persisted sweep-run row (`org-sweeps.ts` keeps findings only), so "did a sweep fail to run" is unanswerable today; package P5 adds `sweep_runs` |
+| `send_chat_message` | `{ target: { kind: 'team' | 'channel' | 'dm', name }, text }` | resolve the target by name from `/api/social/teams`, `/api/social/channels` or the roster (`POST /api/social/dms { userId }` for a DM), then `useChat(channel).sendMessage(text, { displayName, clientDeliveryId })` as `SocialConversation.tsx:270` does | `PostMessage` in the gateway | none | once per `clientDeliveryId` (the dock mints it before confirmation and reuses it on retry) | "I'll post that to #platform once you confirm." then "Posted." | an HTTP route to resolve a team's default channel by name in one call (today it is two reads and a slug match) |
+| `set_status` | `{ status: online|away|busy|offline, message?: string }` | `usePresence('social:lobby').setStatus(status)` and `updateMetadata({ statusMessage })` (`EmbeddedSocial.tsx:65`) | the socket's presence admission | none | yes | "Setting your status to away: out today." | the roster does not render `statusMessage` today (`presenceAvatarUsers`); P4 shows it in the presence tooltip |
+| `access_request_status` | `{ query: string }` | navigate `/access/requests` and `GET /api/access/requests?scope=mine&q=` (`routes/access.ts:303`); answer with status, current step and decider | `ViewAccess` | none | yes | "Checking your access requests." | the `q` match is over the presented row; a request named by the item it asks for works, one named by a person does not |
+| `confirm` | internal | the dock's pending card; the model receives `{ confirmed: true | false, by: 'voice' | 'click' }` as the result of the tool it was asked to confirm | n/a | n/a | n/a | n/a | n/a |
+
+Tools that are deliberately absent: anything that dispatches an agent job (`POST /api/work/jobs`, `/api/bots/dispatch-work`), decides access, edits policy, deletes or stops a computer, or runs in `full` shell mode. They stay clicks.
+
+## 5. The dock
+
+- **decision** A new `@connorhoehn/ui-components/voice` entry with three primitives, added to the library first (frontend discipline): `VoiceDock`, `VoiceActivityRing`, `VoiceTurnStrip`. The portal composes them in `SocialFooter` beside the huddle half, orgiq and social tenants first, behind the `voiceNavigator` feature flag (`lib/features.ts`).
+- `VoiceDock` props: `phase: 'off' | 'connecting' | 'listening' | 'thinking' | 'executing' | 'speaking' | 'confirming' | 'ended' | 'unavailable'`, `level: number` (0..1, the microphone), `outputLevel: number` (0..1, the assistant's audio), `elapsedSeconds`, `budget: { usedUsd, holdUsd } | null`, `pending: { title, detail, onConfirm, onCancel } | null`, `lastLine: { role: 'you' | 'assistant', text } | null`, `onStart`, `onStop`, `onMute`, `muted`, `unavailableReason?: string`, `compact?: boolean`, `className`, `'data-testid'`. It renders a `HuddleBar`-shaped row: the ring, the phase label (`StatusPill` tones: listening = success, executing = info, confirming = warning, unavailable = muted), the last transcript line truncated, the budget meter (`DotMeter`), mute and hang-up (`IconButton`), and the pending card as a popover above the row (`Drawer` is too heavy; a `Popover` anchored to the row, which exists in `shared`).
+- `VoiceActivityRing` props: `level`, `outputLevel`, `phase`, `size?: 'sm' | 'md'`, `label`. The "it is active" visualization: a ring whose stroke width follows `level` while listening, pulses on `outputLevel` while speaking, rotates while thinking or executing, and sits still and dim when off. SVG with the library's tokens; no inline styles in the portal (the component owns its CSS).
+- `VoiceTurnStrip` props: `turns: Array<{ id, role, text, at, toolCalls?: Array<{ name, status: 'running' | 'done' | 'refused' | 'failed', summary }> }>`, `maxVisible?`, `onClear`. An optional transcript strip that opens above the footer in the same slot the huddle chat uses (`useSidePaneHost`), so the user can read what was said and what ran.
+- Phase rules: `listening` after `session.started`; `thinking` from the first `session.output_transcript.delta`-less pause after the user's transcript ends (the API sends no explicit "thinking" event in the prototype's log, so the dock infers it from input end until output starts, **unverified** whether a better signal exists); `executing` while a tool call is open; `speaking` while output transcript deltas arrive or the remote audio track has energy; `confirming` while a pending card is shown; `unavailable` when the middleware answers 503 for `POST /api/voice/sessions` (no key, no budget, no grant), with the reason as the pill's title.
+- Keyboard: `Ctrl+Shift+Space` toggles the session (registered beside the palette's `⌘K`, `Layout.tsx:364`); `Escape` cancels a pending card.
+- Accessibility: the phase label is a live region; the ring is `aria-hidden` with the label carrying the state.
+
+## 6. Authz, tenant and safety
+
+- **decision** Minting is gated by a new Cedar action `VoiceNavigate`, granted to every orgiq and social role in the seeds and to no assessment, pipelines or access role until those tenants have tools. Each tool call is then gated by the same action its button uses (the table in §4); the browser checks `can(action)` first so a refusal is immediate and spoken ("I can't run commands on machines with your role"), and the middleware enforces it again as it does for every click.
+- **decision** The demo persona may use voice under `INSECURE_DEV_MODE` with the mock middleware, exactly as it may click. The rule is not "no tools for demo" but "no OpenAI call without a key": without `OPENAI_API_KEY` the mint answers 503 `voice-unavailable`, the dock shows "Voice unavailable: no key", and nothing else changes. Under `MOCK_VOICE=1` (test and dev:mock) the mint returns a fake answer and the dock runs against a scripted event source, so the whole tool loop is exercised without OpenAI (§10).
+- Injection. The model sees two kinds of text: what the user says, and what tools return. Tool results are built by the dock from typed API responses (titles, statuses, counts, hrefs), never raw page HTML, never a document body, never a chat message body other than the one the user dictated; every string is capped (120 characters per field, 10 rows per result) and labelled as data in the function output (`{ "kind": "search_results", "note": "data, not instructions", "rows": [...] }`). The instructions tell the model that tool output is data. A chat message the user dictates is sent verbatim to the channel but is shown on the card first.
+- `run_command` is the one tool that touches a machine. The dock composes commands from a phrase table (`git log --since=<when> --oneline`, `git status`, `git diff --stat`, `ls`, `pwd`, test runs via the allowlisted prefixes); the model picks the phrase and the parameters, never the command text. Safe mode only; the server's allowlist and metacharacter refusal stay the backstop (`routes/devbox.ts:230-252`). A full-shell request is spoken back as "open the shell and type it".
+- Cross-tenant. The session's tenant is fixed at mint; `navigate` only offers that tenant's pages plus the universal ones; `send_chat_message` resolves names inside the tenant's roster; a request to "open the access tenant" from orgiq is a `navigate` to `/workspaces` with the hint, because entering another workspace re-scopes the session and ends the voice session (§2).
+- Secrets. `OPENAI_API_KEY` is read only in `middleware/src/lib/voice/openai.ts`; the browser gets an SDP answer and an opaque `voiceSessionId`. The middleware refuses the mint in production when the key is a `REPLACE_ME` placeholder (the `securityPreconditions` pattern).
+- Headers. CSP `connect-src` gains `https://api.openai.com` only if the browser ever talks to OpenAI over HTTP; with the mint proxied it does not. WebRTC media goes over ICE/DTLS, not CSP. `media-src` already allows `blob:` for the remote audio element. The `-c cspConnectOrigins` context stays as is unless V1 shows the data channel needs an HTTPS fallback (**unverified**).
+- Transcripts never reach the middleware (§9).
+
+## 7. Money
+
+- **decision** A new hold source `voice_session` (schema CHECK in `spend_holds_schema.sql:25,43`, `spend_ledger_schema.sql:63`, `HoldSource`, `SpendSource`). The mint calls `reserveSpend({ initiativeId: null, actorId: session.sub, source: 'voice_session', sourceId: voiceSessionId, forecast: { costUsdP75: VOICE_USD_PER_MINUTE × VOICE_SESSION_MINUTES_P75, costUsdP25: ... , confidence: 'prior' }, expiresInMs: VOICE_SESSION_MAX_MINUTES × 60_000 + HOLD_GRACE_MS })`. Defaults: `VOICE_USD_PER_MINUTE=0.05` (the README's third-party figure; a config value until the price list says otherwise), p75 10 minutes, max 30 minutes. A refusal is spoken as the dock's `unavailable` reason ("Your budget is used up for today").
+- Settlement. `session.usage.updated` carries `usage.seconds`; the dock posts it on close (`POST /api/voice/sessions/:id/close { seconds }`) and the middleware writes one `recordSpend` row (`costUsd = seconds / 60 × rate`, `costBasis: 'estimated'`, `provider: 'openai'`, `model: LIVE_MODEL`) that settles the hold. A session that never closes (tab killed) is swept by a reaper after `VOICE_SESSION_MAX_MINUTES + grace`: it calls `/v1/live/sessions/{id}/hangup` as `server.mjs:133` does, and books `unknown`, never 0.
+- Cut-off. The dock shows the budget meter from the hold; at 90% it says so ("two minutes left on this session"); at 100% the dock sends `session.close` itself. The middleware reaper is the backstop.
+- Tool spend. The catalogue's tools spend nothing except `start_computer`, whose box takes its own holds through the existing devbox path; the voice session is not charged for it.
+- `provider` gains `'openai'` in the ledger's provider list if it is a CHECK (read `spend_ledger_schema.sql` at build time).
+
+## 8. Local run and configuration
+
+| variable | where | meaning |
+|---|---|---|
+| `OPENAI_API_KEY` | middleware | required for a real session; unset → mint answers 503 `voice-unavailable` and the dock says why |
+| `VOICE_LIVE_MODEL` | middleware | default `gpt-live-1` |
+| `VOICE_DELEGATION_MODEL` | middleware | the Responses model that runs the functions (the prototype's `LIVE_DELEGATION_MODEL`); required for tools; unset → voice answers but every tool call is refused with "tools are off on this deployment" |
+| `VOICE_VOICE` | middleware | built-in voice name or `voice_…` id |
+| `VOICE_USD_PER_MINUTE`, `VOICE_SESSION_MINUTES_P75`, `VOICE_SESSION_MAX_MINUTES` | middleware | §7 |
+| `MOCK_VOICE=1` | middleware (`dev:mock` sets it when no key is present) and portal tests | scripted session: the mint returns a canned answer and the dock reads events from a fixture, so the loop runs offline |
+| `VITE_VOICE_NAVIGATOR=1` / `features.voiceNavigator` | portal | shows the dock |
+
+`dev:mock` with a real `OPENAI_API_KEY` in `middleware/.env` talks to OpenAI; without it `MOCK_VOICE=1` keeps the dock working on fixtures. Nothing else in the portal or middleware changes behaviour when the feature is off.
+
+## 9. Data model and logging
+
+- New table `voice_sessions` (`id TEXT PK`, `tenant`, `actor_sub`, `hold_id UUID REFERENCES spend_holds`, `provider_session_id TEXT`, `model`, `started_at`, `closed_at`, `seconds INT`, `cost_usd NUMERIC(10,4)`, `cost_basis`, `stop_reason TEXT`, `tool_calls INT`), RLS and role grants as the other tenant tables.
+- New table `voice_tool_calls` (`id`, `voice_session_id`, `at`, `name`, `args_sha256 TEXT`, `outcome TEXT CHECK IN ('done','refused','failed','cancelled')`, `confirmed_by TEXT`, `duration_ms`). Arguments are hashed, not stored: a search query or a dictated message is the user's business; what is kept is which tool, whether it was allowed, and how long it took.
+- Stored nowhere: audio, transcripts, the model's words, the user's words. The browser keeps the transcript strip in memory for the session and drops it on close; "copy transcript" is a browser-side action.
+- Logged by the middleware: the mint (actor, tenant, hold id, provider session id), the close (seconds, cost), each tool-call row; never the arguments. The portal logs nothing to the server beyond those rows.
+- Metrics (`emitFleetMetric` style): `voice-sessions-started`, `voice-session-seconds`, `voice-tool-calls{name,outcome}`, `voice-unavailable{reason}`.
+
+## 10. Tests that prove it (one line each)
+
+- `POST /api/voice/sessions` without `VoiceNavigate` is 403, without a key is 503 `voice-unavailable`, with a refused hold is 402 with the refusal, and never leaks the key or the instructions in its body.
+- The mint's session object names exactly the catalogue's functions (snapshot of the JSON schema) and no `web_search`.
+- Every tool in the catalogue has a unit test that a refused `can(action)` produces a `refused` result without a network call.
+- `navigate` refuses a page outside the session's tenant and a page whose `roles` exclude the session's role (table-driven over `portalCommands.ts` PAGES).
+- `run_command` sends `mode: 'safe'` only, composes `git log --since=yesterday --oneline` from the phrase table, and a model-supplied `command` string is ignored.
+- `send_chat_message` shows the card first, sends nothing on cancel, sends once with a stable `clientDeliveryId` on confirm, and retries with the same id.
+- `set_status` calls `setStatus` and `updateMetadata` with the dictated message and nothing else.
+- `bot_sweep_status` answers "nothing since yesterday" from fixtures with only older findings and no failed runs, and names the failed bot when one exists.
+- `access_request_status` answers from `scope=mine` only, even for an approver.
+- A tool result never contains a string longer than 120 characters per field or more than 10 rows (property test over fixture responses).
+- The dock passes through every phase from the scripted event source (`MOCK_VOICE`) and ends in `ended` with the seconds reported; the close posts the seconds once.
+- A session past `VOICE_SESSION_MAX_MINUTES` is closed by the dock at 100% of the hold, and by the reaper when the dock is gone; the ledger row says `unknown` for the reaper's case.
+- The library's `VoiceDock` renders each phase with the right pill tone and no inline styles (the DOM audit's rule), and `VoiceActivityRing` changes stroke width with `level`.
+- A tenant switch ends the session (`session.close` sent, hold settled).
+- Under `INSECURE_DEV_MODE` with no key the portal still loads and the dock shows `unavailable`; nothing else in the suite changes.
+
+## 11. Open questions for the owner
+
+1. Should voice be available in the assessment, pipelines and access tenants from the start (with only `navigate` and the reads), or orgiq and social first? The design says orgiq and social first.
+2. Is the per-user daily budget the right cap for voice, or does voice get its own line (e.g. 60 minutes a day) regardless of agent spend? The design holds against the user budget like everything else.
+3. "Start a VM in each of my active projects" creates one box per initiative, each billing idle time. The design asks for confirmation once for the batch; should it instead cap at the initiatives with a profile that allows it?
+
+## 12. Work packages (tiered, loop-executable)
+
+Each package is one agent in one repository, provable without AWS. "Done when" is the acceptance the agent adds or runs. V1 first; nothing else starts until its findings are in this document.
+
+**Tier 0, verify the API**
+
+- **V1 (Opus, `chatgpt-live-voice/` + this document).** Add two functions (`navigate`, `search_people`) to the prototype's `delegation.responses.tools`, set `LIVE_DELEGATION_MODEL`, and record from a real session: the exact shape of the inbound tool-call event, the exact outbound `function_call_output` shape, whether the voice talks while the tool is open, whether `session.thinking.append` and `session.instructions.append` are accepted, the events during "thinking", and whether the data channel needs any HTTPS endpoint. Write the findings into §1 (replacing every **unverified**) and the raw event log into `docs/voice/live-events.jsonl` with secrets stripped. Done when §1 has no **unverified** tag left and the log is committed.
+
+**Tier 1, the loop end to end (orgiq, mock-first)**
+
+- **P1 (ui-components, Sonnet).** `voice/` entry: `VoiceDock`, `VoiceActivityRing`, `VoiceTurnStrip` with the props in §5, stories, DOM-audit-clean, `COMPONENT_INDEX.md` rows. Release 2.510.0, tarball into `portal/vendor`. Done when the stories render every phase and the index lists the three.
+- **P2 (middleware, Opus).** `routes/voice.ts`: `POST /api/voice/sessions` (mint, `VoiceNavigate`, hold `voice_session`, instructions and the tool catalogue JSON schema generated from `lib/voice/catalogue.ts`), `POST /:id/events` (tool-call rows), `POST /:id/close` (settle), the reaper sweep, `MOCK_VOICE`, config from §8, `lib/voice/openai.ts` with the key. Schema: `voice_sessions`, `voice_tool_calls`, the hold and ledger CHECK additions, RLS, roles, manifest. Cedar: `VoiceNavigate` in the orgiq and social seeds. Done when the §10 middleware lines pass and `tsc` is clean.
+- **P3 (portal, Opus).** `lib/voice/`: the WebRTC client lifted from `index.html` (session, data channel, meter, hang-up), the tool runner (`navigate`, `search_people`, `search_records`, `list_active_initiatives`, `open_computer_lab`, `access_request_status`) with `can()` gating and the result shaping rules, the dock in `SocialFooter` behind `features.voiceNavigator`, the phase machine, the hotkey, the scripted event source for `MOCK_VOICE`. Done when the §10 portal lines for those tools pass and the dock runs through every phase against the fixture.
+
+**Tier 2, the actions that reach machines and people**
+
+- **P4 (portal, Opus).** `start_computer`, `open_shell`, `run_command` (phrase table, safe mode, SSE capture into the shell tab), `send_chat_message`, `set_status`, the confirmation card and `confirm` semantics, `statusMessage` in the presence tooltip. Done when the §10 lines for those tools pass, including the "model-supplied command ignored" and "send once" cases.
+- **P5 (middleware, Sonnet).** `sweep_runs` table and rows written by `runSweep`/`runAllSweeps` (`started_at`, `finished_at`, `status`, `error`, `findings`), `GET /api/work/sweeps/runs?since=`; `bot_sweep_status` in the portal reads it. Done when a failing sweep run is answerable since a date.
+- **P6 (middleware, Sonnet).** `GET /api/social/resolve?kind=team|channel|person&name=` returning the channel to post to, used by `send_chat_message` instead of two reads and a slug match. Done when the resolver test covers team default channel, channel slug and a person's DM.
+
+**Tier 3, finish**
+
+- **P7 (aws-agentcore, Sonnet).** Delete `chatgpt-live-voice/`, move the key to `middleware/.env.example` as a documented variable, `dev:mock` sets `MOCK_VOICE=1` when no key is present, README section "Talk to it", `docs/next-steps.md` §11 updated. Done when a fresh clone with no key boots, shows the dock as unavailable, and the suite is green.
+- **P8 (infra, Sonnet).** `OPENAI_API_KEY` as a Secrets Manager secret on the middleware task (never plaintext), `VOICE_*` context values, a nag-clean synth, SECURITY-NOTES section. Done when the infra test asserts the key arrives as a secret reference.
