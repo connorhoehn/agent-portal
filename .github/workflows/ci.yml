@@ -87,6 +87,26 @@ jobs:
           # The checkout credential is scoped to this repo and would override the
           # dependency token in the rewritten github: URLs (npm ci "Repository not found").
           persist-credentials: false
+      # The github: dependencies (distributed-core, service-runtime, ...) are private
+      # repositories. The workflow token only reads this repository, so a personal
+      # access token with read access to the dependency repositories is required:
+      # a classic PAT with the `repo` scope from an account that can read them,
+      # stored as the GH_PACKAGES_TOKEN secret (repository or organisation level).
+      - name: "Check the dependency token"
+        env:
+          GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
+        run: |
+          if [ -z "$GH_PACKAGES_TOKEN" ]; then
+            echo "::error::GH_PACKAGES_TOKEN secret is not set. npm ci cannot fetch the private github: dependencies without it. Create a PAT with read access to the connorhoehn dependency repositories and add it as a repository secret named GH_PACKAGES_TOKEN."
+            exit 1
+          fi
+      - name: "Let npm fetch github: dependencies"
+        env:
+          GH_PACKAGES_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
+        run: |
+          git config --global url."https://x-access-token:${GH_PACKAGES_TOKEN}@github.com/".insteadOf "ssh://git@github.com/"
+          git config --global --add url."https://x-access-token:${GH_PACKAGES_TOKEN}@github.com/".insteadOf "git@github.com:"
+          git config --global --add url."https://x-access-token:${GH_PACKAGES_TOKEN}@github.com/".insteadOf "https://github.com/"
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
