@@ -235,7 +235,7 @@ test('the V2-7 scripted session: an HR admin asks what the org spent and hears t
   assert.equal(call.name, 'budget');
   const run = await scriptedRun('orgiq', {
     role: 'hr-admin', allow: ['ManageBudgets', 'VoiceNavigate'], call,
-    routes: [route('GET', '/api/spend/report', 200, { totals: { knownUsd: 29.8063, projectedPeriodEndUsd: 112.49 }, groups: [{ key: 'p-auth', label: 'Auth Migration', knownUsd: 9.72 }] })],
+    routes: [route('GET', '/api/spend/report', 200, { totals: { knownUsd: 29.8063, projectedPeriodEndUsd: 112.49 }, groups: [{ key: 'p-auth-migration', label: 'Auth Migration', knownUsd: 9.72 }] })],
   });
   assert.deepEqual(run.calls, [['budget', 'done']]);
   assert.equal(run.summaries[0], 'The org spent $29.81 this month; on pace for $112.49; most: Auth Migration at $9.72');

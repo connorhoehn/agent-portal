@@ -137,7 +137,7 @@ test('a search the server refuses is a refusal, an outage a failure', async () =
 
 test('search answer: a tenant\'s /answer fact with the records it read; no fact falls back to the matching records', async () => {
   const answer = { intent: 'assessment:below-target', text: '2 teams are below the target level: Atlas and Borealis.', records: [
-    { type: 'team', id: 't-atlas', title: 'Atlas', href: '/assessment/teams/t-atlas', n: 1, status: 'in progress' },
+    { type: 'team', id: 't-atlas', title: 'Atlas', href: '/assessment/teams/t-atlas', n: 1, status: 'in_progress' },
     { type: 'team', id: 't-bor', title: 'Borealis', href: '/assessment/teams/t-bor', n: 2 },
   ], rows: [{ secret: 'never sent' }], sources: ['the scorecards'] };
   const { fetch, log } = fakeFetch([route('GET', '/api/assessment/search/answer?', 200, { query: 'q', answer })]);
@@ -508,7 +508,7 @@ function moneyFixtures(belowTier: boolean) {
     route('GET', '/api/me/spend', 200, { period: 'month', knownUsd: 3.5, unknownCount: 0, byInitiative: [{ initiativeId: 'p1', initiativeName: 'Alpha', knownUsd: 3.5 }], budget: null }),
     route('GET', '/api/graph/projects', 200, [{ id: 'p1', name: 'Alpha migration' }, { id: 'p2', name: 'Beta' }, { id: 'p3', name: 'Alpha rollout' }]),
     route('GET', '/api/spend/report', 200, belowTier
-      ? { totals: { unknownCount: 0, entries: 47 }, groups: [{ key: 'p1', label: 'Alpha migration', entries: 7 }], budgetAccess: lockedBody }
+      ? { totals: { unknownCount: 0, entries: 47 }, groups: [{ key: 'p-auth-migration', label: 'Alpha migration', entries: 7 }], budgetAccess: lockedBody }
       : { totals: { knownUsd: FIGURE, burnPerDay7d: 1.25, projectedPeriodEndUsd: 40.5 }, groups: [{ key: 'u-ada', label: 'Ada', knownUsd: 9.72 }] }),
     ...(belowTier
       ? ['/api/budgets', '/api/user-budgets', '/api/ops/switches'].map((p) => route('GET', p, 403, { error: 'Forbidden', action: 'ManageBudgets', amountUsd: FIGURE }))
