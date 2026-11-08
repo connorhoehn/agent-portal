@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { VoiceClient, mintFailure, parseFrame, toolOutputEvent, thinkingEvent, type ClientEvent, type VoiceFrame } from '../client.ts';
+import { VoiceClient, mintFailure, parseFrame, toolOutputEvent, thinkingEvent, voiceDebugEnabled, type ClientEvent, type VoiceFrame } from '../client.ts';
 import { FakeClock, fakeFetch, liveEvents, middlewareVoice, route, wireEvent } from './voiceHarness.ts';
 
 test('parseFrame reads the real Live API frames V1 recorded', async () => {
@@ -117,4 +117,52 @@ test('no microphone is unavailable before any mint', async () => {
   await client.start();
   assert.deepEqual(events, [{ type: 'unavailable', reason: 'Microphone unavailable: permission denied' }]);
   assert.equal(log.length, 0);
+});
+
+test('the debug log sees every frame in and out (VITE_VOICE_DEBUG or localStorage voiceDebug)', async () => {
+  const mint = await mockMint();
+  const clock = new FakeClock();
+  const { fetch } = fakeFetch([
+    route('POST', '/api/voice/sessions/vs_', 200, { alreadyClosed: false }),
+    route('POST', '/api/voice/sessions', 201, mint),
+  ]);
+  const seen: Array<[string, string]> = [];
+  const client = new VoiceClient({
+    fetch, media: null, onEvent: () => {}, now: clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer,
+    debugLog: (dir, ev) => { seen.push([dir, String((ev as { type?: unknown }).type)]); },
+  });
+  await client.start();
+  await clock.advance(1300);
+  client.sendToolOutput('call_mock_1', '{}');
+  const types = (dir: string) => seen.filter(([d]) => d === dir).map(([, t]) => t);
+  assert.deepEqual(types('in').slice(0, 3), ['session.started', 'session.input_transcript.delta', 'session.delegation.created']);
+  assert.ok(types('in').includes('response.event'), 'the nested function_call envelope is logged');
+  assert.deepEqual(types('out'), ['response.item.create']);
+  // Off by default outside a browser with the flag (node has neither the env flag nor localStorage voiceDebug).
+  assert.equal(voiceDebugEnabled(), false);
+  const stopping = client.stop('closed');
+  await clock.advance(200);
+  await stopping;
+});
+
+test('after session.close the client sends nothing else (a delegation still in flight cannot answer)', async () => {
+  const mint = await mockMint();
+  const clock = new FakeClock();
+  const { fetch } = fakeFetch([
+    route('POST', '/api/voice/sessions/vs_', 200, { alreadyClosed: false }),
+    route('POST', '/api/voice/sessions', 201, mint),
+  ]);
+  const out: string[] = [];
+  const client = new VoiceClient({
+    fetch, media: null, onEvent: () => {}, now: clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer,
+    debugLog: (dir, ev) => { if (dir === 'out') out.push(String((ev as { type?: unknown }).type)); },
+  });
+  await client.start();
+  await clock.advance(1300);
+  const stopping = client.stop('closed');
+  assert.equal(client.sendToolOutput('call_mock_1', '{}'), null);
+  assert.equal(client.requestResponse(), null);
+  await clock.advance(200);
+  await stopping;
+  assert.deepEqual(out, ['session.close']);
 });

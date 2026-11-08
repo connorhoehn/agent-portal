@@ -20,6 +20,14 @@
 // response.create and `onClose` after session.close, so every phase runs
 // under `node --test`.
 //
+// Debugging a live session: VITE_VOICE_DEBUG=1 (read when vite starts), or
+// `localStorage.voiceDebug = '1'` in an open tab (read at each session start,
+// no restart), logs every data-channel frame in and out to the console as
+// `[voice] in|out <event>`. A missing tool chip is then either no
+// `session.delegation.created` at all (the voice answered by itself) or a
+// delegation whose `response.event` carried no function_call (the backend
+// answered in text).
+//
 // `session.instructions.append` is deliberately missing: the mint's
 // data-channel allowlist leaves it (and session.update) to the server, so
 // the browser cannot rewrite the instructions (§1 "What this changes").
@@ -279,6 +287,22 @@ export function browserMedia(): MediaFactory | null {
   };
 }
 
+// ── debug ───────────────────────────────────────────────────────────────────
+
+/** VITE_VOICE_DEBUG=1|true, or localStorage voiceDebug = '1' (no vite restart needed). */
+export function voiceDebugEnabled(): boolean {
+  const env = (import.meta as unknown as { env?: Record<string, unknown> }).env;
+  const flag = env?.['VITE_VOICE_DEBUG'];
+  if (flag === true || flag === '1' || flag === 'true') return true;
+  // Only a browser's storage: node 25 has its own globalThis.localStorage, which warns when touched.
+  if (typeof window === 'undefined') return false;
+  try { return window.localStorage.getItem('voiceDebug') === '1'; } catch { return false; }
+}
+
+/** What the debug log writes per frame: the event itself (WebRTC carries no audio frames on the channel). */
+export type VoiceDebugLog = (direction: 'in' | 'out', event: unknown) => void;
+const consoleDebugLog: VoiceDebugLog = (direction, event) => { console.log(`[voice] ${direction}`, event); };
+
 // ── the client ──────────────────────────────────────────────────────────────
 
 export type ClientEvent =
@@ -311,6 +335,8 @@ export interface VoiceClientOptions {
   setTimer?: (fn: () => void, ms: number) => Timer;
   clearTimer?: (t: Timer) => void;
   closeWaitMs?: number;
+  /** Log every frame in and out; default: console, when voiceDebugEnabled() at construction. Null = off. */
+  debugLog?: VoiceDebugLog | null;
 }
 
 export class VoiceClient {
@@ -324,16 +350,20 @@ export class VoiceClient {
   private timers = new Set<Timer>();
   private closedWaiter: (() => void) | null = null;
   private sawClosed = false;
+  /** session.close went out: the provider refuses anything after it ("The session is closing and cannot accept new client events."). */
+  private closing = false;
   private finished = false;
   private live = false;
   private readonly now: () => number;
   private readonly setTimer: (fn: () => void, ms: number) => Timer;
   private readonly clearTimer: (t: Timer) => void;
+  private readonly debugLog: VoiceDebugLog | null;
 
   private readonly opts: VoiceClientOptions;
 
   constructor(opts: VoiceClientOptions) {
     this.opts = opts;
+    this.debugLog = opts.debugLog !== undefined ? opts.debugLog : voiceDebugEnabled() ? consoleDebugLog : null;
     this.now = opts.now ?? (() => Date.now());
     this.setTimer = opts.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
     this.clearTimer = opts.clearTimer ?? ((t) => clearTimeout(t as ReturnType<typeof setTimeout>));
@@ -408,9 +438,10 @@ export class VoiceClient {
 
   /** Send one allowlisted client event; returns its event_id, or null when nothing is open. */
   send(event: Obj & { type: ClientEventName }): string | null {
-    if (!this.live) return null;
+    if (!this.live || (this.closing && event.type !== 'session.close')) return null;
     const id = `voice_${++this.seq}`;
     const ev = { event_id: id, ...event };
+    this.debugLog?.('out', ev);
     if (this.mocked) {
       if (ev.type === 'response.create') this.play(this.mint?.mockScript?.onResponseCreate ?? []);
       if (ev.type === 'session.close') this.play(this.mint?.mockScript?.onClose ?? []);
@@ -459,6 +490,8 @@ export class VoiceClient {
     if (this.live && reason !== 'dropped' && !this.sawClosed) {
       const closed = new Promise<void>((resolve) => { this.closedWaiter = resolve; });
       const sent = this.send({ type: 'session.close' });
+      // A delegation still in flight must not answer after the close (8 November: a late response.create drew an error frame).
+      this.closing = true;
       if (sent) {
         await Promise.race([closed, new Promise<void>((resolve) => {
           const t = this.setTimer(resolve, this.opts.closeWaitMs ?? CLOSE_WAIT_MS);
@@ -497,6 +530,11 @@ export class VoiceClient {
 
   private deliver(data: string): void {
     if (this.finished) return;
+    if (this.debugLog) {
+      let ev: unknown = data;
+      try { ev = JSON.parse(data); } catch { /* logged as the raw string */ }
+      this.debugLog('in', ev);
+    }
     const frame = parseFrame(data);
     if (!frame) return;
     if (frame.kind === 'started' && this.startedAt == null) this.startedAt = this.now();

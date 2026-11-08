@@ -131,7 +131,8 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
   } else {
     try {
       answer = await createLiveSession(sdp!, {
-        model: cfg.model, instructions: voiceInstructions(session.tenant, tools),
+        // Without a delegation model the voice is told it has no backend (§8), never to delegate into nothing.
+        model: cfg.model, instructions: voiceInstructions(session.tenant, cfg.delegationModel ? tools : []),
         delegationInstructions: delegationInstructions(session.tenant), voice: cfg.voice,
         delegationModel: cfg.delegationModel, tools: responsesFunctionTools(tools),
       });

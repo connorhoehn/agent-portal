@@ -267,7 +267,23 @@ describe('POST /api/voice/sessions — the mint', () => {
     process.env['VOICE_DELEGATION_MODEL'] = 'off';
     const res = await mint();
     expect(res.body).toMatchObject({ toolsEnabled: false, tools: [] });
-    expect(JSON.parse(calls[0]!.init.body!).session).not.toHaveProperty('delegation');
+    const session = JSON.parse(calls[0]!.init.body!).session;
+    expect(session).not.toHaveProperty('delegation');
+    // ...and the voice is not told to delegate into nothing.
+    expect(session.instructions).toMatch(/no backend is connected/);
+    expect(session.instructions).not.toMatch(/Delegate to the backend/);
+  });
+
+  // The live failure of 8 November: the delegation block was sent, but the voice prompt never said to delegate,
+  // so the voice answered "find me the Kubernetes experts" itself with invented names and no function call.
+  it('the minted voice prompt carries the delegation directive alongside the delegation block', async () => {
+    budget();
+    await mint();
+    const session = JSON.parse(calls[0]!.init.body!).session;
+    expect(session.delegation.responses.tools.length).toBeGreaterThan(0);
+    expect(session.instructions).toMatch(/Delegate to the backend whenever the user asks to open a page, search, find or look up a person/);
+    expect(session.instructions).toMatch(/never invent names, people, results/i);
+    expect(session.delegation.responses.instructions).toMatch(/never invent names/);
   });
 });
 
