@@ -436,6 +436,73 @@ test('summary: health, work, today (money left to budget), rollup, access and li
   assert.equal((await runVoiceTool('summary', { kind: 'pipelines' }, toolContext())).outcome, 'refused');
 });
 
+// ── budget (V2-7): money at the tier, the offer below it, never a figure in a refusal ──
+
+const FIGURE = 12345.67;
+const FIGURES = /12345|12,345|\$/;
+function moneyFixtures(belowTier: boolean) {
+  const lockedBody = { requestItemId: 'capability:orgiq:budgets-read', visible: false, reason: 'tier' };
+  return fakeFetch([
+    route('GET', '/api/me/spend', 200, { period: 'month', knownUsd: 3.5, unknownCount: 0, byInitiative: [{ initiativeId: 'p1', initiativeName: 'Alpha', knownUsd: 3.5 }], budget: null }),
+    route('GET', '/api/graph/projects', 200, [{ id: 'p1', name: 'Alpha migration' }, { id: 'p2', name: 'Beta' }, { id: 'p3', name: 'Alpha rollout' }]),
+    route('GET', '/api/spend/report', 200, belowTier
+      ? { totals: { unknownCount: 0, entries: 47 }, groups: [{ key: 'p1', label: 'Alpha migration', entries: 7 }], budgetAccess: lockedBody }
+      : { totals: { knownUsd: FIGURE, burnPerDay7d: 1.25, projectedPeriodEndUsd: 40.5 }, groups: [{ key: 'u-ada', label: 'Ada', knownUsd: 9.72 }] }),
+    ...(belowTier
+      ? ['/api/budgets', '/api/user-budgets', '/api/ops/switches'].map((p) => route('GET', p, 403, { error: 'Forbidden', action: 'ManageBudgets', amountUsd: FIGURE }))
+      : [route('GET', '/api/budgets', 200, { budgets: [{ orgProjectName: 'Alpha migration', allocatedUsd: 75, spentThisPeriodUsd: 5.45 }] }),
+        route('GET', '/api/user-budgets', 200, { budgets: [{ displayName: 'Ada', spentUsd: 8.46 }] }),
+        route('GET', '/api/ops/switches', 200, { switches: [{ scope: 'fleet', paused: true }] })]),
+    route('GET', '/api/sprints/envelopes', 200, { envelopes: [] }),
+    route('GET', '/api/observability/cost/summary', 200, { windowHours: 24, sections: { total: { totalCostUsd: FIGURE }, perAgent: { byAgent: [{ agentId: 'orgiq-supervisor', totalCostUsd: 0.15 }] } } }),
+  ]);
+}
+
+test('budget: a member hears their own spend and the access request offer, and every wider scope refuses with the offer and no figure', async () => {
+  const { fetch, log } = moneyFixtures(true);
+  const c = toolContext({ fetch, role: 'member', deny: ['ManageBudgets'] });
+  const me = await runVoiceTool('budget', { scope: 'me' }, c);
+  assert.equal(me.outcome, 'done');
+  assert.equal(me.summary, 'You spent $3.50 this month');
+  assert.deepEqual(me.output['rows'], [{ title: 'Alpha', spentUsd: 3.5 }]);
+  const more = me.output['more'] as { hint: { href: string; item: string }; offer: unknown };
+  assert.equal(more.hint.href, '/access/requests/new?item=capability%3Aorgiq%3Abudgets-read');
+  assert.deepEqual(more.offer, { tool: 'navigate', page: 'workspaces' });
+  for (const args of [{ scope: 'initiative', initiative: 'Alpha migration' }, { scope: 'org' }, { scope: 'allocations' }, { scope: 'users' }, { scope: 'switches' }, { scope: 'cost' }]) {
+    const r = await runVoiceTool('budget', args, c);
+    assert.equal(r.outcome, 'refused', JSON.stringify(args));
+    assert.equal(r.output['reason'], 'Spend and allocation figures are visible to the budgets read tier. I can open the access request.');
+    assert.equal((r.output['hint'] as { item: string }).item, 'capability:orgiq:budgets-read');
+    assert.doesNotMatch(JSON.stringify(r.output) + r.summary, FIGURES, `${JSON.stringify(args)}: no figure in a refusal`);
+  }
+  assert.ok(!log.some((l) => l.url.startsWith('/api/observability/cost')), 'the cost console is never read below the tier');
+  // Outside orgiq only the caller's own spend exists, and no offer (there is no tier there).
+  const p = await runVoiceTool('budget', { scope: 'me' }, toolContext({ fetch, tenant: 'pipelines', role: 'operator' }));
+  assert.equal(p.outcome, 'done');
+  assert.equal(p.output['more'], undefined);
+  assert.equal((await runVoiceTool('budget', { scope: 'org' }, toolContext({ fetch, tenant: 'pipelines' }))).outcome, 'refused');
+});
+
+test('budget: a program owner hears Alpha\'s spend by person, the org\'s pace, allocations and switches; two Alphas are a question', async () => {
+  const { fetch, log } = moneyFixtures(false);
+  const c = toolContext({ fetch, role: 'program-owner' });
+  const one = await runVoiceTool('budget', { scope: 'initiative', initiative: 'alpha migration' }, c);
+  assert.equal(one.outcome, 'done');
+  assert.equal(log.at(-1)!.url, '/api/spend/report?groupBy=actor&initiativeId=p1');
+  assert.equal(one.summary, `Alpha migration spent $${FIGURE.toFixed(2)} this month; on pace for $40.50; most: Ada at $9.72`);
+  const two = await runVoiceTool('budget', { scope: 'initiative', initiative: 'Alpha' }, c);
+  assert.equal(two.output['kind'], 'ambiguous');
+  assert.deepEqual((two.output['candidates'] as Array<{ title: string }>).map((x) => x.title), ['Alpha migration', 'Alpha rollout']);
+  assert.match((await runVoiceTool('budget', { scope: 'allocations', initiative: 'alpha' }, c)).summary, /^Alpha migration: \$5\.45 spent of \$75\.00$/);
+  assert.equal((await runVoiceTool('budget', { scope: 'switches' }, c)).summary, 'Paused: fleet');
+  assert.match((await runVoiceTool('budget', { scope: 'cost' }, c)).summary, /^Agent runs cost \$12345\.67 in the last 24 hours; most: orgiq-supervisor at \$0\.15$/);
+  // The route's withheld fields stay absent: a body with no figures is a failure, never $0.
+  const blank = fakeFetch([route('GET', '/api/spend/report', 200, { totals: { entries: 3 }, groups: [] })]);
+  const b = await runVoiceTool('budget', { scope: 'org' }, toolContext({ fetch: blank.fetch, role: 'org-leader' }));
+  assert.equal(b.outcome, 'failed');
+  assert.doesNotMatch(b.summary, /\$/);
+});
+
 test('parseSince reads yesterday as local midnight and refuses the future', () => {
   const now = new Date(2026, 10, 8, 15, 30);
   assert.equal(parseSince('yesterday', now)!.getTime(), new Date(2026, 10, 7).getTime());

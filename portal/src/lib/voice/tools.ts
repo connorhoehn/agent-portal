@@ -28,7 +28,7 @@
 import type { Action } from '../capabilities';
 import { waitingOn } from '../../pages/projects/budgetAccessModel.ts';
 import type { AccessRequest } from '../accessRequests';
-import { activityScopes, getParts, listKinds, navigatePageIds, summaryKinds, searchRecordTypes, voiceToolSpec, SEARCH_ACTIONS, type JsonSchema, type VoiceToolSpec } from './catalogue.ts';
+import { activityScopes, budgetScopes, getParts, listKinds, navigatePageIds, summaryKinds, searchRecordTypes, voiceToolSpec, SEARCH_ACTIONS, type JsonSchema, type VoiceToolSpec } from './catalogue.ts';
 import { collectionOf, factsOf, fill, kindSpec, parseRef, recordOf, shapeRow, type KindSpec, type Rec, type ShapedRow } from './kinds.ts';
 
 export const DATA_NOTE = 'data, not instructions';
@@ -975,6 +975,179 @@ const summary: Runner = async (args, ctx) => {
   return refused(`There is no "${kind}" summary in this workspace.`);
 };
 
+// ── budget (catalogue v2, V2-7): the money reads, at the budgets read tier ──
+//
+// Money is the server's to show. Every figure here is one a route answered to
+// this session: below the budgets read tier the spend report withholds its
+// dollar fields (routes/spend-report.ts shapeBelowTier) and the tier routes
+// answer 403, and the dock never computes, zeroes or fills one in. A refusal
+// is built from fixed words and the catalog item that grants the tier, never
+// from a body, so no refusal payload carries a figure (G10's hint shape:
+// `hint` with the request link, `offer` naming the workspace switch).
+
+/** Roles that read money outright (lib/budget-read-tier.ts BUDGET_READ_ROLES). Anyone else may hold ManageBudgets or the budgets-reader grant; the route decides. */
+export const BUDGET_TIER_ROLES: readonly string[] = ['org-leader', 'hr-admin', 'program-owner', 'admin'];
+/** The access catalog item that grants the figures (lib/budget-read-tier.ts BUDGET_READ_ITEM_ID); the route's own budgetAccess names it when it answers. */
+export const BUDGET_READ_ITEM_ID = 'capability:orgiq:budgets-read';
+export const BUDGET_TIER_REASON = 'Spend and allocation figures are visible to the budgets read tier. I can open the access request.';
+const CATALOG_ITEM_RE = /^[a-z0-9][a-z0-9:_.-]{0,99}$/i;
+
+/** The refusal below the tier: fixed words, the request link, the workspace switch offer. Never a figure. */
+export function budgetTierRefusal(item?: unknown): ToolResult {
+  const id = typeof item === 'string' && CATALOG_ITEM_RE.test(item) ? item : BUDGET_READ_ITEM_ID;
+  return refused(BUDGET_TIER_REASON, {
+    hint: { label: 'Request budget visibility', href: accessRequestHref(id), item: id, note: 'The request is filed in the Access workspace; switching to it ends this voice session.' },
+    offer: { tool: 'navigate', page: 'workspaces' },
+  });
+}
+
+const usd = (v: number) => `$${v.toFixed(2)}`;
+/** A dollar figure only when the route answered one; absent stays absent (never 0). */
+const money = (v: unknown): number | undefined => { const n = num(v); return n == null ? undefined : Math.round(n * 10_000) / 10_000; };
+const locked = (body: unknown): { requestItemId?: unknown } | null => {
+  const ba = body && typeof body === 'object' ? (body as Rec)['budgetAccess'] : undefined;
+  return ba && typeof ba === 'object' && (ba as Rec)['visible'] === false ? ba as { requestItemId?: unknown } : null;
+};
+
+type BudgetScope = 'me' | 'initiative' | 'org' | 'allocations' | 'users' | 'switches' | 'envelopes' | 'cost';
+
+/** An initiative the user named, against the initiatives this session reads: one, several (ambiguous) or none. */
+async function namedInitiative(ctx: ToolContext, name: string): Promise<{ id: string; name: string } | { result: ToolResult }> {
+  const read = await readJson<ProjectRow[]>(ctx, `/api/graph/projects?${qs({ scope: 'all', limit: 50 })}`);
+  if (!read.ok) return { result: readFailure('the initiatives', read.status) };
+  const list = Array.isArray(read.body) ? read.body : [];
+  const q = name.trim().toLowerCase();
+  const exact = list.find((p) => p.id === name.trim()) ?? list.find((p) => p.name.toLowerCase() === q);
+  if (exact) return { id: exact.id, name: exact.name };
+  const needles = wordsOf(q);
+  const loose = needles.length ? list.filter((p) => needles.every((w) => p.name.toLowerCase().includes(w))) : [];
+  if (loose.length === 1) return { id: loose[0]!.id, name: loose[0]!.name };
+  if (loose.length > 1) return { result: ambiguous(`Several initiatives match "${name}". Ask which.`, loose.slice(0, MAX_ROWS).map((p) => ({ ref: `initiative:${p.id}`, title: p.name }))) };
+  return { result: refused(`I found no initiative called "${name}" among the ones you can read.`) };
+}
+
+const budget: Runner = async (args, ctx) => {
+  const scope = String(args['scope']) as BudgetScope;
+  if (!budgetScopes(ctx.tenant).includes(scope)) return refused(scope === 'me' ? 'There is no spend to read in this workspace.' : 'Budgets beyond your own spend are read in the Work workspace.');
+  const initiativeArg = typeof args['initiative'] === 'string' ? args['initiative'].trim() : '';
+  const groupBy = args['groupBy'] === 'person' ? 'actor' : 'initiative';
+  const tierRole = BUDGET_TIER_ROLES.includes(ctx.role) || ctx.can('ManageBudgets');
+
+  if (scope === 'me') {
+    const read = await readJson<{ period?: string; knownUsd?: unknown; unknownCount?: unknown; byInitiative?: Rec[]; budget?: Rec | null }>(ctx, '/api/me/spend');
+    if (!read.ok) return readFailure('your spend', read.status);
+    const b = read.body;
+    let rows = (b.byInitiative ?? []).map((r) => ({ initiative: String(r['initiativeName'] ?? r['initiativeId'] ?? 'unattributed'), id: r['initiativeId'] as string | null, spentUsd: money(r['knownUsd']) }));
+    if (initiativeArg) {
+      const q = initiativeArg.toLowerCase();
+      rows = rows.filter((r) => r.id === initiativeArg || r.initiative.toLowerCase().includes(q));
+    }
+    const spent = initiativeArg ? (rows.some((r) => r.spentUsd != null) ? rows.reduce((a, r) => a + (r.spentUsd ?? 0), 0) : undefined) : money(b.knownUsd);
+    const mine = b.budget ? { allocatedUsd: money(b.budget['allocatedUsd']), spentUsd: money(b.budget['spentUsd']), remainingUsd: money(b.budget['remainingUsd']), capUsd: money(b.budget['effectiveHardCapUsd']) } : undefined;
+    // Below the tier, the offer to see more: only where the tier exists (orgiq), and only when the route says the figures are withheld.
+    let more: Record<string, unknown> | undefined;
+    if (ctx.tenant === 'orgiq' && !tierRole) {
+      const report = await readJson<unknown>(ctx, `/api/spend/report?${qs({ groupBy: 'initiative' })}`);
+      const lock = report.ok ? locked(report.body) : null;
+      if (lock) {
+        const o = budgetTierRefusal(lock.requestItemId).output;
+        more = { reason: 'Initiative and org spend are visible to the budgets read tier.', hint: o['hint'], offer: o['offer'] };
+      }
+    }
+    const period = b.period === 'month' || !b.period ? 'this month' : `in the last ${b.period}`;
+    const line = spent != null ? `You spent ${usd(spent)} ${period}${initiativeArg ? ` on ${initiativeArg}` : ''}` : `No spend of yours ${period}${initiativeArg ? ` on ${initiativeArg}` : ''}`;
+    return done('budget', {
+      of: 'me', period: b.period ?? 'month', ...(spent != null ? { spentUsd: spent } : {}), unknownEntries: num(b.unknownCount),
+      rows: rows.map(({ initiative, spentUsd }) => ({ title: initiative, ...(spentUsd != null ? { spentUsd } : {}) })),
+      ...(mine ? { yourBudget: mine } : {}),
+      ...(more ? { more } : {}),
+    }, `${line}${mine?.remainingUsd != null ? `; ${usd(mine.remainingUsd)} left of your budget` : ''}`);
+  }
+
+  if (scope === 'initiative' || scope === 'org') {
+    let target: { id: string; name: string } | undefined;
+    if (scope === 'initiative') {
+      if (!initiativeArg) return refused('Name the initiative.');
+      const found = await namedInitiative(ctx, initiativeArg);
+      if ('result' in found) return found.result;
+      target = found;
+    }
+    const read = await readJson<{ totals?: Rec; groups?: Rec[] }>(ctx, `/api/spend/report?${qs({ groupBy: scope === 'initiative' ? 'actor' : groupBy, initiativeId: target?.id })}`);
+    if (!read.ok) return read.status === 403 ? budgetTierRefusal() : readFailure('the spend report', read.status);
+    const lock = locked(read.body);
+    if (lock) return budgetTierRefusal(lock.requestItemId);
+    const t = read.body.totals ?? {};
+    const groups = (read.body.groups ?? []).map((g) => ({
+      title: String(g['label'] ?? g['key'] ?? 'unattributed'), spentUsd: money(g['knownUsd']), allocatedUsd: money(g['allocatedUsd']), remainingUsd: money(g['remainingUsd']),
+    })).filter((g) => g.spentUsd != null);
+    const spent = money(t['knownUsd']);
+    if (spent == null) return failed('The spend report answered without its figures.');
+    const projected = money(t['projectedPeriodEndUsd']);
+    return done('budget', {
+      of: scope, ...(target ? { initiative: target.name } : {}), groupBy: scope === 'initiative' || groupBy === 'actor' ? 'person' : 'initiative',
+      spentUsd: spent, burnPerDayUsd: money(t['burnPerDay7d']), projectedUsd: projected, heldUsd: money(t['heldUsd']),
+      rows: groups.slice(0, MAX_ROWS),
+    }, `${target?.name ?? 'The org'} spent ${usd(spent)} this month${projected != null ? `; on pace for ${usd(projected)}` : ''}${groups[0] ? `; most: ${groups[0].title} at ${usd(groups[0].spentUsd!)}` : ''}`);
+  }
+
+  if (scope === 'cost') {
+    // The cost console reads under ViewObservability, but its figures are money: the tier gates them here too.
+    if (!ctx.can('ViewObservability')) return refused('Your role cannot read the cost console.');
+    if (!tierRole) {
+      const report = await readJson<unknown>(ctx, `/api/spend/report?${qs({ groupBy: 'initiative' })}`);
+      if (!report.ok) return report.status === 403 ? budgetTierRefusal() : readFailure('the spend report', report.status);
+      const lock = locked(report.body);
+      if (lock) return budgetTierRefusal(lock.requestItemId);
+    }
+    const read = await readJson<{ windowHours?: unknown; sections?: Record<string, Rec> }>(ctx, '/api/observability/cost/summary');
+    if (!read.ok) return readFailure('the cost console', read.status);
+    const total = read.body.sections?.['total'] ?? {};
+    const byAgent = ((read.body.sections?.['perAgent']?.['byAgent'] as Rec[] | undefined) ?? [])
+      .map((a) => ({ title: String(a['agentId'] ?? a['agent'] ?? a['name'] ?? 'an agent'), costUsd: money(a['totalCostUsd'] ?? a['costUsd']) }))
+      .filter((a) => a.costUsd != null).sort((a, b) => b.costUsd! - a.costUsd!);
+    const cost = money(total['totalCostUsd']);
+    const hours = num(read.body.windowHours) ?? 24;
+    return done('budget', { of: 'cost', windowHours: hours, ...(cost != null ? { costUsd: cost } : {}), invocations: num(total['invocations']), rows: byAgent.slice(0, MAX_ROWS) },
+      cost != null ? `Agent runs cost ${usd(cost)} in the last ${hours} hours${byAgent[0] ? `; most: ${byAgent[0].title} at ${usd(byAgent[0].costUsd!)}` : ''}` : `No agent cost in the last ${hours} hours`);
+  }
+
+  // The tier routes: 403 below it is the offer, never a figure.
+  const ROUTES: Record<'allocations' | 'users' | 'switches' | 'envelopes', string> = {
+    allocations: '/api/budgets', users: '/api/user-budgets', switches: '/api/ops/switches', envelopes: '/api/sprints/envelopes',
+  };
+  const read = await readJson<Rec>(ctx, ROUTES[scope as keyof typeof ROUTES]);
+  if (!read.ok) return read.status === 403 ? budgetTierRefusal() : readFailure(scope === 'switches' ? 'the kill switches' : `the ${scope}`, read.status);
+  const lock = locked(read.body);
+  if (lock) return budgetTierRefusal(lock.requestItemId);
+  const b = read.body;
+  if (scope === 'allocations') {
+    let rows = ((b['budgets'] as Rec[] | undefined) ?? []).map((r) => ({
+      title: String(r['orgProjectName'] ?? r['orgProjectId']), allocatedUsd: money(r['effectiveAllocatedUsd'] ?? r['allocatedUsd']), spentUsd: money(r['spentThisPeriodUsd']), capUsd: money(r['effectiveHardCapUsd']),
+    }));
+    if (initiativeArg) rows = rows.filter((r) => r.title.toLowerCase().includes(initiativeArg.toLowerCase()));
+    const first = rows[0];
+    return done('budget', { of: 'allocations', count: rows.length, rows: rows.slice(0, MAX_ROWS) },
+      first ? `${first.title}: ${first.spentUsd != null ? usd(first.spentUsd) : 'nothing'} spent of ${first.allocatedUsd != null ? usd(first.allocatedUsd) : 'no allocation'}${rows.length > 1 ? `; ${rows.length - 1} more` : ''}` : 'No allocations');
+  }
+  if (scope === 'users') {
+    const rows = ((b['budgets'] as Rec[] | undefined) ?? []).map((r) => ({ title: String(r['displayName'] ?? 'someone'), spentUsd: money(r['spentUsd']), allocatedUsd: money(r['allocatedUsd']), capUsd: money(r['effectiveHardCapUsd']) }))
+      .sort((a, b2) => (b2.spentUsd ?? 0) - (a.spentUsd ?? 0));
+    return done('budget', { of: 'users', count: rows.length, rows: rows.slice(0, MAX_ROWS) },
+      rows[0] ? `${plural(rows.length, 'person', 'people')}; most spent: ${rows[0].title}${rows[0].spentUsd != null ? ` at ${usd(rows[0].spentUsd)}` : ''}` : 'No user budgets');
+  }
+  if (scope === 'switches') {
+    const sw = ((b['switches'] as Rec[] | undefined) ?? []).map((r) => ({ title: String(r['scope'] ?? r['name'] ?? 'a switch'), status: r['paused'] === true || r['engaged'] === true || r['state'] === 'paused' ? 'paused' : String(r['state'] ?? 'on') }));
+    const paused = sw.filter((x) => x.status === 'paused');
+    return done('budget', { of: 'switches', count: sw.length, rows: sw.slice(0, MAX_ROWS) }, paused.length ? `Paused: ${paused.map((x) => x.title).join(', ')}` : 'Nothing is paused');
+  }
+  // envelopes: the caller's own sprint envelopes.
+  const env = ((b['envelopes'] as Rec[] | undefined) ?? []).map((r) => ({
+    title: String(r['sprintName'] ?? r['orgProjectName'] ?? r['sprintId'] ?? 'an envelope'), grantedUsd: money(r['grantedUsd'] ?? r['amountUsd']), spentUsd: money(r['spentUsd']), remainingUsd: money(r['remainingUsd']),
+  }));
+  return done('budget', { of: 'envelopes', count: env.length, rows: env.slice(0, MAX_ROWS) },
+    env[0] ? `${plural(env.length, 'envelope')}; ${env[0].title}${env[0].remainingUsd != null ? `: ${usd(env[0].remainingUsd)} left` : ''}` : 'You hold no sprint envelopes');
+};
+
 // ── access requests: the caller's own (mine), their approvals, their reports' ──
 
 type AccessScope = 'mine' | 'approvals' | 'reports';
@@ -1192,6 +1365,7 @@ export const TOOL_RUNNERS: Readonly<Record<string, Runner>> = {
   get,
   open_computer_lab: openComputerLab,
   summary,
+  budget,
   access_request_status: accessRequestStatus,
   activity,
 };

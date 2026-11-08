@@ -89,7 +89,7 @@
     "navigate": 0,
     "internal": 3,
     "dev": 0,
-    "covered": 28,
+    "covered": 29,
     "v2": {
      "read": 38,
      "never": 18,
@@ -188,7 +188,7 @@
     "navigate": 0,
     "internal": 0,
     "dev": 0,
-    "covered": 0,
+    "covered": 6,
     "v2": {
      "read": 18,
      "never": 9
@@ -357,12 +357,12 @@
   "peopleRoutes": 794,
   "peopleReads": 437,
   "peopleWrites": 357,
-  "coveredRoutes": 146,
-  "coveredReads": 140,
+  "coveredRoutes": 153,
+  "coveredReads": 147,
   "coveredWrites": 6,
   "coveredPages": 26,
   "pagesWithPageId": 109,
-  "v1Tools": 16,
+  "v1Tools": 17,
   "v2Tools": 15,
   "v2Decisions": {
    "confirm": 114,
@@ -718,7 +718,7 @@
    ],
    "mapsTo": "useNavigate() to the palette entry's path",
    "routes": [],
-   "line": 328
+   "line": 348
   },
   {
    "name": "search",
@@ -772,7 +772,7 @@
      "path": "/api/access/search/answer"
     }
    ],
-   "line": 343
+   "line": 363
   },
   {
    "name": "open_result",
@@ -789,7 +789,7 @@
    ],
    "mapsTo": "useNavigate() to the kept row's href (the index's own link: /social/contacts/<id>, /iq/search?tab=connections&selection=person:<id>, …)",
    "routes": [],
-   "line": 360
+   "line": 380
   },
   {
    "name": "list",
@@ -1023,7 +1023,7 @@
      "path": "/api/access/audit"
     }
    ],
-   "line": 371
+   "line": 391
   },
   {
    "name": "get",
@@ -1261,7 +1261,7 @@
      "path": "/api/access/reviews/:id"
     }
    ],
-   "line": 390
+   "line": 410
   },
   {
    "name": "open_computer_lab",
@@ -1274,7 +1274,7 @@
    ],
    "mapsTo": "navigate /admin/devbox[?box=<a computer of the initiative>]",
    "routes": [],
-   "line": 402
+   "line": 422
   },
   {
    "name": "start_computer",
@@ -1292,7 +1292,7 @@
      "path": "/api/devbox/boxes"
     }
    ],
-   "line": 409
+   "line": 429
   },
   {
    "name": "open_shell",
@@ -1305,7 +1305,7 @@
    ],
    "mapsTo": "openShell({ id, label, sessionId, cwd })",
    "routes": [],
-   "line": 423
+   "line": 443
   },
   {
    "name": "run_command",
@@ -1323,7 +1323,7 @@
      "path": "/api/devbox/:sessionId/command"
     }
    ],
-   "line": 430
+   "line": 450
   },
   {
    "name": "summary",
@@ -1421,7 +1421,57 @@
      "path": "/api/access/summary"
     }
    ],
-   "line": 442
+   "line": 462
+  },
+  {
+   "name": "budget",
+   "kind": "read",
+   "backing": "search",
+   "confirm": false,
+   "action": null,
+   "tenants": [
+    "orgiq",
+    "assessment",
+    "social",
+    "pipelines",
+    "access"
+   ],
+   "mapsTo": "GET /api/me/spend, GET /api/spend/report?initiativeId=&groupBy=, GET /api/graph/projects, GET /api/budgets, GET /api/user-budgets, GET /api/ops/switches, GET /api/sprints/envelopes, GET /api/observability/cost/summary",
+   "routes": [
+    {
+     "method": "GET",
+     "path": "/api/me/spend"
+    },
+    {
+     "method": "GET",
+     "path": "/api/spend/report"
+    },
+    {
+     "method": "GET",
+     "path": "/api/graph/projects"
+    },
+    {
+     "method": "GET",
+     "path": "/api/budgets"
+    },
+    {
+     "method": "GET",
+     "path": "/api/user-budgets"
+    },
+    {
+     "method": "GET",
+     "path": "/api/ops/switches"
+    },
+    {
+     "method": "GET",
+     "path": "/api/sprints/envelopes"
+    },
+    {
+     "method": "GET",
+     "path": "/api/observability/cost/summary"
+    }
+   ],
+   "line": 475
   },
   {
    "name": "activity",
@@ -1448,7 +1498,7 @@
      "path": "/api/search"
     }
    ],
-   "line": 455
+   "line": 489
   },
   {
    "name": "send_chat_message",
@@ -1471,7 +1521,7 @@
      "path": "/api/social/dms"
     }
    ],
-   "line": 468
+   "line": 502
   },
   {
    "name": "start_call",
@@ -1494,7 +1544,7 @@
      "path": "/api/social/dms"
     }
    ],
-   "line": 482
+   "line": 516
   },
   {
    "name": "set_status",
@@ -1508,7 +1558,7 @@
    ],
    "mapsTo": "usePresence('<tenant>:lobby') (the shell's tenant lobby, manifest presenceLobby) then usePresence('social:lobby') with a Social grant: setStatus(status) and updateMetadata({ statusMessage })",
    "routes": [],
-   "line": 496
+   "line": 530
   },
   {
    "name": "queue_work",
@@ -1562,7 +1612,7 @@
      "path": "/api/pipelines/runs/:id/events"
     }
    ],
-   "line": 508
+   "line": 542
   },
   {
    "name": "access_request_status",
@@ -1592,7 +1642,7 @@
      "path": "/api/access/approvals"
     }
    ],
-   "line": 521
+   "line": 555
   }
  ],
  "navigatePages": [
@@ -2855,7 +2905,7 @@
   {"method":"PUT","path":"/api/bots/work-items/:id/job-draft","source":"src/routes/bots.ts:432","declaredAt":"src/routes/bots.ts:432","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"bots","cedarAction":"DispatchAgentRun","actions":["DispatchAgentRun"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the dispatch drawer's own drafts and estimates"}},
   {"method":"POST","path":"/api/bots/work-items/:id/review-estimate","source":"src/routes/bots.ts:523","declaredAt":"src/routes/bots.ts:523","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"bots","cedarAction":"DispatchAgentRun","actions":["DispatchAgentRun"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the dispatch drawer's own drafts and estimates"}},
   {"method":"GET","path":"/api/briefs","source":"src/routes/session-briefs.ts:92","declaredAt":"src/routes/session-briefs.ts:92","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"runbooks","cedarAction":"ViewSessionBrief","actions":["ViewSessionBrief"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":["list"],"v2":{"decision":"read","tool":"list","note":"a collection"}},
-  {"method":"GET","path":"/api/budgets","source":"src/routes/budgets.ts:44","declaredAt":"src/routes/budgets.ts:44","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"budgets","cedarAction":"ManageBudgets","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageBudgets","holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
+  {"method":"GET","path":"/api/budgets","source":"src/routes/budgets.ts:44","declaredAt":"src/routes/budgets.ts:44","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"budgets","cedarAction":"ManageBudgets","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageBudgets","holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner"],"writePolicy":null,"pageId":null,"coveredBy":["budget"],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
   {"method":"DELETE","path":"/api/budgets/:orgProjectId","source":"src/routes/budgets.ts:210","declaredAt":"src/routes/budgets.ts:210","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"budgets","cedarAction":"ManageBudgets","actions":["ManageBudgets"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner"],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"allocations, caps, grants, kill switches, policy profiles"}},
   {"method":"PUT","path":"/api/budgets/:orgProjectId","source":"src/routes/budgets.ts:125","declaredAt":"src/routes/budgets.ts:125","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"budgets","cedarAction":"ManageBudgets","actions":["ManageBudgets"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"allocations, caps, grants, kill switches, policy profiles"}},
   {"method":"GET","path":"/api/budgets/:orgProjectId/limits","source":"src/routes/budgets.ts:101","declaredAt":"src/routes/budgets.ts:101","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"budgets","cedarAction":"ManageBudgets","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageBudgets","holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
@@ -2991,7 +3041,7 @@
   {"method":"GET","path":"/api/graph/people/:personId","source":"src/routes/graph.ts:46","declaredAt":"src/routes/graph.ts:46","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"org","cedarAction":"ViewOrgChart","actions":["ViewOrgChart"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":["get"],"v2":{"decision":"read","tool":"get","note":"one record"}},
   {"method":"GET","path":"/api/graph/people/:personId/evidence","source":"src/routes/graph.ts:55","declaredAt":"src/routes/graph.ts:55","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"org","cedarAction":"ViewOrgChart","actions":["ViewOrgChart"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":["get"],"v2":{"decision":"read","tool":"get","note":"one record"}},
   {"method":"GET","path":"/api/graph/people/:personId/work","source":"src/routes/work-items.ts:354","declaredAt":"src/routes/work-items.ts:354","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":["get"],"v2":{"decision":"read","tool":"get","note":"one record"}},
-  {"method":"GET","path":"/api/graph/projects","source":"src/routes/projects.ts:43","declaredAt":"src/routes/projects.ts:43","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":["list"],"v2":{"decision":"read","tool":"list","note":"a collection"}},
+  {"method":"GET","path":"/api/graph/projects","source":"src/routes/projects.ts:43","declaredAt":"src/routes/projects.ts:43","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":["list","budget"],"v2":{"decision":"read","tool":"list","note":"a collection"}},
   {"method":"GET","path":"/api/graph/projects-graph","source":"src/routes/graph.ts:18","declaredAt":"src/routes/graph.ts:18","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"org","cedarAction":"ViewOrgChart","actions":["ViewOrgChart"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"operator consoles, agent-facing reads and leadership data: the page, not the voice"}},
   {"method":"GET","path":"/api/graph/projects/:id","source":"src/routes/projects.ts:69","declaredAt":"src/routes/projects.ts:69","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":["get"],"v2":{"decision":"read","tool":"get","note":"one record"}},
   {"method":"PATCH","path":"/api/graph/projects/:id","source":"src/routes/projects.ts:93","declaredAt":"src/routes/projects.ts:93","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"DispatchAgentRun","actions":["DispatchAgentRun"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"skipped","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"initiative governance edits"}},
@@ -3129,7 +3179,7 @@
   {"method":"POST","path":"/api/local-compute/sessions/:sessionId/end","source":"src/routes/local-compute.ts:394","declaredAt":"src/routes/local-compute.ts:394","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"compute","cedarAction":null,"actions":[],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"node-token machine routes"}},
   {"method":"GET","path":"/api/local-compute/stream","source":"src/routes/local-compute.ts:1077","declaredAt":"src/routes/local-compute.ts:1077","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"compute","cedarAction":null,"actions":[],"floor":["ViewLocalCompute"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"a stream"}},
   {"method":"GET","path":"/api/me/groups","source":"src/routes/me-groups.ts:23","declaredAt":"src/routes/me-groups.ts:23","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"social.chat","cedarAction":null,"actions":[],"floor":["MyGroups"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"list","note":"a collection"}},
-  {"method":"GET","path":"/api/me/spend","source":"src/routes/me-spend.ts:45","declaredAt":"src/routes/me-spend.ts:45","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"budgets","cedarAction":null,"actions":[],"floor":["MySpend"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
+  {"method":"GET","path":"/api/me/spend","source":"src/routes/me-spend.ts:45","declaredAt":"src/routes/me-spend.ts:45","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"budgets","cedarAction":null,"actions":[],"floor":["MySpend"],"writePolicy":null,"pageId":null,"coveredBy":["budget"],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
   {"method":"GET","path":"/api/observability/approvals","source":"src/routes/approvals.ts:395","declaredAt":"src/routes/approvals.ts:395","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"approvals","cedarAction":"ViewObservability","actions":["ViewObservability"],"holders":["assessment/lead-assessor","assessment/program-lead","orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"operator consoles, agent-facing reads and leadership data: the page, not the voice"}},
   {"method":"GET","path":"/api/observability/approvals/:id","source":"src/routes/approvals.ts:439","declaredAt":"src/routes/approvals.ts:439","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"approvals","cedarAction":"ViewObservability","actions":["ViewObservability"],"serviceAlt":true,"holders":["assessment/lead-assessor","assessment/program-lead","orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"operator consoles, agent-facing reads and leadership data: the page, not the voice"}},
   {"method":"POST","path":"/api/observability/approvals/:id/decision","source":"src/routes/approvals.ts:470","declaredAt":"src/routes/approvals.ts:470","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"approvals","cedarAction":"ApproveTransaction","actions":[],"bodyActions":["ApproveTransaction"],"holders":["orgiq/org-leader"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"confirm","tool":"decide","note":"ApproveTransaction with the amount"}},
@@ -3167,7 +3217,7 @@
   {"method":"GET","path":"/api/observability/cost/by-model","source":"src/routes/cost.ts:417","declaredAt":"src/routes/cost.ts:417","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"budgets","cedarAction":"ViewObservability","actions":["ViewObservability"],"holders":["assessment/lead-assessor","assessment/program-lead","orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
   {"method":"GET","path":"/api/observability/cost/deploy-markers","source":"src/routes/cost.ts:616","declaredAt":"src/routes/cost.ts:616","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"budgets","cedarAction":"ViewObservability","actions":["ViewObservability"],"holders":["assessment/lead-assessor","assessment/program-lead","orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
   {"method":"GET","path":"/api/observability/cost/per-agent","source":"src/routes/cost.ts:193","declaredAt":"src/routes/cost.ts:193","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"budgets","cedarAction":"ViewObservability","actions":["ViewObservability"],"holders":["assessment/lead-assessor","assessment/program-lead","orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
-  {"method":"GET","path":"/api/observability/cost/summary","source":"src/routes/cost.ts:660","declaredAt":"src/routes/cost.ts:660","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"budgets","cedarAction":"ViewObservability","actions":["ViewObservability"],"holders":["assessment/lead-assessor","assessment/program-lead","orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
+  {"method":"GET","path":"/api/observability/cost/summary","source":"src/routes/cost.ts:660","declaredAt":"src/routes/cost.ts:660","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"budgets","cedarAction":"ViewObservability","actions":["ViewObservability"],"holders":["assessment/lead-assessor","assessment/program-lead","orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":["budget"],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
   {"method":"GET","path":"/api/observability/cost/timeseries","source":"src/routes/cost.ts:270","declaredAt":"src/routes/cost.ts:270","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"budgets","cedarAction":"ViewObservability","actions":["ViewObservability"],"holders":["assessment/lead-assessor","assessment/program-lead","orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
   {"method":"GET","path":"/api/observability/cost/top","source":"src/routes/cost.ts:350","declaredAt":"src/routes/cost.ts:350","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"budgets","cedarAction":"ViewObservability","actions":["ViewObservability"],"holders":["assessment/lead-assessor","assessment/program-lead","orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
   {"method":"GET","path":"/api/observability/cost/total","source":"src/routes/cost.ts:125","declaredAt":"src/routes/cost.ts:125","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"budgets","cedarAction":"ViewObservability","actions":["ViewObservability"],"holders":["assessment/lead-assessor","assessment/program-lead","orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
@@ -3230,7 +3280,7 @@
   {"method":"GET","path":"/api/observability/traffic/per-agent-summary","source":"src/routes/traffic.ts:277","declaredAt":"src/routes/traffic.ts:277","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"observability","cedarAction":"ViewObservability","actions":["ViewObservability"],"holders":["assessment/lead-assessor","assessment/program-lead","orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"operator consoles, agent-facing reads and leadership data: the page, not the voice"}},
   {"method":"GET","path":"/api/observability/traffic/rps","source":"src/routes/traffic.ts:91","declaredAt":"src/routes/traffic.ts:91","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"observability","cedarAction":"ViewObservability","actions":["ViewObservability"],"holders":["assessment/lead-assessor","assessment/program-lead","orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"operator consoles, agent-facing reads and leadership data: the page, not the voice"}},
   {"method":"GET","path":"/api/observability/traffic/top-users","source":"src/routes/traffic.ts:203","declaredAt":"src/routes/traffic.ts:203","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"observability","cedarAction":"ViewObservability","actions":["ViewObservability"],"holders":["assessment/lead-assessor","assessment/program-lead","orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"operator consoles, agent-facing reads and leadership data: the page, not the voice"}},
-  {"method":"GET","path":"/api/ops/switches","source":"src/routes/ops-switches.ts:31","declaredAt":"src/routes/ops-switches.ts:31","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"budgets","cedarAction":"ManageBudgets","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageBudgets","holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
+  {"method":"GET","path":"/api/ops/switches","source":"src/routes/ops-switches.ts:31","declaredAt":"src/routes/ops-switches.ts:31","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"budgets","cedarAction":"ManageBudgets","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageBudgets","holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner"],"writePolicy":null,"pageId":null,"coveredBy":["budget"],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
   {"method":"PUT","path":"/api/ops/switches/:scope","source":"src/routes/ops-switches.ts:36","declaredAt":"src/routes/ops-switches.ts:36","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"budgets","cedarAction":"ManageBudgets","actions":["ManageBudgets"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"allocations, caps, grants, kill switches, policy profiles"}},
   {"method":"GET","path":"/api/page-references/resolve","source":"src/routes/page-references.ts:10","declaredAt":"src/routes/page-references.ts:10","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"social.chat","cedarAction":null,"actions":[],"floor":["ReadPageReference"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"list","note":"a collection"}},
   {"method":"GET","path":"/api/people/conversations","source":"src/routes/people.ts:68","declaredAt":"src/routes/people.ts:68","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"social.chat","cedarAction":null,"actions":[],"floor":["SharedPeopleConversations"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"list","note":"a collection"}},
@@ -3414,15 +3464,15 @@
   {"method":"DELETE","path":"/api/social/teams/:teamId/members/:userId","source":"src/routes/social.ts:513","declaredAt":"src/routes/social.ts:513","stale":false,"snapshot":true,"tenants":["social"],"kind":"write","family":"social.teams","cedarAction":null,"actions":[],"socialGate":true,"dynamicActions":["teamMemberAction"],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"adding or removing other people"}},
   {"method":"GET","path":"/api/social/work-graph/conversations/:id/graph","source":"src/routes/social-work-graph.ts:30","declaredAt":"src/routes/social-work-graph.ts:30","stale":false,"snapshot":true,"tenants":["social"],"kind":"read","family":"social.chat","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"get","note":"one record"}},
   {"method":"GET","path":"/api/social/work-graph/workspace/graph","source":"src/routes/social-work-graph.ts:38","declaredAt":"src/routes/social-work-graph.ts:38","stale":false,"snapshot":true,"tenants":["social"],"kind":"read","family":"social.chat","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"list","note":"a collection"}},
-  {"method":"GET","path":"/api/spend/report","source":"src/routes/spend-report.ts:72","declaredAt":"src/routes/spend-report.ts:72","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"budgets","cedarAction":null,"actions":[],"floor":["ViewSpendReport"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
+  {"method":"GET","path":"/api/spend/report","source":"src/routes/spend-report.ts:72","declaredAt":"src/routes/spend-report.ts:72","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"budgets","cedarAction":null,"actions":[],"floor":["ViewSpendReport"],"writePolicy":null,"pageId":null,"coveredBy":["budget"],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
   {"method":"GET","path":"/api/sprints","source":"src/routes/sprints.ts:95","declaredAt":"src/routes/sprints.ts:95","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"floor":["ViewSprints"],"writePolicy":null,"pageId":null,"coveredBy":["list"],"v2":{"decision":"read","tool":"list","note":"a collection"}},
   {"method":"POST","path":"/api/sprints","source":"src/routes/sprints.ts:259","declaredAt":"src/routes/sprints.ts:259","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageSprints","actions":["ManageSprints"],"floor":["ViewSprints"],"holders":["orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"confirm","tool":"create","note":"sprint (ManageSprints)"}},
   {"method":"PATCH","path":"/api/sprints/:sprintId/items","source":"src/routes/sprints.ts:319","declaredAt":"src/routes/sprints.ts:319","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageSprints","actions":["ManageSprints"],"floor":["ViewSprints"],"holders":["orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"confirm","tool":"update","note":"move work between sprints (ManageSprints)"}},
   {"method":"DELETE","path":"/api/sprints/:sprintId/items/:itemId","source":"src/routes/sprints.ts:345","declaredAt":"src/routes/sprints.ts:345","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageSprints","actions":["ManageSprints"],"floor":["ViewSprints"],"holders":["orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"confirm","tool":"update","note":"move work between sprints (ManageSprints)"}},
-  {"method":"GET","path":"/api/sprints/envelopes","source":"src/routes/sprints.ts:195","declaredAt":"src/routes/sprints.ts:195","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"floor":["ViewSprints"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
+  {"method":"GET","path":"/api/sprints/envelopes","source":"src/routes/sprints.ts:195","declaredAt":"src/routes/sprints.ts:195","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"floor":["ViewSprints"],"writePolicy":null,"pageId":null,"coveredBy":["budget"],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
   {"method":"GET","path":"/api/today","source":"src/routes/today.ts:89","declaredAt":"src/routes/today.ts:89","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"work","cedarAction":null,"actions":[],"bodyActions":["ManageBudgets"],"writePolicy":null,"pageId":null,"coveredBy":["summary"],"v2":{"decision":"read","tool":"summary","note":"an aggregate"}},
   {"method":"GET","path":"/api/topology/a2a","source":"src/routes/topology.ts:77","declaredAt":"src/routes/topology.ts:77","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"observability","cedarAction":"ViewObservability","actions":["ViewObservability"],"holders":["assessment/lead-assessor","assessment/program-lead","orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"operator consoles, agent-facing reads and leadership data: the page, not the voice"}},
-  {"method":"GET","path":"/api/user-budgets","source":"src/routes/user-budgets.ts:56","declaredAt":"src/routes/user-budgets.ts:56","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"budgets","cedarAction":"ManageBudgets","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageBudgets","holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
+  {"method":"GET","path":"/api/user-budgets","source":"src/routes/user-budgets.ts:56","declaredAt":"src/routes/user-budgets.ts:56","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"budgets","cedarAction":"ManageBudgets","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageBudgets","holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner"],"writePolicy":null,"pageId":null,"coveredBy":["budget"],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
   {"method":"DELETE","path":"/api/user-budgets/:userId","source":"src/routes/user-budgets.ts:107","declaredAt":"src/routes/user-budgets.ts:107","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"budgets","cedarAction":"ManageBudgets","actions":["ManageBudgets"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner"],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"allocations, caps, grants, kill switches, policy profiles"}},
   {"method":"GET","path":"/api/user-budgets/:userId","source":"src/routes/user-budgets.ts:69","declaredAt":"src/routes/user-budgets.ts:69","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"budgets","cedarAction":"ManageBudgets","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageBudgets","holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
   {"method":"PUT","path":"/api/user-budgets/:userId","source":"src/routes/user-budgets.ts:77","declaredAt":"src/routes/user-budgets.ts:77","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"budgets","cedarAction":"ManageBudgets","actions":["ManageBudgets"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"allocations, caps, grants, kill switches, policy profiles"}},

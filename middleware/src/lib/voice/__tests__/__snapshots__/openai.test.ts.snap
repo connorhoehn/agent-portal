@@ -465,6 +465,56 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
+    "description": "Read money: what the user spent this month, an initiative's or the org's spend and pace, allocations, people's budgets, whether the fleet is paused, sprint envelopes or agent cost. Figures beyond the user's own need the budgets read tier; below it the result offers the access request instead. Say only the figures the result gives. The scopes here: me, initiative, org, allocations, users, switches, envelopes, cost.",
+    "name": "budget",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "groupBy": {
+          "description": "For org: by initiative (the default) or by person.",
+          "enum": [
+            "initiative",
+            "person",
+            null,
+          ],
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "initiative": {
+          "description": "One initiative, as the user named it or by its id, for me, initiative and allocations.",
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "scope": {
+          "description": "Whose money: "me" (what the user spent), "initiative" (one initiative's spend, by person), "org" (every initiative's), "allocations" (each initiative's budget), "users" (people's budgets), "switches" (whether the fleet is paused), "envelopes" (the user's sprint envelopes), "cost" (agent cost in the last day).",
+          "enum": [
+            "me",
+            "initiative",
+            "org",
+            "allocations",
+            "users",
+            "switches",
+            "envelopes",
+            "cost",
+          ],
+          "type": "string",
+        },
+      },
+      "required": [
+        "scope",
+        "initiative",
+        "groupBy",
+      ],
+      "type": "object",
+    },
+    "strict": true,
+    "type": "function",
+  },
+  {
     "description": "Read what is happening around the user from the social app's activity and the presence roster: who is online, who is in a call or huddle now, the user's missed calls, recent messages or pinned messages (optionally from or about one person), what a person worked on, or everything recent since a time. Each row carries a ref that open_result opens.",
     "name": "activity",
     "parameters": {

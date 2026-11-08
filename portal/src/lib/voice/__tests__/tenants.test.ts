@@ -207,7 +207,7 @@ test('the V2-5 scripted sessions list access requests, pipeline runs, assessment
   }
 });
 
-test('the V2-6 scripted sessions: an org leader asks about the sweeps, a pipeline admin what failed last night, an HR admin whether the fleet is healthy', async () => {
+test('the V2-6 scripted sessions: an org leader asks about the sweeps, a pipeline admin what failed last night', async () => {
   const { mockCallFor } = await middlewareVoice<{ mockCallFor: (t: string, r: string) => Call }>('catalogue.ts');
   const runs = [
     { tenant: 'orgiq', role: 'org-leader', allow: ['Search', 'ManageBots', 'VoiceNavigate'] as Action[], routes: [
@@ -218,9 +218,6 @@ test('the V2-6 scripted sessions: an org leader asks about the sweeps, a pipelin
       route('GET', '/api/pipelines/runs', 200, { runs: [{ id: 'run-9', definitionId: 'runbook:nightly', status: 'failed', startedAt: '2026-11-08T02:00:00Z' }] }),
       route('GET', '/api/pipelines/queues', 200, { queues: [] })],
       summary: /^1 failed run since .*; latest: runbook:nightly$/ },
-    { tenant: 'orgiq', role: 'hr-admin', allow: ['ViewObservability', 'VoiceNavigate'] as Action[], routes: [
-      route('GET', '/api/observability/summary', 200, { totalInvocations24h: 10, totalErrors24h: 1, successRate: '90.0', avgLatencyMs: 800 })],
-      summary: /^90% of 10 agent runs succeeded/ },
   ];
   for (const r of runs) {
     const call = mockCallFor(r.tenant, r.role);
@@ -229,4 +226,17 @@ test('the V2-6 scripted sessions: an org leader asks about the sweeps, a pipelin
     assert.deepEqual(run.calls, [['summary', 'done']], r.role);
     assert.match(run.summaries[0]!, r.summary, r.role);
   }
+});
+
+test('the V2-7 scripted session: an HR admin asks what the org spent and hears the spend report\'s own figures', async () => {
+  const { mockCallFor } = await middlewareVoice<{ mockCallFor: (t: string, r: string) => Call }>('catalogue.ts');
+  const call = mockCallFor('orgiq', 'hr-admin');
+  assert.equal(call.name, 'budget');
+  const run = await scriptedRun('orgiq', {
+    role: 'hr-admin', allow: ['ManageBudgets', 'VoiceNavigate'], call,
+    routes: [route('GET', '/api/spend/report', 200, { totals: { knownUsd: 29.8063, projectedPeriodEndUsd: 112.49 }, groups: [{ key: 'p-auth', label: 'Auth Migration', knownUsd: 9.72 }] })],
+  });
+  assert.deepEqual(run.calls, [['budget', 'done']]);
+  assert.equal(run.summaries[0], 'The org spent $29.81 this month; on pace for $112.49; most: Auth Migration at $9.72');
+  assert.deepEqual(run.log.filter((l) => l.method === 'GET').map((l) => l.url), ['/api/spend/report?groupBy=initiative']);
 });

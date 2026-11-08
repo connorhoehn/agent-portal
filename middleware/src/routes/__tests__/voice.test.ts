@@ -190,7 +190,7 @@ describe('POST /api/voice/sessions — the mint', () => {
       const res = await mint();
       expect(res.status).toBe(201);
       // Reads and navigation; pipelines adds queue_work's dry-run (G19, gated per kind on RunPipeline by the dock).
-      const offered = ['access_request_status', 'get', 'list', 'navigate', 'open_result', ...(tenant === 'pipelines' ? ['queue_work'] : []), 'search', 'summary'];
+      const offered = ['access_request_status', 'budget', 'get', 'list', 'navigate', 'open_result', ...(tenant === 'pipelines' ? ['queue_work'] : []), 'search', 'summary'];
       expect(res.body.tools.sort()).toEqual(offered);
       const sent = JSON.parse(calls[0]!.init.body!).session;
       expect(sent.delegation.responses.tools.map((t: { name: string }) => t.name).sort()).toEqual(offered);
@@ -200,7 +200,7 @@ describe('POST /api/voice/sessions — the mint', () => {
     principal = { sub: USER, role: 'participant', tenant: 'social', grants: {} };
     const res = await mint();
     expect(res.status).toBe(201);
-    expect(res.body.tools.sort()).toEqual(['access_request_status', 'activity', 'get', 'list', 'navigate', 'open_result', 'search', 'send_chat_message', 'set_status', 'start_call', 'summary']);
+    expect(res.body.tools.sort()).toEqual(['access_request_status', 'activity', 'budget', 'get', 'list', 'navigate', 'open_result', 'search', 'send_chat_message', 'set_status', 'start_call', 'summary']);
   });
 
   it('an access approver\'s scripted session reads their approvals; a requester\'s their own requests', async () => {

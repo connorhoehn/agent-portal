@@ -162,6 +162,26 @@ export function summaryKinds(tenant: string | null): string[] {
   return [...new Set(Object.values(SUMMARY_KINDS).flat())];
 }
 
+/**
+ * What `budget` may read, per tenant (catalogue v2, V2-7). The caller's own
+ * spend everywhere; the rest is orgiq's money, behind the budgets read tier
+ * (the routes withhold or refuse below it, and the dock turns that into the
+ * quick access request offer, never a figure).
+ */
+export const BUDGET_SCOPES: Readonly<Record<string, readonly string[]>> = {
+  orgiq: ['me', 'initiative', 'org', 'allocations', 'users', 'switches', 'envelopes', 'cost'],
+  social: ['me'],
+  assessment: ['me'],
+  pipelines: ['me'],
+  access: ['me'],
+};
+
+/** `budget`'s scope enum for one tenant, or every tenant's scopes (null). */
+export function budgetScopes(tenant: string | null): string[] {
+  if (tenant != null) return [...(BUDGET_SCOPES[tenant] ?? [])];
+  return [...new Set(Object.values(BUDGET_SCOPES).flat())];
+}
+
 /** `activity`'s scope enum for one tenant, or every tenant's scopes (null) for the base row. */
 export function activityScopes(tenant: string | null): string[] {
   if (tenant != null) return [...(ACTIVITY_SCOPES[tenant] ?? [])];
@@ -298,6 +318,15 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       since: str(`Since when, for sweeps, pipelines, machines and unread: ${SINCE_WORDS}; yesterday by default for sweeps and pipelines.`, { minLength: 1, maxLength: 40 }),
     }, ['kind']),
     kind: 'read', backing: 'search', confirm: false, action: null, says: 'Checking the sweeps since yesterday.', tenants: VOICE_TENANTS,
+  },
+  {
+    name: 'budget',
+    parameters: obj({
+      scope: str('Whose money: "me" (what the user spent), "initiative" (one initiative\'s spend, by person), "org" (every initiative\'s), "allocations" (each initiative\'s budget), "users" (people\'s budgets), "switches" (whether the fleet is paused), "envelopes" (the user\'s sprint envelopes), "cost" (agent cost in the last day).', { enum: budgetScopes(null) }),
+      initiative: str('One initiative, as the user named it or by its id, for me, initiative and allocations.', { minLength: 1, maxLength: 200 }),
+      groupBy: str('For org: by initiative (the default) or by person.', { enum: ['initiative', 'person'] }),
+    }, ['scope']),
+    kind: 'read', backing: 'search', confirm: false, action: null, says: 'Checking your spend this month.', tenants: VOICE_TENANTS,
   },
   {
     name: 'activity',

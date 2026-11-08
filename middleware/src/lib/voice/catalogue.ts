@@ -289,6 +289,26 @@ export function summaryKinds(tenant: string | null): string[] {
   return [...new Set(Object.values(SUMMARY_KINDS).flat())];
 }
 
+/**
+ * What `budget` may read, per tenant (catalogue v2, V2-7). The caller's own
+ * spend everywhere; the rest is orgiq's money, behind the budgets read tier
+ * (the routes withhold or refuse below it, and the dock turns that into the
+ * quick access request offer, never a figure).
+ */
+export const BUDGET_SCOPES: Readonly<Record<string, readonly string[]>> = {
+  orgiq: ['me', 'initiative', 'org', 'allocations', 'users', 'switches', 'envelopes', 'cost'],
+  social: ['me'],
+  assessment: ['me'],
+  pipelines: ['me'],
+  access: ['me'],
+};
+
+/** `budget`'s scope enum for one tenant, or every tenant's scopes (null). */
+export function budgetScopes(tenant: string | null): string[] {
+  if (tenant != null) return [...(BUDGET_SCOPES[tenant] ?? [])];
+  return [...new Set(Object.values(BUDGET_SCOPES).flat())];
+}
+
 /** `activity`'s scope enum for one tenant, or every tenant's scopes (null) for the catalogue's base row. */
 export function activityScopes(tenant: string | null): string[] {
   if (tenant != null) return [...(ACTIVITY_SCOPES[tenant] ?? [])];
@@ -453,6 +473,20 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     mapsTo: 'GET /api/work/sweeps/runs, GET /api/work/findings, GET /api/bots, GET /api/bots/runs, GET /api/work/summary, GET /api/devbox/boxes, GET /api/bots/active-runs, GET /api/local-compute/nodes, GET /api/local-compute/runs, GET /api/observability/summary, GET /api/ingest/stats, GET /api/admin/kb-registry/health, GET /api/today, GET /api/discussions/unread, GET /api/social/plane/active, GET /api/social/summary, GET /api/pipelines/runs, GET /api/pipelines/queues, GET /api/assessment/rollup, GET /api/access/summary',
   },
   {
+    name: 'budget',
+    // toolsForTenant names the tenant's own scopes in the description it renders.
+    description: 'Read money: what the user spent this month, an initiative\'s or the org\'s spend and pace, allocations, people\'s budgets, whether the fleet is paused, sprint envelopes or agent cost. Figures beyond the user\'s own need the budgets read tier; below it the result offers the access request instead. Say only the figures the result gives.',
+    parameters: obj({
+      scope: str('Whose money: "me" (what the user spent), "initiative" (one initiative\'s spend, by person), "org" (every initiative\'s), "allocations" (each initiative\'s budget), "users" (people\'s budgets), "switches" (whether the fleet is paused), "envelopes" (the user\'s sprint envelopes), "cost" (agent cost in the last day).', { enum: budgetScopes(null) }),
+      initiative: str('One initiative, as the user named it or by its id, for me, initiative and allocations.', { minLength: 1, maxLength: 200 }),
+      groupBy: str('For org: by initiative (the default) or by person.', { enum: ['initiative', 'person'] }),
+    }, ['scope']),
+    kind: 'read', backing: 'search', confirm: false, action: null,
+    gate: 'me: a session floor, the caller\'s own figures; the rest the budgets read tier (org-leader, hr-admin, program-owner, ManageBudgets or the budgets-reader grant): the routes withhold or refuse below it and the dock offers the quick access request (G10); cost also ViewObservability', spend: 'none', idempotent: true,
+    says: 'Checking your spend this month.', tenants: VOICE_TENANTS,
+    mapsTo: 'GET /api/me/spend, GET /api/spend/report?initiativeId=&groupBy=, GET /api/graph/projects, GET /api/budgets, GET /api/user-budgets, GET /api/ops/switches, GET /api/sprints/envelopes, GET /api/observability/cost/summary',
+  },
+  {
     name: 'activity',
     description: 'Read what is happening around the user from the social app\'s activity and the presence roster: who is online, who is in a call or huddle now, the user\'s missed calls, recent messages or pinned messages (optionally from or about one person), what a person worked on, or everything recent since a time. Each row carries a ref that open_result opens.',
     parameters: obj({
@@ -558,7 +592,9 @@ export const MOCK_CALLS: Readonly<Record<string, { name: string; arguments: Reco
   'access/requester': { name: 'list', arguments: { kind: 'request', filter: { q: null, status: null, scope: 'mine', since: null }, limit: null }, said: 'List my access requests.' },
   // V2-6: the aggregates. An org leader asks about the sweeps, an HR admin whether the fleet is healthy, a pipeline admin what failed.
   'orgiq/org-leader': { name: 'summary', arguments: { kind: 'sweeps', since: 'yesterday' }, said: 'Any issues with the sweeps since yesterday?' },
-  'orgiq/hr-admin': { name: 'summary', arguments: { kind: 'health', since: null }, said: 'Is the fleet healthy?' },
+  // V2-7: an HR admin asks what the org spent (at the budgets tier). A member's own spend and the tier's offer
+  // are the dock's tests; the member's scripted session stays the search.
+  'orgiq/hr-admin': { name: 'budget', arguments: { scope: 'org', initiative: null, groupBy: null }, said: 'What has the org spent this month?' },
   'pipelines/pipeline-admin': { name: 'summary', arguments: { kind: 'pipelines', since: 'last night' }, said: 'What failed last night?' },
   'assessment/program-lead': { name: 'summary', arguments: { kind: 'rollup', since: null }, said: 'How is the program doing?' },
   // G19: a program owner queues the nightly sweep; under dev:mock the job is paced queued, running, done (lib/sweep-jobs.ts).
@@ -609,6 +645,10 @@ export function toolsForTenant(tenant: string, opts: { commandAllowlist?: readon
       return kinds.length ? [withEnum(t, 'kind', kinds, `${t.description} The kinds here: ${kinds.join(', ')}.`)] : [];
     }
     if (t.name === 'get') return [withEnum(t, 'part', getParts(tenant))];
+    if (t.name === 'budget') {
+      const scopes = budgetScopes(tenant);
+      return scopes.length ? [withEnum(t, 'scope', scopes, `${t.description} The scopes here: ${scopes.join(', ')}.`)] : [];
+    }
     if (t.name === 'summary') {
       const kinds = summaryKinds(tenant);
       return kinds.length ? [withEnum(t, 'kind', kinds, `${t.description} The kinds here: ${kinds.join(', ')}.`)] : [];

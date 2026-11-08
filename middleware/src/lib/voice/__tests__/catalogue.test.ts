@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import {
   VOICE_TOOLS, INTERNAL_TOOLS, NAVIGATE_PAGES, RUN_COMMAND_PHRASES, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, toolsForTenant, responsesFunctionTools,
   voiceInstructions, delegationInstructions, hashToolArgs, voiceTool, searchRecordTypes, MOCK_CALLS, VOICE_TENANTS, mockCallFor, activityScopes,
-  QUEUE_WORK_ACTIONS, QUEUE_WORK_KINDS, queueWorkKinds, LIST_KINDS, listKinds, getParts, summaryKinds,
+  QUEUE_WORK_ACTIONS, QUEUE_WORK_KINDS, queueWorkKinds, LIST_KINDS, listKinds, getParts, summaryKinds, budgetScopes,
 } from '../catalogue.js';
 import { SEARCH_TYPES } from '../../../providers/search.js';
 import { tenantSpec } from '../../search-index/tenants.js';
@@ -37,6 +37,7 @@ const SPEC: Record<string, [string, boolean, string]> = {
   open_shell: ['machine', false, 'route'],
   run_command: ['machine', true, 'work'],
   summary: ['read', false, 'search'],
+  budget: ['read', false, 'search'],
   send_chat_message: ['people', true, 'social-activity'],
   start_call: ['people', true, 'social-activity'],
   set_status: ['people', false, 'social-activity'],
@@ -94,6 +95,9 @@ describe('the §4 catalogue', () => {
     ok('get', { ref: '2' });
     ok('summary', { kind: 'sweeps', since: 'yesterday' });
     ok('summary', { kind: 'health' });
+    ok('budget', { scope: 'me' });
+    ok('budget', { scope: 'initiative', initiative: 'Auth Migration' });
+    ok('budget', { scope: 'org', groupBy: 'person' });
     ok('run_command', { computerId: 'box-1', phrase: 'commits-since', since: 'yesterday' });
     ok('start_computer', { initiativeIds: ['p1', 'Alpha'] });
     ok('send_chat_message', { target: { kind: 'team', name: 'platform' }, text: "I'm out today" });
@@ -123,7 +127,7 @@ describe('the §4 catalogue', () => {
 
 describe('tenant scoping (§6)', () => {
   it('a social session is offered navigate, its search, its activity, chat, a call, status and its own requests, nothing on machines', () => {
-    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'activity', 'get', 'list', 'navigate', 'open_result', 'search', 'send_chat_message', 'set_status', 'start_call', 'summary']);
+    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'activity', 'budget', 'get', 'list', 'navigate', 'open_result', 'search', 'send_chat_message', 'set_status', 'start_call', 'summary']);
   });
 
   it('start_call is offered in orgiq and social only, asks first, and gates on StartCall (G7)', () => {
@@ -171,7 +175,7 @@ describe('tenant scoping (§6)', () => {
 
   it.each(['assessment', 'pipelines', 'access'])('%s is offered reads and navigation only: nothing that touches a machine or posts (gaps doc Q1); pipelines adds queue_work (G19)', (tenant) => {
     const tools = toolsForTenant(tenant).filter((t) => t.name !== 'queue_work');
-    expect(tools.map((t) => t.name).sort()).toEqual(['access_request_status', 'get', 'list', 'navigate', 'open_result', 'search', 'summary']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['access_request_status', 'budget', 'get', 'list', 'navigate', 'open_result', 'search', 'summary']);
     expect(toolsForTenant(tenant).some((t) => t.name === 'queue_work')).toBe(tenant === 'pipelines');
     for (const t of tools) {
       expect(['read', 'navigate']).toContain(t.kind);
@@ -280,8 +284,23 @@ describe('tenant scoping (§6)', () => {
     expect(summaryKinds('pipelines')).toContain('pipelines');
     expect(summaryKinds('social')).not.toContain('sweeps');
     expect(mockCallFor('orgiq', 'org-leader')).toMatchObject({ name: 'summary', arguments: { kind: 'sweeps' } });
-    expect(mockCallFor('orgiq', 'hr-admin')).toMatchObject({ name: 'summary', arguments: { kind: 'health' } });
     expect(mockCallFor('pipelines', 'pipeline-admin')).toMatchObject({ name: 'summary', arguments: { kind: 'pipelines', since: 'last night' } });
+  });
+
+  it('budget (V2-7) reads the caller\'s own spend everywhere and the rest of the money in orgiq only, asking nothing', () => {
+    const t = voiceTool('budget')!;
+    expect(t).toMatchObject({ kind: 'read', confirm: false, spend: 'none', action: null });
+    for (const tenant of VOICE_TENANTS) {
+      const scopes = (toolsForTenant(tenant).find((x) => x.name === 'budget')!.parameters.properties['scope'] as { enum: string[] }).enum;
+      expect(scopes).toEqual(budgetScopes(tenant));
+      expect(scopes[0]).toBe('me');
+      if (tenant !== 'orgiq') expect(scopes).toEqual(['me']);
+    }
+    expect(budgetScopes('orgiq')).toEqual(expect.arrayContaining(['initiative', 'org', 'allocations', 'users', 'switches', 'envelopes', 'cost']));
+    // The model names a scope and an initiative, never an amount, a cap or a user to change.
+    const v = new Ajv({ strict: true }).compile(t.parameters);
+    expect(v({ scope: 'allocations', amountUsd: 100 })).toBe(false);
+    expect(mockCallFor('orgiq', 'hr-admin')).toMatchObject({ name: 'budget', arguments: { scope: 'org' } });
   });
 
   it('a tenant that holds no voice grant gets no tools', () => {

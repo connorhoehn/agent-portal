@@ -10,7 +10,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { VOICE_PLANNERS, VOICE_RUNNERS } from '../actions.ts';
-import { accessRequestHref, planPreparedCall, prepareToolCall, ResultMemory, runPreparedCall, type CallAccess, type ComputeAccess, type PresenceAccess, type SocialAccess, type ToolResult, type VoiceComputer } from '../tools.ts';
+import { accessRequestHref, BUDGET_READ_ITEM_ID, planPreparedCall, prepareToolCall, ResultMemory, runPreparedCall, type CallAccess, type ComputeAccess, type PresenceAccess, type SocialAccess, type ToolResult, type VoiceComputer } from '../tools.ts';
 import { middlewareVoice, toolContext, type LoggedRequest } from './voiceHarness.ts';
 import type { Action } from '../../capabilities';
 
@@ -100,6 +100,7 @@ const VARIANTS: Record<string, unknown[]> = {
   start_computer: [{ initiativeIds: ['Unknown Initiative'] }],
   open_shell: [{ computerId: 'unknown-box' }],
   run_command: [{ computerId: 'unknown-box', phrase: 'status' }, { computerId: 'unknown-box', phrase: 'commits-since', since: 'soon' }],
+  budget: [{ scope: 'me' }, { scope: 'initiative', initiative: 'Nobody Initiative' }, { scope: 'initiative', initiative: 'Initiative' }, { scope: 'org' }, { scope: 'allocations' }, { scope: 'cost' }],
   summary: [{ kind: 'sweeps', since: 'whenever' }, { kind: 'sweeps', since: 'yesterday' }, { kind: 'fleet' }, { kind: 'live' }, { kind: 'ingest' }, { kind: 'rollup' }, { kind: 'today' }],
   send_chat_message: [{ target: { kind: 'dm', name: 'Ada' }, text: 'hello' }, { target: { kind: 'team', name: 'nobody' }, text: 'x' }],
   start_call: [{ target: { kind: 'dm', name: 'Ada' } }],
@@ -151,6 +152,8 @@ async function runAs(world: World, mode: Mode, name: string, args: unknown): Pro
   const universe = strings([answered, world.computers, world.roster.roster(), args]);
   // The dock's own fixed words for that link are not a row.
   if (world.socialRequestItemId) for (const s of [world.socialRequestItemId, accessRequestHref(world.socialRequestItemId), 'Request Social access']) universe.add(s);
+  // And the budgets tier's own request link (budget's offer): fixed words and the catalog item, never a row.
+  for (const s of [BUDGET_READ_ITEM_ID, accessRequestHref(BUDGET_READ_ITEM_ID), 'Request budget visibility']) universe.add(s);
   return { results, universe };
 }
 
@@ -172,7 +175,10 @@ test('property: a refused, ambiguous or failed payload names only rows that pers
             checked++;
             const where = `${who} ${tool} ${JSON.stringify(args)} ${mode}`;
             for (const id of identifiers(r.output)) {
-              assert.ok(universe.has(id) || [...universe].some((u) => capped(u) === id), `${where}: "${id}" is not in this persona's own reads`);
+              // A typed ref (`kind:id`, catalogue v2) names a row by the id the persona's own read returned.
+              const typed = /^[a-z][a-z-]*:(.+)$/.exec(id)?.[1];
+              const known = (x: string) => universe.has(x) || [...universe].some((u) => capped(u) === x);
+              assert.ok(known(id) || (typed != null && known(typed)), `${where}: "${id}" is not in this persona's own reads`);
             }
             const text = JSON.stringify(r.output) + r.summary;
             for (const f of foreign) assert.ok(!text.includes(f), `${where}: names the other persona's "${f}"`);
