@@ -60,6 +60,9 @@ import {
   type ConfirmPlan, type JobFollow, type JobTracking, type QueuedJob, type ToolContext, type ToolResult, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 import type { PageRow } from './pageContext.ts';
+import { deriveJob, dispatchBlockedReason, dispatchBody, modelLabel } from '../../pages/project-detail/prepareJobModel.ts';
+import { flattenWorkItems } from '../../pages/project-detail/projectFormat.ts';
+import type { Codebase, WorkItemTree } from '../../pages/project-detail/types.ts';
 
 // ── targets ─────────────────────────────────────────────────────────────────
 
@@ -102,7 +105,9 @@ export function matchByName<T>(rows: readonly T[], name: (r: T) => string, said:
 
 // ── planner and runner ──────────────────────────────────────────────────────
 
-interface WorkPlan { kind: QueueWorkKind; title: string; sweep?: SweepName | null; botId?: string; definitionId?: string; note?: string; post?: PostSpec }
+interface WorkPlan { kind: QueueWorkKind; title: string; sweep?: SweepName | null; botId?: string; definitionId?: string; note?: string; post?: PostSpec; dispatch?: DispatchItem[] }
+/** One work item of a dispatch (G22): its title and the drawer's exact body, fixed by the planner. */
+interface DispatchItem { id: string; title: string; body: Record<string, unknown> }
 interface BotRow { id: string; name: string; enabled?: boolean; pausedReason?: string | null }
 interface RunbookRow { id: string; title: string; enabled?: boolean }
 
@@ -244,6 +249,9 @@ async function planKind(kind: QueueWorkKind, target: string, args: VoiceToolArgs
     case 'dispatch': {
       const found = await findByName(ctx, 'work-item', target);
       if ('result' in found) return found;
+      // G22: the item's initiative's defaults, as the page's drawer has them, on one card.
+      const projectId = typeof found.row.raw['projectId'] === 'string' ? found.row.raw['projectId'] : null;
+      if (projectId) return planDispatch(ctx, [{ ref: `work-item:${found.row.id}`, title: found.row.title }], args, note, projectId);
       const item = found.row;
       const model = dispatchModel(typeof args['model'] === 'string' ? args['model'] : undefined, item.raw['estimateModel']);
       if (!model) return { result: refused(`There is no "${String(args['model'])}" model to dispatch with. The models are ${DEVBOX_MODELS.map((m) => m.label).join(', ')}.`) };
@@ -359,6 +367,69 @@ async function planKind(kind: QueueWorkKind, target: string, args: VoiceToolArgs
   }
 }
 
+/**
+ * G22, dispatch without the questionnaire: the items the user named (the
+ * page's rows, or one by name) go on one card with the defaults the page's
+ * own dispatch drawer derives (prepareJobModel.ts deriveJob): each item's
+ * recorded model (else the runtime default; a model only when the user named
+ * one), the initiative's codebase, the instruction from the item, no cap; the
+ * computer runs under the initiative's own profile, which the server applies.
+ * The card names the items, those defaults and the drawer's forecast (GET
+ * /api/bots/estimate, summed). Reads only, all of them the page's own: the
+ * initiative's work tree, its detail, the codebases.
+ */
+async function planDispatch(ctx: ToolContext, rows: ReadonlyArray<Pick<PageRow, 'ref' | 'title'>>, args: VoiceToolArgs, note: string | undefined, initiativeId?: string): Promise<{ plan: ConfirmPlan } | { result: ToolResult }> {
+  const ids = rows.map((r) => /^work-item:(.+)$/.exec(r.ref)?.[1] ?? null);
+  if (ids.some((id) => !id)) return { result: refused('Only work items are dispatched; those rows are not work items.', { code: 'not-on-this-page' }) };
+  const record = ctx.page?.()?.record ?? null;
+  const projectId = initiativeId ?? (record && /^initiative:(.+)$/.exec(record.ref)?.[1]) ?? null;
+  if (!projectId) return { result: refused('Open the initiative whose work this is, then ask again.', { code: 'not-on-this-page' }) };
+  const canDispatch = ctx.can('DispatchAgentRun');
+  const [tree, detail, codebases] = await Promise.all([
+    readJson<WorkItemTree[]>(ctx, `/api/graph/projects/${enc(projectId)}/work`),
+    readJson<{ name?: string; repoFullName?: string | null }>(ctx, `/api/graph/projects/${enc(projectId)}`),
+    readJson<{ projects?: Codebase[] }>(ctx, '/api/agent-projects'),
+  ]);
+  if (!tree.ok) return { result: readFailure('the initiative\'s work', tree.status) };
+  if (!detail.ok) return { result: readFailure('the initiative', detail.status) };
+  const initiative = detail.body.name ?? 'the initiative';
+  const all = flattenWorkItems(Array.isArray(tree.body) ? tree.body : []);
+  const repos = codebases.ok ? (codebases.body.projects ?? []).filter((c) => c.orgProjectId === projectId) : [];
+  const said = typeof args['model'] === 'string' ? args['model'] : undefined;
+  const named = said ? dispatchModel(said, null) : null;
+  if (said && !named) return { result: refused(`There is no "${said}" model to dispatch with. The models are ${DEVBOX_MODELS.map((m) => m.label).join(', ')}.`) };
+  const items: Array<DispatchItem & { model: string; points: number; agentProjectId: string | null }> = [];
+  for (const [i, id] of ids.entries()) {
+    const item = all.find((w) => w.id === id);
+    if (!item) return { result: refused(`"${rows[i]!.title}" is not work of ${initiative} you can dispatch.`) };
+    const blocked = dispatchBlockedReason(item, canDispatch);
+    if (blocked) return { result: refused(`"${item.title}" cannot be dispatched: ${blocked.toLowerCase()}.`) };
+    const job = deriveJob({ item, codebases: repos, linkedRepo: detail.body.repoFullName ?? null });
+    if (named) job.model = named.id;
+    if (!items.some((x) => x.id === item.id)) items.push({ id: item.id, title: item.title, body: dispatchBody(item.id, job, {}), model: job.model, points: item.storyPoints!, agentProjectId: job.agentProjectId });
+  }
+  // The drawer's forecast per item, summed: the route's own figures on the card.
+  let lo = 0, hi = 0, known = true;
+  for (const it of items) {
+    const est = await readJson<{ costUsdP25?: number; costUsdP75?: number }>(ctx, `/api/bots/estimate?${qs({ model: it.model, points: it.points, ...(it.agentProjectId ? { agentProjectId: it.agentProjectId } : {}) })}`);
+    if (!est.ok) return { result: readFailure('the forecast', est.status) };
+    if (typeof est.body.costUsdP25 !== 'number' || typeof est.body.costUsdP75 !== 'number') { known = false; continue; }
+    lo += est.body.costUsdP25; hi += est.body.costUsdP75;
+  }
+  const models = [...new Set(items.map((it) => modelLabel(it.model)))].join(' and ');
+  const repo = items[0]!.agentProjectId ? repos.find((c) => c.id === items[0]!.agentProjectId)?.repoFullName ?? null : null;
+  const one = items.length === 1;
+  const title = one ? `Dispatch "${items[0]!.title}"` : `Dispatch ${items.length} work items`;
+  const detailLines = [
+    ...items.map((it, i) => `${one ? '' : `${i + 1}. `}${it.title} · ${modelLabel(it.model)}`),
+    `Profile: ${initiative}'s own, with ${models}${named ? ' as you asked' : ' (the drawer\'s default)'} and ${repo ? `the ${repo} codebase` : 'the codebase the server picks'}; no per-run cap.`,
+    known ? `Forecast ${usd(lo)} to ${usd(hi)}${one ? '' : ' in all'}.` : 'The forecast is not known yet.',
+    withNote(`${one ? 'An agent runs it on a computer and spends' : 'Agents run them on computers and spend'} against ${initiative}.`, note),
+  ];
+  const data: WorkPlan = { kind: 'dispatch', title: one ? `"${items[0]!.title}"` : `${items.length} dispatches`, dispatch: items.map(({ id, title: t, body }) => ({ id, title: t, body })), ...(note ? { note } : {}) };
+  return { plan: { title, detail: detailLines, data } };
+}
+
 const planQueueWork: VoiceToolPlanner = async (args, ctx) => {
   const kind = String(args['kind']) as QueueWorkKind;
   const kinds = QUEUE_WORK_ACTIONS[ctx.tenant] ?? {};
@@ -385,7 +456,9 @@ const planQueueWork: VoiceToolPlanner = async (args, ctx) => {
       if ('result' in hit) return hit;
       found.push(hit.row);
     }
-    if (found.length > 1) return { result: refused('Only one row at a time can be queued this way; ask for each in turn.', { code: 'not-on-this-page' }) };
+    // G22: a dispatch takes the page's rows as one card, with the page's own defaults.
+    if (kind === 'dispatch') return planDispatch(ctx, found, args, note);
+    if (found.length > 1) return { result: refused('Only a dispatch takes several rows at once; ask for each in turn.', { code: 'not-on-this-page' }) };
     target = found[0]!.ref;
   }
 
@@ -511,11 +584,43 @@ async function runKind(plan: WorkPlan, ctx: ToolContext, jobs: JobTracking): Pro
   }, () => done('work_queued', { workKind: plan.kind, title: plan.title, alreadyQueued: true }, `${plan.title} was already queued; nothing was sent again`));
 }
 
+/**
+ * G22: each item through the drawer's own route and body, one after the other,
+ * none of the over-budget confirm flags; the first refusal stops the rest and
+ * is answered in the usual shape (postRefusal), with what was already sent.
+ */
+async function runDispatch(plan: WorkPlan, items: readonly DispatchItem[], ctx: ToolContext, jobs: JobTracking): Promise<ToolResult> {
+  const queued: Array<{ jobId: string; title: string; href: string }> = [];
+  for (const it of items) {
+    const itemPlan: WorkPlan = { kind: 'dispatch', title: `"${it.title}"`, ...(plan.note ? { note: plan.note } : {}),
+      post: { url: '/api/bots/dispatch-work', body: it.body, idAt: 'run.jobId', follow: { url: '/api/work/jobs/:id', reader: 'work-job' }, href: '/iq/work/:id' } };
+    const res = await runKind(itemPlan, ctx, jobs);
+    if (res.outcome !== 'done') {
+      if (!queued.length) return res;
+      return { ...res, output: { ...res.output, dispatched: queued.map((q) => q.title), stoppedAt: it.title } };
+    }
+    const id = res.output['jobId'];
+    if (typeof id === 'string') queued.push({ jobId: id, title: it.title, href: String(res.output['href'] ?? '') });
+  }
+  if (items.length === 1) return runKindResultOf(queued[0], plan);
+  return done('work_queued', {
+    workKind: 'dispatch', title: plan.title, state: 'queued', count: queued.length, jobs: queued,
+    next: 'Say they are queued and that you will say as each is done. The portal shows their progress.',
+  }, `${queued.length} dispatches queued`);
+}
+
+function runKindResultOf(q: { jobId: string; title: string; href: string } | undefined, plan: WorkPlan): ToolResult {
+  if (!q) return done('work_queued', { workKind: 'dispatch', title: plan.title, alreadyQueued: true }, `${plan.title} was already queued; nothing was sent again`);
+  return done('work_queued', { jobId: q.jobId, workKind: 'dispatch', title: `"${q.title}"`, state: 'queued', href: q.href,
+    next: 'Say it is queued and that you will say when it is done. The portal shows its progress.' }, `"${q.title}": queued`);
+}
+
 const runQueueWork: VoiceToolRunner = async (_args, ctx, planned) => {
   const plan = planned as WorkPlan | undefined;
   if (!plan?.kind) return failed('Nothing was planned to queue.');
   const jobs = ctx.jobs;
   if (!jobs) return refused('This dock cannot follow background work right now, so nothing was queued.');
+  if (plan.dispatch) return runDispatch(plan, plan.dispatch, ctx, jobs);
   if (plan.post) return runKind(plan, ctx, jobs);
   let job: QueuedJob | null = null;
   if (plan.kind === 'sweep') {

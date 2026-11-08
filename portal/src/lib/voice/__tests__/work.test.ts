@@ -13,6 +13,7 @@ import { SPOKEN_DETAIL_MAX, VoiceJobTracker, jobNotification, matchByName, outco
 import { addLocalNotification, clearLocalNotifications, getLocalNotifications, mergeNotifications } from '../../localNotifications.ts';
 import { FakeClock, fakeFetch, isToolRow, middlewareVoice, route, toolContext, type Route, type LoggedRequest } from './voiceHarness.ts';
 import type { Action } from '../../capabilities';
+import { deriveInstruction } from '../../../pages/project-detail/prepareJobModel.ts';
 
 type Call = { name: string; arguments: Record<string, unknown>; said: string };
 const SESSION = 'vs_00000000-0000-0000-0000-0000000000cc';
@@ -362,6 +363,14 @@ interface KindCase {
 }
 
 const PROJECTS = [{ id: 'p-auth', name: 'Auth Migration' }, { id: 'p-obs', name: 'Observability Platform' }];
+/** The initiative page's own reads (G22): its work tree, its detail (the linked repo), the codebases that deliver it. */
+const CODEBASE = '11111111-2222-4333-8444-555555555555';
+const RETRY_STORM = { id: 'w-9', type: 'story', title: 'Fix the retry storm', status: 'open', priority: 'high', storyPoints: 3, children: [] };
+const INITIATIVE_READS: Route[] = [
+  route('GET', '/api/graph/projects/p-auth/work', 200, [{ id: 'e-1', type: 'epic', title: 'Resilience', children: [RETRY_STORM] }]),
+  route('GET', '/api/graph/projects/p-auth', 200, { id: 'p-auth', name: 'Auth Migration', repoFullName: 'acme/auth' }),
+  route('GET', '/api/agent-projects', 200, { projects: [{ id: CODEBASE, repoFullName: 'acme/auth', orgProjectId: 'p-auth' }] }),
+];
 const TEAMS = [{ id: 'TEAM-001', name: 'Northstar Payments' }, { id: 'TEAM-002', name: 'Kubernetes Operator' }];
 const CASES: KindCase[] = [
   { kind: 'job', tenant: 'orgiq', allow: ['ManageDevbox'], target: 'login redirect',
@@ -372,11 +381,13 @@ const CASES: KindCase[] = [
     title: 'Queue "Fix the login redirect"', states: ['queued', 'running', 'done'], href: '/iq/work/job-41' },
   { kind: 'dispatch', tenant: 'orgiq', allow: ['DispatchAgentRun'], target: 'retry storm', model: 'sonnet',
     routes: [route('GET', '/api/graph/work', 200, [{ id: 'w-9', title: 'Fix the retry storm', projectId: 'p-auth', storyPoints: 3 }]),
+      ...INITIATIVE_READS,
       route('GET', '/api/bots/estimate', 200, { costUsdP25: 0.4, costUsdP75: 1.25, confidence: 'medium' }),
       route('POST', '/api/bots/dispatch-work', 202, { run: { id: 'run-5', jobId: 'job-55' } }),
       steps('/api/work/jobs/job-55', [{ status: 'claimed' }, { status: 'running' }, { status: 'done', result: { summary: 'Opened a PR' } }])],
-    post: ['/api/bots/dispatch-work', { workItemId: 'w-9', model: 'us.anthropic.claude-sonnet-5' }],
-    title: 'Dispatch "Fix the retry storm" with Sonnet', states: ['queued', 'running', 'done'], href: '/iq/work/job-55' },
+    // The drawer's own body (prepareJobModel.ts dispatchBody): the named model, the initiative's codebase, the item's instruction.
+    post: ['/api/bots/dispatch-work', { workItemId: 'w-9', model: 'us.anthropic.claude-sonnet-5', agentProjectId: CODEBASE, instruction: deriveInstruction({ ...RETRY_STORM, summary: null, description: null, nextStep: null, nextStepDetail: null }) }],
+    title: 'Dispatch "Fix the retry storm"', states: ['queued', 'running', 'done'], href: '/iq/work/job-55' },
   { kind: 'finding-promote', tenant: 'orgiq', allow: ['DispatchAgentRun'], target: 'stale onboarding doc',
     routes: [route('GET', '/api/work/findings', 200, { findings: [{ id: 'f-3', title: 'Stale onboarding doc', status: 'open' }] }),
       route('POST', '/api/work/findings/f-3/promote', 201, { id: 'job-60' }), steps('/api/work/jobs/job-60', [{ status: 'running' }, { status: 'done' }])],
@@ -472,12 +483,18 @@ test('V2-9: the dispatch card shows the drawer\'s forecast; an unknown model is 
   const dispatch = CASES.find((c) => c.kind === 'dispatch')!;
   const r = await kindRun(dispatch);
   assert.ok(r.planned && 'plan' in r.planned);
-  assert.match(String(r.planned.plan.detail), /^Forecast \$0\.40 to \$1\.25\./);
-  assert.ok(r.log.some((l) => l.url === '/api/bots/estimate?model=us.anthropic.claude-sonnet-5&points=3'));
+  assert.deepEqual(r.planned.plan.detail, [
+    'Fix the retry storm · Sonnet',
+    'Profile: Auth Migration\'s own, with Sonnet as you asked and the acme/auth codebase; no per-run cap.',
+    'Forecast $0.40 to $1.25.',
+    'An agent runs it on a computer and spends against Auth Migration.',
+  ]);
+  assert.ok(r.log.some((l) => l.url === `/api/bots/estimate?model=us.anthropic.claude-sonnet-5&points=3&agentProjectId=${CODEBASE}`));
   const odd = await kindRun({ ...dispatch, model: 'gpt-9' });
   assert.ok(odd.planned && 'result' in odd.planned && /no "gpt-9" model/.test(odd.planned.result.summary));
   assert.equal(odd.log.filter((l) => l.method !== 'GET').length, 0);
-  const braked = await kindRun({ ...dispatch, routes: [dispatch.routes[0]!, dispatch.routes[1]!, route('POST', '/api/bots/dispatch-work', 409, { error: 'over the allocation', gate: 'allocation', confirmFlag: 'confirmOverAllocation' })] });
+  const reads = dispatch.routes.filter((r) => r({ method: 'GET', url: '/api/bots/estimate?x', body: undefined }) || ['/api/graph/work', '/api/graph/projects/p-auth/work', '/api/graph/projects/p-auth', '/api/agent-projects'].some((u) => r({ method: 'GET', url: u, body: undefined })));
+  const braked = await kindRun({ ...dispatch, routes: [...reads, route('POST', '/api/bots/dispatch-work', 409, { error: 'over the allocation', gate: 'allocation', confirmFlag: 'confirmOverAllocation' })] });
   assert.equal(braked.res?.outcome, 'refused');
   assert.match(braked.res?.summary ?? '', /needs a confirm on its page, not by voice: over the allocation/);
   assert.ok(!JSON.stringify(braked.log.map((l) => l.body)).includes('confirmOver'), 'no confirm flag is ever sent');
