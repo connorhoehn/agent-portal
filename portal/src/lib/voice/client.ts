@@ -4,7 +4,9 @@
 // offer -> POST /api/voice/sessions (the middleware holds the key and returns
 // the SDP answer, §2) -> remote audio element; input and output level meters
 // as 0..1; hang-up through `session.close` and then POST /:id/close with the
-// seconds, so the hold settles.
+// seconds and the delegated model's tokens (every nested
+// `response.completed.response.usage`, summed; G11), so the hold settles and
+// the ledger books both rows.
 //
 // Every data-channel frame goes through `parseFrame`, in the shapes V1
 // recorded against the real Live API (docs/voice/live-events.jsonl):
@@ -66,7 +68,7 @@ export type VoiceFrame =
   | { kind: 'audio' }
   | { kind: 'delegation'; delegationId: string; responseId: string | null; target: string | null }
   | { kind: 'call'; delegationId: string | null; callId: string; name: string; arguments: string }
-  | { kind: 'response-completed'; delegationId: string | null; responseId: string | null }
+  | { kind: 'response-completed'; delegationId: string | null; responseId: string | null; usage: ResponseUsage | null }
   | { kind: 'response-failed'; delegationId: string | null; responseId: string | null; message: string }
   | { kind: 'response-progress'; delegationId: string | null; type: string }
   | { kind: 'usage'; seconds: number }
@@ -76,10 +78,25 @@ export type VoiceFrame =
   | { kind: 'error'; message: string; code: string | null; param: string | null; clientEventId: string | null }
   | { kind: 'other'; type: string };
 
+/** One nested `response.completed.response.usage` (the delegated model's tokens, G11). */
+export interface ResponseUsage { inputTokens: number; outputTokens: number; cachedTokens: number }
+
+/** The session's delegated tokens as the close posts them (middleware lib/voice/ledger.ts DelegatedUsage). */
+export interface DelegatedUsage extends ResponseUsage { responses: number }
+
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
 const strOr = (v: unknown, d: string | null = null): string | null => (typeof v === 'string' ? v : d);
 const numOr = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+/** `{ input_tokens, output_tokens, input_tokens_details: { cached_tokens } }`, else null. */
+function responseUsage(u: unknown): ResponseUsage | null {
+  if (!isObj(u)) return null;
+  const input = numOr(u['input_tokens']), output = numOr(u['output_tokens']);
+  if (input == null || output == null) return null;
+  const details = isObj(u['input_tokens_details']) ? u['input_tokens_details'] : {};
+  return { inputTokens: input, outputTokens: output, cachedTokens: numOr(details['cached_tokens']) ?? 0 };
+}
 
 /** One data-channel message (a JSON string, or an already-parsed event) as a frame; null when it is not an event. */
 export function parseFrame(data: unknown): VoiceFrame | null {
@@ -115,7 +132,9 @@ export function parseFrame(data: unknown): VoiceFrame | null {
         if (callId && name) return { kind: 'call', delegationId, callId, name, arguments: strOr(item['arguments'], '') ?? '' };
       }
       const response = isObj(inner['response']) ? inner['response'] : {};
-      if (innerType === 'response.completed') return { kind: 'response-completed', delegationId, responseId: strOr(response['id']) };
+      if (innerType === 'response.completed') {
+        return { kind: 'response-completed', delegationId, responseId: strOr(response['id']), usage: responseUsage(response['usage']) };
+      }
       if (innerType === 'response.failed') {
         const err = isObj(response['error']) ? response['error'] : {};
         return { kind: 'response-failed', delegationId, responseId: strOr(response['id']), message: strOr(err['message'], 'the backend response failed') ?? '' };
@@ -343,6 +362,8 @@ export class VoiceClient {
   mint: VoiceMint | null = null;
   /** Cumulative seconds from the last session.usage.updated / session.closed. */
   usageSeconds: number | null = null;
+  /** The delegated model's tokens, summed over every response.completed of this session (G11). */
+  delegated: DelegatedUsage = { inputTokens: 0, outputTokens: 0, cachedTokens: 0, responses: 0 };
   private media: MediaSession | null = null;
   private startedAt: number | null = null;
   private mintedAt: number | null = null;
@@ -511,7 +532,7 @@ export class VoiceClient {
     try {
       await this.opts.fetch(`${VOICE_API}/${encodeURIComponent(mint.sessionId)}/close`, {
         method: 'POST', credentials: 'include', keepalive: true, headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ seconds, reason }),
+        body: JSON.stringify({ seconds, reason, delegated: { ...this.delegated } }),
       });
     } catch { /* the reaper settles a session whose close never arrived (§7) */ }
     this.opts.onEvent({ type: 'ended', reason, seconds });
@@ -539,6 +560,14 @@ export class VoiceClient {
     if (!frame) return;
     if (frame.kind === 'started' && this.startedAt == null) this.startedAt = this.now();
     if (frame.kind === 'usage') this.usageSeconds = frame.seconds;
+    if (frame.kind === 'response-completed' && frame.usage) {
+      // Per response, never cumulative: each nested usage is that response's own.
+      const d = this.delegated, u = frame.usage;
+      this.delegated = {
+        inputTokens: d.inputTokens + u.inputTokens, outputTokens: d.outputTokens + u.outputTokens,
+        cachedTokens: d.cachedTokens + u.cachedTokens, responses: d.responses + 1,
+      };
+    }
     if (frame.kind === 'closed') {
       if (frame.seconds != null) this.usageSeconds = frame.seconds;
       this.sawClosed = true;

@@ -19,9 +19,13 @@
 //     session object.
 //   POST /api/voice/sessions/:id/events  { tool, args? | argsSha256?, outcome, durationMs?, confirmedBy? }
 //     one voice_tool_calls row; the arguments are hashed and dropped. 201 { id }.
-//   POST /api/voice/sessions/:id/close   { seconds, reason? }
-//     one ledger row (source voice_session, cost seconds/60 × rate, basis
-//     estimated, provider openai) that settles the hold. Idempotent.
+//   POST /api/voice/sessions/:id/close   { seconds, reason?, delegated?: { inputTokens, outputTokens, cachedTokens, responses } }
+//     two ledger rows (lib/voice/ledger.ts, G11), both source voice_session,
+//     provider openai, basis estimated: `<id>` at seconds/60 × rate, which
+//     settles the hold, and `<id>:tokens` (trigger voice-delegation) for the
+//     delegated model's tokens, bounded at 50,000 per response and one
+//     response per reported tool call plus one; no `delegated` = unknown.
+//     Idempotent.
 //
 // A session belongs to the user who minted it, and its tool calls to the
 // tenant it was minted in: any other caller gets 404, whether or not the id
@@ -38,7 +42,7 @@ import { emitFleetMetric } from '../lib/fleet-metrics.js';
 import { rateLimit } from '../lib/rate-limit.js';
 import { clock } from '../mock/core/index.js';
 import { voiceConfig, voiceCostUsd, MIN_BILLED_SECONDS } from '../lib/voice/config.js';
-import { bookVoiceSpend } from '../lib/voice/ledger.js';
+import { bookVoiceSpend, boundDelegatedUsage } from '../lib/voice/ledger.js';
 import {
   delegationInstructions, hashToolArgs, responsesFunctionTools, toolsForTenant, voiceInstructions, voiceTool, MOCK_CALLS,
 } from '../lib/voice/catalogue.js';
@@ -224,6 +228,8 @@ voiceRouter.post('/sessions/:id/close', asyncHandler(async (req, res) => {
     seconds = Math.ceil(Math.max(MIN_BILLED_SECONDS, Math.min(raw, wall)));
   }
   const costUsd = seconds == null ? null : voiceCostUsd(seconds, row.usd_per_minute);
+  // The delegated tokens (G11), from the dock like the seconds until the sideband lands (G12).
+  const delegated = boundDelegatedUsage(body['delegated'], row.tool_calls);
 
   const closed = await closeVoiceSession(row.id, {
     seconds, cost_usd: costUsd, cost_basis: seconds == null ? 'unknown' : 'estimated', stop_reason: reason,
@@ -233,18 +239,19 @@ voiceRouter.post('/sessions/:id/close', asyncHandler(async (req, res) => {
     // from a late close; any other close is a no-op answered with what is stored.
     if (seconds != null && costUsd != null && row.stop_reason === 'reaped' && row.cost_basis === 'unknown') {
       const learnt = await learnReapedSessionCost(row.id, seconds, costUsd);
-      if (learnt) await bookVoiceSpend(learnt);
+      if (learnt) await bookVoiceSpend(learnt, delegated);
       res.json(closeBody(learnt ?? row, true));
       return;
     }
     res.json(closeBody(row, true));
     return;
   }
-  await bookVoiceSpend(closed);
+  await bookVoiceSpend(closed, delegated);
   // The dock is gone or cut off: make sure the provider stops billing (server.mjs /api/hangup).
   if (reason !== 'closed' && !closed.mock && closed.provider_session_id) await hangupLiveSession(closed.provider_session_id);
   if (seconds != null) emitFleetMetric('voice-session-seconds', { tenant: closed.tenant, seconds });
-  console.log(JSON.stringify({ event: 'voice-session-closed', sessionId: closed.id, seconds, costUsd, reason }));
+  console.log(JSON.stringify({ event: 'voice-session-closed', sessionId: closed.id, seconds, costUsd, reason,
+    delegatedTokens: delegated ? { input: delegated.inputTokens, output: delegated.outputTokens, responses: delegated.responses } : null }));
   res.json(closeBody(closed, false));
 }));
 

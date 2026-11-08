@@ -25,6 +25,16 @@
 // infra/lib/devbox-stack.ts) are listed. Nothing else in the platform calls
 // an Anthropic model — AWS-native models only — so a wider table would only
 // invite one.
+//
+// THE ONE OTHER PROVIDER: the voice navigator (docs/voice-navigator-spec.md
+// §7, docs/voice-navigator-gaps.md G11) runs on OpenAI's Live API. Its voice
+// bills per minute (`OPENAI_LIVE_USD_PER_MINUTE`, the default of
+// VOICE_USD_PER_MINUTE in lib/voice/config.ts), and the Responses model the
+// voice delegates its functions to bills per token, which is the
+// `gpt-6-luna` row below (input / cached input / output, standard tier,
+// short context). Both were read from OpenAI's pricing page on 2026-11-08.
+// The voice ledger's own override is VOICE_DELEGATION_USD_PER_1M_INPUT /
+// _OUTPUT (lib/voice/config.ts); an SSM row replaces this one like any other.
 
 import type { BedrockPrice } from './pricing.js';
 
@@ -37,6 +47,18 @@ const SOURCE =
   'Anthropic first-party list price, https://platform.claude.com/docs/en/about-claude/pricing, read 2026-10-28; '
   + 'Bedrock on-demand is partner-priced and unverified — override in SSM /orgiq/pricing/model_prices';
 const EFFECTIVE_FROM = '2026-10-28';
+
+const OPENAI_SOURCE =
+  'OpenAI API list price (standard tier, short context), https://developers.openai.com/api/docs/pricing, read 2026-11-08; '
+  + 'override with VOICE_DELEGATION_USD_PER_1M_INPUT / _OUTPUT or SSM /orgiq/pricing/model_prices';
+const OPENAI_EFFECTIVE_FROM = '2026-11-08';
+
+/**
+ * `gpt-live-1`, the voice itself: USD per minute of session, billed per second
+ * (OpenAI pricing page, "GPT-Live sessions", read 2026-11-08). Delegated
+ * model tokens are billed separately, at the delegation model's row.
+ */
+export const OPENAI_LIVE_USD_PER_MINUTE = 0.05;
 
 /** $/MTok on the page → $/1K here. */
 function perK(perMillion: number): number {
@@ -56,5 +78,10 @@ export const DEFAULT_MODEL_PRICES: Readonly<Record<string, ModelPriceEntry>> = O
   'anthropic.claude-opus-4-8': {
     input: perK(5), output: perK(25), cacheWrite: perK(6.25), cacheRead: perK(0.50),
     source: SOURCE, effectiveFrom: EFFECTIVE_FROM,
+  },
+  // The voice navigator's delegation model (lib/voice/config.ts VOICE_DELEGATION_MODEL).
+  'gpt-6-luna': {
+    input: perK(0.10), output: perK(0.50), cacheRead: perK(0.01),
+    source: OPENAI_SOURCE, effectiveFrom: OPENAI_EFFECTIVE_FROM,
   },
 });

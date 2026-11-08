@@ -96,8 +96,12 @@ describe('online: defaults overlaid by the parameter', () => {
     const snap = buildSnapshot(null, 0);
     expect(snap.origin).toBe('defaults');
     for (const [id, p] of Object.entries(snap.prices)) {
-      expect(id.startsWith('anthropic.claude-')).toBe(true);
-      expect(p.source).toMatch(/first-party list price/);
+      // The devbox's Claude profiles, plus the voice navigator's one OpenAI delegation model (G11).
+      if (id === 'gpt-6-luna') expect(p.source).toMatch(/OpenAI API list price/);
+      else {
+        expect(id.startsWith('anthropic.claude-')).toBe(true);
+        expect(p.source).toMatch(/first-party list price/);
+      }
       expect(p.effectiveFrom).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     }
   });

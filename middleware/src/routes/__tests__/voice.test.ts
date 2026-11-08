@@ -60,7 +60,8 @@ let calls: Call[] = [];
 let upstream: { status: number; body: unknown } = { status: 200, body: { session: { id: 'sess_live_1' }, transport: { sdp: ANSWER } } };
 
 const ENV_KEYS = ['OPENAI_API_KEY', 'MOCK_VOICE', 'VOICE_DELEGATION_MODEL', 'VOICE_SESSION_MAX_MINUTES', 'VOICE_USD_PER_MINUTE',
-  'VOICE_SESSION_MINUTES_P75', 'VOICE_LIVE_MODEL', 'VOICE_VOICE', 'INSECURE_DEV_MODE', 'SPEND_HOLDS_UNATTRIBUTED'];
+  'VOICE_SESSION_MINUTES_P75', 'VOICE_LIVE_MODEL', 'VOICE_VOICE', 'INSECURE_DEV_MODE', 'SPEND_HOLDS_UNATTRIBUTED',
+  'VOICE_DELEGATION_USD_PER_1M_INPUT', 'VOICE_DELEGATION_USD_PER_1M_OUTPUT'];
 const saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
 
 function budget(allocatedUsd = 1_000, hardCapUsd: number | null = null): void {
@@ -91,7 +92,9 @@ afterAll(() => {
 });
 
 const mint = (body: Record<string, unknown> = { sdp: SDP }) => request(app).post('/api/voice/sessions').send(body);
-const voiceRows = () => spendEntries.rows().filter((r) => r.source === 'voice_session');
+/** The voice row of each session (the one that settles the hold); the delegated tokens' row is `tokenRows`. */
+const voiceRows = () => spendEntries.rows().filter((r) => r.source === 'voice_session' && !r.sourceId.endsWith(':tokens'));
+const tokenRows = () => spendEntries.rows().filter((r) => r.source === 'voice_session' && r.sourceId.endsWith(':tokens'));
 const voiceHolds = () => spendHolds.rows().filter((h) => h.source === 'voice_session');
 
 describe('POST /api/voice/sessions — the mint', () => {
@@ -413,6 +416,102 @@ describe('POST /api/voice/sessions/:id/close — settlement', () => {
     principal = { sub: 'u-mallory', role: 'member', tenant: 'orgiq', grants: {} };
     expect((await request(app).post(`/api/voice/sessions/${id}/close`).send({ seconds: 60 })).status).toBe(404);
     expect(voiceRows()).toHaveLength(0);
+  });
+});
+
+describe('the delegated tokens (G11): a second ledger row per session', () => {
+  const close = (id: string, body: Record<string, unknown>) => request(app).post(`/api/voice/sessions/${id}/close`).send(body);
+  const toolCall = (id: string) => request(app).post(`/api/voice/sessions/${id}/events`).send({ tool: VOICE_TOOLS[0]!.name, outcome: 'done' });
+
+  /** What the dock sums: every nested response.completed.response.usage the script plays. */
+  function scriptedUsage(script: { onStart: Array<{ event: Record<string, any> }>; onResponseCreate: Array<{ event: Record<string, any> }> }) {
+    const done = [...script.onStart, ...script.onResponseCreate]
+      .filter((f) => f.event['type'] === 'response.event' && f.event['event']?.type === 'response.completed')
+      .map((f) => f.event['event'].response.usage as { input_tokens: number; output_tokens: number; input_tokens_details?: { cached_tokens?: number } });
+    return {
+      inputTokens: done.reduce((n, u) => n + u.input_tokens, 0), outputTokens: done.reduce((n, u) => n + u.output_tokens, 0),
+      cachedTokens: done.reduce((n, u) => n + (u.input_tokens_details?.cached_tokens ?? 0), 0), responses: done.length,
+    };
+  }
+
+  it('the scripted session\'s two response.completed frames settle to 2,254 in and 48 out, priced as gpt-6-luna', async () => {
+    process.env['MOCK_VOICE'] = '1';
+    delete process.env['OPENAI_API_KEY'];
+    delete process.env['VOICE_DELEGATION_MODEL'];
+    budget();
+    const res = await mint({});
+    expect(res.status).toBe(201);
+    const id = res.body.sessionId as string;
+    const delegated = scriptedUsage(res.body.mockScript);
+    expect(delegated).toEqual({ inputTokens: 2254, outputTokens: 48, cachedTokens: 0, responses: 2 });
+    await toolCall(id);
+    expect((await close(id, { seconds: 15, delegated })).status).toBe(200);
+    expect(voiceRows()).toEqual([expect.objectContaining({ sourceId: id, costUsd: 0.0125, costBasis: 'estimated', model: 'gpt-live-1' })]);
+    // 2,254 × $0.10/M + 48 × $0.50/M = $0.0002494, to the ledger's four places.
+    expect(tokenRows()).toEqual([expect.objectContaining({
+      sourceId: `${id}:tokens`, actorId: USER, initiativeId: null, trigger: 'voice-delegation', model: 'gpt-6-luna',
+      inputTokens: 2254, outputTokens: 48, costUsd: 0.0002, costBasis: 'estimated', provider: 'openai',
+    })]);
+    expect(spendEntries.rows().filter((r) => r.source === 'voice_session')).toHaveLength(2);
+    // The token row never matches the hold: the voice row settled it.
+    expect(voiceHolds()).toEqual([expect.objectContaining({ sourceId: id, status: 'settled' })]);
+  });
+
+  it('VOICE_DELEGATION_USD_PER_1M_INPUT / _OUTPUT price a model the table lacks; cached input at the input override', async () => {
+    process.env['VOICE_DELEGATION_USD_PER_1M_INPUT'] = '1';
+    process.env['VOICE_DELEGATION_USD_PER_1M_OUTPUT'] = '2';
+    budget();
+    const id = (await mint()).body.sessionId as string;
+    await toolCall(id);
+    await close(id, { seconds: 60, delegated: { inputTokens: 3000, cachedTokens: 1000, outputTokens: 100, responses: 2 } });
+    // 2,000 + 1,000 cached at $1/M, 100 at $2/M.
+    expect(tokenRows()).toEqual([expect.objectContaining({ model: 'gpt-delegate', inputTokens: 3000, outputTokens: 100, costUsd: 0.0032, costBasis: 'estimated' })]);
+  });
+
+  it('an unpriced delegation model keeps its tokens with an unknown cost, never 0', async () => {
+    budget();
+    const id = (await mint()).body.sessionId as string;
+    await close(id, { seconds: 60, delegated: { inputTokens: 1060, cachedTokens: 0, outputTokens: 20, responses: 1 } });
+    expect(tokenRows()).toEqual([expect.objectContaining({ model: 'gpt-delegate', inputTokens: 1060, outputTokens: 20, costUsd: null, costBasis: 'unknown' })]);
+    expect(voiceHolds()[0]!.status).toBe('settled');
+  });
+
+  it('bounds the browser\'s figures: responses at tool calls + 1, 50,000 tokens per response, cached within input', async () => {
+    process.env['VOICE_DELEGATION_MODEL'] = 'gpt-6-luna';
+    budget();
+    const id = (await mint()).body.sessionId as string;
+    await close(id, { seconds: 60, delegated: { inputTokens: 900_000, cachedTokens: 2_000_000, outputTokens: 70_000, responses: 9 } });
+    // No tool call reported: one response, 50,000 in (all of it cached) and 50,000 out.
+    expect(tokenRows()).toEqual([expect.objectContaining({ inputTokens: 50_000, outputTokens: 50_000, costUsd: 0.0255, costBasis: 'estimated' })]);
+  });
+
+  it('a close without the token block (or with a malformed one) books the token row unknown', async () => {
+    budget();
+    const a = (await mint()).body.sessionId as string;
+    await close(a, { seconds: 60 });
+    const b = (await mint()).body.sessionId as string;
+    await close(b, { seconds: 60, delegated: { inputTokens: -1, outputTokens: 'lots', responses: 1 } });
+    expect(tokenRows()).toEqual([
+      expect.objectContaining({ sourceId: `${a}:tokens`, inputTokens: null, costUsd: null, costBasis: 'unknown' }),
+      expect.objectContaining({ sourceId: `${b}:tokens`, inputTokens: null, costUsd: null, costBasis: 'unknown' }),
+    ]);
+  });
+
+  it('a reaped session books both rows unknown; a late close prices them once', async () => {
+    process.env['VOICE_DELEGATION_MODEL'] = 'gpt-6-luna';
+    budget();
+    let id: string;
+    const at = freezeClock('2026-11-08T10:00:00.000Z');
+    try { id = (await mint()).body.sessionId; } finally { at(); }
+    const later = freezeClock('2026-11-08T10:40:00.000Z');
+    try {
+      await sweepVoiceSessions(await defaultVoiceReaperDeps());
+      expect(tokenRows()).toEqual([expect.objectContaining({ sourceId: `${id}:tokens`, costUsd: null, costBasis: 'unknown' })]);
+      await close(id, { seconds: 600, delegated: { inputTokens: 1060, cachedTokens: 0, outputTokens: 20, responses: 1 } });
+      await close(id, { seconds: 900, delegated: { inputTokens: 50_000, cachedTokens: 0, outputTokens: 50_000, responses: 1 } });
+    } finally { later(); }
+    expect(voiceRows()).toEqual([expect.objectContaining({ costUsd: 0.5, costBasis: 'estimated' })]);
+    expect(tokenRows()).toEqual([expect.objectContaining({ costUsd: 0.0001, costBasis: 'estimated' })]);
   });
 });
 

@@ -12,6 +12,10 @@
 // Claude rate is hard-coded in this module (DE-32), and this module imports
 // no config so the fleet and the runner can price without a credential.
 //
+// The one non-AWS row is the voice navigator's OpenAI delegation model
+// (`gpt-6-luna`), which comes through the same config table as the Claude
+// rows (lib/model-prices-defaults.ts), never from this file.
+//
 // "Embeddings" model output tokens are zero by definition; we keep the slot
 // for shape uniformity so `estimateCost` doesn't need to special-case.
 
@@ -114,7 +118,14 @@ function tokens(v: number | undefined): number {
  */
 export function estimateUsageCost(modelId: string, usage: TokenUsage): number | null {
   const p = priceFor(modelId);
-  if (!p) return null;
+  return p ? priceUsage(p, usage) : null;
+}
+
+/**
+ * `estimateUsageCost` over a price row already in hand (the voice ledger's
+ * env override, lib/voice/ledger.ts): the same no-partial-price rule.
+ */
+export function priceUsage(p: BedrockPrice, usage: TokenUsage): number | null {
   const buckets: Array<[number, number | undefined]> = [
     [tokens(usage.inputTokens), p.input],
     [tokens(usage.outputTokens), p.output],

@@ -21,6 +21,10 @@ test('parseFrame reads the real Live API frames V1 recorded', async () => {
   assert.match(calls[0]!.callId, /^call_/);
   // The message items of a continuation are not calls; response.completed arrives once per nested response.
   assert.equal(kinds('response-completed').length, 4);
+  // Each carries its own nested usage (G11): V1's first two were 1,060 / 20 and 1,194 / 28.
+  const usages = (kinds('response-completed') as Extract<VoiceFrame, { kind: 'response-completed' }>[]).map((f) => f.usage);
+  assert.ok(usages.every((u) => u && u.inputTokens > 0 && u.outputTokens > 0 && u.cachedTokens >= 0 && u.cachedTokens <= u.inputTokens));
+  assert.deepEqual(usages.slice(0, 2).map((u) => [u!.inputTokens, u!.outputTokens]), [[1060, 20], [1194, 28]]);
   assert.equal(kinds('input').map((f) => (f as { text: string }).text).join('').trim().startsWith('Hey, I want to do search'), true);
   assert.ok(kinds('output').length > 40);
   assert.equal(kinds('audio').length, 468, 'output audio is its own kind, never a speaking signal');
@@ -93,7 +97,8 @@ test('a mock mint plays its script through the parser, replays on response.creat
   await stopping;
   const closes = log.filter((r) => r.url.endsWith('/close'));
   assert.equal(closes.length, 1);
-  assert.deepEqual(closes[0]!.body, { seconds: 15, reason: 'closed' });
+  // The delegated tokens: the script's two nested response.completed usages, summed (G11).
+  assert.deepEqual(closes[0]!.body, { seconds: 15, reason: 'closed', delegated: { inputTokens: 2254, outputTokens: 48, cachedTokens: 0, responses: 2 } });
   await client.stop('closed');
   assert.equal(log.filter((r) => r.url.endsWith('/close')).length, 1, 'a second stop posts nothing');
   assert.deepEqual(events.at(-1), { type: 'ended', reason: 'closed', seconds: 15 });

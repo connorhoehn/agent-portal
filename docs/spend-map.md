@@ -94,6 +94,15 @@ larger part of a long idle box (*inferred*), are booked nowhere.
 - Unattributed spend is allowed unless `SPEND_HOLDS_UNATTRIBUTED=refuse` (`spend-holds.ts:194-196,307`); infra sets neither it nor `BUDGET_FAIL_CLOSED` (§8).
 - `spend_holds.source` has a CHECK list (`schema/spend_holds_schema.sql:25`); `spend_entries.source` does not (`schema/spend_ledger_schema.sql:18`). New sources need the holds constraint widened.
 
+### 1g. Voice sessions (OpenAI Live, the voice navigator)
+
+| # | Path | Bills | Hold | Ledger | Real figure |
+|---|---|---|---|---|---|
+| 37 | `routes/voice.ts` `POST /api/voice/sessions` → `reserveSpend` (`voice_session`, p75 minutes × `VOICE_USD_PER_MINUTE`, `initiativeId: null`, the user's budget) → `lib/voice/openai.ts` mint; settled by `POST /:id/close` → `lib/voice/ledger.ts` `bookVoiceSpend`, or by `lib/voice/reaper.ts` past the ceiling | `gpt-live-1` voice time, $0.05 per minute billed per second (OpenAI pricing page, 2026-11-08; `OPENAI_LIVE_USD_PER_MINUTE` in `lib/model-prices-defaults.ts`) | yes | yes, row `source_id = <id>` (`trigger voice:<tenant>`, `provider: 'openai'`, `estimated`; `unknown` when reaped), which settles the hold | the dock's seconds, floored at 15 and capped at wall time + 60 s; `session.closed.usage.seconds` over the sideband once G12 lands (`reported`) |
+| 38 | The same session's delegated Responses calls (`VOICE_DELEGATION_MODEL`, default `gpt-6-luna`): every tool call and its continuation | delegated tokens, $0.10 in / $0.01 cached / $0.50 out per million (`lib/model-prices-defaults.ts`; override `VOICE_DELEGATION_USD_PER_1M_INPUT` / `_OUTPUT`, or SSM `/orgiq/pricing/model_prices`) | no (inside row 37's session, not held) | yes, row `source_id = <id>:tokens` (`trigger voice-delegation`, model = the delegation model, input/output tokens, `estimated`; `unknown` when the close carries no token block or the reaper closed the session; a late close prices it once) | the dock's sum of every nested `response.completed.response.usage`, bounded at 50,000 tokens per response and one response per reported tool call plus one; the sideband's own figures once G12 lands |
+
+Both rows carry `source: 'voice_session'` and the user as `actor_id`, so the user's budget and the spend surfaces see voice as its own line; mock sessions (`MOCK_VOICE`) book both rows too, priced from the mock price table.
+
 ## 2. The minimum change: a real figure on every path
 
 The settle mechanism already replaces the P75 with the real figure for rows

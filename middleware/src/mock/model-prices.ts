@@ -50,6 +50,8 @@ export const modelPriceRows = defineFixture<ModelPriceRow>({
       // The ids the mock fleet and the mock agent loop send.
       row('claude-sonnet-5', SONNET),
       row('sonnet', SONNET),
+      // The voice navigator's delegation model, so MOCK_VOICE's scripted tokens price (G11).
+      row('gpt-6-luna', 'gpt-6-luna'),
     ],
     empty: () => [],
   },
