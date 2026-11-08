@@ -56,9 +56,10 @@ import type { Notification } from '@connorhoehn/realtime-modules/client';
 import { QUEUE_WORK_ACTIONS, type QueueWorkKind } from './catalogue.ts';
 import { DEFAULT_DEVBOX_MODEL, DEVBOX_MODELS } from '../devboxModels.ts';
 import {
-  ambiguous, done, failed, findByName, localHref, once, qs, readFailure, readJson, refused,
+  ambiguous, done, failed, findByName, localHref, once, pageRowAt, pageRowNamed, qs, readFailure, readJson, refused,
   type ConfirmPlan, type JobFollow, type JobTracking, type QueuedJob, type ToolContext, type ToolResult, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
+import type { PageRow } from './pageContext.ts';
 
 // ── targets ─────────────────────────────────────────────────────────────────
 
@@ -366,8 +367,27 @@ const planQueueWork: VoiceToolPlanner = async (args, ctx) => {
   const action = kinds[kind];
   if (action && !ctx.can(action)) return { result: refused(ROLE_REFUSAL[kind] ?? "I can't queue that with your role.") };
   if (!ctx.jobs) return { result: refused('This dock cannot follow background work right now, so nothing was queued.') };
-  const target = String(args['target'] ?? '').trim();
+  let target = String(args['target'] ?? '').trim();
   const note = typeof args['note'] === 'string' && args['note'].trim() ? args['note'].trim() : undefined;
+
+  // G21: the rows of the page in view, by position ("the second one", or `rows`), or a row named among them.
+  const rows = Array.isArray(args['rows']) ? (args['rows'] as number[]) : null;
+  if (rows || args['scope'] === 'this-page') {
+    const picks = rows ?? (/^\d{1,2}$/.test(target) ? [Number(target)] : null);
+    const found: PageRow[] = [];
+    for (const n of picks ?? []) {
+      const hit = pageRowAt(ctx, n);
+      if ('result' in hit) return hit;
+      if (!found.includes(hit.row)) found.push(hit.row);
+    }
+    if (!picks) {
+      const hit = pageRowNamed(ctx, target);
+      if ('result' in hit) return hit;
+      found.push(hit.row);
+    }
+    if (found.length > 1) return { result: refused('Only one row at a time can be queued this way; ask for each in turn.', { code: 'not-on-this-page' }) };
+    target = found[0]!.ref;
+  }
 
   if (kind === 'sweep') {
     const sweep = resolveSweep(target);

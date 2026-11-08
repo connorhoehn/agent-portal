@@ -29,7 +29,7 @@ import { parseRef, type Rec } from './kinds.ts';
 import { DELEGATION_REASON_MIN, DELEGATION_WINDOWS, JUSTIFICATION_MIN, delegationBody } from '../accessRequests.ts';
 import { matchByName } from './work.ts';
 import {
-  ambiguous, done, failed, findByName, once, qs, readFailure, readJson, refused, socialGrantRefusal,
+  ambiguous, done, failed, findByName, once, pageRowNamed, qs, readFailure, readJson, refused, socialGrantRefusal,
   type CardAnswer, type ConfirmPlan, type ToolContext, type ToolResult, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 
@@ -287,7 +287,12 @@ const VERB_WORD: Readonly<Record<Verb, string>> = { approve: 'Approve', reject: 
 
 const planDecide: VoiceToolPlanner = async (args, ctx) => {
   let ref = String(args['ref']).trim();
-  if (/^\d{1,2}$/.test(ref)) {
+  // G21: a position among the rows the page in view shows.
+  if (args['scope'] === 'this-page') {
+    const hit = pageRowNamed(ctx, ref);
+    if ('result' in hit) return hit;
+    ref = hit.row.ref;
+  } else if (/^\d{1,2}$/.test(ref)) {
     const kept = ctx.results?.find(ref);
     if (!kept) return { result: refused(`There is no row ${ref} in the last result. List what is waiting first.`) };
     ref = kept.ref;

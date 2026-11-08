@@ -28,6 +28,7 @@
 // No React and only `.ts` imports, so `node --test` runs it.
 
 import type { Action } from '../capabilities';
+import { PAGE_ROWS_MAX, type PageRow, type PublishedPage } from './pageContext.ts';
 import { waitingOn } from '../../pages/projects/budgetAccessModel.ts';
 import type { AccessRequest } from '../accessRequests';
 import { activityScopes, budgetScopes, getParts, listKinds, navigatePageIds, openKinds, summaryKinds, searchRecordTypes, voiceToolSpec, SEARCH_ACTIONS, type JsonSchema, type VoiceToolSpec } from './catalogue.ts';
@@ -224,6 +225,8 @@ export interface ToolContext {
   results?: ResultMemory | null;
   /** queue_work's follower (G19); null/absent = queued work cannot be followed, so none is queued. */
   jobs?: JobTracking | null;
+  /** The page in view (G21, pageContext.ts): what it rendered for this persona, or null when it has published nothing. */
+  page?: () => PublishedPage | null;
 }
 
 export interface ToolResult {
@@ -235,6 +238,44 @@ export interface ToolResult {
 }
 
 type Args = Record<string, unknown>;
+
+// ── this page (G21): the rows the page in view rendered, read with scope "this-page" ──
+
+export const NOT_ON_PAGE = 'not-on-this-page';
+
+/** The page's rows, or the refusal when the page in view shows none. */
+export function pageRows(ctx: ToolContext): { page: PublishedPage; rows: readonly PageRow[] } | { result: ToolResult } {
+  const page = ctx.page?.() ?? null;
+  if (!page || !page.rows.length) return { result: refused('This page shows no rows I can read. List them instead.', { code: NOT_ON_PAGE }) };
+  return { page, rows: page.rows.slice(0, PAGE_ROWS_MAX) };
+}
+
+/** Row `n` (1-based) of the page in view, or the refusal. */
+export function pageRowAt(ctx: ToolContext, n: number): { row: PageRow } | { result: ToolResult } {
+  const read = pageRows(ctx);
+  if ('result' in read) return read;
+  const row = read.rows[n - 1];
+  return row ? { row } : { result: refused(`This page shows ${read.rows.length} row${read.rows.length === 1 ? '' : 's'}; there is no row ${n}.`, { code: NOT_ON_PAGE }) };
+}
+
+/** The row of the page in view a position ("2"), a ref or a name names; one row, or the refusal (several names are ambiguous). */
+export function pageRowNamed(ctx: ToolContext, said: string): { row: PageRow } | { result: ToolResult } {
+  const t = said.trim();
+  if (/^\d{1,2}$/.test(t)) return pageRowAt(ctx, Number(t));
+  const read = pageRows(ctx);
+  if ('result' in read) return read;
+  const byRef = read.rows.find((r) => r.ref === t);
+  if (byRef) return { row: byRef };
+  const needles = t.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  const exact = read.rows.filter((r) => r.title.toLowerCase() === t.toLowerCase());
+  const hits = exact.length ? exact : needles.length ? read.rows.filter((r) => needles.every((w) => r.title.toLowerCase().includes(w))) : [];
+  if (hits.length === 1) return { row: hits[0]! };
+  if (hits.length > 1) return { result: ambiguous(`Several rows on this page match "${t}". Read them out and ask which; then use its position.`, hits.map((r) => ({ ref: r.ref, title: r.title, position: read.rows.indexOf(r) + 1 }))) };
+  return { result: refused(`This page shows no row called "${t}".`, { code: NOT_ON_PAGE }) };
+}
+
+/** The kept-row shape of a page row, for open and get by position afterwards. */
+const keptOf = (r: PageRow): KeptRow => ({ ref: r.ref, title: r.title, href: r.href && localHref(r.href) ? r.href : '' });
 
 /** What a card with `fields` answered (ui-components VoiceConfirmCard 2.510.5): the toggle and the note, trimmed. */
 export interface CardAnswer { decision: 'approve' | 'reject'; note: string }
@@ -686,12 +727,42 @@ function keepShaped(ctx: ToolContext, kind: string, rows: readonly ShapedRow[]):
   ctx.results?.keep(rows.map((r) => ({ ref: cap(`${kind}:${r.id}`), title: r.title, href: r.href && localHref(r.href) ? r.href : '' })));
 }
 
+/**
+ * `list { scope: 'this-page' }` (G21): the rows the page in view shows, of the
+ * kind asked for, in the page's order, narrowed by the same words and status
+ * (a status matches the row's status or its priority). No request: the page
+ * already read them, behind its own gates, for this persona.
+ */
+function listThisPage(kind: string, spec: KindSpec, args: Args, ctx: ToolContext): ToolResult {
+  const read = pageRows(ctx);
+  if ('result' in read) return read.result;
+  const filter = (args['filter'] as Args | undefined) ?? {};
+  const q = typeof filter['q'] === 'string' ? filter['q'].trim() : '';
+  const status = typeof filter['status'] === 'string' ? filter['status'].trim().toLowerCase() : '';
+  const ofKind = read.rows.map((r, i) => ({ r, position: i + 1 })).filter(({ r }) => r.ref.startsWith(`${kind}:`));
+  if (!ofKind.length) return refused(`This page shows no ${spec.label}.`, { code: NOT_ON_PAGE });
+  const needles = wordsOf(q);
+  const all = ofKind.filter(({ r }) => (!needles.length || needles.every((w) => r.title.toLowerCase().includes(w)))
+    && (!status || [r.status, r.priority].some((v) => (v ?? '').toLowerCase().includes(status))));
+  const limit = Math.min(typeof args['limit'] === 'number' ? args['limit'] : MAX_ROWS, MAX_ROWS);
+  const rows = all.slice(0, limit);
+  ctx.results?.keep(rows.map(({ r }) => keptOf(r)));
+  const narrowed = [q && `matching "${q}"`, status && `with ${status}`].filter(Boolean).join(', ');
+  const where = read.page.record ? ` on ${read.page.record.title}` : ' on this page';
+  return done('list', {
+    of: kind, scope: 'this-page', ...(narrowed ? { filter: narrowed } : {}), count: all.length,
+    rows: rows.map(({ r, position }) => ({ ref: r.ref, title: r.title, status: r.status ?? undefined, priority: r.priority ?? undefined, position, href: r.href ?? undefined })),
+    open: 'open { ref: <position>, scope: "this-page" } opens a row; queue_work and decide take these positions with scope "this-page".',
+  }, rows.length ? `${plural(all.length, spec.one ?? spec.label.replace(/s$/, ''), spec.label)}${where}${narrowed ? ` ${narrowed}` : ''}; first: ${rows[0]!.r.title}` : `No ${spec.label}${where}${narrowed ? ` ${narrowed}` : ''}`);
+}
+
 const list: Runner = async (args, ctx) => {
   const kind = String(args['kind']);
   const spec = listKinds(ctx.tenant).includes(kind) ? kindSpec(ctx.tenant, kind) : undefined;
   if (!spec?.list) return refused(`There is no "${kind}" list in this workspace.`);
   const gate = kindGate(spec, ctx);
   if (gate) return gate;
+  if (args['scope'] === 'this-page') return listThisPage(kind, spec, args, ctx);
   const filter = (args['filter'] as Args | undefined) ?? {};
   const q = typeof filter['q'] === 'string' ? filter['q'].trim() : '';
   const status = typeof filter['status'] === 'string' ? filter['status'].trim() : '';
@@ -930,6 +1001,16 @@ const open: Runner = async (args, ctx) => {
   const ref = typeof args['ref'] === 'string' ? args['ref'].trim() : undefined;
   const kind = typeof args['kind'] === 'string' ? args['kind'] : undefined;
   const name = typeof args['name'] === 'string' ? args['name'].trim() : undefined;
+  // G21: a row the page in view shows, by its position, ref or name (a kind, when given, must match it).
+  if (args['scope'] === 'this-page') {
+    const said = ref ?? name;
+    if (!said || page || (ref && name)) return refused('With scope "this-page", name one row of the page: its position, its ref, or its name.');
+    const hit = pageRowNamed(ctx, said);
+    if ('result' in hit) return hit.result;
+    if (kind && !hit.row.ref.startsWith(`${kind}:`)) return refused(`That row of the page is not a ${kind}.`, { code: NOT_ON_PAGE });
+    if (!hit.row.href) return refused('That row has no page of its own; get reads it.');
+    return opened(hit.row.ref, hit.row.title, hit.row.href, ctx);
+  }
   const given = [page, ref, kind || name].filter(Boolean).length;
   if (given !== 1 || (!!kind !== !!name)) return refused('Name exactly one thing to open: a page, a row\'s ref or position, or a kind with a name.');
 

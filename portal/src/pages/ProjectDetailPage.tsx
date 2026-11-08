@@ -48,7 +48,8 @@ import {
   type HeaderPeopleGroup,
 } from '@connorhoehn/ui-components/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
+import { usePublishPageContext } from '../lib/voice/pageContext';
 import { ConversationOwner, ConversationThread } from '../components/chat/ConversationThread';
 import type { EstimateProvenance } from '../components/marketplace/EstimateDrawer';
 import { OwnerEditor } from '../components/marketplace/GovernanceEditor';
@@ -323,6 +324,13 @@ function ProjectDetailPage() {
   // backlog, so typing a search never swaps the item you are reading.
   const allRows = useMemo(() => workRows(workTree, sort, ''), [workTree, sort]);
   const visibleRows = useMemo(() => workRows(workTree, sort, query, filters), [workTree, sort, query, filters]);
+  // The voice's page context (G21): the initiative in view and the work rows exactly as the list shows them
+  // (its sort, search and filters), from this page's own reads. Nothing while the work read is loading or failed.
+  const { pathname } = useLocation();
+  usePublishPageContext(project && id && treeRead && !workFailure ? {
+    path: pathname, record: { ref: `initiative:${id}`, title: project.name }, rowsLabel: 'work items', total: allRows.length,
+    rows: visibleRows.map((r) => ({ ref: `work-item:${r.id}`, title: r.title, status: r.status ?? null, priority: r.priority ?? null, href: `/iq/projects/${encodeURIComponent(id)}?item=${encodeURIComponent(r.id)}` })),
+  } : null);
   const current = tab === 'work' && wantedItem ? allRows.find((row) => row.id === wantedItem) ?? null : null;
   const thread = useWorkItemThread(current?.id ?? null);
   // "Add a note" posts to the same thread.

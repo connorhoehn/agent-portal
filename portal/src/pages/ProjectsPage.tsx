@@ -1,5 +1,6 @@
 import { Fragment, useMemo, type ReactNode } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
+import { usePublishPageContext } from '../lib/voice/pageContext';
 import { UNDER_CRUMBS_BAND } from '../components/shell/headerRhythm';
 import {
   Button,
@@ -96,6 +97,12 @@ function ProjectsPage() {
     [rows, list.statusFilter, list.query, list.sort],
   );
   const totals = useMemo(() => programTotals(rows ?? []), [rows]);
+  // The voice's page context (G21): the initiatives as the table lists them, from this page's own read.
+  const { pathname } = useLocation();
+  usePublishPageContext(rows ? {
+    path: pathname, rowsLabel: 'initiatives', total: rows.length,
+    rows: visible.map((p) => ({ ref: `initiative:${p.id}`, title: p.name, status: p.status ?? null, href: `/iq/projects/${encodeURIComponent(p.id)}` })),
+  } : null);
   // Below the budgets read tier the server withholds spend and allocation
   // (budgetAccess on each row): the strip and the Spend column show a lock and
   // the header carries the one quick request for the tier. A locked budget

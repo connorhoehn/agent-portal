@@ -146,6 +146,13 @@ export interface ControllerOptions {
   /** Re-evaluate time-based phases, levels and the budget. Default: an interval of TICK_MS. */
   autoTick?: boolean;
   closeWaitMs?: number;
+  /**
+   * The page context note (G21, pageContext.ts pageContextNote): tenant, page,
+   * the record in view and its visible rows. Appended silently on start, on
+   * every notePage() (navigation, a page publishing its rows) and after every
+   * tool result, once per distinct text.
+   */
+  pageContext?(): string | null;
 }
 
 interface CallRecord { name: string; status: 'confirming' | 'running' | 'answered' }
@@ -223,6 +230,8 @@ export class VoiceController {
   private turnSeq = 0;
   /** The first turn number of the session minted last: the turns the on-device keep saves under its id. */
   private sessionTurnFrom = 1;
+  /** The last page context the voice was given, so the same page is not appended twice. */
+  private lastPageNote: string | null = null;
   private levels = { input: 0, output: 0 };
   private muted = false;
   private warned = false;
@@ -372,6 +381,15 @@ export class VoiceController {
     this.publish();
   }
 
+  /** The page in view, for the voice (G21): appended when it differs from the last one it was given. */
+  notePage(): void {
+    if (this.machine.base !== 'live' || !this.client) return;
+    const text = this.opts.pageContext?.() ?? null;
+    if (!text || text === this.lastPageNote) return;
+    this.lastPageNote = text;
+    this.client.appendThinking(text);
+  }
+
   /** Silent page context for the voice (§1: session.thinking.append, delegation_id null). */
   noteContext(text: string): void {
     if (this.machine.base === 'live') this.client?.appendThinking(text);
@@ -448,6 +466,7 @@ export class VoiceController {
       case 'started':
         this.emit({ kind: 'started' });
         this.dispatch({ type: 'started' });
+        this.notePage();
         return;
       case 'input':
         this.appendTurn('you', f.text, at);
@@ -569,6 +588,8 @@ export class VoiceController {
   private async answer(client: VoiceClient, delegationId: string, callId: string, name: string, res: ToolResult, startedAt: number, args: unknown, confirmedBy?: 'voice' | 'click'): Promise<void> {
     if (client !== this.client || this.machine.base !== 'live') return;
     client.sendToolOutput(callId, JSON.stringify(res.output));
+    // The page the result left the user on (G21), before the continuation reads it.
+    this.notePage();
     this.noteChoice(res);
     const rec = this.delegation(delegationId);
     rec.calls.set(callId, { name, status: 'answered' });
@@ -787,6 +808,7 @@ export class VoiceController {
     this.choice = null;
     this.budgetCard = null;
     this.mint = null;
+    this.lastPageNote = null;
     this.warned = false;
     this.muted = false;
     this.elapsedFrozen = null;

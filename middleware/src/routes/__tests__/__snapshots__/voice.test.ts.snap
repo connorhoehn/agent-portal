@@ -123,12 +123,24 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
             "null",
           ],
         },
+        "scope": {
+          "description": ""this-page": the ref (a position, "2" for the second row) or the name is one of the rows the page in view shows, as the page context lists them; kind is then optional.",
+          "enum": [
+            "this-page",
+            null,
+          ],
+          "type": [
+            "string",
+            "null",
+          ],
+        },
       },
       "required": [
         "page",
         "ref",
         "kind",
         "name",
+        "scope",
         "params",
       ],
       "type": "object",
@@ -308,10 +320,22 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
             "null",
           ],
         },
+        "scope": {
+          "description": ""this-page": the rows the page in view already shows (an initiative's work, in the page's order) instead of reading again; filter and limit still apply.",
+          "enum": [
+            "this-page",
+            null,
+          ],
+          "type": [
+            "string",
+            "null",
+          ],
+        },
       },
       "required": [
         "kind",
         "filter",
+        "scope",
         "limit",
       ],
       "type": "object",
@@ -747,6 +771,27 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
             "null",
           ],
         },
+        "rows": {
+          "description": "With scope "this-page": positions among the rows the page in view shows ("the top three" is [1, 2, 3]); target then says what they are, as the user did.",
+          "items": {
+            "type": "integer",
+          },
+          "type": [
+            "array",
+            "null",
+          ],
+        },
+        "scope": {
+          "description": ""this-page": rows (or a position in target) count among the rows the page in view shows.",
+          "enum": [
+            "this-page",
+            null,
+          ],
+          "type": [
+            "string",
+            "null",
+          ],
+        },
         "target": {
           "description": "What it runs on, as the user said it, or a ref or position a result gave.",
           "type": "string",
@@ -757,6 +802,8 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
         "target",
         "note",
         "model",
+        "rows",
+        "scope",
       ],
       "type": "object",
     },
@@ -791,11 +838,23 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           "description": "The row to decide: its ref exactly as a result gave it (e.g. "approval:r-9"), or its position in the last result ("1"). Never a name or a path.",
           "type": "string",
         },
+        "scope": {
+          "description": ""this-page": a position in ref counts among the rows the page in view shows.",
+          "enum": [
+            "this-page",
+            null,
+          ],
+          "type": [
+            "string",
+            "null",
+          ],
+        },
       },
       "required": [
         "ref",
         "decision",
         "note",
+        "scope",
       ],
       "type": "object",
     },

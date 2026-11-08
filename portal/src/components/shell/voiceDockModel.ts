@@ -23,8 +23,3 @@ export function voiceDockVisible(g: VoiceDockGate): boolean {
 export function isVoiceHotkey(e: { ctrlKey: boolean; shiftKey: boolean; altKey: boolean; metaKey: boolean; code?: string; key?: string }): boolean {
   return e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && (e.code === 'Space' || e.key === ' ');
 }
-
-/** The silent context the voice gets when the user moves by hand (§1 "P3 context"). */
-export function pageContextNote(pathname: string): string {
-  return `The user is now on the portal page ${pathname}.`;
-}

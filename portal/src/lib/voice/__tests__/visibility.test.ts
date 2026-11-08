@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { VOICE_PLANNERS, VOICE_RUNNERS } from '../actions.ts';
 import { accessRequestHref, BUDGET_READ_ITEM_ID, planPreparedCall, prepareToolCall, ResultMemory, runPreparedCall, type CallAccess, type ComputeAccess, type PresenceAccess, type SocialAccess, type ToolResult, type VoiceComputer } from '../tools.ts';
 import { middlewareVoice, PALETTE, toolContext, type LoggedRequest } from './voiceHarness.ts';
+import { pageContextNote, type PublishedPage } from '../pageContext.ts';
 import type { Action } from '../../capabilities';
 
 interface World {
@@ -22,6 +23,8 @@ interface World {
   allow: Action[];
   social: boolean;
   socialRequestItemId: string | null;
+  /** What this persona's initiative page rendered (G21): the page context the dock may read with scope "this-page". */
+  page: PublishedPage;
 }
 
 const SID = (c: string) => c.repeat(40);
@@ -31,6 +34,13 @@ const SANA: World = {
   allow: ['Search', 'ViewSocial', 'PostMessage', 'StartCall', 'ManageDevbox', 'OpenDevboxShell', 'ManageBots', 'ConnectLocalCompute', 'DispatchAgentRun', 'RunDevboxTask',
     'ApproveTransaction', 'DecideAgentChange', 'DeliverAgentChange', 'ReviewRunbook', 'VoiceNavigate'],
   social: true, socialRequestItemId: null,
+  page: {
+    path: '/iq/projects/p-sana-alpha', record: { ref: 'initiative:p-sana-alpha', title: 'Sana Alpha Initiative' }, rowsLabel: 'work items',
+    rows: [
+      { ref: 'work-item:w-sana-1', title: 'Sana fix the login', status: 'open', priority: 'high', href: '/iq/projects/p-sana-alpha?item=w-sana-1' },
+      { ref: 'work-item:w-sana-2', title: 'Sana fix the logout', status: 'open', priority: 'medium', href: '/iq/projects/p-sana-alpha?item=w-sana-2' },
+    ],
+  },
   computers: [{ id: 'c-sana-alpha', label: 'sana-alpha-box', sessionId: SID('a'), status: 'running', projectId: 'p-sana-alpha', project: 'Sana Alpha Initiative' }],
   roster: { roster: () => [{ userId: 'u-sana-peer', name: 'Sana Peer Person', status: 'online' }], lobby: () => null },
   reads: {
@@ -46,7 +56,7 @@ const SANA: World = {
     '/api/devbox/boxes': { boxes: [{ id: 'c-sana-alpha', label: 'sana-alpha-box', sessionId: SID('a'), status: 'running', ownerId: 'u-me' }, { id: 'c-sana-other', label: 'sana-other-box', sessionId: SID('b'), status: 'running', ownerId: 'u-sana-colleague' }] },
     '/api/local-compute/nodes': { nodes: [{ id: 'n-sana-1', label: 'sana-laptop', acceptJobs: true }, { id: 'n-sana-2', label: 'sana-parked-laptop', acceptJobs: false }] },
     // V2-10: the rows decide reads again (a delivered change, a pending transaction, a closed design, a proposal not open for review).
-    '/api/sdlc/changes/cr-sana': { change: { id: 'cr-sana', title: 'Sana tighten retries', status: 'sana_parked' } },
+    '/api/sdlc/changes/cr-sana': { change: { id: 'cr-sana', title: 'Sana tighten retries', status: 'delivered' } },
     '/api/observability/approvals': { approvals: [{ approvalId: 'ha-sana', reason: 'Sana refund batch', payload: { amount: 1200 }, agentId: 'sana-agent' }] },
     '/api/lab/consults': { consults: [{ id: 'co-sana', question: 'Sana which branch?' }] },
     '/api/designs/d-sana': { id: 'd-sana', title: 'Sana cache design', status: 'superseded' },
@@ -59,6 +69,10 @@ const SANA: World = {
 const ELI: World = {
   allow: ['Search', 'VoiceNavigate'],
   social: false, socialRequestItemId: 'role:social:moderator',
+  page: {
+    path: '/iq/projects/p-eli-gamma', record: { ref: 'initiative:p-eli-gamma', title: 'Eli Gamma Initiative' }, rowsLabel: 'work items',
+    rows: [{ ref: 'work-item:w-eli-1', title: 'Eli tidy the docs', status: 'open', priority: 'low', href: '/iq/projects/p-eli-gamma?item=w-eli-1' }],
+  },
   computers: [],
   roster: { roster: () => [{ userId: 'u-eli-peer', name: 'Eli Lobby Person', status: 'online' }], lobby: () => ({ channel: 'orgiq:lobby', setStatus: () => {}, updateMetadata: () => {} }) },
   reads: {
@@ -104,9 +118,12 @@ const calls: CallAccess = { unavailable: null, active: () => null, callConversat
 /** Arguments that drive each tool to a refusal, an ambiguity or a failure. */
 const VARIANTS: Record<string, unknown[]> = {
   open: [{ page: 'bots' }, { page: 'nowhere' }, { page: 'search', params: { q: 'x' } }, { ref: 'person:p-not-kept' }, { ref: '1' }, { ref: 'initiative:p-sana-alpha' },
-    { kind: 'initiative', name: 'Initiative' }, { kind: 'initiative', name: 'Nothing Like It' }, { kind: 'bot', name: 'sana' }, { kind: 'channel', name: 'x' }, { page: 'search', ref: '1' }],
+    { kind: 'initiative', name: 'Initiative' }, { kind: 'initiative', name: 'Nothing Like It' }, { kind: 'bot', name: 'sana' }, { kind: 'channel', name: 'x' }, { page: 'search', ref: '1' },
+    // G21: rows of the page in view, by position (one past the page), by a name two rows share, by a name none has.
+    { ref: '9', scope: 'this-page' }, { name: 'fix', scope: 'this-page' }, { name: 'Nothing Like It', scope: 'this-page' }, { ref: '1', kind: 'decision', scope: 'this-page' }],
   search: [{ query: 'kubernetes', type: 'person' }, { query: 'alpha', type: 'initiative' }, { query: 'x', type: 'not-a-type' }, { query: 'who decided it', answer: true }],
-  list: [{ kind: 'initiative', filter: { q: 'nothing like it' } }, { kind: 'bot' }, { kind: 'channel' }, { kind: 'not-a-kind' }, { kind: 'finding', filter: { since: 'soon' } }],
+  list: [{ kind: 'initiative', filter: { q: 'nothing like it' } }, { kind: 'bot' }, { kind: 'channel' }, { kind: 'not-a-kind' }, { kind: 'finding', filter: { since: 'soon' } },
+    { kind: 'work-item', scope: 'this-page' }, { kind: 'decision', scope: 'this-page' }],
   get: [{ ref: '1' }, { ref: 'initiative:p-unknown' }, { ref: 'bot:b-x', part: 'runs' }, { ref: 'person:p-sana-x' }, { ref: 'Sana Alpha Initiative' }],
   computer: [{ action: 'start', initiatives: ['Unknown Initiative'] }, { action: 'open-shell', computer: 'unknown-box' },
     { action: 'run', computer: 'unknown-box', phrase: 'status' }, { action: 'run', computer: 'unknown-box', phrase: 'commits-since', since: 'soon' },
@@ -123,11 +140,14 @@ const VARIANTS: Record<string, unknown[]> = {
     // V2-9: the new kinds, driven to an ambiguity (two of the persona's own rows), nothing found, or the gate.
     { kind: 'job', target: 'sana fix' }, { kind: 'job', target: 'payroll' }, { kind: 'dispatch', target: 'nothing like it' }, { kind: 'dispatch', target: 'Initiative', model: 'gpt-9' },
     { kind: 'finding-promote', target: 'x' }, { kind: 'finding-analyze', target: '3' }, { kind: 'change-address', target: 'anything' },
-    { kind: 'deck', target: 'Initiative' }, { kind: 'summarize', target: 'Initiative' }, { kind: 'diagram', target: 'Nothing Like It' }, { kind: 'doc', target: 'initiative:p-not-theirs' }],
+    { kind: 'deck', target: 'Initiative' }, { kind: 'summarize', target: 'Initiative' }, { kind: 'diagram', target: 'Nothing Like It' }, { kind: 'doc', target: 'initiative:p-not-theirs' },
+    // G21: page positions past the page, and a page row's name that matches two rows.
+    { kind: 'finding-promote', target: 'the seventh', rows: [7] }, { kind: 'finding-promote', target: 'fix', scope: 'this-page' }],
   // V2-10: a decision on a row the persona's read holds (in a state that refuses), one it does not, a position, a missing note.
   decide: [{ ref: 'change:cr-sana', decision: 'approve' }, { ref: 'change:cr-not-theirs', decision: 'deliver' }, { ref: 'hitl-approval:ha-sana', decision: 'reject' },
     { ref: 'hitl-approval:ha-other', decision: 'approve' }, { ref: '1', decision: 'approve' }, { ref: 'consult:co-sana', decision: 'approve' },
-    { ref: 'proposal:gp-x', decision: 'reject' }, { ref: 'design:d-sana', decision: 'approve' }, { ref: 'runbook-proposal:rp-sana', decision: 'accept' }, { ref: 'nonsense', decision: 'approve' }],
+    { ref: 'proposal:gp-x', decision: 'reject' }, { ref: 'design:d-sana', decision: 'approve' }, { ref: 'runbook-proposal:rp-sana', decision: 'accept' }, { ref: 'nonsense', decision: 'approve' },
+    { ref: '5', decision: 'approve', scope: 'this-page' }, { ref: '1', decision: 'approve', scope: 'this-page' }],
   // V2-11: creates and updates driven to an ambiguity, nothing found, a refused field set or a state that refuses.
   create: [{ kind: 'work-item', fields: { initiative: 'Initiative', title: 'x' } }, { kind: 'work-item', fields: { initiative: 'Nothing Like It', title: 'x' } },
     { kind: 'comment', fields: { on: 'Sana Alpha', text: 'hi' } }, { kind: 'comment', fields: { on: 'work-item:w-not-theirs', text: 'hi' } },
@@ -167,6 +187,7 @@ async function runAs(world: World, mode: Mode, name: string, args: unknown): Pro
   const ctx = toolContext({
     role: 'member', allow: world.allow, fetch, compute: compute(world), social: social(world), calls, presence: world.roster,
     socialRequestItemId: world.socialRequestItemId, results: new ResultMemory(), jobs: { track: () => {} },
+    page: () => world.page,
   });
   const results: ToolResult[] = [];
   const prepared = prepareToolCall(name, args, ctx);
@@ -178,7 +199,7 @@ async function runAs(world: World, mode: Mode, name: string, args: unknown): Pro
   }
   // What this persona may be told: its own reads, the providers its own shell holds, its own words, and the
   // request link its own capabilities read named.
-  const universe = strings([answered, world.computers, world.roster.roster(), args]);
+  const universe = strings([answered, world.computers, world.roster.roster(), world.page, args]);
   // The dock's own fixed words for that link are not a row.
   if (world.socialRequestItemId) for (const s of [world.socialRequestItemId, accessRequestHref(world.socialRequestItemId), 'Request Social access']) universe.add(s);
   // And the budgets tier's own request link (budget's offer): fixed words and the catalog item, never a row.
@@ -196,7 +217,7 @@ test('property: a refused, ambiguous or failed payload names only rows that pers
   const worlds = [['sana', SANA, ELI], ['eli', ELI, SANA]] as const;
   let checked = 0;
   for (const [who, mine, other] of worlds) {
-    const foreign = new Set([...strings([Object.values(other.reads), other.computers, other.roster.roster()])].filter((s) => s.length > 3 && !strings([Object.values(mine.reads), mine.computers, mine.roster.roster()]).has(s)));
+    const foreign = new Set([...strings([Object.values(other.reads), other.computers, other.roster.roster(), other.page])].filter((s) => s.length > 3 && !strings([Object.values(mine.reads), mine.computers, mine.roster.roster(), mine.page]).has(s)));
     for (const tool of names) {
       for (const args of VARIANTS[tool]!) {
         for (const mode of ['world', 'forbidden', 'down'] as const) {
@@ -257,4 +278,16 @@ test('confirm-time DM: a refused or mismatched open sends nothing; an ambiguous 
   const planned = await planPreparedCall(prepared.call, ctx, VOICE_PLANNERS);
   assert.ok(planned && 'result' in planned && planned.result.output['kind'] === 'ambiguous');
   assert.ok(log.every((l) => l.startsWith('GET ')));
+});
+
+test('page context (G21): the note and a this-page list carry only the rows that persona\'s page rendered, never the other\'s', async () => {
+  for (const [mine, other] of [[SANA, ELI], [ELI, SANA]] as const) {
+    const foreign = [...strings([other.page])].filter((x) => x.length > 3 && !strings([mine.page]).has(x));
+    const note = pageContextNote({ tenant: 'orgiq', pathname: mine.page.path, pageId: 'initiatives', page: mine.page });
+    const { results } = await runAs(mine, 'world', 'list', { kind: 'work-item', scope: 'this-page' });
+    const listed = JSON.stringify(results[0]!.output);
+    assert.equal(results[0]!.outcome, 'done');
+    for (const r of mine.page.rows) { assert.ok(note.includes(r.title)); assert.ok(listed.includes(r.ref)); }
+    for (const f of foreign) { assert.ok(!note.includes(f), `the note names the other persona's "${f}"`); assert.ok(!listed.includes(f), `the list names the other persona's "${f}"`); }
+  }
 });

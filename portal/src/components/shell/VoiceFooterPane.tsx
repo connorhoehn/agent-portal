@@ -57,6 +57,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { browserMedia } from '../../lib/voice/client';
 import { keepTranscripts, subscribeKeepTranscripts, transcriptStore } from '../../lib/voice/transcriptKeep';
 import { VOICE_LOG_PATH, sessionHref } from '../../pages/voice/voiceLogModel';
+import { pageContextFor, pageContextNote, pageIdFor, subscribePageContext } from '../../lib/voice/pageContext';
 import { VoiceController } from '../../lib/voice/controller';
 import { VoiceJobTracker, jobNotification, type JobNotice } from '../../lib/voice/work';
 import { addLocalNotification } from '../../lib/localNotifications';
@@ -67,7 +68,7 @@ import { useSocialCall } from '../../pages/social/useSocialCall';
 import { sendAndWaitForSocialChatAck, socialChatError } from '../../pages/social/socialChatDelivery';
 import { useEmbeddedSocial } from './EmbeddedSocial';
 import { PAGES, isPageVisible } from './portalCommands';
-import { isVoiceHotkey, pageContextNote, voiceDockVisible } from './voiceDockModel';
+import { isVoiceHotkey, voiceDockVisible } from './voiceDockModel';
 import { tenantLobbyPresence } from './tenantPresence';
 
 /** The footer's voice slot: nothing at all unless the flag is on. */
@@ -323,7 +324,14 @@ function VoiceFooterPane() {
       },
       showOutput,
       jobs,
+      // G21: the rows the page in view rendered for this persona (pageContext.ts), never a second read.
+      page: () => pageContextFor(window.location.pathname),
     }),
+    // The page context note the voice gets on start, on navigation and after every tool result (G21).
+    pageContext: () => {
+      const path = window.location.pathname;
+      return pageContextNote({ tenant: live.current.tenant, pathname: path, pageId: pageIdFor(PAGES, live.current.tenant, path), page: pageContextFor(path) });
+    },
   }), [showOutput, jobs]);
   controllerRef.current = controller;
   const snap = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
@@ -337,8 +345,16 @@ function VoiceFooterPane() {
     void controller.stop('tenant-switch');
   }, [controller, session?.tenant]);
 
-  // Moving by hand: the voice learns where the user is, silently.
-  useEffect(() => { controller.noteContext(pageContextNote(pathname)); }, [controller, pathname]);
+  // Moving by hand, or the page showing its rows: the voice learns where the user is and what is on screen, silently (G21).
+  useEffect(() => { controller.notePage(); }, [controller, pathname]);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const off = subscribePageContext(() => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { timer = null; controller.notePage(); }, 250);
+    });
+    return () => { off(); if (timer) clearTimeout(timer); };
+  }, [controller]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
