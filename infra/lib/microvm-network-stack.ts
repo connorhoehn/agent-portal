@@ -25,6 +25,12 @@ export const MICROVM_EGRESS_DOMAINS: readonly string[] = [
 
 /** The private name the BFF callback answers on (`LAB_API_BASE`). */
 export const microvmLabZoneName = (prefix: string): string => `lab.${prefix}.internal`;
+/**
+ * The BFF origin the microVM's lab broker forwards to: the runtime's
+ * LAB_API_BASE and the middleware's MICROVM_LAB_API_BASE (which the dispatcher
+ * puts in every boot payload). One function so the two can never disagree.
+ */
+export const microvmLabApiBase = (prefix: string): string => `https://${microvmLabZoneName(prefix)}`;
 
 /** The Bedrock actions the role and the endpoint policy both allow. */
 export const MICROVM_BEDROCK_ACTIONS: readonly string[] = [

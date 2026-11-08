@@ -279,7 +279,7 @@ describe('network (design §5)', () => {
 });
 
 describe('middleware task role additions (design §12)', () => {
-  const MICROVM_SIDS = ['MicrovmGithubSecrets', 'MicrovmInvokeAndStop', 'MicrovmRunObjects'];
+  const MICROVM_SIDS = ['MicrovmGithubSecrets', 'MicrovmInvokeAndStop', 'MicrovmParameters', 'MicrovmRunObjects'];
   const RT_ARN = 'arn:aws:bedrock-agentcore:us-east-1:111111111111:runtime/orgiq_microvm-AbCdEf1234';
   const EP_ARN = `${RT_ARN}/runtime-endpoint/orgiq_microvm_endpoint`;
   const sidsOf = (t: Template) => statementsForRole(t, 'orgiq-middleware-task-role').map((s) => s.Sid);
@@ -307,6 +307,25 @@ describe('middleware task role additions (design §12)', () => {
     assert.ok(env.includes(`"Name":"MICROVM_RUNTIME_ARN","Value":"${RT_ARN}"`));
     assert.ok(env.includes('"Name":"MICROVM_RUNS_BUCKET","Value":"orgiq-microvm-runs-x"'));
     assert.ok(env.includes('"Name":"MICROVM_COMPUTE_USD_PER_SECOND","Value":"0.0001"'));
+    // The SSM fallback reads the runtime's own parameters, and nothing else.
+    assert.deepEqual(actionsOf(bySid('MicrovmParameters')), ['ssm:GetParameter']);
+    assert.match(JSON.stringify(bySid('MicrovmParameters').Resource), /parameter\/orgiq\/microvm\/\*/);
+  });
+
+  test('MICROVM_LAB_API_BASE is the same origin the runtime gets as LAB_API_BASE', () => {
+    const t = Template.fromStack(middlewareServiceStack({}, {
+      microvmRuntimeArn: RT_ARN, microvmEndpointArn: EP_ARN, microvmRunsBucketName: 'b',
+    }));
+    const [rt] = microvmRuntime(runtime);
+    const labApiBase = rt.Properties.EnvironmentVariables.LAB_API_BASE;
+    assert.equal(labApiBase, 'https://lab.orgiq.internal');
+    assert.ok(JSON.stringify(t.toJSON()).includes(`"Name":"MICROVM_LAB_API_BASE","Value":"${labApiBase}"`));
+  });
+
+  test('the flagged app wires MICROVM_LAB_API_BASE into the middleware from the runtime\'s value', () => {
+    const app = synthApp({ microvm: 'true' });
+    const rtEnv = microvmRuntime(app.template('OrgIQ-MicrovmRuntime'))[0].Properties.EnvironmentVariables;
+    assert.ok(JSON.stringify(app.templates['OrgIQ-MiddlewareService']).includes(`"Name":"MICROVM_LAB_API_BASE","Value":"${rtEnv.LAB_API_BASE}"`));
   });
 
   test('the compute rate defaults to 0 and must be a number', () => {

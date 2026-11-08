@@ -9,7 +9,7 @@ import { trustedService } from './service-trust';
 import { refusePlaintext } from './callback-secrets';
 import { resolveContainerUri } from './agentcore-runtime-stack';
 import { DEVBOX_TASK_TIMEOUT_S, bedrockModelArns, resolveDevboxModels } from './devbox-stack';
-import { MICROVM_BEDROCK_ACTIONS, microvmLabZoneName } from './microvm-network-stack';
+import { MICROVM_BEDROCK_ACTIONS, microvmLabApiBase } from './microvm-network-stack';
 import { protectData } from './context-flags';
 
 /** AgentCore's ceiling on a session's lifetime. */
@@ -180,7 +180,7 @@ export class MicrovmRuntimeStack extends cdk.Stack {
         OTEL_SERVICE_NAME: `${prefix}-microvm`,
         OTEL_PYTHON_LOG_CORRELATION: 'true',
         OTEL_RESOURCE_ATTRIBUTES: `deployment.environment=dev,service.namespace=${prefix},agent.id=${prefix}-microvm`,
-        LAB_API_BASE: `https://${microvmLabZoneName(prefix)}`,
+        LAB_API_BASE: microvmLabApiBase(prefix),
         // No LAB_CALLBACK_SECRET and no LAB_CALLBACK_SECRET_ID: see labCallbackSecret above.
       },
     });

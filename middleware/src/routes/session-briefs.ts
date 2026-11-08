@@ -29,7 +29,7 @@ import { LAB_CALLBACK_SERVICE_AUTH, hasServiceAuth } from '../lib/service-auth.j
 import { previewBrief } from '../lib/session-brief-preview.js';
 import { liveBundleSkills, loadWorkContext } from '../lib/run-brief.js';
 import { RUN_TOKEN_HEADER, runTokenMatches } from '../lib/run-token.js';
-import { loadSkillLibrary, skillDescription, type RunbookStore, type SessionBrief } from '../lib/runbooks/index.js';
+import { loadSkillLibrary, skillDescription, skillLibraryForRun, type RunbookStore, type SessionBrief } from '../lib/runbooks/index.js';
 import { clock } from '../mock/core/clock.js';
 
 export interface SessionBriefDeps {
@@ -155,12 +155,16 @@ export function createSessionBriefsRouter(deps: SessionBriefDeps): Router {
   // fleet secret alone fetches nothing. The set is content-addressed (`sha256`); a box sends it
   // back as If-None-Match and gets a 304 when nothing changed, so an unchanged library is no copy.
   // Only ACCEPTED versions are in it — a run's captured tool reaches it only through a person's accept.
+  // A run whose brief froze a library gets THAT library (each skill at the version the brief
+  // recorded), not today's: a runbook published after the freeze must not fail the microVM
+  // boot's library check, nor change what an older run was told it has.
   router.get('/runs/:ref/skills', briefLimit, machineMark,
     unlessMachine(requireTenant('orgiq')), unlessMachine(requireAction('ViewSessionBrief')),
     asyncHandler(async (req, res) => {
       const ref = String(req.params['ref']);
       if (res.locals['machine'] && !(await runTokenMatches(req, ref))) { refuseRunToken(res); return; }
-      const lib = await loadSkillLibrary(await deps.store());
+      const s = await deps.store();
+      const { lib } = await skillLibraryForRun(s, (await s.getBrief(ref))?.skill_library);
       const etag = `"${lib.sha256}"`;
       res.setHeader('ETag', etag);
       res.setHeader('X-Skill-Library-Sha256', lib.sha256);

@@ -108,6 +108,36 @@ export async function loadSkillLibrary(store: RunbookStore): Promise<SkillLibrar
   return buildSkillLibrary(rows);
 }
 
+/**
+ * The library AS A BRIEF FROZE IT: each skill the brief recorded, at the
+ * version it recorded. Versions are immutable, so this rebuilds the same set
+ * the brief's `sha256` names — unless a recorded runbook or version is gone,
+ * in which case the rebuilt sha differs and the caller must not pass it off
+ * as the frozen one. A runbook archived since the freeze still counts: it was
+ * published when the run was given it.
+ */
+export async function loadFrozenSkillLibrary(store: RunbookStore, recorded: ReadonlyArray<{ name: string; version: number }>): Promise<SkillLibrary> {
+  const rows: Array<{ runbook: Runbook; version: RunbookVersion }> = [];
+  for (const k of recorded) {
+    const runbook = await store.getRunbook(k.name);
+    const version = runbook ? await store.getVersion(k.name, k.version) : null;
+    if (runbook && version) rows.push({ runbook: { ...runbook, status: 'published' }, version });
+  }
+  return buildSkillLibrary(rows);
+}
+
+/**
+ * The library a run should sync: the frozen one when the run's brief recorded
+ * a library (the current one when nothing has moved since, or when the frozen
+ * set can no longer be rebuilt), else the current one. `frozen` says which.
+ */
+export async function skillLibraryForRun(store: RunbookStore, recorded: { sha256: string; skills: ReadonlyArray<{ name: string; version: number }> } | null | undefined): Promise<{ lib: SkillLibrary; frozen: boolean }> {
+  const current = await loadSkillLibrary(store);
+  if (!recorded || current.sha256 === recorded.sha256) return { lib: current, frozen: !!recorded };
+  const then = await loadFrozenSkillLibrary(store, recorded.skills);
+  return then.sha256 === recorded.sha256 ? { lib: then, frozen: true } : { lib: current, frozen: false };
+}
+
 /** The library as a session brief records it (brief.ts BriefSkillLibrary). */
 export function briefLibraryOf(lib: SkillLibrary, dir: string | null = BOX_SKILLS_DIR): { sha256: string; dir: string | null; skills: Array<{ name: string; version: number }> } {
   return { sha256: lib.sha256, dir, skills: lib.skills.map((k) => ({ name: k.name, version: k.version })) };

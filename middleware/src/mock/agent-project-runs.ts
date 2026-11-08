@@ -42,6 +42,10 @@ export interface ProjectRunSeed {
   dispatchedBy?: string | null;
   /** `agent_project_runs.cutoff` (DE-35): why the run's spend ceiling stopped it. Read by the reconcile only. */
   cutoff?: Record<string, unknown> | null;
+  /** `agent_project_runs.session_id`: the runtime session (a microVM run's derived id). A column only. */
+  sessionId?: string | null;
+  /** `agent_project_runs.runner` (schema/microvm_sessions.sql): 'microvm' for the microVM runner. A column only. */
+  runner?: string | null;
 }
 
 /** The wire shape both routes return — `durationMs` computed, everything else carried. */
@@ -173,7 +177,7 @@ function durationMs(seed: ProjectRunSeed): number | null {
 
 function toRow(seed: ProjectRunSeed): ProjectRunRow {
   // `rowToRun` does not read dispatched_by, so the offline wire does not carry it either.
-  const { dispatchedBy: _dispatchedBy, cutoff: _cutoff, ...run } = seed;
+  const { dispatchedBy: _dispatchedBy, cutoff: _cutoff, sessionId: _sessionId, runner: _runner, ...run } = seed;
   return { ...run, durationMs: durationMs(seed) };
 }
 
@@ -220,7 +224,7 @@ export function mockRecentRunsForProjects(
  */
 export function mockStartRun(input: {
   projectId: string; prompt: string; model?: string | null; workItemId?: string | null;
-  dispatchedBy?: string | null;
+  dispatchedBy?: string | null; sessionId?: string | null; runner?: string | null;
 }): ProjectRunRow {
   const seed: ProjectRunSeed = {
     id: randomUUID(),
@@ -236,6 +240,8 @@ export function mockStartRun(input: {
     costUsd: null,
     ...(input.workItemId ? { workItemId: input.workItemId } : {}),
     ...(input.dispatchedBy ? { dispatchedBy: input.dispatchedBy } : {}),
+    ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+    ...(input.runner ? { runner: input.runner } : {}),
   };
   agentProjectRuns.rows().push(seed);
   return toRow(seed);

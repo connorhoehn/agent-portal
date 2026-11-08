@@ -40,7 +40,7 @@ import { RUN_TOKEN_HEADER, mintRunToken } from '../../lib/run-token.js';
 import { createRunbooksRouter } from '../runbooks.js';
 import { createSessionBriefsRouter } from '../session-briefs.js';
 import { errorHandler } from '../../lib/async-handler.js';
-import { assembleBrief, briefLibraryOf, loadSkillLibrary, renderSkill, type RunbookStore } from '../../lib/runbooks/index.js';
+import { assembleBrief, briefLibraryOf, librarySha, loadSkillLibrary, renderSkill, type RunbookStore } from '../../lib/runbooks/index.js';
 import { NEW_MD, USERS, seededStore, type TestUser } from './runbook-world.js';
 import { cdpWebsocketDoc, bundleFiles, CDP_RUNBOOK_ID } from '../../mock/runbook-bundles.js';
 
@@ -258,6 +258,45 @@ describe('delivery', () => {
     // Another run's token, or no envelope, gets nothing.
     expect((await request(appAs(null)).get(target).set(boxHeaders('GET', target, '', await mintRunToken('job-other')))).status).toBe(403);
     expect((await request(appAs(null)).get(target)).status).toBe(401);
+  });
+
+  it('library: a run gets the library its brief froze, not one published after it (the microVM boot check)', async () => {
+    await freeze('job-lib-frozen', null);
+    const frozenSha = (await store.getBrief('job-lib-frozen'))!.skill_library!.sha256;
+    // A runbook is published after the freeze: the current library moves.
+    await freeze('job-cap-pub', 'p-101');
+    const pid = (await boxProposes('job-cap-pub')).body.proposal.id;
+    expect((await request(appAs(USERS.leader!)).post(`/api/runbooks/proposals/${pid}/accept`).send({})).status).toBe(201);
+    const current = await loadSkillLibrary(store);
+    expect(current.sha256).not.toBe(frozenSha);
+
+    const target = '/api/runs/job-lib-frozen/skills';
+    const res = await request(appAs(null)).get(target).set(boxHeaders('GET', target, '', await mintRunToken('job-lib-frozen')));
+    expect(res.status).toBe(200);
+    expect(res.body.sha256).toBe(frozenSha);
+    expect(res.headers['x-skill-library-sha256']).toBe(frozenSha);
+    expect(res.body.skills.map((k: { name: string }) => k.name)).not.toContain(NAME);
+    // The served bundle is self-consistent: its sha is the set sha of its own files.
+    expect(librarySha(res.body.files)).toBe(frozenSha);
+
+    // A run frozen after the publish gets the new library.
+    await freeze('job-lib-after', null);
+    const after = '/api/runs/job-lib-after/skills';
+    const res2 = await request(appAs(null)).get(after).set(boxHeaders('GET', after, '', await mintRunToken('job-lib-after')));
+    expect(res2.body.sha256).toBe(current.sha256);
+    expect(res2.body.skills.map((k: { name: string }) => k.name)).toContain(NAME);
+  });
+
+  it('library: a frozen set that can no longer be rebuilt is not passed off as the frozen one', async () => {
+    await freeze('job-lib-gone', null);
+    const brief = (await store.getBrief('job-lib-gone'))!;
+    // The brief names a version that does not exist (a hand-edited or damaged record).
+    await store.putBrief({ ...brief, run_ref: 'job-lib-gone-2', skill_library: { ...brief.skill_library!, sha256: 'f'.repeat(64), skills: [{ name: 'rb-no-such-runbook', version: 1 }] } });
+    const target = '/api/runs/job-lib-gone-2/skills';
+    const res = await request(appAs(null)).get(target).set(boxHeaders('GET', target, '', await mintRunToken('job-lib-gone-2')));
+    expect(res.status).toBe(200);
+    expect(res.body.sha256).toBe((await loadSkillLibrary(store)).sha256);
+    expect(res.body.sha256).not.toBe('f'.repeat(64));
   });
 
   it('library: people read the manifest without file bytes', async () => {

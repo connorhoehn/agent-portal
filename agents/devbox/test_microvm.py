@@ -305,6 +305,8 @@ class BootTests(MicrovmCase):
         self.assertEqual(out["head_sha"], HEAD)
         self.assertTrue(out["library_sha_ok"])
         self.assertTrue(out["booted_at"].endswith("Z"))
+        # The box says where its workspace is; the dispatcher stops guessing.
+        self.assertEqual(out["workspace_root"], self.root)
 
     def test_bad_targets_raise_before_any_delete(self):
         sentinel = Path(self.root, "sentinel")
@@ -319,7 +321,8 @@ class BootTests(MicrovmCase):
                     with self.assertRaises(main.BadTarget):
                         main._confine(target, self.root)
                 out = run(main.handle(self.boot_payload(target=target)))
-                self.assertEqual(out, {"ok": False, "error": "bad-target", "detail": out["detail"]})
+                self.assertEqual(out, {"ok": False, "error": "bad-target", "detail": out["detail"],
+                                       "workspace_root": self.root})
                 self.assertTrue(sentinel.exists(), "a refused target still wiped the workspace")
         self.assertEqual(self.git.calls, [], "git ran for a refused target")
         self.assertEqual(self.up.calls, [])
@@ -798,6 +801,45 @@ class PushTests(MicrovmCase):
         run(go())
         push = next(c for c in self.git.calls if "push" in c["argv"])
         self.assertEqual(push["argv"][4], f"--force-with-lease=refs/heads/orgiq/ab12cd34/job12345:{HEAD}")
+
+    def test_expected_head_null_leases_on_absent_and_a_sha_leases_on_that_sha(self):
+        sha = "3" * 40
+
+        async def go():
+            await self._boot()
+            a = await main.handle({"op": "push", "runner": "microvm", "branch": "orgiq/a/b", "expected_head": None})
+            await main._mvm_shutdown()
+            await self._boot()
+            b = await main.handle({"op": "push", "runner": "microvm", "branch": "orgiq/a/b", "expected_head": sha})
+            return a, b
+
+        a, b = run(go())
+        self.assertTrue(a["ok"] and b["ok"], (a, b))
+        pushes = [c["argv"][4] for c in self.git.calls if "push" in c["argv"]]
+        self.assertEqual(pushes, ["--force-with-lease=refs/heads/orgiq/a/b:",
+                                  f"--force-with-lease=refs/heads/orgiq/a/b:{sha}"])
+
+    def test_a_failed_lease_on_expected_head_is_push_rejected(self):
+        async def go():
+            await self._boot()
+            self.git.push_rc = 1
+            return await main.handle({"op": "push", "runner": "microvm", "branch": "orgiq/a/b",
+                                      "expected_head": "4" * 40})
+
+        out = run(go())
+        self.assertEqual((out["ok"], out["error"]), (False, "push-rejected"))
+
+    def test_a_malformed_expected_head_is_refused_before_git(self):
+        async def go():
+            await self._boot()
+            before = len(self.git.calls)
+            outs = [await main.handle({"op": "push", "runner": "microvm", "branch": "orgiq/a/b", "expected_head": v})
+                    for v in ("", "HEAD", "3" * 39, "G" * 40, 7, "--force")]
+            return outs, self.git.calls[before:]
+
+        outs, calls = run(go())
+        self.assertTrue(all(o["error"] == "bad-expected-head" for o in outs), outs)
+        self.assertFalse([c for c in calls if "push" in c["argv"]])
 
     def test_push_refuses_branches_outside_orgiq_and_reports_rejection(self):
         async def go():

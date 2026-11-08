@@ -14,16 +14,19 @@ import { spendHolds } from '../../mock/spend-holds.js';
 import { spendEntries } from '../../mock/spend-ledger.js';
 import { credentialIssues } from '../../mock/credential-issues.js';
 import { microvmSessions } from '../../mock/microvm-sessions.js';
+import { agentProjectRuns } from '../../mock/agent-project-runs.js';
+import { startRun, finishRun } from '../../providers/agent-projects.js';
 import { recordCredentialIssue, listCredentialIssues } from '../../providers/credential-issues.js';
 import {
-  insertMicrovmSession, updateMicrovmSession, latestSessionForJob, countLiveSessionsForActor, listLiveSessions,
+  insertMicrovmSession, updateMicrovmSession, latestSessionForJob, countLiveSessionsForActor, listLiveSessions, pushedHeadForJob,
 } from '../../providers/microvm-sessions.js';
 import { mintAuditedRepoToken, _setRepoTokenProvider, LocalFakeTokenProvider } from '../repo-token-provider.js';
 import { presignS3 } from '../microvm-invoke.js';
-import { microvmConfig } from '../microvm-config.js';
+import { microvmConfig, loadMicrovmParameters, _resetMicrovmParameters } from '../microvm-config.js';
 import { microvmSessionId, MIN_SESSION_ID_LENGTH, microvmBranch } from '../microvm-ids.js';
 import {
   judgeMicrovmJob, runMicrovmAttempt, microvmDispatchPass, sweepMicrovmOverruns, tokenCostFromEnd,
+  microvmHoldExpiresInMs, startMicrovmRunner, _resetMicrovmStart, _resetLearnedWorkspaceRoots, workspaceRootFor,
   type MicrovmDeps,
 } from '../microvm-dispatcher.js';
 import type { ClaimedAgentJob, AgentJob } from '../../providers/agent-jobs.js';
@@ -88,14 +91,19 @@ const TASK_EVENTS: Array<Record<string, unknown>> = [
   RESULT, END,
 ];
 
-function fakeAgentCore(answers: Partial<Record<'boot' | 'task' | 'push', unknown>> = {}) {
+type Answer = unknown | ((payload: Record<string, unknown>, nth: number) => unknown);
+
+function fakeAgentCore(answers: Partial<Record<'boot' | 'task' | 'push', Answer>> = {}) {
+  const seen: Record<string, number> = {};
   const invokes: Invoke[] = [];
   const client = {
     send: jest.fn(async (cmd: { input: { runtimeSessionId: string; agentRuntimeArn: string; payload: Uint8Array } }) => {
       const payload = JSON.parse(Buffer.from(cmd.input.payload).toString('utf8')) as Record<string, unknown>;
       invokes.push({ sessionId: cmd.input.runtimeSessionId, arn: cmd.input.agentRuntimeArn, payload });
       const op = payload['op'] as 'boot' | 'task' | 'push';
-      const answer = answers[op] ?? (op === 'boot'
+      seen[op] = (seen[op] ?? 0) + 1;
+      const given = answers[op];
+      const answer = (typeof given === 'function' ? (given as (p: Record<string, unknown>, n: number) => unknown)(payload, seen[op]!) : given) ?? (op === 'boot'
         ? { ok: true, head_sha: BASE, library_sha_ok: true, booted_at: '2026-11-07T00:00:00Z' }
         : op === 'push' ? { ok: true, head_sha: HEAD, pushed: true } : TASK_EVENTS);
       return { response: sse(Array.isArray(answer) ? answer as Array<Record<string, unknown>> : [answer as Record<string, unknown>]) };
@@ -167,6 +175,9 @@ function harness(over: Partial<MicrovmDeps> = {}, answers: Parameters<typeof fak
     insertSession: (row) => insertMicrovmSession(row),
     updateSession: (id, p) => updateMicrovmSession(id, p),
     latestSessionForJob: (id) => latestSessionForJob(id),
+    pushedHeadForJob: (id, before) => pushedHeadForJob(id, before),
+    startProjectRun: (i) => startRun({ ...i, runner: 'microvm' }),
+    finishProjectRun: (id, o) => finishRun(id, o),
     countLiveSessions: (sub) => countLiveSessionsForActor(sub),
     listLiveSessions: () => listLiveSessions(),
     computeSecondsP75: jest.fn(async () => null),
@@ -209,7 +220,8 @@ async function judgeAndRun(h: Harness, j: ClaimedAgentJob = job()): Promise<void
 }
 
 beforeEach(() => {
-  spendHolds.reset(); spendEntries.reset(); credentialIssues.reset(); microvmSessions.reset();
+  spendHolds.reset(); spendEntries.reset(); credentialIssues.reset(); microvmSessions.reset(); agentProjectRuns.reset();
+  _resetLearnedWorkspaceRoots(); _resetMicrovmParameters(); _resetMicrovmStart();
 });
 afterAll(() => _setRepoTokenProvider(null));
 
@@ -368,7 +380,7 @@ describe('one attempt, end to end', () => {
     expect(write.perms).toEqual({ contents: 'write', pull_requests: 'write' });
     expect(h.invokes[2]!.payload).toEqual({
       op: 'push', runner: 'microvm', branch: 'orgiq/unora/6c1d2e3f', token: write.token,
-      author: { name: 'nora-gh', email: '42+nora-gh@users.noreply.github.com' },
+      author: { name: 'nora-gh', email: '42+nora-gh@users.noreply.github.com' }, expected_head: null,
     });
     expect(h.calls.openPullRequest).toHaveBeenCalledWith(USER_TOKEN, expect.objectContaining({ owner: 'acme', repo: 'widgets', head: 'orgiq/unora/6c1d2e3f', base: 'main' }));
     expect(JSON.stringify(h.invokes)).not.toContain(USER_TOKEN);
@@ -462,7 +474,8 @@ describe('one attempt, end to end', () => {
     expect(h.invokes[0]!.payload).toMatchObject({ ref: 'orgiq/unora/origorig' });
     expect(h.invokes[1]!.payload).toMatchObject({ resume_session_id: CLAUDE_SID });
     expect(String(h.invokes[1]!.payload['resume_transcript_get_url'])).toMatch(/\/runs\/job-orig-0001\/1\/transcript\.ndjson\?/);
-    expect(h.invokes[2]!.payload).toMatchObject({ op: 'push', branch: 'orgiq/unora/origorig' });
+    // A resume cloned the branch, so it leases on the head its boot saw.
+    expect(h.invokes[2]!.payload).toMatchObject({ op: 'push', branch: 'orgiq/unora/origorig', expected_head: BASE });
     expect((await listCredentialIssues({ runRef: job().id })).filter((r) => r.kind === 'presign')).toHaveLength(2);
   });
 
@@ -492,6 +505,8 @@ describe('one attempt, end to end', () => {
     expect(h.invokes.map((i) => i.payload['op'])).toEqual(['boot', 'task']);
     expect(h.calls.completeJob).toHaveBeenCalledWith(job().id, expect.objectContaining({ status: 'failed', error: 'task refused: model not allowlisted' }));
     expect(h.calls.stopSession).toHaveBeenCalledTimes(1);
+    // Nothing was pushed, so the row carries no lease for the next attempt.
+    expect((await latestSessionForJob(job().id))!.head_sha).toBeNull();
   });
 
   it('a failed run that left a commit still pushes its branch (for a resume) but opens no PR', async () => {
@@ -500,6 +515,154 @@ describe('one attempt, end to end', () => {
     expect(h.invokes.map((i) => i.payload['op'])).toEqual(['boot', 'task', 'push']);
     expect(h.calls.openPullRequest).not.toHaveBeenCalled();
     expect(h.calls.completeJob).toHaveBeenCalledWith(job().id, expect.objectContaining({ status: 'failed' }));
+  });
+});
+
+// ─── The gaps §16 listed, closed ──────────────────────────────────────────────
+
+describe('push lease (expected_head)', () => {
+  it('attempt 2 of a job whose attempt 1 pushed leases on the head attempt 1 recorded', async () => {
+    await judgeAndRun(harness());
+    expect((await latestSessionForJob(job().id))!.head_sha).toBe(HEAD);
+    const NEXT = '3'.repeat(40);
+    const h2 = harness({}, { push: { ok: true, head_sha: NEXT, pushed: true } });
+    await judgeAndRun(h2, job({ attempts: 2 }));
+    expect(h2.invokes[2]!.payload).toMatchObject({ op: 'push', branch: 'orgiq/unora/6c1d2e3f', expected_head: HEAD });
+    expect((await latestSessionForJob(job().id))!).toMatchObject({ attempt: 2, head_sha: NEXT });
+  });
+
+  it('a commit that never left the box is no lease: attempt 2 still sends null', async () => {
+    // Attempt 1 commits but its push is rejected.
+    const h1 = harness({}, { push: { ok: false, error: 'push-rejected', detail: 'git push exited 1' } });
+    await judgeAndRun(h1);
+    expect(h1.calls.completeJob).toHaveBeenCalledWith(job().id, expect.objectContaining({ status: 'failed', error: 'push failed: push-rejected' }));
+    expect((await latestSessionForJob(job().id))!.head_sha).toBeNull();
+    const h2 = harness();
+    await judgeAndRun(h2, job({ attempts: 2 }));
+    expect(h2.invokes[2]!.payload['expected_head']).toBeNull();
+  });
+});
+
+describe('hold TTL (§6)', () => {
+  it('covers the task, the boot allowance and the grace, never under the default', () => {
+    expect(microvmHoldExpiresInMs(30, 840)).toBe(35 * 60_000);
+    expect(microvmHoldExpiresInMs(30, 3300)).toBe(3300_000 + 10 * 60_000 + 5 * 60_000);
+    expect(microvmHoldExpiresInMs(30, 0)).toBe(35 * 60_000);
+  });
+
+  it('a profile at the 3,300 s cap gets a hold that outlives its task, on reserveSpend and the meter', async () => {
+    const h = harness({ profileFor: jest.fn(async () => ({ ...PROFILE, task_timeout_s: 3300 })) });
+    await judgeAndRun(h);
+    const held = (h.calls.reserveSpend.mock.calls[0]![0] as { expiresInMs: number }).expiresInMs;
+    expect(held).toBeGreaterThan(3300_000 + 10 * 60_000);
+    expect(held).toBe(70 * 60_000);
+    expect(h.deps.meterForHold).toHaveBeenCalledWith(expect.objectContaining({ expiresInMs: held }));
+  });
+});
+
+describe('runtime ARN and runs bucket from SSM', () => {
+  const NOARN = { LAB_CALLBACK_SECRET: 'fleet-secret-value', PROJECT_PREFIX: 'orgiq', MICROVM_COMPUTE_USD_PER_SECOND: '0' };
+
+  it('reads /orgiq/microvm/* once when the env is unset, and the config uses them', async () => {
+    const read = jest.fn(async (name: string) => ({
+      '/orgiq/microvm/runtime-arn': ARN, '/orgiq/microvm/endpoint-arn': `${ARN}/runtime-endpoint/DEFAULT`, '/orgiq/microvm/runs-bucket': 'runs-from-ssm',
+    } as Record<string, string>)[name] ?? null);
+    await loadMicrovmParameters(read, NOARN, () => undefined);
+    await loadMicrovmParameters(read, NOARN, () => undefined);
+    expect(read.mock.calls.map((c) => c[0]).sort()).toEqual(['/orgiq/microvm/endpoint-arn', '/orgiq/microvm/runs-bucket', '/orgiq/microvm/runtime-arn']);
+    expect(microvmConfig(NOARN)).toMatchObject({ runtimeArn: ARN, runsBucket: 'runs-from-ssm', endpointArn: `${ARN}/runtime-endpoint/DEFAULT` });
+    // The env still wins over the cache.
+    expect(microvmConfig({ ...NOARN, MICROVM_RUNTIME_ARN: 'arn:env' }).runtimeArn).toBe('arn:env');
+    const v = await judgeMicrovmJob(job(), harness({}, {}, NOARN).deps, { saturated: [] });
+    expect(v.ok).toBe(true);
+  });
+
+  it('reads nothing when the env names both, or offline', async () => {
+    const read = jest.fn(async () => 'x');
+    await loadMicrovmParameters(read, ENV, () => undefined);
+    _resetMicrovmParameters();
+    await loadMicrovmParameters(read, { ...NOARN, MOCK_AGENTCORE: 'true' }, () => undefined);
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it('with neither the env nor the parameter (or an SSM error) every job still waits as no-microvm-runtime', async () => {
+    await loadMicrovmParameters(jest.fn(async (name: string) => { if (name.endsWith('runs-bucket')) throw Object.assign(new Error('x'), { name: 'AccessDeniedException' }); return null; }), NOARN, () => undefined);
+    expect(microvmConfig(NOARN)).toMatchObject({ runtimeArn: null, runsBucket: null });
+    expect(await judgeMicrovmJob(job(), harness({}, {}, NOARN).deps, { saturated: [] })).toEqual({ ok: false, reason: 'no-microvm-runtime' });
+  });
+});
+
+describe('lab_api_base', () => {
+  it('prefers MICROVM_LAB_API_BASE and says once at start-up which source it used', async () => {
+    const lines: Array<Record<string, unknown>> = [];
+    const env = { ...ENV, MICROVM_LAB_API_BASE: 'https://lab.orgiq.internal:8443' };
+    await startMicrovmRunner({ env, read: async () => null, log: (l) => lines.push(l) });
+    await startMicrovmRunner({ env, read: async () => null, log: (l) => lines.push(l) });
+    const config = lines.filter((l) => l['event'] === 'config');
+    expect(config).toHaveLength(1);
+    expect(config[0]).toMatchObject({ labApiBase: 'https://lab.orgiq.internal:8443', labApiBaseSource: 'env MICROVM_LAB_API_BASE', runtimeArnSource: 'env' });
+    const h = harness({}, {}, env);
+    await judgeAndRun(h);
+    expect(h.invokes[0]!.payload['lab_api_base']).toBe('https://lab.orgiq.internal:8443');
+
+    _resetMicrovmStart();
+    lines.length = 0;
+    await startMicrovmRunner({ env: ENV, read: async () => null, log: (l) => lines.push(l) });
+    expect(lines.find((l) => l['event'] === 'config')).toMatchObject({ labApiBase: 'https://lab.orgiq.internal', labApiBaseSource: 'default lab.<PROJECT_PREFIX>.internal' });
+  });
+});
+
+describe('agent_project_runs', () => {
+  it('a microVM session writes one run row: its session id, runner microvm, the agent project, finished with the token cost', async () => {
+    const h = harness();
+    await judgeAndRun(h);
+    const sid = h.invokes[0]!.sessionId;
+    const rows = agentProjectRuns.rows().filter((r) => r.sessionId === sid);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ runner: 'microvm', projectId: AP_ID, model: PROFILE.models[0], status: 'done', costUsd: 0.12 });
+  });
+
+  it('a failed boot still finishes its row as failed', async () => {
+    const h = harness({}, { boot: { ok: false, error: 'clone-failed', detail: 'git clone exited 128' } });
+    await judgeAndRun(h);
+    const row = agentProjectRuns.rows().find((r) => r.sessionId === h.invokes[0]!.sessionId)!;
+    expect(row).toMatchObject({ runner: 'microvm', status: 'failed', error: 'boot failed: clone-failed', costUsd: null });
+  });
+});
+
+describe('workspace root', () => {
+  it('uses the env root before the first boot, then the root the box reported', async () => {
+    const h1 = harness({}, { boot: { ok: true, head_sha: BASE, library_sha_ok: true, booted_at: '', workspace_root: '/var/devbox/ws' } });
+    await judgeAndRun(h1);
+    expect(h1.invokes[0]!.payload['target']).toBe('/tmp/devbox-workspace/repo');
+    expect(workspaceRootFor(ARN, '/tmp/devbox-workspace')).toBe('/var/devbox/ws');
+    const h2 = harness();
+    await judgeAndRun(h2, job({ id: 'job-7d1d2e3f-4a5b-4c6d-8e7f-001122334466' }));
+    expect(h2.invokes[0]!.payload['target']).toBe('/var/devbox/ws/repo');
+  });
+
+  it('a bad-target boot that names its root is retried once on the same session with a target under it', async () => {
+    const h = harness({}, {
+      boot: (p: Record<string, unknown>) => (String(p['target']).startsWith('/srv/ws/')
+        ? { ok: true, head_sha: BASE, library_sha_ok: true, booted_at: '', workspace_root: '/srv/ws' }
+        : { ok: false, error: 'bad-target', detail: 'target must be strictly under the workspace', workspace_root: '/srv/ws' }),
+    });
+    await judgeAndRun(h);
+    expect(h.invokes.map((i) => [i.payload['op'], i.payload['target'] ?? null])).toEqual([
+      ['boot', '/tmp/devbox-workspace/repo'], ['boot', '/srv/ws/repo'], ['task', null], ['push', null],
+    ]);
+    expect(new Set(h.invokes.map((i) => i.sessionId)).size).toBe(1);
+    expect(h.calls.completeJob).toHaveBeenCalledWith(job().id, expect.objectContaining({ status: 'awaiting_review' }));
+  });
+
+  it('ignores a reported root that is not a clean absolute path, and never retries twice', async () => {
+    for (const [i, bad] of ['relative', '/', '/a/../etc', '/a/\nb', 42].entries()) {
+      _resetLearnedWorkspaceRoots();
+      const h = harness({}, { boot: { ok: false, error: 'bad-target', detail: '', workspace_root: bad } });
+      await judgeAndRun(h, job({ id: `job-${i}badroot-0000-0000-000000000000` }));
+      expect([bad, h.invokes.filter((x) => x.payload['op'] === 'boot').length]).toEqual([bad, 1]);
+      expect(workspaceRootFor(ARN, 'fallback')).toBe('fallback');
+    }
   });
 });
 

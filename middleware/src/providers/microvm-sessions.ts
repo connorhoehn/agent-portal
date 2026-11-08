@@ -156,6 +156,28 @@ export async function latestSessionForJob(jobId: string): Promise<MicrovmSession
   return rows[0] ? toRow(rows[0]) : null;
 }
 
+/**
+ * The head an earlier attempt of this job pushed to its branch, or null when
+ * none did: the push lease of the next attempt (`expected_head`). `head_sha`
+ * is written only after a push the box confirmed, so a commit that never left
+ * the box is not a lease.
+ */
+export async function pushedHeadForJob(jobId: string, beforeAttempt: number): Promise<string | null> {
+  if (config.mock.aurora) {
+    const row = microvmSessions.rows()
+      .filter((r) => r.job_id === jobId && r.attempt < beforeAttempt && r.head_sha)
+      .sort((a, b) => b.attempt - a.attempt)[0];
+    return row?.head_sha ?? null;
+  }
+  const rows = await exec(
+    `SELECT head_sha FROM microvm_sessions WHERE job_id = :job AND attempt < :attempt AND head_sha IS NOT NULL
+      ORDER BY attempt DESC LIMIT 1`,
+    [{ name: 'job', value: { stringValue: jobId } }, { name: 'attempt', value: { longValue: Math.trunc(beforeAttempt) } }],
+  );
+  const v = rows[0]?.['head_sha'];
+  return typeof v === 'string' && v ? v : null;
+}
+
 /** How many sessions the actor holds that have not stopped or failed (§10 item 10). */
 export async function countLiveSessionsForActor(actorSub: string): Promise<number> {
   if (config.mock.aurora) {

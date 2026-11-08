@@ -210,6 +210,14 @@ The runner was built in three lanes. Nothing has run against AWS: every lane is 
   - Reaper. The leader sweeps for sessions past `task_timeout_s + grace` and stops them as `overrun` (`ReaperDeps.microvmSweep`).
   - Metrics. `microvm-boot-seconds`, `microvm-run-cutoff`, `microvm-held-back{reason}` and `microvm-pr-opened`.
   - PRs. `openPullRequestWithToken` opens the PR with a token the caller holds, with the same 422 handling as before.
+- **Gap fixes (all three lanes, proven with fakes only).**
+  - Push lease. `push` takes `expected_head` (40 hex, or null for "the branch must not exist"). The dispatcher writes `microvm_sessions.head_sha` only after a confirmed push and sends it as the lease on the job's next attempt; a resume leases on its boot head. A failed lease is still `push-rejected`.
+  - Library sha. `/api/runs/:ref/skills` serves the library the run's brief froze, rebuilt from the recorded skill versions (`lib/runbooks/library.ts` `skillLibraryForRun`), or the current one when nothing moved. It falls back to the current library only when the frozen set can no longer be rebuilt, and then `boot` still fails with `library-mismatch`. No new store was needed and the dispatcher does not re-freeze.
+  - Hold TTL. A microvm hold and its meter last `task_timeout_s` + 10 min boot allowance + `HOLD_GRACE_MS`, never less than the old `STALE_MINUTES + 5 min` (`microvmHoldExpiresInMs`). A 3,300 s profile gets 70 minutes.
+  - Runtime ARN from SSM. With `MICROVM_RUNTIME_ARN` or `MICROVM_RUNS_BUCKET` unset, start-up reads `/<prefix>/microvm/runtime-arn`, `endpoint-arn` and `runs-bucket` once and caches them (`loadMicrovmParameters`); the env always wins, and with neither the job still waits as `no-microvm-runtime`. The middleware task role gets `ssm:GetParameter` on `/<prefix>/microvm/*` (`MicrovmParameters`, flagged deploys only).
+  - `lab_api_base`. Infra sets `MICROVM_LAB_API_BASE` on the middleware from the same `microvmLabApiBase(prefix)` that sets the runtime's `LAB_API_BASE`. The dispatcher logs once at start-up which source each value came from.
+  - `agent_project_runs.runner`. Each session writes one `agent_project_runs` row at boot (session id, runner `microvm`, the job's agent project) through `startRun`, finished with the token cost only, because the forecast adds compute itself.
+  - Workspace root. `boot` returns `workspace_root`, and a `bad-target` refusal says it too. The dispatcher uses the reported root for later boots on that runtime and retries a `bad-target` boot once on the same session. `MICROVM_WORKSPACE_ROOT` is only the pre-boot default.
 
 ### Decisions this lane made
 
@@ -247,13 +255,8 @@ The runner was built in three lanes. Nothing has run against AWS: every lane is 
 
 ### Gaps against what the other lanes ship
 
-- **No lease field on `push`.** main.py leases a new branch against "absent". A second attempt of a job whose first attempt already pushed `orgiq/<sub8>/<job8>` is refused as `push-rejected`.
-- **The library check compares against the current library.** `/api/runs/:ref/skills` serves the current library, but `boot` checks it against the brief's frozen `library_sha`. Any runbook published between the freeze and `boot` fails the run with `library-mismatch`, and that includes every resume after a publish.
 - **No `cloning` status.** `boot` does the clone inside one op and reports nothing in between, so the dispatcher never writes `cloning`.
-- **The workspace root is configuration.** The dispatcher sends `target = <MICROVM_WORKSPACE_ROOT>/repo` (default `/tmp/devbox-workspace`). That default is main.py's tempdir fallback, assuming no session storage and no `TMPDIR`. The box does not report its root.
-- **`lab_api_base` is not given to the middleware.** Infra sets `LAB_API_BASE` on the runtime only. The dispatcher sends `MICROVM_LAB_API_BASE`, else `https://lab.<PROJECT_PREFIX>.internal`.
-- **No SSM fallback.** `/orgiq/microvm/runtime-arn` is not read. The ARN comes only from `MICROVM_RUNTIME_ARN`.
 - **No `microvm-egress-denied` metric.** It needs the firewall alert log joined to a session id through the ENI, and nothing does that join yet.
-- **`agent_project_runs.runner` is not written.** The column exists, but queued jobs, fleet or microvm, write no `agent_project_runs` row.
 - **Bot and marketplace work on a `restricted` initiative does not run.** It is enqueued as microvm and then held back (`bot-owned-job`), or refused by `claimJob`.
-- **The hold can expire mid-run.** It lasts `STALE_MINUTES + 5 min` (35 min by default) as §6 says. A profile whose `task_timeout_s` is close to the 3,300 s cap outlives its hold.
+- **A deploy without `-c microvm=true` cannot use the SSM fallback.** The parameter read works, but invoke/stop and the `MicrovmParameters` grant come only with the flag, so the fallback helps local runs against a deployed runtime, not an unflagged middleware.
+- **The first boot on a new runtime can still guess the root wrong.** It costs one refused boot and one retry on the same session. Nothing persists the learned root across middleware restarts.

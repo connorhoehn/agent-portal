@@ -18,6 +18,7 @@ import { realtimeAlarm, realtimeAlarmsEnabled, realtimeAlarmTopicName } from './
 import { attachFleetAlarms, fleetAlarmsEnabled } from './fleet-alarms';
 import { capabilityParameterNames } from './agentcore-capabilities-stack';
 import { DEVBOX_TASK_TIMEOUT_S } from './devbox-stack';
+import { microvmLabApiBase } from './microvm-network-stack';
 import type { Construct } from 'constructs';
 import { trustedService } from './service-trust';
 import {
@@ -1000,10 +1001,20 @@ export class MiddlewareServiceStack extends cdk.Stack {
         actions: ['s3:PutObject', 's3:GetObject'],
         resources: [`arn:aws:s3:::${props.microvmRunsBucketName}/runs/*`],
       }));
+      // The runtime's own parameters (OrgIQ-MicrovmRuntime): the dispatcher
+      // reads them at start-up when MICROVM_RUNTIME_ARN / MICROVM_RUNS_BUCKET
+      // are unset (lib/microvm-config.ts). Read-only, that path only.
+      taskRole.addToPolicy(new iam.PolicyStatement({
+        sid: 'MicrovmParameters',
+        actions: ['ssm:GetParameter'],
+        resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/${prefix}/microvm/*`],
+      }));
       microvmEnv = {
         MICROVM_RUNTIME_ARN: props.microvmRuntimeArn,
         MICROVM_RUNS_BUCKET: props.microvmRunsBucketName,
         MICROVM_COMPUTE_USD_PER_SECOND: rate,
+        // The same origin the runtime gets as LAB_API_BASE; the boot payload carries it.
+        MICROVM_LAB_API_BASE: microvmLabApiBase(prefix),
       };
     }
 

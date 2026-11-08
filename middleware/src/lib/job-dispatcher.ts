@@ -402,6 +402,10 @@ export function startJobDispatcher(): void {
   // The microVM runner's own pass (lib/microvm-dispatcher.ts): runner='microvm'
   // jobs never reach a fleet box, so they are claimed on a separate tick.
   microvmTimer = setInterval(() => void dispatchMicrovmOnce(), TICK_MS);
+  // Once at start-up: the SSM fallback for an unset runtime ARN / runs bucket,
+  // and one line saying where each value (and lab_api_base) came from.
+  void import('./microvm-dispatcher.js').then((m) => m.startMicrovmRunner())
+    .catch((err) => console.warn('[dispatcher] microVM start-up failed:', (err as Error).message));
 }
 
 export function stopJobDispatcher(): void {
@@ -415,6 +419,7 @@ let microvmTimer: ReturnType<typeof setInterval> | null = null;
 export async function dispatchMicrovmOnce(): Promise<void> {
   try {
     const m = await import('./microvm-dispatcher.js');
+    await m.startMicrovmRunner();
     await m.microvmDispatchPass(await m.defaultMicrovmDeps());
   } catch (err) {
     console.warn('[dispatcher] microVM pass failed:', (err as Error).message);

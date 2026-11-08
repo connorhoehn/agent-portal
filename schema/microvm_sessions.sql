@@ -39,6 +39,9 @@ ALTER TABLE spend_entries ADD COLUMN IF NOT EXISTS compute_usd NUMERIC(10,4);
 ALTER TABLE spend_entries ADD COLUMN IF NOT EXISTS session_id TEXT;
 
 -- ── agent_project_runs: which runner a run used ────────────────────────────
+-- The microVM dispatcher writes one row per session at boot ('microvm', the
+-- session id, the job's agent project) through providers/agent-projects.ts
+-- startRun, and finishes it with the token cost. Fleet rows leave it NULL.
 ALTER TABLE agent_project_runs ADD COLUMN IF NOT EXISTS runner TEXT;
 
 -- ── microvm_sessions ───────────────────────────────────────────────────────
@@ -61,6 +64,8 @@ CREATE TABLE IF NOT EXISTS microvm_sessions (
   library_sha        TEXT,
   claude_session_id  TEXT,
   base_sha           TEXT,
+  -- The head the box confirmed it PUSHED to `branch` (never a commit that
+  -- stayed in the box): the next attempt's push lease (`expected_head`).
   head_sha           TEXT,
   branch             TEXT,
   pr_url             TEXT,

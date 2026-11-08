@@ -50,7 +50,7 @@ import {
   parseReportedCost, resultEventError, resultEventSucceeded, settleRunCost, type CostBasis,
 } from './run-cost.js';
 import { lifetimePolicy } from './devbox-lifetime.js';
-import { microvmConfig, type MicrovmConfig } from './microvm-config.js';
+import { loadMicrovmParameters, microvmConfig, type MicrovmConfig, type ParameterReader } from './microvm-config.js';
 import { microvmBoxId, microvmBranch, microvmSessionId, transcriptKey } from './microvm-ids.js';
 import {
   invokeMicrovmJson, invokeMicrovmStream, PRESIGN_EXPIRES_S, type AgentCoreSend, type PresignInput,
@@ -95,6 +95,8 @@ export interface MicrovmDeps {
   insertSession: (row: MicrovmSessionInsert) => Promise<unknown>;
   updateSession: (sessionId: string, patch: MicrovmSessionPatch) => Promise<void>;
   latestSessionForJob: (jobId: string) => Promise<MicrovmSessionRow | null>;
+  /** The head an earlier attempt of this job pushed (the next push's lease), or null. */
+  pushedHeadForJob: (jobId: string, beforeAttempt: number) => Promise<string | null>;
   countLiveSessions: (actorSub: string) => Promise<number>;
   listLiveSessions: () => Promise<MicrovmSessionRow[]>;
   computeSecondsP75: (agentProjectId: string, model: string | null) => Promise<number | null>;
@@ -106,6 +108,10 @@ export interface MicrovmDeps {
   releaseHold: (holdId: string | null) => Promise<void>;
   recordSpend: (input: SpendInput) => Promise<void>;
   estimateCost: (model: string, usage: TokenUsage) => number | null;
+
+  // The codebase's run history (agent_project_runs): one row per session, runner 'microvm'.
+  startProjectRun: (input: { projectId: string; prompt: string; model: string; sessionId: string; workItemId: string | null }) => Promise<{ id: string }>;
+  finishProjectRun: (id: string, outcome: { status: 'done' | 'failed'; error: string | null; costUsd: number | null; costBasis: CostBasis; estimatedCostUsd: number | null }) => Promise<void>;
 
   // The brief and the credentials.
   /** freezeJobBrief: the frozen brief and its run context (with the run token), or null. */
@@ -134,6 +140,42 @@ export interface MicrovmDeps {
 
 /** lib/spend-holds.ts HOLD_GRACE_MS, restated so this module loads no provider. */
 const HOLD_GRACE_MS = 5 * 60_000;
+/** Boot, clone, push and the PR around the task (§7's 15 minutes, less the grace). */
+export const BOOT_ALLOWANCE_MS = 10 * 60_000;
+
+/**
+ * How long a microVM hold lives (§6): the profile's whole task plus the boot
+ * allowance plus the grace, and never less than the fleet's
+ * `STALE_MINUTES + grace` default — so a profile near the 3,300 s cap is not
+ * left running on an expired hold.
+ */
+export function microvmHoldExpiresInMs(staleMinutes: number, taskTimeoutS: number): number {
+  const floor = staleMinutes * 60_000 + HOLD_GRACE_MS;
+  const task = Number.isFinite(taskTimeoutS) && taskTimeoutS > 0 ? taskTimeoutS * 1000 : 0;
+  return Math.max(floor, task + BOOT_ALLOWANCE_MS + HOLD_GRACE_MS);
+}
+
+// ─── The box's workspace root, as the box reports it ──────────────────────────
+
+/**
+ * The root each runtime's boot reported (`workspace_root`), keyed by runtime
+ * ARN. MICROVM_WORKSPACE_ROOT is only the default before the first boot.
+ */
+const learnedRoots = new Map<string, string>();
+
+/** An absolute, normalised path the box may name as its root; anything else is ignored. */
+function reportedRoot(v: unknown): string | null {
+  if (typeof v !== 'string' || v.length > 1024 || !v.startsWith('/') || v === '/') return null;
+  if (/[\0\r\n]/.test(v) || v.split('/').some((seg) => seg === '..' || seg === '.')) return null;
+  return v.replace(/\/+$/, '') || null;
+}
+
+export function workspaceRootFor(runtimeArn: string, fallback: string): string {
+  return learnedRoots.get(runtimeArn) ?? fallback;
+}
+
+/** Tests: forget what boots reported. */
+export function _resetLearnedWorkspaceRoots(): void { learnedRoots.clear(); }
 const TRANSCRIPT_MAX_ENTRIES = 200;
 const DETAIL_MAX = 600;
 const round4 = (n: number): number => Math.round(n * 10_000) / 10_000;
@@ -355,7 +397,7 @@ export async function runMicrovmAttempt(job: ClaimedAgentJob, plan: Plan, deps: 
   const attemptN = job.attempts;
   const sourceId = `${job.id}:${attemptN}`;
   const repo = plan.project.repoFullName;
-  const expiresInMs = deps.staleMinutes * 60_000 + HOLD_GRACE_MS;
+  const expiresInMs = microvmHoldExpiresInMs(deps.staleMinutes, plan.profile.task_timeout_s);
 
   let sessionId: string;
   try {
@@ -448,6 +490,7 @@ export async function runMicrovmAttempt(job: ClaimedAgentJob, plan: Plan, deps: 
   const transcript: ActivityEntry[] = [];
   const record = (e: ActivityEntry): void => { if (transcript.length < TRANSCRIPT_MAX_ENTRIES) transcript.push(e); };
   let slotHolder: string | null = holdId;
+  let projectRunId: string | null = null;
 
   try {
     await deps.insertSession({
@@ -465,19 +508,43 @@ export async function runMicrovmAttempt(job: ClaimedAgentJob, plan: Plan, deps: 
     deps.appendEvent(boxId, { type: 'brief_frozen', jobId: job.id, brief_id: frozen.brief.id, brief_sha: frozen.brief.sha256, ts: iso(deps.now()) });
     say('step', { step: 'boot', phase: 'start', model: plan.model, profileId: plan.profile.id, profileVersion: plan.profile.version, briefSha: frozen.brief.sha256, librarySha, branch });
 
+    // The codebase's run history: one agent_project_runs row per session,
+    // runner 'microvm'. Best effort — a run is never refused for its history.
+    try {
+      projectRunId = (await deps.startProjectRun({
+        projectId: plan.project.id, prompt: String(job.payload['prompt'] ?? ''), model: plan.model, sessionId,
+        workItemId: str(job.payload['workItemId']),
+      })).id;
+    } catch (err) {
+      say('project_run_unrecorded', { error: (err as Error).message });
+    }
+
     // ── boot ──
     const client = deps.client();
     invoked = true;
     bootedAtMs = deps.now();
     await deps.updateSession(sessionId, { status: 'booting', booted_at: iso(bootedAtMs) });
-    const boot = await guard.run(() => invokeMicrovmJson(client, plan.runtimeArn, sessionId, {
+    const bootOnce = (root: string): Promise<Record<string, unknown>> => guard.run(() => invokeMicrovmJson(client, plan.runtimeArn, sessionId, {
       op: 'boot', runner: 'microvm',
       repo: { full_name: repo, clone_url: `https://github.com/${repo}.git` },
-      ref, target: `${cfg.workspaceRoot}/repo`, token: readToken.token,
+      ref, target: `${root}/repo`, token: readToken.token,
       run_ref: frozen.run.run_ref, run_token: frozen.run.run_token, callback_secret: plan.callbackSecret,
       library_sha: librarySha, brief_ref: frozen.brief.id, lab_api_base: cfg.labApiBase, author,
     }, guard.signal));
+    let root = workspaceRootFor(plan.runtimeArn, cfg.workspaceRoot);
+    let boot = await bootOnce(root);
     guard.assertLive();
+    // A box whose root is not the one we guessed refuses the target before it
+    // deletes anything and says its real root: learn it, and boot again once
+    // on the same session with a target under it.
+    const told = reportedRoot(boot['workspace_root']);
+    if (boot['ok'] !== true && boot['error'] === 'bad-target' && told && told !== root) {
+      learnedRoots.set(plan.runtimeArn, told);
+      say('step', { step: 'boot', phase: 'retry', reason: 'bad-target', workspaceRoot: told });
+      root = told;
+      boot = await bootOnce(root);
+      guard.assertLive();
+    }
     const bootSeconds = Math.round((deps.now() - bootedAtMs) / 100) / 10;
     if (boot['ok'] !== true) {
       error = `boot failed: ${String(boot['error'] ?? 'unknown')}`;
@@ -486,6 +553,8 @@ export async function runMicrovmAttempt(job: ClaimedAgentJob, plan: Plan, deps: 
       throw new StepFailed(error);
     }
     baseSha = typeof boot['head_sha'] === 'string' ? boot['head_sha'] : null;
+    const bootRoot = reportedRoot(boot['workspace_root']);
+    if (bootRoot) learnedRoots.set(plan.runtimeArn, bootRoot);
     deps.emitMetric('microvm-boot-seconds', { seconds: bootSeconds, jobId: job.id, sessionId });
     say('step', { step: 'boot', phase: 'end', ok: true, seconds: bootSeconds, baseSha });
     await deps.updateSession(sessionId, { status: 'ready', base_sha: baseSha });
@@ -585,7 +654,8 @@ export async function runMicrovmAttempt(job: ClaimedAgentJob, plan: Plan, deps: 
     }
     const claudeSession = typeof endEv?.['claude_session_id'] === 'string' ? endEv['claude_session_id'] as string : null;
     await deps.updateSession(sessionId, {
-      ended_at: iso(deps.now()), exit_code: exitCode, head_sha: headSha, claude_session_id: claudeSession,
+      // head_sha is the PUSHED head (the next attempt's lease): written after the push, not here.
+      ended_at: iso(deps.now()), exit_code: exitCode, claude_session_id: claudeSession,
       fresh_tokens: typeof endEv?.['fresh_tokens'] === 'number' ? endEv['fresh_tokens'] as number : null,
       ...(endEv?.['transcript_uploaded'] === true ? { transcript_s3_key: putKey } : {}),
     });
@@ -601,9 +671,13 @@ export async function runMicrovmAttempt(job: ClaimedAgentJob, plan: Plan, deps: 
       const writeToken = await deps.mintRepoToken(repo, { contents: 'write', pull_requests: 'write' }, {
         runRef: job.id, callerSub: plan.actorSub, connectionName: plan.project.connectionName, sessionId,
       });
-      say('step', { step: 'push', phase: 'start', branch });
+      // The lease. A resume cloned the branch itself, so the boot head is where
+      // it is; otherwise the head an earlier attempt of this job pushed, else
+      // null (the branch must not exist yet).
+      const expectedHead = plan.resume ? baseSha : await deps.pushedHeadForJob(job.id, attemptN);
+      say('step', { step: 'push', phase: 'start', branch, expectedHead });
       const push = await guard.run(() => invokeMicrovmJson(client, plan.runtimeArn, sessionId, {
-        op: 'push', runner: 'microvm', branch, token: writeToken.token, author,
+        op: 'push', runner: 'microvm', branch, token: writeToken.token, author, expected_head: expectedHead,
       }, guard.signal));
       guard.assertLive();
       if (push['ok'] !== true) {
@@ -612,6 +686,7 @@ export async function runMicrovmAttempt(job: ClaimedAgentJob, plan: Plan, deps: 
       }
       pushed = push['pushed'] === true;
       if (typeof push['head_sha'] === 'string') headSha = push['head_sha'];
+      if (pushed && headSha) await deps.updateSession(sessionId, { head_sha: headSha });
       say('step', { step: 'push', phase: 'end', ok: true, headSha });
     }
 
@@ -682,6 +757,13 @@ export async function runMicrovmAttempt(job: ClaimedAgentJob, plan: Plan, deps: 
     } else {
       await release();
     }
+    // The run history: token cost only, because forecastP75ForModel reads
+    // these rows and the hold adds the compute term itself.
+    if (projectRunId) {
+      await deps.finishProjectRun(projectRunId, {
+        status: error ? 'failed' : 'done', error, costUsd: cost.costUsd, costBasis: cost.costBasis, estimatedCostUsd: cost.estimatedCostUsd,
+      }).catch((err) => say('project_run_unfinished', { error: (err as Error).message }));
+    }
 
     // ── the job ──
     if (!lost) {
@@ -741,6 +823,40 @@ export async function sweepMicrovmOverruns(deps: Pick<MicrovmDeps, 'config' | 'n
   }
   return stopped;
 }
+
+// ─── Start-up ─────────────────────────────────────────────────────────────────
+
+let starting: Promise<void> | null = null;
+
+/**
+ * Once per process, before the first pass: fill an unset runtime ARN / runs
+ * bucket from SSM (lib/microvm-config.ts `loadMicrovmParameters`) and say,
+ * once, where each value came from — including which lab_api_base the boots
+ * will carry. Idempotent; never throws.
+ */
+export function startMicrovmRunner(opts: { read?: ParameterReader; env?: NodeJS.ProcessEnv; log?: (line: Record<string, unknown>) => void } = {}): Promise<void> {
+  if (starting) return starting;
+  const env = opts.env ?? process.env;
+  const log = opts.log ?? ((line) => console.log(JSON.stringify({ msg: 'microvm', ...line })));
+  starting = (async () => {
+    const fromSsm = await loadMicrovmParameters(opts.read, env, (m) => log({ event: 'config_note', note: m })).catch(() => null);
+    const cfg = microvmConfig(env);
+    const source = (envName: string, ssm: string | null | undefined): 'env' | 'ssm' | 'none' =>
+      (env[envName]?.trim() ? 'env' : ssm ? 'ssm' : 'none');
+    log({
+      event: 'config',
+      runtimeArnSource: source('MICROVM_RUNTIME_ARN', fromSsm?.runtimeArn),
+      runsBucketSource: source('MICROVM_RUNS_BUCKET', fromSsm?.runsBucket),
+      labApiBase: cfg.labApiBase,
+      labApiBaseSource: cfg.labApiBaseSource === 'env' ? 'env MICROVM_LAB_API_BASE' : 'default lab.<PROJECT_PREFIX>.internal',
+      workspaceRootDefault: cfg.workspaceRoot,
+    });
+  })();
+  return starting;
+}
+
+/** Tests: run the start-up again. */
+export function _resetMicrovmStart(): void { starting = null; }
 
 // ─── The real collaborators ───────────────────────────────────────────────────
 
@@ -809,6 +925,7 @@ export async function defaultMicrovmDeps(): Promise<MicrovmDeps> {
     insertSession: (row) => sessions.insertMicrovmSession(row),
     updateSession: (id, patch) => sessions.updateMicrovmSession(id, patch),
     latestSessionForJob: (id) => sessions.latestSessionForJob(id),
+    pushedHeadForJob: (id, before) => sessions.pushedHeadForJob(id, before),
     countLiveSessions: (sub) => sessions.countLiveSessionsForActor(sub),
     listLiveSessions: () => sessions.listLiveSessions(),
     computeSecondsP75: (ap, m) => sessions.computeSecondsP75(ap, m),
@@ -818,6 +935,8 @@ export async function defaultMicrovmDeps(): Promise<MicrovmDeps> {
     releaseHold: (id) => holdStore.releaseHold(id),
     recordSpend: (i) => ledger.recordSpend(i),
     estimateCost: (m, u) => prices.estimateUsageCost(m, u),
+    startProjectRun: (i) => projects.startRun({ ...i, runner: 'microvm' }),
+    finishProjectRun: (id, o) => projects.finishRun(id, o),
     freezeBrief: (job) => brief.freezeJobBrief(job, 'devbox'),
     mintRepoToken: (r, p, c) => tokens.mintAuditedRepoToken(r, p, c),
     recordCredentialIssue: (i) => issues.recordCredentialIssue(i),

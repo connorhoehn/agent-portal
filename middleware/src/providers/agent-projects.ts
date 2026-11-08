@@ -326,6 +326,12 @@ export async function startRun(input: {
   workItemId?: string | null;
   /** The person who dispatched it (DE-43); the change it captures answers to them. */
   dispatchedBy?: string | null;
+  /**
+   * Which runner ran it ('microvm' from lib/microvm-dispatcher.ts). Omitted
+   * keeps the statement byte-for-byte; dropped on a cluster without
+   * schema/microvm_sessions.sql's column (providers/column-probe.ts).
+   */
+  runner?: string | null;
 }): Promise<ProjectRun> {
   // The run rows render offline (mockRunsForProject) but could not be *made*
   // offline, so the portal's run button 500'd here on a laptop. The mock row
@@ -336,18 +342,22 @@ export async function startRun(input: {
       projectId: input.projectId, prompt: input.prompt, model: input.model ?? null,
       ...(input.workItemId ? { workItemId: input.workItemId } : {}),
       ...(input.dispatchedBy ? { dispatchedBy: input.dispatchedBy } : {}),
+      ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+      ...(input.runner ? { runner: input.runner } : {}),
     });
   }
   const id = randomUUID();
+  const withRunner = !!input.runner && await hasColumns('agent_project_runs', ['runner']);
   const rows = await exec(
-    `INSERT INTO agent_project_runs (id, project_id, prompt, model, session_id, work_item_id, dispatched_by)
-     VALUES (:id::uuid, :pid::uuid, :prompt, :model, :sid, :wid, :by)
+    `INSERT INTO agent_project_runs (id, project_id, prompt, model, session_id, work_item_id, dispatched_by${withRunner ? ', runner' : ''})
+     VALUES (:id::uuid, :pid::uuid, :prompt, :model, :sid, :wid, :by${withRunner ? ', :runner' : ''})
      RETURNING *`,
     [
       s('id', id), s('pid', input.projectId), s('prompt', input.prompt),
       maybe('model', input.model ?? null), maybe('sid', input.sessionId ?? null),
       maybe('wid', input.workItemId ?? null),
       maybe('by', input.dispatchedBy ?? null),
+      ...(withRunner ? [s('runner', input.runner!)] : []),
     ],
   );
   const row = rows[0];

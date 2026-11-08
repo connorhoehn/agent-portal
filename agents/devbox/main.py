@@ -1146,7 +1146,12 @@ async def _mvm_boot(payload: dict) -> dict:
             raise _Refusal("bad-target", str(err)) from None
     except _Refusal as r:
         log.warning("microvm boot refused: %s (%s)", r.error, r.detail)
-        return r.result()
+        out = r.result()
+        if r.error == "bad-target":
+            # The dispatcher only knows the root by configuration; tell it the
+            # real one so it can retry with a target under it (nothing was deleted).
+            out["workspace_root"] = home
+        return out
 
     await _mvm_shutdown()  # a reused container: the previous run's broker goes first
     try:
@@ -1225,7 +1230,8 @@ async def _mvm_boot(payload: dict) -> dict:
     _RUN = run
     log.info("microvm boot: run=%s head=%s library_sha_ok=true boot_ms=%d", run_ref, head,
              int((time.monotonic() - t0) * 1000))
-    return {"ok": True, "head_sha": head, "library_sha_ok": True, "booted_at": _now_iso()}
+    return {"ok": True, "head_sha": head, "library_sha_ok": True, "booted_at": _now_iso(),
+            "workspace_root": home}
 
 
 # ── task ─────────────────────────────────────────────────────────────────────
@@ -1334,14 +1340,29 @@ async def _mvm_push(payload: dict) -> dict:
         await _snapshot(run, author)  # a tree left dirty since task, as the actor
     except _Refusal as r:
         return r.result()
+    # The dispatcher's lease (`expected_head`): null means the branch must not
+    # exist yet; a sha means it must be exactly there (a later attempt of a job
+    # whose earlier attempt pushed). Absent keeps the session's own rule.
+    has_expected = "expected_head" in payload
+    expected_head = payload.get("expected_head")
+    if has_expected and expected_head is not None and (
+            not isinstance(expected_head, str) or not re.fullmatch(r"[0-9a-f]{40}", expected_head)):
+        return _Refusal("bad-expected-head", "expected_head must be 40 hex or null").result()
     env = _mvm_git_env(run.home, token, author)
     git = _git_bin()
     rc, out = await _exec([git, "-C", run.target, "checkout", "-B", branch, "--"], cwd=run.home, env=env)
     if rc != 0:
         return _Refusal("checkout-failed", f"git checkout exited {rc}").result()
-    # An explicit lease: the branch must be where this session last saw it —
-    # absent for a new branch, the boot head for a resumed one.
-    expected = run.pushed.get(branch) or (run.base_sha if branch == run.ref else "")
+    # An explicit lease: the branch must be where this session last saw it.
+    # This session's own push wins (it is newer than anything the dispatcher
+    # knew); then the dispatcher's expected_head; then absent for a new branch,
+    # the boot head for a resumed one.
+    if run.pushed.get(branch):
+        expected = run.pushed[branch]
+    elif has_expected:
+        expected = expected_head or ""
+    else:
+        expected = run.base_sha if branch == run.ref else ""
     url = f"https://github.com/{run.repo}.git"
     rc, out = await _exec([git, "-C", run.target, "push", f"--force-with-lease=refs/heads/{branch}:{expected}",
                            url, f"HEAD:refs/heads/{branch}"], cwd=run.home, env=env)
