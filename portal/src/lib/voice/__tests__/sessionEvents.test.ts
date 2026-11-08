@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { VoiceController } from '../controller.ts';
 import { VOICE_RUNNERS } from '../actions.ts';
-import { EVENT_FLUSH_MS, MAX_EVENT_BATCH, VoiceEventLog, DOCK_EVENT_KINDS, refusalCode, resultSummary } from '../sessionEvents.ts';
+import { EVENT_FLUSH_MS, MAX_EVENT_BATCH, VoiceEventLog, DOCK_EVENT_KINDS, argShape, refusalCode, resultSummary } from '../sessionEvents.ts';
 import { refused, ambiguous, type VoiceToolRunner } from '../tools.ts';
 import { FakeClock, fakeFetch, isToolRow, loggedEvents, middlewareVoice, route, toolContext } from './voiceHarness.ts';
 
@@ -61,13 +61,15 @@ test('the scripted session posts its phases, start, delegation and tool call as 
   assert.deepEqual(phases, ['listening', 'thinking', 'executing', 'listening', 'speaking', 'listening', 'ended']);
   const call = r.events.find((e) => e['kind'] === 'tool-call')!;
   assert.equal(call['tool'], 'search');
+  // The call's shape: its enum arguments, never the query.
+  assert.deepEqual(call['data'], { callId: 'call_mock_1', type: 'person', sort: 'recent' });
   // Batched: fewer requests than events, and never two within 500 ms.
   const batches = r.log.filter((l) => l.url.endsWith('/events') && !isToolRow(l));
   assert.ok(batches.length < r.events.length, `${batches.length} requests for ${r.events.length} events`);
   for (let i = 1; i < r.sentAt.length; i++) assert.ok(r.sentAt[i]! - r.sentAt[i - 1]! >= EVENT_FLUSH_MS, `request ${i} left ${r.sentAt[i]! - r.sentAt[i - 1]!} ms after the one before`);
   // The tool-call row carries the result's counts, through the same pace.
   const row = r.log.find(isToolRow)!.body as Record<string, unknown>;
-  assert.deepEqual(row['summary'], { outcome: 'done', result: 'search_results', rows: 1 });
+  assert.deepEqual(row['summary'], { type: 'person', sort: 'recent', outcome: 'done', result: 'search_results', rows: 1 });
 });
 
 test('nothing posted to /events carries a word that was said, heard or searched for', async () => {
@@ -99,7 +101,7 @@ test('a refusal posts `refused` with its tool and code, never its sentence', asy
   assert.deepEqual({ tool: (ev['data'] as Record<string, unknown>)['tool'], reason: (ev['data'] as Record<string, unknown>)['reason'] }, { tool: 'search', reason: 'role' });
   assert.doesNotMatch(JSON.stringify(r.events), /can't search/);
   const row = r.log.find(isToolRow)!.body as Record<string, unknown>;
-  assert.deepEqual(row['summary'], { outcome: 'refused', reason: 'role', result: 'refused' });
+  assert.deepEqual(row['summary'], { type: 'person', sort: 'recent', outcome: 'refused', reason: 'role', result: 'refused' });
 });
 
 test('refusal codes: the runner\'s own code first, then ambiguous, then the wording', () => {
@@ -126,4 +128,23 @@ test('the queue sends at most MAX_EVENT_BATCH per request and keeps the pace und
   assert.deepEqual(at.map((t, i) => (i ? t - at[i - 1]! : 0)).slice(1).every((d) => d >= EVENT_FLUSH_MS), true);
   assert.doesNotMatch(JSON.stringify(log.map((l) => l.body)), /never/, 'text and transcript keys are dropped before sending');
   assert.equal(q.pending, 0);
+});
+
+test('a call\'s shape tells calls of one tool apart, with no argument text, name or id', () => {
+  assert.deepEqual(argShape('computer', JSON.stringify({ action: 'open-shell', computer: 'nora-auth-box', initiatives: null })), { action: 'open-shell' });
+  assert.deepEqual(argShape('computer', { action: 'start', initiatives: ['Auth migration', 'Payments'] }), { action: 'start', targets: 2 });
+  assert.deepEqual(argShape('list', { kind: 'work-item', scope: 'this-page', filter: { q: 'login', status: 'open', scope: 'mine' } }), { kind: 'work-item', scope: 'this-page', filterScope: 'mine', filteredBy: 'q,status' });
+  assert.deepEqual(argShape('get', { ref: 'initiative:p-secret-12', part: 'work' }), { part: 'work', refKind: 'initiative' });
+  assert.deepEqual(argShape('open', { ref: '2', scope: 'this-page' }), { scope: 'this-page', refKind: 'position' });
+  assert.deepEqual(argShape('open', { page: 'computer-lab' }), { page: 'computer-lab' });
+  assert.deepEqual(argShape('open', { kind: 'initiative', name: 'Payments' }), { kind: 'initiative', byName: true });
+  assert.deepEqual(argShape('search', { query: 'Kubernetes experts', scope: 'p-auth', type: 'person' }), { type: 'person', scope: 'initiative' });
+  assert.deepEqual(argShape('budget', { scope: 'initiative', initiative: 'Payments' }), { scope: 'initiative' });
+  assert.deepEqual(argShape('queue_work', { kind: 'dispatch', target: 'the top three', rows: [1, 2, 3], scope: 'this-page' }), { kind: 'dispatch', scope: 'this-page', rowCount: 3 });
+  assert.deepEqual(argShape('decide', { ref: 'approval:req-1', decision: 'approve', note: 'fine by me' }), { decision: 'approve', refKind: 'approval' });
+  assert.deepEqual(argShape('update', { ref: 'work-item:w-1', fields: { status: 'done', title: null } }), { fields: 'status', refKind: 'work-item' });
+  assert.deepEqual(argShape('message', { target: { kind: 'dm', name: 'Ada' }, text: 'secret words' }), { targetKind: 'dm' });
+  assert.deepEqual(argShape('search', 'not json'), {});
+  const all = JSON.stringify([argShape('message', { target: { kind: 'dm', name: 'Ada' }, text: 'secret words' }), argShape('get', { ref: 'initiative:p-secret-12' })]);
+  assert.doesNotMatch(all, /Ada|secret|p-secret/);
 });

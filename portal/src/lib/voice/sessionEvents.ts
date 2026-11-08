@@ -86,6 +86,60 @@ export function refusalCode(output: Record<string, unknown>): RefusalCode {
   return 'other';
 }
 
+/** The enum-valued arguments that tell one call of a tool from another (never free text, names or ids). */
+const SHAPE_KEYS: Readonly<Record<string, readonly string[]>> = {
+  computer: ['action', 'phrase'],
+  list: ['kind', 'scope'], get: ['part'], create: ['kind'], update: [], queue_work: ['kind', 'scope'], decide: ['decision', 'scope'],
+  search: ['type', 'scope', 'sort', 'answer'], budget: ['scope', 'groupBy'], summary: ['kind'], activity: ['scope'],
+  open: ['page', 'kind', 'scope'], call: ['action'], set_status: ['status'], access_request_status: ['scope'],
+};
+const REF_KIND = /^([a-z][a-z-]{0,39}):./;
+
+/**
+ * The shape of a call, for the log: its enum arguments (computer's action,
+ * the kind, the scope, open's page), the kind of a ref (`work-item`, never
+ * its id) or `position` for a row number, and how many rows or targets it
+ * named. `search`'s scope is an initiative id or "workspace": only which of
+ * the two. Never a word the user said.
+ */
+export function argShape(tool: string, raw: unknown): Record<string, EventScalar> {
+  let args: Record<string, unknown> = {};
+  if (typeof raw === 'string') { try { args = JSON.parse(raw) as Record<string, unknown>; } catch { return {}; } } else if (raw && typeof raw === 'object') args = raw as Record<string, unknown>;
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return {};
+  const out: Record<string, EventScalar> = {};
+  for (const k of SHAPE_KEYS[tool] ?? []) {
+    const v = args[k];
+    if (v == null) continue;
+    if (tool === 'search' && k === 'scope') { out['scope'] = v === 'workspace' ? 'workspace' : 'initiative'; continue; }
+    if (typeof v === 'string' && /^[a-z][a-z0-9_-]{0,39}$/.test(v)) out[k] = v;
+    else if (typeof v === 'boolean') out[k] = v;
+  }
+  if (tool === 'list' && args['filter'] && typeof args['filter'] === 'object') {
+    const f = args['filter'] as Record<string, unknown>;
+    if (typeof f['scope'] === 'string') out['filterScope'] = String(f['scope']).slice(0, 20);
+    const by = ['q', 'status', 'since'].filter((k) => f[k] != null);
+    if (by.length) out['filteredBy'] = by.join(',');
+  }
+  for (const key of ['ref', 'target']) {
+    const v = args[key];
+    if (typeof v !== 'string') continue;
+    const m = REF_KIND.exec(v.trim());
+    if (m) out[`${key}Kind`] = m[1]!;
+    else if (/^\d{1,2}$/.test(v.trim())) out[`${key}Kind`] = 'position';
+    else if (key === 'ref') out['refKind'] = 'other';
+  }
+  if (typeof args['name'] === 'string') out['byName'] = true;
+  if (Array.isArray(args['rows'])) out['rowCount'] = args['rows'].length;
+  if (Array.isArray(args['initiatives'])) out['targets'] = args['initiatives'].length;
+  if (tool === 'message' || tool === 'call') {
+    const t = args['target'] as Record<string, unknown> | undefined;
+    if (t && typeof t['kind'] === 'string') out['targetKind'] = t['kind'];
+  }
+  if (tool === 'update' && args['fields'] && typeof args['fields'] === 'object') out['fields'] = Object.keys(args['fields'] as object).filter((k) => (args['fields'] as Record<string, unknown>)[k] != null).sort().join(',').slice(0, 120);
+  if (tool === 'create' && args['fields'] && typeof args['fields'] === 'object') out['fields'] = Object.keys(args['fields'] as object).filter((k) => (args['fields'] as Record<string, unknown>)[k] != null).sort().join(',').slice(0, 120);
+  return out;
+}
+
 /** The structured result summary a tool-call row carries: the outcome, the result kind and its counts. */
 export function resultSummary(outcome: string, output: Record<string, unknown>): Record<string, EventScalar> {
   const s: Record<string, EventScalar> = { outcome };

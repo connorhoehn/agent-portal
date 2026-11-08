@@ -61,7 +61,7 @@ test('the scripted session drives the dock through its phases, runs the tool, an
   assert.equal(events.length, 1);
   const row = events[0]!.body as Record<string, unknown>;
   assert.deepEqual(Object.keys(row).sort(), ['argsSha256', 'durationMs', 'outcome', 'summary', 'tool']);
-  assert.deepEqual(row['summary'], { outcome: 'done', result: 'search_results', rows: 1 });
+  assert.deepEqual(row['summary'], { type: 'person', sort: 'recent', outcome: 'done', result: 'search_results', rows: 1 });
   assert.equal(row['argsSha256'], await hashToolArgs({ query: 'Kubernetes experts', type: 'person', sort: 'recent' }));
   assert.equal(row['outcome'], 'done');
   assert.doesNotMatch(JSON.stringify(events[0]!.body), /Kubernetes/);

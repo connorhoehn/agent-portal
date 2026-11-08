@@ -65,7 +65,7 @@ import {
 } from './tools.ts';
 import { VOICE_PLANNERS, VOICE_RUNNERS } from './actions.ts';
 import { DEFAULT_TOAST_SECONDS } from './work.ts';
-import { VoiceEventLog, refusalCode, resultSummary, type DockEvent } from './sessionEvents.ts';
+import { VoiceEventLog, argShape, refusalCode, resultSummary, type DockEvent } from './sessionEvents.ts';
 
 export const TICK_MS = 100;
 export const COMPLETION_GRACE_MS = 1500;
@@ -527,7 +527,8 @@ export class VoiceController {
     if (rec.calls.has(callId)) return;
     if (!this.machine.openDelegations.includes(delegationId)) this.dispatch({ type: 'delegation', id: delegationId });
     rec.calls.set(callId, { name, status: 'running' });
-    this.emit({ kind: 'tool-call', tool: name, data: { callId } });
+    // The call's shape (its enum arguments, a ref's kind), never its words: four open-shells read apart from four starts.
+    this.emit({ kind: 'tool-call', tool: name, data: { callId, ...argShape(name, rawArgs) } });
     const startedAt = this.now();
     const ctx = this.opts.toolContext();
     const prepared = prepareToolCall(name, rawArgs, ctx);
@@ -601,7 +602,7 @@ export class VoiceController {
     // The row keeps a hash of the arguments, never the arguments (§9), and the result's counts, never its spoken line.
     const sessionId = client.mint?.sessionId;
     const durationMs = Math.max(0, Math.round(this.now() - startedAt));
-    const summary = resultSummary(res.outcome, res.output);
+    const summary = { ...argShape(name, args), ...resultSummary(res.outcome, res.output) };
     void hashToolArgs(args).then((argsSha256) => {
       if (sessionId) this.log.toolCall(sessionId, { tool: name, argsSha256, outcome: res.outcome, durationMs, ...(confirmedBy ? { confirmedBy } : {}) }, summary);
     });
