@@ -21,16 +21,25 @@
 // read as "the call is done"; a result that settles first waits for it (and
 // COMPLETION_GRACE_MS, should it never come).
 //
+// A confirm tool with a planner (actions.ts: start_computer, run_command,
+// send_chat_message) runs it first, reads only, so the card shows the resolved
+// target and the composed command; a planner may end the call without a card
+// (a refusal, several matching names). Nothing acts before the confirm, and a
+// cancel answers { confirmed: false } and runs nothing.
+//
 // Money (§7): the meter is elapsed/60 × the mint's rate against the hold; at
 // 90% the voice says so once (commentary), at 100% (or the mint's maxSeconds)
-// the dock hangs up itself with reason `cutoff`.
+// the dock hangs up itself with reason `cutoff`. A mint that answers 409 on the
+// user's budget shows a card ("This session will exceed your budget by $x");
+// Confirm mints again with confirmOverUserBudget.
 
 import { VoiceClient, type ClientEvent, type MediaFactory, type StopReason, type VoiceFrame, type VoiceMint } from './client.ts';
 import { initialMachine, phaseAt, reduce, sessionOpen, type MachineEvent, type MachineState, type VoicePhase } from './machine.ts';
 import {
-  cancelledResult, hashToolArgs, prepareToolCall, runPreparedCall, toolAvailable, TOOL_RUNNERS,
-  type PreparedCall, type ToolContext, type ToolResult, type VoiceToolRunner,
+  cancelledResult, hashToolArgs, planPreparedCall, prepareToolCall, refused, runPreparedCall, toolAvailable,
+  type ConfirmPlan, type PreparedCall, type ToolContext, type ToolResult, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
+import { VOICE_PLANNERS, VOICE_RUNNERS } from './actions.ts';
 
 export const TICK_MS = 100;
 export const COMPLETION_GRACE_MS = 1500;
@@ -78,8 +87,10 @@ export interface ControllerOptions {
   /** The tool context at call time (tenant, role, can(), the router). */
   toolContext(): ToolContext;
   runners?: Readonly<Record<string, VoiceToolRunner>>;
-  /** The card's wording for a confirm tool; P4 supplies the per-tool lines. */
-  describeConfirm?(call: PreparedCall): { title: string; detail?: string };
+  /** What runs before a confirm card (default: actions.ts VOICE_PLANNERS); a tool without one shows describeConfirm's card. */
+  planners?: Readonly<Record<string, VoiceToolPlanner>>;
+  /** The card's wording, over the planner's own and defaultConfirmText. */
+  describeConfirm?(call: PreparedCall, plan: ConfirmPlan | null): { title: string; detail?: string } | null;
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => Timer;
   clearTimer?: (t: Timer) => void;
@@ -90,18 +101,40 @@ export interface ControllerOptions {
 
 interface CallRecord { name: string; status: 'confirming' | 'running' | 'answered' }
 interface DelegationRecord { calls: Map<string, CallRecord>; completed: boolean; unanswered: number; grace: Timer | null }
-interface Pending { callId: string; delegationId: string; call: PreparedCall; startedAt: number; heard: string; view: VoicePendingView }
+interface Pending { callId: string; delegationId: string; call: PreparedCall; plan: ConfirmPlan | null; startedAt: number; heard: string; view: VoicePendingView }
+
+/** The card id of a mint that waits on the user's budget (not a tool call). */
+export const BUDGET_CARD = 'voice-budget';
+
+/** The 409 card: how far over the session goes, from the mint's estimate and what the budget has left. */
+export function budgetConfirmText(b: { estimateUsd: number | null; remainingUsd: number | null; reason: string | null }): { title: string; detail: string } {
+  const over = b.estimateUsd != null && b.remainingUsd != null ? Math.max(0, b.estimateUsd - Math.max(0, b.remainingUsd)) : null;
+  const usd = (v: number) => `$${v < 1 ? v.toFixed(2) : v.toFixed(2).replace(/\.00$/, '')}`;
+  return {
+    title: 'Over your budget',
+    detail: over != null && over > 0
+      ? `This session will exceed your budget by ${usd(over)}. Start it anyway?`
+      : `${b.reason ?? 'This session goes over your budget.'} Start it anyway?`,
+  };
+}
 
 const YES = /\b(yes|yeah|yep|confirm|confirmed|do it|go ahead|sure|ok(ay)?|send it|please do)\b/i;
 const NO = /\b(no|nope|cancel|stop|don'?t|never ?mind|wait)\b/i;
 
-/** The default card wording: the tool and its arguments, as plain text. */
+/** The default card wording per tool, before (or without) a planner: the tool and its arguments, as plain text. */
 export function defaultConfirmText(call: PreparedCall): { title: string; detail?: string } {
   const a = call.args;
   if (call.spec.name === 'send_chat_message') {
     const target = (a['target'] ?? {}) as Record<string, unknown>;
     const where = target['kind'] === 'dm' ? String(target['name']) : `#${String(target['name'])}`;
     return { title: `Post to ${where}`, detail: String(a['text'] ?? '') };
+  }
+  if (call.spec.name === 'start_computer') {
+    const ids = Array.isArray(a['initiativeIds']) ? (a['initiativeIds'] as string[]) : [];
+    return { title: ids.length === 1 ? `Start a computer for ${ids[0]}` : `Start ${ids.length} computers`, detail: `${ids.join(', ')}. A running computer bills idle time until it stops.` };
+  }
+  if (call.spec.name === 'run_command') {
+    return { title: `Run on ${String(a['computerId'])}`, detail: String(a['phrase']).replace(/-/g, ' ') };
   }
   const detail = Object.entries(a).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`).join(', ');
   return { title: call.spec.name.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()), ...(detail ? { detail } : {}) };
@@ -113,6 +146,7 @@ export class VoiceController {
   private mint: VoiceMint | null = null;
   private delegations = new Map<string, DelegationRecord>();
   private pending: Pending | null = null;
+  private budgetCard: VoicePendingView | null = null;
   private turns: VoiceTurnView[] = [];
   private turnSeq = 0;
   private levels = { input: 0, output: 0 };
@@ -127,6 +161,7 @@ export class VoiceController {
   private readonly setTimer: (fn: () => void, ms: number) => Timer;
   private readonly clearTimer: (t: Timer) => void;
   private readonly runners: Readonly<Record<string, VoiceToolRunner>>;
+  private readonly planners: Readonly<Record<string, VoiceToolPlanner>>;
 
   private readonly opts: ControllerOptions;
 
@@ -135,7 +170,8 @@ export class VoiceController {
     this.now = opts.now ?? (() => Date.now());
     this.setTimer = opts.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
     this.clearTimer = opts.clearTimer ?? ((t) => clearTimeout(t as ReturnType<typeof setTimeout>));
-    this.runners = opts.runners ?? TOOL_RUNNERS;
+    this.runners = opts.runners ?? VOICE_RUNNERS;
+    this.planners = opts.planners ?? VOICE_PLANNERS;
     this.snapshot = this.build();
   }
 
@@ -161,7 +197,7 @@ export class VoiceController {
 
   // ── commands ─────────────────────────────────────────────────────────────
 
-  async start(): Promise<void> {
+  async start(opts: { confirmOverUserBudget?: boolean } = {}): Promise<void> {
     if (sessionOpen(this.machine)) return;
     this.reset();
     this.dispatch({ type: 'start' });
@@ -172,7 +208,7 @@ export class VoiceController {
     });
     this.client = client;
     if (this.opts.autoTick !== false) this.startTicker();
-    await client.start();
+    await client.start(opts.confirmOverUserBudget ? { confirmOverUserBudget: true } : {});
   }
 
   async stop(reason: StopReason = 'closed'): Promise<void> {
@@ -195,8 +231,18 @@ export class VoiceController {
     this.publish();
   }
 
-  confirm(by: 'voice' | 'click' = 'click'): void { this.resolvePending(true, by); }
-  cancel(by: 'voice' | 'click' = 'click'): void { this.resolvePending(false, by); }
+  confirm(by: 'voice' | 'click' = 'click'): void {
+    if (this.budgetCard) { this.budgetCard = null; void this.start({ confirmOverUserBudget: true }); return; }
+    this.resolvePending(true, by);
+  }
+  cancel(by: 'voice' | 'click' = 'click'): void {
+    if (this.budgetCard) {
+      this.budgetCard = null;
+      this.dispatch({ type: 'unavailable', reason: 'Not started: this session would go over your budget.' });
+      return;
+    }
+    this.resolvePending(false, by);
+  }
 
   /** Silent page context for the voice (§1: session.thinking.append, delegation_id null). */
   noteContext(text: string): void {
@@ -226,6 +272,11 @@ export class VoiceController {
       case 'unavailable':
         this.stopTicker();
         this.dispatch({ type: 'unavailable', reason: e.reason });
+        return;
+      case 'budget-confirm':
+        this.stopTicker();
+        this.budgetCard = { callId: BUDGET_CARD, tool: 'voice_session', ...budgetConfirmText(e) };
+        this.dispatch({ type: 'budget-confirm' });
         return;
       case 'failed':
         this.stopTicker();
@@ -315,21 +366,47 @@ export class VoiceController {
       await this.answer(client, delegationId, callId, name, prepared.result, startedAt, rawArgs);
       return;
     }
-    if (prepared.call.spec.confirm && toolAvailable(name, this.runners)) {
+    const call = prepared.call;
+    // A dropped `command` (§6) is its own refused row: the attempt is on record, its text is not (§9).
+    if (call.ignored?.length) {
+      void hashToolArgs({ ignored: call.ignored }).then((argsSha256) => client.reportToolCall({ tool: name, argsSha256, outcome: 'refused', durationMs: 0 }));
+    }
+    if (call.spec.confirm && toolAvailable(name, this.runners)) {
+      // The delegation asks one call at a time (parallel_tool_calls: false); a second card would hide the first.
+      if (this.pending) {
+        await this.answer(client, delegationId, callId, name, refused('Another action is waiting for the user to confirm. Ask again after it.'), startedAt, call.args);
+        return;
+      }
+      let plan: ConfirmPlan | null = null;
+      if (this.planners[name]) {
+        this.attachTool(name, 'running', call.spec.says);
+        this.dispatch({ type: 'call-running', callId });
+        const planned = await planPreparedCall(call, ctx, this.planners);
+        if (client !== this.client || this.machine.base !== 'live') return;
+        if (planned && 'result' in planned) {
+          await this.answer(client, delegationId, callId, name, planned.result, startedAt, call.args);
+          return;
+        }
+        plan = planned?.plan ?? null;
+        if (this.pending) {
+          await this.answer(client, delegationId, callId, name, refused('Another action is waiting for the user to confirm. Ask again after it.'), startedAt, call.args);
+          return;
+        }
+      }
       rec.calls.set(callId, { name, status: 'confirming' });
-      const text = (this.opts.describeConfirm ?? defaultConfirmText)(prepared.call);
-      this.pending = { callId, delegationId, call: prepared.call, startedAt, heard: '', view: { callId, tool: name, ...text } };
+      const text = this.opts.describeConfirm?.(call, plan) ?? (plan ? { title: plan.title, ...(plan.detail ? { detail: plan.detail } : {}) } : defaultConfirmText(call));
+      this.pending = { callId, delegationId, call, plan, startedAt, heard: '', view: { callId, tool: name, ...text } };
       this.attachTool(name, 'running', text.title);
       this.dispatch({ type: 'confirm-shown', callId });
       return;
     }
-    await this.execute(client, delegationId, callId, prepared.call, startedAt, ctx);
+    await this.execute(client, delegationId, callId, call, startedAt, ctx);
   }
 
-  private async execute(client: VoiceClient, delegationId: string, callId: string, call: PreparedCall, startedAt: number, ctx: ToolContext, confirmedBy?: 'voice' | 'click'): Promise<void> {
+  private async execute(client: VoiceClient, delegationId: string, callId: string, call: PreparedCall, startedAt: number, ctx: ToolContext, confirmedBy?: 'voice' | 'click', plan?: ConfirmPlan | null): Promise<void> {
     this.attachTool(call.spec.name, 'running', call.spec.says);
     this.dispatch({ type: 'call-running', callId });
-    let res = await runPreparedCall(call, ctx, this.runners);
+    let res = await runPreparedCall(call, ctx, this.runners, plan?.data);
     if (confirmedBy) res = { ...res, output: { ...res.output, confirmed: true, by: confirmedBy } };
     await this.answer(client, delegationId, callId, call.spec.name, res, startedAt, call.args, confirmedBy);
   }
@@ -409,7 +486,7 @@ export class VoiceController {
     this.pending = null;
     this.dispatch({ type: 'confirm-resolved', callId: p.callId });
     if (confirmed) {
-      void this.execute(client, p.delegationId, p.callId, p.call, p.startedAt, this.opts.toolContext(), by);
+      void this.execute(client, p.delegationId, p.callId, p.call, p.startedAt, this.opts.toolContext(), by, p.plan);
     } else {
       void this.answer(client, p.delegationId, p.callId, p.call.spec.name, cancelledResult(by), p.startedAt, p.call.args, by);
     }
@@ -492,6 +569,7 @@ export class VoiceController {
   private reset(): void {
     this.clearDelegations();
     this.pending = null;
+    this.budgetCard = null;
     this.mint = null;
     this.warned = false;
     this.muted = false;
@@ -526,7 +604,7 @@ export class VoiceController {
       outputLevel: live ? round(this.levels.output) : 0,
       elapsedSeconds: Math.floor(this.elapsed()),
       budget: this.budget(),
-      pending: this.pending?.view ?? null,
+      pending: this.pending?.view ?? this.budgetCard ?? null,
       lastLine: last ? { role: last.role, text: last.text.trim() } : null,
       turns: this.turns,
       muted: this.muted,

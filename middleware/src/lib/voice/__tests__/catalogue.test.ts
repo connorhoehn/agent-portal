@@ -72,7 +72,8 @@ describe('the §4 catalogue', () => {
     ok('search_people', { query: 'kubernetes', sort: 'recent', limit: 5, scope: 'workspace' });
     ok('list_active_initiatives', { scope: 'mine' });
     ok('bot_sweep_status', { since: 'yesterday', scope: 'failed' });
-    ok('run_command', { computerId: 'box-1', phrase: 'git_log_since', since: 'yesterday' });
+    ok('run_command', { computerId: 'box-1', phrase: 'commits-since', since: 'yesterday' });
+    ok('start_computer', { initiativeIds: ['p1', 'Alpha'] });
     ok('send_chat_message', { target: { kind: 'team', name: 'platform' }, text: "I'm out today" });
     ok('set_status', { status: 'away', message: 'out today' });
   });
@@ -80,10 +81,10 @@ describe('the §4 catalogue', () => {
   it('run_command takes a phrase from the table, never a command string (§6)', () => {
     const ajv = new Ajv({ strict: true });
     const v = ajv.compile(voiceTool('run_command')!.parameters);
-    expect(v({ computerId: 'b', phrase: 'git_status', command: 'rm -rf /' })).toBe(false);
+    expect(v({ computerId: 'b', phrase: 'status', command: 'rm -rf /' })).toBe(false);
     expect(v({ computerId: 'b', phrase: 'rm -rf /' })).toBe(false);
     expect(Object.keys(voiceTool('run_command')!.parameters.properties)).not.toContain('command');
-    expect(RUN_COMMAND_PHRASES).toContain('git_log_since');
+    expect(RUN_COMMAND_PHRASES).toContain('latest-commits-since-yesterday');
   });
 
   it('each Cedar action is one the middleware evaluates', () => {

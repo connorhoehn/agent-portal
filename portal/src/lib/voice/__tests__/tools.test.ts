@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_FIELD_CHARS, MAX_ROWS, P4_TOOLS, DATA_NOTE, parseSince, parseToolArgs, runVoiceTool, shapeOutput, voicePage } from '../tools.ts';
+import { MAX_FIELD_CHARS, MAX_ROWS, DATA_NOTE, parseSince, parseToolArgs, runVoiceTool, shapeOutput, voicePage } from '../tools.ts';
 import { VOICE_TOOLS, voiceToolSpec } from '../catalogue.ts';
 import { PALETTE, fakeFetch, route, toolContext } from './voiceHarness.ts';
 
@@ -28,24 +28,10 @@ test('every P3 tool refuses on its gate without a network call', async () => {
   }
 });
 
-test('a P4 tool answers "not available yet" at once, so the model never waits', async () => {
-  const c = toolContext();
-  for (const name of P4_TOOLS) {
-    const spec = voiceToolSpec(name)!;
-    const args = name === 'send_chat_message' ? { target: { kind: 'team', name: 'platform' }, text: 'out today' }
-      : name === 'set_status' ? { status: 'away' } : name === 'run_command' ? { computerId: 'c1', phrase: 'git_status' }
-      : name === 'open_shell' ? { computerId: 'c1' } : { initiativeId: 'p1' };
-    assert.ok(parseToolArgs(spec, args).ok, name);
-    const r = await runVoiceTool(name, args, c);
-    assert.equal(r.outcome, 'refused');
-    assert.match(String(r.output['reason']), /not available from voice yet/);
-  }
-});
-
 test('arguments: strict nulls are dropped, then lengths, ranges, enums and unknown keys are enforced', () => {
   const people = voiceToolSpec('search_people')!;
   assert.deepEqual(parseToolArgs(people, '{"query":"Kubernetes experts","scope":null,"limit":null,"sort":"recent"}'),
-    { ok: true, args: { query: 'Kubernetes experts', sort: 'recent' } });
+    { ok: true, args: { query: 'Kubernetes experts', sort: 'recent' }, ignored: [] });
   for (const bad of ['{"query":""}', '{"query":"x","limit":11}', '{"query":"x","limit":2.5}', '{"query":"x","sort":"newest"}',
     '{"query":"x","tenant":"access"}', '{}', 'not json', JSON.stringify({ query: 'x'.repeat(201) })]) {
     assert.equal(parseToolArgs(people, bad).ok, false, bad);
@@ -118,11 +104,20 @@ test('list_active_initiatives reads the initiatives list the page reads, mine by
   assert.deepEqual(r.output['rows'], [{ id: 'p1', name: 'Alpha', owner: 'Ana', contributors: 4, openStories: 3 }]);
 });
 
-test('open_computer_lab opens the Computer Lab route', async () => {
+test('open_computer_lab opens the Computer Lab (/admin/devbox), on the initiative\'s busiest computer when it has one', async () => {
   const c = toolContext();
   const r = await runVoiceTool('open_computer_lab', { initiativeId: 'p1' }, c);
   assert.equal(r.outcome, 'done');
-  assert.deepEqual(c.navigations, ['/iq/local-compute']);
+  assert.deepEqual(c.navigations, ['/admin/devbox'], 'the lab that lists and starts computers, not /iq/local-compute');
+  const boxes = [
+    { id: 'c-idle', label: 'alpha-1', sessionId: 's'.repeat(40), status: 'idle', projectId: 'p1' },
+    { id: 'c-run', label: 'alpha-2', sessionId: 't'.repeat(40), status: 'running', projectId: 'p1' },
+  ];
+  const withBoxes = toolContext({ compute: { canManage: true, computers: () => boxes, create: async () => boxes[0]!, openShell: () => ({ ok: true, id: 'x' }), runCommand: async () => {} } });
+  await runVoiceTool('open_computer_lab', { initiativeId: 'p1' }, withBoxes);
+  assert.deepEqual(withBoxes.navigations, ['/admin/devbox?box=c-run']);
+  const member = await runVoiceTool('open_computer_lab', {}, toolContext({ role: 'member' }));
+  assert.equal(member.outcome, 'refused', 'the lab route\'s roles');
 });
 
 const NOW = new Date('2026-11-08T12:00:00Z');
@@ -242,6 +237,6 @@ test('property: no tool result carries a string over 120 characters or a list ov
 });
 
 test('the catalogue has a runner for every tool', async () => {
-  const { TOOL_RUNNERS } = await import('../tools.ts');
-  assert.deepEqual(Object.keys(TOOL_RUNNERS).sort(), VOICE_TOOLS.map((t) => t.name).sort());
+  const { VOICE_RUNNERS } = await import('../actions.ts');
+  assert.deepEqual(Object.keys(VOICE_RUNNERS).sort(), VOICE_TOOLS.map((t) => t.name).sort());
 });

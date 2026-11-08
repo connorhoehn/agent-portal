@@ -419,13 +419,14 @@ export function conversationChannelForDoc(docId: string): string {
   return `assessment:doc:h:${(4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)}`;
 }
 
-/** A presence roster as `PresenceAvatars` users — the rail's per-source "who is here". */
-export function presenceAvatarUsers(roster: ReadonlyArray<{ clientId: string; status?: string; metadata?: Record<string, unknown> }>): Array<{ id: string; name: string; idle?: boolean; avatarUrl?: string }> {
+/** A presence roster as `PresenceAvatars` users — the rail's per-source "who is here". `detail` is the
+ *  person's status message (`metadata.statusMessage`, set from Social or the voice navigator's set_status). */
+export function presenceAvatarUsers(roster: ReadonlyArray<{ clientId: string; status?: string; metadata?: Record<string, unknown> }>): Array<{ id: string; name: string; idle?: boolean; avatarUrl?: string; detail?: string }> {
   // One avatar per PERSON, not per connection (re-audit #16, 2026-09-29: a
   // reader with two tabs showed twice). Keyed by the presence metadata's
   // userId when the gateway stamped one, else by the connection; a person
   // reads idle only when every one of their connections is.
-  const byUser = new Map<string, { id: string; name: string; idle: boolean; avatarUrl?: string }>();
+  const byUser = new Map<string, { id: string; name: string; idle: boolean; avatarUrl?: string; detail?: string }>();
   for (const entry of roster) {
     const meta = entry.metadata ?? {};
     const userId = typeof meta['userId'] === 'string' && meta['userId'].length > 0 ? meta['userId'] : entry.clientId;
@@ -433,11 +434,12 @@ export function presenceAvatarUsers(roster: ReadonlyArray<{ clientId: string; st
     const idle = !!entry.status && entry.status !== 'online';
     // The gateway stamps the signed token's avatar on the entry; absent → initials.
     const avatarUrl = typeof meta['avatarUrl'] === 'string' && meta['avatarUrl'].length > 0 ? meta['avatarUrl'] : undefined;
+    const message = typeof meta['statusMessage'] === 'string' ? meta['statusMessage'].trim().slice(0, 120) : '';
     const seen = byUser.get(userId);
-    if (seen) { seen.idle = seen.idle && idle; seen.avatarUrl ??= avatarUrl; }
-    else byUser.set(userId, { id: userId, name: name ?? 'Someone', idle, ...(avatarUrl ? { avatarUrl } : {}) });
+    if (seen) { seen.idle = seen.idle && idle; seen.avatarUrl ??= avatarUrl; if (message) seen.detail ??= message; }
+    else byUser.set(userId, { id: userId, name: name ?? 'Someone', idle, ...(avatarUrl ? { avatarUrl } : {}), ...(message ? { detail: message } : {}) });
   }
-  return [...byUser.values()].map(({ id, name, idle, avatarUrl }) => ({ id, name, ...(idle ? { idle: true } : {}), ...(avatarUrl ? { avatarUrl } : {}) }));
+  return [...byUser.values()].map(({ id, name, idle, avatarUrl, detail }) => ({ id, name, ...(idle ? { idle: true } : {}), ...(avatarUrl ? { avatarUrl } : {}), ...(detail ? { detail } : {}) }));
 }
 
 /** One tree section's realtime channel — just a presence headcount

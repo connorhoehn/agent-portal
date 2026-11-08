@@ -104,7 +104,8 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
   });
   if (held.kind !== 'held') {
     emitFleetMetric('voice-unavailable', { reason: 'budget', gate: 'gate' in held ? held.gate : held.kind });
-    const out = spendRefusalResponse(held, { reason: 'budget' });
+    // The session's estimate rides along so the dock can say how far over the confirm goes.
+    const out = spendRefusalResponse(held, { reason: 'budget', estimateUsd: voiceForecast(cfg).costUsdP75 });
     if (out.headers) res.set(out.headers);
     res.status(out.status).json(out.body);
     return;

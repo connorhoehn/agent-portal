@@ -156,6 +156,14 @@ export const commentaryEvent = (content: string): Obj => ({ type: 'session.comme
 /** `unavailable`: will not work by retrying now (no key, no grant, budget, no mic). `failed`: try again. */
 export type StartFailure = { kind: 'unavailable' | 'failed'; reason: string };
 
+/** A 409 the user may confirm past (spendRefusalResponse's `confirm` shape on the user-budget gate), else null. */
+export function budgetConfirmOf(status: number, body: unknown): { estimateUsd: number | null; remainingUsd: number | null; reason: string | null } | null {
+  const b = isObj(body) ? body : {};
+  if (status !== 409 || b['confirmFlag'] !== 'confirmOverUserBudget') return null;
+  const ub = isObj(b['userBudget']) ? b['userBudget'] : {};
+  return { estimateUsd: numOr(b['estimateUsd']), remainingUsd: numOr(ub['remainingUsd']), reason: strOr(b['error']) };
+}
+
 export function mintFailure(status: number, body: unknown): StartFailure {
   const b = isObj(body) ? body : {};
   const error = strOr(b['error']);
@@ -276,6 +284,8 @@ export function browserMedia(): MediaFactory | null {
 export type ClientEvent =
   | { type: 'minted'; mint: VoiceMint }
   | { type: 'unavailable'; reason: string }
+  /** 409 on the user's budget: the dock asks, and Confirm mints again with confirmOverUserBudget (§7). */
+  | { type: 'budget-confirm'; estimateUsd: number | null; remainingUsd: number | null; reason: string | null }
   | { type: 'failed'; reason: string }
   | { type: 'frame'; frame: VoiceFrame }
   | { type: 'dropped' }
@@ -330,7 +340,7 @@ export class VoiceClient {
   }
 
   /** Microphone (when there is one), offer, mint, answer. Reports `minted` or a refusal through onEvent. */
-  async start(): Promise<void> {
+  async start(opts: { confirmOverUserBudget?: boolean } = {}): Promise<void> {
     if (this.opts.media) {
       try {
         this.media = await this.opts.media({ onMessage: (d) => this.deliver(d), onDrop: () => this.onDrop() });
@@ -344,7 +354,7 @@ export class VoiceClient {
     try {
       res = await this.opts.fetch(VOICE_API, {
         method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(this.media ? { sdp: this.media.offer } : {}),
+        body: JSON.stringify({ ...(this.media ? { sdp: this.media.offer } : {}), ...(opts.confirmOverUserBudget ? { confirmOverUserBudget: true } : {}) }),
       });
       body = await res.json().catch(() => null);
     } catch {
@@ -354,6 +364,8 @@ export class VoiceClient {
     }
     if (!res.ok) {
       this.teardown();
+      const confirm = budgetConfirmOf(res.status, body);
+      if (confirm && !opts.confirmOverUserBudget) { this.opts.onEvent({ type: 'budget-confirm', ...confirm }); return; }
       const f = mintFailure(res.status, body);
       this.opts.onEvent({ type: f.kind, reason: f.reason });
       return;

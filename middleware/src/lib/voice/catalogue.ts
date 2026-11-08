@@ -84,7 +84,9 @@ export const VOICE_TENANTS = ['orgiq', 'social'] as const;
  */
 export const NAVIGATE_PAGES: ReadonlyArray<{ id: string; path: string; tenants: readonly string[] }> = [
   { id: 'search', path: '/iq/search', tenants: ['orgiq'] },
-  { id: 'computer-lab', path: '/iq/local-compute', tenants: ['orgiq'] },
+  // The lab that lists and starts the user's computers (DevboxPage, `ComputerLab`), where
+  // start_computer's boxes appear. /iq/local-compute is the paired-laptop page, not the lab.
+  { id: 'computer-lab', path: '/admin/devbox', tenants: ['orgiq'] },
   { id: 'initiatives', path: '/iq/projects', tenants: ['orgiq'] },
   { id: 'bots', path: '/admin/bots', tenants: ['orgiq'] },
   { id: 'findings', path: '/iq/work/findings', tenants: ['orgiq'] },
@@ -94,8 +96,17 @@ export const NAVIGATE_PAGES: ReadonlyArray<{ id: string; path: string; tenants: 
   { id: 'workspaces', path: '/workspaces', tenants: ['*'] },
 ];
 
-/** Shell phrases `run_command` may name; the dock owns the command text (§6). */
-export const RUN_COMMAND_PHRASES = ['git_log_since', 'git_status', 'git_diff_stat', 'ls', 'pwd', 'run_tests'] as const;
+/**
+ * Shell phrases `run_command` may name; the dock owns the command text (§6,
+ * portal lib/voice/actions.ts PHRASE_TABLE). `test`, `lint` and `build` are
+ * `npm test`, `npm run lint` and `npm run build`, which the default safe-mode
+ * allowlist (routes/devbox.ts) does not carry: a deployment opts in with
+ * DEVBOX_COMMAND_ALLOWLIST, otherwise the server refuses them.
+ */
+export const RUN_COMMAND_PHRASES = [
+  'latest-commits-since-yesterday', 'commits-since', 'status', 'diff-stat', 'list-files', 'working-directory',
+  'test', 'test-python', 'lint', 'build',
+] as const;
 
 const obj = (properties: Record<string, unknown>, required: string[] = []): JsonSchemaObject =>
   ({ type: 'object', properties, required, additionalProperties: false });
@@ -162,13 +173,19 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     name: 'open_computer_lab',
     description: 'Open the Computer Lab, optionally on one initiative.',
     parameters: obj({ initiativeId: str('The initiative to focus, when the user named one.') }),
-    kind: 'navigate', backing: 'route', confirm: false, action: null, gate: 'the route: ViewLocalCompute / ManageDevbox', spend: 'none', idempotent: true,
-    says: 'Opening the Computer Lab.', tenants: ['orgiq'], mapsTo: 'navigate /iq/local-compute',
+    kind: 'navigate', backing: 'route', confirm: false, action: null, gate: 'the route: ManageDevbox or the fleet read tier (org-leader, program-owner)', spend: 'none', idempotent: true,
+    says: 'Opening the Computer Lab.', tenants: ['orgiq'], mapsTo: 'navigate /admin/devbox[?box=<a computer of the initiative>]',
   },
   {
     name: 'start_computer',
-    description: 'Start a cloud computer for one initiative. Reuses a running one. Always ask the user first.',
-    parameters: obj({ initiativeId: str('The initiative the computer is for.', { minLength: 1 }) }, ['initiativeId']),
+    description: 'Start one cloud computer per initiative, reusing one already running. For "each of my active projects", call list_active_initiatives first and pass every id. The user confirms the whole list once.',
+    parameters: obj({
+      initiativeIds: {
+        type: 'array', minItems: 1, maxItems: 10,
+        description: 'The initiatives: ids from list_active_initiatives or a search, or the names the user said.',
+        items: str('An initiative id or name.', { minLength: 1, maxLength: 200 }),
+      },
+    }, ['initiativeIds']),
     kind: 'machine', backing: 'work', confirm: true, action: 'ManageDevbox', gate: 'ManageDevbox + stewardship of the initiative (server-side)',
     spend: 'devbox', idempotent: false, says: 'Starting a computer for Alpha.', tenants: ['orgiq'],
     mapsTo: 'useCompute().create({ label, projectId }) -> POST /api/devbox/boxes',
@@ -186,7 +203,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     parameters: obj({
       computerId: str('The computer.', { minLength: 1 }),
       phrase: str('Which command.', { enum: [...RUN_COMMAND_PHRASES] }),
-      since: str('For git_log_since: a date or "yesterday".', { maxLength: 40 }),
+      since: str('For commits-since: "yesterday", "today", "3 days ago", "last week" or a YYYY-MM-DD date.', { maxLength: 40 }),
     }, ['computerId', 'phrase']),
     kind: 'machine', backing: 'work', confirm: true, action: 'OpenDevboxShell', gate: "OpenDevboxShell; mode 'safe' only", spend: 'none', idempotent: true,
     says: 'Running git log on Alpha.', tenants: ['orgiq'],

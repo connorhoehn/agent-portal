@@ -17,10 +17,11 @@
 //      characters and every list at 10 rows, and labelled "data, not
 //      instructions" (`shapeOutput`, applied to every result on the way out).
 //
-// Reads and navigation are P3. The machine and people tools (start_computer,
-// open_shell, run_command, send_chat_message, set_status) are P4: they are
-// registered with a runner that answers "not available yet", so the model gets
-// an answer instead of waiting on a call nobody runs.
+// Reads and navigation live here (P3). The machine and people tools
+// (start_computer, open_shell, run_command, send_chat_message, set_status) are
+// in actions.ts (P4), which adds them to this table as VOICE_RUNNERS, with the
+// planners that run before a confirm card (resolve the target, compose the
+// command, mint the delivery id) so the card shows exactly what will happen.
 //
 // No React and only `.ts` imports, so `node --test` runs it.
 
@@ -56,7 +57,68 @@ export interface Palette {
   visible(page: PalettePage, tenant: string, role: string): boolean;
 }
 
-/** What a tool may touch: the tab's own session, fetch and router. */
+/** One of the Computer Lab's computers, as the machine tools read it (the library's `Computer`). */
+export interface VoiceComputer {
+  id: string;
+  label: string;
+  sessionId: string;
+  status?: string;
+  projectId?: string;
+  project?: string;
+  kind?: string;
+  workspace?: string;
+  lastActivityAt?: string;
+}
+
+/** A stream event of POST /api/devbox/:sessionId/command (stdout, stderr, cwd, exit, devbox_error). */
+export type CommandEvent = Record<string, unknown>;
+
+/** The Computer Lab's provider (ComputeHost's `useCompute()`), the calls its own buttons make. */
+export interface ComputeAccess {
+  /** ManageDevbox: provision is allowed (the provider's `canManage`). */
+  canManage: boolean;
+  computers(): readonly VoiceComputer[];
+  create(input: { label?: string; projectId?: string }): Promise<VoiceComputer>;
+  openShell(box: { id: string; label: string; sessionId: string; cwd?: string }): { ok: true; id: string } | { ok: false; reason: string };
+  runCommand(sessionId: string, body: { command: string; mode: 'safe'; cwd?: string }, onEvent: (ev: CommandEvent) => void, signal?: AbortSignal): Promise<void>;
+}
+
+/** What send_chat_message remembers per (channel, text): the id minted before the card, and whether it landed. */
+export interface DeliveryRecord { deliveryId: string; state: 'pending' | 'sent' | 'failed'; at: number }
+
+/** Social, through the hooks the shell already holds (EmbeddedSocial's presence, the composer's useChat path). */
+export interface SocialAccess {
+  /** The BFF prefix for Social reads: `/api/social` in the Social tenant, the plane `/api/social/plane` elsewhere. */
+  api: string;
+  /** Why nothing can be posted right now (no Social grant, the socket is down), or null. */
+  unavailable: string | null;
+  /** Post through useChat(channel).sendMessage with the composer's ack wait; resolves on the persisted receipt. */
+  send(input: { channel: string; text: string; deliveryId: string }): Promise<void>;
+  /** The shell's presence entry (usePresence's setStatus + updateMetadata); null when the socket has none. */
+  presence: { setStatus(status: string): void; updateMetadata(meta: Record<string, unknown>): void } | null;
+  /** Delivery ids by channel and text, kept for the dock's lifetime so a retry reuses one. */
+  deliveries: Map<string, DeliveryRecord>;
+}
+
+/** The app's toast store (lib/toastStore.ts), so a slow action shows outside the dock too. */
+export interface ToastSink {
+  pending(title: string, detail?: string): string;
+  success(id: string, title: string, detail?: string): void;
+  error(id: string, title: string, detail?: string): void;
+}
+
+/** A run_command's captured output, as the dock shows it while it streams. */
+export interface CommandOutputView {
+  computerId: string;
+  computer: string;
+  command: string;
+  lines: string[];
+  running: boolean;
+  exitCode: number | null;
+  error?: string;
+}
+
+/** What a tool may touch: the tab's own session, fetch and router, and the providers the shell already mounts. */
 export interface ToolContext {
   tenant: string;
   role: string;
@@ -65,6 +127,13 @@ export interface ToolContext {
   fetch(url: string, init?: RequestInit): Promise<Response>;
   navigate(path: string): void;
   now(): Date;
+  /** The Computer Lab's provider; null outside orgiq or before it mounts. */
+  compute?: ComputeAccess | null;
+  /** Social; null when the session holds no Social grant. */
+  social?: SocialAccess | null;
+  toast?: ToastSink;
+  /** The dock's command-output panel. */
+  showOutput?(view: CommandOutputView): void;
 }
 
 export interface ToolResult {
@@ -76,7 +145,19 @@ export interface ToolResult {
 }
 
 type Args = Record<string, unknown>;
-type Runner = (args: Args, ctx: ToolContext) => Promise<ToolResult>;
+/** Runs the tool. `plan` is what the tool's planner prepared before the confirm card, when it has one. */
+type Runner = (args: Args, ctx: ToolContext, plan?: unknown) => Promise<ToolResult>;
+
+/** What a confirm card shows, and what the runner will act on once confirmed. */
+export interface ConfirmPlan { title: string; detail?: string; data: unknown }
+
+/**
+ * Runs before a confirm tool's card, with no side effect beyond reads: it
+ * resolves the target, composes the command or mints the delivery id. It
+ * answers a plan (the card) or a result that ends the call without a card
+ * (a refusal, an ambiguous name, nothing left to do).
+ */
+type Planner = (args: Args, ctx: ToolContext) => Promise<{ plan: ConfirmPlan } | { result: ToolResult }>;
 
 // ── result shaping ──────────────────────────────────────────────────────────
 
@@ -99,9 +180,12 @@ export function shapeOutput(v: unknown): unknown {
 function result(outcome: ToolOutcome, kind: string, body: Record<string, unknown>, summary: string): ToolResult {
   return { outcome, output: shapeOutput({ kind, note: DATA_NOTE, ...body }) as Record<string, unknown>, summary: cap(summary) };
 }
-const done = (kind: string, body: Record<string, unknown>, summary: string) => result('done', kind, body, summary);
-export const refused = (reason: string): ToolResult => result('refused', 'refused', { reason }, reason);
-const failed = (reason: string): ToolResult => result('failed', 'failed', { reason }, reason);
+export const done = (kind: string, body: Record<string, unknown>, summary: string) => result('done', kind, body, summary);
+export const refused = (reason: string, body: Record<string, unknown> = {}): ToolResult => result('refused', 'refused', { reason, ...body }, reason);
+export const failed = (reason: string, body: Record<string, unknown> = {}): ToolResult => result('failed', 'failed', { reason, ...body }, reason);
+/** A refusal the model should turn into a question: several things match the name. */
+export const ambiguous = (reason: string, candidates: Array<Record<string, unknown>>): ToolResult =>
+  result('refused', 'ambiguous', { reason, candidates }, reason);
 
 /** The model's answer for a confirm-card the user cancelled (§4 `confirm`). */
 export function cancelledResult(by: 'voice' | 'click'): ToolResult {
@@ -136,6 +220,18 @@ export function schemaProblem(schema: JsonSchema, value: unknown, path = 'argume
     }
     return null;
   }
+  if (schema.type === 'array') {
+    if (!Array.isArray(value)) return `${path} must be a list`;
+    if (schema.minItems !== undefined && value.length < schema.minItems) return `${path} needs at least ${schema.minItems}`;
+    if (schema.maxItems !== undefined && value.length > schema.maxItems) return `${path} takes at most ${schema.maxItems}`;
+    if (schema.items) {
+      for (let i = 0; i < value.length; i++) {
+        const p = schemaProblem(schema.items, value[i], `${path}[${i}]`);
+        if (p) return p;
+      }
+    }
+    return null;
+  }
   if (schema.type === 'string') {
     if (typeof value !== 'string') return `${path} must be a string`;
     if (schema.enum && !schema.enum.includes(value)) return `${path} must be one of ${schema.enum.join(', ')}`;
@@ -149,15 +245,33 @@ export function schemaProblem(schema: JsonSchema, value: unknown, path = 'argume
   return null;
 }
 
+/**
+ * Arguments a tool drops instead of refusing the call over: `run_command`
+ * never runs model-supplied shell text (§6), but a call that names a phrase
+ * AND smuggles a `command` still runs the phrase. The dropped field is named
+ * in the result and recorded as its own refused row.
+ */
+export const IGNORED_ARGS: Readonly<Record<string, readonly string[]>> = {
+  run_command: ['command', 'cmd', 'shell', 'script'],
+};
+export const IGNORED_NOTE = 'Commands come from the phrase table; text sent as a command was not run. For anything else, ask the user to open the shell and type it.';
+
 /** The call's arguments (a JSON string on the wire) parsed, nulls dropped and validated; or why not. */
-export function parseToolArgs(spec: VoiceToolSpec, raw: unknown): { ok: true; args: Args } | { ok: false; problem: string } {
+export function parseToolArgs(spec: VoiceToolSpec, raw: unknown): { ok: true; args: Args; ignored: string[] } | { ok: false; problem: string } {
   let value: unknown = raw;
   if (typeof raw === 'string') {
     try { value = raw.trim() ? JSON.parse(raw) : {}; } catch { return { ok: false, problem: 'the arguments are not JSON' }; }
   }
   value = dropNulls(value ?? {});
+  const ignored: string[] = [];
+  const drop = IGNORED_ARGS[spec.name];
+  if (drop && value && typeof value === 'object' && !Array.isArray(value)) {
+    const obj = { ...(value as Args) };
+    for (const k of drop) if (k in obj) { ignored.push(k); delete obj[k]; }
+    value = obj;
+  }
   const problem = schemaProblem(spec.parameters, value);
-  return problem ? { ok: false, problem } : { ok: true, args: value as Args };
+  return problem ? { ok: false, problem } : { ok: true, args: value as Args, ignored };
 }
 
 // ── hashing (§9: /events keeps a hash, never the arguments) ─────────────────
@@ -183,7 +297,7 @@ export async function hashToolArgs(args: unknown): Promise<string> {
 
 type Read<T> = { ok: true; body: T } | { ok: false; status: number };
 
-async function readJson<T>(ctx: ToolContext, url: string): Promise<Read<T>> {
+export async function readJson<T>(ctx: ToolContext, url: string): Promise<Read<T>> {
   try {
     const res = await ctx.fetch(url, { credentials: 'include' });
     if (!res.ok) return { ok: false, status: res.status };
@@ -193,12 +307,12 @@ async function readJson<T>(ctx: ToolContext, url: string): Promise<Read<T>> {
   }
 }
 
-function readFailure(what: string, status: number): ToolResult {
+export function readFailure(what: string, status: number): ToolResult {
   if (status === 401 || status === 403) return refused(`Your role cannot read ${what}.`);
   return failed(status ? `Could not read ${what} (HTTP ${status}).` : `Could not reach the server for ${what}.`);
 }
 
-const qs = (params: Record<string, string | number | undefined>): string =>
+export const qs = (params: Record<string, string | number | undefined>): string =>
   new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => [k, String(v)])).toString();
 
 // ── navigate ────────────────────────────────────────────────────────────────
@@ -240,14 +354,28 @@ const navigate: Runner = async (args, ctx) => {
   }, `Opened ${open.page.label}`);
 };
 
+/** The lab's busiest-first pick of an initiative's computers (lib/computeInitiative.ts), microVMs only. */
+export function computersOf(computers: readonly VoiceComputer[], initiativeId: string): VoiceComputer[] {
+  return computers.filter((c) => c.projectId === initiativeId && c.kind !== 'local').slice().sort((a, b) => {
+    const ar = a.status === 'running' ? 0 : 1;
+    const br = b.status === 'running' ? 0 : 1;
+    return ar - br || (b.lastActivityAt ?? '').localeCompare(a.lastActivityAt ?? '');
+  });
+}
+
+// The Computer Lab (/admin/devbox): the page that lists and starts the user's
+// computers, where start_computer's boxes appear. `?box=` is the lab's own
+// focus link (DevboxPage), so an initiative opens on its busiest computer.
 const openComputerLab: Runner = async (args, ctx) => {
   const open = openablePage('computer-lab', ctx);
   if ('refusal' in open) return open.refusal;
-  ctx.navigate(open.page.path);
   const initiativeId = typeof args['initiativeId'] === 'string' ? args['initiativeId'] : undefined;
+  const focus = initiativeId && ctx.compute ? computersOf(ctx.compute.computers(), initiativeId)[0] : undefined;
+  const path = focus ? `${open.page.path}?box=${encodeURIComponent(focus.id)}` : open.page.path;
+  ctx.navigate(path);
   return done('navigated', {
-    page: 'computer-lab', label: open.page.label, path: open.page.path,
-    ...(initiativeId ? { initiativeId, focus: 'The page lists every machine; it does not focus one initiative yet.' } : {}),
+    page: 'computer-lab', label: open.page.label, path,
+    ...(initiativeId ? { initiativeId, focus: focus ? `computer ${focus.label}` : 'This initiative has no computer yet; start_computer starts one.' } : {}),
   }, `Opened ${open.page.label}`);
 };
 
@@ -281,7 +409,7 @@ function searchRunner(type: 'person' | 'records'): Runner {
 
 // ── initiatives ─────────────────────────────────────────────────────────────
 
-interface ProjectRow { id: string; name: string; status?: string | null; ownerName?: string | null; contributorCount?: number; openStories?: number | null; lastActivityAt?: string | null }
+export interface ProjectRow { id: string; name: string; status?: string | null; ownerName?: string | null; contributorCount?: number; openStories?: number | null; lastActivityAt?: string | null }
 
 const listActiveInitiatives: Runner = async (args, ctx) => {
   if (ctx.tenant !== 'orgiq') return refused('Initiatives are in the Work workspace.');
@@ -431,17 +559,7 @@ const accessRequestStatus: Runner = async (args, ctx) => {
   return requestsDone(query, items, items.length ? undefined : OUTSIDE_ACCESS_HINT);
 };
 
-// ── P4 placeholders ─────────────────────────────────────────────────────────
-
-/** Tools whose actions package P4 wires; until then they answer at once. */
-export const P4_TOOLS = ['start_computer', 'open_shell', 'run_command', 'send_chat_message', 'set_status'] as const;
-
-const notYet = (name: string): Runner => async () =>
-  refused(`${name.replace(/_/g, ' ')} is not available from voice yet. Offer to open the page so the user can do it there.`);
-
-const PLACEHOLDERS: Readonly<Record<string, Runner>> = Object.fromEntries(P4_TOOLS.map((n) => [n, notYet(n)]));
-
-/** The runner per catalogue tool. P4 replaces the placeholders through the `runners` argument below. */
+/** The read and navigation runners. actions.ts adds the machine and people tools as VOICE_RUNNERS. */
 export const TOOL_RUNNERS: Readonly<Record<string, Runner>> = {
   navigate,
   search_people: searchRunner('person'),
@@ -450,18 +568,18 @@ export const TOOL_RUNNERS: Readonly<Record<string, Runner>> = {
   open_computer_lab: openComputerLab,
   bot_sweep_status: botSweepStatus,
   access_request_status: accessRequestStatus,
-  ...PLACEHOLDERS,
 };
 
-/** Whether the named tool has a real runner (a P4 placeholder does not), so a confirm card is worth showing. */
+/** Whether the named tool has a runner, so a confirm card is worth showing. */
 export function toolAvailable(name: string, runners: Readonly<Record<string, Runner>> = TOOL_RUNNERS): boolean {
-  const runner = runners[name];
-  return !!runner && runner !== PLACEHOLDERS[name];
+  return !!runners[name];
 }
 
 export interface PreparedCall {
   spec: VoiceToolSpec;
   args: Args;
+  /** Argument names dropped by IGNORED_ARGS (never run, named in the result). */
+  ignored?: string[];
 }
 
 /**
@@ -474,19 +592,48 @@ export function prepareToolCall(name: string, rawArgs: unknown, ctx: Pick<ToolCo
   if (!spec) return { ok: false, result: refused(`There is no "${name}" tool.`) };
   if (!spec.tenants.includes(ctx.tenant)) return { ok: false, result: refused(`${name.replace(/_/g, ' ')} is not available in this workspace.`) };
   const parsed = parseToolArgs(spec, rawArgs);
-  if (!parsed.ok) return { ok: false, result: refused(`I could not use those details: ${parsed.problem}.`) };
-  if (spec.action && !ctx.can(spec.action)) return { ok: false, result: refused(`Your role cannot ${spec.kind === 'read' ? 'read that' : 'do that'} here.`) };
-  return { ok: true, call: { spec, args: parsed.args } };
+  if (!parsed.ok) {
+    const shell = IGNORED_ARGS[name]?.some((k) => typeof rawArgs === 'string' ? rawArgs.includes(`"${k}"`) : !!rawArgs && typeof rawArgs === 'object' && k in rawArgs);
+    return { ok: false, result: refused(`I could not use those details: ${parsed.problem}.${shell ? ` ${IGNORED_NOTE}` : ''}`) };
+  }
+  if (spec.action && !ctx.can(spec.action)) return { ok: false, result: refused(ROLE_REFUSALS[name] ?? `Your role cannot ${spec.kind === 'read' ? 'read that' : 'do that'} here.`) };
+  return { ok: true, call: { spec, args: parsed.args, ...(parsed.ignored.length ? { ignored: parsed.ignored } : {}) } };
+}
+
+/** What the voice says when the button's own action is missing (§6: "I can't run commands on machines with your role"). */
+const ROLE_REFUSALS: Readonly<Record<string, string>> = {
+  start_computer: "I can't start computers with your role.",
+  open_shell: "I can't open shells on computers with your role.",
+  run_command: "I can't run commands on machines with your role.",
+  send_chat_message: "I can't post messages with your role.",
+};
+
+/** The dropped arguments, said in the result (applied by runPreparedCall). */
+function withIgnored(res: ToolResult, ignored: readonly string[] | undefined): ToolResult {
+  if (!ignored?.length) return res;
+  return { ...res, output: { ...res.output, ignored: { fields: [...ignored], reason: IGNORED_NOTE } }, summary: cap(`${res.summary} (command text ignored)`) };
 }
 
 /** Run a prepared call; a thrown runner becomes `failed`, never an unanswered call. */
-export async function runPreparedCall(call: PreparedCall, ctx: ToolContext, runners: Readonly<Record<string, Runner>> = TOOL_RUNNERS): Promise<ToolResult> {
+export async function runPreparedCall(call: PreparedCall, ctx: ToolContext, runners: Readonly<Record<string, Runner>> = TOOL_RUNNERS, plan?: unknown): Promise<ToolResult> {
   const runner = runners[call.spec.name];
   if (!runner) return refused(`${call.spec.name} has no runner.`);
   try {
-    return await runner(call.args, ctx);
+    return withIgnored(await runner(call.args, ctx, plan), call.ignored);
   } catch (err) {
-    return failed(`The ${call.spec.name.replace(/_/g, ' ')} call failed: ${(err as Error)?.message ?? 'unknown error'}`);
+    return withIgnored(failed(`The ${call.spec.name.replace(/_/g, ' ')} call failed: ${(err as Error)?.message ?? 'unknown error'}`), call.ignored);
+  }
+}
+
+/** Run a confirm tool's planner (when it has one); a thrown planner ends the call as `failed`. */
+export async function planPreparedCall(call: PreparedCall, ctx: ToolContext, planners: Readonly<Record<string, Planner>>): Promise<{ plan: ConfirmPlan } | { result: ToolResult } | null> {
+  const planner = planners[call.spec.name];
+  if (!planner) return null;
+  try {
+    const out = await planner(call.args, ctx);
+    return 'result' in out ? { result: withIgnored(out.result, call.ignored) } : out;
+  } catch (err) {
+    return { result: withIgnored(failed(`The ${call.spec.name.replace(/_/g, ' ')} call failed: ${(err as Error)?.message ?? 'unknown error'}`), call.ignored) };
   }
 }
 
@@ -497,4 +644,4 @@ export async function runVoiceTool(name: string, rawArgs: unknown, ctx: ToolCont
   return runPreparedCall(prepared.call, ctx, runners);
 }
 
-export type { Runner as VoiceToolRunner };
+export type { Runner as VoiceToolRunner, Planner as VoiceToolPlanner, Args as VoiceToolArgs };

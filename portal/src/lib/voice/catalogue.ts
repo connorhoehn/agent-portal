@@ -17,7 +17,7 @@ export type VoiceToolBacking = 'search' | 'social-activity' | 'route' | 'work';
 
 /** The subset of JSON Schema the catalogue uses. */
 export interface JsonSchema {
-  type: 'object' | 'string' | 'integer';
+  type: 'object' | 'string' | 'integer' | 'array';
   description?: string;
   properties?: Record<string, JsonSchema>;
   required?: string[];
@@ -27,6 +27,9 @@ export interface JsonSchema {
   maxLength?: number;
   minimum?: number;
   maximum?: number;
+  items?: JsonSchema;
+  minItems?: number;
+  maxItems?: number;
 }
 
 export interface VoiceToolSpec {
@@ -56,7 +59,12 @@ export const NAVIGATE_PAGE_IDS: ReadonlyArray<{ id: string; tenants: readonly st
   { id: 'workspaces', tenants: ['*'] },
 ];
 
-export const RUN_COMMAND_PHRASES = ['git_log_since', 'git_status', 'git_diff_stat', 'ls', 'pwd', 'run_tests'] as const;
+/** The phrase ids `run_command` may name; actions.ts PHRASE_TABLE owns the command text (§6). */
+export const RUN_COMMAND_PHRASES = [
+  'latest-commits-since-yesterday', 'commits-since', 'status', 'diff-stat', 'list-files', 'working-directory',
+  'test', 'test-python', 'lint', 'build',
+] as const;
+export type RunCommandPhrase = typeof RUN_COMMAND_PHRASES[number];
 
 const obj = (properties: Record<string, JsonSchema>, required: string[] = []): JsonSchema =>
   ({ type: 'object', properties, required, additionalProperties: false });
@@ -111,7 +119,13 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
   },
   {
     name: 'start_computer',
-    parameters: obj({ initiativeId: str('The initiative the computer is for.', { minLength: 1 }) }, ['initiativeId']),
+    parameters: obj({
+      initiativeIds: {
+        type: 'array', minItems: 1, maxItems: 10,
+        description: 'The initiatives: ids from list_active_initiatives or a search, or the names the user said.',
+        items: str('An initiative id or name.', { minLength: 1, maxLength: 200 }),
+      },
+    }, ['initiativeIds']),
     kind: 'machine', backing: 'work', confirm: true, action: 'ManageDevbox', says: 'Starting a computer for Alpha.', tenants: ['orgiq'],
   },
   {
@@ -124,7 +138,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
     parameters: obj({
       computerId: str('The computer.', { minLength: 1 }),
       phrase: str('Which command.', { enum: [...RUN_COMMAND_PHRASES] }),
-      since: str('For git_log_since: a date or "yesterday".', { maxLength: 40 }),
+      since: str('For commits-since: "yesterday", "today", "3 days ago", "last week" or a YYYY-MM-DD date.', { maxLength: 40 }),
     }, ['computerId', 'phrase']),
     kind: 'machine', backing: 'work', confirm: true, action: 'OpenDevboxShell', says: 'Running git log on Alpha.', tenants: ['orgiq'],
   },

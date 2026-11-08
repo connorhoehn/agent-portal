@@ -142,9 +142,10 @@ export const PAGES: readonly PageEntry[] = [
     keywords: ['codebase', 'repository', 'repo', 'git', 'run'] },
   { label: 'Changes',            hint: 'Code review queue + policies',        path: '/admin/changes',                              tenant: 'admin',  group: 'Build',   roles: CHANGES,
     keywords: ['change', 'review', 'pr', 'pull request', 'diff', 'policy'] },
-  { label: 'Computer Lab',       hint: 'MicroVM fleet + task runner',         path: '/admin/devbox',                               tenant: 'admin',  group: 'Build',   roles: DEVBOX,
+  // pageId: the voice navigator's open_computer_lab opens this page, where start_computer's boxes appear.
+  { label: 'Computer Lab',       hint: 'MicroVM fleet + task runner',         path: '/admin/devbox',                               tenant: 'admin',  group: 'Build',   roles: DEVBOX, pageId: 'computer-lab',
     keywords: ['devbox', 'computer', 'box', 'lab', 'microvm', 'terminal'] },
-  { label: 'Local compute',      hint: 'Your paired machines — hand them work', path: '/iq/local-compute',                         tenant: 'orgiq',  group: 'Build', pageId: 'computer-lab',
+  { label: 'Local compute',      hint: 'Your paired machines — hand them work', path: '/iq/local-compute',                         tenant: 'orgiq',  group: 'Build',
     keywords: ['machine', 'node', 'laptop', 'local', 'compute', 'paired'] },
   { label: 'Runbooks',                hint: 'Procedures the fleet follows — read, version, review', path: '/iq/runbooks',    tenant: 'orgiq',  group: 'Build',
     keywords: ['runbook', 'procedure', 'playbook', 'how to', 'steps', 'rollback', 'library', 'knowledge', 'guide', 'distillation', 'learned'] },

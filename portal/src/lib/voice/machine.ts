@@ -49,6 +49,8 @@ export interface MachineState {
 export type MachineEvent =
   | { type: 'start' }
   | { type: 'unavailable'; reason: string }
+  /** The mint answered 409 on the user's budget: a card, before any session exists. */
+  | { type: 'budget-confirm' }
   | { type: 'failed'; reason: string }
   | { type: 'started' }
   | { type: 'input'; at: number }
@@ -62,6 +64,9 @@ export type MachineEvent =
   | { type: 'call-done'; callId: string }
   | { type: 'stop' }
   | { type: 'closed'; reason?: string | null };
+
+/** `confirming` while the budget card is up (no session, no call). */
+export const BUDGET_CONFIRMING = 'budget';
 
 export const initialMachine: MachineState = {
   base: 'off', reason: null, lastInputAt: null, lastOutputAt: null, lastMicActiveAt: null, awaitingReply: false,
@@ -78,6 +83,8 @@ export function reduce(s: MachineState, e: MachineEvent): MachineState {
       return s.base === 'connecting' || s.base === 'live' || s.base === 'closing' ? s : { ...initialMachine, base: 'connecting' };
     case 'unavailable':
       return { ...initialMachine, base: 'unavailable', reason: e.reason };
+    case 'budget-confirm':
+      return { ...initialMachine, base: 'off', confirming: BUDGET_CONFIRMING };
     case 'failed':
       return { ...initialMachine, base: 'ended', reason: e.reason };
     case 'started':
@@ -111,7 +118,7 @@ export function reduce(s: MachineState, e: MachineEvent): MachineState {
 /** The phase the dock shows at `now`. */
 export function phaseAt(s: MachineState, now: number): VoicePhase {
   switch (s.base) {
-    case 'off': return 'off';
+    case 'off': return s.confirming === BUDGET_CONFIRMING ? 'confirming' : 'off';
     case 'connecting': return 'connecting';
     case 'unavailable': return 'unavailable';
     case 'closing':

@@ -10,17 +10,33 @@
 // shell, so it survives route changes; a tenant switch ends it (§2), a page
 // change by hand is passed to the voice as silent context, Ctrl+Shift+Space
 // toggles it and Escape cancels a confirm card (the dock's popover).
+//
+// The machine and people tools (lib/voice/actions.ts) reach only what the
+// shell already mounts, never a second socket: the Computer Lab's provider
+// (ComputeHost's useCompute: computers, create, openShell, the command
+// stream), the shell's one presence announcement (EmbeddedSocial), and the
+// gateway socket through useChat for a post, the same send-and-wait-for-
+// receipt path the composer uses. A run_command's output streams into the
+// pane's output panel (LogStream); the library's shell tab is a live PTY with
+// no way to write captured output into it.
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocation, useNavigate } from 'react-router';
+import { useChat, useGatewayOptional } from '@connorhoehn/realtime-modules/client';
 import { CaptionsIcon } from '@connorhoehn/ui-components';
-import { IconButton, Inline, InlinePopover, Tooltip } from '@connorhoehn/ui-components/shared';
+import { openShell, useComputeOptional } from '@connorhoehn/ui-components/compute';
+import { Button, IconButton, Inline, InlinePopover, LogStream, Tooltip } from '@connorhoehn/ui-components/shared';
 import { VoiceDock, VoiceTurnStrip, type VoicePending, type VoiceTurn } from '@connorhoehn/ui-components/voice';
 import { useSession } from '../../lib/auth';
 import { useCapabilities, type Action } from '../../lib/capabilities';
 import { features } from '../../lib/features';
+import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
+import { useFetch } from '../../hooks/useFetch';
 import { browserMedia } from '../../lib/voice/client';
 import { VoiceController } from '../../lib/voice/controller';
+import type { CommandOutputView, ComputeAccess, DeliveryRecord, SocialAccess, ToolContext, VoiceComputer } from '../../lib/voice/tools';
+import { sendAndWaitForSocialChatAck, socialChatError } from '../../pages/social/socialChatDelivery';
+import { useEmbeddedSocial } from './EmbeddedSocial';
 import { PAGES, isPageVisible } from './portalCommands';
 import { isVoiceHotkey, pageContextNote, voiceDockVisible } from './voiceDockModel';
 
@@ -37,28 +53,144 @@ function VoiceGate() {
   return <VoiceFooterPane />;
 }
 
+/** How long a post waits for its conversation's join before giving up. */
+const CHANNEL_JOIN_MS = 8000;
+
+type ChatSender = (text: string, deliveryId: string) => Promise<void>;
+type Waiter = { resolve(sender: ChatSender): void; reject(err: Error): void };
+
+/**
+ * The conversation a voice post goes to: useChat(channel) on the shell's
+ * socket, ready once the gateway says `joined` (SocialConversation's own
+ * rule), and the composer's confirmed send. Stays mounted until the voice
+ * posts somewhere else, so a confirm and its retry share one join.
+ */
+function VoiceChatChannel({ channel, userId, displayName, onReady, onFailed }: {
+  channel: string; userId: string; displayName: string;
+  onReady(channel: string, sender: ChatSender | null): void;
+  onFailed(channel: string, message: string): void;
+}) {
+  const gateway = useGatewayOptional();
+  const chat = useChat(channel);
+  const epoch = gateway?.sessionEpoch;
+  const [joined, setJoined] = useState<number | undefined | null>(null);
+  const latest = useRef({ chat, gateway });
+  latest.current = { chat, gateway };
+  const abort = useRef(new AbortController());
+  useEffect(() => { const a = abort.current; return () => a.abort(); }, []);
+  const listen = gateway?.onMessage;
+  useEffect(() => listen?.((frame) => {
+    const f = frame as Record<string, unknown>;
+    const failure = socialChatError(f, channel);
+    if (failure) onFailed(channel, failure);
+    if (f['type'] === 'chat' && f['channel'] === channel && f['action'] === 'joined') setJoined(epoch);
+  }), [listen, channel, epoch, onFailed]);
+  useEffect(() => { setJoined(null); }, [channel, epoch]);
+  const ready = joined !== null && joined === epoch;
+  useEffect(() => {
+    if (!ready) return undefined;
+    onReady(channel, async (text, deliveryId) => {
+      const { gateway: g } = latest.current;
+      if (!g?.onMessage || g.connectionState !== 'connected') throw new Error('Reconnect to send messages.');
+      await sendAndWaitForSocialChatAck({
+        channel, deliveryId, userId, listen: g.onMessage as (h: (f: Record<string, unknown>) => void) => () => void, signal: abort.current.signal,
+        send: () => latest.current.chat.sendMessage(text, { displayName, clientDeliveryId: deliveryId }),
+      });
+    });
+    return () => onReady(channel, null);
+  }, [ready, channel, userId, displayName, onReady]);
+  return null;
+}
+
 function VoiceFooterPane() {
   const { session } = useSession();
   const { can } = useCapabilities();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  // The tool context is read at call time, so a call sees the current router and grants.
-  const live = useRef({ tenant: session?.tenant ?? 'orgiq', role: session?.role ?? 'member', can, navigate });
-  live.current = { tenant: session?.tenant ?? 'orgiq', role: session?.role ?? 'member', can, navigate };
+  const compute = useComputeOptional();
+  const social = useEmbeddedSocial();
+  const gateway = useGatewayOptional();
+  const tenant = session?.tenant ?? 'orgiq';
+  // Outside the Social tenant, Social actions come from the plane's grants, not the session's tenant (socialPlane.ts).
+  const onPlane = tenant !== 'social' && !!social?.available;
+  const planeCaps = useFetch<{ actions: Record<string, boolean> }>(onPlane ? '/api/social/plane/capabilities' : null, 60_000, { share: true });
+  const [deliveries] = useState(() => new Map<string, DeliveryRecord>());
+
+  // ── the post path: one conversation mounted at a time, a sender per joined channel ──
+  const [chatChannel, setChatChannel] = useState<string | null>(null);
+  const chatChannelRef = useRef<string | null>(null);
+  const senders = useRef(new Map<string, ChatSender>());
+  const waiters = useRef(new Map<string, Waiter[]>());
+  const onReady = useCallback((channel: string, sender: ChatSender | null) => {
+    if (!sender) { senders.current.delete(channel); return; }
+    senders.current.set(channel, sender);
+    for (const w of waiters.current.get(channel) ?? []) w.resolve(sender);
+    waiters.current.delete(channel);
+  }, []);
+  const onFailed = useCallback((channel: string, message: string) => {
+    for (const w of waiters.current.get(channel) ?? []) w.reject(new Error(message));
+    waiters.current.delete(channel);
+  }, []);
+  const sendChat = useCallback(async ({ channel, text, deliveryId }: { channel: string; text: string; deliveryId: string }) => {
+    let sender = senders.current.get(channel);
+    if (!sender) {
+      if (chatChannelRef.current !== channel) { chatChannelRef.current = channel; setChatChannel(channel); }
+      sender = await new Promise<ChatSender>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('The conversation did not open in time.')), CHANNEL_JOIN_MS);
+        const list = waiters.current.get(channel) ?? [];
+        list.push({ resolve: (s) => { clearTimeout(timer); resolve(s); }, reject: (e) => { clearTimeout(timer); reject(e); } });
+        waiters.current.set(channel, list);
+      });
+    }
+    await sender(text, deliveryId);
+  }, []);
+
+  // ── run_command's captured output ──
+  const [output, setOutput] = useState<CommandOutputView | null>(null);
+  const [outputOpen, setOutputOpen] = useState(false);
+  const showOutput = useCallback((view: CommandOutputView) => { setOutput(view); setOutputOpen(true); }, []);
+
+  const computeAccess = useMemo<ComputeAccess | null>(() => (compute && tenant === 'orgiq' ? {
+    canManage: compute.canManage,
+    computers: () => compute.computers as readonly VoiceComputer[],
+    create: (input) => compute.create(input),
+    openShell: (box) => { const r = openShell(box); return r.ok ? r : { ok: false, reason: r.reason }; },
+    runCommand: (sessionId, body, onEvent, signal) => compute.client.runCommand(sessionId, body, onEvent, signal),
+  } : null), [compute, tenant]);
+
+  const socialAccess = useMemo<SocialAccess | null>(() => (social?.available ? {
+    api: tenant === 'social' ? '/api/social' : '/api/social/plane',
+    unavailable: gateway?.connectionState === 'connected' ? null : 'Social is not connected right now. Try again in a moment.',
+    send: sendChat,
+    presence: social.presence,
+    deliveries,
+  } : null), [social?.available, social?.presence, tenant, gateway?.connectionState, sendChat, deliveries]);
+
+  // The tool context is read at call time, so a call sees the current router, grants and providers.
+  const live = useRef({ tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, planePost: !!planeCaps.data?.actions['PostMessage'] });
+  live.current = { tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, planePost: !!planeCaps.data?.actions['PostMessage'] };
 
   const controller = useMemo(() => new VoiceController({
     fetch: (url, init) => fetch(url, init),
     media: browserMedia(),
-    toolContext: () => ({
+    toolContext: (): ToolContext => ({
       tenant: live.current.tenant,
       role: live.current.role,
       palette: { pages: PAGES, visible: isPageVisible },
-      can: (action: Action) => live.current.can(action),
+      can: (action: Action) => (action === 'PostMessage' && live.current.tenant !== 'social' ? live.current.planePost : live.current.can(action)),
       fetch: (url, init) => fetch(url, init),
       navigate: (path) => { void live.current.navigate(path); },
       now: () => new Date(),
+      compute: live.current.compute,
+      social: live.current.social,
+      toast: {
+        pending: (title, detail) => toastPending(title, detail),
+        success: (id, title, detail) => { toastSuccess(id, title, detail); },
+        error: (id, title, detail) => { toastError(id, title, detail); },
+      },
+      showOutput,
     }),
-  }), []);
+  }), [showOutput]);
   const snap = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   useEffect(() => () => controller.dispose(), [controller]);
 
@@ -95,6 +227,8 @@ function VoiceFooterPane() {
     onCancel: () => controller.cancel('click'),
   } : null;
   const turns = snap.turns as VoiceTurn[];
+  const outputBox = output ? computeAccess?.computers().find((c) => c.id === output.computerId) : undefined;
+  const outputLines = useMemo(() => (output?.lines ?? []).map((message, i) => ({ id: `l${i}`, message })), [output]);
 
   return <Inline ref={anchor} gap="xs" align="center" wrap={false} className="min-w-0 max-w-[30rem] shrink border-l border-border pl-2" data-testid="shell-footer-voice">
     <VoiceDock
@@ -122,5 +256,17 @@ function VoiceFooterPane() {
       placement="bottom-end" aria-label="Voice transcript" kind="voice-transcript" data-testid="shell-voice-transcript">
       <VoiceTurnStrip turns={turns} maxVisible={6} onClear={() => { controller.clearTurns(); setStripOpen(false); }} />
     </InlinePopover>
+    <InlinePopover trigger={anchor} open={outputOpen && !!output} onClose={() => setOutputOpen(false)}
+      placement="bottom-end" aria-label="Command output" kind="voice-command-output" data-testid="shell-voice-output">
+      {output && <LogStream lines={outputLines} showTimestamp={false} showLevel={false} showSource={false} maxHeight="16rem" tone="surface"
+        title={`${output.command} · ${output.computer}${output.running ? ' (running)' : output.exitCode ? ` (exit ${output.exitCode})` : ''}`}
+        emptyMessage={output.error ?? (output.running ? 'Waiting for output…' : 'No output')}
+        headerSlot={outputBox ? <Button variant="ghost" size="sm" data-testid="shell-voice-output-shell"
+          onClick={() => { openShell({ id: outputBox.id, label: outputBox.label, sessionId: outputBox.sessionId, ...(outputBox.workspace ? { cwd: outputBox.workspace } : {}) }); setOutputOpen(false); }}>
+          Open shell</Button> : undefined}
+        data-testid="shell-voice-output-log" />}
+    </InlinePopover>
+    {chatChannel && session && <VoiceChatChannel key={chatChannel} channel={chatChannel} userId={session.sub}
+      displayName={social?.me?.displayName ?? session.name ?? session.sub} onReady={onReady} onFailed={onFailed} />}
   </Inline>;
 }

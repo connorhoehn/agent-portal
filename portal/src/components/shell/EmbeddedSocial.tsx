@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { useGatewayOptional, usePresence } from '@connorhoehn/realtime-modules/client';
 import { useSharedNotifications } from './SharedNotifications';
 import { WrappedNotificationBell } from '@connorhoehn/ui-components/integrations/realtime';
-import { Button, ChatIcon, EmptyState, ExternalLinkIcon, IconButton, Inline, PresenceAvatars, PresenceDot, Stack, T } from '@connorhoehn/ui-components/shared';
+import { Button, ChatIcon, EmptyState, ExternalLinkIcon, IconButton, Inline, PresenceAvatars, PresenceDot, Stack, T, Tooltip } from '@connorhoehn/ui-components/shared';
 import type { ConversationFeature } from '@connorhoehn/ui-components/social';
 import { ChannelBinding, useChannelBinding, type ChannelBindingState } from '../social/ChannelBindingStrip';
 import { useSession } from '../../lib/auth';
@@ -17,7 +17,7 @@ import { presenceAvatarUsers } from '../../pages/assessment/knowledge/knowledgeF
 import SocialConversation from '../../pages/social/SocialConversation';
 import { TenantDirectEntry } from './TenantDirectMessages';
 import { MessagesOverviewDialog, type ConversationPreview } from './MessagesOverviewDialog';
-import { showSocialTenantDoor, socialActivityPath, socialEntryTarget } from './socialEntryModel';
+import { presenceStatusLines, showSocialTenantDoor, socialActivityPath, socialEntryTarget } from './socialEntryModel';
 import { SOCIAL_PRESENCE_CHANNEL, namesFrom } from '../../pages/social/socialPlatform';
 import { dmTitle, socialInbox, type SocialPerson, type SocialDm } from '../../pages/social/socialChat';
 
@@ -37,7 +37,12 @@ export interface EmbeddedSocialContextValue {
   pageChannel: ChannelBindingState; pageOpen: boolean; openPageChannel(): void; selectPage(on: boolean): void;
   /** Pages name their binding context here; the bar shows it while they are mounted. */
   setPageContext(context: string | null): void;
+  /** The shell's own presence entry (`usePresence(SOCIAL_PRESENCE_CHANNEL, { join: true })`), once the transport is ready. */
+  presence: ShellPresenceControls | null;
 }
+
+/** The status and metadata writers of the shell's one presence announcement. */
+export interface ShellPresenceControls { setStatus(status: 'online' | 'away' | 'busy' | 'offline'): void; updateMetadata(meta: Record<string, unknown>): void }
 const EmbeddedSocialContext = createContext<EmbeddedSocialContextValue | null>(null);
 const IDLE = emptyEmbeddedSocialState();
 const EMPTY_DRAFT: EmbeddedSocialDraft = { html: '', files: [] };
@@ -61,8 +66,10 @@ export function usePageSocialChannel(context: string | null): void {
 const PAGE_VIEWS: readonly ConversationFeature[] = ['chat', 'pins'];
 
 /** Exactly one workspace announcement. Route surfaces may only read it. */
-function ShellSocialPresence({ onPeople }: { onPeople: (people: ReturnType<typeof presenceAvatarUsers>) => void }) {
-  const { roster } = usePresence(SOCIAL_PRESENCE_CHANNEL, { join: true });
+function ShellSocialPresence({ onPeople, onControls }: { onPeople: (people: ReturnType<typeof presenceAvatarUsers>) => void; onControls: (controls: ShellPresenceControls | null) => void }) {
+  const { roster, setStatus, updateMetadata } = usePresence(SOCIAL_PRESENCE_CHANNEL, { join: true });
+  // The one announcement's writers, for set_status (voice): a status set here is the entry every peer reads.
+  useLayoutEffect(() => { onControls({ setStatus, updateMetadata }); return () => onControls(null); }, [onControls, setStatus, updateMetadata]);
   const people = useMemo(() => presenceAvatarUsers(roster.filter(entry => typeof entry.metadata?.userId === 'string')), [roster]);
   // Every presence frame hands usePresence a new roster array. Mirroring it into
   // the provider from a passive effect made each frame two commits, and a burst
@@ -85,6 +92,7 @@ export function EmbeddedSocialProvider({ children }: { children: ReactNode }) {
   const [controller] = useState(() => new EmbeddedSocialSession(createEmbeddedSocialClient()));
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   const [present, setPresent] = useState<ReturnType<typeof presenceAvatarUsers>>([]);
+  const [presenceControls, setPresenceControls] = useState<ShellPresenceControls | null>(null);
   const [tokenProblem, setTokenProblem] = useState<string | null>(null);
   const [tokenRetry, setTokenRetry] = useState(0);
   const [pageContext, setPageContext] = useState<string | null>(null);
@@ -167,8 +175,8 @@ export function EmbeddedSocialProvider({ children }: { children: ReactNode }) {
     sendToPerson: (userId, text, page) => transportReady ? controller.sendToPerson(userId, text, page) : Promise.resolve(false),
     pageChannel, pageOpen: pageView && state.open,
     openPageChannel: () => { setPageView(true); controller.openMessage(); }, selectPage: setPageView,
-    setPageContext,
-  }), [eligible, current, scope?.userId, snapshot, state, unavailableReason, online.size, presencePeople, controller, transportReady, pageChannel, pageView]);
+    setPageContext, presence: transportReady ? presenceControls : null,
+  }), [eligible, current, scope?.userId, snapshot, state, unavailableReason, online.size, presencePeople, controller, transportReady, pageChannel, pageView, presenceControls]);
   const bind = useCallback((runtime: EmbeddedSocialTransport) => authority && transportReady
     ? controller.bindTransport(authority, runtime) : undefined, [authority, transportReady, controller]);
   const refresh = useCallback(() => { void controller.refresh(); setTokenRetry(value => value + 1); }, [controller]);
@@ -193,7 +201,7 @@ export function EmbeddedSocialProvider({ children }: { children: ReactNode }) {
   </Stack>;
   return <EmbeddedSocialContext.Provider value={value}>
     {children}
-    {transportReady && <ShellSocialPresence key={authority} onPeople={setPresent} />}
+    {transportReady && <ShellSocialPresence key={authority} onPeople={setPresent} onControls={setPresenceControls} />}
     {current && tokenMatches && snapshot && selectedDm && state.selected
       ? <SocialConversation compactCallDock key={`${authority}:${state.selected}`} channel={state.selected} name={dmTitle(selectedDm.peers)}
         {...(selectedDm.peers.length === 1 && selectedDm.peers[0]?.avatarUrl ? { avatarUrl: selectedDm.peers[0].avatarUrl } : {})}
@@ -263,9 +271,7 @@ function SocialEntryRow({ social }: { social: EmbeddedSocialContextValue }) {
         data-testid="shell-social-workspace" />}
     </Inline>
     <Inline gap="xs" align="center" wrap={false} className="border-l border-border pl-3">
-      {social.presencePeople.length > 0 && <Inline gap="none" align="center" className="hidden xl:flex">
-        <PresenceAvatars size={20} maxVisible={4} users={social.presencePeople} />
-      </Inline>}
+      {social.presencePeople.length > 0 && <PresenceRow people={social.presencePeople} />}
       <PresenceDot state={social.onlineCount > 0 ? 'online' : 'offline'} pulse={false} size="sm" />
       {/* Tabular digits: a live count changing (7 → 8 online) must not shift the footer controls after it. */}
       <T size="xs" tone="secondary" tabular className="whitespace-nowrap" data-testid="shell-social-online">{social.onlineCount} online</T>
@@ -282,6 +288,18 @@ function SocialEntryRow({ social }: { social: EmbeddedSocialContextValue }) {
         }} data-testid="shell-social-activity" />
     </Inline>
   </Inline>;
+}
+
+/** The footer's online faces; a status message (statusMessage) shows in the row's tooltip. */
+function PresenceRow({ people }: { people: EmbeddedSocialContextValue['presencePeople'] }) {
+  const lines = presenceStatusLines(people);
+  const row = <Inline gap="none" align="center" className="hidden xl:flex" data-testid="shell-social-presence">
+    <PresenceAvatars size={20} maxVisible={4} users={people} />
+  </Inline>;
+  if (!lines.length) return row;
+  return <Tooltip placement="top" data-testid="shell-social-presence-status" content={<Stack gap="none">
+    {lines.map((line) => <T key={line} size="xs">{line}</T>)}
+  </Stack>}>{row}</Tooltip>;
 }
 
 function EmbeddedSocialPanel({ refresh, latest, pageView }: {

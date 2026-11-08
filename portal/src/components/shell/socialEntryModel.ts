@@ -49,3 +49,12 @@ export function socialActivityPath(tenant: string | null | undefined, hasSocialG
   const base = tenant === 'social' ? '/social' : communicationPath(tenant);
   return base ? `${base}/channels?shelf=activity` : null;
 }
+
+/**
+ * The footer presence tooltip's lines: everyone online with a status message,
+ * "Ana (away): out today". PresenceAvatars' own native title carries only the
+ * name and "Away", so the footer wraps the row in a Tooltip with these.
+ */
+export function presenceStatusLines(people: ReadonlyArray<{ name: string; idle?: boolean; detail?: string }>, max = 6): string[] {
+  return people.filter((p) => p.detail).slice(0, max).map((p) => `${p.name}${p.idle ? ' (away)' : ''}: ${p.detail}`);
+}

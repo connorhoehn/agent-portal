@@ -215,18 +215,22 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Start a cloud computer for one initiative. Reuses a running one. Always ask the user first.",
+    "description": "Start one cloud computer per initiative, reusing one already running. For "each of my active projects", call list_active_initiatives first and pass every id. The user confirms the whole list once.",
     "name": "start_computer",
     "parameters": {
       "additionalProperties": false,
       "properties": {
-        "initiativeId": {
-          "description": "The initiative the computer is for.",
-          "type": "string",
+        "initiativeIds": {
+          "description": "The initiatives: ids from list_active_initiatives or a search, or the names the user said.",
+          "items": {
+            "description": "An initiative id or name.",
+            "type": "string",
+          },
+          "type": "array",
         },
       },
       "required": [
-        "initiativeId",
+        "initiativeIds",
       ],
       "type": "object",
     },
@@ -273,17 +277,21 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
         "phrase": {
           "description": "Which command.",
           "enum": [
-            "git_log_since",
-            "git_status",
-            "git_diff_stat",
-            "ls",
-            "pwd",
-            "run_tests",
+            "latest-commits-since-yesterday",
+            "commits-since",
+            "status",
+            "diff-stat",
+            "list-files",
+            "working-directory",
+            "test",
+            "test-python",
+            "lint",
+            "build",
           ],
           "type": "string",
         },
         "since": {
-          "description": "For git_log_since: a date or "yesterday".",
+          "description": "For commits-since: "yesterday", "today", "3 days ago", "last week" or a YYYY-MM-DD date.",
           "type": [
             "string",
             "null",

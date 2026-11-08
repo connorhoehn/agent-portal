@@ -83,7 +83,7 @@ export const ALLOWED_SERVER_EVENTS: ReadonlyArray<{ type: string; response_event
 ];
 
 /** Keywords left out of a strict schema: the dock enforces them; the probe never sent them under strict. */
-const UNSTRICT_KEYWORDS = new Set(['minLength', 'maxLength', 'minimum', 'maximum']);
+const UNSTRICT_KEYWORDS = new Set(['minLength', 'maxLength', 'minimum', 'maximum', 'minItems', 'maxItems']);
 
 /**
  * A catalogue schema in the strict form Responses function calling takes:
@@ -101,6 +101,9 @@ export function strictSchema(schema: Record<string, unknown>, nullable = false):
     out['properties'] = Object.fromEntries(Object.entries(props).map(([k, v]) => [k, strictSchema(v, !required.has(k))]));
     out['required'] = Object.keys(props);
     out['additionalProperties'] = false;
+  }
+  if (schema['type'] === 'array' && schema['items'] && typeof schema['items'] === 'object') {
+    out['items'] = strictSchema(schema['items'] as Record<string, unknown>);
   }
   if (nullable && typeof out['type'] === 'string') {
     out['type'] = [out['type'], 'null'];
