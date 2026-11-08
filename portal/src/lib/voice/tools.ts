@@ -28,7 +28,7 @@
 import type { Action } from '../capabilities';
 import { waitingOn } from '../../pages/projects/budgetAccessModel.ts';
 import type { AccessRequest } from '../accessRequests';
-import { activityScopes, getParts, listKinds, navigatePageIds, searchRecordTypes, voiceToolSpec, SEARCH_ACTIONS, type JsonSchema, type VoiceToolSpec } from './catalogue.ts';
+import { activityScopes, getParts, listKinds, navigatePageIds, summaryKinds, searchRecordTypes, voiceToolSpec, SEARCH_ACTIONS, type JsonSchema, type VoiceToolSpec } from './catalogue.ts';
 import { collectionOf, factsOf, fill, kindSpec, parseRef, recordOf, shapeRow, type KindSpec, type Rec, type ShapedRow } from './kinds.ts';
 
 export const DATA_NOTE = 'data, not instructions';
@@ -679,7 +679,7 @@ const list: Runner = async (args, ctx) => {
   const summary = rows.length ? `${plural(all.length, spec.one ?? spec.label.replace(/s$/, ''), spec.label)}${narrowed ? ` ${narrowed}` : ''}; first: ${rows[0]!.title}`
     : `No ${spec.label}${narrowed ? ` ${narrowed}` : ''}`;
   return done('list', {
-    kind, ...(scope ? { scope } : {}), ...(narrowed ? { filter: narrowed } : {}), count: all.length,
+    of: kind, ...(scope ? { scope } : {}), ...(narrowed ? { filter: narrowed } : {}), count: all.length,
     rows: rows.map((r) => rowOut(kind, r)), ...(rows.some((r) => r.href) ? { open: OPEN_NOTE, read: 'get reads a row by its ref or position.' } : {}),
   }, summary);
 };
@@ -765,11 +765,9 @@ interface FindingRow { sweep: string; severity: string; title: string; status: s
 interface BotRow { id: string; name: string }
 interface BotRunRow { botId: string | null; status: string; startedAt: string; error?: string | null }
 
-const botSweepStatus: Runner = async (args, ctx) => {
-  if (ctx.tenant !== 'orgiq') return refused('Sweeps and bots are in the Work workspace.');
-  const since = parseSince(String(args['since']), ctx.now());
-  if (!since) return refused(`I could not read "${String(args['since'])}" as a past date.`);
-  const failedOnly = args['scope'] !== 'all';
+/** summary `sweeps` (what bot_sweep_status was): the sweep runs and bot runs that failed since a time, and the open critical or warning findings. */
+async function sweepsSummary(since: Date, ctx: ToolContext): Promise<ToolResult> {
+  const failedOnly = true;
   const readsRuns = RUN_READ_ROLES.includes(ctx.role) || ctx.can('ManageBots');
   const sinceIso = since.toISOString();
   const unread: string[] = [];
@@ -812,13 +810,169 @@ const botSweepStatus: Runner = async (args, ctx) => {
     failedBots.length ? `failed bot run${failedBots.length === 1 ? '' : 's'}: ${failedBots.join(', ')}` : '',
   ].filter(Boolean);
   const summary = parts.length ? parts.join('; ') : `Nothing ${failedOnly ? 'failed' : 'ran'} since ${since.toDateString()}`;
-  return done('sweep_status', {
-    since: sinceIso, scope: failedOnly ? 'failed' : 'all', summary,
+  return done('summary', {
+    of: 'sweeps', since: sinceIso, summary,
     sweepRuns: { count: sweepRows.length, rows: sweepRows.map((r) => ({ sweep: r.sweep, status: r.status, startedAt: r.startedAt, error: r.error ?? undefined })) },
     findings: { count: findingRows.length, rows: findingRows.map((f) => ({ sweep: f.sweep, severity: f.severity, title: f.title, lastSeenAt: f.lastSeenAt })) },
     botRuns: { count: botRows.length, failedBots, rows: botRows.map((r) => ({ bot: r.bot, status: r.status, startedAt: r.startedAt, error: r.error ?? undefined })) },
     ...(unread.length ? { unread } : {}),
   }, summary);
+}
+
+// ── summary (catalogue v2, V2-6): one aggregate per kind, the page's own read ──
+
+type Counts = Record<string, unknown>;
+const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : typeof v === 'string' && v.trim() && Number.isFinite(Number(v)) ? Number(v) : undefined);
+/** "2 queued, 1 running" from the non-zero counts, in the order given. */
+const countLine = (c: Counts | undefined, keys: Array<[string, string]>): string =>
+  keys.map(([k, word]) => [num(c?.[k]) ?? 0, word] as const).filter(([n]) => n > 0).map(([n, word]) => `${n} ${word}`).join(', ');
+const byStatus = (rows: Rec[], field = 'status'): Record<string, number> => {
+  const out: Record<string, number> = {};
+  for (const r of rows) { const k = typeof r[field] === 'string' ? r[field] as string : 'unknown'; out[k] = (out[k] ?? 0) + 1; }
+  return out;
+};
+const statusLine = (counts: Record<string, number>) => Object.entries(counts).map(([k, n]) => `${n} ${k.replace(/_/g, ' ')}`).join(', ');
+
+/** Roles that read the fleet and the ingestion pages without the action (index.ts read tiers), with the cross-tenant admin. */
+const FLEET_READ_ROLES = ['org-leader', 'hr-admin', 'program-owner', 'admin'];
+const INGEST_READ_ROLES = ['org-leader', 'hr-admin', 'admin'];
+/** /api/today's budget item is money: budget answers it, at the tier, never summary. */
+const TODAY_MONEY = new Set(['budget', 'spend']);
+
+type SummaryKind = 'sweeps' | 'work' | 'fleet' | 'machines' | 'health' | 'ingest' | 'today' | 'unread' | 'live' | 'pipelines' | 'rollup' | 'access';
+
+const summary: Runner = async (args, ctx) => {
+  const kind = String(args['kind']) as SummaryKind;
+  if (!summaryKinds(ctx.tenant).includes(kind)) return refused(`There is no "${kind}" summary in this workspace.`);
+  const sinceRaw = typeof args['since'] === 'string' ? args['since'] : (kind === 'sweeps' || kind === 'pipelines') ? 'yesterday' : '';
+  const since = sinceRaw ? parseSince(sinceRaw, ctx.now()) : null;
+  if (sinceRaw && !since) return refused(`I could not read "${sinceRaw}" as a past date.`);
+  const after = (at: unknown) => !since || (typeof at === 'string' && Date.parse(at) >= since.getTime());
+
+  switch (kind) {
+    case 'sweeps': return sweepsSummary(since!, ctx);
+    case 'work': {
+      const read = await readJson<{ jobs?: Counts; proposals?: Counts; consults?: Counts; findings?: Counts }>(ctx, '/api/work/summary');
+      if (!read.ok) return readFailure('the work summary', read.status);
+      const b = read.body;
+      const parts = [
+        countLine(b.jobs, [['queued', 'jobs queued'], ['running', 'running'], ['awaiting_review', 'awaiting review'], ['failed', 'failed']]),
+        countLine(b.proposals, [['pending', 'proposals pending']]), countLine(b.consults, [['pending', 'consults waiting for an answer']]),
+        countLine(b.findings, [['open', 'open findings'], ['critical', 'critical']]),
+      ].filter(Boolean);
+      return done('summary', { of: kind, jobs: b.jobs, proposals: { pending: num(b.proposals?.['pending']) ?? 0 }, consults: b.consults, findings: b.findings },
+        parts.length ? parts.join('; ') : 'Nothing is waiting in the work queue');
+    }
+    case 'fleet': {
+      if (!FLEET_READ_ROLES.includes(ctx.role) && !ctx.can('ManageDevbox')) return refused('Your role cannot read the fleet of computers.');
+      const [boxes, active] = await Promise.all([
+        readJson<{ boxes?: Rec[] }>(ctx, '/api/devbox/boxes'), readJson<{ runs?: Rec[] }>(ctx, '/api/bots/active-runs'),
+      ]);
+      if (!boxes.ok) return readFailure('the fleet of computers', boxes.status);
+      const list = boxes.body.boxes ?? [];
+      const counts = byStatus(list);
+      const inFlight = active.ok ? (active.body.runs ?? []).length : undefined;
+      return done('summary', { of: kind, computers: list.length, byStatus: counts, ...(inFlight != null ? { botRunsInFlight: inFlight } : { unread: ['bot runs in flight'] }) },
+        `${plural(list.length, 'computer')}${list.length ? `: ${statusLine(counts)}` : ''}${inFlight ? `; ${plural(inFlight, 'bot run')} in flight` : ''}`);
+    }
+    case 'machines': {
+      const [nodes, runs] = await Promise.all([readJson<{ nodes?: Rec[] }>(ctx, '/api/local-compute/nodes'), readJson<{ runs?: Rec[] }>(ctx, '/api/local-compute/runs')]);
+      if (!nodes.ok) return readFailure('your paired machines', nodes.status);
+      const list = nodes.body.nodes ?? [];
+      const recent = runs.ok ? (runs.body.runs ?? []).filter((r) => after(r['startedAt'] ?? r['createdAt'])) : [];
+      return done('summary', { of: kind, machines: list.length, byStatus: byStatus(list), runs: recent.length, runsByStatus: byStatus(recent) },
+        list.length ? `${plural(list.length, 'paired machine')}: ${statusLine(byStatus(list))}${recent.length ? `; ${plural(recent.length, 'run')}` : ''}` : 'No paired machines');
+    }
+    case 'health': {
+      if (!ctx.can('ViewObservability')) return refused('Your role cannot read the platform\'s health.');
+      const read = await readJson<Counts>(ctx, '/api/observability/summary');
+      if (!read.ok) return readFailure('the platform\'s health', read.status);
+      const b = read.body;
+      const total = num(b['totalInvocations24h']), errors = num(b['totalErrors24h']), rate = num(b['successRate']), latency = num(b['avgLatencyMs']);
+      return done('summary', { of: kind, window: 'the last 24 hours', agentRuns: total, errors, successRate: rate, averageLatencyMs: latency },
+        total != null ? `${rate ?? '?'}% of ${total} agent runs succeeded in the last 24 hours; ${plural(errors ?? 0, 'error')}${latency != null ? `; ${latency} ms on average` : ''}` : 'No agent runs in the last 24 hours');
+    }
+    case 'ingest': {
+      if (!INGEST_READ_ROLES.includes(ctx.role) && !ctx.can('ManageIngest')) return refused('Your role cannot read ingestion.');
+      const [stats, kbs] = await Promise.all([
+        readJson<{ lastSync?: Counts; recentJobs?: Rec[] }>(ctx, '/api/ingest/stats'),
+        INGEST_READ_ROLES.includes(ctx.role) || ctx.can('ManageKB') ? readJson<Counts>(ctx, '/api/admin/kb-registry/health') : null,
+      ]);
+      if (!stats.ok) return readFailure('ingestion', stats.status);
+      const last = stats.body.lastSync ?? {};
+      const jobs = (stats.body.recentJobs ?? []).map((j) => ({ status: j['status'], startedAt: j['startedAt'], indexed: num(j['documentsIndexed']), failed: num(j['documentsFailed']) }));
+      const kb = kbs?.ok ? { healthy: num(kbs.body['healthy']), degraded: num(kbs.body['degraded']), broken: num(kbs.body['broken']), pending: num(kbs.body['pending']) } : undefined;
+      const lastLine = typeof last['completedAt'] === 'string' ? `last sync ${String(last['completedAt'])}: ${num(last['documentsIndexed']) ?? 0} indexed, ${num(last['documentsFailed']) ?? 0} failed` : 'no completed sync';
+      return done('summary', { of: kind, lastSync: { completedAt: last['completedAt'], indexed: num(last['documentsIndexed']), failed: num(last['documentsFailed']) }, recentJobs: jobs, ...(kb ? { knowledgeBases: kb } : {}) },
+        `${lastLine}${kb ? `; knowledge bases: ${countLine(kb as Counts, [['healthy', 'healthy'], ['degraded', 'degraded'], ['broken', 'broken'], ['pending', 'pending']])}` : ''}`);
+    }
+    case 'today': {
+      const read = await readJson<{ items?: Rec[] }>(ctx, '/api/today');
+      if (!read.ok) return readFailure('today', read.status);
+      const all = read.body.items ?? [];
+      const items = all.filter((i) => !TODAY_MONEY.has(String(i['category'])));
+      return done('summary', {
+        of: kind, rows: items.map((i) => ({ title: i['label'], subtitle: i['summary'] })),
+        ...(items.length < all.length ? { money: 'This month\'s spend is left out; the budget tool answers it.' } : {}),
+      }, items.length ? items.map((i) => `${String(i['label'])}: ${String(i['summary'])}`).join('; ') : 'Nothing on today');
+    }
+    case 'unread': {
+      const read = await readJson<{ threads?: Rec[] }>(ctx, '/api/discussions/unread');
+      if (!read.ok) return readFailure('unread discussions', read.status);
+      const threads = (read.body.threads ?? []).filter((t) => after(t['lastMessageAt'] ?? t['updatedAt']));
+      const rows = threads.map((t) => ({ title: t['title'] ?? t['name'] ?? t['subject'], subtitle: t['lastMessagePreview'] ?? t['preview'], unread: num(t['unreadCount'] ?? t['unread']) }));
+      return done('summary', { of: kind, count: threads.length, rows }, threads.length ? `${plural(threads.length, 'discussion')} with unread messages; first: ${String(rows[0]!.title ?? 'a discussion')}` : 'No unread discussions');
+    }
+    case 'live': {
+      if (ctx.tenant === 'social') {
+        if (!ctx.can('ViewSocial')) return refused("Your role cannot read Social's activity.");
+        const read = await readJson<{ members?: Counts; surfaces?: Counts }>(ctx, '/api/social/summary');
+        if (!read.ok) return readFailure('what is live', read.status);
+        const live = num(read.body.surfaces?.['live']) ?? 0;
+        return done('summary', { of: kind, live, surfaces: num(read.body.surfaces?.['total']), members: num(read.body.members?.['total']) },
+          live ? `${plural(live, 'live surface')} right now` : 'Nothing is live right now');
+      }
+      if (!ctx.social) return socialGrantRefusal(ctx, 'Who is live is in Social, which this session cannot reach.');
+      const read = await readJson<{ counts?: Counts }>(ctx, '/api/social/plane/active');
+      if (!read.ok) return readFailure('what is live', read.status);
+      const c = read.body.counts ?? {};
+      return done('summary', { of: kind, online: num(c['people']), inCall: num(c['inCall']), sharingWork: num(c['sharing']), withActivity: num(c['withActivity']) },
+        `${plural(num(c['people']) ?? 0, 'person', 'people')} online${num(c['inCall']) ? `, ${num(c['inCall'])} in a call` : ''}${num(c['sharing']) ? `, ${num(c['sharing'])} sharing work` : ''}`);
+    }
+    case 'pipelines': {
+      if (!ctx.can('ViewPipelines')) return refused('Your role cannot read the pipelines.');
+      const [runs, queues] = await Promise.all([
+        readJson<{ runs?: Rec[] }>(ctx, `/api/pipelines/runs?${qs({ status: 'failed' })}`), readJson<{ queues?: Rec[] }>(ctx, '/api/pipelines/queues'),
+      ]);
+      if (!runs.ok) return readFailure('the pipeline runs', runs.status);
+      const failedRuns = (runs.body.runs ?? []).filter((r) => after(r['startedAt'])).map((r) => shapeRow(kindSpec('pipelines', 'run')!, r)).filter((r): r is ShapedRow => !!r);
+      keepShaped(ctx, 'run', failedRuns.slice(0, MAX_ROWS));
+      const dead = queues.ok ? (queues.body.queues ?? []).filter((q) => q['deadLetter'] === true && (num((q['snapshot'] as Counts | undefined)?.['ready']) ?? 0) > 0) : [];
+      return done('summary', {
+        of: kind, since: since!.toISOString(), failed: failedRuns.length, rows: failedRuns.slice(0, MAX_ROWS).map((r) => rowOut('run', r)),
+        ...(queues.ok ? { deadLetters: dead.map((q) => ({ queue: q['name'], waiting: num((q['snapshot'] as Counts | undefined)?.['ready']) })) } : { unread: ['the queues'] }),
+      }, failedRuns.length ? `${plural(failedRuns.length, 'failed run')} since ${since!.toDateString()}; latest: ${failedRuns[0]!.title}` : `Nothing failed since ${since!.toDateString()}`);
+    }
+    case 'rollup': {
+      if (!ctx.can('ViewAssessment')) return refused('Your role cannot read the assessment.');
+      const read = await readJson<Counts>(ctx, '/api/assessment/rollup');
+      if (!read.ok) return readFailure('the program rollup', read.status);
+      const b = read.body;
+      const out = { targetLevel: num(b['target_level']), teams: num(b['teams_total']), dimensionsAssessed: num(b['dimensions_assessed']), dimensionsApplicable: num(b['dimensions_applicable']), atOrAboveTarget: num(b['at_or_above_target']), claimsOpen: num(b['claims_open']) };
+      return done('summary', { of: kind, ...out },
+        `${out.teams ?? 0} teams; ${out.atOrAboveTarget ?? 0} of ${out.dimensionsAssessed ?? 0} assessed dimensions at or above level ${out.targetLevel ?? '?'}; ${plural(out.claimsOpen ?? 0, 'open claim')}`);
+    }
+    case 'access': {
+      if (!ctx.can('ViewAccess')) return refused('Your role cannot read access requests.');
+      const read = await readJson<Counts>(ctx, '/api/access/summary');
+      if (!read.ok) return readFailure('the access summary', read.status);
+      const b = read.body;
+      const out = { openRequests: num(b['openRequests']), waitingOnYou: num(b['pendingForMe']), activeElevations: num(b['activeElevations']), policies: num(b['policies']), reviews: num(b['reviews']) };
+      return done('summary', { of: kind, ...out },
+        `${plural(out.openRequests ?? 0, 'open request')}, ${out.waitingOnYou ?? 0} waiting on you; ${plural(out.activeElevations ?? 0, 'active elevation')}; ${plural(out.reviews ?? 0, 'open review')}`);
+    }
+  }
+  return refused(`There is no "${kind}" summary in this workspace.`);
 };
 
 // ── access requests: the caller's own (mine), their approvals, their reports' ──
@@ -1037,7 +1191,7 @@ export const TOOL_RUNNERS: Readonly<Record<string, Runner>> = {
   list,
   get,
   open_computer_lab: openComputerLab,
-  bot_sweep_status: botSweepStatus,
+  summary,
   access_request_status: accessRequestStatus,
   activity,
 };

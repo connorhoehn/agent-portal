@@ -100,7 +100,7 @@ const VARIANTS: Record<string, unknown[]> = {
   start_computer: [{ initiativeIds: ['Unknown Initiative'] }],
   open_shell: [{ computerId: 'unknown-box' }],
   run_command: [{ computerId: 'unknown-box', phrase: 'status' }, { computerId: 'unknown-box', phrase: 'commits-since', since: 'soon' }],
-  bot_sweep_status: [{ since: 'whenever' }, { since: 'yesterday' }],
+  summary: [{ kind: 'sweeps', since: 'whenever' }, { kind: 'sweeps', since: 'yesterday' }, { kind: 'fleet' }, { kind: 'live' }, { kind: 'ingest' }, { kind: 'rollup' }, { kind: 'today' }],
   send_chat_message: [{ target: { kind: 'dm', name: 'Ada' }, text: 'hello' }, { target: { kind: 'team', name: 'nobody' }, text: 'x' }],
   start_call: [{ target: { kind: 'dm', name: 'Ada' } }],
   set_status: [{ status: 'away', message: 'out' }],

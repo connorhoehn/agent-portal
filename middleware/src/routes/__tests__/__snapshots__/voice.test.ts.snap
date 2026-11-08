@@ -424,31 +424,37 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Read the sweep runs, the findings they raised and the failed bot runs since a time, from the backend's sweep and bot records.",
-    "name": "bot_sweep_status",
+    "description": "Read one aggregate of this workspace as a few figures: what failed since a time ("what failed last night", "any issues with the sweeps"), the work queue, the fleet, paired machines, platform health, ingestion, what is on today, unread discussions, who is live, the program rollup or the access summary. The kinds here: sweeps, work, fleet, machines, health, ingest, today, unread, live.",
+    "name": "summary",
     "parameters": {
       "additionalProperties": false,
       "properties": {
-        "scope": {
-          "description": ""failed" (the default): only sweep runs and bot runs that failed, and open critical or warning findings; "all": every run since then.",
+        "kind": {
+          "description": "Which aggregate: "sweeps" (sweep and bot runs that failed, open findings), "work" (the work queue), "fleet" (the computers), "machines" (paired machines), "health" (agent runs in the last 24 hours), "ingest", "today", "unread" (discussions), "live" (who is online, in a call), "pipelines" (failed runs, dead letters), "rollup" (the assessment program), "access".",
           "enum": [
-            "failed",
-            "all",
-            null,
+            "sweeps",
+            "work",
+            "fleet",
+            "machines",
+            "health",
+            "ingest",
+            "today",
+            "unread",
+            "live",
           ],
+          "type": "string",
+        },
+        "since": {
+          "description": "Since when, for sweeps, pipelines, machines and unread: "yesterday", "last night", "today", "this morning", "3 hours ago", "3 days ago", "last week" or a YYYY-MM-DD date; yesterday by default for sweeps and pipelines.",
           "type": [
             "string",
             "null",
           ],
         },
-        "since": {
-          "description": "Since when: "yesterday", "last night", "today", "this morning", "3 hours ago", "3 days ago", "last week" or a YYYY-MM-DD date.",
-          "type": "string",
-        },
       },
       "required": [
+        "kind",
         "since",
-        "scope",
       ],
       "type": "object",
     },

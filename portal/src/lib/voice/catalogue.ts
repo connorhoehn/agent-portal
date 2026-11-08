@@ -140,6 +140,28 @@ export function getParts(tenant: string | null): string[] {
   return [...new Set(Object.values(GET_PARTS).flat())];
 }
 
+/**
+ * What `summary` may read, per tenant (catalogue v2, V2-6): one aggregate
+ * each, through the page's own read. orgiq: the sweeps (what
+ * bot_sweep_status read), the work queue, the fleet of computers, paired
+ * machines, platform health, ingestion, today, unread discussions and who is
+ * live on the plane; Social: live and unread; assessment: the program rollup;
+ * pipelines: what failed and the dead letters; access: its summary.
+ */
+export const SUMMARY_KINDS: Readonly<Record<string, readonly string[]>> = {
+  orgiq: ['sweeps', 'work', 'fleet', 'machines', 'health', 'ingest', 'today', 'unread', 'live'],
+  social: ['live', 'unread'],
+  assessment: ['rollup', 'live', 'unread'],
+  pipelines: ['pipelines', 'live', 'unread'],
+  access: ['access', 'unread'],
+};
+
+/** `summary`'s kind enum for one tenant, or every tenant's kinds (null). */
+export function summaryKinds(tenant: string | null): string[] {
+  if (tenant != null) return [...(SUMMARY_KINDS[tenant] ?? [])];
+  return [...new Set(Object.values(SUMMARY_KINDS).flat())];
+}
+
 /** `activity`'s scope enum for one tenant, or every tenant's scopes (null) for the base row. */
 export function activityScopes(tenant: string | null): string[] {
   if (tenant != null) return [...(ACTIVITY_SCOPES[tenant] ?? [])];
@@ -176,7 +198,7 @@ export const RUN_COMMAND_PHRASES = [
 ] as const;
 export type RunCommandPhrase = typeof RUN_COMMAND_PHRASES[number];
 
-/** What `since` takes (run_command's commits-since, bot_sweep_status); parseSince and gitSince read exactly these. */
+/** What `since` takes (run_command's commits-since, list, summary, activity); parseSince and gitSince read exactly these. */
 const SINCE_WORDS = '"yesterday", "last night", "today", "this morning", "3 hours ago", "3 days ago", "last week" or a YYYY-MM-DD date';
 
 const obj = (properties: Record<string, JsonSchema>, required: string[] = []): JsonSchema =>
@@ -270,12 +292,12 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
     kind: 'machine', backing: 'work', confirm: true, action: 'OpenDevboxShell', says: 'Running git log on Alpha.', tenants: ['orgiq'],
   },
   {
-    name: 'bot_sweep_status',
+    name: 'summary',
     parameters: obj({
-      since: str(`Since when: ${SINCE_WORDS}.`, { minLength: 1, maxLength: 40 }),
-      scope: str('"failed" (the default): only sweep runs and bot runs that failed, and open critical or warning findings; "all": every run since then.', { enum: ['failed', 'all'] }),
-    }, ['since']),
-    kind: 'read', backing: 'search', confirm: false, action: null, says: 'Checking the sweeps since yesterday.', tenants: ['orgiq'],
+      kind: str('Which aggregate: "sweeps" (sweep and bot runs that failed, open findings), "work" (the work queue), "fleet" (the computers), "machines" (paired machines), "health" (agent runs in the last 24 hours), "ingest", "today", "unread" (discussions), "live" (who is online, in a call), "pipelines" (failed runs, dead letters), "rollup" (the assessment program), "access".', { enum: summaryKinds(null) }),
+      since: str(`Since when, for sweeps, pipelines, machines and unread: ${SINCE_WORDS}; yesterday by default for sweeps and pipelines.`, { minLength: 1, maxLength: 40 }),
+    }, ['kind']),
+    kind: 'read', backing: 'search', confirm: false, action: null, says: 'Checking the sweeps since yesterday.', tenants: VOICE_TENANTS,
   },
   {
     name: 'activity',

@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import {
   VOICE_TOOLS, INTERNAL_TOOLS, NAVIGATE_PAGES, RUN_COMMAND_PHRASES, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, toolsForTenant, responsesFunctionTools,
   voiceInstructions, delegationInstructions, hashToolArgs, voiceTool, searchRecordTypes, MOCK_CALLS, VOICE_TENANTS, mockCallFor, activityScopes,
-  QUEUE_WORK_ACTIONS, QUEUE_WORK_KINDS, queueWorkKinds, LIST_KINDS, listKinds, getParts,
+  QUEUE_WORK_ACTIONS, QUEUE_WORK_KINDS, queueWorkKinds, LIST_KINDS, listKinds, getParts, summaryKinds,
 } from '../catalogue.js';
 import { SEARCH_TYPES } from '../../../providers/search.js';
 import { tenantSpec } from '../../search-index/tenants.js';
@@ -36,7 +36,7 @@ const SPEC: Record<string, [string, boolean, string]> = {
   start_computer: ['machine', true, 'work'],
   open_shell: ['machine', false, 'route'],
   run_command: ['machine', true, 'work'],
-  bot_sweep_status: ['read', false, 'search'],
+  summary: ['read', false, 'search'],
   send_chat_message: ['people', true, 'social-activity'],
   start_call: ['people', true, 'social-activity'],
   set_status: ['people', false, 'social-activity'],
@@ -92,7 +92,8 @@ describe('the §4 catalogue', () => {
     ok('list', { kind: 'run', filter: { status: 'failed', since: 'last night' }, limit: 10 });
     ok('get', { ref: 'initiative:p-12', part: 'work' });
     ok('get', { ref: '2' });
-    ok('bot_sweep_status', { since: 'yesterday', scope: 'failed' });
+    ok('summary', { kind: 'sweeps', since: 'yesterday' });
+    ok('summary', { kind: 'health' });
     ok('run_command', { computerId: 'box-1', phrase: 'commits-since', since: 'yesterday' });
     ok('start_computer', { initiativeIds: ['p1', 'Alpha'] });
     ok('send_chat_message', { target: { kind: 'team', name: 'platform' }, text: "I'm out today" });
@@ -122,7 +123,7 @@ describe('the §4 catalogue', () => {
 
 describe('tenant scoping (§6)', () => {
   it('a social session is offered navigate, its search, its activity, chat, a call, status and its own requests, nothing on machines', () => {
-    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'activity', 'get', 'list', 'navigate', 'open_result', 'search', 'send_chat_message', 'set_status', 'start_call']);
+    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'activity', 'get', 'list', 'navigate', 'open_result', 'search', 'send_chat_message', 'set_status', 'start_call', 'summary']);
   });
 
   it('start_call is offered in orgiq and social only, asks first, and gates on StartCall (G7)', () => {
@@ -170,7 +171,7 @@ describe('tenant scoping (§6)', () => {
 
   it.each(['assessment', 'pipelines', 'access'])('%s is offered reads and navigation only: nothing that touches a machine or posts (gaps doc Q1); pipelines adds queue_work (G19)', (tenant) => {
     const tools = toolsForTenant(tenant).filter((t) => t.name !== 'queue_work');
-    expect(tools.map((t) => t.name).sort()).toEqual(['access_request_status', 'get', 'list', 'navigate', 'open_result', 'search']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['access_request_status', 'get', 'list', 'navigate', 'open_result', 'search', 'summary']);
     expect(toolsForTenant(tenant).some((t) => t.name === 'queue_work')).toBe(tenant === 'pipelines');
     for (const t of tools) {
       expect(['read', 'navigate']).toContain(t.kind);
@@ -268,6 +269,19 @@ describe('tenant scoping (§6)', () => {
     expect(mockCallFor('pipelines', 'author').arguments).toMatchObject({ kind: 'run', filter: { status: 'failed' } });
     expect(mockCallFor('assessment', 'lead-assessor').arguments).toMatchObject({ kind: 'team' });
     expect(mockCallFor('social', 'community-admin').arguments).toMatchObject({ kind: 'channel' });
+  });
+
+  it('summary (V2-6) offers each tenant its own aggregates; "what failed last night" is sweeps in orgiq and pipelines in Pipelines', () => {
+    for (const tenant of VOICE_TENANTS) {
+      const t = toolsForTenant(tenant).find((x) => x.name === 'summary')!;
+      expect((t.parameters.properties['kind'] as { enum: string[] }).enum).toEqual(summaryKinds(tenant));
+    }
+    expect(summaryKinds('orgiq')).toEqual(expect.arrayContaining(['sweeps', 'health', 'fleet', 'today']));
+    expect(summaryKinds('pipelines')).toContain('pipelines');
+    expect(summaryKinds('social')).not.toContain('sweeps');
+    expect(mockCallFor('orgiq', 'org-leader')).toMatchObject({ name: 'summary', arguments: { kind: 'sweeps' } });
+    expect(mockCallFor('orgiq', 'hr-admin')).toMatchObject({ name: 'summary', arguments: { kind: 'health' } });
+    expect(mockCallFor('pipelines', 'pipeline-admin')).toMatchObject({ name: 'summary', arguments: { kind: 'pipelines', since: 'last night' } });
   });
 
   it('a tenant that holds no voice grant gets no tools', () => {

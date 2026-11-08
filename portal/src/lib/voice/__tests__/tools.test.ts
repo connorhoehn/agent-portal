@@ -21,7 +21,14 @@ const P3_REFUSALS: Array<{ tool: string; args: Record<string, unknown>; ctx: Par
   { tool: 'get', args: { ref: 'Alpha' }, ctx: {} },
   { tool: 'get', args: { ref: 'initiative:p1', part: 'steps' }, ctx: {} },
   { tool: 'get', args: { ref: 'person:p-9' }, ctx: { deny: ['ViewOrgChart'] } },
-  { tool: 'bot_sweep_status', args: { since: 'yesterday' }, ctx: { tenant: 'social' } },
+  { tool: 'summary', args: { kind: 'sweeps', since: 'yesterday' }, ctx: { tenant: 'social' } },
+  { tool: 'summary', args: { kind: 'sweeps', since: 'next tuesday' }, ctx: {} },
+  { tool: 'summary', args: { kind: 'fleet' }, ctx: { role: 'member', deny: ['ManageDevbox'] } },
+  { tool: 'summary', args: { kind: 'health' }, ctx: { deny: ['ViewObservability'] } },
+  { tool: 'summary', args: { kind: 'ingest' }, ctx: { role: 'sme', deny: ['ManageIngest'] } },
+  { tool: 'summary', args: { kind: 'live' }, ctx: { tenant: 'pipelines', social: null } },
+  { tool: 'summary', args: { kind: 'pipelines' }, ctx: { tenant: 'pipelines', deny: ['ViewPipelines'] } },
+  { tool: 'summary', args: { kind: 'rollup' }, ctx: { tenant: 'access' } },
   { tool: 'access_request_status', args: { query: 'budgets' }, ctx: { tenant: 'access', deny: ['ViewAccess'] } },
   { tool: 'access_request_status', args: { scope: 'approvals' }, ctx: { tenant: 'access', role: 'requester', allow: ['ViewAccess', 'RequestAccess'] } },
   { tool: 'access_request_status', args: { scope: 'approvals' }, ctx: { tenant: 'orgiq' } },
@@ -357,31 +364,76 @@ function sweepFixtures(opts: { failedBot?: boolean; findingAt?: string; failedSw
   ]);
 }
 
-test('bot_sweep_status answers "nothing since yesterday" from only older findings and no failed runs', async () => {
+test('summary sweeps answers "nothing since yesterday" from only older findings and no failed runs', async () => {
   const { fetch, log } = sweepFixtures({});
-  const r = await runVoiceTool('bot_sweep_status', '{"since":"yesterday","scope":null}', toolContext({ fetch, role: 'org-leader', now: () => NOW }));
+  const r = await runVoiceTool('summary', '{"kind":"sweeps","since":null}', toolContext({ fetch, role: 'org-leader', now: () => NOW }));
   assert.equal(r.outcome, 'done');
   assert.match(String(r.output['summary']), /^Nothing failed since/);
   assert.match(log.find((l) => l.url.startsWith('/api/work/sweeps/runs'))!.url, /status=failed/);
   assert.equal((r.output['botRuns'] as { count: number }).count, 0);
 });
 
-test('bot_sweep_status names the failed bot, the failed sweep and the new finding', async () => {
+test('summary sweeps names the failed bot, the failed sweep and the new finding', async () => {
   const { fetch } = sweepFixtures({ failedBot: true, failedSweep: true, findingAt: recent });
-  const r = await runVoiceTool('bot_sweep_status', { since: 'yesterday' }, toolContext({ fetch, role: 'program-owner', now: () => NOW }));
+  const r = await runVoiceTool('summary', { kind: 'sweeps', since: 'yesterday' }, toolContext({ fetch, role: 'program-owner', now: () => NOW }));
   assert.match(r.summary, /Docs freshness bot/);
   assert.doesNotMatch(r.summary, /Old bot/);
   assert.match(r.summary, /1 failed sweep run/);
   assert.match(r.summary, /1 open finding/);
 });
 
-test('bot_sweep_status for a role without the run history reads findings only and says so', async () => {
+test('summary sweeps for a role without the run history reads findings only and says so', async () => {
   const { fetch, log } = sweepFixtures({ failedBot: true });
-  const r = await runVoiceTool('bot_sweep_status', { since: 'yesterday' }, toolContext({ fetch, role: 'member', deny: ['ManageBots'], now: () => NOW }));
+  const r = await runVoiceTool('summary', { kind: 'sweeps', since: 'yesterday' }, toolContext({ fetch, role: 'member', deny: ['ManageBots'], now: () => NOW }));
   assert.equal(r.outcome, 'done');
   assert.deepEqual(log.map((l) => l.url.split('?')[0]), ['/api/work/findings']);
   assert.ok((r.output['unread'] as string[])[0]!.includes('your role cannot read it'));
-  assert.equal((await runVoiceTool('bot_sweep_status', { since: 'next tuesday' }, toolContext({ fetch, now: () => NOW }))).outcome, 'refused');
+  assert.equal((await runVoiceTool('summary', { kind: 'sweeps', since: 'next tuesday' }, toolContext({ fetch, now: () => NOW }))).outcome, 'refused');
+});
+
+test('summary pipelines answers "what failed last night" from the failed runs since then, keeps them, and names dead letters', async () => {
+  const { fetch, log } = fakeFetch([
+    route('GET', '/api/pipelines/runs', 200, { runs: [
+      { id: 'run-9', definitionId: 'runbook:nightly-ingest', status: 'failed', startedAt: recent },
+      { id: 'run-1', definitionId: 'runbook:old', status: 'failed', startedAt: old },
+    ] }),
+    route('GET', '/api/pipelines/queues', 200, { queues: [{ name: 'agent-work-dlq', deadLetter: true, snapshot: { ready: 2 } }, { name: 'agent-work', deadLetter: false, snapshot: { ready: 9 } }] }),
+  ]);
+  const results = new ResultMemory();
+  const r = await runVoiceTool('summary', { kind: 'pipelines', since: 'last night' }, toolContext({ fetch, tenant: 'pipelines', role: 'operator', allow: ['ViewPipelines'], now: () => NOW, results }));
+  assert.equal(r.outcome, 'done');
+  assert.deepEqual(log.map((l) => l.url), ['/api/pipelines/runs?status=failed', '/api/pipelines/queues']);
+  assert.equal(r.output['failed'], 1);
+  assert.match(r.summary, /^1 failed run since .*; latest: runbook:nightly-ingest$/);
+  assert.deepEqual(r.output['deadLetters'], [{ queue: 'agent-work-dlq', waiting: 2 }]);
+  assert.equal(results.find('1')!.href, '/pipelines/runs/run-9', '"open the first one"');
+});
+
+test('summary: health, work, today (money left to budget), rollup, access and live, each from its page\'s own read', async () => {
+  const cases: Array<{ tenant: string; kind: string; prefix: string; body: unknown; summary: RegExp; ctx?: Parameters<typeof toolContext>[0]; absent?: RegExp }> = [
+    { tenant: 'orgiq', kind: 'health', prefix: '/api/observability/summary', body: { totalInvocations24h: 335, totalErrors24h: 14, successRate: '95.8', avgLatencyMs: 1347 },
+      summary: /^95\.8% of 335 agent runs succeeded in the last 24 hours; 14 errors; 1347 ms on average$/ },
+    { tenant: 'orgiq', kind: 'work', prefix: '/api/work/summary', body: { jobs: { queued: 2, running: 1, failed: 8 }, proposals: { pending: 2 }, consults: { pending: 1 }, findings: { open: 5, critical: 0 } },
+      summary: /^2 jobs queued, 1 running, 8 failed; 2 proposals pending; 1 consults waiting for an answer; 5 open findings$/ },
+    { tenant: 'orgiq', kind: 'today', prefix: '/api/today', body: { items: [{ category: 'review', label: 'Needs review', summary: '1 agent question waiting' }, { category: 'budget', label: 'Budget', summary: '$22.65 of $431.00 spent this month (5%)' }] },
+      summary: /^Needs review: 1 agent question waiting$/, absent: /\$|431/ },
+    { tenant: 'assessment', kind: 'rollup', prefix: '/api/assessment/rollup', body: { target_level: 3, teams_total: 7, dimensions_assessed: 55, at_or_above_target: 35, claims_open: 28 },
+      summary: /^7 teams; 35 of 55 assessed dimensions at or above level 3; 28 open claims$/ },
+    { tenant: 'access', kind: 'access', prefix: '/api/access/summary', body: { openRequests: 2, pendingForMe: 1, activeElevations: 0, policies: 4, reviews: 1 },
+      summary: /^2 open requests, 1 waiting on you; 0 active elevations; 1 open review$/ },
+    { tenant: 'pipelines', kind: 'live', prefix: '/api/social/plane/active', body: { counts: { people: 17, inCall: 2, sharing: 0 } }, summary: /^17 people online, 2 in a call$/,
+      ctx: { social: { api: '/api/social/plane', unavailable: null, send: async () => {}, presence: null, deliveries: new Map() } } },
+  ];
+  for (const k of cases) {
+    const { fetch, log } = fakeFetch([route('GET', k.prefix, 200, k.body)]);
+    const r = await runVoiceTool('summary', { kind: k.kind }, toolContext({ fetch, tenant: k.tenant, role: 'org-leader', ...(k.ctx ?? {}) }));
+    assert.equal(r.outcome, 'done', k.kind);
+    assert.deepEqual(log.map((l) => l.url), [k.prefix], k.kind);
+    assert.match(r.summary, k.summary, k.kind);
+    if (k.absent) assert.doesNotMatch(JSON.stringify(r.output) + r.summary, k.absent, `${k.kind} carries no money`);
+  }
+  // A kind another tenant has is refused before the network.
+  assert.equal((await runVoiceTool('summary', { kind: 'pipelines' }, toolContext())).outcome, 'refused');
 });
 
 test('parseSince reads yesterday as local midnight and refuses the future', () => {
@@ -486,7 +538,7 @@ test('property: no tool result carries a string over 120 characters or a list ov
   ]);
   const calls: Array<[string, Record<string, unknown>]> = [
     ['search', { query: 'k', type: 'person', limit: 10 }], ['search', { query: 'k', limit: 10 }], ['list', { kind: 'initiative', filter: { scope: 'all' }, limit: 10 }],
-    ['bot_sweep_status', { since: 'yesterday', scope: 'all' }], ['access_request_status', { query: 'alpha' }], ['navigate', { page: 'search', params: { q: huge.slice(0, 900) } }],
+    ['summary', { kind: 'sweeps', since: 'yesterday' }], ['access_request_status', { query: 'alpha' }], ['navigate', { page: 'search', params: { q: huge.slice(0, 900) } }],
   ];
   const walk = (v: unknown, path: string): void => {
     if (typeof v === 'string') assert.ok(v.length <= MAX_FIELD_CHARS, `${path} is ${v.length} characters`);

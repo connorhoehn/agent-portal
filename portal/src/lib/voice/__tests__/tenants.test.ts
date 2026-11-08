@@ -206,3 +206,27 @@ test('the V2-5 scripted sessions list access requests, pipeline runs, assessment
     assert.equal(run.summaries[0], r.summary, r.tenant);
   }
 });
+
+test('the V2-6 scripted sessions: an org leader asks about the sweeps, a pipeline admin what failed last night, an HR admin whether the fleet is healthy', async () => {
+  const { mockCallFor } = await middlewareVoice<{ mockCallFor: (t: string, r: string) => Call }>('catalogue.ts');
+  const runs = [
+    { tenant: 'orgiq', role: 'org-leader', allow: ['Search', 'ManageBots', 'VoiceNavigate'] as Action[], routes: [
+      route('GET', '/api/work/sweeps/runs', 200, { runs: [{ sweep: 'stale_docs', status: 'failed', startedAt: '2026-11-08T08:00:00Z', error: 'timeout', findings: null }] }),
+      route('GET', '/api/work/findings', 200, { findings: [] }), route('GET', '/api/bots/runs', 200, { runs: [] }), route('GET', '/api/bots', 200, { bots: [{ id: 'b1', name: 'Docs bot' }] })],
+      summary: /^1 failed sweep run$/ },
+    { tenant: 'pipelines', role: 'pipeline-admin', allow: ['ViewPipelines', 'VoiceNavigate'] as Action[], routes: [
+      route('GET', '/api/pipelines/runs', 200, { runs: [{ id: 'run-9', definitionId: 'runbook:nightly', status: 'failed', startedAt: '2026-11-08T02:00:00Z' }] }),
+      route('GET', '/api/pipelines/queues', 200, { queues: [] })],
+      summary: /^1 failed run since .*; latest: runbook:nightly$/ },
+    { tenant: 'orgiq', role: 'hr-admin', allow: ['ViewObservability', 'VoiceNavigate'] as Action[], routes: [
+      route('GET', '/api/observability/summary', 200, { totalInvocations24h: 10, totalErrors24h: 1, successRate: '90.0', avgLatencyMs: 800 })],
+      summary: /^90% of 10 agent runs succeeded/ },
+  ];
+  for (const r of runs) {
+    const call = mockCallFor(r.tenant, r.role);
+    assert.equal(call.name, 'summary', r.role);
+    const run = await scriptedRun(r.tenant, { role: r.role, allow: r.allow, call, routes: r.routes });
+    assert.deepEqual(run.calls, [['summary', 'done']], r.role);
+    assert.match(run.summaries[0]!, r.summary, r.role);
+  }
+});

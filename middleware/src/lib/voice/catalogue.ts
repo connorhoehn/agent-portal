@@ -177,7 +177,7 @@ export function runCommandPhrases(prefixes: readonly string[]): RunCommandPhrase
   return RUN_COMMAND_PHRASES.filter((p) => commandAllowedBy(prefixes, RUN_COMMAND_PHRASE_COMMANDS[p]));
 }
 
-/** What `since` takes (run_command's commits-since, bot_sweep_status); the dock's parsers read exactly these. */
+/** What `since` takes (run_command's commits-since, list, summary, activity); the dock's parsers read exactly these. */
 const SINCE_WORDS = '"yesterday", "last night", "today", "this morning", "3 hours ago", "3 days ago", "last week" or a YYYY-MM-DD date';
 
 const obj = (properties: Record<string, unknown>, required: string[] = []): JsonSchemaObject =>
@@ -265,6 +265,28 @@ export function listKinds(tenant: string | null): string[] {
 export function getParts(tenant: string | null): string[] {
   if (tenant != null) return [...(GET_PARTS[tenant] ?? [])];
   return [...new Set(Object.values(GET_PARTS).flat())];
+}
+
+/**
+ * What `summary` may read, per tenant (catalogue v2, V2-6): one aggregate
+ * each, through the page's own read. orgiq: the sweeps (what
+ * bot_sweep_status read), the work queue, the fleet of computers, paired
+ * machines, platform health, ingestion, today, unread discussions and who is
+ * live on the plane; Social: live and unread; assessment: the program rollup;
+ * pipelines: what failed and the dead letters; access: its summary.
+ */
+export const SUMMARY_KINDS: Readonly<Record<string, readonly string[]>> = {
+  orgiq: ['sweeps', 'work', 'fleet', 'machines', 'health', 'ingest', 'today', 'unread', 'live'],
+  social: ['live', 'unread'],
+  assessment: ['rollup', 'live', 'unread'],
+  pipelines: ['pipelines', 'live', 'unread'],
+  access: ['access', 'unread'],
+};
+
+/** `summary`'s kind enum for one tenant, or every tenant's kinds (null). */
+export function summaryKinds(tenant: string | null): string[] {
+  if (tenant != null) return [...(SUMMARY_KINDS[tenant] ?? [])];
+  return [...new Set(Object.values(SUMMARY_KINDS).flat())];
 }
 
 /** `activity`'s scope enum for one tenant, or every tenant's scopes (null) for the catalogue's base row. */
@@ -418,15 +440,17 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     mapsTo: "POST /api/devbox/:sessionId/command { command, mode: 'safe', cwd }",
   },
   {
-    name: 'bot_sweep_status',
-    description: 'Read the sweep runs, the findings they raised and the failed bot runs since a time, from the backend\'s sweep and bot records.',
+    name: 'summary',
+    // toolsForTenant names the tenant's own kinds in the description it renders.
+    description: 'Read one aggregate of this workspace as a few figures: what failed since a time ("what failed last night", "any issues with the sweeps"), the work queue, the fleet, paired machines, platform health, ingestion, what is on today, unread discussions, who is live, the program rollup or the access summary.',
     parameters: obj({
-      since: str(`Since when: ${SINCE_WORDS}.`, { minLength: 1, maxLength: 40 }),
-      scope: str('"failed" (the default): only sweep runs and bot runs that failed, and open critical or warning findings; "all": every run since then.', { enum: ['failed', 'all'] }),
-    }, ['since']),
-    kind: 'read', backing: 'search', confirm: false, action: null, gate: 'ViewWork floor, ActiveRuns, the bots read gate', spend: 'none', idempotent: true,
-    says: 'Checking the sweeps since yesterday.', tenants: ['orgiq'],
-    mapsTo: 'GET /api/work/sweeps/runs?since=&status=failed|all (P5), GET /api/work/findings, GET /api/bots/active-runs, GET /api/bots/runs?botIds=',
+      kind: str('Which aggregate: "sweeps" (sweep and bot runs that failed, open findings), "work" (the work queue), "fleet" (the computers), "machines" (paired machines), "health" (agent runs in the last 24 hours), "ingest", "today", "unread" (discussions), "live" (who is online, in a call), "pipelines" (failed runs, dead letters), "rollup" (the assessment program), "access".', { enum: summaryKinds(null) }),
+      since: str(`Since when, for sweeps, pipelines, machines and unread: ${SINCE_WORDS}; yesterday by default for sweeps and pipelines.`, { minLength: 1, maxLength: 40 }),
+    }, ['kind']),
+    kind: 'read', backing: 'search', confirm: false, action: null,
+    gate: 'per kind, the page\'s own gate: sweeps the ViewWork floor and the run history\'s read tier else ManageBots; fleet the devbox read tier else ManageDevbox; health ViewObservability; ingest the read tier else ManageIngest / ManageKB; live the Social grant; pipelines ViewPipelines; rollup ViewAssessment; access ViewAccess; the rest a session floor', spend: 'none', idempotent: true,
+    says: 'Checking the sweeps since yesterday.', tenants: VOICE_TENANTS,
+    mapsTo: 'GET /api/work/sweeps/runs, GET /api/work/findings, GET /api/bots, GET /api/bots/runs, GET /api/work/summary, GET /api/devbox/boxes, GET /api/bots/active-runs, GET /api/local-compute/nodes, GET /api/local-compute/runs, GET /api/observability/summary, GET /api/ingest/stats, GET /api/admin/kb-registry/health, GET /api/today, GET /api/discussions/unread, GET /api/social/plane/active, GET /api/social/summary, GET /api/pipelines/runs, GET /api/pipelines/queues, GET /api/assessment/rollup, GET /api/access/summary',
   },
   {
     name: 'activity',
@@ -532,6 +556,11 @@ export const MOCK_CALLS: Readonly<Record<string, { name: string; arguments: Reco
   'pipelines/author': { name: 'list', arguments: { kind: 'run', filter: { q: null, status: 'failed', scope: null, since: null }, limit: null }, said: 'List the failed runs.' },
   'social/community-admin': { name: 'list', arguments: { kind: 'channel', filter: null, limit: null }, said: 'Which channels are there?' },
   'access/requester': { name: 'list', arguments: { kind: 'request', filter: { q: null, status: null, scope: 'mine', since: null }, limit: null }, said: 'List my access requests.' },
+  // V2-6: the aggregates. An org leader asks about the sweeps, an HR admin whether the fleet is healthy, a pipeline admin what failed.
+  'orgiq/org-leader': { name: 'summary', arguments: { kind: 'sweeps', since: 'yesterday' }, said: 'Any issues with the sweeps since yesterday?' },
+  'orgiq/hr-admin': { name: 'summary', arguments: { kind: 'health', since: null }, said: 'Is the fleet healthy?' },
+  'pipelines/pipeline-admin': { name: 'summary', arguments: { kind: 'pipelines', since: 'last night' }, said: 'What failed last night?' },
+  'assessment/program-lead': { name: 'summary', arguments: { kind: 'rollup', since: null }, said: 'How is the program doing?' },
   // G19: a program owner queues the nightly sweep; under dev:mock the job is paced queued, running, done (lib/sweep-jobs.ts).
   'orgiq/program-owner': { name: 'queue_work', arguments: { kind: 'sweep', target: 'nightly sweep', note: null }, said: 'Run the nightly sweep now.' },
 };
@@ -580,6 +609,10 @@ export function toolsForTenant(tenant: string, opts: { commandAllowlist?: readon
       return kinds.length ? [withEnum(t, 'kind', kinds, `${t.description} The kinds here: ${kinds.join(', ')}.`)] : [];
     }
     if (t.name === 'get') return [withEnum(t, 'part', getParts(tenant))];
+    if (t.name === 'summary') {
+      const kinds = summaryKinds(tenant);
+      return kinds.length ? [withEnum(t, 'kind', kinds, `${t.description} The kinds here: ${kinds.join(', ')}.`)] : [];
+    }
     if (t.name === 'queue_work') {
       const kinds = queueWorkKinds(tenant);
       return kinds.length ? [withEnum(t, 'kind', kinds)] : [];
