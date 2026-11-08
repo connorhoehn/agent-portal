@@ -15,7 +15,7 @@ concurrency:
 jobs:
   middleware:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 120
     defaults:
       run:
         working-directory: middleware
@@ -54,6 +54,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
       - name: Test
+        env:
+          # 25% of a hosted runner is one worker and the suite overran 45 minutes.
+          JEST_MAX_WORKERS: '3'
         run: npm test
   infra:
     runs-on: ubuntu-latest
