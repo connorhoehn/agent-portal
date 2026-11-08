@@ -136,6 +136,8 @@ Verdicts: **fine** (closed, or explicit opt-in), **needs a flag** (open path mus
 | event-catalog | production without auth fails to boot; queue secret without auth fails to boot; CORS off; short tokens rejected | `startServer({ insecure })` from the helper replaces `NODE_ENV === 'production'` at `index.ts:422`; `HOST` default `127.0.0.1` |
 | ui-components | n/a (React library) | none for this convention; replace `innerHTML` in `SharedTextEditor.tsx:36,50` with text as realtime-modules did in 0.146.0 |
 
+aws-agentcore: done 2026-11-07, commits f3a90e18 (middleware, service-runtime 0.7.3) and 37387e74 (launchers, images, infra test). All 17 cases in `fail-closed-startup.test.ts` are plain tests. Not done from that row: `gateway/env.ts` brakes stay off in production (a plain test pins it), the agents' `SERVICE_AUTH_LEGACY_HEADERS` default (agents/ was out of scope), and no `assertDevShortcutAllowed` boot gate (production `AUTH_DEMO_MODE=true` stays a pinned opt-in). Deliberate differences: `demoModeEnabled` is `AUTH_DEMO_MODE==='true' || insecureDevMode()`, and the ECS task gets no body-only `accept` because it sets no internal-router secret.
+
 ## 3. First instance: the middleware's fail-closed test
 
 `middleware/src/lib/__tests__/fail-closed-startup.test.ts` (new, 290 lines, source untouched). Every test starts with

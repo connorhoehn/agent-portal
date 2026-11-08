@@ -384,7 +384,7 @@ Spend is charged to the actor's budget when no initiative is known; group DMs an
 ### Still open, in order
 
 1. **Deploy.** Nothing here has run in AWS. The migration order is in `infra/SECURITY-NOTES.md`; the first deploy needs `-c kbMasterSecret=true`, `apply_all_seed.py --roles-only`, a certificate or `-c allowHttpOrigin=true`, and the Helm placeholders filled in.
-2. **Fail-open leftovers.** The 17 `test.failing` cases in `middleware/src/lib/__tests__/fail-closed-startup.test.ts` are the middleware defaults that still open on a bare `NODE_ENV` check. The convention to adopt is the `INSECURE_DEV_MODE` helper described in `docs/fail-open-audit.md`.
+2. **Fail-open leftovers: closed** (2026-11-07, f3a90e18). Only `INSECURE_DEV_MODE=true` opens a middleware security default now; the 17 former `test.failing` cases in `middleware/src/lib/__tests__/fail-closed-startup.test.ts` pass as plain tests, and `docs/fail-open-audit.md` §2 lists what that row left open.
 3. **Agent runtime usage.** Chat spend rows carry an unknown cost until `agents/_shared/agui_stream.py` emits token usage.
 4. **Devbox box reuse.** Package 15's microVM runner is designed, not built.
 5. **CI.** No workflows were added (GitHub access was out of scope); actions in the four repos with workflows are pinned by tag.
