@@ -11,7 +11,7 @@ import {
 } from '../actions.ts';
 import { RUN_COMMAND_PHRASES } from '../catalogue.ts';
 import {
-  MAX_FIELD_CHARS, MAX_ROWS, planPreparedCall, prepareToolCall, runPreparedCall,
+  MAX_FIELD_CHARS, MAX_ROWS, needsConfirm, planPreparedCall, prepareToolCall, runPreparedCall,
   type CallAccess, type CommandEvent, type CommandOutputView, type ComputeAccess, type DeliveryRecord, type SocialAccess, type ToolResult, type VoiceComputer,
 } from '../tools.ts';
 import { presenceAvatarUsers } from '../../../pages/assessment/knowledge/knowledgeFormat.ts';
@@ -29,14 +29,16 @@ const BOXES: VoiceComputer[] = [
   { id: 'c-laptop', label: 'my laptop', sessionId: SID('l'), status: 'idle', kind: 'local' },
 ];
 
-interface FakeCompute extends ComputeAccess { created: Array<{ label?: string; projectId?: string }>; shells: unknown[]; commands: Array<{ sessionId: string; body: unknown }> }
-function fakeCompute(opts: { canManage?: boolean; stream?: CommandEvent[]; fail?: string; computers?: VoiceComputer[] } = {}): FakeCompute {
+interface FakeCompute extends ComputeAccess { created: Array<{ label?: string; projectId?: string }>; shells: unknown[]; commands: Array<{ sessionId: string; body: unknown }>; removed: string[] }
+function fakeCompute(opts: { canManage?: boolean; stream?: CommandEvent[]; fail?: string; computers?: VoiceComputer[]; removeFails?: string } = {}): FakeCompute {
   const created: FakeCompute['created'] = [];
+  const removed: string[] = [];
   const shells: unknown[] = [];
   const commands: FakeCompute['commands'] = [];
   return {
-    created, shells, commands,
+    created, shells, commands, removed,
     canManage: opts.canManage ?? true,
+    remove: async (id) => { if (opts.removeFails) throw new Error(opts.removeFails); removed.push(id); },
     computers: () => opts.computers ?? BOXES,
     create: async (input) => { created.push(input); return { id: `new-${created.length}`, label: input.label ?? 'computer', sessionId: SID(String(created.length)), status: 'provisioning', ...(input.projectId ? { projectId: input.projectId } : {}) }; },
     openShell: (box) => { shells.push(box); return { ok: true, id: box.id }; },
@@ -75,9 +77,11 @@ async function confirmAndRun(name: string, args: unknown, ctx: ReturnType<typeof
 }
 
 const P4_REFUSALS: Array<{ tool: string; args: Record<string, unknown>; deny: string[] }> = [
-  { tool: 'start_computer', args: { initiativeIds: ['p1'] }, deny: ['ManageDevbox'] },
-  { tool: 'open_shell', args: { computerId: 'c-alpha' }, deny: ['OpenDevboxShell'] },
-  { tool: 'run_command', args: { computerId: 'c-alpha', phrase: 'status' }, deny: ['OpenDevboxShell'] },
+  { tool: 'computer', args: { action: 'start', initiatives: ['p1'] }, deny: ['ManageDevbox'] },
+  { tool: 'computer', args: { action: 'open-shell', computer: 'c-alpha' }, deny: ['OpenDevboxShell'] },
+  { tool: 'computer', args: { action: 'run', computer: 'c-alpha', phrase: 'status' }, deny: ['OpenDevboxShell'] },
+  { tool: 'computer', args: { action: 'stop', computer: 'c-alpha' }, deny: ['ManageDevbox'] },
+  { tool: 'computer', args: { action: 'hand-work', machine: 'laptop', job: 'login' }, deny: ['ConnectLocalCompute'] },
   { tool: 'send_chat_message', args: { target: { kind: 'team', name: 'platform' }, text: 'out today' }, deny: ['PostMessage'] },
   { tool: 'start_call', args: { target: { kind: 'team', name: 'platform' } }, deny: ['StartCall'] },
 ];
@@ -91,10 +95,10 @@ test('every P4 tool refuses on its gate without a network call, a machine call o
     const { result } = await confirmAndRun(tool, args, c);
     assert.equal(result.outcome, 'refused', tool);
     assert.equal(calls, 0, `${tool} made no request`);
-    assert.deepEqual([compute.created, compute.shells, compute.commands, social.sends], [[], [], [], []], tool);
+    assert.deepEqual([compute.created, compute.shells, compute.commands, compute.removed, social.sends], [[], [], [], [], []], tool);
   }
   // §6: the refusal is said the way the button's own gate would.
-  const r = prepareToolCall('run_command', { computerId: 'c', phrase: 'status' }, toolContext({ deny: ['OpenDevboxShell'] }));
+  const r = prepareToolCall('computer', { action: 'run', computer: 'c', phrase: 'status' }, toolContext({ deny: ['OpenDevboxShell'] }));
   assert.ok(!r.ok && /can't run commands on machines with your role/.test(String(r.result.output['reason'])));
   // set_status has no Cedar action of its own: without the shell's presence entry it refuses, still with no request.
   const s = await confirmAndRun('set_status', { status: 'away' }, toolContext({ social: fakeSocial({ presence: false }) }));
@@ -145,14 +149,14 @@ test('since is read into git date words only; anything else composes nothing', (
 test('run_command: a model-supplied command is ignored, the phrase runs in safe mode, and the result says so', async () => {
   const compute = fakeCompute({ stream: [{ type: 'stdout', text: 'On branch main\n' }, { type: 'exit', exitCode: 0 }] });
   const c = toolContext({ compute, fetch: allowlist().fetch });
-  const { card, result } = await confirmAndRun('run_command', { computerId: 'alpha-1', phrase: 'status', command: 'rm -rf /' }, c);
+  const { card, result } = await confirmAndRun('computer', { action: 'run', computer: 'alpha-1', phrase: 'status', command: 'rm -rf /' }, c);
   assert.deepEqual(card, { title: 'Run on alpha-1', detail: 'git status' });
   assert.deepEqual(compute.commands, [{ sessionId: SID('a'), body: { command: 'git status', mode: 'safe', cwd: '/mnt/workspace/alpha' } }]);
   assert.equal(result.outcome, 'done');
   assert.deepEqual((result.output['ignored'] as { fields: string[] }).fields, ['command']);
   assert.doesNotMatch(JSON.stringify(result.output), /rm -rf/);
   // A command with no phrase is refused outright: nothing composes it, nothing runs.
-  const bare = await confirmAndRun('run_command', { computerId: 'alpha-1', command: 'git log --since=yesterday' }, toolContext({ compute: fakeCompute() }));
+  const bare = await confirmAndRun('computer', { action: 'run', computer: 'alpha-1', command: 'git log --since=yesterday' }, toolContext({ compute: fakeCompute() }));
   assert.equal(bare.result.outcome, 'refused');
   assert.match(String(bare.result.output['reason']), /phrase table/);
 });
@@ -164,7 +168,7 @@ test('run_command captures the stream into the output panel and gives the model 
   const stream: CommandEvent[] = [{ type: 'stdout', text: text.slice(0, 333) }, { type: 'stdout', text: text.slice(333, 2001) }, { type: 'stdout', text: text.slice(2001) }, { type: 'exit', exitCode: 0 }];
   const compute = fakeCompute({ stream });
   const views: CommandOutputView[] = [];
-  const { result } = await confirmAndRun('run_command', { computerId: 'c-alpha', phrase: 'latest-commits-since-yesterday' }, toolContext({ compute, fetch: allowlist().fetch, showOutput: (v) => { views.push(v); } }));
+  const { result } = await confirmAndRun('computer', { action: 'run', computer: 'c-alpha', phrase: 'latest-commits-since-yesterday' }, toolContext({ compute, fetch: allowlist().fetch, showOutput: (v) => { views.push(v); } }));
   assert.equal((compute.commands[0]!.body as { command: string }).command, 'git log --since=yesterday --oneline');
   assert.equal(result.output['totalLines'], 30);
   assert.equal((result.output['lines'] as string[]).length, OUTPUT_LINES_TO_MODEL);
@@ -179,7 +183,7 @@ test('run_command captures the stream into the output panel and gives the model 
 
 test('run_command: an output tab the dock cannot open (every tab in use) is said in the result, and the lines still go back', async () => {
   const compute = fakeCompute({ stream: [{ type: 'stdout', text: 'a\nb\n' }, { type: 'exit', exitCode: 0 }] });
-  const { result } = await confirmAndRun('run_command', { computerId: 'c-alpha', phrase: 'status' }, toolContext({ compute, fetch: allowlist().fetch, showOutput: () => false }));
+  const { result } = await confirmAndRun('computer', { action: 'run', computer: 'c-alpha', phrase: 'status' }, toolContext({ compute, fetch: allowlist().fetch, showOutput: () => false }));
   assert.equal(result.outcome, 'done');
   assert.deepEqual(result.output['lines'], ['a', 'b']);
   assert.match(String(result.output['outputTab']), /in use/);
@@ -190,7 +194,7 @@ test('run_command: the card never shows a command the server\'s allowlist refuse
   for (const phrase of ['test', 'lint', 'build']) {
     const compute = fakeCompute();
     const f = allowlist();
-    const { card, result } = await confirmAndRun('run_command', { computerId: 'c-alpha', phrase }, toolContext({ compute, fetch: f.fetch }));
+    const { card, result } = await confirmAndRun('computer', { action: 'run', computer: 'c-alpha', phrase }, toolContext({ compute, fetch: f.fetch }));
     assert.equal(card, null, phrase);
     assert.equal(result.outcome, 'refused');
     assert.match(String(result.output['reason']), /safe mode does not run .*open the shell/);
@@ -199,15 +203,15 @@ test('run_command: the card never shows a command the server\'s allowlist refuse
   }
   // Opted in with npm test: test gets its card, lint still does not.
   const opted = [...DEFAULT_PREFIXES, 'npm test'];
-  assert.deepEqual((await confirmAndRun('run_command', { computerId: 'c-alpha', phrase: 'test' }, toolContext({ compute: fakeCompute(), fetch: allowlist(opted).fetch }))).card,
+  assert.deepEqual((await confirmAndRun('computer', { action: 'run', computer: 'c-alpha', phrase: 'test' }, toolContext({ compute: fakeCompute(), fetch: allowlist(opted).fetch }))).card,
     { title: 'Run on alpha-1', detail: 'npm test' });
-  assert.equal((await confirmAndRun('run_command', { computerId: 'c-alpha', phrase: 'lint' }, toolContext({ compute: fakeCompute(), fetch: allowlist(opted).fetch }))).card, null);
+  assert.equal((await confirmAndRun('computer', { action: 'run', computer: 'c-alpha', phrase: 'lint' }, toolContext({ compute: fakeCompute(), fetch: allowlist(opted).fetch }))).card, null);
   // A since token the allowlist's prefix does not cover is caught on the composed text, not the phrase.
-  const narrow = await confirmAndRun('run_command', { computerId: 'c-alpha', phrase: 'commits-since', since: '3 days ago' }, toolContext({ compute: fakeCompute(), fetch: allowlist(['git log --since=yesterday']).fetch }));
+  const narrow = await confirmAndRun('computer', { action: 'run', computer: 'c-alpha', phrase: 'commits-since', since: '3 days ago' }, toolContext({ compute: fakeCompute(), fetch: allowlist(['git log --since=yesterday']).fetch }));
   assert.equal(narrow.card, null);
   assert.equal(narrow.result.outcome, 'refused');
   // No read of the allowlist (403) is the role refusal, never a card.
-  const denied = await confirmAndRun('run_command', { computerId: 'c-alpha', phrase: 'status' }, toolContext({ compute: fakeCompute(), fetch: fakeFetch([route('GET', ALLOWLIST_URL, 403, { error: 'Forbidden' })]).fetch }));
+  const denied = await confirmAndRun('computer', { action: 'run', computer: 'c-alpha', phrase: 'status' }, toolContext({ compute: fakeCompute(), fetch: fakeFetch([route('GET', ALLOWLIST_URL, 403, { error: 'Forbidden' })]).fetch }));
   assert.equal(denied.card, null);
   assert.match(String(denied.result.output['reason']), /can't run commands/);
 });
@@ -215,17 +219,17 @@ test('run_command: the card never shows a command the server\'s allowlist refuse
 test('run_command: the server refusing a phrase in safe mode is still a refusal that says to open the shell', async () => {
   // The allowlist read admitted it (opted in), the server's own check refused it anyway (the backstop).
   const compute = fakeCompute({ fail: 'not an allowlisted read-only command — switch to full shell to run it' });
-  const { result } = await confirmAndRun('run_command', { computerId: 'c-alpha', phrase: 'build' }, toolContext({ compute, fetch: allowlist([...DEFAULT_PREFIXES, 'npm run build']).fetch }));
+  const { result } = await confirmAndRun('computer', { action: 'run', computer: 'c-alpha', phrase: 'build' }, toolContext({ compute, fetch: allowlist([...DEFAULT_PREFIXES, 'npm run build']).fetch }));
   assert.equal(result.outcome, 'refused');
   assert.match(String(result.output['reason']), /open the shell and type it/);
   assert.equal((compute.commands[0]!.body as { mode: string }).mode, 'safe');
 });
 
 test('run_command and open_shell: an unknown or ambiguous computer goes back as candidates; a laptop is never a target', async () => {
-  const { result } = await confirmAndRun('run_command', { computerId: 'gamma', phrase: 'status' }, toolContext({ compute: fakeCompute() }));
+  const { result } = await confirmAndRun('computer', { action: 'run', computer: 'gamma', phrase: 'status' }, toolContext({ compute: fakeCompute() }));
   assert.equal(result.output['kind'], 'ambiguous');
   assert.deepEqual((result.output['candidates'] as Array<{ id: string }>).map((c) => c.id), ['c-alpha', 'c-beta']);
-  const laptop = await confirmAndRun('open_shell', { computerId: 'c-laptop' }, toolContext({ compute: fakeCompute() }));
+  const laptop = await confirmAndRun('computer', { action: 'open-shell', computer: 'c-laptop' }, toolContext({ compute: fakeCompute() }));
   assert.equal(laptop.result.output['kind'], 'ambiguous');
 });
 
@@ -233,24 +237,24 @@ test('run_command and open_shell: an unknown or ambiguous computer goes back as 
 
 test('open_shell opens (or focuses) the lab\'s shell tab with no card, by label or initiative name', async () => {
   const compute = fakeCompute();
-  const { card, result } = await confirmAndRun('open_shell', { computerId: 'Alpha' }, toolContext({ compute }));
+  const { card, result } = await confirmAndRun('computer', { action: 'open-shell', computer: 'Alpha' }, toolContext({ compute }));
   assert.equal(card, null);
   assert.equal(result.outcome, 'done');
   assert.deepEqual(compute.shells, [{ id: 'c-alpha', label: 'alpha-1', sessionId: SID('a'), cwd: '/mnt/workspace/alpha' }]);
   const full = fakeCompute();
   full.openShell = () => ({ ok: false, reason: 'at-capacity' });
-  assert.equal((await confirmAndRun('open_shell', { computerId: 'c-alpha' }, toolContext({ compute: full }))).result.outcome, 'refused');
+  assert.equal((await confirmAndRun('computer', { action: 'open-shell', computer: 'c-alpha' }, toolContext({ compute: full }))).result.outcome, 'refused');
 });
 
 test('open_shell takes no directory from the model: a `cwd` argument is refused before any shell opens, and the shell starts in the box\'s workspace (sweep 2 M3)', async () => {
   const compute = fakeCompute();
   for (const cwd of ['/etc', '../../root', 'src; rm -rf ~', 'x'.repeat(500)]) {
-    const { result } = await confirmAndRun('open_shell', { computerId: 'Alpha', cwd }, toolContext({ compute }));
+    const { result } = await confirmAndRun('computer', { action: 'open-shell', computer: 'Alpha', cwd }, toolContext({ compute }));
     assert.equal(result.outcome, 'refused', cwd);
     assert.match(String(result.output['error'] ?? result.summary), /cwd is not an argument/, cwd);
   }
   assert.deepEqual(compute.shells, [], 'nothing opened');
-  const { result } = await confirmAndRun('open_shell', { computerId: 'Alpha' }, toolContext({ compute }));
+  const { result } = await confirmAndRun('computer', { action: 'open-shell', computer: 'Alpha' }, toolContext({ compute }));
   assert.equal(result.output['cwd'], '/mnt/workspace/alpha');
   assert.deepEqual(compute.shells, [{ id: 'c-alpha', label: 'alpha-1', sessionId: SID('a'), cwd: '/mnt/workspace/alpha' }]);
 });
@@ -266,7 +270,7 @@ test('start_computer: the card lists every initiative with the idle-billing note
   const compute = fakeCompute();
   const toasts: string[] = [];
   const ctx = toolContext({ fetch, compute, toast: { pending: (t) => { toasts.push(`pending:${t}`); return 't1'; }, success: (_i, t) => { toasts.push(`success:${t}`); }, error: (_i, t) => { toasts.push(`error:${t}`); } } });
-  const prepared = prepareToolCall('start_computer', { initiativeIds: ['p1', 'Beta', 'gamma'] }, ctx);
+  const prepared = prepareToolCall('computer', { action: 'start', initiatives: ['p1', 'Beta', 'gamma'] }, ctx);
   assert.ok(prepared.ok);
   const planned = await planPreparedCall(prepared.call, ctx, VOICE_PLANNERS);
   assert.ok(planned && 'plan' in planned);
@@ -286,15 +290,109 @@ test('start_computer: the card lists every initiative with the idle-billing note
 
 test('start_computer: an initiative it cannot find goes back with the user\'s list; all running answers with no card', async () => {
   const { fetch } = fakeFetch([route('GET', '/api/graph/projects', 200, PROJECTS)]);
-  const missing = await confirmAndRun('start_computer', { initiativeIds: ['Delta'] }, toolContext({ fetch, compute: fakeCompute() }));
+  const missing = await confirmAndRun('computer', { action: 'start', initiatives: ['Delta'] }, toolContext({ fetch, compute: fakeCompute() }));
   assert.equal(missing.result.output['kind'], 'ambiguous');
   assert.equal((missing.result.output['candidates'] as unknown[]).length, 3);
   const compute = fakeCompute();
-  const running = await confirmAndRun('start_computer', { initiativeIds: ['Alpha'] }, toolContext({ fetch, compute }));
+  const running = await confirmAndRun('computer', { action: 'start', initiatives: ['Alpha'] }, toolContext({ fetch, compute }));
   assert.equal(running.card, null);
   assert.equal(running.result.outcome, 'done');
   assert.deepEqual(compute.created, []);
-  assert.equal((await confirmAndRun('start_computer', { initiativeIds: ['p1'] }, toolContext({ fetch, compute: fakeCompute({ canManage: false }) }))).result.outcome, 'refused');
+  assert.equal((await confirmAndRun('computer', { action: 'start', initiatives: ['p1'] }, toolContext({ fetch, compute: fakeCompute({ canManage: false }) }))).result.outcome, 'refused');
+});
+
+// ── computer (V2-8): one tool, five actions; stop and hand-work ──
+
+test('computer: open-shell needs no card; every other action does, and each is gated on its own button\'s action', () => {
+  const ctx = toolContext({ allow: ['ManageDevbox', 'OpenDevboxShell'] });
+  const card = (args: Record<string, unknown>) => { const p = prepareToolCall('computer', args, ctx); assert.ok(p.ok); return needsConfirm(p.call); };
+  assert.equal(card({ action: 'open-shell', computer: 'alpha-1' }), false);
+  for (const action of ['start', 'stop', 'run']) assert.equal(card({ action, computer: 'alpha-1', initiatives: ['p1'], phrase: 'status' }), true, action);
+  // hand-work is ConnectLocalCompute: refused here before any request, said the way Local compute's own gate would.
+  const r = prepareToolCall('computer', { action: 'hand-work', machine: 'laptop', job: 'login' }, ctx);
+  assert.ok(!r.ok && /can't hand work to machines with your role/.test(String(r.result.output['reason'])));
+});
+
+test('computer start: a retry of the same confirmed card starts nothing new (the action ledger)', async () => {
+  const { fetch } = fakeFetch([route('GET', '/api/graph/projects', 200, PROJECTS)]);
+  const compute = fakeCompute();
+  const ctx = toolContext({ fetch, compute });
+  const first = await confirmAndRun('computer', { action: 'start', initiatives: ['Beta'] }, ctx);
+  assert.equal(first.result.outcome, 'done');
+  const again = await confirmAndRun('computer', { action: 'start', initiatives: ['Beta'] }, ctx);
+  assert.equal(again.result.output['alreadyStarted'], true);
+  assert.deepEqual(compute.created, [{ label: 'Beta', projectId: 'p2' }], 'one box');
+});
+
+const FLEET = { boxes: [
+  { id: 'c-alpha', label: 'alpha-1', sessionId: SID('a'), status: 'running', projectId: 'p1', ownerId: 'u-me' },
+  { id: 'c-beta', label: 'beta-1', sessionId: SID('b'), status: 'running', projectId: 'p2', ownerId: 'u-colleague' },
+] };
+
+test('computer stop: only the caller\'s own box, from the lab\'s own read; the card says it ends billing; a second stop is already stopped', async () => {
+  const { fetch, log } = fakeFetch([route('GET', '/api/devbox/boxes', 200, FLEET)]);
+  const compute = fakeCompute();
+  const ctx = toolContext({ fetch, compute });
+  const { card, result } = await confirmAndRun('computer', { action: 'stop', computer: 'Alpha' }, ctx);
+  assert.deepEqual(card, { title: 'Stop alpha-1', detail: 'It stops the computer and its billing; the workspace stays until it expires.' });
+  assert.deepEqual(compute.removed, ['c-alpha']);
+  assert.equal(result.summary, 'Stopped alpha-1');
+  assert.deepEqual(log.map((l) => `${l.method} ${l.url}`), ['GET /api/devbox/boxes'], 'the remove is the lab\'s own call, nothing else');
+  // A box a colleague started on an initiative the caller can see: named back, never stopped.
+  const theirs = await confirmAndRun('computer', { action: 'stop', computer: 'beta-1' }, toolContext({ fetch, compute }));
+  assert.equal(theirs.card, null);
+  assert.match(String(theirs.result.output['reason']), /started by someone else/);
+  assert.deepEqual(compute.removed, ['c-alpha']);
+  // The route answering "not found" to a retry is the outcome asked for.
+  const gone = await confirmAndRun('computer', { action: 'stop', computer: 'alpha-1' }, toolContext({ fetch, compute: fakeCompute({ removeFails: 'computer not found' }) }));
+  assert.equal(gone.result.outcome, 'done');
+  assert.equal(gone.result.output['alreadyStopped'], true);
+  // No session id: nothing is stopped, nothing is read.
+  const anon = await confirmAndRun('computer', { action: 'stop', computer: 'alpha-1' }, toolContext({ fetch, compute, userId: null }));
+  assert.equal(anon.result.outcome, 'refused');
+});
+
+const NODES = { nodes: [{ id: 'n-1', label: 'my-macbook', acceptJobs: true, jobKinds: ['local:task'] }, { id: 'n-2', label: 'old-thinkpad', acceptJobs: false }] };
+const SUGGESTIONS = { suggestions: [{ workItemId: 'w-login', title: 'Fix the login redirect', initiativeName: 'Alpha' }, { workItemId: 'w-docs', title: 'Update the onboarding docs', initiativeName: 'Alpha' }] };
+
+test('computer hand-work: the user\'s own machine and an item from the page\'s pick list; the page\'s body on confirm, once', async () => {
+  const { fetch, log } = fakeFetch([
+    route('GET', '/api/local-compute/nodes', 200, NODES), route('GET', '/api/work/suggestions', 200, SUGGESTIONS),
+    route('GET', '/api/bots', 200, { bots: [{ id: 'b-1', name: 'Docs bot', enabled: true }] }),
+    route('POST', '/api/local-compute/nodes/n-1/work', 201, { id: 'job-77', status: 'queued' }),
+  ]);
+  const ctx = toolContext({ fetch, allow: ['ConnectLocalCompute'] });
+  const { card, result } = await confirmAndRun('computer', { action: 'hand-work', machine: 'macbook', job: 'login redirect' }, ctx);
+  assert.deepEqual(card, { title: 'Hand "Fix the login redirect" to my-macbook', detail: 'Your machine runs the work item with its own login; a run that changes a repo waits for your review.' });
+  assert.equal(result.outcome, 'done');
+  assert.equal(result.output['href'], '/iq/local-compute?machine=n-1');
+  const posts = log.filter((l) => l.method === 'POST');
+  assert.deepEqual(posts.map((p) => [p.url, p.body]), [['/api/local-compute/nodes/n-1/work', { workItemId: 'w-login', requiresReview: true }]]);
+  assert.ok(!log.some((l) => l.url === '/api/bots'), 'bots are offered only with ManageBots');
+  // The same request again: the ledger answers, nothing is posted twice.
+  const again = await confirmAndRun('computer', { action: 'hand-work', machine: 'macbook', job: 'login redirect' }, ctx);
+  assert.equal(again.result.output['alreadyHanded'], true);
+  assert.equal(log.filter((l) => l.method === 'POST').length, 1);
+});
+
+test('computer hand-work: a machine not accepting jobs, an unknown job and the route\'s 409 are refusals; a bot needs ManageBots', async () => {
+  const routes = [route('GET', '/api/local-compute/nodes', 200, NODES), route('GET', '/api/work/suggestions', 200, SUGGESTIONS),
+    route('GET', '/api/bots', 200, { bots: [{ id: 'b-1', name: 'Docs bot', enabled: true }, { id: 'b-2', name: 'Parked bot', enabled: true, pausedReason: 'over budget' }] })];
+  const off = await confirmAndRun('computer', { action: 'hand-work', machine: 'thinkpad', job: 'login' }, toolContext({ fetch: fakeFetch(routes).fetch }));
+  assert.equal(off.card, null);
+  assert.match(String(off.result.output['reason']), /not accepting jobs/);
+  const unknown = await confirmAndRun('computer', { action: 'hand-work', machine: 'macbook', job: 'payroll' }, toolContext({ fetch: fakeFetch(routes).fetch }));
+  assert.equal(unknown.result.outcome, 'refused');
+  const bot = fakeFetch([...routes, route('POST', '/api/local-compute/nodes/n-1/work', 201, { id: 'job-8' })]);
+  const withBots = await confirmAndRun('computer', { action: 'hand-work', machine: 'macbook', job: 'docs bot' }, toolContext({ fetch: bot.fetch, allow: ['ConnectLocalCompute', 'ManageBots'] }));
+  assert.equal(withBots.result.outcome, 'done');
+  assert.deepEqual(bot.log.filter((l) => l.method === 'POST').map((l) => l.body), [{ botId: 'b-1', requiresReview: true }]);
+  const parked = await confirmAndRun('computer', { action: 'hand-work', machine: 'macbook', job: 'parked bot' }, toolContext({ fetch: fakeFetch(routes).fetch, allow: ['ConnectLocalCompute', 'ManageBots'] }));
+  assert.equal(parked.result.outcome, 'refused', 'a paused bot is not on the pick list');
+  const busy = await confirmAndRun('computer', { action: 'hand-work', machine: 'macbook', job: 'onboarding' },
+    toolContext({ fetch: fakeFetch([...routes, route('POST', '/api/local-compute/nodes/n-1/work', 409, { gate: 'kinds', error: 'this machine runs local:task — it has not registered for devbox:task' })]).fetch }));
+  assert.equal(busy.result.outcome, 'refused');
+  assert.match(String(busy.result.output['reason']), /my-macbook did not take it/);
 });
 
 // ── start_call (G7) ──
@@ -507,9 +605,9 @@ test('property: no P4 result carries a string over 120 characters or a list over
   };
   const ctx = toolContext({ fetch, compute: fakeCompute({ stream, computers: many }), social: fakeSocial() });
   for (const [name, args] of [
-    ['run_command', { computerId: `c3-${huge}`.slice(0, 200), phrase: 'status' }], ['run_command', { computerId: 'nothing', phrase: 'status' }],
-    ['start_computer', { initiativeIds: ['nope'] }], ['send_chat_message', { target: { kind: 'team', name: 'p' }, text: 'x' }],
-    ['open_shell', { computerId: 'nothing' }], ['set_status', { status: 'busy', message: 'm'.repeat(120) }],
+    ['computer', { action: 'run', computer: `c3-${huge}`.slice(0, 200), phrase: 'status' }], ['computer', { action: 'run', computer: 'nothing', phrase: 'status' }],
+    ['computer', { action: 'start', initiatives: ['nope'] }], ['send_chat_message', { target: { kind: 'team', name: 'p' }, text: 'x' }],
+    ['computer', { action: 'open-shell', computer: 'nothing' }], ['set_status', { status: 'busy', message: 'm'.repeat(120) }],
   ] as const) {
     const { result } = await confirmAndRun(name, args, ctx);
     walk(result.output, name);

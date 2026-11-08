@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import {
   VOICE_TOOLS, INTERNAL_TOOLS, NAVIGATE_PAGES, RUN_COMMAND_PHRASES, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, toolsForTenant, responsesFunctionTools,
   voiceInstructions, delegationInstructions, hashToolArgs, voiceTool, searchRecordTypes, MOCK_CALLS, VOICE_TENANTS, mockCallFor, activityScopes,
-  QUEUE_WORK_ACTIONS, QUEUE_WORK_KINDS, queueWorkKinds, LIST_KINDS, listKinds, getParts, summaryKinds, budgetScopes, openKinds,
+  QUEUE_WORK_ACTIONS, QUEUE_WORK_KINDS, COMPUTER_ACTIONS, queueWorkKinds, LIST_KINDS, listKinds, getParts, summaryKinds, budgetScopes, openKinds,
 } from '../catalogue.js';
 import { SEARCH_TYPES } from '../../../providers/search.js';
 import { tenantSpec } from '../../search-index/tenants.js';
@@ -31,9 +31,7 @@ const SPEC: Record<string, [string, boolean, string]> = {
   search: ['read', false, 'search'],
   list: ['read', false, 'search'],
   get: ['read', false, 'search'],
-  start_computer: ['machine', true, 'work'],
-  open_shell: ['machine', false, 'route'],
-  run_command: ['machine', true, 'work'],
+  computer: ['machine', true, 'work'],
   summary: ['read', false, 'search'],
   budget: ['read', false, 'search'],
   send_chat_message: ['people', true, 'social-activity'],
@@ -68,7 +66,9 @@ describe('the §4 catalogue', () => {
   });
 
   it('asks first for exactly the tools that spend, run on a machine or reach people', () => {
-    expect(VOICE_TOOLS.filter((t) => t.confirm).map((t) => t.name).sort()).toEqual(['queue_work', 'run_command', 'send_chat_message', 'start_call', 'start_computer']);
+    expect(VOICE_TOOLS.filter((t) => t.confirm).map((t) => t.name).sort()).toEqual(['computer', 'queue_work', 'send_chat_message', 'start_call']);
+    // computer's open-shell only opens a tab: the one action that skips the card (V2-8).
+    expect(voiceTool('computer')!.noConfirm).toEqual({ action: ['open-shell'] });
   });
 
   it('every argument schema compiles as strict JSON Schema and refuses unknown keys', () => {
@@ -98,21 +98,33 @@ describe('the §4 catalogue', () => {
     ok('budget', { scope: 'me' });
     ok('budget', { scope: 'initiative', initiative: 'Auth Migration' });
     ok('budget', { scope: 'org', groupBy: 'person' });
-    ok('run_command', { computerId: 'box-1', phrase: 'commits-since', since: 'yesterday' });
-    ok('start_computer', { initiativeIds: ['p1', 'Alpha'] });
+    ok('computer', { action: 'run', computer: 'box-1', phrase: 'commits-since', since: 'yesterday' });
+    ok('computer', { action: 'start', initiatives: ['p1', 'Alpha'] });
+    ok('computer', { action: 'stop', computer: 'alpha-1' });
+    ok('computer', { action: 'open-shell', computer: 'Alpha' });
+    ok('computer', { action: 'hand-work', machine: 'my laptop', job: 'the login fix' });
     ok('send_chat_message', { target: { kind: 'team', name: 'platform' }, text: "I'm out today" });
     ok('set_status', { status: 'away', message: 'out today' });
     ok('start_call', { target: { kind: 'team', name: 'platform' } });
     ok('start_call', { target: { kind: 'dm', name: 'Ada' } });
   });
 
-  it('run_command takes a phrase from the table, never a command string (§6)', () => {
+  it('computer run takes a phrase from the table, never a command string (§6); hand-work names a job, never a prompt', () => {
     const ajv = new Ajv({ strict: true });
-    const v = ajv.compile(voiceTool('run_command')!.parameters);
-    expect(v({ computerId: 'b', phrase: 'status', command: 'rm -rf /' })).toBe(false);
-    expect(v({ computerId: 'b', phrase: 'rm -rf /' })).toBe(false);
-    expect(Object.keys(voiceTool('run_command')!.parameters.properties)).not.toContain('command');
+    const v = ajv.compile(voiceTool('computer')!.parameters);
+    expect(v({ action: 'run', computer: 'b', phrase: 'status', command: 'rm -rf /' })).toBe(false);
+    expect(v({ action: 'run', computer: 'b', phrase: 'rm -rf /' })).toBe(false);
+    expect(v({ action: 'hand-work', machine: 'm', job: 'x', prompt: 'do anything' })).toBe(false);
+    expect(v({ action: 'reboot', computer: 'b' })).toBe(false);
+    expect(Object.keys(voiceTool('computer')!.parameters.properties)).not.toContain('command');
     expect(RUN_COMMAND_PHRASES).toContain('latest-commits-since-yesterday');
+  });
+
+  it('computer gates each action on the button it stands in for (V2-8)', () => {
+    expect(COMPUTER_ACTIONS).toEqual({ start: 'ManageDevbox', stop: 'ManageDevbox', 'open-shell': 'OpenDevboxShell', run: 'OpenDevboxShell', 'hand-work': 'ConnectLocalCompute' });
+    expect(voiceTool('computer')).toMatchObject({ action: null, actionBy: { arg: 'action', actions: COMPUTER_ACTIONS }, tenants: ['orgiq'] });
+    for (const a of Object.values(COMPUTER_ACTIONS)) expect(CAPABILITY_ACTIONS).toContain(a);
+    expect(mockCallFor('orgiq', 'sme')).toMatchObject({ name: 'computer', arguments: { action: 'stop', computer: 'auth-migration-1' } });
   });
 
   it('each Cedar action is one the middleware evaluates', () => {
@@ -120,8 +132,8 @@ describe('the §4 catalogue', () => {
     expect(CAPABILITY_ACTIONS).toContain('VoiceNavigate');
   });
 
-  it('only start_computer and queue_work spend, through the devbox path and the dispatch routes\' own brakes (§7, G19)', () => {
-    expect(VOICE_TOOLS.filter((t) => t.spend !== 'none').map((t) => [t.name, t.spend])).toEqual([['start_computer', 'devbox'], ['queue_work', 'dispatch']]);
+  it('only computer and queue_work spend, through the devbox path and the dispatch routes\' own brakes (§7, G19)', () => {
+    expect(VOICE_TOOLS.filter((t) => t.spend !== 'none').map((t) => [t.name, t.spend])).toEqual([['computer', 'devbox'], ['queue_work', 'dispatch']]);
   });
 });
 
@@ -213,7 +225,6 @@ describe('tenant scoping (§6)', () => {
       for (const k of kinds) expect(listKinds(tenant)).toContain(k);
     }
     expect(voiceTool('search')!.description).toMatch(/ref that open opens/);
-    expect(mockCallFor('orgiq', 'sme')).toMatchObject({ name: 'open', arguments: { kind: 'initiative', name: 'migration' } });
     for (const gone of ['navigate', 'open_result', 'open_computer_lab', 'search_people', 'search_records', 'list_active_initiatives', 'bot_sweep_status']) expect(voiceTool(gone)).toBeUndefined();
   });
 

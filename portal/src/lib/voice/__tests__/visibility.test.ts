@@ -28,7 +28,7 @@ const SID = (c: string) => c.repeat(40);
 
 /** Sana: a Work member with a Social grant and the Computer Lab. */
 const SANA: World = {
-  allow: ['Search', 'ViewSocial', 'PostMessage', 'StartCall', 'ManageDevbox', 'OpenDevboxShell', 'ManageBots', 'VoiceNavigate'],
+  allow: ['Search', 'ViewSocial', 'PostMessage', 'StartCall', 'ManageDevbox', 'OpenDevboxShell', 'ManageBots', 'ConnectLocalCompute', 'VoiceNavigate'],
   social: true, socialRequestItemId: null,
   computers: [{ id: 'c-sana-alpha', label: 'sana-alpha-box', sessionId: SID('a'), status: 'running', projectId: 'p-sana-alpha', project: 'Sana Alpha Initiative' }],
   roster: { roster: () => [{ userId: 'u-sana-peer', name: 'Sana Peer Person', status: 'online' }], lobby: () => null },
@@ -41,6 +41,10 @@ const SANA: World = {
     '/api/work/findings': { findings: [] },
     '/api/access-requests/mine': { items: [] },
     '/api/bots': { bots: [{ id: 'b-sana-1', name: 'sana-nightly-bot', enabled: true }, { id: 'b-sana-2', name: 'sana-nightly-check', enabled: true }, { id: 'b-sana-3', name: 'sana-parked-bot', enabled: false, pausedReason: 'Sana parked it' }] },
+    // V2-8: the lab's own fleet read (one box Sana started, one a colleague did) and Sana's paired machines with Local compute's pick list.
+    '/api/devbox/boxes': { boxes: [{ id: 'c-sana-alpha', label: 'sana-alpha-box', sessionId: SID('a'), status: 'running', ownerId: 'u-me' }, { id: 'c-sana-other', label: 'sana-other-box', sessionId: SID('b'), status: 'running', ownerId: 'u-sana-colleague' }] },
+    '/api/local-compute/nodes': { nodes: [{ id: 'n-sana-1', label: 'sana-laptop', acceptJobs: true }, { id: 'n-sana-2', label: 'sana-parked-laptop', acceptJobs: false }] },
+    '/api/work/suggestions': { suggestions: [{ workItemId: 'w-sana-1', title: 'Sana fix the login', initiativeName: 'Sana Alpha Initiative' }, { workItemId: 'w-sana-2', title: 'Sana fix the logout', initiativeName: 'Sana Alpha Initiative' }] },
   },
 };
 
@@ -80,6 +84,7 @@ function compute(world: World): ComputeAccess | null {
   return {
     canManage: true, computers: () => world.computers,
     create: async () => { throw new Error('the property never confirms a start'); },
+    remove: async () => { throw new Error('not yours to remove'); },
     openShell: () => ({ ok: false, reason: 'at-capacity' }),
     runCommand: async () => { throw new Error('not allowlisted in safe mode'); },
   };
@@ -96,9 +101,11 @@ const VARIANTS: Record<string, unknown[]> = {
   search: [{ query: 'kubernetes', type: 'person' }, { query: 'alpha', type: 'initiative' }, { query: 'x', type: 'not-a-type' }, { query: 'who decided it', answer: true }],
   list: [{ kind: 'initiative', filter: { q: 'nothing like it' } }, { kind: 'bot' }, { kind: 'channel' }, { kind: 'not-a-kind' }, { kind: 'finding', filter: { since: 'soon' } }],
   get: [{ ref: '1' }, { ref: 'initiative:p-unknown' }, { ref: 'bot:b-x', part: 'runs' }, { ref: 'person:p-sana-x' }, { ref: 'Sana Alpha Initiative' }],
-  start_computer: [{ initiativeIds: ['Unknown Initiative'] }],
-  open_shell: [{ computerId: 'unknown-box' }],
-  run_command: [{ computerId: 'unknown-box', phrase: 'status' }, { computerId: 'unknown-box', phrase: 'commits-since', since: 'soon' }],
+  computer: [{ action: 'start', initiatives: ['Unknown Initiative'] }, { action: 'open-shell', computer: 'unknown-box' },
+    { action: 'run', computer: 'unknown-box', phrase: 'status' }, { action: 'run', computer: 'unknown-box', phrase: 'commits-since', since: 'soon' },
+    { action: 'run', computer: 'unknown-box' }, { action: 'stop', computer: 'unknown-box' }, { action: 'stop', computer: 'sana-alpha-box' }, { action: 'stop', computer: 'sana-other-box' },
+    { action: 'hand-work', machine: 'nobody-laptop', job: 'x' }, { action: 'hand-work', machine: 'sana', job: 'nothing like it' }, { action: 'hand-work', machine: 'sana-laptop', job: 'sana' },
+    { action: 'hand-work', machine: 'sana-parked-laptop', job: 'sana' }, { action: 'hand-work' }],
   budget: [{ scope: 'me' }, { scope: 'initiative', initiative: 'Nobody Initiative' }, { scope: 'initiative', initiative: 'Initiative' }, { scope: 'org' }, { scope: 'allocations' }, { scope: 'cost' }],
   summary: [{ kind: 'sweeps', since: 'whenever' }, { kind: 'sweeps', since: 'yesterday' }, { kind: 'fleet' }, { kind: 'live' }, { kind: 'ingest' }, { kind: 'rollup' }, { kind: 'today' }],
   send_chat_message: [{ target: { kind: 'dm', name: 'Ada' }, text: 'hello' }, { target: { kind: 'team', name: 'nobody' }, text: 'x' }],

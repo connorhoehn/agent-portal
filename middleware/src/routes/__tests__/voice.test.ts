@@ -140,7 +140,7 @@ describe('POST /api/voice/sessions — the mint', () => {
     expect(session.delegation.responses.tools).toMatchSnapshot();
   });
 
-  it('offers only the run_command phrases the devbox allowlist runs (G9)', async () => {
+  it('offers only the computer run phrases the devbox allowlist runs (G9)', async () => {
     budget();
     const phrases = async () => {
       calls = [];
@@ -149,7 +149,7 @@ describe('POST /api/voice/sessions — the mint', () => {
       // One open session per person: close it so the next mint goes through.
       await request(app).post(`/api/voice/sessions/${res.body.sessionId}/close`).send({ seconds: 15 });
       const tools = JSON.parse(calls[0]!.init.body!).session.delegation.responses.tools as Array<{ name: string; parameters: { properties: { phrase?: { enum: string[] } } } }>;
-      return tools.find((t) => t.name === 'run_command')?.parameters.properties.phrase?.enum ?? null;
+      return tools.find((t) => t.name === 'computer')?.parameters.properties.phrase?.enum ?? null;
     };
     const saved = process.env['DEVBOX_COMMAND_ALLOWLIST'];
     try {

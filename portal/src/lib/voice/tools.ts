@@ -18,10 +18,12 @@
 //      instructions" (`shapeOutput`, applied to every result on the way out).
 //
 // Reads and navigation live here (P3). The machine and people tools
-// (start_computer, open_shell, run_command, send_chat_message, start_call, set_status) are
-// in actions.ts (P4), which adds them to this table as VOICE_RUNNERS, with the
+// (computer, send_chat_message, start_call, set_status) are in actions.ts
+// (P4, V2-8), which adds them to this table as VOICE_RUNNERS, with the
 // planners that run before a confirm card (resolve the target, compose the
 // command, mint the delivery id) so the card shows exactly what will happen.
+// An action that is not idempotent goes through `once` (the dock's action
+// ledger), so a retry of the same act never acts twice.
 //
 // No React and only `.ts` imports, so `node --test` runs it.
 
@@ -82,6 +84,8 @@ export interface ComputeAccess {
   create(input: { label?: string; projectId?: string }): Promise<VoiceComputer>;
   openShell(box: { id: string; label: string; sessionId: string; cwd?: string }): { ok: true; id: string } | { ok: false; reason: string };
   runCommand(sessionId: string, body: { command: string; mode: 'safe'; cwd?: string }, onEvent: (ev: CommandEvent) => void, signal?: AbortSignal): Promise<void>;
+  /** The lab's remove (useCompute().remove -> DELETE /api/devbox/boxes/:boxId): stops the box and its billing. */
+  remove(id: string): Promise<void>;
 }
 
 /** What send_chat_message remembers per (channel, text): the id minted before the card, and whether it landed. */
@@ -176,6 +180,10 @@ export interface CommandOutputView {
 export interface ToolContext {
   tenant: string;
   role: string;
+  /** The session's own user id (`sub`): what "the caller's own" is checked against (a computer to stop). */
+  userId?: string | null;
+  /** The dock's action ledger (`once`), held for the dock's lifetime; absent = a module-wide one. */
+  ledger?: Map<string, DeliveryRecord> | null;
   palette: Palette;
   can(action: Action): boolean;
   fetch(url: string, init?: RequestInit): Promise<Response>;
@@ -224,7 +232,53 @@ export interface ConfirmPlan { title: string; detail?: string; data: unknown }
  * answers a plan (the card) or a result that ends the call without a card
  * (a refusal, an ambiguous name, nothing left to do).
  */
-type Planner = (args: Args, ctx: ToolContext) => Promise<{ plan: ConfirmPlan } | { result: ToolResult }>;
+type Planner = (args: Args, ctx: ToolContext) => Promise<{ plan: ConfirmPlan } | { result: ToolResult } | null>;
+
+// ── the action ledger (retries never double-act) ────────────────────────────
+
+/** How long a landed act suppresses the same act again (a retry, a repeated request). */
+export const LEDGER_MEMORY_MS = 10 * 60_000;
+const SHARED_LEDGER = new Map<string, DeliveryRecord>();
+
+/**
+ * Runs `act` once per `key` (the route and the body it sends): the same key
+ * landed within LEDGER_MEMORY_MS answers `again()` without a request, one
+ * still in flight is refused, and a failed one may be tried again. The key
+ * is built from the plan the card showed, so a retry of that card reuses it.
+ */
+export async function once(ctx: ToolContext, key: string, act: () => Promise<ToolResult>, again: () => ToolResult): Promise<ToolResult> {
+  const book = ctx.ledger ?? SHARED_LEDGER;
+  const now = ctx.now().getTime();
+  const known = book.get(key);
+  if (known?.state === 'sent' && now - known.at < LEDGER_MEMORY_MS) return again();
+  if (known?.state === 'pending' && now - known.at < LEDGER_MEMORY_MS) return refused('That is already under way; wait for it to finish.');
+  const record: DeliveryRecord = { deliveryId: known?.deliveryId ?? newId(), state: 'pending', at: now };
+  book.set(key, record);
+  let res: ToolResult;
+  try {
+    res = await act();
+  } catch (err) {
+    book.set(key, { ...record, state: 'failed', at: ctx.now().getTime() });
+    throw err;
+  }
+  book.set(key, { ...record, state: res.outcome === 'done' ? 'sent' : 'failed', at: ctx.now().getTime() });
+  return res;
+}
+
+/** The delivery id a key's act carries (a route that dedupes on one): the same across retries of that key. */
+export function deliveryIdFor(ctx: ToolContext, key: string): string {
+  const book = ctx.ledger ?? SHARED_LEDGER;
+  const known = book.get(key);
+  if (known) return known.deliveryId;
+  const id = newId();
+  book.set(key, { deliveryId: id, state: 'failed', at: 0 });
+  return id;
+}
+
+function newId(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  return c?.randomUUID ? c.randomUUID() : `vd-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 // ── result shaping ──────────────────────────────────────────────────────────
 
@@ -320,7 +374,7 @@ export function schemaProblem(schema: JsonSchema, value: unknown, path = 'argume
  * in the result and recorded as its own refused row.
  */
 export const IGNORED_ARGS: Readonly<Record<string, readonly string[]>> = {
-  run_command: ['command', 'cmd', 'shell', 'script'],
+  computer: ['command', 'cmd', 'shell', 'script'],
 };
 export const IGNORED_NOTE = 'Commands come from the phrase table; text sent as a command was not run. For anything else, ask the user to open the shell and type it.';
 
@@ -1496,6 +1550,19 @@ export function socialGrantRefusal(ctx: Pick<ToolContext, 'tenant' | 'socialRequ
   });
 }
 
+/** Whether this call shows the Confirm card: a confirm tool, unless its arguments name a no-card value (computer's open-shell). */
+export function needsConfirm(call: PreparedCall): boolean {
+  if (!call.spec.confirm) return false;
+  return !Object.entries(call.spec.noConfirm ?? {}).some(([arg, values]) => values.includes(String(call.args[arg])));
+}
+
+/** The Cedar action this call is gated on: the tool's, else the one its arguments pick (computer's actionBy). */
+export function callAction(spec: VoiceToolSpec, args: Args): Action | null {
+  if (spec.action) return spec.action;
+  if (!spec.actionBy) return null;
+  return spec.actionBy.actions[String(args[spec.actionBy.arg])] ?? null;
+}
+
 /** Tools whose action is a Social grant outside Social (the plane's PostMessage / StartCall): refused with the request offer. */
 const SOCIAL_GRANT_TOOLS: ReadonlySet<string> = new Set(['send_chat_message', 'start_call']);
 
@@ -1508,8 +1575,10 @@ export function prepareToolCall(name: string, rawArgs: unknown, ctx: Pick<ToolCo
     const shell = IGNORED_ARGS[name]?.some((k) => typeof rawArgs === 'string' ? rawArgs.includes(`"${k}"`) : !!rawArgs && typeof rawArgs === 'object' && k in rawArgs);
     return { ok: false, result: refused(`I could not use those details: ${parsed.problem}.${shell ? ` ${IGNORED_NOTE}` : ''}`) };
   }
-  if (spec.action && !ctx.can(spec.action)) {
-    const fallback = ROLE_REFUSALS[name] ?? `Your role cannot ${spec.kind === 'read' ? 'read that' : 'do that'} here.`;
+  const action = callAction(spec, parsed.args);
+  if (action && !ctx.can(action)) {
+    const sub = spec.actionBy ? `${name}:${String(parsed.args[spec.actionBy.arg])}` : name;
+    const fallback = ROLE_REFUSALS[sub] ?? ROLE_REFUSALS[name] ?? `Your role cannot ${spec.kind === 'read' ? 'read that' : 'do that'} here.`;
     return { ok: false, result: SOCIAL_GRANT_TOOLS.has(name) ? socialGrantRefusal(ctx, fallback) : refused(fallback) };
   }
   return { ok: true, call: { spec, args: parsed.args, ...(parsed.ignored.length ? { ignored: parsed.ignored } : {}) } };
@@ -1517,9 +1586,11 @@ export function prepareToolCall(name: string, rawArgs: unknown, ctx: Pick<ToolCo
 
 /** What the voice says when the button's own action is missing (§6: "I can't run commands on machines with your role"). */
 const ROLE_REFUSALS: Readonly<Record<string, string>> = {
-  start_computer: "I can't start computers with your role.",
-  open_shell: "I can't open shells on computers with your role.",
-  run_command: "I can't run commands on machines with your role.",
+  'computer:start': "I can't start computers with your role.",
+  'computer:stop': "I can't stop computers with your role.",
+  'computer:open-shell': "I can't open shells on computers with your role.",
+  'computer:run': "I can't run commands on machines with your role.",
+  'computer:hand-work': "I can't hand work to machines with your role.",
   send_chat_message: "I can't post messages with your role.",
   start_call: "I can't start calls with your role.",
 };
@@ -1547,6 +1618,7 @@ export async function planPreparedCall(call: PreparedCall, ctx: ToolContext, pla
   if (!planner) return null;
   try {
     const out = await planner(call.args, ctx);
+    if (!out) return null;
     return 'result' in out ? { result: withIgnored(out.result, call.ignored) } : out;
   } catch (err) {
     return { result: withIgnored(failed(`The ${call.spec.name.replace(/_/g, ' ')} call failed: ${(err as Error)?.message ?? 'unknown error'}`), call.ignored) };

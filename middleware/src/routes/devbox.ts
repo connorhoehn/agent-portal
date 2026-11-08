@@ -221,7 +221,7 @@ const DEFAULT_ALLOWLIST = [
 /**
  * The safe-mode prefixes this deployment runs (DEVBOX_COMMAND_ALLOWLIST, else
  * the default above). Exported for the voice mint, which drops the
- * run_command phrases these would refuse before the model is offered them
+ * computer run phrases these would refuse before the model is offered them
  * (docs/voice-navigator-gaps.md G9), and served as GET /allowlist for the
  * dock's planner, which checks the composed command again before its card.
  */
@@ -443,9 +443,9 @@ devboxRouter.get('/status', asyncHandler(async (_req, res) => {
 }));
 
 // The safe-mode prefixes, nothing else (no ARN, no full-exec flag): what the
-// voice dock checks a composed run_command against before it shows the card,
+// voice dock checks a composed computer run against before it shows the card,
 // so the card never offers a command this server would refuse (G9). Gated like
-// run_command itself (OpenDevboxShell, the box's own check in /command): a
+// computer run itself (OpenDevboxShell, the box's own check in /command): a
 // role that can read the fleet but never run a command reads 403, which the
 // dock answers as "not with your role".
 devboxRouter.get('/allowlist', requireAgentCapability('OpenDevboxShell'), (_req, res) => {

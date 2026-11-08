@@ -21,8 +21,8 @@
 // read as "the call is done"; a result that settles first waits for it (and
 // COMPLETION_GRACE_MS, should it never come).
 //
-// A confirm tool with a planner (actions.ts: start_computer, run_command,
-// send_chat_message) runs it first, reads only, so the card shows the resolved
+// A confirm tool with a planner (actions.ts: computer, send_chat_message,
+// start_call; work.ts: queue_work) runs it first, reads only, so the card shows the resolved
 // target and the composed command; a planner may end the call without a card
 // (a refusal, several matching names). Nothing acts before the confirm, and a
 // cancel answers { confirmed: false } and runs nothing.
@@ -54,7 +54,7 @@
 import { VoiceClient, type ClientEvent, type MediaFactory, type StopReason, type VoiceFrame, type VoiceMint } from './client.ts';
 import { initialMachine, phaseAt, reduce, sessionOpen, type MachineEvent, type MachineState, type VoicePhase } from './machine.ts';
 import {
-  cancelledResult, hashToolArgs, localHref, openableHref, planPreparedCall, prepareToolCall, refused, runPreparedCall, spokenOrdinal, toolAvailable,
+  cancelledResult, hashToolArgs, localHref, needsConfirm, openableHref, planPreparedCall, prepareToolCall, refused, runPreparedCall, spokenOrdinal, toolAvailable,
   type ConfirmPlan, type PreparedCall, type ToolContext, type ToolResult, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 import { VOICE_PLANNERS, VOICE_RUNNERS } from './actions.ts';
@@ -185,12 +185,12 @@ export function defaultConfirmText(call: PreparedCall): { title: string; detail?
     const where = target['kind'] === 'dm' ? String(target['name']) : `#${String(target['name'])}`;
     return { title: `Post to ${where}`, detail: String(a['text'] ?? '') };
   }
-  if (call.spec.name === 'start_computer') {
-    const ids = Array.isArray(a['initiativeIds']) ? (a['initiativeIds'] as string[]) : [];
+  if (call.spec.name === 'computer' && a['action'] === 'start') {
+    const ids = Array.isArray(a['initiatives']) ? (a['initiatives'] as string[]) : [];
     return { title: ids.length === 1 ? `Start a computer for ${ids[0]}` : `Start ${ids.length} computers`, detail: `${ids.join(', ')}. A running computer bills idle time until it stops.` };
   }
-  if (call.spec.name === 'run_command') {
-    return { title: `Run on ${String(a['computerId'])}`, detail: String(a['phrase']).replace(/-/g, ' ') };
+  if (call.spec.name === 'computer' && a['action'] === 'run') {
+    return { title: `Run on ${String(a['computer'])}`, detail: String(a['phrase']).replace(/-/g, ' ') };
   }
   const detail = Object.entries(a).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`).join(', ');
   return { title: call.spec.name.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()), ...(detail ? { detail } : {}) };
@@ -489,7 +489,7 @@ export class VoiceController {
     if (call.ignored?.length) {
       void hashToolArgs({ ignored: call.ignored }).then((argsSha256) => client.reportToolCall({ tool: name, argsSha256, outcome: 'refused', durationMs: 0 }));
     }
-    if (call.spec.confirm && toolAvailable(name, this.runners)) {
+    if (needsConfirm(call) && toolAvailable(name, this.runners)) {
       // The delegation asks one call at a time (parallel_tool_calls: false); a second card would hide the first.
       if (this.pending) {
         await this.answer(client, delegationId, callId, name, refused('Another action is waiting for the user to confirm. Ask again after it.'), startedAt, call.args);

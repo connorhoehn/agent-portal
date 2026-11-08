@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACTIVITY_SCOPES, GET_PARTS, LIST_KINDS, OPEN_KINDS, SUMMARY_KINDS, NAVIGATE_PAGE_IDS, QUEUE_WORK_ACTIONS, QUEUE_WORK_KINDS, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, VOICE_TENANTS, VOICE_TOOLS, activityScopes, getParts, listKinds, openKinds, summaryKinds, navigatePageIds, queueWorkKinds, searchRecordTypes } from '../catalogue.ts';
+import { ACTIVITY_SCOPES, COMPUTER_ACTIONS, GET_PARTS, LIST_KINDS, OPEN_KINDS, SUMMARY_KINDS, NAVIGATE_PAGE_IDS, QUEUE_WORK_ACTIONS, QUEUE_WORK_KINDS, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, VOICE_TENANTS, VOICE_TOOLS, activityScopes, getParts, listKinds, openKinds, summaryKinds, navigatePageIds, queueWorkKinds, searchRecordTypes } from '../catalogue.ts';
 import { voicePage, hashToolArgs } from '../tools.ts';
 import { commandAllowedBy, composeCommand } from '../actions.ts';
 import { PALETTE, middlewareVoice } from './voiceHarness.ts';
 
-interface MwTool { name: string; parameters: unknown; kind: string; backing: string; confirm: boolean; action: string | null; says: string; tenants: readonly string[] }
+interface MwTool { name: string; parameters: unknown; kind: string; backing: string; confirm: boolean; action: string | null; says: string; tenants: readonly string[]; noConfirm?: unknown; actionBy?: unknown }
 interface MwCatalogue {
   VOICE_TOOLS: MwTool[];
   NAVIGATE_PAGES: Array<{ id: string; path: string; tenants: readonly string[]; roles?: readonly string[] }>;
@@ -22,6 +22,7 @@ interface MwCatalogue {
   GET_PARTS: Record<string, readonly string[]>;
   SUMMARY_KINDS: Record<string, readonly string[]>;
   RUN_COMMAND_PHRASES: readonly string[];
+  COMPUTER_ACTIONS: Record<string, string>;
   RUN_COMMAND_PHRASE_COMMANDS: Record<string, string>;
   commandAllowedBy(prefixes: readonly string[], command: string): boolean;
 }
@@ -34,7 +35,10 @@ test('the portal catalogue matches the middleware one the session is minted with
     assert.deepEqual(mine.parameters, theirs.parameters, `${mine.name} schema`);
     for (const k of ['kind', 'backing', 'confirm', 'action', 'says'] as const) assert.equal(mine[k], theirs[k], `${mine.name}.${k}`);
     assert.deepEqual([...mine.tenants], [...theirs.tenants], `${mine.name} tenants`);
+    assert.deepEqual(mine.noConfirm, theirs.noConfirm, `${mine.name} noConfirm`);
+    assert.deepEqual(mine.actionBy, theirs.actionBy, `${mine.name} actionBy`);
   }
+  assert.deepEqual(COMPUTER_ACTIONS, mw.COMPUTER_ACTIONS);
   assert.deepEqual(NAVIGATE_PAGE_IDS.map((p) => ({ id: p.id, tenants: [...p.tenants], roles: p.roles })), mw.NAVIGATE_PAGES.map((p) => ({ id: p.id, tenants: p.tenants, roles: p.roles })));
   assert.deepEqual(OPEN_KINDS, mw.OPEN_KINDS);
   assert.deepEqual([...VOICE_TENANTS], [...mw.VOICE_TENANTS]);
@@ -99,7 +103,7 @@ test('the dock hashes arguments exactly as the middleware does', async () => {
   }
 });
 
-test('the mint filters run_command phrases by the same commands and the same prefix rule the dock checks (G9)', async () => {
+test('the mint filters computer run phrases by the same commands and the same prefix rule the dock checks (G9)', async () => {
   const mw = await middlewareVoice<MwCatalogue>('catalogue.ts');
   for (const phrase of mw.RUN_COMMAND_PHRASES) {
     assert.equal(composeCommand(phrase, { since: 'yesterday' }), mw.RUN_COMMAND_PHRASE_COMMANDS[phrase], phrase);
@@ -110,4 +114,21 @@ test('the mint filters run_command phrases by the same commands and the same pre
       assert.equal(commandAllowedBy(prefixes, command), mw.commandAllowedBy(prefixes, command), `${command} under ${prefixes.join(',')}`);
     }
   }
+});
+
+test('an action tool reaches only routes the inventory decides confirm (or open, the shell tab); everything it reads is a read', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const inv = JSON.parse(await readFile(new URL('../../../../../docs/voice-tool-inventory.json', import.meta.url), 'utf8')) as {
+    rows: Array<{ method: string; path: string; coveredBy: string[]; v2: { decision: string | null; tool: string | null } }>;
+  };
+  const actionTools = new Set(VOICE_TOOLS.filter((t) => t.confirm).map((t) => t.name));
+  let writes = 0;
+  for (const r of inv.rows) {
+    for (const tool of r.coveredBy.filter((t) => actionTools.has(t))) {
+      const where = `${tool}: ${r.method} ${r.path}`;
+      if (r.method === 'GET') assert.ok(['read', 'n/a'].includes(r.v2.decision ?? ''), `${where} is a ${r.v2.decision}`);
+      else { assert.ok(['confirm', 'open'].includes(r.v2.decision ?? ''), `${where} is a ${r.v2.decision}`); writes++; }
+    }
+  }
+  assert.ok(writes >= 5, `${writes} write routes checked`);
 });

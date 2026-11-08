@@ -89,7 +89,7 @@
     "navigate": 0,
     "internal": 3,
     "dev": 0,
-    "covered": 29,
+    "covered": 30,
     "v2": {
      "read": 38,
      "never": 18,
@@ -230,7 +230,7 @@
     "navigate": 0,
     "internal": 15,
     "dev": 0,
-    "covered": 8,
+    "covered": 12,
     "v2": {
      "never": 16,
      "confirm": 4,
@@ -357,12 +357,12 @@
   "peopleRoutes": 794,
   "peopleReads": 437,
   "peopleWrites": 357,
-  "coveredRoutes": 153,
-  "coveredReads": 147,
-  "coveredWrites": 6,
+  "coveredRoutes": 158,
+  "coveredReads": 149,
+  "coveredWrites": 9,
   "coveredPages": 109,
   "pagesWithPageId": 109,
-  "v1Tools": 15,
+  "v1Tools": 13,
   "v2Tools": 15,
   "v2Decisions": {
    "confirm": 114,
@@ -718,7 +718,7 @@
    ],
    "mapsTo": "useNavigate() to the palette entry's path, the kept row's href, or the kind's href built from a typed ref; a name through the kind's list read (list's routes)",
    "routes": [],
-   "line": 453
+   "line": 474
   },
   {
    "name": "search",
@@ -772,7 +772,7 @@
      "path": "/api/access/search/answer"
     }
    ],
-   "line": 472
+   "line": 493
   },
   {
    "name": "list",
@@ -1006,7 +1006,7 @@
      "path": "/api/access/audit"
     }
    ],
-   "line": 489
+   "line": 510
   },
   {
    "name": "get",
@@ -1244,53 +1244,62 @@
      "path": "/api/access/reviews/:id"
     }
    ],
-   "line": 508
+   "line": 529
   },
   {
-   "name": "start_computer",
+   "name": "computer",
    "kind": "machine",
    "backing": "work",
    "confirm": true,
-   "action": "ManageDevbox",
+   "action": null,
    "tenants": [
     "orgiq"
    ],
-   "mapsTo": "useCompute().create({ label, projectId }) -> POST /api/devbox/boxes",
+   "mapsTo": "start: GET /api/graph/projects, then useCompute().create({ label, projectId }) -> POST /api/devbox/boxes; stop: GET /api/devbox/boxes, then useCompute().remove(id) -> DELETE /api/devbox/boxes/:boxId; open-shell: openShell({ id, label, sessionId, cwd }) -> POST /api/devbox/:sessionId/shell-url; run: GET /api/devbox/allowlist, then POST /api/devbox/:sessionId/command { command, mode: 'safe', cwd }; hand-work: GET /api/local-compute/nodes, GET /api/work/suggestions, GET /api/bots, then POST /api/local-compute/nodes/:nodeId/work { workItemId | botId, requiresReview: true }",
    "routes": [
+    {
+     "method": "GET",
+     "path": "/api/graph/projects"
+    },
     {
      "method": "POST",
      "path": "/api/devbox/boxes"
-    }
-   ],
-   "line": 520
-  },
-  {
-   "name": "open_shell",
-   "kind": "machine",
-   "backing": "route",
-   "confirm": false,
-   "action": "OpenDevboxShell",
-   "tenants": [
-    "orgiq"
-   ],
-   "mapsTo": "openShell({ id, label, sessionId, cwd: the box's workspace })",
-   "routes": [],
-   "line": 534
-  },
-  {
-   "name": "run_command",
-   "kind": "machine",
-   "backing": "work",
-   "confirm": true,
-   "action": "OpenDevboxShell",
-   "tenants": [
-    "orgiq"
-   ],
-   "mapsTo": "POST /api/devbox/:sessionId/command { command, mode: 'safe', cwd }",
-   "routes": [
+    },
+    {
+     "method": "GET",
+     "path": "/api/devbox/boxes"
+    },
+    {
+     "method": "DELETE",
+     "path": "/api/devbox/boxes/:boxId"
+    },
+    {
+     "method": "POST",
+     "path": "/api/devbox/:sessionId/shell-url"
+    },
+    {
+     "method": "GET",
+     "path": "/api/devbox/allowlist"
+    },
     {
      "method": "POST",
      "path": "/api/devbox/:sessionId/command"
+    },
+    {
+     "method": "GET",
+     "path": "/api/local-compute/nodes"
+    },
+    {
+     "method": "GET",
+     "path": "/api/work/suggestions"
+    },
+    {
+     "method": "GET",
+     "path": "/api/bots"
+    },
+    {
+     "method": "POST",
+     "path": "/api/local-compute/nodes/:nodeId/work"
     }
    ],
    "line": 541
@@ -1391,7 +1400,7 @@
      "path": "/api/access/summary"
     }
    ],
-   "line": 553
+   "line": 564
   },
   {
    "name": "budget",
@@ -1441,7 +1450,7 @@
      "path": "/api/observability/cost/summary"
     }
    ],
-   "line": 566
+   "line": 577
   },
   {
    "name": "activity",
@@ -1468,7 +1477,7 @@
      "path": "/api/search"
     }
    ],
-   "line": 580
+   "line": 591
   },
   {
    "name": "send_chat_message",
@@ -1491,7 +1500,7 @@
      "path": "/api/social/dms"
     }
    ],
-   "line": 593
+   "line": 604
   },
   {
    "name": "start_call",
@@ -1514,7 +1523,7 @@
      "path": "/api/social/dms"
     }
    ],
-   "line": 607
+   "line": 618
   },
   {
    "name": "set_status",
@@ -1528,7 +1537,7 @@
    ],
    "mapsTo": "usePresence('<tenant>:lobby') (the shell's tenant lobby, manifest presenceLobby) then usePresence('social:lobby') with a Social grant: setStatus(status) and updateMetadata({ statusMessage })",
    "routes": [],
-   "line": 621
+   "line": 632
   },
   {
    "name": "queue_work",
@@ -1582,7 +1591,7 @@
      "path": "/api/pipelines/runs/:id/events"
     }
    ],
-   "line": 633
+   "line": 644
   },
   {
    "name": "access_request_status",
@@ -1612,7 +1621,7 @@
      "path": "/api/access/approvals"
     }
    ],
-   "line": 646
+   "line": 657
   }
  ],
  "navigatePages": [
@@ -3448,7 +3457,7 @@
   {"method":"GET","path":"/api/auth/config","source":"src/routes/auth.ts:69","declaredAt":"src/routes/auth.ts:69","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"identity","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"SSO"}},
   {"method":"GET","path":"/api/auth/login","source":"src/routes/auth.ts:73","declaredAt":"src/routes/auth.ts:73","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"identity","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"SSO"}},
   {"method":"POST","path":"/api/auth/logout","source":"src/routes/auth.ts:150","declaredAt":"src/routes/auth.ts:150","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"identity","cedarAction":null,"actions":[],"writePolicy":"refused:session","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"SSO"}},
-  {"method":"GET","path":"/api/bots","source":"src/routes/bots.ts:647","declaredAt":"src/routes/bots.ts:647","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"bots","cedarAction":"ManageBots","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageBots","holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":["list","summary","queue_work"],"v2":{"decision":"read","tool":"list","note":"a collection"}},
+  {"method":"GET","path":"/api/bots","source":"src/routes/bots.ts:647","declaredAt":"src/routes/bots.ts:647","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"bots","cedarAction":"ManageBots","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageBots","holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":["list","computer","summary","queue_work"],"v2":{"decision":"read","tool":"list","note":"a collection"}},
   {"method":"POST","path":"/api/bots","source":"src/routes/bots.ts:652","declaredAt":"src/routes/bots.ts:652","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"bots","cedarAction":"ManageBots","actions":["ManageBots"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"bot missions are authored on the page"}},
   {"method":"DELETE","path":"/api/bots/:id","source":"src/routes/bots.ts:763","declaredAt":"src/routes/bots.ts:763","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"bots","cedarAction":"ManageBots","actions":["ManageBots"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"destructive"}},
   {"method":"GET","path":"/api/bots/:id","source":"src/routes/bots.ts:697","declaredAt":"src/routes/bots.ts:697","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"bots","cedarAction":"ManageBots","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageBots","holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":["get"],"v2":{"decision":"read","tool":"get","note":"one record"}},
@@ -3564,13 +3573,13 @@
   {"method":"POST","path":"/api/designs/:id/answer","source":"src/routes/designs.ts:59","declaredAt":"src/routes/designs.ts:59","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"DispatchAgentRun","actions":["DispatchAgentRun"],"floor":["ViewDesigns"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"confirm","tool":"decide","note":"a design question or sign-off (DispatchAgentRun)"}},
   {"method":"POST","path":"/api/designs/:id/signoff","source":"src/routes/designs.ts:83","declaredAt":"src/routes/designs.ts:83","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"DispatchAgentRun","actions":["DispatchAgentRun"],"floor":["ViewDesigns"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"confirm","tool":"decide","note":"a design question or sign-off (DispatchAgentRun)"}},
   {"method":"DELETE","path":"/api/devbox/:sessionId","source":"src/routes/devbox.ts:1168","declaredAt":"src/routes/devbox.ts:1171","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"compute","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageDevbox","holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"raw sessions, free-text tasks, box edits"}},
-  {"method":"POST","path":"/api/devbox/:sessionId/command","source":"src/routes/devbox.ts:921","declaredAt":"src/routes/devbox.ts:924","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"compute","cedarAction":"OpenDevboxShell","actions":["OpenDevboxShell","ManageDevbox"],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageDevbox","holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"skipped","pageId":null,"coveredBy":["run_command"],"v2":{"decision":"confirm","tool":"computer","note":"run, safe-mode phrase only (as run_command)"}},
-  {"method":"POST","path":"/api/devbox/:sessionId/shell-url","source":"src/routes/devbox.ts:1097","declaredAt":"src/routes/devbox.ts:1100","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"compute","cedarAction":"OpenDevboxShell","actions":["OpenDevboxShell","ManageDevbox"],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageDevbox","holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"skipped","pageId":null,"coveredBy":[],"v2":{"decision":"open","tool":"computer","note":"open-shell (the PTY tab)"}},
+  {"method":"POST","path":"/api/devbox/:sessionId/command","source":"src/routes/devbox.ts:921","declaredAt":"src/routes/devbox.ts:924","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"compute","cedarAction":"OpenDevboxShell","actions":["OpenDevboxShell","ManageDevbox"],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageDevbox","holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"skipped","pageId":null,"coveredBy":["computer"],"v2":{"decision":"confirm","tool":"computer","note":"run, safe-mode phrase only (as run_command)"}},
+  {"method":"POST","path":"/api/devbox/:sessionId/shell-url","source":"src/routes/devbox.ts:1097","declaredAt":"src/routes/devbox.ts:1100","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"compute","cedarAction":"OpenDevboxShell","actions":["OpenDevboxShell","ManageDevbox"],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageDevbox","holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"skipped","pageId":null,"coveredBy":["computer"],"v2":{"decision":"open","tool":"computer","note":"open-shell (the PTY tab)"}},
   {"method":"POST","path":"/api/devbox/:sessionId/task","source":"src/routes/devbox.ts:887","declaredAt":"src/routes/devbox.ts:890","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"compute","cedarAction":"RunDevboxTask","actions":["RunDevboxTask","ManageDevbox"],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageDevbox","holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"refused:fires","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"raw sessions, free-text tasks, box edits"}},
-  {"method":"GET","path":"/api/devbox/allowlist","source":"src/routes/devbox.ts:448","declaredAt":"src/routes/devbox.ts:451","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"compute","cedarAction":"ManageDevbox","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageDevbox","unresolvedGates":["requireAgentCapability"],"holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"list","note":"a collection"}},
-  {"method":"GET","path":"/api/devbox/boxes","source":"src/routes/devbox.ts:463","declaredAt":"src/routes/devbox.ts:466","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"compute","cedarAction":"ManageDevbox","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageDevbox","holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":["list","summary"],"v2":{"decision":"read","tool":"list","note":"a collection"}},
-  {"method":"POST","path":"/api/devbox/boxes","source":"src/routes/devbox.ts:546","declaredAt":"src/routes/devbox.ts:549","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"compute","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageDevbox","holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"refused:fires","pageId":null,"coveredBy":["start_computer"],"v2":{"decision":"confirm","tool":"computer","note":"start (as start_computer)"}},
-  {"method":"DELETE","path":"/api/devbox/boxes/:boxId","source":"src/routes/devbox.ts:592","declaredAt":"src/routes/devbox.ts:595","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"compute","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageDevbox","holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"confirm","tool":"computer","note":"stop the caller's own computer; stops billing"}},
+  {"method":"GET","path":"/api/devbox/allowlist","source":"src/routes/devbox.ts:448","declaredAt":"src/routes/devbox.ts:451","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"compute","cedarAction":"ManageDevbox","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageDevbox","unresolvedGates":["requireAgentCapability"],"holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":["computer"],"v2":{"decision":"read","tool":"list","note":"a collection"}},
+  {"method":"GET","path":"/api/devbox/boxes","source":"src/routes/devbox.ts:463","declaredAt":"src/routes/devbox.ts:466","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"compute","cedarAction":"ManageDevbox","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageDevbox","holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":["list","computer","summary"],"v2":{"decision":"read","tool":"list","note":"a collection"}},
+  {"method":"POST","path":"/api/devbox/boxes","source":"src/routes/devbox.ts:546","declaredAt":"src/routes/devbox.ts:549","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"compute","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageDevbox","holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"refused:fires","pageId":null,"coveredBy":["computer"],"v2":{"decision":"confirm","tool":"computer","note":"start (as start_computer)"}},
+  {"method":"DELETE","path":"/api/devbox/boxes/:boxId","source":"src/routes/devbox.ts:592","declaredAt":"src/routes/devbox.ts:595","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"compute","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageDevbox","holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"refused:destructive","pageId":null,"coveredBy":["computer"],"v2":{"decision":"confirm","tool":"computer","note":"stop the caller's own computer; stops billing"}},
   {"method":"PATCH","path":"/api/devbox/boxes/:boxId","source":"src/routes/devbox.ts:579","declaredAt":"src/routes/devbox.ts:582","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"compute","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageDevbox","holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"raw sessions, free-text tasks, box edits"}},
   {"method":"GET","path":"/api/devbox/boxes/:boxId/tail","source":"src/routes/devbox.ts:653","declaredAt":"src/routes/devbox.ts:656","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"compute","cedarAction":"ManageDevbox","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageDevbox","holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"get","note":"one record"}},
   {"method":"GET","path":"/api/devbox/profiles","source":"src/routes/devbox-profiles.ts:43","declaredAt":"src/routes/devbox-profiles.ts:43","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"compute","cedarAction":"ManageDevbox","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageDevbox","holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"budget","note":"the budgets read tier"}},
@@ -3606,7 +3615,7 @@
   {"method":"GET","path":"/api/graph/people/:personId","source":"src/routes/graph.ts:46","declaredAt":"src/routes/graph.ts:46","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"org","cedarAction":"ViewOrgChart","actions":["ViewOrgChart"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":["get"],"v2":{"decision":"read","tool":"get","note":"one record"}},
   {"method":"GET","path":"/api/graph/people/:personId/evidence","source":"src/routes/graph.ts:55","declaredAt":"src/routes/graph.ts:55","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"org","cedarAction":"ViewOrgChart","actions":["ViewOrgChart"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":["get"],"v2":{"decision":"read","tool":"get","note":"one record"}},
   {"method":"GET","path":"/api/graph/people/:personId/work","source":"src/routes/work-items.ts:354","declaredAt":"src/routes/work-items.ts:354","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":["get"],"v2":{"decision":"read","tool":"get","note":"one record"}},
-  {"method":"GET","path":"/api/graph/projects","source":"src/routes/projects.ts:43","declaredAt":"src/routes/projects.ts:43","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":["list","budget"],"v2":{"decision":"read","tool":"list","note":"a collection"}},
+  {"method":"GET","path":"/api/graph/projects","source":"src/routes/projects.ts:43","declaredAt":"src/routes/projects.ts:43","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":["list","computer","budget"],"v2":{"decision":"read","tool":"list","note":"a collection"}},
   {"method":"GET","path":"/api/graph/projects-graph","source":"src/routes/graph.ts:18","declaredAt":"src/routes/graph.ts:18","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"org","cedarAction":"ViewOrgChart","actions":["ViewOrgChart"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"operator consoles, agent-facing reads and leadership data: the page, not the voice"}},
   {"method":"GET","path":"/api/graph/projects/:id","source":"src/routes/projects.ts:69","declaredAt":"src/routes/projects.ts:69","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":["get"],"v2":{"decision":"read","tool":"get","note":"one record"}},
   {"method":"PATCH","path":"/api/graph/projects/:id","source":"src/routes/projects.ts:93","declaredAt":"src/routes/projects.ts:93","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"DispatchAgentRun","actions":["DispatchAgentRun"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"skipped","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"initiative governance edits"}},
@@ -3728,12 +3737,12 @@
   {"method":"POST","path":"/api/local-compute/jobs/:jobId/skills","source":"src/routes/local-compute.ts:624","declaredAt":"src/routes/local-compute.ts:624","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"compute","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"node-token machine routes"}},
   {"method":"POST","path":"/api/local-compute/jobs/:jobId/start","source":"src/routes/local-compute.ts:584","declaredAt":"src/routes/local-compute.ts:584","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"compute","cedarAction":null,"actions":[],"writePolicy":"skipped","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"node-token machine routes"}},
   {"method":"POST","path":"/api/local-compute/log","source":"src/routes/local-compute.ts:867","declaredAt":"src/routes/local-compute.ts:867","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"compute","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"node-token machine routes"}},
-  {"method":"GET","path":"/api/local-compute/nodes","source":"src/routes/local-compute.ts:984","declaredAt":"src/routes/local-compute.ts:984","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"compute","cedarAction":null,"actions":[],"floor":["ViewLocalCompute"],"writePolicy":null,"pageId":null,"coveredBy":["summary"],"v2":{"decision":"read","tool":"summary","note":"an aggregate"}},
+  {"method":"GET","path":"/api/local-compute/nodes","source":"src/routes/local-compute.ts:984","declaredAt":"src/routes/local-compute.ts:984","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"compute","cedarAction":null,"actions":[],"floor":["ViewLocalCompute"],"writePolicy":null,"pageId":null,"coveredBy":["computer","summary"],"v2":{"decision":"read","tool":"summary","note":"an aggregate"}},
   {"method":"DELETE","path":"/api/local-compute/nodes/:id","source":"src/routes/local-compute.ts:1182","declaredAt":"src/routes/local-compute.ts:1182","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"compute","cedarAction":"ConnectLocalCompute","actions":["ConnectLocalCompute"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"rename or unpair a machine"}},
   {"method":"PATCH","path":"/api/local-compute/nodes/:id","source":"src/routes/local-compute.ts:1160","declaredAt":"src/routes/local-compute.ts:1160","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"compute","cedarAction":"ConnectLocalCompute","actions":["ConnectLocalCompute"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"rename or unpair a machine"}},
   {"method":"GET","path":"/api/local-compute/nodes/:nodeId/log","source":"src/routes/local-compute.ts:913","declaredAt":"src/routes/local-compute.ts:913","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"compute","cedarAction":null,"actions":[],"floor":["ViewLocalCompute"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"summary","note":"an aggregate"}},
   {"method":"GET","path":"/api/local-compute/nodes/:nodeId/log/stream","source":"src/routes/local-compute.ts:931","declaredAt":"src/routes/local-compute.ts:931","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"compute","cedarAction":null,"actions":[],"floor":["ViewLocalCompute"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"summary","note":"an aggregate"}},
-  {"method":"POST","path":"/api/local-compute/nodes/:nodeId/work","source":"src/routes/local-compute.ts:1237","declaredAt":"src/routes/local-compute.ts:1237","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"compute","cedarAction":"ConnectLocalCompute","actions":["ConnectLocalCompute"],"bodyActions":["ManageBots"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"confirm","tool":"computer","note":"hand-work to a paired machine (ConnectLocalCompute)"}},
+  {"method":"POST","path":"/api/local-compute/nodes/:nodeId/work","source":"src/routes/local-compute.ts:1237","declaredAt":"src/routes/local-compute.ts:1237","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"compute","cedarAction":"ConnectLocalCompute","actions":["ConnectLocalCompute"],"bodyActions":["ManageBots"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":["computer"],"v2":{"decision":"confirm","tool":"computer","note":"hand-work to a paired machine (ConnectLocalCompute)"}},
   {"method":"GET","path":"/api/local-compute/nodes/all","source":"src/routes/local-compute.ts:996","declaredAt":"src/routes/local-compute.ts:996","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"compute","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"summary","note":"an aggregate"}},
   {"method":"GET","path":"/api/local-compute/pair/:code","source":"src/routes/local-compute.ts:231","declaredAt":"src/routes/local-compute.ts:231","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"compute","cedarAction":"ConnectLocalCompute","actions":["ConnectLocalCompute"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"pairing a machine is a click with a code"}},
   {"method":"POST","path":"/api/local-compute/pair/claim","source":"src/routes/local-compute.ts:247","declaredAt":"src/routes/local-compute.ts:247","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"compute","cedarAction":null,"actions":[],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"pairing a machine is a click with a code"}},
@@ -4066,7 +4075,7 @@
   {"method":"GET","path":"/api/work/proposals","source":"src/routes/work.ts:581","declaredAt":"src/routes/work.ts:610","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"floor":["ViewWork"],"writePolicy":null,"pageId":null,"coveredBy":["list"],"v2":{"decision":"read","tool":"list","note":"a collection"}},
   {"method":"POST","path":"/api/work/proposals","source":"src/routes/work.ts:588","declaredAt":"src/routes/work.ts:617","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"skipped","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"agent-proposed graph writes are the agents' route"}},
   {"method":"POST","path":"/api/work/proposals/:id/decide","source":"src/routes/work.ts:609","declaredAt":"src/routes/work.ts:638","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"confirm","tool":"decide","note":"ManageDevbox"}},
-  {"method":"GET","path":"/api/work/suggestions","source":"src/routes/work.ts:142","declaredAt":"src/routes/work.ts:143","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"floor":["WorkSuggestions","ViewWork"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"read","tool":"summary","note":"an aggregate"}},
+  {"method":"GET","path":"/api/work/suggestions","source":"src/routes/work.ts:142","declaredAt":"src/routes/work.ts:143","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"floor":["WorkSuggestions","ViewWork"],"writePolicy":null,"pageId":null,"coveredBy":["computer"],"v2":{"decision":"read","tool":"summary","note":"an aggregate"}},
   {"method":"GET","path":"/api/work/summary","source":"src/routes/work.ts:57","declaredAt":"src/routes/work.ts:58","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"floor":["ViewWork"],"writePolicy":null,"pageId":null,"coveredBy":["summary"],"v2":{"decision":"read","tool":"summary","note":"an aggregate"}},
   {"method":"GET","path":"/api/work/sweeps/jobs/:id","source":"src/routes/work.ts:432","declaredAt":"src/routes/work.ts:461","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"bots","cedarAction":null,"actions":[],"floor":["ViewWork"],"writePolicy":null,"pageId":null,"coveredBy":["queue_work"],"v2":{"decision":"read","tool":"get","note":"one record"}},
   {"method":"POST","path":"/api/work/sweeps/run","source":"src/routes/work.ts:405","declaredAt":"src/routes/work.ts:429","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"bots","cedarAction":null,"actions":[],"floor":["RunSweeps","ViewWork"],"unresolvedGates":["forBackground"],"writePolicy":"allowed","pageId":null,"coveredBy":["queue_work"],"v2":{"decision":"confirm","tool":"queue_work","note":"sweep (G19)"}},

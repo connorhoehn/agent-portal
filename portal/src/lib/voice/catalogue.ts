@@ -43,6 +43,10 @@ export interface VoiceToolSpec {
   action: Action | null;
   says: string;
   tenants: readonly string[];
+  /** Argument values that skip the card although the tool confirms (computer's open-shell). */
+  noConfirm?: Readonly<Record<string, readonly string[]>>;
+  /** The gate per argument value where `action` is null (computer: the button each action stands in for). */
+  actionBy?: { arg: string; actions: Readonly<Record<string, Action>> };
 }
 
 export const VOICE_TENANTS = ['orgiq', 'social', 'assessment', 'pipelines', 'access'] as const;
@@ -310,8 +314,14 @@ export function queueWorkKinds(tenant: string | null): string[] {
   return [...new Set(Object.values(QUEUE_WORK_KINDS).flat())];
 }
 
+/** What `computer` may do and the Cedar action of the button each stands in for (the middleware's COMPUTER_ACTIONS, V2-8). */
+export const COMPUTER_ACTIONS: Readonly<Record<string, Action>> = {
+  start: 'ManageDevbox', stop: 'ManageDevbox', 'open-shell': 'OpenDevboxShell', run: 'OpenDevboxShell', 'hand-work': 'ConnectLocalCompute',
+};
+export type ComputerAction = 'start' | 'stop' | 'open-shell' | 'run' | 'hand-work';
+
 /**
- * The phrase ids `run_command` may name; actions.ts PHRASE_TABLE owns the
+ * The phrase ids `computer { action: 'run' }` may name; actions.ts PHRASE_TABLE owns the
  * command text (§6). The mint narrows this enum to the phrases the server's
  * allowlist runs (G9), so the dock validates against the full list and the
  * planner checks the composed command against GET /api/devbox/allowlist.
@@ -322,7 +332,7 @@ export const RUN_COMMAND_PHRASES = [
 ] as const;
 export type RunCommandPhrase = typeof RUN_COMMAND_PHRASES[number];
 
-/** What `since` takes (run_command's commits-since, list, summary, activity); parseSince and gitSince read exactly these. */
+/** What `since` takes (computer run's commits-since, list, summary, activity); parseSince and gitSince read exactly these. */
 const SINCE_WORDS = '"yesterday", "last night", "today", "this morning", "3 hours ago", "3 days ago", "last week" or a YYYY-MM-DD date';
 
 const obj = (properties: Record<string, JsonSchema>, required: string[] = []): JsonSchema =>
@@ -382,29 +392,23 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
     kind: 'read', backing: 'search', confirm: false, action: null, says: 'Reading that initiative.', tenants: VOICE_TENANTS,
   },
   {
-    name: 'start_computer',
+    name: 'computer',
     parameters: obj({
-      initiativeIds: {
+      action: str('What to do.', { enum: Object.keys(COMPUTER_ACTIONS) }),
+      initiatives: {
         type: 'array', minItems: 1, maxItems: 10,
-        description: 'The initiatives: ids from a list of initiatives or a search, or the names the user said.',
+        description: 'For start: the initiatives, as ids from a list or search, or the names the user said.',
         items: str('An initiative id or name.', { minLength: 1, maxLength: 200 }),
       },
-    }, ['initiativeIds']),
-    kind: 'machine', backing: 'work', confirm: true, action: 'ManageDevbox', says: 'Starting a computer for Alpha.', tenants: ['orgiq'],
-  },
-  {
-    name: 'open_shell',
-    parameters: obj({ computerId: str('The computer.', { minLength: 1 }) }, ['computerId']),
-    kind: 'machine', backing: 'route', confirm: false, action: 'OpenDevboxShell', says: 'Opening a shell on Alpha.', tenants: ['orgiq'],
-  },
-  {
-    name: 'run_command',
-    parameters: obj({
-      computerId: str('The computer.', { minLength: 1 }),
-      phrase: str('Which command.', { enum: [...RUN_COMMAND_PHRASES] }),
-      since: str(`For commits-since: ${SINCE_WORDS}.`, { maxLength: 40 }),
-    }, ['computerId', 'phrase']),
-    kind: 'machine', backing: 'work', confirm: true, action: 'OpenDevboxShell', says: 'Running git log on Alpha.', tenants: ['orgiq'],
+      computer: str('For stop, open-shell and run: the computer, by the id a result gave or the name or initiative the user said.', { minLength: 1, maxLength: 200 }),
+      phrase: str('For run: which command.', { enum: [...RUN_COMMAND_PHRASES] }),
+      since: str(`For run's commits-since: ${SINCE_WORDS}.`, { maxLength: 40 }),
+      machine: str('For hand-work: the paired machine, as the user named it.', { minLength: 1, maxLength: 120 }),
+      job: str('For hand-work: the work item or the bot whose mission to hand over, as the user named it; never an instruction.', { minLength: 1, maxLength: 200 }),
+    }, ['action']),
+    kind: 'machine', backing: 'work', confirm: true, action: null, says: 'Starting a computer for Alpha.', tenants: ['orgiq'],
+    noConfirm: { action: ['open-shell'] },
+    actionBy: { arg: 'action', actions: COMPUTER_ACTIONS },
   },
   {
     name: 'summary',

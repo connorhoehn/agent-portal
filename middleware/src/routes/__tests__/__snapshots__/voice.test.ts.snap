@@ -362,59 +362,56 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Start one cloud computer per initiative, reusing one already running. For "each of my active projects", list the initiatives first (kind initiative, scope mine) and pass every id. The user confirms the whole list once.",
-    "name": "start_computer",
+    "description": "Act on the user's computers. "start": one cloud computer per initiative in \`initiatives\` (ids from a list, or the names the user said; a running one is reused; for "each of my active projects" list the initiatives first, kind initiative, scope mine). "stop": stop one of the user's own computers (\`computer\`). "open-shell": open a shell tab on a computer. "run": run one read-only command on a computer, chosen by \`phrase\` from a fixed list, never a free-form command (for anything else tell the user to open the shell and type it). "hand-work": hand a work item or a bot's mission (\`job\`, as the user named it) to one of the user's paired machines (\`machine\`). Everything except open-shell asks the user first.",
+    "name": "computer",
     "parameters": {
       "additionalProperties": false,
       "properties": {
-        "initiativeIds": {
-          "description": "The initiatives: ids from a list of initiatives or a search, or the names the user said.",
+        "action": {
+          "description": "What to do.",
+          "enum": [
+            "start",
+            "stop",
+            "open-shell",
+            "run",
+            "hand-work",
+          ],
+          "type": "string",
+        },
+        "computer": {
+          "description": "For stop, open-shell and run: the computer, by the id a result gave or the name or initiative the user said.",
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "initiatives": {
+          "description": "For start: the initiatives, as ids from a list or search, or the names the user said.",
           "items": {
             "description": "An initiative id or name.",
             "type": "string",
           },
-          "type": "array",
+          "type": [
+            "array",
+            "null",
+          ],
         },
-      },
-      "required": [
-        "initiativeIds",
-      ],
-      "type": "object",
-    },
-    "strict": true,
-    "type": "function",
-  },
-  {
-    "description": "Open (or focus) a shell tab on one of the user's computers, in its workspace.",
-    "name": "open_shell",
-    "parameters": {
-      "additionalProperties": false,
-      "properties": {
-        "computerId": {
-          "description": "The computer.",
-          "type": "string",
+        "job": {
+          "description": "For hand-work: the work item or the bot whose mission to hand over, as the user named it; never an instruction.",
+          "type": [
+            "string",
+            "null",
+          ],
         },
-      },
-      "required": [
-        "computerId",
-      ],
-      "type": "object",
-    },
-    "strict": true,
-    "type": "function",
-  },
-  {
-    "description": "Run one read-only command on a computer, chosen from a fixed list of phrases. Never a free-form command: for anything else tell the user to open the shell and type it.",
-    "name": "run_command",
-    "parameters": {
-      "additionalProperties": false,
-      "properties": {
-        "computerId": {
-          "description": "The computer.",
-          "type": "string",
+        "machine": {
+          "description": "For hand-work: the paired machine, as the user named it.",
+          "type": [
+            "string",
+            "null",
+          ],
         },
         "phrase": {
-          "description": "Which command.",
+          "description": "For run: which command.",
           "enum": [
             "latest-commits-since-yesterday",
             "commits-since",
@@ -423,11 +420,15 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
             "list-files",
             "working-directory",
             "test-python",
+            null,
           ],
-          "type": "string",
+          "type": [
+            "string",
+            "null",
+          ],
         },
         "since": {
-          "description": "For commits-since: "yesterday", "last night", "today", "this morning", "3 hours ago", "3 days ago", "last week" or a YYYY-MM-DD date.",
+          "description": "For run's commits-since: "yesterday", "last night", "today", "this morning", "3 hours ago", "3 days ago", "last week" or a YYYY-MM-DD date.",
           "type": [
             "string",
             "null",
@@ -435,9 +436,13 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
         },
       },
       "required": [
-        "computerId",
+        "action",
+        "initiatives",
+        "computer",
         "phrase",
         "since",
+        "machine",
+        "job",
       ],
       "type": "object",
     },

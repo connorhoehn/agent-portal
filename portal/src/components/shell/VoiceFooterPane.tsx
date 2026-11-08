@@ -18,7 +18,7 @@
 // gateway socket through useChat for a post, the same send-and-wait-for-
 // receipt path the composer uses, and the shell's call host (useSocialCall,
 // the Social pages' call buttons and the footer's Huddle) for start_call. A
-// run_command's output streams into a read-only output tab in the compute dock
+// computer run's output streams into a read-only output tab in the compute dock
 // (the library's openOutputTab, ui-components 2.510.2), beside the shell
 // tabs, with an "Open shell" action. Work queue_work queues (G19) is followed
 // by lib/voice/work.ts's VoiceJobTracker: one library job toast (useToast's
@@ -142,6 +142,8 @@ function VoiceFooterPane() {
   const planeCaps = useFetch<{ actions: Record<string, boolean>; requestItemId?: string }>(onPlane ? '/api/social/plane/capabilities' : null, 60_000, { share: true });
   // Delivery ids per (channel, text), for this person only.
   const deliveries = useMemo(() => new Map<string, DeliveryRecord>(), [session?.sub]);
+  // The action ledger (tools.ts `once`): a retried act never acts twice while this dock lives.
+  const ledger = useMemo(() => new Map<string, DeliveryRecord>(), [session?.sub]);
   // The rows this tenant's reads returned, for open and get by position; a new tenant or another person starts empty
   // (G14: a row one persona's read returned is never opened for another in the same tab).
   const results = useMemo(() => new ResultMemory(), [tenant, session?.sub]);
@@ -175,7 +177,7 @@ function VoiceFooterPane() {
     await sender(text, deliveryId);
   }, []);
 
-  // ── run_command's captured output: a read-only tab in the compute dock (G9) ──
+  // ── computer run's captured output: a read-only tab in the compute dock (G9) ──
   // Read through a ref: the controller is built once per pane, and a new computer list must not rebuild it (that ends the session).
   const computeRef = useRef(compute);
   computeRef.current = compute;
@@ -197,6 +199,8 @@ function VoiceFooterPane() {
     create: (input) => compute.create(input),
     openShell: (box) => { const r = openShell(box); return r.ok ? r : { ok: false, reason: r.reason }; },
     runCommand: (sessionId, body, onEvent, signal) => compute.client.runCommand(sessionId, body, onEvent, signal),
+    // computer stop: the lab's own remove (DELETE /api/devbox/boxes/:boxId), the dock having checked the box is the caller's.
+    remove: (id) => compute.remove(id),
   } : null), [compute, tenant]);
 
   // start_call: the shell's one call host (ShellCallHost mounts this footer), through the Social pages' own starts.
@@ -241,8 +245,9 @@ function VoiceFooterPane() {
   // The tool context is read at call time, so a call sees the current router, grants and providers.
   const planeActions = planeCaps.data?.actions ?? {};
   const socialRequestItemId = onPlane && planeCaps.data?.actions && !planeCaps.data.actions['PostMessage'] ? planeCaps.data.requestItemId ?? null : null;
-  const live = useRef({ tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, socialRequestItemId, results });
-  live.current = { tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, socialRequestItemId, results };
+  const userId = session?.sub ?? null;
+  const live = useRef({ tenant, role: session?.role ?? 'member', userId, ledger, can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, socialRequestItemId, results });
+  live.current = { tenant, role: session?.role ?? 'member', userId, ledger, can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, socialRequestItemId, results };
 
   // ── queue_work (G19): one keyed toast per job, the notification center's entry, the spoken outcome ──
   const toaster = useToastOptional();
@@ -278,6 +283,8 @@ function VoiceFooterPane() {
     toolContext: (): ToolContext => ({
       tenant: live.current.tenant,
       role: live.current.role,
+      userId: live.current.userId,
+      ledger: live.current.ledger,
       palette: { pages: PAGES, visible: isPageVisible },
       // Outside Social, posting and calling are the plane's grants (GET /api/social/plane/capabilities), not the session tenant's.
       can: (action: Action) => (PLANE_ACTIONS.has(action) && live.current.tenant !== 'social' ? !!live.current.planeActions[action] : live.current.can(action)),

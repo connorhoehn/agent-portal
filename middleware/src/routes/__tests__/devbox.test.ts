@@ -657,7 +657,7 @@ describe('GET /api/devbox/status', () => {
 describe('GET /api/devbox/allowlist and the voice phrases it admits (G9)', () => {
   afterEach(() => { delete process.env['DEVBOX_COMMAND_ALLOWLIST']; });
   const phraseEnum = (tools: ReturnType<typeof toolsForTenant>) =>
-    ((tools.find((t) => t.name === 'run_command')?.parameters.properties['phrase'] as { enum?: string[] } | undefined)?.enum ?? null);
+    ((tools.find((t) => t.name === 'computer')?.parameters.properties['phrase'] as { enum?: string[] } | undefined)?.enum ?? null);
 
   it('answers the safe-mode prefixes and nothing else', async () => {
     const res = await request(buildApp()).get('/api/devbox/allowlist');
@@ -692,11 +692,10 @@ describe('GET /api/devbox/allowlist and the voice phrases it admits (G9)', () =>
     expect(runCommandPhrases(commandAllowlist())).toEqual(phrases);
   });
 
-  it('an allowlist that runs no phrase leaves run_command out of the session', () => {
+  it('an allowlist that runs no phrase leaves computer\'s run out of the session, and keeps the rest of the tool', () => {
     process.env['DEVBOX_COMMAND_ALLOWLIST'] = 'echo hello';
-    const tools = toolsForTenant('orgiq', { commandAllowlist: commandAllowlist() });
-    expect(tools.map((t) => t.name)).not.toContain('run_command');
-    expect(tools.map((t) => t.name)).toContain('open_shell');
+    const computer = toolsForTenant('orgiq', { commandAllowlist: commandAllowlist() }).find((t) => t.name === 'computer')!;
+    expect((computer.parameters.properties['action'] as { enum: string[] }).enum).toEqual(['start', 'stop', 'open-shell', 'hand-work']);
   });
 });
 

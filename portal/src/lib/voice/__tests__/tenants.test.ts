@@ -16,7 +16,7 @@ interface MwCatalogue { MOCK_CALLS: Record<string, Call>; VOICE_TENANTS: readonl
 interface MwOpenai { mockLiveScript: (id: string, c: Call) => { onStart: unknown[]; onResponseCreate: unknown[]; onClose: unknown[] } }
 
 /** One tenant's scripted session run to the end; `extraStart` adds frames (a second call) to the script. */
-export async function scriptedRun(tenant: string, opts: { role: string; allow: Action[]; routes: Route[]; extraStart?: unknown[]; ctx?: Parameters<typeof toolContext>[0]; call?: Call; beforeStop?: (c: VoiceController, ctx: ReturnType<typeof toolContext>) => Promise<void> | void }) {
+export async function scriptedRun(tenant: string, opts: { role: string; allow: Action[]; routes: Route[]; extraStart?: unknown[]; ctx?: Parameters<typeof toolContext>[0]; call?: Call; beforeStop?: (c: VoiceController, ctx: ReturnType<typeof toolContext>, clock: FakeClock) => Promise<void> | void }) {
   const { MOCK_CALLS } = await middlewareVoice<MwCatalogue>('catalogue.ts');
   const { mockLiveScript } = await middlewareVoice<MwOpenai>('openai.ts');
   const call = opts.call ?? MOCK_CALLS[tenant];
@@ -38,7 +38,7 @@ export async function scriptedRun(tenant: string, opts: { role: string; allow: A
   const controller = new VoiceController({ fetch, media: null, toolContext: () => ctx, now: clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer });
   await controller.start();
   await clock.advance(opts.extraStart ? 8000 : 4000);
-  await opts.beforeStop?.(controller, ctx);
+  await opts.beforeStop?.(controller, ctx, clock);
   const stopping = controller.stop();
   await clock.advance(300);
   await stopping;
@@ -275,4 +275,35 @@ test('V2-4: open by a unique name opens in one step, with no card', async () => 
   });
   assert.deepEqual(run.calls, [['open', 'done']]);
   assert.deepEqual(run.ctx.navigations, ['/iq/projects/p-alpha']);
+});
+
+test('V2-8: an SME\'s scripted session stops a computer of their own: the card first, then the lab\'s remove, once', async () => {
+  const { mockCallFor } = await middlewareVoice<{ mockCallFor: (t: string, r: string) => Call }>('catalogue.ts');
+  const call = mockCallFor('orgiq', 'sme');
+  assert.equal(call.name, 'computer');
+  const removed: string[] = [];
+  let card: unknown = null;
+  const boxes = { boxes: [
+    { id: 'box-mock-0001', label: 'auth-migration-1', sessionId: 'a'.repeat(40), status: 'stopped', projectId: 'p-auth-migration', ownerId: 'u-me' },
+    { id: 'box-mock-0002', label: 'auth-migration-2', sessionId: 'b'.repeat(40), status: 'idle', projectId: 'p-auth-migration', ownerId: 'u-vera' },
+  ] };
+  const run = await scriptedRun('orgiq', {
+    role: 'sme', allow: ['Search', 'ManageDevbox', 'OpenDevboxShell', 'VoiceNavigate'], call,
+    routes: [route('GET', '/api/devbox/boxes', 200, boxes)],
+    ctx: { compute: {
+      canManage: true, computers: () => [], openShell: () => ({ ok: false, reason: 'unused' }), runCommand: async () => {},
+      create: async () => { throw new Error('a stop creates nothing'); }, remove: async (id) => { removed.push(id); },
+    } },
+    beforeStop: async (c, _ctx, clock) => {
+      const p = c.getSnapshot().pending!;
+      card = { tool: p.tool, title: p.title, detail: p.detail };
+      assert.deepEqual(removed, [], 'nothing stops before the confirm');
+      c.confirm('click');
+      await clock.advance(300);
+    },
+  });
+  assert.deepEqual(card, { tool: 'computer', title: 'Stop auth-migration-1', detail: 'It is already stopped; this removes it from the Computer Lab.' });
+  assert.deepEqual(removed, ['box-mock-0001']);
+  assert.deepEqual(run.calls, [['computer', 'done']]);
+  assert.deepEqual(run.outcomes, ['done']);
 });

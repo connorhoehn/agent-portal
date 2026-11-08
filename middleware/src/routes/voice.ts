@@ -189,7 +189,7 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
   }
 
   const { releaseHold } = await import('../providers/spend-holds.js');
-  // run_command offers only the phrases this deployment's safe-mode allowlist runs (G9).
+  // computer run offers only the phrases this deployment's safe-mode allowlist runs (G9).
   const { commandAllowlist } = await import('./devbox.js');
   const tools = toolsForTenant(session.tenant, { commandAllowlist: commandAllowlist(), role: session.role });
   const toolsEnabled = cfg.mock || (cfg.delegationModel != null && tools.length > 0);

@@ -142,7 +142,7 @@ export const PAGES: readonly PageEntry[] = [
     keywords: ['codebase', 'repository', 'repo', 'git', 'run'] },
   { label: 'Changes',            hint: 'Code review queue + policies',        path: '/admin/changes',                              tenant: 'admin',  group: 'Build', pageId: 'changes',   roles: CHANGES,
     keywords: ['change', 'review', 'pr', 'pull request', 'diff', 'policy'] },
-  // pageId: the voice navigator's `open` (page 'computer-lab') opens this page, where start_computer's boxes appear.
+  // pageId: the voice navigator's `open` (page 'computer-lab') opens this page, where computer start's boxes appear.
   { label: 'Computer Lab',       hint: 'MicroVM fleet + task runner',         path: '/admin/devbox',                               tenant: 'admin',  group: 'Build',   roles: DEVBOX, pageId: 'computer-lab',
     keywords: ['devbox', 'computer', 'box', 'lab', 'microvm', 'terminal'] },
   { label: 'Local compute',      hint: 'Your paired machines — hand them work', path: '/iq/local-compute',                         tenant: 'orgiq',  group: 'Build', pageId: 'local-compute',

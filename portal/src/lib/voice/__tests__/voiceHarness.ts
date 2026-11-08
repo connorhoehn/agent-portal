@@ -115,7 +115,7 @@ export function toolContext(over: Partial<ToolContext> & { allow?: Action[]; den
   const navigations: string[] = [];
   const { allow, deny, ...rest } = over;
   return {
-    tenant: 'orgiq', role: 'sme', palette: PALETTE, now: () => new Date('2026-11-08T12:00:00Z'),
+    tenant: 'orgiq', role: 'sme', userId: 'u-me', ledger: new Map(), palette: PALETTE, now: () => new Date('2026-11-08T12:00:00Z'),
     can: (a: Action) => (deny ? !deny.includes(a) : allow ? allow.includes(a) : true),
     fetch: async () => { throw new Error('no network in this test'); },
     navigate: (p: string) => { navigations.push(p); },

@@ -1,27 +1,42 @@
 // The voice navigator's machine and people tools (docs/voice-navigator-spec.md
-// §4, §6, §7; package P4): start_computer, open_shell, run_command,
-// send_chat_message, set_status. Each goes through the call the page's own
+// §4, §6, §7; package P4; catalogue v2 V2-8): computer, send_chat_message,
+// start_call, set_status. Each goes through the call the page's own
 // control makes, read from the ToolContext the dock fills from the providers
 // the shell already mounts (ComputeHost's useCompute, EmbeddedSocial's
 // presence, the composer's useChat path): never a second socket, never a new
 // endpoint.
 //
-// The three confirm tools have a planner that runs before the card, with
-// reads only: it resolves the initiatives, the computer or the recipient,
-// composes the command and mints the delivery id, so the card says exactly
-// what will happen and a cancel leaves nothing behind. The runner then acts on
-// that plan and nothing else.
+// The confirm tools have a planner that runs before the card, with reads
+// only: it resolves the initiatives, the computer, the machine and its job or
+// the recipient, composes the command and mints the delivery id, so the card
+// says exactly what will happen and a cancel leaves nothing behind. The runner
+// then acts on that plan and nothing else. `computer` is one tool with five
+// actions, each gated by the Cedar action of the button it stands in for
+// (catalogue COMPUTER_ACTIONS, checked by prepareToolCall before any request):
 //
-//   start_computer    initiatives resolved against the user's own list; one
+//   start             initiatives resolved against the user's own list; one
 //                     card for the batch with the idle-billing note; one
 //                     create({ label, projectId }) per initiative (the lab's
 //                     + Computer), a running box reused; a pending toast while
-//                     they boot
-//   open_shell        the library's openShell (the ⌘K palette's call): opens or
+//                     they boot; the batch goes through the action ledger, so a
+//                     retry never starts a second box
+//   stop              only a box the caller started (`ownerId` on the lab's own
+//                     GET /api/devbox/boxes, against the session's sub): the
+//                     lab's remove (DELETE /api/devbox/boxes/:boxId), which ends
+//                     its billing; a box someone else started is refused, a
+//                     second stop answers that it is already stopped
+//   open-shell        the library's openShell (the ⌘K palette's call): opens or
 //                     focuses the dock's shell tab in the box's workspace, as
-//                     run_command runs there; the model names no directory
-//                     (sweep 2 M3: no model text reaches a shell); no card
-//   run_command       a phrase id from PHRASE_TABLE, never model text; the
+//                     run runs there; the model names no directory (sweep 2
+//                     M3: no model text reaches a shell); no card
+//   hand-work         Local compute's "Hand it work": the user's own paired
+//                     machine (GET /api/local-compute/nodes, owner-scoped) and a
+//                     work item from the page's pick list (GET
+//                     /api/work/suggestions) or a bot (GET /api/bots, with
+//                     ManageBots), never a typed prompt; POST
+//                     /api/local-compute/nodes/:nodeId/work { workItemId |
+//                     botId, requiresReview: true }, the page's default
+//   run               a phrase id from PHRASE_TABLE, never model text; the
 //                     composed command checked against GET
 //                     /api/devbox/allowlist before the card, so the card never
 //                     shows a command the server would refuse; safe mode only,
@@ -54,21 +69,21 @@
 
 import type { RunCommandPhrase } from './catalogue.ts';
 import {
-  ambiguous, computersOf, done, failed, qs, readFailure, readJson, refused, socialGrantRefusal, TOOL_RUNNERS,
+  ambiguous, computersOf, done, failed, once, qs, readFailure, readJson, refused, socialGrantRefusal, TOOL_RUNNERS,
   type CallAccess, type ConfirmPlan, type DeliveryRecord, type PresenceWriter, type ProjectRow, type ToolContext, type ToolResult,
   type VoiceComputer, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
-import { WORK_PLANNERS, WORK_RUNNERS } from './work.ts';
+import { matchByName, WORK_PLANNERS, WORK_RUNNERS } from './work.ts';
 
 /** Lines of command output the model gets (§6 caps every list at 10 rows); the panel keeps the rest. */
 export const OUTPUT_LINES_TO_MODEL = 10;
 /** Lines the dock's panel keeps per run. */
 export const OUTPUT_LINES_KEPT = 400;
-/** A run_command that never ends is abandoned after this (the server's own timeout is 120 s). */
+/** A run that never ends is abandoned after this (the server's own timeout is 120 s). */
 export const COMMAND_TIMEOUT_MS = 150_000;
 /** How long a delivered message suppresses an identical retry. */
 export const DELIVERY_MEMORY_MS = 10 * 60_000;
-/** The lab's path: open { page: 'computer-lab' } opens it and start_computer's boxes appear in it. */
+/** The lab's path: open { page: 'computer-lab' } opens it and computer start's boxes appear in it. */
 export const LAB_PATH = '/admin/devbox';
 
 // ── the phrase table (§6: the model picks the phrase, the dock owns the text) ──
@@ -147,7 +162,7 @@ export function findComputer(computers: readonly VoiceComputer[], ref: string): 
 }
 
 function noComputer(ref: string, candidates: VoiceComputer[]): ToolResult {
-  if (!candidates.length) return refused('You have no computers in the Computer Lab. start_computer starts one.');
+  if (!candidates.length) return refused('You have no computers in the Computer Lab. computer start starts one.');
   return ambiguous(`No single computer matches "${ref}". Ask which one.`, candidates.map(computerRow));
 }
 
@@ -157,7 +172,7 @@ function computeOrRefusal(ctx: ToolContext): { compute: NonNullable<ToolContext[
   return { compute: ctx.compute };
 }
 
-// ── start_computer ──────────────────────────────────────────────────────────
+// ── computer start ──────────────────────────────────────────────────────────
 
 interface StartPlan { start: Array<{ id: string; name: string }>; reuse: Array<{ id: string; name: string; computer: VoiceComputer }> }
 
@@ -184,7 +199,7 @@ const planStartComputer: VoiceToolPlanner = async (args, ctx) => {
   const c = computeOrRefusal(ctx);
   if ('result' in c) return c;
   if (!c.compute.canManage) return { result: refused("I can't start computers with your role.") };
-  const refs = [...new Set((args['initiativeIds'] as string[]).map((r) => r.trim()).filter(Boolean))];
+  const refs = [...new Set(((args['initiatives'] as string[] | undefined) ?? []).map((r) => r.trim()).filter(Boolean))];
   if (!refs.length) return { result: refused('Name at least one initiative.') };
   const read = await readJson<ProjectRow[]>(ctx, `/api/graph/projects?${qs({ scope: 'mine', limit: 50 })}`);
   if (!read.ok) return { result: readFailure('your initiatives', read.status) };
@@ -238,7 +253,15 @@ const runStartComputer: VoiceToolRunner = async (_args, ctx, planned) => {
   const c = computeOrRefusal(ctx);
   if ('result' in c) return c.result;
   const plan = planned as StartPlan | undefined;
-  if (!plan) return refused('start_computer runs only after the user confirms its card.');
+  if (!plan?.start) return refused('A computer starts only after the user confirms its card.');
+  // One start per batch: a retry of the same card (or the same request again) never starts a second box.
+  const key = `computer:start:${plan.start.map((p) => p.id).sort().join(',')}`;
+  return once(ctx, key, () => startNow(ctx, c.compute, plan),
+    () => done('computers', { count: plan.start.length, alreadyStarted: true, lab: LAB_PATH }, `Already started for ${listNames(plan.start.map((s) => s.name))}; nothing new was started`));
+};
+
+async function startNow(ctx: ToolContext, compute: NonNullable<ToolContext['compute']>, plan: StartPlan): Promise<ToolResult> {
+  const c = { compute };
   const names = plan.start.map((s) => s.name);
   const toast = ctx.toast?.pending(names.length === 1 ? `Starting a computer for ${names[0]}` : `Starting ${names.length} computers`, listNames(names));
   const started: Started[] = [];
@@ -256,14 +279,134 @@ const runStartComputer: VoiceToolRunner = async (_args, ctx, planned) => {
     else ctx.toast!.error(toast, 'Computers did not start', started.map((s) => s.error).filter(Boolean).join('; '));
   }
   return res;
+}
+
+// ── computer stop: only the caller's own box ────────────────────────────────
+
+/** The lab's own fleet read: the boxes this caller may see, each with who started it. */
+export const BOXES_URL = '/api/devbox/boxes';
+interface StopPlan { computer: VoiceComputer }
+type FleetBox = VoiceComputer & { ownerId?: string | null };
+
+const planStopComputer: VoiceToolPlanner = async (args, ctx) => {
+  const c = computeOrRefusal(ctx);
+  if ('result' in c) return c;
+  if (!c.compute.canManage) return { result: refused("I can't stop computers with your role.") };
+  if (!ctx.userId) return { result: refused('I cannot tell which computers are yours in this session.') };
+  const ref = String(args['computer']);
+  const read = await readJson<{ boxes?: FleetBox[] }>(ctx, BOXES_URL);
+  if (!read.ok) return { result: readFailure('your computers', read.status) };
+  const visible = (read.body.boxes ?? []).filter((b) => b && typeof b.id === 'string' && b.kind !== 'local');
+  const own = visible.filter((b) => b.ownerId === ctx.userId);
+  const found = findComputer(own, ref);
+  if ('candidates' in found) {
+    // A box the caller can see but did not start is named back (they see it in the lab), never stopped by voice.
+    const theirs = findComputer(visible, ref);
+    if ('computer' in theirs) return { result: refused(`${theirs.computer.label} was started by someone else; only its owner stops it.`) };
+    return { result: own.length ? ambiguous(`No single computer of yours matches "${ref}". Ask which one.`, own.map(computerRow)) : refused('You have no computers of your own running.') };
+  }
+  const box = found.computer;
+  return { plan: {
+    title: `Stop ${box.label}`,
+    detail: box.status === 'stopped' ? 'It is already stopped; this removes it from the Computer Lab.' : 'It stops the computer and its billing; the workspace stays until it expires.',
+    data: { computer: box } satisfies StopPlan,
+  } };
 };
 
-// ── open_shell ──────────────────────────────────────────────────────────────
+const runStopComputer: VoiceToolRunner = async (_args, ctx, planned) => {
+  const c = computeOrRefusal(ctx);
+  if ('result' in c) return c.result;
+  const plan = planned as StopPlan | undefined;
+  if (!plan?.computer) return refused('A computer stops only after the user confirms its card.');
+  const box = plan.computer;
+  try {
+    await c.compute.remove(box.id);
+  } catch (err) {
+    const message = (err as Error)?.message ?? '';
+    // A second stop (a retry) finds it gone: that is the outcome the user asked for.
+    if (/not found|404/i.test(message)) return done('computer_stopped', { computerId: box.id, label: box.label, alreadyStopped: true }, `${box.label} was already stopped`);
+    if (/not yours|403|forbidden/i.test(message)) return refused(`${box.label} is not yours to stop.`);
+    return failed(`${box.label} did not stop: ${message || 'refused'}`, { computerId: box.id });
+  }
+  return done('computer_stopped', { computerId: box.id, label: box.label, lab: LAB_PATH }, `Stopped ${box.label}`);
+};
+
+// ── computer hand-work: a paired machine, a work item or a bot (Local compute's pick list) ──
+
+export const NODES_URL = '/api/local-compute/nodes';
+export const SUGGESTIONS_URL = '/api/work/suggestions';
+interface NodeRow { id: string; label: string; acceptJobs?: boolean; presence?: { status?: string } }
+interface SuggestionRow { workItemId: string; title: string; initiativeName?: string }
+interface HandPlan { nodeId: string; machine: string; origin: { workItemId: string } | { botId: string }; job: string }
+
+const planHandWork: VoiceToolPlanner = async (args, ctx) => {
+  if (ctx.tenant !== 'orgiq') return { result: refused('Paired machines are in the Work workspace.') };
+  const machine = String(args['machine'] ?? '').trim();
+  const job = String(args['job'] ?? '').trim();
+  if (!machine || !job) return { result: refused('Name the machine and the work item or bot to hand it.') };
+  const nodes = await readJson<{ nodes?: NodeRow[] }>(ctx, NODES_URL);
+  if (!nodes.ok) return { result: readFailure('your machines', nodes.status) };
+  const mine = nodes.body.nodes ?? [];
+  const hits = matchByName(mine, (n) => n.label, machine);
+  if (!hits.length) return { result: mine.length ? refused(`None of your machines is called "${machine}".`, { machines: mine.slice(0, 10).map((n) => n.label) }) : refused('You have no paired machines.') };
+  if (hits.length > 1) return { result: ambiguous(`Several of your machines match "${machine}". Ask which one.`, hits.map((n) => ({ id: n.id, name: n.label }))) };
+  const node = hits[0]!;
+  if (node.acceptJobs === false) return { result: refused(`${node.label} is not accepting jobs; switch it on in Local compute first.`) };
+  // The page's own pick list: the ranked work items, and the bots this person may run.
+  const sugg = await readJson<{ suggestions?: SuggestionRow[] }>(ctx, SUGGESTIONS_URL);
+  if (!sugg.ok) return { result: readFailure('the work you can hand over', sugg.status) };
+  const items = (sugg.body.suggestions ?? []).filter((x) => typeof x?.workItemId === 'string');
+  const bots: Array<{ id: string; name: string }> = [];
+  if (ctx.can('ManageBots')) {
+    const read = await readJson<{ bots?: Array<{ id: string; name: string; enabled?: boolean; pausedReason?: string | null }> }>(ctx, '/api/bots');
+    if (read.ok) bots.push(...(read.body.bots ?? []).filter((b) => b.enabled !== false && !b.pausedReason));
+  }
+  const choices = [
+    ...items.map((i) => ({ title: i.title, origin: { workItemId: i.workItemId } as HandPlan['origin'], what: 'work item' })),
+    ...bots.map((b) => ({ title: b.name, origin: { botId: b.id } as HandPlan['origin'], what: 'bot' })),
+  ];
+  const picked = matchByName(choices, (x) => x.title, job);
+  if (!picked.length) return { result: refused(`Nothing you can hand over is called "${job}".`, { choices: choices.slice(0, 10).map((x) => x.title) }) };
+  if (picked.length > 1) return { result: ambiguous(`Several things match "${job}". Ask which one.`, picked.map((x) => ({ name: x.title, kind: x.what }))) };
+  const choice = picked[0]!;
+  return { plan: {
+    title: `Hand "${choice.title}" to ${node.label}`,
+    detail: `Your machine runs the ${choice.what} with its own login; a run that changes a repo waits for your review.`,
+    data: { nodeId: node.id, machine: node.label, origin: choice.origin, job: choice.title } satisfies HandPlan,
+  } };
+};
+
+const runHandWork: VoiceToolRunner = async (_args, ctx, planned) => {
+  const plan = planned as HandPlan | undefined;
+  if (!plan?.nodeId) return refused('Work is handed to a machine only after the user confirms its card.');
+  const url = `${NODES_URL}/${encodeURIComponent(plan.nodeId)}/work`;
+  const body = { ...plan.origin, requiresReview: true };
+  const href = `/iq/local-compute?${qs({ machine: plan.nodeId })}`;
+  return once(ctx, `POST ${url} ${JSON.stringify(body)}`, async () => {
+    let res: Response;
+    try {
+      res = await ctx.fetch(url, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    } catch {
+      return failed('Could not reach the server; nothing was handed over.');
+    }
+    const json = await res.json().catch(() => null) as { id?: unknown; error?: unknown } | null;
+    const error = typeof json?.error === 'string' ? json.error : null;
+    if (res.status === 401 || res.status === 403) return refused(error ? `Not handed over: ${error}.` : "I can't hand work to machines with your role.");
+    if (res.status === 404) return refused(`That machine or ${'botId' in plan.origin ? 'bot' : 'work item'} is gone; nothing was handed over.`);
+    if (res.status === 409) return refused(`${plan.machine} did not take it: ${error ?? 'it is not accepting this work'}.`, { page: href });
+    if (!res.ok) return failed(`${plan.machine} could not take it (HTTP ${res.status})${error ? `: ${error}` : ''}.`);
+    ctx.toast?.success(ctx.toast.pending(`Handing "${plan.job}" to ${plan.machine}`), `"${plan.job}" queued for ${plan.machine}`, 'It shows in the machine\'s runs on Local compute.');
+    return done('work_handed', { machine: plan.machine, job: plan.job, runId: typeof json?.id === 'string' ? json.id : undefined, href, waitsForReview: true },
+      `"${plan.job}" queued for ${plan.machine}`);
+  }, () => done('work_handed', { machine: plan.machine, job: plan.job, href, alreadyHanded: true }, `"${plan.job}" was already handed to ${plan.machine}; nothing was sent again`));
+};
+
+// ── computer open-shell ─────────────────────────────────────────────────────
 
 const runOpenShell: VoiceToolRunner = async (args, ctx) => {
   const c = computeOrRefusal(ctx);
   if ('result' in c) return c.result;
-  const ref = String(args['computerId']);
+  const ref = String(args['computer']);
   const found = findComputer(c.compute.computers(), ref);
   if ('candidates' in found) return noComputer(ref, found.candidates);
   const box = found.computer;
@@ -274,7 +417,7 @@ const runOpenShell: VoiceToolRunner = async (args, ctx) => {
   return done('shell_opened', { computerId: box.id, label: box.label, ...(cwd ? { cwd } : {}) }, `Shell on ${box.label}`);
 };
 
-// ── run_command ─────────────────────────────────────────────────────────────
+// ── computer run (a phrase, never text) ─────────────────────────────────────
 
 interface CommandPlan { computer: VoiceComputer; command: string; phrase: string; cwd?: string }
 
@@ -288,7 +431,7 @@ const planRunCommand: VoiceToolPlanner = async (args, ctx) => {
       ? `I could not read "${String(args['since'] ?? '')}" as a date. Say yesterday, last night, this morning, "3 hours ago", "3 days ago", "last week" or a date.`
       : `There is no "${phrase}" command. For anything else, ask the user to open the shell and type it.`) };
   }
-  const ref = String(args['computerId']);
+  const ref = String(args['computer']);
   const found = findComputer(c.compute.computers(), ref);
   if ('candidates' in found) return { result: noComputer(ref, found.candidates) };
   const box = found.computer;
@@ -323,7 +466,7 @@ const runRunCommand: VoiceToolRunner = async (_args, ctx, planned) => {
   const c = computeOrRefusal(ctx);
   if ('result' in c) return c.result;
   const plan = planned as CommandPlan | undefined;
-  if (!plan) return refused('run_command runs only after the user confirms its card.');
+  if (!plan?.command) return refused('A command runs only after the user confirms its card.');
   const { computer, command } = plan;
   const out = { lines: [] as string[], partial: '', exitCode: null as number | null, error: undefined as string | undefined };
   // One output tab per computer and phrase: a re-run replaces its lines in place (openOutputTab's id rule).
@@ -563,12 +706,49 @@ const runSetStatus: VoiceToolRunner = async (args, ctx) => {
     message ? `Status: ${status}, "${message}"` : `Status: ${status}`);
 };
 
+// ── computer: one tool, five actions ────────────────────────────────────────
+
+/** What each action needs beyond `action`; missing ones are refused before any request. */
+const COMPUTER_NEEDS: Readonly<Record<string, readonly string[]>> = {
+  start: ['initiatives'], stop: ['computer'], 'open-shell': ['computer'], run: ['computer', 'phrase'], 'hand-work': ['machine', 'job'],
+};
+const NEED_WORDS: Readonly<Record<string, string>> = {
+  initiatives: 'the initiatives', computer: 'the computer', phrase: 'the command', machine: 'the machine', job: 'the work item or bot',
+};
+
+function computerArgsProblem(args: VoiceToolArgs): ToolResult | null {
+  const missing = (COMPUTER_NEEDS[String(args['action'])] ?? []).filter((k) => args[k] === undefined);
+  if (!missing.length) return null;
+  if (missing.includes('phrase')) return refused('Name the command to run from the phrase table; for anything else, ask the user to open the shell and type it.');
+  return refused(`Name ${missing.map((k) => NEED_WORDS[k]).join(' and ')} to ${String(args['action']).replace('-', ' ')}.`);
+}
+
+const COMPUTER_PLANNERS: Readonly<Record<string, VoiceToolPlanner>> = {
+  start: planStartComputer, stop: planStopComputer, run: planRunCommand, 'hand-work': planHandWork,
+};
+const COMPUTER_RUNNERS: Readonly<Record<string, VoiceToolRunner>> = {
+  start: runStartComputer, stop: runStopComputer, 'open-shell': runOpenShell, run: runRunCommand, 'hand-work': runHandWork,
+};
+
+/** open-shell has no card, so no plan (null); every other action plans before its card. */
+const planComputer: VoiceToolPlanner = async (args, ctx) => {
+  const problem = computerArgsProblem(args);
+  if (problem) return { result: problem };
+  const planner = COMPUTER_PLANNERS[String(args['action'])];
+  return planner ? planner(args, ctx) : null;
+};
+
+const runComputer: VoiceToolRunner = async (args, ctx, plan) => {
+  const problem = computerArgsProblem(args);
+  if (problem) return problem;
+  const runner = COMPUTER_RUNNERS[String(args['action'])];
+  return runner ? runner(args, ctx, plan) : refused(`A computer cannot "${String(args['action'])}".`);
+};
+
 // ── the tables ──────────────────────────────────────────────────────────────
 
 export const ACTION_RUNNERS: Readonly<Record<string, VoiceToolRunner>> = {
-  start_computer: runStartComputer,
-  open_shell: runOpenShell,
-  run_command: runRunCommand,
+  computer: runComputer,
   send_chat_message: runSendChat,
   start_call: runStartCall,
   set_status: runSetStatus,
@@ -580,8 +760,7 @@ export const VOICE_RUNNERS: Readonly<Record<string, VoiceToolRunner>> = { ...TOO
 
 /** The planners that run before a confirm card. */
 export const VOICE_PLANNERS: Readonly<Record<string, VoiceToolPlanner>> = {
-  start_computer: planStartComputer,
-  run_command: planRunCommand,
+  computer: planComputer,
   send_chat_message: planSendChat,
   start_call: planStartCall,
   ...WORK_PLANNERS,
