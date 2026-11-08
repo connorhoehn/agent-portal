@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { VoiceClient, mintFailure, parseFrame, toolOutputEvent, thinkingEvent, voiceDebugEnabled, type ClientEvent, type VoiceFrame } from '../client.ts';
-import { FakeClock, fakeFetch, liveEvents, middlewareVoice, route, wireEvent } from './voiceHarness.ts';
+import { VoiceClient, mintFailure, parseFrame, redactDebugEvent, toolOutputEvent, thinkingEvent, voiceDebugEnabled, type ClientEvent, type VoiceFrame } from '../client.ts';
+import { FakeClock, fakeFetch, liveEvents, middlewareVoice, route, wireEvent, type Route } from './voiceHarness.ts';
 
 test('parseFrame reads the real Live API frames V1 recorded', async () => {
   const lines = (await liveEvents()).filter((l) => l['s'] === 'live-responses' && l['dir'] === 'in');
@@ -152,6 +152,83 @@ test('the debug log sees every frame in and out (VITE_VOICE_DEBUG or localStorag
   const stopping = client.stop('closed');
   await clock.advance(200);
   await stopping;
+});
+
+test('the debug sink never sees words: transcript deltas and text become character counts, a tool output\'s body is dropped (sweep 2 M4)', async () => {
+  const mint = await mockMint();
+  const clock = new FakeClock();
+  const { fetch } = fakeFetch([
+    route('POST', '/api/voice/sessions/vs_', 200, { alreadyClosed: false }),
+    route('POST', '/api/voice/sessions', 201, mint),
+  ]);
+  const seen: Array<[string, unknown]> = [];
+  const client = new VoiceClient({
+    fetch, media: null, onEvent: () => {}, now: clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer,
+    debugLog: (dir, ev) => { seen.push([dir, ev]); },
+  });
+  await client.start();
+  await clock.advance(1300);
+  client.sendToolOutput('call_mock_1', JSON.stringify({ kind: 'results', rows: [{ title: 'Priya Natarajan, secret row' }] }));
+  client.requestResponse();
+  await clock.advance(1100);
+  const text = JSON.stringify(seen);
+  assert.doesNotMatch(text, /Kubernetes experts\./, 'the user\'s words never reach the log');
+  assert.doesNotMatch(text, /Priya|secret row/, 'a tool output\'s body never reaches the log');
+  const input = seen.find(([d, e]) => d === 'in' && (e as { type?: string }).type === 'session.input_transcript.delta')![1] as Record<string, unknown>;
+  assert.equal(input['delta'], `[${'Find me the latest Kubernetes experts.'.length} chars]`);
+  assert.equal(typeof input['start_ms'], 'number', 'timings stay');
+  const output = seen.find(([d, e]) => d === 'out' && (e as { type?: string }).type === 'response.item.create')![1] as { item: Record<string, unknown> };
+  assert.deepEqual(Object.keys(output.item).sort(), ['call_id', 'output', 'type']);
+  assert.match(String(output.item['output']), /^\[\d+ chars\]$/);
+  assert.equal(output.item['call_id'], 'call_mock_1', 'ids stay');
+  assert.ok(seen.some(([d, e]) => d === 'in' && (e as { type?: string }).type === 'session.output_transcript.delta'), 'the spoken reply is logged as an event');
+  // Any depth, and the three word fields.
+  assert.deepEqual(redactDebugEvent({ type: 'response.event', event: { type: 'response.completed', response: { output: [{ content: [{ text: 'hello there', transcript: 'hi' }] }] } } }),
+    { type: 'response.event', event: { type: 'response.completed', response: { output: [{ content: [{ text: '[11 chars]', transcript: '[2 chars]' }] }] } } });
+  assert.equal(redactDebugEvent('not json at all'), '[15 chars]');
+  const stopping = client.stop('closed');
+  await clock.advance(200);
+  await stopping;
+});
+
+/** POST /api/voice/sessions answered from a list, one answer per call (the last one repeats). */
+function mintSequence(answers: Array<{ status: number; body: unknown }>): Route {
+  let i = 0;
+  return (req) => (req.method === 'POST' && req.url === '/api/voice/sessions' ? answers[Math.min(i++, answers.length - 1)] : undefined);
+}
+
+test('a mint refused with session-open closes that session (zero seconds, reason dropped) and mints again, once', async () => {
+  const OTHER = 'vs_00000000-0000-0000-0000-0000000000ff';
+  const SESSION_OPEN = { status: 409, body: { error: 'voice-unavailable', reason: 'session-open', message: 'A voice session is already open for you.', openSessionId: OTHER } };
+  const mint = await mockMint();
+  for (const [label, answers, known, expect] of [
+    ['retry works', [SESSION_OPEN, { status: 201, body: mint }], null, 'minted'],
+    ['its own session reports its own seconds', [SESSION_OPEN, { status: 201, body: mint }], 42, 'minted'],
+    ['refused again: failed, no third mint', [SESSION_OPEN, SESSION_OPEN], null, 'failed'],
+  ] as const) {
+    const clock = new FakeClock();
+    const { fetch, log } = fakeFetch([
+      route('POST', `/api/voice/sessions/${OTHER}/close`, 200, { alreadyClosed: false }),
+      route('POST', '/api/voice/sessions/vs_', 200, { alreadyClosed: false }),
+      mintSequence([...answers]),
+    ]);
+    const events: ClientEvent[] = [];
+    const client = new VoiceClient({
+      fetch, media: null, onEvent: (e) => events.push(e), now: clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer,
+      knownSeconds: (id) => (id === OTHER ? known : null),
+    });
+    await client.start();
+    assert.deepEqual(log.map((r) => [r.method, r.url, r.body]), [
+      ['POST', '/api/voice/sessions', {}],
+      ['POST', `/api/voice/sessions/${OTHER}/close`, { seconds: known ?? 0, reason: 'dropped' }],
+      ['POST', '/api/voice/sessions', {}],
+    ], label);
+    assert.equal(events[0]!.type, expect, label);
+    if (expect === 'failed') assert.match((events[0] as { reason: string }).reason, /Another voice session/);
+    const stopping = client.stop('closed');
+    await clock.advance(200);
+    await stopping;
+  }
 });
 
 test('after session.close the client sends nothing else (a delegation still in flight cannot answer)', async () => {

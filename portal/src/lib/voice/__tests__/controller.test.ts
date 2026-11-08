@@ -115,6 +115,78 @@ test('"yes" by voice confirms, "no" cancels and sends nothing', async () => {
   }
 });
 
+/** Word-by-word input deltas as the Live API sends them (docs/voice/live-events.jsonl): 200 ms of audio per word, 100 ms apart on the wire. */
+function words(text: string, opts: { atMs?: number; startMs?: number } = {}) {
+  const at = opts.atMs ?? 1500, start = opts.startMs ?? 4000;
+  return text.split(/(?=\s)/).map((w, i) => ({ atMs: at + i * 100, event: { type: 'session.input_transcript.delta', delta: w, start_ms: start + i * 200, end_ms: start + i * 200 + 200 } }));
+}
+
+test('voice confirm (sweep 2 M2): the first utterance after the card decides; an affirmation only at its start, "okay" only alone, and "instead" or "no" cancels', async () => {
+  const cases: Array<[string, unknown[], 'done' | 'cancelled' | 'open']> = [
+    ['Okay, send it to the platform team instead', words(' Okay, send it to the platform team instead'), 'cancelled'],
+    ['Yes ... instead, in one breath', words(' Yes, but instead post it to Ada'), 'cancelled'],
+    ['Okay alone', words(' Okay.'), 'done'],
+    ['Sure alone', words(' Sure'), 'done'],
+    ['Sure, but change the text', words(' Sure, but change the text'), 'open'],
+    ['go ahead, word by word', words(' Go ahead and post it'), 'done'],
+    ['an affirmation mid-sentence is not one', words(' I guess yes'), 'open'],
+    ['wait', words(' Wait, what does this do?'), 'cancelled'],
+    // The first utterance said nothing either way; a second one (a gap in the audio) is the voice's, not the card's.
+    ['only the first utterance', [...words(' Hmm, let me read it'), ...words(' Yes', { atMs: 3000, startMs: 9000 })], 'open'],
+  ];
+  for (const [label, said, expected] of cases) {
+    const p = postRunner();
+    const h = harness(await mint(POST, {}, said), { runners: p.runners, planners: p.planners });
+    await h.controller.start();
+    await h.clock.advance(5000);
+    assert.equal(p.sent.length, expected === 'done' ? 1 : 0, label);
+    const row = h.log.find((r) => r.url.endsWith('/events'))?.body as Record<string, unknown> | undefined;
+    if (expected === 'open') {
+      assert.equal(row, undefined, `${label}: no answer yet`);
+      assert.notEqual(h.controller.getSnapshot().pending, null, `${label}: the card waits for a click`);
+    } else {
+      assert.deepEqual([row?.['outcome'], row?.['confirmedBy']], [expected, 'voice'], label);
+    }
+    h.controller.dispose();
+  }
+});
+
+test('every card carries its own requestId (ui-components 2.510.5), and the snapshot carries no money while a session runs', async () => {
+  const p = postRunner();
+  const h = harness(await mint(POST), { runners: p.runners, planners: p.planners });
+  await h.controller.start();
+  await h.clock.advance(1100);
+  const snap = h.controller.getSnapshot();
+  assert.equal(typeof snap.pending?.requestId, 'number');
+  assert.ok(!('budget' in snap), 'no dollar figure for the dock to show');
+  assert.doesNotMatch(JSON.stringify(snap), /\$\d|usd/i);
+  h.controller.dispose();
+});
+
+test('a mint refused with session-open: the dock closes its own earlier session with that session\'s seconds, mints again and runs', async () => {
+  // A first session that ends normally (15 s), then a second start the middleware refuses because it still holds the first open.
+  let mints = 0;
+  const first = await mint(KUBE);
+  const h = harness(first, {
+    routes: [(req) => {
+      if (req.method !== 'POST' || req.url !== '/api/voice/sessions') return undefined;
+      mints += 1;
+      return mints === 2 ? { status: 409, body: { error: 'voice-unavailable', reason: 'session-open', openSessionId: SESSION } } : { status: 201, body: first };
+    }],
+  });
+  await h.controller.start();
+  await h.clock.advance(4000);
+  const stopping = h.controller.stop();
+  await h.clock.advance(300);
+  await stopping;
+  await h.controller.start();
+  const closes = h.log.filter((r) => r.url.endsWith('/close')).map((r) => r.body);
+  assert.deepEqual(closes.map((c) => [(c as { seconds: number }).seconds, (c as { reason: string }).reason]), [[15, 'closed'], [15, 'dropped']]);
+  assert.equal(mints, 3, 'one retry');
+  assert.notEqual(h.controller.getSnapshot().phase, 'unavailable');
+  h.controller.dispose();
+});
+
 test('a confirm tool whose planner refuses (no Social in this session) answers at once without a card', async () => {
   const h = harness(await mint(POST));
   await h.controller.start();

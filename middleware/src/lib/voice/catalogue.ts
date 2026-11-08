@@ -533,10 +533,10 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
   },
   {
     name: 'open_shell',
-    description: 'Open (or focus) a shell tab on one of the user\'s computers.',
-    parameters: obj({ computerId: str('The computer.', { minLength: 1 }), cwd: str('A starting directory.') }, ['computerId']),
+    description: 'Open (or focus) a shell tab on one of the user\'s computers, in its workspace.',
+    parameters: obj({ computerId: str('The computer.', { minLength: 1 }) }, ['computerId']),
     kind: 'machine', backing: 'route', confirm: false, action: 'OpenDevboxShell', gate: 'OpenDevboxShell', spend: 'none', idempotent: true,
-    says: 'Opening a shell on Alpha.', tenants: ['orgiq'], mapsTo: 'openShell({ id, label, sessionId, cwd })',
+    says: 'Opening a shell on Alpha.', tenants: ['orgiq'], mapsTo: "openShell({ id, label, sessionId, cwd: the box's workspace })",
   },
   {
     name: 'run_command',

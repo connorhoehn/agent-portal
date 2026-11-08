@@ -25,7 +25,11 @@
 // Debugging a live session: VITE_VOICE_DEBUG=1 (read when vite starts), or
 // `localStorage.voiceDebug = '1'` in an open tab (read at each session start,
 // no restart), logs every data-channel frame in and out to the console as
-// `[voice] in|out <event>`. A missing tool chip is then either no
+// `[voice] in|out <event>`: the frames, never the words. The sink
+// (redactDebugEvent) turns every `delta`, `text` and `transcript` string into
+// its character count and drops a `function_call_output`'s body, so the log
+// keeps event names, ids and timings, never what anyone said or what a tool
+// read (spec §9: transcripts are never logged). A missing tool chip is then either no
 // `session.delegation.created` at all (the voice answered by itself) or a
 // delegation whose `response.event` carried no function_call (the backend
 // answered in text).
@@ -33,6 +37,12 @@
 // `session.instructions.append` is deliberately missing: the mint's
 // data-channel allowlist leaves it (and session.update) to the server, so
 // the browser cannot rewrite the instructions (§1 "What this changes").
+//
+// One open session per person (middleware sweep 1): a mint answered 409
+// `voice-unavailable` / `session-open` names the open session; the client
+// closes it (POST /:id/close, reason `dropped` so the middleware hangs the
+// provider up; zero seconds unless the session is one this dock minted and
+// knows the figure of) and mints again, once.
 
 export const VOICE_API = '/api/voice/sessions';
 export const CLOSE_WAIT_MS = 5000;
@@ -206,11 +216,20 @@ export function dailyMinutesText(b: Record<string, unknown>): string {
   return `${head} Voice is back at midnight UTC.`;
 }
 
+/** The 409 that names the user's other open session (one per person), else null. */
+export function openSessionOf(status: number, body: unknown): string | null {
+  const b = isObj(body) ? body : {};
+  if (status !== 409 || b['error'] !== 'voice-unavailable' || b['reason'] !== 'session-open') return null;
+  const id = strOr(b['openSessionId']);
+  return id && id.length <= 200 ? id : null;
+}
+
 export function mintFailure(status: number, body: unknown): StartFailure {
   const b = isObj(body) ? body : {};
   const error = strOr(b['error']);
   if (b['code'] === 'voice-demo-refused') return { kind: 'unavailable', reason: 'Voice is not available to the demo identity. Sign in.' };
   if (error === 'voice-unavailable' && b['reason'] === 'daily-minutes') return { kind: 'unavailable', reason: dailyMinutesText(b) };
+  if (error === 'voice-unavailable' && b['reason'] === 'session-open') return { kind: 'failed', reason: 'Another voice session of yours is still open. Try again in a moment.' };
   if (b['reason'] === 'budget') return { kind: 'unavailable', reason: `Your budget does not cover a voice session: ${error ?? 'refused'}` };
   if (error === 'voice-unavailable') {
     return b['reason'] === 'no-key'
@@ -334,9 +353,31 @@ export function voiceDebugEnabled(): boolean {
   try { return window.localStorage.getItem('voiceDebug') === '1'; } catch { return false; }
 }
 
-/** What the debug log writes per frame: the event itself (WebRTC carries no audio frames on the channel). */
+/** What the debug log writes per frame: the event, redacted (redactDebugEvent). */
 export type VoiceDebugLog = (direction: 'in' | 'out', event: unknown) => void;
 const consoleDebugLog: VoiceDebugLog = (direction, event) => { console.log(`[voice] ${direction}`, event); };
+
+const WORD_FIELDS = new Set(['delta', 'text', 'transcript']);
+
+/**
+ * A frame as the debug log may keep it: every `delta`, `text` and `transcript`
+ * string, at any depth, becomes `[n chars]`; a `function_call_output`'s
+ * `output` becomes the same. Names, ids and timings stay.
+ */
+export function redactDebugEvent(event: unknown, depth = 0): unknown {
+  if (depth > 8) return '[nested]';
+  if (typeof event === 'string') return depth === 0 ? `[${event.length} chars]` : event;
+  if (Array.isArray(event)) return event.map((v) => redactDebugEvent(v, depth + 1));
+  if (!isObj(event)) return event;
+  const toolOutput = event['type'] === 'function_call_output';
+  const out: Obj = {};
+  for (const [k, v] of Object.entries(event)) {
+    if (typeof v === 'string' && (WORD_FIELDS.has(k) || (toolOutput && k === 'output'))) out[k] = `[${v.length} chars]`;
+    else if (toolOutput && k === 'output') out[k] = '[omitted]';
+    else out[k] = redactDebugEvent(v, depth + 1);
+  }
+  return out;
+}
 
 // ── the client ──────────────────────────────────────────────────────────────
 
@@ -370,8 +411,14 @@ export interface VoiceClientOptions {
   setTimer?: (fn: () => void, ms: number) => Timer;
   clearTimer?: (t: Timer) => void;
   closeWaitMs?: number;
-  /** Log every frame in and out; default: console, when voiceDebugEnabled() at construction. Null = off. */
+  /** Log every frame in and out (redacted first); default: console, when voiceDebugEnabled() at construction. Null = off. */
   debugLog?: VoiceDebugLog | null;
+  /**
+   * The seconds this dock knows for a session it minted (the mint's 409
+   * `session-open` names one): what the close of that session reports. Null,
+   * or not given = a session of another tab or device: closed with zero.
+   */
+  knownSeconds?(sessionId: string): number | null;
 }
 
 export class VoiceClient {
@@ -400,7 +447,9 @@ export class VoiceClient {
 
   constructor(opts: VoiceClientOptions) {
     this.opts = opts;
-    this.debugLog = opts.debugLog !== undefined ? opts.debugLog : voiceDebugEnabled() ? consoleDebugLog : null;
+    const sink = opts.debugLog !== undefined ? opts.debugLog : voiceDebugEnabled() ? consoleDebugLog : null;
+    // Every frame is redacted before any sink sees it (§9: never the words).
+    this.debugLog = sink ? (direction, event) => sink(direction, redactDebugEvent(event)) : null;
     this.now = opts.now ?? (() => Date.now());
     this.setTimer = opts.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
     this.clearTimer = opts.clearTimer ?? ((t) => clearTimeout(t as ReturnType<typeof setTimeout>));
@@ -416,19 +465,30 @@ export class VoiceClient {
         return;
       }
     }
-    let res: Response;
-    let body: unknown;
-    try {
-      res = await this.opts.fetch(VOICE_API, {
-        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...(this.media ? { sdp: this.media.offer } : {}), ...(opts.confirmOverUserBudget ? { confirmOverUserBudget: true } : {}) }),
-      });
-      body = await res.json().catch(() => null);
-    } catch {
+    const mintOnce = async (): Promise<{ res: Response; body: unknown } | null> => {
+      try {
+        const res = await this.opts.fetch(VOICE_API, {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...(this.media ? { sdp: this.media.offer } : {}), ...(opts.confirmOverUserBudget ? { confirmOverUserBudget: true } : {}) }),
+        });
+        return { res, body: await res.json().catch(() => null) };
+      } catch {
+        return null;
+      }
+    };
+    let minted = await mintOnce();
+    // One open session per person: close the one the 409 names, then mint again, once.
+    const open = minted ? openSessionOf(minted.res.status, minted.body) : null;
+    if (open) {
+      await this.closeOther(open);
+      minted = await mintOnce();
+    }
+    if (!minted) {
       this.teardown();
       this.opts.onEvent({ type: 'failed', reason: 'The server could not be reached.' });
       return;
     }
+    const { res, body } = minted;
     if (!res.ok) {
       this.teardown();
       const confirm = budgetConfirmOf(res.status, body);
@@ -459,6 +519,18 @@ export class VoiceClient {
     } catch {
       await this.stop('dropped');
     }
+  }
+
+  /** Close a session the mint said is still open: its known seconds if this dock minted it, else zero; `dropped` hangs the provider up. */
+  private async closeOther(sessionId: string): Promise<void> {
+    const known = this.opts.knownSeconds?.(sessionId) ?? null;
+    const seconds = known != null && Number.isFinite(known) && known >= 0 ? Math.ceil(known) : 0;
+    try {
+      await this.opts.fetch(`${VOICE_API}/${encodeURIComponent(sessionId)}/close`, {
+        method: 'POST', credentials: 'include', keepalive: true, headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seconds, reason: 'dropped' }),
+      });
+    } catch { /* the retry's own answer says whether it worked */ }
   }
 
   get mocked(): boolean { return this.mint?.mock === true; }

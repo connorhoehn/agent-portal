@@ -394,7 +394,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
   },
   {
     name: 'open_shell',
-    parameters: obj({ computerId: str('The computer.', { minLength: 1 }), cwd: str('A starting directory.') }, ['computerId']),
+    parameters: obj({ computerId: str('The computer.', { minLength: 1 }) }, ['computerId']),
     kind: 'machine', backing: 'route', confirm: false, action: 'OpenDevboxShell', says: 'Opening a shell on Alpha.', tenants: ['orgiq'],
   },
   {

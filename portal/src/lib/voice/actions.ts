@@ -18,7 +18,9 @@
 //                     + Computer), a running box reused; a pending toast while
 //                     they boot
 //   open_shell        the library's openShell (the ⌘K palette's call): opens or
-//                     focuses the dock's shell tab; no card
+//                     focuses the dock's shell tab in the box's workspace, as
+//                     run_command runs there; the model names no directory
+//                     (sweep 2 M3: no model text reaches a shell); no card
 //   run_command       a phrase id from PHRASE_TABLE, never model text; the
 //                     composed command checked against GET
 //                     /api/devbox/allowlist before the card, so the card never
@@ -265,7 +267,8 @@ const runOpenShell: VoiceToolRunner = async (args, ctx) => {
   const found = findComputer(c.compute.computers(), ref);
   if ('candidates' in found) return noComputer(ref, found.candidates);
   const box = found.computer;
-  const cwd = typeof args['cwd'] === 'string' && args['cwd'].trim() ? args['cwd'].trim() : box.workspace;
+  // The box's own workspace, never a model-supplied path (the schema has no `cwd`; prepareToolCall refuses one).
+  const cwd = box.workspace;
   const opened = c.compute.openShell({ id: box.id, label: box.label, sessionId: box.sessionId, ...(cwd ? { cwd } : {}) });
   if (!opened.ok) return refused('Every shell tab is in use. Ask the user to close one first.', { limit: 'at-capacity' });
   return done('shell_opened', { computerId: box.id, label: box.label, ...(cwd ? { cwd } : {}) }, `Shell on ${box.label}`);

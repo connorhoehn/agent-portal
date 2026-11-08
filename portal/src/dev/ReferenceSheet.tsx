@@ -327,7 +327,8 @@ function Dock({ phase, compact = false, footer = false }: { phase: VoicePhase; c
       level={p.level}
       outputLevel={p.outputLevel}
       {...(p.elapsed !== undefined ? { elapsedSeconds: p.elapsed } : {})}
-      budget={live ? { usedUsd: 0.04 + (p.elapsed ?? 0) * 0.0008, holdUsd: 0.25 } : null}
+      // The footer shows no money while a session runs (owner decision): phase, elapsed and controls only.
+      budget={live && !footer ? { usedUsd: 0.04 + (p.elapsed ?? 0) * 0.0008, holdUsd: 0.25 } : null}
       lastLine={p.line ?? null}
       // One open confirmation per page: the compact tile shows the phase, F-16 shows the card.
       pending={phase === 'confirming' && !compact && !footer ? PENDING : null}
@@ -402,9 +403,9 @@ export default function ReferenceSheet() {
             <Tile id="A-3" component="Footer row" subpath="/shared, /video" state="today: idle, no call" width="full">
               <FooterRow />
             </Tile>
-            <Tile id="A-4" component="Footer row + VoiceDock" subpath="/shared, /video, /voice" state="spec §5 placement: listening, beside the huddle half" width="full">
+            <Tile id="A-4" component="Footer row + VoiceDock" subpath="/shared, /video, /voice" state="spec §5 placement: listening, beside the huddle half; no dollar figure" width="full">
               <FooterRow voice={<VoiceDock size="footer" phase="listening" level={0.6} outputLevel={0} elapsedSeconds={14}
-                budget={{ usedUsd: 0.05, holdUsd: 0.25 }} lastLine={{ role: 'you', text: 'Open the computer lab' }}
+                lastLine={{ role: 'you', text: 'Open the computer lab' }}
                 onStop={noop} onMute={noop} className="min-w-0 max-w-[640px] flex-1 border-l border-border" />} />
             </Tile>
           </Section>
@@ -669,7 +670,7 @@ export default function ReferenceSheet() {
                 <Dock phase={phase} compact />
               </Tile>
             ))}
-            <Subhead>VoiceDock, footer size: the footer’s metrics, an 18px ring, xs labels, a quiet Voice / End control (F-31 to F-39)</Subhead>
+            <Subhead>VoiceDock, footer size: the footer’s metrics, an 18px ring, xs labels, a quiet Voice / End control, and no budget meter: phase, elapsed and controls only (F-31 to F-39)</Subhead>
             {VOICE_PHASES.map((phase, index) => (
               <Tile key={phase} id={`F-${31 + index}`} component="VoiceDock" subpath="/voice" state={phase === 'confirming' ? 'confirming, footer (its card is F-16)' : `${phase}, footer`} width="half">
                 <Dock phase={phase} footer />

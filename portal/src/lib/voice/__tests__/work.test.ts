@@ -9,7 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { VoiceController } from '../controller.ts';
 import { ResultMemory, runPreparedCall, planPreparedCall, prepareToolCall } from '../tools.ts';
-import { VoiceJobTracker, jobNotification, matchByName, resolveSweep, type JobToastSink, type JobState } from '../work.ts';
+import { SPOKEN_DETAIL_MAX, VoiceJobTracker, jobNotification, matchByName, outcomeLine, resolveSweep, type JobToastSink, type JobState } from '../work.ts';
 import { addLocalNotification, clearLocalNotifications, getLocalNotifications, mergeNotifications } from '../../localNotifications.ts';
 import { FakeClock, fakeFetch, middlewareVoice, route, toolContext, type Route, type LoggedRequest } from './voiceHarness.ts';
 import type { Action } from '../../capabilities';
@@ -162,6 +162,44 @@ test('the program owner\'s scripted session queues the nightly sweep, and one to
   await s.clock.advance(5000);
   assert.equal(s.log.filter((r) => r.url === `/api/work/sweeps/jobs/${SERVER_JOB}`).length, reads200, 'no reads after the end');
   await stop(s);
+});
+
+test('a sweep already running (409 sweep-job-running): the runner follows that job\'s toast and says nothing new was queued, instead of failing', async () => {
+  const RUNNING = 'sweepjob-already-running';
+  const s = await scripted({
+    routes: [
+      route('POST', '/api/work/sweeps/run', 409, {
+        error: 'a background sweep you started is still running', code: 'sweep-job-running', jobId: RUNNING,
+        job: { jobId: RUNNING, kind: 'sweep', sweep: 'stale_docs', title: 'server title', state: 'running', detail: null, href: 'https://evil.example/x' },
+      }),
+      sweepJobRoute(RUNNING, { state: 'done', detail: '2 stale docs' }),
+    ],
+  });
+  s.controller.confirm('click');
+  await s.clock.advance(200);
+  assert.equal(posts(s.log, '/api/work/sweeps/run').length, 1, 'one request; no retry');
+  assert.equal(s.toasts.calls[0]?.id, RUNNING, 'the toast follows the running job');
+  assert.equal(s.toasts.calls[0]?.title, 'The stale docs sweep');
+  assert.equal(s.toasts.calls[0]?.href, '/iq/work/findings', 'an off-portal href is never followed');
+  const call = s.controller.getSnapshot().turns.flatMap((t) => t.toolCalls ?? []).find((c) => c.name === 'queue_work');
+  assert.equal(call?.status, 'done');
+  assert.match(call?.summary ?? '', /already running/);
+  for (let i = 0; i < 60 && s.toasts.shown.get(RUNNING) !== 'done'; i++) await s.clock.advance(100);
+  assert.equal(s.toasts.shown.get(RUNNING), 'done');
+  assert.ok(s.controller.getSnapshot().turns.some((t) => t.text === 'The stale docs sweep finished: 2 stale docs.'));
+  assert.deepEqual(toolRows(s.log).map((r) => [r['tool'], r['outcome']]), [['queue_work', 'done']]);
+  await stop(s);
+});
+
+test('a job\'s spoken outcome keeps the server\'s detail to one line of at most 120 characters', () => {
+  const long = `Traceback (most recent call last):\n  File "x.py", line 1\n${'boom '.repeat(80)}`;
+  const line = outcomeLine({ title: 'The nightly org sweeps' }, 'failed', long);
+  const detail = line.slice('The nightly org sweeps failed: '.length, -1);
+  assert.equal(SPOKEN_DETAIL_MAX, 120);
+  assert.ok(detail.length <= SPOKEN_DETAIL_MAX, `${detail.length}`);
+  assert.doesNotMatch(line, /\n/);
+  assert.match(detail, /…$/);
+  assert.equal(outcomeLine({ title: 'A' }, 'done', '6 findings.'), 'A finished: 6 findings.');
 });
 
 test('a cancelled card sends nothing: no queue request, no toast, no entry', async () => {

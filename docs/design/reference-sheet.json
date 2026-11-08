@@ -91,7 +91,7 @@
       "section": "layout",
       "component": "Footer row + VoiceDock",
       "subpath": "/shared, /video, /voice",
-      "state": "spec §5 placement: listening, beside the huddle half",
+      "state": "spec §5 placement: listening, beside the huddle half; no dollar figure",
       "box": {
         "x": 32,
         "y": 1571,

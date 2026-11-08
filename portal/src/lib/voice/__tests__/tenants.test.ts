@@ -253,12 +253,12 @@ test('V2-4: open with a name two initiatives share shows the choice card; "the s
     extraStart: [said],
     beforeStop: (c, ctx) => {
       const choice = c.getSnapshot().choice!;
-      assert.equal(c.getSnapshot().phase, 'confirming', 'the card waits on the user (the library opens it in that phase)');
+      assert.notEqual(c.getSnapshot().phase, 'confirming', 'the library (2.510.5) opens the choice on pendingChoice alone; the phase is not driven for it');
+      assert.equal(typeof choice.requestId, 'number', 'every card carries a requestId');
       seen = { titles: choice.candidates.map((x) => x.title), ordinal: choice.ordinal, hrefs: choice.candidates.map((x) => x.href) };
       assert.deepEqual(ctx.navigations, [], 'nothing opens while the user chooses');
       c.choose(choice.ordinal! - 1);
       assert.equal(c.getSnapshot().choice, null);
-      assert.notEqual(c.getSnapshot().phase, 'confirming');
     },
   });
   assert.deepEqual(seen, { titles: ['Alpha migration', 'Alpha rollout'], ordinal: 2, hrefs: ['/iq/projects/p-alpha', '/iq/projects/p-alpha-2'] });

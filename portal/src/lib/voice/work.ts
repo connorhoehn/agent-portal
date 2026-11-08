@@ -22,6 +22,9 @@
 //
 // The id the toast is keyed on is the one in that response; the model never
 // supplies one (the schema has no such argument and refuses any it sends).
+// One background sweep per person: a 409 `sweep-job-running` names the sweep
+// already running, and the runner follows THAT job (its toast, its spoken
+// outcome) and says nothing new was queued, instead of failing.
 //
 // VoiceJobTracker follows each job to the end: a read of its state when the
 // stream the page already holds says something moved (GET /api/work/events in
@@ -169,6 +172,19 @@ function postRefusal(plan: WorkPlan, posted: Extract<Posted, { ok: false }>, pag
   return failed(`${plan.title} could not be queued (HTTP ${posted.status})${error ? `: ${error}` : ''}.`);
 }
 
+/** The 409 that names the caller's running background sweep (routes/work.ts), as the job to follow, else null. */
+export function runningSweepOf(posted: Posted): QueuedJob | null {
+  const b = posted.body;
+  if (posted.ok || posted.status !== 409 || !b || b['code'] !== 'sweep-job-running') return null;
+  const id = b['jobId'];
+  if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,120}$/.test(id)) return null;
+  const job = (b['job'] && typeof b['job'] === 'object' ? b['job'] : {}) as Record<string, unknown>;
+  const sweep = job['sweep'];
+  const title = sweep === null || (typeof sweep === 'string' && sweep in SWEEP_LABEL) ? sweepTitle(sweep as SweepName | null) : 'Your background sweep';
+  const href = typeof job['href'] === 'string' && localHref(job['href'] as string) ? job['href'] as string : '/iq/work/findings';
+  return { jobId: id, kind: 'sweep', title, href };
+}
+
 const runQueueWork: VoiceToolRunner = async (_args, ctx, planned) => {
   const plan = planned as WorkPlan | undefined;
   if (!plan) return failed('Nothing was planned to queue.');
@@ -177,6 +193,15 @@ const runQueueWork: VoiceToolRunner = async (_args, ctx, planned) => {
   let job: QueuedJob | null = null;
   if (plan.kind === 'sweep') {
     const posted = await post(ctx, '/api/work/sweeps/run', { ...(plan.sweep ? { sweep: plan.sweep } : {}), background: true });
+    const running = runningSweepOf(posted);
+    if (running) {
+      // One sweep at a time: follow the one already running (its toast says when it ends); nothing new is queued.
+      jobs.track(running);
+      return done('work_running', {
+        jobId: running.jobId, workKind: 'sweep', title: running.title, state: 'running', href: running.href, queued: false,
+        next: 'Say that a sweep they started is still running, so nothing new was queued, and that you will say when it is done.',
+      }, `${running.title}: already running`);
+    }
     if (!posted.ok) return postRefusal(plan, posted, '/iq/work/findings');
     const id = posted.body['jobId'];
     // The route's own link, only when it stays inside the portal (localHref, as open checks a kept row's).
@@ -292,9 +317,15 @@ async function readState(o: JobTrackerOptions, job: QueuedJob): Promise<{ state:
   return { state: 'running' };
 }
 
-/** What the voice says when a job ends. */
+/** The most of a server's job detail (a run's error, a bot's reason) the voice speaks. */
+export const SPOKEN_DETAIL_MAX = 120;
+
+/** What the voice says when a job ends: the server's detail on one line, at most SPOKEN_DETAIL_MAX characters. */
 export function outcomeLine(job: Pick<QueuedJob, 'title'>, state: 'done' | 'failed', detail: string | undefined): string {
-  return `${job.title} ${state === 'done' ? 'finished' : 'failed'}${detail ? `: ${detail.replace(/\.$/, '')}` : ''}.`;
+  let d = (detail ?? '').replace(/\s+/g, ' ').trim();
+  if (d.length > SPOKEN_DETAIL_MAX) d = `${d.slice(0, SPOKEN_DETAIL_MAX - 1).trimEnd()}…`;
+  d = d.replace(/\.$/, '');
+  return `${job.title} ${state === 'done' ? 'finished' : 'failed'}${d ? `: ${d}` : ''}.`;
 }
 
 /**

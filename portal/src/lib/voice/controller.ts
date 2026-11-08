@@ -27,14 +27,29 @@
 // (a refusal, several matching names). Nothing acts before the confirm, and a
 // cancel answers { confirmed: false } and runs nothing.
 //
-// Money (§7): the meter is elapsed/60 × the mint's rate against the hold; at
-// 90% the voice says so once (commentary), at 100% (or the mint's maxSeconds)
-// the dock hangs up itself with reason `cutoff`. A mint that answers 409 on the
+// Money (§7): the controller meters elapsed/60 × the mint's rate against the
+// hold, privately (the owner's rule: no dollar figure in the dock while a
+// session runs, so the snapshot carries none); at 90% the voice says how many
+// minutes are left once (commentary), at 100% (or the mint's maxSeconds) the
+// dock hangs up itself with reason `cutoff`. A mint that answers 409 on the
 // user's budget shows a card ("This session will exceed your budget by $x");
 // Confirm mints again with confirmOverUserBudget. The user's daily voice
 // minutes (G13) are the server's: a mint refused on them is the dock's
 // `unavailable` reason (client.ts dailyMinutesText), and a session they cut
 // short (the mint's `dailyMinutesLeft`) says how much of today is left.
+//
+// Confirming by voice (sweep 2 M2): only the user's first utterance after the
+// card decides, and only once it has ended (a quiet UTTERANCE_GAP_MS, or the
+// next word starting UTTERANCE_SPLIT_MS after the last one in the audio): an
+// affirmation at its start confirms ("yes", "yeah", "yep", "confirm", "do
+// it", "go ahead"; "ok", "okay" and "sure" only as the whole utterance), and
+// any utterance with "instead", "no", "cancel", "wait" (and the like) cancels
+// as soon as it is heard. Anything else leaves the card to a click.
+//
+// Every card the dock raises carries a fresh `requestId` (the library's
+// VoicePending / VoicePendingChoice key, 2.510.5), so two requests with one
+// title never share a card's state. The choice card no longer moves the phase:
+// the library opens it on `pendingChoice` alone.
 
 import { VoiceClient, type ClientEvent, type MediaFactory, type StopReason, type VoiceFrame, type VoiceMint } from './client.ts';
 import { initialMachine, phaseAt, reduce, sessionOpen, type MachineEvent, type MachineState, type VoicePhase } from './machine.ts';
@@ -62,6 +77,8 @@ export interface VoiceTurnView {
 
 export interface VoicePendingView {
   callId: string;
+  /** Unique per card raised (the library remounts the card when it changes). */
+  requestId: number;
   tool: string;
   title: string;
   detail?: string;
@@ -74,6 +91,8 @@ export interface VoicePendingView {
  */
 export interface VoiceChoiceView {
   id: string;
+  /** Unique per card raised, from the same counter as VoicePendingView's. */
+  requestId: number;
   title: string;
   candidates: ReadonlyArray<{ title: string; subtitle?: string; kind?: string; href?: string }>;
   /** 1-based, set when the user said a number; the card chooses that row. */
@@ -85,7 +104,6 @@ export interface VoiceSnapshot {
   level: number;
   outputLevel: number;
   elapsedSeconds: number;
-  budget: { usedUsd: number; holdUsd: number } | null;
   pending: VoicePendingView | null;
   /** The numbered choice an ambiguous name left, or null. */
   choice: VoiceChoiceView | null;
@@ -120,7 +138,9 @@ export interface ControllerOptions {
 
 interface CallRecord { name: string; status: 'confirming' | 'running' | 'answered' }
 interface DelegationRecord { calls: Map<string, CallRecord>; completed: boolean; unanswered: number; grace: Timer | null }
-interface Pending { callId: string; delegationId: string; call: PreparedCall; plan: ConfirmPlan | null; startedAt: number; heard: string; view: VoicePendingView }
+/** What the card has heard: the first utterance after it, and whether that utterance has ended. */
+interface Heard { text: string; lastEndMs: number | null; quiet: Timer | null; done: boolean }
+interface Pending { callId: string; delegationId: string; call: PreparedCall; plan: ConfirmPlan | null; startedAt: number; heard: Heard; view: VoicePendingView }
 
 /** The card id of a mint that waits on the user's budget (not a tool call). */
 export const BUDGET_CARD = 'voice-budget';
@@ -137,8 +157,25 @@ export function budgetConfirmText(b: { estimateUsd: number | null; remainingUsd:
   };
 }
 
-const YES = /\b(yes|yeah|yep|confirm|confirmed|do it|go ahead|sure|ok(ay)?|send it|please do)\b/i;
-const NO = /\b(no|nope|cancel|stop|don'?t|never ?mind|wait)\b/i;
+/** Wall-clock quiet after the last word that ends the utterance. */
+export const UTTERANCE_GAP_MS = 700;
+/** An audio gap between two words (start_ms − the last end_ms) that starts a new utterance. */
+export const UTTERANCE_SPLIT_MS = 300;
+
+const AFFIRM = /^[\s"'“]*(yes|yeah|yep|confirm(ed)?|do it|go ahead)\b/i;
+const BARE_OK = /^[\s"'“]*(ok|okay|sure)[\s.!,"'”]*$/i;
+const CANCEL = /\b(instead|no|nope|cancel|wait|stop|don'?t|never ?mind)\b/i;
+
+/**
+ * The card's answer from the first utterance after it: `cancel` as soon as a
+ * cancelling word is heard, `confirm` only once the utterance has ended and
+ * starts with an affirmation (or is only "ok", "okay" or "sure"), else null.
+ */
+export function confirmDecision(utterance: string, ended: boolean): 'confirm' | 'cancel' | null {
+  if (CANCEL.test(utterance)) return 'cancel';
+  if (!ended) return null;
+  return AFFIRM.test(utterance) || BARE_OK.test(utterance) ? 'confirm' : null;
+}
 
 /** The default card wording per tool, before (or without) a planner: the tool and its arguments, as plain text. */
 export function defaultConfirmText(call: PreparedCall): { title: string; detail?: string } {
@@ -167,6 +204,8 @@ export class VoiceController {
   private pending: Pending | null = null;
   private choice: (VoiceChoiceView & { heard: string }) | null = null;
   private choiceSeq = 0;
+  /** One per card raised (confirm, choice, budget): the library's requestId. */
+  private requestSeq = 0;
   private budgetCard: VoicePendingView | null = null;
   private turns: VoiceTurnView[] = [];
   private turnSeq = 0;
@@ -176,6 +215,8 @@ export class VoiceController {
   private lastToastSeconds = DEFAULT_TOAST_SECONDS;
   private elapsedFrozen: number | null = null;
   private closedSeconds: number | null = null;
+  /** Sessions this dock minted and the seconds their close reported (for a mint's `session-open` 409). */
+  private ownSessions = new Map<string, number>();
   private snapshot: VoiceSnapshot;
   private listeners = new Set<() => void>();
   private ticker: Timer | null = null;
@@ -226,6 +267,7 @@ export class VoiceController {
     const client = new VoiceClient({
       fetch: this.opts.fetch, media: this.opts.media, onEvent: (e) => this.onClientEvent(client, e),
       now: this.now, setTimer: this.setTimer, clearTimer: this.clearTimer,
+      knownSeconds: (id) => this.ownSessions.get(id) ?? null,
       ...(this.opts.closeWaitMs !== undefined ? { closeWaitMs: this.opts.closeWaitMs } : {}),
     });
     this.client = client;
@@ -303,12 +345,11 @@ export class VoiceController {
     this.clearChoice();
   }
 
-  /** The choice is a card the user answers, so the phase reads `confirming` while it is up (the library opens it then). */
+  /** The choice card opens on `pendingChoice` alone (ui-components 2.510.5), so it never touches the phase. */
   private clearChoice(): void {
-    const c = this.choice;
-    if (!c) return;
+    if (!this.choice) return;
     this.choice = null;
-    this.dispatch({ type: 'confirm-resolved', callId: c.id });
+    this.publish();
   }
 
   /** Silent page context for the voice (§1: session.thinking.append, delegation_id null). */
@@ -347,7 +388,7 @@ export class VoiceController {
         return;
       case 'budget-confirm':
         this.stopTicker();
-        this.budgetCard = { callId: BUDGET_CARD, tool: 'voice_session', ...budgetConfirmText(e) };
+        this.budgetCard = { callId: BUDGET_CARD, requestId: ++this.requestSeq, tool: 'voice_session', ...budgetConfirmText(e) };
         this.dispatch({ type: 'budget-confirm' });
         return;
       case 'failed':
@@ -360,6 +401,10 @@ export class VoiceController {
       case 'ended':
         this.elapsedFrozen = client.elapsedSeconds();
         this.closedSeconds = e.seconds;
+        if (client.mint && e.seconds != null) {
+          this.ownSessions.set(client.mint.sessionId, e.seconds);
+          if (this.ownSessions.size > 10) this.ownSessions.delete(this.ownSessions.keys().next().value!);
+        }
         this.clearDelegations();
         this.stopTicker();
         this.dispatch({ type: 'closed', reason: e.reason === 'cutoff' ? 'The session reached its budget and was ended.' : e.reason === 'dropped' ? 'The connection dropped.' : null });
@@ -378,7 +423,7 @@ export class VoiceController {
       case 'input':
         this.appendTurn('you', f.text, at);
         this.dispatch({ type: 'input', at });
-        if (this.pending) this.hearForPending(f.text);
+        if (this.pending) this.hearForPending(f.text, f.startMs, f.endMs);
         else if (this.choice) this.hearForChoice(f.text);
         return;
       case 'output':
@@ -468,7 +513,7 @@ export class VoiceController {
       }
       rec.calls.set(callId, { name, status: 'confirming' });
       const text = this.opts.describeConfirm?.(call, plan) ?? (plan ? { title: plan.title, ...(plan.detail ? { detail: plan.detail } : {}) } : defaultConfirmText(call));
-      this.pending = { callId, delegationId, call, plan, startedAt, heard: '', view: { callId, tool: name, ...text } };
+      this.pending = { callId, delegationId, call, plan, startedAt, heard: { text: '', lastEndMs: null, quiet: null, done: false }, view: { callId, requestId: ++this.requestSeq, tool: name, ...text } };
       this.attachTool(name, 'running', text.title);
       this.dispatch({ type: 'confirm-shown', callId });
       return;
@@ -508,14 +553,13 @@ export class VoiceController {
     if (cands && rows.length && rows.length === cands.length) {
       this.clearChoice();
       this.choice = {
-        id: `choice-${++this.choiceSeq}`, heard: '',
+        id: `choice-${++this.choiceSeq}`, requestId: ++this.requestSeq, heard: '',
         title: 'Which one?',
         candidates: rows.map((c) => ({
           title: c['title'] as string, href: c['href'] as string,
           ...(typeof c['subtitle'] === 'string' ? { subtitle: c['subtitle'] } : {}), ...(typeof c['kind'] === 'string' ? { kind: c['kind'] } : {}),
         })),
       };
-      this.dispatch({ type: 'confirm-shown', callId: this.choice.id });
     } else this.clearChoice();
     this.publish();
   }
@@ -575,18 +619,37 @@ export class VoiceController {
     this.publish();
   }
 
-  private hearForPending(text: string): void {
+  /** The first utterance after the card decides it (confirmDecision); a later one is the voice's, not the card's. */
+  private hearForPending(text: string, startMs: number | null, endMs: number | null): void {
     const p = this.pending;
-    if (!p) return;
-    p.heard += text;
-    if (NO.test(p.heard)) this.resolvePending(false, 'voice');
-    else if (YES.test(p.heard)) this.resolvePending(true, 'voice');
+    if (!p || p.heard.done) return;
+    const h = p.heard;
+    // The next word starts well after the last one ended: the first utterance is over, and this word is not part of it.
+    if (h.text.trim() && startMs != null && h.lastEndMs != null && startMs - h.lastEndMs >= UTTERANCE_SPLIT_MS) {
+      this.endUtterance(p);
+      return;
+    }
+    h.text += text;
+    if (endMs != null) h.lastEndMs = endMs;
+    if (confirmDecision(h.text, false) === 'cancel') { this.resolvePending(false, 'voice'); return; }
+    if (h.quiet != null) this.clearTimer(h.quiet);
+    h.quiet = this.setTimer(() => { h.quiet = null; if (this.pending === p) this.endUtterance(p); }, UTTERANCE_GAP_MS);
+  }
+
+  private endUtterance(p: Pending): void {
+    const h = p.heard;
+    if (h.done) return;
+    h.done = true;
+    if (h.quiet != null) { this.clearTimer(h.quiet); h.quiet = null; }
+    const decision = confirmDecision(h.text, true);
+    if (decision) this.resolvePending(decision === 'confirm', 'voice');
   }
 
   private resolvePending(confirmed: boolean, by: 'voice' | 'click'): void {
     const p = this.pending;
     const client = this.client;
     if (!p || !client) return;
+    if (p.heard.quiet != null) { this.clearTimer(p.heard.quiet); p.heard.quiet = null; }
     this.pending = null;
     this.dispatch({ type: 'confirm-resolved', callId: p.callId });
     if (confirmed) {
@@ -708,9 +771,8 @@ export class VoiceController {
       level: live ? round(this.levels.input) : 0,
       outputLevel: live ? round(this.levels.output) : 0,
       elapsedSeconds: Math.floor(this.elapsed()),
-      budget: this.budget(),
       pending: this.pending?.view ?? this.budgetCard ?? null,
-      choice: this.choice ? { id: this.choice.id, title: this.choice.title, candidates: this.choice.candidates, ...(this.choice.ordinal ? { ordinal: this.choice.ordinal } : {}) } : null,
+      choice: this.choice ? { id: this.choice.id, requestId: this.choice.requestId, title: this.choice.title, candidates: this.choice.candidates, ...(this.choice.ordinal ? { ordinal: this.choice.ordinal } : {}) } : null,
       lastLine: last ? { role: last.role, text: last.text.trim() } : null,
       turns: this.turns,
       muted: this.muted,
@@ -723,8 +785,7 @@ export class VoiceController {
     const next = this.build();
     const prev = this.snapshot;
     if (prev.phase === next.phase && prev.level === next.level && prev.outputLevel === next.outputLevel
-      && prev.elapsedSeconds === next.elapsedSeconds && prev.budget?.usedUsd === next.budget?.usedUsd
-      && prev.budget?.holdUsd === next.budget?.holdUsd && prev.pending === next.pending && prev.turns === next.turns
+      && prev.elapsedSeconds === next.elapsedSeconds && prev.pending === next.pending && prev.turns === next.turns
       && prev.choice?.id === next.choice?.id && prev.choice?.ordinal === next.choice?.ordinal
       && prev.lastLine?.text === next.lastLine?.text && prev.muted === next.muted && prev.reason === next.reason
       && prev.closedSeconds === next.closedSeconds) return;

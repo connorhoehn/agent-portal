@@ -430,7 +430,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "Open (or focus) a shell tab on one of the user's computers.",
+    "description": "Open (or focus) a shell tab on one of the user's computers, in its workspace.",
     "name": "open_shell",
     "parameters": {
       "additionalProperties": false,
@@ -439,17 +439,9 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
           "description": "The computer.",
           "type": "string",
         },
-        "cwd": {
-          "description": "A starting directory.",
-          "type": [
-            "string",
-            "null",
-          ],
-        },
       },
       "required": [
         "computerId",
-        "cwd",
       ],
       "type": "object",
     },

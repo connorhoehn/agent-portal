@@ -26,7 +26,14 @@
 // the entry mirrored into the notification center (lib/localNotifications.ts)
 // and the outcome spoken while the session is live. An ambiguous `open` (two
 // Alphas) shows the library's VoiceChoiceCard (2.510.4) through the dock's
-// `pendingChoice`; the user picks by click or by saying the number.
+// `pendingChoice`; the user picks by click or by saying the number. Every
+// card carries the controller's `requestId` (2.510.5 remounts a card per
+// request), and the dock opens either card on its prop alone.
+//
+// No money in the footer (owner decision, 8 November): the dock shows the
+// phase, the elapsed time and the controls, never a dollar figure, so no
+// `budget` reaches VoiceDock; the hold and the daily cap still enforce in the
+// controller and the middleware.
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocation, useNavigate } from 'react-router';
@@ -324,6 +331,7 @@ function VoiceFooterPane() {
   const anchor = useRef<HTMLDivElement>(null);
   const pending: VoicePending | null = snap.pending ? {
     title: snap.pending.title,
+    requestId: snap.pending.requestId,
     ...(snap.pending.detail ? { detail: snap.pending.detail } : {}),
     onConfirm: () => controller.confirm('click'),
     onCancel: () => controller.cancel('click'),
@@ -332,6 +340,7 @@ function VoiceFooterPane() {
   // (the controller hears it and sets `ordinal`; the card chooses that row once and calls back here).
   const pendingChoice: VoicePendingChoice | null = snap.choice ? {
     title: snap.choice.title,
+    requestId: snap.choice.requestId,
     candidates: snap.choice.candidates.map((c) => ({ ...c })),
     ...(snap.choice.ordinal ? { ordinal: snap.choice.ordinal } : {}),
     onChoose: (index) => controller.choose(index),
@@ -345,7 +354,6 @@ function VoiceFooterPane() {
       level={snap.level}
       outputLevel={snap.outputLevel}
       elapsedSeconds={snap.elapsedSeconds}
-      budget={snap.budget}
       pending={pending}
       pendingChoice={pendingChoice}
       lastLine={snap.lastLine}

@@ -242,6 +242,19 @@ test('open_shell opens (or focuses) the lab\'s shell tab with no card, by label 
   assert.equal((await confirmAndRun('open_shell', { computerId: 'c-alpha' }, toolContext({ compute: full }))).result.outcome, 'refused');
 });
 
+test('open_shell takes no directory from the model: a `cwd` argument is refused before any shell opens, and the shell starts in the box\'s workspace (sweep 2 M3)', async () => {
+  const compute = fakeCompute();
+  for (const cwd of ['/etc', '../../root', 'src; rm -rf ~', 'x'.repeat(500)]) {
+    const { result } = await confirmAndRun('open_shell', { computerId: 'Alpha', cwd }, toolContext({ compute }));
+    assert.equal(result.outcome, 'refused', cwd);
+    assert.match(String(result.output['error'] ?? result.summary), /cwd is not an argument/, cwd);
+  }
+  assert.deepEqual(compute.shells, [], 'nothing opened');
+  const { result } = await confirmAndRun('open_shell', { computerId: 'Alpha' }, toolContext({ compute }));
+  assert.equal(result.output['cwd'], '/mnt/workspace/alpha');
+  assert.deepEqual(compute.shells, [{ id: 'c-alpha', label: 'alpha-1', sessionId: SID('a'), cwd: '/mnt/workspace/alpha' }]);
+});
+
 // ── start_computer ──
 
 const PROJECTS = [
