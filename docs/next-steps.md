@@ -50,7 +50,7 @@ The sweep removed `docs/`, `CLAUDE.md`, `.claude/` and the skills folders. Some 
 - **The two consumers pin different `realtime-modules` builds** (0.142.0 in the portal, 0.141.0 in the middleware) and the middleware reaches into `../portal/vendor` for its copy. Pin both to the same version and give the middleware its own `vendor/` entry, or publish the package to a registry and pin a version.
 - **Prefer tags over commit hashes for library pins.** `service-runtime` is pinned by a 40-character hash in `middleware/package.json`. That is exact, but it tells a reader nothing. Tag releases in each library and pin the tag.
 - **There is no continuous integration in `aws-agentcore`, `realtime-modules`, `service-runtime`, `pipeline-runtime`, `message-queue`, `event-catalog`, `platform-api` or `managed-nosql-store`.** Five of the twelve repos have GitHub workflows. Add a minimal one to each of the others that runs `npm test` and `npm run typecheck` on push. For this repo, run the middleware suite alone, as the README says, because two concurrent runs hang.
-- **Document the release order.** A change at the bottom of the stack ripples up through up to six repositories. Write the order down once (it is the layering in the story document) and the rule that each library change is one release, not several.
+- **Document the release order.** A change at the bottom of the stack ripples up through up to six repositories. Write the order down once (it is the layering in the story document) and the rule that each library change is one release, not several. Done 8 November 2026: `docs/release-order.md`.
 
 ## 3. Prove the cloud deployment again (when credentials are back)
 
