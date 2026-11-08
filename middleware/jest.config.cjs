@@ -1,7 +1,8 @@
 /** @type {import('jest').Config} */
 module.exports = {
   testEnvironment: 'node',
-  maxWorkers: '25%',
+  // 25% keeps two concurrent local runs from hanging the dev box; CI sets JEST_MAX_WORKERS.
+  maxWorkers: process.env.JEST_MAX_WORKERS || '25%',
   workerIdleMemoryLimit: '512MB',
   // Disables HTTP keep-alive so supertest never reuses a pooled socket across
   // its per-request listen/close port churn — see jest.setup.cjs for the full
