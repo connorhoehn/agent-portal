@@ -74,6 +74,9 @@ function VoiceGate() {
   return <VoiceFooterPane />;
 }
 
+/** queue_work kinds whose jobs the Work stream announces (the sweep jobs and the dispatcher's work jobs). */
+const WORK_EVENT_KINDS: ReadonlySet<string> = new Set(['sweep', 'bot-run', 'job', 'dispatch', 'finding-promote']);
+
 /** Social actions whose grant comes from the plane outside the Social tenant (routes/social-plane.ts PLANE_ACTIONS). */
 const PLANE_ACTIONS: ReadonlySet<Action> = new Set<Action>(['PostMessage', 'StartCall']);
 
@@ -268,7 +271,9 @@ function VoiceFooterPane() {
     // The stream the page already holds: the Work pages' /api/work/events in orgiq (the sweep jobs and the
     // dispatcher's jobs both emit there), the run's own event stream in pipelines.
     wake: (job, onEvent) => {
-      if (job.kind !== 'pipeline') return subscribeWorkEvents(onEvent);
+      // Work's jobs emit on /api/work/events; the other kinds' reads are polled (their pages poll too).
+      if (WORK_EVENT_KINDS.has(job.kind)) return subscribeWorkEvents(onEvent);
+      if (job.kind !== 'pipeline') return () => {};
       if (typeof EventSource === 'undefined') return () => {};
       const es = new EventSource(`/api/pipelines/runs/${encodeURIComponent(job.jobId)}/events`);
       es.onmessage = () => onEvent();

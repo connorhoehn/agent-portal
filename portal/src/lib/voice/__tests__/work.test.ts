@@ -347,3 +347,163 @@ test('the notification center merges the portal\'s entries with the gateway inbo
   assert.deepEqual(marked, ['g1']);
   clearLocalNotifications();
 });
+
+// ── catalogue v2 (V2-9): every new kind through its page button's route, one toast each ──
+
+/** A read that answers `bodies` in turn (the last one again after), so a follower moves queued, running, done. */
+const steps = (url: string, bodies: unknown[]): Route => {
+  let n = 0;
+  return (req) => (req.method === 'GET' && req.url === url ? { status: 200, body: bodies[Math.min(n++, bodies.length - 1)] } : undefined);
+};
+
+interface KindCase {
+  kind: string; tenant: string; allow: Action[]; target: string; model?: string;
+  routes: Route[]; post: [string, unknown]; title: string; states: JobState[]; href: string; toastId?: string;
+}
+
+const PROJECTS = [{ id: 'p-auth', name: 'Auth Migration' }, { id: 'p-obs', name: 'Observability Platform' }];
+const TEAMS = [{ id: 'TEAM-001', name: 'Northstar Payments' }, { id: 'TEAM-002', name: 'Kubernetes Operator' }];
+const CASES: KindCase[] = [
+  { kind: 'job', tenant: 'orgiq', allow: ['ManageDevbox'], target: 'login redirect',
+    routes: [route('GET', '/api/work/suggestions', 200, { suggestions: [{ id: 'sg-w1', title: 'Fix the login redirect', prompt: 'Fix the redirect loop on /login (w1).', initiativeName: 'Auth Migration' }, { id: 'sg-w2', title: 'Write the runbook', prompt: 'p' }] }),
+      route('POST', '/api/work/jobs', 201, { id: 'job-41', status: 'queued' }),
+      steps('/api/work/jobs/job-41', [{ id: 'job-41', status: 'running' }, { id: 'job-41', status: 'awaiting_review' }])],
+    post: ['/api/work/jobs', { title: 'Fix the login redirect', prompt: 'Fix the redirect loop on /login (w1).', suggestionId: 'sg-w1' }],
+    title: 'Queue "Fix the login redirect"', states: ['queued', 'running', 'done'], href: '/iq/work/job-41' },
+  { kind: 'dispatch', tenant: 'orgiq', allow: ['DispatchAgentRun'], target: 'retry storm', model: 'sonnet',
+    routes: [route('GET', '/api/graph/work', 200, [{ id: 'w-9', title: 'Fix the retry storm', projectId: 'p-auth', storyPoints: 3 }]),
+      route('GET', '/api/bots/estimate', 200, { costUsdP25: 0.4, costUsdP75: 1.25, confidence: 'medium' }),
+      route('POST', '/api/bots/dispatch-work', 202, { run: { id: 'run-5', jobId: 'job-55' } }),
+      steps('/api/work/jobs/job-55', [{ status: 'claimed' }, { status: 'running' }, { status: 'done', result: { summary: 'Opened a PR' } }])],
+    post: ['/api/bots/dispatch-work', { workItemId: 'w-9', model: 'us.anthropic.claude-sonnet-5' }],
+    title: 'Dispatch "Fix the retry storm" with Sonnet', states: ['queued', 'running', 'done'], href: '/iq/work/job-55' },
+  { kind: 'finding-promote', tenant: 'orgiq', allow: ['DispatchAgentRun'], target: 'stale onboarding doc',
+    routes: [route('GET', '/api/work/findings', 200, { findings: [{ id: 'f-3', title: 'Stale onboarding doc', status: 'open' }] }),
+      route('POST', '/api/work/findings/f-3/promote', 201, { id: 'job-60' }), steps('/api/work/jobs/job-60', [{ status: 'running' }, { status: 'done' }])],
+    post: ['/api/work/findings/f-3/promote', {}], title: 'Turn "Stale onboarding doc" into a job', states: ['queued', 'running', 'done'], href: '/iq/work/job-60' },
+  { kind: 'finding-analyze', tenant: 'orgiq', allow: ['DispatchAgentRun'], target: 'stale onboarding doc',
+    routes: [route('GET', '/api/work/findings', 200, { findings: [{ id: 'f-3', title: 'Stale onboarding doc', status: 'open' }] }),
+      route('POST', '/api/work/findings/f-3/analyze', 200, { links: [1, 2], proposals: [1], problem: 'x' })],
+    post: ['/api/work/findings/f-3/analyze', {}], title: 'Analyse "Stale onboarding doc"', states: ['done'], href: '/iq/work/findings' },
+  { kind: 'change-rereview', tenant: 'orgiq', allow: ['RunDevboxTask', 'ManageDevbox'], target: 'tighten retries',
+    routes: [route('GET', '/api/sdlc/changes', 200, { changes: [{ id: 'cr-1', title: 'Tighten retries', status: 'changes_requested' }] }),
+      route('POST', '/api/sdlc/changes/cr-1/rereview', 200, { ok: true, verdict: 'approve', status: 'needs_approval' })],
+    post: ['/api/sdlc/changes/cr-1/rereview', {}], title: 'Re-review "Tighten retries"', states: ['done'], href: '/admin/changes/cr-1' },
+  { kind: 'change-address', tenant: 'orgiq', allow: ['RunDevboxTask', 'ManageDevbox'], target: 'tighten retries',
+    routes: [steps('/api/sdlc/changes/cr-1', [{ change: { status: 'changes_requested' } }, { change: { status: 'needs_approval' } }]),
+      route('GET', '/api/sdlc/changes', 200, { changes: [{ id: 'cr-1', title: 'Tighten retries', status: 'changes_requested' }] }),
+      route('POST', '/api/sdlc/changes/cr-1/address', 202, { ok: true, runId: 'arun-1' })],
+    post: ['/api/sdlc/changes/cr-1/address', {}], title: 'Address the review on "Tighten retries"', states: ['queued', 'running', 'done'], href: '/admin/changes/cr-1' },
+  { kind: 'deck', tenant: 'orgiq', allow: ['DispatchAgentRun'], target: 'auth migration',
+    routes: [route('GET', '/api/graph/projects', 200, PROJECTS), route('POST', '/api/initiative-decks/projects/p-auth', 201, { deckId: 'idk-1', revisionId: 'r1' })],
+    post: ['/api/initiative-decks/projects/p-auth', {}], title: 'Build a status deck for Auth Migration', states: ['done'], href: '/iq/decks/idk-1' },
+  { kind: 'summarize', tenant: 'orgiq', allow: [], target: 'observability',
+    routes: [route('GET', '/api/graph/projects', 200, PROJECTS), route('POST', '/api/conversations/summarize/run', 202, { runId: 'sum-1' }),
+      steps('/api/conversations/summarize/runs/sum-1', [{ phase: 'running' }, { phase: 'completed' }])],
+    post: ['/api/conversations/summarize/run', { channel: 'orgiq:initiative:p-obs', text: '' }], title: 'Summarise Observability Platform', states: ['queued', 'running', 'done'], href: '/iq/projects/p-obs' },
+  { kind: 'diagram', tenant: 'social', allow: ['ViewSocial'], target: 'platform',
+    routes: [route('GET', '/api/social/resolve?kind=channel', 200, { kind: 'channel', match: { id: 'platform', name: 'platform', channel: 'social:ch:platform', channelId: 'x' }, candidates: [] }),
+      route('POST', '/api/chat/commands/diagram/run', 202, { runId: 'dia-1' }), steps('/api/chat/commands/diagram/runs/dia-1', [{ phase: 'completed' }])],
+    post: ['/api/chat/commands/diagram/run', { channel: 'social:ch:platform', text: '' }], title: 'Draw a diagram of #platform', states: ['queued', 'done'], href: '/social/channels/platform' },
+  { kind: 'deck', tenant: 'social', allow: ['ViewSocial'], target: 'platform',
+    routes: [route('GET', '/api/social/resolve?kind=channel', 200, { kind: 'channel', match: { id: 'platform', name: 'platform', channel: 'social:ch:platform', channelId: 'x' }, candidates: [] }),
+      route('POST', '/api/chat/commands/deck/run', 202, { runId: 'deck-1' }), steps('/api/chat/commands/deck/runs/deck-1', [{ phase: 'running' }, { phase: 'failed', error: 'No readable messages' }])],
+    post: ['/api/chat/commands/deck/run', { channel: 'social:ch:platform', text: '' }], title: 'Build a deck from #platform', states: ['queued', 'running', 'failed'], href: '/social/channels/platform' },
+  { kind: 'assessment-run', tenant: 'assessment', allow: ['ViewAssessment', 'RunAssessmentAgent'], target: 'northstar',
+    routes: [route('GET', '/api/assessment/teams', 200, TEAMS), route('POST', '/api/assessment/runs', 202, { run_id: 'arun-9' }),
+      steps('/api/assessment/runs/arun-9', [{ status: 'running' }, { status: 'completed' }])],
+    post: ['/api/assessment/runs', { command: 'score-dimensions', args: { team: 'TEAM-001' }, team_id: 'TEAM-001' }], title: 'Run the scorer on Northstar Payments', states: ['queued', 'running', 'done'], href: '/assessment/runs/arun-9' },
+  { kind: 'draft-followups', tenant: 'assessment', allow: ['ViewAssessment', 'RunAssessmentAgent'], target: 'continuous integration for northstar',
+    routes: [route('GET', '/api/assessment/teams/TEAM-001', 200, { team: TEAMS[0], dimensions: [{ id: '1', title: 'Continuous Integration (CI)' }, { id: '2', title: 'Continuous Delivery' }] }),
+      route('GET', '/api/assessment/teams', 200, TEAMS),
+      route('POST', '/api/assessment/teams/TEAM-001/dimensions/1/drafts/followups', 202, { runId: 'adr-1' }), steps('/api/assessment/drafts/adr-1', [{ phase: 'completed' }])],
+    post: ['/api/assessment/teams/TEAM-001/dimensions/1/drafts/followups', {}], title: 'Draft follow-ups for Continuous Integration (CI) (Northstar Payments)', states: ['queued', 'done'], href: '/assessment/teams/TEAM-001' },
+  { kind: 'deck', tenant: 'assessment', allow: ['ViewAssessment', 'RunAssessmentAgent'], target: 'kubernetes',
+    routes: [route('GET', '/api/assessment/teams', 200, TEAMS), route('POST', '/api/assessment/teams/TEAM-002/decks', 202, { deckId: 'adk-7', runId: 'arun-7' }),
+      steps('/api/assessment/runs/arun-7', [{ status: 'completed' }])],
+    post: ['/api/assessment/teams/TEAM-002/decks', {}], title: 'Build a review deck for Kubernetes Operator', states: ['queued', 'done'], href: '/assessment/decks/adk-7' },
+  { kind: 'deck', tenant: 'pipelines', allow: ['ViewPipelines', 'RunPipeline'], target: 'nightly',
+    routes: [route('GET', '/api/pipelines/runs', 200, { runs: [{ id: 'run-42', definitionId: 'runbook:nightly', status: 'failed' }] }),
+      route('POST', '/api/pipelines/runs/run-42/decks', 201, { deckId: 'pdk-2' })],
+    post: ['/api/pipelines/runs/run-42/decks', {}], title: 'Build a report deck for runbook:nightly', states: ['done'], href: '/pipelines/decks/pdk-2' },
+];
+
+async function kindRun(c: KindCase, opts: { deny?: Action[] } = {}) {
+  const clock = new FakeClock();
+  const toasts = fakeToasts(clock);
+  const { fetch, log } = fakeFetch(c.routes);
+  const notices: string[] = [];
+  const jobs = new VoiceJobTracker({ fetch, toast: toasts.sink, notify: (n) => notices.push(`${n.kind}:${n.state}`), speak: () => {}, toastSeconds: () => 8, pollMs: 1000, setTimer: clock.setTimer, clearTimer: clock.clearTimer });
+  const ctx = toolContext({ tenant: c.tenant, role: 'tester', fetch, jobs, ...(opts.deny ? { deny: opts.deny } : { allow: c.allow }) });
+  const { VOICE_PLANNERS, VOICE_RUNNERS } = await import('../actions.ts');
+  const args = { kind: c.kind, target: c.target, ...(c.model ? { model: c.model } : {}) };
+  const p = prepareToolCall('queue_work', args, ctx);
+  assert.ok(p.ok, `${c.kind} prepares`);
+  const planned = await planPreparedCall(p.call, ctx, VOICE_PLANNERS);
+  const before = log.filter((r) => r.method !== 'GET').length;
+  if (!planned || 'result' in planned) return { planned, log, toasts, notices, before, res: null, again: null, jobs, clock };
+  const res = await runPreparedCall(p.call, ctx, VOICE_RUNNERS, planned.plan.data);
+  await clock.advance(5000);
+  const again = await runPreparedCall(p.call, ctx, VOICE_RUNNERS, planned.plan.data);
+  jobs.dispose();
+  return { planned, log, toasts, notices, before, res, again, jobs, clock };
+}
+
+test('V2-9: every new kind resolves its target by the page\'s own read, asks first, sends the page button\'s route and body once, and one toast follows it', async () => {
+  for (const c of CASES) {
+    const where = `${c.tenant}/${c.kind}`;
+    const r = await kindRun(c);
+    assert.ok(r.planned && 'plan' in r.planned, `${where} shows a card: ${JSON.stringify(r.planned)}`);
+    assert.equal(r.planned.plan.title, c.title, where);
+    assert.equal(r.before, 0, `${where}: nothing is sent before the confirm`);
+    assert.equal(r.res?.outcome, 'done', `${where}: ${r.res?.summary}`);
+    const sent = r.log.filter((l) => l.method === 'POST');
+    assert.deepEqual(sent.map((l) => [l.url, l.body]), [c.post], `${where}: the page button's route and body, once (a retry is answered from the ledger)`);
+    assert.ok(r.again?.output['alreadyQueued'], `${where}: the retry says it was already queued`);
+    const ids = [...new Set(r.toasts.calls.map((t) => t.id))];
+    assert.equal(ids.length, 1, `${where}: one toast`);
+    assert.deepEqual(r.toasts.calls.map((t) => t.state), c.states, `${where} states`);
+    assert.equal(r.toasts.calls.at(-1)!.href, c.href, `${where} href`);
+    assert.deepEqual(r.notices, [`${c.kind}:${c.states.at(-1)}`], `${where}: the notification center keeps it`);
+  }
+});
+
+test('V2-9: the dispatch card shows the drawer\'s forecast; an unknown model is refused before any write, and a money brake names the page', async () => {
+  const dispatch = CASES.find((c) => c.kind === 'dispatch')!;
+  const r = await kindRun(dispatch);
+  assert.ok(r.planned && 'plan' in r.planned);
+  assert.match(String(r.planned.plan.detail), /^Forecast \$0\.40 to \$1\.25\./);
+  assert.ok(r.log.some((l) => l.url === '/api/bots/estimate?model=us.anthropic.claude-sonnet-5&points=3'));
+  const odd = await kindRun({ ...dispatch, model: 'gpt-9' });
+  assert.ok(odd.planned && 'result' in odd.planned && /no "gpt-9" model/.test(odd.planned.result.summary));
+  assert.equal(odd.log.filter((l) => l.method !== 'GET').length, 0);
+  const braked = await kindRun({ ...dispatch, routes: [dispatch.routes[0]!, dispatch.routes[1]!, route('POST', '/api/bots/dispatch-work', 409, { error: 'over the allocation', gate: 'allocation', confirmFlag: 'confirmOverAllocation' })] });
+  assert.equal(braked.res?.outcome, 'refused');
+  assert.match(braked.res?.summary ?? '', /needs a confirm on its page, not by voice: over the allocation/);
+  assert.ok(!JSON.stringify(braked.log.map((l) => l.body)).includes('confirmOver'), 'no confirm flag is ever sent');
+});
+
+test('V2-9: each kind is refused on its page button\'s action before any request; a kind from another workspace is refused too', async () => {
+  for (const c of CASES) {
+    const action = (await import('../catalogue.ts')).QUEUE_WORK_ACTIONS[c.tenant]![c.kind];
+    if (!action) continue;
+    const r = await kindRun(c, { deny: [action] });
+    assert.ok(r.planned && 'result' in r.planned && r.planned.result.outcome === 'refused', `${c.tenant}/${c.kind}`);
+    assert.equal(r.log.length, 0, `${c.tenant}/${c.kind}: no request`);
+  }
+  const elsewhere = await kindRun({ ...CASES[0]!, tenant: 'pipelines' });
+  assert.ok(elsewhere.planned && 'result' in elsewhere.planned && /Work workspace/.test(elsewhere.planned.result.summary));
+});
+
+test('V2-9: a finding already promoted follows the job it names; a change not asking for changes is refused; agent-plan is not a kind', async () => {
+  const promote = CASES.find((c) => c.kind === 'finding-promote')!;
+  const r = await kindRun({ ...promote, routes: [promote.routes[0]!, route('POST', '/api/work/findings/f-3/promote', 409, { error: 'already promoted', jobId: 'job-12' }), steps('/api/work/jobs/job-12', [{ status: 'done' }])] });
+  assert.equal(r.res?.output['queued'], false);
+  assert.equal(r.res?.output['jobId'], 'job-12');
+  assert.deepEqual(r.toasts.calls.map((t) => [t.id, t.state]), [['job-12', 'queued'], ['job-12', 'done']]);
+  const address = CASES.find((c) => c.kind === 'change-address')!;
+  const closed = await kindRun({ ...address, routes: [route('GET', '/api/sdlc/changes?', 200, { changes: [{ id: 'cr-1', title: 'Tighten retries', status: 'approved' }] })] });
+  assert.ok(closed.planned && 'result' in closed.planned && /is approved/.test(closed.planned.result.summary));
+  const ctx = toolContext({ tenant: 'orgiq' });
+  assert.equal(prepareToolCall('queue_work', { kind: 'agent-plan', target: 'x' }, ctx).ok, false);
+});

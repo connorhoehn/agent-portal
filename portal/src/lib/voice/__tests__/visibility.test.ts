@@ -28,7 +28,7 @@ const SID = (c: string) => c.repeat(40);
 
 /** Sana: a Work member with a Social grant and the Computer Lab. */
 const SANA: World = {
-  allow: ['Search', 'ViewSocial', 'PostMessage', 'StartCall', 'ManageDevbox', 'OpenDevboxShell', 'ManageBots', 'ConnectLocalCompute', 'VoiceNavigate'],
+  allow: ['Search', 'ViewSocial', 'PostMessage', 'StartCall', 'ManageDevbox', 'OpenDevboxShell', 'ManageBots', 'ConnectLocalCompute', 'DispatchAgentRun', 'RunDevboxTask', 'VoiceNavigate'],
   social: true, socialRequestItemId: null,
   computers: [{ id: 'c-sana-alpha', label: 'sana-alpha-box', sessionId: SID('a'), status: 'running', projectId: 'p-sana-alpha', project: 'Sana Alpha Initiative' }],
   roster: { roster: () => [{ userId: 'u-sana-peer', name: 'Sana Peer Person', status: 'online' }], lobby: () => null },
@@ -112,7 +112,11 @@ const VARIANTS: Record<string, unknown[]> = {
   start_call: [{ target: { kind: 'dm', name: 'Ada' } }],
   set_status: [{ status: 'away', message: 'out' }],
   access_request_status: [{ scope: 'approvals' }, { query: 'budget' }],
-  queue_work: [{ kind: 'sweep', target: 'vibes' }, { kind: 'bot-run', target: 'nightly' }, { kind: 'bot-run', target: 'unknown thing' }, { kind: 'bot-run', target: 'sana parked' }, { kind: 'pipeline', target: 'ingest' }],
+  queue_work: [{ kind: 'sweep', target: 'vibes' }, { kind: 'bot-run', target: 'nightly' }, { kind: 'bot-run', target: 'unknown thing' }, { kind: 'bot-run', target: 'sana parked' }, { kind: 'pipeline', target: 'ingest' },
+    // V2-9: the new kinds, driven to an ambiguity (two of the persona's own rows), nothing found, or the gate.
+    { kind: 'job', target: 'sana fix' }, { kind: 'job', target: 'payroll' }, { kind: 'dispatch', target: 'nothing like it' }, { kind: 'dispatch', target: 'Initiative', model: 'gpt-9' },
+    { kind: 'finding-promote', target: 'x' }, { kind: 'finding-analyze', target: '3' }, { kind: 'change-address', target: 'anything' },
+    { kind: 'deck', target: 'Initiative' }, { kind: 'summarize', target: 'Initiative' }, { kind: 'diagram', target: 'Nothing Like It' }, { kind: 'doc', target: 'initiative:p-not-theirs' }],
   activity: [{ scope: 'missed-calls' }, { scope: 'online', who: 'nobody' }, { scope: 'recent', since: 'tomorrow' }, { scope: 'work', who: 'Someone' }],
 };
 

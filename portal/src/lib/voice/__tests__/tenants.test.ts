@@ -307,3 +307,28 @@ test('V2-8: an SME\'s scripted session stops a computer of their own: the card f
   assert.deepEqual(run.calls, [['computer', 'done']]);
   assert.deepEqual(run.outcomes, ['done']);
 });
+
+test('V2-9: an assessor\'s scripted session runs the scorer on a team: the card, then Runs\' own launch, and the job is followed', async () => {
+  const { mockCallFor } = await middlewareVoice<{ mockCallFor: (t: string, r: string) => Call }>('catalogue.ts');
+  const call = mockCallFor('assessment', 'assessor');
+  assert.equal(call.name, 'queue_work');
+  const tracked: unknown[] = [];
+  let card: unknown = null;
+  const run = await scriptedRun('assessment', {
+    role: 'assessor', allow: ['ViewAssessment', 'RunAssessmentAgent', 'VoiceNavigate'], call,
+    routes: [route('GET', '/api/assessment/teams', 200, [{ id: 'TEAM-001', name: 'Northstar Payments' }, { id: 'TEAM-002', name: 'Kubernetes Operator' }]),
+      route('POST', '/api/assessment/runs', 202, { run_id: 'run-77', started_at: '2026-11-08T12:00:00Z' })],
+    ctx: { jobs: { track: (j) => { tracked.push({ id: j.jobId, kind: j.kind, href: j.href, follow: j.follow }); } } },
+    beforeStop: async (c, _ctx, clock) => {
+      const p = c.getSnapshot().pending!;
+      card = p.title;
+      c.confirm('click');
+      await clock.advance(300);
+    },
+  });
+  assert.equal(card, 'Run the scorer on Northstar Payments');
+  assert.deepEqual(run.log.filter((l) => l.method === 'POST' && !l.url.startsWith('/api/voice/')).map((l) => [l.url, l.body]),
+    [['/api/assessment/runs', { command: 'score-dimensions', args: { team: 'TEAM-001' }, team_id: 'TEAM-001' }]]);
+  assert.deepEqual(tracked, [{ id: 'run-77', kind: 'assessment-run', href: '/assessment/runs/run-77', follow: { url: '/api/assessment/runs/run-77', reader: 'assessment-run' } }]);
+  assert.deepEqual(run.calls, [['queue_work', 'done']]);
+});

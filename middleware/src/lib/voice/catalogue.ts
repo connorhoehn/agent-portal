@@ -429,22 +429,63 @@ export function activityScopes(tenant: string | null): string[] {
 }
 
 /**
- * What `queue_work` may queue, per tenant (G19): the org sweeps and a bot's
- * run in orgiq, a runbook's dry-run in pipelines. Each kind goes through the
- * route its page's button calls and is gated by that button's Cedar action
- * (QUEUE_WORK_ACTIONS): "Run sweeps now" on the Findings page
- * (POST /api/work/sweeps/run, background mode), "Dry-run" on a runbook
- * (POST /api/pipelines/definitions/:id/dry-run), "Run now" on a bot
- * (POST /api/bots/:id/run).
+ * What `queue_work` may queue, per tenant, and the Cedar action of the page
+ * button each kind stands in for (G19, catalogue v2 V2-9). Every kind goes
+ * through the route that button calls, with the button's body; the dock
+ * checks the action with can() before any request and the route checks it
+ * again. null = the button has no Cedar action of its own: the conversation
+ * commands in Work are gated by the conversation's own membership, which the
+ * route checks (Social's are the ViewSocial its pages hold).
+ *
+ *   sweep            Findings "Run sweeps now"     POST /api/work/sweeps/run { background: true }
+ *   bot-run          a bot's "Run now"             POST /api/bots/:id/run
+ *   pipeline         a runbook's "Dry-run"         POST /api/pipelines/definitions/:id/dry-run
+ *   job              the queue's suggestion        POST /api/work/jobs { title, prompt, suggestionId } (the suggestion's own prompt)
+ *   dispatch         a work item's "Dispatch"      POST /api/bots/dispatch-work { workItemId, model } after GET /api/bots/estimate
+ *   finding-promote  a finding's "Promote"         POST /api/work/findings/:id/promote
+ *   finding-analyze  a finding's "Analyse"         POST /api/work/findings/:id/analyze
+ *   change-rereview  a change's "Re-review"        POST /api/sdlc/changes/:id/rereview
+ *   change-address   a change's "Address"          POST /api/sdlc/changes/:id/address
+ *   deck             the status deck's "Build"     POST /api/initiative-decks/projects/:id, /api/assessment/teams/:id/decks,
+ *                                                  /api/pipelines/runs/:id/decks, /api/chat/commands/deck/run
+ *   summarize, diagram, doc   the conversation's /summarize, /diagram, /doc   POST /api/conversations/<cmd>/run (Work),
+ *                                                  /api/chat/commands/<cmd>/run (Social), { channel, text: '' }
+ *   assessment-run   Runs "Score dimensions"       POST /api/assessment/runs { command: 'score-dimensions', args: { team }, team_id }
+ *   draft-evidence, draft-followups   a dimension's "Draft"   POST /api/assessment/teams/:id/dimensions/:dim/drafts/{evidence-summary,followups}
  */
-export const QUEUE_WORK_KINDS: Readonly<Record<string, readonly string[]>> = {
-  orgiq: ['sweep', 'bot-run'],
-  pipelines: ['pipeline'],
+export const QUEUE_WORK_ACTIONS: Readonly<Record<string, Readonly<Record<string, CapabilityAction | null>>>> = {
+  orgiq: {
+    sweep: 'DispatchAgentRun', 'bot-run': 'ManageBots', job: 'ManageDevbox', dispatch: 'DispatchAgentRun',
+    'finding-promote': 'DispatchAgentRun', 'finding-analyze': 'DispatchAgentRun', 'change-rereview': 'RunDevboxTask', 'change-address': 'RunDevboxTask',
+    deck: 'DispatchAgentRun', summarize: null, diagram: null, doc: null,
+  },
+  social: { deck: 'ViewSocial', summarize: 'ViewSocial', diagram: 'ViewSocial', doc: 'ViewSocial' },
+  assessment: { 'assessment-run': 'RunAssessmentAgent', 'draft-evidence': 'RunAssessmentAgent', 'draft-followups': 'RunAssessmentAgent', deck: 'RunAssessmentAgent' },
+  pipelines: { pipeline: 'RunPipeline', deck: 'RunPipeline' },
 };
 
-/** The Cedar action each kind's page button is gated on (FindingsPage, RunbooksPage, BotsPage). */
-export const QUEUE_WORK_ACTIONS: Readonly<Record<string, CapabilityAction>> = {
-  sweep: 'DispatchAgentRun', pipeline: 'RunPipeline', 'bot-run': 'ManageBots',
+/** `queue_work`'s kinds per tenant (the keys of QUEUE_WORK_ACTIONS). */
+export const QUEUE_WORK_KINDS: Readonly<Record<string, readonly string[]>> = Object.fromEntries(
+  Object.entries(QUEUE_WORK_ACTIONS).map(([tenant, kinds]) => [tenant, Object.keys(kinds)]));
+
+/** What each kind does and what its target names, as the tenant's description lists them. */
+export const QUEUE_WORK_SAYS: Readonly<Record<string, string>> = {
+  sweep: '"sweep" runs the org sweeps now (target "all" or "nightly", or one of bus factor, stale docs, orphan decisions)',
+  'bot-run': '"bot-run" runs one bot now (target: the bot)',
+  pipeline: '"pipeline" dry-runs one runbook (target: the runbook)',
+  job: '"job" queues one of the suggested jobs for the fleet (target: the suggestion)',
+  dispatch: '"dispatch" dispatches a work item to an agent (target: the work item; model: Haiku, Sonnet or Opus if the user named one); the card shows the forecast',
+  'finding-promote': '"finding-promote" turns a finding into a job (target: the finding)',
+  'finding-analyze': '"finding-analyze" analyses a document finding (target: the finding)',
+  'change-rereview': '"change-rereview" re-reviews an agent change (target: the change)',
+  'change-address': '"change-address" has an agent address a change\'s review comments (target: the change)',
+  deck: '"deck" builds a status deck (target: the initiative in Work, the team in Assessment, the run in Pipelines, the channel in Social)',
+  summarize: '"summarize" summarises a conversation (target: the initiative in Work, the channel in Social)',
+  diagram: '"diagram" draws a diagram of a conversation (target as summarize)',
+  doc: '"doc" drafts a document from a conversation (target as summarize)',
+  'assessment-run': '"assessment-run" runs the scorer on a team (target: the team)',
+  'draft-evidence': '"draft-evidence" drafts a dimension\'s evidence summary (target: "<dimension> for <team>")',
+  'draft-followups': '"draft-followups" drafts a dimension\'s follow-ups (target: "<dimension> for <team>")',
 };
 
 /** `queue_work`'s kind enum for one tenant, or every tenant's kinds (null) for the catalogue's base row. */
@@ -643,16 +684,18 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
   },
   {
     name: 'queue_work',
-    description: 'Queue background work the user asks for and report back when it ends: "sweep" runs the org sweeps now (target "all" or "nightly" for every sweep, or one of bus factor, stale docs, orphan decisions), "bot-run" runs one bot now (target: the bot\'s name), "pipeline" dry-runs one pipeline runbook (target: its name). The user confirms first. Say it is queued and that you will say when it is done; the portal shows its progress and tells you the outcome.',
+    // toolsForTenant lists the tenant's own kinds and what each takes in the description it renders.
+    description: 'Queue background work the user asks for and report back when it ends. The user confirms first. Say it is queued and that you will say when it is done; the portal shows its progress and tells you the outcome.',
     parameters: obj({
       kind: str('What to queue.', { enum: queueWorkKinds(null) }),
-      target: str('Which sweep, bot or runbook, as the user said it.', { minLength: 1, maxLength: 200 }),
+      target: str('What it runs on, as the user said it, or a ref or position a result gave.', { minLength: 1, maxLength: 200 }),
       note: str('A short label the user gave for this run, shown with it; never an instruction.', { maxLength: 200 }),
+      model: str('For dispatch: the model the user named (Haiku, Sonnet or Opus); the work item\'s own otherwise.', { minLength: 1, maxLength: 40 }),
     }, ['kind', 'target']),
     kind: 'machine', backing: 'work', confirm: true, action: null,
-    gate: "per kind, the page button's action (QUEUE_WORK_ACTIONS): sweep DispatchAgentRun (the route's own floor is ViewWork), bot-run ManageBots + stewardship and the bot's money brakes, pipeline RunPipeline + the dry-run's money brakes",
-    spend: 'dispatch', idempotent: false, says: 'Queuing the nightly sweep.', tenants: ['orgiq', 'pipelines'],
-    mapsTo: "sweep: POST /api/work/sweeps/run { sweep?, background: true } then GET /api/work/sweeps/jobs/:id; bot-run: GET /api/bots, POST /api/bots/:id/run, GET /api/bots/:id/runs; pipeline: GET /api/pipelines/runbooks, POST /api/pipelines/definitions/:id/dry-run, GET /api/pipelines/runs/:id; each woken by GET /api/work/events (orgiq) or GET /api/pipelines/runs/:id/events",
+    gate: "per tenant and kind, the page button's action (QUEUE_WORK_ACTIONS): sweep, dispatch, finding-promote, finding-analyze and Work's deck DispatchAgentRun; bot-run ManageBots + stewardship and the bot's money brakes; job ManageDevbox; change-rereview and change-address RunDevboxTask; pipeline and Pipelines' deck RunPipeline + the dry-run's money brakes; assessment-run, the drafts and Assessment's deck RunAssessmentAgent; Social's kinds ViewSocial; Work's conversation commands the conversation's own membership (the route)",
+    spend: 'dispatch', idempotent: false, says: 'Queuing the nightly sweep.', tenants: ['orgiq', 'social', 'assessment', 'pipelines'],
+    mapsTo: "sweep: POST /api/work/sweeps/run { sweep?, background: true } then GET /api/work/sweeps/jobs/:id; bot-run: GET /api/bots, POST /api/bots/:id/run, GET /api/bots/:id/runs; pipeline: GET /api/pipelines/runbooks, POST /api/pipelines/definitions/:id/dry-run, GET /api/pipelines/runs/:id; job: GET /api/work/suggestions, POST /api/work/jobs, GET /api/work/jobs/:id; dispatch: GET /api/graph/work, GET /api/bots/estimate, POST /api/bots/dispatch-work; finding-promote and finding-analyze: GET /api/work/findings, POST /api/work/findings/:id/promote, POST /api/work/findings/:id/analyze; change-rereview and change-address: GET /api/sdlc/changes, POST /api/sdlc/changes/:id/rereview, POST /api/sdlc/changes/:id/address, GET /api/sdlc/changes/:id; deck: GET /api/graph/projects, POST /api/initiative-decks/projects/:projectId, GET /api/assessment/teams, POST /api/assessment/teams/:teamId/decks, GET /api/assessment/runs/:runId, GET /api/pipelines/runs, POST /api/pipelines/runs/:id/decks, GET /api/social/resolve, POST /api/chat/commands/deck/run, GET /api/chat/commands/deck/runs/:id; summarize, diagram and doc: POST /api/conversations/summarize/run, POST /api/conversations/diagram/run, POST /api/conversations/doc/run, GET /api/conversations/summarize/runs/:id, GET /api/conversations/diagram/runs/:id, GET /api/conversations/doc/runs/:id, POST /api/chat/commands/summarize/run, POST /api/chat/commands/diagram/run, POST /api/chat/commands/doc/run, GET /api/chat/commands/summarize/runs/:id, GET /api/chat/commands/diagram/runs/:id, GET /api/chat/commands/doc/runs/:id; assessment-run: POST /api/assessment/runs; drafts: GET /api/assessment/teams/:id, POST /api/assessment/teams/:id/dimensions/:dim/drafts/evidence-summary, POST /api/assessment/teams/:id/dimensions/:dim/drafts/followups, GET /api/assessment/drafts/:runId; each woken by GET /api/work/events (Work) or GET /api/pipelines/runs/:id/events",
   },
   {
     name: 'access_request_status',
@@ -702,8 +745,10 @@ export const MOCK_CALLS: Readonly<Record<string, { name: string; arguments: Reco
   'orgiq/hr-admin': { name: 'budget', arguments: { scope: 'org', initiative: null, groupBy: null }, said: 'What has the org spent this month?' },
   'pipelines/pipeline-admin': { name: 'summary', arguments: { kind: 'pipelines', since: 'last night' }, said: 'What failed last night?' },
   'assessment/program-lead': { name: 'summary', arguments: { kind: 'rollup', since: null }, said: 'How is the program doing?' },
+  // V2-9: an assessor runs the scorer on a team; the dock follows the run to its end with one toast.
+  'assessment/assessor': { name: 'queue_work', arguments: { kind: 'assessment-run', target: 'Northstar Payments', note: null, model: null }, said: 'Run the scorer on Northstar Payments.' },
   // G19: a program owner queues the nightly sweep; under dev:mock the job is paced queued, running, done (lib/sweep-jobs.ts).
-  'orgiq/program-owner': { name: 'queue_work', arguments: { kind: 'sweep', target: 'nightly sweep', note: null }, said: 'Run the nightly sweep now.' },
+  'orgiq/program-owner': { name: 'queue_work', arguments: { kind: 'sweep', target: 'nightly sweep', note: null, model: null }, said: 'Run the nightly sweep now.' },
 };
 
 /** The scripted call for a session: its role's, else its tenant's, else Social's. */
@@ -764,7 +809,7 @@ export function toolsForTenant(tenant: string, opts: { commandAllowlist?: readon
     }
     if (t.name === 'queue_work') {
       const kinds = queueWorkKinds(tenant);
-      return kinds.length ? [withEnum(t, 'kind', kinds)] : [];
+      return kinds.length ? [withEnum(t, 'kind', kinds, `${t.description} The kinds here: ${kinds.map((k) => QUEUE_WORK_SAYS[k]).join('; ')}.`)] : [];
     }
     if (t.name === 'computer' && opts.commandAllowlist) {
       const phrases = runCommandPhrases(opts.commandAllowlist);

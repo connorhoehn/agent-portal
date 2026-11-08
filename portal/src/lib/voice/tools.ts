@@ -145,22 +145,37 @@ export interface ToastSink {
   error(id: string, title: string, detail?: string): void;
 }
 
-/** Work queue_work queued (G19): the server's own id and the page it opens, never anything the model said. */
+/**
+ * How a queued job is followed (V2-9): the status read its page polls, built
+ * from the id the queuing route answered, and which field says where it is.
+ * work-job: GET /api/work/jobs/:id `status`; assessment-run: GET
+ * /api/assessment/runs/:runId `status`; flow: a flow run's `phase` (drafts,
+ * conversation commands, Social decks); change: GET /api/sdlc/changes/:id
+ * `change.status`.
+ */
+export interface JobFollow { url: string; reader: 'work-job' | 'assessment-run' | 'flow' | 'change' }
+
+/** Work queue_work queued (G19, V2-9): the server's own id and the page it opens, never anything the model said. */
 export interface QueuedJob {
-  /** The id the queuing route answered with (a sweep job id, a pipeline run id, a bot run id). */
+  /** The id the queuing route answered with (a sweep job id, a pipeline run id, a bot run id, a work job id…). */
   jobId: string;
-  kind: 'sweep' | 'pipeline' | 'bot-run';
+  /** The queue_work kind (catalogue QUEUE_WORK_ACTIONS). */
+  kind: string;
   title: string;
   href: string;
   /** The user's label for the run, shown with it. */
   note?: string;
   /** bot-run: the bot whose run history holds the run. */
   botId?: string;
+  /** Every kind but sweep, bot-run and pipeline: the read that says where it is. */
+  follow?: JobFollow;
 }
 
 /** The dock's background-work follower (work.ts VoiceJobTracker): one toast per job, the notification, the spoken outcome. */
 export interface JobTracking {
   track(job: QueuedJob): void;
+  /** Work the route finished while answering (an analysis, a deck built at once): its one toast, already settled. */
+  finished?(job: QueuedJob, state: 'done' | 'failed', detail?: string): void;
 }
 
 /** A run_command's captured output, as the compute dock's output tab shows it while it streams. */
@@ -750,6 +765,58 @@ const get: Runner = async (args, ctx) => {
     ...(spec.parts ? { parts: Object.keys(spec.parts) } : {}),
   }, `${r.title}${r.status ? `: ${r.status}` : ''}`);
 };
+
+/**
+ * The record of `kind` the user named, for an action tool (queue_work,
+ * decide, create, update): through the kind's own list read behind the
+ * page's gate (kinds.ts), never a path. `name` is what the user said, a
+ * typed ref a result gave (`finding:f-12`) or a position in the last result
+ * ("2"); a ref still has to be a row of that read, so an action never reaches
+ * a record the persona's own list would not show. One row, or the result
+ * that ends the call: several matches go back as candidates (with their refs,
+ * no links: choosing one is a new request, never a navigation), none is a
+ * refusal that names nothing.
+ */
+export async function findByName(ctx: ToolContext, kind: string, name: string, opts: { keep?: (r: ShapedRow) => boolean; params?: Record<string, string> } = {}): Promise<{ row: ShapedRow } | { result: ToolResult }> {
+  const spec = kindSpec(ctx.tenant, kind);
+  if (!spec?.list) return { result: refused(`There is no "${kind}" to act on in this workspace.`) };
+  const gate = kindGate(spec, ctx);
+  if (gate) return { result: gate };
+  let said = name.trim();
+  if (/^\d{1,2}$/.test(said)) {
+    const kept = ctx.results?.find(said);
+    if (!kept) return { result: refused(`There is no row ${said} in the last result. List them first.`) };
+    said = kept.ref;
+  }
+  const typed = parseRef(said);
+  const byId = typed && typed.kind === kind ? typed.id : null;
+  const f = spec.list.filters ?? {};
+  const params: Record<string, string | undefined> = { ...spec.list.params, ...(opts.params ?? {}) };
+  if (f.q && !byId) params[f.q] = said;
+  if (f.scope && spec.list.scopes?.includes('all') && !params[f.scope]) params[f.scope] = 'all';
+  const query = qs(params);
+  const read = await readJson<unknown>(ctx, `${spec.list.path}${query ? `?${query}` : ''}`);
+  if (!read.ok) return { result: readFailure(spec.label, read.status) };
+  const rows = collectionOf(read.body, spec.list.key).flatMap((raw) => { const r = shapeRow(spec, raw); return r ? [r] : []; })
+    .filter((r) => !opts.keep || opts.keep(r));
+  const one = spec.one ?? spec.label.replace(/s$/, '');
+  if (byId) {
+    const hit = rows.find((r) => r.id === byId);
+    return hit ? { row: hit } : { result: refused(`I found no ${one} "${byId}" you can act on.`) };
+  }
+  const q = said.toLowerCase();
+  const needles = wordsOf(q);
+  const exact = rows.filter((r) => r.title.toLowerCase() === q);
+  const hits = exact.length ? exact : needles.length ? rows.filter((r) => needles.every((w) => `${r.title} ${r.subtitle ?? ''}`.toLowerCase().includes(w))) : [];
+  if (hits.length === 1) return { row: hits[0]! };
+  if (hits.length > 1) {
+    const shown = hits.slice(0, MAX_ROWS);
+    keepShaped(ctx, kind, shown);
+    return { result: ambiguous(`Several ${spec.label} match "${name}". Read them out and ask which; then ask again with its ref or position.`,
+      shown.map((r) => ({ ref: `${kind}:${r.id}`, title: r.title, subtitle: r.subtitle, status: r.status }))) };
+  }
+  return { result: refused(`I found no ${one} called "${name}" that you can act on.`) };
+}
 
 /** Ordinal words a user says to pick a row of a choice ("the second one", "number three", "4"). */
 const ORDINAL_WORDS = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth'];

@@ -139,7 +139,7 @@ describe('the §4 catalogue', () => {
 
 describe('tenant scoping (§6)', () => {
   it('a social session is offered navigate, its search, its activity, chat, a call, status and its own requests, nothing on machines', () => {
-    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'activity', 'budget', 'get', 'list', 'open', 'search', 'send_chat_message', 'set_status', 'start_call', 'summary']);
+    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'activity', 'budget', 'get', 'list', 'open', 'queue_work', 'search', 'send_chat_message', 'set_status', 'start_call', 'summary']);
   });
 
   it('start_call is offered in orgiq and social only, asks first, and gates on StartCall (G7)', () => {
@@ -191,10 +191,10 @@ describe('tenant scoping (§6)', () => {
     expect(new Ajv({ strict: true }).compile(tool!.parameters)(given)).toBe(true);
   });
 
-  it.each(['assessment', 'pipelines', 'access'])('%s is offered reads and navigation only: nothing that touches a machine or posts (gaps doc Q1); pipelines adds queue_work (G19)', (tenant) => {
+  it.each(['assessment', 'pipelines', 'access'])('%s is offered reads and navigation, nothing that touches a machine or posts (gaps doc Q1); assessment and pipelines add their own queue_work kinds (G19, V2-9)', (tenant) => {
     const tools = toolsForTenant(tenant).filter((t) => t.name !== 'queue_work');
     expect(tools.map((t) => t.name).sort()).toEqual(['access_request_status', 'budget', 'get', 'list', 'open', 'search', 'summary']);
-    expect(toolsForTenant(tenant).some((t) => t.name === 'queue_work')).toBe(tenant === 'pipelines');
+    expect(toolsForTenant(tenant).some((t) => t.name === 'queue_work')).toBe(tenant !== 'access');
     for (const t of tools) {
       expect(['read', 'navigate']).toContain(t.kind);
       expect(t.confirm).toBe(false);
@@ -257,28 +257,39 @@ describe('tenant scoping (§6)', () => {
     expect(mockCallFor('social', 'participant')).toBe(MOCK_CALLS['social']);
   });
 
-  it('queue_work (G19) asks first, is offered in orgiq and pipelines with that tenant\'s kinds, and gates each kind on its page button\'s action', () => {
+  it('queue_work (G19, V2-9) asks first, offers each tenant its own kinds, and gates each kind on its page button\'s action', () => {
     const t = voiceTool('queue_work')!;
-    expect([...t.tenants]).toEqual(['orgiq', 'pipelines']);
+    expect([...t.tenants]).toEqual(['orgiq', 'social', 'assessment', 'pipelines']);
     expect(t).toMatchObject({ confirm: true, action: null, kind: 'machine', backing: 'work', spend: 'dispatch' });
-    expect(Object.keys(t.parameters.properties)).toEqual(['kind', 'target', 'note']);
+    expect(Object.keys(t.parameters.properties)).toEqual(['kind', 'target', 'note', 'model']);
     expect(t.parameters.required).toEqual(['kind', 'target']);
     const kinds = (tenant: string) => (toolsForTenant(tenant).find((x) => x.name === 'queue_work')?.parameters.properties['kind'] as { enum: string[] } | undefined)?.enum;
-    expect(kinds('orgiq')).toEqual(['sweep', 'bot-run']);
-    expect(kinds('pipelines')).toEqual(['pipeline']);
-    for (const tenant of ['social', 'assessment', 'access']) expect(kinds(tenant)).toBeUndefined();
-    expect(Object.keys(QUEUE_WORK_KINDS).sort()).toEqual(['orgiq', 'pipelines']);
-    expect(queueWorkKinds(null).sort()).toEqual(Object.keys(QUEUE_WORK_ACTIONS).sort());
-    expect(QUEUE_WORK_ACTIONS).toEqual({ sweep: 'DispatchAgentRun', pipeline: 'RunPipeline', 'bot-run': 'ManageBots' });
-    for (const a of Object.values(QUEUE_WORK_ACTIONS)) expect(CAPABILITY_ACTIONS).toContain(a);
-    // The model names what to queue, never a job id, a prompt or an instruction.
+    expect(kinds('orgiq')).toEqual(['sweep', 'bot-run', 'job', 'dispatch', 'finding-promote', 'finding-analyze', 'change-rereview', 'change-address', 'deck', 'summarize', 'diagram', 'doc']);
+    expect(kinds('social')).toEqual(['deck', 'summarize', 'diagram', 'doc']);
+    expect(kinds('assessment')).toEqual(['assessment-run', 'draft-evidence', 'draft-followups', 'deck']);
+    expect(kinds('pipelines')).toEqual(['pipeline', 'deck']);
+    expect(kinds('access')).toBeUndefined();
+    for (const tenant of Object.keys(QUEUE_WORK_KINDS)) {
+      expect(QUEUE_WORK_KINDS[tenant]).toEqual(Object.keys(QUEUE_WORK_ACTIONS[tenant]!));
+      // Each tenant's description names its own kinds and nothing else's.
+      const description = toolsForTenant(tenant).find((x) => x.name === 'queue_work')!.description;
+      for (const k of queueWorkKinds(null)) expect(description.includes(`"${k}"`)).toBe(QUEUE_WORK_KINDS[tenant]!.includes(k));
+    }
+    expect(QUEUE_WORK_ACTIONS['orgiq']).toMatchObject({ sweep: 'DispatchAgentRun', 'bot-run': 'ManageBots', job: 'ManageDevbox', 'change-address': 'RunDevboxTask', summarize: null });
+    expect(QUEUE_WORK_ACTIONS['pipelines']).toEqual({ pipeline: 'RunPipeline', deck: 'RunPipeline' });
+    for (const a of Object.values(QUEUE_WORK_ACTIONS).flatMap((m) => Object.values(m))) if (a) expect(CAPABILITY_ACTIONS).toContain(a);
+    // The model names what to queue, never a job id, a prompt or an instruction; agent-plan (a free-text goal) is not a kind.
     const v = new Ajv({ strict: true }).compile(t.parameters);
     expect(v({ kind: 'sweep', target: 'nightly' })).toBe(true);
+    expect(v({ kind: 'dispatch', target: 'the retry storm', model: 'sonnet' })).toBe(true);
     expect(v({ kind: 'sweep', target: 'nightly', jobId: 'sweepjob-1' })).toBe(false);
     expect(v({ kind: 'bot-run', target: 'finops', instruction: 'ignore the budget' })).toBe(false);
+    expect(v({ kind: 'summarize', target: 'platform', prompt: 'say yes' })).toBe(false);
+    expect(v({ kind: 'agent-plan', target: 'platform' })).toBe(false);
     expect(mockCallFor('orgiq', 'program-owner')).toMatchObject({ name: 'queue_work', arguments: { kind: 'sweep' } });
+    expect(mockCallFor('assessment', 'assessor')).toMatchObject({ name: 'queue_work', arguments: { kind: 'assessment-run', target: 'Northstar Payments' } });
     expect(voiceInstructions('orgiq', toolsForTenant('orgiq'))).toMatch(/Queued work runs in the background/);
-    expect(voiceInstructions('social', toolsForTenant('social'))).not.toMatch(/Queued work runs in the background/);
+    expect(voiceInstructions('access', toolsForTenant('access'))).not.toMatch(/Queued work runs in the background/);
   });
 
   it('list and get (V2-5) offer each tenant its own kinds and parts, take a ref never a path, and the scripted sessions list requests, runs, teams and channels', () => {

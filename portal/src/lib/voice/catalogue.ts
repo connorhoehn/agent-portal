@@ -296,17 +296,28 @@ export function activityScopes(tenant: string | null): string[] {
   return [...new Set(Object.values(ACTIVITY_SCOPES).flat())];
 }
 
-/** What `queue_work` may queue, per tenant (the middleware's QUEUE_WORK_KINDS, G19). */
-export const QUEUE_WORK_KINDS: Readonly<Record<string, readonly string[]>> = {
-  orgiq: ['sweep', 'bot-run'],
-  pipelines: ['pipeline'],
+/**
+ * What `queue_work` may queue, per tenant, and the Cedar action of the page
+ * button each kind stands in for (the middleware's QUEUE_WORK_ACTIONS, G19,
+ * V2-9): the dock's can() per tenant and kind; null = the conversation's own
+ * membership, which the route checks.
+ */
+export const QUEUE_WORK_ACTIONS: Readonly<Record<string, Readonly<Record<string, Action | null>>>> = {
+  orgiq: {
+    sweep: 'DispatchAgentRun', 'bot-run': 'ManageBots', job: 'ManageDevbox', dispatch: 'DispatchAgentRun',
+    'finding-promote': 'DispatchAgentRun', 'finding-analyze': 'DispatchAgentRun', 'change-rereview': 'RunDevboxTask', 'change-address': 'RunDevboxTask',
+    deck: 'DispatchAgentRun', summarize: null, diagram: null, doc: null,
+  },
+  social: { deck: 'ViewSocial', summarize: 'ViewSocial', diagram: 'ViewSocial', doc: 'ViewSocial' },
+  assessment: { 'assessment-run': 'RunAssessmentAgent', 'draft-evidence': 'RunAssessmentAgent', 'draft-followups': 'RunAssessmentAgent', deck: 'RunAssessmentAgent' },
+  pipelines: { pipeline: 'RunPipeline', deck: 'RunPipeline' },
 };
-export type QueueWorkKind = 'sweep' | 'pipeline' | 'bot-run';
+export type QueueWorkKind = 'sweep' | 'pipeline' | 'bot-run' | 'job' | 'dispatch' | 'finding-promote' | 'finding-analyze' | 'change-rereview' | 'change-address'
+  | 'deck' | 'summarize' | 'diagram' | 'doc' | 'assessment-run' | 'draft-evidence' | 'draft-followups';
 
-/** The Cedar action each kind's page button is gated on (the middleware's QUEUE_WORK_ACTIONS): the dock's can() per kind. */
-export const QUEUE_WORK_ACTIONS: Readonly<Record<QueueWorkKind, Action>> = {
-  sweep: 'DispatchAgentRun', pipeline: 'RunPipeline', 'bot-run': 'ManageBots',
-};
+/** `queue_work`'s kinds per tenant (the keys of QUEUE_WORK_ACTIONS). */
+export const QUEUE_WORK_KINDS: Readonly<Record<string, readonly string[]>> = Object.fromEntries(
+  Object.entries(QUEUE_WORK_ACTIONS).map(([tenant, kinds]) => [tenant, Object.keys(kinds)]));
 
 /** `queue_work`'s kind enum for one tenant, or every tenant's kinds (null) for the base row. */
 export function queueWorkKinds(tenant: string | null): string[] {
@@ -469,10 +480,11 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
     name: 'queue_work',
     parameters: obj({
       kind: str('What to queue.', { enum: queueWorkKinds(null) }),
-      target: str('Which sweep, bot or runbook, as the user said it.', { minLength: 1, maxLength: 200 }),
+      target: str('What it runs on, as the user said it, or a ref or position a result gave.', { minLength: 1, maxLength: 200 }),
       note: str('A short label the user gave for this run, shown with it; never an instruction.', { maxLength: 200 }),
+      model: str('For dispatch: the model the user named (Haiku, Sonnet or Opus); the work item\'s own otherwise.', { minLength: 1, maxLength: 40 }),
     }, ['kind', 'target']),
-    kind: 'machine', backing: 'work', confirm: true, action: null, says: 'Queuing the nightly sweep.', tenants: ['orgiq', 'pipelines'],
+    kind: 'machine', backing: 'work', confirm: true, action: null, says: 'Queuing the nightly sweep.', tenants: ['orgiq', 'social', 'assessment', 'pipelines'],
   },
   {
     name: 'access_request_status',
