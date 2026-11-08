@@ -25,6 +25,7 @@
 //   POST   /channels/:slug/leave            leave                                              (ViewSocial)
 //   GET    /dms                             your DMs                                           (ViewSocial)
 //   GET    /people                          everyone holding a Social grant                    (ViewSocial)
+//   GET    /resolve?kind=&name=             the channel to post to, by spoken name             (ViewSocial)
 //   GET    /rooms   POST /rooms             rooms; create                                      (ViewSocial / ManageChannels)
 //   GET    /teams   POST /teams             your teams; create                                 (ViewSocial / ManageTeams)
 //   GET    /teams/:teamId                   one team                                           (ViewSocial)
@@ -70,6 +71,7 @@ socialPlaneRouter.post('/channels/:slug/join', socialGate('PostMessage'), handle
 socialPlaneRouter.post('/channels/:slug/leave', socialGate('ViewSocial'), handler('post /channels/:slug/leave'));
 socialPlaneRouter.get('/dms', socialGate('ViewSocial'), handler('get /dms'));
 socialPlaneRouter.get('/people', socialGate('ViewSocial'), handler('get /people'));
+socialPlaneRouter.get('/resolve', socialGate('ViewSocial'), handler('get /resolve'));
 socialPlaneRouter.get('/rooms', socialGate('ViewSocial'), handler('get /rooms'));
 socialPlaneRouter.post('/rooms', socialGate('ManageChannels'), handler('post /rooms'));
 socialPlaneRouter.get('/rooms/:slug', socialGate('ViewSocial'), handler('get /rooms/:slug'));

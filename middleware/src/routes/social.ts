@@ -22,6 +22,7 @@
 //                                  (socialEmbedRouter, below: grant-gated, lane E)
 //   POST /dms/read {channel}       you have read the DM up to now (its unread count → 0)
 //   GET  /people                   everyone holding a social grant
+//   GET  /resolve?kind=team|channel|person&name=  the channel to post to, by name (voice navigator)
 //
 // Phase S2 (design §4.4–§4.5): rooms, teams, recordings and the call log live
 // in platform-api; these are thin tenant-scoped proxies to it with the
@@ -60,6 +61,8 @@ import { unreadFor } from '../mock/social-channels.js';
 import { createChannel, DuplicateChannelError, getChannel, listChannels, type SocialChannelPrivacy, type SocialChannelRow } from '../providers/social-channels.js';
 import { listUsers } from '../providers/identity.js';
 import { userAvatars } from '../providers/user-avatars.js';
+import { resolveByName, type ResolveRow } from '../lib/social-resolve.js';
+import { teamChannelConversation } from '../lib/work-graph/social-sources.js';
 import { withCallAvatars } from '../lib/call-log-avatars.js';
 import { deleteBinding, getBinding, putBinding, type BindingContext, type SocialBindingRow } from '../providers/social-bindings.js';
 import { ROLES_BY_TENANT } from '../lib/session.js';
@@ -345,6 +348,51 @@ socialRouter.get('/dms', socialGate('ViewSocial'), socialHandler('get /dms', asy
   // Direct messages are listed under the session's own id: a clone reads its copies of its persona's (lib/clone-dms.ts).
   const conversations = await socialDirectMessages(req.session?.sub ?? '', names);
   res.json({ conversations: withPeerAvatars(conversations, await userAvatars(directory)) });
+})));
+
+/**
+ * Where to post for a spoken name (voice navigator, spec §4 `send_chat_message`): a team → its first channel
+ * (the General it is created with), a channel → its directory row, a person → the caller's own DM with them,
+ * opened the way POST /dms opens it. Tenant-scoped by the sources: the caller's teams, the channels they may see,
+ * the social roster. Nothing fits → 404 with `match: null`; several fit → 200, `match: null` and the candidates.
+ */
+socialRouter.get('/resolve', socialGate('ViewSocial'), socialHandler('get /resolve', asyncHandler(async (req, res) => {
+  const kind = String(req.query['kind'] ?? '');
+  const name = typeof req.query['name'] === 'string' ? req.query['name'] : '';
+  if (kind !== 'team' && kind !== 'channel' && kind !== 'person') throw new ValidationError('kind is team, channel or person');
+  if (!name.trim() || name.length > NAME_MAX) throw new ValidationError(`name is 1–${NAME_MAX} characters`);
+  type Target = ResolveRow & { channelId: string; channel: string };
+  let rows: Target[] = [];
+  if (kind === 'team') {
+    for (const team of await listTeams(sessionOf(req))) {
+      const first = team.channels.find((c) => c.channelPrivacy !== 'private') ?? team.channels[0];
+      if (first) rows.push({ id: team.teamId, name: team.name, slug: team.slug, channelId: first.roomId, channel: teamChannelConversation(team.slug, first.slug) });
+    }
+  } else if (kind === 'channel') {
+    const userId = me(req);
+    const chat = socialChat();
+    await chat.ready;
+    const directory = await listChannels();
+    await Promise.all(directory.map((row) => chat.membershipStore.hydrate(channelForSlug(row.slug))));
+    rows = directory.filter((r) => r.privacy === 'public' || chat.membershipStore.isActiveMember(channelForSlug(r.slug), userId))
+      .map((r) => ({ id: r.slug, name: r.name, slug: r.slug, channelId: r.slug, channel: channelForSlug(r.slug) }));
+  } else {
+    const self = req.session?.sub ?? '';
+    let roster;
+    try { roster = await socialRoster({ authoritative: true }); }
+    catch { throw new AppError(503, 'The identity store is unavailable'); }
+    // Only the caller's own pair: the channel is always [caller, person]. Self and the operator account are not contacts.
+    rows = [...roster.values()].filter((p) => p.userId !== self && !(p.roles.length === 1 && p.roles[0] === 'admin'))
+      .map((p) => { const channel = dmChannelFor([self, p.userId]); return { id: p.userId, name: p.displayName, channelId: channel, channel }; });
+  }
+  const { match, candidates } = resolveByName(rows, name);
+  if (match && kind === 'person') {
+    const self = req.session?.sub ?? '';
+    await currentSocialActionSession(sessionOf(req), 'PostMessage');
+    await Promise.all([self, match.id].map((u) => socialChat().conversations.recordJoin(match.channel, u).catch(() => undefined)));
+  }
+  const body = { kind, match: match ? { id: match.id, name: match.name, channelId: match.channelId, channel: match.channel } : null, candidates };
+  res.status(candidates.length ? 200 : 404).json(body);
 })));
 
 /** DM rows with each peer's avatar (null → initials); the rows are otherwise unchanged. */
