@@ -645,11 +645,24 @@ _SAFE_ID = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$"
 _SESSION_UUID = r"^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"
 _BRANCH_PREFIX = "orgiq/"
 
-# What the `claude` child never inherits (design §8, pinned by a test). The
-# region survives so the Bedrock client still knows where to call.
-_CLAUDE_ENV_STRIP = ("LAB_RUN_TOKEN", "LAB_CALLBACK_SECRET", "LAB_CALLBACK_SECRET_ID", "GH_TOKEN", "GITHUB_TOKEN")
-_CLAUDE_ENV_STRIP_PREFIXES = ("GIT_CONFIG", "AWS_")
-_CLAUDE_ENV_KEEP = ("AWS_REGION", "AWS_DEFAULT_REGION")
+# What the `claude` child never inherits (design §8, pinned by a test).
+#
+# The design's "AWS_* other than region" line was wrong: `claude` must call
+# Bedrock as the execution role, and on AgentCore (as on ECS) that role reaches
+# the process through the container credential provider variables
+# (AWS_CONTAINER_CREDENTIALS_FULL_URI / _RELATIVE_URI, AWS_CONTAINER_AUTHORIZATION_TOKEN[_FILE]),
+# or web identity (AWS_WEB_IDENTITY_TOKEN_FILE, AWS_ROLE_ARN, AWS_ROLE_SESSION_NAME),
+# not static keys. Stripping every AWS_* cut Claude off from Bedrock. So only
+# STATIC credentials, and the files/profiles that could point at some, are
+# stripped; the provider variables, the region, AWS_EXECUTION_ENV, AWS_BEDROCK_*
+# and CLAUDE_CODE_USE_BEDROCK / ANTHROPIC_* model settings pass through.
+_CLAUDE_ENV_STRIP = (
+    "LAB_RUN_TOKEN", "LAB_CALLBACK_SECRET", "LAB_CALLBACK_SECRET_ID",
+    "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
+    "AWS_PROFILE", "AWS_SHARED_CREDENTIALS_FILE", "AWS_CONFIG_FILE",
+    "GH_TOKEN", "GITHUB_TOKEN",
+)
+_CLAUDE_ENV_STRIP_PREFIXES = ("GIT_CONFIG",)
 
 # Seam: every HTTP call this file makes (broker upstream, transcript GET/PUT).
 _urlopen = urllib.request.urlopen
@@ -697,8 +710,6 @@ def _author(value: object) -> dict | None:
 
 
 def _stripped_for_claude(name: str) -> bool:
-    if name in _CLAUDE_ENV_KEEP:
-        return False
     return name in _CLAUDE_ENV_STRIP or name.startswith(_CLAUDE_ENV_STRIP_PREFIXES)
 
 
@@ -1161,11 +1172,19 @@ async def _mvm_boot(payload: dict) -> dict:
     except OSError:
         return _Refusal("clone-failed", "no .git/config after clone").result()
 
-    try:
-        secret = resolve_secret("LAB_CALLBACK_SECRET")
-    except SecretResolutionError as exc:
-        log.error("microvm boot: %s; lab calls will go unsigned", exc)
-        secret = ""
+    # The fleet secret: the boot payload's, held only in the broker's memory
+    # (the §12 role has no Secrets Manager grant, so LAB_CALLBACK_SECRET_ID
+    # cannot resolve in a microVM); else the env / _ID resolution; else none.
+    secret = _clean_str(payload.get("callback_secret")) or ""
+    source = "payload" if secret else "none"
+    if not secret:
+        try:
+            secret = resolve_secret("LAB_CALLBACK_SECRET")
+        except SecretResolutionError as exc:
+            log.error("microvm boot: %s; lab calls will go unsigned", exc)
+            secret = ""
+        source = "env" if secret else "none"
+    log.info("microvm boot: run=%s callback secret source=%s", run_ref, source)
     broker = LabBroker(run_ref=run_ref, run_token=run_token, secret=secret, api_base=api_base,
                        socket_path=_lab_socket_path())
     try:

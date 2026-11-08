@@ -519,31 +519,52 @@ class TaskTests(MicrovmCase):
             env[k] = v
         return env
 
+    KEPT = {
+        "AWS_REGION": "us-east-1", "AWS_DEFAULT_REGION": "us-east-1",
+        "AWS_CONTAINER_CREDENTIALS_FULL_URI": "http://169.254.170.23/v1/credentials",
+        "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI": "/v2/credentials/x",
+        "AWS_CONTAINER_AUTHORIZATION_TOKEN": "provider-token",
+        "AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE": "/var/run/token",
+        "AWS_WEB_IDENTITY_TOKEN_FILE": "/var/run/wi", "AWS_ROLE_ARN": "arn:aws:iam::1:role/r",
+        "AWS_ROLE_SESSION_NAME": "s", "AWS_EXECUTION_ENV": "AWS_ECS_FARGATE",
+        "AWS_BEDROCK_RUNTIME_ENDPOINT": "https://bedrock-runtime.vpce", "CLAUDE_CODE_USE_BEDROCK": "1",
+        "ANTHROPIC_MODEL": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+        "ANTHROPIC_SMALL_FAST_MODEL": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    }
+    STRIPPED = {
+        "LAB_RUN_TOKEN": "stale", "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "http.extraheader",
+        "GIT_CONFIG_VALUE_0": "AUTHORIZATION: basic leak", "GIT_CONFIG_PARAMETERS": "'x.y'='z'",
+        "LAB_CALLBACK_SECRET_ID": "orgiq/lab", "AWS_ACCESS_KEY_ID": "AKIA", "AWS_SECRET_ACCESS_KEY": "s",
+        "AWS_SESSION_TOKEN": "t", "AWS_PROFILE": "p", "AWS_SHARED_CREDENTIALS_FILE": "/c",
+        "AWS_CONFIG_FILE": "/f", "GITHUB_TOKEN": "ghp_x",
+    }
+
     def test_the_strip_list_is_pinned(self):
-        self.assertEqual(main._CLAUDE_ENV_STRIP,
-                         ("LAB_RUN_TOKEN", "LAB_CALLBACK_SECRET", "LAB_CALLBACK_SECRET_ID", "GH_TOKEN", "GITHUB_TOKEN"))
-        self.assertEqual(main._CLAUDE_ENV_STRIP_PREFIXES, ("GIT_CONFIG", "AWS_"))
-        self.assertEqual(main._CLAUDE_ENV_KEEP, ("AWS_REGION", "AWS_DEFAULT_REGION"))
+        self.assertEqual(main._CLAUDE_ENV_STRIP, (
+            "LAB_RUN_TOKEN", "LAB_CALLBACK_SECRET", "LAB_CALLBACK_SECRET_ID",
+            "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
+            "AWS_PROFILE", "AWS_SHARED_CREDENTIALS_FILE", "AWS_CONFIG_FILE",
+            "GH_TOKEN", "GITHUB_TOKEN"))
+        self.assertEqual(main._CLAUDE_ENV_STRIP_PREFIXES, ("GIT_CONFIG",))
+        for name in self.KEPT:
+            self.assertFalse(main._stripped_for_claude(name), name)
+        for name in list(self.STRIPPED) + ["LAB_CALLBACK_SECRET", "GIT_CONFIG_GLOBAL"]:
+            self.assertTrue(main._stripped_for_claude(name), name)
 
     def test_claude_env_lacks_the_secrets_the_git_child_has_the_header(self):
-        os.environ.update({
-            "LAB_RUN_TOKEN": "stale", "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "http.extraheader",
-            "GIT_CONFIG_VALUE_0": "AUTHORIZATION: basic leak", "GIT_CONFIG_PARAMETERS": "'x.y'='z'",
-            "AWS_ACCESS_KEY_ID": "AKIA", "AWS_SECRET_ACCESS_KEY": "s", "AWS_SESSION_TOKEN": "t",
-            "AWS_CONTAINER_CREDENTIALS_FULL_URI": "http://169.254.170.23/v1/credentials",
-            "AWS_REGION": "us-east-1", "AWS_DEFAULT_REGION": "us-east-1", "GITHUB_TOKEN": "ghp_x",
-        })
-        booted, events = run(self.boot_and_task())
+        os.environ.update(self.STRIPPED)
+        os.environ.update(self.KEPT)
+        # The payload's secret, so boot never tries the _ID lookup (no boto3, no network).
+        booted, events = run(self.boot_and_task(boot_over={"callback_secret": SECRET}))
         env = self._env_of_claude()
-        for name in ("LAB_RUN_TOKEN", "LAB_CALLBACK_SECRET", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0",
-                     "GIT_CONFIG_VALUE_0", "GIT_CONFIG_PARAMETERS", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
-                     "AWS_SESSION_TOKEN", "AWS_CONTAINER_CREDENTIALS_FULL_URI", "GITHUB_TOKEN"):
+        for name in list(self.STRIPPED) + ["LAB_CALLBACK_SECRET"]:
             self.assertNotIn(name, env, name)
         self.assertNotIn(RUN_TOKEN, Path(self.out, "env").read_text())
         self.assertNotIn(SECRET, Path(self.out, "env").read_text())
         self.assertNotIn(READ_TOKEN, Path(self.out, "env").read_text())
-        self.assertEqual(env["AWS_REGION"], "us-east-1")
-        self.assertEqual(env["AWS_DEFAULT_REGION"], "us-east-1")
+        # The execution role's credential provider and the Bedrock settings survive.
+        for name, value in self.KEPT.items():
+            self.assertEqual(env.get(name), value, name)
         self.assertEqual(env["LAB_API_BASE"], "http+unix://" + self.sock)
         self.assertEqual(env["LAB_RUN_REF"], "job-42")
         self.assertEqual(env["LAB_LIBRARY_SHA"], LIB_SHA)
@@ -553,6 +574,56 @@ class TaskTests(MicrovmCase):
         clone_env = self.git.calls[0]["env"]
         self.assertIn("http.https://github.com/.extraheader",
                       [clone_env[f"GIT_CONFIG_KEY_{i}"] for i in range(int(clone_env["GIT_CONFIG_COUNT"]))])
+
+    def test_payload_callback_secret_stays_in_the_broker(self):
+        payload_secret = "payload-fleet-secret-XYZ-0987"
+        os.environ.pop("LAB_CALLBACK_SECRET", None)
+        root = logging.getLogger()
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        old_level = root.level
+        root.addHandler(handler)
+        root.setLevel(logging.DEBUG)
+
+        async def go():
+            booted, events = await self.boot_and_task(boot_over={"callback_secret": payload_secret})
+            # The broker signs with the payload's secret.
+            self.up.calls.clear()
+            status, _, _ = await main._unix_http(self.sock, "GET", "/api/runs/job-42/brief")
+            return booted, events, status
+
+        try:
+            booted, events, status = run(go())
+        finally:
+            root.removeHandler(handler)
+            root.setLevel(old_level)
+        self.assertEqual(status, 200)
+        h = self.up.calls[0]["headers"]
+        cb = main._callbacks
+        ok, _ = cb.verify_service_request(h["x-service-auth"], "GET", "/api/runs/job-42/brief", "",
+                                          secret=payload_secret, allowed_services=["orgiq-devbox"],
+                                          audience=cb.nonce_audience("orgiq-middleware/lab", h["x-service-nonce"]))
+        self.assertTrue(ok)
+        logs = stream.getvalue()
+        self.assertEqual(logs.count("callback secret source=payload"), 1)
+        claude_env = Path(self.out, "env").read_text()
+        for value in (payload_secret, RUN_TOKEN):
+            self.assertNotIn(value, claude_env)
+            self.assertNotIn(value, logs)
+            self.assertNotIn(value, json.dumps([booted, events]))
+            for path in Path(self.root).rglob("*"):
+                if path.is_file():
+                    self.assertNotIn(value, path.read_text(errors="replace"), f"{value[:8]}… on disk in {path}")
+
+    def test_secret_source_falls_back_to_env_then_none(self):
+        with self.assertLogs("main", level="INFO") as logs:
+            run(main.handle(self.boot_payload()))
+        self.assertTrue(any("callback secret source=env" in m for m in logs.output))
+        self.assertFalse(any(SECRET in m for m in logs.output))
+        os.environ.pop("LAB_CALLBACK_SECRET", None)
+        with self.assertLogs("main", level="INFO") as logs:
+            run(main.handle(self.boot_payload()))
+        self.assertTrue(any("callback secret source=none" in m for m in logs.output))
 
     def test_argv_has_no_continue_no_skipped_permissions_and_cwd_is_the_repo(self):
         _, events = run(self.boot_and_task())
