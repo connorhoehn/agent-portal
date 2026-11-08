@@ -20,6 +20,7 @@ try { require.resolve('cdk-nag'); } catch { installed = false; }
 const EVERYTHING = {
   deployRuntimes: 'true', deployDevbox: 'true', deployCanary: 'true', deployMiddlewareService: 'true',
   deploySocial: 'true', deploySocialMedia: 'true', sfuAllowCidr: '203.0.113.4/32',
+  microvm: 'true',
   deployPortal: 'true', certificateArn: 'arn:aws:acm:us-east-1:647757222309:certificate/nag',
   portalAlbOriginHost: 'mw.example.com',
 };

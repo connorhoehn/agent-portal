@@ -83,6 +83,15 @@ export const NAG_SUPPRESSIONS: readonly NagSuppressionEntry[] = [
   },
   {
     id: 'AwsSolutions-IAM5',
+    reason: 'MicrovmRuntime/MicrovmExecutionRole is design §12 exactly: ecr:GetAuthorizationToken, xray:Put* and cloudwatch:PutMetricData '
+      + '(namespace-conditioned) have no resource-level permission; logs are limited to log-group:/aws/bedrock-agentcore/runtimes/<prefix>_microvm*; '
+      + 'the foundation-model ARNs carry a wildcard region because a cross-region inference profile routes to any region (same as the devbox). '
+      + 'test/microvm-stacks.test.ts pins the Sids and which of them may name *.',
+    stacks: ['MicrovmRuntime'],
+    paths: ['MicrovmExecutionRole'],
+  },
+  {
+    id: 'AwsSolutions-IAM5',
     reason: 'Aurora AuroraDeleterRole may delete only cluster snapshots named <prefix>-aurora-final-*; its provider framework role invokes the deleter Lambda (:* is the version/alias suffix).',
     stacks: ['Aurora'],
     paths: ['AuroraDeleterRole', 'AuroraDeleterProvider/framework-onEvent/ServiceRole'],
@@ -144,6 +153,13 @@ export const NAG_SUPPRESSIONS: readonly NagSuppressionEntry[] = [
       + '(same constraint as ELB2); CloudTrail data events are the audit path. Research stack.',
     stacks: ['Foundation', 'Portal'],
   },
+  {
+    id: 'AwsSolutions-S1',
+    reason: 'MicrovmRuntime/RunsBucket holds one transcript per run under runs/ (30-day expiry), written and read only through BFF-presigned URLs; '
+      + 'no server access log bucket exists (same custodian constraint as Foundation and Portal). Research stack.',
+    stacks: ['MicrovmRuntime'],
+    paths: ['RunsBucket'],
+  },
   // ── RDS ──────────────────────────────────────────────────────────────────
   {
     id: 'AwsSolutions-RDS6',
@@ -187,6 +203,13 @@ export const NAG_SUPPRESSIONS: readonly NagSuppressionEntry[] = [
     id: 'AwsSolutions-VPC7',
     reason: 'No VPC flow logs on Aurora/AuroraVpc (isolated subnets only) or MiddlewareService/MiddlewareVpc: research stack, cost.',
     stacks: ['Aurora', 'MiddlewareService'],
+  },
+  {
+    id: 'AwsSolutions-VPC7',
+    reason: 'MicrovmNetwork/MicrovmVpc: every flow that leaves the runtime subnets crosses Network Firewall, whose FLOW and ALERT logs go to '
+      + '/<prefix>/microvm/egress; VPC flow logs would record the same flows again at cost. Research stack.',
+    stacks: ['MicrovmNetwork'],
+    paths: ['MicrovmVpc'],
   },
   {
     id: 'AwsSolutions-ELB2',

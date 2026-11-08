@@ -14,6 +14,7 @@ Work item 19 in `docs/next-steps.md` §8 (least privilege for the infrastructure
 | `authDev` | `false` | Development Cognito pool: adds the localhost callback and sign-out URLs and the admin-password flow (`AdminInitiateAuth`). |
 | `allowHttpOrigin` | `false` | Lets `deployPortal` run without `certificateArn`, so CloudFront reaches the ALB over plain HTTP. Throwaway stacks only; it leaves a synth warning. |
 | `nag` | unset | `true` requires cdk-nag and fails the synth without it, `false` skips it. Unset runs it when installed and warns when not. |
+| `microvm` | `false` | Adds OrgIQ-MicrovmNetwork and OrgIQ-MicrovmRuntime and the middleware's microVM grants. See "microVM runner" below. |
 
 Middleware sizing: with the realtime gateway on (`realtimeGateway=true`), the middleware task now defaults to 2 vCPU / 4 GB. That is the measured profile: 1,000 sockets and 100 calls with no errors and chat p95 about 0.7 s (`docs/spend-map.md`). At 1 vCPU the BFF pinned one core and chat p95 was 1.2 to 1.8 s. Without the gateway the size is unchanged. `middlewareCpu` and `middlewareMemoryMiB` still override it.
 
@@ -53,6 +54,34 @@ cdk-nag 2.38.2 (devDependency) runs AwsSolutions over every stack; `npx cdk synt
 | ECS2, CFR1, CFR4, DDB3 | MiddlewareService, Social, Portal, Foundation | Non-secret env vars only; no geo restriction; default CloudFront certificate; PITR only on durable tables. |
 
 Still open: the Devbox role grants `bedrock:InvokeModel` on a foundation-model ARN with a wildcard region; it is suppressed under IAM5 but deserves a look against the AWS-native-models rule.
+
+## microVM runner
+
+The infrastructure half of `docs/microvm-runner-design.md` (§2, §5, §7, §11, §12). It is all behind `-c microvm=true`; without the flag the synth output is unchanged (`test/microvm-stacks.test.ts` checks both).
+
+- **Stacks.** `lib/microvm-network-stack.ts` builds the VPC, the firewalls, the Bedrock endpoint and the private zone. `lib/microvm-runtime-stack.ts` builds the `<prefix>_microvm` runtime, its execution role and the runs bucket. The middleware gains its grants through the `microvmRuntimeArn` prop. The stacks are joined by stable export names, so no hash-named export is frozen.
+- **Deploy order.** First `OrgIQ-MicrovmNetwork`. Then `OrgIQ-MicrovmRuntime`, once `agents/devbox/build.sh` has pushed the image the devbox already uses. Last, `OrgIQ-MiddlewareService` with `-c microvm=true`, which imports the runtime ARN, the endpoint ARN and the bucket name. Pass the flag on every later middleware deploy, or the grants and `MICROVM_*` variables are removed.
+- **Other context.** `microvmTaskTimeoutSeconds` (default 840) sets `maxLifetime`: the timeout plus 900 s, rounded up to the hour, capped at 8 h. The idle timeout is 300 s. `microvmComputeUsdPerSecond` (default `0`) becomes `MICROVM_COMPUTE_USD_PER_SECOND`; set it from the AgentCore price list.
+- **Egress allowlist.**
+  - Network Firewall runs in strict order. It drops TCP to port 80 first, then passes TLS only when the SNI is `github.com`, `api.github.com`, `codeload.github.com` or `objects.githubusercontent.com`. The default action drops and alerts on every other established flow.
+  - DNS Firewall allows the same four names and answers NXDOMAIN for everything else. It also allows two names that never cross Network Firewall, because blocking them would break Bedrock and the lab loop: `bedrock-runtime.<region>.amazonaws.com` (the endpoint's private DNS) and `lab.<prefix>.internal`.
+  - Flow and alert logs go to `/<prefix>/microvm/egress`, kept 30 days.
+  - The runtime security group has no inbound rules. Outbound, it allows 443 to the endpoint group, to the ALB group when one is given, and to `0.0.0.0/0`, whose only route is the firewall endpoint.
+  - The `bedrock-runtime` endpoint policy allows `InvokeModel*` and `CountTokens` only on the role's model ARNs, and only for principals in this account.
+- **What the execution role deliberately lacks.** No `secretsmanager:*`, `rds-data:*`, `bedrock:Retrieve`, `s3:*` or `InvokeAgentRuntime*`. The test pins the Sids to §12's seven, and only EcrAuth, Traces and Metrics may name `*`. One consequence: unlike the devbox, the runtime gets no `LAB_CALLBACK_SECRET_ID`, because it could not read the secret. The lab broker has to receive the fleet secret in the `boot` payload, next to the run token. That change belongs in `agents/devbox/main.py` and the dispatcher.
+- **Middleware additions.** These apply only with the prop:
+  - `InvokeAgentRuntime` and `StopRuntimeSession` on the runtime and endpoint ARNs.
+  - `GetSecretValue` on `<prefix>/github-app*` and `<prefix>/github-user/*`.
+  - `s3:PutObject` and `s3:GetObject` on `<runs-bucket>/runs/*`.
+  - The runs bucket blocks public access, uses SSE-S3, requires TLS and expires `runs/` after 30 days.
+  - The older `AgentCoreInvoke` statement on `runtime/<prefix>_*` still covers the new runtime as well. Replacing it, per §12, is a separate change.
+- **cdk-nag.** `npx cdk synth -c nag=true -c microvm=true` exits 0. The new path-scoped suppressions are IAM5 on `MicrovmExecutionRole`, VPC7 on `MicrovmVpc` (the firewall's flow logs cover every egress) and S1 on `RunsBucket`.
+- **Unverified without AWS.**
+  - Whether AgentCore creates the VPC network interfaces through its service-linked role, or the execution role also needs `ec2:CreateNetworkInterface`, `ec2:DescribeNetworkInterfaces`, `ec2:DeleteNetworkInterface` and related statements. Confirm at the first `cdk deploy`.
+  - The ACM certificate for `lab.<prefix>.internal`. It is not requested here. The BFF's HTTPS listener needs one, from a private CA or imported, before `LAB_API_BASE=https://lab.<prefix>.internal` verifies.
+  - Whether the BFF is reachable from this VPC at all. The middleware ALB is internet-facing and sits in `MiddlewareVpc`. A security-group reference and a private alias work only across a peering or transit-gateway link, so `bin/app.ts` does not pass the ALB, and the zone has no record until one exists.
+  - Whether Network Firewall accepts one log group for both the FLOW and ALERT destinations.
+  - Every route uses the first firewall endpoint. `EndpointIds` is an unordered `az:vpce` list, so the AZ of each entry cannot be picked with intrinsics.
 
 ## Row-level security (work item 22)
 

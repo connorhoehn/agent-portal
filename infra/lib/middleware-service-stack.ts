@@ -123,6 +123,17 @@ export interface MiddlewareServiceStackProps extends cdk.StackProps {
    * carries) and passes its ARN here.
    */
   readonly gatewayServiceAuthSecretArn?: string;
+  /**
+   * The `orgiq_microvm` runtime (OrgIQ-MicrovmRuntime, `-c microvm=true`).
+   * When set, the task role gains invoke/stop on that runtime and endpoint,
+   * the GitHub App and per-user GitHub secrets, and object access under the
+   * runs bucket's `runs/` prefix (docs/microvm-runner-design.md §12), and the
+   * task gets MICROVM_* env. `microvmEndpointArn` and `microvmRunsBucketName`
+   * are then required.
+   */
+  readonly microvmRuntimeArn?: string;
+  readonly microvmEndpointArn?: string;
+  readonly microvmRunsBucketName?: string;
 }
 
 /**
@@ -959,6 +970,43 @@ export class MiddlewareServiceStack extends cdk.Stack {
       ? secretsmanager.Secret.fromSecretCompleteArn(this, 'GitHubAppSecret', githubAppSecretArn)
       : null;
 
+    // ── microVM runner (design §12), only with microvmRuntimeArn ───────────
+    let microvmEnv: Record<string, string> = {};
+    if (props.microvmRuntimeArn) {
+      if (!props.microvmEndpointArn || !props.microvmRunsBucketName) {
+        throw new Error('microvmRuntimeArn needs microvmEndpointArn and microvmRunsBucketName');
+      }
+      // Set from the AgentCore price list (vCPU-second + GB-second, folded to
+      // one rate for the runtime's size); 0 until someone does.
+      const rate = String(this.node.tryGetContext('microvmComputeUsdPerSecond') ?? '0');
+      if (!/^\d+(\.\d+)?$/.test(rate)) {
+        throw new Error(`--context microvmComputeUsdPerSecond must be a non-negative number, got ${rate}`);
+      }
+      taskRole.addToPolicy(new iam.PolicyStatement({
+        sid: 'MicrovmInvokeAndStop',
+        actions: ['bedrock-agentcore:InvokeAgentRuntime', 'bedrock-agentcore:StopRuntimeSession'],
+        resources: [props.microvmRuntimeArn, props.microvmEndpointArn],
+      }));
+      taskRole.addToPolicy(new iam.PolicyStatement({
+        sid: 'MicrovmGithubSecrets',
+        actions: ['secretsmanager:GetSecretValue'],
+        resources: [
+          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:${prefix}/github-app*`,
+          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:${prefix}/github-user/*`,
+        ],
+      }));
+      taskRole.addToPolicy(new iam.PolicyStatement({
+        sid: 'MicrovmRunObjects',
+        actions: ['s3:PutObject', 's3:GetObject'],
+        resources: [`arn:aws:s3:::${props.microvmRunsBucketName}/runs/*`],
+      }));
+      microvmEnv = {
+        MICROVM_RUNTIME_ARN: props.microvmRuntimeArn,
+        MICROVM_RUNS_BUCKET: props.microvmRunsBucketName,
+        MICROVM_COMPUTE_USD_PER_SECOND: rate,
+      };
+    }
+
     // ── Container environment variables ────────────────────────────────────
     // All values that are resolvable at synth time go here as plain strings.
     // Secrets (ARNs only known at runtime) are injected separately below.
@@ -1075,6 +1123,9 @@ export class MiddlewareServiceStack extends cdk.Stack {
       ...(realtime.gatewayUrl && { REALTIME_GATEWAY_URL: realtime.gatewayUrl }),
       ...(realtime.platformPublicUrl && { REALTIME_PLATFORM_PUBLIC_URL: realtime.platformPublicUrl }),
       ...(realtime.videoPublicUrl && { REALTIME_VIDEO_PUBLIC_URL: realtime.videoPublicUrl }),
+
+      // microVM runner (above); empty unless microvmRuntimeArn is set.
+      ...microvmEnv,
     };
     // The portal's public URLs, from OrgIQ-Portal's parameters. Explicit
     // context (above) wins over the parameter for each REALTIME_* URL, and an

@@ -33,6 +33,48 @@ export function bedrockModelArns(region: string, account: string, profileId: str
 }
 
 /**
+ * The devbox's default model, small model and the union any profile may name
+ * (DE-40), read from context the same way for every runtime built from the
+ * devbox image (`orgiq_devbox`, `orgiq_microvm`), so their IAM and endpoint
+ * policies name the same model ARNs.
+ */
+export function resolveDevboxModels(
+  scope: Construct,
+  props: { readonly modelId?: string; readonly smallModelId?: string } = {},
+): { modelId: string; smallModelId: string; allowedModels: string[] } {
+  const modelId = (scope.node.tryGetContext('devboxModel') as string | undefined)
+    ?? props.modelId
+    // Haiku by default. A devbox task is usually small — read a file, run a
+    // test, leave a note — and Sonnet was charging ~$0.12 for a three-second
+    // "are you there". Callers opt into a larger model per task when the work
+    // warrants it; see DEVBOX_ALLOWED_MODELS below.
+    ?? 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
+  const smallModelId = (scope.node.tryGetContext('devboxSmallModel') as string | undefined)
+    ?? props.smallModelId
+    ?? 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
+
+  // The union of models any devbox policy profile may name (DE-40):
+  //   --context devboxModels=us.anthropic.claude-haiku-4-5-20251001-v1:0,us.anthropic.claude-sonnet-5
+  // Backs the per-initiative allowlist with IAM, which is the only control
+  // that also covers command mode and the PTY (where main.py is not in the
+  // path). The default is exactly the pre-profile allowlist. The runtime's
+  // own default and small model are always included, so a context that
+  // forgets them cannot deploy a box that cannot run.
+  const modelsContext = scope.node.tryGetContext('devboxModels') as string | undefined;
+  const allowedModels = Array.from(new Set([
+    ...(modelsContext ?? DEFAULT_DEVBOX_MODELS.join(','))
+      .split(',').map((m) => m.trim()).filter(Boolean),
+    modelId, smallModelId,
+  ]));
+  for (const m of allowedModels) {
+    if (!/^us\.anthropic\./.test(m)) {
+      throw new Error(`devboxModels: "${m}" is not a Bedrock inference-profile id (us.anthropic.*)`);
+    }
+  }
+  return { modelId, smallModelId, allowedModels };
+}
+
+/**
  * The container's task-timeout default (seconds), set explicitly on the
  * runtime so the deployed value is visible in CFN and agrees with the
  * middleware's (DE-48: middleware/src/lib/devbox-lifetime.ts
@@ -137,35 +179,7 @@ export class DevboxStack extends cdk.Stack {
     const orgAccess = this.node.tryGetContext('devboxOrgAccess') === 'true'
       || this.node.tryGetContext('devboxOrgAccess') === true;
 
-    const modelId = (this.node.tryGetContext('devboxModel') as string | undefined)
-      ?? props.modelId
-      // Haiku by default. A devbox task is usually small — read a file, run a
-      // test, leave a note — and Sonnet was charging ~$0.12 for a three-second
-      // "are you there". Callers opt into a larger model per task when the work
-      // warrants it; see DEVBOX_ALLOWED_MODELS below.
-      ?? 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
-    const smallModelId = (this.node.tryGetContext('devboxSmallModel') as string | undefined)
-      ?? props.smallModelId
-      ?? 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
-
-    // The union of models any devbox policy profile may name (DE-40):
-    //   --context devboxModels=us.anthropic.claude-haiku-4-5-20251001-v1:0,us.anthropic.claude-sonnet-5
-    // Backs the per-initiative allowlist with IAM, which is the only control
-    // that also covers command mode and the PTY (where main.py is not in the
-    // path). The default is exactly the pre-profile allowlist. The runtime's
-    // own default and small model are always included, so a context that
-    // forgets them cannot deploy a box that cannot run.
-    const modelsContext = this.node.tryGetContext('devboxModels') as string | undefined;
-    const allowedModels = Array.from(new Set([
-      ...(modelsContext ?? DEFAULT_DEVBOX_MODELS.join(','))
-        .split(',').map((m) => m.trim()).filter(Boolean),
-      modelId, smallModelId,
-    ]));
-    for (const m of allowedModels) {
-      if (!/^us\.anthropic\./.test(m)) {
-        throw new Error(`devboxModels: "${m}" is not a Bedrock inference-profile id (us.anthropic.*)`);
-      }
-    }
+    const { modelId, smallModelId, allowedModels } = resolveDevboxModels(this, props);
 
     // ── ECR ──────────────────────────────────────────────────────────────────
     this.ecrRepo = new ecr.Repository(this, 'DevboxRepo', {

@@ -21,6 +21,8 @@ import { SpanProjectorStack } from '../lib/span-projector-stack';
 import { PromptCanaryStack } from '../lib/prompt-canary-stack';
 import { MiddlewareServiceStack } from '../lib/middleware-service-stack';
 import { DevboxStack } from '../lib/devbox-stack';
+import { MicrovmNetworkStack, microvmNetworkExports } from '../lib/microvm-network-stack';
+import { MicrovmRuntimeStack, microvmRuntimeExports } from '../lib/microvm-runtime-stack';
 import { SocialImagesStack } from '../lib/social-images-stack';
 import { SocialMediaStack } from '../lib/social-media-stack';
 import { SocialStack } from '../lib/social-stack';
@@ -414,6 +416,44 @@ new DevboxStack(app, stackId(environment, 'Devbox'), {
 });
 
 // -------------------------------------------------------------------
+// Stacks 14c-14d: microVM runner (docs/microvm-runner-design.md), opt-in.
+//   -c microvm=true   OrgIQ-MicrovmNetwork (VPC, Network Firewall, DNS
+//                     Firewall, bedrock-runtime endpoint, lab.<prefix>.internal)
+//                     and OrgIQ-MicrovmRuntime (`<prefix>_microvm`, runs
+//                     bucket), and the middleware's invoke/stop, GitHub-secret
+//                     and runs-bucket grants. Deploy in that order.
+//   -c microvmTaskTimeoutSeconds=<s>   maxLifetime input (default 840)
+//   -c microvmComputeUsdPerSecond=<usd> MICROVM_COMPUTE_USD_PER_SECOND (default 0;
+//                     set from the AgentCore price list)
+// The runtime imports the network by stable export names, and the middleware
+// imports the runtime's; the BFF's ALB is not passed to the network stack (it
+// sits in MiddlewareVpc and the middleware deploys after the runtime), so
+// lab.<prefix>.internal has no record yet (infra/SECURITY-NOTES.md).
+// -------------------------------------------------------------------
+const microvm = contextFlag(app, 'microvm', false);
+let microvmRuntime: MicrovmRuntimeStack | undefined;
+if (microvm) {
+  const network = new MicrovmNetworkStack(app, stackId(environment, 'MicrovmNetwork'), {
+    env,
+    prefix,
+    description: 'OrgIQ microVM network: VPC, Network Firewall + DNS Firewall egress allowlist, Bedrock endpoint',
+  });
+  const netEx = microvmNetworkExports(prefix);
+  const taskTimeout = app.node.tryGetContext('microvmTaskTimeoutSeconds');
+  microvmRuntime = new MicrovmRuntimeStack(app, stackId(environment, 'MicrovmRuntime'), {
+    env,
+    prefix,
+    subnetIds: cdk.Fn.split(',', cdk.Fn.importValue(netEx.runtimeSubnetIds), 2),
+    securityGroupIds: [cdk.Fn.importValue(netEx.runtimeSecurityGroupId)],
+    ...(taskTimeout !== undefined && { taskTimeoutSeconds: Number(taskTimeout) }),
+    labCallbackSecret: app.node.tryGetContext('labCallbackSecret') as string | undefined,
+    description: 'OrgIQ microVM runtime: Claude Code, one work item per session, in VPC mode',
+  });
+  microvmRuntime.addDependency(network);
+}
+const microvmEx = microvmRuntimeExports(prefix);
+
+// -------------------------------------------------------------------
 // Stack 15: Middleware Service (ECS Fargate + ALB)
 // Deploys the Express middleware as a production Fargate service.
 //
@@ -504,6 +544,13 @@ const middlewareService = new MiddlewareServiceStack(app, stackId(environment, '
   guardrailIdOrgLeader: cdk.Fn.importValue(`${prefix}-guardrail-id-org-leader`),
   guardrailIdHrAdmin: cdk.Fn.importValue(`${prefix}-guardrail-id-hr-admin`),
 
+  // The microVM runner (-c microvm=true, above).
+  ...(microvmRuntime && {
+    microvmRuntimeArn: cdk.Fn.importValue(microvmEx.runtimeArn),
+    microvmEndpointArn: cdk.Fn.importValue(microvmEx.endpointArn),
+    microvmRunsBucketName: cdk.Fn.importValue(microvmEx.runsBucketName),
+  }),
+
   description: 'OrgIQ Middleware Service: ECS Fargate + ALB for the Express middleware API',
 });
 middlewareService.addDependency(foundation);
@@ -515,6 +562,7 @@ middlewareService.addDependency(guardrails);
 // The capability-id SSM parameters are read by name, which creates no CDK
 // dependency (the PromptCanary race): they must exist before this deploys.
 middlewareService.addDependency(agentCoreCapabilities);
+if (microvmRuntime) middlewareService.addDependency(microvmRuntime);
 
 // -------------------------------------------------------------------
 // Stacks 16-18: Social calls (docs/social-calls-deploy-plan.md). All opt-in —
