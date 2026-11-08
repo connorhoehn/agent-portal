@@ -791,6 +791,311 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
+    "description": "Create a record of one kind through the form its page uses, with the fields that kind takes. The user confirms on a card that shows exactly what will be created (an access request's approvers and conflicts first). Text the user dictated (a title, a comment, a justification) goes in as they said it. The kinds here and their fields: work-item (initiative, title, type?); comment (on, text); saved-search (name, query); sprint (initiative, name, startsOn, endsOn).",
+    "name": "create",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "additionalProperties": false,
+          "properties": {
+            "delegate": {
+              "description": "delegation: who decides for the user, as the user named them.",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "description": {
+              "description": "channel, team, room: one line about it.",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "duration": {
+              "description": "access-request: how long.",
+              "enum": [
+                "8h",
+                "24h",
+                "7d",
+                "30d",
+                null,
+              ],
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "endsOn": {
+              "description": "sprint: its last day, YYYY-MM-DD.",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "initiative": {
+              "description": "work-item, sprint: the initiative, as the user named it or by the ref a result gave.",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "item": {
+              "description": "access-request: the catalog item, as the user named it or by the ref a result gave.",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "justification": {
+              "description": "access-request: why, in the user's words (at least 20 characters).",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "name": {
+              "description": "saved-search, sprint, channel, team, room: its name.",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "on": {
+              "description": "comment: the work item it is on, by the ref a result gave or its position. Never a name.",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "privacy": {
+              "description": "channel, team, room: public (default) or private.",
+              "enum": [
+                "public",
+                "private",
+                null,
+              ],
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "query": {
+              "description": "saved-search: the search text.",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "reason": {
+              "description": "delegation: why, in the user's words (at least 10 characters).",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "startsOn": {
+              "description": "sprint: its first day, YYYY-MM-DD.",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "text": {
+              "description": "comment: the comment, exactly as dictated.",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "title": {
+              "description": "work-item: its title, as the user said it.",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "type": {
+              "description": "work-item: story (default), bug or epic.",
+              "enum": [
+                "story",
+                "bug",
+                "epic",
+                null,
+              ],
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "window": {
+              "description": "delegation: for how long.",
+              "enum": [
+                "1d",
+                "3d",
+                "7d",
+                "14d",
+                null,
+              ],
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+          },
+          "required": [
+            "initiative",
+            "title",
+            "type",
+            "on",
+            "text",
+            "name",
+            "query",
+            "startsOn",
+            "endsOn",
+            "description",
+            "privacy",
+            "item",
+            "justification",
+            "duration",
+            "delegate",
+            "window",
+            "reason",
+          ],
+          "type": "object",
+        },
+        "kind": {
+          "description": "What to create.",
+          "enum": [
+            "work-item",
+            "comment",
+            "saved-search",
+            "sprint",
+          ],
+          "type": "string",
+        },
+      },
+      "required": [
+        "kind",
+        "fields",
+      ],
+      "type": "object",
+    },
+    "strict": true,
+    "type": "function",
+  },
+  {
+    "description": "Change one thing on a record a result named (by its ref or position): one field per kind, through the button its page uses. The user confirms on a card that shows the change. The ref kinds here and their field: work-item (status); bot (paused); finding (status); job (reviewed or requeued); channel (member); dm (read).",
+    "name": "update",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "additionalProperties": false,
+          "properties": {
+            "member": {
+              "description": "channel: true joins it, false leaves it.",
+              "type": [
+                "boolean",
+                "null",
+              ],
+            },
+            "paused": {
+              "description": "bot: true pauses it, false resumes it.",
+              "type": [
+                "boolean",
+                "null",
+              ],
+            },
+            "publish": {
+              "description": "report: true publishes the program report to its readers.",
+              "type": [
+                "boolean",
+                "null",
+              ],
+            },
+            "read": {
+              "description": "dm: true marks it read.",
+              "type": [
+                "boolean",
+                "null",
+              ],
+            },
+            "requeued": {
+              "description": "job: true runs a failed or cancelled job again.",
+              "type": [
+                "boolean",
+                "null",
+              ],
+            },
+            "response": {
+              "description": "feedback resolved: the response, as the user said it.",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "reviewed": {
+              "description": "job: accept or reject its result.",
+              "enum": [
+                "accept",
+                "reject",
+                null,
+              ],
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "status": {
+              "description": "work-item: open, in_progress, in_review, done or cancelled; finding: dismissed; run: stopped (Assessment) or cancelled (Pipelines); feedback: resolved or dismissed; request: withdrawn; delegation: ended.",
+              "enum": [
+                "open",
+                "in_progress",
+                "in_review",
+                "done",
+                "cancelled",
+                "dismissed",
+                "stopped",
+                "resolved",
+                "withdrawn",
+                "ended",
+                null,
+              ],
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+          },
+          "required": [
+            "status",
+            "response",
+            "paused",
+            "reviewed",
+            "requeued",
+            "member",
+            "read",
+            "publish",
+          ],
+          "type": "object",
+        },
+        "ref": {
+          "description": "The row to change: its ref exactly as a result gave it (e.g. "work-item:w-9"), its position in the last result, or "report:program" for the assessment program report. Never a name or a path.",
+          "type": "string",
+        },
+      },
+      "required": [
+        "ref",
+        "fields",
+      ],
+      "type": "object",
+    },
+    "strict": true,
+    "type": "function",
+  },
+  {
     "description": "Look up access requests and report status, current step and decider: the user's own ("mine", the default), the ones waiting on their decision ("approvals", approvers only) or their reports' ("reports"). Approvals and reports are read in the Access workspace only. Each row carries a ref that open opens.",
     "name": "access_request_status",
     "parameters": {

@@ -24,10 +24,12 @@
 //
 // No React and only `.ts` imports, so `node --test` runs it.
 
-import { DECIDE_ACTIONS } from './catalogue.ts';
+import { CREATE_ACTIONS, CREATE_FIELDS, DECIDE_ACTIONS, UPDATE_ACTIONS } from './catalogue.ts';
 import { parseRef, type Rec } from './kinds.ts';
+import { DELEGATION_REASON_MIN, DELEGATION_WINDOWS, JUSTIFICATION_MIN, delegationBody } from '../accessRequests.ts';
+import { matchByName } from './work.ts';
 import {
-  done, failed, once, qs, readFailure, readJson, refused,
+  ambiguous, done, failed, findByName, once, qs, readFailure, readJson, refused, socialGrantRefusal,
   type CardAnswer, type ConfirmPlan, type ToolContext, type ToolResult, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 
@@ -357,7 +359,296 @@ const runDecide: VoiceToolRunner = async (_args, ctx, planned, answer?: CardAnsw
   }, () => done('decided', { ref: `${plan.kind}:${plan.id}`, decision: verb, title: plan.title, alreadyDecided: true }, `${plan.title} was already decided; nothing was sent again`));
 };
 
-export const RECORD_PLANNERS: Readonly<Record<string, VoiceToolPlanner>> = { decide: planDecide };
-export const RECORD_RUNNERS: Readonly<Record<string, VoiceToolRunner>> = { decide: runDecide };
+// ── create and update (V2-11) ───────────────────────────────────────────────
+//
+// create { kind, fields }: one field set per kind (catalogue CREATE_FIELDS),
+// the form's submit route and body, its Cedar action first. Names the user
+// said resolve through the kind's own list read (findByName); a comment's
+// work item is a ref a result handed out. Text the user dictated (a title, a
+// comment, a justification) is sent as said and shown verbatim on the card.
+// An access request's card is the route's own preview (approvers, conflicts,
+// a refusal ends it with no card).
+//
+// update { ref, fields }: one field per ref kind (catalogue UPDATE_ACTIONS),
+// the row read again through its kind's list (a ref must be a row the
+// persona's own read returns), the page button's route. A channel is joined
+// only with PostMessage (the route's own gate), left with the Social grant.
+
+interface ActPlan { key: string; send: Send; done: string; result: Record<string, unknown>; href?: string }
+
+const MAX_CREATE = { justification: JUSTIFICATION_MIN, reason: DELEGATION_REASON_MIN };
+
+/** The field set check: what a kind needs, nothing it does not take. */
+function fieldProblem(kind: string, fields: Rec): string | null {
+  const set = CREATE_FIELDS[kind];
+  if (!set) return `There is no "${kind}" to create here.`;
+  const [required, optional] = set;
+  const extra = Object.keys(fields).filter((f) => !required.includes(f) && !optional.includes(f));
+  if (extra.length) return `A ${kind.replace(/-/g, ' ')} takes ${[...required, ...optional].join(', ')}; not ${extra.join(', ')}.`;
+  const missing = required.filter((f) => fields[f] === undefined);
+  return missing.length ? `A ${kind.replace(/-/g, ' ')} needs ${missing.join(' and ')}.` : null;
+}
+
+const isoDay = (v: unknown): string | null => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) ? v : null);
+
+async function planCreateKind(kind: string, f: Rec, ctx: ToolContext): Promise<{ plan: ConfirmPlan } | { result: ToolResult }> {
+  const card = (title: string, detail: string[], act: ActPlan) => ({ plan: { title, detail, data: act } satisfies ConfirmPlan });
+  switch (kind) {
+    case 'work-item': {
+      const found = await findByName(ctx, 'initiative', String(f['initiative']));
+      if ('result' in found) return found;
+      const type = String(f['type'] ?? 'story');
+      const body = { projectId: found.row.id, type, title: String(f['title']).trim(), priority: 'medium' };
+      return card(`Create a ${type} on ${found.row.title}`, [`"${body.title}"`, 'Priority medium; it starts open.'],
+        { key: `POST /api/graph/work-items ${JSON.stringify(body)}`, send: { method: 'POST', url: '/api/graph/work-items', body }, done: `Created "${body.title}"`, result: { kind: 'work-item', title: body.title }, href: `/iq/projects/${enc(found.row.id)}` });
+    }
+    case 'comment': {
+      const on = String(f['on']).trim();
+      if (!/^\d{1,2}$/.test(on) && !parseRef(on)) return { result: refused('Name the work item by the ref a result gave, or its position. List the work items first.') };
+      const found = await findByName(ctx, 'work-item', on);
+      if ('result' in found) return found;
+      const text = String(f['text']).trim();
+      const url = `/api/graph/work-items/${enc(found.row.id)}/comments`;
+      return card(`Comment on "${found.row.title}"`, [text, 'Everyone on the initiative reads it.'],
+        { key: `POST ${url} ${text}`, send: { method: 'POST', url, body: { body: text } }, done: `Commented on "${found.row.title}"`, result: { kind: 'comment', on: `work-item:${found.row.id}` }, ...(found.row.href ? { href: found.row.href } : {}) });
+    }
+    case 'saved-search': {
+      const body = { name: String(f['name']).trim(), query: String(f['query']).trim(), scope: 'workspace' };
+      return card(`Save the search "${body.name}"`, [`For "${body.query}" across the workspace.`],
+        { key: `POST /api/saved-searches ${JSON.stringify(body)}`, send: { method: 'POST', url: '/api/saved-searches', body }, done: `Saved "${body.name}"`, result: { kind: 'saved-search', name: body.name }, href: '/iq/search' });
+    }
+    case 'sprint': {
+      const startsOn = isoDay(f['startsOn']); const endsOn = isoDay(f['endsOn']);
+      if (!startsOn || !endsOn || endsOn <= startsOn) return { result: refused('A sprint needs a first and a last day as YYYY-MM-DD, the last after the first.') };
+      const found = await findByName(ctx, 'initiative', String(f['initiative']));
+      if ('result' in found) return found;
+      const body = { initiativeId: found.row.id, name: String(f['name']).trim(), startsOn, endsOn };
+      return card(`Start the sprint "${body.name}" on ${found.row.title}`, [`${startsOn} to ${endsOn}; it starts planned.`],
+        { key: `POST /api/sprints ${JSON.stringify(body)}`, send: { method: 'POST', url: '/api/sprints', body }, done: `Created the sprint "${body.name}"`, result: { kind: 'sprint', name: body.name }, href: '/iq/projects?lens=sprints' });
+    }
+    case 'channel':
+    case 'team':
+    case 'room': {
+      const name = String(f['name']).trim().replace(/^#/, '');
+      const priv = f['privacy'] === 'private';
+      const description = str(f['description']);
+      const body = kind === 'channel'
+        ? { name, ...(description ? { description } : {}), privacy: priv ? 'private' : 'public' }
+        : { name, ...(description ? { description } : {}), visibility: priv ? 'private' : 'org' };
+      const url = `/api/social/${kind}s`;
+      const label = kind === 'channel' ? `#${name}` : `the ${name} ${kind}`;
+      return card(`Create ${label}`, [priv ? 'Private: only the people you add see it.' : 'Open to everyone in Social.', ...(description ? [description] : [])],
+        { key: `POST ${url} ${name.toLowerCase()}`, send: { method: 'POST', url, body }, done: `Created ${label}`, result: { kind, name }, href: kind === 'channel' ? '/social/channels' : kind === 'team' ? '/social/teams' : '/social/rooms' });
+    }
+    case 'access-request': {
+      const justification = String(f['justification']).trim();
+      if (justification.length < MAX_CREATE.justification) return { result: refused(`Say why in at least ${JUSTIFICATION_MIN} characters; the approvers read it.`) };
+      const found = await findByName(ctx, 'catalog-item', String(f['item']));
+      if ('result' in found) return found;
+      const duration = String(f['duration']);
+      // The route's own preview: who approves, what conflicts, or why it would be refused (it writes nothing).
+      let res: Response;
+      try {
+        res = await ctx.fetch('/api/access/requests/preview', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId: found.row.id, duration }) });
+      } catch { return { result: failed('Could not reach the server for the request preview.') }; }
+      const preview = await res.json().catch(() => null) as Rec | null;
+      if (!res.ok) return { result: res.status === 403 ? refused("I can't file access requests with your role.") : refused(`Not filed: ${str(preview?.['error']) ?? `the preview answered ${res.status}`}.`) };
+      const refusal = preview?.['refusal'] as Rec | null | undefined;
+      if (refusal) return { result: refused(`Not filed: ${str(refusal['error']) ?? str(refusal['message']) ?? 'the request would be refused'}.`, { ...(str(refusal['requestId']) ? { existing: `request:${String(refusal['requestId'])}` } : {}) }) };
+      const steps = Array.isArray(preview?.['steps']) ? preview!['steps'] as Rec[] : [];
+      const approvers = steps.map((s) => `step ${String(s['step'])}: ${String(s['kind'] ?? 'approver')}${Array.isArray(s['eligible']) ? ` (${(s['eligible'] as Rec[]).length} can decide)` : ''}`);
+      const sod = str(dig(preview, 'sod.verdict'));
+      if (sod === 'block') return { result: refused('Not filed: it conflicts with access you hold (separation of duties); the request page shows the conflict.') };
+      const body = { itemId: found.row.id, justification, duration };
+      return card(`Request ${found.row.title} for ${duration}`, [justification, ...(approvers.length ? [`Approvers: ${approvers.join('; ')}.`] : []), ...(sod && sod !== 'clear' ? [`Separation of duties: ${sod}.`] : [])],
+        { key: `POST /api/access/requests ${found.row.id} ${duration}`, send: { method: 'POST', url: '/api/access/requests', body }, done: `Requested ${found.row.title}`, result: { kind: 'access-request', item: found.row.title }, href: '/access/requests' });
+    }
+    case 'delegation': {
+      const reason = String(f['reason']).trim();
+      if (reason.length < MAX_CREATE.reason) return { result: refused(`Say why in at least ${DELEGATION_REASON_MIN} characters; it is kept in the audit trail.`) };
+      const window = DELEGATION_WINDOWS.find((w) => w.value === f['window']);
+      if (!window) return { result: refused('Delegate for 1 day, 3 days, a week or two weeks.') };
+      const read = await readJson<{ items?: Array<{ id: string; displayName: string }> }>(ctx, '/api/access/delegates');
+      if (!read.ok) return { result: readFailure('who you can delegate to', read.status) };
+      const people = (read.body.items ?? []).filter((p) => p && typeof p.id === 'string');
+      const hits = matchByName(people, (p) => p.displayName, String(f['delegate']));
+      if (!hits.length) return { result: refused(`No one called "${String(f['delegate'])}" can decide access for you.`) };
+      if (hits.length > 1) return { result: ambiguous(`Several people match "${String(f['delegate'])}". Ask which one.`, hits.map((p) => ({ name: p.displayName }))) };
+      const who = hits[0]!;
+      return card(`Delegate your approvals to ${who.displayName} for ${window.label}`, [reason, 'They decide the requests waiting on you until it ends; you can end it early.'],
+        { key: `POST /api/access/delegations ${who.id} ${window.value}`, send: { method: 'POST', url: '/api/access/delegations', body: { delegateId: who.id, window: window.value, reason } }, done: `Delegated to ${who.displayName}`, result: { kind: 'delegation', to: who.displayName }, href: '/access/settings' });
+    }
+    default:
+      return { result: refused(`There is no "${kind}" to create here.`) };
+  }
+}
+
+const planCreate: VoiceToolPlanner = async (args, ctx) => {
+  const kind = String(args['kind']);
+  const kinds = CREATE_ACTIONS[ctx.tenant] ?? {};
+  if (!(kind in kinds)) return { result: refused(`A ${kind.replace(/-/g, ' ')} is not created by voice in this workspace.`) };
+  const action = kinds[kind];
+  if (action && !ctx.can(action)) return { result: refused(`I can't create ${kind.replace(/-/g, ' ')}s with your role.`) };
+  const fields = (args['fields'] as Rec | undefined) ?? {};
+  const problem = fieldProblem(kind, fields);
+  if (problem) return { result: refused(problem) };
+  return planCreateKind(kind, fields, ctx);
+};
+
+/** The delegation window becomes the page's own times only when it is sent (delegationBody), so a slow card never starts it late. */
+function sendable(act: ActPlan, now: number): Send {
+  if (act.send.url !== '/api/access/delegations') return act.send;
+  const b = act.send.body as { delegateId: string; window: string; reason: string };
+  return { ...act.send, body: delegationBody({ delegateId: b.delegateId, window: b.window, reason: b.reason }, now) };
+}
+
+async function act(ctx: ToolContext, plan: ActPlan, verb: string): Promise<ToolResult> {
+  return once(ctx, plan.key, async () => {
+    const send = sendable(plan, ctx.now().getTime());
+    let res: Response;
+    try {
+      res = await ctx.fetch(send.url, { method: send.method, credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(send.body) });
+    } catch {
+      return failed(`Could not reach the server; nothing was ${verb}.`);
+    }
+    const body = await res.json().catch(() => null) as Rec | null;
+    if (!res.ok) {
+      const error = str(body?.['error']);
+      if (res.status === 401 || res.status === 403) return refused(`Not ${verb}: ${error && !/^forbidden$/i.test(error) ? error : 'your role cannot do that'}.`);
+      if (res.status === 404) return refused(`Not ${verb}: it is gone, or you can no longer reach it.`);
+      if (res.status === 400 || res.status === 409 || res.status === 422) return refused(`Not ${verb}: ${error ?? `the server refused it (${res.status})`}.`);
+      return failed(`Not ${verb} (HTTP ${res.status})${error ? `: ${error}` : ''}.`);
+    }
+    return done(verb === 'created' ? 'created' : 'updated', { ...plan.result, ...(plan.href ? { href: plan.href } : {}) }, plan.done);
+  }, () => done(verb === 'created' ? 'created' : 'updated', { ...plan.result, already: true }, `${plan.done} already; nothing was sent again`));
+}
+
+const runCreate: VoiceToolRunner = async (_args, ctx, planned) => {
+  const plan = planned as ActPlan | undefined;
+  if (!plan?.send) return refused('Nothing is created until the user confirms its card.');
+  return act(ctx, plan, 'created');
+};
+
+// ── update ──
+
+/** A work item's status moves the server allows (providers/work-items.ts), so the card never offers one it refuses. */
+const WORK_MOVES: Readonly<Record<string, readonly string[]>> = {
+  open: ['in_progress', 'cancelled'], in_progress: ['in_review', 'done', 'open', 'cancelled'], in_review: ['in_progress', 'done', 'cancelled'],
+  done: ['in_progress'], cancelled: ['open'],
+};
+const words = (s: string) => s.replace(/_/g, ' ');
+
+async function planUpdateKind(kind: string, field: string, value: unknown, fields: Rec, ref: string, ctx: ToolContext): Promise<{ plan: ConfirmPlan } | { result: ToolResult }> {
+  const card = (title: string, detail: string[], a: ActPlan) => ({ plan: { title, detail, data: a } satisfies ConfirmPlan });
+  if (kind === 'report') {
+    if (ref !== 'report:program' || value !== true) return { result: refused('Publish the program report with ref "report:program" and publish true.') };
+    return card('Publish the program report', ['Readers of the assessment see the scores as they stand now.'],
+      { key: 'POST /api/assessment/reports/publish', send: { method: 'POST', url: '/api/assessment/reports/publish', body: {} }, done: 'Published the program report', result: { ref }, href: '/assessment/reports' });
+  }
+  const found = await findByName(ctx, kind, ref);
+  if ('result' in found) return found;
+  const row = found.row;
+  const id = enc(row.id);
+  const named = `"${row.title}"`;
+  const mk = (title: string, detail: string[], method: Send['method'], url: string, body: Record<string, unknown>, doneLine: string): { plan: ConfirmPlan } =>
+    card(title, detail, { key: `${method} ${url} ${JSON.stringify(body)}`, send: { method, url, body }, done: doneLine, result: { ref: `${kind}:${row.id}`, [field]: value }, ...(row.href ? { href: row.href } : {}) });
+  const statusNow = String(row.status ?? '');
+  switch (`${kind}.${field}`) {
+    case 'work-item.status': {
+      const to = String(value);
+      if (statusNow === to) return { result: refused(`${named} is already ${words(to)}.`) };
+      if (statusNow && !(WORK_MOVES[statusNow] ?? []).includes(to)) return { result: refused(`${named} is ${words(statusNow)}; from there it moves to ${(WORK_MOVES[statusNow] ?? []).map(words).join(' or ') || 'nothing'}.`) };
+      return mk(`Move ${named} to ${words(to)}`, [`It is ${words(statusNow) || 'unknown'} now.`], 'PATCH', `/api/graph/work-items/${id}`, { status: to }, `${row.title}: ${words(to)}`);
+    }
+    case 'bot.paused':
+      return value === true
+        ? mk(`Pause the ${row.title} bot`, ['Its schedule stops until it is resumed.'], 'POST', `/api/bots/${id}/pause`, {}, `Paused ${row.title}`)
+        : mk(`Resume the ${row.title} bot`, ['Its schedule runs again and spends against its budget.'], 'POST', `/api/bots/${id}/resume`, {}, `Resumed ${row.title}`);
+    case 'finding.status':
+      if (value !== 'dismissed') return { result: refused('A finding is only dismissed by voice.') };
+      return mk(`Dismiss the finding ${named}`, ['It leaves the findings board.'], 'POST', `/api/work/findings/${id}/dismiss`, {}, `Dismissed ${row.title}`);
+    case 'job.reviewed':
+      if (statusNow !== 'awaiting_review') return { result: refused(`${named} is ${words(statusNow) || 'not'} waiting for review.`) };
+      return mk(`${value === 'accept' ? 'Accept' : 'Reject'} the result of ${named}`, [value === 'accept' ? 'The job is done.' : 'The job is rejected and its finding reopens.'], 'POST', `/api/work/jobs/${id}/review`, { decision: value }, `${value === 'accept' ? 'Accepted' : 'Rejected'} ${row.title}`);
+    case 'job.requeued':
+      if (!['failed', 'cancelled'].includes(statusNow)) return { result: refused(`${named} is ${words(statusNow)}; only a failed or cancelled job runs again.`) };
+      return mk(`Run ${named} again`, ['A new job is queued for the fleet and spends against its initiative.'], 'POST', `/api/work/jobs/${id}/requeue`, {}, `Queued ${row.title} again`);
+    case 'channel.member': {
+      const base = ctx.tenant === 'social' ? '/api/social' : '/api/social/plane';
+      if (value === true) {
+        // Joining posts membership the channel's people see: the route asks PostMessage (the plane's grant outside Social).
+        if (!ctx.can('PostMessage')) return { result: refused("I can't join channels with your role.") };
+        return mk(`Join #${row.title}`, ['Its people see you join; you can post there.'], 'POST', `${base}/channels/${id}/join`, {}, `Joined #${row.title}`);
+      }
+      return mk(`Leave #${row.title}`, ['You stop seeing its messages.'], 'POST', `${base}/channels/${id}/leave`, {}, `Left #${row.title}`);
+    }
+    case 'dm.read':
+      if (value !== true) return { result: refused('A conversation is marked read, never unread, by voice.') };
+      return mk(`Mark your conversation with ${row.title} read`, [], 'POST', '/api/social/dms/read', { channel: row.id }, `Marked ${row.title} read`);
+    case 'run.status':
+      if (ctx.tenant === 'assessment') {
+        if (value !== 'stopped') return { result: refused('An assessment run is only stopped by voice.') };
+        if (statusNow && statusNow !== 'running') return { result: refused(`That run is already ${words(statusNow)}.`) };
+        return mk(`Stop the ${row.title} run`, ['It ends as stopped; what it drafted stays for review.'], 'POST', `/api/assessment/runs/${id}/stop`, {}, `Stopped ${row.title}`);
+      }
+      if (value !== 'cancelled') return { result: refused('A pipeline run is only cancelled by voice.') };
+      if (statusNow && !['queued', 'claimed', 'pending'].includes(statusNow)) return { result: refused(`That run is ${words(statusNow)}; only a queued run is cancelled.`) };
+      return mk(`Cancel the run ${named}`, ['It leaves the queue before it starts.'], 'POST', `/api/pipelines/runs/${id}/cancel`, {}, `Cancelled ${row.title}`);
+    case 'feedback.status': {
+      if (value === 'dismissed') return mk(`Dismiss the follow-up ${named}`, [], 'POST', `/api/assessment/feedback/${id}/dismiss`, {}, `Dismissed ${row.title}`);
+      if (value !== 'resolved') return { result: refused('A follow-up is resolved or dismissed.') };
+      const response = str(fields['response']);
+      if (!response) return { result: refused('Resolving a follow-up needs the response; say it.') };
+      return mk(`Resolve the follow-up ${named}`, [response], 'POST', `/api/assessment/feedback/${id}/resolve`, { response }, `Resolved ${row.title}`);
+    }
+    case 'request.status':
+      if (value !== 'withdrawn') return { result: refused('An access request is only withdrawn by voice.') };
+      if (dig(row.raw, 'can.withdraw') !== true) return { result: refused(`${named} cannot be withdrawn now.`) };
+      return mk(`Withdraw your request for ${row.title}`, ['Its approvers stop seeing it.'], 'POST', `/api/access/requests/${id}/withdraw`, {}, `Withdrew ${row.title}`);
+    case 'delegation.status':
+      if (value !== 'ended') return { result: refused('A delegation is only ended by voice.') };
+      if (dig(row.raw, 'can.end') !== true) return { result: refused(`${row.title} cannot be ended by you now.`) };
+      return mk(`End the delegation ${row.title}`, ['The requests waiting on you come back to you.'], 'POST', `/api/access/delegations/${id}/end`, { reason: 'Ended early by voice' }, `Ended ${row.title}`);
+    default:
+      return { result: refused(`A ${kind.replace(/-/g, ' ')} does not take ${field} here.`) };
+  }
+}
+
+const planUpdate: VoiceToolPlanner = async (args, ctx) => {
+  let ref = String(args['ref']).trim();
+  if (/^\d{1,2}$/.test(ref)) {
+    const kept = ctx.results?.find(ref);
+    if (!kept) return { result: refused(`There is no row ${ref} in the last result. List them first.`) };
+    ref = kept.ref;
+  }
+  const parsed = parseRef(ref);
+  if (!parsed) return { result: refused('Name the row by the ref a result gave, such as "work-item:<id>", or its position.') };
+  const kinds = UPDATE_ACTIONS[ctx.tenant] ?? {};
+  const allowed = kinds[parsed.kind];
+  if (!allowed) return { result: refused(`A ${parsed.kind.replace(/-/g, ' ')} is not changed by voice in this workspace.`) };
+  const fields = (args['fields'] as Rec | undefined) ?? {};
+  const given = Object.keys(fields).filter((k) => k !== 'response');
+  const field = given[0];
+  if (given.length !== 1 || !field || !(field in allowed) || (fields['response'] !== undefined && parsed.kind !== 'feedback')) {
+    return { result: refused(`A ${parsed.kind.replace(/-/g, ' ')} takes one change here: ${Object.keys(allowed).join(' or ')}.`) };
+  }
+  const action = allowed[field];
+  // Leaving a channel needs only the Social grant (ViewSocial), joining the route's PostMessage (checked in the planner).
+  const leaving = parsed.kind === 'channel' && fields['member'] === false;
+  if (action && !leaving && action !== 'PostMessage' && !ctx.can(action)) return { result: refused(`I can't change that with your role.`) };
+  if ((parsed.kind === 'channel' || parsed.kind === 'dm') && ctx.tenant !== 'social' && !ctx.social) {
+    return { result: socialGrantRefusal(ctx, 'Channels and conversations are in Social, which this session cannot reach.') };
+  }
+  return planUpdateKind(parsed.kind, field, fields[field], fields, ref, ctx);
+};
+
+const runUpdate: VoiceToolRunner = async (_args, ctx, planned) => {
+  const plan = planned as ActPlan | undefined;
+  if (!plan?.send) return refused('Nothing changes until the user confirms its card.');
+  return act(ctx, plan, 'changed');
+};
+
+export const RECORD_PLANNERS: Readonly<Record<string, VoiceToolPlanner>> = { decide: planDecide, create: planCreate, update: planUpdate };
+export const RECORD_RUNNERS: Readonly<Record<string, VoiceToolRunner>> = { decide: runDecide, create: runCreate, update: runUpdate };
 
 export type { VoiceToolArgs };

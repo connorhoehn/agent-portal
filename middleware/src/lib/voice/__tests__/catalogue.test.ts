@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import {
   VOICE_TOOLS, INTERNAL_TOOLS, NAVIGATE_PAGES, RUN_COMMAND_PHRASES, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, toolsForTenant, responsesFunctionTools,
   voiceInstructions, delegationInstructions, hashToolArgs, voiceTool, searchRecordTypes, MOCK_CALLS, VOICE_TENANTS, mockCallFor, activityScopes,
-  QUEUE_WORK_ACTIONS, QUEUE_WORK_KINDS, COMPUTER_ACTIONS, DECIDE_ACTIONS, decideKinds, queueWorkKinds, LIST_KINDS, listKinds, getParts, summaryKinds, budgetScopes, openKinds,
+  QUEUE_WORK_ACTIONS, QUEUE_WORK_KINDS, COMPUTER_ACTIONS, DECIDE_ACTIONS, decideKinds, CREATE_ACTIONS, CREATE_FIELDS, UPDATE_ACTIONS, createKinds, updateKinds, queueWorkKinds, LIST_KINDS, listKinds, getParts, summaryKinds, budgetScopes, openKinds,
 } from '../catalogue.js';
 import { SEARCH_TYPES } from '../../../providers/search.js';
 import { tenantSpec } from '../../search-index/tenants.js';
@@ -41,6 +41,8 @@ const SPEC: Record<string, [string, boolean, string]> = {
   activity: ['read', false, 'search'],
   queue_work: ['machine', true, 'work'],
   decide: ['action', true, 'work'],
+  create: ['action', true, 'work'],
+  update: ['action', true, 'work'],
 };
 
 describe('the §4 catalogue', () => {
@@ -67,7 +69,7 @@ describe('the §4 catalogue', () => {
   });
 
   it('asks first for exactly the tools that spend, run on a machine or reach people', () => {
-    expect(VOICE_TOOLS.filter((t) => t.confirm).map((t) => t.name).sort()).toEqual(['computer', 'decide', 'queue_work', 'send_chat_message', 'start_call']);
+    expect(VOICE_TOOLS.filter((t) => t.confirm).map((t) => t.name).sort()).toEqual(['computer', 'create', 'decide', 'queue_work', 'send_chat_message', 'start_call', 'update']);
     // computer's open-shell only opens a tab: the one action that skips the card (V2-8).
     expect(voiceTool('computer')!.noConfirm).toEqual({ action: ['open-shell'] });
   });
@@ -140,7 +142,7 @@ describe('the §4 catalogue', () => {
 
 describe('tenant scoping (§6)', () => {
   it('a social session is offered navigate, its search, its activity, chat, a call, status and its own requests, nothing on machines', () => {
-    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'activity', 'budget', 'get', 'list', 'open', 'queue_work', 'search', 'send_chat_message', 'set_status', 'start_call', 'summary']);
+    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'activity', 'budget', 'create', 'get', 'list', 'open', 'queue_work', 'search', 'send_chat_message', 'set_status', 'start_call', 'summary', 'update']);
   });
 
   it('start_call is offered in orgiq and social only, asks first, and gates on StartCall (G7)', () => {
@@ -193,7 +195,7 @@ describe('tenant scoping (§6)', () => {
   });
 
   it.each(['assessment', 'pipelines', 'access'])('%s is offered reads and navigation, nothing that touches a machine or posts (gaps doc Q1); assessment and pipelines add their own queue_work kinds (G19, V2-9)', (tenant) => {
-    const ACTIONS = ['queue_work', 'decide'];
+    const ACTIONS = ['queue_work', 'decide', 'create', 'update'];
     const tools = toolsForTenant(tenant).filter((t) => !ACTIONS.includes(t.name));
     expect(tools.map((t) => t.name).sort()).toEqual(['access_request_status', 'budget', 'get', 'list', 'open', 'search', 'summary']);
     expect(toolsForTenant(tenant).some((t) => t.name === 'queue_work')).toBe(tenant !== 'access');
@@ -233,7 +235,7 @@ describe('tenant scoping (§6)', () => {
   it('the access approver\'s scripted session reads approvals, a requester\'s its own requests, and every role key names a real seed role', () => {
     expect(mockCallFor('access', 'approver')).toMatchObject({ name: 'decide', arguments: { ref: 'approval:req-0001', decision: 'approve' } });
     expect(mockCallFor('access', 'access-admin').arguments).toMatchObject({ scope: 'approvals' });
-    expect(mockCallFor('access', 'requester')).toMatchObject({ name: 'list', arguments: { kind: 'request', filter: { scope: 'mine' } } });
+    expect(mockCallFor('access', 'requester')).toMatchObject({ name: 'create', arguments: { kind: 'access-request', fields: { item: 'Operator in Pipelines', duration: '7d' } } });
     expect(mockCallFor('orgiq', 'member')).toBe(MOCK_CALLS['orgiq']);
     const seeds = join(__dirname, '..', '..', '..', '..', 'seeds', 'roles');
     for (const key of Object.keys(MOCK_CALLS).filter((k) => k.includes('/'))) {
@@ -316,6 +318,32 @@ describe('tenant scoping (§6)', () => {
     }
   });
 
+  it('create and update (V2-11) ask first, take one field set per kind, and gate each on its form\'s or button\'s action', () => {
+    expect(voiceTool('create')).toMatchObject({ confirm: true, action: null, kind: 'action', backing: 'work', tenants: ['orgiq', 'social', 'access'] });
+    expect(voiceTool('update')).toMatchObject({ confirm: true, action: null, kind: 'action', backing: 'work', tenants: ['orgiq', 'social', 'assessment', 'pipelines', 'access'] });
+    expect(createKinds('orgiq')).toEqual(['work-item', 'comment', 'saved-search', 'sprint']);
+    expect(createKinds('social')).toEqual(['channel', 'team', 'room']);
+    expect(createKinds('access')).toEqual(['access-request', 'delegation']);
+    for (const t of ['assessment', 'pipelines']) expect(toolsForTenant(t).some((x) => x.name === 'create')).toBe(false);
+    expect(Object.keys(CREATE_FIELDS).sort()).toEqual(createKinds(null).sort());
+    expect(updateKinds('access')).toEqual(['request', 'delegation']);
+    expect(UPDATE_ACTIONS['social']!['channel']).toEqual({ member: 'PostMessage' });
+    for (const a of [...Object.values(CREATE_ACTIONS).flatMap((m) => Object.values(m)), ...Object.values(UPDATE_ACTIONS).flatMap((m) => Object.values(m).flatMap((f) => Object.values(f)))]) {
+      if (a) expect(CAPABILITY_ACTIONS).toContain(a);
+    }
+    const c = new Ajv({ strict: true }).compile(voiceTool('create')!.parameters);
+    expect(c({ kind: 'work-item', fields: { initiative: 'Alpha', title: 'Rotate keys' } })).toBe(true);
+    expect(c({ kind: 'work-item', fields: { initiative: 'Alpha', title: 'Rotate keys', projectId: 'p1' } })).toBe(false);
+    expect(c({ kind: 'access-request', fields: { item: 'SME', justification: 'x', duration: 'standing' } })).toBe(false);
+    const u = new Ajv({ strict: true }).compile(voiceTool('update')!.parameters);
+    expect(u({ ref: 'work-item:w-1', fields: { status: 'in_progress' } })).toBe(true);
+    expect(u({ ref: 'work-item:w-1', fields: { assigneeId: 'u-1' } })).toBe(false);
+    const created = toolsForTenant('access').find((x) => x.name === 'create')!;
+    expect((created.parameters.properties['kind'] as { enum: string[] }).enum).toEqual(['access-request', 'delegation']);
+    expect(created.description).toContain('access-request (item, justification, duration)');
+    expect(toolsForTenant('pipelines').find((x) => x.name === 'update')!.description).toContain('run (status)');
+  });
+
   it('list and get (V2-5) offer each tenant its own kinds and parts, take a ref never a path, and the scripted sessions list requests, runs, teams and channels', () => {
     for (const tenant of VOICE_TENANTS) {
       const list = toolsForTenant(tenant).find((t) => t.name === 'list')!;
@@ -330,7 +358,6 @@ describe('tenant scoping (§6)', () => {
     expect(v({ ref: 'initiative:p1', path: '/admin/identity' })).toBe(false);
     expect(v({ ref: 'initiative:p1', part: 'not-a-part' })).toBe(false);
     expect(Object.keys(LIST_KINDS).sort()).toEqual([...VOICE_TENANTS].sort());
-    expect(mockCallFor('access', 'requester').arguments).toMatchObject({ kind: 'request' });
     expect(mockCallFor('pipelines', 'author').arguments).toMatchObject({ kind: 'run', filter: { status: 'failed' } });
     expect(mockCallFor('assessment', 'lead-assessor').arguments).toMatchObject({ kind: 'team' });
     expect(mockCallFor('social', 'community-admin').arguments).toMatchObject({ kind: 'channel' });

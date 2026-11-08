@@ -141,7 +141,7 @@ test('an access approver\'s scripted session answers its approvals from the fixt
   const { mockCallFor } = await middlewareVoice<{ mockCallFor: (t: string, r: string) => Call }>('catalogue.ts');
   // The approver's own scripted session decides (V2-10); the read it used to make is given here.
   const approvals: Call = { name: 'access_request_status', arguments: { query: null, scope: 'approvals' }, said: 'Show me my approvals.' };
-  assert.deepEqual(mockCallFor('access', 'requester').arguments['filter'], { q: null, status: null, scope: 'mine', since: null });
+  assert.equal(mockCallFor('access', 'requester').name, 'create', 'the requester files a request by voice now (V2-11)');
   const run = await scriptedRun('access', {
     role: 'approver', allow: ['ViewAccess', 'RequestAccess', 'DecideAccess', 'VoiceNavigate'], call: approvals,
     routes: [route('GET', '/api/access/approvals', 200, { items: [ada] })],
@@ -199,7 +199,8 @@ test('the V2-5 scripted sessions list access requests, pipeline runs, assessment
       body: { channels: [{ slug: 'general', name: 'General' }] }, url: '/api/social/channels', summary: '1 channel; first: General' },
   ];
   for (const r of runs) {
-    const call = mockCallFor(r.tenant, r.role);
+    // The requester's own scripted session files a request now (V2-11); its V2-5 read is given here.
+    const call = r.tenant === 'access' ? { name: 'list', arguments: { kind: 'request', filter: { q: null, status: null, scope: 'mine', since: null }, limit: null }, said: 'List my access requests.' } : mockCallFor(r.tenant, r.role);
     assert.equal(call.name, 'list', r.tenant);
     const run = await scriptedRun(r.tenant, { role: r.role, allow: r.allow, call, routes: [route('GET', r.prefix, 200, r.body)] });
     assert.deepEqual(run.calls, [['list', 'done']], r.tenant);
@@ -355,4 +356,26 @@ test('V2-10: an approver\'s scripted session approves the request waiting on the
   assert.deepEqual(run.log.filter((l) => l.method === 'POST' && !l.url.startsWith('/api/voice/')).map((l) => [l.url, l.body]),
     [['/api/access/requests/req-0001/steps/1/decide', { decision: 'approve', comment: 'Welcome aboard' }]]);
   assert.deepEqual(run.calls, [['decide', 'done']]);
+});
+
+test('V2-11: a requester\'s scripted session files a request from the catalogue: the card is the route\'s preview, then one submit', async () => {
+  const { mockCallFor } = await middlewareVoice<{ mockCallFor: (t: string, r: string) => Call }>('catalogue.ts');
+  const call = mockCallFor('access', 'requester');
+  assert.equal(call.name, 'create');
+  let card: unknown = null;
+  const run = await scriptedRun('access', {
+    role: 'requester', allow: ['ViewAccess', 'RequestAccess', 'VoiceNavigate'], call,
+    routes: [route('GET', '/api/access/catalog', 200, { items: [{ id: 'role:pipelines:operator', title: 'Operator in Pipelines' }, { id: 'role:orgiq:sme', title: 'SME in Work' }] }),
+      route('POST', '/api/access/requests/preview', 200, { steps: [{ step: 1, kind: 'manager', eligible: [{ id: 'u-m' }] }], sod: { verdict: 'clear' }, refusal: null }),
+      route('POST', '/api/access/requests', 201, { id: 'req-0042' })],
+    beforeStop: async (c, _ctx, clock) => {
+      const p = c.getSnapshot().pending!;
+      card = { title: p.title, detail: p.detail };
+      c.confirm('click');
+      await clock.advance(300);
+    },
+  });
+  assert.deepEqual(card, { title: 'Request Operator in Pipelines for 7d', detail: ['I cover the nightly pipeline runs while the operators are out.', 'Approvers: step 1: manager (1 can decide).'] });
+  assert.deepEqual(run.log.filter((l) => l.method === 'POST' && !l.url.startsWith('/api/voice/')).map((l) => l.url), ['/api/access/requests/preview', '/api/access/requests']);
+  assert.deepEqual(run.calls, [['create', 'done']]);
 });

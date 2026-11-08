@@ -130,3 +130,126 @@ test('decide: a consult is answered with the note (required), a runbook edit is 
     route('GET', '/api/runbooks/proposals/rp-2', 200, { proposal: { id: 'rp-2', status: 'open', kind: 'new', proposed: { title: 'A new runbook' } }, runbook: null, can_review: true })] });
   assert.match(fresh.result.summary, /scope is chosen/);
 });
+
+// ── create and update (V2-11) ──
+
+async function act(tool: 'create' | 'update', args: Record<string, unknown>, opts: { tenant: string; allow: Action[]; routes: Route[]; results?: ResultMemory; social?: boolean }) {
+  const { fetch, log } = fakeFetch(opts.routes);
+  const ctx = toolContext({ tenant: opts.tenant, allow: opts.allow, fetch, ...(opts.results ? { results: opts.results } : {}),
+    ...(opts.social ? { social: { api: '/api/social/plane', unavailable: null, presence: null, deliveries: new Map(), send: async () => {} } } : {}) });
+  const p = prepareToolCall(tool, args, ctx);
+  if (!p.ok) return { card: null as ConfirmPlan | null, result: p.result, log, again: null as ToolResult | null };
+  const planned = await planPreparedCall(p.call, ctx, VOICE_PLANNERS);
+  if (!planned || 'result' in planned) return { card: null as ConfirmPlan | null, result: planned?.result as ToolResult, log, again: null as ToolResult | null };
+  assert.deepEqual(writes(log).filter(([, url]) => !String(url).endsWith('/preview')), [], `${tool}: nothing is written before the confirm`);
+  const result = await runPreparedCall(p.call, ctx, VOICE_RUNNERS, planned.plan.data);
+  const again = await runPreparedCall(p.call, ctx, VOICE_RUNNERS, planned.plan.data);
+  return { card: planned.plan, result, log, again };
+}
+
+const CATALOG = { items: [{ id: 'role:orgiq:sme', title: 'SME in Work', kind: 'role' }, { id: 'capability:orgiq:budgets-read', title: 'Budget visibility', kind: 'capability' }] };
+const PREVIEW = { item: { id: 'role:orgiq:sme' }, steps: [{ step: 1, kind: 'manager', eligible: [{ id: 'u-m' }] }, { step: 2, kind: 'owner', eligible: [{ id: 'u-o' }, { id: 'u-p' }] }], sod: { verdict: 'clear', conflicts: [] }, refusal: null };
+
+test('create: a requester files a request from the catalogue; the card is the route\'s own preview, and it is filed once', async () => {
+  const args = { kind: 'access-request', fields: { item: 'SME', justification: 'I review the platform team\'s agent changes every week.', duration: '30d' } };
+  const r = await act('create', args, { tenant: 'access', allow: ['ViewAccess', 'RequestAccess'], routes: [
+    route('GET', '/api/access/catalog', 200, CATALOG), route('POST', '/api/access/requests/preview', 200, PREVIEW), route('POST', '/api/access/requests', 201, { id: 'req-9' })] });
+  assert.equal(r.card!.title, 'Request SME in Work for 30d');
+  assert.deepEqual(r.card!.detail, ['I review the platform team\'s agent changes every week.', 'Approvers: step 1: manager (1 can decide); step 2: owner (2 can decide).']);
+  assert.equal(r.result.outcome, 'done');
+  assert.deepEqual(writes(r.log), [
+    ['POST', '/api/access/requests/preview', { itemId: 'role:orgiq:sme', duration: '30d' }],
+    ['POST', '/api/access/requests', { itemId: 'role:orgiq:sme', justification: 'I review the platform team\'s agent changes every week.', duration: '30d' }],
+  ], 'the preview, then one submit; the retry is answered from the ledger');
+  assert.equal(r.again!.output['already'], true);
+  // The preview's refusal ends it with no card; a short justification never reaches the route.
+  const held = await act('create', args, { tenant: 'access', allow: ['ViewAccess', 'RequestAccess'], routes: [
+    route('GET', '/api/access/catalog', 200, CATALOG), route('POST', '/api/access/requests/preview', 200, { ...PREVIEW, refusal: { error: 'You already hold SME in Work' } })] });
+  assert.equal(held.card, null);
+  assert.match(held.result.summary, /already hold/);
+  const short = await act('create', { kind: 'access-request', fields: { item: 'SME', justification: 'need it', duration: '7d' } }, { tenant: 'access', allow: ['ViewAccess', 'RequestAccess'], routes: [] });
+  assert.match(short.result.summary, /at least 20 characters/);
+  assert.equal(short.log.length, 0);
+  // Standing access is chosen on the page (its own reason), never by voice.
+  assert.equal(prepareToolCall('create', { kind: 'access-request', fields: { item: 'SME', justification: 'x'.repeat(30), duration: 'standing' } }, toolContext({ tenant: 'access' })).ok, false);
+});
+
+test('create: one field set per kind; a work item on an initiative by name; a comment only on a ref', async () => {
+  const extra = await act('create', { kind: 'saved-search', fields: { name: 'k8s', query: 'kubernetes', title: 'nope' } }, { tenant: 'orgiq', allow: ['Search'], routes: [] });
+  assert.match(extra.result.summary, /takes name, query; not title/);
+  const item = await act('create', { kind: 'work-item', fields: { initiative: 'auth migration', title: 'Rotate the signing keys', type: 'bug' } }, { tenant: 'orgiq', allow: ['DispatchAgentRun'], routes: [
+    route('GET', '/api/graph/projects', 200, [{ id: 'p-auth', name: 'Auth Migration' }]), route('POST', '/api/graph/work-items', 201, { id: 'w-77' })] });
+  assert.equal(item.card!.title, 'Create a bug on Auth Migration');
+  assert.deepEqual(writes(item.log), [['POST', '/api/graph/work-items', { projectId: 'p-auth', type: 'bug', title: 'Rotate the signing keys', priority: 'medium' }]]);
+  const byName = await act('create', { kind: 'comment', fields: { on: 'the signing keys', text: 'Looks good' } }, { tenant: 'orgiq', allow: [], routes: [] });
+  assert.match(byName.result.summary, /by the ref a result gave/);
+  const comment = await act('create', { kind: 'comment', fields: { on: 'work-item:w-77', text: 'Rotated in staging; prod next.' } }, { tenant: 'orgiq', allow: [], routes: [
+    route('GET', '/api/graph/work', 200, [{ id: 'w-77', title: 'Rotate the signing keys', projectId: 'p-auth' }]), route('POST', '/api/graph/work-items/w-77/comments', 201, { id: 'c-1' })] });
+  assert.deepEqual(comment.card!.detail, ['Rotated in staging; prod next.', 'Everyone on the initiative reads it.']);
+  assert.deepEqual(writes(comment.log), [['POST', '/api/graph/work-items/w-77/comments', { body: 'Rotated in staging; prod next.' }]]);
+  // A role without the form's action is refused before any read.
+  const role = await act('create', { kind: 'sprint', fields: { initiative: 'Auth', name: 'S12', startsOn: '2026-11-10', endsOn: '2026-11-24' } }, { tenant: 'orgiq', allow: [], routes: [] });
+  assert.equal(role.result.outcome, 'refused');
+  assert.equal(role.log.length, 0);
+  // Social's kinds are created in Social only.
+  const elsewhere = await act('create', { kind: 'channel', fields: { name: 'retro' } }, { tenant: 'orgiq', allow: ['ManageChannels'], routes: [] });
+  assert.equal(elsewhere.result.outcome, 'refused');
+});
+
+test('create: a delegation names someone who can decide, for one of the page\'s windows, timed when it is sent', async () => {
+  const r = await act('create', { kind: 'delegation', fields: { delegate: 'priya', window: '3d', reason: 'Out at the offsite until Thursday' } }, { tenant: 'access', allow: ['DecideAccess'], routes: [
+    route('GET', '/api/access/delegates', 200, { items: [{ id: 'u-priya', displayName: 'Priya Natarajan' }, { id: 'u-omar', displayName: 'Omar Haddad' }] }), route('POST', '/api/access/delegations', 201, { id: 'd-1' })] });
+  assert.equal(r.card!.title, 'Delegate your approvals to Priya Natarajan for 3 days');
+  const sent = writes(r.log)[0]![2] as { delegateId: string; startsAt: string; endsAt: string; reason: string };
+  assert.equal(sent.delegateId, 'u-priya');
+  assert.equal(Date.parse(sent.endsAt) - Date.parse(sent.startsAt), 72 * 3_600_000);
+  assert.equal(writes(r.log).length, 1);
+});
+
+test('update: a work item moves to in progress through the page\'s PATCH; a move the server refuses is refused first', async () => {
+  const routes = [route('GET', '/api/graph/work', 200, [{ id: 'w-9', title: 'Fix the retry storm', status: 'open', projectId: 'p-auth' }]), route('PATCH', '/api/graph/work-items/w-9', 200, { id: 'w-9', status: 'in_progress' })];
+  const r = await act('update', { ref: 'work-item:w-9', fields: { status: 'in_progress' } }, { tenant: 'orgiq', allow: ['DispatchAgentRun'], routes });
+  assert.equal(r.card!.title, 'Move "Fix the retry storm" to in progress');
+  assert.deepEqual(writes(r.log), [['PATCH', '/api/graph/work-items/w-9', { status: 'in_progress' }]]);
+  const jump = await act('update', { ref: 'work-item:w-9', fields: { status: 'done' } }, { tenant: 'orgiq', allow: ['DispatchAgentRun'], routes });
+  assert.match(jump.result.summary, /from there it moves to in progress or cancelled/);
+  const two = await act('update', { ref: 'work-item:w-9', fields: { status: 'done', paused: true } }, { tenant: 'orgiq', allow: ['DispatchAgentRun'], routes });
+  assert.match(two.result.summary, /takes one change here: status/);
+});
+
+test('update: joining a channel needs PostMessage, the route\'s own gate; leaving needs only the Social grant; nothing is sent without them', async () => {
+  const routes = [route('GET', '/api/social/channels', 200, { channels: [{ slug: 'platform', name: 'platform' }] }),
+    route('POST', '/api/social/channels/platform/join', 200, {}), route('POST', '/api/social/channels/platform/leave', 200, {})];
+  const join = await act('update', { ref: 'channel:platform', fields: { member: true } }, { tenant: 'social', allow: ['ViewSocial', 'PostMessage'], routes });
+  assert.deepEqual(writes(join.log), [['POST', '/api/social/channels/platform/join', {}]]);
+  const noPost = await act('update', { ref: 'channel:platform', fields: { member: true } }, { tenant: 'social', allow: ['ViewSocial'], routes });
+  assert.equal(noPost.result.outcome, 'refused');
+  assert.deepEqual(writes(noPost.log), []);
+  const leave = await act('update', { ref: 'channel:platform', fields: { member: false } }, { tenant: 'social', allow: ['ViewSocial'], routes });
+  assert.deepEqual(writes(leave.log), [['POST', '/api/social/channels/platform/leave', {}]]);
+  // Outside Social, the plane's twins with the grant; without it the request offer, and nothing read.
+  const plane = await act('update', { ref: 'channel:platform', fields: { member: false } }, { tenant: 'orgiq', allow: ['Search'], social: true, routes: [
+    route('GET', '/api/social/plane/channels', 200, { channels: [{ slug: 'platform', name: 'platform' }] }), route('POST', '/api/social/plane/channels/platform/leave', 200, {})] });
+  assert.deepEqual(writes(plane.log), [['POST', '/api/social/plane/channels/platform/leave', {}]]);
+  const noGrant = await act('update', { ref: 'channel:platform', fields: { member: false } }, { tenant: 'orgiq', allow: ['Search'], routes: [] });
+  assert.equal(noGrant.result.outcome, 'refused');
+  assert.equal(noGrant.log.length, 0);
+});
+
+test('update: pause a bot, withdraw a request only when it can be, cancel a queued pipeline run, publish the program report', async () => {
+  const bot = await act('update', { ref: 'bot:b-1', fields: { paused: true } }, { tenant: 'orgiq', allow: ['ManageBots'], routes: [route('GET', '/api/bots', 200, { bots: [{ id: 'b-1', name: 'finops-daily' }] }), route('POST', '/api/bots/b-1/pause', 200, {})] });
+  assert.deepEqual(writes(bot.log), [['POST', '/api/bots/b-1/pause', {}]]);
+  const reqRoutes = (can: boolean) => [route('GET', '/api/access/requests', 200, { items: [{ id: 'r-1', item: { title: 'SME in Work' }, status: 'submitted', can: { withdraw: can } }] }), route('POST', '/api/access/requests/r-1/withdraw', 200, {})];
+  const withdraw = await act('update', { ref: 'request:r-1', fields: { status: 'withdrawn' } }, { tenant: 'access', allow: ['ViewAccess'], routes: reqRoutes(true) });
+  assert.deepEqual(writes(withdraw.log), [['POST', '/api/access/requests/r-1/withdraw', {}]]);
+  const notMine = await act('update', { ref: 'request:r-1', fields: { status: 'withdrawn' } }, { tenant: 'access', allow: ['ViewAccess'], routes: reqRoutes(false) });
+  assert.equal(notMine.result.outcome, 'refused');
+  const run = await act('update', { ref: 'run:run-4', fields: { status: 'cancelled' } }, { tenant: 'pipelines', allow: ['ViewPipelines', 'CancelRun'], routes: [
+    route('GET', '/api/pipelines/runs', 200, { runs: [{ id: 'run-4', definitionId: 'runbook:nightly', status: 'queued' }] }), route('POST', '/api/pipelines/runs/run-4/cancel', 200, {})] });
+  assert.deepEqual(writes(run.log), [['POST', '/api/pipelines/runs/run-4/cancel', {}]]);
+  const report = await act('update', { ref: 'report:program', fields: { publish: true } }, { tenant: 'assessment', allow: ['PublishReport'], routes: [route('POST', '/api/assessment/reports/publish', 201, {})] });
+  assert.equal(report.card!.title, 'Publish the program report');
+  assert.deepEqual(writes(report.log), [['POST', '/api/assessment/reports/publish', {}]]);
+  const noPublish = await act('update', { ref: 'report:program', fields: { publish: true } }, { tenant: 'assessment', allow: [], routes: [] });
+  assert.equal(noPublish.result.outcome, 'refused');
+});

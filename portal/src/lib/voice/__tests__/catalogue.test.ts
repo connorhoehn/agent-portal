@@ -132,7 +132,8 @@ test('an action tool reaches only routes the inventory decides confirm (or open,
     for (const tool of r.coveredBy.filter((t) => actionTools.has(t))) {
       const where = `${tool}: ${r.method} ${r.path}`;
       if (r.method === 'GET') assert.ok(['read', 'n/a'].includes(r.v2.decision ?? ''), `${where} is a ${r.v2.decision}`);
-      else { assert.ok(['confirm', 'open'].includes(r.v2.decision ?? ''), `${where} is a ${r.v2.decision}`); writes++; }
+      // A write the inventory decides `read` writes nothing (the access request's preview the card shows).
+      else { assert.ok(['confirm', 'open'].includes(r.v2.decision ?? '') || (r.v2.decision === 'read' && /\/preview$/.test(r.path)), `${where} is a ${r.v2.decision}`); writes++; }
     }
   }
   assert.ok(writes >= 5, `${writes} write routes checked`);

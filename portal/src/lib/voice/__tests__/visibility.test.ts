@@ -128,6 +128,14 @@ const VARIANTS: Record<string, unknown[]> = {
   decide: [{ ref: 'change:cr-sana', decision: 'approve' }, { ref: 'change:cr-not-theirs', decision: 'deliver' }, { ref: 'hitl-approval:ha-sana', decision: 'reject' },
     { ref: 'hitl-approval:ha-other', decision: 'approve' }, { ref: '1', decision: 'approve' }, { ref: 'consult:co-sana', decision: 'approve' },
     { ref: 'proposal:gp-x', decision: 'reject' }, { ref: 'design:d-sana', decision: 'approve' }, { ref: 'runbook-proposal:rp-sana', decision: 'accept' }, { ref: 'nonsense', decision: 'approve' }],
+  // V2-11: creates and updates driven to an ambiguity, nothing found, a refused field set or a state that refuses.
+  create: [{ kind: 'work-item', fields: { initiative: 'Initiative', title: 'x' } }, { kind: 'work-item', fields: { initiative: 'Nothing Like It', title: 'x' } },
+    { kind: 'comment', fields: { on: 'Sana Alpha', text: 'hi' } }, { kind: 'comment', fields: { on: 'work-item:w-not-theirs', text: 'hi' } },
+    { kind: 'sprint', fields: { initiative: 'Initiative', name: 's', startsOn: '2026-11-10', endsOn: '2026-11-01' } }, { kind: 'saved-search', fields: { name: 'n', query: 'q', title: 'extra' } },
+    { kind: 'channel', fields: { name: 'x' } }, { kind: 'delegation', fields: { delegate: 'x', window: '1d', reason: 'short' } }],
+  update: [{ ref: 'work-item:w-sana-1', fields: { status: 'done' } }, { ref: 'bot:b-sana-3', fields: { paused: false, member: true } }, { ref: 'bot:b-not-theirs', fields: { paused: true } },
+    { ref: 'finding:f-x', fields: { status: 'dismissed' } }, { ref: 'channel:general', fields: { member: true } }, { ref: '2', fields: { status: 'done' } }, { ref: 'nonsense', fields: { status: 'done' } },
+    { ref: 'report:program', fields: { publish: true } }],
   activity: [{ scope: 'missed-calls' }, { scope: 'online', who: 'nobody' }, { scope: 'recent', since: 'tomorrow' }, { scope: 'work', who: 'Someone' }],
 };
 

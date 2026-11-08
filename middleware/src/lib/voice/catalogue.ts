@@ -540,6 +540,68 @@ export function decideKinds(tenant: string | null): string[] {
   return [...new Set(Object.values(DECIDE_ACTIONS).flatMap((m) => Object.keys(m)))];
 }
 
+/**
+ * What `create` may create, per tenant (catalogue v2, V2-11), and the Cedar
+ * action of the form's submit button each kind stands in for; and the
+ * fields each kind takes (one set per kind: anything else is refused).
+ * Left out, with the reason in the inventory document: an assessment
+ * follow-up (no page posts one), a document proposal and a review request
+ * (editor acts on a document's anchors and reviewers).
+ */
+export const CREATE_ACTIONS: Readonly<Record<string, Readonly<Record<string, CapabilityAction | null>>>> = {
+  orgiq: { 'work-item': 'DispatchAgentRun', comment: null, 'saved-search': 'Search', sprint: 'ManageSprints' },
+  social: { channel: 'ManageChannels', team: 'ManageTeams', room: 'ManageChannels' },
+  access: { 'access-request': 'RequestAccess', delegation: 'DecideAccess' },
+};
+
+/** Each create kind's field set: [required, optional]. */
+export const CREATE_FIELDS: Readonly<Record<string, readonly [readonly string[], readonly string[]]>> = {
+  'work-item': [['initiative', 'title'], ['type']],
+  comment: [['on', 'text'], []],
+  'saved-search': [['name', 'query'], []],
+  sprint: [['initiative', 'name', 'startsOn', 'endsOn'], []],
+  channel: [['name'], ['description', 'privacy']],
+  team: [['name'], ['description', 'privacy']],
+  room: [['name'], ['description', 'privacy']],
+  'access-request': [['item', 'justification', 'duration'], []],
+  delegation: [['delegate', 'window', 'reason'], []],
+};
+
+/**
+ * What `update` may change, per tenant: the ref kind, the one field it
+ * takes, and the Cedar action of the button that changes it. A work item's
+ * status, a bot paused or resumed, a finding dismissed, a job reviewed or
+ * requeued, a channel joined (PostMessage) or left, a DM read, an
+ * assessment or pipeline run stopped, a follow-up resolved or dismissed,
+ * the program report published (the fixed ref `report:program`), an access
+ * request withdrawn and a delegation ended. Left out: pins (no read hands
+ * out a message's ref), posting a finished summary or deck (the route hands
+ * back a message the page then sends itself), a team's mute (the route has
+ * only a favourite) and withdrawing a runbook proposal (no page offers it).
+ */
+export const UPDATE_ACTIONS: Readonly<Record<string, Readonly<Record<string, Readonly<Record<string, CapabilityAction | null>>>>>> = {
+  orgiq: {
+    'work-item': { status: 'DispatchAgentRun' }, bot: { paused: 'ManageBots' }, finding: { status: 'ManageDevbox' },
+    job: { reviewed: 'ManageDevbox', requeued: 'ManageDevbox' }, channel: { member: 'PostMessage' }, dm: { read: null },
+  },
+  social: { channel: { member: 'PostMessage' }, dm: { read: 'ViewSocial' } },
+  assessment: { run: { status: 'RunAssessmentAgent' }, feedback: { status: 'ScoreAssessment' }, report: { publish: 'PublishReport' } },
+  pipelines: { run: { status: 'CancelRun' } },
+  access: { request: { status: 'ViewAccess' }, delegation: { status: 'DecideAccess' } },
+};
+
+/** `create`'s kinds for one tenant, or every tenant's (null). */
+export function createKinds(tenant: string | null): string[] {
+  if (tenant != null) return Object.keys(CREATE_ACTIONS[tenant] ?? {});
+  return [...new Set(Object.values(CREATE_ACTIONS).flatMap((m) => Object.keys(m)))];
+}
+
+/** `update`'s ref kinds for one tenant, or every tenant's (null). */
+export function updateKinds(tenant: string | null): string[] {
+  if (tenant != null) return Object.keys(UPDATE_ACTIONS[tenant] ?? {});
+  return [...new Set(Object.values(UPDATE_ACTIONS).flatMap((m) => Object.keys(m)))];
+}
+
 /** `queue_work`'s kind enum for one tenant, or every tenant's kinds (null) for the catalogue's base row. */
 export function queueWorkKinds(tenant: string | null): string[] {
   if (tenant != null) return [...(QUEUE_WORK_KINDS[tenant] ?? [])];
@@ -764,6 +826,59 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     mapsTo: "access: GET /api/access/approvals, POST /api/access/requests/:id/steps/:step/decide { decision, comment }; GET /api/access/reviews/:id, POST /api/access/reviews/:id/items/:itemId/decide { decision: keep | revoke, comment }; pipelines: GET /api/pipelines/approvals, POST /api/pipelines/approvals/:id/decide { decision, note }; HITL: GET /api/observability/approvals, POST /api/observability/approvals/:id/decision { decision: APPROVED | REJECTED, note }; changes: GET /api/sdlc/changes/:id, POST /api/sdlc/changes/:id/decide { decision, note }, POST /api/sdlc/changes/:id/deliver; runbook proposals: GET /api/runbooks/proposals/:pid, POST /api/runbooks/proposals/:pid/accept { expected_version, note }, POST /api/runbooks/proposals/:pid/reject { note }; graph proposals: GET /api/work/proposals, POST /api/work/proposals/:id/decide { decision, note }; consults: GET /api/lab/consults, POST /api/lab/consults/:id/answer { answer }; designs: GET /api/designs/:id, POST /api/designs/:id/signoff { decision }; drafts: GET /api/assessment/drafts/:runId, POST /api/assessment/drafts/:runId/accept, POST /api/assessment/drafts/:runId/discard",
   },
   {
+    name: 'create',
+    // toolsForTenant lists the tenant's own kinds and the fields each takes in the description it renders.
+    description: 'Create a record of one kind through the form its page uses, with the fields that kind takes. The user confirms on a card that shows exactly what will be created (an access request\'s approvers and conflicts first). Text the user dictated (a title, a comment, a justification) goes in as they said it.',
+    parameters: obj({
+      kind: str('What to create.', { enum: createKinds(null) }),
+      fields: obj({
+        initiative: str('work-item, sprint: the initiative, as the user named it or by the ref a result gave.', { minLength: 1, maxLength: 200 }),
+        title: str('work-item: its title, as the user said it.', { minLength: 1, maxLength: 200 }),
+        type: str('work-item: story (default), bug or epic.', { enum: ['story', 'bug', 'epic'] }),
+        on: str('comment: the work item it is on, by the ref a result gave or its position. Never a name.', { minLength: 1, maxLength: 200 }),
+        text: str('comment: the comment, exactly as dictated.', { minLength: 1, maxLength: 2000 }),
+        name: str('saved-search, sprint, channel, team, room: its name.', { minLength: 1, maxLength: 80 }),
+        query: str('saved-search: the search text.', { minLength: 1, maxLength: 200 }),
+        startsOn: str('sprint: its first day, YYYY-MM-DD.', { minLength: 10, maxLength: 10 }),
+        endsOn: str('sprint: its last day, YYYY-MM-DD.', { minLength: 10, maxLength: 10 }),
+        description: str('channel, team, room: one line about it.', { minLength: 1, maxLength: 280 }),
+        privacy: str('channel, team, room: public (default) or private.', { enum: ['public', 'private'] }),
+        item: str('access-request: the catalog item, as the user named it or by the ref a result gave.', { minLength: 1, maxLength: 200 }),
+        justification: str('access-request: why, in the user\'s words (at least 20 characters).', { minLength: 1, maxLength: 2000 }),
+        duration: str('access-request: how long.', { enum: ['8h', '24h', '7d', '30d'] }),
+        delegate: str('delegation: who decides for the user, as the user named them.', { minLength: 1, maxLength: 120 }),
+        window: str('delegation: for how long.', { enum: ['1d', '3d', '7d', '14d'] }),
+        reason: str('delegation: why, in the user\'s words (at least 10 characters).', { minLength: 1, maxLength: 2000 }),
+      }),
+    }, ['kind', 'fields']),
+    kind: 'action', backing: 'work', confirm: true, action: null,
+    gate: "per tenant and kind, the form's submit action (CREATE_ACTIONS): DispatchAgentRun for a work item, the initiative's own conversation for a comment (the route checks ViewWorkItems and the initiative), Search for a saved search, ManageSprints + stewardship for a sprint, ManageChannels / ManageTeams in Social, RequestAccess for an access request, DecideAccess for a delegation",
+    spend: 'none', idempotent: false, says: 'Creating that once you confirm.', tenants: ['orgiq', 'social', 'access'],
+    mapsTo: "work-item: GET /api/graph/projects, POST /api/graph/work-items { projectId, type, title, priority }; comment: GET /api/graph/work, POST /api/graph/work-items/:id/comments { body }; saved-search: POST /api/saved-searches { name, query, scope }; sprint: POST /api/sprints { initiativeId, name, startsOn, endsOn }; channel, team, room: POST /api/social/channels, POST /api/social/teams, POST /api/social/rooms; access-request: GET /api/access/catalog, POST /api/access/requests/preview, POST /api/access/requests { itemId, justification, duration }; delegation: GET /api/access/delegates, POST /api/access/delegations { delegateId, startsAt, endsAt, reason }",
+  },
+  {
+    name: 'update',
+    // toolsForTenant lists the tenant's own ref kinds and the field each takes in the description it renders.
+    description: 'Change one thing on a record a result named (by its ref or position): one field per kind, through the button its page uses. The user confirms on a card that shows the change.',
+    parameters: obj({
+      ref: str('The row to change: its ref exactly as a result gave it (e.g. "work-item:w-9"), its position in the last result, or "report:program" for the assessment program report. Never a name or a path.', { minLength: 1, maxLength: 200 }),
+      fields: obj({
+        status: str('work-item: open, in_progress, in_review, done or cancelled; finding: dismissed; run: stopped (Assessment) or cancelled (Pipelines); feedback: resolved or dismissed; request: withdrawn; delegation: ended.', { enum: ['open', 'in_progress', 'in_review', 'done', 'cancelled', 'dismissed', 'stopped', 'resolved', 'withdrawn', 'ended'] }),
+        response: str('feedback resolved: the response, as the user said it.', { minLength: 1, maxLength: 2000 }),
+        paused: { type: 'boolean', description: 'bot: true pauses it, false resumes it.' },
+        reviewed: str('job: accept or reject its result.', { enum: ['accept', 'reject'] }),
+        requeued: { type: 'boolean', description: 'job: true runs a failed or cancelled job again.' },
+        member: { type: 'boolean', description: 'channel: true joins it, false leaves it.' },
+        read: { type: 'boolean', description: 'dm: true marks it read.' },
+        publish: { type: 'boolean', description: 'report: true publishes the program report to its readers.' },
+      }),
+    }, ['ref', 'fields']),
+    kind: 'action', backing: 'work', confirm: true, action: null,
+    gate: "per tenant, ref kind and field, the page button's action (UPDATE_ACTIONS): DispatchAgentRun for a work item's status, ManageBots to pause a bot, ManageDevbox for findings and jobs, PostMessage to join a channel (ViewSocial to leave), ViewSocial to mark a DM read, RunAssessmentAgent to stop a run, ScoreAssessment for follow-ups, PublishReport, CancelRun, the request's own withdraw and the delegation's own end",
+    spend: 'none', idempotent: false, says: 'Changing that once you confirm.', tenants: ['orgiq', 'social', 'assessment', 'pipelines', 'access'],
+    mapsTo: "work-item: GET /api/graph/work, PATCH /api/graph/work-items/:id { status }; bot: GET /api/bots, POST /api/bots/:id/pause, POST /api/bots/:id/resume; finding: GET /api/work/findings, POST /api/work/findings/:id/dismiss; job: GET /api/work/jobs, POST /api/work/jobs/:id/review { decision }, POST /api/work/jobs/:id/requeue; channel: GET /api/social/channels, POST /api/social/channels/:slug/join, POST /api/social/channels/:slug/leave, GET /api/social/plane/channels, POST /api/social/plane/channels/:slug/join, POST /api/social/plane/channels/:slug/leave; dm: GET /api/social/dms, GET /api/social/plane/dms, POST /api/social/dms/read { channel }; run: GET /api/assessment/runs, POST /api/assessment/runs/:runId/stop, GET /api/pipelines/runs, POST /api/pipelines/runs/:id/cancel; feedback: GET /api/assessment/feedback, POST /api/assessment/feedback/:taskId/resolve { response }, POST /api/assessment/feedback/:taskId/dismiss; report: POST /api/assessment/reports/publish; request: GET /api/access/requests, POST /api/access/requests/:id/withdraw; delegation: GET /api/access/delegations, POST /api/access/delegations/:id/end",
+  },
+  {
     name: 'access_request_status',
     description: 'Look up access requests and report status, current step and decider: the user\'s own ("mine", the default), the ones waiting on their decision ("approvals", approvers only) or their reports\' ("reports"). Approvals and reports are read in the Access workspace only. Each row carries a ref that open opens.',
     parameters: obj({
@@ -804,7 +919,8 @@ export const MOCK_CALLS: Readonly<Record<string, { name: string; arguments: Reco
   'assessment/lead-assessor': { name: 'list', arguments: { kind: 'team', filter: null, limit: null }, said: 'Which teams are there?' },
   'pipelines/author': { name: 'list', arguments: { kind: 'run', filter: { q: null, status: 'failed', scope: null, since: null }, limit: null }, said: 'List the failed runs.' },
   'social/community-admin': { name: 'list', arguments: { kind: 'channel', filter: null, limit: null }, said: 'Which channels are there?' },
-  'access/requester': { name: 'list', arguments: { kind: 'request', filter: { q: null, status: null, scope: 'mine', since: null }, limit: null }, said: 'List my access requests.' },
+  // V2-11: a requester files a request from the catalogue (the card is the route's own preview of who approves).
+  'access/requester': { name: 'create', arguments: { kind: 'access-request', fields: { item: 'Operator in Pipelines', justification: 'I cover the nightly pipeline runs while the operators are out.', duration: '7d', initiative: null, title: null, type: null, on: null, text: null, name: null, query: null, startsOn: null, endsOn: null, description: null, privacy: null, delegate: null, window: null, reason: null } }, said: 'Request the pipelines operator role for a week: I cover the nightly runs while the operators are out.' },
   // V2-6: the aggregates. An org leader asks about the sweeps, an HR admin whether the fleet is healthy, a pipeline admin what failed.
   'orgiq/org-leader': { name: 'summary', arguments: { kind: 'sweeps', since: 'yesterday' }, said: 'Any issues with the sweeps since yesterday?' },
   // V2-7: an HR admin asks what the org spent (at the budgets tier). A member's own spend and the tier's offer
@@ -877,6 +993,16 @@ export function toolsForTenant(tenant: string, opts: { commandAllowlist?: readon
     if (t.name === 'queue_work') {
       const kinds = queueWorkKinds(tenant);
       return kinds.length ? [withEnum(t, 'kind', kinds, `${t.description} The kinds here: ${kinds.map((k) => QUEUE_WORK_SAYS[k]).join('; ')}.`)] : [];
+    }
+    if (t.name === 'create') {
+      const kinds = createKinds(tenant);
+      if (!kinds.length) return [];
+      const narrowed = withEnum(t, 'kind', kinds);
+      return [{ ...narrowed, description: `${t.description} The kinds here and their fields: ${kinds.map((k) => `${k} (${[...CREATE_FIELDS[k]![0], ...CREATE_FIELDS[k]![1].map((f) => `${f}?`)].join(', ')})`).join('; ')}.` }];
+    }
+    if (t.name === 'update') {
+      const kinds = updateKinds(tenant);
+      return kinds.length ? [{ ...t, description: `${t.description} The ref kinds here and their field: ${kinds.map((k) => `${k} (${Object.keys(UPDATE_ACTIONS[tenant]![k]!).join(' or ')})`).join('; ')}.` }] : [];
     }
     if (t.name === 'decide') {
       const kinds = decideKinds(tenant);

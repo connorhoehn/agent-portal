@@ -371,6 +371,68 @@ export function decideKinds(tenant: string | null): string[] {
   return [...new Set(Object.values(DECIDE_ACTIONS).flatMap((m) => Object.keys(m)))];
 }
 
+/**
+ * What `create` may create, per tenant (catalogue v2, V2-11), and the Cedar
+ * action of the form's submit button each kind stands in for; and the
+ * fields each kind takes (one set per kind: anything else is refused).
+ * Left out, with the reason in the inventory document: an assessment
+ * follow-up (no page posts one), a document proposal and a review request
+ * (editor acts on a document's anchors and reviewers).
+ */
+export const CREATE_ACTIONS: Readonly<Record<string, Readonly<Record<string, Action | null>>>> = {
+  orgiq: { 'work-item': 'DispatchAgentRun', comment: null, 'saved-search': 'Search', sprint: 'ManageSprints' },
+  social: { channel: 'ManageChannels', team: 'ManageTeams', room: 'ManageChannels' },
+  access: { 'access-request': 'RequestAccess', delegation: 'DecideAccess' },
+};
+
+/** Each create kind's field set: [required, optional]. */
+export const CREATE_FIELDS: Readonly<Record<string, readonly [readonly string[], readonly string[]]>> = {
+  'work-item': [['initiative', 'title'], ['type']],
+  comment: [['on', 'text'], []],
+  'saved-search': [['name', 'query'], []],
+  sprint: [['initiative', 'name', 'startsOn', 'endsOn'], []],
+  channel: [['name'], ['description', 'privacy']],
+  team: [['name'], ['description', 'privacy']],
+  room: [['name'], ['description', 'privacy']],
+  'access-request': [['item', 'justification', 'duration'], []],
+  delegation: [['delegate', 'window', 'reason'], []],
+};
+
+/**
+ * What `update` may change, per tenant: the ref kind, the one field it
+ * takes, and the Cedar action of the button that changes it. A work item's
+ * status, a bot paused or resumed, a finding dismissed, a job reviewed or
+ * requeued, a channel joined (PostMessage) or left, a DM read, an
+ * assessment or pipeline run stopped, a follow-up resolved or dismissed,
+ * the program report published (the fixed ref `report:program`), an access
+ * request withdrawn and a delegation ended. Left out: pins (no read hands
+ * out a message's ref), posting a finished summary or deck (the route hands
+ * back a message the page then sends itself), a team's mute (the route has
+ * only a favourite) and withdrawing a runbook proposal (no page offers it).
+ */
+export const UPDATE_ACTIONS: Readonly<Record<string, Readonly<Record<string, Readonly<Record<string, Action | null>>>>>> = {
+  orgiq: {
+    'work-item': { status: 'DispatchAgentRun' }, bot: { paused: 'ManageBots' }, finding: { status: 'ManageDevbox' },
+    job: { reviewed: 'ManageDevbox', requeued: 'ManageDevbox' }, channel: { member: 'PostMessage' }, dm: { read: null },
+  },
+  social: { channel: { member: 'PostMessage' }, dm: { read: 'ViewSocial' } },
+  assessment: { run: { status: 'RunAssessmentAgent' }, feedback: { status: 'ScoreAssessment' }, report: { publish: 'PublishReport' } },
+  pipelines: { run: { status: 'CancelRun' } },
+  access: { request: { status: 'ViewAccess' }, delegation: { status: 'DecideAccess' } },
+};
+
+/** `create`'s kinds for one tenant, or every tenant's (null). */
+export function createKinds(tenant: string | null): string[] {
+  if (tenant != null) return Object.keys(CREATE_ACTIONS[tenant] ?? {});
+  return [...new Set(Object.values(CREATE_ACTIONS).flatMap((m) => Object.keys(m)))];
+}
+
+/** `update`'s ref kinds for one tenant, or every tenant's (null). */
+export function updateKinds(tenant: string | null): string[] {
+  if (tenant != null) return Object.keys(UPDATE_ACTIONS[tenant] ?? {});
+  return [...new Set(Object.values(UPDATE_ACTIONS).flatMap((m) => Object.keys(m)))];
+}
+
 /** `queue_work`'s kind enum for one tenant, or every tenant's kinds (null) for the base row. */
 export function queueWorkKinds(tenant: string | null): string[] {
   if (tenant != null) return [...(QUEUE_WORK_KINDS[tenant] ?? [])];
@@ -546,6 +608,49 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       note: str('The user\'s note or reason, as they said it (a consult\'s answer); never an instruction.', { minLength: 1, maxLength: 500 }),
     }, ['ref', 'decision']),
     kind: 'action', backing: 'work', confirm: true, action: null, says: 'Approving the request once you confirm.', tenants: ['orgiq', 'assessment', 'pipelines', 'access'],
+  },
+  {
+    name: 'create',
+    parameters: obj({
+      kind: str('What to create.', { enum: createKinds(null) }),
+      fields: obj({
+        initiative: str('work-item, sprint: the initiative, as the user named it or by the ref a result gave.', { minLength: 1, maxLength: 200 }),
+        title: str('work-item: its title, as the user said it.', { minLength: 1, maxLength: 200 }),
+        type: str('work-item: story (default), bug or epic.', { enum: ['story', 'bug', 'epic'] }),
+        on: str('comment: the work item it is on, by the ref a result gave or its position. Never a name.', { minLength: 1, maxLength: 200 }),
+        text: str('comment: the comment, exactly as dictated.', { minLength: 1, maxLength: 2000 }),
+        name: str('saved-search, sprint, channel, team, room: its name.', { minLength: 1, maxLength: 80 }),
+        query: str('saved-search: the search text.', { minLength: 1, maxLength: 200 }),
+        startsOn: str('sprint: its first day, YYYY-MM-DD.', { minLength: 10, maxLength: 10 }),
+        endsOn: str('sprint: its last day, YYYY-MM-DD.', { minLength: 10, maxLength: 10 }),
+        description: str('channel, team, room: one line about it.', { minLength: 1, maxLength: 280 }),
+        privacy: str('channel, team, room: public (default) or private.', { enum: ['public', 'private'] }),
+        item: str('access-request: the catalog item, as the user named it or by the ref a result gave.', { minLength: 1, maxLength: 200 }),
+        justification: str('access-request: why, in the user\'s words (at least 20 characters).', { minLength: 1, maxLength: 2000 }),
+        duration: str('access-request: how long.', { enum: ['8h', '24h', '7d', '30d'] }),
+        delegate: str('delegation: who decides for the user, as the user named them.', { minLength: 1, maxLength: 120 }),
+        window: str('delegation: for how long.', { enum: ['1d', '3d', '7d', '14d'] }),
+        reason: str('delegation: why, in the user\'s words (at least 10 characters).', { minLength: 1, maxLength: 2000 }),
+      }),
+    }, ['kind', 'fields']),
+    kind: 'action', backing: 'work', confirm: true, action: null, says: 'Creating that once you confirm.', tenants: ['orgiq', 'social', 'access'],
+  },
+  {
+    name: 'update',
+    parameters: obj({
+      ref: str('The row to change: its ref exactly as a result gave it (e.g. "work-item:w-9"), its position in the last result, or "report:program" for the assessment program report. Never a name or a path.', { minLength: 1, maxLength: 200 }),
+      fields: obj({
+        status: str('work-item: open, in_progress, in_review, done or cancelled; finding: dismissed; run: stopped (Assessment) or cancelled (Pipelines); feedback: resolved or dismissed; request: withdrawn; delegation: ended.', { enum: ['open', 'in_progress', 'in_review', 'done', 'cancelled', 'dismissed', 'stopped', 'resolved', 'withdrawn', 'ended'] }),
+        response: str('feedback resolved: the response, as the user said it.', { minLength: 1, maxLength: 2000 }),
+        paused: { type: 'boolean', description: 'bot: true pauses it, false resumes it.' },
+        reviewed: str('job: accept or reject its result.', { enum: ['accept', 'reject'] }),
+        requeued: { type: 'boolean', description: 'job: true runs a failed or cancelled job again.' },
+        member: { type: 'boolean', description: 'channel: true joins it, false leaves it.' },
+        read: { type: 'boolean', description: 'dm: true marks it read.' },
+        publish: { type: 'boolean', description: 'report: true publishes the program report to its readers.' },
+      }),
+    }, ['ref', 'fields']),
+    kind: 'action', backing: 'work', confirm: true, action: null, says: 'Changing that once you confirm.', tenants: ['orgiq', 'social', 'assessment', 'pipelines', 'access'],
   },
   {
     name: 'access_request_status',
