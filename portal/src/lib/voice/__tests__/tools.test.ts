@@ -551,7 +551,7 @@ test('budget: a program owner hears Alpha\'s spend by person, the org\'s pace, a
   const one = await runVoiceTool('budget', { scope: 'initiative', initiative: 'alpha migration' }, c);
   assert.equal(one.outcome, 'done');
   assert.equal(log.at(-1)!.url, '/api/spend/report?groupBy=actor&initiativeId=p1');
-  assert.equal(one.summary, `Alpha migration spent $${FIGURE.toFixed(2)} this month; on pace for $40.50; most: Ada at $9.72`);
+  assert.equal(one.summary, `Alpha migration spent $${FIGURE.toFixed(2)} this month; on pace for $40.50; most: Auth Migration at $9.72`);
   const two = await runVoiceTool('budget', { scope: 'initiative', initiative: 'Alpha' }, c);
   assert.equal(two.output['kind'], 'ambiguous');
   assert.deepEqual((two.output['candidates'] as Array<{ title: string }>).map((x) => x.title), ['Alpha migration', 'Alpha rollout']);
