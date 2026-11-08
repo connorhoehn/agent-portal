@@ -18,7 +18,7 @@ jest.mock('@aws-sdk/client-verifiedpermissions', () => ({
 
 import express from 'express';
 import request from '../../test-support/http.js';
-import { socialRouter } from '../social.js';
+import { socialEmbedRouter, socialRouter } from '../social.js';
 import { requireTenant } from '../../lib/authz.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import type { Session } from '../../lib/session.js';
@@ -32,6 +32,7 @@ function appAs(session: Partial<Session>) {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => { req.session = { sub: 'u-sana', role: 'participant', tenant: 'social', iat: 0, grants: { social: ['participant'] }, ...session } as Session; next(); });
+  app.use('/api/social', socialEmbedRouter);
   app.use('/api/social', requireTenant('social'), socialRouter);
   app.use(errorHandler);
   return app;
@@ -102,13 +103,27 @@ describe('GET /api/social/resolve (mock provider)', () => {
     const hidden = await resolve(sana(), 'channel', 'moderators');
     expect(hidden.status).toBe(404); expect(hidden.body.match).toBeNull();
   });
-  it('a person → the DM channel for the caller, created on the way', async () => {
+  it('a person → the DM channel for the caller, named but not opened: the conversations are unchanged until POST /dms (G14)', async () => {
+    const channel = dmChannelFor(['u-sana', 'u-lena']);
+    const before = { sana: await socialChat().conversations.listForUser('u-sana'), lena: await socialChat().conversations.listForUser('u-lena') };
     const res = await resolve(sana(), 'person', 'Lena');
     expect(res.status).toBe(200);
-    const channel = dmChannelFor(['u-sana', 'u-lena']);
     expect(res.body.match).toEqual({ id: 'u-lena', name: expect.stringMatching(/^Lena/), channelId: channel, channel });
-    const mine = await socialChat().conversations.listForUser('u-sana');
-    expect(mine.some((r) => r.channel === channel)).toBe(true);
+    // A cancelled or ambiguous "message Lena" stops here: nothing was written for either person.
+    expect(await socialChat().conversations.listForUser('u-sana')).toEqual(before.sana);
+    expect(await socialChat().conversations.listForUser('u-lena')).toEqual(before.lena);
+    // The confirm writes it, for both people, the way the DM button does.
+    const opened = await request(sana()).post('/api/social/dms').send({ userId: 'u-lena' });
+    expect(opened.status).toBe(200);
+    expect(opened.body.channel).toBe(channel);
+    expect((await socialChat().conversations.listForUser('u-sana')).some((r) => r.channel === channel)).toBe(true);
+    expect((await socialChat().conversations.listForUser('u-lena')).some((r) => r.channel === channel)).toBe(true);
+  });
+
+  it('no person read writes a conversation, whatever it answers (a match, several, nothing)', async () => {
+    const before = await socialChat().conversations.listForUser('u-sana');
+    for (const name of ['a', 'Lena', 'Mira', 'nobody-at-all']) await resolve(sana(), 'person', name);
+    expect(await socialChat().conversations.listForUser('u-sana')).toEqual(before);
   });
   it('the pair is always the caller and the person; the caller is never a result', async () => {
     const asLena = await resolve(appAs({ sub: 'u-lena', role: 'moderator', grants: { social: ['moderator'] } }), 'person', 'Sana');

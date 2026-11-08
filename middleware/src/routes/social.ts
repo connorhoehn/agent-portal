@@ -352,9 +352,11 @@ socialRouter.get('/dms', socialGate('ViewSocial'), socialHandler('get /dms', asy
 
 /**
  * Where to post for a spoken name (voice navigator, spec §4 `send_chat_message`): a team → its first channel
- * (the General it is created with), a channel → its directory row, a person → the caller's own DM with them,
- * opened the way POST /dms opens it. Tenant-scoped by the sources: the caller's teams, the channels they may see,
- * the social roster. Nothing fits → 404 with `match: null`; several fit → 200, `match: null` and the candidates.
+ * (the General it is created with), a channel → its directory row, a person → the name of the caller's own DM
+ * with them. A read, nothing more (G14): the DM's membership is written only when the user confirms, by
+ * POST /dms, so a cancelled or ambiguous "message Ada" leaves no conversation behind. Tenant-scoped by the
+ * sources: the caller's teams, the channels they may see, the social roster. Nothing fits → 404 with
+ * `match: null`; several fit → 200, `match: null` and the candidates.
  */
 socialRouter.get('/resolve', socialGate('ViewSocial'), socialHandler('get /resolve', asyncHandler(async (req, res) => {
   const kind = String(req.query['kind'] ?? '');
@@ -386,11 +388,6 @@ socialRouter.get('/resolve', socialGate('ViewSocial'), socialHandler('get /resol
       .map((p) => { const channel = dmChannelFor([self, p.userId]); return { id: p.userId, name: p.displayName, channelId: channel, channel }; });
   }
   const { match, candidates } = resolveByName(rows, name);
-  if (match && kind === 'person') {
-    const self = req.session?.sub ?? '';
-    await currentSocialActionSession(sessionOf(req), 'PostMessage');
-    await Promise.all([self, match.id].map((u) => socialChat().conversations.recordJoin(match.channel, u).catch(() => undefined)));
-  }
   const body = { kind, match: match ? { id: match.id, name: match.name, channelId: match.channelId, channel: match.channel } : null, candidates };
   res.status(candidates.length ? 200 : 404).json(body);
 })));

@@ -124,9 +124,11 @@ function VoiceFooterPane() {
   // that grants posting (`requestItemId`), which a refused post offers (G10).
   const onPlane = tenant !== 'social';
   const planeCaps = useFetch<{ actions: Record<string, boolean>; requestItemId?: string }>(onPlane ? '/api/social/plane/capabilities' : null, 60_000, { share: true });
-  const [deliveries] = useState(() => new Map<string, DeliveryRecord>());
-  // The rows this tenant's searches returned, for open_result; a new tenant starts empty (a switch ends the session).
-  const results = useMemo(() => new ResultMemory(), [tenant]);
+  // Delivery ids per (channel, text), for this person only.
+  const deliveries = useMemo(() => new Map<string, DeliveryRecord>(), [session?.sub]);
+  // The rows this tenant's searches returned, for open_result; a new tenant or another person starts empty
+  // (G14: a row one persona's read returned is never opened for another in the same tab).
+  const results = useMemo(() => new ResultMemory(), [tenant, session?.sub]);
 
   // ── the post path: one conversation mounted at a time, a sender per joined channel ──
   const [chatChannel, setChatChannel] = useState<string | null>(null);

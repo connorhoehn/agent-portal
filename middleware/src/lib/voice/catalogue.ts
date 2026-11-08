@@ -375,7 +375,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     }, ['target', 'text']),
     kind: 'people', backing: 'social-activity', confirm: true, action: 'PostMessage', gate: 'PostMessage in the gateway', spend: 'none', idempotent: true,
     says: "I'll post that to #platform once you confirm.", tenants: PEOPLE_TENANTS,
-    mapsTo: 'GET /api/social/resolve?kind=&name= (P6), then useChat(channel).sendMessage(text, { displayName, clientDeliveryId }) over the gateway',
+    mapsTo: 'GET /api/social/resolve?kind=&name= (P6, a read), then on confirm POST /api/social/dms { userId } for a person (G14) and useChat(channel).sendMessage(text, { displayName, clientDeliveryId }) over the gateway',
   },
   {
     name: 'start_call',
@@ -389,7 +389,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     kind: 'people', backing: 'social-activity', confirm: true, action: 'StartCall',
     gate: "StartCall (outside Social, the plane's StartCall); the gateway's lobby guard admits by membership", spend: 'none', idempotent: false,
     says: "I'll start a huddle in #platform once you confirm.", tenants: PEOPLE_TENANTS,
-    mapsTo: "GET /api/social/resolve?kind=&name= (P6), then the shell's call host: useSocialCall().callConversation({ channel, title }) for a team or channel, callPeople([{ userId, displayName }]) for a person",
+    mapsTo: "GET /api/social/resolve?kind=&name= (P6), then the shell's call host: useSocialCall().callConversation({ channel, title }) for a team or channel, callPeople([{ userId, displayName }]) for a person after POST /api/social/dms { userId } on confirm (G14)",
   },
   {
     name: 'set_status',

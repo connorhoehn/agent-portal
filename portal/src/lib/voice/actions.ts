@@ -27,15 +27,18 @@
 //                     /api/devbox/:sid/command, allowlist and metacharacter
 //                     refusal); the stream lands in the compute dock's output
 //                     tab (openOutputTab) and the first lines go back
-//   send_chat_message the recipient resolved by GET …/resolve (P6); several
-//                     matches go back to the model as candidates with no card;
+//   send_chat_message the recipient resolved by GET …/resolve (P6), a read
+//                     only; several matches go back to the model as candidates
+//                     with no card; a person's DM is opened (POST /api/social/dms)
+//                     only on confirm, so a cancel writes nothing (G14);
 //                     a clientDeliveryId minted before the card and reused for
 //                     the same channel and text, so a retry never double-posts
 //   start_call        the team, channel or person resolved by GET …/resolve,
 //                     the card says who is rung; confirm runs the shell call
 //                     host's own start (useSocialCall: callConversation for a
 //                     team or channel, nobody rung; callPeople for a person,
-//                     who is rung), once; refused while a call is live
+//                     who is rung, after POST /api/social/dms opens the DM at
+//                     confirm), once; refused while a call is live
 //   set_status        setStatus + updateMetadata({ statusMessage }) on the
 //                     tenant's own lobby entry (`<tenant>:lobby`) and, with a
 //                     Social grant, the shell's Social entry, which the
@@ -368,7 +371,30 @@ interface ResolveBody {
   candidates: Array<{ id: string; name: string }>;
 }
 
-interface PostPlan { channel: string; name: string; kind: ResolveBody['kind']; text: string; deliveryId: string; key: string }
+interface PostPlan { channel: string; name: string; kind: ResolveBody['kind']; text: string; deliveryId: string; key: string; userId?: string }
+
+/** The DM button's own call (routes/social.ts POST /dms): writes the pair's membership, at confirm only (G14). */
+export const OPEN_DM_URL = '/api/social/dms';
+
+/**
+ * Opens the caller's DM with `userId` now that the user confirmed: the
+ * resolver only named it, so a cancelled or ambiguous card left nothing
+ * behind. Null when it is open and is the channel the card showed; else the
+ * result that ends the call with nothing sent or rung.
+ */
+async function openDm(ctx: ToolContext, userId: string, channel: string, fallback: string): Promise<ToolResult | null> {
+  let res: Response;
+  try {
+    res = await ctx.fetch(OPEN_DM_URL, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId }) });
+  } catch {
+    return failed('Could not reach the server to open the conversation; nothing was sent.');
+  }
+  if (res.status === 401 || res.status === 403) return socialGrantRefusal(ctx, fallback);
+  if (!res.ok) return failed(`The conversation could not be opened (HTTP ${res.status}); nothing was sent.`);
+  const body = await res.json().catch(() => null) as { channel?: unknown } | null;
+  if (body?.channel !== channel) return failed('The conversation that opened is not the one on the card; nothing was sent.');
+  return null;
+}
 
 const deliveryKey = (channel: string, text: string) => `${channel}\u0000${text}`;
 
@@ -416,7 +442,9 @@ const planSendChat: VoiceToolPlanner = async (args, ctx) => {
     return { result: done('posted', { to: label, posted: true, alreadyPosted: true },
       `Already posted to ${label}; nothing was sent again`) };
   }
-  const plan: PostPlan = { channel: body.match.channel, name: body.match.name, kind, text, deliveryId: record.deliveryId, key: deliveryKey(body.match.channel, text) };
+  // A person's DM is only named here; the runner opens it on confirm (G14), so the plan keeps the peer's id.
+  const plan: PostPlan = { channel: body.match.channel, name: body.match.name, kind, text, deliveryId: record.deliveryId, key: deliveryKey(body.match.channel, text),
+    ...(kind === 'person' ? { userId: body.match.id } : {}) };
   // The card shows the channel and the text verbatim (§6): the message is sent exactly as shown.
   return { plan: { title: kind === 'person' ? `Message ${body.match.name}` : `Post to ${label}`, detail: text, data: plan } };
 };
@@ -429,6 +457,11 @@ const runSendChat: VoiceToolRunner = async (_args, ctx, planned) => {
   const label = where(plan.kind, plan.name);
   const record = social.deliveries.get(plan.key) ?? { deliveryId: plan.deliveryId, state: 'pending' as const, at: ctx.now().getTime() };
   if (record.state === 'sent') return done('posted', { to: label, posted: true, alreadyPosted: true }, `Already posted to ${label}`);
+  if (plan.kind === 'person') {
+    if (!plan.userId) return refused('send_chat_message sends to a person only after the user confirms its card.');
+    const blocked = await openDm(ctx, plan.userId, plan.channel, "I can't message people with your role.");
+    if (blocked) return blocked;
+  }
   social.deliveries.set(plan.key, { ...record, state: 'pending' });
   try {
     await social.send({ channel: plan.channel, text: plan.text, deliveryId: plan.deliveryId });
@@ -487,8 +520,15 @@ const runStartCall: VoiceToolRunner = async (_args, ctx, planned) => {
   // Checked again at confirm time: a call may have started while the card was up.
   const gate = callRefusal(ctx);
   if ('result' in gate) return gate.result;
-  if (plan.kind === 'person') gate.calls.callPeople([{ userId: plan.userId!, displayName: plan.name }]);
-  else gate.calls.callConversation({ channel: plan.channel, title: plan.title });
+  if (plan.kind === 'person') {
+    // The DM lobby's membership is written now, not when the name was resolved (G14): the gateway admits the call by it.
+    const blocked = await openDm(ctx, plan.userId!, plan.channel, "I can't start calls with your role.");
+    if (blocked) return blocked;
+    // The DM opened while the card was up: a call may have started meanwhile.
+    const again = callRefusal(ctx);
+    if ('result' in again) return again.result;
+    again.calls.callPeople([{ userId: plan.userId!, displayName: plan.name }]);
+  } else gate.calls.callConversation({ channel: plan.channel, title: plan.title });
   return plan.kind === 'person'
     ? done('call_started', { with: plan.name, rung: true }, `Calling ${plan.name}`)
     : done('call_started', { in: plan.title, rung: false }, `Huddle starting in ${plan.title}`);

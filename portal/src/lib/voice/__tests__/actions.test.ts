@@ -311,11 +311,12 @@ test('start_call: a team resolves through /resolve, the card says nobody is rung
   assert.deepEqual(calls.people, []);
 });
 
-test('start_call: a person is a DM call that rings them, and the card says so', async () => {
-  const { fetch, log } = fakeFetch([route('GET', '/api/social/resolve', 200, ADA)]);
+test('start_call: a person is a DM call that rings them, and the card says so; the DM is opened at confirm (G14)', async () => {
+  const { fetch, log } = fakeFetch([route('GET', '/api/social/resolve', 200, ADA), route('POST', '/api/social/dms', 200, { channel: ADA.match.channel, peers: [] })]);
   const calls = fakeCalls();
   const { card, result } = await confirmAndRun('start_call', { target: { kind: 'dm', name: 'Ada' } }, toolContext({ tenant: 'social', fetch, social: fakeSocial({ api: '/api/social' }), calls }));
   assert.equal(log[0]!.url, '/api/social/resolve?kind=person&name=Ada');
+  assert.deepEqual(log.slice(1).map((r) => [r.method, r.url, r.body]), [['POST', '/api/social/dms', { userId: 'u-ada' }]]);
   assert.deepEqual(card, { title: 'Call Ada Lovelace', detail: 'This rings Ada Lovelace.' });
   assert.equal(result.outcome, 'done');
   assert.deepEqual(calls.people, [[{ userId: 'u-ada', displayName: 'Ada Lovelace' }]]);
@@ -391,10 +392,18 @@ test('send_chat_message: resolves through /resolve, the card shows the channel a
   assert.equal(social.sends.length, 1);
   assert.deepEqual({ ...social.sends[0], deliveryId: typeof social.sends[0]!.deliveryId }, { channel: 'social:team:platform:general', text: "I'm out today", deliveryId: 'string' });
   // In the Social tenant the same read goes to /api/social; a DM resolves a person.
-  const { fetch: f2, log: l2 } = fakeFetch([route('GET', '/api/social/resolve', 200, { kind: 'person', match: { id: 'u2', name: 'Priya', channelId: 'social:dm:u1:u2', channel: 'social:dm:u1:u2' }, candidates: [{ id: 'u2', name: 'Priya' }] })]);
-  const dm = await confirmAndRun('send_chat_message', { target: { kind: 'dm', name: 'Priya' }, text: 'hi' }, toolContext({ tenant: 'social', fetch: f2, social: fakeSocial({ api: '/api/social' }) }));
+  const { fetch: f2, log: l2 } = fakeFetch([
+    route('GET', '/api/social/resolve', 200, { kind: 'person', match: { id: 'u2', name: 'Priya', channelId: 'social:dm:u1:u2', channel: 'social:dm:u1:u2' }, candidates: [{ id: 'u2', name: 'Priya' }] }),
+    route('POST', '/api/social/dms', 200, { channel: 'social:dm:u1:u2', peers: [] }),
+  ]);
+  const priya = fakeSocial({ api: '/api/social' });
+  const dm = await confirmAndRun('send_chat_message', { target: { kind: 'dm', name: 'Priya' }, text: 'hi' }, toolContext({ tenant: 'social', fetch: f2, social: priya }));
   assert.equal(l2[0]!.url, '/api/social/resolve?kind=person&name=Priya');
   assert.deepEqual(dm.card, { title: 'Message Priya', detail: 'hi' });
+  // The DM is opened at confirm (G14), then the message goes.
+  assert.deepEqual(l2.slice(1).map((r) => [r.method, r.url, r.body]), [['POST', '/api/social/dms', { userId: 'u2' }]]);
+  assert.equal(dm.result.outcome, 'done');
+  assert.deepEqual(priya.sends.map((x) => x.channel), ['social:dm:u1:u2']);
 });
 
 test('send_chat_message: a retry reuses the delivery id, and after a delivered post it never sends again', async () => {

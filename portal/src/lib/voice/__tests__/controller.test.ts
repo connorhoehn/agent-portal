@@ -363,3 +363,27 @@ test('a 409 on the user budget shows a card; Confirm mints again with confirmOve
     h.controller.dispose();
   }
 });
+
+test('message a person through the dock: cancel opens no DM and sends nothing; confirm opens the DM, then sends (G14)', async () => {
+  const DM: Call = { name: 'send_chat_message', arguments: { target: { kind: 'dm', name: 'Ada' }, text: 'running late' }, said: 'Tell Ada I am running late.' };
+  const channel = 'social:dm:u-ada:u-me';
+  const resolveAda = route('GET', '/api/social/plane/resolve', 200, { kind: 'person', match: { id: 'u-ada', name: 'Ada Lovelace', channelId: channel, channel }, candidates: [{ id: 'u-ada', name: 'Ada Lovelace' }] });
+  const openDm = route('POST', '/api/social/dms', 200, { channel, peers: [{ userId: 'u-ada', displayName: 'Ada Lovelace' }] });
+  for (const choice of ['cancel', 'confirm'] as const) {
+    const sends: unknown[] = [];
+    const social = { ...socialStub, deliveries: new Map(), send: async (input: unknown) => { sends.push(input); } };
+    const h = harness(await mint(DM), { ctx: { social }, routes: [resolveAda, openDm] });
+    await h.controller.start();
+    await h.clock.advance(1200);
+    assert.equal(h.controller.getSnapshot().phase, 'confirming');
+    assert.equal(h.controller.getSnapshot().pending?.title, 'Message Ada Lovelace');
+    assert.equal(h.log.filter((r) => r.url === '/api/social/dms').length, 0, 'the card wrote nothing');
+    if (choice === 'cancel') h.controller.cancel('click'); else h.controller.confirm('click');
+    await h.clock.advance(2500);
+    const dms = h.log.filter((r) => r.url === '/api/social/dms');
+    assert.deepEqual(dms.map((r) => [r.method, r.body]), choice === 'cancel' ? [] : [['POST', { userId: 'u-ada' }]], choice);
+    assert.equal(sends.length, choice === 'cancel' ? 0 : 1, choice);
+    if (choice === 'confirm') assert.ok(h.log.indexOf(dms[0]!) > h.log.findIndex((r) => r.url.includes('/resolve')));
+    h.controller.dispose();
+  }
+});
