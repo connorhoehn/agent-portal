@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-08T13:43:57.085Z",
-  "serverHandlerSha": "68a8e0ce320ec2f12b753807c0b1ffb43e41d306dac5b85f48c6958a2cf9fd31",
-  "baseUrl": "http://127.0.0.1:3997",
+  "capturedAt": "2026-11-08T20:31:08.682Z",
+  "serverHandlerSha": "b7701c05de7540ab0b602db72b301ec1dffa1f3f0daca5b47773fa0efd8f869a",
+  "baseUrl": "http://127.0.0.1:3998",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -155,7 +155,14 @@
       }
     },
     "DELETE /api/graph/work-items/:id/decisions/:decisionId": {
-      "skipped": "no value found for :decisionId under /api/graph/work-items/wi-dsapi-e1-s1/decisions (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 404,
+      "shape": {
+        "$": "object",
+        "error": "string"
+      },
+      "values": {},
+      "sent": []
     },
     "DELETE /api/graph/work-items/:id/documents/:documentId": {
       "refused": {
@@ -529,7 +536,7 @@
         "blockedReason": "null",
         "childCount": "number",
         "childDoneCount": "number",
-        "completedAt": "null",
+        "completedAt": "string",
         "createdAt": "string",
         "description": "null",
         "estimateForecast": "null",
@@ -548,8 +555,8 @@
         "nextStep": "null",
         "nextStepDetail": "null",
         "parentId": "string",
-        "prStatus": "null",
-        "prUrl": "null",
+        "prStatus": "string",
+        "prUrl": "string",
         "priority": "string",
         "projectId": "string",
         "projectName": "string",
@@ -563,10 +570,10 @@
       },
       "values": {
         "key": [
-          "ORG-DSAPI-2"
+          "ORG-LLM-10"
         ],
         "status": [
-          "in_progress"
+          "done"
         ],
         "type": [
           "story"
@@ -4781,7 +4788,25 @@
       }
     },
     "PUT /api/graph/work-items/:id/decisions/:decisionId": {
-      "skipped": "no value found for :decisionId under /api/graph/work-items/wi-dsapi-e1-s1/decisions (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "escalatedAt": "null",
+        "id": "string",
+        "requiredRole": "null",
+        "status": "string",
+        "summary": "string",
+        "topic": "string",
+        "workItemId": "string",
+        "workItemTitle": "string"
+      },
+      "values": {
+        "status": [
+          "resolved"
+        ]
+      },
+      "sent": []
     },
     "PUT /api/graph/work-items/:id/documents/:documentId": {
       "refused": {

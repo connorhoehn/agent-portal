@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-08T13:43:51.436Z",
-  "serverHandlerSha": "68a8e0ce320ec2f12b753807c0b1ffb43e41d306dac5b85f48c6958a2cf9fd31",
-  "baseUrl": "http://127.0.0.1:3997",
+  "capturedAt": "2026-11-08T20:31:03.149Z",
+  "serverHandlerSha": "b7701c05de7540ab0b602db72b301ec1dffa1f3f0daca5b47773fa0efd8f869a",
+  "baseUrl": "http://127.0.0.1:3998",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -3007,6 +3007,7 @@
         "boxes[].status": [
           "idle",
           "running",
+          "stopped",
           "waiting"
         ]
       }
@@ -3893,11 +3894,15 @@
         "$[].key": [
           "ORG-AUTH-1",
           "ORG-AUTH-2",
+          "ORG-AUTH-3",
           "ORG-AUTH-5",
+          "ORG-AUTH-7",
           "ORG-AUTH-8",
+          "ORG-AUTH-9",
           "ORG-COST-2",
           "ORG-COST-3",
           "ORG-COST-6",
+          "ORG-DS-1",
           "ORG-DS-3",
           "ORG-DS-4",
           "ORG-DSAPI-1",
@@ -3905,20 +3910,15 @@
           "ORG-DSAPI-4",
           "ORG-FS-1",
           "ORG-FS-3",
+          "ORG-FS-4",
           "ORG-INF-1",
-          "ORG-INF-2",
-          "ORG-INF-3",
           "ORG-LAKE-2",
           "ORG-LAKE-3",
           "ORG-LAKE-4",
           "ORG-LLM-1",
           "ORG-LLM-10",
-          "ORG-LLM-2",
           "ORG-LLM-3",
           "ORG-LLM-4",
-          "ORG-LLM-5",
-          "ORG-LLM-7",
-          "ORG-LLM-9",
           "ORG-MOB-2",
           "ORG-MOB-3",
           "ORG-MOB-4",
@@ -3935,6 +3935,7 @@
           "ORG-RTA-2",
           "ORG-RTA-3",
           "ORG-RTA-5",
+          "ORG-SOC2-1",
           "ORG-SOC2-2",
           "ORG-SOC2-3",
           "ORG-SOC2-4",
@@ -3981,7 +3982,15 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "criteria": "array"
+        "criteria": "array",
+        "criteria[]": "object",
+        "criteria[].createdAt": "string",
+        "criteria[].done": "boolean",
+        "criteria[].id": "string",
+        "criteria[].position": "number",
+        "criteria[].text": "string",
+        "criteria[].updatedAt": "string",
+        "criteria[].workItemId": "string"
       },
       "values": {}
     },
@@ -10511,14 +10520,35 @@
       },
       "values": {}
     },
+    "GET /api/work/sweeps/jobs/:id": {
+      "skipped": "no value found for :id under /api/work/sweeps/jobs (orgiq/admin); no value found for :id under /api/work/sweeps/jobs (assessment/admin); no value found for :id under /api/work/sweeps/jobs (anonymous)"
+    },
     "GET /api/work/sweeps/runs": {
       "persona": "orgiq/admin",
       "status": 200,
       "shape": {
         "$": "object",
-        "runs": "array"
+        "runs": "array",
+        "runs[]": "object",
+        "runs[].botId": "null",
+        "runs[].durationMs": "number",
+        "runs[].error": "null",
+        "runs[].findings": "number",
+        "runs[].finishedAt": "string",
+        "runs[].id": "string",
+        "runs[].startedAt": "string",
+        "runs[].status": "string",
+        "runs[].sweep": "string",
+        "runs[].tenant": "string"
       },
-      "values": {}
+      "values": {
+        "runs[].status": [
+          "ok"
+        ],
+        "runs[].tenant": [
+          "orgiq"
+        ]
+      }
     },
     "GET /health": {
       "persona": "orgiq/admin",
@@ -10967,6 +10997,7 @@
         "running",
         "staged",
         "stale",
+        "stopped",
         "submitted",
         "superseded",
         "unproven",

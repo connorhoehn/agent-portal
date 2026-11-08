@@ -3628,22 +3628,22 @@
     {
       "method": "DELETE",
       "path": "/api/social/bindings",
-      "source": "src/routes/social.ts:732"
+      "source": "src/routes/social.ts:729"
     },
     {
       "method": "GET",
       "path": "/api/social/bindings",
-      "source": "src/routes/social.ts:709"
+      "source": "src/routes/social.ts:706"
     },
     {
       "method": "PUT",
       "path": "/api/social/bindings",
-      "source": "src/routes/social.ts:714"
+      "source": "src/routes/social.ts:711"
     },
     {
       "method": "GET",
       "path": "/api/social/calls",
-      "source": "src/routes/social.ts:546"
+      "source": "src/routes/social.ts:543"
     },
     {
       "method": "GET",
@@ -3673,7 +3673,7 @@
     {
       "method": "GET",
       "path": "/api/social/conversations/:id/shared-work",
-      "source": "src/routes/social.ts:559"
+      "source": "src/routes/social.ts:556"
     },
     {
       "method": "GET",
@@ -3683,7 +3683,7 @@
     {
       "method": "POST",
       "path": "/api/social/dms",
-      "source": "src/routes/social.ts:742"
+      "source": "src/routes/social.ts:739"
     },
     {
       "method": "GET",
@@ -3693,232 +3693,232 @@
     {
       "method": "POST",
       "path": "/api/social/dms/read",
-      "source": "src/routes/social.ts:405"
+      "source": "src/routes/social.ts:402"
     },
     {
       "method": "GET",
       "path": "/api/social/embedded",
-      "source": "src/routes/social.ts:597"
+      "source": "src/routes/social.ts:594"
     },
     {
       "method": "GET",
       "path": "/api/social/people",
-      "source": "src/routes/social.ts:424"
+      "source": "src/routes/social.ts:421"
     },
     {
       "method": "GET",
       "path": "/api/social/plane/active",
-      "source": "src/routes/social-plane.ts:106"
+      "source": "src/routes/social-plane.ts:141"
     },
     {
       "method": "GET",
       "path": "/api/social/plane/calls",
-      "source": "src/routes/social-plane.ts:91"
+      "source": "src/routes/social-plane.ts:123"
     },
     {
       "method": "GET",
       "path": "/api/social/plane/capabilities",
-      "source": "src/routes/social-plane.ts:58"
-    },
-    {
-      "method": "GET",
-      "path": "/api/social/plane/channels",
-      "source": "src/routes/social-plane.ts:68"
-    },
-    {
-      "method": "POST",
-      "path": "/api/social/plane/channels",
-      "source": "src/routes/social-plane.ts:69"
-    },
-    {
-      "method": "POST",
-      "path": "/api/social/plane/channels/:slug/join",
-      "source": "src/routes/social-plane.ts:70"
-    },
-    {
-      "method": "POST",
-      "path": "/api/social/plane/channels/:slug/leave",
-      "source": "src/routes/social-plane.ts:71"
-    },
-    {
-      "method": "GET",
-      "path": "/api/social/plane/conversations/:id/shared-work",
-      "source": "src/routes/social-plane.ts:92"
-    },
-    {
-      "method": "GET",
-      "path": "/api/social/plane/dms",
-      "source": "src/routes/social-plane.ts:72"
-    },
-    {
-      "method": "GET",
-      "path": "/api/social/plane/people",
-      "source": "src/routes/social-plane.ts:73"
-    },
-    {
-      "method": "GET",
-      "path": "/api/social/plane/people/:userId/shared-work",
-      "source": "src/routes/social-plane.ts:117"
-    },
-    {
-      "method": "GET",
-      "path": "/api/social/plane/recordings",
-      "source": "src/routes/social-plane.ts:86"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/social/plane/recordings/:recordingId",
-      "source": "src/routes/social-plane.ts:90"
-    },
-    {
-      "method": "GET",
-      "path": "/api/social/plane/recordings/:recordingId/playback",
-      "source": "src/routes/social-plane.ts:87"
-    },
-    {
-      "method": "POST",
-      "path": "/api/social/plane/recordings/:recordingId/share",
-      "source": "src/routes/social-plane.ts:89"
-    },
-    {
-      "method": "GET",
-      "path": "/api/social/plane/recordings/:recordingId/transcript",
-      "source": "src/routes/social-plane.ts:88"
-    },
-    {
-      "method": "GET",
-      "path": "/api/social/plane/resolve",
-      "source": "src/routes/social-plane.ts:74"
-    },
-    {
-      "method": "GET",
-      "path": "/api/social/plane/rooms",
-      "source": "src/routes/social-plane.ts:75"
-    },
-    {
-      "method": "POST",
-      "path": "/api/social/plane/rooms",
-      "source": "src/routes/social-plane.ts:76"
-    },
-    {
-      "method": "GET",
-      "path": "/api/social/plane/rooms/:slug",
-      "source": "src/routes/social-plane.ts:77"
-    },
-    {
-      "method": "PATCH",
-      "path": "/api/social/plane/rooms/:slug",
-      "source": "src/routes/social-plane.ts:79"
-    },
-    {
-      "method": "GET",
-      "path": "/api/social/plane/rooms/:slug/activity",
-      "source": "src/routes/social-plane.ts:78"
-    },
-    {
-      "method": "GET",
-      "path": "/api/social/plane/teams",
-      "source": "src/routes/social-plane.ts:80"
-    },
-    {
-      "method": "POST",
-      "path": "/api/social/plane/teams",
-      "source": "src/routes/social-plane.ts:81"
-    },
-    {
-      "method": "GET",
-      "path": "/api/social/plane/teams/:teamId",
-      "source": "src/routes/social-plane.ts:82"
-    },
-    {
-      "method": "PATCH",
-      "path": "/api/social/plane/teams/:teamId/me",
-      "source": "src/routes/social-plane.ts:83"
-    },
-    {
-      "method": "POST",
-      "path": "/api/social/plane/teams/:teamId/members",
-      "source": "src/routes/social-plane.ts:84"
-    },
-    {
-      "method": "DELETE",
-      "path": "/api/social/plane/teams/:teamId/members/:userId",
       "source": "src/routes/social-plane.ts:85"
     },
     {
       "method": "GET",
+      "path": "/api/social/plane/channels",
+      "source": "src/routes/social-plane.ts:100"
+    },
+    {
+      "method": "POST",
+      "path": "/api/social/plane/channels",
+      "source": "src/routes/social-plane.ts:101"
+    },
+    {
+      "method": "POST",
+      "path": "/api/social/plane/channels/:slug/join",
+      "source": "src/routes/social-plane.ts:102"
+    },
+    {
+      "method": "POST",
+      "path": "/api/social/plane/channels/:slug/leave",
+      "source": "src/routes/social-plane.ts:103"
+    },
+    {
+      "method": "GET",
+      "path": "/api/social/plane/conversations/:id/shared-work",
+      "source": "src/routes/social-plane.ts:124"
+    },
+    {
+      "method": "GET",
+      "path": "/api/social/plane/dms",
+      "source": "src/routes/social-plane.ts:104"
+    },
+    {
+      "method": "GET",
+      "path": "/api/social/plane/people",
+      "source": "src/routes/social-plane.ts:105"
+    },
+    {
+      "method": "GET",
+      "path": "/api/social/plane/people/:userId/shared-work",
+      "source": "src/routes/social-plane.ts:152"
+    },
+    {
+      "method": "GET",
+      "path": "/api/social/plane/recordings",
+      "source": "src/routes/social-plane.ts:118"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/social/plane/recordings/:recordingId",
+      "source": "src/routes/social-plane.ts:122"
+    },
+    {
+      "method": "GET",
+      "path": "/api/social/plane/recordings/:recordingId/playback",
+      "source": "src/routes/social-plane.ts:119"
+    },
+    {
+      "method": "POST",
+      "path": "/api/social/plane/recordings/:recordingId/share",
+      "source": "src/routes/social-plane.ts:121"
+    },
+    {
+      "method": "GET",
+      "path": "/api/social/plane/recordings/:recordingId/transcript",
+      "source": "src/routes/social-plane.ts:120"
+    },
+    {
+      "method": "GET",
+      "path": "/api/social/plane/resolve",
+      "source": "src/routes/social-plane.ts:106"
+    },
+    {
+      "method": "GET",
+      "path": "/api/social/plane/rooms",
+      "source": "src/routes/social-plane.ts:107"
+    },
+    {
+      "method": "POST",
+      "path": "/api/social/plane/rooms",
+      "source": "src/routes/social-plane.ts:108"
+    },
+    {
+      "method": "GET",
+      "path": "/api/social/plane/rooms/:slug",
+      "source": "src/routes/social-plane.ts:109"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/social/plane/rooms/:slug",
+      "source": "src/routes/social-plane.ts:111"
+    },
+    {
+      "method": "GET",
+      "path": "/api/social/plane/rooms/:slug/activity",
+      "source": "src/routes/social-plane.ts:110"
+    },
+    {
+      "method": "GET",
+      "path": "/api/social/plane/teams",
+      "source": "src/routes/social-plane.ts:112"
+    },
+    {
+      "method": "POST",
+      "path": "/api/social/plane/teams",
+      "source": "src/routes/social-plane.ts:113"
+    },
+    {
+      "method": "GET",
+      "path": "/api/social/plane/teams/:teamId",
+      "source": "src/routes/social-plane.ts:114"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/social/plane/teams/:teamId/me",
+      "source": "src/routes/social-plane.ts:115"
+    },
+    {
+      "method": "POST",
+      "path": "/api/social/plane/teams/:teamId/members",
+      "source": "src/routes/social-plane.ts:116"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/social/plane/teams/:teamId/members/:userId",
+      "source": "src/routes/social-plane.ts:117"
+    },
+    {
+      "method": "GET",
       "path": "/api/social/plane/work-graph/conversations/:id/graph",
-      "source": "src/routes/social-plane.ts:179"
+      "source": "src/routes/social-plane.ts:214"
     },
     {
       "method": "POST",
       "path": "/api/social/plane/work-sharing",
-      "source": "src/routes/social-plane.ts:142"
+      "source": "src/routes/social-plane.ts:177"
     },
     {
       "method": "POST",
       "path": "/api/social/plane/work-sharing/:id/transition",
-      "source": "src/routes/social-plane.ts:154"
+      "source": "src/routes/social-plane.ts:189"
     },
     {
       "method": "GET",
       "path": "/api/social/recordings",
-      "source": "src/routes/social.ts:522"
+      "source": "src/routes/social.ts:519"
     },
     {
       "method": "DELETE",
       "path": "/api/social/recordings/:recordingId",
-      "source": "src/routes/social.ts:540"
+      "source": "src/routes/social.ts:537"
     },
     {
       "method": "GET",
       "path": "/api/social/recordings/:recordingId/playback",
-      "source": "src/routes/social.ts:527"
+      "source": "src/routes/social.ts:524"
     },
     {
       "method": "POST",
       "path": "/api/social/recordings/:recordingId/share",
-      "source": "src/routes/social.ts:536"
+      "source": "src/routes/social.ts:533"
     },
     {
       "method": "GET",
       "path": "/api/social/recordings/:recordingId/transcript",
-      "source": "src/routes/social.ts:531"
+      "source": "src/routes/social.ts:528"
     },
     {
       "method": "GET",
       "path": "/api/social/resolve",
-      "source": "src/routes/social.ts:359"
+      "source": "src/routes/social.ts:361"
     },
     {
       "method": "GET",
       "path": "/api/social/rooms",
-      "source": "src/routes/social.ts:444"
+      "source": "src/routes/social.ts:441"
     },
     {
       "method": "POST",
       "path": "/api/social/rooms",
-      "source": "src/routes/social.ts:450"
+      "source": "src/routes/social.ts:447"
     },
     {
       "method": "GET",
       "path": "/api/social/rooms/:slug",
-      "source": "src/routes/social.ts:457"
+      "source": "src/routes/social.ts:454"
     },
     {
       "method": "PATCH",
       "path": "/api/social/rooms/:slug",
-      "source": "src/routes/social.ts:465"
+      "source": "src/routes/social.ts:462"
     },
     {
       "method": "GET",
       "path": "/api/social/rooms/:slug/activity",
-      "source": "src/routes/social.ts:461"
+      "source": "src/routes/social.ts:458"
     },
     {
       "method": "GET",
       "path": "/api/social/share-destinations",
-      "source": "src/routes/social.ts:643"
+      "source": "src/routes/social.ts:640"
     },
     {
       "method": "GET",
@@ -3928,32 +3928,32 @@
     {
       "method": "GET",
       "path": "/api/social/teams",
-      "source": "src/routes/social.ts:470"
+      "source": "src/routes/social.ts:467"
     },
     {
       "method": "POST",
       "path": "/api/social/teams",
-      "source": "src/routes/social.ts:475"
+      "source": "src/routes/social.ts:472"
     },
     {
       "method": "GET",
       "path": "/api/social/teams/:teamId",
-      "source": "src/routes/social.ts:485"
+      "source": "src/routes/social.ts:482"
     },
     {
       "method": "PATCH",
       "path": "/api/social/teams/:teamId/me",
-      "source": "src/routes/social.ts:495"
+      "source": "src/routes/social.ts:492"
     },
     {
       "method": "POST",
       "path": "/api/social/teams/:teamId/members",
-      "source": "src/routes/social.ts:506"
+      "source": "src/routes/social.ts:503"
     },
     {
       "method": "DELETE",
       "path": "/api/social/teams/:teamId/members/:userId",
-      "source": "src/routes/social.ts:516"
+      "source": "src/routes/social.ts:513"
     },
     {
       "method": "GET",
@@ -4028,17 +4028,17 @@
     {
       "method": "POST",
       "path": "/api/voice/sessions",
-      "source": "src/routes/voice.ts:88"
+      "source": "src/routes/voice.ts:89"
     },
     {
       "method": "POST",
       "path": "/api/voice/sessions/:id/close",
-      "source": "src/routes/voice.ts:265"
+      "source": "src/routes/voice.ts:267"
     },
     {
       "method": "POST",
       "path": "/api/voice/sessions/:id/events",
-      "source": "src/routes/voice.ts:233"
+      "source": "src/routes/voice.ts:235"
     },
     {
       "method": "GET",
@@ -4063,112 +4063,117 @@
     {
       "method": "GET",
       "path": "/api/work/ask-suggestions",
-      "source": "src/routes/work.ts:152"
+      "source": "src/routes/work.ts:153"
     },
     {
       "method": "POST",
       "path": "/api/work/dispatch",
-      "source": "src/routes/work.ts:373"
+      "source": "src/routes/work.ts:374"
     },
     {
       "method": "GET",
       "path": "/api/work/events",
-      "source": "src/routes/work.ts:379"
+      "source": "src/routes/work.ts:380"
     },
     {
       "method": "GET",
       "path": "/api/work/findings",
-      "source": "src/routes/work.ts:388"
+      "source": "src/routes/work.ts:389"
     },
     {
       "method": "POST",
       "path": "/api/work/findings/:id/analyze",
-      "source": "src/routes/work.ts:509"
+      "source": "src/routes/work.ts:530"
     },
     {
       "method": "POST",
       "path": "/api/work/findings/:id/dismiss",
-      "source": "src/routes/work.ts:547"
+      "source": "src/routes/work.ts:568"
     },
     {
       "method": "POST",
       "path": "/api/work/findings/:id/promote",
-      "source": "src/routes/work.ts:467"
+      "source": "src/routes/work.ts:488"
     },
     {
       "method": "POST",
       "path": "/api/work/findings/analyze-batch",
-      "source": "src/routes/work.ts:537"
+      "source": "src/routes/work.ts:558"
     },
     {
       "method": "GET",
       "path": "/api/work/findings/stats",
-      "source": "src/routes/work.ts:543"
+      "source": "src/routes/work.ts:564"
     },
     {
       "method": "GET",
       "path": "/api/work/jobs",
-      "source": "src/routes/work.ts:192"
+      "source": "src/routes/work.ts:193"
     },
     {
       "method": "POST",
       "path": "/api/work/jobs",
-      "source": "src/routes/work.ts:235"
+      "source": "src/routes/work.ts:236"
     },
     {
       "method": "DELETE",
       "path": "/api/work/jobs/:id",
-      "source": "src/routes/work.ts:362"
+      "source": "src/routes/work.ts:363"
     },
     {
       "method": "GET",
       "path": "/api/work/jobs/:id",
-      "source": "src/routes/work.ts:199"
+      "source": "src/routes/work.ts:200"
     },
     {
       "method": "POST",
       "path": "/api/work/jobs/:id/requeue",
-      "source": "src/routes/work.ts:346"
+      "source": "src/routes/work.ts:347"
     },
     {
       "method": "POST",
       "path": "/api/work/jobs/:id/review",
-      "source": "src/routes/work.ts:328"
+      "source": "src/routes/work.ts:329"
     },
     {
       "method": "GET",
       "path": "/api/work/proposals",
-      "source": "src/routes/work.ts:560"
+      "source": "src/routes/work.ts:581"
     },
     {
       "method": "POST",
       "path": "/api/work/proposals",
-      "source": "src/routes/work.ts:567"
+      "source": "src/routes/work.ts:588"
     },
     {
       "method": "POST",
       "path": "/api/work/proposals/:id/decide",
-      "source": "src/routes/work.ts:588"
+      "source": "src/routes/work.ts:609"
     },
     {
       "method": "GET",
       "path": "/api/work/suggestions",
-      "source": "src/routes/work.ts:141"
+      "source": "src/routes/work.ts:142"
     },
     {
       "method": "GET",
       "path": "/api/work/summary",
-      "source": "src/routes/work.ts:56"
+      "source": "src/routes/work.ts:57"
+    },
+    {
+      "method": "GET",
+      "path": "/api/work/sweeps/jobs/:id",
+      "source": "src/routes/work.ts:432"
     },
     {
       "method": "POST",
       "path": "/api/work/sweeps/run",
-      "source": "src/routes/work.ts:404"
+      "source": "src/routes/work.ts:405"
     },
     {
       "method": "GET",
       "path": "/api/work/sweeps/runs",
-      "source": "src/routes/work.ts:426"
+      "source": "src/routes/work.ts:447"
     },
     {
       "method": "GET",
