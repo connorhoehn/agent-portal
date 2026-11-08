@@ -205,7 +205,7 @@ services:
       - AWS_ACCESS_KEY_ID=localbootstrap
       - AWS_SECRET_ACCESS_KEY=localbootstrap
       - PLATFORM_API_URL=http://social-platform-api:3001
-      - SERVICE_AUTH_SECRET=${SOCIAL_SERVICE_AUTH_SECRET:-local-dev-service-auth-secret}
+      - SERVICE_AUTH_SECRET=${SOCIAL_SERVICE_AUTH_SECRET:-local-dev-service-auth-secret-0123456789}
       - SERVICE_AUTH_SERVICE_ID=realtime-examples
       - HOME=/home/websocket
       # Assessment document grants (docs/assessment-documents-parity-plan.md,
@@ -285,7 +285,7 @@ services:
       - AWS_REGION=us-east-1
       - AWS_ACCESS_KEY_ID=localbootstrap
       - AWS_SECRET_ACCESS_KEY=localbootstrap
-      - SERVICE_AUTH_SECRET=${SOCIAL_SERVICE_AUTH_SECRET:-local-dev-service-auth-secret}
+      - SERVICE_AUTH_SECRET=${SOCIAL_SERVICE_AUTH_SECRET:-local-dev-service-auth-secret-0123456789}
       - SERVICE_AUTH_SERVICE_ID=platform-api
       - GATEWAY_WS_URL=ws://social-gateway:8080
       - NODE_PATH=/app/node_modules
