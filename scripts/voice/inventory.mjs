@@ -28,10 +28,19 @@
 //                                                         flags and the routes each one maps to
 //
 // Every row carries the decision the catalogue v2 (docs/voice-tool-inventory.md
-// §3) takes for it: which v2 tool reaches it, whether that tool confirms, or
-// `never` (never by voice). V2_RULES below is that decision table; a write
-// route no rule matches is the check's failure, which is the point: a route
-// added tomorrow needs a decision before the inventory is green again.
+// §3) takes for it (V2-15):
+//   read / confirm / open   a catalogue tool's mapsTo names the route: derived,
+//                           never a regex. A GET is a read; a write is confirm
+//                           when the tool confirms, open when the call that
+//                           reaches it is a no-card one (computer open-shell),
+//                           read when the tool never confirms (a preview)
+//   never / n/a             V2_RULES: the never list and the routes not for
+//                           people (internal, dev, streams)
+//   not-yet                 V2_RULES too: §3 plans a v2 tool for it, but no
+//                           tool's mapsTo reaches it today (the backlog)
+// A route a person can reach with none of these is undecided, which fails the
+// check: a write added tomorrow needs a decision before the inventory is green
+// again. So does a route a tool reaches that the never list also names.
 
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname, join, basename } from 'node:path';
@@ -362,6 +371,8 @@ function parsePages() {
 
 function parseCatalogue(manifest) {
   const raw = read(PATHS.catalogue);
+  // `const NAME = ['a', 'b'] as const`: the tenant lists a tool may name (PEOPLE_TENANTS, ACTIVITY_TENANTS…).
+  const arrays = Object.fromEntries([...raw.matchAll(/\bconst (\w+) = \[([^\]]*)\] as const/g)].map((m) => [m[1], strLits(m[2])]));
   const start = raw.indexOf('export const VOICE_TOOLS');
   const end = raw.indexOf('\n];', start);
   const body = raw.slice(start, end);
@@ -369,9 +380,15 @@ function parseCatalogue(manifest) {
   const tools = heads.map((h, i) => {
     const block = body.slice(h.index, heads[i + 1]?.index ?? body.length);
     const mapsTo = /mapsTo:\s*(["'])([\s\S]*?)\1\s*,?\s*\n/.exec(block)?.[2] ?? '';
-    const tenantsExpr = /tenants:\s*([^,\n]+)/.exec(block)?.[1]?.trim() ?? '';
-    const tenants = tenantsExpr === 'VOICE_TENANTS' ? manifest.tenants.map((t) => t.id) : tenantsExpr === 'PEOPLE_TENANTS' ? ['orgiq', 'social'] : strLits(tenantsExpr);
-    const refs = routeRefs(mapsTo, manifest);
+    // A literal list (`['orgiq', 'social']`) whole, else the constant's name.
+    const tenantsExpr = /tenants:\s*(\[[^\]]*\]|[^,\n]+)/.exec(block)?.[1]?.trim() ?? '';
+    const tenants = tenantsExpr === 'VOICE_TENANTS' ? manifest.tenants.map((t) => t.id) : arrays[tenantsExpr] ?? strLits(tenantsExpr);
+    // The argument values that skip the card (computer's open-shell): a mapsTo segment so labelled reaches its routes with no card.
+    const noConfirm = strLits(/noConfirm:\s*\{\s*\w+:\s*\[([^\]]*)\]/.exec(block)?.[1] ?? '');
+    const refs = mapsTo.split(/;\s+/).flatMap((seg) => {
+      const label = /^\s*([\w-]+):\s/.exec(seg)?.[1] ?? null;
+      return routeRefs(seg, manifest).map((r) => (label && noConfirm.includes(label) ? { ...r, noCard: true } : r));
+    });
     return {
       name: h[1], kind: /\bkind:\s*'(\w+)'/.exec(block)?.[1] ?? null, backing: /\bbacking:\s*'([\w-]+)'/.exec(block)?.[1] ?? null,
       confirm: /\bconfirm:\s*(true|false)/.exec(block)?.[1] === 'true', action: /\baction:\s*(?:'(\w+)'|null)/.exec(block)?.[1] ?? null,
@@ -427,6 +444,12 @@ export const V2_TOOLS = [
   { name: 'update', confirm: true, backing: 'work', description: 'A small state change on a record the caller may edit: work item fields, pin or unpin, join or leave a channel, mark a DM read, withdraw a request, dismiss or resolve, pause or resume a bot, cancel a run, mark a job reviewed or requeued, publish a report, team membership of self, sprint items.' },
 ];
 
+/**
+ * The never list, the routes not for people (n/a), and §3's plan for the routes no tool reaches yet (not-yet, with
+ * the v2 tool that would): [regex over `METHOD /path`, decision, tool | null, note]. First match wins, and a route a
+ * tool's mapsTo names never reaches this table: read, confirm and open are not decided here (V2-15). The not-yet
+ * rows shrink as kinds and actions are built.
+ */
 export const V2_RULES = [
   // Not for people
   [/^\w+ \/internal\//, 'n/a', null, 'service-auth plane'],
@@ -463,126 +486,142 @@ export const V2_RULES = [
   [/^\w+ \/api\/local-compute\/(announce|heartbeat|register|claim|log|sessions\/|jobs\/:[^/]+\/(start|heartbeat|skills|complete|log)$)/, 'n/a', null, 'node-token machine routes'],
   [/^\w+ \/api\/local-compute\/pair\//, 'never', null, 'pairing a machine is a click with a code'],
   [/^(PATCH|DELETE) \/api\/local-compute\/nodes\/:[^/]+$/, 'never', null, 'rename or unpair a machine'],
-  [/^POST \/api\/local-compute\/nodes\/:[^/]+\/work$/, 'confirm', 'computer', 'hand-work to a paired machine (ConnectLocalCompute)'],
-  [/^POST \/api\/devbox\/boxes$/, 'confirm', 'computer', 'start (as start_computer)'],
-  [/^DELETE \/api\/devbox\/boxes\/:[^/]+$/, 'confirm', 'computer', 'stop the caller\'s own computer; stops billing'],
-  [/^POST \/api\/devbox\/:[^/]+\/command$/, 'confirm', 'computer', 'run, safe-mode phrase only (as run_command)'],
-  [/^POST \/api\/devbox\/:[^/]+\/shell-url$/, 'open', 'computer', 'open-shell (the PTY tab)'],
+  [/^POST \/api\/local-compute\/nodes\/:[^/]+\/work$/, 'not-yet', 'computer', 'hand-work to a paired machine (ConnectLocalCompute)'],
+  [/^POST \/api\/devbox\/boxes$/, 'not-yet', 'computer', 'start (as start_computer)'],
+  [/^DELETE \/api\/devbox\/boxes\/:[^/]+$/, 'not-yet', 'computer', 'stop the caller\'s own computer; stops billing'],
+  [/^POST \/api\/devbox\/:[^/]+\/command$/, 'not-yet', 'computer', 'run, safe-mode phrase only (as run_command)'],
+  [/^POST \/api\/devbox\/:[^/]+\/shell-url$/, 'not-yet', 'computer', 'open-shell (the PTY tab)'],
   [/^(POST|PATCH|DELETE) \/api\/devbox\//, 'never', null, 'raw sessions, free-text tasks, box edits'],
   [/^(POST|PATCH|DELETE) \/api\/(environments|agent-projects|gateway)/, 'never', null, 'environments, codebases and the retired gateway bridge'],
   [/^GET \/api\/environments\/:[^/]+\/(enter|access)$/, 'never', null, 'EnterEnvironment reaches a deployed environment'],
   [/^(POST|PUT|PATCH|DELETE) \/api\/sdlc\/(policies|policy-sets|policy-proposals)/, 'never', null, 'ManageSdlcPolicies'],
-  [/^POST \/api\/sdlc\/changes\/:[^/]+\/(decide|deliver)$/, 'confirm', 'decide', 'DecideAgentChange / DeliverAgentChange'],
-  [/^POST \/api\/sdlc\/changes\/:[^/]+\/(rereview|address)$/, 'confirm', 'queue_work', 'RunDevboxTask: re-review or address a change'],
+  [/^POST \/api\/sdlc\/changes\/:[^/]+\/(decide|deliver)$/, 'not-yet', 'decide', 'DecideAgentChange / DeliverAgentChange'],
+  [/^POST \/api\/sdlc\/changes\/:[^/]+\/(rereview|address)$/, 'not-yet', 'queue_work', 'RunDevboxTask: re-review or address a change'],
   // Work and bots
-  [/^POST \/api\/work\/sweeps\/run$/, 'confirm', 'queue_work', 'sweep (G19)'],
-  [/^POST \/api\/work\/jobs$/, 'confirm', 'queue_work', 'a work job for the fleet or a paired machine (G19)'],
-  [/^POST \/api\/work\/jobs\/:[^/]+\/(review|requeue)$/, 'confirm', 'update', 'ManageDevbox'],
+  [/^POST \/api\/work\/sweeps\/run$/, 'not-yet', 'queue_work', 'sweep (G19)'],
+  [/^POST \/api\/work\/jobs$/, 'not-yet', 'queue_work', 'a work job for the fleet or a paired machine (G19)'],
+  [/^POST \/api\/work\/jobs\/:[^/]+\/(review|requeue)$/, 'not-yet', 'update', 'ManageDevbox'],
   [/^DELETE \/api\/work\/jobs\/:[^/]+$/, 'never', null, 'destructive'],
   [/^POST \/api\/work\/dispatch$/, 'never', null, 'drains the queue; a click'],
-  [/^POST \/api\/work\/findings\/:[^/]+\/(promote|analyze)$/, 'confirm', 'queue_work', 'promote a finding to a job, analyse it'],
+  [/^POST \/api\/work\/findings\/:[^/]+\/(promote|analyze)$/, 'not-yet', 'queue_work', 'promote a finding to a job, analyse it'],
   [/^POST \/api\/work\/findings\/analyze-batch$/, 'never', null, 'batch spend'],
-  [/^POST \/api\/work\/findings\/:[^/]+\/dismiss$/, 'confirm', 'update', 'ManageDevbox'],
+  [/^POST \/api\/work\/findings\/:[^/]+\/dismiss$/, 'not-yet', 'update', 'ManageDevbox'],
   [/^POST \/api\/work\/proposals$/, 'never', null, 'agent-proposed graph writes are the agents\' route'],
-  [/^POST \/api\/work\/proposals\/:[^/]+\/decide$/, 'confirm', 'decide', 'ManageDevbox'],
-  [/^POST \/api\/bots\/dispatch-work$/, 'confirm', 'queue_work', 'DispatchAgentRun with the route\'s own estimate and confirm flags'],
-  [/^POST \/api\/bots\/:[^/]+\/run$/, 'confirm', 'queue_work', 'bot run (G19)'],
-  [/^POST \/api\/bots\/:[^/]+\/(pause|resume)$/, 'confirm', 'update', 'ManageBots'],
+  [/^POST \/api\/work\/proposals\/:[^/]+\/decide$/, 'not-yet', 'decide', 'ManageDevbox'],
+  [/^POST \/api\/bots\/dispatch-work$/, 'not-yet', 'queue_work', 'DispatchAgentRun with the route\'s own estimate and confirm flags'],
+  [/^POST \/api\/bots\/:[^/]+\/run$/, 'not-yet', 'queue_work', 'bot run (G19)'],
+  [/^POST \/api\/bots\/:[^/]+\/(pause|resume)$/, 'not-yet', 'update', 'ManageBots'],
   [/^(POST|PATCH) \/api\/bots\/?$|^PATCH \/api\/bots\/:[^/]+$/, 'never', null, 'bot missions are authored on the page'],
   [/^DELETE \/api\/bots\/:[^/]+$/, 'never', null, 'destructive'],
   [/^\w+ \/api\/bots\/work-items\/:[^/]+\/(job-draft|estimate|review-estimate)$/, 'never', null, 'the dispatch drawer\'s own drafts and estimates'],
-  [/^POST \/api\/graph\/work-items$/, 'confirm', 'create', 'work item (DispatchAgentRun)'],
-  [/^PATCH \/api\/graph\/work-items\/:[^/]+$/, 'confirm', 'update', 'status, assignee, sprint'],
-  [/^POST \/api\/graph\/(work-items\/:[^/]+|projects\/:[^/]+\/discussion)\/comments$/, 'confirm', 'create', 'a comment (ViewWorkItems)'],
+  [/^POST \/api\/graph\/work-items$/, 'not-yet', 'create', 'work item (DispatchAgentRun)'],
+  [/^PATCH \/api\/graph\/work-items\/:[^/]+$/, 'not-yet', 'update', 'status, assignee, sprint'],
+  [/^POST \/api\/graph\/(work-items\/:[^/]+|projects\/:[^/]+\/discussion)\/comments$/, 'not-yet', 'create', 'a comment (ViewWorkItems)'],
   [/^(POST|PUT|PATCH|DELETE) \/api\/graph\/work-items\/:[^/]+\/(criteria|decisions|documents)/, 'never', null, 'acceptance criteria, decisions and document links are edited on the item'],
   [/^(POST|PUT|PATCH|DELETE) \/api\/graph\/(projects\/:[^/]+\/workspace-documents|documents)/, 'never', null, 'document content'],
   [/^PATCH \/api\/graph\/projects\/:[^/]+(\/contributors\/:[^/]+)?$/, 'never', null, 'initiative governance edits'],
-  [/^POST \/api\/sprints$/, 'confirm', 'create', 'sprint (ManageSprints)'],
-  [/^(PATCH|DELETE) \/api\/sprints\/:[^/]+\/items/, 'confirm', 'update', 'move work between sprints (ManageSprints)'],
-  [/^POST \/api\/designs\/:[^/]+\/(answer|signoff)$/, 'confirm', 'decide', 'a design question or sign-off (DispatchAgentRun)'],
-  [/^POST \/api\/lab\/consults\/:[^/]+\/answer$/, 'confirm', 'decide', 'answer a computer-lab consult'],
+  [/^POST \/api\/sprints$/, 'not-yet', 'create', 'sprint (ManageSprints)'],
+  [/^(PATCH|DELETE) \/api\/sprints\/:[^/]+\/items/, 'not-yet', 'update', 'move work between sprints (ManageSprints)'],
+  [/^POST \/api\/designs\/:[^/]+\/(answer|signoff)$/, 'not-yet', 'decide', 'a design question or sign-off (DispatchAgentRun)'],
+  [/^POST \/api\/lab\/consults\/:[^/]+\/answer$/, 'not-yet', 'decide', 'answer a computer-lab consult'],
   [/^POST \/api\/lab\//, 'n/a', null, 'lab envelope machine routes'],
   // Runbooks and the promotion ladder
-  [/^POST \/api\/runbooks\/proposals\/:[^/]+\/(accept|reject|merge)$/, 'confirm', 'decide', 'ReviewRunbook'],
-  [/^POST \/api\/runbooks\/proposals\/:[^/]+\/withdraw$/, 'confirm', 'update', 'own proposal'],
+  [/^POST \/api\/runbooks\/proposals\/:[^/]+\/(accept|reject|merge)$/, 'not-yet', 'decide', 'ReviewRunbook'],
+  [/^POST \/api\/runbooks\/proposals\/:[^/]+\/withdraw$/, 'not-yet', 'update', 'own proposal'],
   [/^POST \/api\/runbooks\/proposals$/, 'never', null, 'a proposal is a diff, authored on the page or by a box'],
   [/^POST \/api\/runbooks\/:[^/]+\/retire$/, 'never', null, 'destructive for the fleet'],
   [/^POST \/api\/runbooks\/:[^/]+\/applications$/, 'n/a', null, 'lab envelope'],
-  [/^POST \/api\/promotions\/:[^/]+\/(promote|dismiss)$/, 'confirm', 'decide', 'ManageBots'],
+  [/^POST \/api\/promotions\/:[^/]+\/(promote|dismiss)$/, 'not-yet', 'decide', 'ManageBots'],
   [/^POST \/api\/session-bundle\/:[^/]+\/publish$/, 'never', null, 'the widest-blast-radius action in the product'],
   // Approvals (HITL)
-  [/^POST \/api\/observability\/approvals\/:[^/]+\/decision$/, 'confirm', 'decide', 'ApproveTransaction with the amount'],
+  [/^POST \/api\/observability\/approvals\/:[^/]+\/decision$/, 'not-yet', 'decide', 'ApproveTransaction with the amount'],
   // Social
-  [/^POST \/api\/social\/(plane\/)?dms$/, 'confirm', 'message', 'open the DM at confirm (G14)'],
-  [/^POST \/api\/social\/(plane\/)?dms\/read$/, 'confirm', 'update', 'mark read'],
-  [/^POST \/api\/social\/(plane\/)?channels\/:[^/]+\/(join|leave)$/, 'confirm', 'update', 'PostMessage / ViewSocial'],
-  [/^POST \/api\/social\/(plane\/)?(channels|teams|rooms)$/, 'confirm', 'create', 'ManageChannels / ManageTeams'],
-  [/^PATCH \/api\/social\/(plane\/)?teams\/:[^/]+\/me$/, 'confirm', 'update', 'own membership preference'],
+  [/^POST \/api\/social\/(plane\/)?dms$/, 'not-yet', 'message', 'open the DM at confirm (G14)'],
+  [/^POST \/api\/social\/(plane\/)?dms\/read$/, 'not-yet', 'update', 'mark read'],
+  [/^POST \/api\/social\/(plane\/)?channels\/:[^/]+\/(join|leave)$/, 'not-yet', 'update', 'PostMessage / ViewSocial'],
+  [/^POST \/api\/social\/(plane\/)?(channels|teams|rooms)$/, 'not-yet', 'create', 'ManageChannels / ManageTeams'],
+  [/^PATCH \/api\/social\/(plane\/)?teams\/:[^/]+\/me$/, 'not-yet', 'update', 'own membership preference'],
   [/^(POST|DELETE) \/api\/social\/(plane\/)?teams\/:[^/]+\/members/, 'never', null, 'adding or removing other people'],
   [/^PATCH \/api\/social\/(plane\/)?rooms\/:[^/]+$/, 'never', null, 'room settings'],
   [/^POST \/api\/social\/(plane\/)?recordings\/:[^/]+\/share$/, 'never', null, 'sharing a recording reaches people with content'],
   [/^DELETE \/api\/social\/(plane\/)?recordings\/:[^/]+$/, 'never', null, 'destructive'],
   [/^POST \/api\/social\/plane\/work-sharing/, 'never', null, 'work-sharing transitions are the page\'s'],
-  [/^POST \/api\/chat\/pins$/, 'confirm', 'update', 'pin a message'],
-  [/^DELETE \/api\/chat\/pins$/, 'confirm', 'update', 'unpin'],
-  [/^POST \/api\/(chat\/commands|conversations)(\/summarize)?\/(summarize|diagram|doc|deck|agent)?\/?run$/, 'confirm', 'queue_work', 'a conversation command run'],
-  [/^POST \/api\/(chat\/commands|conversations)(\/summarize)?\/(summarize|diagram|doc|deck|agent)?\/?runs\/:[^/]+\/(post|save)$/, 'confirm', 'update', 'post or save the finished run'],
-  [/^POST \/api\/(chat\/commands|conversations)\/agent\/runs\/:[^/]+\/(approve|discard|approval\/approve|approval\/reject)$/, 'confirm', 'decide', 'an agent-loop plan or approval step'],
+  [/^POST \/api\/chat\/pins$/, 'not-yet', 'update', 'pin a message'],
+  [/^DELETE \/api\/chat\/pins$/, 'not-yet', 'update', 'unpin'],
+  [/^POST \/api\/(chat\/commands|conversations)(\/summarize)?\/(summarize|diagram|doc|deck|agent)?\/?run$/, 'not-yet', 'queue_work', 'a conversation command run'],
+  [/^POST \/api\/(chat\/commands|conversations)(\/summarize)?\/(summarize|diagram|doc|deck|agent)?\/?runs\/:[^/]+\/(post|save)$/, 'not-yet', 'update', 'post or save the finished run'],
+  [/^POST \/api\/(chat\/commands|conversations)\/agent\/runs\/:[^/]+\/(approve|discard|approval\/approve|approval\/reject)$/, 'not-yet', 'decide', 'an agent-loop plan or approval step'],
   [/^(PUT|DELETE) \/api\/calls\/:[^/]+\/page$/, 'never', null, 'page sharing is the live call\'s own control'],
   // Decks
-  [/^POST \/api\/(initiative-decks\/projects\/:[^/]+|assessment\/teams\/:[^/]+\/decks|pipelines\/runs\/:[^/]+\/decks)$/, 'confirm', 'queue_work', 'build a deck'],
-  [/^POST \/api\/(initiative-decks|assessment\/decks|pipelines\/decks|chat\/decks)\/:[^/]+\/revise$/, 'confirm', 'queue_work', 'revise a deck'],
+  [/^POST \/api\/(initiative-decks\/projects\/:[^/]+|assessment\/teams\/:[^/]+\/decks|pipelines\/runs\/:[^/]+\/decks)$/, 'not-yet', 'queue_work', 'build a deck'],
+  [/^POST \/api\/(initiative-decks|assessment\/decks|pipelines\/decks|chat\/decks)\/:[^/]+\/revise$/, 'not-yet', 'queue_work', 'revise a deck'],
   [/^POST \/api\/(initiative-decks|assessment\/decks|pipelines\/decks|chat\/decks)\/:[^/]+\/(revisions|preview)$/, 'never', null, 'editor saves and previews'],
-  [/^POST \/api\/chat\/decks\/:[^/]+\/post$/, 'confirm', 'update', 'post a deck to the conversation (PostMessage)'],
+  [/^POST \/api\/chat\/decks\/:[^/]+\/post$/, 'not-yet', 'update', 'post a deck to the conversation (PostMessage)'],
   // Access
-  [/^POST \/api\/access\/requests\/preview$/, 'read', 'create', 'the preview the card shows before filing'],
-  [/^POST \/api\/access\/requests$/, 'confirm', 'create', 'access request (RequestAccess)'],
-  [/^POST \/api\/access-requests\/(quick|envelope)$/, 'confirm', 'create', 'the in-tenant quick request'],
-  [/^POST \/api\/access\/requests\/:[^/]+\/withdraw$/, 'confirm', 'update', 'own request'],
-  [/^POST \/api\/access\/requests\/:[^/]+\/steps\/:[^/]+\/decide$/, 'confirm', 'decide', 'DecideAccess'],
-  [/^POST \/api\/access\/reviews\/:[^/]+\/items\/:[^/]+\/decide$/, 'confirm', 'decide', 'DecideAccess'],
-  [/^POST \/api\/access\/delegations$/, 'confirm', 'create', 'delegate my approvals (DecideAccess)'],
-  [/^POST \/api\/access\/delegations\/:[^/]+\/end$/, 'confirm', 'update', 'end a delegation'],
+  [/^POST \/api\/access\/requests\/preview$/, 'not-yet', 'create', 'the preview the card shows before filing'],
+  [/^POST \/api\/access\/requests$/, 'not-yet', 'create', 'access request (RequestAccess)'],
+  [/^POST \/api\/access-requests\/(quick|envelope)$/, 'not-yet', 'create', 'the in-tenant quick request'],
+  [/^POST \/api\/access\/requests\/:[^/]+\/withdraw$/, 'not-yet', 'update', 'own request'],
+  [/^POST \/api\/access\/requests\/:[^/]+\/steps\/:[^/]+\/decide$/, 'not-yet', 'decide', 'DecideAccess'],
+  [/^POST \/api\/access\/reviews\/:[^/]+\/items\/:[^/]+\/decide$/, 'not-yet', 'decide', 'DecideAccess'],
+  [/^POST \/api\/access\/delegations$/, 'not-yet', 'create', 'delegate my approvals (DecideAccess)'],
+  [/^POST \/api\/access\/delegations\/:[^/]+\/end$/, 'not-yet', 'update', 'end a delegation'],
   // Assessment
-  [/^POST \/api\/assessment\/runs$/, 'confirm', 'queue_work', 'RunAssessmentAgent'],
-  [/^POST \/api\/assessment\/runs\/:[^/]+\/stop$/, 'confirm', 'update', 'stop a run'],
+  [/^POST \/api\/assessment\/runs$/, 'not-yet', 'queue_work', 'RunAssessmentAgent'],
+  [/^POST \/api\/assessment\/runs\/:[^/]+\/stop$/, 'not-yet', 'update', 'stop a run'],
   [/^POST \/api\/assessment\/runs\/:[^/]+\/complete$/, 'n/a', null, 'agent callback'],
-  [/^POST \/api\/assessment\/teams\/:[^/]+\/dimensions\/:[^/]+\/drafts\//, 'confirm', 'queue_work', 'evidence summary or follow-up drafts'],
-  [/^POST \/api\/assessment\/drafts\/:[^/]+\/(accept|discard|revise)$/, 'confirm', 'decide', 'a draft'],
-  [/^PATCH \/api\/assessment\/teams\/:[^/]+\/exceptions\/:[^/]+$/, 'confirm', 'decide', 'ApproveException'],
-  [/^POST \/api\/assessment\/feedback\/:[^/]+\/(resolve|dismiss)$/, 'confirm', 'update', 'ScoreAssessment'],
-  [/^POST \/api\/assessment\/feedback$/, 'confirm', 'create', 'a follow-up (ScoreAssessment)'],
-  [/^POST \/api\/assessment\/reports\/publish$/, 'confirm', 'update', 'PublishReport reaches readers'],
-  [/^POST \/api\/assessment\/knowledge\/doc\/(proposals|workflows\/review-requests)$/, 'confirm', 'create', 'a document proposal or review request'],
-  [/^POST \/api\/assessment\/knowledge\/doc\/proposals\/:[^/]+\/decision$/, 'confirm', 'decide', 'a document proposal'],
+  [/^POST \/api\/assessment\/teams\/:[^/]+\/dimensions\/:[^/]+\/drafts\//, 'not-yet', 'queue_work', 'evidence summary or follow-up drafts'],
+  [/^POST \/api\/assessment\/drafts\/:[^/]+\/(accept|discard|revise)$/, 'not-yet', 'decide', 'a draft'],
+  [/^PATCH \/api\/assessment\/teams\/:[^/]+\/exceptions\/:[^/]+$/, 'not-yet', 'decide', 'ApproveException'],
+  [/^POST \/api\/assessment\/feedback\/:[^/]+\/(resolve|dismiss)$/, 'not-yet', 'update', 'ScoreAssessment'],
+  [/^POST \/api\/assessment\/feedback$/, 'not-yet', 'create', 'a follow-up (ScoreAssessment)'],
+  [/^POST \/api\/assessment\/reports\/publish$/, 'not-yet', 'update', 'PublishReport reaches readers'],
+  [/^POST \/api\/assessment\/knowledge\/doc\/(proposals|workflows\/review-requests)$/, 'not-yet', 'create', 'a document proposal or review request'],
+  [/^POST \/api\/assessment\/knowledge\/doc\/proposals\/:[^/]+\/decision$/, 'not-yet', 'decide', 'a document proposal'],
   [/^(POST|PATCH|DELETE) \/api\/assessment\/knowledge\/doc\/workflows\/(sections|comments|review-requests|transitions|ownership|versions)/, 'never', null, 'document workflow edits stay in the editor'],
   [/^POST \/api\/assessment\/knowledge\/doc\/(comment|reaction)$|^(PATCH|DELETE) \/api\/assessment\/knowledge\/doc\/comment$/, 'never', null, 'editor comments and reactions'],
   [/^(POST|PUT|PATCH|DELETE) \/api\/assessment\/knowledge\//, 'never', null, 'ManageKnowledge document content and sources'],
   [/^POST \/api\/assessment\/(teams(\/:[^/]+\/(evidence|intake\/\w+|scores\/apply|reset-assessment))?|submissions\/\w+)$|^(PATCH|DELETE) \/api\/assessment\/(teams|submissions)\//, 'never', null, 'scoring, intake and submissions are form work'],
   [/^POST \/api\/assessment\/canvas$/, 'never', null, 'canvas render'],
   // Pipelines
-  [/^POST \/api\/pipelines\/definitions\/:[^/]+\/dry-run$/, 'confirm', 'queue_work', 'RunPipeline dry-run (G19)'],
-  [/^POST \/api\/pipelines\/approvals\/:[^/]+\/decide$/, 'confirm', 'decide', 'ApproveStep'],
-  [/^POST \/api\/pipelines\/runs\/:[^/]+\/cancel$/, 'confirm', 'update', 'CancelRun'],
+  [/^POST \/api\/pipelines\/definitions\/:[^/]+\/dry-run$/, 'not-yet', 'queue_work', 'RunPipeline dry-run (G19)'],
+  [/^POST \/api\/pipelines\/approvals\/:[^/]+\/decide$/, 'not-yet', 'decide', 'ApproveStep'],
+  [/^POST \/api\/pipelines\/runs\/:[^/]+\/cancel$/, 'not-yet', 'update', 'CancelRun'],
   [/^PUT \/api\/pipelines\/definitions\/:[^/]+\/approvers$/, 'never', null, 'AuthorDefinition'],
   // Search
-  [/^(POST|PATCH|DELETE) \/api\/saved-searches/, 'confirm', 'create', 'save, rename or drop a saved search of my own'],
+  [/^(POST|PATCH|DELETE) \/api\/saved-searches/, 'not-yet', 'create', 'save, rename or drop a saved search of my own'],
   // Reads: which tool answers them
-  [/^GET \/api\/(search|\w+\/search|social\/plane\/search|assessment\/recordings\/search|observability\/invocations\/search)(\/answer|\/records)?$/, 'read', 'search', 'the tenant index'],
-  [/^GET \/api\/(me\/spend|spend|budgets|user-budgets|grants|observability\/cost|ops|devbox\/profiles|sprints\/envelopes)/, 'read', 'budget', 'the budgets read tier'],
-  [/^GET \/api\/(work\/summary|work\/findings\/stats|work\/sweeps\/runs|bots\/active-runs|pipelines\/summary|pipelines\/queues|assessment\/rollup|access\/summary|social\/(plane\/)?summary|social\/plane\/active|ingest\/(stats|jobs|queue)|admin\/kb-registry\/health|devbox\/status|local-compute\/nodes|local-compute\/runs|today|work\/suggestions|work\/ask-suggestions|discussions\/unread|observability\/summary|observability\/health)/, 'read', 'summary', 'an aggregate'],
-  [/^GET \/api\/observability\/approvals$/, 'read', 'list', 'the HITL inbox: what waits on the caller (§2.10)'],
+  [/^GET \/api\/(search|\w+\/search|social\/plane\/search|assessment\/recordings\/search|observability\/invocations\/search)(\/answer|\/records)?$/, 'not-yet', 'search', 'the tenant index'],
+  [/^GET \/api\/(me\/spend|spend|budgets|user-budgets|grants|observability\/cost|ops|devbox\/profiles|sprints\/envelopes)/, 'not-yet', 'budget', 'the budgets read tier'],
+  [/^GET \/api\/(work\/summary|work\/findings\/stats|work\/sweeps\/runs|bots\/active-runs|pipelines\/summary|pipelines\/queues|assessment\/rollup|access\/summary|social\/(plane\/)?summary|social\/plane\/active|ingest\/(stats|jobs|queue)|admin\/kb-registry\/health|devbox\/status|local-compute\/nodes|local-compute\/runs|today|work\/suggestions|work\/ask-suggestions|discussions\/unread|observability\/summary|observability\/health)/, 'not-yet', 'summary', 'an aggregate'],
+  [/^GET \/api\/observability\/approvals$/, 'not-yet', 'list', 'the HITL inbox: what waits on the caller (§2.10)'],
   [/^GET \/api\/library\/evals/, 'never', null, 'eval sets are the studio\'s'],
   [/^GET \/api\/(observability|topology|iq\/prompts|capabilities|agents|agent-detail|sessions|rediscovery|promotions|session-bundle|admin\/kb-registry|ingest|connections|knowledge-base|identity|graph\/(entities|skills-graph|projects-graph|help)|scores)/, 'never', null, 'operator consoles, agent-facing reads and leadership data: the page, not the voice'],
   [/^GET \/api\/[\w/-]+\/(stream|events|tail|log\/stream)$/, 'n/a', null, 'a stream'],
-  [/^GET \/api\/[\w-]+(\/[\w-]+)*\/:[^/]+(\/[\w-]+)*$/, 'read', 'get', 'one record'],
-  [/^GET \/api\//, 'read', 'list', 'a collection'],
+  [/^GET \/api\/[\w-]+(\/[\w-]+)*\/:[^/]+(\/[\w-]+)*$/, 'not-yet', 'get', 'one record'],
+  [/^GET \/api\//, 'not-yet', 'list', 'a collection'],
 ];
 
-function decide(method, path) {
+/** The rule table's decision for a route (never, n/a or not-yet), else null. */
+function ruled(method, path) {
   const key = `${method} ${path}`;
   for (const [re, decision, tool, note] of V2_RULES) if (re.test(key)) return { decision, tool, note };
-  return { decision: null, tool: null, note: 'UNDECIDED' };
+  return null;
+}
+
+/**
+ * A route's decision: from the tools whose mapsTo names it (read, confirm, open), else the never list, else the
+ * backlog (not-yet), else undecided.
+ */
+function decide(method, path, covering) {
+  if (covering.length) {
+    const [{ tool, ref }] = covering;
+    if (method === 'GET') return { decision: 'read', tool: tool.name, note: 'mapsTo' };
+    const confirmed = covering.find((c) => c.tool.confirm && !c.ref.noCard);
+    if (confirmed) return { decision: 'confirm', tool: confirmed.tool.name, note: 'mapsTo' };
+    return { decision: ref.noCard ? 'open' : 'read', tool: tool.name, note: ref.noCard ? 'mapsTo, no card' : 'mapsTo, a read before the card' };
+  }
+  return ruled(method, path) ?? { decision: null, tool: null, note: 'UNDECIDED' };
 }
 
 // ─── Build ───────────────────────────────────────────────────────────────────
@@ -665,6 +704,7 @@ function build() {
   for (const d of declared) { const k = declKey(d); if (!declIndex.has(k)) declIndex.set(k, []); declIndex.get(k).push(d); }
 
   const rows = [];
+  const contradictions = [];
   const snapshotKeys = new Set();
   const unresolvedDeclarations = [];
   const resolveRoute = (method, path, source) => {
@@ -715,8 +755,11 @@ function build() {
     const wp = writes.routes[`${method} ${path}`];
     const writePolicy = !wp ? null : wp.refused ? `refused:${wp.refused.rule}` : wp.skipped ? 'skipped' : 'allowed';
     const tenants = tenantsFor(path, gate, manifest);
-    const coveredBy = catalogue.tools.filter((t) => t.routes.some((ref) => ref.method === method && normPath(ref.path) === normPath(path))).map((t) => t.name);
-    const d = kind === 'internal' || kind === 'dev' ? { decision: 'n/a', tool: null, note: kind } : decide(method, path);
+    const covering = catalogue.tools.flatMap((t) => t.routes.filter((ref) => ref.method === method && normPath(ref.path) === normPath(path)).slice(0, 1).map((ref) => ({ tool: t, ref })));
+    const coveredBy = covering.map((c) => c.tool.name);
+    const d = kind === 'internal' || kind === 'dev' ? { decision: 'n/a', tool: null, note: kind } : decide(method, path, covering);
+    // A tool reaches a route the never list names: the catalogue and the list disagree (the check fails).
+    if (coveredBy.length && ruled(method, path)?.decision === 'never') contradictions.push(`${method} ${path} (${coveredBy.join(', ')})`);
     return {
       method, path, source, declaredAt: decl ? `${decl.file}:${decl.line}` : null, stale: flags.stale, snapshot: flags.snapshot,
       tenants, kind, family: fam, cedarAction, actions, anyOf: gate.anyOf || undefined, readRoles: gate.readRoles.length ? gate.readRoles : undefined,
@@ -754,7 +797,8 @@ function build() {
     coveredWrites: people.filter((r) => r.kind === 'write' && r.coveredBy.length).length, coveredPages: pageRows.filter((r) => r.coveredBy.length).length,
     pagesWithPageId: pageRows.filter((r) => r.pageId).length,
     v1Tools: catalogue.tools.length, v2Tools: V2_TOOLS.length, v2Decisions: count(people, (r) => r.v2.decision ?? 'undecided'),
-    v2ToolRoutes: count(people.filter((r) => r.v2.tool), (r) => r.v2.tool), undecided: undecided.map((r) => `${r.method} ${r.path}`),
+    v2ToolRoutes: count(people.filter((r) => r.v2.tool && r.v2.decision !== 'not-yet'), (r) => r.v2.tool),
+    v2Backlog: count(people.filter((r) => r.v2.decision === 'not-yet'), (r) => r.v2.tool), undecided: undecided.map((r) => `${r.method} ${r.path}`), contradictions,
     staleSnapshotLines: rows.filter((r) => r.stale).length, unresolvedDeclarations, missingFromSnapshot,
     unresolvedGateNames: [...new Set(rows.flatMap((r) => r.unresolvedGates ?? []))], actionsNotInSchema: unknownActions,
     capabilityActionsNotInSchema: capabilityActions.filter((a) => !schemaActions.includes(a)), schemaActionsNotInCapabilityActions: schemaActions.filter((a) => !capabilityActions.includes(a)),
@@ -782,7 +826,7 @@ const json = serialize(inventory);
 const s = inventory.summary;
 const headline = `${s.routes} routes (${s.routesInSnapshot} snapshot rows, ${s.snapshotDuplicates} duplicates, ${s.routesDeclaredNotInSnapshot} declared only) + ${s.pages} pages; `
   + `${s.peopleRoutes} reachable by a person (${s.peopleReads} reads, ${s.peopleWrites} writes); covered today: ${s.coveredRoutes} routes, ${s.coveredPages}/${s.pages} pages; `
-  + `v1 tools ${s.v1Tools}, v2 tools ${s.v2Tools}; undecided writes/reads: ${s.undecided.length}`;
+  + `catalogue tools ${s.v1Tools} (v2 ${s.v2Tools}); by mapsTo ${(s.v2Decisions.read ?? 0) + (s.v2Decisions.confirm ?? 0) + (s.v2Decisions.open ?? 0)}, not yet ${s.v2Decisions['not-yet'] ?? 0}, never ${s.v2Decisions.never ?? 0}; undecided writes/reads: ${s.undecided.length}`;
 
 if (args.has('--print')) {
   console.log(headline);
@@ -793,6 +837,9 @@ if (args.has('--print')) {
 if (args.has('--check')) {
   let ok = true;
   if (s.undecided.length) { ok = false; console.error(`inventory: ${s.undecided.length} route(s) a person can reach have no catalogue decision:\n  ${s.undecided.join('\n  ')}`); }
+  if (s.contradictions.length) { ok = false; console.error(`inventory: ${s.contradictions.length} route(s) a tool reaches are on the never list:\n  ${s.contradictions.join('\n  ')}`); }
+  // The rule table holds the never list and the backlog: read, confirm and open come only from the catalogue's mapsTo.
+  if (V2_RULES.some(([, d]) => !['never', 'n/a', 'not-yet'].includes(d))) { ok = false; console.error('inventory: V2_RULES may hold only never, n/a and not-yet decisions'); }
   let onDisk = null;
   try { onDisk = read(PATHS.out); } catch { /* missing */ }
   if (onDisk !== json) { ok = false; console.error(`inventory: ${PATHS.out} is stale; run node scripts/voice/inventory.mjs`); }

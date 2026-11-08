@@ -103,6 +103,8 @@ larger part of a long idle box (*inferred*), are booked nowhere.
 
 Before the hold, the mint enforces `VOICE_DAILY_MINUTES` (default 60 per user per UTC day, `0` off) from the user's non-mock `voice_sessions` rows since UTC midnight (known seconds, else `max_seconds`): a session that fits only partly is minted with `maxSeconds` cut to what is left (the hold shrinks with it), and one with under a minute left is refused (429 `voice-unavailable`, `reason: 'daily-minutes'`). Both rows carry `source: 'voice_session'` and the user as `actor_id`, so the user's budget and the spend surfaces see voice as its own line; mock sessions (`MOCK_VOICE`) book both rows too, priced from the mock price table.
 
+What the voice's tools spend is not voice spend: each tool goes through the route its page's button calls, with that route's own holds and brakes, and books there. `computer` start provisions a box that bills its session time until stopped, and run and open-shell are rows 26 and 27; `queue_work` reaches the dispatch, bot-run, dry-run, job and agent paths (rows 14 to 19, 24 and 1d), each refusing over its brake with no confirm flag from voice; `decide`, `create`, `update`, `message`, `call` and the reads spend nothing. Row 38 grows with what each delegation reads: the dock sends results compact and one current page note (G31, `portal/src/lib/voice/contextWindow.ts`), about 9 k estimated input tokens per delegation over a 20-turn session against the orgiq tools, of which the tool schemas are about 6.6 k; the provider keeps earlier items it was sent, so the sideband's figure is the real one.
+
 ## 2. The minimum change: a real figure on every path
 
 The settle mechanism already replaces the P75 with the real figure for rows
