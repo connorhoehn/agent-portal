@@ -351,8 +351,11 @@ services:
       - PORT=3901
       - ADMIN_TOKEN=${SOCIAL_LVS_ADMIN_TOKEN:-admin}
       # SOCIAL_LVS_AUTH_BYPASS=false: /api/sessions takes only platform-api's
-      # service token (LVS_SERVICE_TOKEN) or a real Cognito token.
+      # service token (LVS_SERVICE_TOKEN) or a real Cognito token. The bypass
+      # counts only beside INSECURE_DEV_MODE (LVS 2.0.3); without the flag the
+      # SFU refuses to start.
       - LVS_AUTH_BYPASS=${SOCIAL_LVS_AUTH_BYPASS:-true}
+      - INSECURE_DEV_MODE=${SOCIAL_LVS_AUTH_BYPASS:-true}
       - LVS_SERVICE_TOKEN=${SOCIAL_LVS_SERVICE_TOKEN:-local-dev-lvs-service-token}
       - COGNITO_REGION=${SOCIAL_COGNITO_REGION:-us-east-1}
       - COGNITO_USER_POOL_ID=${SOCIAL_COGNITO_USER_POOL_ID:-us-east-1_localdev000}
