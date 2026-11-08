@@ -25,11 +25,18 @@
 //     one voice_tool_calls row; the arguments are hashed and dropped. 201 { id }.
 //   POST /api/voice/sessions/:id/close   { seconds, reason?, delegated?: { inputTokens, outputTokens, cachedTokens, responses } }
 //     two ledger rows (lib/voice/ledger.ts, G11), both source voice_session,
-//     provider openai, basis estimated: `<id>` at seconds/60 × rate, which
-//     settles the hold, and `<id>:tokens` (trigger voice-delegation) for the
-//     delegated model's tokens, bounded at 50,000 per response and one
-//     response per reported tool call plus one; no `delegated` = unknown.
+//     provider openai: `<id>` at seconds/60 × rate, which settles the hold,
+//     and `<id>:tokens` (trigger voice-delegation) for the delegated model's
+//     tokens. Each prefers the provider's own figure from the sideband
+//     (G12, basis reported) and falls back to the dock's (basis estimated:
+//     seconds capped at wall time, tokens bounded at 50,000 per response and
+//     one response per reported tool call plus one); neither = unknown.
 //     Idempotent.
+//
+// On a real mint the middleware attaches the sideband (lib/voice/openai.ts
+// attachSideband, G12): best effort, never blocking or failing the mint; the
+// figures it hears land in the row's provider_* columns, and the close and the
+// reaper close the socket.
 //
 // A session belongs to the user who minted it, and its tool calls to the
 // tenant it was minted in: any other caller gets 404, whether or not the id
@@ -46,15 +53,16 @@ import { emitFleetMetric } from '../lib/fleet-metrics.js';
 import { rateLimit } from '../lib/rate-limit.js';
 import { clock } from '../mock/core/index.js';
 import { voiceConfig, voiceCostUsd, utcDay, MIN_BILLED_SECONDS, MIN_DAILY_SESSION_SECONDS } from '../lib/voice/config.js';
-import { bookVoiceSpend, boundDelegatedUsage } from '../lib/voice/ledger.js';
+import { bookVoiceSpend, boundDelegatedUsage, preferProviderFigures, providerUsageFromRow } from '../lib/voice/ledger.js';
 import {
   delegationInstructions, hashToolArgs, responsesFunctionTools, toolsForTenant, voiceInstructions, voiceTool, mockCallFor,
 } from '../lib/voice/catalogue.js';
 import {
-  createLiveSession, hangupLiveSession, mockLiveScript, voiceProviderConfigured, MOCK_SDP_ANSWER, VoiceProviderError,
+  attachSideband, createLiveSession, detachSideband, hangupLiveSession, mockLiveScript, voiceProviderConfigured, waitForSidebandUsage,
+  MOCK_SDP_ANSWER, VoiceProviderError, type ProviderUsage,
 } from '../lib/voice/openai.js';
 import {
-  closeVoiceSession, getVoiceSession, insertVoiceSession, insertVoiceToolCall, learnReapedSessionCost, setProviderSessionId, userVoiceSecondsSince,
+  closeVoiceSession, getVoiceSession, insertVoiceSession, insertVoiceToolCall, learnReapedSessionCost, recordProviderUsage, setProviderSessionId, userVoiceSecondsSince,
   CLIENT_STOP_REASONS, VOICE_TOOL_OUTCOMES, type VoiceSessionRow, type VoiceStopReason, type VoiceToolOutcome,
 } from '../providers/voice-sessions.js';
 
@@ -176,6 +184,14 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
     }
   }
   await setProviderSessionId(id, answer.providerSessionId);
+  // The provider's own usage for this session (G12): best effort, never awaited, never failing the mint.
+  if (!cfg.mock && answer.providerSessionId) {
+    const tenant = session.tenant;
+    attachSideband(answer.providerSessionId, {
+      lifetimeMs: expiresInMs + SIDEBAND_LINGER_PAST_HOLD_MS,
+      onUsage: (u) => recordProviderUsage(id, tenant, u),
+    });
+  }
   console.log(JSON.stringify({ event: 'voice-session-minted', sessionId: id, sub: session.sub, tenant: session.tenant,
     holdId: held.holdId, providerSessionId: answer.providerSessionId, mock: cfg.mock }));
   emitFleetMetric('voice-sessions-started', { tenant: session.tenant, mock: cfg.mock });
@@ -206,6 +222,11 @@ async function ownSession(req: Request, opts: { sameTenant: boolean }): Promise<
 }
 
 const notFound = (res: Response): void => { res.status(404).json({ error: 'voice session not found' }); };
+
+/** How long the close waits for `session.closed` on the sideband (the dock has usually waited already). */
+export const CLOSE_SIDEBAND_WAIT_MS = 2_500;
+/** The sideband outlives the hold by this much, so the reaper's sweep can still read it. */
+const SIDEBAND_LINGER_PAST_HOLD_MS = 10 * 60_000;
 
 voiceRouter.post('/sessions/:id/events', rateLimit('voice-events', 120, 60_000, bySub), asyncHandler(async (req, res) => {
   const row = await ownSession(req, { sameTenant: true });
@@ -254,12 +275,27 @@ voiceRouter.post('/sessions/:id/close', asyncHandler(async (req, res) => {
     seconds = Math.ceil(Math.max(MIN_BILLED_SECONDS, Math.min(raw, wall)));
   }
   const costUsd = seconds == null ? null : voiceCostUsd(seconds, row.usd_per_minute);
-  // The delegated tokens (G11), from the dock like the seconds until the sideband lands (G12).
+  // The delegated tokens (G11) as the dock summed them, bounded.
   const delegated = boundDelegatedUsage(body['delegated'], row.tool_calls);
 
+  // The provider's own figures win (G12): the sideband this process holds,
+  // waited on briefly for session.closed, else what it wrote to the row.
+  const live = !row.ended_at && !row.mock && row.provider_session_id ? row.provider_session_id : null;
+  let provider: ProviderUsage | null = null;
+  let hungUp = false;
+  if (live) {
+    // The dock is gone or cut off: make sure the provider stops billing (server.mjs /api/hangup).
+    if (reason !== 'closed') { await hangupLiveSession(live); hungUp = true; }
+    provider = await waitForSidebandUsage(live, CLOSE_SIDEBAND_WAIT_MS);
+    // A session the sideband never saw close may still be billing.
+    if (provider && !provider.final && !hungUp) await hangupLiveSession(live);
+  }
+  const figures = preferProviderFigures(row, provider ?? providerUsageFromRow(row), { seconds, delegated });
+
   const closed = await closeVoiceSession(row.id, {
-    seconds, cost_usd: costUsd, cost_basis: seconds == null ? 'unknown' : 'estimated', stop_reason: reason,
+    seconds: figures.seconds, cost_usd: figures.costUsd, cost_basis: figures.basis, stop_reason: reason,
   });
+  if (live) detachSideband(live);
   if (!closed) {
     // Already closed. A session the reaper booked unknown learns its figure
     // from a late close; any other close is a no-op answered with what is stored.
@@ -272,12 +308,12 @@ voiceRouter.post('/sessions/:id/close', asyncHandler(async (req, res) => {
     res.json(closeBody(row, true));
     return;
   }
-  await bookVoiceSpend(closed, delegated);
-  // The dock is gone or cut off: make sure the provider stops billing (server.mjs /api/hangup).
-  if (reason !== 'closed' && !closed.mock && closed.provider_session_id) await hangupLiveSession(closed.provider_session_id);
-  if (seconds != null) emitFleetMetric('voice-session-seconds', { tenant: closed.tenant, seconds });
-  console.log(JSON.stringify({ event: 'voice-session-closed', sessionId: closed.id, seconds, costUsd, reason,
-    delegatedTokens: delegated ? { input: delegated.inputTokens, output: delegated.outputTokens, responses: delegated.responses } : null }));
+  await bookVoiceSpend(closed, figures.delegated, figures.tokensBasis);
+  if (figures.seconds != null) emitFleetMetric('voice-session-seconds', { tenant: closed.tenant, seconds: figures.seconds });
+  const used = figures.delegated;
+  console.log(JSON.stringify({ event: 'voice-session-closed', sessionId: closed.id, seconds: figures.seconds, costUsd: figures.costUsd,
+    basis: figures.basis, dockSeconds: seconds, reason, tokensBasis: used ? figures.tokensBasis : null,
+    delegatedTokens: used ? { input: used.inputTokens, output: used.outputTokens, responses: used.responses } : null }));
   res.json(closeBody(closed, false));
 }));
 

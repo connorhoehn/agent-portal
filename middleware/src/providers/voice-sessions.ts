@@ -41,6 +41,15 @@ export interface VoiceSessionRow {
   cost_basis: CostBasis | null;
   stop_reason: VoiceStopReason | null;
   tool_calls: number;
+  /**
+   * What the provider itself reported over the sideband (G12): the cumulative
+   * `usage.seconds` and the sums of every nested `response.completed.response.usage`.
+   * Null = the sideband never delivered that figure.
+   */
+  provider_seconds: number | null;
+  provider_tokens_in: number | null;
+  provider_tokens_out: number | null;
+  provider_tokens_cached: number | null;
 }
 
 export interface VoiceToolCallRow {
@@ -73,7 +82,8 @@ const dbl = (name: string, v: number | null | undefined): SqlParameter =>
   (v == null || !Number.isFinite(v) ? { name, value: { isNull: true } } : { name, value: { doubleValue: v } });
 
 const SELECT = `id, user_sub, tenant, hold_id::text AS hold_id, provider_session_id, model, voice, mock, max_seconds,
-  usd_per_minute, started_at::text AS started_at, ended_at::text AS ended_at, seconds, cost_usd, cost_basis, stop_reason, tool_calls`;
+  usd_per_minute, started_at::text AS started_at, ended_at::text AS ended_at, seconds, cost_usd, cost_basis, stop_reason, tool_calls,
+  provider_seconds, provider_tokens_in, provider_tokens_out, provider_tokens_cached`;
 
 function toRow(r: Record<string, unknown>): VoiceSessionRow {
   const str = (k: string): string | null => (r[k] == null ? null : String(r[k]));
@@ -85,6 +95,8 @@ function toRow(r: Record<string, unknown>): VoiceSessionRow {
     usd_per_minute: n('usd_per_minute') ?? 0, started_at: String(r['started_at'] ?? ''), ended_at: str('ended_at'),
     seconds: n('seconds'), cost_usd: n('cost_usd'), cost_basis: str('cost_basis') as CostBasis | null,
     stop_reason: str('stop_reason') as VoiceStopReason | null, tool_calls: n('tool_calls') ?? 0,
+    provider_seconds: n('provider_seconds'), provider_tokens_in: n('provider_tokens_in'),
+    provider_tokens_out: n('provider_tokens_out'), provider_tokens_cached: n('provider_tokens_cached'),
   };
 }
 
@@ -93,6 +105,7 @@ export async function insertVoiceSession(row: VoiceSessionInsert): Promise<Voice
     const full: VoiceSessionRow = {
       ...row, provider_session_id: null, started_at: clock.nowIso(), ended_at: null, seconds: null,
       cost_usd: null, cost_basis: null, stop_reason: null, tool_calls: 0,
+      provider_seconds: null, provider_tokens_in: null, provider_tokens_out: null, provider_tokens_cached: null,
     };
     if (voiceSessions.rows().some((r) => r.id === row.id)) throw new Error(`voice session ${row.id} already exists`);
     voiceSessions.rows().push(full);
@@ -117,6 +130,46 @@ export async function setProviderSessionId(id: string, providerSessionId: string
     return;
   }
   await exec('UPDATE voice_sessions SET provider_session_id = :p WHERE id = :id', [s('p', providerSessionId), s('id', id)]);
+}
+
+/** The sideband's figures for one session (G12), as `lib/voice/openai.ts` ProviderUsage carries them. */
+export interface ProviderUsageColumns {
+  seconds: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cachedTokens: number | null;
+}
+
+/**
+ * Record the provider's figures for a session (G12). Every column only ever
+ * grows (cumulative seconds, summed tokens), so frames written out of order,
+ * or by a second writer, never lower a figure; a null leaves the column as it
+ * is. Written outside any request (the sideband's socket events), so it runs
+ * in the session's own tenant scope.
+ */
+export async function recordProviderUsage(id: string, tenant: string, usage: ProviderUsageColumns): Promise<void> {
+  const whole = (v: number | null): number | null => (v == null || !Number.isFinite(v) || v < 0 ? null : Math.ceil(v));
+  const sec = whole(usage.seconds), tin = whole(usage.inputTokens), tout = whole(usage.outputTokens), tcached = whole(usage.cachedTokens);
+  if (sec == null && tin == null && tout == null && tcached == null) return;
+  if (config.mock.aurora) {
+    const row = voiceSessions.rows().find((r) => r.id === id);
+    if (!row) return;
+    const grow = (prev: number | null, next: number | null): number | null => (next == null ? prev : Math.max(prev ?? 0, next));
+    row.provider_seconds = grow(row.provider_seconds ?? null, sec);
+    row.provider_tokens_in = grow(row.provider_tokens_in ?? null, tin);
+    row.provider_tokens_out = grow(row.provider_tokens_out ?? null, tout);
+    row.provider_tokens_cached = grow(row.provider_tokens_cached ?? null, tcached);
+    return;
+  }
+  const { runWithDbTenant } = await import('./db-tenant.js');
+  // GREATEST ignores NULLs, so a null parameter keeps the stored figure and a null column takes the new one.
+  await runWithDbTenant(tenant, () => exec(
+    `UPDATE voice_sessions SET provider_seconds = GREATEST(provider_seconds, :sec::integer),
+        provider_tokens_in = GREATEST(provider_tokens_in, :tin::bigint), provider_tokens_out = GREATEST(provider_tokens_out, :tout::bigint),
+        provider_tokens_cached = GREATEST(provider_tokens_cached, :tcached::bigint)
+      WHERE id = :id`,
+    [s('id', id), int('sec', sec), int('tin', tin), int('tout', tout), int('tcached', tcached)],
+  ));
 }
 
 export async function getVoiceSession(id: string): Promise<VoiceSessionRow | null> {

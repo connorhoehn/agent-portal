@@ -33,7 +33,8 @@ import express from 'express';
 import request from '../../test-support/http.js';
 import { voiceRouter } from '../voice.js';
 import { errorHandler } from '../../lib/async-handler.js';
-import { _setVoiceFetch } from '../../lib/voice/openai.js';
+import { _setVoiceFetch, _setVoiceWebSocket, _resetSidebands } from '../../lib/voice/openai.js';
+import { SilentSideband } from '../../test-support/fake-sideband.js';
 import { VOICE_TOOLS } from '../../lib/voice/catalogue.js';
 import { sweepVoiceSessions, defaultVoiceReaperDeps } from '../../lib/voice/reaper.js';
 import { sweepOnce } from '../../lib/devbox-reaper.js';
@@ -81,6 +82,9 @@ beforeEach(() => {
   principal = { sub: USER, role: 'member', tenant: 'orgiq', grants: {} };
   calls = [];
   upstream = { status: 200, body: { session: { id: 'sess_live_1' }, transport: { sdp: ANSWER } } };
+  // The sideband (G12) never opens here: these tests settle on the dock's figures. voice-sideband.test.ts drives it.
+  _resetSidebands();
+  _setVoiceWebSocket(SilentSideband);
   _setVoiceFetch(async (url, init) => {
     calls.push({ url, init });
     return { status: upstream.status, ok: upstream.status < 400, text: async () => JSON.stringify(upstream.body) };
@@ -88,6 +92,8 @@ beforeEach(() => {
 });
 afterAll(() => {
   _setVoiceFetch(null);
+  _resetSidebands();
+  _setVoiceWebSocket(null);
   unfreezeClock();
   for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
 });
@@ -549,7 +555,8 @@ describe('the daily minutes (G13, §3 Q2)', () => {
     voiceSessions.rows().push({
       id: `vs_00000000-0000-4000-8000-${String(n).padStart(12, '0')}`, user_sub: USER, tenant: 'orgiq', hold_id: null,
       provider_session_id: null, model: 'gpt-live-1', voice: null, mock: false, max_seconds: 1800, usd_per_minute: 0.05,
-      ended_at: over.started_at, seconds: null, cost_usd: null, cost_basis: null, stop_reason: 'closed', tool_calls: 0, ...over,
+      ended_at: over.started_at, seconds: null, cost_usd: null, cost_basis: null, stop_reason: 'closed', tool_calls: 0,
+      provider_seconds: null, provider_tokens_in: null, provider_tokens_out: null, provider_tokens_cached: null, ...over,
     });
   }
   async function at<T>(iso: string, fn: () => Promise<T>): Promise<T> {

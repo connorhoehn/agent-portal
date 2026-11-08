@@ -42,6 +42,18 @@ CREATE TABLE IF NOT EXISTS voice_sessions (
   tool_calls           INTEGER     NOT NULL DEFAULT 0 CHECK (tool_calls >= 0)
 );
 
+-- What the provider itself reported over the sideband (G12,
+-- docs/voice-navigator-gaps.md §2.4): the middleware that minted the session
+-- attaches to wss://api.openai.com/v1/live/sessions/{id}/attach and records
+-- the cumulative session.usage.updated / session.closed usage.seconds and the
+-- sums of every nested response.completed.response.usage. Null = the sideband
+-- never delivered that figure (no socket, or the minting replica died); the
+-- close and the reaper then fall back to the dock's figures (`estimated`).
+ALTER TABLE voice_sessions ADD COLUMN IF NOT EXISTS provider_seconds       INTEGER CHECK (provider_seconds IS NULL OR provider_seconds >= 0);
+ALTER TABLE voice_sessions ADD COLUMN IF NOT EXISTS provider_tokens_in     BIGINT  CHECK (provider_tokens_in IS NULL OR provider_tokens_in >= 0);
+ALTER TABLE voice_sessions ADD COLUMN IF NOT EXISTS provider_tokens_out    BIGINT  CHECK (provider_tokens_out IS NULL OR provider_tokens_out >= 0);
+ALTER TABLE voice_sessions ADD COLUMN IF NOT EXISTS provider_tokens_cached BIGINT  CHECK (provider_tokens_cached IS NULL OR provider_tokens_cached >= 0);
+
 CREATE INDEX IF NOT EXISTS voice_sessions_open_idx ON voice_sessions (started_at) WHERE ended_at IS NULL;
 CREATE INDEX IF NOT EXISTS voice_sessions_user_idx ON voice_sessions (user_sub, started_at DESC);
 

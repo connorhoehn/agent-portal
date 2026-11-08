@@ -9,6 +9,8 @@
 //     There is no ephemeral client secret: the middleware proxies the offer
 //     and the answer, and the browser never holds a credential.
 //   POST {base}/live/sessions/{id}/hangup -> 200 {} (ends a session in any state)
+//   WSS  {base}/live/sessions/{id}/attach  the sideband: the provider's own usage
+//     figures for the session, read by the middleware (G12, below)
 //   session = {
 //     model, instructions (<= 20,000 chars), audio?: { output: { voice } },
 //     delegation?: { type: 'responses', responses: { model, instructions, tools: [strict function tools],
@@ -179,6 +181,272 @@ export async function hangupLiveSession(providerSessionId: string): Promise<bool
   } catch {
     return false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// The sideband (docs/voice-navigator-gaps.md §2.4, G12; spec §1 "Sideband").
+//
+//   wss://api.openai.com/v1/live/sessions/{id}/attach   Authorization: Bearer <key>
+//     attaches to a minted WebRTC session at once, before media connects, and
+//     receives the session's server events (V1, `mint-webrtc`):
+//       session.started        { session }                         (ignored here)
+//       session.usage.updated  { usage: { seconds }, context_window }   cumulative
+//       session.closed         { reason, usage: { seconds } }           final, cumulative
+//       response.event         { delegation_id, event: { type: 'response.completed',
+//                                response: { id, usage: { input_tokens, output_tokens,
+//                                input_tokens_details: { cached_tokens } } } } }
+//     Seconds are cumulative, never summed; tokens are summed per nested
+//     response, each response id counted once.
+//
+// One socket per live session, held by the process that minted it. Best
+// effort: attaching never throws, never blocks the mint, reconnects at most
+// twice after an unexpected close, and the socket is closed by the session's
+// close, the reaper, or its own lifetime. The key stays in this module: it is
+// in the constructor's header and nowhere else.
+
+/** What the provider itself reported for one live session. */
+export interface ProviderUsage {
+  /** The latest cumulative `usage.seconds`; null until the first usage frame. */
+  seconds: number | null;
+  /** Sums of every nested `response.completed.response.usage`; null until one arrived (0 once the session closed with none). */
+  inputTokens: number | null;
+  outputTokens: number | null;
+  /** `input_tokens_details.cached_tokens`, a part of inputTokens. */
+  cachedTokens: number | null;
+  /** How many distinct responses the sums cover. */
+  responses: number;
+  /** `session.closed` arrived: the figures are the session's final ones. */
+  final: boolean;
+}
+
+/** The part of a WebSocket the sideband uses (Node 22's built-in, or a test's fake). */
+export interface SidebandSocket {
+  close(code?: number, reason?: string): void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  addEventListener(type: 'open' | 'message' | 'close' | 'error', listener: (ev: any) => void): void;
+}
+/** Node's WebSocket takes `{ headers }` as its second argument (undici's WebSocketInit). */
+export type SidebandSocketCtor = new (url: string, init: { headers: Record<string, string> }) => SidebandSocket;
+
+const builtinSocket = (): SidebandSocketCtor | null =>
+  ((globalThis as { WebSocket?: unknown }).WebSocket as SidebandSocketCtor | undefined) ?? null;
+let socketCtor: () => SidebandSocketCtor | null = builtinSocket;
+/** Tests: replace the WebSocket constructor (null = the built-in one). */
+export function _setVoiceWebSocket(ctor: SidebandSocketCtor | null): void {
+  socketCtor = ctor ? () => ctor : builtinSocket;
+}
+
+/** Reconnects after an unexpected close, on top of the first connect. */
+export const SIDEBAND_MAX_RECONNECTS = 2;
+/** The socket's longest life when nothing closes it (the mint passes its hold's life plus a margin). */
+const SIDEBAND_DEFAULT_LIFETIME_MS = 2 * 60 * 60_000;
+
+interface Sideband {
+  providerSessionId: string;
+  socket: SidebandSocket | null;
+  usage: ProviderUsage;
+  seenResponses: Set<string>;
+  connected: boolean;
+  connects: number;
+  /** Detached, final, or out of reconnects: nothing more will arrive. */
+  ended: boolean;
+  onUsage?: (usage: ProviderUsage) => void | Promise<void>;
+  waiters: Array<() => void>;
+  timers: Set<ReturnType<typeof setTimeout>>;
+}
+
+const sidebands = new Map<string, Sideband>();
+
+const snapshot = (sb: Sideband): ProviderUsage => ({ ...sb.usage });
+
+function later(sb: Sideband, ms: number, fn: () => void): void {
+  const t = setTimeout(() => { sb.timers.delete(t); fn(); }, ms);
+  (t as { unref?: () => void }).unref?.();
+  sb.timers.add(t);
+}
+
+function wake(sb: Sideband): void {
+  for (const w of sb.waiters.splice(0)) w();
+}
+
+function emitUsage(sb: Sideband): void {
+  if (!sb.onUsage) return;
+  try {
+    void Promise.resolve(sb.onUsage(snapshot(sb))).catch((err: Error) => {
+      console.warn(`[voice] sideband usage write failed: ${String(err?.message ?? err).slice(0, 120)}`);
+    });
+  } catch { /* a sink that throws is the sink's problem, never the socket's */ }
+}
+
+const tokenCount = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
+
+/** Fold one server frame into the session's figures. True when they changed. */
+function onFrame(sb: Sideband, ev: Record<string, unknown>): boolean {
+  const type = ev['type'];
+  let changed = false;
+  if (type === 'session.usage.updated' || type === 'session.closed') {
+    const sec = (ev['usage'] as { seconds?: unknown } | undefined)?.seconds;
+    if (typeof sec === 'number' && Number.isFinite(sec) && sec >= 0 && (sb.usage.seconds == null || sec > sb.usage.seconds)) {
+      sb.usage.seconds = sec;
+      changed = true;
+    }
+    if (type === 'session.closed') {
+      sb.usage.final = true;
+      sb.usage.inputTokens ??= 0; sb.usage.outputTokens ??= 0; sb.usage.cachedTokens ??= 0;
+      changed = true;
+    }
+  }
+  // The nested form is what V1 recorded; a bare response.completed is accepted too.
+  const nested = type === 'response.event' ? ev['event'] as Record<string, unknown> | undefined : ev;
+  if (nested && nested['type'] === 'response.completed') {
+    const response = nested['response'] as { id?: unknown; usage?: Record<string, unknown> } | undefined;
+    const id = typeof response?.id === 'string' ? response.id : null;
+    const usage = response?.usage;
+    if (usage && typeof usage === 'object' && !(id && sb.seenResponses.has(id))) {
+      if (id) sb.seenResponses.add(id);
+      const details = usage['input_tokens_details'] as { cached_tokens?: unknown } | undefined;
+      sb.usage.inputTokens = (sb.usage.inputTokens ?? 0) + tokenCount(usage['input_tokens']);
+      sb.usage.outputTokens = (sb.usage.outputTokens ?? 0) + tokenCount(usage['output_tokens']);
+      sb.usage.cachedTokens = (sb.usage.cachedTokens ?? 0) + tokenCount(details?.cached_tokens);
+      sb.usage.responses += 1;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function connect(sb: Sideband): void {
+  const key = apiKey();
+  const Ctor = socketCtor();
+  if (sb.ended) return;
+  if (!key || !Ctor) { sb.ended = true; wake(sb); return; }
+  sb.connects += 1;
+  const url = `${apiBase().replace(/^http/, 'ws')}/live/sessions/${encodeURIComponent(sb.providerSessionId)}/attach`;
+  let socket: SidebandSocket;
+  try {
+    socket = new Ctor(url, { headers: { Authorization: `Bearer ${key}` } });
+  } catch {
+    retry(sb);
+    return;
+  }
+  sb.socket = socket;
+  let gone = false;
+  const lost = () => {
+    if (gone) return;
+    gone = true;
+    if (sb.socket === socket) sb.socket = null;
+    if (sb.usage.final || sb.ended) { sb.ended = true; wake(sb); return; }
+    retry(sb);
+  };
+  socket.addEventListener('open', () => { sb.connected = true; });
+  socket.addEventListener('message', (msg: { data?: unknown }) => {
+    let ev: unknown;
+    try {
+      const data = msg?.data;
+      ev = JSON.parse(typeof data === 'string' ? data : Buffer.from(data as ArrayBuffer).toString('utf8'));
+    } catch { return; }
+    if (!ev || typeof ev !== 'object') return;
+    if (onFrame(sb, ev as Record<string, unknown>)) emitUsage(sb);
+    if (sb.usage.final) {
+      sb.ended = true;
+      wake(sb);
+      try { socket.close(1000); } catch { /* already closing */ }
+    }
+  });
+  socket.addEventListener('error', lost);
+  socket.addEventListener('close', lost);
+}
+
+function retry(sb: Sideband): void {
+  if (sb.ended || sb.connects > SIDEBAND_MAX_RECONNECTS) {
+    sb.ended = true;
+    wake(sb);
+    return;
+  }
+  later(sb, 500 * sb.connects, () => connect(sb));
+}
+
+/**
+ * Attach the sideband to a freshly minted live session (G12). Never throws
+ * and never waits: false when it could not even start (no key, no
+ * WebSocket, a malformed id, MOCK_VOICE). `onUsage` hears every change of
+ * the figures; its failures are logged and dropped.
+ */
+export function attachSideband(providerSessionId: string, opts: {
+  onUsage?: (usage: ProviderUsage) => void | Promise<void>; lifetimeMs?: number;
+} = {}): boolean {
+  try {
+    if (process.env['MOCK_VOICE'] === '1' || !apiKey() || !socketCtor() || !/^[\w-]{1,200}$/.test(providerSessionId)) return false;
+    if (sidebands.has(providerSessionId)) return true;
+    const sb: Sideband = {
+      providerSessionId, socket: null, seenResponses: new Set(), connected: false, connects: 0, ended: false,
+      usage: { seconds: null, inputTokens: null, outputTokens: null, cachedTokens: null, responses: 0, final: false },
+      waiters: [], timers: new Set(), ...(opts.onUsage ? { onUsage: opts.onUsage } : {}),
+    };
+    sidebands.set(providerSessionId, sb);
+    later(sb, opts.lifetimeMs ?? SIDEBAND_DEFAULT_LIFETIME_MS, () => detachSideband(providerSessionId));
+    connect(sb);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The figures this process holds for a session: null when it has no sideband or the socket never opened. */
+export function sidebandUsage(providerSessionId: string): ProviderUsage | null {
+  const sb = sidebands.get(providerSessionId);
+  return sb && sb.connected ? snapshot(sb) : null;
+}
+
+/**
+ * Wait up to `ms` for the session's final figures (`session.closed`) on its
+ * sideband, then answer what it holds (sidebandUsage). Returns at once when
+ * there is no sideband here, it never connected, or nothing more can arrive.
+ */
+export async function waitForSidebandUsage(providerSessionId: string, ms: number): Promise<ProviderUsage | null> {
+  const found = sidebands.get(providerSessionId);
+  if (!found) return null;
+  const sb: Sideband = found;
+  if (!sb.ended && !sb.usage.final && sb.connected) {
+    await new Promise<void>((resolve) => {
+      const t = setTimeout(done, ms);
+      (t as { unref?: () => void }).unref?.();
+      function done() { clearTimeout(t); const i = sb.waiters.indexOf(done); if (i >= 0) sb.waiters.splice(i, 1); resolve(); }
+      sb.waiters.push(done);
+    });
+  }
+  return sidebandUsage(providerSessionId);
+}
+
+/** Close the session's sideband and forget it (the close route, the reaper, the lifetime). */
+export function detachSideband(providerSessionId: string): void {
+  const sb = sidebands.get(providerSessionId);
+  if (!sb) return;
+  sidebands.delete(providerSessionId);
+  sb.ended = true;
+  for (const t of sb.timers) clearTimeout(t);
+  sb.timers.clear();
+  const socket = sb.socket;
+  sb.socket = null;
+  if (socket) { try { socket.close(1000); } catch { /* already closed */ } }
+  wake(sb);
+}
+
+/**
+ * The reaper's path (G12): hang the session up, then read its final usage
+ * from the same sideband (V1: a hangup with the sideband open delivers
+ * `session.closed { usage }` on it). Null usage when this process holds no
+ * connected sideband for it.
+ */
+export async function hangupAndReadUsage(providerSessionId: string, waitMs: number): Promise<{ hungUp: boolean; usage: ProviderUsage | null }> {
+  const hungUp = await hangupLiveSession(providerSessionId);
+  const usage = await waitForSidebandUsage(providerSessionId, waitMs);
+  return { hungUp, usage };
+}
+
+/** Tests: drop every sideband this process holds. */
+export function _resetSidebands(): void {
+  for (const id of [...sidebands.keys()]) detachSideband(id);
 }
 
 /** One data-channel frame of the scripted session, `atMs` after the dock starts it. */
