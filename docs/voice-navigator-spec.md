@@ -120,6 +120,9 @@ sequenceDiagram
 
 ## 4. Tool catalogue
 
+**decision (owner, 8 November 2026)** The intents are "essentially searches in the backend and activities in the social app". The catalogue is therefore a typed facade over two existing systems, not a dozen bespoke endpoints: every read tool is a scoped backend search (people, initiatives, approvals and access requests, sweep runs), every people-facing action is a social activity posted the way the social app posts it (resolved through `GET /api/social/resolve`), navigation is a route change, and machine actions go through the work routes. Each catalogue entry declares its `backing` (`search`, `social-activity`, `route`, `work`) and the implementation adds new middleware only where a search scope or an activity kind is missing.
+
+
 Every tool takes the active tenant from the session and refuses an argument that names another tenant. Arguments are validated against the schema in the browser before any call. "Says" is what the instructions tell the model to say while the tool runs; the dock shows the same line.
 
 | tool | arguments | maps to (today) | gate | spend | idempotent | says | missing |
