@@ -21,8 +21,7 @@ const Ajv: any = (AjvImport as any).default ?? AjvImport;
 /** §4, row by row: name -> [kind, confirm, backing]. */
 const SPEC: Record<string, [string, boolean, string]> = {
   navigate: ['navigate', false, 'route'],
-  search_people: ['read', false, 'search'],
-  search_records: ['read', false, 'search'],
+  search: ['read', false, 'search'],
   open_result: ['navigate', false, 'route'],
   list_active_initiatives: ['read', false, 'search'],
   open_computer_lab: ['navigate', false, 'route'],
@@ -79,7 +78,8 @@ describe('the §4 catalogue', () => {
     const ajv = new Ajv({ strict: true });
     const ok = (name: string, args: unknown) => expect(ajv.compile(voiceTool(name)!.parameters)(args)).toBe(true);
     ok('navigate', { page: 'search', params: { q: 'kubernetes', type: 'person' } });
-    ok('search_people', { query: 'kubernetes', sort: 'recent', limit: 5, scope: 'workspace' });
+    ok('search', { query: 'kubernetes', type: 'person', sort: 'recent', limit: 5, scope: 'workspace' });
+    ok('search', { query: 'who decided the cutover order', answer: true });
     ok('list_active_initiatives', { scope: 'mine' });
     ok('bot_sweep_status', { since: 'yesterday', scope: 'failed' });
     ok('run_command', { computerId: 'box-1', phrase: 'commits-since', since: 'yesterday' });
@@ -111,7 +111,7 @@ describe('the §4 catalogue', () => {
 
 describe('tenant scoping (§6)', () => {
   it('a social session is offered navigate, its search, its activity, chat, a call, status and its own requests, nothing on machines', () => {
-    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'activity', 'navigate', 'open_result', 'search_records', 'send_chat_message', 'set_status', 'start_call']);
+    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'activity', 'navigate', 'open_result', 'search', 'send_chat_message', 'set_status', 'start_call']);
   });
 
   it('start_call is offered in orgiq and social only, asks first, and gates on StartCall (G7)', () => {
@@ -131,9 +131,9 @@ describe('tenant scoping (§6)', () => {
     for (const p of NAVIGATE_PAGES) expect(p.path.startsWith('/')).toBe(true);
   });
 
-  it('search_records names exactly the types each tenant\'s backend search indexes', async () => {
+  it('search names exactly the types each tenant\'s backend search indexes, people included in orgiq (v2)', async () => {
     expect(Object.keys(SEARCH_RECORD_TYPES).sort()).toEqual([...TENANTS_SEARCH_INDEXED].sort());
-    expect(searchRecordTypes('orgiq')).toEqual(SEARCH_TYPES.filter((t) => t !== 'person'));
+    expect(searchRecordTypes('orgiq')).toEqual([...SEARCH_TYPES]);
     for (const tenant of ['social', 'assessment', 'pipelines', 'access'] as const) {
       expect(searchRecordTypes(tenant)).toEqual([...(await tenantSpec(tenant)).types]);
     }
@@ -141,10 +141,10 @@ describe('tenant scoping (§6)', () => {
     for (const a of Object.values(SEARCH_ACTIONS)) expect(CAPABILITY_ACTIONS).toContain(a);
   });
 
-  it.each([...VOICE_TENANTS])('the %s session\'s search_records enum is that tenant\'s index types (orgiq\'s with team)', (tenant) => {
-    const tool = toolsForTenant(tenant).find((t) => t.name === 'search_records')!;
+  it.each([...VOICE_TENANTS])('the %s session\'s search enum is that tenant\'s index types (orgiq\'s with person and team)', (tenant) => {
+    const tool = toolsForTenant(tenant).find((t) => t.name === 'search')!;
     expect((tool.parameters.properties['type'] as { enum: string[] }).enum).toEqual(searchRecordTypes(tenant));
-    if (tenant === 'orgiq') expect((tool.parameters.properties['type'] as { enum: string[] }).enum).toContain('team');
+    if (tenant === 'orgiq') expect((tool.parameters.properties['type'] as { enum: string[] }).enum).toEqual(expect.arrayContaining(['person', 'team']));
     for (const type of searchRecordTypes(tenant)) expect(tool.description).toContain(type);
   });
 
@@ -159,7 +159,7 @@ describe('tenant scoping (§6)', () => {
 
   it.each(['assessment', 'pipelines', 'access'])('%s is offered reads and navigation only: nothing that touches a machine or posts (gaps doc Q1); pipelines adds queue_work (G19)', (tenant) => {
     const tools = toolsForTenant(tenant).filter((t) => t.name !== 'queue_work');
-    expect(tools.map((t) => t.name).sort()).toEqual(['access_request_status', 'navigate', 'open_result', 'search_records']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['access_request_status', 'navigate', 'open_result', 'search']);
     expect(toolsForTenant(tenant).some((t) => t.name === 'queue_work')).toBe(tenant === 'pipelines');
     for (const t of tools) {
       expect(['read', 'navigate']).toContain(t.kind);
@@ -183,7 +183,7 @@ describe('tenant scoping (§6)', () => {
     const v = new Ajv({ strict: true }).compile(t.parameters);
     expect(v({ ref: 'person:p1' })).toBe(true);
     expect(v({ ref: '1', href: '/admin/identity' })).toBe(false);
-    for (const name of ['search_people', 'search_records']) expect(voiceTool(name)!.description).toMatch(/ref that open_result opens/);
+    expect(voiceTool('search')!.description).toMatch(/ref that open_result opens/);
   });
 
   it('the access approver\'s scripted session reads approvals, a requester\'s its own requests, and every role key names a real seed role', () => {

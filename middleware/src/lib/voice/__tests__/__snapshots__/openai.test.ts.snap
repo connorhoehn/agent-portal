@@ -66,11 +66,18 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "Search the workspace's people index (the backend search, type person) by skill, topic or name. "Latest" means sort recent. Each row carries a ref that open_result opens.",
-    "name": "search_people",
+    "description": "Search this workspace's backend index by free text: people by skill, topic or name, records, and questions such as "who decided X" or "which teams are below target". Narrow it with a type; "latest" means sort recent; pass answer true when the user asks a question that wants one fact. Each row carries a ref that open_result opens. The kinds here: person, team, initiative, work, decision, knowledge, asset, recording.",
+    "name": "search",
     "parameters": {
       "additionalProperties": false,
       "properties": {
+        "answer": {
+          "description": "True when the user asked a question that wants one fact (who, how many, which): the backend answers it from the index, with the records it read.",
+          "type": [
+            "boolean",
+            "null",
+          ],
+        },
         "limit": {
           "description": "How many results, 1 to 10. Default 5.",
           "type": [
@@ -79,7 +86,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
           ],
         },
         "query": {
-          "description": "What to search for, e.g. "kubernetes".",
+          "description": "What to search for, in the user's words.",
           "type": "string",
         },
         "scope": {
@@ -101,45 +108,10 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
             "null",
           ],
         },
-      },
-      "required": [
-        "query",
-        "scope",
-        "limit",
-        "sort",
-      ],
-      "type": "object",
-    },
-    "strict": true,
-    "type": "function",
-  },
-  {
-    "description": "Search this workspace's record index (the backend search) by kind of record; each row carries a ref that open_result opens. The kinds here: team, initiative, work, decision, knowledge, asset, recording.",
-    "name": "search_records",
-    "parameters": {
-      "additionalProperties": false,
-      "properties": {
-        "limit": {
-          "description": "How many results, 1 to 10. Default 5.",
-          "type": [
-            "integer",
-            "null",
-          ],
-        },
-        "query": {
-          "description": "What to search for.",
-          "type": "string",
-        },
-        "scope": {
-          "description": "Where to search: "workspace" (the default) or one initiative id, to search inside that initiative only.",
-          "type": [
-            "string",
-            "null",
-          ],
-        },
         "type": {
           "description": "Which kind of record.",
           "enum": [
+            "person",
             "team",
             "initiative",
             "work",
@@ -159,7 +131,9 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
         "query",
         "type",
         "scope",
+        "sort",
         "limit",
+        "answer",
       ],
       "type": "object",
     },
@@ -167,7 +141,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "Open one row of the last search_people or search_records result on its own page (a person's profile, an initiative, a run). Pass the row's ref exactly as the result gave it (e.g. "person:p-12"), or its position in the last result ("1" for the first row). Never a name or a path.",
+    "description": "Open one row of the last search or activity result on its own page (a person's profile, an initiative, a run). Pass the row's ref exactly as the result gave it (e.g. "person:p-12"), or its position in the last result ("1" for the first row). Never a name or a path.",
     "name": "open_result",
     "parameters": {
       "additionalProperties": false,

@@ -6,8 +6,9 @@ import { PALETTE, fakeFetch, route, toolContext } from './voiceHarness.ts';
 
 /** A valid call per P3 tool, and the context that refuses it. */
 const P3_REFUSALS: Array<{ tool: string; args: Record<string, unknown>; ctx: Parameters<typeof toolContext>[0] }> = [
-  { tool: 'search_people', args: { query: 'kubernetes' }, ctx: { deny: ['Search'] } },
-  { tool: 'search_records', args: { query: 'auth migration', type: 'decision' }, ctx: { deny: ['Search'] } },
+  { tool: 'search', args: { query: 'kubernetes', type: 'person' }, ctx: { deny: ['Search'] } },
+  { tool: 'search', args: { query: 'auth migration', type: 'decision', answer: true }, ctx: { deny: ['Search'] } },
+  { tool: 'search', args: { query: 'who approved it', answer: true }, ctx: { tenant: 'access', deny: ['ViewAccess'] } },
   { tool: 'navigate', args: { page: 'bots' }, ctx: { role: 'member' } },
   { tool: 'open_computer_lab', args: {}, ctx: { tenant: 'social' } },
   { tool: 'list_active_initiatives', args: {}, ctx: { tenant: 'social' } },
@@ -32,10 +33,13 @@ test('every P3 tool refuses on its gate without a network call', async () => {
 });
 
 test('arguments: strict nulls are dropped, then lengths, ranges, enums and unknown keys are enforced', () => {
-  const people = voiceToolSpec('search_people')!;
-  assert.deepEqual(parseToolArgs(people, '{"query":"Kubernetes experts","scope":null,"limit":null,"sort":"recent"}'),
-    { ok: true, args: { query: 'Kubernetes experts', sort: 'recent' }, ignored: [] });
-  for (const bad of ['{"query":""}', '{"query":"x","limit":11}', '{"query":"x","limit":2.5}', '{"query":"x","sort":"newest"}',
+  const people = voiceToolSpec('search')!;
+  assert.deepEqual(parseToolArgs(people, '{"query":"Kubernetes experts","type":"person","scope":null,"sort":"recent","limit":null,"answer":null}'),
+    { ok: true, args: { query: 'Kubernetes experts', type: 'person', sort: 'recent' }, ignored: [] });
+  assert.deepEqual(parseToolArgs(people, '{"query":"who decided it","answer":true}'), { ok: true, args: { query: 'who decided it', answer: true }, ignored: [] });
+  // Strict mode sends every property: a boolean false is an answer, never "a whole number" (review finding).
+  assert.deepEqual(parseToolArgs(people, '{"query":"kubernetes","type":null,"scope":null,"sort":null,"limit":null,"answer":false}'), { ok: true, args: { query: 'kubernetes', answer: false }, ignored: [] });
+  for (const bad of ['{"query":""}', '{"query":"x","limit":11}', '{"query":"x","limit":2.5}', '{"query":"x","sort":"newest"}', '{"query":"x","answer":"yes"}',
     '{"query":"x","tenant":"access"}', '{}', 'not json', JSON.stringify({ query: 'x'.repeat(201) })]) {
     assert.equal(parseToolArgs(people, bad).ok, false, bad);
   }
@@ -53,7 +57,7 @@ test('navigate refuses an unknown page id and a page outside the tenant or the r
   // Every role of every tenant, over every page id: the id resolves to its own tenant's palette row, gated by isPageVisible.
   const roles = ['member', 'sme', 'program-owner', 'org-leader', 'hr-admin', 'admin', 'participant', 'moderator',
     'assessor', 'program-lead', 'author', 'operator', 'requester', 'approver', 'access-admin'];
-  assert.equal(PALETTE.pages.filter((p) => p.pageId).length, 24, 'the real palette table, 24 voice pages');
+  assert.equal(PALETTE.pages.filter((p) => p.pageId).length, PALETTE.pages.length, 'the real palette table: every page has an id (V2-2)');
   const inTenant = (p: { tenant: string }, t: string) => p.tenant === t || p.tenant === 'universal' || (p.tenant === 'admin' && t === 'orgiq');
   const ids = [...new Set(PALETTE.pages.filter((p) => p.pageId).map((p) => p.pageId!))];
   for (const id of ids) {
@@ -82,7 +86,7 @@ test('navigate refuses an unknown page id and a page outside the tenant or the r
   assert.equal(voicePage(PALETTE, 'workspaces')!.path, '/workspaces');
 });
 
-test('search_people navigates the page and reads the same search, shaping rows as data', async () => {
+test('search for people navigates the page and reads the same search, shaping rows as data', async () => {
   const long = 'k'.repeat(400);
   const results = Array.from({ length: 14 }, (_, i) => ({
     type: 'person', id: `p${i}`, title: `Person ${i}`, subtitle: 'Platform', description: long, href: `/iq/people/p${i}`,
@@ -90,7 +94,7 @@ test('search_people navigates the page and reads the same search, shaping rows a
   }));
   const { fetch, log } = fakeFetch([route('GET', '/api/search?', 200, { query: 'kubernetes', results, total: 14, counts: {} })]);
   const c = toolContext({ fetch });
-  const r = await runVoiceTool('search_people', '{"query":"Kubernetes experts","scope":null,"limit":null,"sort":"recent"}', c);
+  const r = await runVoiceTool('search', '{"query":"Kubernetes experts","type":"person","scope":null,"limit":null,"sort":"recent","answer":null}', c);
   assert.equal(r.outcome, 'done');
   assert.deepEqual(c.navigations, ['/iq/search?q=Kubernetes+experts&type=person&tab=results&sort=recent']);
   assert.equal(log[0]!.url, '/api/search?q=Kubernetes+experts&type=person&limit=5&sort=recent');
@@ -98,37 +102,87 @@ test('search_people navigates the page and reads the same search, shaping rows a
   assert.equal(r.output['kind'], 'search_results');
   const rows = r.output['rows'] as Array<Record<string, unknown>>;
   assert.equal(rows.length, 5);
-  assert.deepEqual(Object.keys(rows[0]!).sort(), ['detail', 'href', 'matched', 'name', 'ref', 'subtitle', 'updatedAt']);
+  assert.deepEqual(Object.keys(rows[0]!).sort(), ['detail', 'href', 'matched', 'ref', 'subtitle', 'title', 'type', 'updatedAt']);
   assert.equal(rows[0]!['ref'], 'person:p0', 'the row\'s own id, for open_result');
   assert.equal((rows[0]!['detail'] as string).length, MAX_FIELD_CHARS);
 });
 
 test('a search the server refuses is a refusal, an outage a failure', async () => {
   const forbidden = fakeFetch([route('GET', '/api/search', 403, { error: 'Forbidden' })]);
-  assert.equal((await runVoiceTool('search_records', { query: 'x' }, toolContext({ fetch: forbidden.fetch }))).outcome, 'refused');
+  assert.equal((await runVoiceTool('search', { query: 'x' }, toolContext({ fetch: forbidden.fetch }))).outcome, 'refused');
   const down = fakeFetch([route('GET', '/api/search', 502, {})]);
-  assert.equal((await runVoiceTool('search_records', { query: 'x' }, toolContext({ fetch: down.fetch }))).outcome, 'failed');
+  assert.equal((await runVoiceTool('search', { query: 'x' }, toolContext({ fetch: down.fetch }))).outcome, 'failed');
 });
 
-test('search_records outside orgiq reads that tenant\'s own search, with its own types and gate, and opens no page', async () => {
+test('search answer: a tenant\'s /answer fact with the records it read; no fact falls back to the matching records', async () => {
+  const answer = { intent: 'assessment:below-target', text: '2 teams are below the target level: Atlas and Borealis.', records: [
+    { type: 'team', id: 't-atlas', title: 'Atlas', href: '/assessment/teams/t-atlas', n: 1, status: 'in progress' },
+    { type: 'team', id: 't-bor', title: 'Borealis', href: '/assessment/teams/t-bor', n: 2 },
+  ], rows: [{ secret: 'never sent' }], sources: ['the scorecards'] };
+  const { fetch, log } = fakeFetch([route('GET', '/api/assessment/search/answer?', 200, { query: 'q', answer })]);
+  const results = new ResultMemory();
+  const c = toolContext({ fetch, tenant: 'assessment', role: 'assessor', allow: ['ViewAssessment'], results });
+  const r = await runVoiceTool('search', { query: 'Which teams are below target?', answer: true }, c);
+  assert.equal(r.outcome, 'done');
+  assert.equal(r.output['kind'], 'search_answer');
+  assert.equal(r.output['answer'], answer.text);
+  assert.equal(r.summary, answer.text);
+  assert.deepEqual(log.map((l) => l.url), ['/api/assessment/search/answer?q=Which+teams+are+below+target%3F']);
+  assert.deepEqual((r.output['rows'] as Array<{ ref: string }>).map((x) => x.ref), ['team:t-atlas', 'team:t-bor']);
+  assert.doesNotMatch(JSON.stringify(r.output), /never sent|scorecards/, 'only the fact and the records, never the structured rows');
+  assert.equal(results.find('2')!.href, '/assessment/teams/t-bor', 'the records are kept for "the second one"');
+
+  // No intent recognised: the plain search answers, and says no fact was found.
+  const none = fakeFetch([route('GET', '/api/pipelines/search/answer?', 200, { query: 'q', answer: null }),
+    route('GET', '/api/pipelines/search?', 200, { results: [{ type: 'run', id: 'run-9', title: 'Nightly ingest', status: 'failed', href: '/pipelines/runs/run-9' }], total: 1 })]);
+  const p = await runVoiceTool('search', { query: 'what failed', answer: true }, toolContext({ fetch: none.fetch, tenant: 'pipelines', allow: ['ViewPipelines'] }));
+  assert.equal(p.output['kind'], 'search_results');
+  assert.match(String(p.output['noAnswer']), /No question the index answers/);
+  assert.deepEqual(none.log.map((l) => l.url.split('?')[0]), ['/api/pipelines/search/answer', '/api/pipelines/search']);
+  // A refused /answer is a refusal, with no second read.
+  const denied = fakeFetch([route('GET', '/api/access/search/answer?', 403, {})]);
+  assert.equal((await runVoiceTool('search', { query: 'x', answer: true }, toolContext({ fetch: denied.fetch, tenant: 'access', allow: ['ViewAccess'] }))).outcome, 'refused');
+  assert.equal(denied.log.length, 1);
+});
+
+test('search answer in orgiq: the question intent\'s rows GET /api/search ranks first are the fact', async () => {
+  const results = [
+    { type: 'person', id: 'p-vera', title: 'Vera Green', matchReason: 'Decided it', href: '/iq/search?tab=connections&selection=person%3Ap-vera' },
+    { type: 'decision', id: 'd-cut', title: 'Cutover order for legacy SSO tenants', matchReason: 'Decision the question names', href: '/iq/decisions/d-cut' },
+    { type: 'work', id: 'w1', title: 'Cutover runbook', matchReason: 'Text match', href: '/iq/projects/p1' },
+  ];
+  const { fetch, log } = fakeFetch([route('GET', '/api/search?', 200, { results, total: 3 })]);
+  const c = toolContext({ fetch, allow: ['Search'] });
+  const r = await runVoiceTool('search', { query: 'who decided the cutover order', answer: true }, c);
+  assert.equal(r.output['kind'], 'search_answer');
+  assert.equal(r.output['answer'], 'Decided it: Vera Green');
+  assert.equal(log[0]!.url, '/api/search?q=who+decided+the+cutover+order&type=all&limit=5');
+  // A plain text match is not a fact.
+  const plain = fakeFetch([route('GET', '/api/search?', 200, { results: [results[2]], total: 1 })]);
+  const q = await runVoiceTool('search', { query: 'cutover runbook', answer: true }, toolContext({ fetch: plain.fetch, allow: ['Search'] }));
+  assert.equal(q.output['kind'], 'search_results');
+  assert.ok(q.output['noAnswer']);
+});
+
+test('search outside orgiq reads that tenant\'s own search, with its own types and gate, and opens no page', async () => {
   const huddle = { type: 'huddle', id: 'h1', title: 'Platform standup', kind: 'Huddle', subtitle: 'In the huddle now: Mira, Lena', status: 'live', href: '/social/calls', score: 3 };
   const { fetch, log } = fakeFetch([route('GET', '/api/social/search?', 200, { query: 'standup', results: [huddle], counts: { huddle: 1 }, total: 1 })]);
   const c = toolContext({ fetch, tenant: 'social', role: 'participant', allow: ['ViewSocial'] });
-  const r = await runVoiceTool('search_records', '{"query":"standup","type":"huddle","scope":null,"limit":null}', c);
+  const r = await runVoiceTool('search', '{"query":"standup","type":"huddle","scope":null,"limit":null}', c);
   assert.equal(r.outcome, 'done');
   assert.deepEqual(log.map((l) => l.url), ['/api/social/search?q=standup&type=huddle&limit=5']);
   assert.deepEqual(c.navigations, [], 'no search page outside orgiq');
   assert.deepEqual((r.output['rows'] as unknown[])[0], { ref: 'huddle:h1', title: 'Platform standup', type: 'huddle', subtitle: 'In the huddle now: Mira, Lena', status: 'live', href: '/social/calls' });
 
   // A type another tenant indexes is refused before the network; so is a role without the tenant search's own action.
-  const foreign = await runVoiceTool('search_records', { query: 'x', type: 'initiative' }, toolContext({ fetch, tenant: 'social', allow: ['ViewSocial'] }));
+  const foreign = await runVoiceTool('search', { query: 'x', type: 'initiative' }, toolContext({ fetch, tenant: 'social', allow: ['ViewSocial'] }));
   assert.equal(foreign.outcome, 'refused');
-  const noView = await runVoiceTool('search_records', { query: 'x' }, toolContext({ fetch, tenant: 'social', allow: ['Search'] }));
+  const noView = await runVoiceTool('search', { query: 'x' }, toolContext({ fetch, tenant: 'social', allow: ['Search'] }));
   assert.equal(noView.outcome, 'refused');
   assert.equal(log.length, 1);
   // orgiq keeps GET /api/search, and `team` is a type there now.
   const org = fakeFetch([route('GET', '/api/search?', 200, { results: [{ type: 'team', id: 't1', title: 'Platform', href: '/iq/search?tab=connections' }], total: 1 })]);
-  const t = await runVoiceTool('search_records', { query: 'platform', type: 'team' }, toolContext({ fetch: org.fetch, allow: ['Search'] }));
+  const t = await runVoiceTool('search', { query: 'platform', type: 'team' }, toolContext({ fetch: org.fetch, allow: ['Search'] }));
   assert.equal(t.outcome, 'done');
   assert.equal(org.log[0]!.url, '/api/search?q=platform&type=team&limit=5');
 });
@@ -143,7 +197,7 @@ test('open_result opens a row the session\'s own search returned, by ref or posi
   const c = toolContext({ fetch, results });
   // Before any search there is nothing to open.
   assert.equal((await runVoiceTool('open_result', { ref: '1' }, c)).outcome, 'refused');
-  const found = await runVoiceTool('search_people', { query: 'kubernetes' }, c);
+  const found = await runVoiceTool('search', { query: 'kubernetes', type: 'person' }, c);
   assert.deepEqual((found.output['rows'] as Array<{ ref: string }>).map((r) => r.ref), ['person:p-ada', 'person:p-bo']);
   c.navigations.length = 0;
 
@@ -176,7 +230,7 @@ test('open_result refuses a kept row whose href leaves the portal; social profil
 
   const { fetch } = fakeFetch([route('GET', '/api/social/search?', 200, { results: [{ type: 'contact', id: 'u-ada', title: 'Ada Okafor', kind: 'Contact', href: '/social/contacts/u-ada', score: 2 }], total: 1 })]);
   const s = toolContext({ fetch, tenant: 'social', role: 'participant', allow: ['ViewSocial'], results: new ResultMemory() });
-  await runVoiceTool('search_records', { query: 'ada', type: 'contact' }, s);
+  await runVoiceTool('search', { query: 'ada', type: 'contact' }, s);
   assert.equal((await runVoiceTool('open_result', { ref: 'contact:u-ada' }, s)).outcome, 'done');
   assert.deepEqual(s.navigations, ['/social/contacts/u-ada']);
   // And navigate names the same profile by page id.
@@ -354,7 +408,7 @@ test('property: no tool result carries a string over 120 characters or a list ov
     route('GET', '/api/access-requests/mine', 200, { items: rows(30, () => request({ item: { id: 'e', title: huge } })) }),
   ]);
   const calls: Array<[string, Record<string, unknown>]> = [
-    ['search_people', { query: 'k', limit: 10 }], ['search_records', { query: 'k', limit: 10 }], ['list_active_initiatives', { scope: 'all' }],
+    ['search', { query: 'k', type: 'person', limit: 10 }], ['search', { query: 'k', limit: 10 }], ['list_active_initiatives', { scope: 'all' }],
     ['bot_sweep_status', { since: 'yesterday', scope: 'all' }], ['access_request_status', { query: 'alpha' }], ['navigate', { page: 'search', params: { q: huge.slice(0, 900) } }],
   ];
   const walk = (v: unknown, path: string): void => {

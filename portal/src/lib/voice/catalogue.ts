@@ -17,7 +17,7 @@ export type VoiceToolBacking = 'search' | 'social-activity' | 'route' | 'work';
 
 /** The subset of JSON Schema the catalogue uses. */
 export interface JsonSchema {
-  type: 'object' | 'string' | 'integer' | 'array';
+  type: 'object' | 'string' | 'integer' | 'array' | 'boolean';
   description?: string;
   properties?: Record<string, JsonSchema>;
   required?: string[];
@@ -78,9 +78,9 @@ export const NAVIGATE_PAGE_IDS: ReadonlyArray<{ id: string; tenants: readonly st
   { id: 'workspaces', tenants: ['*'] },
 ];
 
-/** The record types `search_records` may name, per tenant (the middleware's SEARCH_RECORD_TYPES: each tenant's backend search index). */
+/** The record types `search` may name, per tenant (the middleware's SEARCH_RECORD_TYPES: each tenant's backend search index, people included in orgiq). */
 export const SEARCH_RECORD_TYPES: Readonly<Record<string, readonly string[]>> = {
-  orgiq: ['team', 'initiative', 'work', 'decision', 'knowledge', 'asset', 'recording'],
+  orgiq: ['person', 'team', 'initiative', 'work', 'decision', 'knowledge', 'asset', 'recording'],
   social: ['channel', 'message', 'pin', 'dm', 'contact', 'team', 'room', 'recording', 'calllog', 'huddle'],
   assessment: ['team', 'dimension', 'exception', 'feedback', 'run', 'submission', 'story', 'document'],
   pipelines: ['run', 'definition', 'runbook', 'bot', 'approval', 'queue', 'artifact'],
@@ -92,7 +92,7 @@ export const SEARCH_ACTIONS: Readonly<Record<string, Action>> = {
   orgiq: 'Search', social: 'ViewSocial', assessment: 'ViewAssessment', pipelines: 'ViewPipelines', access: 'ViewAccess',
 };
 
-/** `search_records`' type enum for one tenant, or every tenant's types (null) for the base row. */
+/** `search`'s type enum for one tenant, or every tenant's types (null) for the base row. */
 export function searchRecordTypes(tenant: string | null): string[] {
   if (tenant != null) return [...(SEARCH_RECORD_TYPES[tenant] ?? [])];
   return [...new Set(Object.values(SEARCH_RECORD_TYPES).flat())];
@@ -163,24 +163,16 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
     kind: 'navigate', backing: 'route', confirm: false, action: null, says: 'Opening search.', tenants: VOICE_TENANTS,
   },
   {
-    name: 'search_people',
+    name: 'search',
     parameters: obj({
-      query: str('What to search for, e.g. "kubernetes".', { minLength: 1, maxLength: 200 }),
-      scope: searchScope,
-      limit,
-      sort: str('relevance (default) or recent.', { enum: ['relevance', 'recent'] }),
-    }, ['query']),
-    kind: 'read', backing: 'search', confirm: false, action: 'Search', says: 'Searching people for kubernetes.', tenants: ['orgiq'],
-  },
-  {
-    name: 'search_records',
-    parameters: obj({
-      query: str('What to search for.', { minLength: 1, maxLength: 200 }),
+      query: str('What to search for, in the user\'s words.', { minLength: 1, maxLength: 200 }),
       type: str('Which kind of record.', { enum: searchRecordTypes(null) }),
       scope: searchScope,
+      sort: str('relevance (default) or recent.', { enum: ['relevance', 'recent'] }),
       limit,
+      answer: { type: 'boolean', description: 'True when the user asked a question that wants one fact (who, how many, which): the backend answers it from the index, with the records it read.' },
     }, ['query']),
-    kind: 'read', backing: 'search', confirm: false, action: null, says: 'Searching.', tenants: VOICE_TENANTS,
+    kind: 'read', backing: 'search', confirm: false, action: null, says: 'Searching for the Kubernetes experts.', tenants: VOICE_TENANTS,
   },
   {
     name: 'open_result',

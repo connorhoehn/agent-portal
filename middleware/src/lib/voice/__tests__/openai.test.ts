@@ -54,8 +54,9 @@ describe('the mint body', () => {
 
 describe('strict schemas', () => {
   it('list every property as required at every level, optional ones nullable', () => {
-    const s = liveFunctionTool(tools.find((t) => t.name === 'search_people')!)['parameters'] as Record<string, any>;
-    expect(s['required']).toEqual(['query', 'scope', 'limit', 'sort']);
+    const s = liveFunctionTool(tools.find((t) => t.name === 'search')!)['parameters'] as Record<string, any>;
+    expect(s['required']).toEqual(['query', 'type', 'scope', 'sort', 'limit', 'answer']);
+    expect(s['properties'].answer.type).toEqual(['boolean', 'null']);
     expect(s['properties'].limit.type).toEqual(['integer', 'null']);
     expect(s['properties'].sort.enum).toEqual(['relevance', 'recent', null]);
     expect(s['properties'].query.type).toBe('string');
@@ -68,10 +69,10 @@ describe('strict schemas', () => {
   it('every strict schema compiles, and a strict call with nulls validates once its nulls are dropped', () => {
     const ajv = new Ajv({ strict: false });
     for (const t of tools) ajv.compile(strictSchema(t.parameters as unknown as Record<string, unknown>));
-    const call = { query: 'Kubernetes experts', scope: null, limit: null, sort: 'recent' };
-    expect(ajv.compile(strictSchema(voiceTool('search_people')!.parameters as unknown as Record<string, unknown>))(call)).toBe(true);
+    const call = { query: 'Kubernetes experts', type: 'person', scope: null, sort: 'recent', limit: null, answer: null };
+    expect(ajv.compile(strictSchema(voiceTool('search')!.parameters as unknown as Record<string, unknown>))(call)).toBe(true);
     const dropped = Object.fromEntries(Object.entries(call).filter(([, v]) => v !== null));
-    expect(new Ajv({ strict: true }).compile(voiceTool('search_people')!.parameters)(dropped)).toBe(true);
+    expect(new Ajv({ strict: true }).compile(voiceTool('search')!.parameters)(dropped)).toBe(true);
   });
 });
 
@@ -87,7 +88,7 @@ describe('the mint call', () => {
 
 describe('the MOCK_VOICE script', () => {
   const script = mockLiveScript('vs_00000000-0000-4000-8000-000000000001', {
-    name: 'search_people', arguments: { query: 'Kubernetes experts', scope: null, limit: null, sort: 'recent' }, said: 'Find me the latest Kubernetes experts.',
+    name: 'search', arguments: { query: 'Kubernetes experts', type: 'person', scope: null, sort: 'recent', limit: null, answer: null }, said: 'Find me the latest Kubernetes experts.',
   });
 
   it('delivers the tool call as the Live API does: delegation.created, then response.event envelopes ending in output_item.done', () => {
@@ -101,8 +102,8 @@ describe('the MOCK_VOICE script', () => {
     const done = script.onStart[6]!.event as { delegation_id: string; event: { item: Record<string, unknown> } };
     expect(created.delegation.target).toBe('responses');
     expect(done.delegation_id).toBe(created.delegation.id);
-    expect(done.event.item).toMatchObject({ type: 'function_call', status: 'completed', name: 'search_people', call_id: expect.stringMatching(/^call_/) });
-    expect(JSON.parse(done.event.item['arguments'] as string)).toEqual({ query: 'Kubernetes experts', scope: null, limit: null, sort: 'recent' });
+    expect(done.event.item).toMatchObject({ type: 'function_call', status: 'completed', name: 'search', call_id: expect.stringMatching(/^call_/) });
+    expect(JSON.parse(done.event.item['arguments'] as string)).toEqual({ query: 'Kubernetes experts', type: 'person', scope: null, sort: 'recent', limit: null, answer: null });
     // The arguments-done event carries no name or call_id, as recorded.
     expect(script.onStart[5]!.event['event']).not.toHaveProperty('name');
     // response.completed is not the call's result: its output is always [].

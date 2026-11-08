@@ -43,7 +43,7 @@ function harness(mintBody: unknown, opts: { mintStatus?: number; runners?: Recor
   return { clock, log, ctx, controller, phases };
 }
 
-const KUBE: Call = { name: 'search_people', arguments: { query: 'Kubernetes experts', scope: null, limit: null, sort: 'recent' }, said: 'Find me the latest Kubernetes experts.' };
+const KUBE: Call = { name: 'search', arguments: { query: 'Kubernetes experts', type: 'person', scope: null, sort: 'recent', limit: null, answer: null }, said: 'Find me the latest Kubernetes experts.' };
 
 test('the scripted session drives the dock through its phases, runs the tool, answers once and ends with the seconds', async () => {
   const h = harness(await mint(KUBE));
@@ -61,7 +61,7 @@ test('the scripted session drives the dock through its phases, runs the tool, an
   assert.equal(events.length, 1);
   const row = events[0]!.body as Record<string, unknown>;
   assert.deepEqual(Object.keys(row).sort(), ['argsSha256', 'durationMs', 'outcome', 'tool']);
-  assert.equal(row['argsSha256'], await hashToolArgs({ query: 'Kubernetes experts', sort: 'recent' }));
+  assert.equal(row['argsSha256'], await hashToolArgs({ query: 'Kubernetes experts', type: 'person', sort: 'recent' }));
   assert.equal(row['outcome'], 'done');
   assert.doesNotMatch(JSON.stringify(events[0]!.body), /Kubernetes/);
   // The close posts the seconds, and the delegated tokens the script's two responses used (G11), exactly once.
@@ -70,7 +70,7 @@ test('the scripted session drives the dock through its phases, runs the tool, an
   assert.equal(h.controller.getSnapshot().closedSeconds, 15);
   const strip = h.controller.getSnapshot().turns;
   assert.equal(strip[0]!.role, 'you');
-  assert.deepEqual(strip.flatMap((t) => t.toolCalls ?? []).map((c) => [c.name, c.status]), [['search_people', 'done']]);
+  assert.deepEqual(strip.flatMap((t) => t.toolCalls ?? []).map((c) => [c.name, c.status]), [['search', 'done']]);
   assert.equal(h.controller.getSnapshot().lastLine?.text, 'Here is what I found.');
 });
 

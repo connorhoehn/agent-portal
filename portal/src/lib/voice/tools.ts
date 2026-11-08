@@ -305,6 +305,7 @@ export function schemaProblem(schema: JsonSchema, value: unknown, path = 'argume
     if (schema.maxLength !== undefined && value.length > schema.maxLength) return `${path} is longer than ${schema.maxLength} characters`;
     return null;
   }
+  if (schema.type === 'boolean') return typeof value === 'boolean' ? null : `${path} must be true or false`;
   if (typeof value !== 'number' || !Number.isInteger(value)) return `${path} must be a whole number`;
   if (schema.minimum !== undefined && value < schema.minimum) return `${path} must be at least ${schema.minimum}`;
   if (schema.maximum !== undefined && value > schema.maximum) return `${path} must be at most ${schema.maximum}`;
@@ -509,61 +510,105 @@ const openResult: Runner = async (args, ctx) => {
 
 interface SearchRow { id?: string; title?: string; subtitle?: string; description?: string; matchReason?: string; href?: string; type?: string; status?: string; updatedAt?: string }
 interface SearchBody { results?: SearchRow[]; total?: number }
+/** routes/tenant-search.ts GET /answer: one fixed fact from the reader's own projection, or null (no intent recognised). */
+interface AnswerBody { answer?: { intent: string; text: string; records?: Array<{ type: string; id: string; title: string; href: string; status?: string; subtitle?: string }> } | null }
 
 /** The other tenants' searches (routes/tenant-search.ts, mounted per tenant in middleware index.ts). */
 export const TENANT_SEARCH: Readonly<Record<string, string>> = {
   social: '/api/social/search', assessment: '/api/assessment/search', pipelines: '/api/pipelines/search', access: '/api/access/search',
 };
 
-const SCOPE_IGNORED = 'This workspace searches as a whole; the scope was not applied.';
+/**
+ * GET /api/search's text and edge match reasons (providers/search.ts MATCH_REASONS). Any other reason
+ * on a row is a question intent's (lib/search-index/resolve.ts ANSWER_REASONS: "Decided it", "Lists the
+ * skill", …): the rows that answer the question, which the route ranks first. orgiq has no /answer route;
+ * its answer is those rows.
+ */
+const TEXT_REASONS: ReadonlySet<string> = new Set(['Title match', 'Text match', 'Matched through initiative membership',
+  'Matched through initiative work', 'Matched through a linked initiative', 'In scope']);
 
-function searchRunner(type: 'person' | 'records'): Runner {
-  return async (args, ctx) => {
-    const orgiq = ctx.tenant === 'orgiq';
-    const gate = type === 'person' ? 'Search' : SEARCH_ACTIONS[ctx.tenant];
-    if (!gate || (!orgiq && !TENANT_SEARCH[ctx.tenant])) return refused('There is no search in this workspace.');
-    if (!ctx.can(gate)) return refused("I can't search with your role.");
-    const query = String(args['query']).trim();
-    const limit = typeof args['limit'] === 'number' ? args['limit'] : DEFAULT_LIMIT;
-    const recordType = type === 'person' ? 'person' : typeof args['type'] === 'string' ? args['type'] : undefined;
-    if (type === 'records' && recordType && !searchRecordTypes(ctx.tenant).includes(recordType)) {
-      return refused(`There is no "${recordType}" record in this workspace's search.`);
-    }
-    const sort = typeof args['sort'] === 'string' ? args['sort'] : undefined;
-    const scope = typeof args['scope'] === 'string' && args['scope'] !== 'workspace' ? args['scope'] : undefined;
-    let url: string;
-    if (orgiq) {
-      // The page shows what the voice reads (the results tab: the answer tab would start an agent call).
-      ctx.navigate(`/iq/search?${qs({ q: query, type: recordType, tab: 'results', sort, scope })}`);
-      url = `/api/search?${qs({ q: query, type: recordType ?? 'all', limit, sort, scope })}`;
-    } else {
-      // No search page outside orgiq (the palette is the search there), so nothing opens.
-      url = `${TENANT_SEARCH[ctx.tenant]}?${qs({ q: query, type: recordType ?? 'all', limit })}`;
-    }
-    const read = await readJson<SearchBody>(ctx, url);
-    if (!read.ok) return readFailure('search', read.status);
-    const found = (read.body.results ?? []).slice(0, Math.min(limit, MAX_ROWS));
-    // The ref is the row's own `<type>:<id>`: what open_result takes back, so the model never opens by name alone.
-    const refOf = (r: SearchRow) => (r.id ? `${r.type ?? recordType ?? 'record'}:${r.id}` : undefined);
-    const rows = found.map((r) => ({
-      ref: refOf(r),
-      ...(type === 'person' ? { name: r.title ?? '' } : { title: r.title ?? '', type: r.type }),
-      subtitle: r.subtitle, detail: r.description, matched: r.matchReason, status: orgiq ? undefined : r.status, href: r.href,
-      ...(sort === 'recent' && r.updatedAt ? { updatedAt: r.updatedAt } : {}),
-    }));
-    // Kept with the full ref (shapeOutput caps strings for the model; a 120-character id must still resolve).
-    ctx.results?.keep(found.flatMap((r) => {
-      const ref = refOf(r);
-      return ref && r.href ? [{ ref: cap(ref), title: r.title ?? ref, href: r.href }] : [];
-    }));
-    const total = typeof read.body.total === 'number' ? read.body.total : rows.length;
-    return done('search_results', {
-      type: recordType ?? 'all', query, total, rows, ...(!orgiq && scope ? { scopeIgnored: SCOPE_IGNORED } : {}),
-      ...(rows.some((r) => r.ref) ? { open: 'open_result opens a row by its ref or position.' } : {}),
-    },
-      rows.length ? `${rows.length} of ${total} for "${query}"` : `Nothing found for "${query}"`);
-  };
+const SCOPE_IGNORED = 'This workspace searches as a whole; the scope was not applied.';
+/** What a row tells the model it can do with a ref. */
+export const OPEN_NOTE = 'open_result opens a row by its ref or position.';
+
+/** Keep rows (ref, title, href) for open_result: the full ref, since the model sees a capped one. */
+function keepRows(ctx: ToolContext, rows: ReadonlyArray<{ ref?: string; title?: string; href?: string }>): void {
+  ctx.results?.keep(rows.flatMap((r) => (r.ref && r.href ? [{ ref: cap(r.ref), title: r.title || r.ref, href: r.href }] : [])));
 }
+
+/**
+ * `search` (catalogue v2, replacing search_people and search_records): free text over the tenant's own
+ * index, typed, sorted, scoped in orgiq; `answer` asks the tenant's /answer route for one fact, and in
+ * orgiq reads the question intent's rows the search already ranks first.
+ */
+const search: Runner = async (args, ctx) => {
+  const orgiq = ctx.tenant === 'orgiq';
+  const gate = SEARCH_ACTIONS[ctx.tenant];
+  if (!gate || (!orgiq && !TENANT_SEARCH[ctx.tenant])) return refused('There is no search in this workspace.');
+  if (!ctx.can(gate)) return refused("I can't search with your role.");
+  const query = String(args['query']).trim();
+  const limit = typeof args['limit'] === 'number' ? args['limit'] : DEFAULT_LIMIT;
+  const recordType = typeof args['type'] === 'string' ? args['type'] : undefined;
+  if (recordType && !searchRecordTypes(ctx.tenant).includes(recordType)) {
+    return refused(`There is no "${recordType}" record in this workspace's search.`);
+  }
+  const sort = typeof args['sort'] === 'string' ? args['sort'] : undefined;
+  const scope = typeof args['scope'] === 'string' && args['scope'] !== 'workspace' ? args['scope'] : undefined;
+  const wantsAnswer = args['answer'] === true;
+  const refOf = (type: string | undefined, id: string | undefined) => (id ? `${type ?? recordType ?? 'record'}:${id}` : undefined);
+
+  let noFact = false;
+  if (wantsAnswer && !orgiq) {
+    const read = await readJson<AnswerBody>(ctx, `${TENANT_SEARCH[ctx.tenant]}/answer?${qs({ q: query })}`);
+    if (!read.ok && (read.status === 401 || read.status === 403)) return readFailure('search', read.status);
+    const answer = read.ok ? read.body.answer : null;
+    if (answer?.text) {
+      const rows = (answer.records ?? []).slice(0, MAX_ROWS).map((r) => ({ ref: refOf(r.type, r.id), title: r.title, type: r.type, subtitle: r.subtitle, status: r.status, href: r.href }));
+      keepRows(ctx, rows);
+      return done('search_answer', { query, answer: answer.text, rows, ...(rows.some((r) => r.ref && r.href) ? { open: OPEN_NOTE } : {}) }, answer.text);
+    }
+    noFact = true;
+  }
+
+  let url: string;
+  if (orgiq) {
+    // The page shows what the voice reads (the results tab: the answer tab would start an agent call).
+    ctx.navigate(`/iq/search?${qs({ q: query, type: recordType, tab: 'results', sort, scope })}`);
+    url = `/api/search?${qs({ q: query, type: recordType ?? 'all', limit, sort, scope })}`;
+  } else {
+    // No search page outside orgiq (the palette is the search there), so nothing opens.
+    url = `${TENANT_SEARCH[ctx.tenant]}?${qs({ q: query, type: recordType ?? 'all', limit })}`;
+  }
+  const read = await readJson<SearchBody>(ctx, url);
+  if (!read.ok) return readFailure('search', read.status);
+  const found = (read.body.results ?? []).slice(0, Math.min(limit, MAX_ROWS));
+  // The ref is the row's own `<type>:<id>`: what open_result takes back, so the model never opens by name alone.
+  const rows = found.map((r) => ({
+    ref: refOf(r.type, r.id), title: r.title ?? '', type: r.type,
+    subtitle: r.subtitle, detail: r.description, matched: r.matchReason, status: orgiq ? undefined : r.status, href: r.href,
+    ...(sort === 'recent' && r.updatedAt ? { updatedAt: r.updatedAt } : {}),
+  }));
+  keepRows(ctx, rows);
+  const total = typeof read.body.total === 'number' ? read.body.total : rows.length;
+  // orgiq's answer: the leading rows a question intent matched, named with the intent's own reason.
+  let answer: string | undefined;
+  if (wantsAnswer && orgiq) {
+    const reason = rows[0]?.matched && !TEXT_REASONS.has(rows[0].matched) ? rows[0].matched : undefined;
+    const hits = reason ? rows.filter((r) => r.matched === reason) : [];
+    if (reason && hits.length) {
+      const first = hits.length === 1 && hits[0]!.subtitle ? ` (${hits[0]!.subtitle})` : '';
+      answer = `${reason}: ${hits.slice(0, 3).map((r) => r.title).join(', ')}${hits.length > 3 ? ', …' : ''}${first}`;
+    }
+    else noFact = true;
+  }
+  const summary = answer ?? (rows.length ? `${rows.length} of ${total} for "${query}"` : `Nothing found for "${query}"`);
+  return done(answer ? 'search_answer' : 'search_results', {
+    type: recordType ?? 'all', query, total, ...(answer ? { answer } : {}), rows,
+    ...(noFact ? { noAnswer: 'No question the index answers as one fact; these are the matching records.' } : {}),
+    ...(!orgiq && scope ? { scopeIgnored: SCOPE_IGNORED } : {}),
+    ...(rows.some((r) => r.ref && r.href) ? { open: OPEN_NOTE } : {}),
+  }, summary);
+};
 
 // ── initiatives ─────────────────────────────────────────────────────────────
 
@@ -874,7 +919,7 @@ const activity: Runner = async (args, ctx) => {
     scope, ...(since ? { since: since.toISOString() } : {}), ...(who ? { who } : {}), count: all.length,
     rows: rows.map((r) => ({ ref: r.ref, type: r.type, title: r.title, subtitle: r.subtitle, status: r.status, at: r.at, href: r.href })),
     ...(unread.length ? { unread } : {}),
-    ...(rows.some((r) => r.ref && r.href) ? { open: 'open_result opens a row by its ref or position.' } : {}),
+    ...(rows.some((r) => r.ref && r.href) ? { open: OPEN_NOTE } : {}),
   }, activitySummary(scope, rows, all.length, who));
 };
 
@@ -882,8 +927,7 @@ const activity: Runner = async (args, ctx) => {
 export const TOOL_RUNNERS: Readonly<Record<string, Runner>> = {
   navigate,
   open_result: openResult,
-  search_people: searchRunner('person'),
-  search_records: searchRunner('records'),
+  search,
   list_active_initiatives: listActiveInitiatives,
   open_computer_lab: openComputerLab,
   bot_sweep_status: botSweepStatus,

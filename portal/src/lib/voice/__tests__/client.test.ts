@@ -71,8 +71,8 @@ async function mockMint(sessionId = 'vs_00000000-0000-0000-0000-000000000001') {
   const { mockLiveScript } = await middlewareVoice<{ mockLiveScript: (id: string, c: unknown) => unknown }>('openai.ts');
   return {
     sessionId, voiceSessionId: sessionId, holdId: 'h1', maxSeconds: 1800, expiresAt: '2026-11-08T13:00:00Z', sdp: 'v=0', mock: true,
-    model: 'gpt-live-1', voice: null, toolsEnabled: true, tools: ['search_people'], budget: { holdUsd: 0.5, usdPerMinute: 0.05 },
-    mockScript: mockLiveScript(sessionId, { name: 'search_people', arguments: { query: 'Kubernetes experts', scope: null, limit: null, sort: 'recent' }, said: 'Find me the latest Kubernetes experts.' }),
+    model: 'gpt-live-1', voice: null, toolsEnabled: true, tools: ['search'], budget: { holdUsd: 0.5, usdPerMinute: 0.05 },
+    mockScript: mockLiveScript(sessionId, { name: 'search', arguments: { query: 'Kubernetes experts', type: 'person', scope: null, sort: 'recent', limit: null, answer: null }, said: 'Find me the latest Kubernetes experts.' }),
   };
 }
 

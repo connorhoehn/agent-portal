@@ -188,16 +188,16 @@ const limit = { type: 'integer', minimum: 1, maximum: 10, description: 'How many
 const searchScope = str('Where to search: "workspace" (the default) or one initiative id, to search inside that initiative only.', { minLength: 1, maxLength: 200 });
 
 /**
- * The record types `search_records` may name, per tenant: what that tenant's
- * backend search indexes. orgiq is GET /api/search's SEARCH_TYPES
- * (providers/search.ts) less `person`, which is search_people's; every other
- * tenant is its TenantIndexSpec.types (lib/search-index/<tenant>.ts
+ * The record types `search` may name, per tenant: what that tenant's backend
+ * search indexes. orgiq is GET /api/search's SEARCH_TYPES (providers/search.ts),
+ * people included (catalogue v2 merged search_people and search_records); every
+ * other tenant is its TenantIndexSpec.types (lib/search-index/<tenant>.ts
  * *_DOC_TYPES) behind GET /api/<tenant>/search (routes/tenant-search.ts). Kept
  * as data, not imported, because the portal's drift test loads this file on
  * its own; the middleware test pins each row to the index's own list.
  */
 export const SEARCH_RECORD_TYPES: Readonly<Record<string, readonly string[]>> = {
-  orgiq: ['team', 'initiative', 'work', 'decision', 'knowledge', 'asset', 'recording'],
+  orgiq: ['person', 'team', 'initiative', 'work', 'decision', 'knowledge', 'asset', 'recording'],
   social: ['channel', 'message', 'pin', 'dm', 'contact', 'team', 'room', 'recording', 'calllog', 'huddle'],
   assessment: ['team', 'dimension', 'exception', 'feedback', 'run', 'submission', 'story', 'document'],
   pipelines: ['run', 'definition', 'runbook', 'bot', 'approval', 'queue', 'artifact'],
@@ -213,7 +213,7 @@ export const SEARCH_ACTIONS: Readonly<Record<string, CapabilityAction>> = {
   orgiq: 'Search', social: 'ViewSocial', assessment: 'ViewAssessment', pipelines: 'ViewPipelines', access: 'ViewAccess',
 };
 
-/** `search_records`' type enum for one tenant, or every tenant's types (null) for the catalogue's base row. */
+/** `search`'s type enum for one tenant, or every tenant's types (null) for the catalogue's base row. */
 export function searchRecordTypes(tenant: string | null): string[] {
   if (tenant != null) return [...(SEARCH_RECORD_TYPES[tenant] ?? [])];
   return [...new Set(Object.values(SEARCH_RECORD_TYPES).flat())];
@@ -283,36 +283,25 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     says: 'Opening search.', tenants: VOICE_TENANTS, mapsTo: "useNavigate() to the palette entry's path",
   },
   {
-    name: 'search_people',
-    description: 'Search the workspace\'s people index (the backend search, type person) by skill, topic or name. "Latest" means sort recent. Each row carries a ref that open_result opens.',
-    parameters: obj({
-      query: str('What to search for, e.g. "kubernetes".', { minLength: 1, maxLength: 200 }),
-      scope: searchScope,
-      limit,
-      sort: str('relevance (default) or recent.', { enum: ['relevance', 'recent'] }),
-    }, ['query']),
-    kind: 'read', backing: 'search', confirm: false, action: 'Search', gate: 'Search', spend: 'none', idempotent: true,
-    says: 'Searching people for kubernetes.', tenants: ['orgiq'],
-    mapsTo: 'navigate /iq/search?q=&type=person&tab=answer and GET /api/search?q=&type=person&scope=&sort=&limit=',
-  },
-  {
-    name: 'search_records',
+    name: 'search',
     // toolsForTenant names the tenant's own types in the description it renders.
-    description: 'Search this workspace\'s record index (the backend search) by kind of record; each row carries a ref that open_result opens.',
+    description: 'Search this workspace\'s backend index by free text: people by skill, topic or name, records, and questions such as "who decided X" or "which teams are below target". Narrow it with a type; "latest" means sort recent; pass answer true when the user asks a question that wants one fact. Each row carries a ref that open_result opens.',
     parameters: obj({
-      query: str('What to search for.', { minLength: 1, maxLength: 200 }),
+      query: str('What to search for, in the user\'s words.', { minLength: 1, maxLength: 200 }),
       type: str('Which kind of record.', { enum: searchRecordTypes(null) }),
       scope: searchScope,
+      sort: str('relevance (default) or recent.', { enum: ['relevance', 'recent'] }),
       limit,
+      answer: { type: 'boolean', description: 'True when the user asked a question that wants one fact (who, how many, which): the backend answers it from the index, with the records it read.' },
     }, ['query']),
     kind: 'read', backing: 'search', confirm: false, action: null,
     gate: "the tenant search mount's action (SEARCH_ACTIONS: Search in orgiq, the tenant's View action elsewhere)", spend: 'none', idempotent: true,
-    says: 'Searching.', tenants: VOICE_TENANTS,
-    mapsTo: 'GET /api/search?q=&type=&scope= in orgiq; GET /api/<tenant>/search?q=&type=&limit= elsewhere',
+    says: 'Searching for the Kubernetes experts.', tenants: VOICE_TENANTS,
+    mapsTo: 'GET /api/search?q=&type=&scope=&sort=&limit= in orgiq, whose question intents rank the answering records first (navigate /iq/search?q=&type=&tab=results); GET /api/<tenant>/search?q=&type=&limit= and GET /api/<tenant>/search/answer?q= elsewhere',
   },
   {
     name: 'open_result',
-    description: 'Open one row of the last search_people or search_records result on its own page (a person\'s profile, an initiative, a run). Pass the row\'s ref exactly as the result gave it (e.g. "person:p-12"), or its position in the last result ("1" for the first row). Never a name or a path.',
+    description: 'Open one row of the last search or activity result on its own page (a person\'s profile, an initiative, a run). Pass the row\'s ref exactly as the result gave it (e.g. "person:p-12"), or its position in the last result ("1" for the first row). Never a name or a path.',
     parameters: obj({
       ref: str('The row\'s ref from the result, or its position in the last result ("1" to "10").', { minLength: 1, maxLength: 200 }),
     }, ['ref']),
@@ -469,10 +458,10 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
  * approver's session reads their approvals, a requester's their own requests.
  */
 export const MOCK_CALLS: Readonly<Record<string, { name: string; arguments: Record<string, unknown>; said: string }>> = {
-  orgiq: { name: 'search_people', arguments: { query: 'Kubernetes experts', scope: null, limit: null, sort: 'recent' }, said: 'Find me the latest Kubernetes experts.' },
-  social: { name: 'search_records', arguments: { query: 'live huddles', type: 'huddle', scope: null, limit: null }, said: 'Any live huddles right now?' },
-  assessment: { name: 'search_records', arguments: { query: 'teams below target', type: 'team', scope: null, limit: null }, said: 'Which teams are below target?' },
-  pipelines: { name: 'search_records', arguments: { query: 'failed runs', type: 'run', scope: null, limit: null }, said: 'What failed last night?' },
+  orgiq: { name: 'search', arguments: { query: 'Kubernetes experts', type: 'person', scope: null, sort: 'recent', limit: null, answer: null }, said: 'Find me the latest Kubernetes experts.' },
+  social: { name: 'search', arguments: { query: 'live huddles', type: 'huddle', scope: null, sort: null, limit: null, answer: null }, said: 'Any live huddles right now?' },
+  assessment: { name: 'search', arguments: { query: 'teams below target', type: 'team', scope: null, sort: null, limit: null, answer: null }, said: 'Which teams are below target?' },
+  pipelines: { name: 'search', arguments: { query: 'failed runs', type: 'run', scope: null, sort: null, limit: null, answer: null }, said: 'What failed last night?' },
   access: { name: 'access_request_status', arguments: { query: 'SME', scope: 'mine' }, said: 'Did my SME request get approved?' },
   // G6: "who is on call" reads the social index's live huddles (a moderator's session; a participant's searches them).
   'social/moderator': { name: 'activity', arguments: { scope: 'live-calls', since: null, who: null }, said: 'Who is on a call right now?' },
@@ -506,7 +495,7 @@ function withEnum(t: VoiceTool, prop: string, values: string[], description = t.
 
 /**
  * The tools a session in `tenant` is offered: `navigate` narrowed to that
- * tenant's pages, `search_records` to that tenant's index types and
+ * tenant's pages, `search` to that tenant's index types and
  * `activity` to that tenant's scopes (no `work` outside orgiq). With
  * `commandAllowlist` (the mint passes routes/devbox.ts commandAllowlist()),
  * `run_command`'s phrases narrow to the ones that allowlist runs, and the
@@ -516,7 +505,7 @@ function withEnum(t: VoiceTool, prop: string, values: string[], description = t.
 export function toolsForTenant(tenant: string, opts: { commandAllowlist?: readonly string[] } = {}): VoiceTool[] {
   return VOICE_TOOLS.filter((t) => t.tenants.includes(tenant)).flatMap((t) => {
     if (t.name === 'navigate') return [withEnum(t, 'page', navigatePageIds(tenant))];
-    if (t.name === 'search_records') {
+    if (t.name === 'search') {
       const types = searchRecordTypes(tenant);
       return types.length ? [withEnum(t, 'type', types, `${t.description} The kinds here: ${types.join(', ')}.`)] : [];
     }

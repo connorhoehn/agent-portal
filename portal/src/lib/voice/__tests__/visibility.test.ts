@@ -92,8 +92,7 @@ const calls: CallAccess = { unavailable: null, active: () => null, callConversat
 /** Arguments that drive each tool to a refusal, an ambiguity or a failure. */
 const VARIANTS: Record<string, unknown[]> = {
   navigate: [{ page: 'bots' }, { page: 'nowhere' }, { page: 'search', params: { q: 'x' } }],
-  search_people: [{ query: 'kubernetes' }],
-  search_records: [{ query: 'alpha', type: 'initiative' }, { query: 'x', type: 'not-a-type' }],
+  search: [{ query: 'kubernetes', type: 'person' }, { query: 'alpha', type: 'initiative' }, { query: 'x', type: 'not-a-type' }, { query: 'who decided it', answer: true }],
   open_result: [{ ref: 'person:p-not-kept' }, { ref: '1' }],
   list_active_initiatives: [{ scope: 'mine' }],
   open_computer_lab: [{ initiativeId: 'p-unknown' }],

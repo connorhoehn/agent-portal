@@ -42,8 +42,8 @@ test('the portal catalogue matches the middleware one the session is minted with
     const tools = mw.toolsForTenant(tenant);
     const page = tools.find((t) => t.name === 'navigate')!.parameters as { properties: { page: { enum: string[] } } };
     assert.deepEqual(navigatePageIds(tenant), page.properties.page.enum, `navigate enum in ${tenant}`);
-    const search = tools.find((t) => t.name === 'search_records')!.parameters as { properties: { type: { enum: string[] } } };
-    assert.deepEqual(searchRecordTypes(tenant), search.properties.type.enum, `search_records enum in ${tenant}`);
+    const search = tools.find((t) => t.name === 'search')!.parameters as { properties: { type: { enum: string[] } } };
+    assert.deepEqual(searchRecordTypes(tenant), search.properties.type.enum, `search enum in ${tenant}`);
     const activity = tools.find((t) => t.name === 'activity')?.parameters as { properties: { scope: { enum: string[] } } } | undefined;
     if (activity) assert.deepEqual(activityScopes(tenant), activity.properties.scope.enum, `activity enum in ${tenant}`);
     else assert.deepEqual(activityScopes(tenant), [], `${tenant} is offered no activity tool`);
@@ -62,9 +62,9 @@ test('every navigate page id resolves to the palette entry with the same path th
       assert.equal(entry.path, p.path, `${p.id} in ${tenant}`);
     }
   }
-  // Only the catalogue's ids carry a pageId: the palette never offers voice a page the model was not told about.
-  const ids = PALETTE.pages.filter((p) => p.pageId).map((p) => p.pageId);
-  assert.deepEqual(new Set(ids), new Set(NAVIGATE_PAGE_IDS.map((p) => p.id).filter((id) => id !== 'workspaces')));
+  // Every id the catalogue offers is a palette pageId (V2-2 gave all 109 rows one; V2-4's `open` offers them all).
+  const ids = new Set(PALETTE.pages.map((p) => p.pageId));
+  for (const p of NAVIGATE_PAGE_IDS) if (p.id !== 'workspaces') assert.ok(ids.has(p.id), p.id);
 });
 
 test('the dock hashes arguments exactly as the middleware does', async () => {

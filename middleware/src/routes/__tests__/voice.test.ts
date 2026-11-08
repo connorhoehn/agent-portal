@@ -187,7 +187,7 @@ describe('POST /api/voice/sessions — the mint', () => {
       const res = await mint();
       expect(res.status).toBe(201);
       // Reads and navigation; pipelines adds queue_work's dry-run (G19, gated per kind on RunPipeline by the dock).
-      const offered = ['access_request_status', 'navigate', 'open_result', ...(tenant === 'pipelines' ? ['queue_work'] : []), 'search_records'];
+      const offered = ['access_request_status', 'navigate', 'open_result', ...(tenant === 'pipelines' ? ['queue_work'] : []), 'search'];
       expect(res.body.tools.sort()).toEqual(offered);
       const sent = JSON.parse(calls[0]!.init.body!).session;
       expect(sent.delegation.responses.tools.map((t: { name: string }) => t.name).sort()).toEqual(offered);
@@ -197,7 +197,7 @@ describe('POST /api/voice/sessions — the mint', () => {
     principal = { sub: USER, role: 'participant', tenant: 'social', grants: {} };
     const res = await mint();
     expect(res.status).toBe(201);
-    expect(res.body.tools.sort()).toEqual(['access_request_status', 'activity', 'navigate', 'open_result', 'search_records', 'send_chat_message', 'set_status', 'start_call']);
+    expect(res.body.tools.sort()).toEqual(['access_request_status', 'activity', 'navigate', 'open_result', 'search', 'send_chat_message', 'set_status', 'start_call']);
   });
 
   it('an access approver\'s scripted session reads their approvals; a requester\'s their own requests', async () => {
@@ -221,7 +221,7 @@ describe('POST /api/voice/sessions — the mint', () => {
     const res = await mint({});
     expect(res.status).toBe(201);
     const done = res.body.mockScript.onStart.find((f: { event: { event?: { type: string } } }) => f.event.event?.type === 'response.output_item.done');
-    expect(done.event.event.item).toMatchObject({ type: 'function_call', name: 'search_records' });
+    expect(done.event.event.item).toMatchObject({ type: 'function_call', name: 'search' });
     expect(JSON.parse(done.event.event.item.arguments)).toMatchObject({ type: 'huddle' });
   });
 
@@ -328,7 +328,7 @@ describe('POST /api/voice/sessions — the mint', () => {
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({ mock: true, toolsEnabled: true, sdp: expect.stringMatching(/^v=0/) });
     const done = res.body.mockScript.onStart.find((f: { event: { type: string; event?: { type: string } } }) => f.event.event?.type === 'response.output_item.done');
-    expect(done.event.event.item).toMatchObject({ type: 'function_call', name: 'search_people' });
+    expect(done.event.event.item).toMatchObject({ type: 'function_call', name: 'search' });
     expect(calls).toHaveLength(0);
     expect(voiceSessions.rows()).toEqual([expect.objectContaining({ mock: true })]);
   });
@@ -373,11 +373,11 @@ describe('POST /api/voice/sessions/:id/events — tool-call rows', () => {
     const id = await minted();
     const secret = 'kubernetes experts in the Lisbon office';
     const res = await request(app).post(`/api/voice/sessions/${id}/events`)
-      .send({ tool: 'search_people', args: { query: secret, limit: 5 }, outcome: 'done', durationMs: 412 });
+      .send({ tool: 'search', args: { query: secret, limit: 5 }, outcome: 'done', durationMs: 412 });
     expect(res.status).toBe(201);
     const rows = voiceToolCalls.rows();
     expect(rows).toEqual([expect.objectContaining({
-      session_id: id, tenant: 'orgiq', tool: 'search_people', outcome: 'done', duration_ms: 412,
+      session_id: id, tenant: 'orgiq', tool: 'search', outcome: 'done', duration_ms: 412,
       args_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
     })]);
     expect(JSON.stringify(rows)).not.toContain(secret);

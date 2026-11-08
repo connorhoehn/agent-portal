@@ -54,8 +54,8 @@ test('the social scripted session searches the social index for huddles and gets
     role: 'participant', allow: ['ViewSocial', 'PostMessage', 'StartCall', 'VoiceNavigate'],
     routes: [route('GET', '/api/social/search?', 200, { query: 'live huddles', results: [huddle], counts: { huddle: 1 }, total: 1 })],
   });
-  assert.equal(run.call.name, 'search_records');
-  assert.deepEqual(run.calls, [['search_records', 'done']]);
+  assert.equal(run.call.name, 'search');
+  assert.deepEqual(run.calls, [['search', 'done']]);
   assert.deepEqual(run.outcomes, ['done']);
   assert.deepEqual(run.summaries, ['1 of 1 for "live huddles"'], 'the row came back');
   const search = run.log.filter((r) => r.url.startsWith('/api/social/search'));
@@ -118,7 +118,7 @@ test('the orgiq scripted session finds the Kubernetes experts, then opens the fi
     routes: [route('GET', '/api/search?', 200, { results: people, total: 2 })],
     extraStart: secondCall('open_result', { ref: '1' }),
   });
-  assert.deepEqual(run.calls, [['search_people', 'done'], ['open_result', 'done']]);
+  assert.deepEqual(run.calls, [['search', 'done'], ['open_result', 'done']]);
   assert.equal(run.ctx.navigations.at(-1), people[0]!.href, 'the person, on the connections tab the index links to');
   assert.equal(run.summaries[1], 'Opened Priya Natarajan');
 });
@@ -129,7 +129,7 @@ test('a scripted open_result for a ref no search returned is refused and opens n
     routes: [route('GET', '/api/search?', 200, { results: [{ type: 'person', id: 'p1', title: 'Priya', href: '/iq/search?tab=connections&selection=person%3Ap1' }], total: 1 })],
     extraStart: secondCall('open_result', { ref: 'person:not-a-row' }),
   });
-  assert.deepEqual(run.calls, [['search_people', 'done'], ['open_result', 'refused']]);
+  assert.deepEqual(run.calls, [['search', 'done'], ['open_result', 'refused']]);
   assert.equal(run.ctx.navigations.length, 1, 'only the search page');
 });
 

@@ -197,7 +197,7 @@ describe('the close prefers the provider\'s figures', () => {
 
   it('tokens from the sideband win over the dock\'s totals for the :tokens row, each response counted once', async () => {
     const id = (await mint()).body.sessionId as string;
-    await request(app).post(`/api/voice/sessions/${id}/events`).send({ tool: 'search_people', outcome: 'done' });
+    await request(app).post(`/api/voice/sessions/${id}/events`).send({ tool: 'search', outcome: 'done' });
     const socket = FakeSideband.sockets[0]!.open();
     socket.frame(completed('resp_1', 1060, 20)).frame(completed('resp_1', 1060, 20)).frame(completed('resp_2', 1194, 28));
     expect(row(id)).toMatchObject({ provider_tokens_in: 2254, provider_tokens_out: 48, provider_tokens_cached: 0 });
