@@ -42,6 +42,7 @@ import { userBudgets } from '../../mock/user-budgets.js';
 import { spendHolds } from '../../mock/spend-holds.js';
 import { spendEntries } from '../../mock/spend-ledger.js';
 import { voiceSessions, voiceToolCalls } from '../../mock/voice-sessions.js';
+import type { VoiceSessionRow } from '../../providers/voice-sessions.js';
 import { freezeClock, unfreezeClock } from '../../mock/core/index.js';
 import { userSpendThisPeriod } from '../../providers/user-budgets.js';
 
@@ -61,7 +62,7 @@ let upstream: { status: number; body: unknown } = { status: 200, body: { session
 
 const ENV_KEYS = ['OPENAI_API_KEY', 'MOCK_VOICE', 'VOICE_DELEGATION_MODEL', 'VOICE_SESSION_MAX_MINUTES', 'VOICE_USD_PER_MINUTE',
   'VOICE_SESSION_MINUTES_P75', 'VOICE_LIVE_MODEL', 'VOICE_VOICE', 'INSECURE_DEV_MODE', 'SPEND_HOLDS_UNATTRIBUTED',
-  'VOICE_DELEGATION_USD_PER_1M_INPUT', 'VOICE_DELEGATION_USD_PER_1M_OUTPUT'];
+  'VOICE_DELEGATION_USD_PER_1M_INPUT', 'VOICE_DELEGATION_USD_PER_1M_OUTPUT', 'VOICE_DAILY_MINUTES'];
 const saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
 
 function budget(allocatedUsd = 1_000, hardCapUsd: number | null = null): void {
@@ -512,6 +513,90 @@ describe('the delegated tokens (G11): a second ledger row per session', () => {
     } finally { later(); }
     expect(voiceRows()).toEqual([expect.objectContaining({ costUsd: 0.5, costBasis: 'estimated' })]);
     expect(tokenRows()).toEqual([expect.objectContaining({ costUsd: 0.0001, costBasis: 'estimated' })]);
+  });
+});
+
+describe('the daily minutes (G13, §3 Q2)', () => {
+  const NOW = '2026-11-08T15:00:00.000Z';
+  let n = 0;
+  /** A session row already in the table: `seconds` null = still open or reaped unknown. */
+  function used(over: Partial<VoiceSessionRow> & { started_at: string }): void {
+    n += 1;
+    voiceSessions.rows().push({
+      id: `vs_00000000-0000-4000-8000-${String(n).padStart(12, '0')}`, user_sub: USER, tenant: 'orgiq', hold_id: null,
+      provider_session_id: null, model: 'gpt-live-1', voice: null, mock: false, max_seconds: 1800, usd_per_minute: 0.05,
+      ended_at: over.started_at, seconds: null, cost_usd: null, cost_basis: null, stop_reason: 'closed', tool_calls: 0, ...over,
+    });
+  }
+  async function at<T>(iso: string, fn: () => Promise<T>): Promise<T> {
+    const restore = freezeClock(iso);
+    try { return await fn(); } finally { restore(); }
+  }
+
+  it('55 minutes used today mints a session capped at 300 s, and the next mint is refused', async () => {
+    budget();
+    used({ started_at: '2026-11-08T09:00:00.000Z', seconds: 3300 });
+    // Mock rows never count, however long.
+    used({ started_at: '2026-11-08T10:00:00.000Z', seconds: 3600, mock: true });
+    const first = await at(NOW, () => mint());
+    expect(first.status).toBe(201);
+    expect(first.body).toMatchObject({ maxSeconds: 300, dailyMinutesLeft: 5, budget: { holdUsd: 0.25, usdPerMinute: 0.05 } });
+    expect(voiceSessions.rows().find((r) => r.id === first.body.sessionId)!.max_seconds).toBe(300);
+    expect(Date.parse(first.body.expiresAt) - Date.parse(NOW)).toBe(300_000);
+
+    // The open session counts at its ceiling: nothing is left.
+    const second = await at('2026-11-08T15:01:00.000Z', () => mint());
+    expect(second.status).toBe(429);
+    expect(second.body).toEqual({
+      error: 'voice-unavailable', reason: 'daily-minutes', minutesLeft: 0, dailyMinutes: 60, resetsAt: '2026-11-09T00:00:00.000Z',
+      message: expect.stringMatching(/60 minutes of voice are used/),
+    });
+    expect(second.headers['retry-after']).toBe(String(9 * 3600 - 60));
+    expect(calls).toHaveLength(1);
+    expect(voiceHolds()).toHaveLength(1);
+  });
+
+  it('a closed session counts its seconds, an open or reaped one its ceiling; yesterday and other users never count', async () => {
+    budget();
+    used({ started_at: '2026-11-07T23:59:00.000Z', seconds: 3600 });
+    used({ started_at: '2026-11-08T08:00:00.000Z', seconds: 600, user_sub: 'u-someone-else' });
+    used({ started_at: '2026-11-08T08:00:00.000Z', seconds: 600 });
+    used({ started_at: '2026-11-08T09:00:00.000Z', seconds: null, max_seconds: 1200, stop_reason: 'reaped', cost_basis: 'unknown' });
+    used({ started_at: '2026-11-08T14:50:00.000Z', seconds: null, max_seconds: 1500, ended_at: null, stop_reason: null });
+    // 600 + 1200 + 1500 = 3300 of 3600.
+    expect((await at(NOW, () => mint())).body).toMatchObject({ maxSeconds: 300, dailyMinutesLeft: 5 });
+  });
+
+  it('a session that fits whole is not cut and carries no dailyMinutesLeft', async () => {
+    budget();
+    used({ started_at: '2026-11-08T09:00:00.000Z', seconds: 1200 });
+    const res = await at(NOW, () => mint());
+    expect(res.body.maxSeconds).toBe(1800);
+    expect(res.body).not.toHaveProperty('dailyMinutesLeft');
+  });
+
+  it('VOICE_DAILY_MINUTES sets the allowance and 0 turns it off', async () => {
+    budget();
+    used({ started_at: '2026-11-08T09:00:00.000Z', seconds: 3600 });
+    process.env['VOICE_DAILY_MINUTES'] = '90';
+    expect((await at(NOW, () => mint())).body).toMatchObject({ maxSeconds: 1800 });
+    process.env['VOICE_DAILY_MINUTES'] = '0';
+    expect((await at(NOW, () => mint())).status).toBe(201);
+    process.env['VOICE_DAILY_MINUTES'] = '61';
+    // 3600 + 1800 + the off mint's 1800 are well past 61 minutes.
+    expect((await at(NOW, () => mint())).body).toMatchObject({ reason: 'daily-minutes' });
+  });
+
+  it('MOCK_VOICE sessions are unaffected: never capped, never counted', async () => {
+    process.env['MOCK_VOICE'] = '1';
+    delete process.env['OPENAI_API_KEY'];
+    budget();
+    used({ started_at: '2026-11-08T09:00:00.000Z', seconds: 3600 });
+    const res = await at(NOW, () => mint({}));
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ mock: true, maxSeconds: 1800 });
+    expect(res.body).not.toHaveProperty('dailyMinutesLeft');
+    expect(voiceSessions.rows().filter((r) => r.mock)).toHaveLength(1);
   });
 });
 

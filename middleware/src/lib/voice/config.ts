@@ -30,6 +30,12 @@ export interface VoiceConfig {
   p75Minutes: number;
   /** VOICE_SESSION_MAX_MINUTES (default 30): the session ceiling the hold and the reaper bound. */
   maxMinutes: number;
+  /**
+   * VOICE_DAILY_MINUTES (default 60, `0` = off): voice minutes per user per
+   * UTC day, enforced at mint from the user's non-mock voice_sessions rows
+   * (docs/voice-navigator-gaps.md §3 Q2, G13). Never applies to MOCK_VOICE.
+   */
+  dailyMinutes: number;
   /** MOCK_VOICE=1: a scripted session, no OpenAI call (§6, §8). */
   mock: boolean;
 }
@@ -51,6 +57,13 @@ function delegation(): string | null {
   return v ?? DEFAULT_DELEGATION_MODEL;
 }
 
+/** A non-negative number, else the fallback (unset or malformed). 0 is a real value here: off. */
+function nonNegative(name: string, fallback: number): number {
+  const raw = (process.env[name] ?? '').trim();
+  const n = Number(raw);
+  return raw && Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
 /** A non-negative rate, or null when unset or malformed (0 is a real price: free). */
 function rate(name: string): number | null {
   const raw = (process.env[name] ?? '').trim();
@@ -68,6 +81,7 @@ export function voiceConfig(): VoiceConfig {
     delegationUsdPer1M: { input: rate('VOICE_DELEGATION_USD_PER_1M_INPUT'), output: rate('VOICE_DELEGATION_USD_PER_1M_OUTPUT') },
     p75Minutes: positive('VOICE_SESSION_MINUTES_P75', 10),
     maxMinutes: positive('VOICE_SESSION_MAX_MINUTES', 30),
+    dailyMinutes: nonNegative('VOICE_DAILY_MINUTES', 60),
     mock: mockRaw === '1' || mockRaw === 'true',
   };
 }
@@ -87,3 +101,15 @@ export function voiceCostUsd(seconds: number, usdPerMinute: number): number {
  * per tool call it reported plus one (the continuation that speaks).
  */
 export const MAX_TOKENS_PER_RESPONSE = 50_000;
+
+/**
+ * A mint with less than this left of the user's daily minutes is refused
+ * rather than started: a session shorter than a minute cannot do anything.
+ */
+export const MIN_DAILY_SESSION_SECONDS = 60;
+
+/** The UTC midnight that starts `now`'s day, and the next one (the daily minutes' window, G13). */
+export function utcDay(now: Date): { start: Date; next: Date } {
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  return { start, next: new Date(start.getTime() + 86_400_000) };
+}

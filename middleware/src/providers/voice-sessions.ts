@@ -177,6 +177,30 @@ export async function listOpenVoiceSessions(limit = 200): Promise<VoiceSessionRo
   return rows.map(toRow);
 }
 
+/**
+ * The voice seconds `userSub` has used since `since` (G13, the daily minutes):
+ * every non-mock session started at or after it, at its known seconds, else at
+ * its ceiling (`max_seconds`: still open, or reaped unknown). Mock rows never
+ * count. Read across every tenant (the cap is per user, not per workspace), so
+ * it runs as the system; the statement is filtered by the user itself.
+ */
+export async function userVoiceSecondsSince(userSub: string, since: Date): Promise<number> {
+  const from = since.getTime();
+  if (config.mock.aurora) {
+    return voiceSessions.rows()
+      .filter((r) => r.user_sub === userSub && !r.mock && Date.parse(r.started_at) >= from)
+      .reduce((n, r) => n + (r.seconds ?? r.max_seconds), 0);
+  }
+  const { runAsSystem } = await import('./db-tenant.js');
+  const rows = await runAsSystem(() => exec(
+    `SELECT COALESCE(SUM(COALESCE(seconds, max_seconds)), 0)::bigint AS used
+       FROM voice_sessions WHERE user_sub = :sub AND mock = false AND started_at >= :since::timestamptz`,
+    [s('sub', userSub), s('since', since.toISOString())],
+  ));
+  const used = Number(rows[0]?.['used'] ?? 0);
+  return Number.isFinite(used) ? used : 0;
+}
+
 /** Per-session cap on tool-call rows, so a misbehaving tab cannot grow the table without bound. */
 export const MAX_TOOL_CALLS_PER_SESSION = 500;
 

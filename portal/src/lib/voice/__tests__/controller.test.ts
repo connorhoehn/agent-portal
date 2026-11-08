@@ -159,6 +159,20 @@ test('a tenant switch ends the session and settles the hold with that reason', a
   assert.deepEqual(h.log.filter((r) => r.url.endsWith('/close')).map((r) => (r.body as { reason: string }).reason), ['tenant-switch']);
 });
 
+test('daily minutes (G13): a refused mint is the dock\'s unavailable reason; a capped one says what is left today', async () => {
+  const refused = harness({ error: 'voice-unavailable', reason: 'daily-minutes', minutesLeft: 0, dailyMinutes: 60, resetsAt: '2026-11-09T00:00:00.000Z' }, { mintStatus: 429 });
+  await refused.controller.start();
+  assert.equal(refused.controller.getSnapshot().phase, 'unavailable');
+  assert.equal(refused.controller.getSnapshot().reason, "You have used today's 60 minutes of voice. Voice is back at midnight UTC.");
+
+  const capped = harness(await mint(KUBE, { maxSeconds: 300, dailyMinutesLeft: 5 }));
+  await capped.controller.start();
+  assert.equal(capped.controller.getSnapshot().turns[0]!.text, 'About 5 minutes of voice left today.');
+  const stopping = capped.controller.stop();
+  await capped.clock.advance(300);
+  await stopping;
+});
+
 test('no key: the mint answers 503 and the dock is unavailable with the reason', async () => {
   const h = harness({ error: 'voice-unavailable', reason: 'no-key', message: 'Voice is not configured' }, { mintStatus: 503 });
   await h.controller.start();

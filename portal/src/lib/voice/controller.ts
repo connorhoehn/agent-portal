@@ -31,7 +31,10 @@
 // 90% the voice says so once (commentary), at 100% (or the mint's maxSeconds)
 // the dock hangs up itself with reason `cutoff`. A mint that answers 409 on the
 // user's budget shows a card ("This session will exceed your budget by $x");
-// Confirm mints again with confirmOverUserBudget.
+// Confirm mints again with confirmOverUserBudget. The user's daily voice
+// minutes (G13) are the server's: a mint refused on them is the dock's
+// `unavailable` reason (client.ts dailyMinutesText), and a session they cut
+// short (the mint's `dailyMinutesLeft`) says how much of today is left.
 
 import { VoiceClient, type ClientEvent, type MediaFactory, type StopReason, type VoiceFrame, type VoiceMint } from './client.ts';
 import { initialMachine, phaseAt, reduce, sessionOpen, type MachineEvent, type MachineState, type VoicePhase } from './machine.ts';
@@ -267,6 +270,10 @@ export class VoiceController {
     switch (e.type) {
       case 'minted':
         this.mint = e.mint;
+        if (e.mint.dailyMinutesLeft != null) {
+          const m = Math.max(1, e.mint.dailyMinutesLeft);
+          this.addLine('assistant', `About ${m} minute${m === 1 ? '' : 's'} of voice left today.`);
+        }
         this.publish();
         return;
       case 'unavailable':

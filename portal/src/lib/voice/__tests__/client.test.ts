@@ -61,6 +61,10 @@ test('mint refusals map to unavailable (will not work now) or failed (try again)
   assert.match(mintFailure(403, { code: 'voice-demo-refused' }).reason, /demo identity/);
   assert.match(mintFailure(403, { error: 'Forbidden', action: 'VoiceNavigate' }).reason, /no voice access/);
   assert.equal(mintFailure(429, {}).kind, 'failed');
+  // The daily minutes (G13): a 429 in the voice-unavailable shape is unavailable, not a retry, and says what is left.
+  assert.deepEqual(mintFailure(429, { error: 'voice-unavailable', reason: 'daily-minutes', minutesLeft: 0, dailyMinutes: 60 }),
+    { kind: 'unavailable', reason: "You have used today's 60 minutes of voice. Voice is back at midnight UTC." });
+  assert.match(mintFailure(429, { error: 'voice-unavailable', reason: 'daily-minutes', minutesLeft: 1, dailyMinutes: 60 }).reason, /^Only 1 minute of voice is left today/);
 });
 
 async function mockMint(sessionId = 'vs_00000000-0000-0000-0000-000000000001') {

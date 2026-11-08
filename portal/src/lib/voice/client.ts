@@ -54,6 +54,8 @@ export interface VoiceMint {
   toolsEnabled: boolean;
   tools: string[];
   budget: { holdUsd: number; usdPerMinute: number };
+  /** Present when the user's daily voice minutes cut this session short (G13): whole minutes left today. */
+  dailyMinutesLeft?: number;
   mockScript?: MockScript;
 }
 
@@ -191,10 +193,22 @@ export function budgetConfirmOf(status: number, body: unknown): { estimateUsd: n
   return { estimateUsd: numOr(b['estimateUsd']), remainingUsd: numOr(ub['remainingUsd']), reason: strOr(b['error']) };
 }
 
+/** The daily-minutes refusal (G13) as the dock says it: the day's allowance and what is left of it. */
+export function dailyMinutesText(b: Record<string, unknown>): string {
+  const daily = numOr(b['dailyMinutes']);
+  const left = Math.max(0, Math.floor(numOr(b['minutesLeft']) ?? 0));
+  const allowance = daily != null ? `today's ${daily} minutes of voice` : "today's voice minutes";
+  const head = left > 0
+    ? `Only ${left} minute${left === 1 ? '' : 's'} of voice ${left === 1 ? 'is' : 'are'} left today, too few to start a session.`
+    : `You have used ${allowance}.`;
+  return `${head} Voice is back at midnight UTC.`;
+}
+
 export function mintFailure(status: number, body: unknown): StartFailure {
   const b = isObj(body) ? body : {};
   const error = strOr(b['error']);
   if (b['code'] === 'voice-demo-refused') return { kind: 'unavailable', reason: 'Voice is not available to the demo identity. Sign in.' };
+  if (error === 'voice-unavailable' && b['reason'] === 'daily-minutes') return { kind: 'unavailable', reason: dailyMinutesText(b) };
   if (b['reason'] === 'budget') return { kind: 'unavailable', reason: `Your budget does not cover a voice session: ${error ?? 'refused'}` };
   if (error === 'voice-unavailable') {
     return b['reason'] === 'no-key'

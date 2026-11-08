@@ -13,7 +13,11 @@
 //         mockScript?: { onStart, onResponseCreate, onClose } }   (MOCK_VOICE only; lib/voice/openai.ts)
 //     sessionId is opaque: the provider's live_… id stays server-side (§6), so a
 //     hang-up goes through POST /:id/close, never from the browser to OpenAI.
-//     503 { error: 'voice-unavailable', reason: 'no-key' | 'provider' }, a spend
+//     503 { error: 'voice-unavailable', reason: 'no-key' | 'provider' }; 429
+//     { error: 'voice-unavailable', reason: 'daily-minutes', minutesLeft,
+//     dailyMinutes, resetsAt } when the user's VOICE_DAILY_MINUTES for the UTC
+//     day are used (G13; a session that fits only partly is minted with its
+//     maxSeconds cut to what is left, and `dailyMinutesLeft` says so); a spend
 //     refusal in spendRefusalResponse's shape plus { reason: 'budget' }, 403 for
 //     the grant or the demo persona. Never the key, the instructions or the
 //     session object.
@@ -41,7 +45,7 @@ import { insecureDevMode } from '../lib/insecure-dev-mode.js';
 import { emitFleetMetric } from '../lib/fleet-metrics.js';
 import { rateLimit } from '../lib/rate-limit.js';
 import { clock } from '../mock/core/index.js';
-import { voiceConfig, voiceCostUsd, MIN_BILLED_SECONDS } from '../lib/voice/config.js';
+import { voiceConfig, voiceCostUsd, utcDay, MIN_BILLED_SECONDS, MIN_DAILY_SESSION_SECONDS } from '../lib/voice/config.js';
 import { bookVoiceSpend, boundDelegatedUsage } from '../lib/voice/ledger.js';
 import {
   delegationInstructions, hashToolArgs, responsesFunctionTools, toolsForTenant, voiceInstructions, voiceTool, MOCK_CALLS,
@@ -50,7 +54,7 @@ import {
   createLiveSession, hangupLiveSession, mockLiveScript, voiceProviderConfigured, MOCK_SDP_ANSWER, VoiceProviderError,
 } from '../lib/voice/openai.js';
 import {
-  closeVoiceSession, getVoiceSession, insertVoiceSession, insertVoiceToolCall, learnReapedSessionCost, setProviderSessionId,
+  closeVoiceSession, getVoiceSession, insertVoiceSession, insertVoiceToolCall, learnReapedSessionCost, setProviderSessionId, userVoiceSecondsSince,
   CLIENT_STOP_REASONS, VOICE_TOOL_OUTCOMES, type VoiceSessionRow, type VoiceStopReason, type VoiceToolOutcome,
 } from '../providers/voice-sessions.js';
 
@@ -62,14 +66,14 @@ const SESSION_ID = /^vs_[0-9a-f-]{36}$/;
 const bySub = (req: Request): string | null => resolveSession(req)?.sub ?? null;
 const MAX_SDP_BYTES = 64 * 1024;
 
-function unavailable(res: Response, reason: 'no-key' | 'provider', message: string, status = 503): void {
+function unavailable(res: Response, reason: 'no-key' | 'provider' | 'daily-minutes', message: string, status = 503, extra: Record<string, unknown> = {}): void {
   emitFleetMetric('voice-unavailable', { reason });
-  res.status(status).json({ error: 'voice-unavailable', reason, message });
+  res.status(status).json({ error: 'voice-unavailable', reason, message, ...extra });
 }
 
-/** The forecast a session is held at: p75 minutes (never past the ceiling) × the rate. */
-function voiceForecast(cfg: ReturnType<typeof voiceConfig>) {
-  const p75 = voiceCostUsd(Math.min(cfg.p75Minutes, cfg.maxMinutes) * 60, cfg.usdPerMinute);
+/** The forecast a session is held at: p75 minutes (never past the session's ceiling) × the rate. */
+function voiceForecast(cfg: ReturnType<typeof voiceConfig>, maxSeconds: number) {
+  const p75 = voiceCostUsd(Math.min(cfg.p75Minutes * 60, maxSeconds), cfg.usdPerMinute);
   return { costUsdP75: p75, costUsdP25: Math.round((p75 / 4) * 10_000) / 10_000, confidence: 'prior' as const };
 }
 
@@ -97,19 +101,40 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
     return;
   }
 
+  // The daily minutes (G13, §3 Q2): what the user's real sessions since UTC
+  // midnight used, known seconds else their ceiling, so an open session counts
+  // in full. The dollar hold below stays the money brake; this is the time one.
+  let maxSeconds = Math.round(cfg.maxMinutes * 60);
+  let dailyMinutesLeft: number | null = null;
+  if (!cfg.mock && cfg.dailyMinutes > 0) {
+    const { start, next } = utcDay(clock.now());
+    const left = Math.max(0, Math.round(cfg.dailyMinutes * 60) - await userVoiceSecondsSince(session.sub, start));
+    if (left < MIN_DAILY_SESSION_SECONDS) {
+      const minutesLeft = Math.floor(left / 60);
+      res.set('Retry-After', String(Math.max(1, Math.ceil((next.getTime() - clock.now().getTime()) / 1000))));
+      unavailable(res, 'daily-minutes', `Today's ${cfg.dailyMinutes} minutes of voice are used. Voice is back at midnight UTC.`, 429, {
+        minutesLeft, dailyMinutes: cfg.dailyMinutes, resetsAt: next.toISOString(),
+      });
+      return;
+    }
+    if (left < maxSeconds) {
+      maxSeconds = left;
+      dailyMinutesLeft = Math.floor(left / 60);
+    }
+  }
+
   const id = `vs_${randomUUID()}`;
-  const maxSeconds = Math.round(cfg.maxMinutes * 60);
   const { reserveSpend, HOLD_GRACE_MS, spendRefusalResponse } = await import('../lib/spend-holds.js');
   const expiresInMs = maxSeconds * 1000 + HOLD_GRACE_MS;
   const held = await reserveSpend({
     initiativeId: null, actorId: session.sub, source: 'voice_session', sourceId: id,
-    forecast: voiceForecast(cfg), expiresInMs, tenant: session.tenant,
+    forecast: voiceForecast(cfg, maxSeconds), expiresInMs, tenant: session.tenant,
     ...(body['confirmOverUserBudget'] === true ? { confirmed: { userBudget: true } } : {}),
   });
   if (held.kind !== 'held') {
     emitFleetMetric('voice-unavailable', { reason: 'budget', gate: 'gate' in held ? held.gate : held.kind });
     // The session's estimate rides along so the dock can say how far over the confirm goes.
-    const out = spendRefusalResponse(held, { reason: 'budget', estimateUsd: voiceForecast(cfg).costUsdP75 });
+    const out = spendRefusalResponse(held, { reason: 'budget', estimateUsd: voiceForecast(cfg, maxSeconds).costUsdP75 });
     if (out.headers) res.set(out.headers);
     res.status(out.status).json(out.body);
     return;
@@ -160,6 +185,7 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
     sdp: answer.sdp, mock: cfg.mock, model: cfg.model, voice: cfg.voice,
     toolsEnabled, tools: toolsEnabled ? tools.map((t) => t.name) : [],
     budget: { holdUsd: held.amountUsd, usdPerMinute: cfg.usdPerMinute },
+    ...(dailyMinutesLeft != null ? { dailyMinutesLeft } : {}),
     ...(cfg.mock ? { mockScript: mockLiveScript(id, MOCK_CALLS[session.tenant] ?? MOCK_CALLS['social']!) } : {}),
   });
 }));
