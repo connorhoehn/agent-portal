@@ -36,13 +36,14 @@ import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { useFetch } from '../../hooks/useFetch';
 import { browserMedia } from '../../lib/voice/client';
 import { VoiceController } from '../../lib/voice/controller';
-import { ResultMemory, type CallAccess, type CommandOutputView, type ComputeAccess, type DeliveryRecord, type SocialAccess, type ToolContext, type VoiceComputer } from '../../lib/voice/tools';
+import { ResultMemory, type CallAccess, type CommandOutputView, type ComputeAccess, type DeliveryRecord, type PresenceAccess, type PresencePerson, type SocialAccess, type ToolContext, type VoiceComputer } from '../../lib/voice/tools';
 import { useCallHost } from '../../lib/conversationCall';
 import { useSocialCall } from '../../pages/social/useSocialCall';
 import { sendAndWaitForSocialChatAck, socialChatError } from '../../pages/social/socialChatDelivery';
 import { useEmbeddedSocial } from './EmbeddedSocial';
 import { PAGES, isPageVisible } from './portalCommands';
 import { isVoiceHotkey, pageContextNote, voiceDockVisible } from './voiceDockModel';
+import { tenantLobbyPresence } from './tenantPresence';
 
 /** The footer's voice slot: nothing at all unless the flag is on. */
 export function VoiceFooterSlot({ enabled = features.voiceNavigator }: { enabled?: boolean }) {
@@ -199,10 +200,23 @@ function VoiceFooterPane() {
     deliveries,
   } : null), [social?.available, social?.presence, tenant, gateway?.connectionState, sendChat, deliveries]);
 
+  // activity `online`: exactly the faces the footer shows. With a Social grant that is the shell's one Social
+  // announcement (EmbeddedSocial's presencePeople); without one, the tenant lobby TenantLobby announces on.
+  const socialPeople = social?.available ? social.presencePeople : null;
+  const presenceAccess = useMemo<PresenceAccess>(() => ({
+    roster: (): PresencePerson[] => {
+      const me = session?.sub;
+      if (socialPeople) {
+        return socialPeople.filter((p) => p.id !== me).map((p) => ({ userId: p.id, name: p.name, status: p.idle ? 'away' : 'online', ...(p.detail ? { message: p.detail } : {}) }));
+      }
+      return (tenantLobbyPresence.get()?.online ?? []).filter((p) => p.userId !== me).map((p) => ({ userId: p.userId, name: p.name, status: 'online' as const }));
+    },
+  }), [socialPeople, session?.sub]);
+
   // The tool context is read at call time, so a call sees the current router, grants and providers.
   const planeActions = planeCaps.data?.actions ?? {};
-  const live = useRef({ tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, planeActions, results });
-  live.current = { tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, planeActions, results };
+  const live = useRef({ tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, results });
+  live.current = { tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, results };
 
   const controller = useMemo(() => new VoiceController({
     fetch: (url, init) => fetch(url, init),
@@ -219,6 +233,7 @@ function VoiceFooterPane() {
       compute: live.current.compute,
       social: live.current.social,
       calls: live.current.calls,
+      presence: live.current.presence,
       results: live.current.results,
       toast: {
         pending: (title, detail) => toastPending(title, detail),

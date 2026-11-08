@@ -213,6 +213,24 @@ export function searchRecordTypes(tenant: string | null): string[] {
   return [...new Set(Object.values(SEARCH_RECORD_TYPES).flat())];
 }
 
+/**
+ * What `activity` may read, per tenant (G6): the presence roster the footer
+ * shows (`online`), the social index's live huddles, the caller's call log,
+ * messages and pins (GET /api/social/search in Social, the plane's
+ * /api/social/plane/search outside it), and in orgiq a person's work items
+ * from GET /api/search. `recent` is every dated source since a time.
+ */
+export const ACTIVITY_SCOPES: Readonly<Record<string, readonly string[]>> = {
+  orgiq: ['online', 'live-calls', 'missed-calls', 'messages', 'pins', 'work', 'recent'],
+  social: ['online', 'live-calls', 'missed-calls', 'messages', 'pins', 'recent'],
+};
+
+/** `activity`'s scope enum for one tenant, or every tenant's scopes (null) for the catalogue's base row. */
+export function activityScopes(tenant: string | null): string[] {
+  if (tenant != null) return [...(ACTIVITY_SCOPES[tenant] ?? [])];
+  return [...new Set(Object.values(ACTIVITY_SCOPES).flat())];
+}
+
 function navigatePageIds(tenant: string | null): string[] {
   return [...new Set(NAVIGATE_PAGES.filter((p) => tenant == null || p.tenants.includes('*') || p.tenants.includes(tenant)).map((p) => p.id))];
 }
@@ -333,6 +351,19 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     mapsTo: 'GET /api/work/sweeps/runs?since=&status=failed|all (P5), GET /api/work/findings, GET /api/bots/active-runs, GET /api/bots/runs?botIds=',
   },
   {
+    name: 'activity',
+    description: 'Read what is happening around the user from the social app\'s activity and the presence roster: who is online, who is in a call or huddle now, the user\'s missed calls, recent messages or pinned messages (optionally from or about one person), what a person worked on, or everything recent since a time. Each row carries a ref that open_result opens.',
+    parameters: obj({
+      scope: str('What to read: "online" (who is online now), "live-calls" (who is in a call or huddle now), "missed-calls" (the user\'s missed calls), "messages", "pins", "work" (what a person worked on, in the Work workspace) or "recent" (messages, pins, missed calls and, in Work, work items, since a time; yesterday by default).', { enum: activityScopes(null) }),
+      since: str(`Since when, for messages, pins, missed-calls, work and recent: ${SINCE_WORDS}.`, { minLength: 1, maxLength: 40 }),
+      who: str('One person, as the user named them, to narrow the read to ("what did Ada work on", "is Ada on a call").', { minLength: 1, maxLength: 120 }),
+    }, ['scope']),
+    kind: 'read', backing: 'search', confirm: false, action: null,
+    gate: 'online: the presence roster the footer shows; calls, messages and pins: the social index behind ViewSocial (GET /api/social/search in Social, the plane\'s Social grant elsewhere); work: GET /api/search behind Search',
+    spend: 'none', idempotent: true, says: 'Checking who is on a call.', tenants: PEOPLE_TENANTS,
+    mapsTo: "the shell's presence roster (online); GET /api/social/search or /api/social/plane/search?q=&type=huddle|calllog|message|pin&limit= (calls, messages, pins); GET /api/search?q=&type=work&sort=recent (work)",
+  },
+  {
     name: 'send_chat_message',
     description: 'Post a message the user dictated to a team, a channel or a person, as a social-app activity. Always read it back and ask the user first.',
     parameters: obj({
@@ -398,6 +429,8 @@ export const MOCK_CALLS: Readonly<Record<string, { name: string; arguments: Reco
   assessment: { name: 'search_records', arguments: { query: 'teams below target', type: 'team', scope: null, limit: null }, said: 'Which teams are below target?' },
   pipelines: { name: 'search_records', arguments: { query: 'failed runs', type: 'run', scope: null, limit: null }, said: 'What failed last night?' },
   access: { name: 'access_request_status', arguments: { query: 'SME', scope: 'mine' }, said: 'Did my SME request get approved?' },
+  // G6: "who is on call" reads the social index's live huddles (a moderator's session; a participant's searches them).
+  'social/moderator': { name: 'activity', arguments: { scope: 'live-calls', since: null, who: null }, said: 'Who is on a call right now?' },
   'access/approver': { name: 'access_request_status', arguments: { query: null, scope: 'approvals' }, said: 'Show me my approvals.' },
   'access/access-admin': { name: 'access_request_status', arguments: { query: null, scope: 'approvals' }, said: 'What is waiting on me?' },
 };
@@ -426,7 +459,8 @@ function withEnum(t: VoiceTool, prop: string, values: string[], description = t.
 
 /**
  * The tools a session in `tenant` is offered: `navigate` narrowed to that
- * tenant's pages and `search_records` to that tenant's index types. With
+ * tenant's pages, `search_records` to that tenant's index types and
+ * `activity` to that tenant's scopes (no `work` outside orgiq). With
  * `commandAllowlist` (the mint passes routes/devbox.ts commandAllowlist()),
  * `run_command`'s phrases narrow to the ones that allowlist runs, and the
  * tool is left out when none does (G9): the model is never offered a phrase
@@ -439,6 +473,7 @@ export function toolsForTenant(tenant: string, opts: { commandAllowlist?: readon
       const types = searchRecordTypes(tenant);
       return types.length ? [withEnum(t, 'type', types, `${t.description} The kinds here: ${types.join(', ')}.`)] : [];
     }
+    if (t.name === 'activity') return [withEnum(t, 'scope', activityScopes(tenant))];
     if (t.name === 'run_command' && opts.commandAllowlist) {
       const phrases = runCommandPhrases(opts.commandAllowlist);
       return phrases.length ? [withEnum(t, 'phrase', phrases)] : [];

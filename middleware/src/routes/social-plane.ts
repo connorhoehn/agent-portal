@@ -35,6 +35,7 @@
 //   GET    /recordings[/:id/playback|/transcript]                                              (ViewSocial)
 //   POST   /recordings/:id/share   DELETE /recordings/:id                                      (ManageRecordings)
 //   GET    /calls                           your Social call log                               (ViewSocial)
+//   GET    /search?q=&type=&limit=          the Social index, as GET /api/social/search answers (ViewSocial)
 //   GET    /conversations/:id/shared-work   what was shared into a conversation you are in     (ViewSocial)
 
 import { Router } from 'express';
@@ -51,6 +52,7 @@ import { buildSocialViewerWorkGraph } from '../lib/work-graph/build.js';
 import { respondWithWorkGraph, WORK_GRAPH_UNAVAILABLE } from '../lib/work-graph/respond.js';
 import { SOCIAL_CONVERSATION_ID } from '../lib/tenant-channels.js';
 import { listTeams } from '../providers/social-platform.js';
+import { tenantSearchRouter } from './tenant-search.js';
 
 export const socialPlaneRouter = Router();
 
@@ -90,6 +92,9 @@ socialPlaneRouter.post('/recordings/:recordingId/share', socialGate('ManageRecor
 socialPlaneRouter.delete('/recordings/:recordingId', socialGate('ManageRecordings'), handler('delete /recordings/:recordingId'));
 socialPlaneRouter.get('/calls', socialGate('ViewSocial'), handler('get /calls'));
 socialPlaneRouter.get('/conversations/:id/shared-work', socialGate('ViewSocial'), handler('get /conversations/:id/shared-work'));
+// The Social index (voice `activity`, G6): the tenant mount's own router behind the same gate. Its visibility rule
+// reads only the caller's id (membership, call-log user), so an orgiq session sees exactly what it sees in Social.
+socialPlaneRouter.use('/search', socialGate('ViewSocial'), tenantSearchRouter('social'));
 
 // ── The plane's own reads (docs/communication-plane-goal.md §1.2, §2, §3) ─────
 

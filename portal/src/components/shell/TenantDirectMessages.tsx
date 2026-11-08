@@ -11,6 +11,7 @@ import { Button, ChatIcon, Inline, T } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { onlineIds, readConversations, readSharedPeople, type SharedPeople } from './tenantDirectModel';
 import { MessagesOverviewDialog } from './MessagesOverviewDialog';
+import { tenantLobbyPresence } from './tenantPresence';
 
 // A segment of the shell footer row (SocialFooter.tsx), which draws the bar itself.
 const BAR = 'min-w-0';
@@ -21,6 +22,11 @@ function TenantLobby({ directory, onOnline }: { directory: SharedPeople; onOnlin
   const ids = useMemo(() => onlineIds(roster, directory.people), [roster, directory]);
   useEffect(() => { onOnline(ids); }, [ids, onOnline]);
   useEffect(() => () => onOnline(new Set()), [onOnline]);
+  // Who the footer counts online, for the voice dock's `activity` (read at call time).
+  useEffect(() => {
+    tenantLobbyPresence.set({ lobby: directory.lobby, online: directory.people.filter(p => ids.has(p.userId)).map(p => ({ userId: p.userId, name: p.displayName })) });
+  }, [directory, ids]);
+  useEffect(() => () => tenantLobbyPresence.set(null), []);
   return null;
 }
 

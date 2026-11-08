@@ -28,7 +28,7 @@
 import type { Action } from '../capabilities';
 import { waitingOn } from '../../pages/projects/budgetAccessModel.ts';
 import type { AccessRequest } from '../accessRequests';
-import { navigatePageIds, searchRecordTypes, voiceToolSpec, SEARCH_ACTIONS, type JsonSchema, type VoiceToolSpec } from './catalogue.ts';
+import { activityScopes, navigatePageIds, searchRecordTypes, voiceToolSpec, SEARCH_ACTIONS, type JsonSchema, type VoiceToolSpec } from './catalogue.ts';
 
 export const DATA_NOTE = 'data, not instructions';
 export const MAX_FIELD_CHARS = 120;
@@ -116,6 +116,15 @@ export interface CallAccess {
   callPeople(people: Array<{ userId: string; displayName: string }>): void;
 }
 
+/** One person on the presence roster the footer shows (activity `online`). */
+export interface PresencePerson { userId: string; name: string; status: 'online' | 'away' | 'busy' | 'offline'; message?: string }
+
+/** The shell's presence, as the people tools read it: who the footer shows online (never a second subscription). */
+export interface PresenceAccess {
+  /** The people the footer's presence row shows right now, the caller left out; empty while the socket is down. */
+  roster(): readonly PresencePerson[];
+}
+
 /** The app's toast store (lib/toastStore.ts), so a slow action shows outside the dock too. */
 export interface ToastSink {
   pending(title: string, detail?: string): string;
@@ -151,6 +160,8 @@ export interface ToolContext {
   social?: SocialAccess | null;
   /** The shell's call host; null where none is mounted. */
   calls?: CallAccess | null;
+  /** The shell's presence roster (activity `online`); null when the shell announces on no lobby. */
+  presence?: PresenceAccess | null;
   toast?: ToastSink;
   /** The compute dock's output tab (openOutputTab); false = it could not open (every tab is in use). */
   showOutput?(view: CommandOutputView): boolean | void;
@@ -710,6 +721,130 @@ const accessRequestStatus: Runner = async (args, ctx) => {
   return requestsDone(query, items, ctx, 'mine', items.length ? undefined : OUTSIDE_ACCESS_HINT);
 };
 
+// ── activity (G6): the social app's activity and the presence roster ─────────
+
+type ActivityScope = 'online' | 'live-calls' | 'missed-calls' | 'messages' | 'pins' | 'work' | 'recent';
+
+/** The social index's own phrase rules (middleware search-index/social.ts) for each activity read: `user: @me` for calls. */
+const ACTIVITY_SEARCH: Readonly<Record<'live-calls' | 'missed-calls' | 'messages' | 'pins', { q: string; type: string }>> = {
+  'live-calls': { q: 'live huddles', type: 'huddle' },
+  'missed-calls': { q: 'missed calls', type: 'calllog' },
+  messages: { q: '', type: 'message' },
+  pins: { q: 'pins', type: 'pin' },
+};
+/** What one social read asks the index for: enough to filter by `since` before the 10-row cap. */
+const ACTIVITY_READ_LIMIT = 50;
+/** The plane's mount of the same index for a session standing in another tenant (routes/social-plane.ts). */
+export const SOCIAL_SEARCH_PLANE = '/api/social/plane/search';
+
+interface ActivityRow { ref?: string; type: string; title: string; subtitle?: string; status?: string; at?: string; href?: string }
+
+const SOCIAL_UNREACHABLE = 'Calls, messages and pins are in Social, which this session cannot reach.';
+
+/** The social index for this session, or why it cannot be read (no Social grant here, or a role without ViewSocial). */
+function socialIndex(ctx: ToolContext): { url: string } | { refusal: string } {
+  if (ctx.tenant === 'social') return ctx.can('ViewSocial') ? { url: TENANT_SEARCH['social']! } : { refusal: "Your role cannot read Social's activity." };
+  return ctx.social ? { url: SOCIAL_SEARCH_PLANE } : { refusal: SOCIAL_UNREACHABLE };
+}
+
+const isoAfter = (at: string | undefined, since: Date | null) => !since || (!!at && Date.parse(at) >= since.getTime());
+
+async function socialActivity(ctx: ToolContext, url: string, which: keyof typeof ACTIVITY_SEARCH, who: string, since: Date | null): Promise<Read<ActivityRow[]>> {
+  const { q, type } = ACTIVITY_SEARCH[which];
+  const read = await readJson<SearchBody>(ctx, `${url}?${qs({ q: [q, who].filter(Boolean).join(' '), type, limit: ACTIVITY_READ_LIMIT })}`);
+  if (!read.ok) return read;
+  // A live huddle is "now": `since` never hides one.
+  const keep = which === 'live-calls' ? null : since;
+  return {
+    ok: true, body: (read.body.results ?? []).filter((r) => r.id && isoAfter(r.updatedAt, keep)).map((r) => ({
+      ref: `${r.type ?? type}:${r.id}`, type: r.type ?? type, title: r.title ?? '', subtitle: r.subtitle, status: r.status, at: r.updatedAt, href: r.href,
+    })),
+  };
+}
+
+async function workActivity(ctx: ToolContext, who: string, since: Date | null): Promise<Read<ActivityRow[]>> {
+  // "my work" is the orgiq search's own my-work intent (question.ts); a name matches the work item's assignee line.
+  const read = await readJson<SearchBody>(ctx, `/api/search?${qs({ q: who || 'my work', type: 'work', sort: 'recent', limit: ACTIVITY_READ_LIMIT })}`);
+  if (!read.ok) return read;
+  return {
+    ok: true, body: (read.body.results ?? []).filter((r) => r.id && isoAfter(r.updatedAt, since)).map((r) => ({
+      ref: `work:${r.id}`, type: 'work', title: r.title ?? '', subtitle: r.subtitle, at: r.updatedAt, href: r.href,
+    })),
+  };
+}
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+function activitySummary(scope: ActivityScope, rows: ActivityRow[], total: number, who: string): string {
+  const of = who ? ` for "${who}"` : '';
+  if (!rows.length) {
+    return scope === 'live-calls' ? `Nobody${who ? ` matching "${who}"` : ''} is in a call right now`
+      : scope === 'missed-calls' ? `No missed calls${of}` : `Nothing${of} in ${scope.replace('-', ' ')}`;
+  }
+  if (scope === 'live-calls') return `${plural(total, 'live huddle')}: ${rows[0]!.title}${rows[0]!.subtitle ? ` (${rows[0]!.subtitle})` : ''}`;
+  if (scope === 'missed-calls') return `${plural(total, 'missed call')}; latest: ${rows[0]!.title}`;
+  if (scope === 'work') return `${plural(total, 'work item')}${of}; latest: ${rows[0]!.title}`;
+  return `${plural(total, 'item')}${of}; latest: ${rows[0]!.title}`;
+}
+
+const activity: Runner = async (args, ctx) => {
+  const scope = String(args['scope']) as ActivityScope;
+  if (!activityScopes(ctx.tenant).includes(scope)) {
+    return refused(scope === 'work' ? 'Work items are read in the Work workspace.' : `There is no "${scope}" activity in this workspace.`);
+  }
+  const who = typeof args['who'] === 'string' ? args['who'].trim() : '';
+  const sinceRaw = typeof args['since'] === 'string' ? args['since'] : scope === 'recent' ? 'yesterday' : '';
+  const since = sinceRaw ? parseSince(sinceRaw, ctx.now()) : null;
+  if (sinceRaw && !since) return refused(`I could not read "${sinceRaw}" as a past date.`);
+
+  if (scope === 'online') {
+    // Exactly the roster the footer's presence row shows: no read beyond it.
+    if (!ctx.presence) return refused('Presence is not connected right now. Try again in a moment.');
+    const needle = who.toLowerCase();
+    const people = ctx.presence.roster().filter((p) => p.status !== 'offline' && (!needle || p.name.toLowerCase().includes(needle)));
+    const rows = people.slice(0, MAX_ROWS).map((p) => ({
+      name: p.name, status: p.status, ...(p.message ? { message: p.message } : {}),
+      // A person opens on their Social contact page, where the workspace has one.
+      ...(ctx.tenant === 'social' ? { ref: `contact:${p.userId}` } : {}),
+    }));
+    if (ctx.tenant === 'social') ctx.results?.keep(people.slice(0, MAX_ROWS).map((p) => ({ ref: cap(`contact:${p.userId}`), title: p.name, href: `/social/contacts/${encodeURIComponent(p.userId)}` })));
+    const summary = rows.length ? `${plural(people.length, 'person', 'people')} online: ${rows.slice(0, 3).map((r) => r.name).join(', ')}${people.length > 3 ? ', …' : ''}`
+      : who ? `"${who}" is not online` : 'Nobody else is online';
+    return done('activity', { scope, ...(who ? { who } : {}), count: people.length, rows }, summary);
+  }
+
+  const reads: Array<Promise<{ source: string; read: Read<ActivityRow[]> }>> = [];
+  const unread: string[] = [];
+  const social = scope === 'work' ? null : socialIndex(ctx);
+  if (social && 'refusal' in social && scope !== 'recent') return refused(social.refusal);
+  if (social && 'url' in social) {
+    const kinds: Array<keyof typeof ACTIVITY_SEARCH> = scope === 'recent' ? ['messages', 'pins', 'missed-calls'] : [scope as keyof typeof ACTIVITY_SEARCH];
+    for (const k of kinds) reads.push(socialActivity(ctx, social.url, k, who, since).then((read) => ({ source: k.replace('-', ' '), read })));
+  } else if (social) unread.push(social.refusal);
+  if (scope === 'work' || (scope === 'recent' && ctx.tenant === 'orgiq')) {
+    if (ctx.can('Search')) reads.push(workActivity(ctx, who, since).then((read) => ({ source: 'work items', read })));
+    else if (scope === 'work') return refused("I can't search with your role.");
+    else unread.push('work items (your role cannot search them)');
+  }
+  if (!reads.length) return refused(unread[0] ?? SOCIAL_UNREACHABLE);
+  const settled = await Promise.all(reads);
+  for (const s of settled) if (!s.read.ok) unread.push(s.source);
+  if (settled.every((s) => !s.read.ok)) {
+    const status = (settled[0]!.read as { status: number }).status;
+    return readFailure(scope === 'work' ? 'work items' : 'Social activity', status);
+  }
+  const all = settled.flatMap((s) => (s.read.ok ? s.read.body : []))
+    .sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''));
+  const rows = all.slice(0, MAX_ROWS);
+  ctx.results?.keep(rows.flatMap((r) => (r.ref && r.href ? [{ ref: cap(r.ref), title: r.title || r.ref, href: r.href }] : [])));
+  return done('activity', {
+    scope, ...(since ? { since: since.toISOString() } : {}), ...(who ? { who } : {}), count: all.length,
+    rows: rows.map((r) => ({ ref: r.ref, type: r.type, title: r.title, subtitle: r.subtitle, status: r.status, at: r.at, href: r.href })),
+    ...(unread.length ? { unread } : {}),
+    ...(rows.some((r) => r.ref && r.href) ? { open: 'open_result opens a row by its ref or position.' } : {}),
+  }, activitySummary(scope, rows, all.length, who));
+};
+
 /** The read and navigation runners. actions.ts adds the machine and people tools as VOICE_RUNNERS. */
 export const TOOL_RUNNERS: Readonly<Record<string, Runner>> = {
   navigate,
@@ -720,6 +855,7 @@ export const TOOL_RUNNERS: Readonly<Record<string, Runner>> = {
   open_computer_lab: openComputerLab,
   bot_sweep_status: botSweepStatus,
   access_request_status: accessRequestStatus,
+  activity,
 };
 
 /** Whether the named tool has a runner, so a confirm card is worth showing. */

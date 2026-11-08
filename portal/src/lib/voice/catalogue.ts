@@ -98,6 +98,18 @@ export function searchRecordTypes(tenant: string | null): string[] {
   return [...new Set(Object.values(SEARCH_RECORD_TYPES).flat())];
 }
 
+/** `activity`'s scopes per tenant (the middleware's ACTIVITY_SCOPES): no `work` outside orgiq (G6). */
+export const ACTIVITY_SCOPES: Readonly<Record<string, readonly string[]>> = {
+  orgiq: ['online', 'live-calls', 'missed-calls', 'messages', 'pins', 'work', 'recent'],
+  social: ['online', 'live-calls', 'missed-calls', 'messages', 'pins', 'recent'],
+};
+
+/** `activity`'s scope enum for one tenant, or every tenant's scopes (null) for the base row. */
+export function activityScopes(tenant: string | null): string[] {
+  if (tenant != null) return [...(ACTIVITY_SCOPES[tenant] ?? [])];
+  return [...new Set(Object.values(ACTIVITY_SCOPES).flat())];
+}
+
 /**
  * The phrase ids `run_command` may name; actions.ts PHRASE_TABLE owns the
  * command text (§6). The mint narrows this enum to the phrases the server's
@@ -203,6 +215,15 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       scope: str('"failed" (the default): only sweep runs and bot runs that failed, and open critical or warning findings; "all": every run since then.', { enum: ['failed', 'all'] }),
     }, ['since']),
     kind: 'read', backing: 'search', confirm: false, action: null, says: 'Checking the sweeps since yesterday.', tenants: ['orgiq'],
+  },
+  {
+    name: 'activity',
+    parameters: obj({
+      scope: str('What to read: "online" (who is online now), "live-calls" (who is in a call or huddle now), "missed-calls" (the user\'s missed calls), "messages", "pins", "work" (what a person worked on, in the Work workspace) or "recent" (messages, pins, missed calls and, in Work, work items, since a time; yesterday by default).', { enum: activityScopes(null) }),
+      since: str(`Since when, for messages, pins, missed-calls, work and recent: ${SINCE_WORDS}.`, { minLength: 1, maxLength: 40 }),
+      who: str('One person, as the user named them, to narrow the read to ("what did Ada work on", "is Ada on a call").', { minLength: 1, maxLength: 120 }),
+    }, ['scope']),
+    kind: 'read', backing: 'search', confirm: false, action: null, says: 'Checking who is on a call.', tenants: PEOPLE_TENANTS,
   },
   {
     name: 'send_chat_message',

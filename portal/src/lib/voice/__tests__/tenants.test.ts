@@ -155,3 +155,18 @@ test('an access approver\'s scripted session answers its approvals from the fixt
   assert.deepEqual(req.calls, [['access_request_status', 'refused']]);
   assert.equal(req.log.filter((l) => l.method === 'GET').length, 0);
 });
+
+test('the social moderator\'s scripted session asks who is on a call: activity reads the live huddles (G6)', async () => {
+  const { mockCallFor } = await middlewareVoice<{ mockCallFor: (t: string, r: string) => Call }>('catalogue.ts');
+  const call = mockCallFor('social', 'moderator');
+  assert.equal(call.name, 'activity');
+  const huddle = { type: 'huddle', id: 'call-1', title: 'Live huddle in #platform', kind: 'Huddle', subtitle: 'In the huddle now: Mira, Lena', status: 'live', href: '/social/calls', score: 4 };
+  const run = await scriptedRun('social', {
+    role: 'moderator', allow: ['ViewSocial', 'PostMessage', 'StartCall', 'VoiceNavigate'], call,
+    routes: [route('GET', '/api/social/search?', 200, { query: 'live huddles', results: [huddle], counts: { huddle: 1 }, total: 1 })],
+  });
+  assert.deepEqual(run.calls, [['activity', 'done']]);
+  assert.deepEqual(run.outcomes, ['done']);
+  assert.deepEqual(run.summaries, ['1 live huddle: Live huddle in #platform (In the huddle now: Mira, Lena)']);
+  assert.deepEqual(run.log.filter((r) => r.url.startsWith('/api/social/search')).map((r) => r.url), ['/api/social/search?q=live+huddles&type=huddle&limit=50']);
+});

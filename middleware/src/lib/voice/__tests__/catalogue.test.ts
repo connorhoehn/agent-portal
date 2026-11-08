@@ -7,7 +7,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   VOICE_TOOLS, INTERNAL_TOOLS, NAVIGATE_PAGES, RUN_COMMAND_PHRASES, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, toolsForTenant, responsesFunctionTools,
-  voiceInstructions, delegationInstructions, hashToolArgs, voiceTool, searchRecordTypes, MOCK_CALLS, VOICE_TENANTS, mockCallFor,
+  voiceInstructions, delegationInstructions, hashToolArgs, voiceTool, searchRecordTypes, MOCK_CALLS, VOICE_TENANTS, mockCallFor, activityScopes,
 } from '../catalogue.js';
 import { SEARCH_TYPES } from '../../../providers/search.js';
 import { tenantSpec } from '../../search-index/tenants.js';
@@ -33,6 +33,7 @@ const SPEC: Record<string, [string, boolean, string]> = {
   start_call: ['people', true, 'social-activity'],
   set_status: ['people', false, 'social-activity'],
   access_request_status: ['read', false, 'search'],
+  activity: ['read', false, 'search'],
 };
 
 describe('the §4 catalogue', () => {
@@ -107,8 +108,8 @@ describe('the §4 catalogue', () => {
 });
 
 describe('tenant scoping (§6)', () => {
-  it('a social session is offered navigate, its search, chat, a call, status and its own requests, nothing on machines', () => {
-    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'navigate', 'open_result', 'search_records', 'send_chat_message', 'set_status', 'start_call']);
+  it('a social session is offered navigate, its search, its activity, chat, a call, status and its own requests, nothing on machines', () => {
+    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'activity', 'navigate', 'open_result', 'search_records', 'send_chat_message', 'set_status', 'start_call']);
   });
 
   it('start_call is offered in orgiq and social only, asks first, and gates on StartCall (G7)', () => {
@@ -195,6 +196,20 @@ describe('tenant scoping (§6)', () => {
       const given = Object.fromEntries(Object.entries(MOCK_CALLS[key]!.arguments).filter(([, v]) => v !== null));
       expect(new Ajv({ strict: true }).compile(tool.parameters)(given)).toBe(true);
     }
+  });
+
+  it('activity (G6) is a read over the social index and the roster, offered in orgiq and social only, with work in orgiq alone', () => {
+    const t = voiceTool('activity')!;
+    expect(t.tenants).toEqual(['orgiq', 'social']);
+    expect(t.parameters.required).toEqual(['scope']);
+    expect(Object.keys(t.parameters.properties)).toEqual(['scope', 'since', 'who']);
+    const scopes = (tenant: string) => (toolsForTenant(tenant).find((x) => x.name === 'activity')!.parameters.properties['scope'] as { enum: string[] }).enum;
+    expect(scopes('orgiq')).toEqual(activityScopes('orgiq'));
+    expect(scopes('orgiq')).toEqual(expect.arrayContaining(['online', 'live-calls', 'missed-calls', 'messages', 'pins', 'work', 'recent']));
+    expect(scopes('social')).not.toContain('work');
+    for (const tenant of ['assessment', 'pipelines', 'access']) expect(toolsForTenant(tenant).some((x) => x.name === 'activity')).toBe(false);
+    expect(mockCallFor('social', 'moderator')).toMatchObject({ name: 'activity', arguments: { scope: 'live-calls' } });
+    expect(mockCallFor('social', 'participant')).toBe(MOCK_CALLS['social']);
   });
 
   it('a tenant that holds no voice grant gets no tools', () => {

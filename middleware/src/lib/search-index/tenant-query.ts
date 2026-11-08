@@ -85,6 +85,8 @@ export interface TenantSearchRow {
   description?: string;
   status?: string;
   href: string;
+  /** The source's own time (a message's, a call's start), when it has one: what "since yesterday" filters on. */
+  updatedAt?: string;
   score: number;
 }
 export interface TenantSearchResponse { query: string; results: TenantSearchRow[]; counts: Record<string, number>; total: number; partial?: string[] }
@@ -150,7 +152,7 @@ export async function searchTenant(tenant: Exclude<IndexedTenant, 'orgiq'>, prin
   const str = (d: SearchDoc, k: string) => (typeof d.record[k] === 'string' && d.record[k] ? { [k]: d.record[k] as string } : {});
   const results: TenantSearchRow[] = rows.slice(0, limit).map(({ d, score }) => ({
     type: d.type, id: d.id, title: d.title, kind: spec.labels[d.type] ?? d.type, href: String(d.record['href'] ?? ''),
-    ...str(d, 'subtitle'), ...str(d, 'description'), ...str(d, 'status'), score,
+    ...str(d, 'subtitle'), ...str(d, 'description'), ...str(d, 'status'), ...(d.updatedAt ? { updatedAt: d.updatedAt } : {}), score,
   }));
   return { query: input.q, results, counts, total: rows.length, ...(meta.partial.length ? { partial: meta.partial } : {}) };
 }

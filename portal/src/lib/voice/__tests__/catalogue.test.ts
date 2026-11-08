@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { NAVIGATE_PAGE_IDS, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, VOICE_TENANTS, VOICE_TOOLS, navigatePageIds, searchRecordTypes } from '../catalogue.ts';
+import { ACTIVITY_SCOPES, NAVIGATE_PAGE_IDS, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, VOICE_TENANTS, VOICE_TOOLS, activityScopes, navigatePageIds, searchRecordTypes } from '../catalogue.ts';
 import { voicePage, hashToolArgs } from '../tools.ts';
 import { commandAllowedBy, composeCommand } from '../actions.ts';
 import { PALETTE, middlewareVoice } from './voiceHarness.ts';
@@ -14,6 +14,7 @@ interface MwCatalogue {
   VOICE_TENANTS: readonly string[];
   SEARCH_RECORD_TYPES: Record<string, readonly string[]>;
   SEARCH_ACTIONS: Record<string, string>;
+  ACTIVITY_SCOPES: Record<string, readonly string[]>;
   RUN_COMMAND_PHRASES: readonly string[];
   RUN_COMMAND_PHRASE_COMMANDS: Record<string, string>;
   commandAllowedBy(prefixes: readonly string[], command: string): boolean;
@@ -32,12 +33,16 @@ test('the portal catalogue matches the middleware one the session is minted with
   assert.deepEqual([...VOICE_TENANTS], [...mw.VOICE_TENANTS]);
   assert.deepEqual(SEARCH_RECORD_TYPES, mw.SEARCH_RECORD_TYPES);
   assert.deepEqual(SEARCH_ACTIONS, mw.SEARCH_ACTIONS);
+  assert.deepEqual(ACTIVITY_SCOPES, mw.ACTIVITY_SCOPES);
   for (const tenant of mw.VOICE_TENANTS) {
     const tools = mw.toolsForTenant(tenant);
     const page = tools.find((t) => t.name === 'navigate')!.parameters as { properties: { page: { enum: string[] } } };
     assert.deepEqual(navigatePageIds(tenant), page.properties.page.enum, `navigate enum in ${tenant}`);
     const search = tools.find((t) => t.name === 'search_records')!.parameters as { properties: { type: { enum: string[] } } };
     assert.deepEqual(searchRecordTypes(tenant), search.properties.type.enum, `search_records enum in ${tenant}`);
+    const activity = tools.find((t) => t.name === 'activity')?.parameters as { properties: { scope: { enum: string[] } } } | undefined;
+    if (activity) assert.deepEqual(activityScopes(tenant), activity.properties.scope.enum, `activity enum in ${tenant}`);
+    else assert.deepEqual(activityScopes(tenant), [], `${tenant} is offered no activity tool`);
   }
 });
 

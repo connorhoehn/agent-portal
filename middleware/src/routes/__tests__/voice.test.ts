@@ -195,7 +195,7 @@ describe('POST /api/voice/sessions — the mint', () => {
     principal = { sub: USER, role: 'participant', tenant: 'social', grants: {} };
     const res = await mint();
     expect(res.status).toBe(201);
-    expect(res.body.tools.sort()).toEqual(['access_request_status', 'navigate', 'open_result', 'search_records', 'send_chat_message', 'set_status', 'start_call']);
+    expect(res.body.tools.sort()).toEqual(['access_request_status', 'activity', 'navigate', 'open_result', 'search_records', 'send_chat_message', 'set_status', 'start_call']);
   });
 
   it('an access approver\'s scripted session reads their approvals; a requester\'s their own requests', async () => {

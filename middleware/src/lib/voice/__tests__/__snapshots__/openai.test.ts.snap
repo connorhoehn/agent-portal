@@ -361,6 +361,50 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
+    "description": "Read what is happening around the user from the social app's activity and the presence roster: who is online, who is in a call or huddle now, the user's missed calls, recent messages or pinned messages (optionally from or about one person), what a person worked on, or everything recent since a time. Each row carries a ref that open_result opens.",
+    "name": "activity",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "description": "What to read: "online" (who is online now), "live-calls" (who is in a call or huddle now), "missed-calls" (the user's missed calls), "messages", "pins", "work" (what a person worked on, in the Work workspace) or "recent" (messages, pins, missed calls and, in Work, work items, since a time; yesterday by default).",
+          "enum": [
+            "online",
+            "live-calls",
+            "missed-calls",
+            "messages",
+            "pins",
+            "work",
+            "recent",
+          ],
+          "type": "string",
+        },
+        "since": {
+          "description": "Since when, for messages, pins, missed-calls, work and recent: "yesterday", "last night", "today", "this morning", "3 hours ago", "3 days ago", "last week" or a YYYY-MM-DD date.",
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "who": {
+          "description": "One person, as the user named them, to narrow the read to ("what did Ada work on", "is Ada on a call").",
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+      },
+      "required": [
+        "scope",
+        "since",
+        "who",
+      ],
+      "type": "object",
+    },
+    "strict": true,
+    "type": "function",
+  },
+  {
     "description": "Post a message the user dictated to a team, a channel or a person, as a social-app activity. Always read it back and ask the user first.",
     "name": "send_chat_message",
     "parameters": {

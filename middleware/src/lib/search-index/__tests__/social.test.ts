@@ -68,3 +68,15 @@ test('a created channel and a posted message are searchable without a rebuild', 
   expect(await keys('u-sana', 'wombat standup')).toContain('message:social:ch:general|zzquokka1');
   expect((await ensureIndexed('social')).meta.builtAt).toBe(before.meta.builtAt);
 });
+
+test('a dated row carries its source time, so a reader can ask "since yesterday" (voice activity, G6); an undated one carries none', async () => {
+  const missed = (await searchTenant('social', as('u-sana'), { q: 'missed calls', type: 'calllog', limit: 20 })).results;
+  expect(missed.length).toBeGreaterThan(0);
+  for (const r of missed) expect(Date.parse(r.updatedAt!)).not.toBeNaN();
+  const messages = (await searchTenant('social', as('u-sana'), { q: '', type: 'message', limit: 5 })).results;
+  expect(messages.length).toBeGreaterThan(0);
+  const times = messages.map(r => r.updatedAt!);
+  expect([...times].sort().reverse()).toEqual(times);
+  const contacts = (await searchTenant('social', as('u-sana'), { q: 'Lena', type: 'contact', limit: 5 })).results;
+  for (const r of contacts) expect(r.updatedAt).toBeUndefined();
+});

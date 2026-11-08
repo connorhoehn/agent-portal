@@ -126,7 +126,7 @@ const GRAPH_QUERY = () => `day=${today()}&timezone=UTC`;
 const READS = ['/capabilities', '/channels', '/people', '/dms', '/rooms', '/rooms/town-hall', '/rooms/town-hall/activity', '/teams', '/teams/mock-team-community', '/recordings',
   '/recordings/mock-rec-dm-lena-sana/playback', '/recordings/mock-rec-dm-lena-sana/transcript', '/calls',
   // The plane's own reads (Lane A).
-  '/active', '/people/u-vera/shared-work', `/work-graph/conversations/${encodeURIComponent('social:ch:plane-general')}/graph?${GRAPH_QUERY()}`];
+  '/active', '/people/u-vera/shared-work', '/search?q=missed%20calls&type=calllog', `/work-graph/conversations/${encodeURIComponent('social:ch:plane-general')}/graph?${GRAPH_QUERY()}`];
 type Write = { method: 'post' | 'patch' | 'delete'; path: string; body?: object; action: string };
 const WRITES: Write[] = [
   { method: 'post', path: '/channels', body: { name: 'plane-created' }, action: 'ManageChannels' },
@@ -170,6 +170,17 @@ describe('reads', () => {
     expect(channels).toEqual(expect.arrayContaining([['plane-open', false]]));
     expect(channels.map((c: [string]) => c[0])).not.toContain('plane-private');
     expect(sessions.get('u-sana')).toMatchObject({ tenant: 'orgiq', role: 'member' });
+  });
+
+  it('the Social index on the plane answers an orgiq session exactly as GET /api/social/search answers in Social (voice activity, G6)', async () => {
+    const missed = await get(`${P}/search?q=missed%20calls&type=calllog&limit=20`, 'u-sana');
+    expect(missed.status).toBe(200);
+    expect(missed.body.results.length).toBeGreaterThan(0);
+    for (const r of missed.body.results as Array<{ type: string; id: string }>) {
+      expect(r.type).toBe('calllog');
+      expect(r.id.endsWith('|u-sana')).toBe(true); // her own call log, never anyone else's
+    }
+    expect(sessions.get('u-sana')).toMatchObject({ tenant: 'orgiq' });
   });
 
   it('the community-admin (the manager) standing in assessment is offered every manage action, as in Social', async () => {
