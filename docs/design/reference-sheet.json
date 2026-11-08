@@ -1,0 +1,1155 @@
+{
+  "generatedBy": "scripts/design/render-reference-sheet.mjs",
+  "source": "/dev/reference-sheet (portal/src/dev/ReferenceSheet.tsx)",
+  "library": "@connorhoehn/ui-components 2.510.0",
+  "sheet": {
+    "file": "reference-sheet.png",
+    "cssWidth": 1600,
+    "cssHeight": 10919,
+    "deviceScaleFactor": 2,
+    "note": "box values are CSS pixels on the full sheet; multiply by deviceScaleFactor for image pixels (unless the sheet was retaken at 1x, see the render log)"
+  },
+  "sections": [
+    {
+      "id": "layout",
+      "file": "reference-sheet-layout.png",
+      "tiles": 4
+    },
+    {
+      "id": "navigation",
+      "file": "reference-sheet-navigation.png",
+      "tiles": 8
+    },
+    {
+      "id": "inputs",
+      "file": "reference-sheet-inputs.png",
+      "tiles": 10
+    },
+    {
+      "id": "data",
+      "file": "reference-sheet-data.png",
+      "tiles": 11
+    },
+    {
+      "id": "social",
+      "file": "reference-sheet-social.png",
+      "tiles": 13
+    },
+    {
+      "id": "voice",
+      "file": "reference-sheet-voice.png",
+      "tiles": 30
+    },
+    {
+      "id": "tokens",
+      "file": "reference-sheet-tokens.png",
+      "tiles": 6
+    }
+  ],
+  "tiles": [
+    {
+      "id": "A-1",
+      "section": "layout",
+      "component": "SubNavLayout + SectionLayout + footer row",
+      "subpath": "/shared, /video",
+      "state": "orgiq initiative page",
+      "box": {
+        "x": 32,
+        "y": 200,
+        "width": 1536,
+        "height": 895
+      }
+    },
+    {
+      "id": "A-2",
+      "section": "layout",
+      "component": "Layout legend",
+      "subpath": "n/a",
+      "state": "regions 1-8",
+      "box": {
+        "x": 32,
+        "y": 1111,
+        "width": 1536,
+        "height": 284
+      }
+    },
+    {
+      "id": "A-3",
+      "section": "layout",
+      "component": "Footer row",
+      "subpath": "/shared, /video",
+      "state": "today: idle, no call",
+      "box": {
+        "x": 32,
+        "y": 1411,
+        "width": 1536,
+        "height": 144
+      }
+    },
+    {
+      "id": "A-4",
+      "section": "layout",
+      "component": "Footer row + VoiceDock",
+      "subpath": "/shared, /video, /voice",
+      "state": "spec §5 placement: listening, beside the huddle half",
+      "box": {
+        "x": 32,
+        "y": 1571,
+        "width": 1536,
+        "height": 148
+      }
+    },
+    {
+      "id": "B-1",
+      "section": "navigation",
+      "component": "PageHeader",
+      "subpath": "/shared",
+      "state": "breadcrumbs, badge, actions",
+      "box": {
+        "x": 32,
+        "y": 1843,
+        "width": 760,
+        "height": 197
+      }
+    },
+    {
+      "id": "B-2",
+      "section": "navigation",
+      "component": "PageHeader",
+      "subpath": "/shared",
+      "state": "tabs, back link",
+      "box": {
+        "x": 808,
+        "y": 1843,
+        "width": 760,
+        "height": 191
+      }
+    },
+    {
+      "id": "B-3",
+      "section": "navigation",
+      "component": "Breadcrumbs",
+      "subpath": "/shared",
+      "state": "md and sm",
+      "box": {
+        "x": 32,
+        "y": 2056,
+        "width": 760,
+        "height": 140
+      }
+    },
+    {
+      "id": "B-4",
+      "section": "navigation",
+      "component": "ChannelHeader",
+      "subpath": "/shared",
+      "state": "md, members, actions",
+      "box": {
+        "x": 808,
+        "y": 2056,
+        "width": 760,
+        "height": 157
+      }
+    },
+    {
+      "id": "B-5",
+      "section": "navigation",
+      "component": "ChannelHeader",
+      "subpath": "/shared",
+      "state": "sm, tabs",
+      "box": {
+        "x": 32,
+        "y": 2229,
+        "width": 760,
+        "height": 141
+      }
+    },
+    {
+      "id": "B-6",
+      "section": "navigation",
+      "component": "Tabs",
+      "subpath": "/shared",
+      "state": "underline, pill, segmented",
+      "box": {
+        "x": 808,
+        "y": 2229,
+        "width": 760,
+        "height": 201
+      }
+    },
+    {
+      "id": "B-7",
+      "section": "navigation",
+      "component": "PaneHeader",
+      "subpath": "/shared",
+      "state": "tabs, trailing",
+      "box": {
+        "x": 32,
+        "y": 2446,
+        "width": 760,
+        "height": 156
+      }
+    },
+    {
+      "id": "B-8",
+      "section": "navigation",
+      "component": "SectionLayout",
+      "subpath": "/shared",
+      "state": "section rail + header, no list",
+      "box": {
+        "x": 32,
+        "y": 2618,
+        "width": 1536,
+        "height": 355
+      }
+    },
+    {
+      "id": "C-1",
+      "section": "inputs",
+      "component": "Button",
+      "subpath": "/shared",
+      "state": "all variants, size sm",
+      "box": {
+        "x": 32,
+        "y": 3097,
+        "width": 1536,
+        "height": 123
+      }
+    },
+    {
+      "id": "C-2",
+      "section": "inputs",
+      "component": "Button",
+      "subpath": "/shared",
+      "state": "all variants, size md",
+      "box": {
+        "x": 32,
+        "y": 3236,
+        "width": 1536,
+        "height": 131
+      }
+    },
+    {
+      "id": "C-3",
+      "section": "inputs",
+      "component": "Button",
+      "subpath": "/shared",
+      "state": "all variants, size lg",
+      "box": {
+        "x": 32,
+        "y": 3383,
+        "width": 1536,
+        "height": 135
+      }
+    },
+    {
+      "id": "C-4",
+      "section": "inputs",
+      "component": "IconButton",
+      "subpath": "/shared",
+      "state": "ghost, primary, danger, outline",
+      "box": {
+        "x": 32,
+        "y": 3534,
+        "width": 372,
+        "height": 131
+      }
+    },
+    {
+      "id": "C-5",
+      "section": "inputs",
+      "component": "Input + FormField",
+      "subpath": "/shared",
+      "state": "default, prefix, invalid, disabled",
+      "box": {
+        "x": 420,
+        "y": 3534,
+        "width": 372,
+        "height": 297
+      }
+    },
+    {
+      "id": "C-6",
+      "section": "inputs",
+      "component": "Select + SearchInput + Textarea",
+      "subpath": "/shared",
+      "state": "default",
+      "box": {
+        "x": 808,
+        "y": 3534,
+        "width": 372,
+        "height": 221
+      }
+    },
+    {
+      "id": "C-7",
+      "section": "inputs",
+      "component": "SegmentedControl + Switch + Checkbox",
+      "subpath": "/shared",
+      "state": "neutral, accent; on, off",
+      "box": {
+        "x": 1196,
+        "y": 3534,
+        "width": 372,
+        "height": 201
+      }
+    },
+    {
+      "id": "C-8",
+      "section": "inputs",
+      "component": "ContextComposer",
+      "subpath": "/social/rich-composer",
+      "state": "empty",
+      "box": {
+        "x": 32,
+        "y": 3847,
+        "width": 501,
+        "height": 137
+      }
+    },
+    {
+      "id": "C-9",
+      "section": "inputs",
+      "component": "ContextComposer",
+      "subpath": "/social/rich-composer",
+      "state": "typing",
+      "box": {
+        "x": 549,
+        "y": 3847,
+        "width": 501,
+        "height": 222
+      }
+    },
+    {
+      "id": "C-10",
+      "section": "inputs",
+      "component": "ContextComposer",
+      "subpath": "/social/rich-composer",
+      "state": "sending (working)",
+      "box": {
+        "x": 1066,
+        "y": 3847,
+        "width": 501,
+        "height": 252
+      }
+    },
+    {
+      "id": "D-1",
+      "section": "data",
+      "component": "CollectionPage + DataTable",
+      "subpath": "/shared",
+      "state": "filter row, 6 rows",
+      "box": {
+        "x": 32,
+        "y": 4223,
+        "width": 1536,
+        "height": 433
+      }
+    },
+    {
+      "id": "D-2",
+      "section": "data",
+      "component": "StatusPill",
+      "subpath": "/shared",
+      "state": "every tone, pill and text",
+      "box": {
+        "x": 32,
+        "y": 4672,
+        "width": 760,
+        "height": 177
+      }
+    },
+    {
+      "id": "D-3",
+      "section": "data",
+      "component": "Chip + Badge",
+      "subpath": "/shared",
+      "state": "tones, solid, outline, dot",
+      "box": {
+        "x": 808,
+        "y": 4672,
+        "width": 760,
+        "height": 146
+      }
+    },
+    {
+      "id": "D-4",
+      "section": "data",
+      "component": "StatCard in KPIGrid",
+      "subpath": "/shared",
+      "state": "4 columns, delta, sparkline",
+      "box": {
+        "x": 32,
+        "y": 4865,
+        "width": 1536,
+        "height": 183
+      }
+    },
+    {
+      "id": "D-5",
+      "section": "data",
+      "component": "Card + CardHeader",
+      "subpath": "/shared",
+      "state": "title, subtitle, action",
+      "box": {
+        "x": 32,
+        "y": 5064,
+        "width": 501,
+        "height": 239
+      }
+    },
+    {
+      "id": "D-6",
+      "section": "data",
+      "component": "ExpertCard",
+      "subpath": "/shared",
+      "state": "matched skills, evidence",
+      "box": {
+        "x": 549,
+        "y": 5064,
+        "width": 501,
+        "height": 279
+      }
+    },
+    {
+      "id": "D-7",
+      "section": "data",
+      "component": "DotMeter + AudioLevelMeter",
+      "subpath": "/shared, /video",
+      "state": "budget 20%, 80% (warn); mic 0, 0.3, 0.8",
+      "box": {
+        "x": 1066,
+        "y": 5064,
+        "width": 501,
+        "height": 199
+      }
+    },
+    {
+      "id": "D-8",
+      "section": "data",
+      "component": "EmptyState",
+      "subpath": "/shared",
+      "state": "block, with action",
+      "box": {
+        "x": 32,
+        "y": 5358,
+        "width": 372,
+        "height": 248
+      }
+    },
+    {
+      "id": "D-9",
+      "section": "data",
+      "component": "EmptyState",
+      "subpath": "/shared",
+      "state": "line",
+      "box": {
+        "x": 420,
+        "y": 5358,
+        "width": 372,
+        "height": 123
+      }
+    },
+    {
+      "id": "D-10",
+      "section": "data",
+      "component": "LoadingState",
+      "subpath": "/shared",
+      "state": "loading",
+      "box": {
+        "x": 808,
+        "y": 5358,
+        "width": 372,
+        "height": 315
+      }
+    },
+    {
+      "id": "D-11",
+      "section": "data",
+      "component": "ErrorState",
+      "subpath": "/shared",
+      "state": "error with retry",
+      "box": {
+        "x": 1196,
+        "y": 5358,
+        "width": 372,
+        "height": 315
+      }
+    },
+    {
+      "id": "E-1",
+      "section": "social",
+      "component": "PresenceAvatars + PresenceDot + Avatar",
+      "subpath": "/shared",
+      "state": "sizes 20, 28; online, away, busy, offline",
+      "box": {
+        "x": 32,
+        "y": 5797,
+        "width": 501,
+        "height": 221
+      }
+    },
+    {
+      "id": "E-2",
+      "section": "social",
+      "component": "NotificationCenter",
+      "subpath": "/shared",
+      "state": "2 unread, 1 read",
+      "box": {
+        "x": 549,
+        "y": 5797,
+        "width": 501,
+        "height": 375
+      }
+    },
+    {
+      "id": "E-3",
+      "section": "social",
+      "component": "ChatPanel",
+      "subpath": "/social",
+      "state": "3 messages, composer",
+      "box": {
+        "x": 1066,
+        "y": 5797,
+        "width": 501,
+        "height": 423
+      }
+    },
+    {
+      "id": "E-4",
+      "section": "social",
+      "component": "HuddleBar",
+      "subpath": "/video",
+      "state": "idle",
+      "box": {
+        "x": 32,
+        "y": 6236,
+        "width": 760,
+        "height": 137
+      }
+    },
+    {
+      "id": "E-5",
+      "section": "social",
+      "component": "HuddleBar",
+      "subpath": "/video",
+      "state": "joinable",
+      "box": {
+        "x": 808,
+        "y": 6236,
+        "width": 760,
+        "height": 137
+      }
+    },
+    {
+      "id": "E-6",
+      "section": "social",
+      "component": "HuddleBar",
+      "subpath": "/video",
+      "state": "ringing",
+      "box": {
+        "x": 32,
+        "y": 6389,
+        "width": 760,
+        "height": 137
+      }
+    },
+    {
+      "id": "E-7",
+      "section": "social",
+      "component": "HuddleBar",
+      "subpath": "/video",
+      "state": "connecting",
+      "box": {
+        "x": 808,
+        "y": 6389,
+        "width": 760,
+        "height": 137
+      }
+    },
+    {
+      "id": "E-8",
+      "section": "social",
+      "component": "HuddleBar",
+      "subpath": "/video",
+      "state": "live",
+      "box": {
+        "x": 32,
+        "y": 6542,
+        "width": 760,
+        "height": 141
+      }
+    },
+    {
+      "id": "E-9",
+      "section": "social",
+      "component": "HuddleBar",
+      "subpath": "/video",
+      "state": "reconnecting",
+      "box": {
+        "x": 808,
+        "y": 6542,
+        "width": 760,
+        "height": 137
+      }
+    },
+    {
+      "id": "E-10",
+      "section": "social",
+      "component": "HuddleBar",
+      "subpath": "/video",
+      "state": "ended",
+      "box": {
+        "x": 32,
+        "y": 6699,
+        "width": 760,
+        "height": 137
+      }
+    },
+    {
+      "id": "E-11",
+      "section": "social",
+      "component": "FooterRow (Social entry + HuddleBar)",
+      "subpath": "/shared, /video",
+      "state": "in a call: live",
+      "box": {
+        "x": 808,
+        "y": 6699,
+        "width": 760,
+        "height": 148
+      }
+    },
+    {
+      "id": "E-12",
+      "section": "social",
+      "component": "ParticipantTile",
+      "subpath": "/video",
+      "state": "speaking, muted, hand raised, local",
+      "box": {
+        "x": 32,
+        "y": 6863,
+        "width": 1536,
+        "height": 245
+      }
+    },
+    {
+      "id": "E-13",
+      "section": "social",
+      "component": "CallTileRow",
+      "subpath": "/video",
+      "state": "dock variant, active speaker",
+      "box": {
+        "x": 32,
+        "y": 7124,
+        "width": 1536,
+        "height": 195
+      }
+    },
+    {
+      "id": "F-1",
+      "section": "voice",
+      "component": "VoiceActivityRing",
+      "subpath": "/voice",
+      "state": "off: sm and md at levels 0, 0.3, 0.8",
+      "box": {
+        "x": 32,
+        "y": 7499,
+        "width": 501,
+        "height": 187
+      }
+    },
+    {
+      "id": "F-2",
+      "section": "voice",
+      "component": "VoiceActivityRing",
+      "subpath": "/voice",
+      "state": "connecting: sm and md at levels 0, 0.3, 0.8",
+      "box": {
+        "x": 549,
+        "y": 7499,
+        "width": 501,
+        "height": 187
+      }
+    },
+    {
+      "id": "F-3",
+      "section": "voice",
+      "component": "VoiceActivityRing",
+      "subpath": "/voice",
+      "state": "listening: sm and md at levels 0, 0.3, 0.8",
+      "box": {
+        "x": 1066,
+        "y": 7499,
+        "width": 501,
+        "height": 187
+      }
+    },
+    {
+      "id": "F-4",
+      "section": "voice",
+      "component": "VoiceActivityRing",
+      "subpath": "/voice",
+      "state": "thinking: sm and md at levels 0, 0.3, 0.8",
+      "box": {
+        "x": 32,
+        "y": 7702,
+        "width": 501,
+        "height": 187
+      }
+    },
+    {
+      "id": "F-5",
+      "section": "voice",
+      "component": "VoiceActivityRing",
+      "subpath": "/voice",
+      "state": "executing: sm and md at levels 0, 0.3, 0.8",
+      "box": {
+        "x": 549,
+        "y": 7702,
+        "width": 501,
+        "height": 187
+      }
+    },
+    {
+      "id": "F-6",
+      "section": "voice",
+      "component": "VoiceActivityRing",
+      "subpath": "/voice",
+      "state": "speaking: sm and md at levels 0, 0.3, 0.8",
+      "box": {
+        "x": 1066,
+        "y": 7702,
+        "width": 501,
+        "height": 187
+      }
+    },
+    {
+      "id": "F-7",
+      "section": "voice",
+      "component": "VoiceActivityRing",
+      "subpath": "/voice",
+      "state": "confirming: sm and md at levels 0, 0.3, 0.8",
+      "box": {
+        "x": 32,
+        "y": 7905,
+        "width": 501,
+        "height": 187
+      }
+    },
+    {
+      "id": "F-8",
+      "section": "voice",
+      "component": "VoiceActivityRing",
+      "subpath": "/voice",
+      "state": "ended: sm and md at levels 0, 0.3, 0.8",
+      "box": {
+        "x": 549,
+        "y": 7905,
+        "width": 501,
+        "height": 187
+      }
+    },
+    {
+      "id": "F-9",
+      "section": "voice",
+      "component": "VoiceActivityRing",
+      "subpath": "/voice",
+      "state": "unavailable: sm and md at levels 0, 0.3, 0.8",
+      "box": {
+        "x": 1066,
+        "y": 7905,
+        "width": 501,
+        "height": 187
+      }
+    },
+    {
+      "id": "F-10",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "off, full",
+      "box": {
+        "x": 32,
+        "y": 8144,
+        "width": 760,
+        "height": 139
+      }
+    },
+    {
+      "id": "F-11",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "connecting, full",
+      "box": {
+        "x": 808,
+        "y": 8144,
+        "width": 760,
+        "height": 139
+      }
+    },
+    {
+      "id": "F-12",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "listening, full",
+      "box": {
+        "x": 32,
+        "y": 8299,
+        "width": 760,
+        "height": 139
+      }
+    },
+    {
+      "id": "F-13",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "thinking, full",
+      "box": {
+        "x": 808,
+        "y": 8299,
+        "width": 760,
+        "height": 139
+      }
+    },
+    {
+      "id": "F-14",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "executing, full",
+      "box": {
+        "x": 32,
+        "y": 8454,
+        "width": 760,
+        "height": 139
+      }
+    },
+    {
+      "id": "F-15",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "speaking, full",
+      "box": {
+        "x": 808,
+        "y": 8454,
+        "width": 760,
+        "height": 139
+      }
+    },
+    {
+      "id": "F-16",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "confirming, full",
+      "box": {
+        "x": 32,
+        "y": 8609,
+        "width": 760,
+        "height": 315
+      }
+    },
+    {
+      "id": "F-17",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "ended, full",
+      "box": {
+        "x": 808,
+        "y": 8609,
+        "width": 760,
+        "height": 139
+      }
+    },
+    {
+      "id": "F-18",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "unavailable, full",
+      "box": {
+        "x": 32,
+        "y": 8940,
+        "width": 760,
+        "height": 139
+      }
+    },
+    {
+      "id": "F-19",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "off, compact",
+      "box": {
+        "x": 32,
+        "y": 9131,
+        "width": 501,
+        "height": 131
+      }
+    },
+    {
+      "id": "F-20",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "connecting, compact",
+      "box": {
+        "x": 549,
+        "y": 9131,
+        "width": 501,
+        "height": 131
+      }
+    },
+    {
+      "id": "F-21",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "listening, compact",
+      "box": {
+        "x": 1066,
+        "y": 9131,
+        "width": 501,
+        "height": 131
+      }
+    },
+    {
+      "id": "F-22",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "thinking, compact",
+      "box": {
+        "x": 32,
+        "y": 9278,
+        "width": 501,
+        "height": 131
+      }
+    },
+    {
+      "id": "F-23",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "executing, compact",
+      "box": {
+        "x": 549,
+        "y": 9278,
+        "width": 501,
+        "height": 131
+      }
+    },
+    {
+      "id": "F-24",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "speaking, compact",
+      "box": {
+        "x": 1066,
+        "y": 9278,
+        "width": 501,
+        "height": 131
+      }
+    },
+    {
+      "id": "F-25",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "confirming, compact (its card is F-16)",
+      "box": {
+        "x": 32,
+        "y": 9425,
+        "width": 501,
+        "height": 131
+      }
+    },
+    {
+      "id": "F-26",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "ended, compact",
+      "box": {
+        "x": 549,
+        "y": 9425,
+        "width": 501,
+        "height": 131
+      }
+    },
+    {
+      "id": "F-27",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "unavailable, compact",
+      "box": {
+        "x": 1066,
+        "y": 9425,
+        "width": 501,
+        "height": 131
+      }
+    },
+    {
+      "id": "F-28",
+      "section": "voice",
+      "component": "VoiceConfirmCard",
+      "subpath": "/voice",
+      "state": "Start a computer in 3 projects",
+      "box": {
+        "x": 32,
+        "y": 9608,
+        "width": 501,
+        "height": 217
+      }
+    },
+    {
+      "id": "F-29",
+      "section": "voice",
+      "component": "VoiceTurnStrip",
+      "subpath": "/voice",
+      "state": "4 turns: done, running, refused",
+      "box": {
+        "x": 549,
+        "y": 9608,
+        "width": 501,
+        "height": 471
+      }
+    },
+    {
+      "id": "F-30",
+      "section": "voice",
+      "component": "VoiceTurnStrip",
+      "subpath": "/voice",
+      "state": "failed tool call; empty",
+      "box": {
+        "x": 1066,
+        "y": 9608,
+        "width": 501,
+        "height": 285
+      }
+    },
+    {
+      "id": "G-1",
+      "section": "tokens",
+      "component": "Colour tokens",
+      "subpath": "portal/src/app.css",
+      "state": "Brand and text",
+      "box": {
+        "x": 32,
+        "y": 10203,
+        "width": 372,
+        "height": 407
+      }
+    },
+    {
+      "id": "G-2",
+      "section": "tokens",
+      "component": "Colour tokens",
+      "subpath": "portal/src/app.css",
+      "state": "Surfaces and borders",
+      "box": {
+        "x": 420,
+        "y": 10203,
+        "width": 372,
+        "height": 407
+      }
+    },
+    {
+      "id": "G-3",
+      "section": "tokens",
+      "component": "Colour tokens",
+      "subpath": "portal/src/app.css",
+      "state": "Status",
+      "box": {
+        "x": 808,
+        "y": 10203,
+        "width": 372,
+        "height": 407
+      }
+    },
+    {
+      "id": "G-4",
+      "section": "tokens",
+      "component": "Colour tokens",
+      "subpath": "portal/src/app.css",
+      "state": "Run states and tenants",
+      "box": {
+        "x": 1196,
+        "y": 10203,
+        "width": 372,
+        "height": 407
+      }
+    },
+    {
+      "id": "G-5",
+      "section": "tokens",
+      "component": "T (type scale)",
+      "subpath": "/shared",
+      "state": "sizes xs, sm, base, lg × weights",
+      "box": {
+        "x": 32,
+        "y": 10626,
+        "width": 760,
+        "height": 235
+      }
+    },
+    {
+      "id": "G-6",
+      "section": "tokens",
+      "component": "Stack / Inline gap",
+      "subpath": "/shared",
+      "state": "none, xs, sm, md, lg, xl",
+      "box": {
+        "x": 808,
+        "y": 10626,
+        "width": 760,
+        "height": 237
+      }
+    }
+  ],
+  "layouts": [
+    {
+      "name": "projects",
+      "path": "/iq/projects",
+      "landed": "/iq/projects",
+      "file": "layout-projects.png",
+      "viewport": "1440x900"
+    },
+    {
+      "name": "search",
+      "path": "/iq/search?q=kubernetes&type=person",
+      "landed": "/iq/search",
+      "file": "layout-search.png",
+      "viewport": "1440x900"
+    },
+    {
+      "name": "computer-lab",
+      "path": "/iq/local-compute",
+      "landed": "/iq/local-compute",
+      "file": "layout-computer-lab.png",
+      "viewport": "1440x900"
+    },
+    {
+      "name": "social",
+      "path": "/iq/communication/channels",
+      "landed": "/iq/communication/channels",
+      "file": "layout-social.png",
+      "viewport": "1440x900"
+    },
+    {
+      "name": "social-dark",
+      "path": "/iq/communication/channels",
+      "landed": "/iq/communication/channels",
+      "file": "layout-social-dark.png",
+      "viewport": "1440x900"
+    }
+  ],
+  "overlaps": []
+}

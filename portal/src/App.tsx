@@ -13,6 +13,9 @@ import RunbooksDistillationRedirect from './pages/runbooks/DistillationRedirect'
 import { ComputeHost } from './components/compute/ComputeHost';
 import { LoadingState } from '@connorhoehn/ui-components/shared';
 
+// Dev-only: the design reference sheet (docs/design/README.md). The ternary keeps
+// the chunk out of production builds (cast: this repo has no vite-env.d.ts).
+const ReferenceSheet = (import.meta as unknown as { env: { DEV: boolean } }).env.DEV ? lazy(() => import('./dev/ReferenceSheet')) : null;
 const AgentFlowPage = lazy(() => import('./pages/AgentFlowPage'));
 const AgentDetailPage = lazy(() => import('./pages/iq/AgentDetailPage'));
 const ScoresPage = lazy(() => import('./pages/ScoresPage'));
@@ -264,6 +267,7 @@ export function App() {
           switcher and a masquerade control would be both confusing and a
           small information leak about the org. */}
       <Route path="drop/:token" element={<Page element={<DropPage />} />} />
+      {ReferenceSheet && <Route path="dev/reference-sheet" element={<Page element={<ReferenceSheet />} />} />}
 
       {/* Workspace chooser — outside Layout: it's the pre-app "select account +
           role" step, shown once after login for multi-context identities. */}
