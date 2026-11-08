@@ -1,6 +1,6 @@
 # Design reference sheet
 
-A picture of the real product for anyone, person or image model, drawing a mock-up of the voice navigator (`docs/voice-navigator-spec.md` §5). Every tile on the sheet is a live component from `@connorhoehn/ui-components` 2.510.0 rendered with fixture data from the middleware's mock org, so a mock-up built from it uses the components, tokens and layout the portal already has.
+A picture of the real product for anyone, person or image model, drawing a mock-up of the voice navigator (`docs/voice-navigator-spec.md` §5). Every tile on the sheet is a live component from `@connorhoehn/ui-components` 2.510.1 rendered with fixture data from the middleware's mock org, so a mock-up built from it uses the components, tokens and layout the portal already has.
 
 ## Files
 

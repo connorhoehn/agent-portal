@@ -1,6 +1,6 @@
 // The voice navigator's footer pane (docs/voice-navigator-spec.md §5): the
-// library's VoiceDock (ring, phase pill, last line, budget meter, mute,
-// hang-up, the confirm card) and, on demand, VoiceTurnStrip in a popover
+// library's VoiceDock at `size="footer"` (HuddleBar's metrics: sm ring, xs
+// labels, a quiet "Voice" / "End" control, mute, the confirm card) and, on demand, VoiceTurnStrip in a popover
 // that opens above the row. Mounted in SocialFooter beside the huddle half,
 // only when `features.voiceNavigator` is on and can('VoiceNavigate') says
 // yes; with either off, `VoiceFooterSlot` returns null before any hook runs,
@@ -232,6 +232,7 @@ function VoiceFooterPane() {
 
   return <Inline ref={anchor} gap="xs" align="center" wrap={false} className="min-w-0 max-w-[30rem] shrink border-l border-border pl-2" data-testid="shell-footer-voice">
     <VoiceDock
+      size="footer"
       phase={snap.phase}
       level={snap.level}
       outputLevel={snap.outputLevel}
@@ -249,7 +250,7 @@ function VoiceFooterPane() {
     />
     <Tooltip content={stripOpen ? 'Hide what was said' : 'What was said and what ran'} placement="top">
       <IconButton variant="ghost" size="sm" aria-label="Voice transcript" aria-pressed={stripOpen}
-        icon={<CaptionsIcon size={15} />} disabled={turns.length === 0}
+        icon={<CaptionsIcon size={16} />} disabled={turns.length === 0}
         onClick={() => setStripOpen((open) => !open)} data-testid="shell-voice-transcript-toggle" />
     </Tooltip>
     <InlinePopover trigger={anchor} open={stripOpen && turns.length > 0} onClose={() => setStripOpen(false)}

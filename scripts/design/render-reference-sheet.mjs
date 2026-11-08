@@ -196,7 +196,7 @@ try {
   const manifest = {
     generatedBy: 'scripts/design/render-reference-sheet.mjs',
     source: '/dev/reference-sheet (portal/src/dev/ReferenceSheet.tsx)',
-    library: '@connorhoehn/ui-components 2.510.0',
+    library: '@connorhoehn/ui-components 2.510.1',
     sheet: { file: 'reference-sheet.png', cssWidth: sheetSize.width, cssHeight: sheetSize.height, deviceScaleFactor: SCALE, note: 'box values are CSS pixels on the full sheet; multiply by deviceScaleFactor for image pixels (unless the sheet was retaken at 1x, see the render log)' },
     sections: sections.map((id) => ({ id, file: `reference-sheet-${id}.png`, tiles: tiles.filter((t) => t.section === id).length })),
     tiles,

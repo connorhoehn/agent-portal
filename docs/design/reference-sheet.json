@@ -1,11 +1,11 @@
 {
   "generatedBy": "scripts/design/render-reference-sheet.mjs",
   "source": "/dev/reference-sheet (portal/src/dev/ReferenceSheet.tsx)",
-  "library": "@connorhoehn/ui-components 2.510.0",
+  "library": "@connorhoehn/ui-components 2.510.1",
   "sheet": {
     "file": "reference-sheet.png",
     "cssWidth": 1600,
-    "cssHeight": 10919,
+    "cssHeight": 11628,
     "deviceScaleFactor": 2,
     "note": "box values are CSS pixels on the full sheet; multiply by deviceScaleFactor for image pixels (unless the sheet was retaken at 1x, see the render log)"
   },
@@ -38,7 +38,7 @@
     {
       "id": "voice",
       "file": "reference-sheet-voice.png",
-      "tiles": 30
+      "tiles": 39
     },
     {
       "id": "tokens",
@@ -96,7 +96,7 @@
         "x": 32,
         "y": 1571,
         "width": 1536,
-        "height": 148
+        "height": 144
       }
     },
     {
@@ -107,7 +107,7 @@
       "state": "breadcrumbs, badge, actions",
       "box": {
         "x": 32,
-        "y": 1843,
+        "y": 1839,
         "width": 760,
         "height": 197
       }
@@ -120,7 +120,7 @@
       "state": "tabs, back link",
       "box": {
         "x": 808,
-        "y": 1843,
+        "y": 1839,
         "width": 760,
         "height": 191
       }
@@ -133,7 +133,7 @@
       "state": "md and sm",
       "box": {
         "x": 32,
-        "y": 2056,
+        "y": 2052,
         "width": 760,
         "height": 140
       }
@@ -146,7 +146,7 @@
       "state": "md, members, actions",
       "box": {
         "x": 808,
-        "y": 2056,
+        "y": 2052,
         "width": 760,
         "height": 157
       }
@@ -159,7 +159,7 @@
       "state": "sm, tabs",
       "box": {
         "x": 32,
-        "y": 2229,
+        "y": 2225,
         "width": 760,
         "height": 141
       }
@@ -172,7 +172,7 @@
       "state": "underline, pill, segmented",
       "box": {
         "x": 808,
-        "y": 2229,
+        "y": 2225,
         "width": 760,
         "height": 201
       }
@@ -185,7 +185,7 @@
       "state": "tabs, trailing",
       "box": {
         "x": 32,
-        "y": 2446,
+        "y": 2442,
         "width": 760,
         "height": 156
       }
@@ -198,7 +198,7 @@
       "state": "section rail + header, no list",
       "box": {
         "x": 32,
-        "y": 2618,
+        "y": 2614,
         "width": 1536,
         "height": 355
       }
@@ -211,7 +211,7 @@
       "state": "all variants, size sm",
       "box": {
         "x": 32,
-        "y": 3097,
+        "y": 3093,
         "width": 1536,
         "height": 123
       }
@@ -224,7 +224,7 @@
       "state": "all variants, size md",
       "box": {
         "x": 32,
-        "y": 3236,
+        "y": 3232,
         "width": 1536,
         "height": 131
       }
@@ -237,7 +237,7 @@
       "state": "all variants, size lg",
       "box": {
         "x": 32,
-        "y": 3383,
+        "y": 3379,
         "width": 1536,
         "height": 135
       }
@@ -250,7 +250,7 @@
       "state": "ghost, primary, danger, outline",
       "box": {
         "x": 32,
-        "y": 3534,
+        "y": 3530,
         "width": 372,
         "height": 131
       }
@@ -263,7 +263,7 @@
       "state": "default, prefix, invalid, disabled",
       "box": {
         "x": 420,
-        "y": 3534,
+        "y": 3530,
         "width": 372,
         "height": 297
       }
@@ -276,7 +276,7 @@
       "state": "default",
       "box": {
         "x": 808,
-        "y": 3534,
+        "y": 3530,
         "width": 372,
         "height": 221
       }
@@ -289,7 +289,7 @@
       "state": "neutral, accent; on, off",
       "box": {
         "x": 1196,
-        "y": 3534,
+        "y": 3530,
         "width": 372,
         "height": 201
       }
@@ -302,7 +302,7 @@
       "state": "empty",
       "box": {
         "x": 32,
-        "y": 3847,
+        "y": 3843,
         "width": 501,
         "height": 137
       }
@@ -315,7 +315,7 @@
       "state": "typing",
       "box": {
         "x": 549,
-        "y": 3847,
+        "y": 3843,
         "width": 501,
         "height": 222
       }
@@ -328,7 +328,7 @@
       "state": "sending (working)",
       "box": {
         "x": 1066,
-        "y": 3847,
+        "y": 3843,
         "width": 501,
         "height": 252
       }
@@ -341,7 +341,7 @@
       "state": "filter row, 6 rows",
       "box": {
         "x": 32,
-        "y": 4223,
+        "y": 4219,
         "width": 1536,
         "height": 433
       }
@@ -354,7 +354,7 @@
       "state": "every tone, pill and text",
       "box": {
         "x": 32,
-        "y": 4672,
+        "y": 4668,
         "width": 760,
         "height": 177
       }
@@ -367,7 +367,7 @@
       "state": "tones, solid, outline, dot",
       "box": {
         "x": 808,
-        "y": 4672,
+        "y": 4668,
         "width": 760,
         "height": 146
       }
@@ -380,7 +380,7 @@
       "state": "4 columns, delta, sparkline",
       "box": {
         "x": 32,
-        "y": 4865,
+        "y": 4861,
         "width": 1536,
         "height": 183
       }
@@ -393,7 +393,7 @@
       "state": "title, subtitle, action",
       "box": {
         "x": 32,
-        "y": 5064,
+        "y": 5060,
         "width": 501,
         "height": 239
       }
@@ -406,7 +406,7 @@
       "state": "matched skills, evidence",
       "box": {
         "x": 549,
-        "y": 5064,
+        "y": 5060,
         "width": 501,
         "height": 279
       }
@@ -419,7 +419,7 @@
       "state": "budget 20%, 80% (warn); mic 0, 0.3, 0.8",
       "box": {
         "x": 1066,
-        "y": 5064,
+        "y": 5060,
         "width": 501,
         "height": 199
       }
@@ -432,7 +432,7 @@
       "state": "block, with action",
       "box": {
         "x": 32,
-        "y": 5358,
+        "y": 5354,
         "width": 372,
         "height": 248
       }
@@ -445,7 +445,7 @@
       "state": "line",
       "box": {
         "x": 420,
-        "y": 5358,
+        "y": 5354,
         "width": 372,
         "height": 123
       }
@@ -458,7 +458,7 @@
       "state": "loading",
       "box": {
         "x": 808,
-        "y": 5358,
+        "y": 5354,
         "width": 372,
         "height": 315
       }
@@ -471,7 +471,7 @@
       "state": "error with retry",
       "box": {
         "x": 1196,
-        "y": 5358,
+        "y": 5354,
         "width": 372,
         "height": 315
       }
@@ -484,7 +484,7 @@
       "state": "sizes 20, 28; online, away, busy, offline",
       "box": {
         "x": 32,
-        "y": 5797,
+        "y": 5793,
         "width": 501,
         "height": 221
       }
@@ -497,7 +497,7 @@
       "state": "2 unread, 1 read",
       "box": {
         "x": 549,
-        "y": 5797,
+        "y": 5793,
         "width": 501,
         "height": 375
       }
@@ -510,7 +510,7 @@
       "state": "3 messages, composer",
       "box": {
         "x": 1066,
-        "y": 5797,
+        "y": 5793,
         "width": 501,
         "height": 423
       }
@@ -523,7 +523,7 @@
       "state": "idle",
       "box": {
         "x": 32,
-        "y": 6236,
+        "y": 6232,
         "width": 760,
         "height": 137
       }
@@ -536,7 +536,7 @@
       "state": "joinable",
       "box": {
         "x": 808,
-        "y": 6236,
+        "y": 6232,
         "width": 760,
         "height": 137
       }
@@ -549,7 +549,7 @@
       "state": "ringing",
       "box": {
         "x": 32,
-        "y": 6389,
+        "y": 6385,
         "width": 760,
         "height": 137
       }
@@ -562,7 +562,7 @@
       "state": "connecting",
       "box": {
         "x": 808,
-        "y": 6389,
+        "y": 6385,
         "width": 760,
         "height": 137
       }
@@ -575,7 +575,7 @@
       "state": "live",
       "box": {
         "x": 32,
-        "y": 6542,
+        "y": 6538,
         "width": 760,
         "height": 141
       }
@@ -588,7 +588,7 @@
       "state": "reconnecting",
       "box": {
         "x": 808,
-        "y": 6542,
+        "y": 6538,
         "width": 760,
         "height": 137
       }
@@ -601,7 +601,7 @@
       "state": "ended",
       "box": {
         "x": 32,
-        "y": 6699,
+        "y": 6695,
         "width": 760,
         "height": 137
       }
@@ -614,7 +614,7 @@
       "state": "in a call: live",
       "box": {
         "x": 808,
-        "y": 6699,
+        "y": 6695,
         "width": 760,
         "height": 148
       }
@@ -627,7 +627,7 @@
       "state": "speaking, muted, hand raised, local",
       "box": {
         "x": 32,
-        "y": 6863,
+        "y": 6859,
         "width": 1536,
         "height": 245
       }
@@ -640,7 +640,7 @@
       "state": "dock variant, active speaker",
       "box": {
         "x": 32,
-        "y": 7124,
+        "y": 7120,
         "width": 1536,
         "height": 195
       }
@@ -653,9 +653,9 @@
       "state": "off: sm and md at levels 0, 0.3, 0.8",
       "box": {
         "x": 32,
-        "y": 7499,
+        "y": 7495,
         "width": 501,
-        "height": 187
+        "height": 181
       }
     },
     {
@@ -666,9 +666,9 @@
       "state": "connecting: sm and md at levels 0, 0.3, 0.8",
       "box": {
         "x": 549,
-        "y": 7499,
+        "y": 7495,
         "width": 501,
-        "height": 187
+        "height": 181
       }
     },
     {
@@ -679,9 +679,9 @@
       "state": "listening: sm and md at levels 0, 0.3, 0.8",
       "box": {
         "x": 1066,
-        "y": 7499,
+        "y": 7495,
         "width": 501,
-        "height": 187
+        "height": 181
       }
     },
     {
@@ -692,9 +692,9 @@
       "state": "thinking: sm and md at levels 0, 0.3, 0.8",
       "box": {
         "x": 32,
-        "y": 7702,
+        "y": 7692,
         "width": 501,
-        "height": 187
+        "height": 181
       }
     },
     {
@@ -705,9 +705,9 @@
       "state": "executing: sm and md at levels 0, 0.3, 0.8",
       "box": {
         "x": 549,
-        "y": 7702,
+        "y": 7692,
         "width": 501,
-        "height": 187
+        "height": 181
       }
     },
     {
@@ -718,9 +718,9 @@
       "state": "speaking: sm and md at levels 0, 0.3, 0.8",
       "box": {
         "x": 1066,
-        "y": 7702,
+        "y": 7692,
         "width": 501,
-        "height": 187
+        "height": 181
       }
     },
     {
@@ -731,9 +731,9 @@
       "state": "confirming: sm and md at levels 0, 0.3, 0.8",
       "box": {
         "x": 32,
-        "y": 7905,
+        "y": 7889,
         "width": 501,
-        "height": 187
+        "height": 181
       }
     },
     {
@@ -744,9 +744,9 @@
       "state": "ended: sm and md at levels 0, 0.3, 0.8",
       "box": {
         "x": 549,
-        "y": 7905,
+        "y": 7889,
         "width": 501,
-        "height": 187
+        "height": 181
       }
     },
     {
@@ -757,9 +757,9 @@
       "state": "unavailable: sm and md at levels 0, 0.3, 0.8",
       "box": {
         "x": 1066,
-        "y": 7905,
+        "y": 7889,
         "width": 501,
-        "height": 187
+        "height": 181
       }
     },
     {
@@ -770,7 +770,7 @@
       "state": "off, full",
       "box": {
         "x": 32,
-        "y": 8144,
+        "y": 8122,
         "width": 760,
         "height": 139
       }
@@ -783,7 +783,7 @@
       "state": "connecting, full",
       "box": {
         "x": 808,
-        "y": 8144,
+        "y": 8122,
         "width": 760,
         "height": 139
       }
@@ -796,7 +796,7 @@
       "state": "listening, full",
       "box": {
         "x": 32,
-        "y": 8299,
+        "y": 8277,
         "width": 760,
         "height": 139
       }
@@ -809,7 +809,7 @@
       "state": "thinking, full",
       "box": {
         "x": 808,
-        "y": 8299,
+        "y": 8277,
         "width": 760,
         "height": 139
       }
@@ -822,7 +822,7 @@
       "state": "executing, full",
       "box": {
         "x": 32,
-        "y": 8454,
+        "y": 8432,
         "width": 760,
         "height": 139
       }
@@ -835,7 +835,7 @@
       "state": "speaking, full",
       "box": {
         "x": 808,
-        "y": 8454,
+        "y": 8432,
         "width": 760,
         "height": 139
       }
@@ -848,7 +848,7 @@
       "state": "confirming, full",
       "box": {
         "x": 32,
-        "y": 8609,
+        "y": 8587,
         "width": 760,
         "height": 315
       }
@@ -861,7 +861,7 @@
       "state": "ended, full",
       "box": {
         "x": 808,
-        "y": 8609,
+        "y": 8587,
         "width": 760,
         "height": 139
       }
@@ -874,7 +874,7 @@
       "state": "unavailable, full",
       "box": {
         "x": 32,
-        "y": 8940,
+        "y": 8918,
         "width": 760,
         "height": 139
       }
@@ -887,7 +887,7 @@
       "state": "off, compact",
       "box": {
         "x": 32,
-        "y": 9131,
+        "y": 9109,
         "width": 501,
         "height": 131
       }
@@ -900,7 +900,7 @@
       "state": "connecting, compact",
       "box": {
         "x": 549,
-        "y": 9131,
+        "y": 9109,
         "width": 501,
         "height": 131
       }
@@ -913,7 +913,7 @@
       "state": "listening, compact",
       "box": {
         "x": 1066,
-        "y": 9131,
+        "y": 9109,
         "width": 501,
         "height": 131
       }
@@ -926,7 +926,7 @@
       "state": "thinking, compact",
       "box": {
         "x": 32,
-        "y": 9278,
+        "y": 9256,
         "width": 501,
         "height": 131
       }
@@ -939,7 +939,7 @@
       "state": "executing, compact",
       "box": {
         "x": 549,
-        "y": 9278,
+        "y": 9256,
         "width": 501,
         "height": 131
       }
@@ -952,7 +952,7 @@
       "state": "speaking, compact",
       "box": {
         "x": 1066,
-        "y": 9278,
+        "y": 9256,
         "width": 501,
         "height": 131
       }
@@ -965,7 +965,7 @@
       "state": "confirming, compact (its card is F-16)",
       "box": {
         "x": 32,
-        "y": 9425,
+        "y": 9403,
         "width": 501,
         "height": 131
       }
@@ -978,7 +978,7 @@
       "state": "ended, compact",
       "box": {
         "x": 549,
-        "y": 9425,
+        "y": 9403,
         "width": 501,
         "height": 131
       }
@@ -991,9 +991,126 @@
       "state": "unavailable, compact",
       "box": {
         "x": 1066,
-        "y": 9425,
+        "y": 9403,
         "width": 501,
         "height": 131
+      }
+    },
+    {
+      "id": "F-31",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "off, footer",
+      "box": {
+        "x": 32,
+        "y": 9586,
+        "width": 760,
+        "height": 123
+      }
+    },
+    {
+      "id": "F-32",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "connecting, footer",
+      "box": {
+        "x": 808,
+        "y": 9586,
+        "width": 760,
+        "height": 123
+      }
+    },
+    {
+      "id": "F-33",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "listening, footer",
+      "box": {
+        "x": 32,
+        "y": 9725,
+        "width": 760,
+        "height": 123
+      }
+    },
+    {
+      "id": "F-34",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "thinking, footer",
+      "box": {
+        "x": 808,
+        "y": 9725,
+        "width": 760,
+        "height": 123
+      }
+    },
+    {
+      "id": "F-35",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "executing, footer",
+      "box": {
+        "x": 32,
+        "y": 9864,
+        "width": 760,
+        "height": 123
+      }
+    },
+    {
+      "id": "F-36",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "speaking, footer",
+      "box": {
+        "x": 808,
+        "y": 9864,
+        "width": 760,
+        "height": 123
+      }
+    },
+    {
+      "id": "F-37",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "confirming, footer (its card is F-16)",
+      "box": {
+        "x": 32,
+        "y": 10003,
+        "width": 760,
+        "height": 123
+      }
+    },
+    {
+      "id": "F-38",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "ended, footer",
+      "box": {
+        "x": 808,
+        "y": 10003,
+        "width": 760,
+        "height": 123
+      }
+    },
+    {
+      "id": "F-39",
+      "section": "voice",
+      "component": "VoiceDock",
+      "subpath": "/voice",
+      "state": "unavailable, footer",
+      "box": {
+        "x": 32,
+        "y": 10142,
+        "width": 760,
+        "height": 123
       }
     },
     {
@@ -1004,7 +1121,7 @@
       "state": "Start a computer in 3 projects",
       "box": {
         "x": 32,
-        "y": 9608,
+        "y": 10317,
         "width": 501,
         "height": 217
       }
@@ -1017,7 +1134,7 @@
       "state": "4 turns: done, running, refused",
       "box": {
         "x": 549,
-        "y": 9608,
+        "y": 10317,
         "width": 501,
         "height": 471
       }
@@ -1030,7 +1147,7 @@
       "state": "failed tool call; empty",
       "box": {
         "x": 1066,
-        "y": 9608,
+        "y": 10317,
         "width": 501,
         "height": 285
       }
@@ -1043,7 +1160,7 @@
       "state": "Brand and text",
       "box": {
         "x": 32,
-        "y": 10203,
+        "y": 10912,
         "width": 372,
         "height": 407
       }
@@ -1056,7 +1173,7 @@
       "state": "Surfaces and borders",
       "box": {
         "x": 420,
-        "y": 10203,
+        "y": 10912,
         "width": 372,
         "height": 407
       }
@@ -1069,7 +1186,7 @@
       "state": "Status",
       "box": {
         "x": 808,
-        "y": 10203,
+        "y": 10912,
         "width": 372,
         "height": 407
       }
@@ -1082,7 +1199,7 @@
       "state": "Run states and tenants",
       "box": {
         "x": 1196,
-        "y": 10203,
+        "y": 10912,
         "width": 372,
         "height": 407
       }
@@ -1095,7 +1212,7 @@
       "state": "sizes xs, sm, base, lg × weights",
       "box": {
         "x": 32,
-        "y": 10626,
+        "y": 11335,
         "width": 760,
         "height": 235
       }
@@ -1108,7 +1225,7 @@
       "state": "none, xs, sm, md, lg, xl",
       "box": {
         "x": 808,
-        "y": 10626,
+        "y": 11335,
         "width": 760,
         "height": 237
       }

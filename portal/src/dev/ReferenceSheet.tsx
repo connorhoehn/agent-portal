@@ -318,7 +318,7 @@ const DOCK_PROPS: Record<VoicePhase, { level: number; outputLevel: number; elaps
   unavailable: { level: 0, outputLevel: 0 },
 };
 
-function Dock({ phase, compact = false }: { phase: VoicePhase; compact?: boolean }) {
+function Dock({ phase, compact = false, footer = false }: { phase: VoicePhase; compact?: boolean; footer?: boolean }) {
   const p = DOCK_PROPS[phase];
   const live = phase !== 'off' && phase !== 'ended' && phase !== 'unavailable';
   return (
@@ -330,13 +330,14 @@ function Dock({ phase, compact = false }: { phase: VoicePhase; compact?: boolean
       budget={live ? { usedUsd: 0.04 + (p.elapsed ?? 0) * 0.0008, holdUsd: 0.25 } : null}
       lastLine={p.line ?? null}
       // One open confirmation per page: the compact tile shows the phase, F-16 shows the card.
-      pending={phase === 'confirming' && !compact ? PENDING : null}
+      pending={phase === 'confirming' && !compact && !footer ? PENDING : null}
       onStart={noop}
       onStop={noop}
       onMute={noop}
       {...(phase === 'unavailable' ? { unavailableReason: 'Voice is not configured: no OPENAI_API_KEY on the middleware' } : {})}
       compact={compact}
-      data-testid={`sheet-voice-dock-${phase}${compact ? '-compact' : ''}`}
+      size={footer ? 'footer' : 'panel'}
+      data-testid={`sheet-voice-dock-${phase}${compact ? '-compact' : ''}${footer ? '-footer' : ''}`}
     />
   );
 }
@@ -378,7 +379,7 @@ export default function ReferenceSheet() {
         <Stack ref={root} gap="none" className="mx-auto w-[1536px] py-8" data-reference-sheet="" {...(ready ? { 'data-ready': '' } : {})}>
           <PageHeader
             title="Voice navigator reference sheet"
-            description="Live components from @connorhoehn/ui-components 2.510.0 with product fixture data. Tile ids (A-1, F-7) are stable; docs/design/reference-sheet.json has each tile's box."
+            description="Live components from @connorhoehn/ui-components 2.510.1 with product fixture data. Tile ids (A-1, F-7) are stable; docs/design/reference-sheet.json has each tile's box."
             badge={<Chip size="sm" tone="info">dev only</Chip>}
             size="lg"
           />
@@ -402,7 +403,7 @@ export default function ReferenceSheet() {
               <FooterRow />
             </Tile>
             <Tile id="A-4" component="Footer row + VoiceDock" subpath="/shared, /video, /voice" state="spec §5 placement: listening, beside the huddle half" width="full">
-              <FooterRow voice={<VoiceDock phase="listening" level={0.6} outputLevel={0} elapsedSeconds={14}
+              <FooterRow voice={<VoiceDock size="footer" phase="listening" level={0.6} outputLevel={0} elapsedSeconds={14}
                 budget={{ usedUsd: 0.05, holdUsd: 0.25 }} lastLine={{ role: 'you', text: 'Open the computer lab' }}
                 onStop={noop} onMute={noop} className="min-w-0 max-w-[640px] flex-1 border-l border-border" />} />
             </Tile>
@@ -648,7 +649,7 @@ export default function ReferenceSheet() {
           </Section>
 
           {/* ── F ── */}
-          <Section id="voice" letter="F" title="Voice" description="The three voice primitives (/voice, 2.510.0). The ring follows the microphone while listening, pulses on the assistant's audio while speaking, rotates while connecting, thinking or working, and sits dim when off. Rendered with reduced motion, so rotation and pulse show as their static frame.">
+          <Section id="voice" letter="F" title="Voice" description="The three voice primitives (/voice, 2.510.1). The ring follows the microphone while listening, pulses on the assistant's audio while speaking, rotates while connecting, thinking or working, and sits dim when off. Rendered with reduced motion, so rotation and pulse show as their static frame.">
             <Subhead>VoiceActivityRing, every phase (F-1 to F-9)</Subhead>
             {VOICE_PHASES.map((phase, index) => (
               <Tile key={phase} id={`F-${index + 1}`} component="VoiceActivityRing" subpath="/voice" state={`${phase}: sm and md at levels 0, 0.3, 0.8`} width="third">
@@ -666,6 +667,12 @@ export default function ReferenceSheet() {
             {VOICE_PHASES.map((phase, index) => (
               <Tile key={phase} id={`F-${19 + index}`} component="VoiceDock" subpath="/voice" state={phase === 'confirming' ? 'confirming, compact (its card is F-16)' : `${phase}, compact`} width="third">
                 <Dock phase={phase} compact />
+              </Tile>
+            ))}
+            <Subhead>VoiceDock, footer size: the footer’s metrics, an 18px ring, xs labels, a quiet Voice / End control (F-31 to F-39)</Subhead>
+            {VOICE_PHASES.map((phase, index) => (
+              <Tile key={phase} id={`F-${31 + index}`} component="VoiceDock" subpath="/voice" state={phase === 'confirming' ? 'confirming, footer (its card is F-16)' : `${phase}, footer`} width="half">
+                <Dock phase={phase} footer />
               </Tile>
             ))}
             <Subhead>Confirmation card and transcript strip (F-28 to F-30)</Subhead>
