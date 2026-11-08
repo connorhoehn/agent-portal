@@ -1,7 +1,7 @@
 import express from 'express';
 import request from 'supertest';
 import { createHealthHandler, livezHandler } from '../health-handler.js';
-import { judgeSnapshot, resolveRuntimeProfile, validateRuntimeProfile } from '../runtime-profile.js';
+import { judgeSnapshot, resolveRuntimeProfile, securityPreconditions, validateRuntimeProfile } from '../runtime-profile.js';
 import type { HealthProbeSnapshot } from '../health-probe.js';
 
 const live = { aurora: false, agentcore: false, guardrails: false, cloudwatch: false };
@@ -89,5 +89,31 @@ describe('local-ephemeral readiness', () => {
     const response = await request(app({ readRealtime: () => ({ ready: false }), readDatastore })).get('/livez').expect(200);
     expect(response.body.status).toBe('alive');
     expect(readDatastore).not.toHaveBeenCalled();
+  });
+});
+
+describe('fail-closed start-up preconditions (docs/fail-open-audit.md §2)', () => {
+  const deployed = { NODE_ENV: 'production', SESSION_SIGNING_SECRET_ARN: 'arn:aws:secretsmanager:us-east-1:1:secret:s', POLICY_STORE_ID: 'ps-1' };
+
+  it('a configured deployment has none, in either profile', () => {
+    expect(securityPreconditions(deployed)).toEqual([]);
+    expect(validateRuntimeProfile(resolveRuntimeProfile({ profile: 'durable', mock: live, inProcessQueue: false, env: deployed }))).toEqual([]);
+  });
+
+  it('names each missing value, and INSECURE_DEV_MODE never waives them in production', () => {
+    const problems = securityPreconditions({ NODE_ENV: 'production', INSECURE_DEV_MODE: 'true' }).join('\n');
+    expect(problems).toMatch(/SESSION_SIGNING_SECRET_ARN unset and INSECURE_DEV_MODE is not set/);
+    expect(problems).toMatch(/POLICY_STORE_ID unset and INSECURE_DEV_MODE is not set/);
+  });
+
+  it('INSECURE_DEV_MODE waives them outside production; an explicit SESSION_SIGNING_KEY_DEV counts as a key; blank is unset', () => {
+    expect(securityPreconditions({ INSECURE_DEV_MODE: 'true' })).toEqual([]);
+    expect(securityPreconditions({ SESSION_SIGNING_KEY_DEV: 'operator-key', POLICY_STORE_ID: 'ps-1' })).toEqual([]);
+    expect(securityPreconditions({ SESSION_SIGNING_SECRET_ARN: ' ', POLICY_STORE_ID: 'ps-1' })).toHaveLength(1);
+  });
+
+  it('/health reports insecureDevMode only when it is on', async () => {
+    expect((await request(app({ insecureDevMode: true })).get('/health')).body.insecureDevMode).toBe(true);
+    expect((await request(app()).get('/health')).body).not.toHaveProperty('insecureDevMode');
   });
 });

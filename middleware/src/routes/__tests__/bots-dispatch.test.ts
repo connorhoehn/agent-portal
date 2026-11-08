@@ -547,11 +547,16 @@ describe('the sprint envelope brake', () => {
     });
   });
 
-  it('degrades to no brake when the envelope cannot be read at all', async () => {
-    // A brake that cannot read its own inputs must not become a refusal — the
-    // allocation brake is still standing behind it.
+  it('refuses (503) when the envelope cannot be read at all, and degrades to no brake only with BUDGET_FAIL_CLOSED=0', async () => {
+    // Unreadable budget state fails closed by default (docs/fail-open-audit.md
+    // §2). The explicit opt-out restores the old posture: a brake that cannot
+    // read its own inputs is not a refusal, the allocation brake stands behind it.
     grants.mockRejectedValue(new Error('relation "budget_grants" does not exist'));
-    expect((await post(BODY)).status).toBe(202);
+    expect((await post(BODY)).status).toBe(503);
+    process.env['BUDGET_FAIL_CLOSED'] = '0';
+    try {
+      expect((await post(BODY)).status).toBe(202);
+    } finally { delete process.env['BUDGET_FAIL_CLOSED']; }
   });
 });
 

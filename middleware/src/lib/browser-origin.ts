@@ -2,6 +2,7 @@ import cors from 'cors';
 import type { RequestHandler } from 'express';
 import { config } from '../config.js';
 import { viewerScheme } from './trusted-proxy.js';
+import { insecureDevMode } from './insecure-dev-mode.js';
 
 function originOf(value: string): string | null {
   try {
@@ -12,7 +13,8 @@ function originOf(value: string): string | null {
 
 /** Reject untrusted browser origins before they can read or mutate a session.
  * Non-browser clients without Origin still use the route's normal auth gates.
- * Production allows the API's own origin and explicitly configured frontends.
+ * Always allowed: the API's own origin and explicitly configured frontends.
+ * Loopback origins (the Vite portal) only under INSECURE_DEV_MODE.
  */
 /** The allowlist decision on its own, so the realtime upgrade
  *  (lib/distillation-realtime.ts) — which never passes through Express —
@@ -26,7 +28,7 @@ export function isAllowedBrowserOrigin(origin: string, selfOrigin: string): bool
     process.env['PUBLIC_BASE_URL'] ?? '',
     ...(process.env['CORS_ALLOWED_ORIGINS'] ?? '').split(','),
   ].map(value => originOf(value.trim())).filter(Boolean);
-  const localDev = process.env['NODE_ENV'] !== 'production' && parsed !== null &&
+  const localDev = insecureDevMode() && parsed !== null &&
     ['localhost', '127.0.0.1', '[::1]'].includes(new URL(parsed).hostname);
   return !(parsed === null || parsed !== origin ||
     !(parsed === sameOrigin || configured.includes(parsed) || localDev));

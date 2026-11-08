@@ -18,11 +18,12 @@
 // SERVICE_AUTH_SECRET).
 //
 // THE TRANSITION. platform-api, the only caller, still signs body-only. For
-// one release the old envelope is still accepted while
-// SERVICE_AUTH_LEGACY_BODY_ONLY is unset or `accept`, with a DEPRECATED warning
-// once per service and router; set it to `refuse` once platform-api signs the
-// request. It is removed with service-runtime 0.8.0, which drops the same
-// allowance from its own gate.
+// one release the old envelope is accepted only while
+// SERVICE_AUTH_LEGACY_BODY_ONLY says `accept` (or `allow`), with a DEPRECATED
+// warning once per service and router. Unset refuses (docs/fail-open-audit.md
+// §2): set `accept` wherever platform-api still calls these routes with the
+// body-only signer, and drop it once it signs the request. The allowance is
+// removed with service-runtime 0.8.0, which drops the same one from its own gate.
 
 import type { Request } from 'express';
 import { SERVICE_AUTH_HEADER, verifyEnvelope, verifyServiceRequest } from '@connorhoehn/service-runtime';
@@ -35,9 +36,9 @@ export const LEGACY_BODY_ONLY_ENV = 'SERVICE_AUTH_LEGACY_BODY_ONLY';
 const TTL_SEC = 30;
 const TOLERANCE_SEC = 5;
 
-/** True while the body-only envelope is still accepted (the default for this release). */
+/** True only while the transition flag explicitly accepts the body-only envelope (`accept` / `allow`). */
 export function legacyBodyOnlyAccepted(): boolean {
-  return (process.env[LEGACY_BODY_ONLY_ENV] ?? '').trim().toLowerCase() !== 'refuse';
+  return ['accept', 'allow'].includes((process.env[LEGACY_BODY_ONLY_ENV] ?? '').trim().toLowerCase());
 }
 
 export type InternalAuthVerdict =

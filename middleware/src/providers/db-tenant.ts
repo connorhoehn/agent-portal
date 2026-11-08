@@ -27,11 +27,12 @@
 // autocommit round trip. A table the pattern misses fails closed (the setting
 // is unset, the policy answers false), never open.
 //
-// RLS_ENFORCE: 'true' / 'false' wins; unset means on exactly when
-// AURORA_SECRET_ARN is the middleware's own login
-// (`<prefix>-aurora-middleware-credentials`, infra/lib/aurora-stack.ts) and off
-// under the `dbMasterSecret` fallback, where the master owns every table and
-// RLS does not bind it.
+// RLS_ENFORCE: 'true' / 'false' wins; unset means on, whatever
+// AURORA_SECRET_ARN names. Under the `dbMasterSecret` fallback the master owns
+// every table and RLS does not bind it, so enforcing there costs only the extra
+// round trips; `RLS_ENFORCE=false` is the explicit opt-out for that login. With
+// the middleware's own login (`<prefix>-aurora-middleware-credentials`,
+// infra/lib/aurora-stack.ts) it must stay on, or tenant tables read empty.
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { config } from '../config.js';
@@ -85,12 +86,11 @@ export function usesApplicationRole(secretArn: string | undefined = config.auror
   return /:secret:[A-Za-z0-9-]*-aurora-middleware-credentials(-[A-Za-z0-9]{6})?$/.test(secretArn ?? '');
 }
 
-/** RLS_ENFORCE, read per call so an operator's override needs no code path of its own. */
+/** RLS_ENFORCE, read per call so an operator's override needs no code path of its own. Unset = on. */
 export function rlsEnforced(): boolean {
   const raw = (process.env['RLS_ENFORCE'] ?? '').trim().toLowerCase();
-  if (raw === 'true' || raw === '1') return true;
   if (raw === 'false' || raw === '0') return false;
-  return usesApplicationRole();
+  return true;
 }
 
 /**
@@ -116,5 +116,5 @@ export function warnIfMisconfigured(log: (msg: string) => void = (m) => console.
   if (warned || rlsEnforced() || !usesApplicationRole()) return;
   warned = true;
   log('[rls] RLS_ENFORCE=false while AURORA_SECRET_ARN is the middleware login: every tenant table will read '
-    + 'empty. Unset RLS_ENFORCE, or deploy with -c dbMasterSecret=true (infra/SECURITY-NOTES.md).');
+    + 'empty. Unset RLS_ENFORCE, or deploy with -c dbMasterSecret=true and RLS_ENFORCE=false (infra/SECURITY-NOTES.md).');
 }

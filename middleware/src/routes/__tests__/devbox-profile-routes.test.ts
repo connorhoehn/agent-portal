@@ -108,6 +108,8 @@ beforeEach(() => {
   store.initiative = { 'p-locked': 'restricted' };
   process.env['DEVBOX_RUNTIME_ARN'] = ARN;
   process.env['WORK_GRAPH_SERVICE_AUTH_SECRET'] = SECRET;
+  // platform-api still signs body-only (`signEnvelope` above); unset refuses it.
+  process.env['SERVICE_AUTH_LEGACY_BODY_ONLY'] = 'accept';
   _internal.resetArnCache();
   _resetFleet();
   _resetLoopMock();

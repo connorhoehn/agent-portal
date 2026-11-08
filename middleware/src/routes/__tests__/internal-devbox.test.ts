@@ -96,6 +96,9 @@ function principal(requestedBy = 'u-loop-owner') {
 
 beforeEach(() => {
   process.env['WORK_GRAPH_SERVICE_AUTH_SECRET'] = SECRET;
+  // platform-api, the only caller, still signs body-only (`signed` below), and
+  // the transition flag must say so: unset refuses it (pinned further down).
+  process.env['SERVICE_AUTH_LEGACY_BODY_ONLY'] = 'accept';
   delete process.env['WORK_GRAPH_PLATFORM_SERVICE_ID'];
   delete process.env['SERVICE_AUTH_SECRET'];
   _resetFleet();
@@ -178,12 +181,14 @@ describe('internal devbox router — request-bound envelope', () => {
     expect((await request(app()).get('/internal/devbox/status').set(otherAudience)).status).toBe(401);
   });
 
-  it('still takes the body-only envelope for one release, logging the deprecation once; SERVICE_AUTH_LEGACY_BODY_ONLY=refuse ends it', async () => {
+  it('takes the body-only envelope only while SERVICE_AUTH_LEGACY_BODY_ONLY=accept, logging the deprecation once; unset or refuse ends it', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
       expect((await request(app()).get('/internal/devbox/status').set(signed({}))).status).toBe(200);
       expect((await request(app()).get('/internal/devbox/status').set(signed({}))).status).toBe(200);
       expect(warn.mock.calls.filter((c) => String(c[0]).includes('DEPRECATED'))).toHaveLength(1);
+      delete process.env['SERVICE_AUTH_LEGACY_BODY_ONLY'];
+      expect((await request(app()).get('/internal/devbox/status').set(signed({}))).status).toBe(401);
       process.env['SERVICE_AUTH_LEGACY_BODY_ONLY'] = 'refuse';
       expect((await request(app()).get('/internal/devbox/status').set(signed({}))).status).toBe(401);
       expect((await request(app()).get('/internal/devbox/status').set(signedRequest('GET', '/internal/devbox/status'))).status).toBe(200);

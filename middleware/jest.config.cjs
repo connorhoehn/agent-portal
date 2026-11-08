@@ -6,7 +6,8 @@ module.exports = {
   // Disables HTTP keep-alive so supertest never reuses a pooled socket across
   // its per-request listen/close port churn — see jest.setup.cjs for the full
   // root cause. Runs once per test file, before the framework loads.
-  setupFiles: ['<rootDir>/jest.setup.cjs'],
+  // jest.dev-mode.cjs sets INSECURE_DEV_MODE=true: the suite is a dev process.
+  setupFiles: ['<rootDir>/jest.setup.cjs', '<rootDir>/jest.dev-mode.cjs'],
   // Binds ONE http.Server per test file for supertest to reuse, instead of
   // supertest's default of one listen/close per request. Must be
   // setupFilesAfterEnv (not setupFiles) because it registers beforeAll/afterAll.

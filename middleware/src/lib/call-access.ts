@@ -6,6 +6,7 @@ import { AppError } from './async-handler.js';
 import { currentDocumentSessionEpoch, documentSessionId } from './document-session.js';
 import { getUser } from '../providers/identity.js';
 import { DEMO_SUB, demoFallbackAllowed, type Grants, type Session } from './session.js';
+import { insecureDevMode } from './insecure-dev-mode.js';
 import { SOCIAL_CONVERSATION_ID, tenantChannelFamily } from './tenant-channels.js';
 import { TENANTS_WITH_HUDDLE_CHAT } from './tenants.generated.js';
 
@@ -27,7 +28,7 @@ export async function currentCallAuthority(session: Session, tenants: readonly C
     throw new AppError(403, tenants.length === 1 ? 'This call requires an OrgIQ session' : 'This session does not support call conversations');
   }
   try {
-    const isDemo = session.sub === DEMO_SUB && process.env['NODE_ENV'] !== 'production' && demoFallbackAllowed();
+    const isDemo = session.sub === DEMO_SUB && insecureDevMode() && demoFallbackAllowed();
     if (isDemo) {
       if (await currentDocumentSessionEpoch(session.sub, session.tenant, documentSessionId(session)) === null) {
         throw new AppError(401, 'The session is no longer current. Sign in again.');

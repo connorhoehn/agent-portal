@@ -91,6 +91,7 @@ import { readDatastoreStatus } from './lib/datastore-probe.js';
 import { createHealthHandler, livezHandler } from './lib/health-handler.js';
 import { createHealthProbe } from './lib/health-probe.js';
 import { resolveRuntimeProfile, validateRuntimeProfile } from './lib/runtime-profile.js';
+import { announceInsecureDevMode } from './lib/insecure-dev-mode.js';
 import { hasPullSideColumns } from './providers/agent-jobs.js';
 import { inProcessQueue, pipelineQueue } from './lib/pipeline-queue-transport.js';
 import { promptHistoryRouter } from './routes/prompt-history.js';
@@ -153,6 +154,10 @@ import { startModelPriceRefresh } from './lib/model-prices.js';
 
 const app = express();
 
+// The one dev switch (lib/insecure-dev-mode.ts): one loud line at start-up when
+// it is on, and /health reports it. Without it every security default is closed.
+const insecureDev = announceInsecureDevMode();
+
 // ECS declares its enforced ALB hop; direct/local servers ignore forwarding
 // headers by default so callers cannot choose their own rate-limit bucket.
 app.set('trust proxy', trustedProxyHops());
@@ -212,7 +217,7 @@ const healthHandler = createHealthHandler({ readRealtime: () => realtimeGatewayS
   readAws: () => Object.values(config.mock).every(Boolean) ? { ok: true } : readAwsCredentialsStatus(),
   readDatastore: readDatastoreStatus, readJobSchema: jobSchemaProbe.snapshot,
   ...(queueProbe ? { readQueue: queueProbe.snapshot } : {}),
-  profile: runtimeProfile.profile, mocks: config.mock, region: config.region });
+  profile: runtimeProfile.profile, mocks: config.mock, region: config.region, insecureDevMode: insecureDev });
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
 app.get('/livez', livezHandler);
@@ -497,8 +502,8 @@ app.use('/api/observability/memory', viewObs, memoryRouter);
 app.use('/api/observability/guardrails-detail', viewObs, guardrailsDetailRouter);
 // Sprint 4 (M13) — traffic shape: RPS, hour-of-week heatmap, top users.
 app.use('/api/observability/traffic', viewObs, trafficRouter);
-// Test fixtures — E2E-only reset utilities. NODE_ENV=production locks them
-// internally, so they stay ungated for the sessionless E2E runner.
+// Test fixtures — E2E-only reset utilities. They answer 403 unless
+// INSECURE_DEV_MODE=true (routes/test-fixtures.ts), production included.
 app.use('/api/observability/test-fixtures', requireSession('TestFixtures'), testFixturesRouter);
 // Sprint 2 — invocation search + per-invocation drill-down (M3/M5 triage).
 app.use('/api/observability/invocations', viewObs, invocationsRouter);

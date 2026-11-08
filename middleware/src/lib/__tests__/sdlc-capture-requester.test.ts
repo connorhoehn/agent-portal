@@ -35,6 +35,16 @@ import { createChangeRequest } from '../../providers/sdlc.js';
 import { startRun, type AgentProject } from '../../providers/agent-projects.js';
 
 const PROJECT = { id: 'ap-1', orgProjectId: 'p-obs', repoFullName: 'o/r' } as unknown as AgentProject;
+
+// The budget reads are not mocked here and are not the subject; the thin config
+// mock cannot serve a dispatcher's envelope or user budget. Unset, the brake
+// fails closed (lib/budget-decisions.ts), so this suite opts out explicitly.
+const priorBudgetFlag = process.env['BUDGET_FAIL_CLOSED'];
+beforeAll(() => { process.env['BUDGET_FAIL_CLOSED'] = '0'; });
+afterAll(() => {
+  if (priorBudgetFlag === undefined) delete process.env['BUDGET_FAIL_CLOSED'];
+  else process.env['BUDGET_FAIL_CLOSED'] = priorBudgetFlag;
+});
 const settle = () => new Promise((r) => setImmediate(r));
 
 async function requesterOf(input: Partial<Parameters<typeof dispatchGovernedRun>[0]>): Promise<unknown> {

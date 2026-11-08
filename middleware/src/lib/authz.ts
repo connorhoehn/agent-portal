@@ -20,6 +20,7 @@ import {
   type Tenant, type Role, type Session,
 } from './session.js';
 import { invalidateAll } from './gateway/authority-invalidation.js';
+import { insecureDevMode } from './insecure-dev-mode.js';
 
 const NAMESPACE = 'OrgIQ';
 const RESOURCE_ID = 'app';
@@ -243,10 +244,11 @@ async function seedPolicyDecision(role: string, action: string): Promise<boolean
 
 async function evaluate(principal: PrincipalRef, action: string, resourceAttrs?: ResourceAttrs): Promise<'ALLOW' | 'DENY'> {
   if (!config.auth.policyStoreId) {
-    // No policy store wired up. In production that is a misconfiguration, and
+    // No policy store wired up. Anywhere but INSECURE_DEV_MODE that is a
+    // misconfiguration (start-up refuses it, lib/runtime-profile.ts), and
     // silently disabling every tenant/role boundary is the worst failure mode.
-    if (process.env['NODE_ENV'] === 'production') return 'DENY';
-    // Locally, fall back to the SEED POLICIES rather than blanket ALLOW.
+    if (!insecureDevMode()) return 'DENY';
+    // Under the dev flag, fall back to the SEED POLICIES rather than blanket ALLOW.
     //
     // Blanket ALLOW made every role look like an admin: GET
     // /api/session/capabilities returned all 24 actions true for `member`, the

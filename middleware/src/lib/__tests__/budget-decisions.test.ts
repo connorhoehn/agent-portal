@@ -52,8 +52,8 @@ describe('effectiveHardCap', () => {
 });
 
 describe('budgetFailClosed', () => {
-  it('is off outside production (dev:mock), on in production', () => {
-    expect(budgetFailClosed()).toBe(false);
+  it('is on with nothing set, and in production (docs/fail-open-audit.md §2)', () => {
+    expect(budgetFailClosed()).toBe(true);
     process.env['NODE_ENV'] = 'production';
     expect(budgetFailClosed()).toBe(true);
   });

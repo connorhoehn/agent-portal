@@ -200,9 +200,10 @@ function requireMockPlane(_req: Request, res: Response, next: NextFunction): voi
 
 /**
  * Optional shared secret, same contract as the agent callbacks in this repo:
- * open when `MOCK_CONTROL_SECRET` is unset (the normal laptop case), a
- * constant-time header check when it is set. Runs after requireMockPlane so a
- * production probe still gets 404 rather than 401.
+ * open when `MOCK_CONTROL_SECRET` is unset under INSECURE_DEV_MODE (the normal
+ * laptop case; `dev:mock` sets the flag), 503 when it is unset without the
+ * flag, a constant-time header check when it is set. Runs after
+ * requireMockPlane so a production probe still gets 404 rather than 401.
  */
 const requireControlSecret = requireServiceAuth(
   MOCK_CONTROL_SERVICE_AUTH,

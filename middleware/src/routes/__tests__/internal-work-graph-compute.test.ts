@@ -51,6 +51,9 @@ function openBody() {
 
 beforeEach(() => {
   process.env['WORK_GRAPH_SERVICE_AUTH_SECRET'] = SECRET;
+  // platform-api, the only caller, still signs body-only (`signed` above), and
+  // the transition flag must say so: unset refuses it (pinned below).
+  process.env['SERVICE_AUTH_LEGACY_BODY_ONLY'] = 'accept';
   delete process.env['WORK_GRAPH_PLATFORM_SERVICE_ID'];
 });
 
@@ -223,6 +226,12 @@ describe('request-bound envelope (service-runtime 0.7.0)', () => {
 
   it('with SERVICE_AUTH_LEGACY_BODY_ONLY=refuse a body-only envelope is refused on every route', async () => {
     process.env['SERVICE_AUTH_LEGACY_BODY_ONLY'] = 'refuse';
+    expect((await post('/revalidate', signed(body), body)).status).toBe(401);
+    expect((await post('/close', signed(body), body)).status).toBe(401);
+  });
+
+  it('with SERVICE_AUTH_LEGACY_BODY_ONLY unset a body-only envelope is refused too (the default is refuse)', async () => {
+    delete process.env['SERVICE_AUTH_LEGACY_BODY_ONLY'];
     expect((await post('/revalidate', signed(body), body)).status).toBe(401);
     expect((await post('/close', signed(body), body)).status).toBe(401);
   });

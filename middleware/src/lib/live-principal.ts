@@ -6,6 +6,7 @@ import { isAllowed } from './authz.js';
 import { currentDocumentSessionEpoch, documentSessionId } from './document-session.js';
 import { getUser, type UserInfo } from '../providers/identity.js';
 import { ADMIN_ROLE, DEFAULT_ROLE, DEFAULT_TENANT, DEMO_SUB, TENANTS, demoFallbackAllowed, demoScopedGrants, permissiveGrants, type Session, type Grants } from './session.js';
+import { insecureDevMode } from './insecure-dev-mode.js';
 import type { AuthorityScope } from '@connorhoehn/realtime-modules/server';
 import { socialChat } from './social-chat.js';
 import { TENANT_PARTITIONS, channelAuthorityFor, tenantChannelFamily, type ChannelAuthority, type TenantChannelFamily } from './tenant-channels.js';
@@ -63,7 +64,7 @@ export function handOffLiveSession(ctx: Record<string, unknown>, session: Sessio
 export async function currentLiveSession(session: Session): Promise<Session> {
   provenance(session);
   try {
-    const demo = session.sub === DEMO_SUB && process.env['NODE_ENV'] !== 'production' && demoFallbackAllowed();
+    const demo = session.sub === DEMO_SUB && insecureDevMode() && demoFallbackAllowed();
     if (demo) {
       if (await currentDocumentSessionEpoch(session.sub, session.tenant, documentSessionId(session)) === null) {
         throw new SessionInvalidError();

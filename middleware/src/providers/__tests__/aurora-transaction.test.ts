@@ -33,6 +33,13 @@ function cmdsOf(): string[] {
   return send.mock.calls.map((c) => (c[0] as { __cmd: string }).__cmd);
 }
 
+// The wire without row-level security: RLS_ENFORCE defaults on now
+// (providers/db-tenant.ts), so this master-login wire opts out the way that
+// deployment must. The RLS-on wire is pinned in aurora-rls.test.ts.
+const priorRls = process.env['RLS_ENFORCE'];
+beforeAll(() => { process.env['RLS_ENFORCE'] = 'false'; });
+afterAll(() => { if (priorRls === undefined) delete process.env['RLS_ENFORCE']; else process.env['RLS_ENFORCE'] = priorRls; });
+
 beforeEach(() => send.mockReset());
 
 describe('withTransaction', () => {

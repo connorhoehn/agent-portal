@@ -17,7 +17,7 @@
 //
 // ── Config, with the defaults taken (docs/local-backlog-goal-2026-10-28.md) ──
 //   BUDGET_FAIL_CLOSED          unreadable budget state answers 503. Default ON
-//                               when NODE_ENV=production, OFF otherwise (dev:mock).
+//                               everywhere; `false` (or 0/off) proceeds unbraked.
 //   BUDGET_HARD_CAP_FACTOR      a null hard_cap_usd means allocated x this. 1.25;
 //                               `off` = only explicitly set caps apply.
 //   UNBUDGETED_HARD_CAP_USD     the per-period cap on an initiative with no
@@ -44,9 +44,9 @@ function production(): boolean {
   return process.env['NODE_ENV'] === 'production';
 }
 
-/** Whether an unreadable budget read refuses (503 `budget-state`) instead of proceeding unbraked. */
+/** Whether an unreadable budget read refuses (503 `budget-state`) instead of proceeding unbraked. On unless set false. */
 export function budgetFailClosed(): boolean {
-  return envFlag('BUDGET_FAIL_CLOSED') ?? production();
+  return envFlag('BUDGET_FAIL_CLOSED') ?? true;
 }
 
 /** The multiplier a null hard cap takes over its allocation; null = derived caps off. */

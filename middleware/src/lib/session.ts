@@ -4,8 +4,9 @@
 //
 // Authentication is still deliberately lightweight: login is a user picker
 // (POST /api/session/login) against the app_users table, and requests with no
-// cookie fall back to the permissive "demo-user" identity — but only while no
-// real authenticator is configured (see demoFallbackAllowed). mintSession() is
+// cookie fall back to the permissive "demo-user" identity — but only in demo
+// mode (AUTH_DEMO_MODE=true or INSECURE_DEV_MODE) and only while no real
+// authenticator is configured (see demoFallbackAllowed). mintSession() is
 // the single choke point that turns an identity + grants into a session, so a
 // real authenticator (e.g. the Cognito OIDC callback) slots in by resolving
 // its subject to an app_users row and calling the same function.
@@ -21,6 +22,7 @@ import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-sec
 import { config } from '../config.js';
 import { viewerScheme } from './trusted-proxy.js';
 import { dbTenantScopeFor, runWithDbTenant } from '../providers/db-tenant.js';
+import { insecureDevMode } from './insecure-dev-mode.js';
 
 // Tenants, their ordered roles and the Role union come from tenants/manifest.json
 // through the generated copy (DE-29; `node scripts/gen-tenants.mjs`).
@@ -234,28 +236,37 @@ export function mintSession(
 
 let signingKey: string | null = null;
 
+/** Published in this file, so it may sign only under INSECURE_DEV_MODE. */
+const DEV_SIGNING_KEY = 'orgiq-dev-signing-key-change-me';
+
 async function loadSigningKey(): Promise<string> {
   if (signingKey) return signingKey;
   const arn = config.auth.sessionSigningSecretArn;
   if (!arn) {
-    // Dev fallback: deterministic key so restarts don't invalidate cookies.
-    // CDK populates the real secret in production.
-    const devKey = process.env['SESSION_SIGNING_KEY_DEV'] ?? 'orgiq-dev-signing-key-change-me';
-    // Refuse to run on a key anyone can read out of this file. The fallback is
-    // fine in dev and catastrophic anywhere else: the key is the ONLY thing
-    // authenticating the session cookie, so a published constant lets anyone
-    // mint a valid `admin` session for any tenant. Losing the secret ARN in
-    // production must fail loudly at boot, not silently downgrade to a
-    // well-known key while everything appears to work.
-    if (process.env['NODE_ENV'] === 'production' && !process.env['SESSION_SIGNING_KEY_DEV']) {
-      throw new Error(
-        'SESSION_SIGNING_SECRET_ARN is unset in production — refusing to sign sessions ' +
-        'with the built-in development key. Set the secret ARN (CDK provides it) ' +
-        'or, for a deliberate non-AWS deployment, set SESSION_SIGNING_KEY_DEV.',
-      );
+    // An operator-supplied key (a deliberate non-AWS deployment) is a real
+    // secret and is used as given, in any environment.
+    const explicitKey = process.env['SESSION_SIGNING_KEY_DEV'];
+    if (explicitKey) {
+      signingKey = explicitKey;
+      return signingKey;
     }
-    signingKey = devKey;
-    return signingKey;
+    // Dev fallback: deterministic key so restarts don't invalidate cookies,
+    // and only under INSECURE_DEV_MODE. The key is the ONLY thing
+    // authenticating the session cookie, so a published constant lets anyone
+    // mint a valid `admin` session for any tenant. A process that merely lost
+    // its secret ARN, or never set NODE_ENV, must fail loudly instead of
+    // silently downgrading to a well-known key while everything appears to work.
+    if (insecureDevMode()) {
+      signingKey = DEV_SIGNING_KEY;
+      return signingKey;
+    }
+    throw new Error(process.env['NODE_ENV'] === 'production'
+      ? 'SESSION_SIGNING_SECRET_ARN is unset in production — refusing to sign sessions '
+        + 'with the built-in development key. Set the secret ARN (CDK provides it) '
+        + 'or, for a deliberate non-AWS deployment, set SESSION_SIGNING_KEY_DEV.'
+      : 'SESSION_SIGNING_SECRET_ARN is unset and INSECURE_DEV_MODE is not set — refusing to sign '
+        + 'sessions with the built-in development key. Set the secret ARN, or SESSION_SIGNING_KEY_DEV, '
+        + 'or INSECURE_DEV_MODE=true for local development.');
   }
   const sm = new SecretsManagerClient({ region: config.region });
   const out = await sm.send(new GetSecretValueCommand({ SecretId: arn }));
@@ -428,11 +439,12 @@ declare module 'express-serve-static-core' {
 }
 
 /** True when cookie-less requests should get the fully-permissive demo
- * identity. Always on outside production; in production it must be opted into
- * explicitly (AUTH_DEMO_MODE=true), otherwise anonymous callers hold zero
+ * identity: AUTH_DEMO_MODE=true (an explicit opt-in, honoured in production for
+ * a deliberate demo deployment) or INSECURE_DEV_MODE (never in production).
+ * Nothing set means off, whatever NODE_ENV says: anonymous callers hold zero
  * grants and can neither switch tenants/roles nor pass any Cedar check. */
 export function demoModeEnabled(): boolean {
-  return process.env['NODE_ENV'] !== 'production' || process.env['AUTH_DEMO_MODE'] === 'true';
+  return process.env['AUTH_DEMO_MODE'] === 'true' || insecureDevMode();
 }
 
 /** Mirror of lib/oidc.ts cognitoEnabled(), duplicated here so session.ts does

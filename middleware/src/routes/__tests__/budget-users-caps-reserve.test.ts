@@ -368,7 +368,8 @@ describe('DE-36: unreadable budget state fails closed where configured', () => {
     expect((await dispatch(vera(), ITEM_A)).body).toMatchObject({ gate: 'budget-state' });
   });
 
-  it('off (the dev:mock default): a missing allocation table is unbraked, as before', async () => {
+  it('BUDGET_FAIL_CLOSED=0 (the explicit opt-out; unset is on): a missing allocation table is unbraked, as before', async () => {
+    process.env['BUDGET_FAIL_CLOSED'] = '0';
     jest.spyOn(budgetsProvider, 'readBudgetGate').mockResolvedValue(missing);
     expect((await dispatch(vera(), ITEM_A)).status).toBe(202);
   });

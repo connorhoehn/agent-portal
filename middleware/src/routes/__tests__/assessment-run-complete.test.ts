@@ -48,7 +48,7 @@ afterEach(() => {
 });
 
 describe('POST /runs/:runId/complete — sessionless agent callback', () => {
-  it('is reachable with no session cookie when no secret is configured (dev default)', async () => {
+  it('is reachable with no session cookie when no secret is configured (INSECURE_DEV_MODE, the jest setup)', async () => {
     delete process.env['ASSESSMENT_RUN_COMPLETE_SECRET'];
     completeRunMock.mockResolvedValueOnce({
       ok: true,
@@ -76,8 +76,14 @@ describe('POST /runs/:runId/complete — sessionless agent callback', () => {
     expect(res.status).toBe(401);
   });
 
-  it('200s with the matching header', async () => {
+  it('200s with the matching static header only while SERVICE_AUTH_LEGACY_HEADERS=accept (unset refuses it)', async () => {
     process.env['ASSESSMENT_RUN_COMPLETE_SECRET'] = 'topsecret';
+    const unsetFlag = await request(buildApp())
+      .post('/api/assessment/runs/run-1/complete')
+      .set('x-assessment-run-auth', 'topsecret')
+      .send({ status: 'completed' });
+    expect(unsetFlag.status).toBe(401);
+    process.env['SERVICE_AUTH_LEGACY_HEADERS'] = 'accept';
     completeRunMock.mockResolvedValueOnce({
       ok: true,
       run: { id: 'run-1', command: 'score-dimensions', team_id: 'TEAM-002', args: {}, status: 'completed', source: 'agent', started_at: 't0', finished_at: 't1', summary: 'done', error: null, files_written: [] },
@@ -86,6 +92,7 @@ describe('POST /runs/:runId/complete — sessionless agent callback', () => {
       .post('/api/assessment/runs/run-1/complete')
       .set('x-assessment-run-auth', 'topsecret')
       .send({ status: 'completed' });
+    delete process.env['SERVICE_AUTH_LEGACY_HEADERS'];
     expect(res.status).toBe(200);
   });
 

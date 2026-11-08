@@ -16,11 +16,14 @@ export function createHealthHandler(options: {
   profile?: RuntimeProfile;
   mocks: Record<string, boolean>;
   region: string;
+  /** INSECURE_DEV_MODE is on: reported so nobody mistakes a dev process for a deployment. */
+  insecureDevMode?: boolean;
 }) {
   const profile = options.profile ?? 'local-ephemeral';
   return (_req: Request, res: Response): void => {
     const realtime = options.readRealtime();
-    const base = { service: 'orgiq-middleware', profile, mocks: options.mocks, region: options.region, realtime };
+    const base = { service: 'orgiq-middleware', profile, mocks: options.mocks, region: options.region, realtime,
+      ...(options.insecureDevMode ? { insecureDevMode: true } : {}) };
     // A lost router lease is an immediate readiness failure, irrespective of
     // cached database/credential diagnostics or an outstanding refresh.
     if (realtime.ready === false) {

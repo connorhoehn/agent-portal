@@ -271,10 +271,12 @@ describe.each(SIGNED_SPECS)('%s — signed envelope', (_name, spec) => {
     expect((await post(app, '/callback', BODY, { [SERVICE_AUTH_HEADER]: t.headers[SERVICE_AUTH_HEADER]! })).status).toBe(401);
   });
 
-  it('legacy header: accepted by default and with `accept`, refused with `refuse`', async () => {
+  it('legacy header: refused by default, accepted only with `accept` / `allow`, refused with `refuse`', async () => {
     const app = appFor(spec);
-    expect((await post(app, '/callback', BODY, { [spec.header]: SECRET })).status).toBe(200);
+    expect((await post(app, '/callback', BODY, { [spec.header]: SECRET })).status).toBe(401);
     process.env[LEGACY_HEADERS_ENV] = 'accept';
+    expect((await post(app, '/callback', BODY, { [spec.header]: SECRET })).status).toBe(200);
+    process.env[LEGACY_HEADERS_ENV] = ' Allow\n';
     expect((await post(app, '/callback', BODY, { [spec.header]: SECRET })).status).toBe(200);
     process.env[LEGACY_HEADERS_ENV] = ' Refuse\n';
     expect((await post(app, '/callback', BODY, { [spec.header]: SECRET })).status).toBe(401);
@@ -288,10 +290,14 @@ describe.each(SIGNED_SPECS)('%s — signed envelope', (_name, spec) => {
     expect((await post(app, '/callback', BODY, { ...bad.headers, [spec.header]: SECRET })).status).toBe(401);
   });
 
-  it('UNSET secret: still open outside production, still 503 in production', async () => {
+  it('UNSET secret: open only under INSECURE_DEV_MODE, 503 without it and in production', async () => {
     delete process.env[spec.envVar];
     const app = appFor(spec);
     expect((await post(app, '/callback', BODY, {})).status).toBe(200);
+    delete process.env['INSECURE_DEV_MODE'];
+    try {
+      expect((await post(app, '/callback', BODY, {})).status).toBe(503);
+    } finally { process.env['INSECURE_DEV_MODE'] = 'true'; }
     process.env['NODE_ENV'] = 'production';
     const s = sign(spec, { method: 'POST', target: '/callback', body: BODY });
     expect((await post(app, '/callback', BODY, s.headers)).status).toBe(503);

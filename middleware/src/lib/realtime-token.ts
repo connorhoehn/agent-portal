@@ -18,12 +18,13 @@
 // verifier for production (docs/social-calls-deploy-plan.md risk #2).
 //
 // Secret contract mirrors lib/service-auth.ts: read live from process.env,
-// trimmed; unset in production → the route 503s; unset elsewhere → a fixed
-// dev secret with a one-time warning, so the local SKIP_AUTH stack works
+// trimmed; unset → the route 503s, unless INSECURE_DEV_MODE=true, which signs
+// with a fixed dev secret (one-time warning) so the local SKIP_AUTH stack works
 // without setup.
 
 import { SignJWT, jwtVerify } from 'jose';
 import type { Session } from './session.js';
+import { insecureDevMode } from './insecure-dev-mode.js';
 
 export const REALTIME_TOKEN_TTL_S = 10 * 60;
 export const REALTIME_TOKEN_ISSUER = 'orgiq-middleware';
@@ -33,15 +34,15 @@ export const DEV_REALTIME_SECRET = 'orgiq-dev-realtime';
 
 let warnedDevSecret = false;
 
-/** The signing secret, the dev fallback, or null when signing is unavailable
- * (production with REALTIME_JWT_SECRET unset). */
+/** The signing secret, the dev fallback under INSECURE_DEV_MODE, or null when
+ * signing is unavailable (REALTIME_JWT_SECRET unset and no dev flag). */
 export function realtimeSigningSecret(): string | null {
   const configured = (process.env['REALTIME_JWT_SECRET'] ?? '').trim();
   if (configured) return configured;
-  if (process.env['NODE_ENV'] === 'production') return null;
+  if (!insecureDevMode()) return null;
   if (!warnedDevSecret) {
     warnedDevSecret = true;
-    console.warn(`[realtime-token] REALTIME_JWT_SECRET is unset — signing with the dev secret '${DEV_REALTIME_SECRET}'. Never use this outside local development.`);
+    console.warn(`[realtime-token] REALTIME_JWT_SECRET is unset — INSECURE_DEV_MODE signs with the dev secret '${DEV_REALTIME_SECRET}'. Never use this outside local development.`);
   }
   return DEV_REALTIME_SECRET;
 }

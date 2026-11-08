@@ -179,16 +179,21 @@ describe('lab consults', () => {
     expect([401, 403]).toContain(res.status);
   });
 
-  it('service secret locks the callback routes when set', async () => {
+  it('service secret locks the callback routes when set; the static header passes only while SERVICE_AUTH_LEGACY_HEADERS=accept', async () => {
     process.env['LAB_CALLBACK_SECRET'] = 's3cret';
     try {
       const denied = await request(agent()).post('/api/lab/signals').send({ title: 'x' });
       expect(denied.status).toBe(401);
+      const unflagged = await request(agent()).post('/api/lab/signals')
+        .set('x-lab-auth', 's3cret').send({ title: 'x' });
+      expect(unflagged.status).toBe(401);
+      process.env['SERVICE_AUTH_LEGACY_HEADERS'] = 'accept';
       const allowed = await request(agent()).post('/api/lab/signals')
         .set('x-lab-auth', 's3cret').send({ title: 'x' });
       expect(allowed.status).toBe(201);
     } finally {
       delete process.env['LAB_CALLBACK_SECRET'];
+      delete process.env['SERVICE_AUTH_LEGACY_HEADERS'];
     }
   });
 });

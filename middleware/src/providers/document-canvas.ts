@@ -7,6 +7,7 @@ import { currentDocumentSessionEpoch, documentSessionId } from '../lib/document-
 import { documentCanvasSchema } from '../lib/document-canvas-schema.js';
 import { documentSourceRevision, ensureDocumentMapping, markDocumentMappingReady } from './document-mapping.js';
 import { canvasSourceEditable } from './document-editability.js';
+import { insecureDevMode } from '../lib/insecure-dev-mode.js';
 
 interface CanvasSource { id: string; title: string; classification: string; markdown: string; editable?: boolean; source_parent_id?: string | null }
 
@@ -20,7 +21,8 @@ function configuration() {
   for (const raw of [gatewayUrl, internalUrl]) {
     const url = new URL(raw);
     if (!['ws:', 'wss:'].includes(url.protocol) || url.username || url.password) throw new Error('Invalid document gateway configuration');
-    if (process.env['NODE_ENV'] === 'production' && raw === gatewayUrl && url.protocol !== 'wss:') throw new Error('Public document gateway requires TLS');
+    // Plaintext ws:// to the public gateway only under INSECURE_DEV_MODE (the local social stack).
+    if (raw === gatewayUrl && url.protocol !== 'wss:' && !insecureDevMode()) throw new Error('Public document gateway requires TLS');
   }
   return { issuer, privateKey, keyId, gatewayUrl, internalUrl };
 }

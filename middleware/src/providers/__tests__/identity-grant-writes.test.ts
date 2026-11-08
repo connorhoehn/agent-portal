@@ -21,6 +21,13 @@ const sent = (): Sent[] => mockSend.mock.calls.map(([c]) => c as Sent);
 const params = (c: Sent) => Object.fromEntries((c.parameters ?? []).map((p) => [p.name, p.value.stringValue]));
 const rows = (pairs: Array<[string, string]>) => ({ records: pairs.map(([t, r]) => [{ stringValue: t }, { stringValue: r }]) });
 
+// The wire without row-level security: RLS_ENFORCE defaults on now
+// (providers/db-tenant.ts), so the master-login wire pinned here opts out the
+// way that deployment must. The RLS-on wire is pinned in aurora-rls.test.ts.
+const priorRls = process.env['RLS_ENFORCE'];
+beforeAll(() => { process.env['RLS_ENFORCE'] = 'false'; });
+afterAll(() => { if (priorRls === undefined) delete process.env['RLS_ENFORCE']; else process.env['RLS_ENFORCE'] = priorRls; });
+
 beforeEach(() => {
   mockSend.mockReset();
   mockSend.mockImplementation(async (c: Sent) => (c.kind === 'begin' ? { transactionId: 'tx-1' } : { records: [] }));

@@ -6,6 +6,13 @@ jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', mock: { aur
 import { getUser, listUsers } from '../identity.js';
 import { config } from '../../config.js';
 
+// The wire without row-level security: RLS_ENFORCE defaults on now
+// (providers/db-tenant.ts), so this master-login wire opts out the way that
+// deployment must. The RLS-on wire is pinned in aurora-rls.test.ts.
+const priorRls = process.env['RLS_ENFORCE'];
+beforeAll(() => { process.env['RLS_ENFORCE'] = 'false'; });
+afterAll(() => { if (priorRls === undefined) delete process.env['RLS_ENFORCE']; else process.env['RLS_ENFORCE'] = priorRls; });
+
 beforeEach(() => { mockSend.mockReset(); Object.assign(config.mock, { aurora: false }); });
 it('does not revive a deleted seed identity when the database returns no rows', async () => {
   mockSend.mockResolvedValue({ records: [] });

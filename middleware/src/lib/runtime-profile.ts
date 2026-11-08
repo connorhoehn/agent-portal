@@ -14,6 +14,11 @@
 // The profile is explicit; it is never inferred from NODE_ENV. Capability
 // declarations describe guarantees the adapters were tested for. They never
 // probe availability and never replace authorization.
+//
+// Both profiles also carry the fail-closed start-up preconditions
+// (`securityPreconditions`, docs/fail-open-audit.md §2): without
+// INSECURE_DEV_MODE=true the process must hold a session signing key and a
+// policy store, or it refuses to start and names what is missing.
 
 import {
   evaluateCapabilities,
@@ -21,6 +26,7 @@ import {
   type CapabilityRequirement,
 } from '@connorhoehn/service-runtime/capabilities';
 import type { HealthProbeSnapshot } from './health-probe.js';
+import { insecureDevMode } from './insecure-dev-mode.js';
 
 export type RuntimeProfile = 'local-ephemeral' | 'durable';
 
@@ -30,6 +36,8 @@ export interface ProfileInputs {
   mock: Record<string, boolean>;
   /** True when pipeline queues ride the in-process memory queue. */
   inProcessQueue: boolean;
+  /** Where the security preconditions are read from; process.env by default. */
+  env?: NodeJS.ProcessEnv;
 }
 
 export interface ProfileConfig {
@@ -45,6 +53,7 @@ export function resolveRuntimeProfile(inputs: ProfileInputs): ProfileConfig {
   let profile: RuntimeProfile = 'local-ephemeral';
   if (raw === 'durable' || raw === 'local-ephemeral') profile = raw;
   else configErrors.push(`ORGIQ_RUNTIME_PROFILE must be "local-ephemeral" or "durable", got "${raw}"`);
+  configErrors.push(...securityPreconditions(inputs.env));
 
   const providers: CapabilityProvider[] = [
     // The Data API cluster is the job store; the aurora mock is a memory fixture.
@@ -58,6 +67,27 @@ export function resolveRuntimeProfile(inputs: ProfileInputs): ProfileConfig {
     { feature: 'pipeline-queues', provider: 'message-queue', capabilities: ['durable-delivery'] },
   ] : [];
   return { profile, providers, requirements, configErrors };
+}
+
+/**
+ * What a process must hold unless INSECURE_DEV_MODE=true. Each of these is
+ * otherwise a refusal at request time (every sign-in throws, every Cedar check
+ * denies), so a bare process would be up and useless; refusing before listen()
+ * says why instead. Presence only: the values are never read here.
+ */
+export function securityPreconditions(env: NodeJS.ProcessEnv = process.env): string[] {
+  if (insecureDevMode(env)) return [];
+  const set = (key: string): boolean => (env[key] ?? '').trim() !== '';
+  const problems: string[] = [];
+  if (!set('SESSION_SIGNING_SECRET_ARN') && !set('SESSION_SIGNING_KEY_DEV')) {
+    problems.push('SESSION_SIGNING_SECRET_ARN unset and INSECURE_DEV_MODE is not set: sessions cannot be signed '
+      + '(set the ARN, or SESSION_SIGNING_KEY_DEV for a deliberate non-AWS deployment, or INSECURE_DEV_MODE=true locally)');
+  }
+  if (!set('POLICY_STORE_ID')) {
+    problems.push('POLICY_STORE_ID unset and INSECURE_DEV_MODE is not set: every authorization check would deny '
+      + '(set it, or INSECURE_DEV_MODE=true to decide from the Cedar seeds locally)');
+  }
+  return problems;
 }
 
 const HINTS: Record<string, string> = {

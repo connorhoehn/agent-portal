@@ -88,11 +88,12 @@ const session: Session = { sub: 'u-test', name: 'Test', role: 'member', tenant: 
 
 describe('start-up: lib/runtime-profile.ts', () => {
   it('a bare process starts in local-ephemeral; the profile never reads NODE_ENV or a secret', () => {
+    process.env['INSECURE_DEV_MODE'] = 'true';
     const profile = resolveRuntimeProfile({ mock: live, inProcessQueue: false });
     expect(profile.profile).toBe('local-ephemeral');
     expect(validateRuntimeProfile(profile)).toEqual([]);
   });
-  test.failing('a bare process (no INSECURE_DEV_MODE, nothing configured) refuses to start', () => {
+  it('a bare process (no INSECURE_DEV_MODE, nothing configured) refuses to start', () => {
     // The convention: every open default below requires INSECURE_DEV_MODE=true,
     // and the static check names the one that is missing before listen().
     expect(validateRuntimeProfile(resolveRuntimeProfile({ mock: live, inProcessQueue: false }))).not.toEqual([]);
@@ -108,7 +109,7 @@ describe('session signing key (session.ts loadSigningKey)', () => {
     production();
     await expect(signSession(session)).rejects.toThrow(/SESSION_SIGNING_SECRET_ARN is unset in production/);
   });
-  test.failing('NODE_ENV unset with no ARN refuses to sign instead of using the published dev key', async () => {
+  it('NODE_ENV unset with no ARN refuses to sign instead of using the published dev key', async () => {
     await expect(signSession(session)).rejects.toThrow();
   });
 });
@@ -121,10 +122,10 @@ describe('anonymous demo identity (session.ts demoModeEnabled / demoFallbackAllo
     process.env['AUTH_DEMO_MODE'] = 'true';
     expect(demoModeEnabled()).toBe(true);
   });
-  test.failing('NODE_ENV unset: demo mode is off until AUTH_DEMO_MODE (or INSECURE_DEV_MODE) says otherwise', () => {
+  it('NODE_ENV unset: demo mode is off until AUTH_DEMO_MODE (or INSECURE_DEV_MODE) says otherwise', () => {
     expect(demoModeEnabled()).toBe(false);
   });
-  test.failing('NODE_ENV unset: a cookie-less request gets no session (call-access, live-principal and document-session inherit this)', async () => {
+  it('NODE_ENV unset: a cookie-less request gets no session (call-access, live-principal and document-session inherit this)', async () => {
     const req = { cookies: {}, headers: {} } as unknown as Request;
     await new Promise<void>((resolve) => { void sessionMiddleware()(req, {} as Response, () => resolve()); });
     expect(req.session).toBeUndefined();
@@ -139,7 +140,7 @@ describe('no POLICY_STORE_ID (authz.ts evaluate)', () => {
     production();
     expect(await isAllowed(admin, 'ViewAgents')).toBe(false);
   });
-  test.failing('NODE_ENV unset denies too, instead of deciding from the seed policies', async () => {
+  it('NODE_ENV unset denies too, instead of deciding from the seed policies', async () => {
     expect(await isAllowed(admin, 'ViewAgents')).toBe(false);
   });
 });
@@ -160,7 +161,7 @@ describe.each(CALLBACKS.map((spec) => [spec.envVar, spec] as const))('requireSer
     production();
     expect((await request(guarded(requireServiceAuth(spec))).post('/cb')).status).toBe(503);
   });
-  test.failing('NODE_ENV unset refuses the write (401/503) instead of letting it through', async () => {
+  it('NODE_ENV unset refuses the write (401/503) instead of letting it through', async () => {
     expect((await request(guarded(requireServiceAuth(spec))).post('/cb')).status).toBeGreaterThanOrEqual(401);
   });
 });
@@ -170,10 +171,10 @@ describe('serviceAuthOr (dual-caller routes) and the transition flags', () => {
     const deny: express.RequestHandler = (_req, res) => { res.status(401).json({ error: 'Unauthenticated' }); };
     expect((await request(guarded(serviceAuthOr(APPROVALS_SERVICE_AUTH, deny))).post('/cb')).status).toBe(401);
   });
-  test.failing('SERVICE_AUTH_LEGACY_HEADERS unset refuses the static bearer header', () => {
+  it('SERVICE_AUTH_LEGACY_HEADERS unset refuses the static bearer header', () => {
     expect(legacyHeadersAccepted()).toBe(false);
   });
-  test.failing('SERVICE_AUTH_LEGACY_BODY_ONLY unset refuses the body-only envelope', () => {
+  it('SERVICE_AUTH_LEGACY_BODY_ONLY unset refuses the body-only envelope', () => {
     expect(legacyBodyOnlyAccepted()).toBe(false);
   });
 });
@@ -185,7 +186,7 @@ describe('realtime token secret (realtime-token.ts realtimeSigningSecret)', () =
     production();
     expect(realtimeSigningSecret()).toBeNull();
   });
-  test.failing('NODE_ENV unset has no secret either, instead of the published dev secret', () => {
+  it('NODE_ENV unset has no secret either, instead of the published dev secret', () => {
     expect(realtimeSigningSecret()).not.toBe(DEV_REALTIME_SECRET);
   });
 });
@@ -232,7 +233,7 @@ describe('E2E fixture resets (test-fixtures.ts)', () => {
     expect((await request(app()).post('/fx/reset-approvals')).status).toBe(403);
     expect(auroraExec).not.toHaveBeenCalled();
   });
-  test.failing('NODE_ENV unset answers 403 too, instead of running the reset', async () => {
+  it('NODE_ENV unset answers 403 too, instead of running the reset', async () => {
     expect((await request(app()).post('/fx/reset-approvals')).status).toBe(403);
   });
 });
@@ -246,7 +247,7 @@ describe('browser origin allowlist (browser-origin.ts isAllowedBrowserOrigin)', 
     production();
     expect(isAllowedBrowserOrigin('http://localhost:5183', 'https://api.example')).toBe(false);
   });
-  test.failing('NODE_ENV unset refuses a localhost origin too, unless INSECURE_DEV_MODE opts in', () => {
+  it('NODE_ENV unset refuses a localhost origin too, unless INSECURE_DEV_MODE opts in', () => {
     expect(isAllowedBrowserOrigin('http://localhost:5183', 'https://api.example')).toBe(false);
   });
   it('TRUST_PROXY_HOPS unset ignores forwarding headers (closed)', () => {
@@ -263,7 +264,7 @@ describe('BUDGET_FAIL_CLOSED (budget-decisions.ts budgetFailClosed)', () => {
     process.env['BUDGET_FAIL_CLOSED'] = 'false';
     expect(budgetFailClosed()).toBe(false);
   });
-  test.failing('NODE_ENV unset refuses too, instead of spending unbraked', () => {
+  it('NODE_ENV unset refuses too, instead of spending unbraked', () => {
     expect(budgetFailClosed()).toBe(true);
   });
 });
@@ -277,7 +278,7 @@ describe('RLS_ENFORCE (db-tenant.ts rlsEnforced)', () => {
     process.env['RLS_ENFORCE'] = 'false';
     expect(rlsEnforced()).toBe(false);
   });
-  test.failing('unset with no AURORA_SECRET_ARN enforces (the master-login fallback should have to ask for it)', () => {
+  it('unset with no AURORA_SECRET_ARN enforces (the master-login fallback should have to ask for it)', () => {
     expect(rlsEnforced()).toBe(true);
   });
 });

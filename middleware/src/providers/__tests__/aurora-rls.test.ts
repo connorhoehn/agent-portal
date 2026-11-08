@@ -45,13 +45,13 @@ beforeEach(() => {
 });
 
 describe('RLS_ENFORCE', () => {
-  it('defaults on for the middleware login and off under the master-secret fallback', () => {
+  it('defaults on for every login, the master-secret fallback included (it opts out with RLS_ENFORCE=false)', () => {
     expect(usesApplicationRole(APP_SECRET)).toBe(true);
     expect(usesApplicationRole(MASTER_SECRET)).toBe(false);
     expect(usesApplicationRole('arn:aws:secretsmanager:us-east-1:1:secret:orgiq-aurora-readonly-credentials-AbC123')).toBe(false);
     expect(rlsEnforced()).toBe(true);
     mockAurora.secretArn = MASTER_SECRET;
-    expect(rlsEnforced()).toBe(false);
+    expect(rlsEnforced()).toBe(true);
   });
 
   it('an explicit value wins either way', () => {

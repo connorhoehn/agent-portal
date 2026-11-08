@@ -25,6 +25,7 @@ import {
   APPROVALS_SERVICE_AUTH,
   HARNESS_TRACE_SERVICE_AUTH,
   ASSESSMENT_RUN_COMPLETE_SERVICE_AUTH,
+  LEGACY_HEADERS_ENV,
   requireServiceAuth,
   type ServiceAuthSpec,
 } from '../service-auth.js';
@@ -74,10 +75,18 @@ describe('the machine-callback specs are the canonical list', () => {
 });
 
 describe.each(SPECS)('%s — the guard matrix', (_name, spec) => {
-  it('UNSET: open to every caller, header or not', async () => {
+  // The static-header compare is the subject here, so the transition flag says
+  // `accept`; unset refuses the header (service-envelope-contract.test.ts).
+  beforeEach(() => { process.env[LEGACY_HEADERS_ENV] = 'accept'; });
+  afterEach(() => { delete process.env[LEGACY_HEADERS_ENV]; process.env['INSECURE_DEV_MODE'] = 'true'; });
+
+  it('UNSET: open to every caller under INSECURE_DEV_MODE, header or not; 503 without the flag', async () => {
     const app = appFor(spec);
     expect((await request(app).post('/callback')).status).toBe(200);
     expect((await request(app).post('/callback').set(spec.header, 'anything')).status).toBe(200);
+    delete process.env['INSECURE_DEV_MODE'];
+    expect((await request(app).post('/callback')).status).toBe(503);
+    expect((await request(app).post('/callback').set(spec.header, 'anything')).status).toBe(503);
   });
 
   it('SET: no header 401s, the exact value passes, a wrong value 401s', async () => {

@@ -35,6 +35,16 @@ jest.mock('../../providers/budgets.js', () => {
   };
 });
 jest.mock('../../providers/user-budgets.js', () => ({ readUserBudgetGate: jest.fn(async () => ({ kind: 'none' })) }));
+// The sprint-envelope read (loadEnvelopeGate → identity) is not mocked and
+// cannot be served by the thin config mock; unset, BUDGET_FAIL_CLOSED now
+// refuses on it (lib/budget-decisions.ts). The brakes under test here are the
+// allocation and floor, so the suite opts out of the unreadable-state refusal.
+const priorBudgetFlag = process.env['BUDGET_FAIL_CLOSED'];
+beforeAll(() => { process.env['BUDGET_FAIL_CLOSED'] = '0'; });
+afterAll(() => {
+  if (priorBudgetFlag === undefined) delete process.env['BUDGET_FAIL_CLOSED'];
+  else process.env['BUDGET_FAIL_CLOSED'] = priorBudgetFlag;
+});
 jest.mock('../../providers/agent-jobs.js', () => ({
   ...jest.requireActual('../../providers/agent-jobs.js'),
   enqueueJob: jest.fn(),

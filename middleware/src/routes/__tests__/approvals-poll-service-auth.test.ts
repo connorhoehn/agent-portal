@@ -89,7 +89,12 @@ async function fileApproval(app: express.Express, extraHeaders: Record<string, s
 }
 
 const ORIGINAL = process.env['APPROVALS_REQUEST_SECRET'];
+// The fleet credential here is the static x-approvals-auth header, which the
+// transition flag must accept explicitly (unset refuses it; the signed
+// envelope is pinned in lib/__tests__/service-envelope-contract.test.ts).
+beforeEach(() => { process.env['SERVICE_AUTH_LEGACY_HEADERS'] = 'accept'; });
 afterEach(() => {
+  delete process.env['SERVICE_AUTH_LEGACY_HEADERS'];
   if (ORIGINAL === undefined) delete process.env['APPROVALS_REQUEST_SECRET'];
   else process.env['APPROVALS_REQUEST_SECRET'] = ORIGINAL;
 });

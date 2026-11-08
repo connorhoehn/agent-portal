@@ -1,10 +1,9 @@
 // E2E test fixtures — /api/observability/test-fixtures (routes/test-fixtures.ts).
 //
-// These two routes are mounted UNGATED (the Playwright specs run before any
-// session exists) and they WRITE to the observability schema. The only thing
-// standing between them and a production database is the NODE_ENV check, so
-// that check is what this file is mostly about: both routes must refuse in
-// production, and must refuse BEFORE issuing any statement.
+// These two routes WRITE to the observability schema, so the guard is what
+// this file is mostly about: both routes refuse in production and in any
+// process without INSECURE_DEV_MODE=true, and refuse BEFORE issuing any
+// statement.
 //
 // Also pinned:
 //   * the reset really resets — decision audit rows are cleared and both
@@ -55,13 +54,23 @@ describe('the production guard', () => {
     expect(execMock).not.toHaveBeenCalled();
   });
 
-  it('allows them in development and test', async () => {
+  it('allows them in development and test under INSECURE_DEV_MODE, and refuses them without it', async () => {
     execMock.mockResolvedValue([]);
     for (const env of ['development', 'test']) {
       process.env['NODE_ENV'] = env;
       const res = await request(buildApp()).post('/api/observability/test-fixtures/reset-approvals').send({});
       expect(res.status).toBe(200);
     }
+    execMock.mockClear();
+    delete process.env['INSECURE_DEV_MODE'];
+    try {
+      for (const path of ['/api/observability/test-fixtures/reset-approvals', '/api/observability/test-fixtures/refresh-seed-timestamps']) {
+        const res = await request(buildApp()).post(path).send({});
+        expect(res.status).toBe(403);
+        expect(res.body).toEqual({ error: 'forbidden unless INSECURE_DEV_MODE=true' });
+      }
+      expect(execMock).not.toHaveBeenCalled();
+    } finally { process.env['INSECURE_DEV_MODE'] = 'true'; }
   });
 });
 

@@ -7,7 +7,7 @@
 // deliberately *optional* so the middleware and the fleet can deploy in either
 // order:
 //
-//   env var unset  → open in development; unavailable in production
+//   env var unset  → 503, unless INSECURE_DEV_MODE=true (then open: the laptop case)
 //   env var set    → the header must match, byte for byte
 //
 //   route                                          env var                        header
@@ -20,8 +20,8 @@
 // TWO GUARD SHAPES, and the difference matters:
 //
 //   requireServiceAuth()  — for a WRITE-ONLY machine endpoint that no human
-//     surface reads. Open in development when the secret is unset. This is the existing
-//     precedent (approvals /request, harness /trace, assessment /complete).
+//     surface reads. Open under INSECURE_DEV_MODE when the secret is unset,
+//     503 otherwise (approvals /request, harness /trace, assessment /complete).
 //
 //   serviceAuthOr(...human) — for an endpoint that BOTH a machine and a human
 //     use. A valid service credential passes; ANYTHING ELSE falls through to
@@ -71,16 +71,16 @@
 // refused by service-runtime itself; MAC compares are timing-safe there, and
 // the legacy compare below stays timing-safe here.
 //
-// THE TRANSITION FLAG. Deployed agent images send only the static header, so
-// the middleware accepts EITHER a valid envelope OR the legacy header while
-// `SERVICE_AUTH_LEGACY_HEADERS` is unset or `accept` (the default). Set it to
-// `refuse` once every signer is on the envelope; the agents read the same
-// variable and stop sending the static header when it says `refuse`. An
-// envelope that is present always decides on its own — a bad envelope is not
-// rescued by a legacy header riding alongside it. Specs with no `signed`
-// contract (harness runner, document policy, mock control) are unchanged and
-// ignore the flag. Unset-secret behaviour is untouched: open outside
-// production, 503 in production, and `serviceAuthOr` never opens.
+// THE TRANSITION FLAG. The middleware accepts EITHER a valid envelope OR the
+// legacy header only while `SERVICE_AUTH_LEGACY_HEADERS` says `accept` (or
+// `allow`). Unset refuses (docs/fail-open-audit.md §2: transition flags default
+// to refuse); the ECS task sets `refuse` and every signer is on the envelope.
+// The agents read the same variable and stop sending the static header when it
+// says `refuse`. An envelope that is present always decides on its own — a bad
+// envelope is not rescued by a legacy header riding alongside it. Specs with no
+// `signed` contract (harness runner, document policy, mock control) are
+// unchanged and ignore the flag. An unset secret answers 503 unless
+// INSECURE_DEV_MODE=true, and `serviceAuthOr` never opens.
 //
 // REPLAY SCOPE. The nonce cache is per process. The BFF runs as one replica
 // today (the single-gateway safeguard pins it); with more replicas a captured
@@ -93,6 +93,7 @@ import { timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import { SERVICE_AUTH_HEADER, verifyServiceRequest } from '@connorhoehn/service-runtime';
+import { insecureDevMode } from './insecure-dev-mode.js';
 
 export interface SignedServiceAuth {
   /** Audience prefix the signer binds; the nonce is appended as `#<nonce>`. */
@@ -196,9 +197,9 @@ export function serviceAuthConfigured(spec: ServiceAuthSpec): boolean {
   return serviceSecret(spec) !== '';
 }
 
-/** True while the transition flag still accepts the static header (the default). */
+/** True only while the transition flag explicitly accepts the static header (`accept` / `allow`). */
 export function legacyHeadersAccepted(): boolean {
-  return (process.env[LEGACY_HEADERS_ENV] ?? '').trim().toLowerCase() !== 'refuse';
+  return ['accept', 'allow'].includes((process.env[LEGACY_HEADERS_ENV] ?? '').trim().toLowerCase());
 }
 
 type RawBodyRequest = IncomingMessage & { rawBody?: Buffer };
@@ -310,13 +311,14 @@ function noteLegacyAccepted(spec: ServiceAuthSpec): void {
   if (legacyNoted.has(spec.envVar)) return;
   legacyNoted.add(spec.envVar);
   console.warn(`[service-auth] accepted the static ${spec.header} header (${spec.envVar}); `
-    + `this caller does not sign yet — keep ${LEGACY_HEADERS_ENV} unset/accept until it does (lane C4)`);
+    + `this caller does not sign yet — ${LEGACY_HEADERS_ENV}=accept is what lets it through until it does (lane C4)`);
 }
 
 /**
- * Write-only machine endpoint: open in development when unconfigured,
- * unavailable in production, constant-time compare when configured.
- * 401 on mismatch.
+ * Write-only machine endpoint: constant-time compare when configured, 401 on
+ * mismatch. Unconfigured answers 503 in every environment (an unset NODE_ENV
+ * included) except INSECURE_DEV_MODE, where it passes so a laptop needs no
+ * secrets.
  */
 export function requireServiceAuth(
   spec: ServiceAuthSpec,
@@ -325,11 +327,8 @@ export function requireServiceAuth(
 ): RequestHandler {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!serviceAuthConfigured(spec)) {
-      if (process.env['NODE_ENV'] === 'production') {
-        res.status(503).json({ error: 'service authentication is not configured' });
-        return;
-      }
-      next();
+      if (insecureDevMode()) { next(); return; }
+      res.status(503).json({ error: 'service authentication is not configured' });
       return;
     }
     if (hasServiceAuth(req, spec)) { next(); return; }
