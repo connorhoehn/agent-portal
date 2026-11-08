@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-08T13:06:40.772Z",
-  "serverHandlerSha": "5b02b4b82334c2692b9151813f732703177b95032b07cbcbb5e07d98e5ddd327",
+  "capturedAt": "2026-11-08T13:43:51.436Z",
+  "serverHandlerSha": "68a8e0ce320ec2f12b753807c0b1ffb43e41d306dac5b85f48c6958a2cf9fd31",
   "baseUrl": "http://127.0.0.1:3997",
   "personas": [
     "orgiq/admin",
@@ -2960,6 +2960,16 @@
         ]
       }
     },
+    "GET /api/devbox/allowlist": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "prefixes": "array",
+        "prefixes[]": "string"
+      },
+      "values": {}
+    },
     "GET /api/devbox/boxes": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -2995,10 +3005,8 @@
       },
       "values": {
         "boxes[].status": [
-          "error",
           "idle",
           "running",
-          "stopped",
           "waiting"
         ]
       }
@@ -5274,12 +5282,35 @@
         "nodes[].presence.lastSeenAt": "string",
         "nodes[].presence.nodeId": "string",
         "nodes[].presence.sessions": "array",
+        "nodes[].presence.sessions[]": "object",
+        "nodes[].presence.sessions[].branch": "string",
+        "nodes[].presence.sessions[].contextUsed": "number",
+        "nodes[].presence.sessions[].harness": "string",
+        "nodes[].presence.sessions[].intent": "string",
+        "nodes[].presence.sessions[].lastSeenAt": "string",
+        "nodes[].presence.sessions[].memory": "object",
+        "nodes[].presence.sessions[].memory.lastPushAt": "number",
+        "nodes[].presence.sessions[].memory.mode": "string",
+        "nodes[].presence.sessions[].memory.pullCursorAgeS": "number",
+        "nodes[].presence.sessions[].model": "string",
+        "nodes[].presence.sessions[].modelProvider": "string",
+        "nodes[].presence.sessions[].projectId": "string",
+        "nodes[].presence.sessions[].repo": "string",
+        "nodes[].presence.sessions[].sessionId": "string",
+        "nodes[].presence.sessions[].startedAt": "number",
+        "nodes[].presence.sessions[].touching": "array",
+        "nodes[].presence.sessions[].touching[]": "string",
+        "nodes[].presence.sessions[].worktree": "string",
         "nodes[].presence.status": "string",
         "nodes[].revokedAt": "null"
       },
       "values": {
+        "nodes[].presence.sessions[].memory.mode": [
+          "synced"
+        ],
         "nodes[].presence.status": [
-          "offline"
+          "offline",
+          "stale"
         ]
       }
     },
@@ -5329,7 +5360,8 @@
       "values": {
         "nodes[].presence.status": [
           "connected",
-          "offline"
+          "offline",
+          "stale"
         ]
       }
     },
@@ -5430,9 +5462,9 @@
         "$": "object",
         "agentId": "string",
         "approvalId": "string",
-        "decidedAt": "string",
-        "decidedBy": "string",
-        "decidedNote": "string",
+        "decidedAt": "null",
+        "decidedBy": "null",
+        "decidedNote": "null",
         "payload": "object",
         "payload.action": "string",
         "payload.document": "string",
@@ -5447,7 +5479,7 @@
           "index"
         ],
         "status": [
-          "EXPIRED"
+          "PENDING"
         ]
       }
     },
@@ -5460,26 +5492,9 @@
       "shape": {
         "$": "object",
         "events": "array",
-        "events[]": "object|object(dictionary)",
-        "events[].action": "string",
-        "events[].decision": "string",
-        "events[].path": "string",
-        "events[].reason": "string",
-        "events[].role": "string",
-        "events[].sub": "string",
-        "events[].ts": "string"
+        "events[]": "object(dictionary)"
       },
-      "values": {
-        "events[].action": [
-          "TenantScope"
-        ],
-        "events[].decision": [
-          "DENY"
-        ],
-        "events[].role": [
-          "-"
-        ]
-      }
+      "values": {}
     },
     "GET /api/observability/authz/stream": {
       "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); server-sent event stream (anonymous)"
@@ -5949,7 +5964,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "null|number",
+        "points[].judgeP50": "number",
         "windowHours": "number"
       },
       "values": {}
@@ -6383,15 +6398,7 @@
       "persona": "orgiq/admin",
       "status": 200,
       "shape": {
-        "$": "object",
-        "decidedInWindow": "number",
-        "expiredInWindow": "number",
-        "oldestPendingAgeSeconds": "null",
-        "p50DecisionSeconds": "number",
-        "p99DecisionSeconds": "number",
-        "pendingCount": "number",
-        "slaCompliantFraction": "number",
-        "slaThresholdSeconds": "number"
+        "$": "object(dictionary)"
       },
       "values": {}
     },
@@ -10509,27 +10516,9 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "runs": "array",
-        "runs[]": "object",
-        "runs[].botId": "null",
-        "runs[].durationMs": "number",
-        "runs[].error": "null",
-        "runs[].findings": "number",
-        "runs[].finishedAt": "string",
-        "runs[].id": "string",
-        "runs[].startedAt": "string",
-        "runs[].status": "string",
-        "runs[].sweep": "string",
-        "runs[].tenant": "string"
+        "runs": "array"
       },
-      "values": {
-        "runs[].status": [
-          "ok"
-        ],
-        "runs[].tenant": [
-          "orgiq"
-        ]
-      }
+      "values": {}
     },
     "GET /health": {
       "persona": "orgiq/admin",
@@ -10608,7 +10597,6 @@
       "values": [
         "ANONYMIZE",
         "BLOCK",
-        "TenantScope",
         "commented on",
         "delete",
         "index",
@@ -10699,7 +10687,6 @@
     "decision": {
       "open": false,
       "values": [
-        "DENY",
         "approve",
         "keep"
       ]
@@ -10808,7 +10795,8 @@
         "browser",
         "browser_spa",
         "fetch",
-        "sim"
+        "sim",
+        "synced"
       ]
     },
     "outcome": {
@@ -10827,7 +10815,6 @@
     "role": {
       "open": false,
       "values": [
-        "-",
         "access-admin",
         "admin",
         "assessor",
@@ -10980,7 +10967,6 @@
         "running",
         "staged",
         "stale",
-        "stopped",
         "submitted",
         "superseded",
         "unproven",

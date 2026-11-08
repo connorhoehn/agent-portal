@@ -1638,47 +1638,52 @@
     {
       "method": "DELETE",
       "path": "/api/devbox/:sessionId",
-      "source": "src/routes/devbox.ts:1153"
+      "source": "src/routes/devbox.ts:1168"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/command",
-      "source": "src/routes/devbox.ts:906"
+      "source": "src/routes/devbox.ts:921"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/shell-url",
-      "source": "src/routes/devbox.ts:1082"
+      "source": "src/routes/devbox.ts:1097"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/task",
-      "source": "src/routes/devbox.ts:872"
+      "source": "src/routes/devbox.ts:887"
+    },
+    {
+      "method": "GET",
+      "path": "/api/devbox/allowlist",
+      "source": "src/routes/devbox.ts:448"
     },
     {
       "method": "GET",
       "path": "/api/devbox/boxes",
-      "source": "src/routes/devbox.ts:448"
+      "source": "src/routes/devbox.ts:463"
     },
     {
       "method": "POST",
       "path": "/api/devbox/boxes",
-      "source": "src/routes/devbox.ts:531"
+      "source": "src/routes/devbox.ts:546"
     },
     {
       "method": "DELETE",
       "path": "/api/devbox/boxes/:boxId",
-      "source": "src/routes/devbox.ts:577"
+      "source": "src/routes/devbox.ts:592"
     },
     {
       "method": "PATCH",
       "path": "/api/devbox/boxes/:boxId",
-      "source": "src/routes/devbox.ts:564"
+      "source": "src/routes/devbox.ts:579"
     },
     {
       "method": "GET",
       "path": "/api/devbox/boxes/:boxId/tail",
-      "source": "src/routes/devbox.ts:638"
+      "source": "src/routes/devbox.ts:653"
     },
     {
       "method": "GET",
@@ -1698,12 +1703,12 @@
     {
       "method": "POST",
       "path": "/api/devbox/sessions",
-      "source": "src/routes/devbox.ts:437"
+      "source": "src/routes/devbox.ts:452"
     },
     {
       "method": "GET",
       "path": "/api/devbox/status",
-      "source": "src/routes/devbox.ts:433"
+      "source": "src/routes/devbox.ts:441"
     },
     {
       "method": "GET",
@@ -3548,62 +3553,62 @@
     {
       "method": "GET",
       "path": "/api/session/capabilities",
-      "source": "src/routes/session.ts:171"
+      "source": "src/routes/session.ts:176"
     },
     {
       "method": "POST",
       "path": "/api/session/login",
-      "source": "src/routes/session.ts:249"
+      "source": "src/routes/session.ts:254"
     },
     {
       "method": "POST",
       "path": "/api/session/logout",
-      "source": "src/routes/session.ts:404"
+      "source": "src/routes/session.ts:409"
     },
     {
       "method": "POST",
       "path": "/api/session/masquerade",
-      "source": "src/routes/session.ts:339"
+      "source": "src/routes/session.ts:344"
     },
     {
       "method": "POST",
       "path": "/api/session/masquerade/stop",
-      "source": "src/routes/session.ts:387"
+      "source": "src/routes/session.ts:392"
     },
     {
       "method": "GET",
       "path": "/api/session/me",
-      "source": "src/routes/session.ts:110"
+      "source": "src/routes/session.ts:115"
     },
     {
       "method": "GET",
       "path": "/api/session/person",
-      "source": "src/routes/session.ts:141"
+      "source": "src/routes/session.ts:146"
     },
     {
       "method": "GET",
       "path": "/api/session/realtime-token",
-      "source": "src/routes/session.ts:200"
+      "source": "src/routes/session.ts:205"
     },
     {
       "method": "POST",
       "path": "/api/session/revoke-others",
-      "source": "src/routes/session.ts:324"
+      "source": "src/routes/session.ts:329"
     },
     {
       "method": "POST",
       "path": "/api/session/role",
-      "source": "src/routes/session.ts:266"
+      "source": "src/routes/session.ts:271"
     },
     {
       "method": "POST",
       "path": "/api/session/tenant",
-      "source": "src/routes/session.ts:289"
+      "source": "src/routes/session.ts:294"
     },
     {
       "method": "GET",
       "path": "/api/session/users",
-      "source": "src/routes/session.ts:236"
+      "source": "src/routes/session.ts:241"
     },
     {
       "method": "GET",
@@ -4023,17 +4028,17 @@
     {
       "method": "POST",
       "path": "/api/voice/sessions",
-      "source": "src/routes/voice.ts:80"
+      "source": "src/routes/voice.ts:88"
     },
     {
       "method": "POST",
       "path": "/api/voice/sessions/:id/close",
-      "source": "src/routes/voice.ts:242"
+      "source": "src/routes/voice.ts:265"
     },
     {
       "method": "POST",
       "path": "/api/voice/sessions/:id/events",
-      "source": "src/routes/voice.ts:210"
+      "source": "src/routes/voice.ts:233"
     },
     {
       "method": "GET",
