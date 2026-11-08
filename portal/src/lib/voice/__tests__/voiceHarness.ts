@@ -34,7 +34,7 @@ export async function loadPalette(): Promise<Palette & { pages: Array<{ label: s
   mkdirSync(out, { recursive: true });
   await build({
     stdin: { contents: "export { PAGES, isPageVisible } from './src/components/shell/portalCommands.ts';", resolveDir: portal, loader: 'ts' },
-    bundle: true, platform: 'node', format: 'esm', packages: 'external', logLevel: 'error', outfile: `${out}/palette.mjs`,
+    bundle: true, platform: 'node', format: 'esm', packages: 'external', logLevel: 'error', outfile: `${out}/palette-${process.pid}.mjs`,
     plugins: [{
       name: 'palette-stubs',
       setup(b) {
@@ -49,7 +49,10 @@ export async function loadPalette(): Promise<Palette & { pages: Array<{ label: s
       },
     }],
   });
-  const m = await import(`${out}/palette.mjs`) as { PAGES: Palette['pages']; isPageVisible: Palette['visible'] };
+  // One bundle per process: the suite runs test files in parallel, and a shared file was read half-written.
+  const m = await import(`${out}/palette-${process.pid}.mjs`) as { PAGES: Palette['pages']; isPageVisible: Palette['visible'] };
+  const { rmSync } = await import('node:fs');
+  rmSync(`${out}/palette-${process.pid}.mjs`, { force: true });
   return { pages: [...m.PAGES], visible: m.isPageVisible };
 }
 
