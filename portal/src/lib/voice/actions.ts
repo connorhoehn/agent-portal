@@ -1,6 +1,6 @@
 // The voice navigator's machine and people tools (docs/voice-navigator-spec.md
-// §4, §6, §7; package P4; catalogue v2 V2-8): computer, send_chat_message,
-// start_call, set_status. Each goes through the call the page's own
+// §4, §6, §7; package P4; catalogue v2 V2-8, V2-12): computer, message,
+// call, set_status. Each goes through the call the page's own
 // control makes, read from the ToolContext the dock fills from the providers
 // the shell already mounts (ComputeHost's useCompute, EmbeddedSocial's
 // presence, the composer's useChat path): never a second socket, never a new
@@ -44,13 +44,13 @@
 //                     /api/devbox/:sid/command, allowlist and metacharacter
 //                     refusal); the stream lands in the compute dock's output
 //                     tab (openOutputTab) and the first lines go back
-//   send_chat_message the recipient resolved by GET …/resolve (P6), a read
+//   message           the recipient resolved by GET …/resolve (P6), a read
 //                     only; several matches go back to the model as candidates
 //                     with no card; a person's DM is opened (POST /api/social/dms)
 //                     only on confirm, so a cancel writes nothing (G14);
 //                     a clientDeliveryId minted before the card and reused for
 //                     the same channel and text, so a retry never double-posts
-//   start_call        the team, channel or person resolved by GET …/resolve,
+//   call              start: the team, channel or person resolved by GET …/resolve,
 //                     the card says who is rung; confirm runs the shell call
 //                     host's own start (useSocialCall: callConversation for a
 //                     team or channel, nobody rung; callPeople for a person,
@@ -517,7 +517,7 @@ const runRunCommand: VoiceToolRunner = async (_args, ctx, planned) => {
   return done('command_output', body, summary);
 };
 
-// ── send_chat_message ───────────────────────────────────────────────────────
+// ── message ─────────────────────────────────────────────────────────────────
 
 interface ResolveBody {
   kind: 'team' | 'channel' | 'person';
@@ -606,13 +606,13 @@ const planSendChat: VoiceToolPlanner = async (args, ctx) => {
 const runSendChat: VoiceToolRunner = async (_args, ctx, planned) => {
   const social = ctx.social;
   const plan = planned as PostPlan | undefined;
-  if (!plan) return refused('send_chat_message sends only after the user confirms its card.');
+  if (!plan) return refused('A message is sent only after the user confirms its card.');
   if (!social) return socialGrantRefusal(ctx, 'Messages go through Social, which this session cannot reach.');
   const label = where(plan.kind, plan.name);
   const record = social.deliveries.get(plan.key) ?? { deliveryId: plan.deliveryId, state: 'pending' as const, at: ctx.now().getTime() };
   if (record.state === 'sent') return done('posted', { to: label, posted: true, alreadyPosted: true }, `Already posted to ${label}`);
   if (plan.kind === 'person') {
-    if (!plan.userId) return refused('send_chat_message sends to a person only after the user confirms its card.');
+    if (!plan.userId) return refused('A message to a person is sent only after the user confirms its card.');
     const blocked = await openDm(ctx, plan.userId, plan.channel, "I can't message people with your role.");
     if (blocked) return blocked;
   }
@@ -627,11 +627,11 @@ const runSendChat: VoiceToolRunner = async (_args, ctx, planned) => {
   return done('posted', { to: label, posted: true }, `Posted to ${label}`);
 };
 
-// ── start_call ──────────────────────────────────────────────────────────────
+// ── call: start, or join the live huddle the index shows (V2-12) ─────────────
 
 interface CallPlan { kind: ResolveBody['kind']; name: string; channel: string; userId?: string; title: string }
 
-/** The call host start_call may use, or why it cannot go ahead (before the card and again at confirm). */
+/** The call host a call may use, or why it cannot go ahead (before the card and again at confirm). */
 function callRefusal(ctx: ToolContext): { calls: CallAccess } | { result: ToolResult } {
   if (!ctx.social) return { result: socialGrantRefusal(ctx, 'Calls go through Social, which this session cannot reach.') };
   if (!ctx.calls) return { result: refused('Calls are not available on this page.') };
@@ -670,7 +670,7 @@ const planStartCall: VoiceToolPlanner = async (args, ctx) => {
 
 const runStartCall: VoiceToolRunner = async (_args, ctx, planned) => {
   const plan = planned as CallPlan | undefined;
-  if (!plan) return refused('start_call starts only after the user confirms its card.');
+  if (!plan) return refused('A call starts only after the user confirms its card.');
   // Checked again at confirm time: a call may have started while the card was up.
   const gate = callRefusal(ctx);
   if ('result' in gate) return gate.result;
@@ -687,6 +687,81 @@ const runStartCall: VoiceToolRunner = async (_args, ctx, planned) => {
     ? done('call_started', { with: plan.name, rung: true }, `Calling ${plan.name}`)
     : done('call_started', { in: plan.title, rung: false }, `Huddle starting in ${plan.title}`);
 };
+
+/**
+ * join: the huddles live now, from the social index the activity read uses
+ * (GET /api/social/search in Social, the plane's search elsewhere, type
+ * huddle). The model names where (a channel, a team, a person), resolved by
+ * GET …/resolve as start does; the dock joins only when the index shows a live
+ * huddle there, so "join" never starts one. Without a target, the one live
+ * huddle in a channel is it. The card says who is in it; confirm runs the call
+ * host's own start on that conversation's lobby, which walks into the live
+ * call (useSocialCall's rejoin), once. Refused while already in a call.
+ */
+interface Huddle { id: string; title: string; subtitle?: string }
+
+async function liveHuddles(ctx: ToolContext): Promise<{ rows: Huddle[] } | { result: ToolResult }> {
+  const url = ctx.tenant === 'social' ? '/api/social/search' : '/api/social/plane/search';
+  const read = await readJson<{ results?: Array<Record<string, unknown>> }>(ctx, `${url}?${qs({ q: 'live huddles', type: 'huddle', limit: 50 })}`);
+  if (!read.ok) return { result: readFailure('the live huddles', read.status) };
+  return { rows: (read.body.results ?? []).filter((r) => r['type'] === 'huddle' && r['status'] === 'live' && typeof r['id'] === 'string' && typeof r['title'] === 'string')
+    .map((r) => ({ id: r['id'] as string, title: r['title'] as string, ...(typeof r['subtitle'] === 'string' ? { subtitle: r['subtitle'] } : {}) })) };
+}
+
+const planJoinCall: VoiceToolPlanner = async (args, ctx) => {
+  const gate = callRefusal(ctx);
+  if ('result' in gate) return gate;
+  const social = ctx.social!;
+  const live = await liveHuddles(ctx);
+  if ('result' in live) return live;
+  if (!live.rows.length) return { result: refused('Nobody is in a huddle you can see right now. Start one instead.') };
+  let target = args['target'] as { kind: 'team' | 'channel' | 'dm'; name: string } | undefined;
+  if (!target) {
+    // "Join the huddle": the one live in a channel, named by its own title ("Live huddle in #general").
+    const inChannels = live.rows.map((h) => /^Live huddle in #([a-z0-9][a-z0-9-]*)$/i.exec(h.title)?.[1]).filter((x): x is string => !!x);
+    if (live.rows.length !== 1 || inChannels.length !== 1) {
+      return { result: ambiguous('Several huddles are live. Ask which one; say where it is.', live.rows.map((h) => ({ title: h.title, subtitle: h.subtitle }))) };
+    }
+    target = { kind: 'channel', name: inChannels[0]! };
+  }
+  const kind = target.kind === 'dm' ? 'person' : target.kind;
+  const read = await readJson<ResolveBody>(ctx, `${social.api}/resolve?${qs({ kind, name: target.name })}`);
+  if (!read.ok) {
+    if (read.status === 404) return { result: refused(`There is no ${kind} called "${target.name}" you can join.`) };
+    return { result: readFailure(kind === 'person' ? 'the person' : `the ${kind}`, read.status) };
+  }
+  if (!read.body.match) {
+    return { result: ambiguous(`Several ${kind === 'person' ? 'people' : `${kind}s`} match "${target.name}". Ask which one; nothing was joined.`, read.body.candidates.map((c) => ({ id: c.id, name: c.name }))) };
+  }
+  const m = read.body.match;
+  // The index names a huddle by where it is: "#<slug>" for a channel, the team's name, the people in a DM.
+  const where = kind === 'channel' ? `#${m.id}` : m.name;
+  const huddle = live.rows.find((h) => h.title.toLowerCase() === `live huddle in ${where.toLowerCase()}`)
+    ?? live.rows.find((h) => h.title.toLowerCase().includes(m.name.toLowerCase()));
+  if (!huddle) return { result: refused(`Nobody is in a huddle in ${kind === 'channel' ? where : m.name} right now. Start one instead.`) };
+  const title = kind === 'team' ? `${m.name} team` : kind === 'channel' ? where : m.name;
+  const plan: CallPlan = { kind, name: m.name, channel: m.channel, title };
+  return { plan: { title: `Join the huddle in ${title}`, detail: huddle.subtitle ? `${huddle.subtitle}.` : 'Join the people already in it.', data: { ...plan, join: true } } };
+};
+
+const runJoinCall: VoiceToolRunner = async (_args, ctx, planned) => {
+  const plan = planned as (CallPlan & { join?: boolean }) | undefined;
+  if (!plan?.join) return refused('A huddle is joined only after the user confirms its card.');
+  // Checked again at confirm time: a call may have started while the card was up.
+  const gate = callRefusal(ctx);
+  if ('result' in gate) return gate.result;
+  // The conversation's own start, which walks into the call live in its lobby (useSocialCall's rejoin), never rings anyone.
+  gate.calls.callConversation({ channel: plan.channel, title: plan.title });
+  return done('call_joined', { in: plan.title, rung: false }, `Joining the huddle in ${plan.title}`);
+};
+
+const planCall: VoiceToolPlanner = async (args, ctx) => {
+  if (args['action'] === 'join') return planJoinCall(args, ctx);
+  if (!args['target']) return { result: refused('Say where to start the call: a team, a channel or a person.') };
+  return planStartCall(args, ctx);
+};
+
+const runCall: VoiceToolRunner = async (args, ctx, plan) => (args['action'] === 'join' ? runJoinCall(args, ctx, plan) : runStartCall(args, ctx, plan));
 
 // ── set_status ──────────────────────────────────────────────────────────────
 
@@ -753,8 +828,8 @@ const runComputer: VoiceToolRunner = async (args, ctx, plan) => {
 
 export const ACTION_RUNNERS: Readonly<Record<string, VoiceToolRunner>> = {
   computer: runComputer,
-  send_chat_message: runSendChat,
-  start_call: runStartCall,
+  message: runSendChat,
+  call: runCall,
   set_status: runSetStatus,
   ...WORK_RUNNERS,
   ...RECORD_RUNNERS,
@@ -766,8 +841,8 @@ export const VOICE_RUNNERS: Readonly<Record<string, VoiceToolRunner>> = { ...TOO
 /** The planners that run before a confirm card. */
 export const VOICE_PLANNERS: Readonly<Record<string, VoiceToolPlanner>> = {
   computer: planComputer,
-  send_chat_message: planSendChat,
-  start_call: planStartCall,
+  message: planSendChat,
+  call: planCall,
   ...WORK_PLANNERS,
   ...RECORD_PLANNERS,
 };

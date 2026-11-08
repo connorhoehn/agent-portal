@@ -93,7 +93,7 @@ export const TURNS: VoiceTurn[] = [
     text: 'Starting the computers now. Posting to a team channel needs its own confirmation.',
     toolCalls: [
       { name: 'computer', status: 'running', summary: 'Auth Migration, 1 of 3' },
-      { name: 'send_chat_message', status: 'refused', summary: 'not confirmed: #platform-engineering' },
+      { name: 'message', status: 'refused', summary: 'not confirmed: #platform-engineering' },
     ],
   },
 ];

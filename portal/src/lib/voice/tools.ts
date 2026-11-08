@@ -18,7 +18,7 @@
 //      instructions" (`shapeOutput`, applied to every result on the way out).
 //
 // Reads and navigation live here (P3). The machine and people tools
-// (computer, send_chat_message, start_call, set_status) are in actions.ts
+// (computer, message, call, set_status) are in actions.ts
 // (P4, V2-8), which adds them to this table as VOICE_RUNNERS, with the
 // planners that run before a confirm card (resolve the target, compose the
 // command, mint the delivery id) so the card shows exactly what will happen.
@@ -88,7 +88,7 @@ export interface ComputeAccess {
   remove(id: string): Promise<void>;
 }
 
-/** What send_chat_message remembers per (channel, text): the id minted before the card, and whether it landed. */
+/** What message remembers per (channel, text): the id minted before the card, and whether it landed. */
 export interface DeliveryRecord { deliveryId: string; state: 'pending' | 'sent' | 'failed'; at: number }
 
 /** Social, through the hooks the shell already holds (EmbeddedSocial's presence, the composer's useChat path). */
@@ -1645,7 +1645,7 @@ export function callAction(spec: VoiceToolSpec, args: Args): Action | null {
 }
 
 /** Tools whose action is a Social grant outside Social (the plane's PostMessage / StartCall): refused with the request offer. */
-const SOCIAL_GRANT_TOOLS: ReadonlySet<string> = new Set(['send_chat_message', 'start_call']);
+const SOCIAL_GRANT_TOOLS: ReadonlySet<string> = new Set(['message', 'call']);
 
 export function prepareToolCall(name: string, rawArgs: unknown, ctx: Pick<ToolContext, 'tenant' | 'can'> & Partial<Pick<ToolContext, 'socialRequestItemId'>>): { ok: true; call: PreparedCall } | { ok: false; result: ToolResult } {
   const spec = voiceToolSpec(name);
@@ -1672,8 +1672,8 @@ const ROLE_REFUSALS: Readonly<Record<string, string>> = {
   'computer:open-shell': "I can't open shells on computers with your role.",
   'computer:run': "I can't run commands on machines with your role.",
   'computer:hand-work': "I can't hand work to machines with your role.",
-  send_chat_message: "I can't post messages with your role.",
-  start_call: "I can't start calls with your role.",
+  message: "I can't post messages with your role.",
+  call: "I can't start or join calls with your role.",
 };
 
 /** The dropped arguments, said in the result (applied by runPreparedCall). */

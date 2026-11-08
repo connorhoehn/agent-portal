@@ -633,7 +633,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
   },
   {
     "description": "Post a message the user dictated to a team, a channel or a person, as a social-app activity. Always read it back and ask the user first.",
-    "name": "send_chat_message",
+    "name": "message",
     "parameters": {
       "additionalProperties": false,
       "properties": {
@@ -675,11 +675,19 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "Start a call (a huddle) as a social-app activity: in a team's channel or a channel, where nobody is rung and anyone who opens it can join, or with one person, who is rung. The user confirms first. Never while the user is already in a call.",
-    "name": "start_call",
+    "description": "A call (a huddle) as a social-app activity. "start": in a team's channel or a channel, where nobody is rung and anyone who opens it can join, or with one person, who is rung. "join": walk into the huddle that is live now in a channel, a team or a conversation (the one the activity read shows; target may be left out when exactly one is live). The user confirms first. Never while the user is already in a call.",
+    "name": "call",
     "parameters": {
       "additionalProperties": false,
       "properties": {
+        "action": {
+          "description": "start a huddle (or ring a person), or join the live huddle there.",
+          "enum": [
+            "start",
+            "join",
+          ],
+          "type": "string",
+        },
         "target": {
           "additionalProperties": false,
           "properties": {
@@ -701,10 +709,14 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
             "kind",
             "name",
           ],
-          "type": "object",
+          "type": [
+            "object",
+            "null",
+          ],
         },
       },
       "required": [
+        "action",
         "target",
       ],
       "type": "object",

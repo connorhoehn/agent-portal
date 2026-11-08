@@ -82,8 +82,8 @@ const P4_REFUSALS: Array<{ tool: string; args: Record<string, unknown>; deny: st
   { tool: 'computer', args: { action: 'run', computer: 'c-alpha', phrase: 'status' }, deny: ['OpenDevboxShell'] },
   { tool: 'computer', args: { action: 'stop', computer: 'c-alpha' }, deny: ['ManageDevbox'] },
   { tool: 'computer', args: { action: 'hand-work', machine: 'laptop', job: 'login' }, deny: ['ConnectLocalCompute'] },
-  { tool: 'send_chat_message', args: { target: { kind: 'team', name: 'platform' }, text: 'out today' }, deny: ['PostMessage'] },
-  { tool: 'start_call', args: { target: { kind: 'team', name: 'platform' } }, deny: ['StartCall'] },
+  { tool: 'message', args: { target: { kind: 'team', name: 'platform' }, text: 'out today' }, deny: ['PostMessage'] },
+  { tool: 'call', args: { action: 'start', target: { kind: 'team', name: 'platform' } }, deny: ['StartCall'] },
 ];
 
 test('every P4 tool refuses on its gate without a network call, a machine call or a post', async () => {
@@ -395,7 +395,7 @@ test('computer hand-work: a machine not accepting jobs, an unknown job and the r
   assert.match(String(busy.result.output['reason']), /my-macbook did not take it/);
 });
 
-// ── start_call (G7) ──
+// ── call (G7, V2-12) ──
 
 interface FakeCalls extends CallAccess { conversations: Array<{ channel: string; title: string }>; people: Array<Array<{ userId: string; displayName: string }>>; live: { title: string } | null }
 function fakeCalls(opts: { live?: { title: string } | null; unavailable?: string | null } = {}): FakeCalls {
@@ -411,10 +411,10 @@ function fakeCalls(opts: { live?: { title: string } | null; unavailable?: string
 const TEAM = { kind: 'team', match: { id: 't1', name: 'Platform', channelId: 'r1', channel: 'social:team:platform:general' }, candidates: [{ id: 't1', name: 'Platform' }] };
 const ADA = { kind: 'person', match: { id: 'u-ada', name: 'Ada Lovelace', channelId: 'social:dm:u-ada:u-me', channel: 'social:dm:u-ada:u-me' }, candidates: [{ id: 'u-ada', name: 'Ada Lovelace' }] };
 
-test('start_call: a team resolves through /resolve, the card says nobody is rung, and confirm starts one huddle in its channel', async () => {
+test('call start: a team resolves through /resolve, the card says nobody is rung, and confirm starts one huddle in its channel', async () => {
   const { fetch, log } = fakeFetch([route('GET', '/api/social/plane/resolve', 200, TEAM)]);
   const calls = fakeCalls();
-  const { card, result } = await confirmAndRun('start_call', { target: { kind: 'team', name: 'platform' } }, toolContext({ fetch, social: fakeSocial(), calls }));
+  const { card, result } = await confirmAndRun('call', { action: 'start', target: { kind: 'team', name: 'platform' } }, toolContext({ fetch, social: fakeSocial(), calls }));
   assert.deepEqual(log.map((r) => r.url), ['/api/social/plane/resolve?kind=team&name=platform']);
   assert.deepEqual(card, { title: 'Start a huddle in the Platform team', detail: 'Nobody is rung; anyone who opens it sees the huddle and can join.' });
   assert.equal(result.outcome, 'done');
@@ -422,10 +422,10 @@ test('start_call: a team resolves through /resolve, the card says nobody is rung
   assert.deepEqual(calls.people, []);
 });
 
-test('start_call: a person is a DM call that rings them, and the card says so; the DM is opened at confirm (G14)', async () => {
+test('call start: a person is a DM call that rings them, and the card says so; the DM is opened at confirm (G14)', async () => {
   const { fetch, log } = fakeFetch([route('GET', '/api/social/resolve', 200, ADA), route('POST', '/api/social/dms', 200, { channel: ADA.match.channel, peers: [] })]);
   const calls = fakeCalls();
-  const { card, result } = await confirmAndRun('start_call', { target: { kind: 'dm', name: 'Ada' } }, toolContext({ tenant: 'social', fetch, social: fakeSocial({ api: '/api/social' }), calls }));
+  const { card, result } = await confirmAndRun('call', { action: 'start', target: { kind: 'dm', name: 'Ada' } }, toolContext({ tenant: 'social', fetch, social: fakeSocial({ api: '/api/social' }), calls }));
   assert.equal(log[0]!.url, '/api/social/resolve?kind=person&name=Ada');
   assert.deepEqual(log.slice(1).map((r) => [r.method, r.url, r.body]), [['POST', '/api/social/dms', { userId: 'u-ada' }]]);
   assert.deepEqual(card, { title: 'Call Ada Lovelace', detail: 'This rings Ada Lovelace.' });
@@ -434,11 +434,11 @@ test('start_call: a person is a DM call that rings them, and the card says so; t
   assert.deepEqual(calls.conversations, []);
 });
 
-test('start_call: never while a call is live, before the card or at confirm; a second one is refused', async () => {
+test('call start: never while a call is live, before the card or at confirm; a second one is refused', async () => {
   // Live before: refused with no request and no card.
   let requests = 0;
   const busy = fakeCalls({ live: { title: 'Alpha huddle' } });
-  const before = await confirmAndRun('start_call', { target: { kind: 'team', name: 'platform' } }, toolContext({ social: fakeSocial(), calls: busy, fetch: async () => { requests++; throw new Error('network'); } }));
+  const before = await confirmAndRun('call', { action: 'start', target: { kind: 'team', name: 'platform' } }, toolContext({ social: fakeSocial(), calls: busy, fetch: async () => { requests++; throw new Error('network'); } }));
   assert.equal(before.card, null);
   assert.equal(before.result.outcome, 'refused');
   assert.match(String(before.result.output['reason']), /^You are already in a call/);
@@ -448,13 +448,13 @@ test('start_call: never while a call is live, before the card or at confirm; a s
   const calls = fakeCalls();
   const { fetch } = fakeFetch([route('GET', '/api/social/plane/resolve', 200, TEAM)]);
   const ctx = toolContext({ fetch, social: fakeSocial(), calls });
-  assert.equal((await confirmAndRun('start_call', { target: { kind: 'team', name: 'platform' } }, ctx)).result.outcome, 'done');
-  const second = await confirmAndRun('start_call', { target: { kind: 'channel', name: 'general' } }, ctx);
+  assert.equal((await confirmAndRun('call', { action: 'start', target: { kind: 'team', name: 'platform' } }, ctx)).result.outcome, 'done');
+  const second = await confirmAndRun('call', { action: 'start', target: { kind: 'channel', name: 'general' } }, ctx);
   assert.match(String(second.result.output['reason']), /^You are already in a call/);
   assert.equal(calls.conversations.length, 1, 'the host was called once');
   // A call that began while the card was up: the runner checks again at confirm.
   const late = fakeCalls();
-  const prepared = prepareToolCall('start_call', { target: { kind: 'team', name: 'platform' } }, ctx);
+  const prepared = prepareToolCall('call', { action: 'start', target: { kind: 'team', name: 'platform' } }, ctx);
   assert.ok(prepared.ok);
   const lateCtx = toolContext({ fetch, social: fakeSocial(), calls: late });
   const planned = await planPreparedCall(prepared.call, lateCtx, VOICE_PLANNERS);
@@ -465,38 +465,72 @@ test('start_call: never while a call is live, before the card or at confirm; a s
   assert.deepEqual(late.conversations, []);
 });
 
-test('start_call: refused without the Social grant, without a call host, and when calls are unavailable; ambiguous names start nothing', async () => {
+test('call start: refused without the Social grant, without a call host, and when calls are unavailable; ambiguous names start nothing', async () => {
   let requests = 0;
   const noNet = async () => { requests++; throw new Error('network'); };
-  const noGrant = await confirmAndRun('start_call', { target: { kind: 'team', name: 'platform' } }, toolContext({ fetch: noNet, social: null, calls: fakeCalls() }));
+  const noGrant = await confirmAndRun('call', { action: 'start', target: { kind: 'team', name: 'platform' } }, toolContext({ fetch: noNet, social: null, calls: fakeCalls() }));
   assert.match(String(noGrant.result.output['reason']), /Social/);
-  const noHost = await confirmAndRun('start_call', { target: { kind: 'team', name: 'platform' } }, toolContext({ fetch: noNet, social: fakeSocial(), calls: null }));
+  const noHost = await confirmAndRun('call', { action: 'start', target: { kind: 'team', name: 'platform' } }, toolContext({ fetch: noNet, social: fakeSocial(), calls: null }));
   assert.equal(noHost.result.outcome, 'refused');
-  const down = await confirmAndRun('start_call', { target: { kind: 'team', name: 'platform' } }, toolContext({ fetch: noNet, social: fakeSocial(), calls: fakeCalls({ unavailable: 'Calls are not available here' }) }));
+  const down = await confirmAndRun('call', { action: 'start', target: { kind: 'team', name: 'platform' } }, toolContext({ fetch: noNet, social: fakeSocial(), calls: fakeCalls({ unavailable: 'Calls are not available here' }) }));
   assert.equal(down.result.output['reason'], 'Calls are not available here');
   assert.equal(requests, 0);
   const calls = fakeCalls();
   const { fetch } = fakeFetch([route('GET', '/api/social/plane/resolve', 200, { kind: 'person', match: null, candidates: [{ id: 'u1', name: 'Ada A' }, { id: 'u2', name: 'Ada B' }] })]);
-  const amb = await confirmAndRun('start_call', { target: { kind: 'dm', name: 'Ada' } }, toolContext({ fetch, social: fakeSocial(), calls }));
+  const amb = await confirmAndRun('call', { action: 'start', target: { kind: 'dm', name: 'Ada' } }, toolContext({ fetch, social: fakeSocial(), calls }));
   assert.equal(amb.result.output['kind'], 'ambiguous');
   assert.equal(amb.card, null);
-  const missing = await confirmAndRun('start_call', { target: { kind: 'channel', name: 'nope' } }, toolContext({ fetch: fakeFetch([]).fetch, social: fakeSocial(), calls }));
+  const missing = await confirmAndRun('call', { action: 'start', target: { kind: 'channel', name: 'nope' } }, toolContext({ fetch: fakeFetch([]).fetch, social: fakeSocial(), calls }));
   assert.match(String(missing.result.output['reason']), /no channel called "nope"/);
   assert.deepEqual([calls.conversations, calls.people], [[], []]);
   // Not offered outside orgiq and social.
   for (const tenant of ['assessment', 'pipelines', 'access']) {
-    assert.equal(prepareToolCall('start_call', { target: { kind: 'team', name: 'p' } }, toolContext({ tenant })).ok, false, tenant);
+    assert.equal(prepareToolCall('call', { action: 'start', target: { kind: 'team', name: 'p' } }, toolContext({ tenant })).ok, false, tenant);
   }
 });
 
-// ── send_chat_message ──
+test('call join: walks into the huddle the index shows live in #general, once, ringing nobody; refused while in a call or where none is live', async () => {
+  const general = { kind: 'channel', match: { id: 'general', name: 'General', channelId: 'c-g', channel: 'social:ch:general' }, candidates: [] };
+  const huddles = { results: [{ type: 'huddle', id: 'call-g', title: 'Live huddle in #general', subtitle: 'In the huddle now: Mira Okafor, Lena Brandt', status: 'live', href: '/social/calls' }], total: 1 };
+  const routes = [route('GET', '/api/social/plane/search', 200, huddles), route('GET', '/api/social/plane/resolve', 200, general)];
+  const calls = fakeCalls();
+  const f = fakeFetch(routes);
+  const { card, result } = await confirmAndRun('call', { action: 'join', target: { kind: 'channel', name: 'general' } }, toolContext({ fetch: f.fetch, social: fakeSocial(), calls }));
+  assert.deepEqual(card, { title: 'Join the huddle in #general', detail: 'In the huddle now: Mira Okafor, Lena Brandt.' });
+  assert.equal(result.outcome, 'done');
+  assert.deepEqual(calls.conversations, [{ channel: 'social:ch:general', title: '#general' }], 'the conversation\'s own start, which walks into its live call');
+  assert.deepEqual(calls.people, [], 'nobody is rung');
+  assert.ok(f.log.some((l) => l.url === '/api/social/plane/search?q=live+huddles&type=huddle&limit=50'), 'the index the activity read uses');
+  assert.ok(f.log.every((l) => l.method === 'GET'), 'joining writes nothing over HTTP');
+  // No target: the one live huddle in a channel is it.
+  const solo = fakeCalls();
+  const one = await confirmAndRun('call', { action: 'join' }, toolContext({ fetch: fakeFetch(routes).fetch, social: fakeSocial(), calls: solo }));
+  assert.equal(one.result.outcome, 'done');
+  assert.deepEqual(solo.conversations, [{ channel: 'social:ch:general', title: '#general' }]);
+  // Already in a call: refused before any read.
+  const busy = fakeFetch(routes);
+  const inCall = await confirmAndRun('call', { action: 'join', target: { kind: 'channel', name: 'general' } }, toolContext({ fetch: busy.fetch, social: fakeSocial(), calls: fakeCalls({ live: { title: 'standup' } }) }));
+  assert.equal(inCall.result.outcome, 'refused');
+  assert.match(inCall.result.summary, /already in a call/);
+  assert.equal(busy.log.length, 0);
+  // Nothing live there: refused, never a new huddle.
+  const quiet = fakeCalls();
+  const none = await confirmAndRun('call', { action: 'join', target: { kind: 'channel', name: 'general' } }, toolContext({ fetch: fakeFetch([route('GET', '/api/social/plane/search', 200, { results: [], total: 0 }), routes[1]!]).fetch, social: fakeSocial(), calls: quiet }));
+  assert.equal(none.result.outcome, 'refused');
+  assert.deepEqual(quiet.conversations, []);
+  // A start with no target asks where.
+  const where = await confirmAndRun('call', { action: 'start' }, toolContext({ fetch: fakeFetch([]).fetch, social: fakeSocial(), calls: fakeCalls() }));
+  assert.match(where.result.summary, /Say where/);
+});
+
+// ── message ──
 
 const RESOLVED = { kind: 'team', match: { id: 't1', name: 'Platform', channelId: 'r1', channel: 'social:team:platform:general' }, candidates: [{ id: 't1', name: 'Platform' }] };
 
-test('send_chat_message: resolves through /resolve, the card shows the channel and the text, and it sends once', async () => {
+test('message: resolves through /resolve, the card shows the channel and the text, and it sends once', async () => {
   const { fetch, log } = fakeFetch([route('GET', '/api/social/plane/resolve', 200, RESOLVED)]);
   const social = fakeSocial();
-  const { card, result } = await confirmAndRun('send_chat_message', { target: { kind: 'team', name: 'platform' }, text: "I'm out today" }, toolContext({ fetch, social }));
+  const { card, result } = await confirmAndRun('message', { target: { kind: 'team', name: 'platform' }, text: "I'm out today" }, toolContext({ fetch, social }));
   assert.equal(log[0]!.url, '/api/social/plane/resolve?kind=team&name=platform');
   assert.deepEqual(card, { title: 'Post to the Platform team', detail: "I'm out today" });
   assert.equal(result.outcome, 'done');
@@ -508,7 +542,7 @@ test('send_chat_message: resolves through /resolve, the card shows the channel a
     route('POST', '/api/social/dms', 200, { channel: 'social:dm:u1:u2', peers: [] }),
   ]);
   const priya = fakeSocial({ api: '/api/social' });
-  const dm = await confirmAndRun('send_chat_message', { target: { kind: 'dm', name: 'Priya' }, text: 'hi' }, toolContext({ tenant: 'social', fetch: f2, social: priya }));
+  const dm = await confirmAndRun('message', { target: { kind: 'dm', name: 'Priya' }, text: 'hi' }, toolContext({ tenant: 'social', fetch: f2, social: priya }));
   assert.equal(l2[0]!.url, '/api/social/resolve?kind=person&name=Priya');
   assert.deepEqual(dm.card, { title: 'Message Priya', detail: 'hi' });
   // The DM is opened at confirm (G14), then the message goes.
@@ -517,22 +551,22 @@ test('send_chat_message: resolves through /resolve, the card shows the channel a
   assert.deepEqual(priya.sends.map((x) => x.channel), ['social:dm:u1:u2']);
 });
 
-test('send_chat_message: a retry reuses the delivery id, and after a delivered post it never sends again', async () => {
+test('message: a retry reuses the delivery id, and after a delivered post it never sends again', async () => {
   const { fetch } = fakeFetch([route('GET', '/api/social/plane/resolve', 200, RESOLVED)]);
   const social = fakeSocial({ failSends: 1 });
   const args = { target: { kind: 'team', name: 'platform' }, text: "I'm out today" };
-  const first = await confirmAndRun('send_chat_message', args, toolContext({ fetch, social }));
+  const first = await confirmAndRun('message', args, toolContext({ fetch, social }));
   assert.equal(first.result.outcome, 'failed');
-  const retry = await confirmAndRun('send_chat_message', args, toolContext({ fetch, social }));
+  const retry = await confirmAndRun('message', args, toolContext({ fetch, social }));
   assert.equal(retry.result.outcome, 'done');
   assert.equal(social.sends.length, 2);
   assert.equal(social.sends[0]!.deliveryId, social.sends[1]!.deliveryId, 'one clientDeliveryId for the message and its retry');
-  const again = await confirmAndRun('send_chat_message', args, toolContext({ fetch, social }));
+  const again = await confirmAndRun('message', args, toolContext({ fetch, social }));
   assert.equal(again.card, null);
   assert.equal(again.result.output['alreadyPosted'], true);
   assert.equal(social.sends.length, 2, 'sent once');
   // A different text is a different message.
-  await confirmAndRun('send_chat_message', { ...args, text: 'back tomorrow' }, toolContext({ fetch, social }));
+  await confirmAndRun('message', { ...args, text: 'back tomorrow' }, toolContext({ fetch, social }));
   assert.notEqual(social.sends[2]!.deliveryId, social.sends[0]!.deliveryId);
   // The memory lapses: an old delivered message may be sent again, under a fresh id.
   const book = new Map<string, DeliveryRecord>();
@@ -542,16 +576,16 @@ test('send_chat_message: a retry reuses the delivery id, and after a delivered p
   assert.notEqual(deliveryFor(book, 'c', 't', 11 * 60_000).deliveryId, a.deliveryId);
 });
 
-test('send_chat_message: several matches go back as candidates with no card and no send; nothing found is a refusal', async () => {
+test('message: several matches go back as candidates with no card and no send; nothing found is a refusal', async () => {
   const { fetch } = fakeFetch([route('GET', '/api/social/plane/resolve', 200, { kind: 'channel', match: null, candidates: [{ id: 'platform', name: 'Platform' }, { id: 'platform-ops', name: 'Platform ops' }] })]);
   const social = fakeSocial();
-  const { card, result } = await confirmAndRun('send_chat_message', { target: { kind: 'channel', name: 'platform' }, text: 'hello' }, toolContext({ fetch, social }));
+  const { card, result } = await confirmAndRun('message', { target: { kind: 'channel', name: 'platform' }, text: 'hello' }, toolContext({ fetch, social }));
   assert.equal(card, null);
   assert.equal(result.output['kind'], 'ambiguous');
   assert.deepEqual(result.output['candidates'], [{ id: 'platform', name: 'Platform' }, { id: 'platform-ops', name: 'Platform ops' }]);
   assert.equal(social.sends.length, 0);
   const { fetch: none } = fakeFetch([route('GET', '/api/social/plane/resolve', 404, { kind: 'team', match: null, candidates: [] })]);
-  const missing = await confirmAndRun('send_chat_message', { target: { kind: 'team', name: 'nobody' }, text: 'hello' }, toolContext({ fetch: none, social }));
+  const missing = await confirmAndRun('message', { target: { kind: 'team', name: 'nobody' }, text: 'hello' }, toolContext({ fetch: none, social }));
   assert.equal(missing.result.outcome, 'refused');
   assert.equal(social.sends.length, 0);
 });
@@ -606,7 +640,7 @@ test('property: no P4 result carries a string over 120 characters or a list over
   const ctx = toolContext({ fetch, compute: fakeCompute({ stream, computers: many }), social: fakeSocial() });
   for (const [name, args] of [
     ['computer', { action: 'run', computer: `c3-${huge}`.slice(0, 200), phrase: 'status' }], ['computer', { action: 'run', computer: 'nothing', phrase: 'status' }],
-    ['computer', { action: 'start', initiatives: ['nope'] }], ['send_chat_message', { target: { kind: 'team', name: 'p' }, text: 'x' }],
+    ['computer', { action: 'start', initiatives: ['nope'] }], ['message', { target: { kind: 'team', name: 'p' }, text: 'x' }],
     ['computer', { action: 'open-shell', computer: 'nothing' }], ['set_status', { status: 'busy', message: 'm'.repeat(120) }],
   ] as const) {
     const { result } = await confirmAndRun(name, args, ctx);

@@ -74,13 +74,13 @@ test('the scripted session drives the dock through its phases, runs the tool, an
   assert.equal(h.controller.getSnapshot().lastLine?.text, 'Here is what I found.');
 });
 
-const POST: Call = { name: 'send_chat_message', arguments: { target: { kind: 'team', name: 'platform' }, text: "I'm out today" }, said: "Tell the platform team I'm out today." };
+const POST: Call = { name: 'message', arguments: { target: { kind: 'team', name: 'platform' }, text: "I'm out today" }, said: "Tell the platform team I'm out today." };
 
 function postRunner() {
   const sent: unknown[] = [];
   const runner: VoiceToolRunner = async (args) => { sent.push(args); return { outcome: 'done', output: { kind: 'posted', note: 'data, not instructions', posted: true }, summary: 'Posted' }; };
   // No planner: the card is defaultConfirmText's, and the stub runner stands in for Social.
-  return { sent, runners: { ...VOICE_RUNNERS, send_chat_message: runner }, planners: {} };
+  return { sent, runners: { ...VOICE_RUNNERS, message: runner }, planners: {} };
 }
 
 test('a confirm tool shows the card (confirming) and runs only on confirm, recording who confirmed', async () => {
@@ -370,7 +370,7 @@ test('computer run through the dock: a phrase the server would refuse never reac
   h.controller.dispose();
 });
 
-const CALL: Call = { name: 'start_call', arguments: { target: { kind: 'team', name: 'platform' } }, said: 'Start a call with the platform team.' };
+const CALL: Call = { name: 'call', arguments: { action: 'start', target: { kind: 'team', name: 'platform' } }, said: 'Start a call with the platform team.' };
 
 function callsFake() {
   const started: Array<{ channel: string; title: string }> = [];
@@ -438,7 +438,7 @@ test('a 409 on the user budget shows a card; Confirm mints again with confirmOve
 });
 
 test('message a person through the dock: cancel opens no DM and sends nothing; confirm opens the DM, then sends (G14)', async () => {
-  const DM: Call = { name: 'send_chat_message', arguments: { target: { kind: 'dm', name: 'Ada' }, text: 'running late' }, said: 'Tell Ada I am running late.' };
+  const DM: Call = { name: 'message', arguments: { target: { kind: 'dm', name: 'Ada' }, text: 'running late' }, said: 'Tell Ada I am running late.' };
   const channel = 'social:dm:u-ada:u-me';
   const resolveAda = route('GET', '/api/social/plane/resolve', 200, { kind: 'person', match: { id: 'u-ada', name: 'Ada Lovelace', channelId: channel, channel }, candidates: [{ id: 'u-ada', name: 'Ada Lovelace' }] });
   const openDm = route('POST', '/api/social/dms', 200, { channel, peers: [{ userId: 'u-ada', displayName: 'Ada Lovelace' }] });

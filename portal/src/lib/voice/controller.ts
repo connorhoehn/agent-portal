@@ -21,8 +21,8 @@
 // read as "the call is done"; a result that settles first waits for it (and
 // COMPLETION_GRACE_MS, should it never come).
 //
-// A confirm tool with a planner (actions.ts: computer, send_chat_message,
-// start_call; work.ts: queue_work) runs it first, reads only, so the card shows the resolved
+// A confirm tool with a planner (actions.ts: computer, message, call;
+// work.ts: queue_work; records.ts: decide, create, update) runs it first, reads only, so the card shows the resolved
 // target and the composed command; a planner may end the call without a card
 // (a refusal, several matching names). Nothing acts before the confirm, and a
 // cancel answers { confirmed: false } and runs nothing.
@@ -183,7 +183,7 @@ export function confirmDecision(utterance: string, ended: boolean): 'confirm' | 
 /** The default card wording per tool, before (or without) a planner: the tool and its arguments, as plain text. */
 export function defaultConfirmText(call: PreparedCall): { title: string; detail?: string } {
   const a = call.args;
-  if (call.spec.name === 'send_chat_message') {
+  if (call.spec.name === 'message') {
     const target = (a['target'] ?? {}) as Record<string, unknown>;
     const where = target['kind'] === 'dm' ? String(target['name']) : `#${String(target['name'])}`;
     return { title: `Post to ${where}`, detail: String(a['text'] ?? '') };

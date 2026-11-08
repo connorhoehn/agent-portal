@@ -190,7 +190,7 @@ describe('POST /api/voice/sessions — the mint', () => {
       const res = await mint();
       expect(res.status).toBe(201);
       // Reads and navigation; assessment and pipelines add queue_work (G19, V2-9: gated per kind on the page button's action by the dock).
-      const offered = ['access_request_status', 'budget', ...(tenant === 'access' ? ['create'] : []), 'decide', 'get', 'list', 'open', ...(tenant !== 'access' ? ['queue_work'] : []), 'search', 'summary', 'update'];
+      const offered = ['access_request_status', 'budget', ...(tenant === 'access' ? ['create'] : []), 'decide', 'get', 'list', 'open', ...(tenant !== 'access' ? ['queue_work'] : []), 'search', ...(tenant !== 'access' ? ['set_status'] : []), 'summary', 'update'];
       expect(res.body.tools.sort()).toEqual(offered);
       const sent = JSON.parse(calls[0]!.init.body!).session;
       expect(sent.delegation.responses.tools.map((t: { name: string }) => t.name).sort()).toEqual(offered);
@@ -200,7 +200,7 @@ describe('POST /api/voice/sessions — the mint', () => {
     principal = { sub: USER, role: 'participant', tenant: 'social', grants: {} };
     const res = await mint();
     expect(res.status).toBe(201);
-    expect(res.body.tools.sort()).toEqual(['access_request_status', 'activity', 'budget', 'create', 'get', 'list', 'open', 'queue_work', 'search', 'send_chat_message', 'set_status', 'start_call', 'summary', 'update']);
+    expect(res.body.tools.sort()).toEqual(['access_request_status', 'activity', 'budget', 'call', 'create', 'get', 'list', 'message', 'open', 'queue_work', 'search', 'set_status', 'summary', 'update']);
   });
 
   it('an access approver\'s scripted session decides the request waiting on them; a requester\'s reads their own requests', async () => {
@@ -217,15 +217,19 @@ describe('POST /api/voice/sessions — the mint', () => {
     expect(await scripted('requester')).toMatchObject({ name: 'create', args: { kind: 'access-request', fields: { item: 'Operator in Pipelines', duration: '7d' } } });
   });
 
-  it('the social scripted session searches its own index for live huddles', async () => {
+  it('the social scripted sessions: a participant summarises #general (V2-9), a moderator reads who is in a huddle', async () => {
     delete process.env['OPENAI_API_KEY'];
     process.env['MOCK_VOICE'] = '1';
-    principal = { sub: USER, role: 'participant', tenant: 'social', grants: {} };
-    const res = await mint({});
-    expect(res.status).toBe(201);
-    const done = res.body.mockScript.onStart.find((f: { event: { event?: { type: string } } }) => f.event.event?.type === 'response.output_item.done');
-    expect(done.event.event.item).toMatchObject({ type: 'function_call', name: 'search' });
-    expect(JSON.parse(done.event.event.item.arguments)).toMatchObject({ type: 'huddle' });
+    const scripted = async (role: string) => {
+      principal = { sub: USER, role, tenant: 'social', grants: {} };
+      const res = await mint({});
+      expect(res.status).toBe(201);
+      await request(app).post(`/api/voice/sessions/${res.body.sessionId}/close`).send({ seconds: 15 });
+      const done = res.body.mockScript.onStart.find((f: { event: { event?: { type: string } } }) => f.event.event?.type === 'response.output_item.done');
+      return { name: done.event.event.item.name, args: JSON.parse(done.event.event.item.arguments) };
+    };
+    expect(await scripted('participant')).toMatchObject({ name: 'queue_work', args: { kind: 'summarize', target: 'general' } });
+    expect(await scripted('moderator')).toMatchObject({ name: 'activity', args: { scope: 'live-calls' } });
   });
 
   it('is 503 voice-unavailable with no key and no mock, even under INSECURE_DEV_MODE, and holds nothing', async () => {
@@ -393,7 +397,7 @@ describe('POST /api/voice/sessions/:id/events — tool-call rows', () => {
   it('takes the dock\'s own hash and the confirmation channel', async () => {
     const id = await minted();
     const sha = 'a'.repeat(64);
-    await request(app).post(`/api/voice/sessions/${id}/events`).send({ tool: 'send_chat_message', argsSha256: sha, outcome: 'done', confirmedBy: 'voice' });
+    await request(app).post(`/api/voice/sessions/${id}/events`).send({ tool: 'message', argsSha256: sha, outcome: 'done', confirmedBy: 'voice' });
     expect(voiceToolCalls.rows()[0]).toMatchObject({ args_sha256: sha, confirmed_by: 'voice' });
   });
 

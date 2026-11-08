@@ -115,8 +115,8 @@ const VARIANTS: Record<string, unknown[]> = {
     { action: 'hand-work', machine: 'sana-parked-laptop', job: 'sana' }, { action: 'hand-work' }],
   budget: [{ scope: 'me' }, { scope: 'initiative', initiative: 'Nobody Initiative' }, { scope: 'initiative', initiative: 'Initiative' }, { scope: 'org' }, { scope: 'allocations' }, { scope: 'cost' }],
   summary: [{ kind: 'sweeps', since: 'whenever' }, { kind: 'sweeps', since: 'yesterday' }, { kind: 'fleet' }, { kind: 'live' }, { kind: 'ingest' }, { kind: 'rollup' }, { kind: 'today' }],
-  send_chat_message: [{ target: { kind: 'dm', name: 'Ada' }, text: 'hello' }, { target: { kind: 'team', name: 'nobody' }, text: 'x' }],
-  start_call: [{ target: { kind: 'dm', name: 'Ada' } }],
+  message: [{ target: { kind: 'dm', name: 'Ada' }, text: 'hello' }, { target: { kind: 'team', name: 'nobody' }, text: 'x' }],
+  call: [{ action: 'start', target: { kind: 'dm', name: 'Ada' } }, { action: 'join' }, { action: 'join', target: { kind: 'channel', name: 'nowhere' } }, { action: 'start' }],
   set_status: [{ status: 'away', message: 'out' }],
   access_request_status: [{ scope: 'approvals' }, { query: 'budget' }],
   queue_work: [{ kind: 'sweep', target: 'vibes' }, { kind: 'bot-run', target: 'nightly' }, { kind: 'bot-run', target: 'unknown thing' }, { kind: 'bot-run', target: 'sana parked' }, { kind: 'pipeline', target: 'ingest' },
@@ -236,7 +236,7 @@ test('confirm-time DM: a refused or mismatched open sends nothing; an ambiguous 
     };
     const s: SocialAccess = { api: '/api/social/plane', unavailable: null, presence: null, deliveries: new Map(), send: async (x) => { sends.push(x); } };
     const ctx = toolContext({ fetch, social: s, socialRequestItemId: 'role:social:moderator' });
-    const prepared = prepareToolCall('send_chat_message', { target: { kind: 'dm', name: 'Ada' }, text: 'hi' }, ctx);
+    const prepared = prepareToolCall('message', { target: { kind: 'dm', name: 'Ada' }, text: 'hi' }, ctx);
     assert.ok(prepared.ok);
     const planned = await planPreparedCall(prepared.call, ctx, VOICE_PLANNERS);
     assert.ok(planned && 'plan' in planned);
@@ -252,7 +252,7 @@ test('confirm-time DM: a refused or mismatched open sends nothing; an ambiguous 
     return new Response(JSON.stringify({ kind: 'person', match: null, candidates: [{ id: 'u1', name: 'Ada A' }, { id: 'u2', name: 'Ada B' }] }), { status: 200 });
   };
   const ctx = toolContext({ fetch, social: { api: '/api/social/plane', unavailable: null, presence: null, deliveries: new Map(), send: async () => {} } });
-  const prepared = prepareToolCall('send_chat_message', { target: { kind: 'dm', name: 'Ada' }, text: 'hi' }, ctx);
+  const prepared = prepareToolCall('message', { target: { kind: 'dm', name: 'Ada' }, text: 'hi' }, ctx);
   assert.ok(prepared.ok);
   const planned = await planPreparedCall(prepared.call, ctx, VOICE_PLANNERS);
   assert.ok(planned && 'result' in planned && planned.result.output['kind'] === 'ambiguous');

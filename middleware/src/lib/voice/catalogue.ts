@@ -12,8 +12,8 @@
 // - `confirm` follows §2's rule literally: anything that spends money, runs on
 //   a machine or reaches other people asks first. That is `computer` (start
 //   bills idle time, stop ends a box, run runs on a machine in safe mode only,
-//   hand-work queues a job on a paired machine), `send_chat_message` and
-//   `start_call` (both reach people). `computer`'s open-shell only opens or
+//   hand-work queues a job on a paired machine), `message` and `call` (both
+//   reach people; catalogue v2 renamed send_chat_message and start_call). `computer`'s open-shell only opens or
 //   focuses a tab (`noConfirm`) and `set_status` changes the caller's own
 //   presence, so neither asks.
 // - The `confirm` row of §4 is internal: it is the dock's pending card, never
@@ -757,7 +757,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     mapsTo: "the shell's presence roster (online); GET /api/social/search or /api/social/plane/search?q=&type=huddle|calllog|message|pin&limit= (calls, messages, pins); GET /api/search?q=&type=work&sort=recent (work)",
   },
   {
-    name: 'send_chat_message',
+    name: 'message',
     description: 'Post a message the user dictated to a team, a channel or a person, as a social-app activity. Always read it back and ask the user first.',
     parameters: obj({
       target: obj({
@@ -771,18 +771,19 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     mapsTo: 'GET /api/social/resolve?kind=&name= (P6, a read), then on confirm POST /api/social/dms { userId } for a person (G14) and useChat(channel).sendMessage(text, { displayName, clientDeliveryId }) over the gateway',
   },
   {
-    name: 'start_call',
-    description: 'Start a call (a huddle) as a social-app activity: in a team\'s channel or a channel, where nobody is rung and anyone who opens it can join, or with one person, who is rung. The user confirms first. Never while the user is already in a call.',
+    name: 'call',
+    description: 'A call (a huddle) as a social-app activity. "start": in a team\'s channel or a channel, where nobody is rung and anyone who opens it can join, or with one person, who is rung. "join": walk into the huddle that is live now in a channel, a team or a conversation (the one the activity read shows; target may be left out when exactly one is live). The user confirms first. Never while the user is already in a call.',
     parameters: obj({
+      action: str('start a huddle (or ring a person), or join the live huddle there.', { enum: ['start', 'join'] }),
       target: obj({
         kind: str('Where the call is: a team, a channel, or one person (dm).', { enum: ['team', 'channel', 'dm'] }),
         name: str('The team, channel or person, as the user said it.', { minLength: 1, maxLength: 120 }),
       }, ['kind', 'name']),
-    }, ['target']),
+    }, ['action']),
     kind: 'people', backing: 'social-activity', confirm: true, action: 'StartCall',
     gate: "StartCall (outside Social, the plane's StartCall); the gateway's lobby guard admits by membership", spend: 'none', idempotent: false,
     says: "I'll start a huddle in #platform once you confirm.", tenants: PEOPLE_TENANTS,
-    mapsTo: "GET /api/social/resolve?kind=&name= (P6), then the shell's call host: useSocialCall().callConversation({ channel, title }) for a team or channel, callPeople([{ userId, displayName }]) for a person after POST /api/social/dms { userId } on confirm (G14)",
+    mapsTo: "GET /api/social/resolve?kind=&name= (P6), then the shell's call host: useSocialCall().callConversation({ channel, title }) for a team or channel, callPeople([{ userId, displayName }]) for a person after POST /api/social/dms { userId } on confirm (G14); join: GET /api/social/search or GET /api/social/plane/search?type=huddle (the live huddles the index shows), then callConversation on that conversation's lobby, which walks into its live call",
   },
   {
     name: 'set_status',
@@ -793,7 +794,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     }, ['status']),
     kind: 'people', backing: 'social-activity', confirm: false, action: null,
     gate: "the socket's presence admission; no Social grant (it changes only the caller, G10)", spend: 'none', idempotent: true,
-    says: 'Setting your status to away: out today.', tenants: PEOPLE_TENANTS,
+    says: 'Setting your status to away: out today.', tenants: ['orgiq', 'social', 'assessment', 'pipelines'],
     mapsTo: "usePresence('<tenant>:lobby') (the shell's tenant lobby, manifest presenceLobby) then usePresence('social:lobby') with a Social grant: setStatus(status) and updateMetadata({ statusMessage })",
   },
   {
@@ -905,6 +906,9 @@ export const MOCK_CALLS: Readonly<Record<string, { name: string; arguments: Reco
   assessment: { name: 'search', arguments: { query: 'teams below target', type: 'team', scope: null, sort: null, limit: null, answer: null }, said: 'Which teams are below target?' },
   pipelines: { name: 'search', arguments: { query: 'failed runs', type: 'run', scope: null, sort: null, limit: null, answer: null }, said: 'What failed last night?' },
   access: { name: 'access_request_status', arguments: { query: 'SME', scope: 'mine' }, said: 'Did my SME request get approved?' },
+  // V2-9: a participant summarises #general (the composer's bare /summarize, followed to its end with one toast). A call
+  // join needs platform-api, which plain dev:mock has not got (the social compose profile has); the dock's tests join.
+  'social/participant': { name: 'queue_work', arguments: { kind: 'summarize', target: 'general', note: null, model: null }, said: 'Summarise general for me.' },
   // G6: "who is on call" reads the social index's live huddles (a moderator's session; a participant's searches them).
   'social/moderator': { name: 'activity', arguments: { scope: 'live-calls', since: null, who: null }, said: 'Who is on a call right now?' },
   // V2-10: an approver approves the request waiting on them (dev:mock's req-0001, Rhea's SME in Work, waits on u-omar's step).

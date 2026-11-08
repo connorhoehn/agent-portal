@@ -65,7 +65,7 @@ test('set_status: with a Social grant the Social entry is the second write; Soci
 test('send_chat_message without PostMessage: refused before any read, with the access request for the Social grant offered', async () => {
   const { fetch, log } = fakeFetch([route('GET', '/api/social/plane/resolve', 200, {})]);
   const s = social();
-  const { card, result } = await call('send_chat_message', { target: { kind: 'team', name: 'platform' }, text: "I'm out today" },
+  const { card, result } = await call('message', { target: { kind: 'team', name: 'platform' }, text: "I'm out today" },
     toolContext({ role: 'member', fetch, social: null, deny: ['PostMessage', 'StartCall'], socialRequestItemId: ITEM }));
   assert.equal(card, false);
   assert.equal(result.outcome, 'refused');
@@ -81,24 +81,24 @@ test('send_chat_message without PostMessage: refused before any read, with the a
 });
 
 test('start_call without StartCall offers the same request; without a requestItemId the refusal is the plain one', async () => {
-  const offered = await call('start_call', { target: { kind: 'team', name: 'platform' } }, toolContext({ social: null, deny: ['PostMessage', 'StartCall'], socialRequestItemId: ITEM }));
+  const offered = await call('call', { action: 'start', target: { kind: 'team', name: 'platform' } }, toolContext({ social: null, deny: ['PostMessage', 'StartCall'], socialRequestItemId: ITEM }));
   assert.equal((offered.result.output['hint'] as { href: string }).href, accessRequestHref(ITEM));
-  const plain = await call('send_chat_message', { target: { kind: 'team', name: 'platform' }, text: 'x' }, toolContext({ social: null, deny: ['PostMessage'] }));
+  const plain = await call('message', { target: { kind: 'team', name: 'platform' }, text: 'x' }, toolContext({ social: null, deny: ['PostMessage'] }));
   assert.equal(plain.result.output['reason'], "I can't post messages with your role.");
   assert.equal(plain.result.output['hint'], undefined);
   // In Social itself the grant is the tenant's: no access offer, whatever the context carries.
-  const inSocial = await call('send_chat_message', { target: { kind: 'team', name: 'platform' }, text: 'x' }, toolContext({ tenant: 'social', social: null, deny: ['PostMessage'], socialRequestItemId: ITEM }));
+  const inSocial = await call('message', { target: { kind: 'team', name: 'platform' }, text: 'x' }, toolContext({ tenant: 'social', social: null, deny: ['PostMessage'], socialRequestItemId: ITEM }));
   assert.equal(inSocial.result.output['hint'], undefined);
 });
 
 test('no post is ever sent without the Social context, even when can() said yes (the planner and the runner both refuse)', async () => {
   const { fetch, log } = fakeFetch([]);
-  const planned = await call('send_chat_message', { target: { kind: 'dm', name: 'Ada' }, text: 'hi' }, toolContext({ fetch, social: null, socialRequestItemId: ITEM }));
+  const planned = await call('message', { target: { kind: 'dm', name: 'Ada' }, text: 'hi' }, toolContext({ fetch, social: null, socialRequestItemId: ITEM }));
   assert.equal(planned.result.outcome, 'refused');
   assert.ok((planned.result.output['hint'] as { href: string }).href.startsWith('/access/requests/new'));
   assert.equal(log.length, 0);
   // A confirmed plan whose Social context went away by confirm time sends nothing.
-  const prepared = prepareToolCall('send_chat_message', { target: { kind: 'team', name: 'p' }, text: 'x' }, toolContext({ social: null }));
+  const prepared = prepareToolCall('message', { target: { kind: 'team', name: 'p' }, text: 'x' }, toolContext({ social: null }));
   assert.ok(prepared.ok);
   const run = await runPreparedCall(prepared.call, toolContext({ social: null, socialRequestItemId: ITEM }), VOICE_RUNNERS,
     { channel: 'social:ch:p', name: 'p', kind: 'channel', text: 'x', deliveryId: 'd1', key: 'k' });

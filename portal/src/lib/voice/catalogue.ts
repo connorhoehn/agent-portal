@@ -562,7 +562,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
     kind: 'read', backing: 'search', confirm: false, action: null, says: 'Checking who is on a call.', tenants: PEOPLE_TENANTS,
   },
   {
-    name: 'send_chat_message',
+    name: 'message',
     parameters: obj({
       target: obj({
         kind: str('Where it goes.', { enum: ['team', 'channel', 'dm'] }),
@@ -573,13 +573,14 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
     kind: 'people', backing: 'social-activity', confirm: true, action: 'PostMessage', says: "I'll post that to #platform once you confirm.", tenants: PEOPLE_TENANTS,
   },
   {
-    name: 'start_call',
+    name: 'call',
     parameters: obj({
+      action: str('start a huddle (or ring a person), or join the live huddle there.', { enum: ['start', 'join'] }),
       target: obj({
         kind: str('Where the call is: a team, a channel, or one person (dm).', { enum: ['team', 'channel', 'dm'] }),
         name: str('The team, channel or person, as the user said it.', { minLength: 1, maxLength: 120 }),
       }, ['kind', 'name']),
-    }, ['target']),
+    }, ['action']),
     kind: 'people', backing: 'social-activity', confirm: true, action: 'StartCall', says: "I'll start a huddle in #platform once you confirm.", tenants: PEOPLE_TENANTS,
   },
   {
@@ -588,7 +589,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       status: str('The status.', { enum: ['online', 'away', 'busy', 'offline'] }),
       message: str('A short status message.', { maxLength: 120 }),
     }, ['status']),
-    kind: 'people', backing: 'social-activity', confirm: false, action: null, says: 'Setting your status to away: out today.', tenants: PEOPLE_TENANTS,
+    kind: 'people', backing: 'social-activity', confirm: false, action: null, says: 'Setting your status to away: out today.', tenants: ['orgiq', 'social', 'assessment', 'pipelines'],
   },
   {
     name: 'queue_work',

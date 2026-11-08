@@ -17,7 +17,7 @@
 // stream), the shell's one presence announcement (EmbeddedSocial), and the
 // gateway socket through useChat for a post, the same send-and-wait-for-
 // receipt path the composer uses, and the shell's call host (useSocialCall,
-// the Social pages' call buttons and the footer's Huddle) for start_call. A
+// the Social pages' call buttons and the footer's Huddle) for call. A
 // computer run's output streams into a read-only output tab in the compute dock
 // (the library's openOutputTab, ui-components 2.510.2), beside the shell
 // tabs, with an "Open shell" action. Work queue_work queues (G19) is followed
@@ -206,7 +206,7 @@ function VoiceFooterPane() {
     remove: (id) => compute.remove(id),
   } : null), [compute, tenant]);
 
-  // start_call: the shell's one call host (ShellCallHost mounts this footer), through the Social pages' own starts.
+  // call (start and join): the shell's one call host (ShellCallHost mounts this footer), through the Social pages' own starts.
   const host = useCallHost();
   const socialCall = useSocialCall();
   const callAccess: CallAccess | null = host ? {

@@ -379,3 +379,44 @@ test('V2-11: a requester\'s scripted session files a request from the catalogue:
   assert.deepEqual(run.log.filter((l) => l.method === 'POST' && !l.url.startsWith('/api/voice/')).map((l) => l.url), ['/api/access/requests/preview', '/api/access/requests']);
   assert.deepEqual(run.calls, [['create', 'done']]);
 });
+
+test('V2-9 in Social: a participant\'s scripted session summarises #general through the composer\'s own command, followed to its end', async () => {
+  const { mockCallFor } = await middlewareVoice<{ mockCallFor: (t: string, r: string) => Call }>('catalogue.ts');
+  const call = mockCallFor('social', 'participant');
+  assert.equal(call.name, 'queue_work');
+  const tracked: unknown[] = [];
+  const run = await scriptedRun('social', {
+    role: 'participant', allow: ['ViewSocial', 'PostMessage', 'StartCall', 'VoiceNavigate'], call,
+    routes: [route('GET', '/api/social/resolve?kind=channel', 200, { kind: 'channel', match: { id: 'general', name: 'General', channelId: 'c', channel: 'social:ch:general' }, candidates: [] }),
+      route('POST', '/api/chat/commands/summarize/run', 202, { runId: 'sum-9' })],
+    ctx: { jobs: { track: (j) => { tracked.push([j.jobId, j.follow?.url]); } } },
+    beforeStop: async (c, _ctx, clock) => { c.confirm('click'); await clock.advance(300); },
+  });
+  assert.deepEqual(run.log.filter((l) => l.method === 'POST' && !l.url.startsWith('/api/voice/')).map((l) => [l.url, l.body]), [['/api/chat/commands/summarize/run', { channel: 'social:ch:general', text: '' }]]);
+  assert.deepEqual(tracked, [['sum-9', '/api/chat/commands/summarize/runs/sum-9']]);
+  assert.deepEqual(run.calls, [['queue_work', 'done']]);
+});
+
+test('V2-12: a scripted join walks into the huddle the index shows live, ringing nobody; while in a call it is refused', async () => {
+  const join: Call = { name: 'call', arguments: { action: 'join', target: { kind: 'channel', name: 'general' } }, said: 'Join the huddle in general.' };
+  const routes = [
+    route('GET', '/api/social/search?', 200, { results: [{ type: 'huddle', id: 'mock-call-live-general', title: 'Live huddle in #general', subtitle: 'In the huddle now: Mira Okafor, Lena Brandt', status: 'live', href: '/social/calls' }], total: 1 }),
+    route('GET', '/api/social/resolve?kind=channel', 200, { kind: 'channel', match: { id: 'general', name: 'General', channelId: 'c', channel: 'social:ch:general' }, candidates: [] }),
+  ];
+  const joined: unknown[] = [];
+  let card: unknown = null;
+  const social = { api: '/api/social', unavailable: null, presence: null, deliveries: new Map(), send: async () => {} };
+  const run = await scriptedRun('social', {
+    role: 'participant', allow: ['ViewSocial', 'PostMessage', 'StartCall', 'VoiceNavigate'], call: join, routes,
+    ctx: { social, calls: { unavailable: null, active: () => null, callConversation: (c) => { joined.push(c); }, callPeople: () => { throw new Error('nobody is rung'); } } },
+    beforeStop: async (c, _ctx, clock) => { card = c.getSnapshot().pending?.title; c.confirm('voice'); await clock.advance(300); },
+  });
+  assert.equal(card, 'Join the huddle in #general');
+  assert.deepEqual(joined, [{ channel: 'social:ch:general', title: '#general' }]);
+  assert.deepEqual(run.calls, [['call', 'done']]);
+  const busy = await scriptedRun('social', {
+    role: 'participant', allow: ['ViewSocial', 'PostMessage', 'StartCall', 'VoiceNavigate'], call: join, routes,
+    ctx: { social, calls: { unavailable: null, active: () => ({ title: 'standup' }), callConversation: () => { throw new Error('never'); }, callPeople: () => {} } },
+  });
+  assert.deepEqual(busy.calls, [['call', 'refused']]);
+});

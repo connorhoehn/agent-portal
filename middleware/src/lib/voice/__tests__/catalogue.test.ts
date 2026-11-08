@@ -34,8 +34,8 @@ const SPEC: Record<string, [string, boolean, string]> = {
   computer: ['machine', true, 'work'],
   summary: ['read', false, 'search'],
   budget: ['read', false, 'search'],
-  send_chat_message: ['people', true, 'social-activity'],
-  start_call: ['people', true, 'social-activity'],
+  message: ['people', true, 'social-activity'],
+  call: ['people', true, 'social-activity'],
   set_status: ['people', false, 'social-activity'],
   access_request_status: ['read', false, 'search'],
   activity: ['read', false, 'search'],
@@ -69,7 +69,7 @@ describe('the §4 catalogue', () => {
   });
 
   it('asks first for exactly the tools that spend, run on a machine or reach people', () => {
-    expect(VOICE_TOOLS.filter((t) => t.confirm).map((t) => t.name).sort()).toEqual(['computer', 'create', 'decide', 'queue_work', 'send_chat_message', 'start_call', 'update']);
+    expect(VOICE_TOOLS.filter((t) => t.confirm).map((t) => t.name).sort()).toEqual(['call', 'computer', 'create', 'decide', 'message', 'queue_work', 'update']);
     // computer's open-shell only opens a tab: the one action that skips the card (V2-8).
     expect(voiceTool('computer')!.noConfirm).toEqual({ action: ['open-shell'] });
   });
@@ -106,10 +106,12 @@ describe('the §4 catalogue', () => {
     ok('computer', { action: 'stop', computer: 'alpha-1' });
     ok('computer', { action: 'open-shell', computer: 'Alpha' });
     ok('computer', { action: 'hand-work', machine: 'my laptop', job: 'the login fix' });
-    ok('send_chat_message', { target: { kind: 'team', name: 'platform' }, text: "I'm out today" });
+    ok('message', { target: { kind: 'team', name: 'platform' }, text: "I'm out today" });
     ok('set_status', { status: 'away', message: 'out today' });
-    ok('start_call', { target: { kind: 'team', name: 'platform' } });
-    ok('start_call', { target: { kind: 'dm', name: 'Ada' } });
+    ok('call', { action: 'start', target: { kind: 'team', name: 'platform' } });
+    ok('call', { action: 'start', target: { kind: 'dm', name: 'Ada' } });
+    ok('call', { action: 'join', target: { kind: 'channel', name: 'general' } });
+    ok('call', { action: 'join' });
   });
 
   it('computer run takes a phrase from the table, never a command string (§6); hand-work names a job, never a prompt', () => {
@@ -142,16 +144,30 @@ describe('the §4 catalogue', () => {
 
 describe('tenant scoping (§6)', () => {
   it('a social session is offered navigate, its search, its activity, chat, a call, status and its own requests, nothing on machines', () => {
-    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'activity', 'budget', 'create', 'get', 'list', 'open', 'queue_work', 'search', 'send_chat_message', 'set_status', 'start_call', 'summary', 'update']);
+    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'activity', 'budget', 'call', 'create', 'get', 'list', 'message', 'open', 'queue_work', 'search', 'set_status', 'summary', 'update']);
   });
 
-  it('start_call is offered in orgiq and social only, asks first, and gates on StartCall (G7)', () => {
-    const t = voiceTool('start_call')!;
+  it('call (G7, V2-12: start or join) is offered in orgiq and social only, asks first, and gates on StartCall; message replaces send_chat_message', () => {
+    const t = voiceTool('call')!;
     expect([...t.tenants]).toEqual(['orgiq', 'social']);
+    expect((t.parameters.properties['action'] as { enum: string[] }).enum).toEqual(['start', 'join']);
+    expect(t.parameters.required).toEqual(['action']);
+    expect(voiceTool('start_call')).toBeUndefined();
+    expect(voiceTool('send_chat_message')).toBeUndefined();
+    expect(voiceTool('message')).toMatchObject({ confirm: true, action: 'PostMessage', tenants: ['orgiq', 'social'] });
     expect(t).toMatchObject({ confirm: true, action: 'StartCall', kind: 'people', spend: 'none' });
     const target = t.parameters.properties['target'] as { properties: { kind: { enum: string[] } } };
     expect(target.properties.kind.enum).toEqual(['team', 'channel', 'dm']);
-    for (const tenant of ['assessment', 'pipelines', 'access']) expect(toolsForTenant(tenant).map((x) => x.name)).not.toContain('start_call');
+    for (const tenant of ['assessment', 'pipelines', 'access']) expect(toolsForTenant(tenant).map((x) => x.name)).not.toContain('call');
+  });
+
+  it('set_status is offered wherever the manifest has a presence lobby, plus Social (its own presence), and asks nothing (V2-12)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const manifest = require('../../../../../tenants/manifest.json') as { tenants: Array<{ id: string; presenceLobby?: boolean }> };
+    const lobbies = manifest.tenants.filter((t) => t.presenceLobby).map((t) => t.id);
+    expect([...voiceTool('set_status')!.tenants].sort()).toEqual([...new Set([...lobbies, 'social'])].sort());
+    expect(voiceTool('set_status')).toMatchObject({ confirm: false, action: null });
+    expect(toolsForTenant('access').some((x) => x.name === 'set_status')).toBe(false);
   });
 
   it('open offers every palette page of the tenant plus the universal ones, narrowed to what the role sees (V2-2, V2-4)', () => {
@@ -195,8 +211,10 @@ describe('tenant scoping (§6)', () => {
   });
 
   it.each(['assessment', 'pipelines', 'access'])('%s is offered reads and navigation, nothing that touches a machine or posts (gaps doc Q1); assessment and pipelines add their own queue_work kinds (G19, V2-9)', (tenant) => {
-    const ACTIONS = ['queue_work', 'decide', 'create', 'update'];
+    const ACTIONS = ['queue_work', 'decide', 'create', 'update', 'set_status'];
     const tools = toolsForTenant(tenant).filter((t) => !ACTIONS.includes(t.name));
+    // A presence lobby offers the caller's own status (V2-12): assessment and pipelines have one, access does not.
+    expect(toolsForTenant(tenant).some((t) => t.name === 'set_status')).toBe(tenant !== 'access');
     expect(tools.map((t) => t.name).sort()).toEqual(['access_request_status', 'budget', 'get', 'list', 'open', 'search', 'summary']);
     expect(toolsForTenant(tenant).some((t) => t.name === 'queue_work')).toBe(tenant !== 'access');
     for (const t of tools) {
@@ -258,7 +276,7 @@ describe('tenant scoping (§6)', () => {
     expect(scopes('social')).not.toContain('work');
     for (const tenant of ['assessment', 'pipelines', 'access']) expect(toolsForTenant(tenant).some((x) => x.name === 'activity')).toBe(false);
     expect(mockCallFor('social', 'moderator')).toMatchObject({ name: 'activity', arguments: { scope: 'live-calls' } });
-    expect(mockCallFor('social', 'participant')).toBe(MOCK_CALLS['social']);
+    expect(mockCallFor('social', 'participant')).toMatchObject({ name: 'queue_work', arguments: { kind: 'summarize', target: 'general' } });
   });
 
   it('queue_work (G19, V2-9) asks first, offers each tenant its own kinds, and gates each kind on its page button\'s action', () => {
