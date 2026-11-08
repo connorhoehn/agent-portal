@@ -161,3 +161,9 @@ jobs:
       - name: Agent tool tests
         working-directory: agents/tests
         run: python -m unittest discover
+      - name: Devbox agent tests
+        working-directory: agents/devbox
+        run: python -m unittest discover
+      - name: Supervisor agent tests
+        working-directory: agents/supervisor
+        run: python -m unittest discover
