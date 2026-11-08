@@ -101,6 +101,12 @@ async function post(path: string, body: unknown): Promise<void> {
   if (!res.ok) {
     let detail = `${res.status}`;
     try { detail = ((await res.json()) as { error?: string }).error ?? detail; } catch { /* keep status */ }
+    if (res.status === 429) {
+      // The per-IP sign-in brake. Say when it lifts: a silent refusal reads as
+      // a frozen button (8 November 2026).
+      const retry = Number(res.headers.get('Retry-After'));
+      detail = `Too many sign-in attempts from this machine${Number.isFinite(retry) && retry > 0 ? `; try again in ${retry}s` : ''}`;
+    }
     throw new Error(detail);
   }
 }

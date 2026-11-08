@@ -237,6 +237,8 @@ export default function SelectContextPage() {
   }, [accounts, query]);
 
   const [showEveryone, setShowEveryone] = useState(false);
+  // The person being signed in as, held until the redirect lands (same reason as `pending`).
+  const [signingIn, setSigningIn] = useState<string | null>(null);
   // The row the user pressed, held until the hard redirect lands. The server
   // answers in milliseconds; the seconds that follow are the browser loading
   // the workspace, and without this the pressed row showed nothing at all.
@@ -475,7 +477,7 @@ export default function SelectContextPage() {
                 user={user}
                 persona={persona}
                 isCurrent={user.id === session?.sub}
-                onPick={() => pick(user)}
+                onPick={() => pick(user)} busy={signingIn === user.id} inert={signingIn != null && signingIn !== user.id}
               />
             ))}
           </CatalogGrid>
@@ -494,7 +496,7 @@ export default function SelectContextPage() {
                         user={user}
                         persona=""
                         isCurrent={user.id === session?.sub}
-                        onPick={() => pick(user)}
+                        onPick={() => pick(user)} busy={signingIn === user.id} inert={signingIn != null && signingIn !== user.id}
                       />
                     ))}
                   </CatalogGrid>
@@ -509,8 +511,12 @@ export default function SelectContextPage() {
   );
 
   function pick(user: DirectoryUser) {
-    login(user.id).catch((err: unknown) =>
-      toastError(null, `Could not sign in as ${user.displayName}`, (err as Error).message));
+    if (signingIn) return;
+    setSigningIn(user.id);
+    login(user.id).catch((err: unknown) => {
+      setSigningIn(null);
+      toastError(null, `Could not sign in as ${user.displayName}`, (err as Error).message);
+    });
   }
 }
 
@@ -518,12 +524,16 @@ export default function SelectContextPage() {
  *  The name carries a PersonHoverCard so the full per-tenant grant list is one
  *  hover away without the card itself growing into a wall of chips. */
 function UserCard({
-  user, persona, isCurrent, onPick,
+  user, persona, isCurrent, onPick, busy = false, inert = false,
 }: {
   user: DirectoryUser;
   persona: string;
   isCurrent: boolean;
   onPick: () => void;
+  /** This card's sign-in is in flight (the redirect has not landed yet). */
+  busy?: boolean;
+  /** Another card's sign-in is in flight. */
+  inert?: boolean;
 }) {
   const portraitPersona = demoPortraits.personas.find(p => p.userId === user.id && p.name === user.displayName);
   const tenants = user.tenants
@@ -596,11 +606,12 @@ function UserCard({
           variant={isCurrent ? 'ghost' : 'secondary'}
           size="sm"
           fullWidth
-          disabled={isCurrent}
+          disabled={isCurrent || busy || inert}
+          aria-busy={busy || undefined}
           onClick={onPick}
           aria-label={isCurrent ? `Signed in as ${user.displayName}` : `Sign in as ${user.displayName}`}
         >
-          {isCurrent ? 'Signed in' : 'Sign in'}
+          {isCurrent ? 'Signed in' : busy ? 'Signing in…' : 'Sign in'}
         </Button>
       </Stack>
     </Card>
