@@ -7,6 +7,7 @@
 //   POST   /api/devbox/:sessionId/command    allowlisted read-only shell (SSE)
 //   DELETE /api/devbox/:sessionId            stop the runtime session
 //   GET    /api/devbox/status                resolved runtime ARN + config
+//   GET    /api/devbox/allowlist             the safe-mode command prefixes only
 //
 // `routes/internal-devbox.ts` mounts a second, HMAC-only router at
 // `/internal/devbox` for platform-api's agent loop (chat `/agent`). It calls
@@ -217,7 +218,14 @@ const DEFAULT_ALLOWLIST = [
   'node --version', 'python --version', 'claude --version',
 ];
 
-function commandAllowlist(): string[] {
+/**
+ * The safe-mode prefixes this deployment runs (DEVBOX_COMMAND_ALLOWLIST, else
+ * the default above). Exported for the voice mint, which drops the
+ * run_command phrases these would refuse before the model is offered them
+ * (docs/voice-navigator-gaps.md G9), and served as GET /allowlist for the
+ * dock's planner, which checks the composed command again before its card.
+ */
+export function commandAllowlist(): string[] {
   const raw = process.env['DEVBOX_COMMAND_ALLOWLIST'];
   if (!raw) return DEFAULT_ALLOWLIST;
   return raw.split(',').map((s) => s.trim()).filter(Boolean);
@@ -433,6 +441,13 @@ export async function buildDevboxStatusPayload(): Promise<{
 devboxRouter.get('/status', asyncHandler(async (_req, res) => {
   res.json(await buildDevboxStatusPayload());
 }));
+
+// The safe-mode prefixes, nothing else (no ARN, no full-exec flag): what the
+// voice dock checks a composed run_command against before it shows the card,
+// so the card never offers a command this server would refuse (G9).
+devboxRouter.get('/allowlist', (_req, res) => {
+  res.json({ prefixes: commandAllowlist() });
+});
 
 devboxRouter.post('/sessions', asyncHandler(async (req, res) => {
   const requested = (req.body as { sessionId?: string } | undefined)?.sessionId;

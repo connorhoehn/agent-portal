@@ -22,7 +22,11 @@ import {
   validateCwd,
   CWD_MARKER,
   stopDevboxSessionForSourceControl,
+  commandAllowlist,
 } from '../devbox.js';
+import {
+  commandAllowedBy, runCommandPhrases, toolsForTenant, RUN_COMMAND_PHRASES, RUN_COMMAND_PHRASE_COMMANDS,
+} from '../../lib/voice/catalogue.js';
 import { type Session } from '../../lib/session.js';
 import { registerBox, _resetFleet, getBoxBySession, getBox } from '../../lib/devbox-fleet.js';
 import { decideReaping, MAX_LIFETIME_MS } from '../../lib/devbox-reaper.js';
@@ -646,6 +650,52 @@ describe('GET /api/devbox/status', () => {
     const res = await request(buildApp()).get('/api/devbox/status');
     expect(res.body.deployed).toBe(true);
     expect(res.body.runtimeArn).toMatch(/runtime\/orgiq_devbox-MOCK$/);
+  });
+});
+
+describe('GET /api/devbox/allowlist and the voice phrases it admits (G9)', () => {
+  afterEach(() => { delete process.env['DEVBOX_COMMAND_ALLOWLIST']; });
+  const phraseEnum = (tools: ReturnType<typeof toolsForTenant>) =>
+    ((tools.find((t) => t.name === 'run_command')?.parameters.properties['phrase'] as { enum?: string[] } | undefined)?.enum ?? null);
+
+  it('answers the safe-mode prefixes and nothing else', async () => {
+    const res = await request(buildApp()).get('/api/devbox/allowlist');
+    expect(res.status).toBe(200);
+    expect(Object.keys(res.body)).toEqual(['prefixes']);
+    expect(res.body.prefixes).toEqual(commandAllowlist());
+    expect(res.body.prefixes).toContain('git log');
+    process.env['DEVBOX_COMMAND_ALLOWLIST'] = 'ls, npm test';
+    expect((await request(buildApp()).get('/api/devbox/allowlist')).body).toEqual({ prefixes: ['ls', 'npm test'] });
+  });
+
+  it('the catalogue\'s prefix rule agrees with validateCommand for every phrase, under every allowlist tried', () => {
+    for (const raw of [undefined, 'ls,npm test', 'git log,git status', 'npm', 'pytest', 'npm run lint,npm run build', 'echo hello']) {
+      if (raw === undefined) delete process.env['DEVBOX_COMMAND_ALLOWLIST']; else process.env['DEVBOX_COMMAND_ALLOWLIST'] = raw;
+      for (const phrase of RUN_COMMAND_PHRASES) {
+        const command = RUN_COMMAND_PHRASE_COMMANDS[phrase];
+        expect([raw, phrase, commandAllowedBy(commandAllowlist(), command)]).toEqual([raw, phrase, validateCommand(command) === null]);
+      }
+    }
+  });
+
+  it('with the default allowlist the minted phrase enum has no test, lint or build', () => {
+    const phrases = phraseEnum(toolsForTenant('orgiq', { commandAllowlist: commandAllowlist() }));
+    expect(phrases).toEqual(['latest-commits-since-yesterday', 'commits-since', 'status', 'diff-stat', 'list-files', 'working-directory', 'test-python']);
+  });
+
+  it('with npm test opted in, test is offered and lint and build are not', () => {
+    process.env['DEVBOX_COMMAND_ALLOWLIST'] = 'git log,git status,ls,npm test';
+    const phrases = phraseEnum(toolsForTenant('orgiq', { commandAllowlist: commandAllowlist() }))!;
+    expect(phrases).toContain('test');
+    expect(phrases.filter((p) => ['test', 'lint', 'build'].includes(p))).toEqual(['test']);
+    expect(runCommandPhrases(commandAllowlist())).toEqual(phrases);
+  });
+
+  it('an allowlist that runs no phrase leaves run_command out of the session', () => {
+    process.env['DEVBOX_COMMAND_ALLOWLIST'] = 'echo hello';
+    const tools = toolsForTenant('orgiq', { commandAllowlist: commandAllowlist() });
+    expect(tools.map((t) => t.name)).not.toContain('run_command');
+    expect(tools.map((t) => t.name)).toContain('open_shell');
   });
 });
 

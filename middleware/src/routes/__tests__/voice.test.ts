@@ -140,6 +140,27 @@ describe('POST /api/voice/sessions — the mint', () => {
     expect(session.delegation.responses.tools).toMatchSnapshot();
   });
 
+  it('offers only the run_command phrases the devbox allowlist runs (G9)', async () => {
+    budget();
+    const phrases = async () => {
+      calls = [];
+      expect((await mint()).status).toBe(201);
+      const tools = JSON.parse(calls[0]!.init.body!).session.delegation.responses.tools as Array<{ name: string; parameters: { properties: { phrase?: { enum: string[] } } } }>;
+      return tools.find((t) => t.name === 'run_command')?.parameters.properties.phrase?.enum ?? null;
+    };
+    const saved = process.env['DEVBOX_COMMAND_ALLOWLIST'];
+    try {
+      delete process.env['DEVBOX_COMMAND_ALLOWLIST'];
+      const byDefault = await phrases();
+      expect(byDefault).toContain('commits-since');
+      expect(byDefault!.filter((p) => ['test', 'lint', 'build'].includes(p))).toEqual([]);
+      process.env['DEVBOX_COMMAND_ALLOWLIST'] = 'git log,git status,ls,pwd,npm test';
+      expect((await phrases())!.filter((p) => ['test', 'lint', 'build'].includes(p))).toEqual(['test']);
+    } finally {
+      if (saved === undefined) delete process.env['DEVBOX_COMMAND_ALLOWLIST']; else process.env['DEVBOX_COMMAND_ALLOWLIST'] = saved;
+    }
+  });
+
   it('never leaks the key, the instructions or the session object in its body', async () => {
     budget();
     const res = await mint();

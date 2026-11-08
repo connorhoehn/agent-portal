@@ -16,16 +16,16 @@
 // (ComputeHost's useCompute: computers, create, openShell, the command
 // stream), the shell's one presence announcement (EmbeddedSocial), and the
 // gateway socket through useChat for a post, the same send-and-wait-for-
-// receipt path the composer uses. A run_command's output streams into the
-// pane's output panel (LogStream); the library's shell tab is a live PTY with
-// no way to write captured output into it.
+// receipt path the composer uses. A run_command's output streams into a
+// read-only output tab in the compute dock (the library's openOutputTab,
+// ui-components 2.510.2), beside the shell tabs, with an "Open shell" action.
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { useChat, useGatewayOptional } from '@connorhoehn/realtime-modules/client';
 import { CaptionsIcon } from '@connorhoehn/ui-components';
-import { openShell, useComputeOptional } from '@connorhoehn/ui-components/compute';
-import { Button, IconButton, Inline, InlinePopover, LogStream, Tooltip } from '@connorhoehn/ui-components/shared';
+import { openOutputTab, openShell, useComputeOptional } from '@connorhoehn/ui-components/compute';
+import { IconButton, Inline, InlinePopover, Tooltip } from '@connorhoehn/ui-components/shared';
 import { VoiceDock, VoiceTurnStrip, type VoicePending, type VoiceTurn } from '@connorhoehn/ui-components/voice';
 import { useSession } from '../../lib/auth';
 import { useCapabilities, type Action } from '../../lib/capabilities';
@@ -147,10 +147,21 @@ function VoiceFooterPane() {
     await sender(text, deliveryId);
   }, []);
 
-  // ── run_command's captured output ──
-  const [output, setOutput] = useState<CommandOutputView | null>(null);
-  const [outputOpen, setOutputOpen] = useState(false);
-  const showOutput = useCallback((view: CommandOutputView) => { setOutput(view); setOutputOpen(true); }, []);
+  // ── run_command's captured output: a read-only tab in the compute dock (G9) ──
+  // Read through a ref: the controller is built once per pane, and a new computer list must not rebuild it (that ends the session).
+  const computeRef = useRef(compute);
+  computeRef.current = compute;
+  const showOutput = useCallback((view: CommandOutputView): boolean => {
+    const box = computeRef.current?.computers.find((c) => c.id === view.computerId);
+    const lines: Array<{ id: string; message: string; level?: 'error' }> = view.lines.map((message, i) => ({ id: `l${i}`, message }));
+    if (view.error) lines.push({ id: 'error', message: view.error, level: 'error' });
+    const opened = openOutputTab({
+      id: view.id, label: `${view.computer} output`, command: view.command, lines, running: view.running,
+      ...(view.exitCode != null ? { exitCode: view.exitCode } : {}),
+      ...(box ? { onOpenShell: () => { openShell({ id: box.id, label: box.label, sessionId: box.sessionId, ...(box.workspace ? { cwd: box.workspace } : {}) }); } } : {}),
+    });
+    return opened.ok;
+  }, []);
 
   const computeAccess = useMemo<ComputeAccess | null>(() => (compute && tenant === 'orgiq' ? {
     canManage: compute.canManage,
@@ -230,9 +241,6 @@ function VoiceFooterPane() {
     onCancel: () => controller.cancel('click'),
   } : null;
   const turns = snap.turns as VoiceTurn[];
-  const outputBox = output ? computeAccess?.computers().find((c) => c.id === output.computerId) : undefined;
-  const outputLines = useMemo(() => (output?.lines ?? []).map((message, i) => ({ id: `l${i}`, message })), [output]);
-
   return <Inline ref={anchor} gap="xs" align="center" wrap={false} className="min-w-0 max-w-[30rem] shrink border-l border-border pl-2" data-testid="shell-footer-voice">
     <VoiceDock
       size="footer"
@@ -259,16 +267,6 @@ function VoiceFooterPane() {
     <InlinePopover trigger={anchor} open={stripOpen && turns.length > 0} onClose={() => setStripOpen(false)}
       placement="bottom-end" aria-label="Voice transcript" kind="voice-transcript" data-testid="shell-voice-transcript">
       <VoiceTurnStrip turns={turns} maxVisible={6} onClear={() => { controller.clearTurns(); setStripOpen(false); }} />
-    </InlinePopover>
-    <InlinePopover trigger={anchor} open={outputOpen && !!output} onClose={() => setOutputOpen(false)}
-      placement="bottom-end" aria-label="Command output" kind="voice-command-output" data-testid="shell-voice-output">
-      {output && <LogStream lines={outputLines} showTimestamp={false} showLevel={false} showSource={false} maxHeight="16rem" tone="surface"
-        title={`${output.command} · ${output.computer}${output.running ? ' (running)' : output.exitCode ? ` (exit ${output.exitCode})` : ''}`}
-        emptyMessage={output.error ?? (output.running ? 'Waiting for output…' : 'No output')}
-        headerSlot={outputBox ? <Button variant="ghost" size="sm" data-testid="shell-voice-output-shell"
-          onClick={() => { openShell({ id: outputBox.id, label: outputBox.label, sessionId: outputBox.sessionId, ...(outputBox.workspace ? { cwd: outputBox.workspace } : {}) }); setOutputOpen(false); }}>
-          Open shell</Button> : undefined}
-        data-testid="shell-voice-output-log" />}
     </InlinePopover>
     {chatChannel && session && <VoiceChatChannel key={chatChannel} channel={chatChannel} userId={session.sub}
       displayName={social?.me?.displayName ?? session.name ?? session.sub} onReady={onReady} onFailed={onFailed} />}

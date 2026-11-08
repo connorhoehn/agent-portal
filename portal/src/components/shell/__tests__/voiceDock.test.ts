@@ -71,7 +71,7 @@ async function bundleFooter(name: string, stubPane: boolean): Promise<{ render()
             caps: 'export const useCapabilities = () => ({ can: (x) => globalThis.__voiceTest.allow.includes(x), ready: true, degraded: false, loading: false });',
             features: `export * from ${JSON.stringify(featuresPath)}; export const features = { get voiceNavigator() { return globalThis.__voiceTest.flag; } };`,
             css: '',
-            compute: 'export const openShell = () => {}; export const useComputeOptional = () => null;',
+            compute: 'export const openShell = () => {}; export const openOutputTab = () => ({ ok: true, id: "" }); export const useComputeOptional = () => null;',
             // The footer as it was before the voice navigator: no slot at all.
             pane: 'export const VoiceFooterSlot = () => null;',
           }[a.path] ?? '',

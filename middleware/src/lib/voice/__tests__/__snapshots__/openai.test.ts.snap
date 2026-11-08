@@ -311,7 +311,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
           "type": "string",
         },
         "since": {
-          "description": "For commits-since: "yesterday", "today", "3 days ago", "last week" or a YYYY-MM-DD date.",
+          "description": "For commits-since: "yesterday", "last night", "today", "this morning", "3 hours ago", "3 days ago", "last week" or a YYYY-MM-DD date.",
           "type": [
             "string",
             "null",
@@ -347,7 +347,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
           ],
         },
         "since": {
-          "description": "An ISO date, or "yesterday".",
+          "description": "Since when: "yesterday", "last night", "today", "this morning", "3 hours ago", "3 days ago", "last week" or a YYYY-MM-DD date.",
           "type": "string",
         },
       },

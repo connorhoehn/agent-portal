@@ -107,8 +107,10 @@ export interface ToastSink {
   error(id: string, title: string, detail?: string): void;
 }
 
-/** A run_command's captured output, as the dock shows it while it streams. */
+/** A run_command's captured output, as the compute dock's output tab shows it while it streams. */
 export interface CommandOutputView {
+  /** The output tab's id: one per computer and phrase, so a re-run replaces its lines. */
+  id: string;
   computerId: string;
   computer: string;
   command: string;
@@ -132,8 +134,8 @@ export interface ToolContext {
   /** Social; null when the session holds no Social grant. */
   social?: SocialAccess | null;
   toast?: ToastSink;
-  /** The dock's command-output panel. */
-  showOutput?(view: CommandOutputView): void;
+  /** The compute dock's output tab (openOutputTab); false = it could not open (every tab is in use). */
+  showOutput?(view: CommandOutputView): boolean | void;
   /** The rows the session's searches returned, kept for open_result; null/absent = nothing can be opened. */
   results?: ResultMemory | null;
 }
@@ -521,13 +523,22 @@ const listActiveInitiatives: Runner = async (args, ctx) => {
 
 // ── sweeps and bots ─────────────────────────────────────────────────────────
 
-/** `since` as an instant: "yesterday" / "today" are local midnights, else an ISO date. Null = unreadable or in the future. */
+/**
+ * `since` as an instant: "yesterday" / "last night" and "today" / "this
+ * morning" are local midnights, "N hours|days|weeks ago" counts back from
+ * now, else an ISO date. Null = unreadable or in the future.
+ */
 export function parseSince(raw: string, now: Date): Date | null {
   const s = raw.trim().toLowerCase();
   const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  if (s === 'today') return midnight;
-  if (s === 'yesterday') return new Date(midnight.getTime() - 24 * 3600_000);
-  if (s === 'last week') return new Date(midnight.getTime() - 7 * 24 * 3600_000);
+  if (s === 'today' || s === 'this morning') return midnight;
+  if (s === 'yesterday' || s === 'last night') return new Date(midnight.getTime() - 24 * 3600_000);
+  if (s === 'last week' || s === 'a week ago') return new Date(midnight.getTime() - 7 * 24 * 3600_000);
+  const ago = /^(\d{1,3}) (hour|hours|day|days|week|weeks) ago$/.exec(s);
+  if (ago) {
+    const unit = ago[2]!.startsWith('hour') ? 3600_000 : ago[2]!.startsWith('day') ? 24 * 3600_000 : 7 * 24 * 3600_000;
+    return new Date(now.getTime() - Number(ago[1]) * unit);
+  }
   const t = Date.parse(raw.trim());
   if (Number.isNaN(t) || t > now.getTime()) return null;
   return new Date(t);

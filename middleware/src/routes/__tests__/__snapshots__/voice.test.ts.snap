@@ -303,15 +303,12 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
             "diff-stat",
             "list-files",
             "working-directory",
-            "test",
             "test-python",
-            "lint",
-            "build",
           ],
           "type": "string",
         },
         "since": {
-          "description": "For commits-since: "yesterday", "today", "3 days ago", "last week" or a YYYY-MM-DD date.",
+          "description": "For commits-since: "yesterday", "last night", "today", "this morning", "3 hours ago", "3 days ago", "last week" or a YYYY-MM-DD date.",
           "type": [
             "string",
             "null",
@@ -347,7 +344,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           ],
         },
         "since": {
-          "description": "An ISO date, or "yesterday".",
+          "description": "Since when: "yesterday", "last night", "today", "this morning", "3 hours ago", "3 days ago", "last week" or a YYYY-MM-DD date.",
           "type": "string",
         },
       },

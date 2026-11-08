@@ -98,12 +98,20 @@ export function searchRecordTypes(tenant: string | null): string[] {
   return [...new Set(Object.values(SEARCH_RECORD_TYPES).flat())];
 }
 
-/** The phrase ids `run_command` may name; actions.ts PHRASE_TABLE owns the command text (§6). */
+/**
+ * The phrase ids `run_command` may name; actions.ts PHRASE_TABLE owns the
+ * command text (§6). The mint narrows this enum to the phrases the server's
+ * allowlist runs (G9), so the dock validates against the full list and the
+ * planner checks the composed command against GET /api/devbox/allowlist.
+ */
 export const RUN_COMMAND_PHRASES = [
   'latest-commits-since-yesterday', 'commits-since', 'status', 'diff-stat', 'list-files', 'working-directory',
   'test', 'test-python', 'lint', 'build',
 ] as const;
 export type RunCommandPhrase = typeof RUN_COMMAND_PHRASES[number];
+
+/** What `since` takes (run_command's commits-since, bot_sweep_status); parseSince and gitSince read exactly these. */
+const SINCE_WORDS = '"yesterday", "last night", "today", "this morning", "3 hours ago", "3 days ago", "last week" or a YYYY-MM-DD date';
 
 const obj = (properties: Record<string, JsonSchema>, required: string[] = []): JsonSchema =>
   ({ type: 'object', properties, required, additionalProperties: false });
@@ -184,14 +192,14 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
     parameters: obj({
       computerId: str('The computer.', { minLength: 1 }),
       phrase: str('Which command.', { enum: [...RUN_COMMAND_PHRASES] }),
-      since: str('For commits-since: "yesterday", "today", "3 days ago", "last week" or a YYYY-MM-DD date.', { maxLength: 40 }),
+      since: str(`For commits-since: ${SINCE_WORDS}.`, { maxLength: 40 }),
     }, ['computerId', 'phrase']),
     kind: 'machine', backing: 'work', confirm: true, action: 'OpenDevboxShell', says: 'Running git log on Alpha.', tenants: ['orgiq'],
   },
   {
     name: 'bot_sweep_status',
     parameters: obj({
-      since: str('An ISO date, or "yesterday".', { minLength: 1, maxLength: 40 }),
+      since: str(`Since when: ${SINCE_WORDS}.`, { minLength: 1, maxLength: 40 }),
       scope: str('"failed" (the default): only sweep runs and bot runs that failed, and open critical or warning findings; "all": every run since then.', { enum: ['failed', 'all'] }),
     }, ['since']),
     kind: 'read', backing: 'search', confirm: false, action: null, says: 'Checking the sweeps since yesterday.', tenants: ['orgiq'],

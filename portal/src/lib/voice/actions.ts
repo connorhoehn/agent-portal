@@ -19,11 +19,14 @@
 //                     they boot
 //   open_shell        the library's openShell (the ⌘K palette's call): opens or
 //                     focuses the dock's shell tab; no card
-//   run_command       a phrase id from PHRASE_TABLE, never model text; safe
-//                     mode only, through the provider's runCommand (the same
-//                     POST /api/devbox/:sid/command, allowlist and
-//                     metacharacter refusal); the stream is captured into the
-//                     dock's output panel and the first lines go back
+//   run_command       a phrase id from PHRASE_TABLE, never model text; the
+//                     composed command checked against GET
+//                     /api/devbox/allowlist before the card, so the card never
+//                     shows a command the server would refuse; safe mode only,
+//                     through the provider's runCommand (the same POST
+//                     /api/devbox/:sid/command, allowlist and metacharacter
+//                     refusal); the stream lands in the compute dock's output
+//                     tab (openOutputTab) and the first lines go back
 //   send_chat_message the recipient resolved by GET …/resolve (P6); several
 //                     matches go back to the model as candidates with no card;
 //                     a clientDeliveryId minted before the card and reused for
@@ -63,12 +66,14 @@ export interface Phrase {
 
 /**
  * `since` as a git date token: only the words and shapes below, so nothing
- * the model says can reach the command line beyond [a-z0-9.-].
+ * the model says can reach the command line beyond [a-z0-9.-]. "last night"
+ * is yesterday and "this morning" today (G9), as tools.ts parseSince reads
+ * them.
  */
 export function gitSince(raw: string | undefined): string | null {
   const s = (raw ?? '').trim().toLowerCase();
-  if (s === 'yesterday') return 'yesterday';
-  if (s === 'today') return 'midnight';
+  if (s === 'yesterday' || s === 'last night') return 'yesterday';
+  if (s === 'today' || s === 'this morning') return 'midnight';
   if (s === 'last week' || s === 'a week ago') return '1.week.ago';
   const ago = /^(\d{1,3}) (hour|hours|day|days|week|weeks|month|months) ago$/.exec(s);
   if (ago) return `${Number(ago[1])}.${ago[2]!.replace(/s$/, '')}s.ago`;
@@ -88,6 +93,18 @@ export const PHRASE_TABLE: Readonly<Record<RunCommandPhrase, Phrase>> = {
   lint: { label: 'the linter', compose: () => 'npm run lint' },
   build: { label: 'the build', compose: () => 'npm run build' },
 };
+
+/**
+ * routes/devbox.ts validateCommand's prefix rule (the middleware catalogue's
+ * commandAllowedBy; the drift test holds the two together): a command equal
+ * to a trimmed prefix, or starting with one.
+ */
+export function commandAllowedBy(prefixes: readonly string[], command: string): boolean {
+  return prefixes.some((prefix) => command === prefix.trim() || command.startsWith(prefix));
+}
+
+/** The safe-mode prefixes this deployment runs (GET /api/devbox/allowlist, the prefixes only). */
+export const ALLOWLIST_URL = '/api/devbox/allowlist';
 
 /** The command a phrase composes (exported for the tests and the card). */
 export function composeCommand(phrase: string, params: { since?: string }): string | null {
@@ -251,13 +268,23 @@ const planRunCommand: VoiceToolPlanner = async (args, ctx) => {
   const command = composeCommand(phrase, { since: typeof args['since'] === 'string' ? args['since'] : undefined });
   if (!command) {
     return { result: refused(phrase === 'commits-since'
-      ? `I could not read "${String(args['since'] ?? '')}" as a date. Say yesterday, today, "3 days ago", "last week" or a date.`
+      ? `I could not read "${String(args['since'] ?? '')}" as a date. Say yesterday, last night, this morning, "3 hours ago", "3 days ago", "last week" or a date.`
       : `There is no "${phrase}" command. For anything else, ask the user to open the shell and type it.`) };
   }
   const ref = String(args['computerId']);
   const found = findComputer(c.compute.computers(), ref);
   if ('candidates' in found) return { result: noComputer(ref, found.candidates) };
   const box = found.computer;
+  // The server's own allowlist, read before the card (G9): the mint already left out the phrases it
+  // refuses, and this catches the composed text (a `since` token, an allowlist changed since the mint).
+  const allow = await readJson<{ prefixes?: unknown }>(ctx, ALLOWLIST_URL);
+  if (!allow.ok) {
+    return { result: allow.status === 401 || allow.status === 403 ? refused("I can't run commands on machines with your role.") : readFailure('the command allowlist', allow.status) };
+  }
+  const prefixes = Array.isArray(allow.body.prefixes) ? allow.body.prefixes.filter((p): p is string => typeof p === 'string') : [];
+  if (!commandAllowedBy(prefixes, command)) {
+    return { result: refused(`This deployment's safe mode does not run "${command}". Ask the user to open the shell on ${box.label} and type it.`, { computerId: box.id, command }) };
+  }
   const plan: CommandPlan = { computer: box, command, phrase, ...(box.workspace ? { cwd: box.workspace } : {}) };
   return { plan: { title: `Run on ${box.label}`, detail: command, data: plan } };
 };
@@ -282,10 +309,16 @@ const runRunCommand: VoiceToolRunner = async (_args, ctx, planned) => {
   if (!plan) return refused('run_command runs only after the user confirms its card.');
   const { computer, command } = plan;
   const out = { lines: [] as string[], partial: '', exitCode: null as number | null, error: undefined as string | undefined };
-  const view = (running: boolean) => ctx.showOutput?.({
-    computerId: computer.id, computer: computer.label, command, lines: [...out.lines, ...(out.partial ? [out.partial] : [])],
-    running, exitCode: out.exitCode, ...(out.error ? { error: out.error } : {}),
-  });
+  // One output tab per computer and phrase: a re-run replaces its lines in place (openOutputTab's id rule).
+  const tab = `voice-${computer.id}-${plan.phrase}`;
+  let tabRefused = false;
+  const view = (running: boolean) => {
+    const shown = ctx.showOutput?.({
+      id: tab, computerId: computer.id, computer: computer.label, command, lines: [...out.lines, ...(out.partial ? [out.partial] : [])],
+      running, exitCode: out.exitCode, ...(out.error ? { error: out.error } : {}),
+    });
+    if (shown === false) tabRefused = true;
+  };
   view(true);
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), COMMAND_TIMEOUT_MS);
@@ -313,6 +346,7 @@ const runRunCommand: VoiceToolRunner = async (_args, ctx, planned) => {
     computerId: computer.id, computer: computer.label, command, exitCode: out.exitCode,
     totalLines: lines.length, lines: lines.slice(0, OUTPUT_LINES_TO_MODEL), truncated: lines.length > OUTPUT_LINES_TO_MODEL,
     ...(out.error ? { error: out.error } : {}),
+    ...(tabRefused ? { outputTab: 'Every tab in the compute dock is in use, so the full output is not shown; ask the user to close one.' } : {}),
   };
   if (out.error) return failed(`"${command}" on ${computer.label}: ${out.error}`, body);
   const summary = `${command} on ${computer.label}: ${lines.length ? `${lines.length} line${lines.length === 1 ? '' : 's'}` : 'no output'}${out.exitCode ? `, exit ${out.exitCode}` : ''}`;

@@ -258,6 +258,13 @@ test('parseSince reads yesterday as local midnight and refuses the future', () =
   assert.equal(parseSince('yesterday', now)!.getTime(), new Date(2026, 10, 7).getTime());
   assert.equal(parseSince('2026-11-01', now)!.toISOString(), '2026-11-01T00:00:00.000Z');
   assert.equal(parseSince('2026-12-01', now), null);
+  // G9: "last night" is yesterday, "this morning" today, "N hours ago" counts back from now.
+  assert.equal(parseSince('Last night', now)!.getTime(), new Date(2026, 10, 7).getTime());
+  assert.equal(parseSince('this morning', now)!.getTime(), new Date(2026, 10, 8).getTime());
+  assert.equal(parseSince('3 hours ago', now)!.getTime(), new Date(2026, 10, 8, 12, 30).getTime());
+  assert.equal(parseSince('1 hour ago', now)!.getTime(), new Date(2026, 10, 8, 14, 30).getTime());
+  assert.equal(parseSince('2 days ago', now)!.getTime(), now.getTime() - 2 * 24 * 3600_000);
+  assert.equal(parseSince('3 hours ago; rm -rf /', now), null);
 });
 
 const request = (over: Record<string, unknown>) => ({

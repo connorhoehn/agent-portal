@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  composeCommand, deliveryFor, gitSince, IDLE_BILLING_NOTE, OUTPUT_LINES_TO_MODEL, PHRASE_TABLE, VOICE_PLANNERS, VOICE_RUNNERS,
+  ALLOWLIST_URL, commandAllowedBy, composeCommand, deliveryFor, gitSince, IDLE_BILLING_NOTE, OUTPUT_LINES_TO_MODEL, PHRASE_TABLE, VOICE_PLANNERS, VOICE_RUNNERS,
 } from '../actions.ts';
 import { RUN_COMMAND_PHRASES } from '../catalogue.ts';
 import {
@@ -18,6 +18,11 @@ import { presenceAvatarUsers } from '../../../pages/assessment/knowledge/knowled
 import { fakeFetch, route, toolContext } from './voiceHarness.ts';
 
 const SID = (c: string) => c.repeat(40);
+/** The middleware's default safe-mode allowlist, read from routes/devbox.ts itself. */
+const DEVBOX_SOURCE = readFileSync(new URL('../../../../../middleware/src/routes/devbox.ts', import.meta.url), 'utf8');
+const DEFAULT_PREFIXES = [...(/const DEFAULT_ALLOWLIST = \[([^\]]*)\]/.exec(DEVBOX_SOURCE)![1]!.matchAll(/'([^']+)'/g))].map((m) => m[1]!);
+/** GET /api/devbox/allowlist answering these prefixes (the default allowlist unless told otherwise). */
+const allowlist = (prefixes: readonly string[] = DEFAULT_PREFIXES) => fakeFetch([route('GET', ALLOWLIST_URL, 200, { prefixes })]);
 const BOXES: VoiceComputer[] = [
   { id: 'c-alpha', label: 'alpha-1', sessionId: SID('a'), status: 'running', projectId: 'p1', project: 'Alpha', workspace: '/mnt/workspace/alpha' },
   { id: 'c-beta', label: 'beta-1', sessionId: SID('b'), status: 'stopped', projectId: 'p2', project: 'Beta' },
@@ -113,13 +118,10 @@ test('the phrase table composes every command; latest-commits-since-yesterday is
     build: 'npm run build',
   });
   // The middleware's safe-mode backstop (routes/devbox.ts): no metacharacter ever, and every read-only phrase is on its default allowlist.
-  const devbox = readFileSync(new URL('../../../../../middleware/src/routes/devbox.ts', import.meta.url), 'utf8');
-  const allow = [...(/const DEFAULT_ALLOWLIST = \[([^\]]*)\]/.exec(devbox)![1]!.matchAll(/'([^']+)'/g))].map((m) => m[1]!);
-  const meta = new RegExp(/const SHELL_META = \/(.*)\/;/.exec(devbox)![1]!);
+  const meta = new RegExp(/const SHELL_META = \/(.*)\/;/.exec(DEVBOX_SOURCE)![1]!);
   for (const [phrase, command] of Object.entries(table)) {
     assert.doesNotMatch(command!, meta, phrase);
-    const allowed = allow.some((prefix) => command === prefix.trim() || command!.startsWith(prefix));
-    assert.equal(allowed, !['test', 'lint', 'build'].includes(phrase), `${phrase} on the default allowlist`);
+    assert.equal(commandAllowedBy(DEFAULT_PREFIXES, command!), !['test', 'lint', 'build'].includes(phrase), `${phrase} on the default allowlist`);
   }
 });
 
@@ -129,6 +131,10 @@ test('since is read into git date words only; anything else composes nothing', (
   assert.equal(gitSince('last week'), '1.week.ago');
   assert.equal(gitSince('2 hours ago'), '2.hours.ago');
   assert.equal(gitSince('2026-11-01'), '2026-11-01');
+  // G9: "last night" is yesterday, "this morning" today.
+  assert.equal(gitSince('Last night'), 'yesterday');
+  assert.equal(gitSince('this morning'), 'midnight');
+  assert.equal(composeCommand('commits-since', { since: 'last night' }), 'git log --since=yesterday --oneline');
   for (const bad of ['yesterday; rm -rf /', '$(whoami)', '1 day ago && ls', '`id`', 'tomorrow', '', undefined]) {
     assert.equal(gitSince(bad), null, String(bad));
     assert.equal(composeCommand('commits-since', { since: bad }), null);
@@ -137,7 +143,7 @@ test('since is read into git date words only; anything else composes nothing', (
 
 test('run_command: a model-supplied command is ignored, the phrase runs in safe mode, and the result says so', async () => {
   const compute = fakeCompute({ stream: [{ type: 'stdout', text: 'On branch main\n' }, { type: 'exit', exitCode: 0 }] });
-  const c = toolContext({ compute });
+  const c = toolContext({ compute, fetch: allowlist().fetch });
   const { card, result } = await confirmAndRun('run_command', { computerId: 'alpha-1', phrase: 'status', command: 'rm -rf /' }, c);
   assert.deepEqual(card, { title: 'Run on alpha-1', detail: 'git status' });
   assert.deepEqual(compute.commands, [{ sessionId: SID('a'), body: { command: 'git status', mode: 'safe', cwd: '/mnt/workspace/alpha' } }]);
@@ -157,7 +163,7 @@ test('run_command captures the stream into the output panel and gives the model 
   const stream: CommandEvent[] = [{ type: 'stdout', text: text.slice(0, 333) }, { type: 'stdout', text: text.slice(333, 2001) }, { type: 'stdout', text: text.slice(2001) }, { type: 'exit', exitCode: 0 }];
   const compute = fakeCompute({ stream });
   const views: CommandOutputView[] = [];
-  const { result } = await confirmAndRun('run_command', { computerId: 'c-alpha', phrase: 'latest-commits-since-yesterday' }, toolContext({ compute, showOutput: (v) => views.push(v) }));
+  const { result } = await confirmAndRun('run_command', { computerId: 'c-alpha', phrase: 'latest-commits-since-yesterday' }, toolContext({ compute, fetch: allowlist().fetch, showOutput: (v) => { views.push(v); } }));
   assert.equal((compute.commands[0]!.body as { command: string }).command, 'git log --since=yesterday --oneline');
   assert.equal(result.output['totalLines'], 30);
   assert.equal((result.output['lines'] as string[]).length, OUTPUT_LINES_TO_MODEL);
@@ -166,11 +172,49 @@ test('run_command captures the stream into the output panel and gives the model 
   const last = views.at(-1)!;
   assert.deepEqual([last.running, last.lines.length, last.exitCode, last.computer], [false, 30, 0, 'alpha-1'], 'the panel keeps every line');
   assert.ok(views[0]!.running, 'the panel opens while it runs');
+  assert.ok(views.every((v) => v.id === 'voice-c-alpha-latest-commits-since-yesterday'), 'one output tab per computer and phrase');
+  assert.equal(result.output['outputTab'], undefined);
 });
 
-test('run_command: the server refusing a phrase in safe mode is a refusal that says to open the shell', async () => {
+test('run_command: an output tab the dock cannot open (every tab in use) is said in the result, and the lines still go back', async () => {
+  const compute = fakeCompute({ stream: [{ type: 'stdout', text: 'a\nb\n' }, { type: 'exit', exitCode: 0 }] });
+  const { result } = await confirmAndRun('run_command', { computerId: 'c-alpha', phrase: 'status' }, toolContext({ compute, fetch: allowlist().fetch, showOutput: () => false }));
+  assert.equal(result.outcome, 'done');
+  assert.deepEqual(result.output['lines'], ['a', 'b']);
+  assert.match(String(result.output['outputTab']), /in use/);
+});
+
+test('run_command: the card never shows a command the server\'s allowlist refuses; the planner reads the allowlist and refuses offline', async () => {
+  // The default allowlist has no npm: test, lint and build end before the card, and nothing is sent.
+  for (const phrase of ['test', 'lint', 'build']) {
+    const compute = fakeCompute();
+    const f = allowlist();
+    const { card, result } = await confirmAndRun('run_command', { computerId: 'c-alpha', phrase }, toolContext({ compute, fetch: f.fetch }));
+    assert.equal(card, null, phrase);
+    assert.equal(result.outcome, 'refused');
+    assert.match(String(result.output['reason']), /safe mode does not run .*open the shell/);
+    assert.deepEqual(compute.commands, []);
+    assert.deepEqual(f.log.map((r) => r.url), [ALLOWLIST_URL], 'one read, the allowlist');
+  }
+  // Opted in with npm test: test gets its card, lint still does not.
+  const opted = [...DEFAULT_PREFIXES, 'npm test'];
+  assert.deepEqual((await confirmAndRun('run_command', { computerId: 'c-alpha', phrase: 'test' }, toolContext({ compute: fakeCompute(), fetch: allowlist(opted).fetch }))).card,
+    { title: 'Run on alpha-1', detail: 'npm test' });
+  assert.equal((await confirmAndRun('run_command', { computerId: 'c-alpha', phrase: 'lint' }, toolContext({ compute: fakeCompute(), fetch: allowlist(opted).fetch }))).card, null);
+  // A since token the allowlist's prefix does not cover is caught on the composed text, not the phrase.
+  const narrow = await confirmAndRun('run_command', { computerId: 'c-alpha', phrase: 'commits-since', since: '3 days ago' }, toolContext({ compute: fakeCompute(), fetch: allowlist(['git log --since=yesterday']).fetch }));
+  assert.equal(narrow.card, null);
+  assert.equal(narrow.result.outcome, 'refused');
+  // No read of the allowlist (403) is the role refusal, never a card.
+  const denied = await confirmAndRun('run_command', { computerId: 'c-alpha', phrase: 'status' }, toolContext({ compute: fakeCompute(), fetch: fakeFetch([route('GET', ALLOWLIST_URL, 403, { error: 'Forbidden' })]).fetch }));
+  assert.equal(denied.card, null);
+  assert.match(String(denied.result.output['reason']), /can't run commands/);
+});
+
+test('run_command: the server refusing a phrase in safe mode is still a refusal that says to open the shell', async () => {
+  // The allowlist read admitted it (opted in), the server's own check refused it anyway (the backstop).
   const compute = fakeCompute({ fail: 'not an allowlisted read-only command — switch to full shell to run it' });
-  const { result } = await confirmAndRun('run_command', { computerId: 'c-alpha', phrase: 'build' }, toolContext({ compute }));
+  const { result } = await confirmAndRun('run_command', { computerId: 'c-alpha', phrase: 'build' }, toolContext({ compute, fetch: allowlist([...DEFAULT_PREFIXES, 'npm run build']).fetch }));
   assert.equal(result.outcome, 'refused');
   assert.match(String(result.output['reason']), /open the shell and type it/);
   assert.equal((compute.commands[0]!.body as { mode: string }).mode, 'safe');
@@ -337,6 +381,7 @@ test('property: no P4 result carries a string over 120 characters or a list over
   const { fetch } = fakeFetch([
     route('GET', '/api/graph/projects', 200, Array.from({ length: 40 }, (_, i) => ({ id: `p${i}`, name: `${huge}${i}` }))),
     route('GET', '/api/social/plane/resolve', 200, { kind: 'team', match: null, candidates: Array.from({ length: 30 }, (_, i) => ({ id: `t${i}`, name: huge })) }),
+    route('GET', ALLOWLIST_URL, 200, { prefixes: DEFAULT_PREFIXES }),
   ]);
   const stream: CommandEvent[] = [{ type: 'stdout', text: `${Array.from({ length: 80 }, () => huge).join('\n')}\n` }, { type: 'exit', exitCode: 3 }];
   const walk = (v: unknown, path: string): void => {

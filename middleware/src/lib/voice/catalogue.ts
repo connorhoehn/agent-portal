@@ -127,12 +127,52 @@ export const NAVIGATE_PAGES: ReadonlyArray<{ id: string; path: string; tenants: 
  * portal lib/voice/actions.ts PHRASE_TABLE). `test`, `lint` and `build` are
  * `npm test`, `npm run lint` and `npm run build`, which the default safe-mode
  * allowlist (routes/devbox.ts) does not carry: a deployment opts in with
- * DEVBOX_COMMAND_ALLOWLIST, otherwise the server refuses them.
+ * DEVBOX_COMMAND_ALLOWLIST. The mint offers only the phrases the server's
+ * allowlist runs (toolsForTenant's `commandAllowlist`, G9), so a deployment
+ * without `npm test` never offers "test".
  */
 export const RUN_COMMAND_PHRASES = [
   'latest-commits-since-yesterday', 'commits-since', 'status', 'diff-stat', 'list-files', 'working-directory',
   'test', 'test-python', 'lint', 'build',
 ] as const;
+export type RunCommandPhrase = typeof RUN_COMMAND_PHRASES[number];
+
+/**
+ * The command each phrase composes, as the server's allowlist reads it. Every
+ * `commits-since` composes `git log --since=<token> --oneline`, so its default
+ * token stands for all of them; the dock's planner checks the real command
+ * again (GET /api/devbox/allowlist). The portal's drift test pins this table
+ * to PHRASE_TABLE.
+ */
+export const RUN_COMMAND_PHRASE_COMMANDS: Readonly<Record<RunCommandPhrase, string>> = {
+  'latest-commits-since-yesterday': 'git log --since=yesterday --oneline',
+  'commits-since': 'git log --since=yesterday --oneline',
+  status: 'git status',
+  'diff-stat': 'git diff --stat',
+  'list-files': 'ls',
+  'working-directory': 'pwd',
+  test: 'npm test',
+  'test-python': 'pytest',
+  lint: 'npm run lint',
+  build: 'npm run build',
+};
+
+/**
+ * routes/devbox.ts validateCommand's prefix rule (a command equal to a
+ * trimmed prefix, or starting with one). The phrases carry no shell
+ * metacharacters, so the rule's other half never applies to them.
+ */
+export function commandAllowedBy(prefixes: readonly string[], command: string): boolean {
+  return prefixes.some((prefix) => command === prefix.trim() || command.startsWith(prefix));
+}
+
+/** The phrases a server with these safe-mode prefixes would run, in catalogue order. */
+export function runCommandPhrases(prefixes: readonly string[]): RunCommandPhrase[] {
+  return RUN_COMMAND_PHRASES.filter((p) => commandAllowedBy(prefixes, RUN_COMMAND_PHRASE_COMMANDS[p]));
+}
+
+/** What `since` takes (run_command's commits-since, bot_sweep_status); the dock's parsers read exactly these. */
+const SINCE_WORDS = '"yesterday", "last night", "today", "this morning", "3 hours ago", "3 days ago", "last week" or a YYYY-MM-DD date';
 
 const obj = (properties: Record<string, unknown>, required: string[] = []): JsonSchemaObject =>
   ({ type: 'object', properties, required, additionalProperties: false });
@@ -275,7 +315,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     parameters: obj({
       computerId: str('The computer.', { minLength: 1 }),
       phrase: str('Which command.', { enum: [...RUN_COMMAND_PHRASES] }),
-      since: str('For commits-since: "yesterday", "today", "3 days ago", "last week" or a YYYY-MM-DD date.', { maxLength: 40 }),
+      since: str(`For commits-since: ${SINCE_WORDS}.`, { maxLength: 40 }),
     }, ['computerId', 'phrase']),
     kind: 'machine', backing: 'work', confirm: true, action: 'OpenDevboxShell', gate: "OpenDevboxShell; mode 'safe' only", spend: 'none', idempotent: true,
     says: 'Running git log on Alpha.', tenants: ['orgiq'],
@@ -285,7 +325,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     name: 'bot_sweep_status',
     description: 'Read the sweep runs, the findings they raised and the failed bot runs since a time, from the backend\'s sweep and bot records.',
     parameters: obj({
-      since: str('An ISO date, or "yesterday".', { minLength: 1, maxLength: 40 }),
+      since: str(`Since when: ${SINCE_WORDS}.`, { minLength: 1, maxLength: 40 }),
       scope: str('"failed" (the default): only sweep runs and bot runs that failed, and open critical or warning findings; "all": every run since then.', { enum: ['failed', 'all'] }),
     }, ['since']),
     kind: 'read', backing: 'search', confirm: false, action: null, gate: 'ViewWork floor, ActiveRuns, the bots read gate', spend: 'none', idempotent: true,
@@ -372,14 +412,22 @@ function withEnum(t: VoiceTool, prop: string, values: string[], description = t.
 
 /**
  * The tools a session in `tenant` is offered: `navigate` narrowed to that
- * tenant's pages and `search_records` to that tenant's index types.
+ * tenant's pages and `search_records` to that tenant's index types. With
+ * `commandAllowlist` (the mint passes routes/devbox.ts commandAllowlist()),
+ * `run_command`'s phrases narrow to the ones that allowlist runs, and the
+ * tool is left out when none does (G9): the model is never offered a phrase
+ * the server would refuse.
  */
-export function toolsForTenant(tenant: string): VoiceTool[] {
+export function toolsForTenant(tenant: string, opts: { commandAllowlist?: readonly string[] } = {}): VoiceTool[] {
   return VOICE_TOOLS.filter((t) => t.tenants.includes(tenant)).flatMap((t) => {
     if (t.name === 'navigate') return [withEnum(t, 'page', navigatePageIds(tenant))];
     if (t.name === 'search_records') {
       const types = searchRecordTypes(tenant);
       return types.length ? [withEnum(t, 'type', types, `${t.description} The kinds here: ${types.join(', ')}.`)] : [];
+    }
+    if (t.name === 'run_command' && opts.commandAllowlist) {
+      const phrases = runCommandPhrases(opts.commandAllowlist);
+      return phrases.length ? [withEnum(t, 'phrase', phrases)] : [];
     }
     return [t];
   });

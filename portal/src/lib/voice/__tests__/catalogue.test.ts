@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { NAVIGATE_PAGE_IDS, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, VOICE_TENANTS, VOICE_TOOLS, navigatePageIds, searchRecordTypes } from '../catalogue.ts';
 import { voicePage, hashToolArgs } from '../tools.ts';
+import { commandAllowedBy, composeCommand } from '../actions.ts';
 import { PALETTE, middlewareVoice } from './voiceHarness.ts';
 
 interface MwTool { name: string; parameters: unknown; kind: string; backing: string; confirm: boolean; action: string | null; says: string; tenants: readonly string[] }
@@ -13,6 +14,9 @@ interface MwCatalogue {
   VOICE_TENANTS: readonly string[];
   SEARCH_RECORD_TYPES: Record<string, readonly string[]>;
   SEARCH_ACTIONS: Record<string, string>;
+  RUN_COMMAND_PHRASES: readonly string[];
+  RUN_COMMAND_PHRASE_COMMANDS: Record<string, string>;
+  commandAllowedBy(prefixes: readonly string[], command: string): boolean;
 }
 
 test('the portal catalogue matches the middleware one the session is minted with', async () => {
@@ -55,5 +59,18 @@ test('the dock hashes arguments exactly as the middleware does', async () => {
   const mw = await middlewareVoice<MwCatalogue>('catalogue.ts');
   for (const args of [{ query: 'Kubernetes experts', limit: 5 }, { b: [1, { z: 1, a: null }], a: 'x' }, {}, 'raw']) {
     assert.equal(await hashToolArgs(args), mw.hashToolArgs(args));
+  }
+});
+
+test('the mint filters run_command phrases by the same commands and the same prefix rule the dock checks (G9)', async () => {
+  const mw = await middlewareVoice<MwCatalogue>('catalogue.ts');
+  for (const phrase of mw.RUN_COMMAND_PHRASES) {
+    assert.equal(composeCommand(phrase, { since: 'yesterday' }), mw.RUN_COMMAND_PHRASE_COMMANDS[phrase], phrase);
+  }
+  const lists = [['git log', 'ls'], ['npm test'], ['npm'], ['pwd '], ['git'], []];
+  for (const prefixes of lists) {
+    for (const command of [...Object.values(mw.RUN_COMMAND_PHRASE_COMMANDS), 'pwd', 'npm run lint', 'git log --since=3.days.ago --oneline']) {
+      assert.equal(commandAllowedBy(prefixes, command), mw.commandAllowedBy(prefixes, command), `${command} under ${prefixes.join(',')}`);
+    }
   }
 });
