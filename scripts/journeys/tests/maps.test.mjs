@@ -19,12 +19,6 @@ const surface = (over = {}) => ({
 
 test('a complete map validates', () => assert.deepEqual(validateMap(surface()), []));
 
-test('coverage CLI reads manifest roles and the checked-in coverage is current', () => {
-  const r = spawnSync(process.execPath, ['scripts/journeys/run-maps.mjs', 'coverage', '--check'], { cwd: new URL('../../../', import.meta.url), encoding: 'utf8' });
-  assert.equal(r.status, 0, r.stdout + r.stderr);
-  assert.match(r.stdout, /coverage.md is current/);
-});
-
 test('coverage includes cross-tenant roles in the denominator and in missing roles', () => {
   const model = coverageModel([{ map: surface({ persona: { user: 'u-admin', tenant: 'access', role: 'admin' } }) }], {
     inventory: [], rolesByTenant: { access: ['requester', 'admin'] }, routeKey: () => null,
@@ -133,12 +127,6 @@ test('coverage: route × role × state, with the gaps', () => {
   assert.match(md, /\| `\/access\/catalog` \| default, filtered-empty \|/);
   assert.match(md, /- access: approver/);
   assert.match(md, /x\.ts` → access\/a\/b: G\. Held: it writes\./);
-});
-
-test('every map in the tree validates', async () => {
-  const { maps, problems } = await loadMaps(mapFiles());
-  assert.deepEqual(problems, []);
-  assert.ok(maps.length >= 40);
 });
 
 test('the work family: its surface kind adds story-facts and tab-stability; new steps validate', () => {

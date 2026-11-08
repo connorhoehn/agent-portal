@@ -21,7 +21,24 @@ The platform was last deployed to AWS on 26 and 27 October 2026 from a different
 
 The sweep removed `docs/`, `CLAUDE.md`, `.claude/` and the skills folders. Some code still points at them.
 
-- **Twenty-five validator scripts and about fifteen helpers in `scripts/` reference the removed `docs/` tree.** They are the `validate-*.sh` judges, the `user-search-*` reports, `audit-ui-dom.cjs`, `social-documents.mjs`, `check-tenant-manifest.mjs`, `build.sh` and `portal-publish.mjs`. Run each once. Keep the ones that still pass (they only read `docs/` for journey logs or comments), fix the ones that merely need a path, and delete the ones that cannot work without the goal documents. Nothing in `package.json` calls them, so none of this blocks a build.
+- **The `docs/` references in `scripts/` are triaged (7 November 2026).** Of the 25 judges and about 15 helpers named in the sweep, eight judges and nine helpers were kept, and the rest were deleted in two passes. A second pass this week removed the huddle storyboard tools in `scripts/demos/` (they read a `storyboard.json` that was deleted), the demo-content judge and its fixtures, `brief-contract.mjs`, `work-journeys.mjs`, and the `user-search-probe` Playwright spec whose helper scripts were gone. It also dropped a dead path from `scripts/audit-loop/run.sh` and reworded one README row so the newsroom-removal judge passes. The journey runner in `scripts/journeys/` stays because runbook mock bundles name it, but the maps and logs it walks no longer exist. All other `docs/` mentions are comments or output folders the scripts create. Nothing in `package.json` called the deleted files, and every `portal/e2e` spec now imports `measure.mjs` from `portal/e2e/lib/ui-dom-audit`. Four kept judges still fail on real debt, listed below. Details per file are in `scripts/README.md`.
+
+| script | verdict | reason |
+|---|---|---|
+| validate-honest-numbers.sh | kept, passes | Run with `--quick`. |
+| validate-nav-parity.sh | kept, passes | Run with `--quick`. |
+| validate-newsroom-removal.sh | kept, passes | Passes with `--quick` after the README row fix. |
+| validate-route-coverage.sh | kept, fails | 11 untested routes against a budget of 0. Real debt. |
+| validate-component-discipline.sh | kept, fails | Raw styled elements and style props over budget in `portal/src`. Real debt. |
+| validate-mock-floor.sh | kept, fails | `wire.json` and `writes.json` snapshots are stale against current handlers. |
+| validate-deploy-bug-classes.sh, validate-agent-eval.sh, validate-ui.sh | kept, not run | Run jest, a vite build, a venv, or the browser audit. Read only; no `docs/` dependency. |
+| check-tenant-manifest.mjs, tenant-manifest.test.mjs, check-uuid-binds.mjs | kept, pass | |
+| check-search-writers.mjs | kept, fails | Two real writers (`updateRoom`, `setBotEssential`) lack a search hook. |
+| build.sh, portal-publish.mjs, social-documents.mjs, audit-ui-dom.cjs | kept, not run | Build, publish or start servers. No removed-file reads; `audit-ui-dom.cjs` prints usage and finds the skill in the installed library. |
+| scripts/lib/*.test, audit-ui-inheritance.test.cjs, journeys maps and walk tests | kept, pass | |
+| 16 other `validate-*.sh` judges, `user-search-*`, `meeting-rooms-proof.mjs` | deleted (first pass) | Needed removed goal docs or journey logs. |
+| demos storyboard tools (13 files), demo-content judge set (4), `brief-contract.mjs`, `work-journeys.mjs`, 3 journey tests, `user-search-probe.spec.ts`, `user-search-catalog.ts` | deleted (this pass) | Needed removed storyboard, goal docs, map files or deleted helpers. |
+| `audit-loop/run.sh` | fixed | Removed a dead queue path. Not run. |
 - **Ten Playwright specs in `portal/e2e/` import `../../.claude/skills/ui-dom-audit/scripts/measure.mjs`, which no longer exists.** The same code lives in `ui-components/skills/ui-dom-audit`. Either copy `measure.mjs` into `portal/e2e/lib/` or install it from the library, then run `npm run audit:ui` in `portal/` to confirm.
 - **`tenants/manifest.json` has a comment pointing at `docs/deployment-enhancements/DE-29-tenant-manifest.md`.** Rewrite the comment so it explains the file on its own.
 - **Merge `ui-components-2501` into `main` in `realtime-examples` and `event-catalog`.** `main` has no commits the branch lacks, so both are fast-forwards. Until this is done, anyone cloning either repo lands on a stale default branch.

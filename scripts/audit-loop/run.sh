@@ -27,7 +27,7 @@ fi
 trap 'rm -rf "$LOCK"' EXIT
 
 cd "$ROOT"
-AUDITED=(portal/src middleware/src docs/ui-components-queue.md scripts/validate-component-discipline.sh portal/package.json middleware/package.json)
+AUDITED=(portal/src middleware/src scripts/validate-component-discipline.sh portal/package.json middleware/package.json)
 fingerprint() {
   {
     git rev-parse HEAD

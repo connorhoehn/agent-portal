@@ -12,7 +12,7 @@ The goal documents, journey logs and CLAUDE.md that the old judges read were rem
 | validate-honest-numbers.sh | kept | Static scanners; passes with `--quick`. |
 | validate-mock-floor.sh | kept | Mock data floor checks; the docs section was dropped. With `--static --quick` it fails because the snapshots are stale against current middleware sources. |
 | validate-nav-parity.sh | kept | Palette versus route parity; passes with `--quick`. |
-| validate-newsroom-removal.sh | kept, stripped | Checks the retired tenant is gone from code; the docs, archive, journey and assessment-judge checks were removed. Passes with `--quick`. |
+| scripts/validate-newsroom-removal.sh | kept, stripped | Checks the retired tenant is gone from code; the docs, archive, journey and assessment-judge checks were removed. Passes with `--quick`. |
 | validate-route-coverage.sh | kept | Route-to-test parity ratchet. Currently fails: 11 untested routes against a budget of 0. |
 | validate-access-tenant.sh | removed | Checks the goal doc, design doc and CLAUDE.md map. |
 | validate-assessment-decks.sh | removed | Goal doc and queue doc checks plus journey walk. |
@@ -51,6 +51,18 @@ The goal documents, journey logs and CLAUDE.md that the old judges read were rem
 | user-search-freshness.mjs, user-search-report.mjs, user-search-results.mjs, user-search-results.test.mjs | removed | Probe-results bookkeeping for the removed judge. |
 | user-search-floors.tsv, work-journeys-floors.tsv | removed | Floors for the removed judges. |
 
-## Left alone, now orphaned
+## Second pass (7 Nov 2026)
 
-`scripts/journeys/`, `scripts/lib/journeys.sh`, `scripts/demo-content/`, `scripts/lib/rail-parity-measure.mjs` and the `*-budget.txt` files for removed judges are no longer called by any kept script (`portal/e2e/user-search-probe.spec.ts` still names the removed user-search files). They were outside this pass; delete or revive them next.
+| File | Decision | Why |
+|---|---|---|
+| scripts/demos/ huddle storyboard tools (audit-huddle-artifacts, check-huddle-lip-sync, export-huddle-handoff, generate-huddle-preview, generate-huddle-speaking, generate-huddle-speech, prepare-huddle-media and its test, huddle-media-contract and its test, rehearse-huddle-speaking, validate-huddle-transcripts, sadtalker-mps.patch) | removed | Read `docs/demos/work-huddles/storyboard.json` and `completion-audit.json`, which were removed. Recoverable from git history (5b6b828c). |
+| scripts/demos/observe-huddle-recordings.mjs, recording-pipeline-acceptance.mjs and its test | kept | Do not read the storyboard; the test passes (10 of 10). |
+| scripts/demo-content/judge.mjs, xref.mts, prose.mts, fixtures.mts | removed | Judge for the removed demo-content goal and audit docs. |
+| scripts/demo-content/rubric.mjs, merge-probe.mjs | kept | `portal/e2e/demo-content-probe.spec.ts` imports the rubric; the merge writes under `docs/demo-content`. |
+| scripts/runbooks/brief-contract.mjs | removed | Re-records `docs/journeys/contracts/session-brief*`, which is gone. |
+| scripts/journeys/work-journeys.mjs and the meeting-proof, assessment-profile and social-maps tests | removed | Read removed goal docs, removed judges or removed map files. |
+| scripts/journeys/ runner (run-maps, walk, maps, journeys, seal, measure) | kept | Runbook mock bundles and `portal/e2e/realSession.ts` name it. The map and log trees it walks were removed, so it has nothing to walk until maps are written again. Its tests pass (maps 15, walk 17); two tests that needed the removed maps were dropped. |
+| scripts/audit-loop/run.sh | fixed | Dropped the removed `docs/ui-components-queue.md` from the audited paths. Not run (it calls Claude). |
+| `portal/e2e/user-search-probe.spec.ts`, `user-search-catalog.ts` | removed | Imported the user-search scripts deleted in the first pass. |
+
+Everything else that mentions `docs/` only does so in a comment, or writes output under a `docs/` folder it creates (`docs/audit-loop`, `docs/demo-content`, `docs/journeys`). Those are left as they are.
