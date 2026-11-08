@@ -309,6 +309,7 @@ describe('the dev file log', () => {
     try {
       const id = await mint();
       expect(voiceLogFile(id)).toBeNull();
+      await close(id);
     } finally { if (flag !== undefined) process.env['INSECURE_DEV_MODE'] = flag; }
     process.env['INSECURE_DEV_MODE'] = 'true';
     try {
