@@ -725,11 +725,11 @@ function build() {
     };
   }
 
-  // Pages as navigate rows.
+  // Pages as rows of their own; a page id open names is covered by `open` (catalogue v2).
   const navIds = new Set(catalogue.navigatePages.map((p) => p.id));
   const pageRows = pages.map((p) => ({
     method: 'PAGE', path: p.path, source: `portal/src/components/shell/portalCommands.ts:${p.line}`, tenants: [p.tenant], kind: 'navigate', family: 'navigate',
-    cedarAction: null, label: p.label, group: p.group, roles: p.roles, pageId: p.pageId, coveredBy: p.pageId && navIds.has(p.pageId) ? ['navigate'] : [],
+    cedarAction: null, label: p.label, group: p.group, roles: p.roles, pageId: p.pageId, coveredBy: p.pageId && navIds.has(p.pageId) ? ['open'] : [],
     v2: { decision: 'open', tool: 'open', note: p.pageId ? 'a page id' : 'needs a pageId before open can name it' },
   }));
 

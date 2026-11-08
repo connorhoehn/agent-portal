@@ -133,7 +133,7 @@ describe('M1: the close after a tenant switch, under row-level security', () => 
   it('tool-call rows still need the caller in the session\'s tenant', async () => {
     const id = (await mint()).body.sessionId as string;
     principal = { sub: USER, role: 'participant', tenant: 'social', grants: {} };
-    expect((await request(app).post(`/api/voice/sessions/${id}/events`).send({ tool: 'navigate', outcome: 'done' })).status).toBe(404);
+    expect((await request(app).post(`/api/voice/sessions/${id}/events`).send({ tool: 'open', outcome: 'done' })).status).toBe(404);
   });
 });
 
