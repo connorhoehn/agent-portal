@@ -51,6 +51,11 @@
 // title never share a card's state. The choice card no longer moves the phase:
 // the library opens it on `pendingChoice` alone.
 //
+// The delegation's context (G31, contextWindow.ts): the model is sent each
+// result in its compact form (no links, lists cut to fit), the page note only
+// when the page changes (one current note), and the dock counts what a
+// delegation reads (contextEstimate).
+//
 // The session log (G20, sessionEvents.ts): every phase change, refusal,
 // confirm and choice shown or decided, tool call, cutoff and error is an
 // event with the server's kind, batched to POST /:id/events at most once per
@@ -67,6 +72,7 @@ import { VOICE_PLANNERS, VOICE_RUNNERS } from './actions.ts';
 import { DEFAULT_TOAST_SECONDS } from './work.ts';
 import { VoiceEventLog, argShape, refusalCode, resultSummary, type DockEvent } from './sessionEvents.ts';
 import { RefusalGuard, STOP_NEXT, refusalLine, withNext } from './refusals.ts';
+import { DelegationContext, PAGE_NOTE_REPLACES, modelOutput, summaryLine } from './contextWindow.ts';
 
 export const TICK_MS = 100;
 export const COMPLETION_GRACE_MS = 1500;
@@ -254,6 +260,8 @@ export class VoiceController {
   private readonly log: VoiceEventLog;
   /** The calls refused in this session (G29): the second identical one is terminal. */
   private readonly refusals = new RefusalGuard();
+  /** The dock's model of what a delegation reads (G31): recent results in full, older ones as a line, one page note. */
+  private readonly context = new DelegationContext();
 
   private readonly opts: ControllerOptions;
 
@@ -347,6 +355,7 @@ export class VoiceController {
    */
   noteJobOutcome(line: string): void {
     if (this.machine.base !== 'live' || !this.client) return;
+    this.context.note(line.length + 15);
     this.client.appendCommentary(`Tell the user: ${line}`);
     this.addLine('assistant', line);
   }
@@ -391,12 +400,26 @@ export class VoiceController {
     const text = this.opts.pageContext?.() ?? null;
     if (!text || text === this.lastPageNote) return;
     this.lastPageNote = text;
-    this.client.appendThinking(text);
+    // G31: one current page note, replaced rather than added to; sent only when the page in view changed.
+    const note = `${text}\n${PAGE_NOTE_REPLACES}`;
+    this.context.pageNote(note);
+    this.client.appendThinking(note);
   }
 
   /** Silent page context for the voice (§1: session.thinking.append, delegation_id null). */
   noteContext(text: string): void {
-    if (this.machine.base === 'live') this.client?.appendThinking(text);
+    if (this.machine.base !== 'live' || !this.client) return;
+    this.context.note(text.length);
+    this.client.appendThinking(text);
+  }
+
+  /**
+   * The delegation context as the dock counts it (G31, contextWindow.ts): `windowChars` is what a delegation reads
+   * under the window (recent results in full, older ones as a line, the current page note, the transcript), `sentChars`
+   * everything the dock sent; `turns` the delegations so far. Base (instructions and tools) not included.
+   */
+  contextEstimate(): { windowChars: number; sentChars: number; turns: number } {
+    return { windowChars: this.context.windowChars(), sentChars: this.context.sentChars(), turns: this.context.turnCount };
   }
 
   /** The turns of the session minted last (the strip may still show an earlier session's): what the on-device keep saves. */
@@ -473,17 +496,22 @@ export class VoiceController {
         this.notePage();
         return;
       case 'input':
+        this.context.speech(f.text.length);
         this.appendTurn('you', f.text, at);
         this.dispatch({ type: 'input', at });
         if (this.pending) this.hearForPending(f.text, f.startMs, f.endMs);
         else if (this.choice) this.hearForChoice(f.text);
         return;
       case 'output':
+        this.context.speech(f.text.length);
         this.appendTurn('assistant', f.text, at);
         this.dispatch({ type: 'output', at });
         return;
       case 'delegation':
-        if (!this.delegations.has(f.delegationId)) this.emit({ kind: 'delegation', data: { delegationId: f.delegationId } });
+        if (!this.delegations.has(f.delegationId)) {
+          this.emit({ kind: 'delegation', data: { delegationId: f.delegationId } });
+          this.context.newTurn();
+        }
         this.delegation(f.delegationId);
         this.dispatch({ type: 'delegation', id: f.delegationId });
         return;
@@ -600,10 +628,15 @@ export class VoiceController {
       res = { ...res, output: { ...res.output, stop: true, next: STOP_NEXT } };
       this.delegation(delegationId).stopped = true;
     }
-    client.sendToolOutput(callId, JSON.stringify(res.output));
+    // G31: the model gets the compact form (no links, lists cut to fit); the strip, the log and the kept rows the full one.
+    const wire = JSON.stringify(modelOutput(res.output));
+    client.sendToolOutput(callId, wire);
+    this.context.result(wire.length, summaryLine(name, res.summary));
     if (verdict?.speak) {
       const line = refusalLine(given.output);
-      client.appendCommentary(`Tell the user, in one sentence, and do not call anything: ${line}`);
+      const said = `Tell the user, in one sentence, and do not call anything: ${line}`;
+      this.context.note(said.length);
+      client.appendCommentary(said);
       this.addLine('assistant', line);
       this.emit({ kind: 'client', data: { event: 'refusal-repeated', tool: name, reason: refusalCode(res.output) } });
     }
@@ -832,6 +865,7 @@ export class VoiceController {
   private reset(): void {
     this.clearDelegations();
     this.refusals.reset();
+    this.context.reset();
     this.pending = null;
     this.choice = null;
     this.budgetCard = null;
