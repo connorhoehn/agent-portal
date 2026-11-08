@@ -21,6 +21,10 @@ jobs:
         working-directory: middleware
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # The checkout credential is scoped to this repo and would override the
+          # dependency token in the rewritten github: URLs (npm ci "Repository not found").
+          persist-credentials: false
       # The github: dependencies (distributed-core, service-runtime, ...) are private
       # repositories. The workflow token only reads this repository, so a personal
       # access token with read access to the dependency repositories is required:
@@ -59,6 +63,10 @@ jobs:
         working-directory: infra
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # The checkout credential is scoped to this repo and would override the
+          # dependency token in the rewritten github: URLs (npm ci "Repository not found").
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
@@ -75,6 +83,10 @@ jobs:
         working-directory: portal
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # The checkout credential is scoped to this repo and would override the
+          # dependency token in the rewritten github: URLs (npm ci "Repository not found").
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
@@ -90,6 +102,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # The checkout credential is scoped to this repo and would override the
+          # dependency token in the rewritten github: URLs (npm ci "Repository not found").
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
