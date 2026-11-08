@@ -303,9 +303,18 @@ describe('the dev file log', () => {
     } finally { warn.mockRestore(); }
   });
 
-  it('is off without VOICE_LOG_DIR', async () => {
-    const id = await mint();
-    expect(voiceLogFile(id)).toBeNull();
+  it('is off without VOICE_LOG_DIR outside INSECURE_DEV_MODE, and defaults to .voice-log under it', async () => {
+    const flag = process.env['INSECURE_DEV_MODE'];
+    delete process.env['INSECURE_DEV_MODE'];
+    try {
+      const id = await mint();
+      expect(voiceLogFile(id)).toBeNull();
+    } finally { if (flag !== undefined) process.env['INSECURE_DEV_MODE'] = flag; }
+    process.env['INSECURE_DEV_MODE'] = 'true';
+    try {
+      const id = await mint();
+      expect(voiceLogFile(id)).toMatch(/\.voice-log\/vs_[0-9a-f-]+\.jsonl$/);
+    } finally { if (flag === undefined) delete process.env['INSECURE_DEV_MODE']; else process.env['INSECURE_DEV_MODE'] = flag; }
   });
 });
 
