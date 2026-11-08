@@ -25,7 +25,7 @@ jest.mock('../../lib/initiative-scope.js', () => ({
 
 import express from 'express';
 import request from '../../test-support/http.js';
-import { requireBoxAction } from '../../lib/agent-actions.js';
+import { requireAgentCapability, requireBoxAction } from '../../lib/agent-actions.js';
 import { requireTenant } from '../../lib/authz.js';
 import { registerBox, _resetFleet } from '../../lib/devbox-fleet.js';
 
@@ -40,6 +40,8 @@ function app(session: Record<string, unknown>) {
   r.post('/:sessionId/command', requireBoxAction('OpenDevboxShell'), ok);
   r.post('/:sessionId/shell-url', requireBoxAction('OpenDevboxShell'), ok);
   r.post('/:sessionId/task', requireBoxAction('RunDevboxTask'), ok);
+  // routes/devbox.ts GET /allowlist: run_command's prefixes, read under run_command's own action.
+  r.get('/allowlist', requireAgentCapability('OpenDevboxShell'), ok);
   a.use('/api/devbox', requireTenant('orgiq'), r);
   return a;
 }
@@ -90,6 +92,16 @@ describe('DE-42 box actions', () => {
         expect(res.status).toBe(403);
         expect(res.body.requiredTenant).toBe('orgiq');
       }
+    }
+  });
+});
+
+describe('GET /api/devbox/allowlist reads under run_command\'s action (sweep 1, L1)', () => {
+  it('the roles that can run a command read it; the ones that cannot get 403 naming OpenDevboxShell', async () => {
+    for (const role of ['hr-admin', 'sme']) expect([role, (await request(app(who('u-x', role))).get('/api/devbox/allowlist')).status]).toEqual([role, 200]);
+    for (const role of ['member', 'org-leader', 'program-owner']) {
+      const res = await request(app(who('u-x', role))).get('/api/devbox/allowlist');
+      expect([role, res.status, res.body.action]).toEqual([role, 403, 'OpenDevboxShell']);
     }
   });
 });

@@ -13,6 +13,8 @@
 // A job is a record of one request, kept in this process's memory: it belongs
 // to the user who started it (any other caller reads 404), lives at most
 // JOB_TTL_MS after it ends, and the table never holds more than MAX_JOBS. A
+// user has at most one job queued or running (`activeSweepJob`; the route
+// answers 409 with it), and the route also holds them to a few an hour. A
 // restart forgets the record, never the sweep's own rows. Each state change is
 // emitted on the dispatcher's `job` feed (GET /api/work/events), the stream the
 // Work pages already hold, as `sweep:queued|running|done|failed`, so a client
@@ -142,6 +144,22 @@ export function startSweepJob(input: { owner: string; tenant: string; sweep: Swe
   dispatcherEvents.emit('job', { kind: 'sweep:queued', jobId: j.jobId, ts: j.queuedAt });
   void play(j);
   return publicJob(j);
+}
+
+/**
+ * The owner's job still queued or running, else null: one background sweep per
+ * person at a time, in any tenant. A job queued more than JOB_TTL_MS ago no
+ * longer counts, so a sweep that never ends cannot lock its owner out until a
+ * restart.
+ */
+export function activeSweepJob(owner: string): SweepJob | null {
+  const now = clock.now().getTime();
+  for (const j of jobs.values()) {
+    if (j.owner !== owner || j.endedAtMs != null) continue;
+    if (now - Date.parse(j.queuedAt) > JOB_TTL_MS) continue;
+    return publicJob(j);
+  }
+  return null;
 }
 
 /** The caller's own job in its own tenant, else null (the route answers 404 either way). */

@@ -36,6 +36,7 @@ const stewards = userStewardsInitiative as jest.MockedFunction<typeof userStewar
 // here it passes through so the routes' own behaviour is what is tested.
 jest.mock('../../lib/agent-actions.js', () => ({
   requireBoxAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  requireAgentCapability: () => (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 jest.mock('../../providers/spend-ledger.js', () => ({
   recordSpend: jest.fn(async () => undefined),

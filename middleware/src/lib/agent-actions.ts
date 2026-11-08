@@ -91,6 +91,19 @@ export async function boxAttrs(session: Session | null, sessionId: string): Prom
 }
 
 /**
+ * Route middleware for "may this caller ever take `action`" where no box is
+ * named: Cedar is asked with the capability probe's attributes (on the
+ * initiative, owning the box; routes/session.ts CAPABILITY_PROBE_ATTRS), so a
+ * role the action is conditioned for passes and a role without it is refused.
+ * The per-box decision still happens at the box's own routes.
+ */
+export function requireAgentCapability(action: Extract<AgentAction, 'OpenDevboxShell' | 'RunDevboxTask'>) {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (await authorizeAgentAction(req, res, action, { onInitiative: true, ownsBox: true })) next();
+  };
+}
+
+/**
  * Route middleware for a box action (`/:sessionId/...`). An unregistered
  * session is left to requireBoxAccess, which adopts it for a fleet-wide role
  * and refuses everyone else; only the bare action is asked here.

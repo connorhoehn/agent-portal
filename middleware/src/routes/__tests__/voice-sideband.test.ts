@@ -123,7 +123,10 @@ describe('the attach at mint', () => {
 
   it('a sideband that cannot be built or errors never fails the mint (still 201)', async () => {
     _setVoiceWebSocket(class { constructor() { throw new Error('no sockets today'); } } as never);
-    expect((await mint()).status).toBe(201);
+    const first = await mint();
+    expect(first.status).toBe(201);
+    // One open session per person: the first ends before the second mint.
+    row(first.body.sessionId).ended_at = new Date().toISOString();
     _setVoiceWebSocket(FakeSideband);
     FakeSideband.onCreate = (s) => queueMicrotask(() => s.fail());
     const res = await mint();

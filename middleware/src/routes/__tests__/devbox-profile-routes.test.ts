@@ -46,6 +46,7 @@ jest.mock('../../lib/initiative-scope.js', () => ({
 }));
 jest.mock('../../lib/agent-actions.js', () => ({
   requireBoxAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  requireAgentCapability: () => (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 jest.mock('../../providers/spend-ledger.js', () => ({
   recordSpend: jest.fn(async () => undefined),

@@ -2,13 +2,18 @@
 // the same sweeps as the button, answered at once with a job its owner reads back.
 
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', aurora: {}, mock: { aurora: true } } }));
-jest.mock('../../lib/authz.js', () => ({
-  resolveSession: (req: { session?: unknown }) => req.session ?? null,
-  isAllowed: jest.fn(async () => true),
-  requireAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
-  requireSession: () => (_req: unknown, _res: unknown, next: () => void) => next(),
-  readForRolesElseAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
-}));
+// requireAction asks the same isAllowed the tests steer, so the background gate is a real decision here.
+jest.mock('../../lib/authz.js', () => {
+  const isAllowed = jest.fn(async (_s: unknown, _action: string) => true);
+  return {
+    resolveSession: (req: { session?: unknown }) => req.session ?? null,
+    isAllowed,
+    requireAction: (action: string) => async (req: { session?: unknown }, res: { status: (n: number) => { json: (b: unknown) => void } }, next: () => void) =>
+      ((await isAllowed(req.session, action)) ? next() : res.status(403).json({ error: 'Forbidden', action })),
+    requireSession: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+    readForRolesElseAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  };
+});
 
 import express, { type Request, type Response, type NextFunction } from 'express';
 import request from '../../test-support/http.js';
@@ -16,6 +21,9 @@ import { workRouter } from '../work.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { sweepRuns } from '../../mock/sweep-runs.js';
 import { resetSweepJobs } from '../../lib/sweep-jobs.js';
+import { resetRateLimits } from '../../lib/rate-limit.js';
+import { isAllowed } from '../../lib/authz.js';
+import { SWEEP_JOBS_PER_HOUR } from '../work.js';
 
 function app(session: Record<string, unknown> | null) {
   const a = express();
@@ -33,7 +41,10 @@ const owner = { sub: 'u-mia', role: 'program-owner', tenant: 'orgiq' };
 const other = { sub: 'u-nora', role: 'sme', tenant: 'orgiq' };
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r)); };
 
-beforeEach(() => { sweepRuns.reset(); resetSweepJobs(); process.env['SWEEP_JOB_MOCK_STEP_MS'] = '0'; });
+beforeEach(() => {
+  sweepRuns.reset(); resetSweepJobs(); resetRateLimits(); (isAllowed as jest.Mock).mockClear();
+  process.env['SWEEP_JOB_MOCK_STEP_MS'] = '0';
+});
 afterAll(() => { sweepRuns.reset(); delete process.env['SWEEP_JOB_MOCK_STEP_MS']; });
 
 describe('background sweeps', () => {
@@ -66,6 +77,51 @@ describe('background sweeps', () => {
     const sync = await request(app(owner)).post('/api/work/sweeps/run').send({});
     expect(sync.status).toBe(200);
     expect(Object.keys(sync.body).sort()).toEqual(['released', 'results']);
+    await settle();
+  });
+});
+
+describe('background sweeps are paced (sweep 1, M2)', () => {
+  const run = (who: Record<string, unknown>, body: Record<string, unknown> = { background: true }) =>
+    request(app(who)).post('/api/work/sweeps/run').send(body);
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  it('needs DispatchAgentRun, the action the Findings page\'s button and the voice card name; the button\'s own run is unchanged', async () => {
+    (isAllowed as jest.Mock).mockImplementation(async (_s: unknown, action: string) => action !== 'DispatchAgentRun');
+    try {
+      const res = await run(owner);
+      expect(res.status).toBe(403);
+      expect(res.body).toMatchObject({ action: 'DispatchAgentRun' });
+      expect(sweepRuns.rows()).toHaveLength(0);
+      expect((await run(owner, {})).status).toBe(200);
+    } finally { (isAllowed as jest.Mock).mockImplementation(async () => true); }
+  });
+
+  it('one job in flight per user: a second is a 409 naming the first, another user is unaffected, and the next goes once it ends', async () => {
+    process.env['SWEEP_JOB_MOCK_STEP_MS'] = '40';
+    const first = await run(owner);
+    expect(first.status).toBe(202);
+    const second = await run(owner, { sweep: 'stale_docs', background: true });
+    expect(second.status).toBe(409);
+    expect(second.body).toMatchObject({ code: 'sweep-job-running', jobId: first.body.jobId, job: { jobId: first.body.jobId } });
+    expect((await run(other)).status).toBe(202);
+    await sleep(200);
+    await settle();
+    expect((await request(app(owner)).get(`/api/work/sweeps/jobs/${first.body.jobId}`)).body.state).toBe('done');
+    expect((await run(owner)).status).toBe(202);
+    await sleep(200);
+  });
+
+  it(`at most ${SWEEP_JOBS_PER_HOUR} an hour per user: the next is a 429; another user and the button's run still go`, async () => {
+    for (let i = 0; i < SWEEP_JOBS_PER_HOUR; i++) {
+      expect((await run(owner)).status).toBe(202);
+      await settle();
+    }
+    const over = await run(owner);
+    expect(over.status).toBe(429);
+    expect(Number(over.headers['retry-after'])).toBeGreaterThan(3000);
+    expect((await run(other)).status).toBe(202);
+    expect((await run(owner, {})).status).toBe(200);
     await settle();
   });
 });

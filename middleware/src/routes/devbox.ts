@@ -40,7 +40,7 @@ import {
 } from '@aws-sdk/client-bedrock-agentcore-control';
 
 import { canSee, visibleBoxes, FLEET_WIDE_ROLES, requireBoxAccess } from '../lib/devbox-visibility.js';
-import { requireBoxAction } from '../lib/agent-actions.js';
+import { requireAgentCapability, requireBoxAction } from '../lib/agent-actions.js';
 import { stewardsInitiative } from '../lib/initiative-scope.js';
 import { asyncHandler } from '../lib/async-handler.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
@@ -444,8 +444,11 @@ devboxRouter.get('/status', asyncHandler(async (_req, res) => {
 
 // The safe-mode prefixes, nothing else (no ARN, no full-exec flag): what the
 // voice dock checks a composed run_command against before it shows the card,
-// so the card never offers a command this server would refuse (G9).
-devboxRouter.get('/allowlist', (_req, res) => {
+// so the card never offers a command this server would refuse (G9). Gated like
+// run_command itself (OpenDevboxShell, the box's own check in /command): a
+// role that can read the fleet but never run a command reads 403, which the
+// dock answers as "not with your role".
+devboxRouter.get('/allowlist', requireAgentCapability('OpenDevboxShell'), (_req, res) => {
   res.json({ prefixes: commandAllowlist() });
 });
 

@@ -144,7 +144,10 @@ describe('POST /api/voice/sessions — the mint', () => {
     budget();
     const phrases = async () => {
       calls = [];
-      expect((await mint()).status).toBe(201);
+      const res = await mint();
+      expect(res.status).toBe(201);
+      // One open session per person: close it so the next mint goes through.
+      await request(app).post(`/api/voice/sessions/${res.body.sessionId}/close`).send({ seconds: 15 });
       const tools = JSON.parse(calls[0]!.init.body!).session.delegation.responses.tools as Array<{ name: string; parameters: { properties: { phrase?: { enum: string[] } } } }>;
       return tools.find((t) => t.name === 'run_command')?.parameters.properties.phrase?.enum ?? null;
     };
@@ -284,7 +287,9 @@ describe('POST /api/voice/sessions — the mint', () => {
   it('passes VOICE_TOAST_SECONDS to the dock (G19: a queued job\'s toast; default 8, above), capped at 120', async () => {
     budget();
     process.env['VOICE_TOAST_SECONDS'] = '5';
-    expect((await mint()).body.toastSeconds).toBe(5);
+    const first = await mint();
+    expect(first.body.toastSeconds).toBe(5);
+    await request(app).post(`/api/voice/sessions/${first.body.sessionId}/close`).send({ seconds: 15 });
     process.env['VOICE_TOAST_SECONDS'] = '900';
     expect((await mint()).body.toastSeconds).toBe(120);
   });
@@ -606,14 +611,20 @@ describe('the daily minutes (G13, §3 Q2)', () => {
     expect(voiceSessions.rows().find((r) => r.id === first.body.sessionId)!.max_seconds).toBe(300);
     expect(Date.parse(first.body.expiresAt) - Date.parse(NOW)).toBe(300_000);
 
-    // The open session counts at its ceiling: nothing is left.
+    // One open session per person: the next mint names it, so the dock can close it.
     const second = await at('2026-11-08T15:01:00.000Z', () => mint());
-    expect(second.status).toBe(429);
-    expect(second.body).toEqual({
+    expect(second.status).toBe(409);
+    expect(second.body).toMatchObject({ error: 'voice-unavailable', reason: 'session-open', openSessionId: first.body.sessionId });
+
+    // Closed at its full 300 s, nothing is left.
+    await at('2026-11-08T15:05:00.000Z', () => request(app).post(`/api/voice/sessions/${first.body.sessionId}/close`).send({ seconds: 300 }));
+    const third = await at('2026-11-08T15:06:00.000Z', () => mint());
+    expect(third.status).toBe(429);
+    expect(third.body).toEqual({
       error: 'voice-unavailable', reason: 'daily-minutes', minutesLeft: 0, dailyMinutes: 60, resetsAt: '2026-11-09T00:00:00.000Z',
       message: expect.stringMatching(/60 minutes of voice are used/),
     });
-    expect(second.headers['retry-after']).toBe(String(9 * 3600 - 60));
+    expect(third.headers['retry-after']).toBe(String(9 * 3600 - 360));
     expect(calls).toHaveLength(1);
     expect(voiceHolds()).toHaveLength(1);
   });
@@ -624,7 +635,8 @@ describe('the daily minutes (G13, §3 Q2)', () => {
     used({ started_at: '2026-11-08T08:00:00.000Z', seconds: 600, user_sub: 'u-someone-else' });
     used({ started_at: '2026-11-08T08:00:00.000Z', seconds: 600 });
     used({ started_at: '2026-11-08T09:00:00.000Z', seconds: null, max_seconds: 1200, stop_reason: 'reaped', cost_basis: 'unknown' });
-    used({ started_at: '2026-11-08T14:50:00.000Z', seconds: null, max_seconds: 1500, ended_at: null, stop_reason: null });
+    // Still open but past its ceiling plus grace (the reaper's next): it no longer blocks a mint, and counts in full.
+    used({ started_at: '2026-11-08T14:20:00.000Z', seconds: null, max_seconds: 1500, ended_at: null, stop_reason: null });
     // 600 + 1200 + 1500 = 3300 of 3600.
     expect((await at(NOW, () => mint())).body).toMatchObject({ maxSeconds: 300, dailyMinutesLeft: 5 });
   });
@@ -640,10 +652,14 @@ describe('the daily minutes (G13, §3 Q2)', () => {
   it('VOICE_DAILY_MINUTES sets the allowance and 0 turns it off', async () => {
     budget();
     used({ started_at: '2026-11-08T09:00:00.000Z', seconds: 3600 });
+    // Each session ends with no figure from the dock (counted at its ceiling) before the next mint.
+    const endUnknown = () => { for (const r of voiceSessions.rows()) r.ended_at ??= NOW; };
     process.env['VOICE_DAILY_MINUTES'] = '90';
     expect((await at(NOW, () => mint())).body).toMatchObject({ maxSeconds: 1800 });
+    endUnknown();
     process.env['VOICE_DAILY_MINUTES'] = '0';
     expect((await at(NOW, () => mint())).status).toBe(201);
+    endUnknown();
     process.env['VOICE_DAILY_MINUTES'] = '61';
     // 3600 + 1800 + the off mint's 1800 are well past 61 minutes.
     expect((await at(NOW, () => mint())).body).toMatchObject({ reason: 'daily-minutes' });

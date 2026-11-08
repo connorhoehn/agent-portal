@@ -239,12 +239,12 @@ export async function listOpenVoiceSessions(limit = 200): Promise<VoiceSessionRo
  */
 export async function userVoiceSecondsSince(userSub: string, since: Date): Promise<number> {
   const from = since.getTime();
+  const { runAsSystem } = await import('./db-tenant.js');
   if (config.mock.aurora) {
-    return voiceSessions.rows()
+    return runAsSystem(() => voiceSessions.rows())
       .filter((r) => r.user_sub === userSub && !r.mock && Date.parse(r.started_at) >= from)
       .reduce((n, r) => n + (r.seconds ?? r.max_seconds), 0);
   }
-  const { runAsSystem } = await import('./db-tenant.js');
   const rows = await runAsSystem(() => exec(
     `SELECT COALESCE(SUM(COALESCE(seconds, max_seconds)), 0)::bigint AS used
        FROM voice_sessions WHERE user_sub = :sub AND mock = false AND started_at >= :since::timestamptz`,
@@ -252,6 +252,31 @@ export async function userVoiceSecondsSince(userSub: string, since: Date): Promi
   ));
   const used = Number(rows[0]?.['used'] ?? 0);
   return Number.isFinite(used) ? used : 0;
+}
+
+/** More open rows than one person could hold at once; the mint needs only whether there is one. */
+const MAX_OPEN_LISTED = 20;
+
+/**
+ * The user's open real sessions in every tenant, oldest first (one voice
+ * session per person, routes/voice.ts). Mock rows never count. Read as the
+ * system, like the daily minutes: the statement is filtered by the user.
+ */
+export async function userOpenVoiceSessions(userSub: string): Promise<VoiceSessionRow[]> {
+  const { runAsSystem } = await import('./db-tenant.js');
+  if (config.mock.aurora) {
+    return runAsSystem(() => voiceSessions.rows())
+      .filter((r) => r.user_sub === userSub && !r.mock && !r.ended_at)
+      .sort((a, b) => Date.parse(a.started_at) - Date.parse(b.started_at))
+      .slice(0, MAX_OPEN_LISTED)
+      .map((r) => ({ ...r }));
+  }
+  const rows = await runAsSystem(() => exec(
+    `SELECT ${SELECT} FROM voice_sessions WHERE user_sub = :sub AND mock = false AND ended_at IS NULL
+      ORDER BY started_at LIMIT ${MAX_OPEN_LISTED}`,
+    [s('sub', userSub)],
+  ));
+  return rows.map(toRow);
 }
 
 /** Per-session cap on tool-call rows, so a misbehaving tab cannot grow the table without bound. */

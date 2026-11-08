@@ -20,8 +20,13 @@
 //     day are used (G13; a session that fits only partly is minted with its
 //     maxSeconds cut to what is left, and `dailyMinutesLeft` says so); a spend
 //     refusal in spendRefusalResponse's shape plus { reason: 'budget' }, 403 for
-//     the grant or the demo persona. Never the key, the instructions or the
-//     session object.
+//     the grant or the demo persona; 409 { error: 'voice-unavailable', reason:
+//     'session-open', openSessionId } while the user already has an open real
+//     session in any tenant (one per person: the dock closes that id and
+//     retries). Both checks are read again after the insert, so two mints at
+//     once never both go through (at most one does; both may refuse) and never
+//     past the day's minutes. Never the key, the instructions or the session
+//     object.
 //   POST /api/voice/sessions/:id/events  { tool, args? | argsSha256?, outcome, durationMs?, confirmedBy? }
 //     one voice_tool_calls row; the arguments are hashed and dropped. 201 { id }.
 //   POST /api/voice/sessions/:id/close   { seconds, reason?, delegated?: { inputTokens, outputTokens, cachedTokens, responses } }
@@ -42,7 +47,9 @@
 // A session belongs to the user who minted it, and its tool calls to the
 // tenant it was minted in: any other caller gets 404, whether or not the id
 // exists. A close is accepted from the same user in any tenant, so a tenant
-// switch (which ends the session, §2) still settles the hold.
+// switch (which ends the session, §2) still settles the hold: `voice_sessions`
+// sits under row-level security, so the close reads and writes the row as the
+// system, and the owner check (`user_sub`) is its boundary.
 
 import { Router, type Request, type Response } from 'express';
 import { randomUUID } from 'node:crypto';
@@ -53,6 +60,8 @@ import { insecureDevMode } from '../lib/insecure-dev-mode.js';
 import { emitFleetMetric } from '../lib/fleet-metrics.js';
 import { rateLimit } from '../lib/rate-limit.js';
 import { clock } from '../mock/core/index.js';
+import { runAsSystem } from '../providers/db-tenant.js';
+import { voiceSessionOverdue } from '../lib/voice/reaper.js';
 import { voiceConfig, voiceCostUsd, utcDay, MIN_BILLED_SECONDS, MIN_DAILY_SESSION_SECONDS } from '../lib/voice/config.js';
 import { bookVoiceSpend, boundDelegatedUsage, preferProviderFigures, providerUsageFromRow } from '../lib/voice/ledger.js';
 import {
@@ -63,7 +72,8 @@ import {
   MOCK_SDP_ANSWER, VoiceProviderError, type ProviderUsage,
 } from '../lib/voice/openai.js';
 import {
-  closeVoiceSession, getVoiceSession, insertVoiceSession, insertVoiceToolCall, learnReapedSessionCost, recordProviderUsage, setProviderSessionId, userVoiceSecondsSince,
+  closeVoiceSession, getVoiceSession, insertVoiceSession, insertVoiceToolCall, learnReapedSessionCost, recordProviderUsage, setProviderSessionId,
+  userOpenVoiceSessions, userVoiceSecondsSince,
   CLIENT_STOP_REASONS, VOICE_TOOL_OUTCOMES, type VoiceSessionRow, type VoiceStopReason, type VoiceToolOutcome,
 } from '../providers/voice-sessions.js';
 
@@ -75,9 +85,33 @@ const SESSION_ID = /^vs_[0-9a-f-]{36}$/;
 const bySub = (req: Request): string | null => resolveSession(req)?.sub ?? null;
 const MAX_SDP_BYTES = 64 * 1024;
 
-function unavailable(res: Response, reason: 'no-key' | 'provider' | 'daily-minutes', message: string, status = 503, extra: Record<string, unknown> = {}): void {
+function unavailable(res: Response, reason: 'no-key' | 'provider' | 'daily-minutes' | 'session-open', message: string, status = 503, extra: Record<string, unknown> = {}): void {
   emitFleetMetric('voice-unavailable', { reason });
   res.status(status).json({ error: 'voice-unavailable', reason, message, ...extra });
+}
+
+/** 409: the user already has a live session; the dock closes `openSessionId` and mints again. */
+function sessionOpen(res: Response, openSessionId: string): void {
+  unavailable(res, 'session-open', 'A voice session is already open for you. Close it to start another.', 409, { openSessionId });
+}
+
+/** 429: the day's minutes are used (G13). */
+function dailyMinutesUsed(res: Response, dailyMinutes: number, leftSeconds: number): void {
+  const { next } = utcDay(clock.now());
+  res.set('Retry-After', String(Math.max(1, Math.ceil((next.getTime() - clock.now().getTime()) / 1000))));
+  unavailable(res, 'daily-minutes', `Today's ${dailyMinutes} minutes of voice are used. Voice is back at midnight UTC.`, 429, {
+    minutesLeft: Math.floor(Math.max(0, leftSeconds) / 60), dailyMinutes, resetsAt: next.toISOString(),
+  });
+}
+
+/**
+ * The user's open real sessions that are still live: one past its ceiling plus
+ * the hold grace is the reaper's (its money is bounded by the hold), and the
+ * dock could not have kept it anyway.
+ */
+async function liveOpenSessions(sub: string): Promise<VoiceSessionRow[]> {
+  const now = clock.now().getTime();
+  return (await userOpenVoiceSessions(sub)).filter((r) => !voiceSessionOverdue(r, now));
 }
 
 /** The forecast a session is held at: p75 minutes (never past the session's ceiling) × the rate. */
@@ -110,20 +144,25 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
     return;
   }
 
+  // One live real session per person, in any tenant (the dock holds one).
+  // Checked first: closing the open one may also give back minutes it holds
+  // at its ceiling below.
+  if (!cfg.mock) {
+    const open = await liveOpenSessions(session.sub);
+    if (open[0]) { sessionOpen(res, open[0].id); return; }
+  }
+
   // The daily minutes (G13, §3 Q2): what the user's real sessions since UTC
   // midnight used, known seconds else their ceiling, so an open session counts
   // in full. The dollar hold below stays the money brake; this is the time one.
   let maxSeconds = Math.round(cfg.maxMinutes * 60);
   let dailyMinutesLeft: number | null = null;
+  const dailySeconds = Math.round(cfg.dailyMinutes * 60);
   if (!cfg.mock && cfg.dailyMinutes > 0) {
-    const { start, next } = utcDay(clock.now());
-    const left = Math.max(0, Math.round(cfg.dailyMinutes * 60) - await userVoiceSecondsSince(session.sub, start));
+    const { start } = utcDay(clock.now());
+    const left = Math.max(0, dailySeconds - await userVoiceSecondsSince(session.sub, start));
     if (left < MIN_DAILY_SESSION_SECONDS) {
-      const minutesLeft = Math.floor(left / 60);
-      res.set('Retry-After', String(Math.max(1, Math.ceil((next.getTime() - clock.now().getTime()) / 1000))));
-      unavailable(res, 'daily-minutes', `Today's ${cfg.dailyMinutes} minutes of voice are used. Voice is back at midnight UTC.`, 429, {
-        minutesLeft, dailyMinutes: cfg.dailyMinutes, resetsAt: next.toISOString(),
-      });
+      dailyMinutesUsed(res, cfg.dailyMinutes, left);
       return;
     }
     if (left < maxSeconds) {
@@ -163,6 +202,27 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
   } catch (err) {
     await releaseHold(held.holdId);
     throw err;
+  }
+
+  // Both checks above read before this insert, so two mints at once can pass
+  // them together. Read again with this row in the table, before the provider
+  // is asked for anything. Any other live row refuses this one: of two racing
+  // mints the second to read always sees the first's row, so at most one goes
+  // through (both refuse when each reads after the other's insert; the dock
+  // retries). The day's minutes, this row at its ceiling, must still fit.
+  if (!cfg.mock) {
+    const other = (await liveOpenSessions(session.sub)).find((r) => r.id !== id);
+    let refuse: (() => void) | null = other ? () => sessionOpen(res, other.id) : null;
+    if (!refuse && cfg.dailyMinutes > 0) {
+      const used = await userVoiceSecondsSince(session.sub, utcDay(clock.now()).start);
+      if (used > dailySeconds) refuse = () => dailyMinutesUsed(res, cfg.dailyMinutes, dailySeconds - (used - maxSeconds));
+    }
+    if (refuse) {
+      await closeVoiceSession(id, { seconds: 0, cost_usd: 0, cost_basis: 'estimated', stop_reason: 'mint-failed' });
+      await releaseHold(held.holdId);
+      refuse();
+      return;
+    }
   }
 
   let answer: { providerSessionId: string | null; sdp: string };
@@ -219,7 +279,9 @@ async function ownSession(req: Request, opts: { sameTenant: boolean }): Promise<
   const id = String(req.params['id'] ?? '');
   if (!SESSION_ID.test(id)) return null;
   const session = resolveSession(req) as Session;
-  const row = await getVoiceSession(id);
+  // A close may come from another tenant than the row's, which row-level
+  // security would hide: read it as the system; the owner check is the boundary.
+  const row = opts.sameTenant ? await getVoiceSession(id) : await runAsSystem(() => getVoiceSession(id));
   if (!row || row.user_sub !== session.sub) return null;
   if (opts.sameTenant && row.tenant !== session.tenant) return null;
   return row;
@@ -296,15 +358,16 @@ voiceRouter.post('/sessions/:id/close', asyncHandler(async (req, res) => {
   }
   const figures = preferProviderFigures(row, provider ?? providerUsageFromRow(row), { seconds, delegated });
 
-  const closed = await closeVoiceSession(row.id, {
+  // As the system: the row may sit in a tenant the caller has switched away from (ownSession).
+  const closed = await runAsSystem(() => closeVoiceSession(row.id, {
     seconds: figures.seconds, cost_usd: figures.costUsd, cost_basis: figures.basis, stop_reason: reason,
-  });
+  }));
   if (live) detachSideband(live);
   if (!closed) {
     // Already closed. A session the reaper booked unknown learns its figure
     // from a late close; any other close is a no-op answered with what is stored.
     if (seconds != null && costUsd != null && row.stop_reason === 'reaped' && row.cost_basis === 'unknown') {
-      const learnt = await learnReapedSessionCost(row.id, seconds, costUsd);
+      const learnt = await runAsSystem(() => learnReapedSessionCost(row.id, seconds, costUsd));
       if (learnt) await bookVoiceSpend(learnt, delegated);
       res.json(closeBody(learnt ?? row, true));
       return;

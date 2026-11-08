@@ -51,7 +51,7 @@ jest.mock('../../lib/authz.js', () => ({
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 jest.mock('../../providers/sweep-runs.js', () => ({ listSweepRuns: jest.fn() }));
 // The background mode's job table reads config; its own tests are lib/__tests__/sweep-jobs.test.ts and work-sweep-jobs.test.ts.
-jest.mock('../../lib/sweep-jobs.js', () => ({ startSweepJob: jest.fn(), getSweepJob: jest.fn() }));
+jest.mock('../../lib/sweep-jobs.js', () => ({ startSweepJob: jest.fn(), getSweepJob: jest.fn(), activeSweepJob: jest.fn(() => null) }));
 jest.mock('../../providers/work-items.js', () => ({ searchWorkItems: jest.fn(), getWorkItem: jest.fn() }));
 const scopeDeny = new Set<string>();
 const scopeCalls: Array<{ initiativeId: unknown; opts: unknown }> = [];
@@ -160,7 +160,8 @@ describe('the gate matrix', () => {
   it('gates finding promotion on DispatchAgentRun — it enqueues agent work', () => {
     // ManageDevbox is the Computer Lab capability; gating dispatch on it 403'd
     // program-owner on spend the same role could authorise elsewhere.
-    expect(gateActions.filter((a) => a === 'DispatchAgentRun')).toHaveLength(1);
+    // Two gates: promotion, and sweeps/run's background mode (sweep 1, M2), which queues a job and answers at once.
+    expect(gateActions.filter((a) => a === 'DispatchAgentRun')).toHaveLength(2);
   });
 
   it('keeps both suggestion reads on the session floor', () => {

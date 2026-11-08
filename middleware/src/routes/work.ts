@@ -7,7 +7,7 @@
 //
 // Mounted at /api/work in index.ts.
 
-import { Router } from 'express';
+import { Router, type Request, type Response, type NextFunction, type RequestHandler } from 'express';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { resolveSession, requireAction, requireSession, readForRolesElseAction } from '../lib/authz.js';
 import { type Session } from '../lib/session.js';
@@ -27,7 +27,8 @@ import {
   SWEEP_NAMES, type SweepName,
 } from '../providers/org-sweeps.js';
 import { listSweepRuns } from '../providers/sweep-runs.js';
-import { getSweepJob, startSweepJob } from '../lib/sweep-jobs.js';
+import { activeSweepJob, getSweepJob, startSweepJob } from '../lib/sweep-jobs.js';
+import { rateLimit } from '../lib/rate-limit.js';
 import { grantScopedDispatchVerdict } from '../lib/bot-runner.js';
 import {
   listProposals, decideProposal, proposeGraphChange, proposalStats,
@@ -402,7 +403,30 @@ workRouter.get('/findings', asyncHandler(async (req, res) => {
  * already relies on, so this drops to the same floor rather than a specific
  * capability (program-owner.md defect #4 — auditing the surrounding gates).
  */
-workRouter.post('/sweeps/run', requireSession('RunSweeps'), asyncHandler(async (req, res) => {
+/** Background sweep jobs one user may start per hour (POST /sweeps/run { background: true }). */
+export const SWEEP_JOBS_PER_HOUR = 6;
+
+/** `gate` for a background request only; the button's run, which waits for its results, passes by. */
+function forBackground(gate: RequestHandler): RequestHandler {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if ((req.body as { background?: unknown } | undefined)?.background === true) { void gate(req, res, next); return; }
+    next();
+  };
+}
+
+/**
+ * A background run answers at once, so nothing paces it but these: the Cedar
+ * action the voice's queue_work card names for a sweep and the Findings
+ * page's button checks (`DispatchAgentRun`, lib/voice/catalogue.ts
+ * QUEUE_WORK_ACTIONS), SWEEP_JOBS_PER_HOUR per user, and one job in flight
+ * per user (409 with that job's id).
+ */
+const backgroundSweepGates = [
+  forBackground(requireAction('DispatchAgentRun')),
+  forBackground(rateLimit('sweeps-background', SWEEP_JOBS_PER_HOUR, 60 * 60_000, (req) => resolveSession(req)?.sub ?? null)),
+];
+
+workRouter.post('/sweeps/run', requireSession('RunSweeps'), ...backgroundSweepGates, asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as { sweep?: string; background?: unknown };
   const name = body.sweep as SweepName | undefined;
   if (name && !SWEEP_NAMES.includes(name)) {
@@ -414,6 +438,11 @@ workRouter.post('/sweeps/run', requireSession('RunSweeps'), asyncHandler(async (
   if (body.background === true) {
     const session = resolveSession(req);
     if (!session) { res.status(401).json({ error: 'unauthenticated' }); return; }
+    const running = activeSweepJob(session.sub);
+    if (running) {
+      res.status(409).json({ error: 'a background sweep you started is still running', code: 'sweep-job-running', jobId: running.jobId, job: running });
+      return;
+    }
     const job = startSweepJob({ owner: session.sub, tenant: session.tenant, sweep: name ?? null });
     res.status(202).json(job);
     return;
