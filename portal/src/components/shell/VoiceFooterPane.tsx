@@ -120,8 +120,10 @@ function VoiceFooterPane() {
   const gateway = useGatewayOptional();
   const tenant = session?.tenant ?? 'orgiq';
   // Outside the Social tenant, Social actions come from the plane's grants, not the session's tenant (socialPlane.ts).
-  const onPlane = tenant !== 'social' && !!social?.available;
-  const planeCaps = useFetch<{ actions: Record<string, boolean> }>(onPlane ? '/api/social/plane/capabilities' : null, 60_000, { share: true });
+  // Read with or without a Social grant: without one it answers every action false and names the catalog item
+  // that grants posting (`requestItemId`), which a refused post offers (G10).
+  const onPlane = tenant !== 'social';
+  const planeCaps = useFetch<{ actions: Record<string, boolean>; requestItemId?: string }>(onPlane ? '/api/social/plane/capabilities' : null, 60_000, { share: true });
   const [deliveries] = useState(() => new Map<string, DeliveryRecord>());
   // The rows this tenant's searches returned, for open_result; a new tenant starts empty (a switch ends the session).
   const results = useMemo(() => new ResultMemory(), [tenant]);
@@ -211,12 +213,18 @@ function VoiceFooterPane() {
       }
       return (tenantLobbyPresence.get()?.online ?? []).filter((p) => p.userId !== me).map((p) => ({ userId: p.userId, name: p.name, status: 'online' as const }));
     },
+    // set_status (G10): the tenant lobby's own entry, when the shell announces on one (no Social grant needed).
+    lobby: () => {
+      const entry = tenantLobbyPresence.get();
+      return entry ? { channel: entry.lobby, setStatus: (status) => entry.setStatus(status as 'online' | 'away' | 'busy' | 'offline'), updateMetadata: (meta) => entry.updateMetadata(meta) } : null;
+    },
   }), [socialPeople, session?.sub]);
 
   // The tool context is read at call time, so a call sees the current router, grants and providers.
   const planeActions = planeCaps.data?.actions ?? {};
-  const live = useRef({ tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, results });
-  live.current = { tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, results };
+  const socialRequestItemId = onPlane && planeCaps.data?.actions && !planeCaps.data.actions['PostMessage'] ? planeCaps.data.requestItemId ?? null : null;
+  const live = useRef({ tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, socialRequestItemId, results });
+  live.current = { tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, socialRequestItemId, results };
 
   const controller = useMemo(() => new VoiceController({
     fetch: (url, init) => fetch(url, init),
@@ -234,6 +242,7 @@ function VoiceFooterPane() {
       social: live.current.social,
       calls: live.current.calls,
       presence: live.current.presence,
+      socialRequestItemId: live.current.socialRequestItemId,
       results: live.current.results,
       toast: {
         pending: (title, detail) => toastPending(title, detail),

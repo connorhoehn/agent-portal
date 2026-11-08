@@ -18,14 +18,17 @@ const BAR = 'min-w-0';
 
 /** Announces this session on the tenant lobby; mounted only while connected. */
 function TenantLobby({ directory, onOnline }: { directory: SharedPeople; onOnline(ids: Set<string>): void }) {
-  const { roster } = usePresence(directory.lobby, { join: true });
+  const { roster, setStatus, updateMetadata } = usePresence(directory.lobby, { join: true });
   const ids = useMemo(() => onlineIds(roster, directory.people), [roster, directory]);
   useEffect(() => { onOnline(ids); }, [ids, onOnline]);
   useEffect(() => () => onOnline(new Set()), [onOnline]);
-  // Who the footer counts online, for the voice dock's `activity` (read at call time).
+  // Who the footer counts online and this announcement's writers, for the voice dock (activity, set_status; read at call time).
   useEffect(() => {
-    tenantLobbyPresence.set({ lobby: directory.lobby, online: directory.people.filter(p => ids.has(p.userId)).map(p => ({ userId: p.userId, name: p.displayName })) });
-  }, [directory, ids]);
+    tenantLobbyPresence.set({
+      lobby: directory.lobby, online: directory.people.filter(p => ids.has(p.userId)).map(p => ({ userId: p.userId, name: p.displayName })),
+      setStatus, updateMetadata,
+    });
+  }, [directory, ids, setStatus, updateMetadata]);
   useEffect(() => () => tenantLobbyPresence.set(null), []);
   return null;
 }

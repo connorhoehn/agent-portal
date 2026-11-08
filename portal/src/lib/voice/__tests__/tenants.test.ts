@@ -170,3 +170,15 @@ test('the social moderator\'s scripted session asks who is on a call: activity r
   assert.deepEqual(run.summaries, ['1 live huddle: Live huddle in #platform (In the huddle now: Mira, Lena)']);
   assert.deepEqual(run.log.filter((r) => r.url.startsWith('/api/social/search')).map((r) => r.url), ['/api/social/search?q=live+huddles&type=huddle&limit=50']);
 });
+
+test('an orgiq member\'s scripted session sets their status with no Social context, on the tenant lobby, and reads nothing (G10)', async () => {
+  const writes: unknown[] = [];
+  const run = await scriptedRun('orgiq', {
+    role: 'member', allow: ['Search', 'VoiceNavigate'], routes: [],
+    call: { name: 'set_status', arguments: { status: 'away', message: 'out today' }, said: 'Set my status to away: out today.' },
+    ctx: { social: null, presence: { roster: () => [], lobby: () => ({ channel: 'orgiq:lobby', setStatus: (s) => { writes.push(s); }, updateMetadata: (m) => { writes.push(m); } }) } },
+  });
+  assert.deepEqual(run.calls, [['set_status', 'done']]);
+  assert.deepEqual(writes, ['away', { statusMessage: 'out today' }]);
+  assert.equal(run.log.filter((l) => l.method === 'GET').length, 0);
+});

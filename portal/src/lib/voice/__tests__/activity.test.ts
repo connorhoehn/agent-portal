@@ -33,7 +33,7 @@ function socialIndex(prefix: string): Route {
 const ROSTER: PresenceAccess = { roster: () => [
   { userId: 'u-mira', name: 'Mira Chen', status: 'online' },
   { userId: 'u-lena', name: 'Lena Park', status: 'away', message: 'out today' },
-] };
+], lobby: () => null };
 const SOCIAL = { api: '/api/social/plane', unavailable: null, send: async () => {}, presence: null, deliveries: new Map() } as SocialAccess;
 
 test('live-calls, missed-calls, messages and pins each answer from the social index, with the index\'s own rows', async () => {

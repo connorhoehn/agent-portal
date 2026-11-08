@@ -37,15 +37,17 @@
 //                     team or channel, nobody rung; callPeople for a person,
 //                     who is rung), once; refused while a call is live
 //   set_status        setStatus + updateMetadata({ statusMessage }) on the
-//                     shell's own presence entry, which the presence tooltip
-//                     reads; no card (§4: it changes only the caller)
+//                     tenant's own lobby entry (`<tenant>:lobby`) and, with a
+//                     Social grant, the shell's Social entry, which the
+//                     presence tooltip reads; no card and no grant (§4, G10:
+//                     it changes only the caller)
 //
 // No React and only `.ts` imports, so `node --test` runs it.
 
 import type { RunCommandPhrase } from './catalogue.ts';
 import {
-  ambiguous, computersOf, done, failed, qs, readFailure, readJson, refused, TOOL_RUNNERS,
-  type CallAccess, type ConfirmPlan, type DeliveryRecord, type ProjectRow, type ToolContext, type ToolResult,
+  ambiguous, computersOf, done, failed, qs, readFailure, readJson, refused, socialGrantRefusal, TOOL_RUNNERS,
+  type CallAccess, type ConfirmPlan, type DeliveryRecord, type PresenceWriter, type ProjectRow, type ToolContext, type ToolResult,
   type VoiceComputer, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 
@@ -389,7 +391,7 @@ const where = (kind: ResolveBody['kind'], name: string) => (kind === 'person' ? 
 
 const planSendChat: VoiceToolPlanner = async (args, ctx) => {
   const social = ctx.social;
-  if (!social) return { result: refused('Messages go through Social, which this session cannot reach.') };
+  if (!social) return { result: socialGrantRefusal(ctx, 'Messages go through Social, which this session cannot reach.') };
   if (social.unavailable) return { result: refused(social.unavailable) };
   const target = args['target'] as { kind: 'team' | 'channel' | 'dm'; name: string };
   const text = String(args['text']);
@@ -423,7 +425,7 @@ const runSendChat: VoiceToolRunner = async (_args, ctx, planned) => {
   const social = ctx.social;
   const plan = planned as PostPlan | undefined;
   if (!plan) return refused('send_chat_message sends only after the user confirms its card.');
-  if (!social) return refused('Messages go through Social, which this session cannot reach.');
+  if (!social) return socialGrantRefusal(ctx, 'Messages go through Social, which this session cannot reach.');
   const label = where(plan.kind, plan.name);
   const record = social.deliveries.get(plan.key) ?? { deliveryId: plan.deliveryId, state: 'pending' as const, at: ctx.now().getTime() };
   if (record.state === 'sent') return done('posted', { to: label, posted: true, alreadyPosted: true }, `Already posted to ${label}`);
@@ -444,7 +446,7 @@ interface CallPlan { kind: ResolveBody['kind']; name: string; channel: string; u
 
 /** The call host start_call may use, or why it cannot go ahead (before the card and again at confirm). */
 function callRefusal(ctx: ToolContext): { calls: CallAccess } | { result: ToolResult } {
-  if (!ctx.social) return { result: refused('Calls go through Social, which this session cannot reach.') };
+  if (!ctx.social) return { result: socialGrantRefusal(ctx, 'Calls go through Social, which this session cannot reach.') };
   if (!ctx.calls) return { result: refused('Calls are not available on this page.') };
   if (ctx.calls.unavailable) return { result: refused(ctx.calls.unavailable) };
   const active = ctx.calls.active();
@@ -495,14 +497,23 @@ const runStartCall: VoiceToolRunner = async (_args, ctx, planned) => {
 // ── set_status ──────────────────────────────────────────────────────────────
 
 const runSetStatus: VoiceToolRunner = async (args, ctx) => {
-  const presence = ctx.social?.presence;
-  if (!presence) return refused('Your status lives in Social, which this session is not connected to.');
+  // G10: the tenant's own presence entry first (the lobby the shell announces on; no grant, it changes only the
+  // caller), then the Social one as a second write when the session holds Social. Either alone is enough.
+  const lobby = ctx.presence?.lobby() ?? null;
+  const writes: Array<{ on: string; writer: PresenceWriter }> = [
+    ...(lobby ? [{ on: 'workspace', writer: lobby }] : []),
+    ...(ctx.social?.presence ? [{ on: 'Social', writer: ctx.social.presence }] : []),
+  ];
+  if (!writes.length) return refused('Your presence is not connected right now. Try again in a moment.');
   const status = String(args['status']);
   const message = typeof args['message'] === 'string' ? args['message'].trim() : undefined;
-  presence.setStatus(status);
-  // Only the dictated message (§10): an omitted one leaves the current message as it is.
-  if (message !== undefined) presence.updateMetadata({ statusMessage: message || null });
-  return done('status_set', { status, ...(message ? { message } : {}) }, message ? `Status: ${status}, "${message}"` : `Status: ${status}`);
+  for (const { writer } of writes) {
+    writer.setStatus(status);
+    // Only the dictated message (§10): an omitted one leaves the current message as it is.
+    if (message !== undefined) writer.updateMetadata({ statusMessage: message || null });
+  }
+  return done('status_set', { status, ...(message ? { message } : {}), on: writes.map((w) => w.on) },
+    message ? `Status: ${status}, "${message}"` : `Status: ${status}`);
 };
 
 // ── the tables ──────────────────────────────────────────────────────────────

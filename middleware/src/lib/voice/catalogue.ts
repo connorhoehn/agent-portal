@@ -393,14 +393,15 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
   },
   {
     name: 'set_status',
-    description: 'Set the user\'s own presence status in the social app, with an optional short message.',
+    description: 'Set the user\'s own presence status, with an optional short message: on this workspace\'s presence and, when the user has Social, on Social\'s too.',
     parameters: obj({
       status: str('The status.', { enum: ['online', 'away', 'busy', 'offline'] }),
       message: str('A short status message.', { maxLength: 120 }),
     }, ['status']),
-    kind: 'people', backing: 'social-activity', confirm: false, action: null, gate: "the socket's presence admission", spend: 'none', idempotent: true,
+    kind: 'people', backing: 'social-activity', confirm: false, action: null,
+    gate: "the socket's presence admission; no Social grant (it changes only the caller, G10)", spend: 'none', idempotent: true,
     says: 'Setting your status to away: out today.', tenants: PEOPLE_TENANTS,
-    mapsTo: "usePresence('social:lobby').setStatus(status) and updateMetadata({ statusMessage })",
+    mapsTo: "usePresence('<tenant>:lobby') (the shell's tenant lobby, manifest presenceLobby) then usePresence('social:lobby') with a Social grant: setStatus(status) and updateMetadata({ statusMessage })",
   },
   {
     name: 'access_request_status',

@@ -94,8 +94,8 @@ export interface SocialAccess {
   unavailable: string | null;
   /** Post through useChat(channel).sendMessage with the composer's ack wait; resolves on the persisted receipt. */
   send(input: { channel: string; text: string; deliveryId: string }): Promise<void>;
-  /** The shell's presence entry (usePresence's setStatus + updateMetadata); null when the socket has none. */
-  presence: { setStatus(status: string): void; updateMetadata(meta: Record<string, unknown>): void } | null;
+  /** The shell's Social presence entry (usePresence's setStatus + updateMetadata); null when the socket has none. */
+  presence: PresenceWriter | null;
   /** Delivery ids by channel and text, kept for the dock's lifetime so a retry reuses one. */
   deliveries: Map<string, DeliveryRecord>;
 }
@@ -119,10 +119,18 @@ export interface CallAccess {
 /** One person on the presence roster the footer shows (activity `online`). */
 export interface PresencePerson { userId: string; name: string; status: 'online' | 'away' | 'busy' | 'offline'; message?: string }
 
+/** One presence announcement's writers (usePresence's setStatus + updateMetadata). */
+export interface PresenceWriter { setStatus(status: string): void; updateMetadata(meta: Record<string, unknown>): void }
+
 /** The shell's presence, as the people tools read it: who the footer shows online (never a second subscription). */
 export interface PresenceAccess {
   /** The people the footer's presence row shows right now, the caller left out; empty while the socket is down. */
   roster(): readonly PresencePerson[];
+  /**
+   * The tenant's own lobby entry (`<tenant>:lobby`, manifest `presenceLobby`) when the shell announces on it,
+   * else null. set_status writes here first (G10): it needs no Social grant, since it changes only the caller.
+   */
+  lobby(): (PresenceWriter & { channel: string }) | null;
 }
 
 /** The app's toast store (lib/toastStore.ts), so a slow action shows outside the dock too. */
@@ -160,8 +168,13 @@ export interface ToolContext {
   social?: SocialAccess | null;
   /** The shell's call host; null where none is mounted. */
   calls?: CallAccess | null;
-  /** The shell's presence roster (activity `online`); null when the shell announces on no lobby. */
+  /** The shell's presence roster (activity `online`) and the tenant lobby's writers (set_status); null when there is none. */
   presence?: PresenceAccess | null;
+  /**
+   * Outside Social: the access-catalog item that grants posting there, from GET /api/social/plane/capabilities
+   * (`requestItemId`, present when PostMessage is false). A refused post or call offers its request (G10).
+   */
+  socialRequestItemId?: string | null;
   toast?: ToastSink;
   /** The compute dock's output tab (openOutputTab); false = it could not open (every tab is in use). */
   showOutput?(view: CommandOutputView): boolean | void;
@@ -875,7 +888,30 @@ export interface PreparedCall {
  * outside the session's tenant, arguments that break the schema, and the
  * tool's can() action. Never touches the network.
  */
-export function prepareToolCall(name: string, rawArgs: unknown, ctx: Pick<ToolContext, 'tenant' | 'can'>): { ok: true; call: PreparedCall } | { ok: false; result: ToolResult } {
+/** Where the Access workspace files a request for one catalog item (RequestNewPage reads `item`). */
+export const accessRequestHref = (itemId: string): string => `/access/requests/new?${qs({ item: itemId })}`;
+
+/**
+ * The refusal for a Social action the session holds no grant for, outside Social (G10): actionable when the
+ * plane named the catalog item that grants it. The request page is the Access workspace's, so the dock offers
+ * the workspace switch (navigate `workspaces`) and says that it ends the voice session.
+ */
+export function socialGrantRefusal(ctx: Pick<ToolContext, 'tenant' | 'socialRequestItemId'>, fallback: string): ToolResult {
+  const item = ctx.tenant !== 'social' ? ctx.socialRequestItemId : null;
+  if (!item) return refused(fallback);
+  return refused("You don't have Social access here. I can open the access request.", {
+    hint: {
+      label: 'Request Social access', href: accessRequestHref(item), item,
+      note: 'The request is filed in the Access workspace; switching to it ends this voice session.',
+    },
+    offer: { tool: 'navigate', page: 'workspaces' },
+  });
+}
+
+/** Tools whose action is a Social grant outside Social (the plane's PostMessage / StartCall): refused with the request offer. */
+const SOCIAL_GRANT_TOOLS: ReadonlySet<string> = new Set(['send_chat_message', 'start_call']);
+
+export function prepareToolCall(name: string, rawArgs: unknown, ctx: Pick<ToolContext, 'tenant' | 'can'> & Partial<Pick<ToolContext, 'socialRequestItemId'>>): { ok: true; call: PreparedCall } | { ok: false; result: ToolResult } {
   const spec = voiceToolSpec(name);
   if (!spec) return { ok: false, result: refused(`There is no "${name}" tool.`) };
   if (!spec.tenants.includes(ctx.tenant)) return { ok: false, result: refused(`${name.replace(/_/g, ' ')} is not available in this workspace.`) };
@@ -884,7 +920,10 @@ export function prepareToolCall(name: string, rawArgs: unknown, ctx: Pick<ToolCo
     const shell = IGNORED_ARGS[name]?.some((k) => typeof rawArgs === 'string' ? rawArgs.includes(`"${k}"`) : !!rawArgs && typeof rawArgs === 'object' && k in rawArgs);
     return { ok: false, result: refused(`I could not use those details: ${parsed.problem}.${shell ? ` ${IGNORED_NOTE}` : ''}`) };
   }
-  if (spec.action && !ctx.can(spec.action)) return { ok: false, result: refused(ROLE_REFUSALS[name] ?? `Your role cannot ${spec.kind === 'read' ? 'read that' : 'do that'} here.`) };
+  if (spec.action && !ctx.can(spec.action)) {
+    const fallback = ROLE_REFUSALS[name] ?? `Your role cannot ${spec.kind === 'read' ? 'read that' : 'do that'} here.`;
+    return { ok: false, result: SOCIAL_GRANT_TOOLS.has(name) ? socialGrantRefusal(ctx, fallback) : refused(fallback) };
+  }
   return { ok: true, call: { spec, args: parsed.args, ...(parsed.ignored.length ? { ignored: parsed.ignored } : {}) } };
 }
 

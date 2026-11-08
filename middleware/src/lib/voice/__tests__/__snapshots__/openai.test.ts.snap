@@ -486,7 +486,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "Set the user's own presence status in the social app, with an optional short message.",
+    "description": "Set the user's own presence status, with an optional short message: on this workspace's presence and, when the user has Social, on Social's too.",
     "name": "set_status",
     "parameters": {
       "additionalProperties": false,

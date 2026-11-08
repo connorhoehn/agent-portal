@@ -18,7 +18,9 @@
 // guards are unchanged: a join here makes the caller a member, and only then
 // does the gateway admit their subscribe.
 //
-//   GET    /capabilities                    which Social actions the actor's grants allow (the plane's can())
+//   GET    /capabilities                    which Social actions the actor's grants allow (the plane's can());
+//                                           any session: no Social grant answers every action false, and
+//                                           without PostMessage the body names the catalog item to request
 //   GET    /channels                        public directory + private ones you are in        (ViewSocial)
 //   POST   /channels                        create; you become its owner                       (ManageChannels)
 //   POST   /channels/:slug/join             join a public channel                              (PostMessage)
@@ -39,8 +41,10 @@
 //   GET    /conversations/:id/shared-work   what was shared into a conversation you are in     (ViewSocial)
 
 import { Router } from 'express';
-import { AppError, asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
-import { socialActionRole } from '../lib/live-principal.js';
+import { AppError, asyncHandler, NotFoundError, SessionInvalidError, ValidationError } from '../lib/async-handler.js';
+import { isAllowed } from '../lib/authz.js';
+import { currentLiveSession, socialActionRole } from '../lib/live-principal.js';
+import { listCatalog } from '../providers/access.js';
 import { currentSocialActionSession, socialGate } from '../lib/social-authority.js';
 import type { Session } from '../lib/session.js';
 import { sharedSocialHandler as handler, teamMemberAction } from './social.js';
@@ -57,14 +61,40 @@ import { tenantSearchRouter } from './tenant-search.js';
 export const socialPlaneRouter = Router();
 
 const PLANE_ACTIONS = ['ViewSocial', 'PostMessage', 'StartCall', 'ManageChannels', 'ManageTeams', 'ManageRecordings'] as const;
-socialPlaneRouter.get('/capabilities', socialGate('ViewSocial'), asyncHandler(async (req, res) => {
-  const session = req.session as Session;
+
+/**
+ * The access-catalog item that grants posting in Social (voice G10: a refused
+ * post offers "/access/requests/new?item=<it>"): the Social tenant roles in
+ * the catalog whose policy allows PostMessage, a non-sensitive one first.
+ * Null when the catalog offers none.
+ */
+export async function socialPostRequestItemId(sub: string): Promise<string | null> {
+  const items = listCatalog().filter((i) => i.kind === 'tenant-role' && i.tenant === 'social' && i.role)
+    .sort((a, b) => Number(a.sensitive) - Number(b.sensitive));
+  for (const item of items) if (await isAllowed({ sub, tenant: 'social', role: item.role! }, 'PostMessage')) return item.id;
+  return null;
+}
+
+/**
+ * The plane's can(): answered to any session, because "which Social actions
+ * may I take here" has an answer without a Social grant (none), and the voice
+ * dock and the Communication door need it to say so and offer the request.
+ * The grants are the directory's current ones (a cookie's claimed grant counts
+ * for nothing; a stale epoch is 401), rechecked after the policy calls.
+ */
+socialPlaneRouter.get('/capabilities', asyncHandler(async (req, res) => {
+  const signed = req.session as Session | undefined;
+  if (!signed) throw new SessionInvalidError('Unauthenticated');
+  const session = await currentLiveSession(signed);
+  const roles: Record<string, string | null> = {};
+  for (const action of PLANE_ACTIONS) roles[action] = await socialActionRole(session, action);
+  // A policy call can outlive revocation: only roles the directory still grants count.
+  const latest = await currentLiveSession(session);
   const actions: Record<string, boolean> = {};
-  for (const action of PLANE_ACTIONS) actions[action] = (await socialActionRole(session, action)) !== null;
-  // A policy call can outlive revocation: recheck before answering.
-  await currentSocialActionSession(session, 'ViewSocial');
+  for (const action of PLANE_ACTIONS) actions[action] = roles[action] != null && !!latest.grants.social?.includes(roles[action]!);
+  const requestItemId = actions['PostMessage'] ? null : await socialPostRequestItemId(session.sub);
   res.set('Cache-Control', 'no-store');
-  res.json({ tenant: session.tenant, actions });
+  res.json({ tenant: session.tenant, actions, ...(requestItemId ? { requestItemId } : {}) });
 }));
 
 socialPlaneRouter.get('/channels', socialGate('ViewSocial'), handler('get /channels'));

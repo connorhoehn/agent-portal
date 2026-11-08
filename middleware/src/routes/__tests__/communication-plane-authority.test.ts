@@ -189,10 +189,14 @@ describe('reads', () => {
     expect((await get(`${P}/channels`, 'u-mira')).body.channels.map((c: { slug: string }) => c.slug)).toContain('plane-private');
   });
 
-  it('a session without a Social grant is refused every read, plane and embed alike', async () => {
-    for (const path of [...READS.map(p => `${P}${p}`), '/api/social/embedded', '/api/social/share-destinations', '/api/social/channels']) {
+  it('a session without a Social grant is refused every read, plane and embed alike; its capabilities say none and name the request', async () => {
+    for (const path of [...READS.filter(p => p !== '/capabilities').map(p => `${P}${p}`), '/api/social/embedded', '/api/social/share-destinations', '/api/social/channels']) {
       expect([path, (await get(path, 'u-eli')).status]).toEqual([path, 403]);
     }
+    // The plane's can() has an answer without a grant (voice G10): nothing, and the catalog item that grants posting.
+    const caps = await get(`${P}/capabilities`, 'u-eli');
+    expect(caps.status).toBe(200);
+    expect(caps.body).toEqual({ tenant: 'orgiq', actions: { ViewSocial: false, PostMessage: false, StartCall: false, ManageChannels: false, ManageTeams: false, ManageRecordings: false }, requestItemId: 'role:social:moderator' });
   });
 
   it('the cross-tenant admin reads the plane under its Social admin grant', async () => {
@@ -266,7 +270,9 @@ describe('every plane route, by its literal path', () => {
 describe('forgery and revocation', () => {
   it('a cookie claiming a Social grant the directory does not hold is refused on every route', async () => {
     sessions.set('u-eli', { ...eli, grants: { orgiq: ['sme'], social: ['community-admin'] } } as Session);
-    for (const path of READS) expect([path, (await get(`${P}${path}`, 'u-eli')).status]).toEqual([path, 403]);
+    for (const path of READS.filter(p => p !== '/capabilities')) expect([path, (await get(`${P}${path}`, 'u-eli')).status]).toEqual([path, 403]);
+    // The claimed grant counts for nothing: the directory's grants answer.
+    expect((await get(`${P}/capabilities`, 'u-eli')).body.actions).toMatchObject({ ViewSocial: false, PostMessage: false, ManageChannels: false });
     for (const w of WRITES) expect([w.path, (await send(w, 'u-eli')).status]).toEqual([w.path, 403]);
   });
 
