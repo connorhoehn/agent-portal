@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-08T22:46:49.169Z",
-  "serverHandlerSha": "5e8ca6f690d122bf276d0d6a79cd63b5c46bae91c4249d308222ba94799ad276",
+  "capturedAt": "2026-11-08T22:49:36.817Z",
+  "serverHandlerSha": "0150af8bae5ae12d50a38172371eeab1aa741442bdb76ac50363f0346c9f56ea",
   "baseUrl": "http://127.0.0.1:3995",
   "personas": [
     "orgiq/admin",
@@ -3000,12 +3000,12 @@
         "boxes[].status": "string",
         "boxes[].stopsInMs": "number",
         "boxes[].taskMsLeft": "number",
-        "boxes[].taskStartedAt": "string",
         "boxes[].tokensUsed": "number"
       },
       "values": {
         "boxes[].status": [
           "idle",
+          "provisioning",
           "running",
           "waiting"
         ]
@@ -3898,17 +3898,16 @@
           "ORG-COST-2",
           "ORG-COST-3",
           "ORG-COST-6",
-          "ORG-DS-1",
           "ORG-DS-3",
           "ORG-DS-4",
           "ORG-DSAPI-1",
           "ORG-DSAPI-2",
-          "ORG-DSAPI-3",
           "ORG-DSAPI-4",
           "ORG-FS-1",
           "ORG-FS-3",
-          "ORG-FS-4",
           "ORG-INF-1",
+          "ORG-INF-2",
+          "ORG-INF-3",
           "ORG-LAKE-2",
           "ORG-LAKE-3",
           "ORG-LAKE-4",
@@ -3918,6 +3917,8 @@
           "ORG-LLM-3",
           "ORG-LLM-4",
           "ORG-LLM-5",
+          "ORG-LLM-7",
+          "ORG-LLM-9",
           "ORG-MOB-2",
           "ORG-MOB-3",
           "ORG-MOB-4",
@@ -3934,7 +3935,6 @@
           "ORG-RTA-2",
           "ORG-RTA-3",
           "ORG-RTA-5",
-          "ORG-SOC2-1",
           "ORG-SOC2-2",
           "ORG-SOC2-3",
           "ORG-SOC2-4",
@@ -3981,15 +3981,7 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "criteria": "array",
-        "criteria[]": "object",
-        "criteria[].createdAt": "string",
-        "criteria[].done": "boolean",
-        "criteria[].id": "string",
-        "criteria[].position": "number",
-        "criteria[].text": "string",
-        "criteria[].updatedAt": "string",
-        "criteria[].workItemId": "string"
+        "criteria": "array"
       },
       "values": {}
     },

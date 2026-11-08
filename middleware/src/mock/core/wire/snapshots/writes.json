@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-08T22:46:54.572Z",
-  "serverHandlerSha": "5e8ca6f690d122bf276d0d6a79cd63b5c46bae91c4249d308222ba94799ad276",
+  "capturedAt": "2026-11-08T22:49:42.460Z",
+  "serverHandlerSha": "0150af8bae5ae12d50a38172371eeab1aa741442bdb76ac50363f0346c9f56ea",
   "baseUrl": "http://127.0.0.1:3995",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -155,7 +155,7 @@
       }
     },
     "DELETE /api/graph/work-items/:id/decisions/:decisionId": {
-      "skipped": "no value found for :decisionId under /api/graph/work-items/wi-dsapi-e1-s1/decisions (orgiq/admin)"
+      "skipped": "no value found for :decisionId under /api/graph/work-items/wi-rta-e1-s1/decisions (orgiq/admin)"
     },
     "DELETE /api/graph/work-items/:id/documents/:documentId": {
       "refused": {
@@ -531,7 +531,7 @@
         "childDoneCount": "number",
         "completedAt": "null",
         "createdAt": "string",
-        "description": "null",
+        "description": "string",
         "estimateForecast": "null",
         "estimateModel": "null",
         "estimateReviewedAt": "null",
@@ -556,14 +556,14 @@
         "sprintId": "string",
         "status": "string",
         "storyPoints": "number",
-        "summary": "null",
+        "summary": "string",
         "title": "string",
         "type": "string",
         "updatedAt": "string"
       },
       "values": {
         "key": [
-          "ORG-DSAPI-2"
+          "ORG-RTA-2"
         ],
         "status": [
           "in_progress"
@@ -4781,7 +4781,7 @@
       }
     },
     "PUT /api/graph/work-items/:id/decisions/:decisionId": {
-      "skipped": "no value found for :decisionId under /api/graph/work-items/wi-dsapi-e1-s1/decisions (orgiq/admin)"
+      "skipped": "no value found for :decisionId under /api/graph/work-items/wi-rta-e1-s1/decisions (orgiq/admin)"
     },
     "PUT /api/graph/work-items/:id/documents/:documentId": {
       "refused": {
