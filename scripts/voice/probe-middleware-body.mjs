@@ -18,7 +18,7 @@
 //
 // Tool results: search_people / search_records read GET {PORTAL_API}/api/search (default http://localhost:3001, the
 // mock middleware, read-only, no cookie: the demo session) shaped as portal/src/lib/voice/tools.ts searchRunner does;
-// navigate and the rest answer { ok: true } so the loop completes. Every session is closed within HARD_CAP_MS.
+// rows carry tools.ts's `ref`; navigate, open_result and the rest answer { ok: true } so the loop completes. Every session is closed within HARD_CAP_MS.
 //
 // The key comes from OPENAI_API_KEY, else middleware/.env, and is never logged: every line passes the same redaction
 // as probe-realtime.mjs, and a line containing the key's prefix throws instead of being written.
@@ -130,7 +130,8 @@ async function runTool(name, argsJson) {
     try {
       const r = await fetch(`${PORTAL_API}/api/search?${q}`, { signal: AbortSignal.timeout(5000) });
       const body = await r.json();
-      const rows = (body.results ?? []).slice(0, limit).map((x) => ({ name: x.title, subtitle: x.subtitle, detail: x.description, matched: x.matchReason, href: x.href }));
+      // `ref` as tools.ts searchRunner gives it (the row's own type:id), so a follow-up open_result can name it.
+      const rows = (body.results ?? []).slice(0, limit).map((x) => ({ ref: x.id ? `${x.type ?? type}:${x.id}` : undefined, name: x.title, subtitle: x.subtitle, detail: x.description, matched: x.matchReason, href: x.href }));
       return { kind: 'search_results', type, query: a.query, total: body.total ?? rows.length, rows };
     } catch (e) { return { ok: false, error: `search read failed: ${e.message}` }; }
   }
