@@ -53,6 +53,8 @@ export interface VoiceToolSpec {
 export const VOICE_TENANTS = ['orgiq', 'social', 'assessment', 'pipelines', 'access'] as const;
 /** Where the machine and people tools reach (the middleware's PEOPLE_TENANTS); the other tenants get reads and navigation only. */
 const PEOPLE_TENANTS = ['orgiq', 'social'] as const;
+/** Where `activity` reads: Social itself, and the tenants that embed its plane (tenants/manifest.json; V2-13). */
+const ACTIVITY_TENANTS = ['orgiq', 'social', 'assessment', 'pipelines'] as const;
 
 /** Page ids `open` may name (the middleware's NAVIGATE_PAGES: ids, tenants and the palette's roles); an id may repeat across tenants. */
 export const NAVIGATE_PAGE_IDS: ReadonlyArray<{ id: string; tenants: readonly string[]; roles?: readonly string[] }> = [
@@ -192,6 +194,9 @@ export function searchRecordTypes(tenant: string | null): string[] {
 export const ACTIVITY_SCOPES: Readonly<Record<string, readonly string[]>> = {
   orgiq: ['online', 'live-calls', 'missed-calls', 'messages', 'pins', 'work', 'recent'],
   social: ['online', 'live-calls', 'missed-calls', 'messages', 'pins', 'recent'],
+  // V2-13: where the Social plane is embedded (inventory §3): the plane's own index and the footer's roster.
+  assessment: ['online', 'live-calls', 'missed-calls', 'messages', 'pins', 'recent'],
+  pipelines: ['online', 'live-calls', 'missed-calls', 'messages', 'pins', 'recent'],
 };
 
 /**
@@ -561,7 +566,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       since: str(`Since when, for messages, pins, missed-calls, work and recent: ${SINCE_WORDS}.`, { minLength: 1, maxLength: 40 }),
       who: str('One person, as the user named them, to narrow the read to ("what did Ada work on", "is Ada on a call").', { minLength: 1, maxLength: 120 }),
     }, ['scope']),
-    kind: 'read', backing: 'search', confirm: false, action: null, says: 'Checking who is on a call.', tenants: PEOPLE_TENANTS,
+    kind: 'read', backing: 'search', confirm: false, action: null, says: 'Checking who is on a call.', tenants: ACTIVITY_TENANTS,
   },
   {
     name: 'message',

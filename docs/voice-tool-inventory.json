@@ -719,7 +719,7 @@
    ],
    "mapsTo": "useNavigate() to the palette entry's path, the kept row's href, or the kind's href built from a typed ref; a name through the kind's list read (list's routes)",
    "routes": [],
-   "line": 629
+   "line": 634
   },
   {
    "name": "search",
@@ -773,7 +773,7 @@
      "path": "/api/access/search/answer"
     }
    ],
-   "line": 649
+   "line": 654
   },
   {
    "name": "list",
@@ -1011,7 +1011,7 @@
      "path": "/api/access/audit"
     }
    ],
-   "line": 666
+   "line": 671
   },
   {
    "name": "get",
@@ -1249,7 +1249,7 @@
      "path": "/api/access/reviews/:id"
     }
    ],
-   "line": 686
+   "line": 691
   },
   {
    "name": "computer",
@@ -1307,7 +1307,7 @@
      "path": "/api/local-compute/nodes/:nodeId/work"
     }
    ],
-   "line": 698
+   "line": 703
   },
   {
    "name": "summary",
@@ -1405,7 +1405,7 @@
      "path": "/api/access/summary"
     }
    ],
-   "line": 721
+   "line": 726
   },
   {
    "name": "budget",
@@ -1455,7 +1455,7 @@
      "path": "/api/observability/cost/summary"
     }
    ],
-   "line": 734
+   "line": 739
   },
   {
    "name": "activity",
@@ -1463,10 +1463,7 @@
    "backing": "search",
    "confirm": false,
    "action": null,
-   "tenants": [
-    "orgiq",
-    "social"
-   ],
+   "tenants": [],
    "mapsTo": "the shell's presence roster (online); GET /api/social/search or /api/social/plane/search?q=&type=huddle|calllog|message|pin&limit= (calls, messages, pins); GET /api/search?q=&type=work&sort=recent (work)",
    "routes": [
     {
@@ -1482,7 +1479,7 @@
      "path": "/api/search"
     }
    ],
-   "line": 748
+   "line": 753
   },
   {
    "name": "message",
@@ -1505,7 +1502,7 @@
      "path": "/api/social/dms"
     }
    ],
-   "line": 761
+   "line": 766
   },
   {
    "name": "call",
@@ -1536,7 +1533,7 @@
      "path": "/api/social/plane/search"
     }
    ],
-   "line": 775
+   "line": 780
   },
   {
    "name": "set_status",
@@ -1549,7 +1546,7 @@
    ],
    "mapsTo": "usePresence('<tenant>:lobby') (the shell's tenant lobby, manifest presenceLobby) then usePresence('social:lobby') with a Social grant: setStatus(status) and updateMetadata({ statusMessage })",
    "routes": [],
-   "line": 790
+   "line": 795
   },
   {
    "name": "queue_work",
@@ -1763,7 +1760,7 @@
      "path": "/api/pipelines/runs/:id/events"
     }
    ],
-   "line": 802
+   "line": 807
   },
   {
    "name": "decide",
@@ -1869,7 +1866,7 @@
      "path": "/api/assessment/drafts/:runId/discard"
     }
    ],
-   "line": 823
+   "line": 828
   },
   {
    "name": "create",
@@ -1939,7 +1936,7 @@
      "path": "/api/access/delegations"
     }
    ],
-   "line": 838
+   "line": 843
   },
   {
    "name": "update",
@@ -2077,7 +2074,7 @@
      "path": "/api/access/delegations/:id/end"
     }
    ],
-   "line": 869
+   "line": 874
   },
   {
    "name": "access_request_status",
@@ -2107,7 +2104,7 @@
      "path": "/api/access/approvals"
     }
    ],
-   "line": 891
+   "line": 896
   }
  ],
  "navigatePages": [

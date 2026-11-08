@@ -84,6 +84,24 @@ test('outside Social the same reads go to the plane, and need the Social grant: 
   assert.equal(l2.length, 0);
 });
 
+test('V2-13: assessment and pipelines read the plane they embed, with the grant; access is not offered activity', async () => {
+  for (const tenant of ['assessment', 'pipelines']) {
+    const { fetch, log } = fakeFetch([socialIndex(SOCIAL_SEARCH_PLANE)]);
+    const r = await runVoiceTool('activity', { scope: 'missed-calls' }, toolContext({ tenant, role: 'operator', fetch, social: SOCIAL }));
+    assert.equal(r.outcome, 'done', tenant);
+    assert.equal(log[0]!.url, `${SOCIAL_SEARCH_PLANE}?q=missed+calls&type=calllog&limit=50`);
+    assert.match(r.summary, /missed call/);
+    const work = await runVoiceTool('activity', { scope: 'work' }, toolContext({ tenant, fetch, social: SOCIAL }));
+    assert.equal(work.outcome, 'refused', 'work items are orgiq only');
+    const online = await runVoiceTool('activity', { scope: 'online' }, toolContext({ tenant, fetch, presence: ROSTER }));
+    assert.equal(online.outcome, 'done');
+    assert.equal(online.output['count'], 2);
+  }
+  const access = await runVoiceTool('activity', { scope: 'live-calls' }, toolContext({ tenant: 'access', social: SOCIAL }));
+  assert.equal(access.outcome, 'refused');
+  assert.match(String(access.output['reason']), /not available in this workspace/);
+});
+
 test('online lists only the roster the footer shows, with no request at all', async () => {
   const { fetch, log } = fakeFetch([]);
   const online = await runVoiceTool('activity', { scope: 'online' }, toolContext({ fetch, presence: ROSTER }));

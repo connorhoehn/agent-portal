@@ -190,7 +190,8 @@ describe('POST /api/voice/sessions — the mint', () => {
       const res = await mint();
       expect(res.status).toBe(201);
       // Reads and navigation; assessment and pipelines add queue_work (G19, V2-9: gated per kind on the page button's action by the dock).
-      const offered = ['access_request_status', 'budget', ...(tenant === 'access' ? ['create'] : []), 'decide', 'get', 'list', 'open', ...(tenant !== 'access' ? ['queue_work'] : []), 'search', ...(tenant !== 'access' ? ['set_status'] : []), 'summary', 'update'];
+      // V2-13: activity where the Social plane is embedded (assessment and pipelines, not access).
+      const offered = ['access_request_status', ...(tenant !== 'access' ? ['activity'] : []), 'budget', ...(tenant === 'access' ? ['create'] : []), 'decide', 'get', 'list', 'open', ...(tenant !== 'access' ? ['queue_work'] : []), 'search', ...(tenant !== 'access' ? ['set_status'] : []), 'summary', 'update'];
       expect(res.body.tools.sort()).toEqual(offered);
       const sent = JSON.parse(calls[0]!.init.body!).session;
       expect(sent.delegation.responses.tools.map((t: { name: string }) => t.name).sort()).toEqual(offered);

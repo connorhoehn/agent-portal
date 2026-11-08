@@ -215,7 +215,8 @@ describe('tenant scoping (§6)', () => {
     const tools = toolsForTenant(tenant).filter((t) => !ACTIONS.includes(t.name));
     // A presence lobby offers the caller's own status (V2-12): assessment and pipelines have one, access does not.
     expect(toolsForTenant(tenant).some((t) => t.name === 'set_status')).toBe(tenant !== 'access');
-    expect(tools.map((t) => t.name).sort()).toEqual(['access_request_status', 'budget', 'get', 'list', 'open', 'search', 'summary']);
+    // V2-13: the plane's activity where it is embedded (assessment, pipelines), never in access.
+    expect(tools.map((t) => t.name).sort()).toEqual(['access_request_status', ...(tenant !== 'access' ? ['activity'] : []), 'budget', 'get', 'list', 'open', 'search', 'summary']);
     expect(toolsForTenant(tenant).some((t) => t.name === 'queue_work')).toBe(tenant !== 'access');
     for (const t of tools) {
       expect(['read', 'navigate']).toContain(t.kind);
@@ -252,7 +253,7 @@ describe('tenant scoping (§6)', () => {
 
   it('the access approver\'s scripted session reads approvals, a requester\'s its own requests, and every role key names a real seed role', () => {
     expect(mockCallFor('access', 'approver')).toMatchObject({ name: 'decide', arguments: { ref: 'approval:req-0001', decision: 'approve' } });
-    expect(mockCallFor('access', 'access-admin').arguments).toMatchObject({ scope: 'approvals' });
+    expect(mockCallFor('access', 'access-admin')).toMatchObject({ name: 'list', arguments: { kind: 'approval' } });
     expect(mockCallFor('access', 'requester')).toMatchObject({ name: 'create', arguments: { kind: 'access-request', fields: { item: 'Operator in Pipelines', duration: '7d' } } });
     expect(mockCallFor('orgiq', 'member')).toBe(MOCK_CALLS['orgiq']);
     const seeds = join(__dirname, '..', '..', '..', '..', 'seeds', 'roles');
@@ -278,16 +279,17 @@ describe('tenant scoping (§6)', () => {
     expect(delegationInstructions('orgiq')).toMatch(/Never ask about models or profiles/);
   });
 
-  it('activity (G6) is a read over the social index and the roster, offered in orgiq and social only, with work in orgiq alone', () => {
+  it('activity (G6, V2-13) is a read over the social index and the roster, offered in Social and where its plane is embedded, with work in orgiq alone', () => {
     const t = voiceTool('activity')!;
-    expect(t.tenants).toEqual(['orgiq', 'social']);
+    expect(t.tenants).toEqual(['orgiq', 'social', 'assessment', 'pipelines']);
     expect(t.parameters.required).toEqual(['scope']);
     expect(Object.keys(t.parameters.properties)).toEqual(['scope', 'since', 'who']);
     const scopes = (tenant: string) => (toolsForTenant(tenant).find((x) => x.name === 'activity')!.parameters.properties['scope'] as { enum: string[] }).enum;
     expect(scopes('orgiq')).toEqual(activityScopes('orgiq'));
     expect(scopes('orgiq')).toEqual(expect.arrayContaining(['online', 'live-calls', 'missed-calls', 'messages', 'pins', 'work', 'recent']));
     expect(scopes('social')).not.toContain('work');
-    for (const tenant of ['assessment', 'pipelines', 'access']) expect(toolsForTenant(tenant).some((x) => x.name === 'activity')).toBe(false);
+    for (const tenant of ['assessment', 'pipelines']) expect(scopes(tenant)).toEqual(scopes('social'));
+    expect(toolsForTenant('access').some((x) => x.name === 'activity')).toBe(false);
     expect(mockCallFor('social', 'moderator')).toMatchObject({ name: 'activity', arguments: { scope: 'live-calls' } });
     expect(mockCallFor('social', 'participant')).toMatchObject({ name: 'queue_work', arguments: { kind: 'summarize', target: 'general' } });
   });
@@ -425,6 +427,57 @@ describe('tenant scoping (§6)', () => {
 
   it('a tenant that holds no voice grant gets no tools', () => {
     expect(toolsForTenant('nowhere')).toEqual([]);
+  });
+});
+
+describe('V2-13: the per-tenant offering, the instructions and the scripted calls', () => {
+  // Inventory §3's sets, minus what the v2 packages left out with a reason in this catalogue: Social's decide (the
+  // conversation agent's plans need the conversation), assessment and pipelines create (no page posts one), access
+  // queue_work (no background work there). access_request_status stays: outside Access no list kind reaches
+  // GET /api/access-requests/mine, so list and get do not cover its lookups.
+  const OFFERED: Record<string, string[]> = {
+    orgiq: ['open', 'search', 'list', 'get', 'computer', 'summary', 'budget', 'activity', 'message', 'call', 'set_status', 'queue_work', 'decide', 'create', 'update', 'access_request_status'],
+    social: ['open', 'search', 'list', 'get', 'summary', 'budget', 'activity', 'message', 'call', 'set_status', 'queue_work', 'create', 'update', 'access_request_status'],
+    assessment: ['open', 'search', 'list', 'get', 'summary', 'budget', 'activity', 'set_status', 'queue_work', 'decide', 'update', 'access_request_status'],
+    pipelines: ['open', 'search', 'list', 'get', 'summary', 'budget', 'activity', 'set_status', 'queue_work', 'decide', 'update', 'access_request_status'],
+    access: ['open', 'search', 'list', 'get', 'summary', 'budget', 'decide', 'create', 'update', 'access_request_status'],
+  };
+  const V2 = ['search', 'open', 'list', 'get', 'summary', 'activity', 'budget', 'message', 'set_status', 'call', 'computer', 'queue_work', 'decide', 'create', 'update'];
+
+  it.each([...VOICE_TENANTS])('%s is offered its §3 set', (tenant) => {
+    expect(toolsForTenant(tenant).map((t) => t.name)).toEqual(OFFERED[tenant]);
+  });
+
+  it('the catalogue is the fifteen v2 tools and access_request_status, whose lookups list and get do not cover outside Access', () => {
+    expect(VOICE_TOOLS.map((t) => t.name).filter((n) => n !== 'access_request_status').sort()).toEqual([...V2].sort());
+    for (const tenant of VOICE_TENANTS.filter((t) => t !== 'access')) {
+      expect(listKinds(tenant)).not.toContain('request');
+      expect(voiceTool('list')!.mapsTo).not.toContain('/api/access-requests/mine');
+    }
+    expect(voiceTool('access_request_status')!.mapsTo).toContain('GET /api/access-requests/mine');
+  });
+
+  it('every tenant\'s and every role\'s scripted call is a v2 call the session is offered, with arguments its schema takes', () => {
+    for (const [key, call] of Object.entries(MOCK_CALLS)) {
+      const [tenant, role] = key.split('/') as [string, string | undefined];
+      expect(V2).toContain(call.name);
+      const tool = toolsForTenant(tenant!, role ? { role } : {}).find((t) => t.name === call.name);
+      expect(tool).toBeDefined();
+      expect(new Ajv({ strict: true }).compile(tool!.parameters)(dropNulls(call.arguments))).toBe(true);
+    }
+    for (const tenant of VOICE_TENANTS) expect(MOCK_CALLS[tenant]).toBeDefined();
+  });
+
+  it('every tenant\'s voice instructions, for its widest role, list each offered tool and fit the 20,000-character cap', () => {
+    const roles: Record<string, string> = { orgiq: 'hr-admin', social: 'community-admin', assessment: 'program-lead', pipelines: 'pipeline-admin', access: 'access-admin' };
+    for (const tenant of VOICE_TENANTS) {
+      const tools = toolsForTenant(tenant, { role: roles[tenant]! });
+      const text = voiceInstructions(tenant, tools);
+      expect(text.length).toBeLessThanOrEqual(20_000);
+      // Nothing was cut to fit: the last tool's description is there whole.
+      for (const t of tools) expect(text).toContain(`- ${t.description}`);
+      expect(text).toMatch(/Never hand the backend the same request again unchanged/);
+    }
   });
 });
 

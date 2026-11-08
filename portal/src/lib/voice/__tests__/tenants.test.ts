@@ -83,7 +83,8 @@ test('the assessment, pipelines and access scripted sessions each run their read
         steps: [{ step: 1, kind: 'manager', status: 'approved', decidedBy: { id: 'm', displayName: 'Maya Manager' }, decidedAt: '2026-11-07T11:00:00Z', eligible: [] }],
         sod: { verdict: 'clear', conflicts: [] },
       }] })],
-      url: '/api/access/requests?scope=mine&q=SME',
+      // V2-13: the access default is list (kind request, scope mine), the Requests page's own read.
+      url: '/api/access/requests?q=SME&scope=mine',
     },
   ];
   for (const r of runs) {

@@ -100,6 +100,8 @@ export const VOICE_TENANTS = ['orgiq', 'social', 'assessment', 'pipelines', 'acc
  * three tenants get reads and navigation only (Q1).
  */
 const PEOPLE_TENANTS = ['orgiq', 'social'] as const;
+/** Where `activity` reads: Social itself, and the tenants that embed its plane (tenants/manifest.json; V2-13). */
+const ACTIVITY_TENANTS = ['orgiq', 'social', 'assessment', 'pipelines'] as const;
 
 /**
  * Page ids `open` may name (catalogue v2, V2-4): every palette page
@@ -324,6 +326,9 @@ export function searchRecordTypes(tenant: string | null): string[] {
 export const ACTIVITY_SCOPES: Readonly<Record<string, readonly string[]>> = {
   orgiq: ['online', 'live-calls', 'missed-calls', 'messages', 'pins', 'work', 'recent'],
   social: ['online', 'live-calls', 'missed-calls', 'messages', 'pins', 'recent'],
+  // V2-13: where the Social plane is embedded (inventory §3): the plane's own index and the footer's roster.
+  assessment: ['online', 'live-calls', 'missed-calls', 'messages', 'pins', 'recent'],
+  pipelines: ['online', 'live-calls', 'missed-calls', 'messages', 'pins', 'recent'],
 };
 
 /**
@@ -754,8 +759,8 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
       who: str('One person, as the user named them, to narrow the read to ("what did Ada work on", "is Ada on a call").', { minLength: 1, maxLength: 120 }),
     }, ['scope']),
     kind: 'read', backing: 'search', confirm: false, action: null,
-    gate: 'online: the presence roster the footer shows; calls, messages and pins: the social index behind ViewSocial (GET /api/social/search in Social, the plane\'s Social grant elsewhere); work: GET /api/search behind Search',
-    spend: 'none', idempotent: true, says: 'Checking who is on a call.', tenants: PEOPLE_TENANTS,
+    gate: 'online: the presence roster the footer shows; calls, messages and pins: the social index behind ViewSocial (GET /api/social/search in Social, the plane\'s Social grant in orgiq, assessment and pipelines); work: GET /api/search behind Search, orgiq only',
+    spend: 'none', idempotent: true, says: 'Checking who is on a call.', tenants: ACTIVITY_TENANTS,
     mapsTo: "the shell's presence roster (online); GET /api/social/search or /api/social/plane/search?q=&type=huddle|calllog|message|pin&limit= (calls, messages, pins); GET /api/search?q=&type=work&sort=recent (work)",
   },
   {
@@ -914,7 +919,9 @@ export const MOCK_CALLS: Readonly<Record<string, { name: string; arguments: Reco
   social: { name: 'search', arguments: { query: 'live huddles', type: 'huddle', scope: null, sort: null, limit: null, answer: null }, said: 'Any live huddles right now?' },
   assessment: { name: 'search', arguments: { query: 'teams below target', type: 'team', scope: null, sort: null, limit: null, answer: null }, said: 'Which teams are below target?' },
   pipelines: { name: 'search', arguments: { query: 'failed runs', type: 'run', scope: null, sort: null, limit: null, answer: null }, said: 'What failed last night?' },
-  access: { name: 'access_request_status', arguments: { query: 'SME', scope: 'mine' }, said: 'Did my SME request get approved?' },
+  // V2-13: every tenant's default is a v2 call; access lists the caller's own requests (access_request_status stays
+  // for that lookup outside Access, where no list kind reaches GET /api/access-requests/mine).
+  access: { name: 'list', arguments: { kind: 'request', filter: { q: 'SME', status: null, scope: 'mine', since: null }, scope: null, limit: null }, said: 'Did my SME request get approved?' },
   // V2-9: a participant summarises #general (the composer's bare /summarize, followed to its end with one toast). A call
   // join needs platform-api, which plain dev:mock has not got (the social compose profile has); the dock's tests join.
   'social/participant': { name: 'queue_work', arguments: { kind: 'summarize', target: 'general', note: null, model: null }, said: 'Summarise general for me.' },
@@ -922,7 +929,7 @@ export const MOCK_CALLS: Readonly<Record<string, { name: string; arguments: Reco
   'social/moderator': { name: 'activity', arguments: { scope: 'live-calls', since: null, who: null }, said: 'Who is on a call right now?' },
   // V2-10: an approver approves the request waiting on them (dev:mock's req-0001, Rhea's SME in Work, waits on u-omar's step).
   'access/approver': { name: 'decide', arguments: { ref: 'approval:req-0001', decision: 'approve', note: null }, said: 'Approve Rhea\'s SME request.' },
-  'access/access-admin': { name: 'access_request_status', arguments: { query: null, scope: 'approvals' }, said: 'What is waiting on me?' },
+  'access/access-admin': { name: 'list', arguments: { kind: 'approval', filter: null, scope: null, limit: null }, said: 'What is waiting on me?' },
   // V2-5: the reads by kind. A lead assessor lists the teams, a pipeline author the failed runs, a community admin
   // the channels, a requester their own access requests.
   // V2-8: an SME stops a computer of their own (the seeded auth-migration-1 is Nora's); the dock shows the card, then the
