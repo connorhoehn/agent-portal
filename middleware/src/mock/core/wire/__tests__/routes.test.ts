@@ -24,6 +24,13 @@ describe('route enumeration', () => {
     expect(live.routes.filter((r) => r.method === 'GET').length).toBeGreaterThan(150);
   });
 
+  it('lists each method and path once, even when a module hosts two routers', () => {
+    // agent-loop.ts and conversation-artifact.ts each export a social and a
+    // tenant router; a mount names one, so none of them is attributed twice.
+    const keys = live.routes.map(routeKey);
+    expect(keys.filter((k, i) => keys.indexOf(k) !== i)).toEqual([]);
+  });
+
   it('follows a nested router mount', () => {
     // observability.ts does `observabilityRouter.use('/drift', driftRouter)`,
     // so a walker that only read index.ts would miss these entirely.

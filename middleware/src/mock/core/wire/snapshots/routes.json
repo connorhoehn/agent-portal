@@ -1221,19 +1221,9 @@
       "source": "src/routes/agent-loop.ts:316"
     },
     {
-      "method": "POST",
-      "path": "/api/chat/commands/agent/run",
-      "source": "src/routes/agent-loop.ts:326"
-    },
-    {
       "method": "GET",
       "path": "/api/chat/commands/agent/runs/:id",
       "source": "src/routes/agent-loop.ts:317"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chat/commands/agent/runs/:id",
-      "source": "src/routes/agent-loop.ts:327"
     },
     {
       "method": "POST",
@@ -1242,18 +1232,8 @@
     },
     {
       "method": "POST",
-      "path": "/api/chat/commands/agent/runs/:id/approval/approve",
-      "source": "src/routes/agent-loop.ts:331"
-    },
-    {
-      "method": "POST",
       "path": "/api/chat/commands/agent/runs/:id/approval/reject",
       "source": "src/routes/agent-loop.ts:322"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chat/commands/agent/runs/:id/approval/reject",
-      "source": "src/routes/agent-loop.ts:332"
     },
     {
       "method": "POST",
@@ -1262,28 +1242,13 @@
     },
     {
       "method": "POST",
-      "path": "/api/chat/commands/agent/runs/:id/approve",
-      "source": "src/routes/agent-loop.ts:328"
-    },
-    {
-      "method": "POST",
       "path": "/api/chat/commands/agent/runs/:id/discard",
       "source": "src/routes/agent-loop.ts:319"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chat/commands/agent/runs/:id/discard",
-      "source": "src/routes/agent-loop.ts:329"
     },
     {
       "method": "GET",
       "path": "/api/chat/commands/agent/waiting",
       "source": "src/routes/agent-loop.ts:320"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chat/commands/agent/waiting",
-      "source": "src/routes/agent-loop.ts:330"
     },
     {
       "method": "POST",
@@ -1306,19 +1271,9 @@
       "source": "src/routes/conversation-artifact.ts:204"
     },
     {
-      "method": "POST",
-      "path": "/api/chat/commands/diagram/run",
-      "source": "src/routes/conversation-artifact.ts:213"
-    },
-    {
       "method": "GET",
       "path": "/api/chat/commands/diagram/runs/:id",
       "source": "src/routes/conversation-artifact.ts:205"
-    },
-    {
-      "method": "GET",
-      "path": "/api/chat/commands/diagram/runs/:id",
-      "source": "src/routes/conversation-artifact.ts:214"
     },
     {
       "method": "POST",
@@ -1327,18 +1282,8 @@
     },
     {
       "method": "POST",
-      "path": "/api/chat/commands/diagram/runs/:id/post",
-      "source": "src/routes/conversation-artifact.ts:215"
-    },
-    {
-      "method": "POST",
       "path": "/api/chat/commands/doc/run",
       "source": "src/routes/conversation-artifact.ts:207"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chat/commands/doc/run",
-      "source": "src/routes/conversation-artifact.ts:216"
     },
     {
       "method": "GET",
@@ -1346,19 +1291,9 @@
       "source": "src/routes/conversation-artifact.ts:208"
     },
     {
-      "method": "GET",
-      "path": "/api/chat/commands/doc/runs/:id",
-      "source": "src/routes/conversation-artifact.ts:217"
-    },
-    {
       "method": "POST",
       "path": "/api/chat/commands/doc/runs/:id/save",
       "source": "src/routes/conversation-artifact.ts:209"
-    },
-    {
-      "method": "POST",
-      "path": "/api/chat/commands/doc/runs/:id/save",
-      "source": "src/routes/conversation-artifact.ts:218"
     },
     {
       "method": "POST",
@@ -1473,17 +1408,7 @@
     {
       "method": "POST",
       "path": "/api/conversations/agent/run",
-      "source": "src/routes/agent-loop.ts:316"
-    },
-    {
-      "method": "POST",
-      "path": "/api/conversations/agent/run",
       "source": "src/routes/agent-loop.ts:326"
-    },
-    {
-      "method": "GET",
-      "path": "/api/conversations/agent/runs/:id",
-      "source": "src/routes/agent-loop.ts:317"
     },
     {
       "method": "GET",
@@ -1493,17 +1418,7 @@
     {
       "method": "POST",
       "path": "/api/conversations/agent/runs/:id/approval/approve",
-      "source": "src/routes/agent-loop.ts:321"
-    },
-    {
-      "method": "POST",
-      "path": "/api/conversations/agent/runs/:id/approval/approve",
       "source": "src/routes/agent-loop.ts:331"
-    },
-    {
-      "method": "POST",
-      "path": "/api/conversations/agent/runs/:id/approval/reject",
-      "source": "src/routes/agent-loop.ts:322"
     },
     {
       "method": "POST",
@@ -1513,17 +1428,7 @@
     {
       "method": "POST",
       "path": "/api/conversations/agent/runs/:id/approve",
-      "source": "src/routes/agent-loop.ts:318"
-    },
-    {
-      "method": "POST",
-      "path": "/api/conversations/agent/runs/:id/approve",
       "source": "src/routes/agent-loop.ts:328"
-    },
-    {
-      "method": "POST",
-      "path": "/api/conversations/agent/runs/:id/discard",
-      "source": "src/routes/agent-loop.ts:319"
     },
     {
       "method": "POST",
@@ -1533,17 +1438,7 @@
     {
       "method": "GET",
       "path": "/api/conversations/agent/waiting",
-      "source": "src/routes/agent-loop.ts:320"
-    },
-    {
-      "method": "GET",
-      "path": "/api/conversations/agent/waiting",
       "source": "src/routes/agent-loop.ts:330"
-    },
-    {
-      "method": "POST",
-      "path": "/api/conversations/diagram/run",
-      "source": "src/routes/conversation-artifact.ts:204"
     },
     {
       "method": "POST",
@@ -1553,17 +1448,7 @@
     {
       "method": "GET",
       "path": "/api/conversations/diagram/runs/:id",
-      "source": "src/routes/conversation-artifact.ts:205"
-    },
-    {
-      "method": "GET",
-      "path": "/api/conversations/diagram/runs/:id",
       "source": "src/routes/conversation-artifact.ts:214"
-    },
-    {
-      "method": "POST",
-      "path": "/api/conversations/diagram/runs/:id/post",
-      "source": "src/routes/conversation-artifact.ts:206"
     },
     {
       "method": "POST",
@@ -1573,27 +1458,12 @@
     {
       "method": "POST",
       "path": "/api/conversations/doc/run",
-      "source": "src/routes/conversation-artifact.ts:207"
-    },
-    {
-      "method": "POST",
-      "path": "/api/conversations/doc/run",
       "source": "src/routes/conversation-artifact.ts:216"
     },
     {
       "method": "GET",
       "path": "/api/conversations/doc/runs/:id",
-      "source": "src/routes/conversation-artifact.ts:208"
-    },
-    {
-      "method": "GET",
-      "path": "/api/conversations/doc/runs/:id",
       "source": "src/routes/conversation-artifact.ts:217"
-    },
-    {
-      "method": "POST",
-      "path": "/api/conversations/doc/runs/:id/save",
-      "source": "src/routes/conversation-artifact.ts:209"
     },
     {
       "method": "POST",

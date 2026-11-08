@@ -64,6 +64,20 @@ jobs:
           # 25% of a hosted runner is one worker and the suite overran 45 minutes.
           JEST_MAX_WORKERS: '3'
         run: npm test -- --shard=${{ matrix.shard }}/3
+  voice-inventory:
+    # Node only, no install: fails when docs/voice-tool-inventory.json is stale or a
+    # write route a person can reach has no voice catalogue decision.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: Voice tool inventory
+        run: node scripts/voice/inventory.mjs --check
   infra:
     runs-on: ubuntu-latest
     timeout-minutes: 20

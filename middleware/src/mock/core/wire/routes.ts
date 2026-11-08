@@ -87,7 +87,12 @@ function lineOf(file: LoadedFile, node: ts.Node): string {
 
 /** `import { botsRouter } from './routes/bots.js'` -> botsRouter -> src/routes/bots.ts */
 function importedFrom(file: LoadedFile): Map<string, string> {
-  const out = new Map<string, string>();
+  return new Map([...importedBindings(file)].map(([local, b]) => [local, b.rel]));
+}
+
+/** Like `importedFrom`, but also the name the module exports it under (`import { a as b }`). */
+function importedBindings(file: LoadedFile): Map<string, { rel: string; exported: string }> {
+  const out = new Map<string, { rel: string; exported: string }>();
   for (const stmt of file.sourceFile.statements) {
     if (!ts.isImportDeclaration(stmt)) continue;
     const spec = stmt.moduleSpecifier;
@@ -95,7 +100,7 @@ function importedFrom(file: LoadedFile): Map<string, string> {
     const relFromRoot = join(dirname(file.rel), spec.text.replace(/\.js$/, '.ts'));
     const bindings = stmt.importClause?.namedBindings;
     if (!bindings || !ts.isNamedImports(bindings)) continue;
-    for (const el of bindings.elements) out.set(el.name.text, relFromRoot);
+    for (const el of bindings.elements) out.set(el.name.text, { rel: relFromRoot, exported: (el.propertyName ?? el.name).text });
   }
   return out;
 }
@@ -127,7 +132,7 @@ function collect(
   seen: Set<string>,
   out: RouteTable,
 ): void {
-  const imports = importedFrom(file);
+  const imports = importedBindings(file);
 
   const visit = (node: ts.Node): void => {
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
@@ -154,12 +159,16 @@ function collect(
           const mounted = lastIdentifier(args);
           const subPrefix = first === null ? prefix : joinPath(prefix, first);
           if (mounted && imports.has(mounted.text)) {
-            const rel = imports.get(mounted.text)!;
-            const key = `${rel}|${subPrefix}`;
+            const { rel, exported } = imports.get(mounted.text)!;
+            // Only the router this mount names: a module hosting two routers
+            // (agent-loop.ts's social and conversation pair) mounts each once,
+            // at its own prefix, rather than both at every mount.
+            const key = `${rel}|${exported}|${subPrefix}`;
             if (!seen.has(key)) {
               seen.add(key);
               const sub = loadFile(root, rel);
-              collect(sub, routerNames(sub), subPrefix, root, seen, out);
+              const all = routerNames(sub);
+              collect(sub, all.has(exported) ? new Set([exported]) : all, subPrefix, root, seen, out);
             }
           }
           // A `use` with an inline function is a middleware, not a mount —
