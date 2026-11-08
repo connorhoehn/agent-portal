@@ -633,7 +633,9 @@ test('property: no P4 result carries a string over 120 characters or a list over
   ]);
   const stream: CommandEvent[] = [{ type: 'stdout', text: `${Array.from({ length: 80 }, () => huge).join('\n')}\n` }, { type: 'exit', exitCode: 3 }];
   const walk = (v: unknown, path: string): void => {
-    if (typeof v === 'string') assert.ok(v.length <= MAX_FIELD_CHARS, `${path} is ${v.length} characters`);
+    // `next` (G29) is the dock's own instruction built from the code and the workspace's enums, never data: its own cap.
+    if (typeof v === 'string' && path.endsWith('.next')) assert.ok(v.length <= 900, `${path} is ${v.length} characters`);
+    else if (typeof v === 'string') assert.ok(v.length <= MAX_FIELD_CHARS, `${path} is ${v.length} characters`);
     else if (Array.isArray(v)) { assert.ok(v.length <= MAX_ROWS, `${path} has ${v.length} rows`); v.forEach((x, i) => walk(x, `${path}[${i}]`)); }
     else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) walk(x, `${path}.${k}`);
   };

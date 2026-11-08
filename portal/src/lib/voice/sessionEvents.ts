@@ -64,7 +64,7 @@ const REFUSAL_PATTERNS: ReadonlyArray<[RegExp, RefusalCode]> = [
   [/another workspace|switching to it ends/i, 'other-workspace'],
   [/allowlist|not allowed to run|phrase table/i, 'allowlist'],
   [/budget|allocation|envelope|over the (run )?cap|spend hold|hold/i, 'budget'],
-  [/grant|request access|which this session cannot reach|Social is not connected/i, 'no-grant'],
+  [/grant|request access|access request|don'?t have \w+ access|which this session cannot reach|Social is not connected/i, 'no-grant'],
   [/your role|role cannot|with your role/i, 'role'],
   [/could not be reached|offline|not connected|try again in a moment|did not open in time/i, 'unavailable'],
   [/could not read|did not answer|failed to read/i, 'read-failed'],

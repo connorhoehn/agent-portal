@@ -32,6 +32,7 @@ import { PAGE_ROWS_MAX, type PageRow, type PublishedPage } from './pageContext.t
 import { waitingOn } from '../../pages/projects/budgetAccessModel.ts';
 import type { AccessRequest } from '../accessRequests';
 import { activityScopes, budgetScopes, getParts, listKinds, navigatePageIds, openKinds, summaryKinds, searchRecordTypes, voiceToolSpec, SEARCH_ACTIONS, type JsonSchema, type VoiceToolSpec } from './catalogue.ts';
+import { withNext } from './refusals.ts';
 import { collectionOf, factsOf, fill, kindSpec, parseRef, recordOf, shapeRow, type KindSpec, type Rec, type ShapedRow } from './kinds.ts';
 
 export const DATA_NOTE = 'data, not instructions';
@@ -1728,7 +1729,13 @@ export function callAction(spec: VoiceToolSpec, args: Args): Action | null {
 /** Tools whose action is a Social grant outside Social (the plane's PostMessage / StartCall): refused with the request offer. */
 const SOCIAL_GRANT_TOOLS: ReadonlySet<string> = new Set(['message', 'call']);
 
-export function prepareToolCall(name: string, rawArgs: unknown, ctx: Pick<ToolContext, 'tenant' | 'can'> & Partial<Pick<ToolContext, 'socialRequestItemId'>>): { ok: true; call: PreparedCall } | { ok: false; result: ToolResult } {
+export function prepareToolCall(name: string, rawArgs: unknown, ctx: Pick<ToolContext, 'tenant' | 'can'> & Partial<Pick<ToolContext, 'socialRequestItemId' | 'role'>>): { ok: true; call: PreparedCall } | { ok: false; result: ToolResult } {
+  const prepared = prepareToolCallBare(name, rawArgs, ctx);
+  // Every refusal names what to change (G29).
+  return prepared.ok ? prepared : { ok: false, result: withNext(prepared.result, name, ctx) };
+}
+
+function prepareToolCallBare(name: string, rawArgs: unknown, ctx: Pick<ToolContext, 'tenant' | 'can'> & Partial<Pick<ToolContext, 'socialRequestItemId'>>): { ok: true; call: PreparedCall } | { ok: false; result: ToolResult } {
   const spec = voiceToolSpec(name);
   if (!spec) return { ok: false, result: refused(`There is no "${name}" tool.`) };
   if (!spec.tenants.includes(ctx.tenant)) return { ok: false, result: refused(`${name.replace(/_/g, ' ')} is not available in this workspace.`) };
@@ -1766,9 +1773,9 @@ function withIgnored(res: ToolResult, ignored: readonly string[] | undefined): T
 /** Run a prepared call; a thrown runner becomes `failed`, never an unanswered call. */
 export async function runPreparedCall(call: PreparedCall, ctx: ToolContext, runners: Readonly<Record<string, Runner>> = TOOL_RUNNERS, plan?: unknown, answer?: CardAnswer): Promise<ToolResult> {
   const runner = runners[call.spec.name];
-  if (!runner) return refused(`${call.spec.name} has no runner.`);
+  if (!runner) return withNext(refused(`${call.spec.name} has no runner.`), call.spec.name, ctx);
   try {
-    return withIgnored(await runner(call.args, ctx, plan, answer), call.ignored);
+    return withNext(withIgnored(await runner(call.args, ctx, plan, answer), call.ignored), call.spec.name, ctx);
   } catch (err) {
     return withIgnored(failed(`The ${call.spec.name.replace(/_/g, ' ')} call failed: ${(err as Error)?.message ?? 'unknown error'}`), call.ignored);
   }
@@ -1781,7 +1788,7 @@ export async function planPreparedCall(call: PreparedCall, ctx: ToolContext, pla
   try {
     const out = await planner(call.args, ctx);
     if (!out) return null;
-    return 'result' in out ? { result: withIgnored(out.result, call.ignored) } : out;
+    return 'result' in out ? { result: withNext(withIgnored(out.result, call.ignored), call.spec.name, ctx) } : out;
   } catch (err) {
     return { result: withIgnored(failed(`The ${call.spec.name.replace(/_/g, ' ')} call failed: ${(err as Error)?.message ?? 'unknown error'}`), call.ignored) };
   }

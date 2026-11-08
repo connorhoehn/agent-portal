@@ -66,6 +66,7 @@ import {
 import { VOICE_PLANNERS, VOICE_RUNNERS } from './actions.ts';
 import { DEFAULT_TOAST_SECONDS } from './work.ts';
 import { VoiceEventLog, argShape, refusalCode, resultSummary, type DockEvent } from './sessionEvents.ts';
+import { RefusalGuard, STOP_NEXT, refusalLine, withNext } from './refusals.ts';
 
 export const TICK_MS = 100;
 export const COMPLETION_GRACE_MS = 1500;
@@ -156,7 +157,8 @@ export interface ControllerOptions {
 }
 
 interface CallRecord { name: string; status: 'confirming' | 'running' | 'answered' }
-interface DelegationRecord { calls: Map<string, CallRecord>; completed: boolean; unanswered: number; grace: Timer | null }
+/** `stopped`: a call of this round was a repeat refusal (G29): the round ends without a continuation. */
+interface DelegationRecord { calls: Map<string, CallRecord>; completed: boolean; unanswered: number; grace: Timer | null; stopped: boolean }
 /** What the card has heard: the first utterance after it, and whether that utterance has ended. */
 interface Heard { text: string; lastEndMs: number | null; quiet: Timer | null; done: boolean }
 interface Pending { callId: string; delegationId: string; call: PreparedCall; plan: ConfirmPlan | null; startedAt: number; heard: Heard; view: VoicePendingView }
@@ -250,6 +252,8 @@ export class VoiceController {
   private readonly planners: Readonly<Record<string, VoiceToolPlanner>>;
   /** The session log's queue (sessionEvents.ts): batched, one request per 500 ms at most. */
   private readonly log: VoiceEventLog;
+  /** The calls refused in this session (G29): the second identical one is terminal. */
+  private readonly refusals = new RefusalGuard();
 
   private readonly opts: ControllerOptions;
 
@@ -362,7 +366,7 @@ export class VoiceController {
     this.clearChoice();
     if (c) this.emit({ kind: 'client', data: { event: 'choice-decided', requestId: c.requestId, index, candidates: c.candidates.length, by: c.ordinal ? 'voice' : 'click' } });
     if (!c || !picked?.href) return;
-    const ctx = this.opts.toolContext();
+    const ctx = this.toolContext();
     if (!openableHref(picked.href, ctx)) return;
     ctx.navigate(picked.href);
     this.addLine('assistant', `Opened ${picked.title}`);
@@ -516,7 +520,7 @@ export class VoiceController {
   private delegation(id: string): DelegationRecord {
     let rec = this.delegations.get(id);
     if (!rec) {
-      rec = { calls: new Map(), completed: false, unanswered: 0, grace: null };
+      rec = { calls: new Map(), completed: false, unanswered: 0, grace: null, stopped: false };
       this.delegations.set(id, rec);
     }
     return rec;
@@ -530,7 +534,7 @@ export class VoiceController {
     // The call's shape (its enum arguments, a ref's kind), never its words: four open-shells read apart from four starts.
     this.emit({ kind: 'tool-call', tool: name, data: { callId, ...argShape(name, rawArgs) } });
     const startedAt = this.now();
-    const ctx = this.opts.toolContext();
+    const ctx = this.toolContext();
     const prepared = prepareToolCall(name, rawArgs, ctx);
     if (!prepared.ok) {
       await this.answer(client, delegationId, callId, name, prepared.result, startedAt, rawArgs);
@@ -545,7 +549,7 @@ export class VoiceController {
     if (needsConfirm(call) && toolAvailable(name, this.runners)) {
       // The delegation asks one call at a time (parallel_tool_calls: false); a second card would hide the first.
       if (this.pending) {
-        await this.answer(client, delegationId, callId, name, refused('Another action is waiting for the user to confirm. Ask again after it.'), startedAt, call.args);
+        await this.answer(client, delegationId, callId, name, withNext(refused('Another action is waiting for the user to confirm. Ask again after it.'), name, ctx), startedAt, call.args);
         return;
       }
       let plan: ConfirmPlan | null = null;
@@ -560,7 +564,7 @@ export class VoiceController {
         }
         plan = planned?.plan ?? null;
         if (this.pending) {
-          await this.answer(client, delegationId, callId, name, refused('Another action is waiting for the user to confirm. Ask again after it.'), startedAt, call.args);
+          await this.answer(client, delegationId, callId, name, withNext(refused('Another action is waiting for the user to confirm. Ask again after it.'), name, ctx), startedAt, call.args);
           return;
         }
       }
@@ -586,9 +590,23 @@ export class VoiceController {
     await this.answer(client, delegationId, callId, call.spec.name, res, startedAt, call.args, confirmedBy);
   }
 
-  private async answer(client: VoiceClient, delegationId: string, callId: string, name: string, res: ToolResult, startedAt: number, args: unknown, confirmedBy?: 'voice' | 'click'): Promise<void> {
+  private async answer(client: VoiceClient, delegationId: string, callId: string, name: string, given: ToolResult, startedAt: number, args: unknown, confirmedBy?: 'voice' | 'click'): Promise<void> {
     if (client !== this.client || this.machine.base !== 'live') return;
+    let res = given;
+    // G29: the second identical refused call of the session is terminal. Its output says stop, the round asks for no
+    // continuation (so the delegation cannot try a third time), and the dock speaks the refusal line itself, once.
+    const verdict = res.outcome === 'refused' ? this.refusals.refused(name, args, res.output) : null;
+    if (verdict?.terminal) {
+      res = { ...res, output: { ...res.output, stop: true, next: STOP_NEXT } };
+      this.delegation(delegationId).stopped = true;
+    }
     client.sendToolOutput(callId, JSON.stringify(res.output));
+    if (verdict?.speak) {
+      const line = refusalLine(given.output);
+      client.appendCommentary(`Tell the user, in one sentence, and do not call anything: ${line}`);
+      this.addLine('assistant', line);
+      this.emit({ kind: 'client', data: { event: 'refusal-repeated', tool: name, reason: refusalCode(res.output) } });
+    }
     // The page the result left the user on (G21), before the continuation reads it.
     this.notePage();
     this.noteChoice(res);
@@ -649,6 +667,8 @@ export class VoiceController {
         return;
       }
       if (rec.grace != null) { this.clearTimer(rec.grace); rec.grace = null; }
+      // A repeat refusal ended the round (G29): no continuation, so no third call; the dock has spoken.
+      if (rec.stopped) { this.closeDelegation(delegationId); return; }
       // One response.create for every output of this round (§1).
       rec.unanswered = 0;
       rec.completed = false;
@@ -718,7 +738,7 @@ export class VoiceController {
     this.emit({ kind: confirmed ? 'confirmed' : 'cancelled', tool: p.call.spec.name, data: { requestId: p.view.requestId, by, callId: p.callId } });
     this.dispatch({ type: 'confirm-resolved', callId: p.callId });
     if (confirmed) {
-      void this.execute(client, p.delegationId, p.callId, p.call, p.startedAt, this.opts.toolContext(), by, p.plan, answer);
+      void this.execute(client, p.delegationId, p.callId, p.call, p.startedAt, this.toolContext(), by, p.plan, answer);
     } else {
       void this.answer(client, p.delegationId, p.callId, p.call.spec.name, cancelledResult(by), p.startedAt, p.call.args, by);
     }
@@ -803,8 +823,13 @@ export class VoiceController {
 
   // ── plumbing ─────────────────────────────────────────────────────────────
 
+  private toolContext(): ToolContext {
+    return this.opts.toolContext();
+  }
+
   private reset(): void {
     this.clearDelegations();
+    this.refusals.reset();
     this.pending = null;
     this.choice = null;
     this.budgetCard = null;
