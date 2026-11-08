@@ -62,7 +62,7 @@ cd portal && npm test && npm run typecheck       # tests 5 seconds, typecheck 7 
 cd infra && npm test                             # about 2 minutes
 ```
 
-The middleware suite is large and slow; run it once, alone. On a fresh clone it reported 9 failing suites out of 610 (run before `infra/` was installed): four runbook suites look for a `CLAUDE.md` that was removed, `migrate-work-comments-dynamo` could not resolve a package from `infra/`, and four others (`run-controls`, `local-compute-fixtures`, `runbooks-demo`, `runbooks-tools-demo`) fail for reasons not yet diagnosed. The portal tests, infra tests and both typechecks pass.
+The middleware suite is large and slow; run it once, alone. On a fresh clone (7 November 2026) every suite passes: 599 suites, 8247 tests, with `INSECURE_DEV_MODE=true` set by the jest setup file. The portal tests, infra tests, agents' Python suites and both typechecks pass.
 
 The agent tests need `botocore`. Install `schema/synth/requirements.txt` into a virtualenv, then:
 
