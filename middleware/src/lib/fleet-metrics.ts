@@ -6,7 +6,9 @@ import { EventEmitter } from 'node:events';
 
 export type FleetMetric =
   | 'devbox-spend' | 'devbox-reaped' | 'devbox-reap-failed' | 'devbox-run-cutoff'
-  | 'devbox-fleet-stats' | 'budget-threshold' | 'fleet-switch';
+  | 'devbox-fleet-stats' | 'budget-threshold' | 'fleet-switch'
+  // The microVM runner (docs/microvm-runner-design.md §11, lib/microvm-dispatcher.ts).
+  | 'microvm-boot-seconds' | 'microvm-run-cutoff' | 'microvm-held-back' | 'microvm-pr-opened';
 
 /** Every alert, in process: `fleetAlerts.on('alert', (line) => …)`. */
 export const fleetAlerts = new EventEmitter();

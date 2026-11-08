@@ -35,6 +35,7 @@ import { replicaFleet, type ReplicaFleet, type ReplicaLock } from './replica-fle
 import { isLocalBoxId } from './local-compute-fleet.js';
 import { lifetimePolicy, taskOverrunMs, type LifetimePolicy } from './devbox-lifetime.js';
 import { emitFleetMetric } from './fleet-metrics.js';
+import { isMicrovmBoxId } from './microvm-ids.js';
 
 const MINUTE = 60_000;
 
@@ -93,6 +94,9 @@ export function decideReaping(boxes: FleetBox[], now = Date.now(), policyFor: Po
   for (const box of boxes) {
     if (box.status === 'stopped') continue;
     if (isLocalBoxId(box.id)) continue;
+    // A microVM runner session's transient box is not on this runtime: its
+    // session is the runner's to stop (and the overrun sweep's, below).
+    if (isMicrovmBoxId(box.id)) continue;
     const policy = policyFor(box);
 
     if (box.status === 'running') {
@@ -139,7 +143,7 @@ export function pausedReaping(boxes: FleetBox[], already: ReapDecision[], now = 
   const taken = new Set(already.map((d) => d.box.id));
   const out: ReapDecision[] = [];
   for (const box of boxes) {
-    if (taken.has(box.id) || box.status === 'stopped' || box.status === 'running' || isLocalBoxId(box.id)) continue;
+    if (taken.has(box.id) || box.status === 'stopped' || box.status === 'running' || isLocalBoxId(box.id) || isMicrovmBoxId(box.id)) continue;
     const idle = now - new Date(box.lastActivityAt).getTime();
     out.push({ box, reason: 'paused', minutes: Number.isFinite(idle) ? Math.round(idle / MINUTE) : 0, policy: policyFor(box) });
   }
@@ -170,6 +174,13 @@ export interface ReaperDeps {
    * test of the reap decision runs nothing else; startReaper wires it.
    */
   housekeeping?: (boxes: FleetBox[], decisions: ReapDecision[], now: number) => Promise<void>;
+  /**
+   * The microVM runner's overrun sweep (docs/microvm-runner-design.md §7): a
+   * `microvm_sessions` row still live past its task timeout plus grace is
+   * stopped and recorded `overrun`. Run by the leader once per sweep, beside
+   * the housekeeping. Default: none.
+   */
+  microvmSweep?: (now: number) => Promise<void>;
 }
 
 let _timer: NodeJS.Timeout | null = null;
@@ -196,6 +207,12 @@ export async function sweepOnce(deps: ReaperDeps, now = Date.now(), lease?: Repl
     return [];
   }
   lease?.assertLive();
+  if (deps.microvmSweep) {
+    try { await deps.microvmSweep(now); } catch (err) {
+      console.warn('[devbox-reaper] microVM overrun sweep failed:', (err as Error).message);
+    }
+    lease?.assertLive();
+  }
   const boxes = listBoxes();
   if (boxes.length === 0) {
     // The stats line is the reaper's heartbeat (alarm: reaper silent), so an

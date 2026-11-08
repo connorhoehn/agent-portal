@@ -23,7 +23,8 @@ import { estimateUsageCost } from '../lib/model-prices.js';
 import { randomUUID } from 'node:crypto';
 
 // 'agent_invoke' (work item 16): a chat invoke or a /summarize run, keyed by its run id (lib/agent-invoke-spend.ts).
-export type SpendSource = 'bot_run' | 'job' | 'box_task' | 'agent_loop' | 'agent_project_run' | 'bff_call' | 'agent_invoke';
+// 'microvm': one microVM runner attempt, keyed `<job>:<attempt>` (lib/microvm-dispatcher.ts).
+export type SpendSource = 'bot_run' | 'job' | 'box_task' | 'agent_loop' | 'agent_project_run' | 'bff_call' | 'agent_invoke' | 'microvm';
 export type { CostBasis };
 
 export interface SpendEntry {
@@ -53,9 +54,20 @@ export interface SpendEntry {
    * writer does not know; never defaulted, never backfilled.
    */
   provider?: ModelProvider | null;
+  /**
+   * The compute half of a microVM run (docs/microvm-runner-design.md §6):
+   * seconds the session billed (stopped − booted), what that cost at
+   * MICROVM_COMPUTE_USD_PER_SECOND, and the runtime session. Null elsewhere.
+   */
+  computeSeconds?: number | null;
+  computeUsd?: number | null;
+  sessionId?: string | null;
 }
 
-export type SpendInput = Omit<SpendEntry, 'costBasis' | 'occurredAt' | 'grantId' | 'trigger' | 'inputTokens' | 'outputTokens' | 'estimatedCostUsd' | 'provider'> & {
+export type SpendInput = Omit<SpendEntry, 'costBasis' | 'occurredAt' | 'grantId' | 'trigger' | 'inputTokens' | 'outputTokens' | 'estimatedCostUsd' | 'provider' | 'computeSeconds' | 'computeUsd' | 'sessionId'> & {
+  computeSeconds?: number | null;
+  computeUsd?: number | null;
+  sessionId?: string | null;
   provider?: ModelProvider | null;
   costBasis?: CostBasis;
   estimatedCostUsd?: number | null;
@@ -116,6 +128,9 @@ export async function recordSpend(input: SpendInput, opts: { unlessBotRunOwnsJob
     estimatedCostUsd: input.estimatedCostUsd ?? null,
     occurredAt: input.occurredAt ?? clock.nowIso(),
     provider: input.provider ?? null,
+    ...(input.computeSeconds != null || input.computeUsd != null || input.sessionId
+      ? { computeSeconds: input.computeSeconds ?? null, computeUsd: input.computeUsd ?? null, sessionId: input.sessionId ?? null }
+      : {}),
   };
   // DE-50: the spend-rate metric line, with InitiativeId/ActorId dimensions.
   emitSpendMetric(entry);
@@ -144,11 +159,14 @@ export async function recordSpend(input: SpendInput, opts: { unlessBotRunOwnsJob
     // columns; a cluster that has not re-applied them still takes the row.
     const withEstimate = await hasColumns('spend_entries', ['estimated_cost_usd']).catch(() => false);
     const withProvider = entry.provider != null && await hasColumns('spend_entries', ['provider']).catch(() => false);
+    // The microVM runner's compute columns (schema/microvm_sessions.sql), only when given.
+    const withCompute = (entry.computeSeconds != null || entry.computeUsd != null || !!entry.sessionId)
+      && await hasColumns('spend_entries', ['compute_seconds', 'compute_usd', 'session_id']).catch(() => false);
     const insert = `INSERT INTO spend_entries
          (source, source_id, initiative_id, grant_id, box_id, actor_id, trigger, model,
-          cost_usd, cost_basis, input_tokens, output_tokens, occurred_at${withEstimate ? ', estimated_cost_usd' : ''}${withProvider ? ', provider' : ''})
+          cost_usd, cost_basis, input_tokens, output_tokens, occurred_at${withEstimate ? ', estimated_cost_usd' : ''}${withProvider ? ', provider' : ''}${withCompute ? ', compute_seconds, compute_usd, session_id' : ''})
        SELECT :source, :sid, :init, :grant, :box, :actor, :trigger, :model,
-              :cost::numeric, :basis, :itok::bigint, :otok::bigint, :at::timestamptz${withEstimate ? ', :est::numeric' : ''}${withProvider ? ', :provider' : ''}
+              :cost::numeric, :basis, :itok::bigint, :otok::bigint, :at::timestamptz${withEstimate ? ', :est::numeric' : ''}${withProvider ? ', :provider' : ''}${withCompute ? ', :csec::int, :cusd::numeric, :csid' : ''}
        ${opts.unlessBotRunOwnsJob ? 'WHERE NOT EXISTS (SELECT 1 FROM bot_runs WHERE job_id = :ownedjob)' : ''}${withEstimate ? UPSERT_TAIL_WITH_ESTIMATE : UPSERT_TAIL}`;
     const params: SqlParameter[] = [
       s('source', entry.source), s('sid', entry.sourceId), maybe('init', entry.initiativeId),
@@ -158,6 +176,7 @@ export async function recordSpend(input: SpendInput, opts: { unlessBotRunOwnsJob
       s('at', entry.occurredAt),
       ...(withEstimate ? [maybeNum('est', entry.estimatedCostUsd)] : []),
       ...(withProvider ? [s('provider', entry.provider!)] : []),
+      ...(withCompute ? [maybeNum('csec', entry.computeSeconds), maybeNum('cusd', entry.computeUsd), maybe('csid', entry.sessionId)] : []),
       ...(opts.unlessBotRunOwnsJob ? [s('ownedjob', opts.unlessBotRunOwnsJob)] : []),
     ];
     await writeAndSettle(entry.source, entry.sourceId, (run) => run(insert, params));

@@ -97,6 +97,11 @@ export function devboxReaperDeps(): ReaperDeps {
     // slots, writes the stats line and announces budget crossings.
     fleetPaused: async () => (await import('../lib/fleet-switches.js')).fleetPaused(),
     housekeeping: async (boxes, decisions, now) => (await import('../lib/fleet-housekeeping.js')).fleetHousekeeping(boxes, decisions, now),
+    // The microVM runner's sessions past task timeout + grace (design §7).
+    microvmSweep: async () => {
+      const m = await import('../lib/microvm-dispatcher.js');
+      await m.sweepMicrovmOverruns(await m.defaultMicrovmDeps());
+    },
   };
 }
 

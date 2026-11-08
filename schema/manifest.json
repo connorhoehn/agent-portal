@@ -311,6 +311,18 @@
       "why": "Local compute P2 — cost provenance (bot_runs/agent_project_runs model_provider) plus the fencing columns a pull-side claim needs. All additive ALTERs, so it loads after agent_bots_schema.sql, agent_projects_schema.sql, agentic_work_schema.sql and local_compute_schema.sql have created the four tables it touches."
     },
     {
+      "id": "github_user_grants",
+      "file": "github_user_grants.sql",
+      "kind": "repeatable",
+      "why": "The microVM runner's GitHub identities (docs/microvm-runner-design.md §13): one row per person who linked GitHub, naming the Secrets Manager secret that holds their user token (never the token). Standalone, so it can load anywhere; a tenant table, so row_level_security.sql lists it."
+    },
+    {
+      "id": "microvm_sessions",
+      "file": "microvm_sessions.sql",
+      "kind": "repeatable",
+      "why": "The microVM runner's sessions plus its additive columns (agent_jobs.runner/actor_sub/resume_of_job_id, spend_entries.compute_seconds/compute_usd/session_id, agent_project_runs.runner). FKs agent_jobs, agent_projects, projects and spend_holds and ALTERs agent_jobs, spend_entries and agent_project_runs, so it loads after every file that creates them (agentic_work, agent_projects, spend_ledger, spend_holds). A tenant table, so row_level_security.sql lists it."
+    },
+    {
       "id": "pipeline_schema",
       "file": "pipeline_schema.sql",
       "kind": "repeatable",

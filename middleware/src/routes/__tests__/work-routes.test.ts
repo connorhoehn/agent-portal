@@ -755,3 +755,28 @@ describe('initiative scope on job lifecycle (DE-44 rows 7–8)', () => {
     expect(scopeCalls[0]!.initiativeId).toBeNull();
   });
 });
+
+// docs/microvm-runner-design.md §10 item 2 / §9: the actor a microVM run acts
+// as is the SESSION's subject, never the body's, and a resume is named by id.
+describe('POST /api/work/jobs — the microVM runner\'s actor and resume', () => {
+  const JOB = { id: 'job-1', status: 'queued', payload: {} };
+
+  it('takes actorSub from the session and ignores one in the body', async () => {
+    m(enqueueJob).mockResolvedValue(JOB);
+    const res = await request(buildApp()).post('/api/work/jobs')
+      .send({ title: 't', prompt: 'p', actorSub: 'u-someone-else', actor_sub: 'u-someone-else' });
+    expect(res.status).toBe(201);
+    expect(m(enqueueJob).mock.calls[0]![0]).toMatchObject({ actorSub: 'u-nora' });
+    expect(JSON.stringify(m(enqueueJob).mock.calls[0]![0])).not.toContain('u-someone-else');
+  });
+
+  it('passes a resumeOfJobId through for the dispatcher to judge, and 400s a malformed one', async () => {
+    m(enqueueJob).mockResolvedValue(JOB);
+    const ok = await request(buildApp()).post('/api/work/jobs').send({ title: 't', prompt: 'p', resumeOfJobId: 'job-abc-123' });
+    expect(ok.status).toBe(201);
+    expect(m(enqueueJob).mock.calls[0]![0]).toMatchObject({ resumeOfJobId: 'job-abc-123' });
+    const bad = await request(buildApp()).post('/api/work/jobs').send({ title: 't', prompt: 'p', resumeOfJobId: '../job' });
+    expect(bad.status).toBe(400);
+    expect(enqueueJob).toHaveBeenCalledTimes(1);
+  });
+});

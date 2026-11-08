@@ -23,6 +23,7 @@ import {
   listBoxes, appendEvent, getBox, registerBox, isReserved, claimBox, releaseBox, refreshFromShared, allHolds,
 } from './devbox-fleet.js';
 import { isLocalBoxId } from './local-compute-fleet.js';
+import { isMicrovmBoxId } from './microvm-ids.js';
 import { replicaFleet, replicaId } from './replica-fleet.js';
 import { runDevboxTask } from '../routes/devbox.js';
 import type { DevboxRunOutcome } from './devbox-runner.js';
@@ -296,7 +297,10 @@ async function tick(): Promise<void> {
       console.warn('[dispatcher] shared fleet state unreadable:', (err as Error).message);
     });
     const candidates = listBoxes().filter(
-      (b) => (b.status === 'idle' || b.status === 'waiting') && !running.has(b.id) && !isLocalBoxId(b.id),
+      (b) => (b.status === 'idle' || b.status === 'waiting') && !running.has(b.id) && !isLocalBoxId(b.id)
+        // A microVM runner session's transient box is one job's, on another
+        // runtime: never a fleet worker (docs/microvm-runner-design.md §7).
+        && !isMicrovmBoxId(b.id),
     );
     const free = candidates.filter((b) => !isReserved(b.id));
     // A box without ceiling left for one default task plus grace is not handed
@@ -353,6 +357,9 @@ async function recoverOrphanedWork(): Promise<void> {
     for (const job of live) {
       if (!job.boxId || !job.sessionId) continue;
       if (isLocalBoxId(job.boxId)) { skippedLocal++; continue; }
+      // A microVM job's session is not a fleet box; its attempt is fenced by
+      // its claim and its session is stopped by the overrun sweep.
+      if (isMicrovmBoxId(job.boxId)) continue;
       if (getBox(job.boxId)) continue;
       registerBox({ id: job.boxId, sessionId: job.sessionId });
       adopted++;
@@ -392,10 +399,26 @@ export function startJobDispatcher(): void {
   console.log(`[dispatcher] starting job dispatcher, interval ${TICK_MS / 1000}s`);
   timer = setInterval(() => void tick(), TICK_MS);
   void recoverOrphanedWork().then(() => tick());
+  // The microVM runner's own pass (lib/microvm-dispatcher.ts): runner='microvm'
+  // jobs never reach a fleet box, so they are claimed on a separate tick.
+  microvmTimer = setInterval(() => void dispatchMicrovmOnce(), TICK_MS);
 }
 
 export function stopJobDispatcher(): void {
   if (timer) { clearInterval(timer); timer = null; }
+  if (microvmTimer) { clearInterval(microvmTimer); microvmTimer = null; }
+}
+
+let microvmTimer: ReturnType<typeof setInterval> | null = null;
+
+/** One microVM dispatch pass (docs/microvm-runner-design.md §3, §10). Never throws. */
+export async function dispatchMicrovmOnce(): Promise<void> {
+  try {
+    const m = await import('./microvm-dispatcher.js');
+    await m.microvmDispatchPass(await m.defaultMicrovmDeps());
+  } catch (err) {
+    console.warn('[dispatcher] microVM pass failed:', (err as Error).message);
+  }
 }
 
 /** Test/ops hook — run one dispatch pass immediately. */

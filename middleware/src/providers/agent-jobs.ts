@@ -63,7 +63,20 @@ export interface AgentJob {
   /** Resolved on reads that join bots; null on INSERT ... RETURNING. */
   botName: string | null;
   botTrigger: string | null;
+  /**
+   * Which executor runs it (docs/microvm-runner-design.md §13): set at enqueue
+   * from the initiative's devbox profile. Absent on reads that do not select
+   * it (and on rows from before the column) = 'fleet'. The fleet claim never
+   * takes a 'microvm' row; the microVM claim takes nothing else.
+   */
+  runner?: JobRunner;
+  /** The session subject that queued it — the authority (created_by is display). */
+  actorSub?: string | null;
+  /** §9: the job this one resumes, accepted only for runner 'microvm'. */
+  resumeOfJobId?: string | null;
 }
+
+export type JobRunner = 'fleet' | 'microvm' | 'local';
 
 /** Returned only to the caller that won a claim; normal job reads omit the token. */
 export interface ClaimedAgentJob extends AgentJob { readonly claimToken: string; }
@@ -230,6 +243,10 @@ function rowToJob(r: Record<string, unknown>): AgentJob {
     botId: r['bot_id'] ? toStr(r['bot_id']) : null,
     botName: r['bot_name'] ? toStr(r['bot_name']) : null,
     botTrigger: r['bot_trigger'] ? toStr(r['bot_trigger']) : null,
+    // Only the reads that select them (claimNextMicrovmJob, getMicrovmJobFacts).
+    ...('runner' in r ? { runner: (toStr(r['runner'], 'fleet') || 'fleet') as JobRunner } : {}),
+    ...('actor_sub' in r ? { actorSub: r['actor_sub'] ? toStr(r['actor_sub']) : null } : {}),
+    ...('resume_of_job_id' in r ? { resumeOfJobId: r['resume_of_job_id'] ? toStr(r['resume_of_job_id']) : null } : {}),
   };
 }
 
@@ -300,7 +317,18 @@ async function enqueueJobRow(input: {
   /** Set when a standing mission enqueued this, so the queue can attribute it
    * to the bot rather than showing an anonymous scheduled task. */
   botId?: string;
+  /** The session subject queuing it (docs/microvm-runner-design.md §10 item 2). From the session, never a body. */
+  actorSub?: string | null;
+  /** §9: the job this one resumes. Only a microvm job may name one. */
+  resumeOfJobId?: string | null;
 }): Promise<AgentJob | null> {
+  // The runner comes from the initiative's profile, never the caller
+  // (lib/microvm-enqueue.ts): an egress-allowlist profile routes the job to the
+  // microVM runner, and refuses the payload fields that runner does not take.
+  const { resolveJobRunner } = await import('../lib/microvm-enqueue.js');
+  const runner = await resolveJobRunner({ kind: input.kind, payload: input.payload ?? {}, resumeOfJobId: input.resumeOfJobId ?? null });
+  const actorSub = input.actorSub && input.actorSub.trim() ? input.actorSub.trim() : null;
+  const resumeOf = runner === 'microvm' && input.resumeOfJobId ? input.resumeOfJobId : null;
   if (config.mock.aurora) {
     const job: AgentJob = {
       id: mockJobId(),
@@ -323,6 +351,10 @@ async function enqueueJobRow(input: {
       botId: input.botId ?? null,
       botName: null,
       botTrigger: null,
+      // Only when they say something, so a fleet row reads as it always has.
+      ...(runner !== 'fleet' ? { runner } : {}),
+      ...(actorSub ? { actorSub } : {}),
+      ...(resumeOf ? { resumeOfJobId: resumeOf } : {}),
     };
     mockJobs.push(job);
     emitJobChange(job);
@@ -331,12 +363,25 @@ async function enqueueJobRow(input: {
   // DE-37: the initiative as a column the claim filters on, when the cluster has it.
   const initiative = typeof input.payload?.['initiativeId'] === 'string' && input.payload['initiativeId'] ? input.payload['initiativeId'] : null;
   const withInitiative = initiative !== null && await hasColumns('agent_jobs', ['initiative_id']).catch(() => false);
+  // The runner columns (schema/microvm_sessions.sql), written when there is
+  // something to say. A microvm job on a cluster without them is refused: the
+  // row would read as 'fleet' and run on the public fleet.
+  const withRunner = (runner !== 'fleet' || actorSub !== null || resumeOf !== null)
+    && await hasColumns('agent_jobs', ['runner', 'actor_sub', 'resume_of_job_id']).catch(() => false);
+  if (runner === 'microvm' && !withRunner) {
+    throw new Error('agent_jobs.runner is missing: apply schema/microvm_sessions.sql before queuing microVM work');
+  }
   const rows = await exec(
-    `INSERT INTO agent_jobs (kind, title, payload, priority, created_by, max_attempts, bot_id${withInitiative ? ', initiative_id' : ''})
-     VALUES (:kind, :title, :payload::jsonb, :priority, :created_by, :max_attempts, :bot_id::uuid${withInitiative ? ', :initiative' : ''})
-     RETURNING ${COLUMNS}`,
+    `INSERT INTO agent_jobs (kind, title, payload, priority, created_by, max_attempts, bot_id${withInitiative ? ', initiative_id' : ''}${withRunner ? ', runner, actor_sub, resume_of_job_id' : ''})
+     VALUES (:kind, :title, :payload::jsonb, :priority, :created_by, :max_attempts, :bot_id::uuid${withInitiative ? ', :initiative' : ''}${withRunner ? ', :runner, :actor_sub, :resume_of' : ''})
+     RETURNING ${COLUMNS}${withRunner ? ', runner, actor_sub, resume_of_job_id' : ''}`,
     [
       ...(withInitiative ? [strParam('initiative', initiative!)] : []),
+      ...(withRunner ? [
+        strParam('runner', runner),
+        actorSub ? strParam('actor_sub', actorSub) : { name: 'actor_sub', value: { isNull: true } },
+        resumeOf ? strParam('resume_of', resumeOf) : { name: 'resume_of', value: { isNull: true } },
+      ] : []),
       strParam('kind', input.kind),
       strParam('title', input.title),
       strParam('payload', JSON.stringify(input.payload ?? {})),
@@ -499,6 +544,14 @@ export async function getJob(id: string): Promise<AgentJob | null> {
 }
 
 /**
+ * The push-side claims' runner guard (docs/microvm-runner-design.md §14 step 4):
+ * a fleet box never takes a microVM job. Read through `to_jsonb` so the same
+ * statement runs on a cluster that has not applied schema/microvm_sessions.sql
+ * (no column → no microvm rows → the guard is true), with no probe call.
+ */
+const NOT_MICROVM = `COALESCE(to_jsonb(agent_jobs)->>'runner', 'fleet') <> 'microvm'`;
+
+/**
  * Atomically claim the next queued job for a box.
  *
  * SKIP LOCKED is what makes this safe under concurrency: a second dispatcher
@@ -533,6 +586,7 @@ export async function claimNextJob(
   if (config.mock.aurora) {
     const next = mockJobs
       .filter((j) => j.status === 'queued' && j.attempts < j.maxAttempts && !pullOnly.includes(j.kind))
+      .filter((j) => (j.runner ?? 'fleet') !== 'microvm')
       .filter((j) => !skip.includes(String(j.payload['initiativeId'] ?? '')))
       .sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt))[0];
     if (!next) return null;
@@ -562,6 +616,7 @@ export async function claimNextJob(
       WHERE id = (
             SELECT id FROM agent_jobs
              WHERE status = 'queued' AND attempts < max_attempts AND kind NOT IN (${kindList})${skipClause}
+               AND ${NOT_MICROVM}
              ORDER BY priority, created_at
              FOR UPDATE SKIP LOCKED
              LIMIT 1)
@@ -589,7 +644,7 @@ export async function claimJob(id: string, boxId: string, sessionId: string): Pr
   await requireClaimSchema();
   const claimToken = mintClaimToken();
   if (config.mock.aurora) {
-    const job = mockJobs.find((j) => j.id === id && j.status === 'queued' && j.attempts < j.maxAttempts);
+    const job = mockJobs.find((j) => j.id === id && j.status === 'queued' && j.attempts < j.maxAttempts && (j.runner ?? 'fleet') !== 'microvm');
     if (!job) return null;
     job.status = 'claimed';
     job.boxId = boxId;
@@ -605,13 +660,103 @@ export async function claimJob(id: string, boxId: string, sessionId: string): Pr
         SET status = 'claimed', box_id = :box, session_id = :session,
             claim_token = :token, heartbeat_at = NOW(), claimed_at = NOW(),
             attempts = attempts + 1, updated_at = NOW()
-      WHERE id = :id AND status = 'queued' AND attempts < max_attempts
+      WHERE id = :id AND status = 'queued' AND attempts < max_attempts AND ${NOT_MICROVM}
       RETURNING ${COLUMNS}`,
     [strParam('id', id), strParam('box', boxId), strParam('session', sessionId), strParam('token', claimToken)],
   );
   const job = rows[0] ? rowToJob(rows[0]) : null;
   if (job) emitJobChange(job);
   return job ? { ...job, claimToken } : null;
+}
+
+// ─── The microVM runner's claim (docs/microvm-runner-design.md §3, §10) ───────
+//
+// No box first: a microvm job gets a fresh runtime session per attempt, so the
+// claim takes the job alone, then `stampJobPlacement` writes the derived
+// session id (it carries the attempt number the claim just incremented) and
+// the transient box id. Both writes are fenced on the claim token.
+
+const RUNNER_COLUMNS = ', runner, actor_sub, resume_of_job_id';
+
+/** Whether the cluster has the runner columns (schema/microvm_sessions.sql). */
+export async function hasRunnerColumns(): Promise<boolean> {
+  return hasColumns('agent_jobs', ['runner', 'actor_sub', 'resume_of_job_id']);
+}
+
+/**
+ * Claim the next queued `runner = 'microvm'` job. `excludeIds` are jobs this
+ * tick already judged (and, held back, handed back), so one tick never spins
+ * on the same head. Null when the queue has none, or the cluster has no runner
+ * column (then there can be no microvm rows).
+ */
+export async function claimNextMicrovmJob(opts: { excludeIds?: readonly string[]; skipInitiatives?: readonly string[] } = {}): Promise<ClaimedAgentJob | null> {
+  await requireClaimSchema();
+  const exclude = (opts.excludeIds ?? []).slice(0, 100);
+  const skip = (opts.skipInitiatives ?? []).slice(0, 200);
+  const claimToken = mintClaimToken();
+  if (config.mock.aurora) {
+    const next = mockJobs
+      .filter((j) => j.status === 'queued' && j.attempts < j.maxAttempts && j.runner === 'microvm')
+      .filter((j) => !exclude.includes(j.id) && !skip.includes(String(j.payload['initiativeId'] ?? '')))
+      .sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt))[0];
+    if (!next) return null;
+    next.status = 'claimed';
+    next.boxId = null;
+    next.sessionId = null;
+    next.claimedAt = clock.nowIso();
+    next.attempts += 1;
+    MOCK_CLAIM_TOKENS.set(next.id, claimToken);
+    emitJobChange(next);
+    return { ...next, claimToken };
+  }
+  if (!await hasRunnerColumns()) return null;
+  const excludeClause = exclude.length ? ` AND id NOT IN (${exclude.map((_, i) => `:ex${i}`).join(', ')})` : '';
+  const skipClause = skip.length ? ` AND COALESCE(payload->>'initiativeId', '') NOT IN (${skip.map((_, i) => `:si${i}`).join(', ')})` : '';
+  const rows = await exec(
+    `UPDATE agent_jobs
+        SET status = 'claimed', box_id = NULL, session_id = NULL,
+            claim_token = :token, heartbeat_at = NOW(), claimed_at = NOW(),
+            attempts = attempts + 1, updated_at = NOW()
+      WHERE id = (
+            SELECT id FROM agent_jobs
+             WHERE status = 'queued' AND attempts < max_attempts AND runner = 'microvm'${excludeClause}${skipClause}
+             ORDER BY priority, created_at
+             FOR UPDATE SKIP LOCKED
+             LIMIT 1)
+      RETURNING ${COLUMNS}${RUNNER_COLUMNS}`,
+    [strParam('token', claimToken), ...exclude.map((id, i) => strParam(`ex${i}`, id)), ...skip.map((id, i) => strParam(`si${i}`, id))],
+  );
+  const job = rows[0] ? rowToJob(rows[0]) : null;
+  if (job) emitJobChange(job);
+  return job ? { ...job, claimToken } : null;
+}
+
+/** Write a claimed microvm job's derived box and session ids, fenced on its claim. */
+export async function stampJobPlacement(id: string, claimToken: string, boxId: string, sessionId: string): Promise<boolean> {
+  if (config.mock.aurora) {
+    const job = mockJobs.find((j) => j.id === id);
+    if (!job || MOCK_CLAIM_TOKENS.get(id) !== claimToken || !['claimed', 'running'].includes(job.status)) return false;
+    job.boxId = boxId;
+    job.sessionId = sessionId;
+    return true;
+  }
+  const rows = await exec(
+    `UPDATE agent_jobs SET box_id = :box, session_id = :session, updated_at = NOW()
+      WHERE id = :id AND claim_token = :token AND status IN ('claimed','running') RETURNING id`,
+    [strParam('id', id), strParam('token', claimToken), strParam('box', boxId), strParam('session', sessionId)],
+  );
+  return rows.length > 0;
+}
+
+/** A job with its runner facts (§9's resume checks read the original's). */
+export async function getMicrovmJobFacts(id: string): Promise<AgentJob | null> {
+  if (config.mock.aurora) {
+    const job = mockJobs.find((j) => j.id === id);
+    return job ? { ...job, runner: job.runner ?? 'fleet', actorSub: job.actorSub ?? null, resumeOfJobId: job.resumeOfJobId ?? null } : null;
+  }
+  if (!await hasRunnerColumns()) return null;
+  const rows = await exec(`SELECT ${COLUMNS}${RUNNER_COLUMNS} FROM agent_jobs WHERE id = :id`, [strParam('id', id)]);
+  return rows[0] ? rowToJob(rows[0]) : null;
 }
 
 // ─── Pull-side claims (local compute) ────────────────────────────────────────

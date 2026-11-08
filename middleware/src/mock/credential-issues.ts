@@ -12,11 +12,17 @@ export interface CredentialIssueRow {
   id: string;
   run_ref: string;
   repo: string;
-  provider: 'github-app' | 'pat' | 'local';
-  permissions: { contents: 'read' | 'write'; pull_requests?: 'write' };
+  /** github-app / pat / local mint repository tokens; github-user, lab and s3
+   *  are the microVM runner's other credentials (schema/credential_issues_schema.sql). */
+  provider: 'github-app' | 'pat' | 'local' | 'github-user' | 'lab' | 's3';
+  permissions: Record<string, string>;
   expires_at: string | null;
   caller_sub: string | null;
   created_at: string;
+  /** The runtime session it went to (the microVM runner); absent on fleet mints. */
+  session_id?: string | null;
+  /** repo-install | repo-user | run-token | presign; absent on rows from before the runner. */
+  kind?: 'repo-install' | 'repo-user' | 'run-token' | 'presign' | null;
 }
 
 export const credentialIssues = defineFixture<CredentialIssueRow>({

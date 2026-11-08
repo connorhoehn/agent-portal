@@ -106,7 +106,21 @@ export async function openPullRequest(
   providerName: string,
   input: { owner: string; repo: string; head: string; base: string; title: string; body: string },
 ): Promise<{ url: string; number: number }> {
-  const token = await borrowApiKey(providerName);
+  return openPullRequestWithToken(await borrowApiKey(providerName), input);
+}
+
+/**
+ * `openPullRequest` with a token the caller already holds — the microVM
+ * runner's PR step, which opens the PR as the person who queued the work with
+ * their own GitHub user token (docs/microvm-runner-design.md §3, §8), so the
+ * PR author is that person, not a shared connection. Same 422 handling: a
+ * branch that already has an open PR (a resume) returns that PR.
+ */
+export async function openPullRequestWithToken(
+  token: string,
+  input: { owner: string; repo: string; head: string; base: string; title: string; body: string },
+): Promise<{ url: string; number: number }> {
+  if (!token) throw new Error('no GitHub token to open the pull request with');
   const res = await fetch(`${API}/repos/${input.owner}/${input.repo}/pulls`, {
     method: 'POST',
     headers: {

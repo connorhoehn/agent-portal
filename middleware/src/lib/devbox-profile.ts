@@ -17,7 +17,9 @@
 //      pinned policy set has no explicit row (`withProfileModelAllowlist`).
 //
 // Network class and org access stay deploy-time (AgentCore fixes them per
-// runtime); a profile names a class and never carries an ARN.
+// runtime); a profile names a class and never carries an ARN. `egress-allowlist`
+// routes an initiative's queued work to the microVM runner (lib/microvm-enqueue.ts,
+// docs/microvm-runner-design.md §5); `public` keeps the fleet.
 //
 // The provider (Aurora + mock) is loaded lazily, inside the async functions:
 // providers import config.ts, whose `import.meta` the CommonJS jest build of
@@ -53,6 +55,16 @@ export type DevboxProfileInput = Pick<
 >;
 
 export const DEFAULT_PROFILE_ID = 'default';
+/** The microVM runner's seeded profile (schema/devbox_profiles_schema.sql). */
+export const RESTRICTED_PROFILE_ID = 'restricted';
+export const RESTRICTED_PROFILE_INPUT: Readonly<DevboxProfileInput> = Object.freeze({
+  models: ['us.anthropic.claude-haiku-4-5-20251001-v1:0', 'us.anthropic.claude-sonnet-5'],
+  task_timeout_s: 840,
+  idle_minutes: 5,
+  max_lifetime_minutes: 60,
+  network_class: 'egress-allowlist',
+  org_access: 'none',
+});
 export const PROFILE_ID_RE = /^[a-z][a-z0-9-]{0,39}$/;
 
 /**
@@ -108,6 +120,8 @@ export function parseProfileInput(raw: unknown): DevboxProfileInput | string {
   if (!NETWORK_CLASSES.includes(network as NetworkClass)) return `network_class must be one of ${NETWORK_CLASSES.join(', ')}`;
   const org = r['org_access'];
   if (!ORG_ACCESS.includes(org as OrgAccess)) return `org_access must be one of ${ORG_ACCESS.join(', ')}`;
+  // The allowlist has no Aurora or knowledge-base path (docs/microvm-runner-design.md §5).
+  if (network === 'egress-allowlist' && org === 'read') return 'an egress-allowlist profile cannot have org_access read: the allowlist reaches no org data';
   return {
     models, task_timeout_s: task, idle_minutes: idle, max_lifetime_minutes: life,
     network_class: network as NetworkClass, org_access: org as OrgAccess,

@@ -1,7 +1,7 @@
 // Devbox policy profiles, offline — the `devbox_profiles` rows (DE-40).
 //
 // The seed is exactly what schema/devbox_profiles_schema.sql inserts as
-// ('default', 1): the pre-profile deployment's values, so an offline box runs
+// ('default', 1) and ('restricted', 1): the pre-profile deployment's values, so an offline box runs
 // under the same rules a deployed one did before profiles existed. Rows are
 // append-only here as in Aurora: a mock write pushes (id, version + 1) and a
 // reset puts the one seeded row back. The initiative → profile pointer is NOT
@@ -12,7 +12,7 @@
 // provider bootstraps `default` into it, as it does against Aurora.
 
 import { clock, defineFixture } from './core/index.js';
-import { DEFAULT_PROFILE_INPUT, type DevboxProfile } from '../lib/devbox-profile.js';
+import { DEFAULT_PROFILE_INPUT, RESTRICTED_PROFILE_INPUT, type DevboxProfile } from '../lib/devbox-profile.js';
 
 export const devboxProfiles = defineFixture<DevboxProfile>({
   key: 'devbox-profiles',
@@ -20,6 +20,12 @@ export const devboxProfiles = defineFixture<DevboxProfile>({
     default: () => [{
       id: 'default', version: 1, ...DEFAULT_PROFILE_INPUT, models: [...DEFAULT_PROFILE_INPUT.models],
       created_by: 'seed', reason: 'Seeded from the pre-profile deployment values (DE-40).',
+      created_at: clock.daysAgo(30),
+    }, {
+      // The microVM runner's profile, as the SQL seeds it. No initiative points
+      // at it offline, so nothing routes to the runner unless a test does.
+      id: 'restricted', version: 1, ...RESTRICTED_PROFILE_INPUT, models: [...RESTRICTED_PROFILE_INPUT.models],
+      created_by: 'seed', reason: 'The microVM runner profile (docs/microvm-runner-design.md §13).',
       created_at: clock.daysAgo(30),
     }],
     empty: () => [],

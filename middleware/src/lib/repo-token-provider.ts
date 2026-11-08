@@ -39,6 +39,8 @@ export interface RepoTokenContext {
   callerSub: string | null;
   /** The connection the legacy provider reads; the app provider ignores it. */
   connectionName?: string | null;
+  /** The microVM runtime session the token goes to, recorded on its audit row (kind repo-install). */
+  sessionId?: string | null;
 }
 
 export interface RepoToken {
@@ -135,6 +137,7 @@ export async function mintAuditedRepoToken(
     await recordCredentialIssue({
       runRef: ctx.runRef, repo: repoFullName, provider: minted.provider,
       permissions: perms, expiresAt: minted.expiresAt, callerSub: ctx.callerSub,
+      ...(ctx.sessionId ? { sessionId: ctx.sessionId, kind: 'repo-install' as const } : {}),
     });
   } catch (err) {
     console.warn('[repo-token] could not record the credential issue:', (err as Error).message);

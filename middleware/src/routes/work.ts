@@ -236,6 +236,8 @@ workRouter.post('/jobs', requireAction('ManageDevbox'), asyncHandler(async (req,
     title?: string; prompt?: string; kind?: string; priority?: number;
     requiresReview?: boolean; findingId?: string;
     workItemId?: string; suggestionId?: string; nodeId?: string;
+    /** docs/microvm-runner-design.md §9: resume a finished microVM job of yours. */
+    resumeOfJobId?: string;
   };
   const title = (body.title ?? '').trim();
   const prompt = (body.prompt ?? '').trim();
@@ -251,6 +253,12 @@ workRouter.post('/jobs', requireAction('ManageDevbox'), asyncHandler(async (req,
   const kind = (body.kind ?? 'devbox:task').trim();
   if (!QUEUEABLE_KINDS.includes(kind)) {
     throw new ValidationError(`kind must be one of ${QUEUEABLE_KINDS.join(', ')}`);
+  }
+  // Only the shape is checked here; whether the resume is allowed (same actor,
+  // same codebase, finished, recent) is the dispatcher's §9 check.
+  const resumeOfJobId = typeof body.resumeOfJobId === 'string' ? body.resumeOfJobId.trim() : '';
+  if (resumeOfJobId && !/^[A-Za-z0-9][A-Za-z0-9-]{0,99}$/.test(resumeOfJobId)) {
+    throw new ValidationError('resumeOfJobId is not a job id');
   }
   // A `local:*` job runs on a person's own machine, so it must name one the
   // caller owns. An untargeted row is claimed by no machine
@@ -295,6 +303,9 @@ workRouter.post('/jobs', requireAction('ManageDevbox'), asyncHandler(async (req,
     },
     ...(body.priority !== undefined ? { priority: body.priority } : {}),
     createdBy: (req as { session?: { sub?: string } }).session?.sub ?? 'portal',
+    // The authority a microVM run acts as: the session's subject, never the body.
+    actorSub: resolveSession(req)?.sub ?? null,
+    ...(resumeOfJobId ? { resumeOfJobId } : {}),
   });
   if (!job) { res.status(503).json({ error: 'queue unavailable (Aurora mocked or unreachable)' }); return; }
 
@@ -454,6 +465,7 @@ workRouter.post('/findings/:id/promote', requireAction('DispatchAgentRun'), asyn
     payload: { prompt: remedy.prompt, requiresReview: true, findingId: finding.id, ...(initiativeId ? { initiativeId } : {}) },
     priority: override.priority ?? remedy.priority,
     createdBy: (req as { session?: { sub?: string } }).session?.sub ?? 'portal',
+    actorSub: resolveSession(req)?.sub ?? null,
   });
   if (!job) { res.status(503).json({ error: 'queue unavailable (Aurora mocked or unreachable)' }); return; }
 

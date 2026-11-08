@@ -192,3 +192,68 @@ Columns added:
 - `main.py`'s log output for a run contains the prompt's length and sha and not any 40-character substring of the prompt.
 - A skill library whose sha differs from the brief's is refused by `lab skills` and the run fails at `boot` with `library-mismatch`, before `claude` starts.
 - A repository `.claude/settings.json` that allows `Bash(git push*)` does not override the managed deny (settings precedence test against the pinned CLI).
+
+## 16. Built (7 November 2026)
+
+The runner was built in three lanes. Nothing has run against AWS: every lane is proven with unit tests and fakes only.
+
+### What landed
+
+- **Infra (0c53f09d).** `OrgIQ-MicrovmNetwork` and `OrgIQ-MicrovmRuntime` behind `-c microvm=true`. The network stack has the VPC, Network Firewall (strict order, port 80 dropped, TLS SNI allowlist for the four GitHub names), DNS Firewall, the `bedrock-runtime` endpoint and the `lab.<prefix>.internal` zone. The runtime stack has `<prefix>_microvm` (VPC mode, idle 300 s, maxLifetime from the task timeout), the §12 execution role, and the runs bucket (30-day `runs/` expiry). The middleware gets invoke/stop, the GitHub secrets and the `runs/*` object grants, and `MICROVM_RUNTIME_ARN`, `MICROVM_RUNS_BUCKET` and `MICROVM_COMPUTE_USD_PER_SECOND`. See `infra/SECURITY-NOTES.md`, "microVM runner".
+- **Box (a689ef40, a29632fc).** `agents/devbox/main.py` handles `runner: "microvm"` with three ops. `boot` wipes the workspace, confines the target by realpath, clones with the read token, starts the lab broker on a 0600 unix socket and checks the library sha. `task` runs `claude -p` with no `--continue` and with `--resume` only for an explicit id, then makes a snapshot commit as the actor, PUTs the transcript and sends one `devbox_end`. `push` pushes `orgiq/*` with an explicit lease. The broker takes the fleet secret from the `boot` payload, because the role cannot read Secrets Manager. The `claude` child keeps the role's credential-provider variables and loses static keys, lab secrets and `GIT_CONFIG_*`. `--dangerously-skip-permissions` is gone: `managed-settings.json` carries the allow/deny lists.
+- **Dispatcher (this lane, `middleware/` and `schema/`).**
+  - Schema. `schema/microvm_sessions.sql` creates the session table and adds `agent_jobs.runner/actor_sub/resume_of_job_id`, `spend_entries.compute_seconds/compute_usd/session_id` and `agent_project_runs.runner`. `schema/github_user_grants.sql` creates the grant table. `spend_holds.source` and `spend_entries.source` gain `microvm`. `credential_issues` gains `session_id` and `kind`, and its provider list gains `github-user`, `lab` and `s3`. A `restricted` profile is seeded (egress-allowlist, org access none, Haiku and Sonnet). Both new tables are in `schema/manifest.json`, in `row_level_security.sql` and in the middleware's tenant-table pattern. `microvm_sessions` also has a `task_timeout_s` column, which the reaper needs.
+  - Enqueue. `lib/microvm-enqueue.ts` sets the runner from the initiative's profile for every `enqueueJob`. It reads the profile store strictly, so a store outage fails the enqueue instead of falling back to the public fleet. A microvm payload with `resume` or `boxId` is a 400, and so is `resumeOfJobId` on fleet work. `POST /api/work/jobs` and the promote route pass `actorSub` from the session. On a cluster without the runner column, microvm work is refused at enqueue.
+  - Claims. The fleet claims (`claimNextJob`, `claimJob`) never take a microvm row. `claimNextMicrovmJob` takes nothing else. The fleet tick, its restart recovery and the fleet reaper all skip the runner's `mvm:` boxes.
+  - Dispatch. `lib/microvm-dispatcher.ts` runs on its own tick, started by `startJobDispatcher`. It does the §10 checks, each failure held back with a named reason, then the §3 sequence. It records one `credential_issues` row per credential: read token, write token, run token, each presigned URL, and the user-token read. It updates the `microvm_sessions` row at every status and keeps a transient `FleetBox` owned by the actor for the tail. Transport and presigning are in `lib/microvm-invoke.ts`. The presigned PUT lasts 15 minutes and signs `content-type: application/x-ndjson`.
+  - Settlement. Token cost comes from `devbox_end`: reported, else estimated from `usage`, else unknown. Compute is `stopped − booted` times the rate. `cost_usd` is tokens plus compute when the token cost is known. When it is unknown, `cost_usd` stays null and `compute_seconds/compute_usd` are still written.
+  - Reaper. The leader sweeps for sessions past `task_timeout_s + grace` and stops them as `overrun` (`ReaperDeps.microvmSweep`).
+  - Metrics. `microvm-boot-seconds`, `microvm-run-cutoff`, `microvm-held-back{reason}` and `microvm-pr-opened`.
+  - PRs. `openPullRequestWithToken` opens the PR with a token the caller holds, with the same 422 handling as before.
+
+### Decisions this lane made
+
+- **Check order.** §10's order holds, except that the resume checks (item 9) and the per-actor session cap (item 10) run before `reserveSpend` (item 7). A cross-actor resume, or an actor at the cap, then holds no money (§15). Three config gates run before item 1, each its own held-back reason: `no-microvm-runtime`, `no-microvm-runs-bucket` and `no-lab-callback-secret`.
+- **Order of the last steps.** The session is stopped before the ledger row is written, so `compute_seconds` covers the whole session. §3 draws the two steps the other way round.
+- **Failed runs.** A failed run that left a commit still pushes its branch, so a resume has something to start from, but opens no PR. A cut run pushes nothing.
+- **Bot jobs.** A job owned by a bot run is held back as `bot-owned-job`. The bot run holds its own money and has no person to act as.
+
+### To turn it on
+
+1. Deploy `-c microvm=true` in the order `infra/SECURITY-NOTES.md` gives: network, then runtime, then middleware. Pass `-c microvmComputeUsdPerSecond=<rate>` from the AgentCore price list, or compute is priced at 0.
+2. Apply `schema/microvm_sessions.sql`, `schema/github_user_grants.sql` and the re-applied `spend_holds`, `spend_ledger`, `credential_issues` and `devbox_profiles` files. Then run `python3 schema/apply_all_seed.py --roles-only` so the middleware login and RLS cover the new tables.
+3. Point an initiative at `restricted` (`PUT /api/projects/:id` with `devboxProfileId: 'restricted'`). That initiative needs exactly one agent project, and the GitHub App has to be configured or the project has to name a connection.
+4. Give each actor a GitHub user grant: a `github_user_grants` row, plus the token in Secrets Manager under `orgiq/github-user/<sub>`, either bare or as JSON with `access_token`. Until the OAuth link page lands, someone has to write both by hand. Without a grant, the job waits as `no-github-identity`.
+
+### Unverified without AWS
+
+- **Infra** (from `infra/SECURITY-NOTES.md`):
+  - Whether AgentCore makes the VPC network interfaces through its service-linked role, or the execution role needs the EC2 statements too.
+  - The ACM certificate for `lab.<prefix>.internal`.
+  - Whether the internet-facing middleware ALB in `MiddlewareVpc` can be reached from the runner VPC at all. Until it can, the zone has no record and the lab loop cannot work.
+  - Whether one log group can take both the firewall's FLOW and ALERT logs.
+  - Every route uses the first firewall endpoint.
+- **Box:**
+  - That the managed `permissions.allow/deny` hold in `-p` mode against the pinned CLI, and that a repository's `.claude/settings.json` cannot widen them.
+  - That `claude -p --resume <uuid>` resumes from a transcript placed at `~/.claude/projects/<cwd-slug>/<uuid>.jsonl`.
+  - That Bedrock credentials reach `claude` through the container credential provider.
+  - The egress allowlist from inside a session (the §15 deploy validator).
+- **Dispatcher:**
+  - The real `InvokeAgentRuntime` response framing for a dict-returning op. The reader takes a whole JSON body or the last SSE `data:` object.
+  - That `StopRuntimeSession` on a VPC-mode session ends billing at the stop.
+  - The S3 presigned PUT signed with `content-type` and `UNSIGNED-PAYLOAD`. It is built with SigV4 and checked only by shape.
+  - The run-token and envelope path from the broker through `lab.<prefix>.internal` to `/api/runs/:ref/skills` and `/brief`.
+  - The new SQL statements against a real PostgreSQL. They have only been checked with stubbed `exec`, including the `to_jsonb(agent_jobs)` runner guard, which works on clusters without the column.
+
+### Gaps against what the other lanes ship
+
+- **No lease field on `push`.** main.py leases a new branch against "absent". A second attempt of a job whose first attempt already pushed `orgiq/<sub8>/<job8>` is refused as `push-rejected`.
+- **The library check compares against the current library.** `/api/runs/:ref/skills` serves the current library, but `boot` checks it against the brief's frozen `library_sha`. Any runbook published between the freeze and `boot` fails the run with `library-mismatch`, and that includes every resume after a publish.
+- **No `cloning` status.** `boot` does the clone inside one op and reports nothing in between, so the dispatcher never writes `cloning`.
+- **The workspace root is configuration.** The dispatcher sends `target = <MICROVM_WORKSPACE_ROOT>/repo` (default `/tmp/devbox-workspace`). That default is main.py's tempdir fallback, assuming no session storage and no `TMPDIR`. The box does not report its root.
+- **`lab_api_base` is not given to the middleware.** Infra sets `LAB_API_BASE` on the runtime only. The dispatcher sends `MICROVM_LAB_API_BASE`, else `https://lab.<PROJECT_PREFIX>.internal`.
+- **No SSM fallback.** `/orgiq/microvm/runtime-arn` is not read. The ARN comes only from `MICROVM_RUNTIME_ARN`.
+- **No `microvm-egress-denied` metric.** It needs the firewall alert log joined to a session id through the ENI, and nothing does that join yet.
+- **`agent_project_runs.runner` is not written.** The column exists, but queued jobs, fleet or microvm, write no `agent_project_runs` row.
+- **Bot and marketplace work on a `restricted` initiative does not run.** It is enqueued as microvm and then held back (`bot-owned-job`), or refused by `claimJob`.
+- **The hold can expire mid-run.** It lasts `STALE_MINUTES + 5 min` (35 min by default) as §6 says. A profile whose `task_timeout_s` is close to the 3,300 s cap outlives its hold.
