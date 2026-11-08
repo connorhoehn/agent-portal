@@ -123,8 +123,9 @@ class RequestHeaderTests(_EnvCase):
     def test_nothing_when_the_secret_is_unset(self):
         self.assertEqual(cb.request_headers(cb.HARNESS_TRACE, "POST", self.URL, b"{}"), {})
 
-    def test_envelope_nonce_and_legacy_header_by_default(self):
+    def test_envelope_nonce_and_legacy_header_when_accepted(self):
         os.environ["HARNESS_TRACE_SECRET"] = " s3cret\n"
+        os.environ[cb.LEGACY_HEADERS_ENV] = "Accept"
         h = cb.request_headers(cb.HARNESS_TRACE, "POST", self.URL, b'{"a":1}')
         self.assertEqual(h["x-harness-auth"], "s3cret")
         nonce = h[cb.SERVICE_NONCE_HEADER]
@@ -136,12 +137,18 @@ class RequestHeaderTests(_EnvCase):
         )
         self.assertEqual((ok, who), (True, "orgiq-agent"))
 
-    def test_refuse_mode_drops_the_static_header(self):
+    def test_default_drops_the_static_header(self):
         os.environ["HARNESS_TRACE_SECRET"] = "s3cret"
-        os.environ[cb.LEGACY_HEADERS_ENV] = "refuse"
         h = cb.request_headers(cb.HARNESS_TRACE, "POST", self.URL, b"{}")
         self.assertNotIn("x-harness-auth", h)
         self.assertIn(cb.SERVICE_AUTH_HEADER, h)
+
+    def test_allow_also_sends_it_and_refuse_does_not(self):
+        os.environ["HARNESS_TRACE_SECRET"] = "s3cret"
+        for value, sent in (("allow", True), ("refuse", False), ("", False)):
+            os.environ[cb.LEGACY_HEADERS_ENV] = value
+            h = cb.request_headers(cb.HARNESS_TRACE, "POST", self.URL, b"{}")
+            self.assertEqual("x-harness-auth" in h, sent, value)
 
     def test_nonces_are_fresh_per_request(self):
         os.environ["HARNESS_TRACE_SECRET"] = "s3cret"

@@ -155,6 +155,7 @@ def _http_error(code: int):
 def _clear_secrets() -> None:
     for callback in cb.ALL_CALLBACKS:
         os.environ.pop(callback.env_var, None)
+    os.environ.pop(cb.LEGACY_HEADERS_ENV, None)
     cb.reset_announcements()
 
 
@@ -229,6 +230,7 @@ class PostTraceTests(unittest.TestCase):
 
     def test_header_sent_when_secret_set(self):
         os.environ["HARNESS_TRACE_SECRET"] = "trace-secret"
+        os.environ[cb.LEGACY_HEADERS_ENV] = "accept"  # the static header is opt-in
         opener = _ok_urlopen()
         with mock.patch("urllib.request.urlopen", opener), redirect_stdout(io.StringIO()):
             self.assertTrue(instr.post_trace(dict(self.BUNDLE), middleware_url="http://mw"))
@@ -242,6 +244,7 @@ class PostTraceTests(unittest.TestCase):
 
     def test_401_does_not_retry_without_the_header(self):
         os.environ["HARNESS_TRACE_SECRET"] = "trace-secret"
+        os.environ[cb.LEGACY_HEADERS_ENV] = "accept"  # the static header is opt-in
         opener = mock.Mock(side_effect=_http_error(401))
         with mock.patch("urllib.request.urlopen", opener), redirect_stdout(io.StringIO()):
             instr.post_trace(dict(self.BUNDLE), middleware_url="http://mw")
@@ -290,6 +293,7 @@ class RequestApprovalTests(unittest.TestCase):
 
     def test_header_sent_when_secret_set(self):
         os.environ["APPROVALS_REQUEST_SECRET"] = "approve-secret"
+        os.environ[cb.LEGACY_HEADERS_ENV] = "accept"  # the static header is opt-in
         self._call()
         headers = StubClient.posts[0]["headers"]
         self.assertEqual(headers["x-approvals-auth"], "approve-secret")
@@ -343,6 +347,7 @@ class ApprovalPollTests(unittest.TestCase):
 
     def test_poll_carries_the_same_credential_as_the_post(self):
         os.environ["APPROVALS_REQUEST_SECRET"] = "approve-secret"
+        os.environ[cb.LEGACY_HEADERS_ENV] = "accept"  # the static header is opt-in
         result = self._call()
         self.assertEqual(result["status"], "APPROVED")
         self.assertEqual(StubClient.gets[0]["headers"]["x-approvals-auth"], "approve-secret")
@@ -358,6 +363,7 @@ class ApprovalPollTests(unittest.TestCase):
         # NOT 150 polls ending in EXPIRED: a 401 cannot become a 200, and
         # "EXPIRED" would be a lie about a row a human may well have approved.
         os.environ["APPROVALS_REQUEST_SECRET"] = "approve-secret"
+        os.environ[cb.LEGACY_HEADERS_ENV] = "accept"  # the static header is opt-in
         StubClient.get_response = StubResponse(401)
         result = self._call()
         self.assertEqual(result["status"], "ERROR")
@@ -389,6 +395,7 @@ class PostRunCompleteTests(unittest.TestCase):
 
     def test_header_sent_when_secret_set(self):
         os.environ["ASSESSMENT_RUN_COMPLETE_SECRET"] = "run-secret"
+        os.environ[cb.LEGACY_HEADERS_ENV] = "accept"  # the static header is opt-in
         opener = _ok_urlopen(b'{"id":"run-1"}')
         with mock.patch("urllib.request.urlopen", opener):
             cb.post_run_complete("run-1", status="failed", error="boom",

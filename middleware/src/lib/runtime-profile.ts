@@ -77,7 +77,11 @@ export function resolveRuntimeProfile(inputs: ProfileInputs): ProfileConfig {
  */
 export function securityPreconditions(env: NodeJS.ProcessEnv = process.env): string[] {
   if (insecureDevMode(env)) return [];
-  const set = (key: string): boolean => (env[key] ?? '').trim() !== '';
+  // A REPLACE_ME placeholder (shipped in the k8s manifest) counts as unset.
+  const set = (key: string): boolean => {
+    const value = (env[key] ?? '').trim();
+    return value !== '' && !value.includes('REPLACE_ME');
+  };
   const problems: string[] = [];
   if (!set('SESSION_SIGNING_SECRET_ARN') && !set('SESSION_SIGNING_KEY_DEV')) {
     problems.push('SESSION_SIGNING_SECRET_ARN unset and INSECURE_DEV_MODE is not set: sessions cannot be signed '

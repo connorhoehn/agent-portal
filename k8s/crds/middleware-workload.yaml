@@ -26,3 +26,12 @@ spec:
       value: 'orgiq-middleware'
     - name: AWS_REGION
       value: 'us-east-1'
+    # Production placeholders: the middleware refuses to start while either is
+    # REPLACE_ME (securityPreconditions). Fill before applying; for a local
+    # cluster set INSECURE_DEV_MODE: 'true' in an overlay instead.
+    # ARN of the Secrets Manager secret that holds the session signing key.
+    - name: SESSION_SIGNING_SECRET_ARN
+      value: 'REPLACE_ME'
+    # Id of the Verified Permissions policy store.
+    - name: POLICY_STORE_ID
+      value: 'REPLACE_ME'

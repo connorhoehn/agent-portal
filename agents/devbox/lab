@@ -58,7 +58,7 @@
 #   LAB_API_BASE        middleware origin, e.g. https://orgiq.example.com
 #   LAB_CALLBACK_SECRET optional; when set every call carries a signed
 #                       X-Service-Auth envelope + x-service-nonce (lane C4),
-#                       plus x-lab-auth unless SERVICE_AUTH_LEGACY_HEADERS=refuse
+#                       plus x-lab-auth only when SERVICE_AUTH_LEGACY_HEADERS=accept|allow
 #   LAB_RUN_REF / LAB_RUN_TOKEN  the run this session is, and the per-run token
 #                       that proves it (brief, applied, propose, runbook); set by
 #                       main.py from the invoke payload, absent outside a run
@@ -85,9 +85,9 @@ sign() { # $1=METHOD $2=path+query $3=exact body → fills auth=()
   local secret="${LAB_CALLBACK_SECRET:-}"
   secret="${secret#"${secret%%[![:space:]]*}"}"; secret="${secret%"${secret##*[![:space:]]}"}"
   [ -n "$secret" ] || return 0
-  if [ "$(printf '%s' "${SERVICE_AUTH_LEGACY_HEADERS:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" != "refuse" ]; then
-    auth+=(-H "x-lab-auth: ${secret}")
-  fi
+  case "$(printf '%s' "${SERVICE_AUTH_LEGACY_HEADERS:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" in
+    accept|allow) auth+=(-H "x-lab-auth: ${secret}") ;;
+  esac
   local lines
   lines=$(LAB_SIGN_SECRET="$secret" python3 -I -c '
 import base64, hashlib, hmac, json, os, secrets, sys, time

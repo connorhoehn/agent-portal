@@ -112,6 +112,11 @@ describe('fail-closed start-up preconditions (docs/fail-open-audit.md §2)', () 
     expect(securityPreconditions({ SESSION_SIGNING_SECRET_ARN: ' ', POLICY_STORE_ID: 'ps-1' })).toHaveLength(1);
   });
 
+  it('a REPLACE_ME placeholder counts as unset', () => {
+    expect(securityPreconditions({ SESSION_SIGNING_SECRET_ARN: 'REPLACE_ME', POLICY_STORE_ID: 'REPLACE_ME' })).toHaveLength(2);
+    expect(securityPreconditions({ SESSION_SIGNING_SECRET_ARN: 'arn:aws:secretsmanager:us-east-1:1:secret:x', POLICY_STORE_ID: 'ps-1' })).toEqual([]);
+  });
+
   it('/health reports insecureDevMode only when it is on', async () => {
     expect((await request(app({ insecureDevMode: true })).get('/health')).body.insecureDevMode).toBe(true);
     expect((await request(app()).get('/health')).body).not.toHaveProperty('insecureDevMode');

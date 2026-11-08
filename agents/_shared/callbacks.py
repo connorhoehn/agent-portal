@@ -39,9 +39,10 @@ Env contract
                                     sends nothing (fails closed)
 ``MIDDLEWARE_URL``                  base URL (default the compose service name)
 
-``SERVICE_AUTH_LEGACY_HEADERS``     transition flag (lane C4): unset/``accept`` sends
-                                    the static header AND the signed envelope;
-                                    ``refuse`` sends the envelope only
+``SERVICE_AUTH_LEGACY_HEADERS``     transition flag (lane C4): unset sends the signed
+                                    envelope only; ``accept``/``allow`` also sends
+                                    the static header, for a middleware that still
+                                    needs it
 
 Signed envelopes (lane C4)
 --------------------------
@@ -57,11 +58,11 @@ byte-for-byte port of service-runtime 0.4.1's TS signer; the fixed vectors in
 checked by both languages (``test_service_envelope.py`` and
 ``service-envelope-contract.test.ts``).
 
-During the transition the static header still rides along, because deployed
-middleware builds only know the header; the middleware lets a present
-envelope decide on its own. Once ``SERVICE_AUTH_LEGACY_HEADERS=refuse`` is set
-on both stacks, the static secret stops crossing the wire. Rollout order:
-``docs/agentcore-preview-surface.md`` §6a.
+By default the static header does NOT ride along: the middleware refuses the
+bare header unless it is run with ``SERVICE_AUTH_LEGACY_HEADERS=accept``, so
+the static secret stays off the wire. Set ``accept`` (or ``allow``) here only
+when talking to an older middleware build that knows nothing but the header.
+Rollout order: ``docs/agentcore-preview-surface.md`` §6a.
 
 Values are read live from ``os.environ`` on each call — an env lookup is far
 cheaper than the HTTP request it decorates, and reading live keeps tests and
@@ -320,8 +321,8 @@ def new_nonce() -> str:
 
 
 def legacy_headers_allowed() -> bool:
-    """False only when the transition flag says ``refuse``."""
-    return (os.environ.get(LEGACY_HEADERS_ENV) or "").strip().lower() != "refuse"
+    """True only when the transition flag says ``accept`` or ``allow``."""
+    return (os.environ.get(LEGACY_HEADERS_ENV) or "").strip().lower() in ("accept", "allow")
 
 
 def request_target(url: str) -> str:
