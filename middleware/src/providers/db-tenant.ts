@@ -100,7 +100,7 @@ export function rlsEnforced(): boolean {
  */
 const TENANT_TABLES = new RegExp(
   '\\b(?:user_tenant_roles|saved_searches|flow_runs|knowledge_bases'
-  + '|social_channels|social_bindings|microvm_sessions|github_user_grants|voice_sessions|voice_tool_calls|sweep_runs'
+  + '|social_channels|social_bindings|microvm_sessions|github_user_grants|voice_sessions|voice_tool_calls|voice_session_events|sweep_runs'
   + '|access_[a-z_]+|assessment_[a-z_]+'
   + '|pipeline_(?:definitions|runs|steps|artifacts|config|run_decks|run_deck_revisions))\\b',
   'i',

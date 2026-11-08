@@ -64,7 +64,7 @@ class RowLevelSecurityCoverageTests(unittest.TestCase):
 class MiddlewareReachTests(unittest.TestCase):
     """Sweep 4 Low 7: an RLS-listed table the middleware holds no grant on fails every write."""
     # The microVM runner's, the voice navigator's and the sweep ledger's tables.
-    NEWER = ('microvm_sessions', 'github_user_grants', 'voice_sessions', 'voice_tool_calls', 'sweep_runs')
+    NEWER = ('microvm_sessions', 'github_user_grants', 'voice_sessions', 'voice_tool_calls', 'voice_session_events', 'sweep_runs')
 
     def test_the_newer_tenant_tables_are_listed_and_tenant_scoped(self):
         for table in self.NEWER:

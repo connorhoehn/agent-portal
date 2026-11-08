@@ -28,6 +28,7 @@ import { scoresRouter } from './routes/scores.js';
 import { decisionsRouter } from './routes/decisions.js';
 import { projectsRouter } from './routes/projects.js';
 import { voiceRouter } from './routes/voice.js';
+import { voiceLogRouter } from './routes/voice-log.js';
 import { designsRouter } from './routes/designs.js';
 import { libraryRouter } from './routes/library.js';
 import { promotionsRouter } from './routes/promotions.js';
@@ -229,8 +230,10 @@ app.get('/livez', livezHandler);
 app.use(mockControlRouter);
 
 app.use('/api/session', sessionRouter);
-// The voice navigator: mint, tool-call rows, close (docs/voice-navigator-spec.md §6, §7).
+// The voice navigator: mint, tool-call rows, close (docs/voice-navigator-spec.md §6, §7),
+// and the owner's read of their own session log (routes/voice-log.ts).
 app.use('/api/voice', voiceRouter);
+app.use('/api/voice', voiceLogRouter);
 app.use('/api/assessment/knowledge', assessmentCanvasRouter);
 app.use('/api/assessment/knowledge', assessmentDocumentWorkflowsRouter);
 app.use('/api/assessment/knowledge', assessmentDocumentSourceRouter);

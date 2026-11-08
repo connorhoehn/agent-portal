@@ -251,11 +251,27 @@ interface Sideband {
   /** Detached, final, or out of reconnects: nothing more will arrive. */
   ended: boolean;
   onUsage?: (usage: ProviderUsage) => void | Promise<void>;
+  onEvent?: (event: SidebandEvent) => void;
   waiters: Array<() => void>;
   timers: Set<ReturnType<typeof setTimeout>>;
 }
 
 const sidebands = new Map<string, Sideband>();
+
+/**
+ * The socket's own life, for the session's event log (lib/voice/session-log.ts):
+ * connected, lost (and whether it will retry), the provider's `session.closed`
+ * (its reason code only), detached. Never a frame's content.
+ */
+export type SidebandEvent =
+  | { state: 'connected'; connects: number }
+  | { state: 'lost'; retry: boolean; connects: number }
+  | { state: 'closed'; reason: string | null }
+  | { state: 'detached' };
+
+function tell(sb: Sideband, event: SidebandEvent): void {
+  try { sb.onEvent?.(event); } catch { /* a sink that throws is the sink's problem, never the socket's */ }
+}
 
 const snapshot = (sb: Sideband): ProviderUsage => ({ ...sb.usage });
 
@@ -336,9 +352,10 @@ function connect(sb: Sideband): void {
     gone = true;
     if (sb.socket === socket) sb.socket = null;
     if (sb.usage.final || sb.ended) { sb.ended = true; wake(sb); return; }
+    tell(sb, { state: 'lost', retry: sb.connects <= SIDEBAND_MAX_RECONNECTS, connects: sb.connects });
     retry(sb);
   };
-  socket.addEventListener('open', () => { sb.connected = true; });
+  socket.addEventListener('open', () => { sb.connected = true; tell(sb, { state: 'connected', connects: sb.connects }); });
   socket.addEventListener('message', (msg: { data?: unknown }) => {
     let ev: unknown;
     try {
@@ -346,7 +363,12 @@ function connect(sb: Sideband): void {
       ev = JSON.parse(typeof data === 'string' ? data : Buffer.from(data as ArrayBuffer).toString('utf8'));
     } catch { return; }
     if (!ev || typeof ev !== 'object') return;
+    const wasFinal = sb.usage.final;
     if (onFrame(sb, ev as Record<string, unknown>)) emitUsage(sb);
+    if (sb.usage.final && !wasFinal) {
+      const reason = (ev as Record<string, unknown>)['reason'];
+      tell(sb, { state: 'closed', reason: typeof reason === 'string' && /^[\w.-]{1,40}$/.test(reason) ? reason : null });
+    }
     if (sb.usage.final) {
       sb.ended = true;
       wake(sb);
@@ -370,10 +392,11 @@ function retry(sb: Sideband): void {
  * Attach the sideband to a freshly minted live session (G12). Never throws
  * and never waits: false when it could not even start (no key, no
  * WebSocket, a malformed id, MOCK_VOICE). `onUsage` hears every change of
- * the figures; its failures are logged and dropped.
+ * the figures; its failures are logged and dropped. `onEvent` hears the
+ * socket's own life (SidebandEvent), for the session's event log.
  */
 export function attachSideband(providerSessionId: string, opts: {
-  onUsage?: (usage: ProviderUsage) => void | Promise<void>; lifetimeMs?: number;
+  onUsage?: (usage: ProviderUsage) => void | Promise<void>; onEvent?: (event: SidebandEvent) => void; lifetimeMs?: number;
 } = {}): boolean {
   try {
     if (process.env['MOCK_VOICE'] === '1' || !apiKey() || !socketCtor() || !/^[\w-]{1,200}$/.test(providerSessionId)) return false;
@@ -381,7 +404,7 @@ export function attachSideband(providerSessionId: string, opts: {
     const sb: Sideband = {
       providerSessionId, socket: null, seenResponses: new Set(), connected: false, connects: 0, ended: false,
       usage: { seconds: null, inputTokens: null, outputTokens: null, cachedTokens: null, responses: 0, final: false },
-      waiters: [], timers: new Set(), ...(opts.onUsage ? { onUsage: opts.onUsage } : {}),
+      waiters: [], timers: new Set(), ...(opts.onUsage ? { onUsage: opts.onUsage } : {}), ...(opts.onEvent ? { onEvent: opts.onEvent } : {}),
     };
     sidebands.set(providerSessionId, sb);
     later(sb, opts.lifetimeMs ?? SIDEBAND_DEFAULT_LIFETIME_MS, () => detachSideband(providerSessionId));
@@ -424,6 +447,7 @@ export function detachSideband(providerSessionId: string): void {
   if (!sb) return;
   sidebands.delete(providerSessionId);
   sb.ended = true;
+  if (sb.connected) tell(sb, { state: 'detached' });
   for (const t of sb.timers) clearTimeout(t);
   sb.timers.clear();
   const socket = sb.socket;

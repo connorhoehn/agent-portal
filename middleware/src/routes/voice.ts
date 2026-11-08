@@ -27,8 +27,21 @@
 //     once never both go through (at most one does; both may refuse) and never
 //     past the day's minutes. Never the key, the instructions or the session
 //     object.
-//   POST /api/voice/sessions/:id/events  { tool, args? | argsSha256?, outcome, durationMs?, confirmedBy? }
+//   POST /api/voice/sessions/:id/events  { tool, args? | argsSha256?, outcome, durationMs?, confirmedBy?, summary? }
 //     one voice_tool_calls row; the arguments are hashed and dropped. 201 { id }.
+//     It also writes a `tool-result` row to the session's event log.
+//   POST /api/voice/sessions/:id/events  { kind, tool?, args? | argsSha256?, summary?, note?, data? }
+//     (the event form: `kind` present) one row of the session's event log
+//     (lib/voice/session-log.ts parseClientEvent): kind is one of started,
+//     delegation, tool-call, tool-result, refused, confirm-shown, confirmed,
+//     cancelled, usage, error, client; sanitized, never words or arguments.
+//     201 { seq }; 429 once the log holds 500 rows.
+//
+// The event log (lib/voice/session-log.ts): the mint (`minted`, or `error` +
+// `closed` when it fails after the row exists), the dock's events above, the
+// sideband (`sideband` for the socket's life, `usage` at most every 30 s and
+// when final), the close (`closed`) and the reaper (`reaper`, `closed`).
+// Read back by the owner only: routes/voice-log.ts.
 //   POST /api/voice/sessions/:id/close   { seconds, reason?, delegated?: { inputTokens, outputTokens, cachedTokens, responses } }
 //     two ledger rows (lib/voice/ledger.ts, G11), both source voice_session,
 //     provider openai: `<id>` at seconds/60 × rate, which settles the hold,
@@ -71,6 +84,7 @@ import {
   attachSideband, createLiveSession, detachSideband, hangupLiveSession, mockLiveScript, voiceProviderConfigured, waitForSidebandUsage,
   MOCK_SDP_ANSWER, VoiceProviderError, type ProviderUsage,
 } from '../lib/voice/openai.js';
+import { parseClientEvent, recordVoiceEvent } from '../lib/voice/session-log.js';
 import {
   closeVoiceSession, getVoiceSession, insertVoiceSession, insertVoiceToolCall, learnReapedSessionCost, recordProviderUsage, setProviderSessionId,
   userOpenVoiceSessions, userVoiceSecondsSince,
@@ -219,6 +233,7 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
     }
     if (refuse) {
       await closeVoiceSession(id, { seconds: 0, cost_usd: 0, cost_basis: 'estimated', stop_reason: 'mint-failed' });
+      await recordVoiceEvent(row, 'closed', { stopReason: 'mint-failed', refusedBy: other ? 'session-open' : 'daily-minutes' });
       await releaseHold(held.holdId);
       refuse();
       return;
@@ -241,18 +256,34 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
       await closeVoiceSession(id, { seconds: 0, cost_usd: 0, cost_basis: 'estimated', stop_reason: 'mint-failed' });
       await releaseHold(held.holdId);
       const status = err instanceof VoiceProviderError ? err.status : 0;
+      await recordVoiceEvent(row, 'error', { stage: 'mint', status });
+      await recordVoiceEvent(row, 'closed', { stopReason: 'mint-failed' });
       console.warn(`[voice] mint failed for ${id}: ${status || (err as Error).message.slice(0, 120)}`);
       unavailable(res, 'provider', 'The voice provider refused the session. Try again shortly.', 503);
       return;
     }
   }
   await setProviderSessionId(id, answer.providerSessionId);
+  await recordVoiceEvent(row, 'minted', {
+    mock: cfg.mock, model: cfg.model, voice: cfg.voice, maxSeconds, toolsEnabled, tools: toolsEnabled ? tools.map((t) => t.name) : [],
+    holdUsd: held.amountUsd, usdPerMinute: cfg.usdPerMinute, dailyMinutesLeft,
+  });
   // The provider's own usage for this session (G12): best effort, never awaited, never failing the mint.
   if (!cfg.mock && answer.providerSessionId) {
     const tenant = session.tenant;
+    let lastUsageLog = 0;
     attachSideband(answer.providerSessionId, {
       lifetimeMs: expiresInMs + SIDEBAND_LINGER_PAST_HOLD_MS,
-      onUsage: (u) => recordProviderUsage(id, tenant, u),
+      onUsage: async (u) => {
+        await recordProviderUsage(id, tenant, u);
+        const now = clock.now().getTime();
+        if (u.final || now - lastUsageLog >= USAGE_LOG_EVERY_MS) {
+          lastUsageLog = now;
+          await recordVoiceEvent(row, 'usage', { source: 'sideband', seconds: u.seconds, inputTokens: u.inputTokens,
+            outputTokens: u.outputTokens, cachedTokens: u.cachedTokens, responses: u.responses, final: u.final });
+        }
+      },
+      onEvent: (e) => { void recordVoiceEvent(row, 'sideband', { ...e }); },
     });
   }
   console.log(JSON.stringify({ event: 'voice-session-minted', sessionId: id, sub: session.sub, tenant: session.tenant,
@@ -293,11 +324,22 @@ const notFound = (res: Response): void => { res.status(404).json({ error: 'voice
 export const CLOSE_SIDEBAND_WAIT_MS = 2_500;
 /** The sideband outlives the hold by this much, so the reaper's sweep can still read it. */
 const SIDEBAND_LINGER_PAST_HOLD_MS = 10 * 60_000;
+/** The event log keeps a sideband usage figure at most this often (and always the final one). */
+const USAGE_LOG_EVERY_MS = 30_000;
 
 voiceRouter.post('/sessions/:id/events', rateLimit('voice-events', 120, 60_000, bySub), asyncHandler(async (req, res) => {
   const row = await ownSession(req, { sameTenant: true });
   if (!row) { notFound(res); return; }
   const body = (req.body ?? {}) as Record<string, unknown>;
+  // The event form: one row of the session's log, nothing else.
+  if (body['kind'] !== undefined) {
+    const parsed = parseClientEvent(body, { knownTool: (n) => voiceTool(n) != null, hashArgs: hashToolArgs });
+    if ('error' in parsed) { res.status(400).json({ error: parsed.error }); return; }
+    const event = await recordVoiceEvent(row, parsed.kind, parsed.data);
+    if (!event) { res.status(429).json({ error: 'this voice session has logged its maximum number of events' }); return; }
+    res.status(201).json({ seq: event.seq });
+    return;
+  }
   const tool = typeof body['tool'] === 'string' ? body['tool'] : typeof body['name'] === 'string' ? body['name'] : '';
   if (!voiceTool(tool)) { res.status(400).json({ error: 'tool must name a catalogue tool' }); return; }
   const outcome = body['outcome'] as VoiceToolOutcome;
@@ -322,6 +364,10 @@ voiceRouter.post('/sessions/:id/events', rateLimit('voice-events', 120, 60_000, 
     session_id: row.id, tenant: row.tenant, tool, args_sha256: argsSha256, outcome, confirmed_by: confirmedBy, duration_ms: durationMs,
   });
   if (!written) { res.status(429).json({ error: 'this voice session has reported its maximum number of tool calls' }); return; }
+  const summary = body['summary'] && typeof body['summary'] === 'object' && !Array.isArray(body['summary']) ? body['summary'] : undefined;
+  await recordVoiceEvent(row, 'tool-result', {
+    tool, toolCallId: written.id, outcome, argsSha256, durationMs, confirmedBy, ...(summary ? { summary } : {}),
+  });
   emitFleetMetric('voice-tool-calls', { name: tool, outcome });
   res.status(201).json({ id: written.id });
 }));
@@ -369,13 +415,22 @@ voiceRouter.post('/sessions/:id/close', asyncHandler(async (req, res) => {
     if (seconds != null && costUsd != null && row.stop_reason === 'reaped' && row.cost_basis === 'unknown') {
       const learnt = await runAsSystem(() => learnReapedSessionCost(row.id, seconds, costUsd));
       if (learnt) await bookVoiceSpend(learnt, delegated);
+      await recordVoiceEvent(row, 'closed', { alreadyClosed: true, reason, learnt: learnt != null, seconds: learnt?.seconds ?? null,
+        costUsd: learnt?.cost_usd ?? null, basis: learnt?.cost_basis ?? row.cost_basis });
       res.json(closeBody(learnt ?? row, true));
       return;
     }
+    await recordVoiceEvent(row, 'closed', { alreadyClosed: true, reason, stopReason: row.stop_reason });
     res.json(closeBody(row, true));
     return;
   }
   await bookVoiceSpend(closed, figures.delegated, figures.tokensBasis);
+  await recordVoiceEvent(closed, 'closed', {
+    stopReason: reason, seconds: figures.seconds, costUsd: figures.costUsd, basis: figures.basis, dockSeconds: seconds, hungUp,
+    providerFinal: provider?.final ?? false, tokensBasis: figures.delegated ? figures.tokensBasis : null,
+    delegatedTokens: figures.delegated ? { inputTokens: figures.delegated.inputTokens, outputTokens: figures.delegated.outputTokens,
+      cachedTokens: figures.delegated.cachedTokens, responses: figures.delegated.responses } : null,
+  });
   if (figures.seconds != null) emitFleetMetric('voice-session-seconds', { tenant: closed.tenant, seconds: figures.seconds });
   const used = figures.delegated;
   console.log(JSON.stringify({ event: 'voice-session-closed', sessionId: closed.id, seconds: figures.seconds, costUsd: figures.costUsd,

@@ -11,12 +11,16 @@
 // nobody reported its seconds), and a later close from the dock may still
 // replace it (routes/voice.ts).
 //
+// Each session it closes gets a `reaper` and a `closed` row in its event log
+// (lib/voice/session-log.ts). The same sweep also deletes event rows past
+// their 30 days (sweepVoiceEventRetention, called beside this one).
+//
 // Run by the devbox reaper's leader once per sweep (lib/devbox-reaper.ts
 // `voiceSweep`), so it is single-flight across replicas like the rest.
 
 import { clock } from '../../mock/core/index.js';
 import { HOLD_GRACE_MS } from '../spend-holds.js';
-import type { VoiceSessionRow, VoiceSessionClose } from '../../providers/voice-sessions.js';
+import type { VoiceEventKind, VoiceSessionRow, VoiceSessionClose } from '../../providers/voice-sessions.js';
 import type { ProviderUsage } from './openai.js';
 import { preferProviderFigures, providerUsageFromRow, type DelegatedUsage, type KnownBasis } from './ledger.js';
 
@@ -34,6 +38,8 @@ export interface VoiceReaperDeps {
   /** Close and forget the session's sideband. */
   detach: (providerSessionId: string) => void;
   log: (line: Record<string, unknown>) => void;
+  /** Append a row to the session's event log (lib/voice/session-log.ts). Default: none. */
+  event?: (row: Pick<VoiceSessionRow, 'id' | 'tenant'>, kind: VoiceEventKind, data: Record<string, unknown>) => Promise<unknown>;
 }
 
 export async function defaultVoiceReaperDeps(): Promise<VoiceReaperDeps> {
@@ -41,6 +47,7 @@ export async function defaultVoiceReaperDeps(): Promise<VoiceReaperDeps> {
   const { expireHoldIfDue } = await import('../../providers/spend-holds.js');
   const { hangupAndReadUsage, detachSideband } = await import('./openai.js');
   const { bookVoiceSpend } = await import('./ledger.js');
+  const { recordVoiceEvent } = await import('./session-log.js');
   return {
     now: () => clock.now().getTime(),
     listOpen: () => sessions.listOpenVoiceSessions(),
@@ -50,6 +57,7 @@ export async function defaultVoiceReaperDeps(): Promise<VoiceReaperDeps> {
     hangupAndRead: (id) => hangupAndReadUsage(id, REAPER_SIDEBAND_WAIT_MS),
     detach: detachSideband,
     log: (line) => console.log(JSON.stringify(line)),
+    event: recordVoiceEvent,
   };
 }
 
@@ -69,7 +77,8 @@ export async function sweepVoiceSessions(deps: VoiceReaperDeps, graceMs = HOLD_G
     // Stop the billing first, and read the final usage the hangup brings on the sideband (G12).
     const live = !row.mock && row.provider_session_id ? row.provider_session_id : null;
     let usage: ProviderUsage | null = null;
-    if (live) usage = (await deps.hangupAndRead(live).catch(() => ({ hungUp: false, usage: null }))).usage;
+    let hungUp = false;
+    if (live) ({ hungUp, usage } = await deps.hangupAndRead(live).catch(() => ({ hungUp: false, usage: null })));
     const figures = preferProviderFigures(row, usage ?? providerUsageFromRow(row), { seconds: null, delegated: null });
     // Compare-and-set: a close that raced this sweep wins and is left alone.
     const closed = await deps.close(row.id, {
@@ -79,6 +88,9 @@ export async function sweepVoiceSessions(deps: VoiceReaperDeps, graceMs = HOLD_G
     if (!closed) continue;
     await deps.book(closed, figures.delegated, figures.tokensBasis);
     await deps.expireHold(closed.hold_id);
+    const minutesOpen = Math.round((now - Date.parse(row.started_at)) / 60_000);
+    await deps.event?.(closed, 'reaper', { minutesOpen, maxSeconds: row.max_seconds, hungUp, providerFigures: usage != null, providerFinal: usage?.final ?? false });
+    await deps.event?.(closed, 'closed', { stopReason: 'reaped', seconds: figures.seconds, costUsd: figures.costUsd, basis: figures.basis });
     deps.log({ event: 'voice-session-reaped', sessionId: closed.id, sub: closed.user_sub, minutes: Math.round((now - Date.parse(row.started_at)) / 60_000),
       seconds: figures.seconds, basis: figures.basis });
     reaped.push(closed.id);

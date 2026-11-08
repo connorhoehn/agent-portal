@@ -40,6 +40,9 @@ portal/test-results/
 # Gateway chat attachments stored on local disk in dev (lib/gateway-attachments.ts).
 middleware/.data/
 
+# The voice session file log dev:mock writes (VOICE_LOG_DIR, lib/voice/session-log.ts).
+middleware/.voice-log/
+
 # Stray root-level screenshots from ad-hoc browser walks
 portal/*.jpg
 portal/*.png

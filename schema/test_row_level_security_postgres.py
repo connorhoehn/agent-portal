@@ -141,7 +141,7 @@ class RowLevelSecurityPostgresTests(unittest.TestCase):
 
     def test_the_middleware_holds_dml_on_the_newer_tenant_tables(self):
         # Sweep 4 Low 7: the microVM, voice and sweep tables, after the role files.
-        for table in ('microvm_sessions', 'github_user_grants', 'voice_sessions', 'voice_tool_calls', 'sweep_runs'):
+        for table in ('microvm_sessions', 'github_user_grants', 'voice_sessions', 'voice_tool_calls', 'voice_session_events', 'sweep_runs'):
             got = psql(self.db, ' '.join(f"SELECT has_table_privilege('{APP}', '{table}', '{p}');"
                                          for p in ('SELECT', 'INSERT', 'UPDATE', 'DELETE')))
             self.assertEqual(got.split(), ['t', 't', 't', 't'], table)

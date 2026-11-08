@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-08T20:36:00.734Z",
-  "serverHandlerSha": "b7701c05de7540ab0b602db72b301ec1dffa1f3f0daca5b47773fa0efd8f869a",
-  "baseUrl": "http://127.0.0.1:3997",
+  "capturedAt": "2026-11-08T22:46:49.169Z",
+  "serverHandlerSha": "5e8ca6f690d122bf276d0d6a79cd63b5c46bae91c4249d308222ba94799ad276",
+  "baseUrl": "http://127.0.0.1:3995",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -3898,16 +3898,17 @@
           "ORG-COST-2",
           "ORG-COST-3",
           "ORG-COST-6",
+          "ORG-DS-1",
           "ORG-DS-3",
           "ORG-DS-4",
           "ORG-DSAPI-1",
           "ORG-DSAPI-2",
+          "ORG-DSAPI-3",
           "ORG-DSAPI-4",
           "ORG-FS-1",
           "ORG-FS-3",
+          "ORG-FS-4",
           "ORG-INF-1",
-          "ORG-INF-2",
-          "ORG-INF-3",
           "ORG-LAKE-2",
           "ORG-LAKE-3",
           "ORG-LAKE-4",
@@ -3917,8 +3918,6 @@
           "ORG-LLM-3",
           "ORG-LLM-4",
           "ORG-LLM-5",
-          "ORG-LLM-7",
-          "ORG-LLM-9",
           "ORG-MOB-2",
           "ORG-MOB-3",
           "ORG-MOB-4",
@@ -3935,6 +3934,7 @@
           "ORG-RTA-2",
           "ORG-RTA-3",
           "ORG-RTA-5",
+          "ORG-SOC2-1",
           "ORG-SOC2-2",
           "ORG-SOC2-3",
           "ORG-SOC2-4",
@@ -3981,7 +3981,15 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "criteria": "array"
+        "criteria": "array",
+        "criteria[]": "object",
+        "criteria[].createdAt": "string",
+        "criteria[].done": "boolean",
+        "criteria[].id": "string",
+        "criteria[].position": "number",
+        "criteria[].text": "string",
+        "criteria[].updatedAt": "string",
+        "criteria[].workItemId": "string"
       },
       "values": {}
     },
@@ -4026,7 +4034,6 @@
         "capabilities.datastore.mandatory": "boolean",
         "capabilities.datastore.ok": "boolean",
         "capabilities.jobSchema": "object",
-        "capabilities.jobSchema.error": "string",
         "capabilities.jobSchema.mandatory": "boolean",
         "capabilities.jobSchema.ok": "boolean",
         "datastore": "object",
@@ -4048,7 +4055,7 @@
       },
       "values": {
         "status": [
-          "degraded"
+          "ok"
         ]
       }
     },
@@ -10007,6 +10014,24 @@
       },
       "values": {}
     },
+    "GET /api/voice/sessions": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "sessions": "array"
+      },
+      "values": {}
+    },
+    "GET /api/voice/sessions/:id": {
+      "skipped": "no value found for :id under /api/voice/sessions (orgiq/admin); no value found for :id under /api/voice/sessions (assessment/admin); no value found for :id under /api/voice/sessions (anonymous)"
+    },
+    "GET /api/voice/sessions/:id/export": {
+      "skipped": "no value found for :id under /api/voice/sessions (orgiq/admin); no value found for :id under /api/voice/sessions (assessment/admin); no value found for :id under /api/voice/sessions (anonymous)"
+    },
+    "GET /api/voice/sessions/latest": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 404 (anonymous)"
+    },
     "GET /api/work-graph/initiatives/:id/graph": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -10520,27 +10545,9 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "runs": "array",
-        "runs[]": "object",
-        "runs[].botId": "null",
-        "runs[].durationMs": "number",
-        "runs[].error": "null",
-        "runs[].findings": "number",
-        "runs[].finishedAt": "string",
-        "runs[].id": "string",
-        "runs[].startedAt": "string",
-        "runs[].status": "string",
-        "runs[].sweep": "string",
-        "runs[].tenant": "string"
+        "runs": "array"
       },
-      "values": {
-        "runs[].status": [
-          "ok"
-        ],
-        "runs[].tenant": [
-          "orgiq"
-        ]
-      }
+      "values": {}
     },
     "GET /health": {
       "persona": "orgiq/admin",

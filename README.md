@@ -106,6 +106,8 @@ The portal footer has a voice dock: press Ctrl+Shift+Space or click it, then spe
 - It costs money per minute of audio. Every session takes a budget hold up front (`VOICE_USD_PER_MINUTE`, default 0.05, times `VOICE_SESSION_MINUTES_P75`) and settles to the billed seconds.
 - The dock is behind `features.voiceNavigator`, which is on under the Vite dev server (`VITE_VOICE_NAVIGATOR=1` turns it on elsewhere).
 
+To debug a session, read its log. Each session keeps a structured event log: the mint, the dock's phases, tool calls and results, refusals, confirms, errors, the provider's usage, and the close or reap. It never holds what was said or a tool's arguments, which are stored only as a hash. Rows are kept for 30 days, at most 500 per session. Under `npm run dev:mock` every event is also appended to `middleware/.voice-log/<session id>.jsonl` (set by `VOICE_LOG_DIR`, ignored in production), so you can `tail -f` it while you talk. Four routes read your own sessions back, and nobody else's: `GET /api/voice/sessions?since=&limit=` lists them, `GET /api/voice/sessions/latest` returns the most recent one, `GET /api/voice/sessions/:id` returns one session with its tool calls and events, and `GET /api/voice/sessions/:id/export` downloads one session as a JSON file for a bug report. For example: `curl -s localhost:3001/api/voice/sessions/latest | jq`.
+
 The design is in [docs/voice-navigator-spec.md](docs/voice-navigator-spec.md); `scripts/voice/probe-realtime.mjs` probes the live API with the same key.
 
 ## Architecture notes

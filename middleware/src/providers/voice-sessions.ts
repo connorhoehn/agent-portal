@@ -1,8 +1,10 @@
 // Voice navigator sessions as data (docs/voice-navigator-spec.md §7, §9): storage only.
 //
-// One `voice_sessions` row per minted session and one `voice_tool_calls` row
-// per tool call the dock reports. Never audio, a transcript, or a tool's
-// arguments: a tool-call row keeps the sha256 of the arguments only.
+// One `voice_sessions` row per minted session, one `voice_tool_calls` row
+// per tool call the dock reports, and one `voice_session_events` row per
+// structured event of the session's log (lib/voice/session-log.ts, which
+// sanitizes `data` before it reaches this file). Never audio, a transcript, or
+// a tool's arguments: a tool-call row keeps the sha256 of the arguments only.
 //
 // Closing is a compare-and-set on `ended_at IS NULL`, so two closes (a retry,
 // or the dock racing the reaper) settle exactly once; the caller learns which
@@ -14,7 +16,7 @@ import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { exec } from './aurora.js';
 import { config } from '../config.js';
 import { clock } from '../mock/core/index.js';
-import { voiceSessions, voiceToolCalls } from '../mock/voice-sessions.js';
+import { voiceSessionEvents, voiceSessions, voiceToolCalls } from '../mock/voice-sessions.js';
 import type { CostBasis } from '../lib/run-cost.js';
 
 export type VoiceStopReason = 'closed' | 'dropped' | 'cutoff' | 'tenant-switch' | 'reaped' | 'mint-failed';
@@ -322,4 +324,145 @@ export async function listVoiceToolCalls(sessionId: string): Promise<VoiceToolCa
     confirmed_by: (r['confirmed_by'] ?? null) as VoiceToolCallRow['confirmed_by'],
     duration_ms: r['duration_ms'] == null ? null : Number(r['duration_ms']), at: String(r['at']),
   }));
+}
+
+// ─── The session's event log (lib/voice/session-log.ts, routes/voice-log.ts) ──
+
+/** The closed set of event kinds (schema/voice_sessions.sql `voice_session_events.kind`). */
+export const VOICE_EVENT_KINDS = [
+  'minted', 'started', 'delegation', 'tool-call', 'tool-result', 'refused', 'confirm-shown', 'confirmed', 'cancelled',
+  'usage', 'sideband', 'reaper', 'closed', 'error', 'client',
+] as const;
+export type VoiceEventKind = typeof VOICE_EVENT_KINDS[number];
+
+export interface VoiceSessionEventRow {
+  id: string;
+  session_id: string;
+  tenant: string;
+  /** 1-based, gapless within the session: the order the events were written in. */
+  seq: number;
+  at: string;
+  kind: VoiceEventKind;
+  /** Already sanitized and at most 2 KB serialized (lib/voice/session-log.ts). */
+  data: Record<string, unknown>;
+}
+
+/** Per-session cap on event rows, so a misbehaving tab cannot grow the log without bound. */
+export const MAX_EVENTS_PER_SESSION = 500;
+
+/**
+ * Append one event to a session's log with the next `seq`. Null when the
+ * session does not exist or its log is at the cap. Runs in the session's own
+ * tenant scope: it is written from requests, the sideband's socket and the
+ * reaper alike.
+ */
+export async function insertVoiceSessionEvent(row: Omit<VoiceSessionEventRow, 'id' | 'seq' | 'at'>): Promise<VoiceSessionEventRow | null> {
+  const at = clock.nowIso();
+  if (config.mock.aurora) {
+    const { runAsSystem } = await import('./db-tenant.js');
+    return runAsSystem(() => {
+      if (!voiceSessions.rows().some((r) => r.id === row.session_id)) return null;
+      const seq = voiceSessionEvents.rows().filter((r) => r.session_id === row.session_id).length + 1;
+      if (seq > MAX_EVENTS_PER_SESSION) return null;
+      const full: VoiceSessionEventRow = { ...row, id: randomUUID(), seq, at, data: { ...row.data } };
+      voiceSessionEvents.rows().push(full);
+      return { ...full, data: { ...full.data } };
+    });
+  }
+  const { runWithDbTenant } = await import('./db-tenant.js');
+  return runWithDbTenant(row.tenant, async () => {
+    // The counter is the sequence: one statement, so two writers never share a seq.
+    const bumped = await exec(
+      `UPDATE voice_sessions SET events = events + 1 WHERE id = :sid AND events < ${MAX_EVENTS_PER_SESSION} RETURNING events`,
+      [s('sid', row.session_id)],
+    );
+    const seq = Number(bumped[0]?.['events']);
+    if (!bumped.length || !Number.isFinite(seq)) return null;
+    const full: VoiceSessionEventRow = { ...row, id: randomUUID(), seq, at };
+    await exec(
+      `INSERT INTO voice_session_events (id, session_id, tenant, seq, at, kind, data)
+       VALUES (:id::uuid, :sid, :tenant, :seq, :at::timestamptz, :kind, :data::jsonb)`,
+      [s('id', full.id), s('sid', row.session_id), s('tenant', row.tenant), int('seq', seq), s('at', at), s('kind', row.kind),
+        s('data', JSON.stringify(row.data))],
+    );
+    return full;
+  });
+}
+
+/** One session's log, in `seq` order. The caller has checked who owns the session. */
+export async function listVoiceSessionEvents(sessionId: string): Promise<VoiceSessionEventRow[]> {
+  if (config.mock.aurora) {
+    return voiceSessionEvents.rows().filter((r) => r.session_id === sessionId)
+      .sort((a, b) => a.seq - b.seq).map((r) => ({ ...r, data: { ...r.data } }));
+  }
+  const rows = await exec(
+    `SELECT id::text AS id, session_id, tenant, seq, at::text AS at, kind, data::text AS data
+       FROM voice_session_events WHERE session_id = :sid ORDER BY seq`,
+    [s('sid', sessionId)],
+  );
+  return rows.map((r) => {
+    let data: Record<string, unknown> = {};
+    try { const v = JSON.parse(String(r['data'] ?? '{}')); if (v && typeof v === 'object' && !Array.isArray(v)) data = v; } catch { /* stored by us; never fails */ }
+    return {
+      id: String(r['id']), session_id: String(r['session_id']), tenant: String(r['tenant']), seq: Number(r['seq']),
+      at: String(r['at']), kind: String(r['kind']) as VoiceEventKind, data,
+    };
+  });
+}
+
+/**
+ * Delete every event row written before `before` (the 30-day retention, run by
+ * the voice reaper's sweep). Every tenant's rows: the caller runs as the
+ * system. Returns how many went.
+ */
+export async function deleteVoiceSessionEventsBefore(before: Date): Promise<number> {
+  const cutoff = before.getTime();
+  if (config.mock.aurora) {
+    const rows = voiceSessionEvents.rows();
+    let gone = 0;
+    for (let i = rows.length - 1; i >= 0; i -= 1) {
+      if (Date.parse(rows[i]!.at) < cutoff) { rows.splice(i, 1); gone += 1; }
+    }
+    return gone;
+  }
+  const rows = await exec(
+    'DELETE FROM voice_session_events WHERE at < :before::timestamptz RETURNING id',
+    [s('before', before.toISOString())],
+  );
+  return rows.length;
+}
+
+/** A session row as the owner's list shows it: the row plus its last tool call's outcome. */
+export type VoiceSessionListRow = VoiceSessionRow & { last_outcome: VoiceToolOutcome | null };
+
+/**
+ * `userSub`'s own sessions in every tenant, newest first, started at or after
+ * `since` when given. Read as the system, like the daily minutes: the
+ * statement is filtered by the user, and the user is the boundary.
+ */
+export async function listUserVoiceSessions(userSub: string, opts: { since?: Date | null; limit: number }): Promise<VoiceSessionListRow[]> {
+  const limit = Math.max(1, Math.min(100, Math.floor(opts.limit)));
+  const from = opts.since ? opts.since.getTime() : null;
+  const { runAsSystem } = await import('./db-tenant.js');
+  if (config.mock.aurora) {
+    return runAsSystem(() => {
+      const calls = voiceToolCalls.rows();
+      return voiceSessions.rows()
+        .filter((r) => r.user_sub === userSub && (from == null || Date.parse(r.started_at) >= from))
+        .sort((a, b) => Date.parse(b.started_at) - Date.parse(a.started_at) || (a.id < b.id ? 1 : -1))
+        .slice(0, limit)
+        .map((r) => {
+          const mine = calls.filter((c) => c.session_id === r.id);
+          return { ...r, last_outcome: mine.length ? mine[mine.length - 1]!.outcome : null };
+        });
+    });
+  }
+  const rows = await runAsSystem(() => exec(
+    `SELECT ${SELECT},
+        (SELECT t.outcome FROM voice_tool_calls t WHERE t.session_id = voice_sessions.id ORDER BY t.at DESC LIMIT 1) AS last_outcome
+       FROM voice_sessions WHERE user_sub = :sub${from == null ? '' : ' AND started_at >= :since::timestamptz'}
+      ORDER BY started_at DESC, id DESC LIMIT ${limit}`,
+    [s('sub', userSub), ...(from == null ? [] : [s('since', new Date(from).toISOString())])],
+  ));
+  return rows.map((r) => ({ ...toRow(r), last_outcome: (r['last_outcome'] ?? null) as VoiceToolOutcome | null }));
 }

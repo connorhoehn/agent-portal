@@ -107,6 +107,8 @@ export function devboxReaperDeps(): ReaperDeps {
     voiceSweep: async () => {
       const v = await import('../lib/voice/reaper.js');
       await v.sweepVoiceSessions(await v.defaultVoiceReaperDeps());
+      // The session event log's 30 days (lib/voice/session-log.ts).
+      await (await import('../lib/voice/session-log.js')).sweepVoiceEventRetention();
     },
   };
 }

@@ -48,7 +48,8 @@
 --     knowledge_bases.tenant, social_channels.tenant,
 --     access_catalog_items.tenant, access_reviews.tenant,
 --     access_review_items.tenant, assessment_document_mappings.tenant_id,
---     voice_sessions.tenant, voice_tool_calls.tenant (the voice navigator,
+--     voice_sessions.tenant, voice_tool_calls.tenant,
+--     voice_session_events.tenant (the voice navigator,
 --     docs/voice-navigator-spec.md §9),
 --     microvm_sessions.tenant, github_user_grants.tenant (the microVM
 --     runner, docs/microvm-runner-design.md §13), sweep_runs.tenant
@@ -134,6 +135,7 @@ BEGIN
       ('github_user_grants',           'public.app_tenant_visible(tenant)'),
       ('voice_sessions',               'public.app_tenant_visible(tenant)'),
       ('voice_tool_calls',             'public.app_tenant_visible(tenant)'),
+      ('voice_session_events',         'public.app_tenant_visible(tenant)'),
       ('sweep_runs',                   'public.app_tenant_visible(tenant)'),
       -- Two tenant columns.
       ('pipeline_definitions',         'public.app_tenant_visible(tenant) OR public.app_tenant_visible(context_tenant)'),

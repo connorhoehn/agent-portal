@@ -71,3 +71,32 @@ CREATE TABLE IF NOT EXISTS voice_tool_calls (
 );
 
 CREATE INDEX IF NOT EXISTS voice_tool_calls_session_idx ON voice_tool_calls (session_id, at);
+
+-- The session's structured event log (debugging: "what happened in my last
+-- voice session"), read back only by the session's owner through
+-- GET /api/voice/sessions[/:id[/export]|/latest] (middleware/src/routes/voice-log.ts).
+-- One row per event the middleware or the dock records, numbered by `seq`
+-- within the session. `data` is structured and small: never transcript text,
+-- never a tool's arguments (their sha256 only), never a key or a presigned
+-- URL (middleware/src/lib/voice/session-log.ts sanitizes every row before it
+-- is written). At most 500 rows per session (`voice_sessions.events` is the
+-- counter the insert bumps), and rows older than 30 days are deleted by the
+-- voice reaper's sweep.
+ALTER TABLE voice_sessions ADD COLUMN IF NOT EXISTS events INTEGER NOT NULL DEFAULT 0 CHECK (events >= 0);
+
+CREATE TABLE IF NOT EXISTS voice_session_events (
+  id          UUID        PRIMARY KEY,
+  session_id  TEXT        NOT NULL REFERENCES voice_sessions (id) ON DELETE CASCADE,
+  -- The session's tenant, copied so the row-level policy needs no join.
+  tenant      TEXT        NOT NULL,
+  seq         INTEGER     NOT NULL CHECK (seq BETWEEN 1 AND 500),
+  at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  kind        TEXT        NOT NULL CHECK (kind IN ('minted', 'started', 'delegation', 'tool-call', 'tool-result', 'refused',
+                            'confirm-shown', 'confirmed', 'cancelled', 'usage', 'sideband', 'reaper', 'closed', 'error', 'client')),
+  -- The writer caps the compact JSON at 2 KB; jsonb's text form adds a space
+  -- after every colon and comma, so the backstop here is twice that.
+  data        JSONB       NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(data) = 'object' AND octet_length(data::text) <= 4096),
+  UNIQUE (session_id, seq)
+);
+
+CREATE INDEX IF NOT EXISTS voice_session_events_at_idx ON voice_session_events (at);
