@@ -10,22 +10,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { VOICE_PLANNERS, VOICE_RUNNERS } from '../actions.ts';
-import { accessRequestHref, BUDGET_READ_ITEM_ID, planPreparedCall, prepareToolCall, ResultMemory, runPreparedCall, type CallAccess, type ComputeAccess, type PresenceAccess, type SocialAccess, type ToolResult, type VoiceComputer } from '../tools.ts';
-import { middlewareVoice, PALETTE, toolContext, type LoggedRequest } from './voiceHarness.ts';
-import { pageContextNote, type PublishedPage } from '../pageContext.ts';
-import type { Action } from '../../capabilities';
-
-interface World {
-  /** What this persona's own GETs answer, by path prefix. */
-  reads: Record<string, unknown>;
-  computers: VoiceComputer[];
-  roster: PresenceAccess;
-  allow: Action[];
-  social: boolean;
-  socialRequestItemId: string | null;
-  /** What this persona's initiative page rendered (G21): the page context the dock may read with scope "this-page". */
-  page: PublishedPage;
-}
+import { planPreparedCall, prepareToolCall, runPreparedCall, type SocialAccess } from '../tools.ts';
+import { middlewareVoice, toolContext, type LoggedRequest } from './voiceHarness.ts';
+import { pageContextNote } from '../pageContext.ts';
+import { queueWorkKinds } from '../catalogue.ts';
+import { assertPersonaProperty, runAs, strings, type World } from './personaProperty.ts';
 
 const SID = (c: string) => c.repeat(40);
 
@@ -83,38 +72,6 @@ const ELI: World = {
   },
 };
 
-type Mode = 'world' | 'forbidden' | 'down';
-
-/** The persona's fetch: its own reads (or every read 403 / 500), logging what it answered. */
-function worldFetch(world: World, mode: Mode) {
-  const answered: unknown[] = [];
-  const log: LoggedRequest[] = [];
-  const fetch = async (url: string, init?: RequestInit): Promise<Response> => {
-    log.push({ method: init?.method ?? 'GET', url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
-    if (mode !== 'world') return new Response('{}', { status: mode === 'forbidden' ? 403 : 500 });
-    const key = Object.keys(world.reads).find((k) => url === k || url.startsWith(`${k}?`));
-    if (!key) return new Response(JSON.stringify({ error: 'no route' }), { status: 404 });
-    answered.push(world.reads[key]);
-    return new Response(JSON.stringify(world.reads[key]), { status: 200, headers: { 'Content-Type': 'application/json' } });
-  };
-  return { fetch, answered, log };
-}
-
-function compute(world: World): ComputeAccess | null {
-  if (!world.allow.includes('ManageDevbox')) return null;
-  return {
-    canManage: true, computers: () => world.computers,
-    create: async () => { throw new Error('the property never confirms a start'); },
-    remove: async () => { throw new Error('not yours to remove'); },
-    openShell: () => ({ ok: false, reason: 'at-capacity' }),
-    runCommand: async () => { throw new Error('not allowlisted in safe mode'); },
-  };
-}
-
-const social = (world: World): SocialAccess | null => (world.social
-  ? { api: '/api/social/plane', unavailable: null, send: async () => { throw new Error('no receipt'); }, presence: null, deliveries: new Map() } : null);
-const calls: CallAccess = { unavailable: null, active: () => null, callConversation: () => {}, callPeople: () => {} };
-
 /** Arguments that drive each tool to a refusal, an ambiguity or a failure. */
 const VARIANTS: Record<string, unknown[]> = {
   open: [{ page: 'bots' }, { page: 'nowhere' }, { page: 'search', params: { q: 'x' } }, { ref: 'person:p-not-kept' }, { ref: '1' }, { ref: 'initiative:p-sana-alpha' },
@@ -139,7 +96,7 @@ const VARIANTS: Record<string, unknown[]> = {
   queue_work: [{ kind: 'sweep', target: 'vibes' }, { kind: 'bot-run', target: 'nightly' }, { kind: 'bot-run', target: 'unknown thing' }, { kind: 'bot-run', target: 'sana parked' }, { kind: 'pipeline', target: 'ingest' },
     // V2-9: the new kinds, driven to an ambiguity (two of the persona's own rows), nothing found, or the gate.
     { kind: 'job', target: 'sana fix' }, { kind: 'job', target: 'payroll' }, { kind: 'dispatch', target: 'nothing like it' }, { kind: 'dispatch', target: 'Initiative', model: 'gpt-9' },
-    { kind: 'finding-promote', target: 'x' }, { kind: 'finding-analyze', target: '3' }, { kind: 'change-address', target: 'anything' },
+    { kind: 'finding-promote', target: 'x' }, { kind: 'finding-analyze', target: '3' }, { kind: 'change-address', target: 'anything' }, { kind: 'change-rereview', target: 'anything' },
     { kind: 'deck', target: 'Initiative' }, { kind: 'summarize', target: 'Initiative' }, { kind: 'diagram', target: 'Nothing Like It' }, { kind: 'doc', target: 'initiative:p-not-theirs' },
     // G21: page positions past the page, and a page row's name that matches two rows.
     { kind: 'finding-promote', target: 'the seventh', rows: [7] }, { kind: 'finding-promote', target: 'fix', scope: 'this-page' }],
@@ -159,89 +116,16 @@ const VARIANTS: Record<string, unknown[]> = {
   activity: [{ scope: 'missed-calls' }, { scope: 'online', who: 'nobody' }, { scope: 'recent', since: 'tomorrow' }, { scope: 'work', who: 'Someone' }],
 };
 
-/** Keys whose values name a row: a person, a record, a link. */
-const IDENT_KEYS = new Set(['id', 'name', 'title', 'label', 'href', 'ref', 'path', 'initiative', 'initiativeId', 'computerId', 'userId', 'channel', 'item', 'requester', 'for', 'decidedBy', 'bot', 'sweep', 'to', 'with', 'in', 'computer']);
-
-function strings(v: unknown, out: Set<string> = new Set()): Set<string> {
-  if (typeof v === 'string') out.add(v);
-  else if (Array.isArray(v)) v.forEach((x) => strings(x, out));
-  else if (v && typeof v === 'object') Object.values(v).forEach((x) => strings(x, out));
-  return out;
-}
-
-function identifiers(v: unknown, out: string[] = []): string[] {
-  if (Array.isArray(v)) v.forEach((x) => identifiers(x, out));
-  else if (v && typeof v === 'object') {
-    for (const [k, x] of Object.entries(v)) {
-      if (IDENT_KEYS.has(k) && typeof x === 'string') out.push(x);
-      else identifiers(x, out);
-    }
-  }
-  return out;
-}
-
-const capped = (s: string) => (s.length > 120 ? `${s.slice(0, 119)}…` : s);
-
-async function runAs(world: World, mode: Mode, name: string, args: unknown): Promise<{ results: ToolResult[]; universe: Set<string> }> {
-  const { fetch, answered } = worldFetch(world, mode);
-  const ctx = toolContext({
-    role: 'member', allow: world.allow, fetch, compute: compute(world), social: social(world), calls, presence: world.roster,
-    socialRequestItemId: world.socialRequestItemId, results: new ResultMemory(), jobs: { track: () => {} },
-    page: () => world.page,
-  });
-  const results: ToolResult[] = [];
-  const prepared = prepareToolCall(name, args, ctx);
-  if (!prepared.ok) results.push(prepared.result);
-  else {
-    const planned = await planPreparedCall(prepared.call, ctx, VOICE_PLANNERS);
-    if (planned && 'result' in planned) results.push(planned.result);
-    else results.push(await runPreparedCall(prepared.call, ctx, VOICE_RUNNERS, planned?.plan.data));
-  }
-  // What this persona may be told: its own reads, the providers its own shell holds, its own words, and the
-  // request link its own capabilities read named.
-  const universe = strings([answered, world.computers, world.roster.roster(), world.page, args]);
-  // The dock's own fixed words for that link are not a row.
-  if (world.socialRequestItemId) for (const s of [world.socialRequestItemId, accessRequestHref(world.socialRequestItemId), 'Request Social access']) universe.add(s);
-  // And the budgets tier's own request link (budget's offer): fixed words and the catalog item, never a row.
-  for (const s of [BUDGET_READ_ITEM_ID, accessRequestHref(BUDGET_READ_ITEM_ID), 'Request budget visibility']) universe.add(s);
-  // The palette's own pages (open's nearest page) are the UI the persona already sees, not rows.
-  for (const p of PALETTE.pages) { universe.add(p.label); if (p.pageId) universe.add(p.pageId); }
-  return { results, universe };
-}
-
 test('property: a refused, ambiguous or failed payload names only rows that persona\'s own reads returned, and nothing of the other persona', async () => {
   // Every tool an orgiq session is offered, from the catalogue the session is minted with.
   const mw = await middlewareVoice<{ toolsForTenant(t: string): Array<{ name: string }> }>('catalogue.ts');
   const names = mw.toolsForTenant('orgiq').map((t) => t.name);
-  for (const tool of names) assert.ok(VARIANTS[tool], `${tool} has variants in this property`);
-  const worlds = [['sana', SANA, ELI], ['eli', ELI, SANA]] as const;
-  let checked = 0;
-  for (const [who, mine, other] of worlds) {
-    const foreign = new Set([...strings([Object.values(other.reads), other.computers, other.roster.roster(), other.page])].filter((s) => s.length > 3 && !strings([Object.values(mine.reads), mine.computers, mine.roster.roster(), mine.page]).has(s)));
-    for (const tool of names) {
-      for (const args of VARIANTS[tool]!) {
-        for (const mode of ['world', 'forbidden', 'down'] as const) {
-          const { results, universe } = await runAs(mine, mode, tool, args);
-          for (const r of results) {
-            if (r.outcome === 'done' || r.outcome === 'cancelled') continue;
-            checked++;
-            const where = `${who} ${tool} ${JSON.stringify(args)} ${mode}`;
-            for (const id of identifiers(r.output)) {
-              // A typed ref (`kind:id`, catalogue v2) names a row by the id the persona's own read returned.
-              const typed = /^[a-z][a-z-]*:(.+)$/.exec(id)?.[1];
-              const known = (x: string) => universe.has(x) || [...universe].some((u) => capped(u) === x);
-              // A portal link the dock built from such an id (kinds.ts href) names the same row: one of its segments is the id.
-              const linked = id.startsWith('/') && decodeURIComponent(id).split(/[/?=&]/).some((seg) => seg.length > 2 && known(seg.replace(/^[a-z][a-z-]*:/, '')));
-              assert.ok(known(id) || (typed != null && known(typed)) || linked, `${where}: "${id}" is not in this persona's own reads`);
-            }
-            const text = JSON.stringify(r.output) + r.summary;
-            for (const f of foreign) assert.ok(!text.includes(f), `${where}: names the other persona's "${f}"`);
-          }
-        }
-      }
-    }
-  }
-  assert.ok(checked > 60, `the property saw ${checked} refusals, ambiguities and failures`);
+  const stats = await assertPersonaProperty([['sana', SANA, ELI], ['eli', ELI, SANA]], names, VARIANTS);
+  assert.ok(stats.checked > 60, `the property saw ${stats.checked} refusals, ambiguities and failures`);
+  // V2-14: pinned per tool, and per queue_work kind (its refusal payloads).
+  for (const tool of names) assert.ok((stats.perTool.get(tool) ?? 0) > 0, `${tool}: no refused, ambiguous or failed payload was checked`);
+  for (const kind of queueWorkKinds('orgiq')) assert.ok((stats.perQueueKind.get(kind) ?? 0) > 0, `queue_work ${kind}: no refusal payload was checked`);
+  assert.ok(stats.ambiguous > 0 && stats.rowsNamed > 0);
 });
 
 test('confirm-time DM: a refused or mismatched open sends nothing; an ambiguous name opens nothing', async () => {

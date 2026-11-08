@@ -82,7 +82,7 @@ export function refusalNext(tool: string, output: Record<string, unknown>, ctx: 
   const people = tool === 'message' || tool === 'call';
   const refTool = tool === 'get' || tool === 'open' || tool === 'decide' || tool === 'update';
   let fix: string;
-  if (refTool && (code === 'not-found' || code === 'other' || code === 'invalid-arguments') && /\bref\b|\brow\b|result|found no|records are not read/i.test(reason)) {
+  if (refTool && (code === 'not-found' || code === 'other' || code === 'invalid-arguments') && /\bref\b|\brow\b|result|found no [a-z-]+ "[^"]*" that you can read|records are not read/i.test(reason)) {
     return `${REF_SHAPE} To find one, list or search that kind first.${allowedClause('list', ctx)} ${NO_REPEAT}`;
   }
   if (offersAccess && (code === 'role' || code === 'no-grant' || code === 'other')) {

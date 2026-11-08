@@ -488,7 +488,8 @@ const planQueueWork: VoiceToolPlanner = async (args, ctx) => {
 
   const read = await readJson<{ runbooks?: RunbookRow[] }>(ctx, '/api/pipelines/runbooks');
   if (!read.ok) return { result: readFailure('the runbooks', read.status) };
-  const runbooks = read.body.runbooks ?? [];
+  // A row without a title cannot be named (and must not throw the planner).
+  const runbooks = (read.body.runbooks ?? []).filter((r) => r && typeof r.id === 'string' && typeof r.title === 'string');
   const found = matchByName(runbooks, (r) => r.title, target);
   if (found.length === 0) return { result: refused(`No runbook matches "${target}".`, { runbooks: runbooks.slice(0, 10).map((r) => r.title) }) };
   if (found.length > 1) return { result: ambiguous(`Several runbooks match "${target}": ${listOf(found.map((r) => r.title))}. Which one?`, found.map((r) => ({ title: r.title }))) };
