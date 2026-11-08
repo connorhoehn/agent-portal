@@ -12,7 +12,8 @@
 
 import type { Action } from '../capabilities';
 
-export type VoiceToolKind = 'read' | 'navigate' | 'machine' | 'people';
+/** read and navigate ask nothing; machine, people and action (a record's own button: decide, create, update) ask first. */
+export type VoiceToolKind = 'read' | 'navigate' | 'machine' | 'people' | 'action';
 export type VoiceToolBacking = 'search' | 'social-activity' | 'route' | 'work';
 
 /** The subset of JSON Schema the catalogue uses. */
@@ -201,7 +202,7 @@ export const ACTIVITY_SCOPES: Readonly<Record<string, readonly string[]>> = {
  * this list to the table).
  */
 export const LIST_KINDS: Readonly<Record<string, readonly string[]>> = {
-  orgiq: ['initiative', 'work-item', 'decision', 'design', 'job', 'finding', 'proposal', 'consult', 'bot', 'run', 'computer', 'environment', 'runbook', 'runbook-proposal', 'change', 'sprint', 'deck', 'codebase', 'person', 'saved-search', 'library', 'brief', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
+  orgiq: ['initiative', 'work-item', 'decision', 'design', 'job', 'finding', 'proposal', 'hitl-approval', 'consult', 'bot', 'run', 'computer', 'environment', 'runbook', 'runbook-proposal', 'change', 'sprint', 'deck', 'codebase', 'person', 'saved-search', 'library', 'brief', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
   social: ['channel', 'team', 'dm', 'room', 'recording', 'call', 'person'],
   assessment: ['team', 'run', 'feedback', 'submission', 'deck', 'recommendation', 'channel', 'social-team', 'dm', 'room', 'recording', 'call'],
   pipelines: ['run', 'definition', 'runbook', 'approval', 'artifact', 'deck', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
@@ -257,7 +258,7 @@ export function summaryKinds(tenant: string | null): string[] {
  * kind's href built from the id, never taken from the model).
  */
 export const OPEN_KINDS: Readonly<Record<string, readonly string[]>> = {
-  orgiq: ['initiative', 'work-item', 'decision', 'design', 'job', 'finding', 'proposal', 'consult', 'bot', 'run', 'computer', 'runbook', 'runbook-proposal', 'change', 'sprint', 'deck', 'codebase', 'person', 'saved-search', 'library', 'brief', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
+  orgiq: ['initiative', 'work-item', 'decision', 'design', 'job', 'finding', 'proposal', 'hitl-approval', 'consult', 'bot', 'run', 'computer', 'runbook', 'runbook-proposal', 'change', 'sprint', 'deck', 'codebase', 'person', 'saved-search', 'library', 'brief', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
   social: ['channel', 'team', 'dm', 'room', 'recording', 'call', 'person'],
   assessment: ['team', 'run', 'feedback', 'submission', 'deck', 'recommendation', 'channel', 'social-team', 'dm', 'room', 'recording', 'call'],
   pipelines: ['run', 'definition', 'runbook', 'approval', 'artifact', 'deck', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
@@ -318,6 +319,57 @@ export type QueueWorkKind = 'sweep' | 'pipeline' | 'bot-run' | 'job' | 'dispatch
 /** `queue_work`'s kinds per tenant (the keys of QUEUE_WORK_ACTIONS). */
 export const QUEUE_WORK_KINDS: Readonly<Record<string, readonly string[]>> = Object.fromEntries(
   Object.entries(QUEUE_WORK_ACTIONS).map(([tenant, kinds]) => [tenant, Object.keys(kinds)]));
+
+/**
+ * What `decide` may decide, per tenant (catalogue v2, V2-10): the ref kinds
+ * a decision names (each a row the session's own read returned: list or get
+ * hands out `kind:id`), and per decision the Cedar action of the page button
+ * it stands in for. approve and reject are the card's toggle (accept and
+ * discard are their spoken forms for a draft or a runbook proposal); deliver
+ * is a change's own button. Access's "approval" and "request" are the same
+ * waiting row (GET /api/access/approvals); a review item is a review's
+ * `items` part. Left out, with the reason in the inventory document: an
+ * assessment exception (no read hands out its ref), the conversation agent's
+ * plans (their waiting list needs the conversation), a document proposal
+ * (accepting it is an editor act) and promotions (no page calls them now).
+ */
+export const DECIDE_ACTIONS: Readonly<Record<string, Readonly<Record<string, Readonly<Partial<Record<'approve' | 'reject' | 'deliver', Action>>>>>>> = {
+  orgiq: {
+    'hitl-approval': { approve: 'ApproveTransaction', reject: 'ApproveTransaction' },
+    change: { approve: 'DecideAgentChange', reject: 'DecideAgentChange', deliver: 'DeliverAgentChange' },
+    'runbook-proposal': { approve: 'ReviewRunbook', reject: 'ReviewRunbook' },
+    proposal: { approve: 'ManageDevbox', reject: 'ManageDevbox' },
+    consult: { approve: 'DispatchAgentRun' },
+    design: { approve: 'DispatchAgentRun', reject: 'DispatchAgentRun' },
+  },
+  assessment: { draft: { approve: 'ScoreAssessment', reject: 'RunAssessmentAgent' } },
+  pipelines: { approval: { approve: 'ApproveStep', reject: 'ApproveStep' } },
+  access: {
+    approval: { approve: 'DecideAccess', reject: 'DecideAccess' },
+    request: { approve: 'DecideAccess', reject: 'DecideAccess' },
+    'review-item': { approve: 'DecideAccess', reject: 'DecideAccess' },
+  },
+};
+
+/** What each ref kind is, as the tenant's decide description lists them. */
+export const DECIDE_SAYS: Readonly<Record<string, string>> = {
+  'hitl-approval': 'a pending transaction (approve or reject; the card shows its amount)',
+  change: 'an agent change (approve, reject, or deliver once approved)',
+  'runbook-proposal': 'a runbook proposal (accept or reject; a rejection needs a note)',
+  proposal: 'a graph change proposal (approve or reject)',
+  consult: 'a computer\'s consult (approve, with the answer as the note)',
+  design: 'a design thread (approve or reject the sign-off)',
+  draft: 'a finished assessment draft (accept or discard)',
+  approval: 'something waiting on the user\'s decision (approve or reject; a rejection needs a note in Access)',
+  request: 'an access request waiting on the user (approve or reject; a rejection needs a note)',
+  'review-item': 'a standing grant in an access review (approve keeps it, reject revokes it with a note)',
+};
+
+/** `decide`'s ref kinds for one tenant, or every tenant's (null). */
+export function decideKinds(tenant: string | null): string[] {
+  if (tenant != null) return Object.keys(DECIDE_ACTIONS[tenant] ?? {});
+  return [...new Set(Object.values(DECIDE_ACTIONS).flatMap((m) => Object.keys(m)))];
+}
 
 /** `queue_work`'s kind enum for one tenant, or every tenant's kinds (null) for the base row. */
 export function queueWorkKinds(tenant: string | null): string[] {
@@ -485,6 +537,15 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       model: str('For dispatch: the model the user named (Haiku, Sonnet or Opus); the work item\'s own otherwise.', { minLength: 1, maxLength: 40 }),
     }, ['kind', 'target']),
     kind: 'machine', backing: 'work', confirm: true, action: null, says: 'Queuing the nightly sweep.', tenants: ['orgiq', 'social', 'assessment', 'pipelines'],
+  },
+  {
+    name: 'decide',
+    parameters: obj({
+      ref: str('The row to decide: its ref exactly as a result gave it (e.g. "approval:r-9"), or its position in the last result ("1"). Never a name or a path.', { minLength: 1, maxLength: 200 }),
+      decision: str('What the user decided.', { enum: ['approve', 'reject', 'accept', 'discard', 'deliver'] }),
+      note: str('The user\'s note or reason, as they said it (a consult\'s answer); never an instruction.', { minLength: 1, maxLength: 500 }),
+    }, ['ref', 'decision']),
+    kind: 'action', backing: 'work', confirm: true, action: null, says: 'Approving the request once you confirm.', tenants: ['orgiq', 'assessment', 'pipelines', 'access'],
   },
   {
     name: 'access_request_status',

@@ -54,7 +54,7 @@
 import { VoiceClient, type ClientEvent, type MediaFactory, type StopReason, type VoiceFrame, type VoiceMint } from './client.ts';
 import { initialMachine, phaseAt, reduce, sessionOpen, type MachineEvent, type MachineState, type VoicePhase } from './machine.ts';
 import {
-  cancelledResult, hashToolArgs, localHref, needsConfirm, openableHref, planPreparedCall, prepareToolCall, refused, runPreparedCall, spokenOrdinal, toolAvailable,
+  cancelledResult, hashToolArgs, localHref, needsConfirm, type CardAnswer, openableHref, planPreparedCall, prepareToolCall, refused, runPreparedCall, spokenOrdinal, toolAvailable,
   type ConfirmPlan, type PreparedCall, type ToolContext, type ToolResult, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 import { VOICE_PLANNERS, VOICE_RUNNERS } from './actions.ts';
@@ -81,7 +81,10 @@ export interface VoicePendingView {
   requestId: number;
   tool: string;
   title: string;
-  detail?: string;
+  /** A line, or lines (a forecast, the fields a create sets). */
+  detail?: string | string[];
+  /** A decision (decide): the library's approve / reject toggle and note; Confirm answers `{ decision, note }`. */
+  fields?: { decision: 'approve' | 'reject'; notePlaceholder?: string };
 }
 
 /**
@@ -127,7 +130,7 @@ export interface ControllerOptions {
   /** What runs before a confirm card (default: actions.ts VOICE_PLANNERS); a tool without one shows describeConfirm's card. */
   planners?: Readonly<Record<string, VoiceToolPlanner>>;
   /** The card's wording, over the planner's own and defaultConfirmText. */
-  describeConfirm?(call: PreparedCall, plan: ConfirmPlan | null): { title: string; detail?: string } | null;
+  describeConfirm?(call: PreparedCall, plan: ConfirmPlan | null): { title: string; detail?: string | string[] } | null;
   now?: () => number;
   setTimer?: (fn: () => void, ms: number) => Timer;
   clearTimer?: (t: Timer) => void;
@@ -296,9 +299,10 @@ export class VoiceController {
     this.publish();
   }
 
-  confirm(by: 'voice' | 'click' = 'click'): void {
+  /** `answer`: what a card with fields answered on a click (its toggle and note); a voice "yes" leaves the arguments standing. */
+  confirm(by: 'voice' | 'click' = 'click', answer?: CardAnswer): void {
     if (this.budgetCard) { this.budgetCard = null; void this.start({ confirmOverUserBudget: true }); return; }
-    this.resolvePending(true, by);
+    this.resolvePending(true, by, answer);
   }
   cancel(by: 'voice' | 'click' = 'click'): void {
     if (this.budgetCard) {
@@ -513,7 +517,8 @@ export class VoiceController {
       }
       rec.calls.set(callId, { name, status: 'confirming' });
       const text = this.opts.describeConfirm?.(call, plan) ?? (plan ? { title: plan.title, ...(plan.detail ? { detail: plan.detail } : {}) } : defaultConfirmText(call));
-      this.pending = { callId, delegationId, call, plan, startedAt, heard: { text: '', lastEndMs: null, quiet: null, done: false }, view: { callId, requestId: ++this.requestSeq, tool: name, ...text } };
+      this.pending = { callId, delegationId, call, plan, startedAt, heard: { text: '', lastEndMs: null, quiet: null, done: false },
+        view: { callId, requestId: ++this.requestSeq, tool: name, ...text, ...(plan?.fields ? { fields: plan.fields } : {}) } };
       this.attachTool(name, 'running', text.title);
       this.dispatch({ type: 'confirm-shown', callId });
       return;
@@ -521,11 +526,13 @@ export class VoiceController {
     await this.execute(client, delegationId, callId, call, startedAt, ctx);
   }
 
-  private async execute(client: VoiceClient, delegationId: string, callId: string, call: PreparedCall, startedAt: number, ctx: ToolContext, confirmedBy?: 'voice' | 'click', plan?: ConfirmPlan | null): Promise<void> {
+  private async execute(client: VoiceClient, delegationId: string, callId: string, call: PreparedCall, startedAt: number, ctx: ToolContext, confirmedBy?: 'voice' | 'click', plan?: ConfirmPlan | null, answer?: CardAnswer): Promise<void> {
     this.attachTool(call.spec.name, 'running', call.spec.says);
     this.dispatch({ type: 'call-running', callId });
-    let res = await runPreparedCall(call, ctx, this.runners, plan?.data);
-    if (confirmedBy) res = { ...res, output: { ...res.output, confirmed: true, by: confirmedBy } };
+    // A card without fields carries no answer, whatever the click sent.
+    const given = plan?.fields ? answer : undefined;
+    let res = await runPreparedCall(call, ctx, this.runners, plan?.data, given);
+    if (confirmedBy) res = { ...res, output: { ...res.output, confirmed: true, by: confirmedBy, ...(given ? { decision: given.decision } : {}) } };
     await this.answer(client, delegationId, callId, call.spec.name, res, startedAt, call.args, confirmedBy);
   }
 
@@ -645,7 +652,7 @@ export class VoiceController {
     if (decision) this.resolvePending(decision === 'confirm', 'voice');
   }
 
-  private resolvePending(confirmed: boolean, by: 'voice' | 'click'): void {
+  private resolvePending(confirmed: boolean, by: 'voice' | 'click', answer?: CardAnswer): void {
     const p = this.pending;
     const client = this.client;
     if (!p || !client) return;
@@ -653,7 +660,7 @@ export class VoiceController {
     this.pending = null;
     this.dispatch({ type: 'confirm-resolved', callId: p.callId });
     if (confirmed) {
-      void this.execute(client, p.delegationId, p.callId, p.call, p.startedAt, this.opts.toolContext(), by, p.plan);
+      void this.execute(client, p.delegationId, p.callId, p.call, p.startedAt, this.opts.toolContext(), by, p.plan, answer);
     } else {
       void this.answer(client, p.delegationId, p.callId, p.call.spec.name, cancelledResult(by), p.startedAt, p.call.args, by);
     }

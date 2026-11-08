@@ -67,7 +67,7 @@ function fakeSocial(opts: { failSends?: number; presence?: boolean; api?: string
 }
 
 /** What the controller does: prepare, plan (the card), then run with the plan once confirmed. */
-async function confirmAndRun(name: string, args: unknown, ctx: ReturnType<typeof toolContext>): Promise<{ card: { title: string; detail?: string } | null; result: ToolResult }> {
+async function confirmAndRun(name: string, args: unknown, ctx: ReturnType<typeof toolContext>): Promise<{ card: { title: string; detail?: string | string[] } | null; result: ToolResult }> {
   const prepared = prepareToolCall(name, args, ctx);
   if (!prepared.ok) return { card: null, result: prepared.result };
   const planned = await planPreparedCall(prepared.call, ctx, VOICE_PLANNERS);

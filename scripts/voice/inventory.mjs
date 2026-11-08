@@ -302,7 +302,7 @@ const FAMILY_BY_FILE = {
   'approvals.ts': 'approvals', 'sdlc.ts': 'approvals',
   'assessment.ts': 'assessment', 'assessment-drafts.ts': 'assessment', 'assessment-work-graph.ts': 'assessment',
   'pipelines.ts': 'pipelines', 'pipelines-work-graph.ts': 'pipelines', 'social-work-graph.ts': 'social.chat',
-  'voice.ts': 'voice',
+  'voice.ts': 'voice', 'voice-log.ts': 'voice',
   'mock-control.ts': 'dev', 'test-fixtures.ts': 'dev',
   'index.ts': 'health',
 };
@@ -437,6 +437,7 @@ export const V2_RULES = [
   [/^\w+ \/api\/drop\//, 'n/a', null, 'link-token public drop'],
   [/^\w+ \/api\/uploads/, 'n/a', null, 'gateway bearer uploads'],
   // The voice plane itself and the session
+  [/^GET \/api\/voice\/sessions(\/|$)/, 'never', null, 'reading your own voice session log (list, one, latest, export) is a debugging read: the page or curl, never by voice'],
   [/^\w+ \/api\/voice\//, 'n/a', null, 'the dock\'s own mint, events and close'],
   [/^GET \/api\/session\/(me|person|capabilities|users|realtime-token)$/, 'n/a', null, 'the shell reads these before the dock exists'],
   [/^POST \/api\/session\//, 'never', null, 'identity switches end the session (login, role, tenant, masquerade, logout, revoke)'],
@@ -570,6 +571,7 @@ export const V2_RULES = [
   [/^GET \/api\/(search|\w+\/search|social\/plane\/search|assessment\/recordings\/search|observability\/invocations\/search)(\/answer|\/records)?$/, 'read', 'search', 'the tenant index'],
   [/^GET \/api\/(me\/spend|spend|budgets|user-budgets|grants|observability\/cost|ops|devbox\/profiles|sprints\/envelopes)/, 'read', 'budget', 'the budgets read tier'],
   [/^GET \/api\/(work\/summary|work\/findings\/stats|work\/sweeps\/runs|bots\/active-runs|pipelines\/summary|pipelines\/queues|assessment\/rollup|access\/summary|social\/(plane\/)?summary|social\/plane\/active|ingest\/(stats|jobs|queue)|admin\/kb-registry\/health|devbox\/status|local-compute\/nodes|local-compute\/runs|today|work\/suggestions|work\/ask-suggestions|discussions\/unread|observability\/summary|observability\/health)/, 'read', 'summary', 'an aggregate'],
+  [/^GET \/api\/observability\/approvals$/, 'read', 'list', 'the HITL inbox: what waits on the caller (§2.10)'],
   [/^GET \/api\/library\/evals/, 'never', null, 'eval sets are the studio\'s'],
   [/^GET \/api\/(observability|topology|iq\/prompts|capabilities|agents|agent-detail|sessions|rediscovery|promotions|session-bundle|admin\/kb-registry|ingest|connections|knowledge-base|identity|graph\/(entities|skills-graph|projects-graph|help)|scores)/, 'never', null, 'operator consoles, agent-facing reads and leadership data: the page, not the voice'],
   [/^GET \/api\/[\w/-]+\/(stream|events|tail|log\/stream)$/, 'n/a', null, 'a stream'],

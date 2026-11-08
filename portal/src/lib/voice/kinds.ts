@@ -287,6 +287,13 @@ const ORGIQ: readonly KindSpec[] = [
     title: 'rationale', subtitle: 'kind', href: () => '/iq/work/changes',
   },
   {
+    // The HITL inbox (§2.10's one observability read voice lists): what waits on an ApproveTransaction holder; decide's refs.
+    kind: 'hitl-approval', label: 'pending transaction approvals', one: 'pending transaction approval', action: 'ViewObservability',
+    list: { path: '/api/observability/approvals', key: 'approvals', params: { status: 'PENDING' } },
+    id: 'approvalId', title: (r) => r['reason'] ?? (r['agentId'] ? `A transaction from ${String(r['agentId'])}` : undefined), subtitle: 'agentId', at: 'requestedAt',
+    href: () => '/admin/observability/approvals',
+  },
+  {
     kind: 'consult', label: 'consults',
     list: { path: '/api/lab/consults', key: 'consults' }, get: { path: '/api/lab/consults/:id', record: 'consult' },
     title: 'question', subtitle: 'repo', href: () => '/iq/work',
@@ -473,8 +480,15 @@ const ACCESS: readonly KindSpec[] = [
   {
     kind: 'review', label: 'access reviews', action: 'ViewAccess',
     list: { path: '/api/access/reviews', key: 'items' }, get: { path: '/api/access/reviews/:id', record: 'review' },
-    parts: { items: { key: 'items', title: 'user.displayName', subtitle: (r) => [r['tenant'], r['role']].filter(Boolean).join(' ') || undefined, status: (r) => r['decision'] ?? 'undecided' } }, subtitle: 'owner.displayName', at: ['closesAt', 'openedAt'],
+    parts: { items: { key: 'items', kind: 'review-item' } }, subtitle: 'owner.displayName', at: ['closesAt', 'openedAt'],
     href: (id) => `/access/reviews/${enc(id)}`,
+  },
+  {
+    // A review's standing grants, read as its `items` part: each a ref decide can name (`review-item:<review>/<item>`).
+    kind: 'review-item', label: 'review items', action: 'ViewAccess',
+    id: (r) => (typeof r['reviewId'] === 'string' && typeof r['id'] === 'string' ? `${r['reviewId']}/${r['id']}` : undefined),
+    title: 'user.displayName', subtitle: (r) => [r['tenant'], r['role']].filter(Boolean).join(' ') || undefined, status: (r) => r['decision'] ?? 'undecided',
+    href: (id) => `/access/reviews/${enc(id.split('/')[0]!)}`,
   },
   {
     kind: 'delegation', label: 'delegations', action: 'ViewAccess',

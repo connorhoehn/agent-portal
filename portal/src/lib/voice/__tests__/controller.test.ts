@@ -309,7 +309,7 @@ test('computer start: the card lists every initiative, nothing starts before con
     const snap = h.controller.getSnapshot();
     assert.equal(snap.phase, 'confirming');
     assert.equal(snap.pending?.title, 'Start 3 computers');
-    assert.match(snap.pending?.detail ?? '', /^For Alpha, Beta and Gamma\. A running computer bills idle time until it stops\.$/);
+    assert.match(String(snap.pending?.detail ?? ''), /^For Alpha, Beta and Gamma\. A running computer bills idle time until it stops\.$/);
     assert.deepEqual(f.created, [], 'nothing starts before the confirm');
     h.controller.cancel('click');
     await h.clock.advance(2500);

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACTIVITY_SCOPES, COMPUTER_ACTIONS, GET_PARTS, LIST_KINDS, OPEN_KINDS, SUMMARY_KINDS, NAVIGATE_PAGE_IDS, QUEUE_WORK_ACTIONS, QUEUE_WORK_KINDS, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, VOICE_TENANTS, VOICE_TOOLS, activityScopes, getParts, listKinds, openKinds, summaryKinds, navigatePageIds, queueWorkKinds, searchRecordTypes } from '../catalogue.ts';
+import { DECIDE_RESOLVERS } from '../records.ts';
+import { ACTIVITY_SCOPES, COMPUTER_ACTIONS, DECIDE_ACTIONS, GET_PARTS, LIST_KINDS, OPEN_KINDS, SUMMARY_KINDS, NAVIGATE_PAGE_IDS, QUEUE_WORK_ACTIONS, QUEUE_WORK_KINDS, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, VOICE_TENANTS, VOICE_TOOLS, activityScopes, getParts, listKinds, openKinds, summaryKinds, navigatePageIds, queueWorkKinds, searchRecordTypes } from '../catalogue.ts';
 import { voicePage, hashToolArgs } from '../tools.ts';
 import { commandAllowedBy, composeCommand } from '../actions.ts';
 import { PALETTE, middlewareVoice } from './voiceHarness.ts';
@@ -23,6 +24,7 @@ interface MwCatalogue {
   SUMMARY_KINDS: Record<string, readonly string[]>;
   RUN_COMMAND_PHRASES: readonly string[];
   COMPUTER_ACTIONS: Record<string, string>;
+  DECIDE_ACTIONS: Record<string, Record<string, Record<string, string>>>;
   RUN_COMMAND_PHRASE_COMMANDS: Record<string, string>;
   commandAllowedBy(prefixes: readonly string[], command: string): boolean;
 }
@@ -39,6 +41,9 @@ test('the portal catalogue matches the middleware one the session is minted with
     assert.deepEqual(mine.actionBy, theirs.actionBy, `${mine.name} actionBy`);
   }
   assert.deepEqual(COMPUTER_ACTIONS, mw.COMPUTER_ACTIONS);
+  assert.deepEqual(DECIDE_ACTIONS, mw.DECIDE_ACTIONS);
+  // Every kind decide offers has a resolver that reads its row again, and nothing else does.
+  for (const tenant of Object.keys(DECIDE_ACTIONS)) assert.deepEqual(Object.keys(DECIDE_RESOLVERS[tenant] ?? {}).sort(), Object.keys(DECIDE_ACTIONS[tenant]!).sort(), `${tenant} decide resolvers`);
   assert.deepEqual(NAVIGATE_PAGE_IDS.map((p) => ({ id: p.id, tenants: [...p.tenants], roles: p.roles })), mw.NAVIGATE_PAGES.map((p) => ({ id: p.id, tenants: p.tenants, roles: p.roles })));
   assert.deepEqual(OPEN_KINDS, mw.OPEN_KINDS);
   assert.deepEqual([...VOICE_TENANTS], [...mw.VOICE_TENANTS]);

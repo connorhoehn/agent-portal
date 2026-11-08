@@ -235,11 +235,25 @@ export interface ToolResult {
 }
 
 type Args = Record<string, unknown>;
-/** Runs the tool. `plan` is what the tool's planner prepared before the confirm card, when it has one. */
-type Runner = (args: Args, ctx: ToolContext, plan?: unknown) => Promise<ToolResult>;
+
+/** What a card with `fields` answered (ui-components VoiceConfirmCard 2.510.5): the toggle and the note, trimmed. */
+export interface CardAnswer { decision: 'approve' | 'reject'; note: string }
+
+/**
+ * Runs the tool. `plan` is what the tool's planner prepared before the confirm card, when it has one;
+ * `answer` is what a card with fields answered on a click (a voice "yes" leaves it undefined: the arguments stand).
+ */
+type Runner = (args: Args, ctx: ToolContext, plan?: unknown, answer?: CardAnswer) => Promise<ToolResult>;
 
 /** What a confirm card shows, and what the runner will act on once confirmed. */
-export interface ConfirmPlan { title: string; detail?: string; data: unknown }
+export interface ConfirmPlan {
+  title: string;
+  /** One line, or a list of lines (the forecast, the fields a create will set). */
+  detail?: string | string[];
+  /** A decision: the card shows the approve / reject toggle (starting at `decision`) and a one-line note. */
+  fields?: { decision: 'approve' | 'reject'; notePlaceholder?: string };
+  data: unknown;
+}
 
 /**
  * Runs before a confirm tool's card, with no side effect beyond reads: it
@@ -1669,11 +1683,11 @@ function withIgnored(res: ToolResult, ignored: readonly string[] | undefined): T
 }
 
 /** Run a prepared call; a thrown runner becomes `failed`, never an unanswered call. */
-export async function runPreparedCall(call: PreparedCall, ctx: ToolContext, runners: Readonly<Record<string, Runner>> = TOOL_RUNNERS, plan?: unknown): Promise<ToolResult> {
+export async function runPreparedCall(call: PreparedCall, ctx: ToolContext, runners: Readonly<Record<string, Runner>> = TOOL_RUNNERS, plan?: unknown, answer?: CardAnswer): Promise<ToolResult> {
   const runner = runners[call.spec.name];
   if (!runner) return refused(`${call.spec.name} has no runner.`);
   try {
-    return withIgnored(await runner(call.args, ctx, plan), call.ignored);
+    return withIgnored(await runner(call.args, ctx, plan, answer), call.ignored);
   } catch (err) {
     return withIgnored(failed(`The ${call.spec.name.replace(/_/g, ' ')} call failed: ${(err as Error)?.message ?? 'unknown error'}`), call.ignored);
   }

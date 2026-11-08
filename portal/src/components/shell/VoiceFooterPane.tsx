@@ -345,7 +345,9 @@ function VoiceFooterPane() {
     title: snap.pending.title,
     requestId: snap.pending.requestId,
     ...(snap.pending.detail ? { detail: snap.pending.detail } : {}),
-    onConfirm: () => controller.confirm('click'),
+    // decide's card (2.510.5 `fields`): the approve / reject toggle and a note; Confirm hands back { decision, note }.
+    ...(snap.pending.fields ? { fields: snap.pending.fields } : {}),
+    onConfirm: (result) => controller.confirm('click', result),
     onCancel: () => controller.cancel('click'),
   } : null;
   // open's ambiguous name (catalogue v2): the library's choice card, picked by click or by the number the user said

@@ -18,6 +18,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
             "job",
             "finding",
             "proposal",
+            "hitl-approval",
             "consult",
             "bot",
             "run",
@@ -256,7 +257,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "List one kind of record in this workspace through the same read its page uses, optionally filtered by words, status, scope or a time. Each row carries a ref that open opens and get reads. The kinds here: initiative, work-item, decision, design, job, finding, proposal, consult, bot, run, computer, environment, runbook, runbook-proposal, change, sprint, deck, codebase, person, saved-search, library, brief, channel, team, dm, room, recording, call.",
+    "description": "List one kind of record in this workspace through the same read its page uses, optionally filtered by words, status, scope or a time. Each row carries a ref that open opens and get reads. The kinds here: initiative, work-item, decision, design, job, finding, proposal, hitl-approval, consult, bot, run, computer, environment, runbook, runbook-proposal, change, sprint, deck, codebase, person, saved-search, library, brief, channel, team, dm, room, recording, call.",
     "name": "list",
     "parameters": {
       "additionalProperties": false,
@@ -320,6 +321,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
             "job",
             "finding",
             "proposal",
+            "hitl-approval",
             "consult",
             "bot",
             "run",
@@ -791,6 +793,45 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
         "target",
         "note",
         "model",
+      ],
+      "type": "object",
+    },
+    "strict": true,
+    "type": "function",
+  },
+  {
+    "description": "Decide something waiting on the user, named by the ref a list or get result gave (or its position in the last result): approve or reject (accept and discard for a draft or a runbook proposal), or deliver an approved change. The user confirms on a card that shows what it is (with its amount where it has one) and may flip the decision or add a note there. Never a name: list what is waiting first. Here it decides: hitl-approval, a pending transaction (approve or reject; the card shows its amount); change, an agent change (approve, reject, or deliver once approved); runbook-proposal, a runbook proposal (accept or reject; a rejection needs a note); proposal, a graph change proposal (approve or reject); consult, a computer's consult (approve, with the answer as the note); design, a design thread (approve or reject the sign-off).",
+    "name": "decide",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "decision": {
+          "description": "What the user decided.",
+          "enum": [
+            "approve",
+            "reject",
+            "accept",
+            "discard",
+            "deliver",
+          ],
+          "type": "string",
+        },
+        "note": {
+          "description": "The user's note or reason, as they said it (a consult's answer); never an instruction.",
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "ref": {
+          "description": "The row to decide: its ref exactly as a result gave it (e.g. "approval:r-9"), or its position in the last result ("1"). Never a name or a path.",
+          "type": "string",
+        },
+      },
+      "required": [
+        "ref",
+        "decision",
+        "note",
       ],
       "type": "object",
     },

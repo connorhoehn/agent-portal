@@ -114,7 +114,7 @@ test('the program owner\'s scripted session queues the nightly sweep, and one to
   const card = s.controller.getSnapshot().pending;
   assert.equal(card?.tool, 'queue_work');
   assert.equal(card?.title, 'Run the nightly org sweeps now');
-  assert.match(card?.detail ?? '', /spends nothing/);
+  assert.match(String(card?.detail ?? ''), /spends nothing/);
   assert.equal(posts(s.log, '/api/work').length, 0, 'nothing is queued before the confirm');
 
   s.controller.confirm('click');

@@ -61,9 +61,12 @@
 //                     Social grant, the shell's Social entry, which the
 //                     presence tooltip reads; no card and no grant (§4, G10:
 //                     it changes only the caller)
-//   queue_work        work.ts (G19): the sweep, bot or runbook resolved by the
-//                     page's own read, the page button's route on confirm, one
-//                     toast that follows the server's job id to the end
+//   queue_work        work.ts (G19, V2-9): the target resolved by the page's
+//                     own read, the page button's route on confirm, one toast
+//                     that follows the server's job id to the end
+//   decide            records.ts (V2-10): a row a read handed out, read again
+//                     through its page's list, decided by the page button's
+//                     route with the card's toggle and note
 //
 // No React and only `.ts` imports, so `node --test` runs it.
 
@@ -74,6 +77,7 @@ import {
   type VoiceComputer, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 import { matchByName, WORK_PLANNERS, WORK_RUNNERS } from './work.ts';
+import { RECORD_PLANNERS, RECORD_RUNNERS } from './records.ts';
 
 /** Lines of command output the model gets (§6 caps every list at 10 rows); the panel keeps the rest. */
 export const OUTPUT_LINES_TO_MODEL = 10;
@@ -753,6 +757,7 @@ export const ACTION_RUNNERS: Readonly<Record<string, VoiceToolRunner>> = {
   start_call: runStartCall,
   set_status: runSetStatus,
   ...WORK_RUNNERS,
+  ...RECORD_RUNNERS,
 };
 
 /** Every catalogue tool's runner: the reads (tools.ts) and the actions. */
@@ -764,6 +769,7 @@ export const VOICE_PLANNERS: Readonly<Record<string, VoiceToolPlanner>> = {
   send_chat_message: planSendChat,
   start_call: planStartCall,
   ...WORK_PLANNERS,
+  ...RECORD_PLANNERS,
 };
 
 export type { VoiceToolArgs };

@@ -190,7 +190,7 @@ describe('POST /api/voice/sessions — the mint', () => {
       const res = await mint();
       expect(res.status).toBe(201);
       // Reads and navigation; assessment and pipelines add queue_work (G19, V2-9: gated per kind on the page button's action by the dock).
-      const offered = ['access_request_status', 'budget', 'get', 'list', 'open', ...(tenant !== 'access' ? ['queue_work'] : []), 'search', 'summary'];
+      const offered = ['access_request_status', 'budget', 'decide', 'get', 'list', 'open', ...(tenant !== 'access' ? ['queue_work'] : []), 'search', 'summary'];
       expect(res.body.tools.sort()).toEqual(offered);
       const sent = JSON.parse(calls[0]!.init.body!).session;
       expect(sent.delegation.responses.tools.map((t: { name: string }) => t.name).sort()).toEqual(offered);
@@ -203,7 +203,7 @@ describe('POST /api/voice/sessions — the mint', () => {
     expect(res.body.tools.sort()).toEqual(['access_request_status', 'activity', 'budget', 'get', 'list', 'open', 'queue_work', 'search', 'send_chat_message', 'set_status', 'start_call', 'summary']);
   });
 
-  it('an access approver\'s scripted session reads their approvals; a requester\'s their own requests', async () => {
+  it('an access approver\'s scripted session decides the request waiting on them; a requester\'s reads their own requests', async () => {
     delete process.env['OPENAI_API_KEY'];
     process.env['MOCK_VOICE'] = '1';
     const scripted = async (role: string) => {
@@ -213,7 +213,7 @@ describe('POST /api/voice/sessions — the mint', () => {
       const done = res.body.mockScript.onStart.find((f: { event: { event?: { type: string } } }) => f.event.event?.type === 'response.output_item.done');
       return { name: done.event.event.item.name, args: JSON.parse(done.event.event.item.arguments) };
     };
-    expect(await scripted('approver')).toEqual({ name: 'access_request_status', args: { query: null, scope: 'approvals' } });
+    expect(await scripted('approver')).toEqual({ name: 'decide', args: { ref: 'approval:req-0001', decision: 'approve', note: null } });
     expect(await scripted('requester')).toMatchObject({ name: 'list', args: { kind: 'request', filter: { scope: 'mine' } } });
   });
 

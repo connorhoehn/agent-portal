@@ -139,10 +139,11 @@ test('an access approver\'s scripted session answers its approvals from the fixt
     item: { id: 'orgiq:sme', title: 'SME in Work' }, justification: 'x', duration: 'standing', status: 'pending', submittedAt: '2026-11-08T09:00:00Z',
     steps: [{ step: 1, kind: 'manager', status: 'current', eligible: [{ id: 'u-me', displayName: 'Me' }] }], sod: { verdict: 'clear', conflicts: [] } };
   const { mockCallFor } = await middlewareVoice<{ mockCallFor: (t: string, r: string) => Call }>('catalogue.ts');
-  assert.equal(mockCallFor('access', 'approver').arguments['scope'], 'approvals');
+  // The approver's own scripted session decides (V2-10); the read it used to make is given here.
+  const approvals: Call = { name: 'access_request_status', arguments: { query: null, scope: 'approvals' }, said: 'Show me my approvals.' };
   assert.deepEqual(mockCallFor('access', 'requester').arguments['filter'], { q: null, status: null, scope: 'mine', since: null });
   const run = await scriptedRun('access', {
-    role: 'approver', allow: ['ViewAccess', 'RequestAccess', 'DecideAccess', 'VoiceNavigate'], call: mockCallFor('access', 'approver'),
+    role: 'approver', allow: ['ViewAccess', 'RequestAccess', 'DecideAccess', 'VoiceNavigate'], call: approvals,
     routes: [route('GET', '/api/access/approvals', 200, { items: [ada] })],
   });
   assert.deepEqual(run.calls, [['access_request_status', 'done']]);
@@ -150,7 +151,7 @@ test('an access approver\'s scripted session answers its approvals from the fixt
   assert.ok(run.log.some((l) => l.url === '/api/access/approvals'));
   // The same script for a requester (no DecideAccess) is refused with no read at all.
   const req = await scriptedRun('access', {
-    role: 'requester', allow: ['ViewAccess', 'RequestAccess', 'VoiceNavigate'], call: mockCallFor('access', 'approver'),
+    role: 'requester', allow: ['ViewAccess', 'RequestAccess', 'VoiceNavigate'], call: approvals,
     routes: [route('GET', '/api/access/approvals', 200, { items: [ada] })],
   });
   assert.deepEqual(req.calls, [['access_request_status', 'refused']]);
@@ -331,4 +332,27 @@ test('V2-9: an assessor\'s scripted session runs the scorer on a team: the card,
     [['/api/assessment/runs', { command: 'score-dimensions', args: { team: 'TEAM-001' }, team_id: 'TEAM-001' }]]);
   assert.deepEqual(tracked, [{ id: 'run-77', kind: 'assessment-run', href: '/assessment/runs/run-77', follow: { url: '/api/assessment/runs/run-77', reader: 'assessment-run' } }]);
   assert.deepEqual(run.calls, [['queue_work', 'done']]);
+});
+
+test('V2-10: an approver\'s scripted session approves the request waiting on them: the card names it, then the step\'s own decide, once', async () => {
+  const { mockCallFor } = await middlewareVoice<{ mockCallFor: (t: string, r: string) => Call }>('catalogue.ts');
+  const call = mockCallFor('access', 'approver');
+  assert.equal(call.name, 'decide');
+  const waiting = { id: 'req-0001', requester: { id: 'u-rhea', displayName: 'Rhea Castellanos' }, beneficiary: { id: 'u-rhea', displayName: 'Rhea Castellanos' },
+    item: { id: 'role:orgiq:sme', title: 'SME in Work' }, status: 'pending', steps: [{ step: 1, kind: 'manager', status: 'current' }] };
+  let card: unknown = null;
+  const run = await scriptedRun('access', {
+    role: 'approver', allow: ['ViewAccess', 'RequestAccess', 'DecideAccess', 'VoiceNavigate'], call,
+    routes: [route('GET', '/api/access/approvals', 200, { items: [waiting] }), route('POST', '/api/access/requests/req-0001/steps/1/decide', 200, { ...waiting, status: 'approved' })],
+    beforeStop: async (c, _ctx, clock) => {
+      const p = c.getSnapshot().pending!;
+      card = { title: p.title, detail: p.detail, fields: p.fields };
+      c.confirm('click', { decision: 'approve', note: 'Welcome aboard' });
+      await clock.advance(300);
+    },
+  });
+  assert.deepEqual(card, { title: 'Approve SME in Work for Rhea Castellanos', detail: ['Step 1 (manager).'], fields: { decision: 'approve', notePlaceholder: 'Reason (needed to reject)' } });
+  assert.deepEqual(run.log.filter((l) => l.method === 'POST' && !l.url.startsWith('/api/voice/')).map((l) => [l.url, l.body]),
+    [['/api/access/requests/req-0001/steps/1/decide', { decision: 'approve', comment: 'Welcome aboard' }]]);
+  assert.deepEqual(run.calls, [['decide', 'done']]);
 });

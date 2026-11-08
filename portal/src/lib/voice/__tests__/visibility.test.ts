@@ -28,7 +28,8 @@ const SID = (c: string) => c.repeat(40);
 
 /** Sana: a Work member with a Social grant and the Computer Lab. */
 const SANA: World = {
-  allow: ['Search', 'ViewSocial', 'PostMessage', 'StartCall', 'ManageDevbox', 'OpenDevboxShell', 'ManageBots', 'ConnectLocalCompute', 'DispatchAgentRun', 'RunDevboxTask', 'VoiceNavigate'],
+  allow: ['Search', 'ViewSocial', 'PostMessage', 'StartCall', 'ManageDevbox', 'OpenDevboxShell', 'ManageBots', 'ConnectLocalCompute', 'DispatchAgentRun', 'RunDevboxTask',
+    'ApproveTransaction', 'DecideAgentChange', 'DeliverAgentChange', 'ReviewRunbook', 'VoiceNavigate'],
   social: true, socialRequestItemId: null,
   computers: [{ id: 'c-sana-alpha', label: 'sana-alpha-box', sessionId: SID('a'), status: 'running', projectId: 'p-sana-alpha', project: 'Sana Alpha Initiative' }],
   roster: { roster: () => [{ userId: 'u-sana-peer', name: 'Sana Peer Person', status: 'online' }], lobby: () => null },
@@ -44,6 +45,12 @@ const SANA: World = {
     // V2-8: the lab's own fleet read (one box Sana started, one a colleague did) and Sana's paired machines with Local compute's pick list.
     '/api/devbox/boxes': { boxes: [{ id: 'c-sana-alpha', label: 'sana-alpha-box', sessionId: SID('a'), status: 'running', ownerId: 'u-me' }, { id: 'c-sana-other', label: 'sana-other-box', sessionId: SID('b'), status: 'running', ownerId: 'u-sana-colleague' }] },
     '/api/local-compute/nodes': { nodes: [{ id: 'n-sana-1', label: 'sana-laptop', acceptJobs: true }, { id: 'n-sana-2', label: 'sana-parked-laptop', acceptJobs: false }] },
+    // V2-10: the rows decide reads again (a delivered change, a pending transaction, a closed design, a proposal not open for review).
+    '/api/sdlc/changes/cr-sana': { change: { id: 'cr-sana', title: 'Sana tighten retries', status: 'sana_parked' } },
+    '/api/observability/approvals': { approvals: [{ approvalId: 'ha-sana', reason: 'Sana refund batch', payload: { amount: 1200 }, agentId: 'sana-agent' }] },
+    '/api/lab/consults': { consults: [{ id: 'co-sana', question: 'Sana which branch?' }] },
+    '/api/designs/d-sana': { id: 'd-sana', title: 'Sana cache design', status: 'superseded' },
+    '/api/runbooks/proposals/rp-sana': { proposal: { id: 'rp-sana', status: 'withdrawn', kind: 'edit', proposed: { title: 'Sana deploy runbook' } }, runbook: { current_version: 3 }, can_review: false },
     '/api/work/suggestions': { suggestions: [{ workItemId: 'w-sana-1', title: 'Sana fix the login', initiativeName: 'Sana Alpha Initiative' }, { workItemId: 'w-sana-2', title: 'Sana fix the logout', initiativeName: 'Sana Alpha Initiative' }] },
   },
 };
@@ -117,6 +124,10 @@ const VARIANTS: Record<string, unknown[]> = {
     { kind: 'job', target: 'sana fix' }, { kind: 'job', target: 'payroll' }, { kind: 'dispatch', target: 'nothing like it' }, { kind: 'dispatch', target: 'Initiative', model: 'gpt-9' },
     { kind: 'finding-promote', target: 'x' }, { kind: 'finding-analyze', target: '3' }, { kind: 'change-address', target: 'anything' },
     { kind: 'deck', target: 'Initiative' }, { kind: 'summarize', target: 'Initiative' }, { kind: 'diagram', target: 'Nothing Like It' }, { kind: 'doc', target: 'initiative:p-not-theirs' }],
+  // V2-10: a decision on a row the persona's read holds (in a state that refuses), one it does not, a position, a missing note.
+  decide: [{ ref: 'change:cr-sana', decision: 'approve' }, { ref: 'change:cr-not-theirs', decision: 'deliver' }, { ref: 'hitl-approval:ha-sana', decision: 'reject' },
+    { ref: 'hitl-approval:ha-other', decision: 'approve' }, { ref: '1', decision: 'approve' }, { ref: 'consult:co-sana', decision: 'approve' },
+    { ref: 'proposal:gp-x', decision: 'reject' }, { ref: 'design:d-sana', decision: 'approve' }, { ref: 'runbook-proposal:rp-sana', decision: 'accept' }, { ref: 'nonsense', decision: 'approve' }],
   activity: [{ scope: 'missed-calls' }, { scope: 'online', who: 'nobody' }, { scope: 'recent', since: 'tomorrow' }, { scope: 'work', who: 'Someone' }],
 };
 
