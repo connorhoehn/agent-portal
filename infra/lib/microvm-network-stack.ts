@@ -9,6 +9,7 @@ import * as route53resolver from 'aws-cdk-lib/aws-route53resolver';
 import * as targets from 'aws-cdk-lib/aws-route53-targets';
 import type { Construct } from 'constructs';
 import { bedrockModelArns, resolveDevboxModels } from './devbox-stack';
+import { GITHUB_EGRESS_CIDRS } from './github-ip-ranges';
 
 /**
  * The only names a microVM session may reach on the internet
@@ -22,6 +23,9 @@ export const MICROVM_EGRESS_DOMAINS: readonly string[] = [
   'codeload.github.com',
   'objects.githubusercontent.com',
 ];
+
+/** The Suricata IP-set variable that holds GITHUB_EGRESS_CIDRS in the destination rule group. */
+export const GITHUB_NETS_VARIABLE = 'GITHUB_NETS';
 
 /** The private name the BFF callback answers on (`LAB_API_BASE`). */
 export const microvmLabZoneName = (prefix: string): string => `lab.${prefix}.internal`;
@@ -68,8 +72,9 @@ export interface MicrovmNetworkStackProps extends cdk.StackProps {
  *   public subnets  ──runtime CIDRs──▶ firewall endpoint (return path)
  *   bedrock-runtime  interface endpoint in the runtime subnets (never leaves the VPC)
  *
- * Network Firewall (strict order) passes TLS whose SNI is one of
- * MICROVM_EGRESS_DOMAINS and drops everything else, port 80 first; DNS Firewall
+ * Network Firewall (strict order) drops port 80 first, then 443 to any address
+ * outside GitHub's published ranges (GITHUB_EGRESS_CIDRS), then passes TLS whose
+ * SNI is one of MICROVM_EGRESS_DOMAINS and drops everything else; DNS Firewall
  * answers NXDOMAIN for every name not on the same list.
  */
 export class MicrovmNetworkStack extends cdk.Stack {
@@ -126,6 +131,27 @@ export class MicrovmNetworkStack extends cdk.Stack {
         statefulRuleOptions: { ruleOrder: 'STRICT_ORDER' },
       },
     });
+    // Destination allowlist, ahead of the SNI group (sweep 4 M2). SNI is what
+    // the client SAYS; nothing checks the server is GitHub, so a run that knows
+    // an IP could open TLS to it with SNI=github.com. Every 443 flow to an
+    // address outside GitHub's published ranges (lib/github-ip-ranges.ts,
+    // embedded and dated, refreshed by scripts/refresh-github-ip-ranges.mjs) is
+    // dropped on its first packet, before the SNI group can pass it. The
+    // endpoint and the BFF are reached inside the VPC (or by a peering route)
+    // and never cross this firewall.
+    const githubDestinations = new networkfirewall.CfnRuleGroup(this, 'GithubDestinationRuleGroup', {
+      ruleGroupName: `${prefix}-microvm-github-destinations`,
+      type: 'STATEFUL',
+      capacity: 10,
+      description: "Drop TLS (443) to any address outside GitHub's published git/web/api ranges",
+      ruleGroup: {
+        ruleVariables: { ipSets: { [GITHUB_NETS_VARIABLE]: { definition: [...GITHUB_EGRESS_CIDRS] } } },
+        rulesSource: {
+          rulesString: `drop tcp $HOME_NET any -> !$${GITHUB_NETS_VARIABLE} 443 (msg:"microvm: 443 outside GitHub's published ranges"; sid:1000443; rev:1;)`,
+        },
+        statefulRuleOptions: { ruleOrder: 'STRICT_ORDER' },
+      },
+    });
     // Domain allowlist on TLS SNI. ALLOWLIST generates pass rules for these
     // names and drops other TLS; the policy's default drops everything else.
     const sniAllowlist = new networkfirewall.CfnRuleGroup(this, 'SniAllowlistRuleGroup', {
@@ -156,6 +182,7 @@ export class MicrovmNetworkStack extends cdk.Stack {
         statefulDefaultActions: ['aws:drop_established', 'aws:alert_established'],
         statefulRuleGroupReferences: [
           { resourceArn: denyPlainHttp.attrRuleGroupArn, priority: 10 },
+          { resourceArn: githubDestinations.attrRuleGroupArn, priority: 15 },
           { resourceArn: sniAllowlist.attrRuleGroupArn, priority: 20 },
         ],
       },

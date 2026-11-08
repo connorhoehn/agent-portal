@@ -155,6 +155,16 @@ export function microvmHoldExpiresInMs(staleMinutes: number, taskTimeoutS: numbe
   return Math.max(floor, task + BOOT_ALLOWANCE_MS + HOLD_GRACE_MS);
 }
 
+/** The timeout a task is actually given: the profile's, capped by the lifetime policy. */
+export function effectiveTaskTimeoutS(profileTimeoutS: number): number {
+  return Math.min(profileTimeoutS, lifetimePolicy().taskMaxS);
+}
+
+/** Whether the task plus BOOT_ALLOWANCE_MS fits the runtime's maxLifetime (MICROVM_MAX_LIFETIME_S). */
+export function fitsRuntimeLifetime(profileTimeoutS: number, maxLifetimeS: number): boolean {
+  return effectiveTaskTimeoutS(profileTimeoutS) * 1000 + BOOT_ALLOWANCE_MS <= maxLifetimeS * 1000;
+}
+
 // ─── The box's workspace root, as the box reports it ──────────────────────────
 
 /**
@@ -186,7 +196,7 @@ export type HeldBackReason =
   | 'no-microvm-runtime' | 'no-microvm-runs-bucket' | 'no-lab-callback-secret'
   | 'not-microvm-task' | 'payload-resume' | 'payload-box' | 'bot-owned-job'
   | 'no-actor' | 'actor-unknown' | 'actor-not-in-tenant' | 'no-initiative' | 'actor-not-on-initiative'
-  | 'no-profile' | 'profile-not-egress-allowlist' | 'model-not-allowed'
+  | 'no-profile' | 'profile-not-egress-allowlist' | 'model-not-allowed' | 'profile-exceeds-runtime-lifetime'
   | 'no-codebase' | 'ambiguous-codebase' | 'bad-repo' | 'no-repo-credential'
   | 'no-github-identity'
   | 'fleet-paused' | 'initiative-saturated'
@@ -254,6 +264,9 @@ export async function judgeMicrovmJob(job: AgentJob, deps: MicrovmDeps, ctx: { s
   if (profile.network_class !== 'egress-allowlist') return { ok: false, reason: 'profile-not-egress-allowlist' };
   const model = resolveTaskModel(profile, job.payload['model']);
   if (!model.ok) return { ok: false, reason: 'model-not-allowed' };
+  // The task (as it will run) plus boot, clone, push and the PR must fit the
+  // deployed runtime's maxLifetime, or AgentCore ends the session mid-run.
+  if (!fitsRuntimeLifetime(profile.task_timeout_s, cfg.maxLifetimeS)) return { ok: false, reason: 'profile-exceeds-runtime-lifetime' };
 
   // 4. The codebase: one agent project serves the initiative (or the payload's repo picks one).
   const wanted = str(job.payload['repo']);
@@ -301,14 +314,26 @@ export async function judgeMicrovmJob(job: AgentJob, deps: MicrovmDeps, ctx: { s
 
 // ─── The pass ─────────────────────────────────────────────────────────────────
 
-/** The last reason logged per job, so a job parked behind a check is said once per reason. */
+/**
+ * The last reason logged per job, so a job parked behind a check is said once
+ * per reason. Bounded (sweep 4 Low 9): an entry goes when its job starts or
+ * completes, and the oldest goes past HELD_BACK_MEMORY_MAX (a job the fleet
+ * finished or someone deleted is never seen here again). Forgetting costs one
+ * repeated log line, never a decision.
+ */
 const heldBackSaid = new Map<string, string>();
+export const HELD_BACK_MEMORY_MAX = 1000;
 let passing = false;
+
+/** Tests: how many held-back jobs are remembered. */
+export function _heldBackMemorySize(): number { return heldBackSaid.size; }
 
 async function holdBack(job: ClaimedAgentJob, reason: string, deps: MicrovmDeps, metricReason: string = reason): Promise<void> {
   await deps.unclaim(job.id, job.claimToken).catch(() => false);
   if (heldBackSaid.get(job.id) !== reason) {
+    heldBackSaid.delete(job.id); // re-insert at the young end
     heldBackSaid.set(job.id, reason);
+    while (heldBackSaid.size > HELD_BACK_MEMORY_MAX) heldBackSaid.delete(heldBackSaid.keys().next().value!);
     deps.log({ event: 'held_back', jobId: job.id, attempt: job.attempts, reason });
     deps.emitMetric('microvm-held-back', { reason: metricReason, jobId: job.id });
   }
@@ -437,32 +462,13 @@ export async function runMicrovmAttempt(job: ClaimedAgentJob, plan: Plan, deps: 
 
   if (!await deps.stampPlacement(job.id, job.claimToken, boxId, sessionId)) { await release(); return; }
 
-  // The read token: contents:read, one repository, audited with the session.
-  let readToken: RepoToken;
-  try {
-    readToken = await deps.mintRepoToken(repo, { contents: 'read' }, {
-      runRef: job.id, callerSub: plan.actorSub, connectionName: plan.project.connectionName, sessionId,
-    });
-  } catch (err) {
-    say('read_token_failed', { error: (err as Error).message });
-    await release();
-    await holdBack(job, 'repo-token-unavailable', deps);
-    return;
-  }
-  // The run token the broker will hold.
-  await deps.recordCredentialIssue({
-    runRef: job.id, repo, provider: 'lab', permissions: { lab: 'run' }, expiresAt: null,
-    callerSub: plan.actorSub, sessionId, kind: 'run-token',
-  }).catch(() => undefined);
-
-  if (!await deps.markRunning(job.id, job.claimToken)) { await release(); return; }
-
   const branch = plan.resume?.session.branch ?? microvmBranch(cfg.tenant, plan.actorSub, job.id);
   const ref = plan.resume?.session.branch ?? plan.project.defaultBranch;
   const author = { name: plan.grant.github_login, email: plan.grant.noreply_email };
   const putKey = transcriptKey(job.id, attemptN);
 
-  // The claim's heartbeat. If ownership cannot be proven nothing has run: give
+  // The claim's heartbeat (it renews a claimed job as well as a running one).
+  // If ownership cannot be proven nothing has run and nothing was minted: give
   // the money back and leave the job to the stale sweep (as the fleet does).
   let attempt: JobAttempt;
   try {
@@ -473,6 +479,29 @@ export async function runMicrovmAttempt(job: ClaimedAgentJob, plan: Plan, deps: 
     return;
   }
   const guard = attempt;
+
+  // The read token: contents:read, one repository, audited with the session.
+  // Minted only once the claim is proven (sweep 4 Low 8), and while the job is
+  // still `claimed`, so a refusal can still hand the attempt back.
+  let readToken: RepoToken;
+  try {
+    readToken = await deps.mintRepoToken(repo, { contents: 'read' }, {
+      runRef: job.id, callerSub: plan.actorSub, connectionName: plan.project.connectionName, sessionId,
+    });
+  } catch (err) {
+    say('read_token_failed', { error: (err as Error).message });
+    attempt.stop();
+    await release();
+    await holdBack(job, 'repo-token-unavailable', deps);
+    return;
+  }
+  // The run token the broker will hold.
+  await deps.recordCredentialIssue({
+    runRef: job.id, repo, provider: 'lab', permissions: { lab: 'run' }, expiresAt: null,
+    callerSub: plan.actorSub, sessionId, kind: 'run-token',
+  }).catch(() => undefined);
+
+  if (!await deps.markRunning(job.id, job.claimToken)) { attempt.stop(); await release(); return; }
   let invoked = false;
   let bootedAtMs = 0;
   let end: Record<string, unknown> | null = null;
@@ -583,7 +612,7 @@ export async function runMicrovmAttempt(job: ClaimedAgentJob, plan: Plan, deps: 
     }).catch(() => null);
     if (!slotHolder && meter) slotHolder = meter.holdIds[0] ?? null;
     const budget = meter?.boxBudget(job.id) ?? null;
-    const timeoutS = Math.min(plan.profile.task_timeout_s, lifetimePolicy().taskMaxS);
+    const timeoutS = effectiveTaskTimeoutS(plan.profile.task_timeout_s);
     await deps.updateSession(sessionId, { status: 'running', started_at: iso(deps.now()) });
     say('step', { step: 'task', phase: 'start', timeoutS, resumeOf: plan.resume?.original.id ?? null });
     const signal = anySignal([guard.signal, meter?.signal]);
@@ -777,6 +806,7 @@ export async function runMicrovmAttempt(job: ClaimedAgentJob, plan: Plan, deps: 
           ...(cutoff ? { cutoff } : {}),
         },
       }).catch(() => false);
+      heldBackSaid.delete(job.id);
       if (committed) {
         deps.appendEvent(boxId, { type: 'job_finished', jobId: job.id, ok: !error, ts: iso(deps.now()) });
         deps.emitJob(status, job.id, { boxId, runner: 'microvm' });
@@ -850,6 +880,8 @@ export function startMicrovmRunner(opts: { read?: ParameterReader; env?: NodeJS.
       labApiBase: cfg.labApiBase,
       labApiBaseSource: cfg.labApiBaseSource === 'env' ? 'env MICROVM_LAB_API_BASE' : 'default lab.<PROJECT_PREFIX>.internal',
       workspaceRootDefault: cfg.workspaceRoot,
+      maxLifetimeS: cfg.maxLifetimeS,
+      maxLifetimeSource: env['MICROVM_MAX_LIFETIME_S']?.trim() ? 'env MICROVM_MAX_LIFETIME_S' : 'default 3600',
     });
   })();
   return starting;

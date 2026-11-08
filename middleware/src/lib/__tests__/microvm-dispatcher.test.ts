@@ -27,6 +27,7 @@ import { microvmSessionId, MIN_SESSION_ID_LENGTH, microvmBranch } from '../micro
 import {
   judgeMicrovmJob, runMicrovmAttempt, microvmDispatchPass, sweepMicrovmOverruns, tokenCostFromEnd,
   microvmHoldExpiresInMs, startMicrovmRunner, _resetMicrovmStart, _resetLearnedWorkspaceRoots, workspaceRootFor,
+  fitsRuntimeLifetime, BOOT_ALLOWANCE_MS, HELD_BACK_MEMORY_MAX, _heldBackMemorySize,
   type MicrovmDeps,
 } from '../microvm-dispatcher.js';
 import type { ClaimedAgentJob, AgentJob } from '../../providers/agent-jobs.js';
@@ -543,6 +544,75 @@ describe('push lease (expected_head)', () => {
   });
 });
 
+describe('the runtime\'s maxLifetime (sweep 4 M3)', () => {
+  it('holds back a profile whose task plus the boot allowance exceeds MICROVM_MAX_LIFETIME_S, before any money is held', async () => {
+    const long: DevboxProfile = { ...PROFILE, task_timeout_s: 3300 };
+    const h = harness({ profileFor: jest.fn(async () => long) });
+    expect(await judgeMicrovmJob(job(), h.deps, { saturated: [] })).toEqual({ ok: false, reason: 'profile-exceeds-runtime-lifetime' });
+    const claims = [job()];
+    (h.deps.claimNext as jest.Mock).mockImplementation(async () => claims.shift() ?? null);
+    await microvmDispatchPass(h.deps);
+    expect(h.calls.log).toHaveBeenCalledWith(expect.objectContaining({ event: 'held_back', reason: 'profile-exceeds-runtime-lifetime' }));
+    expect(h.calls.reserveSpend).not.toHaveBeenCalled();
+    expect(h.client.send).not.toHaveBeenCalled();
+  });
+
+  it('a runtime deployed for the long profile (MICROVM_MAX_LIFETIME_S=7200) takes it; the default 3600 takes the default profile', async () => {
+    const long: DevboxProfile = { ...PROFILE, task_timeout_s: 3300 };
+    const wide = harness({ profileFor: jest.fn(async () => long) }, {}, { ...ENV, MICROVM_MAX_LIFETIME_S: '7200' });
+    expect((await judgeMicrovmJob(job(), wide.deps, { saturated: [] })).ok).toBe(true);
+    expect(microvmConfig({}).maxLifetimeS).toBe(3600);
+    expect((await judgeMicrovmJob(job(), harness().deps, { saturated: [] })).ok).toBe(true);
+  });
+
+  it('the boundary: task + boot allowance equal to the lifetime fits, one second more does not', () => {
+    const edge = 3600 - BOOT_ALLOWANCE_MS / 1000;
+    expect(fitsRuntimeLifetime(edge, 3600)).toBe(true);
+    expect(fitsRuntimeLifetime(edge + 1, 3600)).toBe(false);
+  });
+});
+
+describe('the read token is minted only once the claim is proven (sweep 4 Low 8)', () => {
+  it('a heartbeat that cannot prove the claim mints nothing and records no credential', async () => {
+    const h = harness({ maintainAttempt: jest.fn(async () => { throw new Error('lost'); }) });
+    await judgeAndRun(h);
+    expect(h.tokens.minted).toHaveLength(0);
+    expect(await listCredentialIssues({ runRef: job().id })).toEqual([]);
+    expect(h.calls.markRunning).not.toHaveBeenCalled();
+    expect(h.client.send).not.toHaveBeenCalled();
+  });
+
+  it('a failed mint stops the heartbeat and hands the still-claimed job back as repo-token-unavailable', async () => {
+    const stop = jest.fn();
+    const h = harness({
+      maintainAttempt: jest.fn(async () => ({ signal: new AbortController().signal, assertLive: () => undefined, run: <T,>(w: () => Promise<T>) => w(), stop })),
+      mintRepoToken: jest.fn(async () => { throw new Error('github down'); }),
+    });
+    await judgeAndRun(h);
+    expect(stop).toHaveBeenCalled();
+    expect(h.calls.unclaim).toHaveBeenCalledWith(job().id, 'clm_private');
+    expect(h.calls.markRunning).not.toHaveBeenCalled();
+    expect(h.calls.log).toHaveBeenCalledWith(expect.objectContaining({ event: 'held_back', reason: 'repo-token-unavailable' }));
+  });
+});
+
+describe('held-back memory (sweep 4 Low 9)', () => {
+  it('is bounded, and a job that runs to completion is forgotten', async () => {
+    const h = harness({ profileFor: jest.fn(async () => null) });
+    const claims = Array.from({ length: HELD_BACK_MEMORY_MAX + 50 }, (_, i) => job({ id: `job-held-${i}` }));
+    (h.deps.claimNext as jest.Mock).mockImplementation(async () => claims.shift() ?? null);
+    while (claims.length) await microvmDispatchPass({ ...h.deps, config: () => ({ ...microvmConfig({ ...ENV }), batch: 200 }) });
+    expect(_heldBackMemorySize()).toBe(HELD_BACK_MEMORY_MAX);
+
+    const before = _heldBackMemorySize();
+    const ran = harness();
+    const v = await judgeMicrovmJob(job({ id: 'job-held-1049' }), ran.deps, { saturated: [] });
+    if (!v.ok) throw new Error(v.reason);
+    await runMicrovmAttempt(job({ id: 'job-held-1049' }), v.plan, ran.deps);
+    expect(_heldBackMemorySize()).toBe(before - 1);
+  });
+});
+
 describe('hold TTL (§6)', () => {
   it('covers the task, the boot allowance and the grace, never under the default', () => {
     expect(microvmHoldExpiresInMs(30, 840)).toBe(35 * 60_000);
@@ -551,7 +621,8 @@ describe('hold TTL (§6)', () => {
   });
 
   it('a profile at the 3,300 s cap gets a hold that outlives its task, on reserveSpend and the meter', async () => {
-    const h = harness({ profileFor: jest.fn(async () => ({ ...PROFILE, task_timeout_s: 3300 })) });
+    // On a runtime deployed for it (microvmTaskTimeoutSeconds=3300 → maxLifetime 7200).
+    const h = harness({ profileFor: jest.fn(async () => ({ ...PROFILE, task_timeout_s: 3300 })) }, {}, { ...ENV, MICROVM_MAX_LIFETIME_S: '7200' });
     await judgeAndRun(h);
     const held = (h.calls.reserveSpend.mock.calls[0]![0] as { expiresInMs: number }).expiresInMs;
     expect(held).toBeGreaterThan(3300_000 + 10 * 60_000);

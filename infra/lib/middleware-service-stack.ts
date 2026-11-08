@@ -136,6 +136,13 @@ export interface MiddlewareServiceStackProps extends cdk.StackProps {
   readonly microvmRuntimeArn?: string;
   readonly microvmEndpointArn?: string;
   readonly microvmRunsBucketName?: string;
+  /**
+   * The microVM runtime's deployed `maxLifetime` in seconds
+   * (MicrovmRuntimeStack.maxLifetime, from the same `microvmTaskTimeoutSeconds`
+   * context). Required with microvmRuntimeArn: the dispatcher holds back a
+   * profile whose task plus boot does not fit (MICROVM_MAX_LIFETIME_S).
+   */
+  readonly microvmMaxLifetimeSeconds?: number;
 }
 
 /**
@@ -978,6 +985,10 @@ export class MiddlewareServiceStack extends cdk.Stack {
       if (!props.microvmEndpointArn || !props.microvmRunsBucketName) {
         throw new Error('microvmRuntimeArn needs microvmEndpointArn and microvmRunsBucketName');
       }
+      const maxLifetime = props.microvmMaxLifetimeSeconds;
+      if (maxLifetime === undefined || !Number.isInteger(maxLifetime) || maxLifetime <= 0) {
+        throw new Error('microvmRuntimeArn needs microvmMaxLifetimeSeconds (MicrovmRuntimeStack.maxLifetime)');
+      }
       // Set from the AgentCore price list (vCPU-second + GB-second, folded to
       // one rate for the runtime's size); 0 until someone does.
       const rate = String(this.node.tryGetContext('microvmComputeUsdPerSecond') ?? '0');
@@ -1016,6 +1027,10 @@ export class MiddlewareServiceStack extends cdk.Stack {
         MICROVM_COMPUTE_USD_PER_SECOND: rate,
         // The same origin the runtime gets as LAB_API_BASE; the boot payload carries it.
         MICROVM_LAB_API_BASE: microvmLabApiBase(prefix),
+        // The runtime's maxLifetime: a profile that cannot finish inside it is held back.
+        MICROVM_MAX_LIFETIME_S: String(maxLifetime),
+        // The secret prefixes the dispatcher pins the actor's token to (<prefix>/github-user/).
+        PROJECT_PREFIX: prefix,
       };
     }
 

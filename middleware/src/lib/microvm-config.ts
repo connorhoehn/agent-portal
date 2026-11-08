@@ -48,6 +48,15 @@ export interface MicrovmConfig {
    * dispatcher uses that (lib/microvm-dispatcher.ts `learnedWorkspaceRoot`).
    */
   workspaceRoot: string;
+  /**
+   * MICROVM_MAX_LIFETIME_S: the deployed runtime's `maxLifetime` (s). infra sets
+   * it from the same `microvmTaskTimeoutSeconds` context the runtime stack
+   * uses; the default is what a default deploy gets (microvmMaxLifetime(840) =
+   * 3600). A profile whose task plus the boot allowance does not fit is held
+   * back (`profile-exceeds-runtime-lifetime`) instead of being killed by
+   * AgentCore mid-run.
+   */
+  maxLifetimeS: number;
   /** MICROVM_MAX_SESSIONS_PER_ACTOR (default 2, §10 item 10). */
   maxSessionsPerActor: number;
   /** MICROVM_RESUME_WINDOW_H (default 72, §9). */
@@ -59,6 +68,9 @@ export interface MicrovmConfig {
   /** The tenant microVM runs are charged to and keyed by (the only tenant that dispatches devbox work). */
   tenant: string;
 }
+
+/** infra/lib/microvm-runtime-stack.ts microvmMaxLifetime(DEVBOX_TASK_TIMEOUT_S = 840). */
+export const DEFAULT_MAX_LIFETIME_S = 3600;
 
 function num(raw: string | undefined, fallback: number, min = 0): number {
   if (raw === undefined || raw.trim() === '') return fallback;
@@ -157,6 +169,7 @@ export function microvmConfig(env: NodeJS.ProcessEnv = process.env): MicrovmConf
     labApiBaseSource: labEnv ? 'env' : 'default',
     callbackSecret: nonEmpty(env['LAB_CALLBACK_SECRET']),
     workspaceRoot: (nonEmpty(env['MICROVM_WORKSPACE_ROOT']) ?? '/tmp/devbox-workspace').replace(/\/+$/, ''),
+    maxLifetimeS: Math.floor(num(env['MICROVM_MAX_LIFETIME_S'], DEFAULT_MAX_LIFETIME_S, 1)),
     maxSessionsPerActor: Math.floor(num(env['MICROVM_MAX_SESSIONS_PER_ACTOR'], 2, 1)),
     resumeWindowH: num(env['MICROVM_RESUME_WINDOW_H'], 72, 0),
     batch: Math.floor(num(env['MICROVM_DISPATCH_BATCH'], 4, 1)),

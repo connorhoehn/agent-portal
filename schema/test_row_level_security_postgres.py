@@ -139,6 +139,14 @@ class RowLevelSecurityPostgresTests(unittest.TestCase):
         self.assertEqual(self.count('orgiq', 'assessment_configuration', "key = 'rls-probe'"), 0)
         self.assertEqual(self.count('assessment', 'assessment_configuration', "key = 'rls-probe'"), 1)
 
+    def test_the_middleware_holds_dml_on_the_newer_tenant_tables(self):
+        # Sweep 4 Low 7: the microVM, voice and sweep tables, after the role files.
+        for table in ('microvm_sessions', 'github_user_grants', 'voice_sessions', 'voice_tool_calls', 'sweep_runs'):
+            got = psql(self.db, ' '.join(f"SELECT has_table_privilege('{APP}', '{table}', '{p}');"
+                                         for p in ('SELECT', 'INSERT', 'UPDATE', 'DELETE')))
+            self.assertEqual(got.split(), ['t', 't', 't', 't'], table)
+        self.assertEqual(self.count('orgiq', 'microvm_sessions'), 0)  # reachable, and filtered
+
     def test_roles_and_the_agents_passthrough(self):
         rows = psql(self.db, "SELECT rolname || ':' || rolbypassrls FROM pg_roles WHERE rolname LIKE 'orgiq\\_%' ORDER BY 1")
         for line in rows.splitlines():

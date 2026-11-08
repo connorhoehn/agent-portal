@@ -810,6 +810,20 @@ class LabBroker:
             return True
         return False
 
+    def stamp_run_ref(self, body: bytes) -> bytes | None:
+        """Every /api/lab/* POST is filed for THIS run (sweep 4 M1): whatever
+        `run_ref` the body names is replaced by the boot's, and the middleware
+        refuses a body run_ref that is not the token's run. None when the body
+        is not one JSON object (refused, never forwarded)."""
+        try:
+            doc = json.loads(body.decode("utf-8")) if body.strip() else {}
+        except ValueError:
+            return None
+        if not isinstance(doc, dict):
+            return None
+        doc["run_ref"] = self.run_ref
+        return json.dumps(doc, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
     def _forward(self, method: str, target: str, body: bytes, headers: dict) -> tuple[int, dict, bytes]:
         url = self.api_base + target
         out = {k: headers[k] for k in self._PASS_REQUEST if k in headers}
@@ -886,6 +900,10 @@ class LabBroker:
             await writer.drain()
         body = await asyncio.wait_for(reader.readexactly(length), timeout=30) if length else b""
         body.decode("utf-8")  # the envelope signs text; refuse anything else (→ 400)
+        if method == "POST" and target.split("?", 1)[0].startswith("/api/lab/"):
+            body = self.stamp_run_ref(body)
+            if body is None:
+                return 400, js, b'{"error":"lab broker: a lab post carries one JSON object"}'
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._forward, method, target, body, headers)
 
@@ -1027,14 +1045,27 @@ async def _head_sha(run: _MicrovmRun, env: dict) -> str | None:
     return sha if re.fullmatch(r"[0-9a-f]{40}", sha) else None
 
 
+# Files a run might dump its environment into: never staged by the snapshot
+# (sweep 4 Low 5). The `claude` child's env still holds the container
+# credential pair by design; a name-based exclude is the cheap half, a scan of
+# the staged diff for the known values is the open half (design §16).
+SNAPSHOT_EXCLUDES = (".env", ".env.*", "*.env", ".envrc", "environ", "*.environ", "env.txt", "env.log")
+
+
+def _snapshot_pathspec() -> list[str]:
+    """`git add -A -- <this>`: the whole tree less SNAPSHOT_EXCLUDES at any depth."""
+    return ["."] + [f":(exclude,glob)**/{pat}" for pat in SNAPSHOT_EXCLUDES]
+
+
 async def _snapshot(run: _MicrovmRun, author: dict | None) -> str | None:
-    """Commit whatever the run left in the tree (as the actor), → head sha."""
+    """Commit whatever the run left in the tree (as the actor), less dumped
+    env files, → head sha."""
     _restore_git_config(run)
     env = _mvm_git_env(run.home, None, author)
     git = _git_bin()
     rc, out = await _exec([git, "-C", run.target, "status", "--porcelain"], cwd=run.home, env=env)
     if rc == 0 and out.strip():
-        rc, _ = await _exec([git, "-C", run.target, "add", "-A"], cwd=run.home, env=env)
+        rc, _ = await _exec([git, "-C", run.target, "add", "-A", "--", *_snapshot_pathspec()], cwd=run.home, env=env)
         if rc == 0:
             rc, _ = await _exec([git, "-C", run.target, "commit", "--no-verify", "-q", "-m",
                                  f"OrgIQ snapshot: run {run.run_ref}"], cwd=run.home, env=env)

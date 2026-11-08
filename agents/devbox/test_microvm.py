@@ -482,6 +482,9 @@ class BrokerTests(MicrovmCase):
                 await broker.stop()
 
         get, post, body = asyncio.run(go())
+        # The broker stamps its own run_ref on a lab post (sweep 4 M1); that is what is signed and sent.
+        body = json.dumps({"kind": "gotcha", "title": "t ✓", "run_ref": "job-42"},
+                          ensure_ascii=False, separators=(",", ":")).encode()
         self.assertEqual(get[0], 200)
         self.assertEqual(get[2], b"# the brief\n")
         self.assertIn("x-brief-sha256", get[1])
@@ -499,6 +502,34 @@ class BrokerTests(MicrovmCase):
             self.assertTrue(ok, who)
             self.assertNotIn("x-lab-auth", h)  # the static header stays off the wire by default
         self.assertEqual(self.up.calls[1]["data"], body)
+
+    def test_a_lab_post_is_filed_for_this_run_whatever_run_ref_it_names(self):
+        """§15: the broker's run cannot post a signal for a different run_ref."""
+        async def go():
+            broker = self._broker()
+            await broker.start()
+            try:
+                out = {}
+                for target, body in (
+                    ("/api/lab/signals", json.dumps({"title": "planted", "run_ref": "job-41"}).encode()),
+                    ("/api/lab/consults", json.dumps({"question": "q?"}).encode()),
+                    ("/api/lab/experiences", b""),
+                ):
+                    out[target] = (await main._unix_http(self.sock, "POST", target, body,
+                                                         {"content-type": "application/json"}))[0]
+                bad = [(await main._unix_http(self.sock, "POST", "/api/lab/signals", raw))[0]
+                       for raw in (b"[1,2]", b"not json", b'"job-41"')]
+                return out, bad
+            finally:
+                await broker.stop()
+
+        out, bad = asyncio.run(go())
+        self.assertEqual(set(out.values()), {200})
+        self.assertEqual(bad, [400, 400, 400])
+        self.assertEqual(len(self.up.calls), 3, "a refused body reached the upstream")
+        for call in self.up.calls:
+            self.assertEqual(json.loads(call["data"])["run_ref"], "job-42")
+        self.assertEqual(json.loads(self.up.calls[0]["data"])["title"], "planted")
 
     def test_runbook_writes_lab_makes_are_forwarded(self):
         async def go():
@@ -753,6 +784,32 @@ echo '{{"type":"result","session_id":"{RESUME}","usage":{{"input_tokens":1,"outp
         self.assertEqual(commit["env"]["GIT_COMMITTER_EMAIL"], "1+ada@users.noreply.github.com")
         self.assertNotIn("Fix the flaky", " ".join(commit["argv"]))  # the prompt is not the message
         self.assertEqual(events[-1]["head_sha"], NEW_HEAD)
+
+    def test_the_snapshot_never_stages_a_dumped_env_file(self):
+        self.git.dirty = True
+        run(self.boot_and_task())
+        add = next(c for c in self.git.calls if "add" in c["argv"])
+        spec = add["argv"][add["argv"].index("--") + 1:]
+        self.assertEqual(spec[0], ".")
+        for pat in (".env", ".env.*", "*.env", ".envrc", "environ"):
+            self.assertIn(f":(exclude,glob)**/{pat}", spec)
+        self.assertTrue(all(p == "." or p.startswith(":(exclude,glob)**/") for p in spec), spec)
+
+    def test_the_exclude_pathspec_is_honoured_by_real_git(self):
+        git = shutil.which("git")
+        if not git:
+            self.skipTest("no git on PATH")
+        import subprocess
+        repo = os.path.join(self.tmp, "real")
+        os.makedirs(os.path.join(repo, "sub"))
+        env = {"PATH": os.environ.get("PATH", ""), "HOME": self.tmp, "GIT_CONFIG_NOSYSTEM": "1"}
+        subprocess.run([git, "init", "-q", repo], check=True, env=env)
+        for name in ("code.py", ".env", "sub/.env.local", "sub/prod.env", "environ", "sub/keep.txt"):
+            Path(repo, name).write_text("x\n")
+        subprocess.run([git, "-C", repo, "add", "-A", "--", *main._snapshot_pathspec()], check=True, env=env)
+        staged = subprocess.run([git, "-C", repo, "diff", "--cached", "--name-only"], check=True, env=env,
+                                capture_output=True, text=True).stdout.split()
+        self.assertEqual(sorted(staged), ["code.py", "sub/keep.txt"])
 
     def test_clean_tree_gets_no_commit_and_default_author(self):
         run(self.boot_and_task())

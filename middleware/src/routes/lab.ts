@@ -27,7 +27,7 @@ import {
 } from '../providers/lab.js';
 import { requireServiceAuth, LAB_CALLBACK_SERVICE_AUTH } from '../lib/service-auth.js';
 import { notifyPipelinesWorkGraphChanged } from '../lib/work-graph/live.js';
-import { runRefFromRequest } from '../lib/run-token.js';
+import { runRefFromRequest, runTokenMatches } from '../lib/run-token.js';
 import { requireInitiativeScope } from '../lib/initiative-scope.js';
 
 export const labRouter = Router();
@@ -63,6 +63,15 @@ async function runAttribution(req: Request, res: Response, body: Record<string, 
   Promise<{ initiativeId?: string; repo?: string } | null> {
   const runRef = await runRefFromRequest(req);
   if (runRef === 'invalid') { res.status(403).json({ error: 'the run token does not verify' }); return null; }
+  // A body that names a run must name the token's run (sweep 4 M1): the
+  // microVM broker stamps its own run_ref on every /api/lab POST, and a box
+  // that sends another job's run_ref beside its own token is refused, never
+  // filed under either run.
+  const bodyRunRef = str(body['run_ref']);
+  if (runRef !== 'none' && bodyRunRef !== undefined && !(await runTokenMatches(req, bodyRunRef))) {
+    res.status(403).json({ error: 'the run token is not for the run_ref this callback names', code: 'RUN_REF_MISMATCH' });
+    return null;
+  }
   if (runRef === 'none') return str(body['repo']) !== undefined ? { repo: str(body['repo'])! } : {};
   const { runbookStore } = await import('../lib/runbooks/store-select.js');
   const brief = await runbookStore().getBrief(runRef).catch(() => null);

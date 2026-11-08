@@ -422,7 +422,8 @@ new DevboxStack(app, stackId(environment, 'Devbox'), {
 //                     and OrgIQ-MicrovmRuntime (`<prefix>_microvm`, runs
 //                     bucket), and the middleware's invoke/stop, GitHub-secret
 //                     and runs-bucket grants. Deploy in that order.
-//   -c microvmTaskTimeoutSeconds=<s>   maxLifetime input (default 840)
+//   -c microvmTaskTimeoutSeconds=<s>   maxLifetime input (default 840); the
+//                     middleware gets the same maxLifetime as MICROVM_MAX_LIFETIME_S
 //   -c microvmComputeUsdPerSecond=<usd> MICROVM_COMPUTE_USD_PER_SECOND (default 0;
 //                     set from the AgentCore price list)
 // The runtime imports the network by stable export names, and the middleware
@@ -549,6 +550,8 @@ const middlewareService = new MiddlewareServiceStack(app, stackId(environment, '
     microvmRuntimeArn: cdk.Fn.importValue(microvmEx.runtimeArn),
     microvmEndpointArn: cdk.Fn.importValue(microvmEx.endpointArn),
     microvmRunsBucketName: cdk.Fn.importValue(microvmEx.runsBucketName),
+    // A synth-time number from the same -c microvmTaskTimeoutSeconds, not an import.
+    microvmMaxLifetimeSeconds: microvmRuntime.maxLifetime,
   }),
 
   description: 'OrgIQ Middleware Service: ECS Fargate + ALB for the Express middleware API',

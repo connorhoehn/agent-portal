@@ -228,6 +228,23 @@ BEGIN
     RAISE EXCEPTION 'public.% carries a tenant but has no row-level security (schema/row_level_security.sql)', bad.relname;
   END LOOP;
 
+  -- A policy that binds the middleware is useless without the grant it filters:
+  -- every table with RLS on must give orgiq_app_middleware its DML (service_roles.sql
+  -- §5 grants schema-wide at apply time, so a table a migration added after the
+  -- last --roles-only apply fails here, by name, instead of on the BFF's first
+  -- write). Sweep 4 Low 7: microvm_sessions, github_user_grants, voice_sessions,
+  -- voice_tool_calls and sweep_runs were the tables that prompted it.
+  FOR bad IN
+    SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') AND c.relrowsecurity
+      AND NOT (has_table_privilege('orgiq_app_middleware', c.oid, 'SELECT')
+               AND has_table_privilege('orgiq_app_middleware', c.oid, 'INSERT')
+               AND has_table_privilege('orgiq_app_middleware', c.oid, 'UPDATE')
+               AND has_table_privilege('orgiq_app_middleware', c.oid, 'DELETE'))
+  LOOP
+    RAISE EXCEPTION 'public.% has row-level security but orgiq_app_middleware lacks its DML: re-apply schema/service_roles.sql', bad.relname;
+  END LOOP;
+
   -- Nothing grants the middleware an unconditional policy.
   FOR bad IN
     SELECT tablename, policyname FROM pg_policies

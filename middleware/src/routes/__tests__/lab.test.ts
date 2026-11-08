@@ -226,6 +226,34 @@ describe('where a callback is filed (DE-44 row 28)', () => {
     const res = await request(agent()).post('/api/lab/consults').set(RUN_TOKEN_HEADER, forged).send({ question: 'May I?' });
     expect(res.status).toBe(403);
   });
+
+  // Sweep 4 M1 (docs/microvm-runner-design.md §15): the broker's run cannot
+  // post a signal, an experience or a consult for a different run_ref.
+  it('refuses a body run_ref that is not the token\'s run, on every lab write, and files nothing', async () => {
+    const token = await mintRunToken('job-run-1');
+    const before = (await listFindings({ sweep: 'lab-signal' })).length;
+    const writes: Array<[string, Record<string, unknown>]> = [
+      ['/api/lab/signals', { severity: 'info', title: 'Planted on another run', run_ref: 'job-run-2' }],
+      ['/api/lab/experiences', { kind: 'gotcha', title: 'Planted lesson', run_ref: 'job-run-2' }],
+      ['/api/lab/consults', { question: 'Planted question?', run_ref: 'job-run-2' }],
+    ];
+    for (const [path, body] of writes) {
+      const res = await request(agent()).post(path).set(RUN_TOKEN_HEADER, token).send(body);
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('RUN_REF_MISMATCH');
+    }
+    expect((await listFindings({ sweep: 'lab-signal' })).length).toBe(before);
+    expect((await listExperiences({})).some((e) => e.title === 'Planted lesson')).toBe(false);
+  });
+
+  it('accepts a body run_ref that is the token\'s own run (what the broker stamps)', async () => {
+    const token = await mintRunToken('job-run-1');
+    const res = await request(agent()).post('/api/lab/experiences').set(RUN_TOKEN_HEADER, token).send({
+      kind: 'gotcha', title: 'Own-run lesson', run_ref: 'job-run-1',
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.experience).toMatchObject({ initiativeId: 'p-auth-migration', repo: 'orgiq-auth-service' });
+  });
 });
 
 describe('answering a consult steers its run (DE-44 row 29)', () => {

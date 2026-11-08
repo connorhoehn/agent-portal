@@ -58,14 +58,28 @@ export async function liveGithubUserGrant(userSub: string): Promise<GithubUserGr
   }
 }
 
+const escapeRe = (v: string): string => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Only a secret under `<PROJECT_PREFIX>/github-user/` (sweep 4 M4). The BFF's
+ * task role may also read `<prefix>/github-app*`, so a grant row naming the
+ * App's secret would otherwise make the PR step send the App's credential to
+ * GitHub as a bearer token. A grant row is data; the prefix is the boundary.
+ */
+export function githubUserSecretArnAllowed(secretArn: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  const prefix = (env['PROJECT_PREFIX'] ?? '').trim() || 'orgiq';
+  const re = new RegExp(`^arn:aws:secretsmanager:[a-z0-9-]+:\\d{12}:secret:${escapeRe(prefix)}/github-user/[A-Za-z0-9_+=.@-][A-Za-z0-9/_+=.@-]*$`);
+  return typeof secretArn === 'string' && secretArn.length <= 2048 && re.test(secretArn);
+}
+
 /**
  * The user token behind a grant. The secret is either the bare token or JSON
  * carrying `access_token` (the OAuth exchange's own field) or `token`. Throws
  * when it cannot be read or holds neither: a PR is never opened as anyone else.
  */
-export async function readGithubUserToken(secretArn: string): Promise<string> {
-  if (!/^arn:aws:secretsmanager:[a-z0-9-]+:\d{12}:secret:[A-Za-z0-9/_+=.@-]+$/.test(secretArn)) {
-    throw new Error('github user grant names no Secrets Manager ARN');
+export async function readGithubUserToken(secretArn: string, env: NodeJS.ProcessEnv = process.env): Promise<string> {
+  if (!githubUserSecretArnAllowed(secretArn, env)) {
+    throw new Error('github user grant names no secret under <prefix>/github-user/');
   }
   const { SecretsManagerClient, GetSecretValueCommand } = await import('@aws-sdk/client-secrets-manager');
   const region = secretArn.split(':')[3] ?? process.env['AWS_REGION'] ?? 'us-east-1';

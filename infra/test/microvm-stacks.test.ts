@@ -12,7 +12,8 @@ import { Template } from 'aws-cdk-lib/assertions';
 import { synthApp } from './helpers/app-assembly';
 import { middlewareServiceStack, newApp, withoutEcrLookup, PREFIX } from './helpers/stacks';
 import { actionsOf, statementsForRole, type Statement } from './helpers/cfn';
-import { MicrovmNetworkStack, MICROVM_EGRESS_DOMAINS } from '../lib/microvm-network-stack';
+import { MicrovmNetworkStack, MICROVM_EGRESS_DOMAINS, GITHUB_NETS_VARIABLE } from '../lib/microvm-network-stack';
+import { GITHUB_EGRESS_CIDRS, GITHUB_IP_RANGES_FETCHED, GITHUB_META_KEYS } from '../lib/github-ip-ranges';
 import {
   MicrovmRuntimeStack, MICROVM_ROLE_SIDS, microvmMaxLifetime, type MicrovmRuntimeStackProps,
 } from '../lib/microvm-runtime-stack';
@@ -206,7 +207,51 @@ describe('network (design §5)', () => {
     const fp = policy.Properties.FirewallPolicy;
     assert.equal(fp.StatefulEngineOptions.RuleOrder, 'STRICT_ORDER');
     assert.ok(fp.StatefulDefaultActions.includes('aws:drop_established'));
-    assert.equal(fp.StatefulRuleGroupReferences.length, 2);
+    assert.equal(fp.StatefulRuleGroupReferences.length, 3);
+  });
+
+  // Sweep 4 M2: SNI is what the client says, so the destination address is checked first.
+  test('443 to any address outside GitHub\'s published ranges is dropped, ahead of the SNI group', () => {
+    const groups = network.findResources('AWS::NetworkFirewall::RuleGroup');
+    const ip = groups.GithubDestinationRuleGroup.Properties.RuleGroup;
+    assert.deepEqual(ip.RuleVariables, { IPSets: { [GITHUB_NETS_VARIABLE]: { Definition: [...GITHUB_EGRESS_CIDRS] } } });
+    assert.equal(ip.RulesSource.RulesString.trim().split('\n').length, 1);
+    assert.match(ip.RulesSource.RulesString, /^drop tcp \$HOME_NET any -> !\$GITHUB_NETS 443 \(/);
+    assert.equal(ip.StatefulRuleOptions.RuleOrder, 'STRICT_ORDER');
+    // Strict order: plain HTTP, then the destination check, then SNI.
+    const [policy] = Object.values<any>(network.findResources('AWS::NetworkFirewall::FirewallPolicy'));
+    const prio = Object.fromEntries(policy.Properties.FirewallPolicy.StatefulRuleGroupReferences
+      .map((r: any) => [r.ResourceArn['Fn::GetAtt'][0], r.Priority]));
+    assert.ok(prio.DenyPlainHttpRuleGroup < prio.GithubDestinationRuleGroup && prio.GithubDestinationRuleGroup < prio.SniAllowlistRuleGroup, JSON.stringify(prio));
+  });
+
+  test('the firewall names only GitHub\'s CIDRs, and the runtime SG only the firewall route, the endpoint SG and the ALB SG', () => {
+    // Every CIDR any rule group mentions is one of GitHub's.
+    const cidr = /\b\d{1,3}(?:\.\d{1,3}){3}\/\d{1,2}\b/g;
+    const named = new Set(JSON.stringify(network.findResources('AWS::NetworkFirewall::RuleGroup')).match(cidr) ?? []);
+    assert.deepEqual([...named].sort(), [...GITHUB_EGRESS_CIDRS].sort());
+    // The list is GitHub-only, IPv4, collapsed, dated, from git + web + api.
+    assert.deepEqual([...GITHUB_META_KEYS], ['git', 'web', 'api']);
+    assert.match(GITHUB_IP_RANGES_FETCHED, /^\d{4}-\d{2}-\d{2}$/);
+    assert.ok(GITHUB_EGRESS_CIDRS.length > 3 && GITHUB_EGRESS_CIDRS.every((c) => /^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/.test(c)));
+    for (const known of ['140.82.112.0/20', '185.199.108.0/22', '192.30.252.0/22']) assert.ok(GITHUB_EGRESS_CIDRS.includes(known), known);
+    assert.ok(!GITHUB_EGRESS_CIDRS.includes('0.0.0.0/0'));
+
+    // With the ALB passed: the runtime SG's egress is 0.0.0.0/0:443 (whose only
+    // route is the firewall), the endpoint SG and the ALB SG, nothing else.
+    const app = newApp();
+    const bff = new cdk.Stack(app, 'Bff');
+    const vpc = new ec2.Vpc(bff, 'Vpc', { maxAzs: 2, natGateways: 0 });
+    const albSg = new ec2.SecurityGroup(bff, 'AlbSg', { vpc, allowAllOutbound: false });
+    const alb = new elbv2.ApplicationLoadBalancer(bff, 'Alb', { vpc, securityGroup: albSg });
+    const t = Template.fromStack(new MicrovmNetworkStack(app, 'OrgIQ-MicrovmNetwork', { prefix: PREFIX, alb, albSecurityGroup: albSg }));
+    const [rtId, rtSg] = Object.entries<any>(t.findResources('AWS::EC2::SecurityGroup')).find(([id]) => id.startsWith('RuntimeSecurityGroup'))!;
+    assert.deepEqual(rtSg.Properties.SecurityGroupEgress.map((e: any) => [e.CidrIp, e.FromPort, e.ToPort]), [['0.0.0.0/0', 443, 443]]);
+    const peers = Object.values<any>(t.findResources('AWS::EC2::SecurityGroupEgress'))
+      .filter((r) => JSON.stringify(r.Properties.GroupId).includes(rtId))
+      .map((r) => JSON.stringify(r.Properties.DestinationSecurityGroupId))
+      .map((d) => (d.includes('EndpointSecurityGroup') ? 'endpoint' : d.includes('ImportValue') ? 'alb' : d));
+    assert.deepEqual(peers.sort(), ['alb', 'endpoint']);
   });
 
   test('flow and alert logs go to /orgiq/microvm/egress, kept 30 days', () => {
@@ -292,7 +337,7 @@ describe('middleware task role additions (design §12)', () => {
 
   test('with microvmRuntimeArn: invoke/stop on the runtime and endpoint, the GitHub secrets, runs/ objects, and env', () => {
     const t = Template.fromStack(middlewareServiceStack({ microvmComputeUsdPerSecond: '0.0001' }, {
-      microvmRuntimeArn: RT_ARN, microvmEndpointArn: EP_ARN, microvmRunsBucketName: 'orgiq-microvm-runs-x',
+      microvmRuntimeArn: RT_ARN, microvmEndpointArn: EP_ARN, microvmRunsBucketName: 'orgiq-microvm-runs-x', microvmMaxLifetimeSeconds: 3600,
     }));
     const st = statementsForRole(t, 'orgiq-middleware-task-role');
     assert.deepEqual(sidsOf(t).filter((s) => s?.startsWith('Microvm')).sort(), MICROVM_SIDS);
@@ -314,7 +359,7 @@ describe('middleware task role additions (design §12)', () => {
 
   test('MICROVM_LAB_API_BASE is the same origin the runtime gets as LAB_API_BASE', () => {
     const t = Template.fromStack(middlewareServiceStack({}, {
-      microvmRuntimeArn: RT_ARN, microvmEndpointArn: EP_ARN, microvmRunsBucketName: 'b',
+      microvmRuntimeArn: RT_ARN, microvmEndpointArn: EP_ARN, microvmRunsBucketName: 'b', microvmMaxLifetimeSeconds: 3600,
     }));
     const [rt] = microvmRuntime(runtime);
     const labApiBase = rt.Properties.EnvironmentVariables.LAB_API_BASE;
@@ -328,8 +373,24 @@ describe('middleware task role additions (design §12)', () => {
     assert.ok(JSON.stringify(app.templates['OrgIQ-MiddlewareService']).includes(`"Name":"MICROVM_LAB_API_BASE","Value":"${rtEnv.LAB_API_BASE}"`));
   });
 
-  test('the compute rate defaults to 0 and must be a number', () => {
+  // Sweep 4 M3: the dispatcher must know how long the runtime lets a session live.
+  test('MICROVM_MAX_LIFETIME_S is the runtime\'s maxLifetime, from the same context value', () => {
+    const contexts: Array<Record<string, string>> = [{ microvm: 'true' }, { microvm: 'true', microvmTaskTimeoutSeconds: '3300' }];
+    for (const ctx of contexts) {
+      const app = synthApp(ctx);
+      const maxLifetime = microvmRuntime(app.template('OrgIQ-MicrovmRuntime'))[0].Properties.LifecycleConfiguration.MaxLifetime;
+      assert.equal(maxLifetime, ctx['microvmTaskTimeoutSeconds'] ? 7200 : 3600);
+      const mw = JSON.stringify(app.templates['OrgIQ-MiddlewareService']);
+      assert.ok(mw.includes(`"Name":"MICROVM_MAX_LIFETIME_S","Value":"${maxLifetime}"`), `middleware lacks MICROVM_MAX_LIFETIME_S=${maxLifetime}`);
+      assert.ok(mw.includes('"Name":"PROJECT_PREFIX","Value":"orgiq"'));
+    }
     const props = { microvmRuntimeArn: RT_ARN, microvmEndpointArn: EP_ARN, microvmRunsBucketName: 'b' };
+    assert.throws(() => middlewareServiceStack({}, props), /microvmMaxLifetimeSeconds/);
+    assert.throws(() => middlewareServiceStack({}, { ...props, microvmMaxLifetimeSeconds: 0 }), /microvmMaxLifetimeSeconds/);
+  });
+
+  test('the compute rate defaults to 0 and must be a number', () => {
+    const props = { microvmRuntimeArn: RT_ARN, microvmEndpointArn: EP_ARN, microvmRunsBucketName: 'b', microvmMaxLifetimeSeconds: 3600 };
     const t = Template.fromStack(middlewareServiceStack({}, props));
     assert.ok(JSON.stringify(t.toJSON()).includes('"Name":"MICROVM_COMPUTE_USD_PER_SECOND","Value":"0"'));
     assert.throws(() => middlewareServiceStack({ microvmComputeUsdPerSecond: 'cheap' }, props), /non-negative number/);

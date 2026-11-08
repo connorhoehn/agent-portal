@@ -82,6 +82,8 @@ export class MicrovmRuntimeStack extends cdk.Stack {
   public readonly endpointArn: string;
   public readonly runsBucket: s3.Bucket;
   public readonly executionRole: iam.Role;
+  /** The deployed `maxLifetime` (s): the middleware's MICROVM_MAX_LIFETIME_S (sweep 4 M3). */
+  public readonly maxLifetime: number;
 
   constructor(scope: Construct, id: string, props: MicrovmRuntimeStackProps) {
     super(scope, id, props);
@@ -91,6 +93,7 @@ export class MicrovmRuntimeStack extends cdk.Stack {
     const runtimeName = `${prefix}_microvm`;
     const taskTimeoutSeconds = props.taskTimeoutSeconds ?? DEVBOX_TASK_TIMEOUT_S;
     const maxLifetime = microvmMaxLifetime(taskTimeoutSeconds);
+    this.maxLifetime = maxLifetime;
     const { modelId, smallModelId, allowedModels } = resolveDevboxModels(this, props);
 
     refusePlaintext(this, { labCallbackSecret: props.labCallbackSecret });
