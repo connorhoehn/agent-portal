@@ -181,6 +181,13 @@ export interface ReaperDeps {
    * the housekeeping. Default: none.
    */
   microvmSweep?: (now: number) => Promise<void>;
+  /**
+   * The voice navigator's sweep (docs/voice-navigator-spec.md §7): a voice
+   * session still open past its ceiling plus grace is closed, booked unknown
+   * and hung up (lib/voice/reaper.ts). Run by the leader beside the microVM
+   * sweep. Default: none.
+   */
+  voiceSweep?: (now: number) => Promise<void>;
 }
 
 let _timer: NodeJS.Timeout | null = null;
@@ -210,6 +217,12 @@ export async function sweepOnce(deps: ReaperDeps, now = Date.now(), lease?: Repl
   if (deps.microvmSweep) {
     try { await deps.microvmSweep(now); } catch (err) {
       console.warn('[devbox-reaper] microVM overrun sweep failed:', (err as Error).message);
+    }
+    lease?.assertLive();
+  }
+  if (deps.voiceSweep) {
+    try { await deps.voiceSweep(now); } catch (err) {
+      console.warn('[devbox-reaper] voice session sweep failed:', (err as Error).message);
     }
     lease?.assertLive();
   }

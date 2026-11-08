@@ -660,6 +660,16 @@
             "Application"
           ]
         }
+      },
+      "VoiceNavigate": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
       }
     }
   }

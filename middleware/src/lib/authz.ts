@@ -67,6 +67,7 @@ export const CAPABILITY_ACTIONS = [
   'ConnectLocalCompute', // local-compute.ts — pair/manage your own machine as a fleet node
   'ReviewRunbook',       // runbooks.ts — decide runbook proposals (route scopes to owner / initiative SME; org-leader + admin override)
   'ViewSessionBrief',    // session-briefs.ts — read the brief a run was given, preview a work item's brief
+  'VoiceNavigate',       // voice.ts — mint a voice navigator session (orgiq + social roles, docs/voice-navigator-spec.md §6)
   // Assessment tenant — routes/assessment.ts. Missing from this list, every
   // assessment control hid for every role: the portal's can() read undefined
   // for actions the server never evaluated. See docs/assessment-tenant.md.

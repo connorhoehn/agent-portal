@@ -54,7 +54,10 @@ permit (
     // Edit the Bedrock guardrail (PII filters, denied topics). The guardrail
     // editor is open to org-leader, hr-admin and admin (§9 item 8c); everyone
     // with ViewObservability keeps the read-only detail view.
-    OrgIQ::Action::"EditGuardrail"
+    OrgIQ::Action::"EditGuardrail",
+    // Mint a voice navigator session (docs/voice-navigator-spec.md §6). Each tool the
+    // voice runs is then gated by the action of the button it stands in for.
+    OrgIQ::Action::"VoiceNavigate"
   ],
   resource
 )

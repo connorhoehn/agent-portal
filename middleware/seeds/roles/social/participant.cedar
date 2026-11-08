@@ -7,7 +7,10 @@ permit (
   action in [
     OrgIQ::Action::"ViewSocial",
     OrgIQ::Action::"PostMessage",
-    OrgIQ::Action::"StartCall"
+    OrgIQ::Action::"StartCall",
+    // Mint a voice navigator session (docs/voice-navigator-spec.md §6). Each tool the
+    // voice runs is then gated by the action of the button it stands in for.
+    OrgIQ::Action::"VoiceNavigate"
   ],
   resource
 )

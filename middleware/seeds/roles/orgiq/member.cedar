@@ -25,7 +25,10 @@ permit (
     OrgIQ::Action::"ConnectLocalCompute",
     // Read the session brief a run was given (GET /api/runs/:ref/brief, the work-item
     // brief preview). Every role that can see work can see what a box was told.
-    OrgIQ::Action::"ViewSessionBrief"
+    OrgIQ::Action::"ViewSessionBrief",
+    // Mint a voice navigator session (docs/voice-navigator-spec.md §6). Each tool the
+    // voice runs is then gated by the action of the button it stands in for.
+    OrgIQ::Action::"VoiceNavigate"
   ],
   resource
 )

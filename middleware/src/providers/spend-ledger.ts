@@ -24,7 +24,10 @@ import { randomUUID } from 'node:crypto';
 
 // 'agent_invoke' (work item 16): a chat invoke or a /summarize run, keyed by its run id (lib/agent-invoke-spend.ts).
 // 'microvm': one microVM runner attempt, keyed `<job>:<attempt>` (lib/microvm-dispatcher.ts).
-export type SpendSource = 'bot_run' | 'job' | 'box_task' | 'agent_loop' | 'agent_project_run' | 'bff_call' | 'agent_invoke' | 'microvm';
+// 'voice_session': one voice navigator session, keyed by its `vs_…` id (routes/voice.ts).
+export type SpendSource = 'bot_run' | 'job' | 'box_task' | 'agent_loop' | 'agent_project_run' | 'bff_call' | 'agent_invoke' | 'microvm' | 'voice_session';
+/** Who served the spend: a model provider (lib/run-cost.ts), or OpenAI for a voice session. */
+export type LedgerProvider = ModelProvider | 'openai';
 export type { CostBasis };
 
 export interface SpendEntry {
@@ -53,7 +56,7 @@ export interface SpendEntry {
    * distinguishable from a Bedrock run that reported $0. Null when the
    * writer does not know; never defaulted, never backfilled.
    */
-  provider?: ModelProvider | null;
+  provider?: LedgerProvider | null;
   /**
    * The compute half of a microVM run (docs/microvm-runner-design.md §6):
    * seconds the session billed (stopped − booted), what that cost at
@@ -68,7 +71,7 @@ export type SpendInput = Omit<SpendEntry, 'costBasis' | 'occurredAt' | 'grantId'
   computeSeconds?: number | null;
   computeUsd?: number | null;
   sessionId?: string | null;
-  provider?: ModelProvider | null;
+  provider?: LedgerProvider | null;
   costBasis?: CostBasis;
   estimatedCostUsd?: number | null;
   grantId?: string | null;

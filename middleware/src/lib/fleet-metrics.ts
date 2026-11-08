@@ -8,7 +8,9 @@ export type FleetMetric =
   | 'devbox-spend' | 'devbox-reaped' | 'devbox-reap-failed' | 'devbox-run-cutoff'
   | 'devbox-fleet-stats' | 'budget-threshold' | 'fleet-switch'
   // The microVM runner (docs/microvm-runner-design.md §11, lib/microvm-dispatcher.ts).
-  | 'microvm-boot-seconds' | 'microvm-run-cutoff' | 'microvm-held-back' | 'microvm-pr-opened';
+  | 'microvm-boot-seconds' | 'microvm-run-cutoff' | 'microvm-held-back' | 'microvm-pr-opened'
+  // The voice navigator (docs/voice-navigator-spec.md §9, routes/voice.ts).
+  | 'voice-sessions-started' | 'voice-session-seconds' | 'voice-tool-calls' | 'voice-unavailable';
 
 /** Every alert, in process: `fleetAlerts.on('alert', (line) => …)`. */
 export const fleetAlerts = new EventEmitter();

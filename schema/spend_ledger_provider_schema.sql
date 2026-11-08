@@ -5,3 +5,11 @@
 -- provider for history. Additive; loads after spend_ledger_schema.sql.
 ALTER TABLE spend_entries ADD COLUMN IF NOT EXISTS provider TEXT
   CHECK (provider IN ('bedrock', 'local', 'simulated'));
+
+-- 'openai': a voice navigator session (docs/voice-navigator-spec.md §7). The
+-- column check above is named by PostgreSQL's default (<table>_<column>_check);
+-- it is replaced here as a named constraint, so adding a provider is a
+-- re-apply of this file.
+ALTER TABLE spend_entries DROP CONSTRAINT IF EXISTS spend_entries_provider_check;
+ALTER TABLE spend_entries ADD CONSTRAINT spend_entries_provider_check
+  CHECK (provider IN ('bedrock', 'local', 'simulated', 'openai'));

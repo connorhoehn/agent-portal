@@ -102,6 +102,11 @@ export function devboxReaperDeps(): ReaperDeps {
       const m = await import('../lib/microvm-dispatcher.js');
       await m.sweepMicrovmOverruns(await m.defaultMicrovmDeps());
     },
+    // Voice navigator sessions past their ceiling + grace (docs/voice-navigator-spec.md §7).
+    voiceSweep: async () => {
+      const v = await import('../lib/voice/reaper.js');
+      await v.sweepVoiceSessions(await v.defaultVoiceReaperDeps());
+    },
   };
 }
 

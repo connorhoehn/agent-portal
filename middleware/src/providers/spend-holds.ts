@@ -421,6 +421,32 @@ export async function settleHold(
   }
 }
 
+/**
+ * Close one hold whose deadline has passed (the voice reaper, after booking an
+ * unknown-cost entry that leaves it held). A hold not yet due is left alone,
+ * so this never frees money early. True when it changed the hold.
+ */
+export async function expireHoldIfDue(holdId: string | null | undefined): Promise<boolean> {
+  if (!holdId) return false;
+  if (config.mock.aurora) {
+    const h = spendHolds.rows().find((x) => x.id === holdId);
+    if (!h || h.status !== 'held' || Date.parse(h.expiresAt) > clock.now().getTime()) return false;
+    h.status = 'expired'; h.closedAt = clock.nowIso();
+    return true;
+  }
+  try {
+    const rows = await exec(
+      `UPDATE spend_holds SET status = 'expired', closed_at = NOW()
+        WHERE id = :id::uuid AND status = 'held' AND expires_at <= NOW() RETURNING id`,
+      [s('id', holdId)],
+    );
+    return rows.length > 0;
+  } catch (err) {
+    if (missingHoldsTable(err)) return false;
+    throw err;
+  }
+}
+
 /** The reconcile tick's statement: holds past their expiry are closed. Returns how many. */
 export async function expireHolds(): Promise<number> {
   if (config.mock.aurora) {

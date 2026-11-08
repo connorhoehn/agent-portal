@@ -54,7 +54,10 @@ permit (
     // Decide runbook proposals. Role-wide here; routes/runbooks.ts scopes it to the
     // runbook's owner or an SME on its initiative (lib/runbook-review.ts), with
     // org-leader and admin overriding.
-    OrgIQ::Action::"ReviewRunbook"
+    OrgIQ::Action::"ReviewRunbook",
+    // Mint a voice navigator session (docs/voice-navigator-spec.md §6). Each tool the
+    // voice runs is then gated by the action of the button it stands in for.
+    OrgIQ::Action::"VoiceNavigate"
   ],
   resource
 )

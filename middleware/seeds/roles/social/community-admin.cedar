@@ -12,7 +12,10 @@ permit (
     OrgIQ::Action::"ManageTeams",
     OrgIQ::Action::"ManageRecordings",
     OrgIQ::Action::"ManageSocialConfig",
-    OrgIQ::Action::"ManageUsers"
+    OrgIQ::Action::"ManageUsers",
+    // Mint a voice navigator session (docs/voice-navigator-spec.md §6). Each tool the
+    // voice runs is then gated by the action of the button it stands in for.
+    OrgIQ::Action::"VoiceNavigate"
   ],
   resource
 )

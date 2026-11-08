@@ -141,7 +141,9 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // a runbook proposal is not (ReviewRunbook, below).
       'ViewSessionBrief',
       // Comment on work items of initiatives they are on (§9 item 8d).
-      'ViewWorkItems'],
+      'ViewWorkItems',
+      // Mint a voice navigator session (docs/voice-navigator-spec.md §6).
+      'VoiceNavigate'],
   },
   'orgiq/sme': {
     tenant: 'orgiq',
@@ -162,6 +164,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // conditioned on onInitiative (shell and task also on ownsBox).
       // ManageSdlcPolicies is deliberately absent (DE-43).
       'OpenDevboxShell', 'RunDevboxTask', 'DecideAgentChange', 'DeliverAgentChange',
+      'VoiceNavigate',
     ],
   },
   'orgiq/program-owner': {
@@ -174,7 +177,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // ManageBudgets only on initiatives they own (a forbid, §9 item 8a).
       'Search', 'ViewOrgChart', 'ViewObservability', 'LabelFeedback', 'ViewWorkItems',
       'DispatchAgentRun', 'ManageSprints', 'ManageBots', 'ManageBudgets',
-      'ViewSessionBrief', 'ReviewRunbook',
+      'ViewSessionBrief', 'ReviewRunbook', 'VoiceNavigate',
     ],
   },
   'orgiq/org-leader': {
@@ -185,7 +188,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       'ApproveTransaction', 'EnterEnvironment', 'ManageEnvironments', 'ConnectLocalCompute',
       'ViewSessionBrief', 'ReviewRunbook',
       // §9 items 8b and 8c: the SDLC policy editor and the guardrail editor.
-      'ManageSdlcPolicies', 'EditGuardrail',
+      'ManageSdlcPolicies', 'EditGuardrail', 'VoiceNavigate',
     ],
   },
   'orgiq/hr-admin': {
@@ -201,6 +204,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // policies: that is ManageSdlcPolicies, which a devbox operator never
       // holds (§9 item 8b).
       'OpenDevboxShell', 'RunDevboxTask', 'DecideAgentChange', 'DeliverAgentChange',
+      'VoiceNavigate',
     ],
   },
   'assessment/assessor': {
@@ -232,17 +236,17 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
   // community admin owns configuration and the tenant's users.
   'social/participant': {
     tenant: 'social',
-    granted: ['ViewSocial', 'PostMessage', 'StartCall'],
+    granted: ['ViewSocial', 'PostMessage', 'StartCall', 'VoiceNavigate'],
   },
   'social/moderator': {
     tenant: 'social',
-    granted: ['ViewSocial', 'PostMessage', 'StartCall', 'ManageChannels', 'ManageTeams', 'ManageRecordings'],
+    granted: ['ViewSocial', 'PostMessage', 'StartCall', 'ManageChannels', 'ManageTeams', 'ManageRecordings', 'VoiceNavigate'],
   },
   'social/community-admin': {
     tenant: 'social',
     granted: [
       'ViewSocial', 'PostMessage', 'StartCall', 'ManageChannels', 'ManageTeams', 'ManageRecordings',
-      'ManageSocialConfig', 'ManageUsers',
+      'ManageSocialConfig', 'ManageUsers', 'VoiceNavigate',
     ],
   },
   // The pipelines tenant (seeds/roles/pipelines/, docs/pipelines-tenant-goal.md
@@ -389,6 +393,16 @@ describe('capability boundaries that must not regress', () => {
     expect(has('assessment/program-lead', 'ManageAssessmentConfig')).toBe(true);
     for (const key of ['assessment/assessor', 'assessment/lead-assessor']) {
       expect(has(key, 'ManageAssessmentConfig')).toBe(false);
+    }
+  });
+
+  test('voice: every orgiq and social role may mint a session, no assessment, pipelines or access role (voice spec §6)', () => {
+    for (const [key, r] of roles) {
+      if (key === '*/admin') continue;
+      expect(has(key, 'VoiceNavigate')).toBe(r.tenant === 'orgiq' || r.tenant === 'social');
+    }
+    for (const key of ['orgiq/member', 'social/participant']) {
+      expect(role(key).cedar).toMatch(new RegExp(`principal\\.tenant == "${role(key).tenant}"`));
     }
   });
 

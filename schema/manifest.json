@@ -329,6 +329,12 @@
       "why": "One row per org-sweep run (started/finished/status/error/findings), so a failed or missing sweep is answerable; agent_findings keeps only what a sweep found. Standalone, no FK, so it can load anywhere. A tenant table, so row_level_security.sql lists it."
     },
     {
+      "id": "voice_sessions",
+      "file": "voice_sessions.sql",
+      "kind": "repeatable",
+      "why": "The voice navigator's sessions and tool-call rows (docs/voice-navigator-spec.md §7, §9): one row per minted session and one per reported tool call, never audio, transcripts or arguments. FKs spend_holds, so it loads after spend_holds_schema.sql. Tenant tables, so row_level_security.sql lists both."
+    },
+    {
       "id": "pipeline_schema",
       "file": "pipeline_schema.sql",
       "kind": "repeatable",
