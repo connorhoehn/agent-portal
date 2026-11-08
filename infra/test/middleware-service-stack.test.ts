@@ -521,3 +521,52 @@ describe('devbox lifetime and git wiring (DE-48, DE-45)', () => {
     assert.ok(!('GITHUB_APP_ID' in env) && !('GITHUB_APP_PRIVATE_KEY' in env));
   });
 });
+
+describe('voice navigator (-c voice=true, docs/voice-navigator-spec.md §6-§8)', () => {
+  const voiceT = Template.fromStack(middlewareServiceStack({ voice: 'true' }));
+  const resourceIds = (t: Template) => Object.keys(t.toJSON().Resources).sort();
+
+  test('OPENAI_API_KEY is a Secrets Manager reference, never plain environment', () => {
+    const c = containerDefinition(voiceT);
+    const s = (c.Secrets as any[]).find((x) => x.Name === 'OPENAI_API_KEY');
+    assert.ok(s, 'OPENAI_API_KEY missing from Secrets');
+    assert.match(JSON.stringify(s.ValueFrom), /:secret:orgiq\/openai\/api-key/);
+    assert.ok(!(c.Environment as any[]).some((e) => e.Name === 'OPENAI_API_KEY'));
+  });
+
+  test('VOICE_* settings are plain environment with the spec defaults', () => {
+    const env = Object.fromEntries((containerDefinition(voiceT).Environment as any[]).map((e) => [e.Name, e.Value]));
+    assert.equal(env.VOICE_USD_PER_MINUTE, '0.05');
+    assert.equal(env.VOICE_SESSION_MAX_MINUTES, '30');
+    assert.equal(env.VOICE_LIVE_MODEL, 'gpt-live-1');
+  });
+
+  test('the task role reads that one secret and nothing else voice-related', () => {
+    // The ECS execution role also gets a statement (it injects the secret at launch); look at the task role only.
+    const hits = Object.values<any>(voiceT.findResources('AWS::IAM::Policy'))
+      .filter((p) => JSON.stringify(p.Properties.Roles).includes('MiddlewareTaskRole')).flatMap((p) =>
+      (p.Properties.PolicyDocument.Statement as any[]).filter((st) => JSON.stringify(st.Resource).includes('openai/api-key')));
+    assert.equal(hits.length, 1);
+    assert.ok(hits[0].Action.includes('secretsmanager:GetSecretValue'));
+    assert.ok(!Array.isArray(hits[0].Resource) || hits[0].Resource.length === 1);
+  });
+
+  test('the secret is imported, not created', () => {
+    const created = Object.values<any>(voiceT.findResources('AWS::SecretsManager::Secret'))
+      .filter((r) => JSON.stringify(r).includes('openai'));
+    assert.equal(created.length, 0);
+  });
+
+  test('without the flag nothing voice-related is synthesised', () => {
+    const off = Template.fromStack(middlewareServiceStack());
+    assert.ok(!JSON.stringify(off.toJSON()).match(/OPENAI|openai|VOICE_/));
+    const on = new Set(resourceIds(voiceT));
+    assert.deepEqual(resourceIds(off).filter((id) => !on.has(id)), [], 'voice must only add, never change, resources');
+  });
+
+  test('connect-src needs no OpenAI origin even with the flag: the mint is proxied (spec §6 Headers)', () => {
+    const { synthApp } = require('./helpers/app-assembly');
+    const t = synthApp({ deployPortal: 'true', allowHttpOrigin: 'true', voice: 'true' }).template('OrgIQ-Portal');
+    assert.ok(!JSON.stringify(t.toJSON()).includes('api.openai.com'));
+  });
+});

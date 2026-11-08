@@ -19,6 +19,7 @@ import { attachFleetAlarms, fleetAlarmsEnabled } from './fleet-alarms';
 import { capabilityParameterNames } from './agentcore-capabilities-stack';
 import { DEVBOX_TASK_TIMEOUT_S } from './devbox-stack';
 import { microvmLabApiBase } from './microvm-network-stack';
+import { contextFlag } from './context-flags';
 import type { Construct } from 'constructs';
 import { trustedService } from './service-trust';
 import {
@@ -1250,6 +1251,30 @@ export class MiddlewareServiceStack extends cdk.Stack {
         this, 'CognitoClientSecretRef', props.cognitoClientSecretArn,
       );
       containerSecrets['COGNITO_CLIENT_SECRET'] = ecs.Secret.fromSecretsManager(cognitoSecretRef);
+    }
+
+    // ── Voice navigator (docs/voice-navigator-spec.md §6-§8), `-c voice=true` ──
+    // OPENAI_API_KEY arrives as a Secrets Manager reference to a secret the
+    // operator creates by hand (`<prefix>/openai/api-key`). The stack imports
+    // it by name: it never creates it, never holds the value, and the task
+    // definition carries only the ARN. The task role may read that one secret.
+    if (contextFlag(this, 'voice', false)) {
+      const openaiKeyRef = secretsmanager.Secret.fromSecretNameV2(
+        this, 'OpenAiApiKeyRef', `${prefix}/openai/api-key`,
+      );
+      openaiKeyRef.grantRead(taskRole);
+      containerSecrets['OPENAI_API_KEY'] = ecs.Secret.fromSecretsManager(openaiKeyRef);
+      const voiceCtx = (k: string, d: string): string => {
+        const v = this.node.tryGetContext(k);
+        return v === undefined || v === null || v === '' ? d : String(v);
+      };
+      Object.assign(environment, {
+        VOICE_USD_PER_MINUTE: voiceCtx('voiceUsdPerMinute', '0.05'),
+        VOICE_SESSION_MINUTES_P75: voiceCtx('voiceSessionMinutesP75', '10'),
+        VOICE_SESSION_MAX_MINUTES: voiceCtx('voiceSessionMaxMinutes', '30'),
+        VOICE_LIVE_MODEL: voiceCtx('voiceModel', 'gpt-live-1'),
+        ...(this.node.tryGetContext('voiceVoice') ? { VOICE_VOICE: String(this.node.tryGetContext('voiceVoice')) } : {}),
+      });
     }
 
     // ── Task size and the one-task rule ────────────────────────────────────

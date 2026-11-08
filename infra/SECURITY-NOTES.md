@@ -122,6 +122,16 @@ The infrastructure half of `docs/microvm-runner-design.md` (§2, §5, §7, §11,
 - **`agents/tests/test_readonly_role.py:405`.** It asserts the old source line `resources: [useReadOnlySecret ? readOnlySecretArn! : props.auroraCredentialsSecretArn]`. Replace it with assertions on `resources: [dbSecretArn]` and `login === 'reader' ? readOnlySecretArn`; the behaviour is covered in `infra/test/agentcore-runtime-stack.test.ts`.
 - **`agents/_shared/db_credentials.py`.** Its docstring says ingestion, graph-builder and scoring write with the admin credential. Now ingestion reads as the reader and the other two use the graph writer.
 
+## Voice navigator
+
+- **The flag.** `-c voice=true` (default off) is read by `OrgIQ-MiddlewareService`. Without it nothing voice-related is synthesised.
+- **The secret.** The stack imports `<prefix>/openai/api-key` by name and never creates it, so no value is ever in a template, a task definition or state. Create it once, before deploying with the flag:
+  `aws secretsmanager create-secret --name <prefix>/openai/api-key --secret-string '<key>'`
+- **Delivery.** `OPENAI_API_KEY` reaches the middleware task as an ECS secret reference (`ValueFrom` is the ARN). The task role gets `secretsmanager:GetSecretValue` on that one secret and no other voice permission.
+- **Never the browser.** Only the middleware reads the key. The browser gets an SDP answer and an opaque session id, never the key or an OpenAI token of its own (spec §6).
+- **Settings.** Plain environment from context: `voiceUsdPerMinute` (0.05), `voiceSessionMinutesP75` (10), `voiceSessionMaxMinutes` (30), `voiceModel` (`gpt-live-1`), `voiceVoice` (unset). They become `VOICE_USD_PER_MINUTE`, `VOICE_SESSION_MINUTES_P75`, `VOICE_SESSION_MAX_MINUTES`, `VOICE_LIVE_MODEL`, `VOICE_VOICE`.
+- **CSP.** No addition. The mint is proxied by the middleware, so `connect-src` does not need `https://api.openai.com`, and WebRTC media travels over ICE/DTLS, which CSP does not govern. A test asserts the portal's policy never names OpenAI. If the data channel proves to need an HTTPS fallback (spec §6, unverified), pass `-c cspConnectOrigins=https://api.openai.com`.
+
 ## Open items
 
 - **SpanProjector and PromptCanary still use the master secret.** They write observability tables and could run as `orgiq_app_middleware` or a new observability role.
