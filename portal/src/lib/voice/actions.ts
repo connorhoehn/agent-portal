@@ -416,10 +416,23 @@ const runOpenShell: VoiceToolRunner = async (args, ctx) => {
   const box = found.computer;
   // The box's own workspace, never a model-supplied path (the schema has no `cwd`; prepareToolCall refuses one).
   const cwd = box.workspace;
+  // G30: one shell per box per session. The library's openShell focuses the tab already open for the box (and reopens
+  // one the user closed), so a repeat never stacks a second PTY; the dock says it was already open.
+  const key = `open-shell:${ctx.sessionId ?? 'dock'}:${box.id}`;
+  const book = ctx.ledger ?? SESSION_SHELLS;
+  const again = book.has(key);
   const opened = c.compute.openShell({ id: box.id, label: box.label, sessionId: box.sessionId, ...(cwd ? { cwd } : {}) });
   if (!opened.ok) return refused('Every shell tab is in use. Ask the user to close one first.', { limit: 'at-capacity' });
+  if (again) {
+    return done('shell_opened', { computerId: box.id, label: box.label, alreadyOpen: true, focused: true, note: 'It was already open in this session; it is focused now. Do not open it again.' },
+      `Shell on ${box.label} was already open; focused it`);
+  }
+  book.set(key, { deliveryId: opened.id, state: 'sent', at: ctx.now().getTime() });
   return done('shell_opened', { computerId: box.id, label: box.label, ...(cwd ? { cwd } : {}) }, `Shell on ${box.label}`);
 };
+
+/** The shell tabs opened per session when the context carries no ledger (tests, a bare call). */
+const SESSION_SHELLS = new Map<string, DeliveryRecord>();
 
 // ── computer run (a phrase, never text) ─────────────────────────────────────
 

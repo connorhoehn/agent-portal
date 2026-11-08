@@ -199,6 +199,8 @@ export interface ToolContext {
   role: string;
   /** The session's own user id (`sub`): what "the caller's own" is checked against (a computer to stop). */
   userId?: string | null;
+  /** The voice session the call belongs to (the controller fills it): per-session memory, such as the shell tabs opened (G30). */
+  sessionId?: string | null;
   /** The dock's action ledger (`once`), held for the dock's lifetime; absent = a module-wide one. */
   ledger?: Map<string, DeliveryRecord> | null;
   palette: Palette;

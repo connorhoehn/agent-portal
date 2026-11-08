@@ -823,8 +823,10 @@ export class VoiceController {
 
   // ── plumbing ─────────────────────────────────────────────────────────────
 
+  /** The page's tool context, with the session this dock minted last (per-session memory: G30's shell tabs). */
   private toolContext(): ToolContext {
-    return this.opts.toolContext();
+    const ctx = this.opts.toolContext();
+    return { ...ctx, sessionId: this.mint?.sessionId ?? null };
   }
 
   private reset(): void {
