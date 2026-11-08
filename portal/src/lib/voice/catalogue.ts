@@ -216,6 +216,16 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
     kind: 'people', backing: 'social-activity', confirm: true, action: 'PostMessage', says: "I'll post that to #platform once you confirm.", tenants: PEOPLE_TENANTS,
   },
   {
+    name: 'start_call',
+    parameters: obj({
+      target: obj({
+        kind: str('Where the call is: a team, a channel, or one person (dm).', { enum: ['team', 'channel', 'dm'] }),
+        name: str('The team, channel or person, as the user said it.', { minLength: 1, maxLength: 120 }),
+      }, ['kind', 'name']),
+    }, ['target']),
+    kind: 'people', backing: 'social-activity', confirm: true, action: 'StartCall', says: "I'll start a huddle in #platform once you confirm.", tenants: PEOPLE_TENANTS,
+  },
+  {
     name: 'set_status',
     parameters: obj({
       status: str('The status.', { enum: ['online', 'away', 'busy', 'offline'] }),

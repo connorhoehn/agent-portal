@@ -16,9 +16,11 @@
 // (ComputeHost's useCompute: computers, create, openShell, the command
 // stream), the shell's one presence announcement (EmbeddedSocial), and the
 // gateway socket through useChat for a post, the same send-and-wait-for-
-// receipt path the composer uses. A run_command's output streams into a
-// read-only output tab in the compute dock (the library's openOutputTab,
-// ui-components 2.510.2), beside the shell tabs, with an "Open shell" action.
+// receipt path the composer uses, and the shell's call host (useSocialCall,
+// the Social pages' call buttons and the footer's Huddle) for start_call. A
+// run_command's output streams into a read-only output tab in the compute dock
+// (the library's openOutputTab, ui-components 2.510.2), beside the shell
+// tabs, with an "Open shell" action.
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocation, useNavigate } from 'react-router';
@@ -34,7 +36,9 @@ import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { useFetch } from '../../hooks/useFetch';
 import { browserMedia } from '../../lib/voice/client';
 import { VoiceController } from '../../lib/voice/controller';
-import { ResultMemory, type CommandOutputView, type ComputeAccess, type DeliveryRecord, type SocialAccess, type ToolContext, type VoiceComputer } from '../../lib/voice/tools';
+import { ResultMemory, type CallAccess, type CommandOutputView, type ComputeAccess, type DeliveryRecord, type SocialAccess, type ToolContext, type VoiceComputer } from '../../lib/voice/tools';
+import { useCallHost } from '../../lib/conversationCall';
+import { useSocialCall } from '../../pages/social/useSocialCall';
 import { sendAndWaitForSocialChatAck, socialChatError } from '../../pages/social/socialChatDelivery';
 import { useEmbeddedSocial } from './EmbeddedSocial';
 import { PAGES, isPageVisible } from './portalCommands';
@@ -52,6 +56,9 @@ function VoiceGate() {
   if (!voiceDockVisible({ flag: true, signedIn: !!session, ready, allowed: can('VoiceNavigate') })) return null;
   return <VoiceFooterPane />;
 }
+
+/** Social actions whose grant comes from the plane outside the Social tenant (routes/social-plane.ts PLANE_ACTIONS). */
+const PLANE_ACTIONS: ReadonlySet<Action> = new Set<Action>(['PostMessage', 'StartCall']);
 
 /** How long a post waits for its conversation's join before giving up. */
 const CHANNEL_JOIN_MS = 8000;
@@ -171,6 +178,19 @@ function VoiceFooterPane() {
     runCommand: (sessionId, body, onEvent, signal) => compute.client.runCommand(sessionId, body, onEvent, signal),
   } : null), [compute, tenant]);
 
+  // start_call: the shell's one call host (ShellCallHost mounts this footer), through the Social pages' own starts.
+  const host = useCallHost();
+  const socialCall = useSocialCall();
+  const callAccess: CallAccess | null = host ? {
+    unavailable: socialCall.unavailable,
+    active: () => {
+      const phase = host.call.phase;
+      return phase === 'idle' || phase === 'ended' || phase === 'failed' ? null : { title: host.lobby?.title ?? 'a call' };
+    },
+    callConversation: (conversation) => socialCall.callConversation(conversation),
+    callPeople: (people) => socialCall.callPeople(people),
+  } : null;
+
   const socialAccess = useMemo<SocialAccess | null>(() => (social?.available ? {
     api: tenant === 'social' ? '/api/social' : '/api/social/plane',
     unavailable: gateway?.connectionState === 'connected' ? null : 'Social is not connected right now. Try again in a moment.',
@@ -180,8 +200,9 @@ function VoiceFooterPane() {
   } : null), [social?.available, social?.presence, tenant, gateway?.connectionState, sendChat, deliveries]);
 
   // The tool context is read at call time, so a call sees the current router, grants and providers.
-  const live = useRef({ tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, planePost: !!planeCaps.data?.actions['PostMessage'], results });
-  live.current = { tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, planePost: !!planeCaps.data?.actions['PostMessage'], results };
+  const planeActions = planeCaps.data?.actions ?? {};
+  const live = useRef({ tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, planeActions, results });
+  live.current = { tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, planeActions, results };
 
   const controller = useMemo(() => new VoiceController({
     fetch: (url, init) => fetch(url, init),
@@ -190,12 +211,14 @@ function VoiceFooterPane() {
       tenant: live.current.tenant,
       role: live.current.role,
       palette: { pages: PAGES, visible: isPageVisible },
-      can: (action: Action) => (action === 'PostMessage' && live.current.tenant !== 'social' ? live.current.planePost : live.current.can(action)),
+      // Outside Social, posting and calling are the plane's grants (GET /api/social/plane/capabilities), not the session tenant's.
+      can: (action: Action) => (PLANE_ACTIONS.has(action) && live.current.tenant !== 'social' ? !!live.current.planeActions[action] : live.current.can(action)),
       fetch: (url, init) => fetch(url, init),
       navigate: (path) => { void live.current.navigate(path); },
       now: () => new Date(),
       compute: live.current.compute,
       social: live.current.social,
+      calls: live.current.calls,
       results: live.current.results,
       toast: {
         pending: (title, detail) => toastPending(title, detail),

@@ -18,7 +18,7 @@
 //      instructions" (`shapeOutput`, applied to every result on the way out).
 //
 // Reads and navigation live here (P3). The machine and people tools
-// (start_computer, open_shell, run_command, send_chat_message, set_status) are
+// (start_computer, open_shell, run_command, send_chat_message, start_call, set_status) are
 // in actions.ts (P4), which adds them to this table as VOICE_RUNNERS, with the
 // planners that run before a confirm card (resolve the target, compose the
 // command, mint the delivery id) so the card shows exactly what will happen.
@@ -100,6 +100,22 @@ export interface SocialAccess {
   deliveries: Map<string, DeliveryRecord>;
 }
 
+/**
+ * The shell's one call host (ShellCallHost, through useSocialCall): the same
+ * starts the Social pages' call buttons and the footer's Huddle run. Never a
+ * second call stack.
+ */
+export interface CallAccess {
+  /** Why no call can start right now (no gateway, signed out), or null. */
+  unavailable: string | null;
+  /** The call the user is in (calling, connecting, live, reconnecting), or null. */
+  active(): { title: string } | null;
+  /** An open huddle in a conversation's own lobby (a channel, a team channel): nobody is rung. */
+  callConversation(conversation: { channel: string; title: string }): void;
+  /** A call in the DM lobby with these people: they are rung. */
+  callPeople(people: Array<{ userId: string; displayName: string }>): void;
+}
+
 /** The app's toast store (lib/toastStore.ts), so a slow action shows outside the dock too. */
 export interface ToastSink {
   pending(title: string, detail?: string): string;
@@ -133,6 +149,8 @@ export interface ToolContext {
   compute?: ComputeAccess | null;
   /** Social; null when the session holds no Social grant. */
   social?: SocialAccess | null;
+  /** The shell's call host; null where none is mounted. */
+  calls?: CallAccess | null;
   toast?: ToastSink;
   /** The compute dock's output tab (openOutputTab); false = it could not open (every tab is in use). */
   showOutput?(view: CommandOutputView): boolean | void;
@@ -740,6 +758,7 @@ const ROLE_REFUSALS: Readonly<Record<string, string>> = {
   open_shell: "I can't open shells on computers with your role.",
   run_command: "I can't run commands on machines with your role.",
   send_chat_message: "I can't post messages with your role.",
+  start_call: "I can't start calls with your role.",
 };
 
 /** The dropped arguments, said in the result (applied by runPreparedCall). */

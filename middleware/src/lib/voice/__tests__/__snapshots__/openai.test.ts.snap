@@ -404,6 +404,44 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
+    "description": "Start a call (a huddle) as a social-app activity: in a team's channel or a channel, where nobody is rung and anyone who opens it can join, or with one person, who is rung. The user confirms first. Never while the user is already in a call.",
+    "name": "start_call",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "description": "Where the call is: a team, a channel, or one person (dm).",
+              "enum": [
+                "team",
+                "channel",
+                "dm",
+              ],
+              "type": "string",
+            },
+            "name": {
+              "description": "The team, channel or person, as the user said it.",
+              "type": "string",
+            },
+          },
+          "required": [
+            "kind",
+            "name",
+          ],
+          "type": "object",
+        },
+      },
+      "required": [
+        "target",
+      ],
+      "type": "object",
+    },
+    "strict": true,
+    "type": "function",
+  },
+  {
     "description": "Set the user's own presence status in the social app, with an optional short message.",
     "name": "set_status",
     "parameters": {

@@ -30,6 +30,7 @@ const SPEC: Record<string, [string, boolean, string]> = {
   run_command: ['machine', true, 'work'],
   bot_sweep_status: ['read', false, 'search'],
   send_chat_message: ['people', true, 'social-activity'],
+  start_call: ['people', true, 'social-activity'],
   set_status: ['people', false, 'social-activity'],
   access_request_status: ['read', false, 'search'],
 };
@@ -58,7 +59,7 @@ describe('the §4 catalogue', () => {
   });
 
   it('asks first for exactly the tools that spend, run on a machine or reach people', () => {
-    expect(VOICE_TOOLS.filter((t) => t.confirm).map((t) => t.name).sort()).toEqual(['run_command', 'send_chat_message', 'start_computer']);
+    expect(VOICE_TOOLS.filter((t) => t.confirm).map((t) => t.name).sort()).toEqual(['run_command', 'send_chat_message', 'start_call', 'start_computer']);
   });
 
   it('every argument schema compiles as strict JSON Schema and refuses unknown keys', () => {
@@ -82,6 +83,8 @@ describe('the §4 catalogue', () => {
     ok('start_computer', { initiativeIds: ['p1', 'Alpha'] });
     ok('send_chat_message', { target: { kind: 'team', name: 'platform' }, text: "I'm out today" });
     ok('set_status', { status: 'away', message: 'out today' });
+    ok('start_call', { target: { kind: 'team', name: 'platform' } });
+    ok('start_call', { target: { kind: 'dm', name: 'Ada' } });
   });
 
   it('run_command takes a phrase from the table, never a command string (§6)', () => {
@@ -104,8 +107,17 @@ describe('the §4 catalogue', () => {
 });
 
 describe('tenant scoping (§6)', () => {
-  it('a social session is offered navigate, its search, chat, status and its own requests, nothing on machines', () => {
-    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'navigate', 'open_result', 'search_records', 'send_chat_message', 'set_status']);
+  it('a social session is offered navigate, its search, chat, a call, status and its own requests, nothing on machines', () => {
+    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'navigate', 'open_result', 'search_records', 'send_chat_message', 'set_status', 'start_call']);
+  });
+
+  it('start_call is offered in orgiq and social only, asks first, and gates on StartCall (G7)', () => {
+    const t = voiceTool('start_call')!;
+    expect([...t.tenants]).toEqual(['orgiq', 'social']);
+    expect(t).toMatchObject({ confirm: true, action: 'StartCall', kind: 'people', spend: 'none' });
+    const target = t.parameters.properties['target'] as { properties: { kind: { enum: string[] } } };
+    expect(target.properties.kind.enum).toEqual(['team', 'channel', 'dm']);
+    for (const tenant of ['assessment', 'pipelines', 'access']) expect(toolsForTenant(tenant).map((x) => x.name)).not.toContain('start_call');
   });
 
   it('navigate offers only the tenant\'s pages plus the universal ones', () => {

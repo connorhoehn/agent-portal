@@ -31,6 +31,11 @@
 //                     matches go back to the model as candidates with no card;
 //                     a clientDeliveryId minted before the card and reused for
 //                     the same channel and text, so a retry never double-posts
+//   start_call        the team, channel or person resolved by GET …/resolve,
+//                     the card says who is rung; confirm runs the shell call
+//                     host's own start (useSocialCall: callConversation for a
+//                     team or channel, nobody rung; callPeople for a person,
+//                     who is rung), once; refused while a call is live
 //   set_status        setStatus + updateMetadata({ statusMessage }) on the
 //                     shell's own presence entry, which the presence tooltip
 //                     reads; no card (§4: it changes only the caller)
@@ -40,7 +45,7 @@
 import type { RunCommandPhrase } from './catalogue.ts';
 import {
   ambiguous, computersOf, done, failed, qs, readFailure, readJson, refused, TOOL_RUNNERS,
-  type ConfirmPlan, type DeliveryRecord, type ProjectRow, type ToolContext, type ToolResult,
+  type CallAccess, type ConfirmPlan, type DeliveryRecord, type ProjectRow, type ToolContext, type ToolResult,
   type VoiceComputer, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 
@@ -433,6 +438,60 @@ const runSendChat: VoiceToolRunner = async (_args, ctx, planned) => {
   return done('posted', { to: label, posted: true }, `Posted to ${label}`);
 };
 
+// ── start_call ──────────────────────────────────────────────────────────────
+
+interface CallPlan { kind: ResolveBody['kind']; name: string; channel: string; userId?: string; title: string }
+
+/** The call host start_call may use, or why it cannot go ahead (before the card and again at confirm). */
+function callRefusal(ctx: ToolContext): { calls: CallAccess } | { result: ToolResult } {
+  if (!ctx.social) return { result: refused('Calls go through Social, which this session cannot reach.') };
+  if (!ctx.calls) return { result: refused('Calls are not available on this page.') };
+  if (ctx.calls.unavailable) return { result: refused(ctx.calls.unavailable) };
+  const active = ctx.calls.active();
+  if (active) return { result: refused(`You are already in a call (${active.title}). Leave it first.`) };
+  return { calls: ctx.calls };
+}
+
+const planStartCall: VoiceToolPlanner = async (args, ctx) => {
+  const gate = callRefusal(ctx);
+  if ('result' in gate) return gate;
+  const social = ctx.social!;
+  const target = args['target'] as { kind: 'team' | 'channel' | 'dm'; name: string };
+  const kind = target.kind === 'dm' ? 'person' : target.kind;
+  const read = await readJson<ResolveBody>(ctx, `${social.api}/resolve?${qs({ kind, name: target.name })}`);
+  if (!read.ok) {
+    if (read.status === 404) return { result: refused(`There is no ${kind} called "${target.name}" you can call.`) };
+    return { result: readFailure(kind === 'person' ? 'the person' : `the ${kind}`, read.status) };
+  }
+  const body = read.body;
+  if (!body.match) {
+    return { result: ambiguous(`Several ${kind === 'person' ? 'people' : `${kind}s`} match "${target.name}". Ask which one; no call was started.`,
+      body.candidates.map((c) => ({ id: c.id, name: c.name }))) };
+  }
+  const m = body.match;
+  const plan: CallPlan = kind === 'person'
+    ? { kind, name: m.name, channel: m.channel, userId: m.id, title: m.name }
+    // A channel is named by its slug (the resolver's id), as the Social page's own call names it (`#<slug>`).
+    : { kind, name: m.name, channel: m.channel, title: kind === 'team' ? `${m.name} team` : `#${m.id}` };
+  // Who the call reaches is the card (§6): a person is rung; a team or channel huddle rings nobody.
+  return { plan: kind === 'person'
+    ? { title: `Call ${m.name}`, detail: `This rings ${m.name}.`, data: plan }
+    : { title: `Start a huddle in ${kind === 'team' ? `the ${m.name} team` : plan.title}`, detail: 'Nobody is rung; anyone who opens it sees the huddle and can join.', data: plan } };
+};
+
+const runStartCall: VoiceToolRunner = async (_args, ctx, planned) => {
+  const plan = planned as CallPlan | undefined;
+  if (!plan) return refused('start_call starts only after the user confirms its card.');
+  // Checked again at confirm time: a call may have started while the card was up.
+  const gate = callRefusal(ctx);
+  if ('result' in gate) return gate.result;
+  if (plan.kind === 'person') gate.calls.callPeople([{ userId: plan.userId!, displayName: plan.name }]);
+  else gate.calls.callConversation({ channel: plan.channel, title: plan.title });
+  return plan.kind === 'person'
+    ? done('call_started', { with: plan.name, rung: true }, `Calling ${plan.name}`)
+    : done('call_started', { in: plan.title, rung: false }, `Huddle starting in ${plan.title}`);
+};
+
 // ── set_status ──────────────────────────────────────────────────────────────
 
 const runSetStatus: VoiceToolRunner = async (args, ctx) => {
@@ -453,6 +512,7 @@ export const ACTION_RUNNERS: Readonly<Record<string, VoiceToolRunner>> = {
   open_shell: runOpenShell,
   run_command: runRunCommand,
   send_chat_message: runSendChat,
+  start_call: runStartCall,
   set_status: runSetStatus,
 };
 
@@ -464,6 +524,7 @@ export const VOICE_PLANNERS: Readonly<Record<string, VoiceToolPlanner>> = {
   start_computer: planStartComputer,
   run_command: planRunCommand,
   send_chat_message: planSendChat,
+  start_call: planStartCall,
 };
 
 export type { VoiceToolArgs };

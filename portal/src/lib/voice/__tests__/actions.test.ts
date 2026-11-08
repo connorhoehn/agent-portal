@@ -12,7 +12,7 @@ import {
 import { RUN_COMMAND_PHRASES } from '../catalogue.ts';
 import {
   MAX_FIELD_CHARS, MAX_ROWS, planPreparedCall, prepareToolCall, runPreparedCall,
-  type CommandEvent, type CommandOutputView, type ComputeAccess, type DeliveryRecord, type SocialAccess, type ToolResult, type VoiceComputer,
+  type CallAccess, type CommandEvent, type CommandOutputView, type ComputeAccess, type DeliveryRecord, type SocialAccess, type ToolResult, type VoiceComputer,
 } from '../tools.ts';
 import { presenceAvatarUsers } from '../../../pages/assessment/knowledge/knowledgeFormat.ts';
 import { fakeFetch, route, toolContext } from './voiceHarness.ts';
@@ -79,6 +79,7 @@ const P4_REFUSALS: Array<{ tool: string; args: Record<string, unknown>; deny: st
   { tool: 'open_shell', args: { computerId: 'c-alpha' }, deny: ['OpenDevboxShell'] },
   { tool: 'run_command', args: { computerId: 'c-alpha', phrase: 'status' }, deny: ['OpenDevboxShell'] },
   { tool: 'send_chat_message', args: { target: { kind: 'team', name: 'platform' }, text: 'out today' }, deny: ['PostMessage'] },
+  { tool: 'start_call', args: { target: { kind: 'team', name: 'platform' } }, deny: ['StartCall'] },
 ];
 
 test('every P4 tool refuses on its gate without a network call, a machine call or a post', async () => {
@@ -281,6 +282,99 @@ test('start_computer: an initiative it cannot find goes back with the user\'s li
   assert.equal(running.result.outcome, 'done');
   assert.deepEqual(compute.created, []);
   assert.equal((await confirmAndRun('start_computer', { initiativeIds: ['p1'] }, toolContext({ fetch, compute: fakeCompute({ canManage: false }) }))).result.outcome, 'refused');
+});
+
+// ── start_call (G7) ──
+
+interface FakeCalls extends CallAccess { conversations: Array<{ channel: string; title: string }>; people: Array<Array<{ userId: string; displayName: string }>>; live: { title: string } | null }
+function fakeCalls(opts: { live?: { title: string } | null; unavailable?: string | null } = {}): FakeCalls {
+  const f: FakeCalls = {
+    conversations: [], people: [], live: opts.live ?? null,
+    unavailable: opts.unavailable ?? null,
+    active: () => f.live,
+    callConversation: (c) => { f.conversations.push(c); f.live = { title: c.title }; },
+    callPeople: (p) => { f.people.push(p); f.live = { title: p.map((x) => x.displayName).join(', ') }; },
+  };
+  return f;
+}
+const TEAM = { kind: 'team', match: { id: 't1', name: 'Platform', channelId: 'r1', channel: 'social:team:platform:general' }, candidates: [{ id: 't1', name: 'Platform' }] };
+const ADA = { kind: 'person', match: { id: 'u-ada', name: 'Ada Lovelace', channelId: 'social:dm:u-ada:u-me', channel: 'social:dm:u-ada:u-me' }, candidates: [{ id: 'u-ada', name: 'Ada Lovelace' }] };
+
+test('start_call: a team resolves through /resolve, the card says nobody is rung, and confirm starts one huddle in its channel', async () => {
+  const { fetch, log } = fakeFetch([route('GET', '/api/social/plane/resolve', 200, TEAM)]);
+  const calls = fakeCalls();
+  const { card, result } = await confirmAndRun('start_call', { target: { kind: 'team', name: 'platform' } }, toolContext({ fetch, social: fakeSocial(), calls }));
+  assert.deepEqual(log.map((r) => r.url), ['/api/social/plane/resolve?kind=team&name=platform']);
+  assert.deepEqual(card, { title: 'Start a huddle in the Platform team', detail: 'Nobody is rung; anyone who opens it sees the huddle and can join.' });
+  assert.equal(result.outcome, 'done');
+  assert.deepEqual(calls.conversations, [{ channel: 'social:team:platform:general', title: 'Platform team' }]);
+  assert.deepEqual(calls.people, []);
+});
+
+test('start_call: a person is a DM call that rings them, and the card says so', async () => {
+  const { fetch, log } = fakeFetch([route('GET', '/api/social/resolve', 200, ADA)]);
+  const calls = fakeCalls();
+  const { card, result } = await confirmAndRun('start_call', { target: { kind: 'dm', name: 'Ada' } }, toolContext({ tenant: 'social', fetch, social: fakeSocial({ api: '/api/social' }), calls }));
+  assert.equal(log[0]!.url, '/api/social/resolve?kind=person&name=Ada');
+  assert.deepEqual(card, { title: 'Call Ada Lovelace', detail: 'This rings Ada Lovelace.' });
+  assert.equal(result.outcome, 'done');
+  assert.deepEqual(calls.people, [[{ userId: 'u-ada', displayName: 'Ada Lovelace' }]]);
+  assert.deepEqual(calls.conversations, []);
+});
+
+test('start_call: never while a call is live, before the card or at confirm; a second one is refused', async () => {
+  // Live before: refused with no request and no card.
+  let requests = 0;
+  const busy = fakeCalls({ live: { title: 'Alpha huddle' } });
+  const before = await confirmAndRun('start_call', { target: { kind: 'team', name: 'platform' } }, toolContext({ social: fakeSocial(), calls: busy, fetch: async () => { requests++; throw new Error('network'); } }));
+  assert.equal(before.card, null);
+  assert.equal(before.result.outcome, 'refused');
+  assert.match(String(before.result.output['reason']), /^You are already in a call/);
+  assert.equal(requests, 0);
+  assert.deepEqual([busy.conversations, busy.people], [[], []]);
+  // The first call starts; a second start_call is refused and calls the host no more.
+  const calls = fakeCalls();
+  const { fetch } = fakeFetch([route('GET', '/api/social/plane/resolve', 200, TEAM)]);
+  const ctx = toolContext({ fetch, social: fakeSocial(), calls });
+  assert.equal((await confirmAndRun('start_call', { target: { kind: 'team', name: 'platform' } }, ctx)).result.outcome, 'done');
+  const second = await confirmAndRun('start_call', { target: { kind: 'channel', name: 'general' } }, ctx);
+  assert.match(String(second.result.output['reason']), /^You are already in a call/);
+  assert.equal(calls.conversations.length, 1, 'the host was called once');
+  // A call that began while the card was up: the runner checks again at confirm.
+  const late = fakeCalls();
+  const prepared = prepareToolCall('start_call', { target: { kind: 'team', name: 'platform' } }, ctx);
+  assert.ok(prepared.ok);
+  const lateCtx = toolContext({ fetch, social: fakeSocial(), calls: late });
+  const planned = await planPreparedCall(prepared.call, lateCtx, VOICE_PLANNERS);
+  assert.ok(planned && 'plan' in planned);
+  late.live = { title: 'a ring that was answered' };
+  const ran = await runPreparedCall(prepared.call, lateCtx, VOICE_RUNNERS, planned.plan.data);
+  assert.equal(ran.outcome, 'refused');
+  assert.deepEqual(late.conversations, []);
+});
+
+test('start_call: refused without the Social grant, without a call host, and when calls are unavailable; ambiguous names start nothing', async () => {
+  let requests = 0;
+  const noNet = async () => { requests++; throw new Error('network'); };
+  const noGrant = await confirmAndRun('start_call', { target: { kind: 'team', name: 'platform' } }, toolContext({ fetch: noNet, social: null, calls: fakeCalls() }));
+  assert.match(String(noGrant.result.output['reason']), /Social/);
+  const noHost = await confirmAndRun('start_call', { target: { kind: 'team', name: 'platform' } }, toolContext({ fetch: noNet, social: fakeSocial(), calls: null }));
+  assert.equal(noHost.result.outcome, 'refused');
+  const down = await confirmAndRun('start_call', { target: { kind: 'team', name: 'platform' } }, toolContext({ fetch: noNet, social: fakeSocial(), calls: fakeCalls({ unavailable: 'Calls are not available here' }) }));
+  assert.equal(down.result.output['reason'], 'Calls are not available here');
+  assert.equal(requests, 0);
+  const calls = fakeCalls();
+  const { fetch } = fakeFetch([route('GET', '/api/social/plane/resolve', 200, { kind: 'person', match: null, candidates: [{ id: 'u1', name: 'Ada A' }, { id: 'u2', name: 'Ada B' }] })]);
+  const amb = await confirmAndRun('start_call', { target: { kind: 'dm', name: 'Ada' } }, toolContext({ fetch, social: fakeSocial(), calls }));
+  assert.equal(amb.result.output['kind'], 'ambiguous');
+  assert.equal(amb.card, null);
+  const missing = await confirmAndRun('start_call', { target: { kind: 'channel', name: 'nope' } }, toolContext({ fetch: fakeFetch([]).fetch, social: fakeSocial(), calls }));
+  assert.match(String(missing.result.output['reason']), /no channel called "nope"/);
+  assert.deepEqual([calls.conversations, calls.people], [[], []]);
+  // Not offered outside orgiq and social.
+  for (const tenant of ['assessment', 'pipelines', 'access']) {
+    assert.equal(prepareToolCall('start_call', { target: { kind: 'team', name: 'p' } }, toolContext({ tenant })).ok, false, tenant);
+  }
 });
 
 // ── send_chat_message ──

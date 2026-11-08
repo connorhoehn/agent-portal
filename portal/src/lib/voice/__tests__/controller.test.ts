@@ -297,6 +297,43 @@ test('run_command through the dock: a phrase the server would refuse never reach
   h.controller.dispose();
 });
 
+const CALL: Call = { name: 'start_call', arguments: { target: { kind: 'team', name: 'platform' } }, said: 'Start a call with the platform team.' };
+
+function callsFake() {
+  const started: Array<{ channel: string; title: string }> = [];
+  let live: { title: string } | null = null;
+  return {
+    started,
+    calls: {
+      unavailable: null, active: () => live,
+      callConversation: (c: { channel: string; title: string }) => { started.push(c); live = { title: c.title }; },
+      callPeople: () => { throw new Error('a team call rings nobody'); },
+    },
+  };
+}
+const RESOLVE_TEAM = route('GET', '/api/social/plane/resolve', 200, { kind: 'team', match: { id: 't1', name: 'Platform', channelId: 'r1', channel: 'social:team:platform:general' }, candidates: [{ id: 't1', name: 'Platform' }] });
+const socialStub = { api: '/api/social/plane', unavailable: null, send: async () => {}, presence: null, deliveries: new Map() };
+
+test('start_call through the dock: cancel starts nothing; confirm calls the host once (G7)', async () => {
+  for (const choice of ['cancel', 'confirm'] as const) {
+    const f = callsFake();
+    const h = harness(await mint(CALL), { ctx: { social: socialStub, calls: f.calls }, routes: [RESOLVE_TEAM] });
+    await h.controller.start();
+    await h.clock.advance(1200);
+    const snap = h.controller.getSnapshot();
+    assert.equal(snap.phase, 'confirming');
+    assert.deepEqual(snap.pending && { title: snap.pending.title, detail: snap.pending.detail },
+      { title: 'Start a huddle in the Platform team', detail: 'Nobody is rung; anyone who opens it sees the huddle and can join.' });
+    assert.deepEqual(f.started, [], 'nothing starts before the confirm');
+    if (choice === 'cancel') h.controller.cancel('click'); else h.controller.confirm('voice');
+    await h.clock.advance(2500);
+    assert.deepEqual(f.started, choice === 'cancel' ? [] : [{ channel: 'social:team:platform:general', title: 'Platform team' }], choice);
+    const row = h.log.find((r) => r.url.endsWith('/events'))!.body as Record<string, unknown>;
+    assert.equal(row['outcome'], choice === 'cancel' ? 'cancelled' : 'done');
+    h.controller.dispose();
+  }
+});
+
 test('a 409 on the user budget shows a card; Confirm mints again with confirmOverUserBudget, Cancel leaves it unavailable', async () => {
   const BUDGET_409 = { error: 'This would exceed your monthly agent budget', gate: 'user-budget', confirmFlag: 'confirmOverUserBudget', reason: 'budget', estimateUsd: 0.5, userBudget: { remainingUsd: 0.1 } };
   for (const choice of ['confirm', 'cancel'] as const) {
