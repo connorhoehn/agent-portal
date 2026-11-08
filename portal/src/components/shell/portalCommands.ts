@@ -20,9 +20,9 @@ import { useSession } from '../../lib/auth';
 import { openShell, useComputeOptional } from '@connorhoehn/ui-components/compute';
 import { commandKeywords } from './commandKeywords';
 
-type PageTenant = 'orgiq' | 'assessment' | 'social' | 'pipelines' | 'access' | 'admin' | 'universal';
+export type PageTenant = 'orgiq' | 'assessment' | 'social' | 'pipelines' | 'access' | 'admin' | 'universal';
 
-interface PageEntry {
+export interface PageEntry {
   label: string;
   hint: string;
   path: string;
@@ -43,6 +43,9 @@ interface PageEntry {
   /** Roles that may open it; omitted = any role in the right tenant. The
       cross-tenant 'admin' role bypasses this, same as the nav and routes. */
   roles?: string[];
+  /** The id the voice navigator's `navigate` tool names this page by
+      (middleware/src/lib/voice/catalogue.ts NAVIGATE_PAGES); omitted = not offered to voice. */
+  pageId?: string;
 }
 
 interface RecentRun {
@@ -100,7 +103,9 @@ export function groupRank(tenant: string, group?: string): number {
 // the server are right; only this gate needed widening.
 const ASSESSMENT_ROLES = ['assessor', 'lead-assessor', 'program-lead'];
 
-const PAGES: PageEntry[] = [
+// Exported for the voice navigator (lib/voice/tools.ts): `navigate` opens only
+// what this table offers, gated by the same isPageVisible.
+export const PAGES: readonly PageEntry[] = [
   // ── Plan → Build — the SDLC loop (Plan rows lead the rail; the palette groups by `group`) ──
   { label: 'Automate',           hint: 'The agent loop — queue, bots, review', path: '/iq/work',                                    tenant: 'orgiq',  group: 'Build',
     keywords: ['work', 'queue', 'bots', 'review', 'automate', 'dispatch', 'agent loop'] },
@@ -108,9 +113,9 @@ const PAGES: PageEntry[] = [
     keywords: ['graph', 'changes', 'updates', 'merge', 'org graph'] },
   { label: 'Work Queue',         hint: 'Jobs and suggestions waiting on a dispatch', path: '/iq/work/queue',                       tenant: 'orgiq',  group: 'Build',
     keywords: ['job', 'run', 'invocation', 'dispatch', 'queue', 'suggestion'] },
-  { label: 'Findings',           hint: 'The dead-letter queue — what failed and why', path: '/iq/work/findings',                   tenant: 'orgiq',  group: 'Build',
+  { label: 'Findings',           hint: 'The dead-letter queue — what failed and why', path: '/iq/work/findings',                   tenant: 'orgiq',  group: 'Build', pageId: 'findings',
     keywords: ['finding', 'sweep', 'signal', 'dlq', 'dead letter', 'failure'] },
-  { label: 'Initiatives',        hint: 'Epics, decisions, contributors',      path: '/iq/projects',                                tenant: 'orgiq',  group: 'Plan',
+  { label: 'Initiatives',        hint: 'Epics, decisions, contributors',      path: '/iq/projects',                                tenant: 'orgiq',  group: 'Plan', pageId: 'initiatives',
     keywords: ['initiative', 'project', 'program', 'sprint', 'epic'] },
   { label: 'Decisions',          hint: 'Calls made and calls waiting',        path: '/iq/decisions',                               tenant: 'orgiq',  group: 'Plan',
     keywords: ['decision', 'decide', 'escalated', 'adr', 'call', 'rationale', 'decider'] },
@@ -131,7 +136,7 @@ const PAGES: PageEntry[] = [
     keywords: ['release', 'session', 'config', 'skill bundle', 'hooks'] },
   { label: 'Budgets',            hint: 'Agent spend vs allocation',           path: '/admin/budgets',                              tenant: 'admin',  group: 'Plan',    roles: BUDGETS,
     keywords: ['budget', 'spend', 'allocation', 'money', 'grant', 'envelope'] },
-  { label: 'Bots',               hint: 'Mission-configured cron bots',        path: '/admin/bots',                                 tenant: 'admin',  group: 'Build',   roles: BOTS,
+  { label: 'Bots',               hint: 'Mission-configured cron bots',        path: '/admin/bots',                                 tenant: 'admin',  group: 'Build', pageId: 'bots',   roles: BOTS,
     keywords: ['bot', 'cron', 'mission', 'agent', 'schedule'] },
   { label: 'Codebases',          hint: 'Repos agents work on + runs',         path: '/admin/projects',                             tenant: 'admin',  group: 'Build',   roles: BUILD,
     keywords: ['codebase', 'repository', 'repo', 'git', 'run'] },
@@ -139,7 +144,7 @@ const PAGES: PageEntry[] = [
     keywords: ['change', 'review', 'pr', 'pull request', 'diff', 'policy'] },
   { label: 'Computer Lab',       hint: 'MicroVM fleet + task runner',         path: '/admin/devbox',                               tenant: 'admin',  group: 'Build',   roles: DEVBOX,
     keywords: ['devbox', 'computer', 'box', 'lab', 'microvm', 'terminal'] },
-  { label: 'Local compute',      hint: 'Your paired machines — hand them work', path: '/iq/local-compute',                         tenant: 'orgiq',  group: 'Build',
+  { label: 'Local compute',      hint: 'Your paired machines — hand them work', path: '/iq/local-compute',                         tenant: 'orgiq',  group: 'Build', pageId: 'computer-lab',
     keywords: ['machine', 'node', 'laptop', 'local', 'compute', 'paired'] },
   { label: 'Runbooks',                hint: 'Procedures the fleet follows — read, version, review', path: '/iq/runbooks',    tenant: 'orgiq',  group: 'Build',
     keywords: ['runbook', 'procedure', 'playbook', 'how to', 'steps', 'rollback', 'library', 'knowledge', 'guide', 'distillation', 'learned'] },
@@ -148,7 +153,7 @@ const PAGES: PageEntry[] = [
   { label: 'Session briefs',           hint: 'The exact text a run was given when it started', path: '/iq/runbooks/briefs',    tenant: 'orgiq',  group: 'Build',
     keywords: ['brief', 'session brief', 'frozen', 'context', 'sha', 'injection', 'run'] },
   // ── Org — organizational intelligence ──
-  { label: 'Search', hint: 'Find records, ask questions, explore connections', path: '/iq/search', tenant: 'orgiq', group: 'Engage',
+  { label: 'Search', hint: 'Find records, ask questions, explore connections', path: '/iq/search', tenant: 'orgiq', group: 'Engage', pageId: 'search',
     keywords: ['ask', 'search', 'chat', 'agent', 'help', 'explore', 'graph', 'connections'] },
   { label: 'Communication',      hint: 'Social channels and direct messages here, and the huddles you joined on initiative pages', path: '/iq/communication', tenant: 'orgiq', group: 'Engage',
     keywords: ['communication', 'social', 'chat', 'message', 'dm', 'channel', 'mention', 'call', 'calls', 'huddle', 'missed', 'meeting', 'history'] },
@@ -266,7 +271,7 @@ const PAGES: PageEntry[] = [
   // Social tenant — its own map (Talk / Meet / People / Library / System),
   // mirroring NAV_ITEMS in Layout.tsx. Every route is readable by every
   // social role (ViewSocial); writes are gated inside the pages.
-  { label: 'Channels',           hint: 'Conversations the tenant shares',     path: '/social/channels',                            tenant: 'social', group: 'Talk',
+  { label: 'Channels',           hint: 'Conversations the tenant shares',     path: '/social/channels',                            tenant: 'social', group: 'Talk', pageId: 'channels',
     keywords: ['channel', 'chat', 'conversation', 'message', 'thread'] },
   { label: 'Direct messages',    hint: 'One-to-one and small-group chats',    path: '/social/dms',                                 tenant: 'social', group: 'Talk',
     keywords: ['dm', 'direct message', 'private', 'chat'] },
@@ -276,7 +281,7 @@ const PAGES: PageEntry[] = [
     keywords: ['room', 'hangout', 'huddle', 'meet'] },
   { label: 'Contacts',           hint: 'People you talk with',                path: '/social/contacts',                            tenant: 'social', group: 'People',
     keywords: ['contact', 'people', 'follow', 'presence'] },
-  { label: 'Teams',              hint: 'Teams and their channels',            path: '/social/teams',                               tenant: 'social', group: 'People',
+  { label: 'Teams',              hint: 'Teams and their channels',            path: '/social/teams',                               tenant: 'social', group: 'People', pageId: 'teams',
     keywords: ['team', 'group', 'members'] },
   { label: 'Profile',            hint: 'How you appear to others here',       path: '/social/profile',                             tenant: 'social', group: 'People',
     keywords: ['profile', 'status', 'avatar', 'me'] },
@@ -347,7 +352,7 @@ const PAGES: PageEntry[] = [
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
-function isPageVisible(page: PageEntry, tenant: string, role: string): boolean {
+export function isPageVisible(page: PageEntry, tenant: string, role: string): boolean {
   if (page.tenant === 'universal') return true;
   // Platform pages (tenant 'admin') are org-tenant surfaces — same scoping as
   // the rail: a session parked on another tenant doesn't get org platform jumps.

@@ -31,6 +31,24 @@ export const ACCESS_ENABLED =
   (import.meta as unknown as { env?: Record<string, string | undefined> })
     .env?.VITE_ENABLE_ACCESS !== 'false';
 
+/**
+ * VOICE_NAVIGATOR — the voice dock in the footer (docs/voice-navigator-spec.md
+ * §5, §8). `VITE_VOICE_NAVIGATOR=1|true` turns it on, `0|false` off; unset it
+ * follows the build: on under the dev server, off in a production bundle.
+ * The dock also needs can('VoiceNavigate'), so a role without the grant never
+ * sees it either way.
+ */
+export function voiceNavigatorEnabled(env: Record<string, unknown> | undefined): boolean {
+  const raw = String(env?.['VITE_VOICE_NAVIGATOR'] ?? '').trim().toLowerCase();
+  if (raw === '1' || raw === 'true') return true;
+  if (raw === '0' || raw === 'false') return false;
+  return env?.['DEV'] === true;
+}
+
+export const features = {
+  voiceNavigator: voiceNavigatorEnabled((import.meta as unknown as { env?: Record<string, unknown> }).env),
+} as const;
+
 /** Whether a tenant's portal surfaces are switched on: its manifest
  *  `featureFlag` (tenants/manifest.json) is not 'false'. A tenant without a
  *  flag (orgiq) or an unknown id always is. */

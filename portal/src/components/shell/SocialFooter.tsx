@@ -34,6 +34,7 @@ import { HuddleReactionBar, useHuddleChat, useHuddleChatToggle, useHuddleReact }
 import { useMeetingBarItems } from './CallMeeting';
 import { ShellCallMedia } from './ShellCallHost';
 import { callScopeKey, hasJoinedCall } from './callShellModel';
+import { VoiceFooterSlot } from './VoiceFooterPane';
 import './socialFooter.css';
 
 const noop = () => {};
@@ -202,6 +203,8 @@ export function SocialFooter() {
     <Inline gap="md" align="center" justify="between" wrap={false} className="min-h-11 min-w-0 overflow-x-auto px-4 py-1" data-testid="shell-footer-row">
       <EmbeddedSocialEntry />
       <TodayStripSlot placement="footer" activeCall={drawn} />
+      {/* The voice navigator (docs/voice-navigator-spec.md §5): renders nothing unless features.voiceNavigator and can('VoiceNavigate'). */}
+      <VoiceFooterSlot />
       {drawn
         ? <FooterCall mediaOpen={!!media?.open} onToggleMedia={() => media?.toggle()} />
         : <FooterIdle />}

@@ -49,6 +49,8 @@ export type Action =
   // Runbooks (docs/distillation-runbooks-goal.md R3) — in CAPABILITY_ACTIONS server-side
   | 'ReviewRunbook'
   | 'ViewSessionBrief'
+  // The voice navigator (docs/voice-navigator-spec.md §6) — in CAPABILITY_ACTIONS server-side
+  | 'VoiceNavigate'
   // Assessment tenant (docs/assessment-tenant.md)
   | 'ViewAssessment'
   | 'ScoreAssessment'
