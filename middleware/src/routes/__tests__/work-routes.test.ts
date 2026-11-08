@@ -50,6 +50,8 @@ jest.mock('../../lib/authz.js', () => ({
 
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 jest.mock('../../providers/sweep-runs.js', () => ({ listSweepRuns: jest.fn() }));
+// The background mode's job table reads config; its own tests are lib/__tests__/sweep-jobs.test.ts and work-sweep-jobs.test.ts.
+jest.mock('../../lib/sweep-jobs.js', () => ({ startSweepJob: jest.fn(), getSweepJob: jest.fn() }));
 jest.mock('../../providers/work-items.js', () => ({ searchWorkItems: jest.fn(), getWorkItem: jest.fn() }));
 const scopeDeny = new Set<string>();
 const scopeCalls: Array<{ initiativeId: unknown; opts: unknown }> = [];

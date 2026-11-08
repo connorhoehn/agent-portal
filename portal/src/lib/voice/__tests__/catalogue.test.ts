@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ACTIVITY_SCOPES, NAVIGATE_PAGE_IDS, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, VOICE_TENANTS, VOICE_TOOLS, activityScopes, navigatePageIds, searchRecordTypes } from '../catalogue.ts';
+import { ACTIVITY_SCOPES, NAVIGATE_PAGE_IDS, QUEUE_WORK_ACTIONS, QUEUE_WORK_KINDS, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, VOICE_TENANTS, VOICE_TOOLS, activityScopes, navigatePageIds, queueWorkKinds, searchRecordTypes } from '../catalogue.ts';
 import { voicePage, hashToolArgs } from '../tools.ts';
 import { commandAllowedBy, composeCommand } from '../actions.ts';
 import { PALETTE, middlewareVoice } from './voiceHarness.ts';
@@ -15,6 +15,8 @@ interface MwCatalogue {
   SEARCH_RECORD_TYPES: Record<string, readonly string[]>;
   SEARCH_ACTIONS: Record<string, string>;
   ACTIVITY_SCOPES: Record<string, readonly string[]>;
+  QUEUE_WORK_KINDS: Record<string, readonly string[]>;
+  QUEUE_WORK_ACTIONS: Record<string, string>;
   RUN_COMMAND_PHRASES: readonly string[];
   RUN_COMMAND_PHRASE_COMMANDS: Record<string, string>;
   commandAllowedBy(prefixes: readonly string[], command: string): boolean;
@@ -34,6 +36,8 @@ test('the portal catalogue matches the middleware one the session is minted with
   assert.deepEqual(SEARCH_RECORD_TYPES, mw.SEARCH_RECORD_TYPES);
   assert.deepEqual(SEARCH_ACTIONS, mw.SEARCH_ACTIONS);
   assert.deepEqual(ACTIVITY_SCOPES, mw.ACTIVITY_SCOPES);
+  assert.deepEqual(QUEUE_WORK_KINDS, mw.QUEUE_WORK_KINDS);
+  assert.deepEqual(QUEUE_WORK_ACTIONS, mw.QUEUE_WORK_ACTIONS);
   for (const tenant of mw.VOICE_TENANTS) {
     const tools = mw.toolsForTenant(tenant);
     const page = tools.find((t) => t.name === 'navigate')!.parameters as { properties: { page: { enum: string[] } } };
@@ -43,6 +47,9 @@ test('the portal catalogue matches the middleware one the session is minted with
     const activity = tools.find((t) => t.name === 'activity')?.parameters as { properties: { scope: { enum: string[] } } } | undefined;
     if (activity) assert.deepEqual(activityScopes(tenant), activity.properties.scope.enum, `activity enum in ${tenant}`);
     else assert.deepEqual(activityScopes(tenant), [], `${tenant} is offered no activity tool`);
+    const work = tools.find((t) => t.name === 'queue_work')?.parameters as { properties: { kind: { enum: string[] } } } | undefined;
+    if (work) assert.deepEqual(queueWorkKinds(tenant), work.properties.kind.enum, `queue_work enum in ${tenant}`);
+    else assert.deepEqual(queueWorkKinds(tenant), [], `${tenant} is offered no queue_work tool`);
   }
 });
 

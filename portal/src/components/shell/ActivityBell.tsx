@@ -29,6 +29,7 @@ const KIND_LABEL: Record<string, string> = {
   approval: 'Approval',
   'approval-requested': 'Approval',
   system: 'Notice',
+  job: 'Background job',
 };
 
 type Entry = SharedNotificationsApi['notifications'][number];

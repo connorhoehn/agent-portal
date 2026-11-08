@@ -140,6 +140,24 @@ export interface ToastSink {
   error(id: string, title: string, detail?: string): void;
 }
 
+/** Work queue_work queued (G19): the server's own id and the page it opens, never anything the model said. */
+export interface QueuedJob {
+  /** The id the queuing route answered with (a sweep job id, a pipeline run id, a bot run id). */
+  jobId: string;
+  kind: 'sweep' | 'pipeline' | 'bot-run';
+  title: string;
+  href: string;
+  /** The user's label for the run, shown with it. */
+  note?: string;
+  /** bot-run: the bot whose run history holds the run. */
+  botId?: string;
+}
+
+/** The dock's background-work follower (work.ts VoiceJobTracker): one toast per job, the notification, the spoken outcome. */
+export interface JobTracking {
+  track(job: QueuedJob): void;
+}
+
 /** A run_command's captured output, as the compute dock's output tab shows it while it streams. */
 export interface CommandOutputView {
   /** The output tab's id: one per computer and phrase, so a re-run replaces its lines. */
@@ -180,6 +198,8 @@ export interface ToolContext {
   showOutput?(view: CommandOutputView): boolean | void;
   /** The rows the session's searches returned, kept for open_result; null/absent = nothing can be opened. */
   results?: ResultMemory | null;
+  /** queue_work's follower (G19); null/absent = queued work cannot be followed, so none is queued. */
+  jobs?: JobTracking | null;
 }
 
 export interface ToolResult {

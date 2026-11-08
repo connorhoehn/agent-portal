@@ -44,6 +44,9 @@
 //                     Social grant, the shell's Social entry, which the
 //                     presence tooltip reads; no card and no grant (§4, G10:
 //                     it changes only the caller)
+//   queue_work        work.ts (G19): the sweep, bot or runbook resolved by the
+//                     page's own read, the page button's route on confirm, one
+//                     toast that follows the server's job id to the end
 //
 // No React and only `.ts` imports, so `node --test` runs it.
 
@@ -53,6 +56,7 @@ import {
   type CallAccess, type ConfirmPlan, type DeliveryRecord, type PresenceWriter, type ProjectRow, type ToolContext, type ToolResult,
   type VoiceComputer, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
+import { WORK_PLANNERS, WORK_RUNNERS } from './work.ts';
 
 /** Lines of command output the model gets (§6 caps every list at 10 rows); the panel keeps the rest. */
 export const OUTPUT_LINES_TO_MODEL = 10;
@@ -565,6 +569,7 @@ export const ACTION_RUNNERS: Readonly<Record<string, VoiceToolRunner>> = {
   send_chat_message: runSendChat,
   start_call: runStartCall,
   set_status: runSetStatus,
+  ...WORK_RUNNERS,
 };
 
 /** Every catalogue tool's runner: the reads (tools.ts) and the actions. */
@@ -576,6 +581,7 @@ export const VOICE_PLANNERS: Readonly<Record<string, VoiceToolPlanner>> = {
   run_command: planRunCommand,
   send_chat_message: planSendChat,
   start_call: planStartCall,
+  ...WORK_PLANNERS,
 };
 
 export type { VoiceToolArgs };

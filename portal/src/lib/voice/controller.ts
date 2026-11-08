@@ -43,6 +43,7 @@ import {
   type ConfirmPlan, type PreparedCall, type ToolContext, type ToolResult, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 import { VOICE_PLANNERS, VOICE_RUNNERS } from './actions.ts';
+import { DEFAULT_TOAST_SECONDS } from './work.ts';
 
 export const TICK_MS = 100;
 export const COMPLETION_GRACE_MS = 1500;
@@ -155,6 +156,7 @@ export class VoiceController {
   private levels = { input: 0, output: 0 };
   private muted = false;
   private warned = false;
+  private lastToastSeconds = DEFAULT_TOAST_SECONDS;
   private elapsedFrozen: number | null = null;
   private closedSeconds: number | null = null;
   private snapshot: VoiceSnapshot;
@@ -247,6 +249,22 @@ export class VoiceController {
     this.resolvePending(false, by);
   }
 
+  /**
+   * A background job queue_work queued has ended (G19, work.ts): while the
+   * session is live the voice says it (session.commentary.append) and the
+   * transcript keeps the line; after it, the toast and the notification carry it.
+   */
+  noteJobOutcome(line: string): void {
+    if (this.machine.base !== 'live' || !this.client) return;
+    this.client.appendCommentary(`Tell the user: ${line}`);
+    this.addLine('assistant', line);
+  }
+
+  /** How long a job toast stays once its job ends: the last mint's VOICE_TOAST_SECONDS, else the default. */
+  toastSeconds(): number {
+    return this.lastToastSeconds;
+  }
+
   /** Silent page context for the voice (§1: session.thinking.append, delegation_id null). */
   noteContext(text: string): void {
     if (this.machine.base === 'live') this.client?.appendThinking(text);
@@ -270,6 +288,7 @@ export class VoiceController {
     switch (e.type) {
       case 'minted':
         this.mint = e.mint;
+        if (typeof e.mint.toastSeconds === 'number' && e.mint.toastSeconds > 0) this.lastToastSeconds = e.mint.toastSeconds;
         if (e.mint.dailyMinutesLeft != null) {
           const m = Math.max(1, e.mint.dailyMinutesLeft);
           this.addLine('assistant', `About ${m} minute${m === 1 ? '' : 's'} of voice left today.`);

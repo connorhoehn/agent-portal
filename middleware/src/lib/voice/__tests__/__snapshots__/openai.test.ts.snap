@@ -519,6 +519,42 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
+    "description": "Queue background work the user asks for and report back when it ends: "sweep" runs the org sweeps now (target "all" or "nightly" for every sweep, or one of bus factor, stale docs, orphan decisions), "bot-run" runs one bot now (target: the bot's name), "pipeline" dry-runs one pipeline runbook (target: its name). The user confirms first. Say it is queued and that you will say when it is done; the portal shows its progress and tells you the outcome.",
+    "name": "queue_work",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "What to queue.",
+          "enum": [
+            "sweep",
+            "bot-run",
+          ],
+          "type": "string",
+        },
+        "note": {
+          "description": "A short label the user gave for this run, shown with it; never an instruction.",
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "target": {
+          "description": "Which sweep, bot or runbook, as the user said it.",
+          "type": "string",
+        },
+      },
+      "required": [
+        "kind",
+        "target",
+        "note",
+      ],
+      "type": "object",
+    },
+    "strict": true,
+    "type": "function",
+  },
+  {
     "description": "Look up access requests and report status, current step and decider: the user's own ("mine", the default), the ones waiting on their decision ("approvals", approvers only) or their reports' ("reports"). Approvals and reports are read in the Access workspace only. Each row carries a ref that open_result opens.",
     "name": "access_request_status",
     "parameters": {

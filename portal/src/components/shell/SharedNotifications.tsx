@@ -6,10 +6,12 @@
 // chat workspace and the embedded Social panel each had their own, and a read
 // mark made in one never reached the others' counts. Mounting it once makes a
 // mark authoritative everywhere. Marks are relayed to the gateway by the library
-// (`syncReads`), so the replayed unread set agrees on reconnect.
+// (`syncReads`), so the replayed unread set agrees on reconnect. Entries the
+// portal adds itself (lib/localNotifications.ts) are merged into the same list.
 
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react';
 import { useNotifications } from '@connorhoehn/realtime-modules/client';
+import { getLocalNotifications, mergeNotifications, subscribeLocalNotifications } from '../../lib/localNotifications';
 
 export type SharedNotificationsApi = ReturnType<typeof useNotifications>;
 
@@ -17,7 +19,10 @@ const SharedNotificationsContext = createContext<SharedNotificationsApi | null>(
 
 export function SharedNotificationsProvider({ children }: { children: ReactNode }) {
   // syncReads relays marks to the gateway so the replayed unread set agrees on reconnect.
-  const value = useNotifications({ syncReads: true });
+  const remote = useNotifications({ syncReads: true });
+  // The portal's own entries (a voice-queued job that ended, G19) join the same list, count and read marks.
+  const local = useSyncExternalStore(subscribeLocalNotifications, getLocalNotifications, getLocalNotifications);
+  const value = useMemo(() => mergeNotifications(remote, local), [remote, local]);
 
   return <SharedNotificationsContext.Provider value={value}>{children}</SharedNotificationsContext.Provider>;
 }

@@ -10,6 +10,11 @@ const URL = '/api/work/events';
 let source: EventSource | null = null;
 const listeners = new Set<() => void>();
 
+/** The shared connection outside React (the voice dock's job follower, G19). */
+export function subscribeWorkEvents(listener: () => void): () => void {
+  return subscribe(listener);
+}
+
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   if (!source && typeof EventSource !== 'undefined') {

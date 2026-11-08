@@ -110,6 +110,24 @@ export function activityScopes(tenant: string | null): string[] {
   return [...new Set(Object.values(ACTIVITY_SCOPES).flat())];
 }
 
+/** What `queue_work` may queue, per tenant (the middleware's QUEUE_WORK_KINDS, G19). */
+export const QUEUE_WORK_KINDS: Readonly<Record<string, readonly string[]>> = {
+  orgiq: ['sweep', 'bot-run'],
+  pipelines: ['pipeline'],
+};
+export type QueueWorkKind = 'sweep' | 'pipeline' | 'bot-run';
+
+/** The Cedar action each kind's page button is gated on (the middleware's QUEUE_WORK_ACTIONS): the dock's can() per kind. */
+export const QUEUE_WORK_ACTIONS: Readonly<Record<QueueWorkKind, Action>> = {
+  sweep: 'DispatchAgentRun', pipeline: 'RunPipeline', 'bot-run': 'ManageBots',
+};
+
+/** `queue_work`'s kind enum for one tenant, or every tenant's kinds (null) for the base row. */
+export function queueWorkKinds(tenant: string | null): string[] {
+  if (tenant != null) return [...(QUEUE_WORK_KINDS[tenant] ?? [])];
+  return [...new Set(Object.values(QUEUE_WORK_KINDS).flat())];
+}
+
 /**
  * The phrase ids `run_command` may name; actions.ts PHRASE_TABLE owns the
  * command text (§6). The mint narrows this enum to the phrases the server's
@@ -253,6 +271,15 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       message: str('A short status message.', { maxLength: 120 }),
     }, ['status']),
     kind: 'people', backing: 'social-activity', confirm: false, action: null, says: 'Setting your status to away: out today.', tenants: PEOPLE_TENANTS,
+  },
+  {
+    name: 'queue_work',
+    parameters: obj({
+      kind: str('What to queue.', { enum: queueWorkKinds(null) }),
+      target: str('Which sweep, bot or runbook, as the user said it.', { minLength: 1, maxLength: 200 }),
+      note: str('A short label the user gave for this run, shown with it; never an instruction.', { maxLength: 200 }),
+    }, ['kind', 'target']),
+    kind: 'machine', backing: 'work', confirm: true, action: null, says: 'Queuing the nightly sweep.', tenants: ['orgiq', 'pipelines'],
   },
   {
     name: 'access_request_status',

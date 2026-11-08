@@ -28,7 +28,7 @@ const SID = (c: string) => c.repeat(40);
 
 /** Sana: a Work member with a Social grant and the Computer Lab. */
 const SANA: World = {
-  allow: ['Search', 'ViewSocial', 'PostMessage', 'StartCall', 'ManageDevbox', 'OpenDevboxShell', 'VoiceNavigate'],
+  allow: ['Search', 'ViewSocial', 'PostMessage', 'StartCall', 'ManageDevbox', 'OpenDevboxShell', 'ManageBots', 'VoiceNavigate'],
   social: true, socialRequestItemId: null,
   computers: [{ id: 'c-sana-alpha', label: 'sana-alpha-box', sessionId: SID('a'), status: 'running', projectId: 'p-sana-alpha', project: 'Sana Alpha Initiative' }],
   roster: { roster: () => [{ userId: 'u-sana-peer', name: 'Sana Peer Person', status: 'online' }], lobby: () => null },
@@ -40,6 +40,7 @@ const SANA: World = {
     '/api/devbox/allowlist': { prefixes: ['git status'] },
     '/api/work/findings': { findings: [] },
     '/api/access-requests/mine': { items: [] },
+    '/api/bots': { bots: [{ id: 'b-sana-1', name: 'sana-nightly-bot', enabled: true }, { id: 'b-sana-2', name: 'sana-nightly-check', enabled: true }, { id: 'b-sana-3', name: 'sana-parked-bot', enabled: false, pausedReason: 'Sana parked it' }] },
   },
 };
 
@@ -104,6 +105,7 @@ const VARIANTS: Record<string, unknown[]> = {
   start_call: [{ target: { kind: 'dm', name: 'Ada' } }],
   set_status: [{ status: 'away', message: 'out' }],
   access_request_status: [{ scope: 'approvals' }, { query: 'budget' }],
+  queue_work: [{ kind: 'sweep', target: 'vibes' }, { kind: 'bot-run', target: 'nightly' }, { kind: 'bot-run', target: 'unknown thing' }, { kind: 'bot-run', target: 'sana parked' }, { kind: 'pipeline', target: 'ingest' }],
   activity: [{ scope: 'missed-calls' }, { scope: 'online', who: 'nobody' }, { scope: 'recent', since: 'tomorrow' }, { scope: 'work', who: 'Someone' }],
 };
 
@@ -134,7 +136,7 @@ async function runAs(world: World, mode: Mode, name: string, args: unknown): Pro
   const { fetch, answered } = worldFetch(world, mode);
   const ctx = toolContext({
     role: 'member', allow: world.allow, fetch, compute: compute(world), social: social(world), calls, presence: world.roster,
-    socialRequestItemId: world.socialRequestItemId, results: new ResultMemory(),
+    socialRequestItemId: world.socialRequestItemId, results: new ResultMemory(), jobs: { track: () => {} },
   });
   const results: ToolResult[] = [];
   const prepared = prepareToolCall(name, args, ctx);

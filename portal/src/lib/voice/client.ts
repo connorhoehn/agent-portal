@@ -56,6 +56,8 @@ export interface VoiceMint {
   budget: { holdUsd: number; usdPerMinute: number };
   /** Present when the user's daily voice minutes cut this session short (G13): whole minutes left today. */
   dailyMinutesLeft?: number;
+  /** VOICE_TOAST_SECONDS: how long a queued job's toast stays once the job ends (G19). */
+  toastSeconds?: number;
   mockScript?: MockScript;
 }
 

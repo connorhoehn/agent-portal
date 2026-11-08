@@ -10,6 +10,7 @@
 //     MOCK_VOICE=1). 201:
 //       { sessionId, voiceSessionId, holdId, maxSeconds, expiresAt, sdp, mock,
 //         model, voice, toolsEnabled, tools: [names], budget: { holdUsd, usdPerMinute },
+//         toastSeconds (VOICE_TOAST_SECONDS: how long a queued job's toast stays once it ends, G19),
 //         mockScript?: { onStart, onResponseCreate, onClose } }   (MOCK_VOICE only; lib/voice/openai.ts)
 //     sessionId is opaque: the provider's live_… id stays server-side (§6), so a
 //     hang-up goes through POST /:id/close, never from the browser to OpenAI.
@@ -203,6 +204,7 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
     sdp: answer.sdp, mock: cfg.mock, model: cfg.model, voice: cfg.voice,
     toolsEnabled, tools: toolsEnabled ? tools.map((t) => t.name) : [],
     budget: { holdUsd: held.amountUsd, usdPerMinute: cfg.usdPerMinute },
+    toastSeconds: cfg.toastSeconds,
     ...(dailyMinutesLeft != null ? { dailyMinutesLeft } : {}),
     ...(cfg.mock ? { mockScript: mockLiveScript(id, mockCallFor(session.tenant, session.role)) } : {}),
   });

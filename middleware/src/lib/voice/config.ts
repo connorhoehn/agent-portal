@@ -36,6 +36,12 @@ export interface VoiceConfig {
    * (docs/voice-navigator-gaps.md §3 Q2, G13). Never applies to MOCK_VOICE.
    */
   dailyMinutes: number;
+  /**
+   * VOICE_TOAST_SECONDS (default 8, at most 120): how long the dock's job
+   * toast for queued work (queue_work, G19) stays after the job ends. The
+   * notification center keeps the entry; the mint passes this to the dock.
+   */
+  toastSeconds: number;
   /** MOCK_VOICE=1: a scripted session, no OpenAI call (§6, §8). */
   mock: boolean;
 }
@@ -82,6 +88,7 @@ export function voiceConfig(): VoiceConfig {
     p75Minutes: positive('VOICE_SESSION_MINUTES_P75', 10),
     maxMinutes: positive('VOICE_SESSION_MAX_MINUTES', 30),
     dailyMinutes: nonNegative('VOICE_DAILY_MINUTES', 60),
+    toastSeconds: Math.min(120, positive('VOICE_TOAST_SECONDS', 8)),
     mock: mockRaw === '1' || mockRaw === 'true',
   };
 }

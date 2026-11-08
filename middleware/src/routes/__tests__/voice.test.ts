@@ -63,7 +63,7 @@ let upstream: { status: number; body: unknown } = { status: 200, body: { session
 
 const ENV_KEYS = ['OPENAI_API_KEY', 'MOCK_VOICE', 'VOICE_DELEGATION_MODEL', 'VOICE_SESSION_MAX_MINUTES', 'VOICE_USD_PER_MINUTE',
   'VOICE_SESSION_MINUTES_P75', 'VOICE_LIVE_MODEL', 'VOICE_VOICE', 'INSECURE_DEV_MODE', 'SPEND_HOLDS_UNATTRIBUTED',
-  'VOICE_DELEGATION_USD_PER_1M_INPUT', 'VOICE_DELEGATION_USD_PER_1M_OUTPUT', 'VOICE_DAILY_MINUTES'];
+  'VOICE_DELEGATION_USD_PER_1M_INPUT', 'VOICE_DELEGATION_USD_PER_1M_OUTPUT', 'VOICE_DAILY_MINUTES', 'VOICE_TOAST_SECONDS'];
 const saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
 
 function budget(allocatedUsd = 1_000, hardCapUsd: number | null = null): void {
@@ -113,7 +113,7 @@ describe('POST /api/voice/sessions — the mint', () => {
       sessionId: expect.stringMatching(/^vs_[0-9a-f-]{36}$/), voiceSessionId: res.body.sessionId,
       holdId: expect.any(String), maxSeconds: 1800, expiresAt: expect.any(String), sdp: ANSWER, mock: false,
       model: 'gpt-live-1', voice: null, toolsEnabled: true, tools: VOICE_TOOLS.map((t) => t.name),
-      budget: { holdUsd: 0.5, usdPerMinute: 0.05 },
+      budget: { holdUsd: 0.5, usdPerMinute: 0.05 }, toastSeconds: 8,
     });
     expect(calls).toHaveLength(1);
     expect(calls[0]!.url).toBe('https://api.openai.com/v1/live/sessions');
@@ -186,9 +186,11 @@ describe('POST /api/voice/sessions — the mint', () => {
       principal = { sub: USER, role, tenant, grants: {} };
       const res = await mint();
       expect(res.status).toBe(201);
-      expect(res.body.tools.sort()).toEqual(['access_request_status', 'navigate', 'open_result', 'search_records']);
+      // Reads and navigation; pipelines adds queue_work's dry-run (G19, gated per kind on RunPipeline by the dock).
+      const offered = ['access_request_status', 'navigate', 'open_result', ...(tenant === 'pipelines' ? ['queue_work'] : []), 'search_records'];
+      expect(res.body.tools.sort()).toEqual(offered);
       const sent = JSON.parse(calls[0]!.init.body!).session;
-      expect(sent.delegation.responses.tools.map((t: { name: string }) => t.name).sort()).toEqual(['access_request_status', 'navigate', 'open_result', 'search_records']);
+      expect(sent.delegation.responses.tools.map((t: { name: string }) => t.name).sort()).toEqual(offered);
     });
 
   it('a social participant may mint, and is offered only the social tools', async () => {
@@ -277,6 +279,14 @@ describe('POST /api/voice/sessions — the mint', () => {
     const res = await mint();
     expect(res.status).toBe(403);
     expect(res.body).toMatchObject({ gate: 'spend-hold', reason: 'budget' });
+  });
+
+  it('passes VOICE_TOAST_SECONDS to the dock (G19: a queued job\'s toast; default 8, above), capped at 120', async () => {
+    budget();
+    process.env['VOICE_TOAST_SECONDS'] = '5';
+    expect((await mint()).body.toastSeconds).toBe(5);
+    process.env['VOICE_TOAST_SECONDS'] = '900';
+    expect((await mint()).body.toastSeconds).toBe(120);
   });
 
   it('holds for max minutes × 60 s + grace at the configured rate', async () => {

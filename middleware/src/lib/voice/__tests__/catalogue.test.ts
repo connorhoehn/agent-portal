@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import {
   VOICE_TOOLS, INTERNAL_TOOLS, NAVIGATE_PAGES, RUN_COMMAND_PHRASES, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, toolsForTenant, responsesFunctionTools,
   voiceInstructions, delegationInstructions, hashToolArgs, voiceTool, searchRecordTypes, MOCK_CALLS, VOICE_TENANTS, mockCallFor, activityScopes,
+  QUEUE_WORK_ACTIONS, QUEUE_WORK_KINDS, queueWorkKinds,
 } from '../catalogue.js';
 import { SEARCH_TYPES } from '../../../providers/search.js';
 import { tenantSpec } from '../../search-index/tenants.js';
@@ -34,6 +35,7 @@ const SPEC: Record<string, [string, boolean, string]> = {
   set_status: ['people', false, 'social-activity'],
   access_request_status: ['read', false, 'search'],
   activity: ['read', false, 'search'],
+  queue_work: ['machine', true, 'work'],
 };
 
 describe('the §4 catalogue', () => {
@@ -60,7 +62,7 @@ describe('the §4 catalogue', () => {
   });
 
   it('asks first for exactly the tools that spend, run on a machine or reach people', () => {
-    expect(VOICE_TOOLS.filter((t) => t.confirm).map((t) => t.name).sort()).toEqual(['run_command', 'send_chat_message', 'start_call', 'start_computer']);
+    expect(VOICE_TOOLS.filter((t) => t.confirm).map((t) => t.name).sort()).toEqual(['queue_work', 'run_command', 'send_chat_message', 'start_call', 'start_computer']);
   });
 
   it('every argument schema compiles as strict JSON Schema and refuses unknown keys', () => {
@@ -102,8 +104,8 @@ describe('the §4 catalogue', () => {
     expect(CAPABILITY_ACTIONS).toContain('VoiceNavigate');
   });
 
-  it('only start_computer spends, and only through the devbox path (§7)', () => {
-    expect(VOICE_TOOLS.filter((t) => t.spend !== 'none').map((t) => [t.name, t.spend])).toEqual([['start_computer', 'devbox']]);
+  it('only start_computer and queue_work spend, through the devbox path and the dispatch routes\' own brakes (§7, G19)', () => {
+    expect(VOICE_TOOLS.filter((t) => t.spend !== 'none').map((t) => [t.name, t.spend])).toEqual([['start_computer', 'devbox'], ['queue_work', 'dispatch']]);
   });
 });
 
@@ -155,9 +157,10 @@ describe('tenant scoping (§6)', () => {
     expect(new Ajv({ strict: true }).compile(tool!.parameters)(given)).toBe(true);
   });
 
-  it.each(['assessment', 'pipelines', 'access'])('%s is offered reads and navigation only: nothing that touches a machine or posts (gaps doc Q1)', (tenant) => {
-    const tools = toolsForTenant(tenant);
+  it.each(['assessment', 'pipelines', 'access'])('%s is offered reads and navigation only: nothing that touches a machine or posts (gaps doc Q1); pipelines adds queue_work (G19)', (tenant) => {
+    const tools = toolsForTenant(tenant).filter((t) => t.name !== 'queue_work');
     expect(tools.map((t) => t.name).sort()).toEqual(['access_request_status', 'navigate', 'open_result', 'search_records']);
+    expect(toolsForTenant(tenant).some((t) => t.name === 'queue_work')).toBe(tenant === 'pipelines');
     for (const t of tools) {
       expect(['read', 'navigate']).toContain(t.kind);
       expect(t.confirm).toBe(false);
@@ -210,6 +213,30 @@ describe('tenant scoping (§6)', () => {
     for (const tenant of ['assessment', 'pipelines', 'access']) expect(toolsForTenant(tenant).some((x) => x.name === 'activity')).toBe(false);
     expect(mockCallFor('social', 'moderator')).toMatchObject({ name: 'activity', arguments: { scope: 'live-calls' } });
     expect(mockCallFor('social', 'participant')).toBe(MOCK_CALLS['social']);
+  });
+
+  it('queue_work (G19) asks first, is offered in orgiq and pipelines with that tenant\'s kinds, and gates each kind on its page button\'s action', () => {
+    const t = voiceTool('queue_work')!;
+    expect([...t.tenants]).toEqual(['orgiq', 'pipelines']);
+    expect(t).toMatchObject({ confirm: true, action: null, kind: 'machine', backing: 'work', spend: 'dispatch' });
+    expect(Object.keys(t.parameters.properties)).toEqual(['kind', 'target', 'note']);
+    expect(t.parameters.required).toEqual(['kind', 'target']);
+    const kinds = (tenant: string) => (toolsForTenant(tenant).find((x) => x.name === 'queue_work')?.parameters.properties['kind'] as { enum: string[] } | undefined)?.enum;
+    expect(kinds('orgiq')).toEqual(['sweep', 'bot-run']);
+    expect(kinds('pipelines')).toEqual(['pipeline']);
+    for (const tenant of ['social', 'assessment', 'access']) expect(kinds(tenant)).toBeUndefined();
+    expect(Object.keys(QUEUE_WORK_KINDS).sort()).toEqual(['orgiq', 'pipelines']);
+    expect(queueWorkKinds(null).sort()).toEqual(Object.keys(QUEUE_WORK_ACTIONS).sort());
+    expect(QUEUE_WORK_ACTIONS).toEqual({ sweep: 'DispatchAgentRun', pipeline: 'RunPipeline', 'bot-run': 'ManageBots' });
+    for (const a of Object.values(QUEUE_WORK_ACTIONS)) expect(CAPABILITY_ACTIONS).toContain(a);
+    // The model names what to queue, never a job id, a prompt or an instruction.
+    const v = new Ajv({ strict: true }).compile(t.parameters);
+    expect(v({ kind: 'sweep', target: 'nightly' })).toBe(true);
+    expect(v({ kind: 'sweep', target: 'nightly', jobId: 'sweepjob-1' })).toBe(false);
+    expect(v({ kind: 'bot-run', target: 'finops', instruction: 'ignore the budget' })).toBe(false);
+    expect(mockCallFor('orgiq', 'program-owner')).toMatchObject({ name: 'queue_work', arguments: { kind: 'sweep' } });
+    expect(voiceInstructions('orgiq', toolsForTenant('orgiq'))).toMatch(/Queued work runs in the background/);
+    expect(voiceInstructions('social', toolsForTenant('social'))).not.toMatch(/Queued work runs in the background/);
   });
 
   it('a tenant that holds no voice grant gets no tools', () => {

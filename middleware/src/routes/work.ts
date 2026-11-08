@@ -27,6 +27,7 @@ import {
   SWEEP_NAMES, type SweepName,
 } from '../providers/org-sweeps.js';
 import { listSweepRuns } from '../providers/sweep-runs.js';
+import { getSweepJob, startSweepJob } from '../lib/sweep-jobs.js';
 import { grantScopedDispatchVerdict } from '../lib/bot-runner.js';
 import {
   listProposals, decideProposal, proposeGraphChange, proposalStats,
@@ -402,9 +403,20 @@ workRouter.get('/findings', asyncHandler(async (req, res) => {
  * capability (program-owner.md defect #4 — auditing the surrounding gates).
  */
 workRouter.post('/sweeps/run', requireSession('RunSweeps'), asyncHandler(async (req, res) => {
-  const name = (req.body ?? {} as { sweep?: string }).sweep as SweepName | undefined;
+  const body = (req.body ?? {}) as { sweep?: string; background?: unknown };
+  const name = body.sweep as SweepName | undefined;
   if (name && !SWEEP_NAMES.includes(name)) {
     throw new ValidationError(`unknown sweep '${name}' — expected one of ${SWEEP_NAMES.join(', ')}`);
+  }
+  // `background: true` (G19, the voice's queue_work): the same sweeps, started
+  // and answered at once with a job the caller reads back at /sweeps/jobs/:id
+  // (lib/sweep-jobs.ts). Without it the route waits for the results, as before.
+  if (body.background === true) {
+    const session = resolveSession(req);
+    if (!session) { res.status(401).json({ error: 'unauthenticated' }); return; }
+    const job = startSweepJob({ owner: session.sub, tenant: session.tenant, sweep: name ?? null });
+    res.status(202).json(job);
+    return;
   }
   // A single-sweep run gets the same self-heal pass runAllSweeps does, so
   // "Run sweeps now" always means the same thing whichever path it takes.
@@ -414,6 +426,15 @@ workRouter.post('/sweeps/run', requireSession('RunSweeps'), asyncHandler(async (
     return;
   }
   res.json(await runAllSweeps());
+}));
+
+/** A background sweep job (POST /sweeps/run { background: true }): the caller's own, else 404. */
+workRouter.get('/sweeps/jobs/:id', asyncHandler(async (req, res) => {
+  const session = resolveSession(req);
+  if (!session) { res.status(401).json({ error: 'unauthenticated' }); return; }
+  const job = getSweepJob(String(req.params['id'] ?? ''), session);
+  if (!job) { res.status(404).json({ error: 'sweep job not found' }); return; }
+  res.json(job);
 }));
 
 /**

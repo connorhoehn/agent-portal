@@ -20,14 +20,18 @@
 // the Social pages' call buttons and the footer's Huddle) for start_call. A
 // run_command's output streams into a read-only output tab in the compute dock
 // (the library's openOutputTab, ui-components 2.510.2), beside the shell
-// tabs, with an "Open shell" action.
+// tabs, with an "Open shell" action. Work queue_work queues (G19) is followed
+// by lib/voice/work.ts's VoiceJobTracker: one library job toast (useToast's
+// toastJob, 2.510.3) per server job id, gone VOICE_TOAST_SECONDS after it ends,
+// the entry mirrored into the notification center (lib/localNotifications.ts)
+// and the outcome spoken while the session is live.
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { useChat, useGatewayOptional } from '@connorhoehn/realtime-modules/client';
 import { CaptionsIcon } from '@connorhoehn/ui-components';
 import { openOutputTab, openShell, useComputeOptional } from '@connorhoehn/ui-components/compute';
-import { IconButton, Inline, InlinePopover, Tooltip } from '@connorhoehn/ui-components/shared';
+import { IconButton, Inline, InlinePopover, Tooltip, useToastOptional } from '@connorhoehn/ui-components/shared';
 import { VoiceDock, VoiceTurnStrip, type VoicePending, type VoiceTurn } from '@connorhoehn/ui-components/voice';
 import { useSession } from '../../lib/auth';
 import { useCapabilities, type Action } from '../../lib/capabilities';
@@ -36,6 +40,9 @@ import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { useFetch } from '../../hooks/useFetch';
 import { browserMedia } from '../../lib/voice/client';
 import { VoiceController } from '../../lib/voice/controller';
+import { VoiceJobTracker, jobNotification, type JobNotice } from '../../lib/voice/work';
+import { addLocalNotification } from '../../lib/localNotifications';
+import { subscribeWorkEvents } from '../../hooks/useWorkEvents';
 import { ResultMemory, type CallAccess, type CommandOutputView, type ComputeAccess, type DeliveryRecord, type PresenceAccess, type PresencePerson, type SocialAccess, type ToolContext, type VoiceComputer } from '../../lib/voice/tools';
 import { useCallHost } from '../../lib/conversationCall';
 import { useSocialCall } from '../../pages/social/useSocialCall';
@@ -228,6 +235,34 @@ function VoiceFooterPane() {
   const live = useRef({ tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, socialRequestItemId, results });
   live.current = { tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, socialRequestItemId, results };
 
+  // ── queue_work (G19): one keyed toast per job, the notification center's entry, the spoken outcome ──
+  const toaster = useToastOptional();
+  const toasterRef = useRef(toaster);
+  toasterRef.current = toaster;
+  const controllerRef = useRef<VoiceController | null>(null);
+  const tenantRef = useRef(tenant);
+  tenantRef.current = tenant;
+  const jobs = useMemo(() => new VoiceJobTracker({
+    fetch: (url, init) => fetch(url, init),
+    toast: {
+      toastJob: (opts) => { toasterRef.current?.toastJob(opts); },
+      dismissJobToast: (id) => { toasterRef.current?.dismissJobToast(id); },
+    },
+    notify: (n: JobNotice) => addLocalNotification(jobNotification(n, tenantRef.current, new Date())),
+    speak: (line) => controllerRef.current?.noteJobOutcome(line),
+    toastSeconds: () => controllerRef.current?.toastSeconds() ?? 8,
+    // The stream the page already holds: the Work pages' /api/work/events in orgiq (the sweep jobs and the
+    // dispatcher's jobs both emit there), the run's own event stream in pipelines.
+    wake: (job, onEvent) => {
+      if (job.kind !== 'pipeline') return subscribeWorkEvents(onEvent);
+      if (typeof EventSource === 'undefined') return () => {};
+      const es = new EventSource(`/api/pipelines/runs/${encodeURIComponent(job.jobId)}/events`);
+      es.onmessage = () => onEvent();
+      return () => es.close();
+    },
+  }), []);
+  useEffect(() => () => jobs.dispose(), [jobs]);
+
   const controller = useMemo(() => new VoiceController({
     fetch: (url, init) => fetch(url, init),
     media: browserMedia(),
@@ -252,8 +287,10 @@ function VoiceFooterPane() {
         error: (id, title, detail) => { toastError(id, title, detail); },
       },
       showOutput,
+      jobs,
     }),
-  }), [showOutput]);
+  }), [showOutput, jobs]);
+  controllerRef.current = controller;
   const snap = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   useEffect(() => () => controller.dispose(), [controller]);
 
