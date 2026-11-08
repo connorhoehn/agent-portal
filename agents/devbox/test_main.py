@@ -17,7 +17,7 @@ Covers:
   4. Timeout kills a hung subprocess and flags timed_out.
   5. Sync mode returns collected JSON result + exit code.
   6. Missing prompt → error dict.
-  7. resume flag adds --continue; stream mode adds --verbose.
+  7. resume flag adds --continue; stream mode adds --verbose; no skipped permissions.
   8. Workspace fallback when /mnt/workspace is absent + HOME pointed at it.
 """
 
@@ -172,7 +172,8 @@ class DevboxWrapperTests(unittest.TestCase):
         argv = next(e for e in events if e["type"] == "argv")
         self.assertIn("--continue", argv["args"])
         self.assertIn("--verbose", argv["args"])
-        self.assertIn("--dangerously-skip-permissions", argv["args"])
+        # The managed allowlist decides, for both runners (design §14 step 2).
+        self.assertNotIn("--dangerously-skip-permissions", argv["args"])
         self.assertIn("stream-json", argv["args"])
         # HOME pinned to the workspace so ~/.claude persists with the files.
         self.assertEqual(argv["home"], self.workspace)
@@ -265,14 +266,15 @@ class DevboxWrapperTests(unittest.TestCase):
                     f"echo \"HDR ${{GIT_CONFIG_KEY_1:-}}\" >> {out_file}\n"
                     "echo cloned\n")
         os.chmod(git, 0o755)
-        orig = main._git_bin
+        orig, orig_ws = main._git_bin, main._resolve_workspace
         main._git_bin = lambda: git
+        main._resolve_workspace = lambda: (self.workspace, True)  # the target must be under it (design §4)
         try:
             target = os.path.join(self.workspace, "widgets")
             gen = asyncio.run(main.handle({"op": "clone", "repo": "acme/widgets", "target": target, "token": token}))
             events = _collect(gen)
         finally:
-            main._git_bin = orig
+            main._git_bin, main._resolve_workspace = orig, orig_ws
         self.assertEqual(events[0]["type"], "git_start")
         self.assertTrue(events[0]["authenticated"])
         self.assertEqual(events[-1], {"type": "git_end", "op": "clone", "exit_code": 0})

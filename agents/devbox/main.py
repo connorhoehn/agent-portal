@@ -21,18 +21,33 @@ invocation time (never at import time) and is absent entirely under local
 `agentcore dev` — everything workspace-related is resolved lazily per request
 and degrades to a temp dir when the mount is missing.
 
+The microVM runner (`"runner": "microvm"`, docs/microvm-runner-design.md)
+is the same file on a runtime with no session storage: boot → task → push,
+one work item per session, the run token and fleet secret held by an
+in-process lab broker on a unix socket instead of the `claude` environment.
+
 CAVEAT (also in CLAUDE.md Gotchas): session storage is wiped on every runtime
 version update — i.e. every image push + deploy — and after 14 days idle.
 Treat the workspace as a cache; durable work leaves via git or command mode.
 """
 
 import asyncio
+import base64
+import contextlib
+import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import signal
 import tempfile
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import AsyncIterator
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
@@ -43,6 +58,11 @@ except ImportError:  # pragma: no cover - local run from the repo
     import sys
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "_shared"))
     from secret_resolver import SecretResolutionError, resolve_secret
+
+try:  # the lab broker signs with the shared envelope signer (agents/_shared/callbacks.py)
+    import callbacks as _callbacks
+except ImportError:  # pragma: no cover - an image that did not copy callbacks.py
+    _callbacks = None
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -134,21 +154,36 @@ def _resolve_model(requested: str | None) -> str:
     raise ModelNotAllowed(requested, allowed)
 
 
-def _build_cmd(prompt: str, resume: bool, output_format: str, model: str = "") -> list[str]:
+def _build_cmd(prompt: str, resume: bool, output_format: str, model: str = "",
+               resume_session_id: str | None = None) -> list[str]:
+    """The `claude -p` argv, for both runners.
+
+    No `--dangerously-skip-permissions` (design §14 step 2): what a run may do
+    is the managed settings' `permissions.allow` / `permissions.deny`
+    (managed-settings.json, baked into /etc/claude-code), and in `-p` mode a
+    call no rule allows is refused and reported to the model, not prompted.
+
+    `resume_session_id` (microVM, design §9) resumes one recorded session by
+    id; `resume` (fleet only) keeps today's `--continue`. The microVM path
+    never passes `resume`."""
     cmd = [_claude_bin(), "-p", prompt, "--output-format", output_format]
     if model:
         cmd += ["--model", model]
     if output_format == "stream-json":
         # stream-json requires --verbose in headless mode.
         cmd.append("--verbose")
-    if resume:
-        # Continue the most recent conversation in this workspace. Safe when
-        # none exists yet (Claude Code starts fresh).
+    if resume_session_id:
+        cmd += ["--resume", resume_session_id]
+    elif resume:
+        # Fleet: continue the most recent conversation in this workspace. Safe
+        # when none exists yet (Claude Code starts fresh).
         cmd.append("--continue")
-    # The microVM IS the sandbox — permission prompts would deadlock headless
-    # runs, and there is no interactive user to answer them.
-    cmd.append("--dangerously-skip-permissions")
     return cmd
+
+
+def _prompt_digest(prompt: str) -> tuple[int, str]:
+    """What the logs say about a prompt: its length and sha256, never its text (design §11)."""
+    return len(prompt), hashlib.sha256(prompt.encode("utf-8", errors="replace")).hexdigest()
 
 
 def _model_of(cmd: list[str]) -> str:
@@ -267,7 +302,7 @@ class _FreshTokenMeter:
 
 
 async def _run_streaming(cmd: list[str], workspace: str, persistent: bool, timeout_s: int, lab: object = None,
-                         budget: object = None) -> AsyncIterator[dict]:
+                         budget: object = None, env: dict | None = None) -> AsyncIterator[dict]:
     """Spawn claude and yield one dict per stream-json event line.
 
     Yield DICTS, not pre-serialised JSON strings: BedrockAgentCoreApp
@@ -293,7 +328,7 @@ async def _run_streaming(cmd: list[str], workspace: str, persistent: bool, timeo
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         cwd=workspace,
-        env=_subprocess_env(workspace, lab),
+        env=env if env is not None else _subprocess_env(workspace, lab),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         start_new_session=True,
@@ -427,7 +462,52 @@ async def _run_sync(cmd: list[str], workspace: str, persistent: bool, timeout_s:
 GIT_OPS = ("clone", "push")
 _GIT_TIMEOUT_S = 600
 _SAFE_REPO = r"^[\w.-]+/[\w.-]+$"
-_SAFE_REF = r"^[\w./-]{1,200}$"
+# A ref can never be read as an option (no leading dash) or climb (no "..").
+_SAFE_REF = r"^[A-Za-z0-9][\w./-]{0,199}$"
+
+
+def _safe_ref(ref: object) -> bool:
+    return isinstance(ref, str) and bool(re.match(_SAFE_REF, ref)) and ".." not in ref \
+        and not ref.endswith((".lock", "/", ".")) and "//" not in ref
+
+
+class BadTarget(ValueError):
+    """A clone target outside the workspace (design §4)."""
+
+
+def _workspace_root() -> str:
+    return os.path.realpath(_resolve_workspace()[0])
+
+
+def _confine(target: object, root: str | None = None) -> str:
+    """The target's realpath, or BadTarget unless it is STRICTLY under the
+    workspace root. Called before any delete or git call (design §4)."""
+    root = os.path.realpath(root or _workspace_root())
+    if not isinstance(target, str) or not target.startswith("/") or any(c in target for c in "\n\r\0"):
+        raise BadTarget("target must be an absolute path")
+    real = os.path.realpath(target)
+    if root == "/" or real == root or os.path.commonpath([root, real]) != root:
+        raise BadTarget("target must be strictly under the workspace")
+    return real
+
+
+def _wipe(root: str) -> int:
+    """`find $root -mindepth 1 -delete`, then recreate ~/.claude (design §4).
+
+    Never follows a link: a symlink in the workspace is unlinked, not its
+    target emptied. Returns the number of top-level entries removed."""
+    root = os.path.realpath(root)
+    if root == "/" or not os.path.isabs(root):
+        raise BadTarget("refusing to wipe /")
+    with os.scandir(root) as it:
+        entries = list(it)
+    for entry in entries:
+        if entry.is_dir(follow_symlinks=False):
+            shutil.rmtree(entry.path)
+        else:
+            os.unlink(entry.path)
+    os.makedirs(os.path.join(root, ".claude"), mode=0o700, exist_ok=True)
+    return len(entries)
 
 
 def _git_bin() -> str:
@@ -461,7 +541,6 @@ def _git_env(workspace: str, token: str | None) -> dict:
 
 def _git_argv(op: str, repo: str, target: str, branch: str | None, commit: str | None, depth: int) -> list[list[str]]:
     """The git invocations for an op. The token is NOT here — see _git_env."""
-    import re
     if op not in GIT_OPS:
         raise ValueError(f"unsupported git op: {op}")
     if not re.match(_SAFE_REPO, repo or "") or any(re.fullmatch(r"\.+", seg) for seg in repo.split("/")):
@@ -472,15 +551,15 @@ def _git_argv(op: str, repo: str, target: str, branch: str | None, commit: str |
     git = _git_bin()
     if op == "clone":
         return [[git, "clone", "--depth", str(max(1, int(depth))), url, target]]
-    if not branch or not re.match(_SAFE_REF, branch):
+    if not branch or not _safe_ref(branch):
         raise ValueError("branch is required for push")
     if commit and not re.match(r"^[0-9a-f]{7,40}$", commit):
         raise ValueError("commit must be a sha")
     steps = []
     if commit:
-        steps.append([git, "-C", target, "checkout", "-B", branch, commit])
+        steps.append([git, "-C", target, "checkout", "-B", branch, commit, "--"])
     else:
-        steps.append([git, "-C", target, "checkout", "-B", branch])
+        steps.append([git, "-C", target, "checkout", "-B", branch, "--"])
     steps.append([git, "-C", target, "push", "-u", url, branch, "--force-with-lease"])
     return steps
 
@@ -501,6 +580,10 @@ async def _run_git(payload: dict) -> AsyncIterator[dict]:
     token = token if isinstance(token, str) and token else None
     workspace, persistent = _resolve_workspace()
     try:
+        # Confined BEFORE the rmtree below (design §4): `/etc` or
+        # `/mnt/workspace/../etc` never reaches a delete.
+        if target.startswith("/"):
+            target = _confine(target, workspace)
         steps = _git_argv(op, repo, target, branch if isinstance(branch, str) else None,
                           commit if isinstance(commit, str) else None, depth)
     except ValueError as err:
@@ -535,6 +618,725 @@ async def _run_git(payload: dict) -> AsyncIterator[dict]:
     yield {"type": "git_end", "op": op, "exit_code": rc}
 
 
+# ─── The microVM runner (docs/microvm-runner-design.md §3 §4 §8 §9 §11) ───────
+#
+# One session runs one work item, as three invokes on one runtime session:
+#
+#   boot  wipe the workspace, clone (read token in the git child's env only),
+#         start the lab broker (run token + fleet secret in THIS process's
+#         memory only), check the skill library's sha through the broker.
+#   task  `claude -p` under the managed allowlist with no credential in its
+#         environment; snapshot commit; transcript → presigned PUT; one
+#         devbox_end with the run's numbers.
+#   push  push the branch (write token in the git child's env only).
+#
+# Claude never holds a credential that leaves the VM (design §2, §8).
+
+MICROVM_OPS = ("boot", "task", "push")
+_LAB_SOCKET_DEFAULT = "/run/orgiq/lab.sock"
+_LAB_SERVICE_ID = "orgiq-devbox"            # middleware service-auth.ts DEVBOX_SERVICE_ID
+_LAB_AUDIENCE = "orgiq-middleware/lab"      # middleware LAB_CALLBACK_SERVICE_AUTH.signed.audience
+_LIBRARY_FORMAT = "orgiq-skill-library/1"   # the `lab skills` wire format
+_DEFAULT_AUTHOR = {"name": "OrgIQ Agent", "email": "agent@orgiq.local"}
+_RESPONSE_MAX = 32 * 1024 * 1024            # the broker's upstream cap (lab's --max-filesize)
+_BROKER_BODY_MAX = 1024 * 1024
+_TRANSCRIPT_MAX = 256 * 1024 * 1024
+_SAFE_ID = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$"
+_SESSION_UUID = r"^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"
+_BRANCH_PREFIX = "orgiq/"
+
+# What the `claude` child never inherits (design §8, pinned by a test). The
+# region survives so the Bedrock client still knows where to call.
+_CLAUDE_ENV_STRIP = ("LAB_RUN_TOKEN", "LAB_CALLBACK_SECRET", "LAB_CALLBACK_SECRET_ID", "GH_TOKEN", "GITHUB_TOKEN")
+_CLAUDE_ENV_STRIP_PREFIXES = ("GIT_CONFIG", "AWS_")
+_CLAUDE_ENV_KEEP = ("AWS_REGION", "AWS_DEFAULT_REGION")
+
+# Seam: every HTTP call this file makes (broker upstream, transcript GET/PUT).
+_urlopen = urllib.request.urlopen
+
+
+class _Refusal(Exception):
+    def __init__(self, error: str, detail: str = ""):
+        super().__init__(error)
+        self.error = error
+        self.detail = detail
+
+    def result(self) -> dict:
+        return {"ok": False, "error": self.error, "detail": self.detail}
+
+
+def _lab_socket_path() -> str:
+    return os.environ.get("LAB_BROKER_SOCKET") or _LAB_SOCKET_DEFAULT
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _clean_str(value: object, limit: int = 4096) -> str | None:
+    if isinstance(value, str) and value and len(value) <= limit and not any(c in value for c in "\n\r\0"):
+        return value
+    return None
+
+
+def _https_url(value: object) -> str | None:
+    url = _clean_str(value, 8192)
+    if not url or not url.startswith("https://") or re.search(r"\s", url):
+        return None
+    return url
+
+
+def _author(value: object) -> dict | None:
+    """{name, email} for a commit, or None when the payload has none usable."""
+    if not isinstance(value, dict):
+        return None
+    name, email = _clean_str(value.get("name"), 200), _clean_str(value.get("email"), 320)
+    if not name or not email or any(c in name for c in "<>") or not re.fullmatch(r"[^\s<>@]+@[^\s<>@]+", email):
+        return None
+    return {"name": name, "email": email}
+
+
+def _stripped_for_claude(name: str) -> bool:
+    if name in _CLAUDE_ENV_KEEP:
+        return False
+    return name in _CLAUDE_ENV_STRIP or name.startswith(_CLAUDE_ENV_STRIP_PREFIXES)
+
+
+def _cwd_slug(cwd: str) -> str:
+    """Claude Code's project folder for a cwd: every non-alphanumeric → '-'."""
+    return re.sub(r"[^A-Za-z0-9]", "-", cwd)
+
+
+def _transcript_path(home: str, cwd: str, session_id: str) -> str:
+    return os.path.join(home, ".claude", "projects", _cwd_slug(cwd), f"{session_id}.jsonl")
+
+
+def _library_sha(body: bytes, header_sha: str = "") -> str | None:
+    """The skill library's set sha, recomputed the way `lab skills` does, or
+    None when the body is not a self-consistent library."""
+    try:
+        lib = json.loads(body)
+        if not isinstance(lib, dict) or lib.get("format") != _LIBRARY_FORMAT:
+            return None
+        lines = []
+        for f in lib.get("files", []):
+            data = str(f.get("content", "")).encode("utf-8")
+            sha = f.get("sha256", "")
+            if hashlib.sha256(data).hexdigest() != sha:
+                return None
+            lines.append(f"{f.get('path', '')} {f.get('mode')} {sha}")
+    except (ValueError, TypeError, AttributeError):
+        return None
+    got = hashlib.sha256(("\n".join([_LIBRARY_FORMAT] + sorted(lines)) + "\n").encode()).hexdigest()
+    if got != lib.get("sha256") or (header_sha and got != header_sha):
+        return None
+    return got
+
+
+# ── The lab broker (design §8) ───────────────────────────────────────────────
+
+class LabBroker:
+    """An HTTP/1.1 server on a unix socket that `lab` talks to instead of the
+    middleware. It holds the run token and the fleet secret in memory, refuses
+    every path that is not this run's, signs the service envelope with
+    agents/_shared/callbacks.py's signer, adds `x-lab-run-token`, and forwards
+    to `lab_api_base`. One request per connection."""
+
+    # Headers `lab` may set that are forwarded; everything else (including any
+    # x-lab-run-token or X-Service-Auth `lab` was talked into sending) is dropped.
+    _PASS_REQUEST = ("accept", "content-type", "if-none-match")
+    _PASS_RESPONSE = ("content-type", "etag", "x-skill-library-sha256", "x-brief-sha256", "cache-control")
+
+    def __init__(self, *, run_ref: str, run_token: str, secret: str, api_base: str, socket_path: str):
+        self.run_ref = run_ref
+        self._run_token = run_token
+        self._secret = secret
+        self.api_base = api_base.rstrip("/")
+        self.socket_path = socket_path
+        self._run_segments = {run_ref, urllib.parse.quote(run_ref, safe="")}
+        self._server: asyncio.base_events.Server | None = None
+
+    async def start(self) -> None:
+        parent = os.path.dirname(self.socket_path)
+        os.makedirs(parent, mode=0o700, exist_ok=True)
+        if os.path.lexists(self.socket_path):
+            os.unlink(self.socket_path)
+        old = os.umask(0o177)  # the socket is born 0600, no window at 0755
+        try:
+            self._server = await asyncio.start_unix_server(self._handle, path=self.socket_path)
+        finally:
+            os.umask(old)
+        os.chmod(self.socket_path, 0o600)
+
+    async def stop(self) -> None:
+        if self._server is not None:
+            self._server.close()
+            with contextlib.suppress(Exception):
+                await self._server.wait_closed()
+            self._server = None
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(self.socket_path)
+
+    def allowed(self, method: str, target: str) -> bool:
+        """Only this run's routes: /api/runs/<run_ref>/…, /api/lab/…, and the
+        two run-scoped runbook writes `lab applied|propose|keep` make."""
+        if method not in ("GET", "POST") or not target.startswith("/") or re.search(r"[\s#\\]", target):
+            return False
+        path = target.split("?", 1)[0]
+        if re.search(r"%(2[fFeE]|5[cC]|00)", path):
+            return False  # no encoded separators, dots or NULs
+        segs = path.split("/")[1:]
+        if any(s in ("", ".", "..") for s in segs):
+            return False
+        if len(segs) >= 3 and segs[:2] == ["api", "lab"]:
+            return True
+        if len(segs) >= 4 and segs[:2] == ["api", "runs"] and segs[2] in self._run_segments:
+            return True
+        if method == "POST" and segs == ["api", "runbooks", "proposals"]:
+            return True
+        if method == "POST" and len(segs) == 4 and segs[:2] == ["api", "runbooks"] and segs[3] == "applications" \
+                and re.fullmatch(r"[A-Za-z0-9._-]{1,120}", segs[2]):
+            return True
+        return False
+
+    def _forward(self, method: str, target: str, body: bytes, headers: dict) -> tuple[int, dict, bytes]:
+        url = self.api_base + target
+        out = {k: headers[k] for k in self._PASS_REQUEST if k in headers}
+        if self._secret:
+            if _callbacks is None:
+                return 500, {"content-type": "application/json"}, b'{"error":"lab broker: signer unavailable"}'
+            if _callbacks.legacy_headers_allowed():
+                out["x-lab-auth"] = self._secret
+            nonce = _callbacks.new_nonce()
+            out[_callbacks.SERVICE_AUTH_HEADER] = _callbacks.sign_service_request(
+                method, _callbacks.request_target(url), body.decode("utf-8"),
+                secret=self._secret, service_id=_LAB_SERVICE_ID,
+                audience=_callbacks.nonce_audience(_LAB_AUDIENCE, nonce))
+            out[_callbacks.SERVICE_NONCE_HEADER] = nonce
+        out["x-lab-run-token"] = self._run_token
+        req = urllib.request.Request(url, data=body if method == "POST" else None, method=method, headers=out)
+        try:
+            with _urlopen(req, timeout=30) as resp:
+                status, rh, data = resp.status, resp.headers, resp.read(_RESPONSE_MAX + 1)
+        except urllib.error.HTTPError as err:
+            status, rh, data = err.code, err.headers, err.read() if err.fp else b""
+        except Exception as err:  # noqa: BLE001 - the agent gets a 502, never a crash
+            log.warning("lab broker: upstream unreachable (%s)", type(err).__name__)
+            return 502, {"content-type": "application/json"}, b'{"error":"lab broker: upstream unreachable"}'
+        if len(data) > _RESPONSE_MAX:
+            return 502, {"content-type": "application/json"}, b'{"error":"lab broker: response too large"}'
+        keep = {}
+        for k in self._PASS_RESPONSE:
+            v = rh.get(k) if rh is not None else None
+            if v:
+                keep[k] = v
+        return status, keep, data
+
+    async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        try:
+            status, rh, data = await self._serve(reader, writer)
+        except Exception as err:  # noqa: BLE001
+            log.warning("lab broker: %s", type(err).__name__)
+            status, rh, data = 400, {"content-type": "application/json"}, b'{"error":"lab broker: bad request"}'
+        try:
+            head = [f"HTTP/1.1 {status} {'OK' if status < 400 else 'Error'}",
+                    f"Content-Length: {len(data)}", "Connection: close"]
+            head += [f"{k}: {v}" for k, v in rh.items()]
+            writer.write(("\r\n".join(head) + "\r\n\r\n").encode("latin-1") + data)
+            await writer.drain()
+        finally:
+            writer.close()
+            with contextlib.suppress(Exception):
+                await writer.wait_closed()
+
+    async def _serve(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> tuple[int, dict, bytes]:
+        raw = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=15)
+        lines = raw.decode("latin-1").split("\r\n")
+        parts = lines[0].split(" ")
+        if len(parts) != 3:
+            raise ValueError("request line")
+        method, target = parts[0].upper(), parts[1]
+        headers = {}
+        for line in lines[1:]:
+            if ":" in line:
+                k, _, v = line.partition(":")
+                headers[k.strip().lower()] = v.strip()
+        js = {"content-type": "application/json"}
+        if "transfer-encoding" in headers:
+            return 411, js, b'{"error":"lab broker: content-length required"}'
+        length = int(headers.get("content-length") or 0)
+        if length < 0 or length > _BROKER_BODY_MAX:
+            return 413, js, b'{"error":"lab broker: body too large"}'
+        if not self.allowed(method, target):
+            log.warning("lab broker: refused %s %s", method, target.split("?", 1)[0][:200])
+            return 403, js, b'{"error":"lab broker: path not allowed for this run"}'
+        if length and headers.get("expect", "").lower() == "100-continue":
+            writer.write(b"HTTP/1.1 100 Continue\r\n\r\n")
+            await writer.drain()
+        body = await asyncio.wait_for(reader.readexactly(length), timeout=30) if length else b""
+        body.decode("utf-8")  # the envelope signs text; refuse anything else (→ 400)
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._forward, method, target, body, headers)
+
+
+async def _unix_http(socket_path: str, method: str, target: str, body: bytes = b"",
+                     headers: dict | None = None) -> tuple[int, dict, bytes]:
+    """A one-shot HTTP/1.1 request over a unix socket (boot's own broker calls; tests)."""
+    reader, writer = await asyncio.open_unix_connection(socket_path)
+    try:
+        head = [f"{method} {target} HTTP/1.1", "Host: localhost", "Connection: close",
+                f"Content-Length: {len(body)}"] + [f"{k}: {v}" for k, v in (headers or {}).items()]
+        writer.write(("\r\n".join(head) + "\r\n\r\n").encode("latin-1") + body)
+        await writer.drain()
+        raw = await asyncio.wait_for(reader.read(), timeout=60)
+    finally:
+        writer.close()
+        with contextlib.suppress(Exception):
+            await writer.wait_closed()
+    head_raw, _, data = raw.partition(b"\r\n\r\n")
+    lines = head_raw.decode("latin-1").split("\r\n")
+    status = int(lines[0].split(" ")[1])
+    hdrs = {}
+    for line in lines[1:]:
+        k, _, v = line.partition(":")
+        hdrs[k.strip().lower()] = v.strip()
+    return status, hdrs, data
+
+
+# ── Run state between the three invokes ──────────────────────────────────────
+
+@dataclass
+class _MicrovmRun:
+    run_ref: str
+    brief_ref: str | None
+    library_sha: str
+    repo: str
+    ref: str
+    home: str
+    target: str
+    base_sha: str
+    git_config: bytes
+    broker: LabBroker
+    author: dict | None = None
+    pushed: dict = field(default_factory=dict)
+
+
+_RUN: _MicrovmRun | None = None
+
+
+async def _mvm_shutdown() -> None:
+    """Stop the broker and forget the run (a new boot; tests)."""
+    global _RUN
+    run, _RUN = _RUN, None
+    if run is not None:
+        await run.broker.stop()
+
+
+async def _exec(argv: list[str], *, cwd: str, env: dict, timeout_s: int = _GIT_TIMEOUT_S) -> tuple[int, str]:
+    """Run one child (git) to completion → (exit code, combined output tail). A test seam."""
+    proc = await asyncio.create_subprocess_exec(
+        *argv, cwd=cwd, env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+        start_new_session=True)
+    try:
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
+    except asyncio.TimeoutError:
+        _kill_process_group(proc, timeout_s)
+        await proc.wait()
+        return 124, f"timed out after {timeout_s}s"
+    return proc.returncode or 0, out.decode("utf-8", errors="replace")[-8000:]
+
+
+def _mvm_git_env(home: str, token: str | None = None, author: dict | None = None) -> dict:
+    """The git child's environment on the microVM path.
+
+    Built from a minimal base, not os.environ: no AWS credentials, no fleet
+    secret. The token rides as a github.com-scoped extraheader through
+    GIT_CONFIG_* (never argv, never disk). After `claude` has run, the repo is
+    untrusted: hooks, fsmonitor, credential helpers, the global and system
+    config are all switched off here, and .git/config is restored from boot
+    (_restore_git_config) before any git call."""
+    env = {k: os.environ[k] for k in ("PATH", "LANG", "LC_ALL", "TZ") if k in os.environ}
+    env.update({"HOME": home, "GIT_TERMINAL_PROMPT": "0", "GIT_CONFIG_NOSYSTEM": "1",
+                "GIT_CONFIG_GLOBAL": os.devnull, "GIT_PAGER": "cat"})
+    pairs = [("safe.directory", "*"), ("core.hooksPath", os.devnull), ("core.fsmonitor", "false"),
+             ("credential.helper", "")]
+    if token:
+        basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+        pairs.append(("http.https://github.com/.extraheader", f"AUTHORIZATION: basic {basic}"))
+    env["GIT_CONFIG_COUNT"] = str(len(pairs))
+    for i, (k, v) in enumerate(pairs):
+        env[f"GIT_CONFIG_KEY_{i}"] = k
+        env[f"GIT_CONFIG_VALUE_{i}"] = v
+    a = author or _DEFAULT_AUTHOR
+    env.update({"GIT_AUTHOR_NAME": a["name"], "GIT_AUTHOR_EMAIL": a["email"],
+                "GIT_COMMITTER_NAME": a["name"], "GIT_COMMITTER_EMAIL": a["email"]})
+    return env
+
+
+def _microvm_claude_env(run: _MicrovmRun, author: dict | None) -> dict:
+    """The `claude` child's environment: no run token, no fleet secret, no git
+    credential config, no AWS variable but the region (design §8). `lab`
+    reaches the platform through the broker's socket instead."""
+    env = {k: v for k, v in os.environ.items() if not _stripped_for_claude(k)}
+    for var in _LAB_ENV.values():
+        env.pop(var, None)
+    env["HOME"] = run.home
+    env.setdefault("CLAUDE_CODE_USE_BEDROCK", "1")
+    env["LAB_API_BASE"] = "http+unix://" + run.broker.socket_path
+    env["LAB_RUN_REF"] = run.run_ref
+    env["LAB_LIBRARY_SHA"] = run.library_sha
+    env["LAB_REPO"] = run.repo
+    if run.brief_ref:
+        env["LAB_BRIEF_ID"] = run.brief_ref
+    a = author or _DEFAULT_AUTHOR
+    env.update({"GIT_AUTHOR_NAME": a["name"], "GIT_AUTHOR_EMAIL": a["email"],
+                "GIT_COMMITTER_NAME": a["name"], "GIT_COMMITTER_EMAIL": a["email"]})
+    return env
+
+
+def _restore_git_config(run: _MicrovmRun) -> None:
+    """Put back the .git/config boot saw, so a `claude`-edited config (a
+    remote, a proxy, a filter driver) never reaches a credentialed git call."""
+    gitdir = os.path.join(run.target, ".git")
+    if os.path.islink(gitdir) or not os.path.isdir(gitdir):
+        raise _Refusal("repo-tampered", ".git is not a directory")
+    cfg = os.path.join(gitdir, "config")
+    tmp = cfg + ".orgiq-restore"
+    with contextlib.suppress(FileNotFoundError):
+        os.unlink(tmp)
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o644)
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(run.git_config)
+    os.replace(tmp, cfg)
+
+
+async def _head_sha(run: _MicrovmRun, env: dict) -> str | None:
+    rc, out = await _exec([_git_bin(), "-C", run.target, "rev-parse", "HEAD"], cwd=run.home, env=env)
+    sha = out.strip().splitlines()[-1] if rc == 0 and out.strip() else ""
+    return sha if re.fullmatch(r"[0-9a-f]{40}", sha) else None
+
+
+async def _snapshot(run: _MicrovmRun, author: dict | None) -> str | None:
+    """Commit whatever the run left in the tree (as the actor), → head sha."""
+    _restore_git_config(run)
+    env = _mvm_git_env(run.home, None, author)
+    git = _git_bin()
+    rc, out = await _exec([git, "-C", run.target, "status", "--porcelain"], cwd=run.home, env=env)
+    if rc == 0 and out.strip():
+        rc, _ = await _exec([git, "-C", run.target, "add", "-A"], cwd=run.home, env=env)
+        if rc == 0:
+            rc, _ = await _exec([git, "-C", run.target, "commit", "--no-verify", "-q", "-m",
+                                 f"OrgIQ snapshot: run {run.run_ref}"], cwd=run.home, env=env)
+        if rc != 0:
+            log.warning("microvm: snapshot commit exited %s", rc)
+    return await _head_sha(run, env)
+
+
+def _result_usage(ev: dict | None) -> tuple[int | None, dict | None]:
+    """(fresh tokens, usage) from the stream-json `result` event, mirroring the
+    middleware's parseResultUsage: no result, or malformed usage, is (None,
+    None) — unknown, never 0."""
+    usage = ev.get("usage") if isinstance(ev, dict) else None
+    if not isinstance(usage, dict):
+        return None, None
+
+    def n(key: str, default: int | None = None) -> int | None:
+        v = usage.get(key)
+        if v is None:
+            return default
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or v < 0:
+            return None
+        return int(v)
+
+    inp, out = n("input_tokens"), n("output_tokens")
+    cw, cr = n("cache_creation_input_tokens", 0), n("cache_read_input_tokens", 0)
+    if inp is None or out is None or cw is None or cr is None:
+        return None, None
+    return inp + cw + out, {"inputTokens": inp, "outputTokens": out, "cacheWriteTokens": cw, "cacheReadTokens": cr}
+
+
+def _get_transcript(url: str, path: str) -> bool:
+    try:
+        with _urlopen(urllib.request.Request(url, method="GET"), timeout=120) as resp:
+            data = resp.read(_TRANSCRIPT_MAX + 1)
+    except Exception as err:  # noqa: BLE001
+        log.warning("microvm: transcript download failed (%s)", getattr(err, "code", type(err).__name__))
+        return False
+    if len(data) > _TRANSCRIPT_MAX:
+        log.warning("microvm: transcript download over %s bytes; refused", _TRANSCRIPT_MAX)
+        return False
+    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(data)
+    return True
+
+
+def _put_transcript(url: str, path: str) -> bool:
+    """One PUT of the transcript to its presigned URL. A failure is logged and
+    returned, never raised: it does not change the run's exit code."""
+    try:
+        with open(path, "rb") as fh:
+            data = fh.read(_TRANSCRIPT_MAX + 1)
+    except OSError:
+        return False
+    if len(data) > _TRANSCRIPT_MAX:
+        log.warning("microvm: transcript over %s bytes; not uploaded", _TRANSCRIPT_MAX)
+        return False
+    req = urllib.request.Request(url, data=data, method="PUT", headers={"Content-Type": "application/x-ndjson"})
+    try:
+        with _urlopen(req, timeout=120) as resp:
+            ok = 200 <= int(getattr(resp, "status", 200)) < 300
+    except Exception as err:  # noqa: BLE001
+        log.warning("microvm: transcript upload failed (%s)", getattr(err, "code", type(err).__name__))
+        return False
+    if not ok:
+        log.warning("microvm: transcript upload answered %s", getattr(resp, "status", "?"))
+    return ok
+
+
+# ── boot ─────────────────────────────────────────────────────────────────────
+
+async def _mvm_boot(payload: dict) -> dict:
+    global _RUN
+    t0 = time.monotonic()
+    repo = payload.get("repo") if isinstance(payload.get("repo"), dict) else {}
+    full_name = repo.get("full_name") if isinstance(repo.get("full_name"), str) else ""
+    ref = payload.get("ref")
+    token = _clean_str(payload.get("token"))
+    run_ref = payload.get("run_ref")
+    run_token = _clean_str(payload.get("run_token"))
+    library_sha = payload.get("library_sha")
+    brief_ref = payload.get("brief_ref")
+    api_base = _clean_str(payload.get("lab_api_base"), 2048)
+    try:
+        if not re.match(_SAFE_REPO, full_name) or any(re.fullmatch(r"\.+", s) for s in full_name.split("/")):
+            raise _Refusal("bad-repo", "repo.full_name must be owner/name")
+        url = f"https://github.com/{full_name}.git"
+        clone_url = repo.get("clone_url")
+        if clone_url not in (None, url):
+            raise _Refusal("bad-repo", "repo.clone_url must be https://github.com/<full_name>.git")
+        if not _safe_ref(ref):
+            raise _Refusal("bad-ref", "ref is not a safe ref name")
+        if not isinstance(run_ref, str) or not re.match(_SAFE_ID, run_ref):
+            raise _Refusal("bad-run", "run_ref is missing or unsafe")
+        if not run_token:
+            raise _Refusal("bad-run", "run_token is missing")
+        if not isinstance(library_sha, str) or not re.fullmatch(r"[0-9a-f]{64}", library_sha):
+            raise _Refusal("bad-library-sha", "library_sha must be 64 hex")
+        if brief_ref is not None and (not isinstance(brief_ref, str) or not re.match(_SAFE_ID, brief_ref)):
+            raise _Refusal("bad-run", "brief_ref is unsafe")
+        if not api_base or not re.fullmatch(r"https?://[A-Za-z0-9.-]+(:\d{1,5})?(/[\w./-]*)?", api_base):
+            raise _Refusal("bad-lab-api-base", "lab_api_base must be an http(s) origin")
+        home = _workspace_root()
+        try:
+            target = _confine(payload.get("target"), home)  # before ANY delete
+        except BadTarget as err:
+            raise _Refusal("bad-target", str(err)) from None
+    except _Refusal as r:
+        log.warning("microvm boot refused: %s (%s)", r.error, r.detail)
+        return r.result()
+
+    await _mvm_shutdown()  # a reused container: the previous run's broker goes first
+    try:
+        removed = _wipe(home)
+    except (OSError, BadTarget) as err:
+        return _Refusal("wipe-failed", type(err).__name__).result()
+    log.info("microvm boot: run=%s repo=%s ref=%s wiped=%d", run_ref, full_name, ref, removed)
+
+    env = _mvm_git_env(home, token)
+    git = _git_bin()
+    rc, out = await _exec([git, "clone", "--depth", "50", "--no-tags", "--branch", ref, "--", url, target],
+                          cwd=home, env=env)
+    if rc != 0:
+        log.warning("microvm boot: git clone exited %s: %s", rc, out[-1000:])
+        return _Refusal("clone-failed", f"git clone exited {rc}").result()
+    rc, out = await _exec([git, "-C", target, "checkout", "-B", ref, "--"], cwd=home, env=env)
+    if rc != 0:
+        log.warning("microvm boot: git checkout exited %s: %s", rc, out[-1000:])
+        return _Refusal("checkout-failed", f"git checkout exited {rc}").result()
+    try:
+        with open(os.path.join(target, ".git", "config"), "rb") as fh:
+            git_config = fh.read()
+    except OSError:
+        return _Refusal("clone-failed", "no .git/config after clone").result()
+
+    try:
+        secret = resolve_secret("LAB_CALLBACK_SECRET")
+    except SecretResolutionError as exc:
+        log.error("microvm boot: %s; lab calls will go unsigned", exc)
+        secret = ""
+    broker = LabBroker(run_ref=run_ref, run_token=run_token, secret=secret, api_base=api_base,
+                       socket_path=_lab_socket_path())
+    try:
+        await broker.start()
+    except OSError as err:
+        return _Refusal("broker-failed", type(err).__name__).result()
+    run = _MicrovmRun(run_ref=run_ref, brief_ref=brief_ref, library_sha=library_sha, repo=full_name, ref=ref,
+                      home=home, target=target, base_sha="", git_config=git_config, broker=broker,
+                      author=_author(payload.get("author")))
+    head = await _head_sha(run, env)
+    if not head:
+        await broker.stop()
+        return _Refusal("clone-failed", "no HEAD after checkout").result()
+    run.base_sha = head
+
+    # The skill library through the broker, exactly as `lab skills` will see it.
+    try:
+        status, hdrs, body = await _unix_http(broker.socket_path, "GET",
+                                              f"/api/runs/{urllib.parse.quote(run_ref, safe='')}/skills")
+    except (OSError, ValueError, IndexError, asyncio.TimeoutError) as err:
+        await broker.stop()
+        return _Refusal("skills-unavailable", type(err).__name__).result()
+    if status != 200:
+        await broker.stop()
+        return _Refusal("skills-unavailable", f"HTTP {status}").result()
+    got = _library_sha(body, hdrs.get("x-skill-library-sha256", ""))
+    if got != library_sha:
+        await broker.stop()
+        log.warning("microvm boot: library-mismatch run=%s got=%s want=%s", run_ref,
+                    (got or "invalid")[:12], library_sha[:12])
+        return _Refusal("library-mismatch",
+                        f"library {(got or 'invalid')[:12]} is not the brief's {library_sha[:12]}").result()
+
+    # Where `lab brief` looks when LAB_RUN_REF is not in its environment.
+    state = {"run_ref": run_ref, "brief_ref": brief_ref, "library_sha": library_sha, "repo": full_name}
+    with open(os.path.join(home, ".claude", "orgiq-run.json"), "w") as fh:
+        json.dump(state, fh, sort_keys=True)
+    _RUN = run
+    log.info("microvm boot: run=%s head=%s library_sha_ok=true boot_ms=%d", run_ref, head,
+             int((time.monotonic() - t0) * 1000))
+    return {"ok": True, "head_sha": head, "library_sha_ok": True, "booted_at": _now_iso()}
+
+
+# ── task ─────────────────────────────────────────────────────────────────────
+
+async def _mvm_task(payload: dict) -> AsyncIterator | dict:
+    run = _RUN
+    if run is None:
+        return {"agent": "devbox", "error": "not-booted"}
+    prompt = payload.get("prompt")
+    if not isinstance(prompt, str) or not prompt:
+        return {"agent": "devbox", "error": "missing prompt"}
+    try:
+        model = _resolve_model(payload.get("model"))
+    except ModelNotAllowed as err:
+        log.warning("Refused model %s (allowed: %s)", err.requested, ",".join(err.allowed))
+        return {"agent": "devbox", "error": "model not allowlisted", "model": err.requested, "allowed": err.allowed}
+    try:
+        timeout_s = min(int(payload.get("timeout_s") or DEFAULT_TIMEOUT_S), MAX_TIMEOUT_S)
+    except (TypeError, ValueError):
+        timeout_s = DEFAULT_TIMEOUT_S
+    resume_id = payload.get("resume_session_id")
+    if resume_id is not None and (not isinstance(resume_id, str) or not re.fullmatch(_SESSION_UUID, resume_id)):
+        return {"agent": "devbox", "error": "bad resume_session_id"}
+    put_url = _https_url(payload.get("transcript_put_url"))
+    author = _author(payload.get("author")) or run.author
+    length, digest = _prompt_digest(prompt)
+    log.info("microvm task: run=%s model=%s resume=%s prompt_len=%d prompt_sha256=%s",
+             run.run_ref, model or "(default)", bool(resume_id), length, digest)
+    if resume_id:
+        get_url = _https_url(payload.get("resume_transcript_get_url"))
+        path = _transcript_path(run.home, run.target, resume_id)
+        loop = asyncio.get_running_loop()
+        if not get_url or not await loop.run_in_executor(None, _get_transcript, get_url, path):
+            return {"agent": "devbox", "error": "resume-transcript-unavailable"}
+    cmd = _build_cmd(prompt, False, "stream-json", model, resume_session_id=resume_id)
+    return _mvm_stream(cmd, run, timeout_s, payload.get("budget"), put_url, author)
+
+
+async def _mvm_stream(cmd: list[str], run: _MicrovmRun, timeout_s: int, budget: object,
+                      put_url: str | None, author: dict | None) -> AsyncIterator[dict]:
+    """Today's event stream, then snapshot + transcript, then ONE devbox_end."""
+    t0 = time.monotonic()
+    result_ev: dict | None = None
+    session_id: str | None = None
+    inner_end: dict = {}
+    env = _microvm_claude_env(run, author)
+    inner = _run_streaming(cmd, run.target, False, timeout_s, budget=budget, env=env)
+    async with contextlib.aclosing(inner):
+        async for ev in inner:
+            if ev.get("type") == "devbox_end":
+                inner_end = ev
+                continue
+            if ev.get("type") == "result":
+                result_ev = ev
+            sid = ev.get("session_id")
+            if isinstance(sid, str) and re.fullmatch(_SESSION_UUID, sid):
+                session_id = sid  # the result event's, when there is one, is the last seen
+            yield ev
+    duration_ms = int((time.monotonic() - t0) * 1000)
+    try:
+        head = await _snapshot(run, author)
+    except _Refusal as r:
+        log.warning("microvm task: snapshot skipped (%s)", r.error)
+        head = None
+    uploaded = False
+    if put_url and session_id:
+        path = _transcript_path(run.home, run.target, session_id)
+        if os.path.isfile(path):
+            uploaded = await asyncio.get_running_loop().run_in_executor(None, _put_transcript, put_url, path)
+    fresh, usage = _result_usage(result_ev)
+    end = {
+        "type": "devbox_end",
+        "exit_code": inner_end.get("exit_code"),
+        "timed_out": inner_end.get("timed_out", False),
+        "killed_reason": inner_end.get("killed_reason"),
+        "fresh_tokens": fresh,
+        "usage": usage,
+        "reported_cost_usd": result_ev.get("total_cost_usd") if isinstance(result_ev, dict) else None,
+        "head_sha": head,
+        "claude_session_id": session_id,
+        "duration_ms": duration_ms,
+        "transcript_uploaded": uploaded,
+        "stderr": inner_end.get("stderr", ""),
+    }
+    if "fresh_tokens" in inner_end:  # the budget meter's own count (DE-35)
+        end["metered_fresh_tokens"] = inner_end["fresh_tokens"]
+        end["max_fresh_tokens"] = inner_end.get("max_fresh_tokens")
+    log.info("microvm task end: run=%s exit=%s killed=%s fresh_tokens=%s head=%s session=%s duration_ms=%d "
+             "transcript_uploaded=%s", run.run_ref, end["exit_code"], end["killed_reason"], fresh, head,
+             session_id, duration_ms, uploaded)
+    yield end
+
+
+# ── push ─────────────────────────────────────────────────────────────────────
+
+async def _mvm_push(payload: dict) -> dict:
+    run = _RUN
+    if run is None:
+        return _Refusal("not-booted").result()
+    branch = payload.get("branch")
+    if not _safe_ref(branch) or not branch.startswith(_BRANCH_PREFIX):
+        return _Refusal("bad-branch", f"branch must be a safe ref under {_BRANCH_PREFIX}").result()
+    token = _clean_str(payload.get("token"))
+    author = _author(payload.get("author")) or run.author
+    try:
+        await _snapshot(run, author)  # a tree left dirty since task, as the actor
+    except _Refusal as r:
+        return r.result()
+    env = _mvm_git_env(run.home, token, author)
+    git = _git_bin()
+    rc, out = await _exec([git, "-C", run.target, "checkout", "-B", branch, "--"], cwd=run.home, env=env)
+    if rc != 0:
+        return _Refusal("checkout-failed", f"git checkout exited {rc}").result()
+    # An explicit lease: the branch must be where this session last saw it —
+    # absent for a new branch, the boot head for a resumed one.
+    expected = run.pushed.get(branch) or (run.base_sha if branch == run.ref else "")
+    url = f"https://github.com/{run.repo}.git"
+    rc, out = await _exec([git, "-C", run.target, "push", f"--force-with-lease=refs/heads/{branch}:{expected}",
+                           url, f"HEAD:refs/heads/{branch}"], cwd=run.home, env=env)
+    if rc != 0:
+        log.warning("microvm push: git push exited %s: %s", rc, out[-1000:])
+        return _Refusal("push-rejected" if "stale info" in out or "rejected" in out else "push-failed",
+                        f"git push exited {rc}").result()
+    head = await _head_sha(run, env)
+    if head:
+        run.pushed[branch] = head
+    log.info("microvm push: run=%s branch=%s head=%s", run.run_ref, branch, head)
+    return {"ok": True, "head_sha": head, "pushed": True}
+
+
 @app.entrypoint
 async def handle(payload: dict) -> AsyncIterator | dict:
     """Payload contract:
@@ -555,6 +1357,14 @@ async def handle(payload: dict) -> AsyncIterator | dict:
                         devbox_end says killed_reason "budget")
     }
 
+    Or `{"op": "wipe"}` (fleet, design §4): empty the workspace (never
+    following a link) and recreate ~/.claude, → {"ok": true, "removed": n}.
+
+    Or the microVM runner (`"runner": "microvm"`, design §3): `op` boot |
+    task | push — see _mvm_boot / _mvm_task / _mvm_push and
+    docs/microvm-runner-design.md for the field contract. Without `runner`
+    (or with "fleet") everything below behaves as it always has.
+
     Or a credentialed git op (DE-45), which never starts `claude`:
 
     {
@@ -569,6 +1379,25 @@ async def handle(payload: dict) -> AsyncIterator | dict:
     """
     if not isinstance(payload, dict):
         payload = {"prompt": str(payload)}
+
+    runner = payload.get("runner")
+    if runner == "microvm":
+        op = payload.get("op")
+        if op == "boot":
+            return await _mvm_boot(payload)
+        if op == "task":
+            return await _mvm_task(payload)
+        if op == "push":
+            return await _mvm_push(payload)
+        return {"ok": False, "error": "unsupported-op", "detail": "microvm ops are boot | task | push"}
+    if runner not in (None, "fleet"):
+        return {"ok": False, "error": "unknown-runner", "detail": "runner is fleet | microvm"}
+
+    if payload.get("op") == "wipe":
+        try:
+            return {"ok": True, "removed": _wipe(_workspace_root())}
+        except (OSError, BadTarget) as err:
+            return {"ok": False, "error": "wipe-failed", "detail": type(err).__name__}
 
     if payload.get("op") in GIT_OPS:
         return _run_git(payload)
@@ -587,9 +1416,10 @@ async def handle(payload: dict) -> AsyncIterator | dict:
         return {"agent": "devbox", "error": "model not allowlisted", "model": err.requested, "allowed": err.allowed}
 
     workspace, persistent = _resolve_workspace()
+    prompt_len, prompt_sha = _prompt_digest(str(prompt))
     log.info(
-        "Devbox task: stream=%s resume=%s persistent=%s model=%s prompt=%s",
-        stream, resume, persistent, model or "(default)", prompt[:120],
+        "Devbox task: stream=%s resume=%s persistent=%s model=%s prompt_len=%d prompt_sha256=%s",
+        stream, resume, persistent, model or "(default)", prompt_len, prompt_sha,
     )
 
     if stream:

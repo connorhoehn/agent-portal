@@ -1,17 +1,56 @@
 {
-  "//": "Baked into /etc/claude-code/managed-settings.json in the devbox image. SessionStart runs `lab brief`: it syncs the org's skill library into ~/.claude/skills (lab skills → GET /api/runs/:ref/skills with the lab envelope and the run's LAB_RUN_TOKEN; every published runbook as a Claude Code skill, one verified copy, skipped when its sha is unchanged) and prints this run's frozen session brief (GET /api/runs/:ref/brief): the task, the project, the decisions that bind it, the skills on this box and one line pointing at the org's skills. SessionEnd runs `lab keep`: each tool the run kept in .lab/keep/<rb-name>/ (SKILL.md + scripts/ + data/) is proposed, files included, for a person to review — nothing reaches the library unreviewed. Outside a dispatched run both say there is nothing to do. `lab` (signal|remember|consult|applied|propose|keep|skills|runbook|recall) is documented in the CLI itself.",
+  "//": "Baked into /etc/claude-code/managed-settings.json in the devbox image. SessionStart runs `lab brief`: it syncs the org's skill library into ~/.claude/skills (lab skills → GET /api/runs/:ref/skills with the lab envelope and the run's LAB_RUN_TOKEN; every published runbook as a Claude Code skill, one verified copy, skipped when its sha is unchanged) and prints this run's frozen session brief (GET /api/runs/:ref/brief): the task, the project, the decisions that bind it, the skills on this box and one line pointing at the org's skills. SessionEnd runs `lab keep`: each tool the run kept in .lab/keep/<rb-name>/ (SKILL.md + scripts/ + data/) is proposed, files included, for a person to review — nothing reaches the library unreviewed. Outside a dispatched run both say there is nothing to do. `lab` (signal|remember|consult|applied|propose|keep|skills|runbook|recall) is documented in the CLI itself. permissions: the allowlist that replaced --dangerously-skip-permissions (docs/microvm-runner-design.md §14 step 2). Managed settings cannot be widened by a repository's .claude/settings.json, deny wins over allow, and in -p mode a call no rule allows is refused and reported to the model. Bypass mode is disabled so no flag can turn the lists off.",
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git checkout*)",
+      "Bash(git switch*)",
+      "Bash(git stash*)",
+      "Bash(npm test*)",
+      "Bash(npm run lint*)",
+      "Bash(npm run typecheck*)",
+      "Bash(lab *)"
+    ],
+    "deny": [
+      "Bash(git push*)",
+      "Bash(curl*)",
+      "Bash(wget*)",
+      "Bash(ssh*)",
+      "Bash(aws*)",
+      "WebFetch",
+      "WebSearch",
+      "Read(./.env*)",
+      "Read(~/.aws/**)"
+    ],
+    "disableBypassPermissionsMode": "disable"
+  },
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "lab brief" }
+          {
+            "type": "command",
+            "command": "lab brief"
+          }
         ]
       }
     ],
     "SessionEnd": [
       {
         "hooks": [
-          { "type": "command", "command": "lab keep" }
+          {
+            "type": "command",
+            "command": "lab keep"
+          }
         ]
       }
     ]

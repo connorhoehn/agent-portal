@@ -55,7 +55,14 @@
 #       person's attention and your own runtime budget.
 #
 # Config (set by the runtime / CDK stack):
-#   LAB_API_BASE        middleware origin, e.g. https://orgiq.example.com
+#   LAB_API_BASE        middleware origin, e.g. https://orgiq.example.com, or
+#                       http+unix:///run/orgiq/lab.sock on the microVM runner:
+#                       every call goes to main.py's lab broker over that socket
+#                       (curl --unix-socket), which holds the run token and the
+#                       fleet secret, signs, and forwards; this script then sends
+#                       neither and needs only LAB_RUN_REF
+#   LAB_LIBRARY_SHA     optional; the skill library sha this run was briefed
+#                       with: `lab skills` refuses any other library
 #   LAB_CALLBACK_SECRET optional; when set every call carries a signed
 #                       X-Service-Auth envelope + x-service-nonce (lane C4),
 #                       plus x-lab-auth only when SERVICE_AUTH_LEGACY_HEADERS=accept|allow
@@ -73,6 +80,25 @@ if [ -z "$BASE" ] && ! { [ "${1:-}" = "keep" ] && [ "${2:-}" = "--dry-run" ]; };
   exit 0   # soft: a missing loop must never fail an agent's bash step
 fi
 
+# The microVM runner: the broker on a unix socket signs and carries the run
+# token, so this process holds neither (docs/microvm-runner-design.md §8).
+UNIX_SOCK=""
+sock=()
+case "$BASE" in
+  http+unix://*)
+    UNIX_SOCK="${BASE#http+unix://}"
+    BASE="http://localhost"
+    sock=(--unix-socket "$UNIX_SOCK")
+    ;;
+esac
+
+# The run this is: the environment, else the state file boot wrote.
+if [ -z "${LAB_RUN_REF:-}" ] && [ -f "${HOME:-/nonexistent}/.claude/orgiq-run.json" ]; then
+  LAB_RUN_REF=$(python3 -I -c 'import json,sys
+try: print(json.load(open(sys.argv[1])).get("run_ref") or "")
+except Exception: print("")' "$HOME/.claude/orgiq-run.json")
+fi
+
 # Service auth (middleware lib/service-auth.ts, LAB_CALLBACK_SERVICE_AUTH).
 # Unset secret → no headers at all. Set → service-runtime's signed request
 # envelope over (method, path+query, exact body, audience#nonce), the same
@@ -82,6 +108,7 @@ fi
 auth=()
 sign() { # $1=METHOD $2=path+query $3=exact body → fills auth=()
   auth=()
+  [ -z "$UNIX_SOCK" ] || return 0   # the broker signs
   local secret="${LAB_CALLBACK_SECRET:-}"
   secret="${secret#"${secret%%[![:space:]]*}"}"; secret="${secret%"${secret##*[![:space:]]}"}"
   [ -n "$secret" ] || return 0
@@ -107,10 +134,14 @@ print("x-service-nonce: " + nonce)
 # The per-run token rides on every call when this session is a run: the
 # envelope says "a box of the fleet", the token says "the box running THIS run".
 run_hdr=()
-if [ -n "${LAB_RUN_TOKEN:-}" ]; then run_hdr=(-H "x-lab-run-token: ${LAB_RUN_TOKEN}"); fi
+if [ -z "$UNIX_SOCK" ] && [ -n "${LAB_RUN_TOKEN:-}" ]; then run_hdr=(-H "x-lab-run-token: ${LAB_RUN_TOKEN}"); fi
+
+is_run() { # a dispatched run: a run ref, and a token here or in the broker
+  [ -n "${LAB_RUN_REF:-}" ] && { [ -n "$UNIX_SOCK" ] || [ -n "${LAB_RUN_TOKEN:-}" ]; }
+}
 
 need_run() { # soft: outside a dispatched run there is nothing to report against
-  if [ -z "${LAB_RUN_REF:-}" ] || [ -z "${LAB_RUN_TOKEN:-}" ]; then
+  if ! is_run; then
     echo "lab: this session is not a dispatched run (LAB_RUN_REF/LAB_RUN_TOKEN unset) — nothing to $1." >&2
     exit 0
   fi
@@ -127,12 +158,12 @@ PREFIX="$(base_path)"
 
 post() { # $1=path $2=json-body (sent byte for byte: --data-binary, never -d)
   sign POST "$PREFIX$1" "$2"
-  curl -sS --max-time 15 -X POST "$BASE$1" -H 'content-type: application/json' ${auth[@]+"${auth[@]}"} ${run_hdr[@]+"${run_hdr[@]}"} --data-binary "$2"
+  curl -sS --max-time 15 ${sock[@]+"${sock[@]}"} -X POST "$BASE$1" -H 'content-type: application/json' ${auth[@]+"${auth[@]}"} ${run_hdr[@]+"${run_hdr[@]}"} --data-binary "$2"
 }
 
 get() { # $1=path+query
   sign GET "$PREFIX$1" ""
-  curl -sS --max-time 15 ${auth[@]+"${auth[@]}"} ${run_hdr[@]+"${run_hdr[@]}"} "$BASE$1"
+  curl -sS --max-time 15 ${sock[@]+"${sock[@]}"} ${auth[@]+"${auth[@]}"} ${run_hdr[@]+"${run_hdr[@]}"} "$BASE$1"
 }
 
 SKILLS_DIR="${LAB_SKILLS_DIR:-${HOME:-/tmp}/.claude/skills}"
@@ -148,9 +179,13 @@ except Exception: print("")' "$SKILLS_DIR/.orgiq-library.json")
   local target="/api/runs/$(urlq "$LAB_RUN_REF")/skills"
   sign GET "$PREFIX$target" ""
   # --max-filesize: the library is capped at 8 MiB of content; a response far past that is refused unread.
-  code=$(curl -sS --max-time 30 --max-filesize 33554432 -o "$tmp/body" -D "$tmp/head" -w '%{http_code}' \
+  code=$(curl -sS --max-time 30 --max-filesize 33554432 ${sock[@]+"${sock[@]}"} -o "$tmp/body" -D "$tmp/head" -w '%{http_code}' \
     ${auth[@]+"${auth[@]}"} ${run_hdr[@]+"${run_hdr[@]}"} ${have:+-H "If-None-Match: \"$have\""} "$BASE$target" || echo 000)
   if [ "$code" = "304" ]; then
+    if [ -n "${LAB_LIBRARY_SHA:-}" ] && [ "$have" != "$LAB_LIBRARY_SHA" ]; then
+      echo "skills: REFUSED the library (library-mismatch: ${have:0:12} is not this run's ${LAB_LIBRARY_SHA:0:12}); the skills already in $SKILLS_DIR stay."
+      rm -rf "$tmp"; return 0
+    fi
     [ -n "$quiet" ] || echo "skills: library ${have:0:12} unchanged in $SKILLS_DIR"
     rm -rf "$tmp"; return 0
   fi
@@ -197,6 +232,8 @@ for f in lib.get("files", []):
 if total > LIB_MAX: refuse("library over its size cap")
 got = hashlib.sha256(("\n".join([FMT] + sorted(lines)) + "\n").encode()).hexdigest()
 if got != lib.get("sha256") or (want and got != want): refuse("the set does not match its sha256")
+run_sha = os.environ.get("LAB_LIBRARY_SHA", "").strip()
+if run_sha and got != run_sha: refuse(f"library-mismatch: {got[:12]} is not this run's {run_sha[:12]}")
 state_path = os.path.join(skills_dir, ".orgiq-library.json")
 try: prev = set(json.load(open(state_path))["skills"])
 except Exception: prev = set()
@@ -256,7 +293,7 @@ case "$cmd" in
       && echo "remembered for $repo"
     ;;
   brief)
-    if [ -z "${LAB_RUN_REF:-}" ] || [ -z "${LAB_RUN_TOKEN:-}" ]; then
+    if ! is_run; then
       echo "No session brief: this session was not started by a dispatched run."
       exit 0   # soft: an interactive session has no brief, and SessionStart must not fail
     fi
@@ -265,7 +302,7 @@ case "$cmd" in
     tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
     target="/api/runs/$(urlq "$LAB_RUN_REF")/brief?format=markdown"
     sign GET "$PREFIX$target" ""
-    code=$(curl -sS --max-time 15 -o "$tmp/body" -D "$tmp/head" -w '%{http_code}' \
+    code=$(curl -sS --max-time 15 ${sock[@]+"${sock[@]}"} -o "$tmp/body" -D "$tmp/head" -w '%{http_code}' \
       ${auth[@]+"${auth[@]}"} ${run_hdr[@]+"${run_hdr[@]}"} "$BASE$target" || echo 000)
     if [ "$code" != "200" ]; then
       echo "No session brief could be fetched for run $LAB_RUN_REF (HTTP $code). Work from the task prompt." 
@@ -476,7 +513,7 @@ except Exception: print("pending")')
     exit 0   # soft: an unanswered consult must not fail the run
     ;;
   *)
-    sed -n '2,70p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,74p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac
