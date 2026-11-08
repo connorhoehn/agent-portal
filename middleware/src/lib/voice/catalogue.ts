@@ -930,6 +930,8 @@ export const MOCK_CALLS: Readonly<Record<string, { name: string; arguments: Reco
   // V2-7: an HR admin asks what the org spent (at the budgets tier). A member's own spend and the tier's offer
   // are the dock's tests; the member's scripted session stays the search.
   'orgiq/hr-admin': { name: 'budget', arguments: { scope: 'org', initiative: null, groupBy: null }, said: 'What has the org spent this month?' },
+  // V2-10: an operator approves the step waiting on their role (dev:mock's seeded agent change, gated on operator).
+  'pipelines/operator': { name: 'decide', arguments: { ref: 'approval:change:9f2c17a0-5b64-4de1-8a03-6c1de4f27b58', decision: 'approve', note: null }, said: 'Approve the change waiting on me.' },
   'pipelines/pipeline-admin': { name: 'summary', arguments: { kind: 'pipelines', since: 'last night' }, said: 'What failed last night?' },
   'assessment/program-lead': { name: 'summary', arguments: { kind: 'rollup', since: null }, said: 'How is the program doing?' },
   // V2-9: an assessor runs the scorer on a team; the dock follows the run to its end with one toast.

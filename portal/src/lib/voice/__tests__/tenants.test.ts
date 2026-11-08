@@ -420,3 +420,19 @@ test('V2-12: a scripted join walks into the huddle the index shows live, ringing
   });
   assert.deepEqual(busy.calls, [['call', 'refused']]);
 });
+
+test('V2-10 in Pipelines: an operator\'s scripted session approves the step waiting on their role', async () => {
+  const { mockCallFor } = await middlewareVoice<{ mockCallFor: (t: string, r: string) => Call }>('catalogue.ts');
+  const call = mockCallFor('pipelines', 'operator');
+  assert.equal(call.name, 'decide');
+  const id = 'change:9f2c17a0-5b64-4de1-8a03-6c1de4f27b58';
+  const run = await scriptedRun('pipelines', {
+    role: 'operator', allow: ['ViewPipelines', 'ApproveStep', 'VoiceNavigate'], call,
+    routes: [route('GET', '/api/pipelines/approvals', 200, { approvals: [{ id, title: 'Suppress downstream pages during a cluster-wide outage', requiredRoles: ['operator'] }] }),
+      route('POST', `/api/pipelines/approvals/${encodeURIComponent(id)}/decide`, 200, { id, decision: 'approve' })],
+    beforeStop: async (c, _ctx, clock) => { c.confirm('voice'); await clock.advance(300); },
+  });
+  assert.deepEqual(run.log.filter((l) => l.method === 'POST' && !l.url.startsWith('/api/voice/')).map((l) => [l.url, l.body]),
+    [[`/api/pipelines/approvals/${encodeURIComponent(id)}/decide`, { decision: 'approve', note: null }]]);
+  assert.deepEqual(run.calls, [['decide', 'done']]);
+});

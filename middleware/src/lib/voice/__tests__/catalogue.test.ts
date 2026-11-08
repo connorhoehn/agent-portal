@@ -325,6 +325,7 @@ describe('tenant scoping (§6)', () => {
     expect(v({ ref: 'approval:req-1', decision: 'approve', path: '/api/x' })).toBe(false);
     expect(decideKinds('access')).toEqual(['approval', 'request', 'review-item']);
     expect(decideKinds('pipelines')).toEqual(['approval']);
+    expect(mockCallFor('pipelines', 'operator')).toMatchObject({ name: 'decide', arguments: { ref: 'approval:change:9f2c17a0-5b64-4de1-8a03-6c1de4f27b58', decision: 'approve' } });
     expect(decideKinds('orgiq')).toEqual(['hitl-approval', 'change', 'runbook-proposal', 'proposal', 'consult', 'design']);
     expect(toolsForTenant('social').some((x) => x.name === 'decide')).toBe(false);
     expect(DECIDE_ACTIONS['orgiq']!['change']).toEqual({ approve: 'DecideAgentChange', reject: 'DecideAgentChange', deliver: 'DeliverAgentChange' });
