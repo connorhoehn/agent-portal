@@ -73,6 +73,8 @@ cd agents/tests && python golden_runner.py     # structural check, offline
 
 Run the full middleware suite on its own. Two concurrent runs can hang.
 
+CI: `.github/workflows/ci.yml` runs typecheck and tests on push; it has not run yet (no GitHub access from the machine that wrote it).
+
 ### Deploy
 
 Everything is deployed with CDK through the wrapper script, not with `agentcore deploy`.
