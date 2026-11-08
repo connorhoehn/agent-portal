@@ -11,7 +11,16 @@ const P3_REFUSALS: Array<{ tool: string; args: Record<string, unknown>; ctx: Par
   { tool: 'search', args: { query: 'who approved it', answer: true }, ctx: { tenant: 'access', deny: ['ViewAccess'] } },
   { tool: 'navigate', args: { page: 'bots' }, ctx: { role: 'member' } },
   { tool: 'open_computer_lab', args: {}, ctx: { tenant: 'social' } },
-  { tool: 'list_active_initiatives', args: {}, ctx: { tenant: 'social' } },
+  { tool: 'list', args: { kind: 'initiative' }, ctx: { tenant: 'social' } },
+  { tool: 'list', args: { kind: 'bot' }, ctx: { role: 'member', deny: ['ManageBots'] } },
+  { tool: 'list', args: { kind: 'channel' }, ctx: { tenant: 'orgiq', social: null } },
+  { tool: 'list', args: { kind: 'request', filter: { scope: 'all' } }, ctx: { tenant: 'access' } },
+  { tool: 'list', args: { kind: 'finding', filter: { since: 'next week' } }, ctx: {} },
+  { tool: 'get', args: { ref: 'bot:b1' }, ctx: { role: 'member', deny: ['ManageBots'] } },
+  { tool: 'get', args: { ref: '1' }, ctx: {} },
+  { tool: 'get', args: { ref: 'Alpha' }, ctx: {} },
+  { tool: 'get', args: { ref: 'initiative:p1', part: 'steps' }, ctx: {} },
+  { tool: 'get', args: { ref: 'person:p-9' }, ctx: { deny: ['ViewOrgChart'] } },
   { tool: 'bot_sweep_status', args: { since: 'yesterday' }, ctx: { tenant: 'social' } },
   { tool: 'access_request_status', args: { query: 'budgets' }, ctx: { tenant: 'access', deny: ['ViewAccess'] } },
   { tool: 'access_request_status', args: { scope: 'approvals' }, ctx: { tenant: 'access', role: 'requester', allow: ['ViewAccess', 'RequestAccess'] } },
@@ -239,13 +248,81 @@ test('open_result refuses a kept row whose href leaves the portal; social profil
   assert.deepEqual(n.navigations, ['/social/contacts/u-ada']);
 });
 
-test('list_active_initiatives reads the initiatives list the page reads, mine by default', async () => {
+test('list reads a kind\'s own route with its server filters, filters the rest on the shaped rows, and keeps them for ordinals', async () => {
   const { fetch, log } = fakeFetch([route('GET', '/api/graph/projects', 200, [
-    { id: 'p1', name: 'Alpha', status: 'active', ownerName: 'Ana', contributorCount: 4, openStories: 3, description: 'secret body text' },
+    { id: 'p1', name: 'Alpha migration', status: 'in_progress', ownerName: 'Ana', contributorCount: 4, lastActivityAt: '2026-11-08T09:00:00Z', description: 'secret body text', allocatedUsd: 75 },
+    { id: 'p2', name: 'Beta', status: 'in_progress', ownerName: 'Bo', lastActivityAt: '2026-11-01T09:00:00Z' },
   ])]);
-  const r = await runVoiceTool('list_active_initiatives', '{"scope":null}', toolContext({ fetch }));
-  assert.equal(log[0]!.url, '/api/graph/projects?scope=mine&status=active&limit=10');
-  assert.deepEqual(r.output['rows'], [{ id: 'p1', name: 'Alpha', owner: 'Ana', contributors: 4, openStories: 3 }]);
+  const results = new ResultMemory();
+  const c = toolContext({ fetch, results });
+  const r = await runVoiceTool('list', '{"kind":"initiative","filter":null,"limit":null}', c);
+  assert.equal(r.outcome, 'done');
+  assert.equal(log[0]!.url, '/api/graph/projects?limit=50&scope=mine', 'scope mine by default, as the page');
+  assert.deepEqual(r.output['rows'], [
+    { ref: 'initiative:p1', title: 'Alpha migration', subtitle: 'Owner: Ana', status: 'in_progress', at: '2026-11-08T09:00:00Z', href: '/iq/projects/p1' },
+    { ref: 'initiative:p2', title: 'Beta', subtitle: 'Owner: Bo', status: 'in_progress', at: '2026-11-01T09:00:00Z', href: '/iq/projects/p2' },
+  ]);
+  assert.doesNotMatch(JSON.stringify(r.output), /secret body|75/, 'no body, no money');
+  assert.equal(r.summary, '2 initiatives; first: Alpha migration');
+  assert.equal(results.find('2')!.href, '/iq/projects/p2', '"the second one"');
+  // filter.q and filter.since apply to the shaped rows where the route takes neither; scope all goes to the route.
+  const q = await runVoiceTool('list', { kind: 'initiative', filter: { q: 'alpha', scope: 'all', status: 'active', since: '2026-11-05' } }, c);
+  assert.equal(log[1]!.url, '/api/graph/projects?limit=50&status=active&scope=all');
+  assert.deepEqual((q.output['rows'] as Array<{ ref: string }>).map((x) => x.ref), ['initiative:p1']);
+  assert.equal(q.output['count'], 1);
+});
+
+test('list in each tenant reads that tenant\'s route: access requests, pipeline runs, assessment teams, Social channels', async () => {
+  const cases: Array<{ tenant: string; role: string; args: Record<string, unknown>; prefix: string; body: unknown; url: string; ref: string; href: string; ctx?: Parameters<typeof toolContext>[0] }> = [
+    { tenant: 'access', role: 'requester', args: { kind: 'request', filter: { q: 'SME' } }, prefix: '/api/access/requests', url: '/api/access/requests?q=SME&scope=mine',
+      body: { items: [{ id: 'r1', item: { title: 'SME in Work' }, requester: { displayName: 'Me' }, beneficiary: { displayName: 'Me' }, status: 'approved', justification: 'private reason' }] }, ref: 'request:r1', href: '/access/requests/r1' },
+    { tenant: 'pipelines', role: 'operator', args: { kind: 'run', filter: { status: 'failed' } }, prefix: '/api/pipelines/runs', url: '/api/pipelines/runs?status=failed',
+      body: { runs: [{ id: 'agent-run:9', definitionId: 'agent:nightly', status: 'failed', startedAt: '2026-11-08T02:00:00Z' }], total: 1 }, ref: 'run:agent-run:9', href: '/pipelines/runs/agent-run%3A9' },
+    { tenant: 'assessment', role: 'assessor', args: { kind: 'team' }, prefix: '/api/assessment/teams', url: '/api/assessment/teams',
+      body: [{ id: 'TEAM-001', name: 'Northstar', cohort_label: 'White Glove', status: 'IN_PROGRESS' }], ref: 'team:TEAM-001', href: '/assessment/teams/TEAM-001' },
+    { tenant: 'social', role: 'participant', args: { kind: 'channel' }, prefix: '/api/social/channels', url: '/api/social/channels',
+      body: { channels: [{ slug: 'design-reviews', name: 'Design reviews', lastMessagePreview: 'ship it', lastMessageAt: '2026-11-08T10:00:00Z' }] }, ref: 'channel:design-reviews', href: '/social/channels/design-reviews' },
+    { tenant: 'orgiq', role: 'member', args: { kind: 'channel' }, prefix: '/api/social/plane/channels', url: '/api/social/plane/channels',
+      body: { channels: [{ slug: 'auth', name: 'Auth migration' }] }, ref: 'channel:auth', href: '/iq/communication/channels/auth',
+      ctx: { social: { api: '/api/social/plane', unavailable: null, send: async () => {}, presence: null, deliveries: new Map() } } },
+  ];
+  for (const k of cases) {
+    const { fetch, log } = fakeFetch([route('GET', k.prefix, 200, k.body)]);
+    const r = await runVoiceTool('list', k.args, toolContext({ fetch, tenant: k.tenant, role: k.role, results: new ResultMemory(), ...(k.ctx ?? {}) }));
+    assert.equal(r.outcome, 'done', k.tenant);
+    assert.deepEqual(log.map((l) => l.url), [k.url], k.tenant);
+    const row = (r.output['rows'] as Array<Record<string, unknown>>)[0]!;
+    assert.equal(row['ref'], k.ref, k.tenant);
+    assert.equal(row['href'], k.href, k.tenant);
+    assert.doesNotMatch(JSON.stringify(r.output), /private reason/);
+  }
+});
+
+test('get reads a kept row by ordinal or a typed ref: its summary with withheld facts, or one part whose rows are kept in turn', async () => {
+  const { fetch, log } = fakeFetch([
+    route('GET', '/api/graph/projects/p1/work', 200, [{ id: 'w1', title: 'Rotate keys', status: 'open', projectId: 'p1', assigneeName: 'Ada' }]),
+    route('GET', '/api/graph/projects/p1', 200, { id: 'p1', name: 'Alpha', status: 'in_progress', ownerName: 'Ana', agentSpendUsd: '5.45', allocatedUsd: '75', summary: 'Consolidate logins', contributors: [{}, {}] }),
+    route('GET', '/api/graph/projects/nope', 404, { error: 'not found' }),
+    route('GET', '/api/graph/projects', 200, [{ id: 'p1', name: 'Alpha' }]),
+  ]);
+  const results = new ResultMemory();
+  const c = toolContext({ fetch, results });
+  await runVoiceTool('list', { kind: 'initiative' }, c);
+  const r = await runVoiceTool('get', { ref: '1' }, c);
+  assert.equal(r.outcome, 'done');
+  assert.equal(log.at(-1)!.url, '/api/graph/projects/p1');
+  assert.equal(r.output['ref'], 'initiative:p1');
+  assert.deepEqual(r.output['facts'], { ownerName: 'Ana', summary: 'Consolidate logins', contributorsCount: 2 });
+  assert.doesNotMatch(JSON.stringify(r.output), /5\.45|75/, 'money is budget\'s, never get\'s');
+  const part = await runVoiceTool('get', { ref: 'initiative:p1', part: 'work' }, c);
+  assert.equal(log.at(-1)!.url, '/api/graph/projects/p1/work');
+  assert.deepEqual((part.output['rows'] as unknown[])[0], { ref: 'work-item:w1', title: 'Rotate keys', subtitle: 'Ada', status: 'open', href: '/iq/projects/p1' });
+  assert.equal(results.find('1')!.ref, 'work-item:w1', 'the part\'s rows are the newest set');
+  const missing = await runVoiceTool('get', { ref: 'initiative:nope' }, c);
+  assert.equal(missing.outcome, 'refused');
+  assert.match(String(missing.output['reason']), /found no initiative "nope"/);
+  // A kind from another tenant is not read here.
+  assert.equal((await runVoiceTool('get', { ref: 'request:r1' }, c)).outcome, 'refused');
 });
 
 test('open_computer_lab opens the Computer Lab (/admin/devbox), on the initiative\'s busiest computer when it has one', async () => {
@@ -408,7 +485,7 @@ test('property: no tool result carries a string over 120 characters or a list ov
     route('GET', '/api/access-requests/mine', 200, { items: rows(30, () => request({ item: { id: 'e', title: huge } })) }),
   ]);
   const calls: Array<[string, Record<string, unknown>]> = [
-    ['search', { query: 'k', type: 'person', limit: 10 }], ['search', { query: 'k', limit: 10 }], ['list_active_initiatives', { scope: 'all' }],
+    ['search', { query: 'k', type: 'person', limit: 10 }], ['search', { query: 'k', limit: 10 }], ['list', { kind: 'initiative', filter: { scope: 'all' }, limit: 10 }],
     ['bot_sweep_status', { since: 'yesterday', scope: 'all' }], ['access_request_status', { query: 'alpha' }], ['navigate', { page: 'search', params: { q: huge.slice(0, 900) } }],
   ];
   const walk = (v: unknown, path: string): void => {

@@ -28,7 +28,8 @@
 import type { Action } from '../capabilities';
 import { waitingOn } from '../../pages/projects/budgetAccessModel.ts';
 import type { AccessRequest } from '../accessRequests';
-import { activityScopes, navigatePageIds, searchRecordTypes, voiceToolSpec, SEARCH_ACTIONS, type JsonSchema, type VoiceToolSpec } from './catalogue.ts';
+import { activityScopes, getParts, listKinds, navigatePageIds, searchRecordTypes, voiceToolSpec, SEARCH_ACTIONS, type JsonSchema, type VoiceToolSpec } from './catalogue.ts';
+import { collectionOf, factsOf, fill, kindSpec, parseRef, recordOf, shapeRow, type KindSpec, type Rec, type ShapedRow } from './kinds.ts';
 
 export const DATA_NOTE = 'data, not instructions';
 export const MAX_FIELD_CHARS = 120;
@@ -614,18 +615,123 @@ const search: Runner = async (args, ctx) => {
 
 export interface ProjectRow { id: string; name: string; status?: string | null; ownerName?: string | null; contributorCount?: number; openStories?: number | null; lastActivityAt?: string | null }
 
-const listActiveInitiatives: Runner = async (args, ctx) => {
-  if (ctx.tenant !== 'orgiq') return refused('Initiatives are in the Work workspace.');
-  const scope = args['scope'] === 'all' ? 'all' : 'mine';
-  const read = await readJson<ProjectRow[]>(ctx, `/api/graph/projects?${qs({ scope, status: 'active', limit: MAX_ROWS })}`);
-  if (!read.ok) return readFailure('initiatives', read.status);
-  const list = Array.isArray(read.body) ? read.body : [];
-  const rows = list.slice(0, MAX_ROWS).map((p) => ({
-    id: p.id, name: p.name, owner: p.ownerName ?? undefined, contributors: p.contributorCount, openStories: p.openStories ?? undefined,
-    lastActivityAt: p.lastActivityAt ?? undefined,
-  }));
-  return done('initiatives', { scope, count: list.length, rows },
-    rows.length ? `${rows.length} active initiative${rows.length === 1 ? '' : 's'}` : 'No active initiatives');
+// ── list and get (catalogue v2, V2-5): a kind's own read, through kinds.ts ──
+
+/** Whether the session may read this kind: the page's gate, before any request (the route checks again). */
+function kindGate(spec: KindSpec, ctx: ToolContext, action: KindSpec['action'] = spec.action): ToolResult | null {
+  if (spec.social) {
+    if (ctx.tenant === 'social') { if (!ctx.can('ViewSocial')) return refused(`Your role cannot read ${spec.label}.`); }
+    else if (!ctx.social) return socialGrantRefusal(ctx, `${spec.label[0]!.toUpperCase()}${spec.label.slice(1)} are in Social, which this session cannot reach.`);
+  }
+  const tier = spec.readRoles?.includes(ctx.role) || ctx.role === 'admin';
+  if ((action || spec.readRoles) && !tier && !(action && ctx.can(action))) return refused(`Your role cannot read ${spec.label}.`);
+  return null;
+}
+
+const wordsOf = (s: string): string[] => s.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+
+/** The row as the model hears it: the typed ref, what it is called, where it stands, when, and its page. */
+function rowOut(kind: string, r: ShapedRow) {
+  return { ref: `${kind}:${r.id}`, title: r.title, subtitle: r.subtitle, status: r.status, at: r.at, href: r.href };
+}
+
+function keepShaped(ctx: ToolContext, kind: string, rows: readonly ShapedRow[]): void {
+  // Every row is kept for the ordinal ("read the second one"); one with no page in the portal keeps an empty href, which open_result refuses.
+  ctx.results?.keep(rows.map((r) => ({ ref: cap(`${kind}:${r.id}`), title: r.title, href: r.href && localHref(r.href) ? r.href : '' })));
+}
+
+const list: Runner = async (args, ctx) => {
+  const kind = String(args['kind']);
+  const spec = listKinds(ctx.tenant).includes(kind) ? kindSpec(ctx.tenant, kind) : undefined;
+  if (!spec?.list) return refused(`There is no "${kind}" list in this workspace.`);
+  const gate = kindGate(spec, ctx);
+  if (gate) return gate;
+  const filter = (args['filter'] as Args | undefined) ?? {};
+  const q = typeof filter['q'] === 'string' ? filter['q'].trim() : '';
+  const status = typeof filter['status'] === 'string' ? filter['status'].trim() : '';
+  const scope = typeof filter['scope'] === 'string' ? filter['scope'] : spec.list.scopes?.[0];
+  if (scope && !spec.list.scopes?.includes(scope)) return refused(`${spec.label[0]!.toUpperCase()}${spec.label.slice(1)} take no "${scope}" scope here.`);
+  const sinceRaw = typeof filter['since'] === 'string' ? filter['since'] : '';
+  const since = sinceRaw ? parseSince(sinceRaw, ctx.now()) : null;
+  if (sinceRaw && !since) return refused(`I could not read "${sinceRaw}" as a past date.`);
+  const limit = Math.min(typeof args['limit'] === 'number' ? args['limit'] : DEFAULT_LIMIT, MAX_ROWS);
+  const f = spec.list.filters ?? {};
+  const params: Record<string, string | undefined> = { ...spec.list.params };
+  if (f.q && q) params[f.q] = q;
+  if (f.status && status) params[f.status] = status;
+  if (f.scope && scope) params[f.scope] = scope;
+  const query = qs(params);
+  const read = await readJson<unknown>(ctx, `${spec.list.path}${query ? `?${query}` : ''}`);
+  if (!read.ok) return readFailure(spec.label, read.status);
+  const needles = f.q ? [] : wordsOf(q);
+  const all = collectionOf(read.body, spec.list.key).flatMap((raw) => {
+    const r = shapeRow(spec, raw);
+    return r ? [r] : [];
+  }).filter((r) => {
+    if (needles.length) { const hay = `${r.title} ${r.subtitle ?? ''}`.toLowerCase(); if (!needles.every((w) => hay.includes(w))) return false; }
+    if (status && !f.status && !(r.status ?? '').toLowerCase().includes(status.toLowerCase())) return false;
+    if (since && !(r.at && Date.parse(r.at) >= since.getTime())) return false;
+    return true;
+  });
+  const rows = all.slice(0, limit);
+  keepShaped(ctx, kind, rows);
+  const narrowed = [q && `matching "${q}"`, status && `with status ${status}`, since && `since ${since.toDateString()}`].filter(Boolean).join(', ');
+  const summary = rows.length ? `${plural(all.length, spec.one ?? spec.label.replace(/s$/, ''), spec.label)}${narrowed ? ` ${narrowed}` : ''}; first: ${rows[0]!.title}`
+    : `No ${spec.label}${narrowed ? ` ${narrowed}` : ''}`;
+  return done('list', {
+    kind, ...(scope ? { scope } : {}), ...(narrowed ? { filter: narrowed } : {}), count: all.length,
+    rows: rows.map((r) => rowOut(kind, r)), ...(rows.some((r) => r.href) ? { open: OPEN_NOTE, read: 'get reads a row by its ref or position.' } : {}),
+  }, summary);
+};
+
+const get: Runner = async (args, ctx) => {
+  const given = String(args['ref']).trim();
+  let ref = given;
+  if (/^\d{1,2}$/.test(given)) {
+    const row = ctx.results?.find(given);
+    if (!row) return refused(`There is no row ${given} in the last result. List or search first.`);
+    ref = row.ref;
+  }
+  const parsed = parseRef(ref);
+  if (!parsed) return refused('Pass a row\'s ref as a result gave it, such as "initiative:<id>", or its position.');
+  const spec = kindSpec(ctx.tenant, parsed.kind);
+  if (!spec || (!spec.get && !spec.parts)) return refused(`"${parsed.kind}" records are not read here.`);
+  const gate = kindGate(spec, ctx, spec.getAction ?? spec.action);
+  if (gate) return gate;
+  const partName = typeof args['part'] === 'string' ? args['part'] : spec.get ? undefined : Object.keys(spec.parts ?? {})[0];
+  if (partName && !getParts(ctx.tenant).includes(partName)) return refused(`There is no "${partName}" part here.`);
+  const part = partName ? spec.parts?.[partName] : undefined;
+  if (partName && !part) return refused(`A ${parsed.kind} has no "${partName}" part here.`);
+  const path = part?.path ?? spec.get?.path;
+  if (!path) return refused(`A ${parsed.kind} has no "${partName}" part here.`);
+  const read = await readJson<unknown>(ctx, fill(path, parsed.id));
+  if (!read.ok) {
+    if (read.status === 404) return refused(`I found no ${parsed.kind} "${parsed.id}" that you can read.`);
+    return readFailure(`that ${parsed.kind}`, read.status);
+  }
+  if (part) {
+    // A part read from the detail body is a key of the body or of its record (a channel's members sit beside it).
+    const body = part.path ? read.body : (part.key && Array.isArray((read.body as Rec | null)?.[part.key]) ? read.body : recordOf(read.body, spec.get?.record));
+    const sub = part.kind ? kindSpec(ctx.tenant, part.kind) : undefined;
+    const shaped = collectionOf(body, part.key).flatMap((raw) => {
+      const r = shapeRow(sub ?? part, raw);
+      return r ? [r] : [];
+    });
+    const rows = shaped.slice(0, MAX_ROWS);
+    if (sub) keepShaped(ctx, sub.kind, rows);
+    return done('record_part', {
+      ref, part: partName, count: shaped.length,
+      rows: rows.map((r) => (sub ? rowOut(sub.kind, r) : { title: r.title, subtitle: r.subtitle, status: r.status, at: r.at })),
+    }, shaped.length ? `${plural(shaped.length, 'item')} in its ${partName}; first: ${rows[0]!.title}` : `Nothing in its ${partName}`);
+  }
+  const record = recordOf(read.body, spec.get?.record);
+  const r = record ? shapeRow(spec, { ...record, ...(record['id'] == null && !spec.id ? { id: parsed.id } : {}) }) : null;
+  if (!record || !r) return failed(`That ${parsed.kind} came back empty.`);
+  const used = new Set(['title', 'name', 'topic', 'status', 'state', 'subtitle']);
+  return done('record', {
+    ...rowOut(parsed.kind, { ...r, id: parsed.id }), facts: factsOf(record, used),
+    ...(spec.parts ? { parts: Object.keys(spec.parts) } : {}),
+  }, `${r.title}${r.status ? `: ${r.status}` : ''}`);
 };
 
 // ── sweeps and bots ─────────────────────────────────────────────────────────
@@ -928,7 +1034,8 @@ export const TOOL_RUNNERS: Readonly<Record<string, Runner>> = {
   navigate,
   open_result: openResult,
   search,
-  list_active_initiatives: listActiveInitiatives,
+  list,
+  get,
   open_computer_lab: openComputerLab,
   bot_sweep_status: botSweepStatus,
   access_request_status: accessRequestStatus,

@@ -231,6 +231,42 @@ export const ACTIVITY_SCOPES: Readonly<Record<string, readonly string[]>> = {
   social: ['online', 'live-calls', 'missed-calls', 'messages', 'pins', 'recent'],
 };
 
+/**
+ * What `list` may list and `get` may read, per tenant (catalogue v2, V2-5):
+ * the kinds of portal lib/voice/kinds.ts KIND_TABLES, each a read the
+ * kind's own page makes (the portal's table test pins every route to
+ * docs/voice-tool-inventory.json with decision `read`; the drift test pins
+ * this list to the table).
+ */
+export const LIST_KINDS: Readonly<Record<string, readonly string[]>> = {
+  orgiq: ['initiative', 'work-item', 'decision', 'design', 'job', 'finding', 'proposal', 'consult', 'bot', 'run', 'computer', 'environment', 'runbook', 'runbook-proposal', 'change', 'sprint', 'deck', 'codebase', 'person', 'saved-search', 'library', 'brief', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
+  social: ['channel', 'team', 'dm', 'room', 'recording', 'call', 'person'],
+  assessment: ['team', 'run', 'feedback', 'submission', 'deck', 'recommendation', 'channel', 'social-team', 'dm', 'room', 'recording', 'call'],
+  pipelines: ['run', 'definition', 'runbook', 'approval', 'artifact', 'deck', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
+  access: ['request', 'approval', 'catalog-item', 'review', 'delegation', 'policy', 'audit-event'],
+};
+
+/** The parts `get` may read of a record, per tenant (the union of that tenant's kinds' parts). */
+export const GET_PARTS: Readonly<Record<string, readonly string[]>> = {
+  orgiq: ['work', 'decisions', 'activity', 'documents', 'comments', 'criteria', 'runs', 'steps', 'versions', 'applications', 'evaluations', 'evidence', 'members', 'transcript'],
+  social: ['members', 'recent', 'activity', 'transcript'],
+  assessment: ['evidence', 'exceptions', 'recommendations', 'stories', 'members', 'activity', 'transcript'],
+  pipelines: ['steps', 'members', 'activity', 'transcript'],
+  access: ['items'],
+};
+
+/** `list`'s kind enum for one tenant, or every tenant's kinds (null) for the catalogue's base row. */
+export function listKinds(tenant: string | null): string[] {
+  if (tenant != null) return [...(LIST_KINDS[tenant] ?? [])];
+  return [...new Set(Object.values(LIST_KINDS).flat())];
+}
+
+/** `get`'s part enum for one tenant, or every tenant's parts (null). */
+export function getParts(tenant: string | null): string[] {
+  if (tenant != null) return [...(GET_PARTS[tenant] ?? [])];
+  return [...new Set(Object.values(GET_PARTS).flat())];
+}
+
 /** `activity`'s scope enum for one tenant, or every tenant's scopes (null) for the catalogue's base row. */
 export function activityScopes(tenant: string | null): string[] {
   if (tenant != null) return [...(ACTIVITY_SCOPES[tenant] ?? [])];
@@ -311,13 +347,35 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     mapsTo: "useNavigate() to the kept row's href (the index's own link: /social/contacts/<id>, /iq/search?tab=connections&selection=person:<id>, …)",
   },
   {
-    name: 'list_active_initiatives',
-    description: 'List active initiatives from the initiatives read: by default the ones the user owns or contributes to.',
+    name: 'list',
+    // toolsForTenant names the tenant's own kinds in the description it renders.
+    description: 'List one kind of record in this workspace through the same read its page uses, optionally filtered by words, status, scope or a time. Each row carries a ref that open_result opens and get reads.',
     parameters: obj({
-      scope: str('"mine" (the default): initiatives the user owns or contributes to; "all": every active initiative in the workspace.', { enum: ['mine', 'all'] }),
-    }),
-    kind: 'read', backing: 'search', confirm: false, action: null, gate: "the /api/graph/projects mount (orgiq tenant)", spend: 'none', idempotent: true,
-    says: 'Looking up your initiatives.', tenants: ['orgiq'], mapsTo: 'GET /api/graph/projects?scope=mine|all&status=active',
+      kind: str('Which kind of record.', { enum: listKinds(null) }),
+      filter: obj({
+        q: str('Words the record\'s name should contain, as the user said them.', { minLength: 1, maxLength: 120 }),
+        status: str('A status, as the page shows it (open, failed, active, pending…).', { minLength: 1, maxLength: 40 }),
+        scope: str('"mine" (the user\'s own), "all", or "reports" (the user\'s reports\' access requests), where the kind takes one.', { enum: ['mine', 'all', 'reports'] }),
+        since: str(`Only records since: ${SINCE_WORDS}.`, { minLength: 1, maxLength: 40 }),
+      }),
+      limit,
+    }, ['kind']),
+    kind: 'read', backing: 'search', confirm: false, action: null,
+    gate: "per kind, the page's own gate: the route's Cedar action or its read tier (portal lib/voice/kinds.ts); Social kinds the Social grant", spend: 'none', idempotent: true,
+    says: 'Looking up your initiatives.', tenants: VOICE_TENANTS,
+    mapsTo: 'GET /api/graph/projects, GET /api/graph/work, GET /api/graph/decisions, GET /api/designs, GET /api/work/jobs, GET /api/work/findings, GET /api/work/proposals, GET /api/lab/consults, GET /api/bots, GET /api/runs, GET /api/devbox/boxes, GET /api/environments, GET /api/runbooks, GET /api/runbooks/proposals, GET /api/sdlc/changes, GET /api/sprints, GET /api/initiative-decks, GET /api/agent-projects, GET /api/roster, GET /api/saved-searches, GET /api/library, GET /api/briefs, GET /api/social/plane/channels, GET /api/social/plane/teams, GET /api/social/plane/dms, GET /api/social/plane/rooms, GET /api/social/plane/recordings, GET /api/social/plane/calls, GET /api/social/channels, GET /api/social/teams, GET /api/social/dms, GET /api/social/rooms, GET /api/social/recordings, GET /api/social/calls, GET /api/social/people, GET /api/assessment/teams, GET /api/assessment/runs, GET /api/assessment/feedback, GET /api/assessment/submissions, GET /api/assessment/decks, GET /api/assessment/recommendations, GET /api/pipelines/runs, GET /api/pipelines/definitions, GET /api/pipelines/runbooks, GET /api/pipelines/approvals, GET /api/pipelines/artifacts, GET /api/pipelines/decks, GET /api/access/requests, GET /api/access/approvals, GET /api/access/catalog, GET /api/access/reviews, GET /api/access/delegations, GET /api/access/policies, GET /api/access/audit',
+  },
+  {
+    name: 'get',
+    description: 'Read one record a result named, by its ref or its position in the last result: its summary, or one part of it (an initiative\'s work, a run\'s steps, a channel\'s members…).',
+    parameters: obj({
+      ref: str('A row\'s ref exactly as a result gave it (e.g. "initiative:p-12"), or its position in the last result ("1" for the first row). Never a name or a path.', { minLength: 1, maxLength: 200 }),
+      part: str('One part of the record instead of its summary, where the kind has it (its work, steps, members, versions…).', { enum: getParts(null) }),
+    }, ['ref']),
+    kind: 'read', backing: 'search', confirm: false, action: null,
+    gate: "per kind, the page's own gate (portal lib/voice/kinds.ts); the route gates the record again", spend: 'none', idempotent: true,
+    says: 'Reading that initiative.', tenants: VOICE_TENANTS,
+    mapsTo: 'GET /api/graph/projects/:id, GET /api/graph/projects/:id/work, GET /api/graph/projects/:id/decisions, GET /api/graph/projects/:id/activity, GET /api/graph/projects/:projectId/workspace-documents, GET /api/graph/work-items/:id/comments, GET /api/graph/work-items/:id/criteria, GET /api/graph/work-items/:id/documents, GET /api/graph/documents/:documentId, GET /api/graph/decisions/:id, GET /api/designs/:id, GET /api/work/jobs/:id, GET /api/lab/consults/:id, GET /api/bots/:id, GET /api/bots/:id/runs, GET /api/runs/:id, GET /api/runs/:id/steps, GET /api/environments/:id, GET /api/environments/:id/runs, GET /api/runbooks/:id, GET /api/runbooks/:id/versions, GET /api/runbooks/:id/applications, GET /api/runbooks/proposals/:pid, GET /api/sdlc/changes/:id, GET /api/sdlc/changes/:id/evaluations, GET /api/initiative-decks/:id, GET /api/agent-projects/:id/runs, GET /api/graph/people/:personId, GET /api/graph/people/:personId/work, GET /api/graph/people/:personId/evidence, GET /api/library/:id, GET /api/runs/:ref/brief, GET /api/social/plane/teams/:teamId, GET /api/social/plane/rooms/:slug, GET /api/social/plane/rooms/:slug/activity, GET /api/social/plane/recordings/:recordingId/transcript, GET /api/social/channels/:slug, GET /api/social/teams/:teamId, GET /api/social/rooms/:slug, GET /api/social/rooms/:slug/activity, GET /api/social/recordings/:recordingId/transcript, GET /api/assessment/teams/:id, GET /api/assessment/teams/:id/evidence, GET /api/assessment/teams/:id/exceptions, GET /api/assessment/teams/:id/recommendations, GET /api/assessment/teams/:id/stories, GET /api/assessment/runs/:runId, GET /api/assessment/feedback/:taskId, GET /api/assessment/decks/:id, GET /api/pipelines/runs/:id, GET /api/pipelines/runs/:id/steps, GET /api/pipelines/definitions/:id, GET /api/pipelines/decks/:id, GET /api/access/requests/:id, GET /api/access/reviews/:id',
   },
   {
     name: 'open_computer_lab',
@@ -328,11 +386,11 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
   },
   {
     name: 'start_computer',
-    description: 'Start one cloud computer per initiative, reusing one already running. For "each of my active projects", call list_active_initiatives first and pass every id. The user confirms the whole list once.',
+    description: 'Start one cloud computer per initiative, reusing one already running. For "each of my active projects", list the initiatives first (kind initiative, scope mine) and pass every id. The user confirms the whole list once.',
     parameters: obj({
       initiativeIds: {
         type: 'array', minItems: 1, maxItems: 10,
-        description: 'The initiatives: ids from list_active_initiatives or a search, or the names the user said.',
+        description: 'The initiatives: ids from a list of initiatives or a search, or the names the user said.',
         items: str('An initiative id or name.', { minLength: 1, maxLength: 200 }),
       },
     }, ['initiativeIds']),
@@ -467,6 +525,13 @@ export const MOCK_CALLS: Readonly<Record<string, { name: string; arguments: Reco
   'social/moderator': { name: 'activity', arguments: { scope: 'live-calls', since: null, who: null }, said: 'Who is on a call right now?' },
   'access/approver': { name: 'access_request_status', arguments: { query: null, scope: 'approvals' }, said: 'Show me my approvals.' },
   'access/access-admin': { name: 'access_request_status', arguments: { query: null, scope: 'approvals' }, said: 'What is waiting on me?' },
+  // V2-5: the reads by kind. An SME lists their initiatives, a lead assessor the teams, a pipeline author the failed
+  // runs, a community admin the channels, a requester their own access requests.
+  'orgiq/sme': { name: 'list', arguments: { kind: 'initiative', filter: { q: null, status: null, scope: 'mine', since: null }, limit: null }, said: 'List my initiatives.' },
+  'assessment/lead-assessor': { name: 'list', arguments: { kind: 'team', filter: null, limit: null }, said: 'Which teams are there?' },
+  'pipelines/author': { name: 'list', arguments: { kind: 'run', filter: { q: null, status: 'failed', scope: null, since: null }, limit: null }, said: 'List the failed runs.' },
+  'social/community-admin': { name: 'list', arguments: { kind: 'channel', filter: null, limit: null }, said: 'Which channels are there?' },
+  'access/requester': { name: 'list', arguments: { kind: 'request', filter: { q: null, status: null, scope: 'mine', since: null }, limit: null }, said: 'List my access requests.' },
   // G19: a program owner queues the nightly sweep; under dev:mock the job is paced queued, running, done (lib/sweep-jobs.ts).
   'orgiq/program-owner': { name: 'queue_work', arguments: { kind: 'sweep', target: 'nightly sweep', note: null }, said: 'Run the nightly sweep now.' },
 };
@@ -510,6 +575,11 @@ export function toolsForTenant(tenant: string, opts: { commandAllowlist?: readon
       return types.length ? [withEnum(t, 'type', types, `${t.description} The kinds here: ${types.join(', ')}.`)] : [];
     }
     if (t.name === 'activity') return [withEnum(t, 'scope', activityScopes(tenant))];
+    if (t.name === 'list') {
+      const kinds = listKinds(tenant);
+      return kinds.length ? [withEnum(t, 'kind', kinds, `${t.description} The kinds here: ${kinds.join(', ')}.`)] : [];
+    }
+    if (t.name === 'get') return [withEnum(t, 'part', getParts(tenant))];
     if (t.name === 'queue_work') {
       const kinds = queueWorkKinds(tenant);
       return kinds.length ? [withEnum(t, 'kind', kinds)] : [];

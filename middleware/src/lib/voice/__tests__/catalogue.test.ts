@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import {
   VOICE_TOOLS, INTERNAL_TOOLS, NAVIGATE_PAGES, RUN_COMMAND_PHRASES, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, toolsForTenant, responsesFunctionTools,
   voiceInstructions, delegationInstructions, hashToolArgs, voiceTool, searchRecordTypes, MOCK_CALLS, VOICE_TENANTS, mockCallFor, activityScopes,
-  QUEUE_WORK_ACTIONS, QUEUE_WORK_KINDS, queueWorkKinds,
+  QUEUE_WORK_ACTIONS, QUEUE_WORK_KINDS, queueWorkKinds, LIST_KINDS, listKinds, getParts,
 } from '../catalogue.js';
 import { SEARCH_TYPES } from '../../../providers/search.js';
 import { tenantSpec } from '../../search-index/tenants.js';
@@ -18,12 +18,20 @@ import { CAPABILITY_ACTIONS } from '../../authz.js';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Ajv: any = (AjvImport as any).default ?? AjvImport;
 
+/** Strict mode's nulls dropped at every level, as the dock does (portal tools.ts dropNulls). */
+function dropNulls(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(dropNulls);
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).filter(([, x]) => x !== null).map(([k, x]) => [k, dropNulls(x)]));
+  return v;
+}
+
 /** §4, row by row: name -> [kind, confirm, backing]. */
 const SPEC: Record<string, [string, boolean, string]> = {
   navigate: ['navigate', false, 'route'],
   search: ['read', false, 'search'],
   open_result: ['navigate', false, 'route'],
-  list_active_initiatives: ['read', false, 'search'],
+  list: ['read', false, 'search'],
+  get: ['read', false, 'search'],
   open_computer_lab: ['navigate', false, 'route'],
   start_computer: ['machine', true, 'work'],
   open_shell: ['machine', false, 'route'],
@@ -51,9 +59,9 @@ describe('the §4 catalogue', () => {
     for (const t of VOICE_TOOLS) expect(['search', 'social-activity', 'route', 'work']).toContain(t.backing);
   });
 
-  it('every search-backed tool takes a scope; reads are search, people actions are social activities', () => {
+  it('every search-backed tool takes a scope, a kind or a ref (v2); reads are search, people actions are social activities', () => {
     for (const t of VOICE_TOOLS) {
-      if (t.backing === 'search') expect(Object.keys(t.parameters.properties)).toContain('scope');
+      if (t.backing === 'search') expect(Object.keys(t.parameters.properties).some((k) => ['scope', 'kind', 'ref', 'filter'].includes(k))).toBe(true);
       if (t.kind === 'read') expect(t.backing).toBe('search');
       if (t.kind === 'people') expect(t.backing).toBe('social-activity');
     }
@@ -80,7 +88,10 @@ describe('the §4 catalogue', () => {
     ok('navigate', { page: 'search', params: { q: 'kubernetes', type: 'person' } });
     ok('search', { query: 'kubernetes', type: 'person', sort: 'recent', limit: 5, scope: 'workspace' });
     ok('search', { query: 'who decided the cutover order', answer: true });
-    ok('list_active_initiatives', { scope: 'mine' });
+    ok('list', { kind: 'initiative', filter: { scope: 'mine' } });
+    ok('list', { kind: 'run', filter: { status: 'failed', since: 'last night' }, limit: 10 });
+    ok('get', { ref: 'initiative:p-12', part: 'work' });
+    ok('get', { ref: '2' });
     ok('bot_sweep_status', { since: 'yesterday', scope: 'failed' });
     ok('run_command', { computerId: 'box-1', phrase: 'commits-since', since: 'yesterday' });
     ok('start_computer', { initiativeIds: ['p1', 'Alpha'] });
@@ -111,7 +122,7 @@ describe('the §4 catalogue', () => {
 
 describe('tenant scoping (§6)', () => {
   it('a social session is offered navigate, its search, its activity, chat, a call, status and its own requests, nothing on machines', () => {
-    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'activity', 'navigate', 'open_result', 'search', 'send_chat_message', 'set_status', 'start_call']);
+    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'activity', 'get', 'list', 'navigate', 'open_result', 'search', 'send_chat_message', 'set_status', 'start_call']);
   });
 
   it('start_call is offered in orgiq and social only, asks first, and gates on StartCall (G7)', () => {
@@ -153,13 +164,13 @@ describe('tenant scoping (§6)', () => {
     expect(call).toBeDefined();
     const tool = toolsForTenant(tenant).find((t) => t.name === call.name);
     expect(tool).toBeDefined();
-    const given = Object.fromEntries(Object.entries(call.arguments).filter(([, v]) => v !== null));
+    const given = dropNulls(call.arguments);
     expect(new Ajv({ strict: true }).compile(tool!.parameters)(given)).toBe(true);
   });
 
   it.each(['assessment', 'pipelines', 'access'])('%s is offered reads and navigation only: nothing that touches a machine or posts (gaps doc Q1); pipelines adds queue_work (G19)', (tenant) => {
     const tools = toolsForTenant(tenant).filter((t) => t.name !== 'queue_work');
-    expect(tools.map((t) => t.name).sort()).toEqual(['access_request_status', 'navigate', 'open_result', 'search']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['access_request_status', 'get', 'list', 'navigate', 'open_result', 'search']);
     expect(toolsForTenant(tenant).some((t) => t.name === 'queue_work')).toBe(tenant === 'pipelines');
     for (const t of tools) {
       expect(['read', 'navigate']).toContain(t.kind);
@@ -189,14 +200,14 @@ describe('tenant scoping (§6)', () => {
   it('the access approver\'s scripted session reads approvals, a requester\'s its own requests, and every role key names a real seed role', () => {
     expect(mockCallFor('access', 'approver').arguments).toMatchObject({ scope: 'approvals' });
     expect(mockCallFor('access', 'access-admin').arguments).toMatchObject({ scope: 'approvals' });
-    expect(mockCallFor('access', 'requester').arguments).toMatchObject({ scope: 'mine' });
+    expect(mockCallFor('access', 'requester')).toMatchObject({ name: 'list', arguments: { kind: 'request', filter: { scope: 'mine' } } });
     expect(mockCallFor('orgiq', 'member')).toBe(MOCK_CALLS['orgiq']);
     const seeds = join(__dirname, '..', '..', '..', '..', 'seeds', 'roles');
     for (const key of Object.keys(MOCK_CALLS).filter((k) => k.includes('/'))) {
       const [tenant, role] = key.split('/') as [string, string];
       expect(existsSync(join(seeds, tenant, `${role}.cedar`))).toBe(true);
       const tool = toolsForTenant(tenant).find((t) => t.name === MOCK_CALLS[key]!.name)!;
-      const given = Object.fromEntries(Object.entries(MOCK_CALLS[key]!.arguments).filter(([, v]) => v !== null));
+      const given = dropNulls(MOCK_CALLS[key]!.arguments);
       expect(new Ajv({ strict: true }).compile(tool.parameters)(given)).toBe(true);
     }
   });
@@ -237,6 +248,26 @@ describe('tenant scoping (§6)', () => {
     expect(mockCallFor('orgiq', 'program-owner')).toMatchObject({ name: 'queue_work', arguments: { kind: 'sweep' } });
     expect(voiceInstructions('orgiq', toolsForTenant('orgiq'))).toMatch(/Queued work runs in the background/);
     expect(voiceInstructions('social', toolsForTenant('social'))).not.toMatch(/Queued work runs in the background/);
+  });
+
+  it('list and get (V2-5) offer each tenant its own kinds and parts, take a ref never a path, and the scripted sessions list requests, runs, teams and channels', () => {
+    for (const tenant of VOICE_TENANTS) {
+      const list = toolsForTenant(tenant).find((t) => t.name === 'list')!;
+      expect((list.parameters.properties['kind'] as { enum: string[] }).enum).toEqual(listKinds(tenant));
+      for (const k of listKinds(tenant)) expect(list.description).toContain(k);
+      const get = toolsForTenant(tenant).find((t) => t.name === 'get')!;
+      expect((get.parameters.properties['part'] as { enum: string[] }).enum).toEqual(getParts(tenant));
+    }
+    expect(listKinds('access')).not.toContain('initiative');
+    expect(listKinds('assessment')).toEqual(expect.arrayContaining(['team', 'social-team']));
+    const v = new Ajv({ strict: true }).compile(voiceTool('get')!.parameters);
+    expect(v({ ref: 'initiative:p1', path: '/admin/identity' })).toBe(false);
+    expect(v({ ref: 'initiative:p1', part: 'not-a-part' })).toBe(false);
+    expect(Object.keys(LIST_KINDS).sort()).toEqual([...VOICE_TENANTS].sort());
+    expect(mockCallFor('access', 'requester').arguments).toMatchObject({ kind: 'request' });
+    expect(mockCallFor('pipelines', 'author').arguments).toMatchObject({ kind: 'run', filter: { status: 'failed' } });
+    expect(mockCallFor('assessment', 'lead-assessor').arguments).toMatchObject({ kind: 'team' });
+    expect(mockCallFor('social', 'community-admin').arguments).toMatchObject({ kind: 'channel' });
   });
 
   it('a tenant that holds no voice grant gets no tools', () => {

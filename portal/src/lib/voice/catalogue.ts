@@ -104,6 +104,42 @@ export const ACTIVITY_SCOPES: Readonly<Record<string, readonly string[]>> = {
   social: ['online', 'live-calls', 'missed-calls', 'messages', 'pins', 'recent'],
 };
 
+/**
+ * What `list` may list and `get` may read, per tenant (catalogue v2, V2-5):
+ * the kinds of portal lib/voice/kinds.ts KIND_TABLES, each a read the
+ * kind's own page makes (the portal's table test pins every route to
+ * docs/voice-tool-inventory.json with decision `read`; the drift test pins
+ * this list to the table).
+ */
+export const LIST_KINDS: Readonly<Record<string, readonly string[]>> = {
+  orgiq: ['initiative', 'work-item', 'decision', 'design', 'job', 'finding', 'proposal', 'consult', 'bot', 'run', 'computer', 'environment', 'runbook', 'runbook-proposal', 'change', 'sprint', 'deck', 'codebase', 'person', 'saved-search', 'library', 'brief', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
+  social: ['channel', 'team', 'dm', 'room', 'recording', 'call', 'person'],
+  assessment: ['team', 'run', 'feedback', 'submission', 'deck', 'recommendation', 'channel', 'social-team', 'dm', 'room', 'recording', 'call'],
+  pipelines: ['run', 'definition', 'runbook', 'approval', 'artifact', 'deck', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
+  access: ['request', 'approval', 'catalog-item', 'review', 'delegation', 'policy', 'audit-event'],
+};
+
+/** The parts `get` may read of a record, per tenant (the union of that tenant's kinds' parts). */
+export const GET_PARTS: Readonly<Record<string, readonly string[]>> = {
+  orgiq: ['work', 'decisions', 'activity', 'documents', 'comments', 'criteria', 'runs', 'steps', 'versions', 'applications', 'evaluations', 'evidence', 'members', 'transcript'],
+  social: ['members', 'recent', 'activity', 'transcript'],
+  assessment: ['evidence', 'exceptions', 'recommendations', 'stories', 'members', 'activity', 'transcript'],
+  pipelines: ['steps', 'members', 'activity', 'transcript'],
+  access: ['items'],
+};
+
+/** `list`'s kind enum for one tenant, or every tenant's kinds (null) for the catalogue's base row. */
+export function listKinds(tenant: string | null): string[] {
+  if (tenant != null) return [...(LIST_KINDS[tenant] ?? [])];
+  return [...new Set(Object.values(LIST_KINDS).flat())];
+}
+
+/** `get`'s part enum for one tenant, or every tenant's parts (null). */
+export function getParts(tenant: string | null): string[] {
+  if (tenant != null) return [...(GET_PARTS[tenant] ?? [])];
+  return [...new Set(Object.values(GET_PARTS).flat())];
+}
+
 /** `activity`'s scope enum for one tenant, or every tenant's scopes (null) for the base row. */
 export function activityScopes(tenant: string | null): string[] {
   if (tenant != null) return [...(ACTIVITY_SCOPES[tenant] ?? [])];
@@ -182,11 +218,26 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
     kind: 'navigate', backing: 'route', confirm: false, action: null, says: 'Opening the first result.', tenants: VOICE_TENANTS,
   },
   {
-    name: 'list_active_initiatives',
+    name: 'list',
     parameters: obj({
-      scope: str('"mine" (the default): initiatives the user owns or contributes to; "all": every active initiative in the workspace.', { enum: ['mine', 'all'] }),
-    }),
-    kind: 'read', backing: 'search', confirm: false, action: null, says: 'Looking up your initiatives.', tenants: ['orgiq'],
+      kind: str('Which kind of record.', { enum: listKinds(null) }),
+      filter: obj({
+        q: str('Words the record\'s name should contain, as the user said them.', { minLength: 1, maxLength: 120 }),
+        status: str('A status, as the page shows it (open, failed, active, pending…).', { minLength: 1, maxLength: 40 }),
+        scope: str('"mine" (the user\'s own), "all", or "reports" (the user\'s reports\' access requests), where the kind takes one.', { enum: ['mine', 'all', 'reports'] }),
+        since: str(`Only records since: ${SINCE_WORDS}.`, { minLength: 1, maxLength: 40 }),
+      }),
+      limit,
+    }, ['kind']),
+    kind: 'read', backing: 'search', confirm: false, action: null, says: 'Looking up your initiatives.', tenants: VOICE_TENANTS,
+  },
+  {
+    name: 'get',
+    parameters: obj({
+      ref: str('A row\'s ref exactly as a result gave it (e.g. "initiative:p-12"), or its position in the last result ("1" for the first row). Never a name or a path.', { minLength: 1, maxLength: 200 }),
+      part: str('One part of the record instead of its summary, where the kind has it (its work, steps, members, versions…).', { enum: getParts(null) }),
+    }, ['ref']),
+    kind: 'read', backing: 'search', confirm: false, action: null, says: 'Reading that initiative.', tenants: VOICE_TENANTS,
   },
   {
     name: 'open_computer_lab',
@@ -198,7 +249,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
     parameters: obj({
       initiativeIds: {
         type: 'array', minItems: 1, maxItems: 10,
-        description: 'The initiatives: ids from list_active_initiatives or a search, or the names the user said.',
+        description: 'The initiatives: ids from a list of initiatives or a search, or the names the user said.',
         items: str('An initiative id or name.', { minLength: 1, maxLength: 200 }),
       },
     }, ['initiativeIds']),

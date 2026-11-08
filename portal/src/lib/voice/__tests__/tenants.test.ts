@@ -139,7 +139,7 @@ test('an access approver\'s scripted session answers its approvals from the fixt
     steps: [{ step: 1, kind: 'manager', status: 'current', eligible: [{ id: 'u-me', displayName: 'Me' }] }], sod: { verdict: 'clear', conflicts: [] } };
   const { mockCallFor } = await middlewareVoice<{ mockCallFor: (t: string, r: string) => Call }>('catalogue.ts');
   assert.equal(mockCallFor('access', 'approver').arguments['scope'], 'approvals');
-  assert.equal(mockCallFor('access', 'requester').arguments['scope'], 'mine');
+  assert.deepEqual(mockCallFor('access', 'requester').arguments['filter'], { q: null, status: null, scope: 'mine', since: null });
   const run = await scriptedRun('access', {
     role: 'approver', allow: ['ViewAccess', 'RequestAccess', 'DecideAccess', 'VoiceNavigate'], call: mockCallFor('access', 'approver'),
     routes: [route('GET', '/api/access/approvals', 200, { items: [ada] })],
@@ -181,4 +181,28 @@ test('an orgiq member\'s scripted session sets their status with no Social conte
   assert.deepEqual(run.calls, [['set_status', 'done']]);
   assert.deepEqual(writes, ['away', { statusMessage: 'out today' }]);
   assert.equal(run.log.filter((l) => l.method === 'GET').length, 0);
+});
+
+test('the V2-5 scripted sessions list access requests, pipeline runs, assessment teams and Social channels through list', async () => {
+  const { mockCallFor } = await middlewareVoice<{ mockCallFor: (t: string, r: string) => Call }>('catalogue.ts');
+  const runs = [
+    { tenant: 'access', role: 'requester', allow: ['ViewAccess', 'RequestAccess', 'VoiceNavigate'] as Action[], prefix: '/api/access/requests',
+      body: { items: [{ id: 'r1', item: { title: 'SME in Work' }, requester: { displayName: 'Me' }, beneficiary: { displayName: 'Me' }, status: 'submitted' }] },
+      url: '/api/access/requests?scope=mine', summary: '1 access request; first: SME in Work' },
+    { tenant: 'pipelines', role: 'author', allow: ['ViewPipelines', 'VoiceNavigate'] as Action[], prefix: '/api/pipelines/runs',
+      body: { runs: [{ id: 'agent-run:9', definitionId: 'agent:nightly', status: 'failed' }] }, url: '/api/pipelines/runs?status=failed', summary: '1 run with status failed; first: agent:nightly' },
+    { tenant: 'assessment', role: 'lead-assessor', allow: ['ViewAssessment', 'VoiceNavigate'] as Action[], prefix: '/api/assessment/teams',
+      body: [{ id: 'TEAM-001', name: 'Northstar Payments' }, { id: 'TEAM-002', name: 'Kubernetes Operator' }], url: '/api/assessment/teams', summary: '2 teams; first: Northstar Payments' },
+    { tenant: 'social', role: 'community-admin', allow: ['ViewSocial', 'VoiceNavigate'] as Action[], prefix: '/api/social/channels',
+      body: { channels: [{ slug: 'general', name: 'General' }] }, url: '/api/social/channels', summary: '1 channel; first: General' },
+  ];
+  for (const r of runs) {
+    const call = mockCallFor(r.tenant, r.role);
+    assert.equal(call.name, 'list', r.tenant);
+    const run = await scriptedRun(r.tenant, { role: r.role, allow: r.allow, call, routes: [route('GET', r.prefix, 200, r.body)] });
+    assert.deepEqual(run.calls, [['list', 'done']], r.tenant);
+    assert.deepEqual(run.outcomes, ['done'], r.tenant);
+    assert.deepEqual(run.log.filter((l) => l.method === 'GET').map((l) => l.url), [r.url], r.tenant);
+    assert.equal(run.summaries[0], r.summary, r.tenant);
+  }
 });

@@ -160,16 +160,135 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "List active initiatives from the initiatives read: by default the ones the user owns or contributes to.",
-    "name": "list_active_initiatives",
+    "description": "List one kind of record in this workspace through the same read its page uses, optionally filtered by words, status, scope or a time. Each row carries a ref that open_result opens and get reads. The kinds here: initiative, work-item, decision, design, job, finding, proposal, consult, bot, run, computer, environment, runbook, runbook-proposal, change, sprint, deck, codebase, person, saved-search, library, brief, channel, team, dm, room, recording, call.",
+    "name": "list",
     "parameters": {
       "additionalProperties": false,
       "properties": {
-        "scope": {
-          "description": ""mine" (the default): initiatives the user owns or contributes to; "all": every active initiative in the workspace.",
+        "filter": {
+          "additionalProperties": false,
+          "properties": {
+            "q": {
+              "description": "Words the record's name should contain, as the user said them.",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "scope": {
+              "description": ""mine" (the user's own), "all", or "reports" (the user's reports' access requests), where the kind takes one.",
+              "enum": [
+                "mine",
+                "all",
+                "reports",
+                null,
+              ],
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "since": {
+              "description": "Only records since: "yesterday", "last night", "today", "this morning", "3 hours ago", "3 days ago", "last week" or a YYYY-MM-DD date.",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "status": {
+              "description": "A status, as the page shows it (open, failed, active, pending…).",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+          },
+          "required": [
+            "q",
+            "status",
+            "scope",
+            "since",
+          ],
+          "type": [
+            "object",
+            "null",
+          ],
+        },
+        "kind": {
+          "description": "Which kind of record.",
           "enum": [
-            "mine",
-            "all",
+            "initiative",
+            "work-item",
+            "decision",
+            "design",
+            "job",
+            "finding",
+            "proposal",
+            "consult",
+            "bot",
+            "run",
+            "computer",
+            "environment",
+            "runbook",
+            "runbook-proposal",
+            "change",
+            "sprint",
+            "deck",
+            "codebase",
+            "person",
+            "saved-search",
+            "library",
+            "brief",
+            "channel",
+            "team",
+            "dm",
+            "room",
+            "recording",
+            "call",
+          ],
+          "type": "string",
+        },
+        "limit": {
+          "description": "How many results, 1 to 10. Default 5.",
+          "type": [
+            "integer",
+            "null",
+          ],
+        },
+      },
+      "required": [
+        "kind",
+        "filter",
+        "limit",
+      ],
+      "type": "object",
+    },
+    "strict": true,
+    "type": "function",
+  },
+  {
+    "description": "Read one record a result named, by its ref or its position in the last result: its summary, or one part of it (an initiative's work, a run's steps, a channel's members…).",
+    "name": "get",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "part": {
+          "description": "One part of the record instead of its summary, where the kind has it (its work, steps, members, versions…).",
+          "enum": [
+            "work",
+            "decisions",
+            "activity",
+            "documents",
+            "comments",
+            "criteria",
+            "runs",
+            "steps",
+            "versions",
+            "applications",
+            "evaluations",
+            "evidence",
+            "members",
+            "transcript",
             null,
           ],
           "type": [
@@ -177,9 +296,14 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
             "null",
           ],
         },
+        "ref": {
+          "description": "A row's ref exactly as a result gave it (e.g. "initiative:p-12"), or its position in the last result ("1" for the first row). Never a name or a path.",
+          "type": "string",
+        },
       },
       "required": [
-        "scope",
+        "ref",
+        "part",
       ],
       "type": "object",
     },
@@ -209,13 +333,13 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Start one cloud computer per initiative, reusing one already running. For "each of my active projects", call list_active_initiatives first and pass every id. The user confirms the whole list once.",
+    "description": "Start one cloud computer per initiative, reusing one already running. For "each of my active projects", list the initiatives first (kind initiative, scope mine) and pass every id. The user confirms the whole list once.",
     "name": "start_computer",
     "parameters": {
       "additionalProperties": false,
       "properties": {
         "initiativeIds": {
-          "description": "The initiatives: ids from list_active_initiatives or a search, or the names the user said.",
+          "description": "The initiatives: ids from a list of initiatives or a search, or the names the user said.",
           "items": {
             "description": "An initiative id or name.",
             "type": "string",

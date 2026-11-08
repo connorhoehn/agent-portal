@@ -187,7 +187,7 @@ describe('POST /api/voice/sessions — the mint', () => {
       const res = await mint();
       expect(res.status).toBe(201);
       // Reads and navigation; pipelines adds queue_work's dry-run (G19, gated per kind on RunPipeline by the dock).
-      const offered = ['access_request_status', 'navigate', 'open_result', ...(tenant === 'pipelines' ? ['queue_work'] : []), 'search'];
+      const offered = ['access_request_status', 'get', 'list', 'navigate', 'open_result', ...(tenant === 'pipelines' ? ['queue_work'] : []), 'search'];
       expect(res.body.tools.sort()).toEqual(offered);
       const sent = JSON.parse(calls[0]!.init.body!).session;
       expect(sent.delegation.responses.tools.map((t: { name: string }) => t.name).sort()).toEqual(offered);
@@ -197,7 +197,7 @@ describe('POST /api/voice/sessions — the mint', () => {
     principal = { sub: USER, role: 'participant', tenant: 'social', grants: {} };
     const res = await mint();
     expect(res.status).toBe(201);
-    expect(res.body.tools.sort()).toEqual(['access_request_status', 'activity', 'navigate', 'open_result', 'search', 'send_chat_message', 'set_status', 'start_call']);
+    expect(res.body.tools.sort()).toEqual(['access_request_status', 'activity', 'get', 'list', 'navigate', 'open_result', 'search', 'send_chat_message', 'set_status', 'start_call']);
   });
 
   it('an access approver\'s scripted session reads their approvals; a requester\'s their own requests', async () => {
@@ -211,7 +211,7 @@ describe('POST /api/voice/sessions — the mint', () => {
       return { name: done.event.event.item.name, args: JSON.parse(done.event.event.item.arguments) };
     };
     expect(await scripted('approver')).toEqual({ name: 'access_request_status', args: { query: null, scope: 'approvals' } });
-    expect((await scripted('requester')).args).toMatchObject({ scope: 'mine' });
+    expect(await scripted('requester')).toMatchObject({ name: 'list', args: { kind: 'request', filter: { scope: 'mine' } } });
   });
 
   it('the social scripted session searches its own index for live huddles', async () => {
