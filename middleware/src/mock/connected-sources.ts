@@ -11,7 +11,7 @@
 // because kindOf() parses the kind back out of the name — a fixture that spelt
 // a name freehand would classify every row as `unknown`. The GitHub row's label
 // is the org schema/seed_program.sql actually points its repos at
-// (github.com/connorhoehnslalom/orgiq-*); the Confluence and Jira labels name
+// (github.com/connorhoehn/orgiq-*); the Confluence and Jira labels name
 // the two systems the seeded corpus is described as coming from.
 //
 // These labels used to be justified by mirroring mock/ingest-sources.ts, a
@@ -31,7 +31,7 @@ export const connectedSourceRows = defineFixture<ConnectedSource>({
   scenarios: {
     default: () => [
       {
-        name: 'orgiq-github-connorhoehnslalom',
+        name: 'orgiq-github-connorhoehn',
         kind: 'github',
         authType: 'api-key',
         createdAt: clock.daysAgo(38),

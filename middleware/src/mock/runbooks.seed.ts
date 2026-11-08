@@ -39,9 +39,9 @@ export const PEOPLE = {
 type PersonId = keyof typeof PEOPLE;
 
 const REPO = {
-  OBS: 'connorhoehnslalom/orgiq-observability',
-  AUTH: 'connorhoehnslalom/orgiq-auth-service',
-  LLM: 'connorhoehnslalom/orgiq-llm-platform',
+  OBS: 'connorhoehn/orgiq-observability',
+  AUTH: 'connorhoehn/orgiq-auth-service',
+  LLM: 'connorhoehn/orgiq-llm-platform',
 } as const;
 
 /** The author every migrated v1 carries. */
@@ -284,7 +284,7 @@ const authPrCsrfGate: RunbookDoc = {
     },
     {
       do: "Read the CSRF check's result on your pull request.",
-      command: bash('gh pr checks "$PR" --repo connorhoehnslalom/orgiq-auth-service'),
+      command: bash('gh pr checks "$PR" --repo connorhoehn/orgiq-auth-service'),
       expect: "the CSRF check listed as required, and on a failure its details link names the lines it judged as weakening.",
     },
     {
@@ -295,14 +295,14 @@ const authPrCsrfGate: RunbookDoc = {
     },
     {
       do: 'Wait until every required check, the CSRF check among them, passes on the pull request.',
-      command: bash('gh pr checks "$PR" --repo connorhoehnslalom/orgiq-auth-service --required --watch'),
+      command: bash('gh pr checks "$PR" --repo connorhoehn/orgiq-auth-service --required --watch'),
       expect: 'every required check reports `pass`.',
     },
   ],
   verify: [
     {
       check: 'The CSRF check passed on the latest commit of the pull request.',
-      command: bash('gh pr checks "$PR" --repo connorhoehnslalom/orgiq-auth-service --required'),
+      command: bash('gh pr checks "$PR" --repo connorhoehn/orgiq-auth-service --required'),
     },
   ],
   failure_modes: [

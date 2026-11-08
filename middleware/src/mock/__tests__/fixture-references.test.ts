@@ -34,7 +34,7 @@
 //   * `Finding.entityId` when `entityType === 'repo'` — the one seeded row
 //     (find-mock-7, entityId 'orgiq-portal') is a devbox lab-signal finding
 //     about the ACTUAL developer repos (aws-agentcore, orgiq-portal) this
-//     project runs on, not the synthetic `connorhoehnslalom/orgiq-*` cast
+//     project runs on, not the synthetic `connorhoehn/orgiq-*` cast
 //     mock/github.ts and mock/agent-projects.ts model. See also lab.ts's
 //     `repo: 'aws-agentcore'` rows below.
 //   * `LabExperience.repo` / `LabConsult.repo` / `Observation.repo` — same

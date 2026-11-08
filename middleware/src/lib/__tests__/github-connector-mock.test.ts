@@ -38,7 +38,7 @@ describe('github-connector under MOCK_AGENTCORE', () => {
   });
 
   it('identify() returns the fixture identity, never fetch, never borrowApiKey', async () => {
-    const id = await identify('orgiq-github-connorhoehnslalom');
+    const id = await identify('orgiq-github-connorhoehn');
     expect(id.login).toBe('connorhoehn');
     expect(id.scopes.length).toBeGreaterThan(0);
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -46,10 +46,10 @@ describe('github-connector under MOCK_AGENTCORE', () => {
   });
 
   it('listRepos() returns the seeded repo_full_name rows, most recently pushed first', async () => {
-    const repos = await listRepos('orgiq-github-connorhoehnslalom', {});
+    const repos = await listRepos('orgiq-github-connorhoehn', {});
     expect(repos.length).toBe(githubRepoRows.rows().length);
     // agent_projects.repo_full_name from schema/seed_program.sql, not invented.
-    expect(repos.map((r) => r.fullName)).toContain('connorhoehnslalom/orgiq-observability');
+    expect(repos.map((r) => r.fullName)).toContain('connorhoehn/orgiq-observability');
     for (let i = 1; i < repos.length; i++) {
       expect((repos[i - 1]!.pushedAt ?? '') >= (repos[i]!.pushedAt ?? '')).toBe(true);
     }
@@ -58,14 +58,14 @@ describe('github-connector under MOCK_AGENTCORE', () => {
   });
 
   it('listRepos() filters by org and returns empty for an org this fixture world has no repos under', async () => {
-    const none = await listRepos('orgiq-github-connorhoehnslalom', { org: 'some-other-org' });
+    const none = await listRepos('orgiq-github-connorhoehn', { org: 'some-other-org' });
     expect(none).toEqual([]);
-    const some = await listRepos('orgiq-github-connorhoehnslalom', { org: 'connorhoehnslalom' });
+    const some = await listRepos('orgiq-github-connorhoehn', { org: 'connorhoehnslalom' });
     expect(some.length).toBeGreaterThan(0);
   });
 
   it('listRepos() respects limit', async () => {
-    const repos = await listRepos('orgiq-github-connorhoehnslalom', { limit: 3 });
+    const repos = await listRepos('orgiq-github-connorhoehn', { limit: 3 });
     expect(repos.length).toBe(3);
   });
 
@@ -78,11 +78,11 @@ describe('github-connector under MOCK_AGENTCORE', () => {
   });
 
   it('readRepoSignal() returns the seeded contributors for a repo with fixture rows', async () => {
-    const signals = await readRepoSignal('orgiq-github-connorhoehnslalom', {
-      owner: 'connorhoehnslalom', name: 'orgiq-observability', fullName: 'connorhoehnslalom/orgiq-observability',
+    const signals = await readRepoSignal('orgiq-github-connorhoehn', {
+      owner: 'connorhoehnslalom', name: 'orgiq-observability', fullName: 'connorhoehn/orgiq-observability',
     });
     expect(signals.length).toBe(
-      githubSignalRows.rows().filter((s) => s.repo === 'connorhoehnslalom/orgiq-observability').length,
+      githubSignalRows.rows().filter((s) => s.repo === 'connorhoehn/orgiq-observability').length,
     );
     expect(signals[0]!.commits).toBeGreaterThanOrEqual(signals[signals.length - 1]!.commits);
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -90,16 +90,16 @@ describe('github-connector under MOCK_AGENTCORE', () => {
   });
 
   it('readRepoSignal() returns [] rather than an error for a repo with no sampled rows', async () => {
-    const signals = await readRepoSignal('orgiq-github-connorhoehnslalom', {
-      owner: 'connorhoehnslalom', name: 'orgiq-mobile-app', fullName: 'connorhoehnslalom/orgiq-mobile-app',
+    const signals = await readRepoSignal('orgiq-github-connorhoehn', {
+      owner: 'connorhoehnslalom', name: 'orgiq-mobile-app', fullName: 'connorhoehn/orgiq-mobile-app',
     });
     expect(signals).toEqual([]);
   });
 
   it('mutating a returned row does not corrupt the fixture for the next call', async () => {
-    const first = await listRepos('orgiq-github-connorhoehnslalom', {});
+    const first = await listRepos('orgiq-github-connorhoehn', {});
     (first[0] as { name: string }).name = 'tampered';
-    const second = await listRepos('orgiq-github-connorhoehnslalom', {});
+    const second = await listRepos('orgiq-github-connorhoehn', {});
     expect(second[0]!.name).not.toBe('tampered');
   });
 });

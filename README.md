@@ -111,11 +111,11 @@ The stacks create Aurora and the Bedrock knowledge base. Apply the Aurora schema
 
 All of these sit next to this checkout under the same parent directory.
 
-- `connorhoehnslalom/ui-components`: the React component library behind the portal, consumed as a packed tarball in `portal/vendor`.
+- `connorhoehn/ui-components`: the React component library behind the portal, consumed as a packed tarball in `portal/vendor`.
 - `connorhoehn/realtime-modules`: presence, chat, calls and collaborative documents served over the realtime gateway, with matching client hooks.
 - `connorhoehn/service-runtime`: signed service-to-service authentication for internal calls.
 - `connorhoehn/distributed-core`: clustering and coordination primitives under the realtime gateway.
-- `connorhoehnslalom/message-queue`: the message queue service, built into the `mq` container image.
+- `connorhoehn/message-queue`: the message queue service, built into the `mq` container image.
 - `connorhoehn/realtime-examples`: reference realtime applications. Its `cdk/` package of reusable CDK constructs is vendored in `infra/vendor`.
 - `connorhoehn/platform-api`: the HTTP API behind call sessions, document workspaces and lobby admission.
 - `connorhoehn/live-video-streaming`: the media server (SFU) that carries call audio and video.

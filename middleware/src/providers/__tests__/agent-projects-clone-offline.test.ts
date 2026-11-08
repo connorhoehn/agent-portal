@@ -23,18 +23,18 @@ describe('buildCloneCommand, offline', () => {
   it('seeds every initiative repository as private, behind the GitHub connection', () => {
     const rows = agentProjects.rows();
     expect(rows).toHaveLength(14);
-    for (const p of rows) expect(p.connectionName).toBe('orgiq-github-connorhoehnslalom');
+    for (const p of rows) expect(p.connectionName).toBe('orgiq-github-connorhoehn');
   });
 
   it('builds the credentialed clone without asking the vault', async () => {
     const project = agentProjects.rows().find((p) => p.orgProjectId === 'p-auth-migration')!;
     const { command, redacted } = await buildCloneCommand(project);
     expect(borrowApiKey).not.toHaveBeenCalled();
-    expect(command).toContain('git clone --depth 50 https://github.com/connorhoehnslalom/orgiq-auth-service.git');
+    expect(command).toContain('git clone --depth 50 https://github.com/connorhoehn/orgiq-auth-service.git');
     // Same shape as the live credentialed branch: the origin is reset to the
     // bare URL after the clone, and nothing token-shaped is in either string.
-    expect(command).toContain('remote set-url origin https://github.com/connorhoehnslalom/orgiq-auth-service.git');
+    expect(command).toContain('remote set-url origin https://github.com/connorhoehn/orgiq-auth-service.git');
     expect(command).not.toContain('x-access-token');
-    expect(redacted).toBe(`git clone --depth 50 https://github.com/connorhoehnslalom/orgiq-auth-service.git ${command.match(/orgiq-auth-service\.git (\S+)/)![1]}`);
+    expect(redacted).toBe(`git clone --depth 50 https://github.com/connorhoehn/orgiq-auth-service.git ${command.match(/orgiq-auth-service\.git (\S+)/)![1]}`);
   });
 });

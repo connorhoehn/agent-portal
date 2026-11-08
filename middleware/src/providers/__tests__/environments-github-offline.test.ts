@@ -39,8 +39,8 @@ describe('repoForInitiative, offline', () => {
     // Private, like every initiative repo — reached through the GitHub
     // credential the seed links it with.
     expect(await repoForInitiative('p-observability')).toEqual({
-      repoFullName: 'connorhoehnslalom/orgiq-observability',
-      connectionName: 'orgiq-github-connorhoehnslalom',
+      repoFullName: 'connorhoehn/orgiq-observability',
+      connectionName: 'orgiq-github-connorhoehn',
     });
   });
 
@@ -67,9 +67,9 @@ describe('listWorkflowRuns, offline', () => {
   it('returns seeded history without touching the network', async () => {
     const fetchSpy = jest.spyOn(globalThis, 'fetch');
     try {
-      const runs = await listWorkflowRuns('connorhoehnslalom/orgiq-observability', 3);
+      const runs = await listWorkflowRuns('connorhoehn/orgiq-observability', 3);
       expect(runs).toHaveLength(3);
-      expect(runs[0]!.url).toContain('connorhoehnslalom/orgiq-observability');
+      expect(runs[0]!.url).toContain('connorhoehn/orgiq-observability');
       // The branch sits ABOVE the token borrow and above the URL build. A mock
       // that fetched first and caught afterwards would be the original bug.
       expect(fetchSpy).not.toHaveBeenCalled();
@@ -79,13 +79,13 @@ describe('listWorkflowRuns, offline', () => {
   });
 
   it('clamps the limit the same way the live branch does', async () => {
-    expect(await listWorkflowRuns('connorhoehnslalom/orgiq-observability', 1)).toHaveLength(1);
+    expect(await listWorkflowRuns('connorhoehn/orgiq-observability', 1)).toHaveLength(1);
     // 0 and negatives clamp UP to 1, matching Math.min(Math.max(limit, 1), 50).
-    expect(await listWorkflowRuns('connorhoehnslalom/orgiq-observability', 0)).toHaveLength(1);
+    expect(await listWorkflowRuns('connorhoehn/orgiq-observability', 0)).toHaveLength(1);
   });
 
   it('answers [] for a linked repository with no history', async () => {
-    expect(await listWorkflowRuns('connorhoehnslalom/orgiq-rag-search', 10)).toEqual([]);
+    expect(await listWorkflowRuns('connorhoehn/orgiq-rag-search', 10)).toEqual([]);
   });
 
   it('THROWS under the error scenario, so the route can report a degraded upstream', async () => {
@@ -94,7 +94,7 @@ describe('listWorkflowRuns, offline', () => {
     // "damage shared state and warn the next auditor" problem the control
     // plane exists to end.
     fixtureRegistry.resetAll('error');
-    await expect(listWorkflowRuns('connorhoehnslalom/orgiq-observability', 10))
+    await expect(listWorkflowRuns('connorhoehn/orgiq-observability', 10))
       .rejects.toThrow(/HTTP 503/);
     expect(githubWorkflowRunRows.rows('default').length).toBeGreaterThan(0);
   });

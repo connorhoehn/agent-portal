@@ -34,7 +34,7 @@ function app(): express.Express {
   return a;
 }
 
-const GITHUB = 'orgiq-github-connorhoehnslalom';
+const GITHUB = 'orgiq-github-connorhoehn';
 const JIRA = 'orgiq-jira-platform';
 
 describe('/api/connections under MOCK_AGENTCORE', () => {
@@ -76,7 +76,7 @@ describe('/api/connections under MOCK_AGENTCORE', () => {
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.repos)).toBe(true);
     expect(res.body.repos.length).toBeGreaterThan(0);
-    expect(res.body.repos.map((r: { fullName: string }) => r.fullName)).toContain('connorhoehnslalom/orgiq-observability');
+    expect(res.body.repos.map((r: { fullName: string }) => r.fullName)).toContain('connorhoehn/orgiq-observability');
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -89,9 +89,9 @@ describe('/api/connections under MOCK_AGENTCORE', () => {
   it('GET /:name/github/signal returns contributors for a repo the fixture covers', async () => {
     const res = await request(app())
       .get(`/api/connections/${GITHUB}/github/signal`)
-      .query({ repo: 'connorhoehnslalom/orgiq-observability' });
+      .query({ repo: 'connorhoehn/orgiq-observability' });
     expect(res.status).toBe(200);
-    expect(res.body.repo).toBe('connorhoehnslalom/orgiq-observability');
+    expect(res.body.repo).toBe('connorhoehn/orgiq-observability');
     expect(res.body.signals.length).toBeGreaterThan(0);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
@@ -99,7 +99,7 @@ describe('/api/connections under MOCK_AGENTCORE', () => {
   it('GET /:name/github/signal returns [] — not an error — for a repo with no sampled rows', async () => {
     const res = await request(app())
       .get(`/api/connections/${GITHUB}/github/signal`)
-      .query({ repo: 'connorhoehnslalom/orgiq-mobile-app' });
+      .query({ repo: 'connorhoehn/orgiq-mobile-app' });
     expect(res.status).toBe(200);
     expect(res.body.signals).toEqual([]);
   });

@@ -112,7 +112,7 @@ function TerminalInspector({id,reference,view,setView}:{id:string;reference:(lab
 
   {view==='files'&&<div className="terminal-workspace">
    <div className="detail-section-label">Checkout</div>
-   <div className="workspace-repo"><b>connorhoehnslalom/orgiq-auth-service</b><span>main · /mnt/workspace/orgiq-auth-service</span></div>
+   <div className="workspace-repo"><b>connorhoehn/orgiq-auth-service</b><span>main · /mnt/workspace/orgiq-auth-service</span></div>
    <div className="detail-section-label">Changed this session</div>
    <ul className="workspace-files">{files.files.map(f=><li key={f.path}><code>{f.path}</code><span>{f.stat}</span></li>)}</ul>
    <div className="detail-section-label">Artifacts</div>

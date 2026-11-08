@@ -24,7 +24,7 @@ export interface WorkItemContext {
   title: string;
   description: string;
   labels: string[];
-  /** "connorhoehnslalom/orgiq-auth-service" or "orgiq-auth-service"; compared by basename. */
+  /** "connorhoehn/orgiq-auth-service" or "orgiq-auth-service"; compared by basename. */
   repo: string | null;
   initiative_id: string | null;
   /** Runbooks a person attached to the work item, in their order. */

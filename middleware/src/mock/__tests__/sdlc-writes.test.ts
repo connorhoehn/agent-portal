@@ -74,7 +74,7 @@ describe('the seeded queue', () => {
     for (const change of await listChangeRequests()) {
       expect(linked.has(change.projectId)).toBe(true);
       // The list JOINs agent_projects, so the repo name is resolved, not stored.
-      expect(change.repoFullName).toBe('connorhoehnslalom/orgiq-observability');
+      expect(change.repoFullName).toBe('connorhoehn/orgiq-observability');
       expect(change.orgProjectName).toBe('Observability Platform');
     }
   });
@@ -198,7 +198,7 @@ describe('capturing a change offline', () => {
 
     // ...but a read joins them.
     const read = await getChangeRequest(created.id);
-    expect(read!.repoFullName).toBe('connorhoehnslalom/orgiq-observability');
+    expect(read!.repoFullName).toBe('connorhoehn/orgiq-observability');
     expect((await listChangeRequests({ open: true })).map((c) => c.id)).toContain(created.id);
   });
 

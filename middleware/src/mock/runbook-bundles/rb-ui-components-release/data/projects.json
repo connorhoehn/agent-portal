@@ -5,7 +5,7 @@
       "ui-components": {
         "package": "@connorhoehnslalom/ui-components",
         "repo": "~/Projects/ui-components",
-        "remote": "git@github.com:connorhoehnslalom/ui-components.git",
+        "remote": "git@github.com:connorhoehn/ui-components.git",
         "vendor": "portal/vendor",
         "consumers": ["portal"],
         "doc": "CLAUDE.md",

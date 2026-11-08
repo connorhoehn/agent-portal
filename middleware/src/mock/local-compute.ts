@@ -261,7 +261,7 @@ function seededNodes(): ComputeNodeRow[] {
  * corrected here and NOT there: that announcer names `projectId: 'p-realtime'`
  * and `repo: 'realtime-platform'`, neither of which any seed creates
  * (`schema/seed_program.sql` has `p-realtime-analytics` and
- * `connorhoehnslalom/orgiq-stream-analytics`). Invented wire strings are the
+ * `connorhoehn/orgiq-stream-analytics`). Invented wire strings are the
  * floor's rule 2; the route file is not this slice's to edit, so the
  * divergence is reported rather than silently mirrored.
  */
@@ -275,7 +275,7 @@ function seededPresence(): NodePresenceRow[] {
           sessionId: 'demo-local-session-0000000000000000000',
           harness: 'claude-code',
           projectId: 'p-realtime-analytics',
-          repo: 'connorhoehnslalom/orgiq-stream-analytics',
+          repo: 'connorhoehn/orgiq-stream-analytics',
           branch: 'feat/presence-mesh',
           intent: 'wire the presence mesh into the gateway',
           // The shape tools/local-compute-plugin/orgiq-presence.mjs announces
@@ -298,7 +298,7 @@ function seededPresence(): NodePresenceRow[] {
           sessionId: 'local-session-thinkpad-00000000000000',
           harness: 'claude-code',
           projectId: 'p-observability',
-          repo: 'connorhoehnslalom/orgiq-observability',
+          repo: 'connorhoehn/orgiq-observability',
           branch: 'fix/span-projector-lag',
           worktree: '~/src/orgiq-observability',
           intent: 'chase the span projector lag to its source',
@@ -326,7 +326,7 @@ function seededPresence(): NodePresenceRow[] {
           sessionId: 'local-session-mini-000000000000000000',
           harness: 'cursor',
           projectId: 'p-design-v3',
-          repo: 'connorhoehnslalom/orgiq-design-system',
+          repo: 'connorhoehn/orgiq-design-system',
           branch: 'chore/token-audit',
           intent: 'audit the colour tokens against the light/dark pairs',
           modelProvider: 'bedrock',

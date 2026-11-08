@@ -7,8 +7,8 @@ import { githubRepoUrl } from '../repoLink.ts';
 
 test('a repo slug becomes a github.com link', () => {
   assert.equal(
-    githubRepoUrl('connorhoehnslalom/orgiq-observability'),
-    'https://github.com/connorhoehnslalom/orgiq-observability',
+    githubRepoUrl('connorhoehn/orgiq-observability'),
+    'https://github.com/connorhoehn/orgiq-observability',
   );
 });
 

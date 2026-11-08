@@ -48,7 +48,7 @@ for (const project of ['middleware', 'portal']) {
     const checkout = resolve(siblings, repo);
     // The sibling directory is keyed by repo NAME, but a pin identifies an
     // owner TOO — and both owners are in play here: `connorhoehn/distributed-core`
-    // (the 0.4x line this repo pins) and `connorhoehnslalom/distributed-core` are
+    // (the 0.4x line this repo pins) and `connorhoehn/distributed-core` are
     // different repositories that both land at `../distributed-core`, whichever
     // was cloned first. Trusting the checkout's origin therefore reads the wrong
     // history: eb6e4910 (v0.45.6) is absent from the slalom remote, which answers

@@ -31,9 +31,9 @@ import { clock, freezeClock, fixtureRegistry } from '../core/index.js';
 import { githubWorkflowRunRows, mockWorkflowRuns } from '../github-runs.js';
 import { agentProjects } from '../agent-projects.js';
 
-const OBS = 'connorhoehnslalom/orgiq-observability';
-const FINOPS = 'connorhoehnslalom/orgiq-finops';
-const RAG = 'connorhoehnslalom/orgiq-rag-search';
+const OBS = 'connorhoehn/orgiq-observability';
+const FINOPS = 'connorhoehn/orgiq-finops';
+const RAG = 'connorhoehn/orgiq-rag-search';
 
 afterEach(() => {
   fixtureRegistry.resetAll('default');

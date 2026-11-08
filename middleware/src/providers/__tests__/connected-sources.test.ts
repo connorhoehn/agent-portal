@@ -30,8 +30,8 @@ beforeEach(() => {
 
 describe('borrowApiKey in mock mode', () => {
   it('throws — never a fake token — for a github provider', async () => {
-    await expect(borrowApiKey('orgiq-github-connorhoehnslalom'))
-      .rejects.toThrow(/no credential vault in mock mode — orgiq-github-connorhoehnslalom is a fixture/);
+    await expect(borrowApiKey('orgiq-github-connorhoehn'))
+      .rejects.toThrow(/no credential vault in mock mode — orgiq-github-connorhoehn is a fixture/);
   });
 
   it('throws for a kind with no reader either (jira) — the message doesn\'t pretend otherwise', async () => {
@@ -40,7 +40,7 @@ describe('borrowApiKey in mock mode', () => {
   });
 
   it('names the real path out, so the error is actionable and not just a dead end', async () => {
-    await expect(borrowApiKey('orgiq-github-connorhoehnslalom'))
+    await expect(borrowApiKey('orgiq-github-connorhoehn'))
       .rejects.toThrow(/npm run dev/);
   });
 });

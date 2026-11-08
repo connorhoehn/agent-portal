@@ -44,7 +44,7 @@ const WI: WorkItemContext = {
   title: 'Tenant-by-tenant cutover runbook with rollback',
   description: 'Cannot be written until the cutover order is settled — smallest tenant first or riskiest first is still escalated.',
   labels: ['decom', 'runbook', 'blocked'],
-  repo: 'connorhoehnslalom/orgiq-auth-service',
+  repo: 'connorhoehn/orgiq-auth-service',
   initiative_id: 'p-auth-migration',
   pinned_runbook_ids: [],
 };
@@ -59,7 +59,7 @@ const briefInput = (over: Partial<AssembleBriefInput> = {}): AssembleBriefInput 
   assembled_at: '2026-10-14T09:00:00.000Z',
   framing: 'You are running non-interactively. Nobody will answer a question; decide, note the decision, and continue.',
   work_item: { id: WI.id, title: WI.title, kind: 'story', points: 5, description: WI.description, labels: WI.labels, parent_epic: { title: 'Legacy SSO decommission', goal: 'The SAML shim serves zero tenants and is deleted, not paused' } },
-  initiative: { id: 'p-auth-migration', name: 'Auth Migration', repo: 'connorhoehnslalom/orgiq-auth-service' },
+  initiative: { id: 'p-auth-migration', name: 'Auth Migration', repo: 'connorhoehn/orgiq-auth-service' },
   decisions: [
     { id: 'd-legacy-auth', title: 'Sunset legacy auth service', status_line: 'resolved 2026-01-30: migrate remaining services off the v1 auth gateway before Q3 2026.', at: '2026-01-30T00:00:00.000Z' },
     { id: 'd-cognito-cutover', title: 'Cutover order for legacy SSO tenants', status_line: 'escalated to an org-leader 2 days ago; not decided. Do not choose an order; write the runbook so the order is a parameter.', at: '2026-10-12T00:00:00.000Z' },
@@ -99,7 +99,7 @@ describe('selectRunbooks', () => {
   });
 
   it('matches repo scope by basename and tool scope by label', () => {
-    const repoWi = { ...WI, repo: 'connorhoehnslalom/orgiq-observability', initiative_id: null, title: 'Flaky test in the trace sink', description: 'Rerun failed once.', labels: ['flaky'] };
+    const repoWi = { ...WI, repo: 'connorhoehn/orgiq-observability', initiative_id: null, title: 'Flaky test in the trace sink', description: 'Rerun failed once.', labels: ['flaky'] };
     expect(selectRunbooks(repoWi, CANDIDATES).selected.map((r) => r.runbook_id)).toEqual(['rb-flaky-test-rerun-diff']);
     const tool = cand('rb-tool', flakyRerunDiff, { kind: 'tool', ref: 'jest' }, PROVEN);
     expect(selectRunbooks({ ...repoWi, repo: null, labels: ['jest', 'flaky'] }, [tool]).selected.map((r) => r.reasons[0])).toEqual(['tool jest']);

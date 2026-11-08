@@ -56,7 +56,7 @@ describe('getProject agentSpendUsd/repoFullName — real Aurora path', () => {
 
   it('scopes the spend/repo subqueries to this project id', async () => {
     const { getProject } = await import('../projects.js');
-    queueResponses({ agentSpendUsd: 12.5, repoFullName: 'connorhoehnslalom/orgiq-observability' });
+    queueResponses({ agentSpendUsd: 12.5, repoFullName: 'connorhoehn/orgiq-observability' });
     await getProject('p-observability');
     const sql = String(send.mock.calls[4]?.[0]?.input?.sql ?? '');
     expect(sql).toMatch(/agent_spend_usd/);
@@ -65,10 +65,10 @@ describe('getProject agentSpendUsd/repoFullName — real Aurora path', () => {
 
   it('maps agent_spend_usd and repo_full_name onto the detail response', async () => {
     const { getProject } = await import('../projects.js');
-    queueResponses({ agentSpendUsd: 12.5, repoFullName: 'connorhoehnslalom/orgiq-observability' });
+    queueResponses({ agentSpendUsd: 12.5, repoFullName: 'connorhoehn/orgiq-observability' });
     const project = await getProject('p-observability');
     expect(project?.agentSpendUsd).toBe(12.5);
-    expect(project?.repoFullName).toBe('connorhoehnslalom/orgiq-observability');
+    expect(project?.repoFullName).toBe('connorhoehn/orgiq-observability');
   });
 
   it('reports nulls, not a crash, when nothing is linked yet', async () => {
@@ -132,7 +132,7 @@ describe('getProject agentSpendUsd/repoFullName — mock mode parity', () => {
     ];
     for (const id of ids) {
       const project = await getProject(id);
-      expect(project?.repoFullName).toEqual(expect.stringMatching(/^connorhoehnslalom\//));
+      expect(project?.repoFullName).toEqual(expect.stringMatching(/^connorhoehn\//));
       expect(project?.agentSpendUsd).toEqual(expect.any(Number));
     }
   });

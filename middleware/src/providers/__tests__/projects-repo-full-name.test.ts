@@ -47,11 +47,11 @@ describe('listProjects repoFullName — real Aurora path', () => {
       records: [[
         { stringValue: 'p-observability' },
         { stringValue: 'Observability Platform' },
-        { stringValue: 'connorhoehnslalom/orgiq-observability' },
+        { stringValue: 'connorhoehn/orgiq-observability' },
       ]],
     });
     const [project] = await listProjects({ limit: 1 });
-    expect(project?.repoFullName).toBe('connorhoehnslalom/orgiq-observability');
+    expect(project?.repoFullName).toBe('connorhoehn/orgiq-observability');
   });
 
   it('reports null, not a crash, when no repo is linked yet', async () => {
@@ -81,7 +81,7 @@ describe('listProjects repoFullName — mock mode parity', () => {
     const { listProjects } = await import('../projects.js');
     const projects = await listProjects({ limit: 200 });
     const observability = projects.find((p) => p.id === 'p-observability');
-    expect(observability?.repoFullName).toBe('connorhoehnslalom/orgiq-observability');
+    expect(observability?.repoFullName).toBe('connorhoehn/orgiq-observability');
   });
 
   it('every mock initiative carries a repoFullName', async () => {
@@ -89,7 +89,7 @@ describe('listProjects repoFullName — mock mode parity', () => {
     const projects = await listProjects({ limit: 200 });
     expect(projects.length).toBeGreaterThan(0);
     for (const p of projects) {
-      expect(p.repoFullName).toEqual(expect.stringMatching(/^connorhoehnslalom\//));
+      expect(p.repoFullName).toEqual(expect.stringMatching(/^connorhoehn\//));
     }
   });
 });

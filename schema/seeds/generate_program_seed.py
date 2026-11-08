@@ -52,7 +52,7 @@ def run_note(prefix: str, seq: int) -> dict:
     ok = [n for n in notes if 'status' not in n]
     return ok[(seq - 1) % len(ok)]
 
-GH = 'https://github.com/connorhoehnslalom'
+GH = 'https://github.com/connorhoehn'
 
 # Whose name is on an initiative's monthly allocation when it is not the release
 # manager's: Mia Singh (u-mia, program-owner) holds Auth Migration's money.
@@ -63,10 +63,10 @@ ALLOCATED_BY = {'p-auth-migration': 'u-mia'}
 # agent_projects.connection_name null means "public, no credential" — so a
 # seed that left it null told the Codebases page every repo was public and
 # sent clones and pushes out with no credential to a repo that refuses them.
-# The name is providerNameFor('github', 'connorhoehnslalom') in
+# The name is providerNameFor('github', 'connorhoehn') in
 # middleware/src/providers/connected-sources.ts, the same provider the mock
 # fixture (middleware/src/mock/connected-sources.ts) lists.
-GH_CONNECTION = 'orgiq-github-connorhoehnslalom'
+GH_CONNECTION = 'orgiq-github-connorhoehn'
 
 # ─── Curated cast ────────────────────────────────────────────────────────────
 # owner: the one person who runs the initiative ("Run by").
@@ -1015,7 +1015,7 @@ def main() -> None:
         # the repos went private stops reading them as public.
         emit(
             "INSERT INTO agent_projects (id, repo_full_name, default_branch, org_project_id, connection_name, added_by) "
-            f"VALUES ('{stable_uuid('repo', pid)}', 'connorhoehnslalom/{ini['repo']}', 'main', '{pid}', "
+            f"VALUES ('{stable_uuid('repo', pid)}', 'connorhoehn/{ini['repo']}', 'main', '{pid}', "
             f"'{GH_CONNECTION}', 'seed') "
             f"ON CONFLICT (repo_full_name) DO UPDATE SET org_project_id = '{pid}', "
             f"connection_name = '{GH_CONNECTION}'"

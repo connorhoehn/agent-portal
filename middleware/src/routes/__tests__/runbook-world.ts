@@ -24,8 +24,8 @@ export const USERS: Record<string, TestUser> = {
 export const personOf = (sub: string): string | null => Object.values(USERS).find((u) => u.sub === sub)?.personId ?? null;
 
 export const PROJECTS: Record<string, { id: string; name: string; ownerId: string; contributors: Array<{ personId: string }>; repoFullName: string | null }> = {
-  'p-auth': { id: 'p-auth', name: 'Auth Migration', ownerId: 'p-100', contributors: [{ personId: 'p-101' }, { personId: 'p-103' }], repoFullName: 'connorhoehnslalom/orgiq-auth-service' },
-  'p-other': { id: 'p-other', name: 'Other Initiative', ownerId: 'p-200', contributors: [{ personId: 'p-102' }], repoFullName: 'connorhoehnslalom/orgiq-other' },
+  'p-auth': { id: 'p-auth', name: 'Auth Migration', ownerId: 'p-100', contributors: [{ personId: 'p-101' }, { personId: 'p-103' }], repoFullName: 'connorhoehn/orgiq-auth-service' },
+  'p-other': { id: 'p-other', name: 'Other Initiative', ownerId: 'p-200', contributors: [{ personId: 'p-102' }], repoFullName: 'connorhoehn/orgiq-other' },
 };
 
 const AT = '2026-10-01T00:00:00.000Z';

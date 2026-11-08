@@ -124,7 +124,7 @@ describe('detail rollups — Aurora path', () => {
     queueHead();
     send.mockResolvedValueOnce({
       columnMetadata: [{ name: 'agent_spend_usd' }, { name: 'repo_full_name' }, { name: 'active_agent_runs' }],
-      records: [[{ doubleValue: 1.73 }, { stringValue: 'connorhoehnslalom/orgiq-observability' }, { longValue: 2 }]],
+      records: [[{ doubleValue: 1.73 }, { stringValue: 'connorhoehn/orgiq-observability' }, { longValue: 2 }]],
     });
     send.mockResolvedValueOnce({ columnMetadata: [{ name: 'allocated_usd' }], records: [[{ doubleValue: 95 }]] });
 

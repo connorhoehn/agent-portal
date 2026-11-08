@@ -236,12 +236,12 @@ export interface BrowserSession {
 // Pages each browser session has requested, oldest first; `requestCount` is the
 // length of its list and `currentUrl` its last entry.
 const SEARCH_BROWSER_PAGES = [
-  'https://github.com/orgs/connorhoehnslalom/repositories', 'https://github.com/connorhoehnslalom/orgiq-auth-service',
-  'https://github.com/connorhoehnslalom/orgiq-auth-service/pulls', 'https://github.com/connorhoehnslalom/orgiq-auth-service/pull/49',
-  'https://github.com/connorhoehnslalom/orgiq-auth-service/pull/49/files', 'https://github.com/connorhoehnslalom/orgiq-auth-service/issues',
-  'https://github.com/connorhoehnslalom/orgiq-observability', 'https://github.com/connorhoehnslalom/orgiq-observability/pulls',
-  'https://github.com/connorhoehnslalom/orgiq-llm-platform', 'https://github.com/connorhoehnslalom/orgiq-llm-platform/pulls',
-  'https://github.com/connorhoehnslalom/orgiq-inference-platform', 'https://github.com/connorhoehnslalom/orgiq-inference-platform/pulls',
+  'https://github.com/orgs/connorhoehn/repositories', 'https://github.com/connorhoehn/orgiq-auth-service',
+  'https://github.com/connorhoehn/orgiq-auth-service/pulls', 'https://github.com/connorhoehn/orgiq-auth-service/pull/49',
+  'https://github.com/connorhoehn/orgiq-auth-service/pull/49/files', 'https://github.com/connorhoehn/orgiq-auth-service/issues',
+  'https://github.com/connorhoehn/orgiq-observability', 'https://github.com/connorhoehn/orgiq-observability/pulls',
+  'https://github.com/connorhoehn/orgiq-llm-platform', 'https://github.com/connorhoehn/orgiq-llm-platform/pulls',
+  'https://github.com/connorhoehn/orgiq-inference-platform', 'https://github.com/connorhoehn/orgiq-inference-platform/pulls',
 ];
 const ADVISOR_BROWSER_PAGES = [
   'https://docs.aws.amazon.com/cognito/latest/developerguide/amazon-cognito-user-pools-using-tokens-verifying-a-jwt.html',
@@ -259,7 +259,7 @@ export const browserSessions = defineFixture<BrowserSession>({
         startedAt: clock.hoursAgo(2 / 60),
         lastActivityAt: clock.hoursAgo(5 / 3600),
         currentUrl: SEARCH_BROWSER_PAGES[SEARCH_BROWSER_PAGES.length - 1]!,
-        pageTitle: 'Pull requests · connorhoehnslalom/orgiq-inference-platform',
+        pageTitle: 'Pull requests · connorhoehn/orgiq-inference-platform',
         requestCount: SEARCH_BROWSER_PAGES.length,
         profileId: 'bp-default',
       },

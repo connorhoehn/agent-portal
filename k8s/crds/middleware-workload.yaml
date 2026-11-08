@@ -5,7 +5,7 @@ metadata:
   namespace: orgiq
 spec:
   kind: Deployment
-  image: connorhoehnslalom/orgiq-middleware:dev  # placeholder; manual push needed (see docs/deploy-via-operator.md)
+  image: connorhoehn/orgiq-middleware:dev  # placeholder; manual push needed (see docs/deploy-via-operator.md)
   replicas: 2
   ports:
     - containerPort: 3001

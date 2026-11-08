@@ -61,7 +61,7 @@ import {
 
 // ─── The seeded codebase ────────────────────────────────────────────────────
 //
-// `schema/seed_program.sql` links `connorhoehnslalom/orgiq-observability` to
+// `schema/seed_program.sql` links `connorhoehn/orgiq-observability` to
 // the `p-observability` initiative under this id. Named rather than inlined so
 // a wrong uuid is one edit — and so it is plain that no change here points at
 // an invented codebase.
@@ -527,7 +527,7 @@ const CHANGE_SEEDS: ChangeSeed[] = [
     model: SONNET,
     commitSha: 'c73d5a081b46e2f907ac31b58d0e64f2a9051837',
     branchName: 'agent/red-span-metrics',
-    prUrl: 'https://github.com/connorhoehnslalom/orgiq-observability/pull/41',
+    prUrl: 'https://github.com/connorhoehn/orgiq-observability/pull/41',
     // `wi-obs-e1-s3` — "Span-metrics connector feeding RED dashboards"
     // (schema/seed_program.sql). This is the marketplace attribution
     // `createChangeRequest` copies off the run, and what delivery writes the

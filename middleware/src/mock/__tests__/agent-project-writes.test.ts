@@ -46,10 +46,10 @@ describe('linking a repository offline', () => {
   it('adds a row that the list and the detail both then show', async () => {
     const before = (await listAgentProjects()).length;
     const created = await linkAgentProject({
-      repoFullName: 'connorhoehnslalom/orgiq-scratch', orgProjectId: 'p-soc2',
+      repoFullName: 'connorhoehn/orgiq-scratch', orgProjectId: 'p-soc2',
     });
 
-    expect(created.repoFullName).toBe('connorhoehnslalom/orgiq-scratch');
+    expect(created.repoFullName).toBe('connorhoehn/orgiq-scratch');
     expect(created.defaultBranch).toBe('main');
     expect(await listAgentProjects()).toHaveLength(before + 1);
     expect(await getAgentProject(created.id)).toMatchObject({ id: created.id, orgProjectId: 'p-soc2' });
@@ -58,7 +58,7 @@ describe('linking a repository offline', () => {
   it('re-linking an existing repo UPDATES it — the conflict target is repo_full_name', async () => {
     const before = await listAgentProjects();
     const again = await linkAgentProject({
-      repoFullName: 'connorhoehnslalom/orgiq-observability',
+      repoFullName: 'connorhoehn/orgiq-observability',
       orgProjectId: 'p-observability', defaultBranch: 'trunk',
     });
 
@@ -70,7 +70,7 @@ describe('linking a repository offline', () => {
 
   it('stamps createdAt from the clock, not from wall time', async () => {
     const restore = freezeClock('2026-03-01T09:00:00.000Z');
-    const created = await linkAgentProject({ repoFullName: 'connorhoehnslalom/orgiq-frozen' });
+    const created = await linkAgentProject({ repoFullName: 'connorhoehn/orgiq-frozen' });
     restore();
     expect(created.createdAt).toBe('2026-03-01T09:00:00.000Z');
   });
@@ -153,7 +153,7 @@ describe('markCloned', () => {
 describe('the control plane undoes a write', () => {
   it('reset() restores the seeded fleet after a link and an unlink', async () => {
     const seeded = (await listAgentProjects()).length;
-    await linkAgentProject({ repoFullName: 'connorhoehnslalom/orgiq-scratch' });
+    await linkAgentProject({ repoFullName: 'connorhoehn/orgiq-scratch' });
     await unlinkAgentProject(OBSERVABILITY);
     expect(await listAgentProjects()).toHaveLength(seeded);
 

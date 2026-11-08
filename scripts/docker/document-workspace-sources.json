@@ -3,16 +3,16 @@
   "redisImage": "redis@sha256:7aec734b2bb298a1d769fd8729f13b8514a41bf90fcdd1f38ec52267fbaa8ee6",
   "sources": {
     "managed-nosql-store": { "url": "git@github.com:connorhoehn/managed-nosql-store.git", "commit": "48bf83451ee58421da2a707a16bf56020faa4f89" },
-    "message-queue": { "url": "git@github.com:connorhoehnslalom/message-queue.git", "commit": "b93c6b7ff12ff39db52f56ef78c2abaf6b78b391" },
-    "event-catalog": { "url": "git@github.com:connorhoehnslalom/event-catalog.git", "commit": "b0bff824021a97945be331225519845b0fadf918" },
-    "ui-components": { "url": "git@github.com:connorhoehnslalom/ui-components.git", "commit": "79bdd2bae303d6a4b0bb9a8287d4b7be1eddc3c7" },
-    "platform-api": { "url": "git@github.com:connorhoehnslalom/platform-api.git", "commit": "9c0c96f428d982ce88e4011ec37a3ca573b0b29e" },
+    "message-queue": { "url": "git@github.com:connorhoehn/message-queue.git", "commit": "b93c6b7ff12ff39db52f56ef78c2abaf6b78b391" },
+    "event-catalog": { "url": "git@github.com:connorhoehn/event-catalog.git", "commit": "b0bff824021a97945be331225519845b0fadf918" },
+    "ui-components": { "url": "git@github.com:connorhoehn/ui-components.git", "commit": "79bdd2bae303d6a4b0bb9a8287d4b7be1eddc3c7" },
+    "platform-api": { "url": "git@github.com:connorhoehn/platform-api.git", "commit": "9c0c96f428d982ce88e4011ec37a3ca573b0b29e" },
     "realtime-examples": { "url": "git@github.com:connorhoehn/realtime-examples.git", "commit": "907991255b1426f3051d943dda853dc42313609b" }
   },
   "socialSources": {
     "_comment": "The OrgIQ-SocialImages builds (scripts/docker/social-images-build.mjs). Kept apart from `sources` so the document-workspace build neither archives nor rebuilds them; the commits are the clean sibling HEADs on 2026-09-29, the trees the compose `social` profile builds from. Move a pin by editing the full 40-char sha.",
     "realtime-examples": { "url": "git@github.com:connorhoehn/realtime-examples.git", "commit": "423c91fd4cbe2f542111de43955dc36ca008867a" },
-    "platform-api": { "url": "git@github.com:connorhoehnslalom/platform-api.git", "commit": "1f0d3f279fbc4d9d9ff7420659b627a944615aac" },
+    "platform-api": { "url": "git@github.com:connorhoehn/platform-api.git", "commit": "1f0d3f279fbc4d9d9ff7420659b627a944615aac" },
     "live-video-streaming": { "url": "git@github.com:connorhoehn/live-video-streaming.git", "commit": "b039d20958b3d54291da66ad56f22b9ca6350eed" }
   }
 }

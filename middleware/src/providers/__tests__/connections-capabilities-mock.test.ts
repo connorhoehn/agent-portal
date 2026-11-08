@@ -63,7 +63,7 @@ describe('connected credential sources in dev:mock', () => {
     // A plausible-looking token would send the GitHub connector at
     // api.github.com and come back 401, which reads as "your token is wrong"
     // rather than "there is no vault here".
-    await expect(borrowApiKey('orgiq-github-connorhoehnslalom')).rejects.toThrow(/mock mode/);
+    await expect(borrowApiKey('orgiq-github-connorhoehn')).rejects.toThrow(/mock mode/);
   });
 
   it('has an empty world — nothing connected, which is not an error', async () => {

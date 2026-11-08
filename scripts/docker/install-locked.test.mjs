@@ -12,8 +12,8 @@ function fixture() {
   const dir = mkdtempSync(resolve(tmpdir(), 'orgiq-lock-test-'));
   const vendor = resolve(dir, 'vendor'); mkdirSync(vendor);
   const commit = 'a'.repeat(40);
-  const spec = `github:connorhoehnslalom/example#${commit}`;
-  const resolved = `git+ssh://git@github.com/connorhoehnslalom/example.git#${commit}`;
+  const spec = `github:connorhoehn/example#${commit}`;
+  const resolved = `git+ssh://git@github.com/connorhoehn/example.git#${commit}`;
   const data = Buffer.from('committed package bytes');
   const integrity = 'sha512-' + createHash('sha512').update(data).digest('base64');
   const manifest = { example: { commit, resolved, file: 'example.tgz', integrity } };
@@ -52,8 +52,8 @@ for (const corruption of ['artifact bytes', 'commit']) test(`rejects stale ${cor
 test('distinct nested commits retain their own artifacts and dependency edges', () => {
   const f = fixture(); try {
     const commit = 'b'.repeat(40);
-    const spec = `github:connorhoehnslalom/example#${commit}`;
-    const resolved = `git+ssh://git@github.com/connorhoehnslalom/example.git#${commit}`;
+    const spec = `github:connorhoehn/example#${commit}`;
+    const resolved = `git+ssh://git@github.com/connorhoehn/example.git#${commit}`;
     const bytes = Buffer.from('second committed version');
     const integrity = 'sha512-' + createHash('sha512').update(bytes).digest('base64');
     writeFileSync(resolve(f.vendor, 'example-b.tgz'), bytes);

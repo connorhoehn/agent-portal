@@ -1,7 +1,7 @@
 // Codebase link — Mission-2 data.
 //
 // The projects rollup (`GET /api/graph/projects`) carries `repoFullName`
-// (e.g. `connorhoehnslalom/orgiq-observability`). The portal renders it as a
+// (e.g. `connorhoehn/orgiq-observability`). The portal renders it as a
 // link to the repo on GitHub, visible to any signed-in role (no capability
 // gate). This is the one place that builds that URL, so the card and the
 // detail header agree by construction.

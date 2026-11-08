@@ -40,24 +40,24 @@ import { findInitiative } from './initiatives.js';
  * the dispatch preflight for that initiative.
  */
 const SEEDED: Array<{ id: string; repoFullName: string; orgProjectId: string; linkedDaysAgo: number }> = [
-  { id: 'db4978ec-903a-5398-a88a-807447cdaa44', repoFullName: 'connorhoehnslalom/orgiq-rag-search', orgProjectId: 'p-rag-search', linkedDaysAgo: 141 },
-  { id: '4870e01d-9274-5c4a-91af-ea9acb7f857a', repoFullName: 'connorhoehnslalom/orgiq-observability', orgProjectId: 'p-observability', linkedDaysAgo: 105 },
-  { id: '34ce3706-b201-539f-818e-5ed551186fae', repoFullName: 'connorhoehnslalom/orgiq-finops', orgProjectId: 'p-cost-opt', linkedDaysAgo: 99 },
-  { id: '7aad75a2-a91c-5f87-a312-2b2691b37b8c', repoFullName: 'connorhoehnslalom/orgiq-auth-service', orgProjectId: 'p-auth-migration', linkedDaysAgo: 93 },
-  { id: '4fbe2b7a-7f55-5008-a226-3905635c89d4', repoFullName: 'connorhoehnslalom/orgiq-mobile-app', orgProjectId: 'p-mobile-redesign', linkedDaysAgo: 86 },
-  { id: '246a5843-5308-518d-88ca-749e1bd3ae0a', repoFullName: 'connorhoehnslalom/orgiq-inference-platform', orgProjectId: 'p-inference-platform', linkedDaysAgo: 83 },
-  { id: '0c7b1f2f-79d2-5851-81ce-713455d6ac9c', repoFullName: 'connorhoehnslalom/orgiq-llm-platform', orgProjectId: 'p-llm-platform', linkedDaysAgo: 79 },
-  { id: '5e00ed8f-fd6a-5bff-b394-bc45358c85a1', repoFullName: 'connorhoehnslalom/orgiq-compliance', orgProjectId: 'p-soc2', linkedDaysAgo: 76 },
-  { id: 'fe14d5bf-b55f-55eb-8b3d-4956357bf1fe', repoFullName: 'connorhoehnslalom/orgiq-stream-analytics', orgProjectId: 'p-realtime-analytics', linkedDaysAgo: 74 },
-  { id: '5643cea7-dc73-5555-a944-6110115fef5e', repoFullName: 'connorhoehnslalom/orgiq-feature-store', orgProjectId: 'p-feature-store', linkedDaysAgo: 70 },
-  { id: '62494906-efb3-56fc-ab99-10d48698a820', repoFullName: 'connorhoehnslalom/orgiq-design-system', orgProjectId: 'p-design-v3', linkedDaysAgo: 65 },
-  { id: '7395f933-eca7-57d8-b0ab-387f63f87589', repoFullName: 'connorhoehnslalom/orgiq-design-system-api', orgProjectId: 'p-design-system-api', linkedDaysAgo: 58 },
-  { id: '8bf7c98b-0c23-5bae-839d-2c346ad02006', repoFullName: 'connorhoehnslalom/orgiq-data-lake', orgProjectId: 'p-data-lake', linkedDaysAgo: 36 },
-  { id: '340cfae2-476d-533d-a291-49d29d3f1496', repoFullName: 'connorhoehnslalom/orgiq-zero-trust', orgProjectId: 'p-zero-trust', linkedDaysAgo: 29 },
+  { id: 'db4978ec-903a-5398-a88a-807447cdaa44', repoFullName: 'connorhoehn/orgiq-rag-search', orgProjectId: 'p-rag-search', linkedDaysAgo: 141 },
+  { id: '4870e01d-9274-5c4a-91af-ea9acb7f857a', repoFullName: 'connorhoehn/orgiq-observability', orgProjectId: 'p-observability', linkedDaysAgo: 105 },
+  { id: '34ce3706-b201-539f-818e-5ed551186fae', repoFullName: 'connorhoehn/orgiq-finops', orgProjectId: 'p-cost-opt', linkedDaysAgo: 99 },
+  { id: '7aad75a2-a91c-5f87-a312-2b2691b37b8c', repoFullName: 'connorhoehn/orgiq-auth-service', orgProjectId: 'p-auth-migration', linkedDaysAgo: 93 },
+  { id: '4fbe2b7a-7f55-5008-a226-3905635c89d4', repoFullName: 'connorhoehn/orgiq-mobile-app', orgProjectId: 'p-mobile-redesign', linkedDaysAgo: 86 },
+  { id: '246a5843-5308-518d-88ca-749e1bd3ae0a', repoFullName: 'connorhoehn/orgiq-inference-platform', orgProjectId: 'p-inference-platform', linkedDaysAgo: 83 },
+  { id: '0c7b1f2f-79d2-5851-81ce-713455d6ac9c', repoFullName: 'connorhoehn/orgiq-llm-platform', orgProjectId: 'p-llm-platform', linkedDaysAgo: 79 },
+  { id: '5e00ed8f-fd6a-5bff-b394-bc45358c85a1', repoFullName: 'connorhoehn/orgiq-compliance', orgProjectId: 'p-soc2', linkedDaysAgo: 76 },
+  { id: 'fe14d5bf-b55f-55eb-8b3d-4956357bf1fe', repoFullName: 'connorhoehn/orgiq-stream-analytics', orgProjectId: 'p-realtime-analytics', linkedDaysAgo: 74 },
+  { id: '5643cea7-dc73-5555-a944-6110115fef5e', repoFullName: 'connorhoehn/orgiq-feature-store', orgProjectId: 'p-feature-store', linkedDaysAgo: 70 },
+  { id: '62494906-efb3-56fc-ab99-10d48698a820', repoFullName: 'connorhoehn/orgiq-design-system', orgProjectId: 'p-design-v3', linkedDaysAgo: 65 },
+  { id: '7395f933-eca7-57d8-b0ab-387f63f87589', repoFullName: 'connorhoehn/orgiq-design-system-api', orgProjectId: 'p-design-system-api', linkedDaysAgo: 58 },
+  { id: '8bf7c98b-0c23-5bae-839d-2c346ad02006', repoFullName: 'connorhoehn/orgiq-data-lake', orgProjectId: 'p-data-lake', linkedDaysAgo: 36 },
+  { id: '340cfae2-476d-533d-a291-49d29d3f1496', repoFullName: 'connorhoehn/orgiq-zero-trust', orgProjectId: 'p-zero-trust', linkedDaysAgo: 29 },
 ];
 
-/** providerNameFor('github', 'connorhoehnslalom') — see mock/connected-sources.ts. */
-const SEEDED_CONNECTION = 'orgiq-github-connorhoehnslalom';
+/** providerNameFor('github', 'connorhoehn') — see mock/connected-sources.ts. */
+const SEEDED_CONNECTION = 'orgiq-github-connorhoehn';
 
 function seedRow(s: (typeof SEEDED)[number]): AgentProject {
   return {

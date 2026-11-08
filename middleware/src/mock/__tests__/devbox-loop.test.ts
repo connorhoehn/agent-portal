@@ -250,7 +250,7 @@ describe('deliverChange offline', () => {
     runtimeArn: 'arn:mock',
     sessionId: SESSION,
     checkout: '/mnt/workspace/repo',
-    repoFullName: 'connorhoehnslalom/orgiq-observability',
+    repoFullName: 'connorhoehn/orgiq-observability',
     defaultBranch: 'main',
     connectionName: 'github-primary',
     changeId: 'b8c5d347-8ade-456f-adf1-604dfa4c3e60',
@@ -265,7 +265,7 @@ describe('deliverChange offline', () => {
     expect(out.ok).toBe(true);
     expect(out.branch).toBe('orgiq/change-b8c5d347');
     // Never a number a seeded change could also be claiming.
-    expect(out.prUrl).toBe('https://github.com/connorhoehnslalom/orgiq-observability/pull/101');
+    expect(out.prUrl).toBe('https://github.com/connorhoehn/orgiq-observability/pull/101');
   });
 
   it('refuses a change whose commit the workspace no longer holds', async () => {

@@ -25,7 +25,7 @@
 // (ndasilva and lhassan on observability, lhassan on finops), so no stranger
 // is introduced to trigger a build.
 //
-// WHAT IS DELIBERATELY ABSENT. `connorhoehnslalom/orgiq-rag-search` has no
+// WHAT IS DELIBERATELY ABSENT. `connorhoehn/orgiq-rag-search` has no
 // rows. Its environment (`p-rag-search` / prod) is the seeded `provisioning`
 // one — nothing has shipped there yet — so it is the honest *genuinely empty*
 // case, and it is what makes the route's two empty answers distinguishable by
@@ -74,8 +74,8 @@ function ran(
 
 const runUrl = (repo: string, id: number): string => `https://github.com/${repo}/actions/runs/${id}`;
 
-const OBS = 'connorhoehnslalom/orgiq-observability';
-const FINOPS = 'connorhoehnslalom/orgiq-finops';
+const OBS = 'connorhoehn/orgiq-observability';
+const FINOPS = 'connorhoehn/orgiq-finops';
 
 /**
  * Workflow runs, per repository.
