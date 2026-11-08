@@ -280,7 +280,7 @@ export const PAGES: readonly PageEntry[] = [
     keywords: ['call', 'video', 'audio', 'meet', 'ring'] },
   { label: 'Hangouts',              hint: 'Standing rooms you can drop into',    path: '/social/rooms',                               tenant: 'social', group: 'Meet',
     keywords: ['room', 'hangout', 'huddle', 'meet'] },
-  { label: 'Contacts',           hint: 'People you talk with',                path: '/social/contacts',                            tenant: 'social', group: 'People',
+  { label: 'Contacts',           hint: 'People you talk with',                path: '/social/contacts',                            tenant: 'social', group: 'People', pageId: 'contacts',
     keywords: ['contact', 'people', 'follow', 'presence'] },
   { label: 'Teams',              hint: 'Teams and their channels',            path: '/social/teams',                               tenant: 'social', group: 'People', pageId: 'teams',
     keywords: ['team', 'group', 'members'] },

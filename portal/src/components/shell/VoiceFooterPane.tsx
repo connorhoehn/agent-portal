@@ -34,7 +34,7 @@ import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { useFetch } from '../../hooks/useFetch';
 import { browserMedia } from '../../lib/voice/client';
 import { VoiceController } from '../../lib/voice/controller';
-import type { CommandOutputView, ComputeAccess, DeliveryRecord, SocialAccess, ToolContext, VoiceComputer } from '../../lib/voice/tools';
+import { ResultMemory, type CommandOutputView, type ComputeAccess, type DeliveryRecord, type SocialAccess, type ToolContext, type VoiceComputer } from '../../lib/voice/tools';
 import { sendAndWaitForSocialChatAck, socialChatError } from '../../pages/social/socialChatDelivery';
 import { useEmbeddedSocial } from './EmbeddedSocial';
 import { PAGES, isPageVisible } from './portalCommands';
@@ -115,6 +115,8 @@ function VoiceFooterPane() {
   const onPlane = tenant !== 'social' && !!social?.available;
   const planeCaps = useFetch<{ actions: Record<string, boolean> }>(onPlane ? '/api/social/plane/capabilities' : null, 60_000, { share: true });
   const [deliveries] = useState(() => new Map<string, DeliveryRecord>());
+  // The rows this tenant's searches returned, for open_result; a new tenant starts empty (a switch ends the session).
+  const results = useMemo(() => new ResultMemory(), [tenant]);
 
   // ── the post path: one conversation mounted at a time, a sender per joined channel ──
   const [chatChannel, setChatChannel] = useState<string | null>(null);
@@ -167,8 +169,8 @@ function VoiceFooterPane() {
   } : null), [social?.available, social?.presence, tenant, gateway?.connectionState, sendChat, deliveries]);
 
   // The tool context is read at call time, so a call sees the current router, grants and providers.
-  const live = useRef({ tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, planePost: !!planeCaps.data?.actions['PostMessage'] });
-  live.current = { tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, planePost: !!planeCaps.data?.actions['PostMessage'] };
+  const live = useRef({ tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, planePost: !!planeCaps.data?.actions['PostMessage'], results });
+  live.current = { tenant, role: session?.role ?? 'member', can, navigate, compute: computeAccess, social: socialAccess, planePost: !!planeCaps.data?.actions['PostMessage'], results };
 
   const controller = useMemo(() => new VoiceController({
     fetch: (url, init) => fetch(url, init),
@@ -183,6 +185,7 @@ function VoiceFooterPane() {
       now: () => new Date(),
       compute: live.current.compute,
       social: live.current.social,
+      results: live.current.results,
       toast: {
         pending: (title, detail) => toastPending(title, detail),
         success: (id, title, detail) => { toastSuccess(id, title, detail); },

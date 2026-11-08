@@ -66,7 +66,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "Search the workspace's people index (the backend search, type person) by skill, topic or name. "Latest" means sort recent.",
+    "description": "Search the workspace's people index (the backend search, type person) by skill, topic or name. "Latest" means sort recent. Each row carries a ref that open_result opens.",
     "name": "search_people",
     "parameters": {
       "additionalProperties": false,
@@ -114,7 +114,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "Search this workspace's record index (the backend search) by kind of record: team, initiative, work, decision, knowledge, asset, recording.",
+    "description": "Search this workspace's record index (the backend search) by kind of record; each row carries a ref that open_result opens. The kinds here: team, initiative, work, decision, knowledge, asset, recording.",
     "name": "search_records",
     "parameters": {
       "additionalProperties": false,
@@ -160,6 +160,25 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
         "type",
         "scope",
         "limit",
+      ],
+      "type": "object",
+    },
+    "strict": true,
+    "type": "function",
+  },
+  {
+    "description": "Open one row of the last search_people or search_records result on its own page (a person's profile, an initiative, a run). Pass the row's ref exactly as the result gave it (e.g. "person:p-12"), or its position in the last result ("1" for the first row). Never a name or a path.",
+    "name": "open_result",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "description": "The row's ref from the result, or its position in the last result ("1" to "10").",
+          "type": "string",
+        },
+      },
+      "required": [
+        "ref",
       ],
       "type": "object",
     },

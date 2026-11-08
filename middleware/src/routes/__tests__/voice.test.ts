@@ -159,16 +159,16 @@ describe('POST /api/voice/sessions — the mint', () => {
       principal = { sub: USER, role, tenant, grants: {} };
       const res = await mint();
       expect(res.status).toBe(201);
-      expect(res.body.tools.sort()).toEqual(['access_request_status', 'navigate', 'search_records']);
+      expect(res.body.tools.sort()).toEqual(['access_request_status', 'navigate', 'open_result', 'search_records']);
       const sent = JSON.parse(calls[0]!.init.body!).session;
-      expect(sent.delegation.responses.tools.map((t: { name: string }) => t.name).sort()).toEqual(['access_request_status', 'navigate', 'search_records']);
+      expect(sent.delegation.responses.tools.map((t: { name: string }) => t.name).sort()).toEqual(['access_request_status', 'navigate', 'open_result', 'search_records']);
     });
 
   it('a social participant may mint, and is offered only the social tools', async () => {
     principal = { sub: USER, role: 'participant', tenant: 'social', grants: {} };
     const res = await mint();
     expect(res.status).toBe(201);
-    expect(res.body.tools.sort()).toEqual(['access_request_status', 'navigate', 'search_records', 'send_chat_message', 'set_status']);
+    expect(res.body.tools.sort()).toEqual(['access_request_status', 'navigate', 'open_result', 'search_records', 'send_chat_message', 'set_status']);
   });
 
   it('the social scripted session searches its own index for live huddles', async () => {

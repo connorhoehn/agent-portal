@@ -6,6 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { VoiceController } from '../controller.ts';
 import { FakeClock, fakeFetch, middlewareVoice, route, toolContext, type Route } from './voiceHarness.ts';
+import { ResultMemory } from '../tools.ts';
 import type { Action } from '../../capabilities';
 
 type Call = { name: string; arguments: Record<string, unknown>; said: string };
@@ -33,10 +34,10 @@ export async function scriptedRun(tenant: string, opts: { role: string; allow: A
     route('POST', `/api/voice/sessions/${SESSION}/close`, 200, { alreadyClosed: false }),
     route('POST', '/api/voice/sessions', 201, body),
   ]);
-  const ctx = toolContext({ fetch, tenant, role: opts.role, allow: opts.allow, ...(opts.ctx ?? {}) });
+  const ctx = toolContext({ fetch, tenant, role: opts.role, allow: opts.allow, results: new ResultMemory(), ...(opts.ctx ?? {}) });
   const controller = new VoiceController({ fetch, media: null, toolContext: () => ctx, now: clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer });
   await controller.start();
-  await clock.advance(4000);
+  await clock.advance(opts.extraStart ? 8000 : 4000);
   const stopping = controller.stop();
   await clock.advance(300);
   await stopping;
@@ -91,4 +92,43 @@ test('the assessment, pipelines and access scripted sessions each run their read
     assert.ok(run.log.some((l) => l.url === r.url), `${r.tenant} read ${r.url}`);
     assert.doesNotMatch(run.summaries[0]!, /^Nothing|No request/, `${r.tenant} found its row`);
   }
+});
+
+/** A second delegation in the scripted session: the model calls `name` with `args` after the first answer. */
+function secondCall(name: string, args: Record<string, unknown>, atMs = 4500): unknown[] {
+  const d = 'item_mock_delegation_2', resp = 'resp_mock_3', fc = 'fc_mock_2', callId = 'call_mock_2';
+  const env = (event: Record<string, unknown>) => ({ type: 'response.event', delegation_id: d, event });
+  const a = JSON.stringify(args);
+  return [
+    { atMs, event: { type: 'session.input_transcript.delta', delta: 'Open the first one.', start_ms: 6000, end_ms: 6800 } },
+    { atMs: atMs + 100, event: { type: 'session.delegation.created', offset_ms: 6900, delegation: { id: d, type: 'delegation', response_id: resp, target: 'responses' } } },
+    { atMs: atMs + 110, event: env({ type: 'response.created', response: { id: resp, status: 'in_progress', output: [] } }) },
+    { atMs: atMs + 300, event: env({ type: 'response.output_item.done', item: { id: fc, type: 'function_call', status: 'completed', arguments: a, call_id: callId, name }, output_index: 0, sequence_number: 4 }) },
+    { atMs: atMs + 350, event: env({ type: 'response.completed', response: { id: resp, status: 'completed', output: [] } }) },
+  ];
+}
+
+test('the orgiq scripted session finds the Kubernetes experts, then opens the first row\'s own href', async () => {
+  const people = [
+    { type: 'person', id: 'p-priya', title: 'Priya Natarajan', subtitle: 'Staff platform engineer', href: '/iq/search?tab=connections&selection=person%3Ap-priya' },
+    { type: 'person', id: 'p-sam', title: 'Sam Ortiz', subtitle: 'SRE', href: '/iq/search?tab=connections&selection=person%3Ap-sam' },
+  ];
+  const run = await scriptedRun('orgiq', {
+    role: 'member', allow: ['Search', 'VoiceNavigate'],
+    routes: [route('GET', '/api/search?', 200, { results: people, total: 2 })],
+    extraStart: secondCall('open_result', { ref: '1' }),
+  });
+  assert.deepEqual(run.calls, [['search_people', 'done'], ['open_result', 'done']]);
+  assert.equal(run.ctx.navigations.at(-1), people[0]!.href, 'the person, on the connections tab the index links to');
+  assert.equal(run.summaries[1], 'Opened Priya Natarajan');
+});
+
+test('a scripted open_result for a ref no search returned is refused and opens nothing', async () => {
+  const run = await scriptedRun('orgiq', {
+    role: 'member', allow: ['Search', 'VoiceNavigate'],
+    routes: [route('GET', '/api/search?', 200, { results: [{ type: 'person', id: 'p1', title: 'Priya', href: '/iq/search?tab=connections&selection=person%3Ap1' }], total: 1 })],
+    extraStart: secondCall('open_result', { ref: 'person:not-a-row' }),
+  });
+  assert.deepEqual(run.calls, [['search_people', 'done'], ['open_result', 'refused']]);
+  assert.equal(run.ctx.navigations.length, 1, 'only the search page');
 });

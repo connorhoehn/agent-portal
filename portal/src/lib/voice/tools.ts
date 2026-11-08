@@ -134,6 +134,8 @@ export interface ToolContext {
   toast?: ToastSink;
   /** The dock's command-output panel. */
   showOutput?(view: CommandOutputView): void;
+  /** The rows the session's searches returned, kept for open_result; null/absent = nothing can be opened. */
+  results?: ResultMemory | null;
 }
 
 export interface ToolResult {
@@ -333,7 +335,7 @@ export function voicePage(palette: Palette, pageId: string, tenant?: string): Pa
 
 /** Pages whose route takes a record id as the next path segment (App.tsx `<path>/:id`). */
 const ID_PATHS: ReadonlySet<string> = new Set([
-  '/social/channels', '/iq/projects',
+  '/social/channels', '/social/contacts', '/iq/projects',
   '/assessment/teams', '/assessment/submissions', '/assessment/feedback', '/assessment/runs',
   '/pipelines/definitions', '/pipelines/runs', '/pipelines/approvals',
 ]);
@@ -392,6 +394,53 @@ const openComputerLab: Runner = async (args, ctx) => {
   }, `Opened ${open.page.label}`);
 };
 
+// ── kept results (open_result) ──────────────────────────────────────────────
+
+/** One search row the dock may open: its ref, what it is called and the index's own link. */
+export interface KeptRow { ref: string; title: string; href: string }
+
+/** How many result sets the dock keeps (the newest first); a ref from an older set is still opened by ref. */
+export const KEPT_SETS = 3;
+
+/**
+ * The rows this session's own searches returned, so `open_result` can open
+ * one by its ref or position and never by a path or a name the model made
+ * up: a row is here only because a gated read answered it to this user.
+ * The dock holds one for the session's lifetime (VoiceFooterPane).
+ */
+export class ResultMemory {
+  private sets: KeptRow[][] = [];
+  keep(rows: readonly KeptRow[]): void {
+    this.sets = [rows.slice(0, MAX_ROWS), ...this.sets].slice(0, KEPT_SETS);
+  }
+  /** A position ("1".."10") in the newest set, or a ref in any kept set (newest first). */
+  find(ref: string): KeptRow | null {
+    const r = ref.trim();
+    if (/^\d{1,2}$/.test(r)) return this.sets[0]?.[Number(r) - 1] ?? null;
+    for (const set of this.sets) {
+      const hit = set.find((row) => row.ref === r);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  get empty(): boolean { return this.sets.every((s) => s.length === 0); }
+}
+
+/** A link inside this portal: a path, never another origin or a scheme. */
+export function localHref(href: string): boolean {
+  return href.startsWith('/') && !href.startsWith('//') && !href.includes('\\') && !/^\/*[a-z][a-z0-9+.-]*:/i.test(href);
+}
+
+const openResult: Runner = async (args, ctx) => {
+  const ref = String(args['ref']).trim();
+  if (!ctx.results || ctx.results.empty) return refused('There is no search result to open yet. Search first, then open a row by its ref.');
+  const row = ctx.results.find(ref);
+  if (!row) return refused(`"${ref}" is not a row of the last search results. Use a row's ref or its position.`);
+  if (!localHref(row.href)) return refused('That result has no page in this portal.');
+  ctx.navigate(row.href);
+  return done('navigated', { ref: row.ref, title: row.title, path: row.href }, `Opened ${row.title}`);
+};
+
 // ── search (the backend's search: GET /api/search in orgiq, GET /api/<tenant>/search elsewhere) ──
 
 interface SearchRow { id?: string; title?: string; subtitle?: string; description?: string; matchReason?: string; href?: string; type?: string; status?: string; updatedAt?: string }
@@ -429,13 +478,25 @@ function searchRunner(type: 'person' | 'records'): Runner {
     }
     const read = await readJson<SearchBody>(ctx, url);
     if (!read.ok) return readFailure('search', read.status);
-    const rows = (read.body.results ?? []).slice(0, Math.min(limit, MAX_ROWS)).map((r) => ({
+    const found = (read.body.results ?? []).slice(0, Math.min(limit, MAX_ROWS));
+    // The ref is the row's own `<type>:<id>`: what open_result takes back, so the model never opens by name alone.
+    const refOf = (r: SearchRow) => (r.id ? `${r.type ?? recordType ?? 'record'}:${r.id}` : undefined);
+    const rows = found.map((r) => ({
+      ref: refOf(r),
       ...(type === 'person' ? { name: r.title ?? '' } : { title: r.title ?? '', type: r.type }),
       subtitle: r.subtitle, detail: r.description, matched: r.matchReason, status: orgiq ? undefined : r.status, href: r.href,
       ...(sort === 'recent' && r.updatedAt ? { updatedAt: r.updatedAt } : {}),
     }));
+    // Kept with the full ref (shapeOutput caps strings for the model; a 120-character id must still resolve).
+    ctx.results?.keep(found.flatMap((r) => {
+      const ref = refOf(r);
+      return ref && r.href ? [{ ref: cap(ref), title: r.title ?? ref, href: r.href }] : [];
+    }));
     const total = typeof read.body.total === 'number' ? read.body.total : rows.length;
-    return done('search_results', { type: recordType ?? 'all', query, total, rows, ...(!orgiq && scope ? { scopeIgnored: SCOPE_IGNORED } : {}) },
+    return done('search_results', {
+      type: recordType ?? 'all', query, total, rows, ...(!orgiq && scope ? { scopeIgnored: SCOPE_IGNORED } : {}),
+      ...(rows.some((r) => r.ref) ? { open: 'open_result opens a row by its ref or position.' } : {}),
+    },
       rows.length ? `${rows.length} of ${total} for "${query}"` : `Nothing found for "${query}"`);
   };
 }
@@ -595,6 +656,7 @@ const accessRequestStatus: Runner = async (args, ctx) => {
 /** The read and navigation runners. actions.ts adds the machine and people tools as VOICE_RUNNERS. */
 export const TOOL_RUNNERS: Readonly<Record<string, Runner>> = {
   navigate,
+  open_result: openResult,
   search_people: searchRunner('person'),
   search_records: searchRunner('records'),
   list_active_initiatives: listActiveInitiatives,

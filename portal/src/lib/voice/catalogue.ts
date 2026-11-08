@@ -58,6 +58,7 @@ export const NAVIGATE_PAGE_IDS: ReadonlyArray<{ id: string; tenants: readonly st
   { id: 'findings', tenants: ['orgiq'] },
   { id: 'teams', tenants: ['social'] },
   { id: 'channels', tenants: ['social'] },
+  { id: 'contacts', tenants: ['social'] },
   { id: 'teams', tenants: ['assessment'] },
   { id: 'submissions', tenants: ['assessment'] },
   { id: 'reports', tenants: ['assessment'] },
@@ -141,6 +142,13 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       limit,
     }, ['query']),
     kind: 'read', backing: 'search', confirm: false, action: null, says: 'Searching.', tenants: VOICE_TENANTS,
+  },
+  {
+    name: 'open_result',
+    parameters: obj({
+      ref: str('The row\'s ref from the result, or its position in the last result ("1" to "10").', { minLength: 1, maxLength: 200 }),
+    }, ['ref']),
+    kind: 'navigate', backing: 'route', confirm: false, action: null, says: 'Opening the first result.', tenants: VOICE_TENANTS,
   },
   {
     name: 'list_active_initiatives',

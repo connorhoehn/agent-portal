@@ -100,6 +100,8 @@ export const NAVIGATE_PAGES: ReadonlyArray<{ id: string; path: string; tenants: 
   { id: 'findings', path: '/iq/work/findings', tenants: ['orgiq'] },
   { id: 'teams', path: '/social/teams', tenants: ['social'] },
   { id: 'channels', path: '/social/channels', tenants: ['social'] },
+  // A person's profile in Social; params.id opens /social/contacts/<userId>.
+  { id: 'contacts', path: '/social/contacts', tenants: ['social'] },
   { id: 'teams', path: '/assessment/teams', tenants: ['assessment'] },
   { id: 'submissions', path: '/assessment/submissions', tenants: ['assessment'] },
   { id: 'reports', path: '/assessment/reports', tenants: ['assessment'] },
@@ -192,7 +194,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
   },
   {
     name: 'search_people',
-    description: 'Search the workspace\'s people index (the backend search, type person) by skill, topic or name. "Latest" means sort recent.',
+    description: 'Search the workspace\'s people index (the backend search, type person) by skill, topic or name. "Latest" means sort recent. Each row carries a ref that open_result opens.',
     parameters: obj({
       query: str('What to search for, e.g. "kubernetes".', { minLength: 1, maxLength: 200 }),
       scope: searchScope,
@@ -206,7 +208,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
   {
     name: 'search_records',
     // toolsForTenant names the tenant's own types in the description it renders.
-    description: 'Search this workspace\'s record index (the backend search) by kind of record.',
+    description: 'Search this workspace\'s record index (the backend search) by kind of record; each row carries a ref that open_result opens.',
     parameters: obj({
       query: str('What to search for.', { minLength: 1, maxLength: 200 }),
       type: str('Which kind of record.', { enum: searchRecordTypes(null) }),
@@ -217,6 +219,17 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     gate: "the tenant search mount's action (SEARCH_ACTIONS: Search in orgiq, the tenant's View action elsewhere)", spend: 'none', idempotent: true,
     says: 'Searching.', tenants: VOICE_TENANTS,
     mapsTo: 'GET /api/search?q=&type=&scope= in orgiq; GET /api/<tenant>/search?q=&type=&limit= elsewhere',
+  },
+  {
+    name: 'open_result',
+    description: 'Open one row of the last search_people or search_records result on its own page (a person\'s profile, an initiative, a run). Pass the row\'s ref exactly as the result gave it (e.g. "person:p-12"), or its position in the last result ("1" for the first row). Never a name or a path.',
+    parameters: obj({
+      ref: str('The row\'s ref from the result, or its position in the last result ("1" to "10").', { minLength: 1, maxLength: 200 }),
+    }, ['ref']),
+    kind: 'navigate', backing: 'route', confirm: false, action: null,
+    gate: "only a row this session's own search returned (the dock keeps them); the page's route gates again", spend: 'none', idempotent: true,
+    says: 'Opening the first result.', tenants: VOICE_TENANTS,
+    mapsTo: "useNavigate() to the kept row's href (the index's own link: /social/contacts/<id>, /iq/search?tab=connections&selection=person:<id>, …)",
   },
   {
     name: 'list_active_initiatives',
@@ -355,7 +368,7 @@ export function toolsForTenant(tenant: string): VoiceTool[] {
     if (t.name === 'navigate') return [withEnum(t, 'page', navigatePageIds(tenant))];
     if (t.name === 'search_records') {
       const types = searchRecordTypes(tenant);
-      return types.length ? [withEnum(t, 'type', types, `${t.description.replace(/\.$/, '')}: ${types.join(', ')}.`)] : [];
+      return types.length ? [withEnum(t, 'type', types, `${t.description} The kinds here: ${types.join(', ')}.`)] : [];
     }
     return [t];
   });

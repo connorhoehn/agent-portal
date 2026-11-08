@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_FIELD_CHARS, MAX_ROWS, DATA_NOTE, parseSince, parseToolArgs, runVoiceTool, shapeOutput, voicePage } from '../tools.ts';
+import { MAX_FIELD_CHARS, MAX_ROWS, DATA_NOTE, ResultMemory, localHref, parseSince, parseToolArgs, runVoiceTool, shapeOutput, voicePage } from '../tools.ts';
 import { VOICE_TENANTS, VOICE_TOOLS, navigatePageIds, voiceToolSpec } from '../catalogue.ts';
 import { PALETTE, fakeFetch, route, toolContext } from './voiceHarness.ts';
 
@@ -50,7 +50,7 @@ test('navigate refuses an unknown page id and a page outside the tenant or the r
   // Every role of every tenant, over every page id: the id resolves to its own tenant's palette row, gated by isPageVisible.
   const roles = ['member', 'sme', 'program-owner', 'org-leader', 'hr-admin', 'admin', 'participant', 'moderator',
     'assessor', 'program-lead', 'author', 'operator', 'requester', 'approver', 'access-admin'];
-  assert.equal(PALETTE.pages.filter((p) => p.pageId).length, 22, 'the real palette table, 22 voice pages');
+  assert.equal(PALETTE.pages.filter((p) => p.pageId).length, 23, 'the real palette table, 23 voice pages');
   const inTenant = (p: { tenant: string }, t: string) => p.tenant === t || p.tenant === 'universal' || (p.tenant === 'admin' && t === 'orgiq');
   const ids = [...new Set(PALETTE.pages.filter((p) => p.pageId).map((p) => p.pageId!))];
   for (const id of ids) {
@@ -95,7 +95,8 @@ test('search_people navigates the page and reads the same search, shaping rows a
   assert.equal(r.output['kind'], 'search_results');
   const rows = r.output['rows'] as Array<Record<string, unknown>>;
   assert.equal(rows.length, 5);
-  assert.deepEqual(Object.keys(rows[0]!).sort(), ['detail', 'href', 'matched', 'name', 'subtitle', 'updatedAt']);
+  assert.deepEqual(Object.keys(rows[0]!).sort(), ['detail', 'href', 'matched', 'name', 'ref', 'subtitle', 'updatedAt']);
+  assert.equal(rows[0]!['ref'], 'person:p0', 'the row\'s own id, for open_result');
   assert.equal((rows[0]!['detail'] as string).length, MAX_FIELD_CHARS);
 });
 
@@ -114,7 +115,7 @@ test('search_records outside orgiq reads that tenant\'s own search, with its own
   assert.equal(r.outcome, 'done');
   assert.deepEqual(log.map((l) => l.url), ['/api/social/search?q=standup&type=huddle&limit=5']);
   assert.deepEqual(c.navigations, [], 'no search page outside orgiq');
-  assert.deepEqual((r.output['rows'] as unknown[])[0], { title: 'Platform standup', type: 'huddle', subtitle: 'In the huddle now: Mira, Lena', status: 'live', href: '/social/calls' });
+  assert.deepEqual((r.output['rows'] as unknown[])[0], { ref: 'huddle:h1', title: 'Platform standup', type: 'huddle', subtitle: 'In the huddle now: Mira, Lena', status: 'live', href: '/social/calls' });
 
   // A type another tenant indexes is refused before the network; so is a role without the tenant search's own action.
   const foreign = await runVoiceTool('search_records', { query: 'x', type: 'initiative' }, toolContext({ fetch, tenant: 'social', allow: ['ViewSocial'] }));
@@ -127,6 +128,58 @@ test('search_records outside orgiq reads that tenant\'s own search, with its own
   const t = await runVoiceTool('search_records', { query: 'platform', type: 'team' }, toolContext({ fetch: org.fetch, allow: ['Search'] }));
   assert.equal(t.outcome, 'done');
   assert.equal(org.log[0]!.url, '/api/search?q=platform&type=team&limit=5');
+});
+
+test('open_result opens a row the session\'s own search returned, by ref or position, and nothing else', async () => {
+  const people = [
+    { type: 'person', id: 'p-ada', title: 'Ada Okafor', subtitle: 'Platform', href: '/iq/search?tab=connections&selection=person%3Ap-ada' },
+    { type: 'person', id: 'p-bo', title: 'Bo Lin', subtitle: 'SRE', href: '/iq/search?tab=connections&selection=person%3Ap-bo' },
+  ];
+  const { fetch, log } = fakeFetch([route('GET', '/api/search?', 200, { results: people, total: 2 })]);
+  const results = new ResultMemory();
+  const c = toolContext({ fetch, results });
+  // Before any search there is nothing to open.
+  assert.equal((await runVoiceTool('open_result', { ref: '1' }, c)).outcome, 'refused');
+  const found = await runVoiceTool('search_people', { query: 'kubernetes' }, c);
+  assert.deepEqual((found.output['rows'] as Array<{ ref: string }>).map((r) => r.ref), ['person:p-ada', 'person:p-bo']);
+  c.navigations.length = 0;
+
+  const first = await runVoiceTool('open_result', { ref: '1' }, c);
+  assert.equal(first.outcome, 'done');
+  assert.deepEqual(c.navigations, [people[0]!.href], 'the first row\'s own href: the person in the connections inspector');
+  const byRef = await runVoiceTool('open_result', { ref: 'person:p-bo' }, c);
+  assert.equal(byRef.summary, 'Opened Bo Lin');
+  assert.deepEqual(c.navigations, [people[0]!.href, people[1]!.href]);
+
+  // A name, a path, a ref no search returned and a position past the rows are all refused, and open nothing.
+  for (const ref of ['Ada Okafor', '/admin/identity', 'person:p-zed', '3', 'https://evil.example/x']) {
+    const r = await runVoiceTool('open_result', { ref }, c);
+    assert.equal(r.outcome, 'refused', ref);
+  }
+  assert.equal(c.navigations.length, 2);
+  assert.equal(log.length, 1, 'open_result never reads');
+  // A context without the dock's memory (no session) cannot open anything.
+  assert.equal((await runVoiceTool('open_result', { ref: '1' }, toolContext())).outcome, 'refused');
+});
+
+test('open_result refuses a kept row whose href leaves the portal; social profiles open on the contacts page', async () => {
+  const results = new ResultMemory();
+  results.keep([{ ref: 'contact:u-ada', title: 'Ada', href: '//evil.example/x' }]);
+  const c = toolContext({ tenant: 'social', role: 'participant', results });
+  assert.equal((await runVoiceTool('open_result', { ref: 'contact:u-ada' }, c)).outcome, 'refused');
+  assert.deepEqual(c.navigations, []);
+  for (const bad of ['//x', 'https://x', 'javascript:alert(1)', '\\x', 'x']) assert.equal(localHref(bad), false, bad);
+  assert.equal(localHref('/social/contacts/u-ada'), true);
+
+  const { fetch } = fakeFetch([route('GET', '/api/social/search?', 200, { results: [{ type: 'contact', id: 'u-ada', title: 'Ada Okafor', kind: 'Contact', href: '/social/contacts/u-ada', score: 2 }], total: 1 })]);
+  const s = toolContext({ fetch, tenant: 'social', role: 'participant', allow: ['ViewSocial'], results: new ResultMemory() });
+  await runVoiceTool('search_records', { query: 'ada', type: 'contact' }, s);
+  assert.equal((await runVoiceTool('open_result', { ref: 'contact:u-ada' }, s)).outcome, 'done');
+  assert.deepEqual(s.navigations, ['/social/contacts/u-ada']);
+  // And navigate names the same profile by page id.
+  const n = toolContext({ tenant: 'social', role: 'participant' });
+  await runVoiceTool('navigate', { page: 'contacts', params: { id: 'u-ada' } }, n);
+  assert.deepEqual(n.navigations, ['/social/contacts/u-ada']);
 });
 
 test('list_active_initiatives reads the initiatives list the page reads, mine by default', async () => {

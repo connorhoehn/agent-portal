@@ -20,6 +20,7 @@ const SPEC: Record<string, [string, boolean, string]> = {
   navigate: ['navigate', false, 'route'],
   search_people: ['read', false, 'search'],
   search_records: ['read', false, 'search'],
+  open_result: ['navigate', false, 'route'],
   list_active_initiatives: ['read', false, 'search'],
   open_computer_lab: ['navigate', false, 'route'],
   start_computer: ['machine', true, 'work'],
@@ -102,12 +103,12 @@ describe('the §4 catalogue', () => {
 
 describe('tenant scoping (§6)', () => {
   it('a social session is offered navigate, its search, chat, status and its own requests, nothing on machines', () => {
-    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'navigate', 'search_records', 'send_chat_message', 'set_status']);
+    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'navigate', 'open_result', 'search_records', 'send_chat_message', 'set_status']);
   });
 
   it('navigate offers only the tenant\'s pages plus the universal ones', () => {
     const pages = (tenant: string) => (toolsForTenant(tenant).find((t) => t.name === 'navigate')!.parameters.properties['page'] as { enum: string[] }).enum;
-    expect(pages('social').sort()).toEqual(['channels', 'teams', 'workspaces']);
+    expect(pages('social').sort()).toEqual(['channels', 'contacts', 'teams', 'workspaces']);
     expect(pages('orgiq')).not.toContain('teams');
     expect(pages('orgiq')).toContain('search');
     for (const p of NAVIGATE_PAGES) expect(p.path.startsWith('/')).toBe(true);
@@ -141,7 +142,7 @@ describe('tenant scoping (§6)', () => {
 
   it.each(['assessment', 'pipelines', 'access'])('%s is offered reads and navigation only: nothing that touches a machine or posts (gaps doc Q1)', (tenant) => {
     const tools = toolsForTenant(tenant);
-    expect(tools.map((t) => t.name).sort()).toEqual(['access_request_status', 'navigate', 'search_records']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['access_request_status', 'navigate', 'open_result', 'search_records']);
     for (const t of tools) {
       expect(['read', 'navigate']).toContain(t.kind);
       expect(t.confirm).toBe(false);
@@ -156,6 +157,15 @@ describe('tenant scoping (§6)', () => {
     expect(pages('pipelines')).toEqual(expect.arrayContaining(['runs', 'approvals']));
     expect(pages('access')).toEqual(expect.arrayContaining(['requests', 'new-request']));
     expect(pages('assessment')).not.toContain('approvals');
+  });
+
+  it('open_result takes only a ref or a position, never a path or a free-form target', () => {
+    const t = voiceTool('open_result')!;
+    expect(Object.keys(t.parameters.properties)).toEqual(['ref']);
+    const v = new Ajv({ strict: true }).compile(t.parameters);
+    expect(v({ ref: 'person:p1' })).toBe(true);
+    expect(v({ ref: '1', href: '/admin/identity' })).toBe(false);
+    for (const name of ['search_people', 'search_records']) expect(voiceTool(name)!.description).toMatch(/ref that open_result opens/);
   });
 
   it('a tenant that holds no voice grant gets no tools', () => {
