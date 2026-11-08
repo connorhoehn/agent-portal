@@ -14,8 +14,14 @@ concurrency:
 
 jobs:
   middleware:
+    # The suite (8,300 tests) overran a single hosted runner; three shards finish in parallel.
+    name: middleware (shard ${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     defaults:
       run:
         working-directory: middleware
@@ -57,7 +63,7 @@ jobs:
         env:
           # 25% of a hosted runner is one worker and the suite overran 45 minutes.
           JEST_MAX_WORKERS: '3'
-        run: npm test
+        run: npm test -- --shard=${{ matrix.shard }}/3
   infra:
     runs-on: ubuntu-latest
     timeout-minutes: 20
