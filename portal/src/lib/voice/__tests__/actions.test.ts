@@ -15,7 +15,6 @@ import {
   type CommandEvent, type CommandOutputView, type ComputeAccess, type DeliveryRecord, type SocialAccess, type ToolResult, type VoiceComputer,
 } from '../tools.ts';
 import { presenceAvatarUsers } from '../../../pages/assessment/knowledge/knowledgeFormat.ts';
-import { presenceStatusLines } from '../../../components/shell/socialEntryModel.ts';
 import { fakeFetch, route, toolContext } from './voiceHarness.ts';
 
 const SID = (c: string) => c.repeat(40);
@@ -313,7 +312,7 @@ test('set_status calls setStatus and updateMetadata with the dictated message an
   assert.deepEqual([plain.status, plain.meta], [['online'], []], 'no message: the status only');
 });
 
-test('the status message shows in the presence tooltip', () => {
+test('the status message rides on the presence user as the library tooltip\'s detail', () => {
   const people = presenceAvatarUsers([
     { clientId: 'k1', status: 'away', metadata: { userId: 'u1', displayName: 'Ana', statusMessage: 'out today' } },
     { clientId: 'k2', status: 'online', metadata: { userId: 'u1', displayName: 'Ana' } },
@@ -323,10 +322,11 @@ test('the status message shows in the presence tooltip', () => {
   assert.equal(people.find((p) => p.id === 'u1')!.detail, 'out today', 'a second tab without a message keeps it');
   assert.equal(people.find((p) => p.id === 'u2')!.detail, undefined);
   assert.equal(people.find((p) => p.id === 'u3')!.detail!.length, 120);
-  const lines = presenceStatusLines(people);
-  assert.equal(lines[0], 'Ana: out today');
-  assert.match(lines[1]!, /^Cy \(away\): in a review z+$/);
-  assert.equal(lines.length, 2);
+  // The footer hands these users to the library's PresenceAvatars, whose own tooltip shows `detail` (2.510.2, G17).
+  const footer = readFileSync(new URL('../../../components/shell/EmbeddedSocial.tsx', import.meta.url), 'utf8');
+  const row = footer.slice(footer.indexOf('function PresenceRow('), footer.indexOf('function EmbeddedSocialPanel('));
+  assert.match(row, /<PresenceAvatars [^>]*users=\{people\}/);
+  assert.doesNotMatch(row, /Tooltip/, 'no portal wrap around the faces');
 });
 
 // ── caps (§6, §10) ──

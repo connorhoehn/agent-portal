@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { useGatewayOptional, usePresence } from '@connorhoehn/realtime-modules/client';
 import { useSharedNotifications } from './SharedNotifications';
 import { WrappedNotificationBell } from '@connorhoehn/ui-components/integrations/realtime';
-import { Button, ChatIcon, EmptyState, ExternalLinkIcon, IconButton, Inline, PresenceAvatars, PresenceDot, Stack, T, Tooltip } from '@connorhoehn/ui-components/shared';
+import { Button, ChatIcon, EmptyState, ExternalLinkIcon, IconButton, Inline, PresenceAvatars, PresenceDot, Stack, T } from '@connorhoehn/ui-components/shared';
 import type { ConversationFeature } from '@connorhoehn/ui-components/social';
 import { ChannelBinding, useChannelBinding, type ChannelBindingState } from '../social/ChannelBindingStrip';
 import { useSession } from '../../lib/auth';
@@ -17,7 +17,7 @@ import { presenceAvatarUsers } from '../../pages/assessment/knowledge/knowledgeF
 import SocialConversation from '../../pages/social/SocialConversation';
 import { TenantDirectEntry } from './TenantDirectMessages';
 import { MessagesOverviewDialog, type ConversationPreview } from './MessagesOverviewDialog';
-import { presenceStatusLines, showSocialTenantDoor, socialActivityPath, socialEntryTarget } from './socialEntryModel';
+import { showSocialTenantDoor, socialActivityPath, socialEntryTarget } from './socialEntryModel';
 import { SOCIAL_PRESENCE_CHANNEL, namesFrom } from '../../pages/social/socialPlatform';
 import { dmTitle, socialInbox, type SocialPerson, type SocialDm } from '../../pages/social/socialChat';
 
@@ -290,16 +290,15 @@ function SocialEntryRow({ social }: { social: EmbeddedSocialContextValue }) {
   </Inline>;
 }
 
-/** The footer's online faces; a status message (statusMessage) shows in the row's tooltip. */
+/**
+ * The footer's online faces. A status message (`statusMessage`, set_status)
+ * rides on each user's `detail`, which PresenceAvatars shows in its own
+ * tooltip ("Ana — Away: out today") and marks `data-presence-detail`.
+ */
 function PresenceRow({ people }: { people: EmbeddedSocialContextValue['presencePeople'] }) {
-  const lines = presenceStatusLines(people);
-  const row = <Inline gap="none" align="center" className="hidden xl:flex" data-testid="shell-social-presence">
+  return <Inline gap="none" align="center" className="hidden xl:flex" data-testid="shell-social-presence">
     <PresenceAvatars size={20} maxVisible={4} users={people} />
   </Inline>;
-  if (!lines.length) return row;
-  return <Tooltip placement="top" data-testid="shell-social-presence-status" content={<Stack gap="none">
-    {lines.map((line) => <T key={line} size="xs">{line}</T>)}
-  </Stack>}>{row}</Tooltip>;
 }
 
 function EmbeddedSocialPanel({ refresh, latest, pageView }: {
