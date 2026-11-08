@@ -34,6 +34,7 @@ import { cognitoEnabled } from '../lib/oidc.js';
 import { demoModeEnabled, ssoAvailable } from '../lib/session.js';
 import { listUsers, getUser, bumpSessionEpoch } from '../providers/identity.js';
 import { userAvatars } from '../providers/user-avatars.js';
+import { insecureDevMode } from '../lib/insecure-dev-mode.js';
 
 export const sessionRouter = Router();
 
@@ -44,9 +45,13 @@ export const sessionRouter = Router();
 // running at once they starve each other on 429s. `LOGIN_RATE_LIMIT_PER_MIN`
 // widens the bucket for that case and is honoured only outside production;
 // the shipped brake stays 15/min.
+// Under INSECURE_DEV_MODE the default itself is 120/min: a laptop running
+// the portal, a headless walk and an agent's probe at once hit 15 in seconds,
+// and the person at the keyboard was the one refused (8 November 2026).
 const loginPerMin = (() => {
   const raw = Number(process.env.LOGIN_RATE_LIMIT_PER_MIN);
-  return process.env.NODE_ENV !== 'production' && Number.isFinite(raw) && raw > 0 ? raw : 15;
+  if (process.env.NODE_ENV !== 'production' && Number.isFinite(raw) && raw > 0) return raw;
+  return insecureDevMode() ? 120 : 15;
 })();
 const loginLimit = rateLimit('session-login', loginPerMin, 60_000);
 // Tenant/role switches share the same loopback bucket problem (journey maps,
