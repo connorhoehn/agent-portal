@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-08T05:36:02.335Z",
-  "serverHandlerSha": "3c2ba5b982107a50189b906f7a5a1b187d27707c8dc66d8641bd64153c23aea7",
+  "capturedAt": "2026-11-08T12:58:47.940Z",
+  "serverHandlerSha": "9eb8c5cb25220bb5b8cd5f941ce1acc51ac9f9418004eea50f9d3627486eaf0e",
   "baseUrl": "http://127.0.0.1:3997",
   "personas": [
     "orgiq/admin",
@@ -3888,17 +3888,16 @@
           "ORG-COST-2",
           "ORG-COST-3",
           "ORG-COST-6",
-          "ORG-DS-1",
           "ORG-DS-3",
           "ORG-DS-4",
           "ORG-DSAPI-1",
           "ORG-DSAPI-2",
-          "ORG-DSAPI-3",
           "ORG-DSAPI-4",
           "ORG-FS-1",
           "ORG-FS-3",
-          "ORG-FS-4",
           "ORG-INF-1",
+          "ORG-INF-2",
+          "ORG-INF-3",
           "ORG-LAKE-2",
           "ORG-LAKE-3",
           "ORG-LAKE-4",
@@ -3908,6 +3907,8 @@
           "ORG-LLM-3",
           "ORG-LLM-4",
           "ORG-LLM-5",
+          "ORG-LLM-7",
+          "ORG-LLM-9",
           "ORG-MOB-2",
           "ORG-MOB-3",
           "ORG-MOB-4",
@@ -3924,7 +3925,6 @@
           "ORG-RTA-2",
           "ORG-RTA-3",
           "ORG-RTA-5",
-          "ORG-SOC2-1",
           "ORG-SOC2-2",
           "ORG-SOC2-3",
           "ORG-SOC2-4",
@@ -3971,15 +3971,7 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "criteria": "array",
-        "criteria[]": "object",
-        "criteria[].createdAt": "string",
-        "criteria[].done": "boolean",
-        "criteria[].id": "string",
-        "criteria[].position": "number",
-        "criteria[].text": "string",
-        "criteria[].updatedAt": "string",
-        "criteria[].workItemId": "string"
+        "criteria": "array"
       },
       "values": {}
     },
@@ -5962,7 +5954,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "number",
+        "points[].judgeP50": "null|number",
         "windowHours": "number"
       },
       "values": {}

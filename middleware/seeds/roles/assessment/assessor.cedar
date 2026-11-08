@@ -11,7 +11,10 @@ permit (
     OrgIQ::Action::"ManageSubmissions",
     OrgIQ::Action::"RunAssessmentAgent",
     OrgIQ::Action::"Search",
-    OrgIQ::Action::"LabelFeedback"
+    OrgIQ::Action::"LabelFeedback",
+    // Mint a voice navigator session: reads and navigation only in this tenant
+    // (docs/voice-navigator-gaps.md Q1); each tool is gated by its own read's action.
+    OrgIQ::Action::"VoiceNavigate"
   ],
   resource
 )

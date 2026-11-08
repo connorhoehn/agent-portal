@@ -7,7 +7,7 @@ import { PALETTE, middlewareVoice } from './voiceHarness.ts';
 interface MwTool { name: string; parameters: unknown; kind: string; backing: string; confirm: boolean; action: string | null; says: string; tenants: readonly string[] }
 interface MwCatalogue {
   VOICE_TOOLS: MwTool[];
-  NAVIGATE_PAGES: Array<{ id: string; path: string; tenants: string[] }>;
+  NAVIGATE_PAGES: Array<{ id: string; path: string; tenants: readonly string[] }>;
   toolsForTenant(t: string): MwTool[];
   hashToolArgs(a: unknown): string;
   VOICE_TENANTS: readonly string[];
@@ -40,9 +40,11 @@ test('the portal catalogue matches the middleware one the session is minted with
 test('every navigate page id resolves to the palette entry with the same path the middleware names', async () => {
   const mw = await middlewareVoice<MwCatalogue>('catalogue.ts');
   for (const p of mw.NAVIGATE_PAGES) {
-    const entry = voicePage(PALETTE, p.id);
-    assert.ok(entry, `${p.id} has a palette entry`);
-    assert.equal(entry.path, p.path, p.id);
+    for (const tenant of p.tenants.includes('*') ? mw.VOICE_TENANTS : p.tenants) {
+      const entry = voicePage(PALETTE, p.id, tenant);
+      assert.ok(entry, `${p.id} has a palette entry in ${tenant}`);
+      assert.equal(entry.path, p.path, `${p.id} in ${tenant}`);
+    }
   }
   // Only the catalogue's ids carry a pageId: the palette never offers voice a page the model was not told about.
   const ids = PALETTE.pages.filter((p) => p.pageId).map((p) => p.pageId);

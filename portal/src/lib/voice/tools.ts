@@ -319,17 +319,30 @@ export const qs = (params: Record<string, string | number | undefined>): string 
 
 /** Pages the voice may open: palette entries carrying a pageId, plus the workspace picker (universal). */
 const WORKSPACES_PAGE: PalettePage = { label: 'Workspaces', path: '/workspaces', tenant: 'universal', pageId: 'workspaces' };
-export function voicePage(palette: Palette, pageId: string): PalettePage | undefined {
-  if (pageId === 'workspaces') return WORKSPACES_PAGE;
-  return palette.pages.find((p) => p.pageId === pageId);
+
+/** Whether a palette row belongs to a session in `tenant` (isPageVisible's tenant half: platform rows are orgiq's). */
+function rowInTenant(page: PalettePage, tenant: string): boolean {
+  return page.tenant === tenant || page.tenant === 'universal' || (page.tenant === 'admin' && tenant === 'orgiq');
 }
+
+/** The palette row a page id names in `tenant` (ids repeat across tenants: "teams", "runs"); any tenant when omitted. */
+export function voicePage(palette: Palette, pageId: string, tenant?: string): PalettePage | undefined {
+  if (pageId === 'workspaces') return WORKSPACES_PAGE;
+  return palette.pages.find((p) => p.pageId === pageId && (tenant == null || rowInTenant(p, tenant)));
+}
+
+/** Pages whose route takes a record id as the next path segment (App.tsx `<path>/:id`). */
+const ID_PATHS: ReadonlySet<string> = new Set([
+  '/social/channels', '/iq/projects',
+  '/assessment/teams', '/assessment/submissions', '/assessment/feedback', '/assessment/runs',
+  '/pipelines/definitions', '/pipelines/runs', '/pipelines/approvals',
+]);
 
 function pagePath(page: PalettePage, params: Args): string {
   const q = typeof params['q'] === 'string' ? params['q'] : undefined;
   const type = typeof params['type'] === 'string' ? params['type'] : undefined;
   const id = typeof params['id'] === 'string' ? params['id'] : undefined;
-  if (id && page.pageId === 'channels') return `${page.path}/${encodeURIComponent(id)}`;
-  if (id && page.pageId === 'initiatives') return `${page.path}/${encodeURIComponent(id)}`;
+  if (id && ID_PATHS.has(page.path)) return `${page.path}/${encodeURIComponent(id)}`;
   if (page.pageId === 'search' && (q || type)) return `${page.path}?${qs({ q, type, tab: 'results' })}`;
   return page.path;
 }
@@ -337,7 +350,7 @@ function pagePath(page: PalettePage, params: Args): string {
 /** The page a session may open, or why not (shared by navigate and open_computer_lab). */
 function openablePage(pageId: string, ctx: ToolContext): { page: PalettePage } | { refusal: ToolResult } {
   if (!navigatePageIds(ctx.tenant).includes(pageId)) return { refusal: refused(`There is no "${pageId}" page in this workspace.`) };
-  const page = voicePage(ctx.palette, pageId);
+  const page = voicePage(ctx.palette, pageId, ctx.tenant);
   if (!page) return { refusal: refused(`There is no "${pageId}" page in this workspace.`) };
   if (!ctx.palette.visible(page, ctx.tenant, ctx.role)) return { refusal: refused(`Your role cannot open ${page.label}.`) };
   return { page };

@@ -123,10 +123,10 @@ describe('tenant scoping (§6)', () => {
     for (const a of Object.values(SEARCH_ACTIONS)) expect(CAPABILITY_ACTIONS).toContain(a);
   });
 
-  it.each(['orgiq', 'social'])('the %s session\'s search_records enum is that tenant\'s index types, team included', (tenant) => {
+  it.each([...VOICE_TENANTS])('the %s session\'s search_records enum is that tenant\'s index types (orgiq\'s with team)', (tenant) => {
     const tool = toolsForTenant(tenant).find((t) => t.name === 'search_records')!;
     expect((tool.parameters.properties['type'] as { enum: string[] }).enum).toEqual(searchRecordTypes(tenant));
-    expect((tool.parameters.properties['type'] as { enum: string[] }).enum).toContain('team');
+    if (tenant === 'orgiq') expect((tool.parameters.properties['type'] as { enum: string[] }).enum).toContain('team');
     for (const type of searchRecordTypes(tenant)) expect(tool.description).toContain(type);
   });
 
@@ -139,8 +139,27 @@ describe('tenant scoping (§6)', () => {
     expect(new Ajv({ strict: true }).compile(tool!.parameters)(given)).toBe(true);
   });
 
-  it('a tenant with no voice tools gets none', () => {
-    expect(toolsForTenant('assessment')).toEqual([]);
+  it.each(['assessment', 'pipelines', 'access'])('%s is offered reads and navigation only: nothing that touches a machine or posts (gaps doc Q1)', (tenant) => {
+    const tools = toolsForTenant(tenant);
+    expect(tools.map((t) => t.name).sort()).toEqual(['access_request_status', 'navigate', 'search_records']);
+    for (const t of tools) {
+      expect(['read', 'navigate']).toContain(t.kind);
+      expect(t.confirm).toBe(false);
+      expect(t.spend).toBe('none');
+    }
+  });
+
+  it('every voice tenant has pages to open beyond the workspace picker', () => {
+    const pages = (tenant: string) => (toolsForTenant(tenant).find((t) => t.name === 'navigate')!.parameters.properties['page'] as { enum: string[] }).enum;
+    for (const tenant of VOICE_TENANTS) expect(pages(tenant).filter((p) => p !== 'workspaces').length).toBeGreaterThan(1);
+    expect(pages('assessment')).toEqual(expect.arrayContaining(['teams', 'runs']));
+    expect(pages('pipelines')).toEqual(expect.arrayContaining(['runs', 'approvals']));
+    expect(pages('access')).toEqual(expect.arrayContaining(['requests', 'new-request']));
+    expect(pages('assessment')).not.toContain('approvals');
+  });
+
+  it('a tenant that holds no voice grant gets no tools', () => {
+    expect(toolsForTenant('nowhere')).toEqual([]);
   });
 });
 

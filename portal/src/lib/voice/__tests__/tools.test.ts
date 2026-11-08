@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MAX_FIELD_CHARS, MAX_ROWS, DATA_NOTE, parseSince, parseToolArgs, runVoiceTool, shapeOutput, voicePage } from '../tools.ts';
-import { VOICE_TOOLS, voiceToolSpec } from '../catalogue.ts';
+import { VOICE_TENANTS, VOICE_TOOLS, navigatePageIds, voiceToolSpec } from '../catalogue.ts';
 import { PALETTE, fakeFetch, route, toolContext } from './voiceHarness.ts';
 
 /** A valid call per P3 tool, and the context that refuses it. */
@@ -47,20 +47,31 @@ test('navigate refuses an unknown page id and a page outside the tenant or the r
   const crossTenant = await runVoiceTool('navigate', { page: 'teams' }, toolContext({ tenant: 'orgiq' }));
   assert.equal(crossTenant.outcome, 'refused', 'a social page from orgiq');
 
-  const roles = ['member', 'sme', 'program-owner', 'org-leader', 'hr-admin', 'admin', 'social-member', 'channel-admin'];
-  assert.equal(PALETTE.pages.filter((p) => p.pageId).length, 7, 'the real palette table, seven voice pages');
-  for (const page of PALETTE.pages.filter((p) => p.pageId)) {
-    for (const tenant of ['orgiq', 'social']) {
+  // Every role of every tenant, over every page id: the id resolves to its own tenant's palette row, gated by isPageVisible.
+  const roles = ['member', 'sme', 'program-owner', 'org-leader', 'hr-admin', 'admin', 'participant', 'moderator',
+    'assessor', 'program-lead', 'author', 'operator', 'requester', 'approver', 'access-admin'];
+  assert.equal(PALETTE.pages.filter((p) => p.pageId).length, 22, 'the real palette table, 22 voice pages');
+  const inTenant = (p: { tenant: string }, t: string) => p.tenant === t || p.tenant === 'universal' || (p.tenant === 'admin' && t === 'orgiq');
+  const ids = [...new Set(PALETTE.pages.filter((p) => p.pageId).map((p) => p.pageId!))];
+  for (const id of ids) {
+    for (const tenant of VOICE_TENANTS) {
       for (const role of roles) {
         const c = toolContext({ tenant, role });
-        const r = await runVoiceTool('navigate', { page: page.pageId }, c);
-        const offered = (voiceToolSpec('navigate')!.parameters.properties!['page']!.enum ?? []).includes(page.pageId!);
-        const expected = offered && PALETTE.visible(page, tenant, role) && (page.tenant === tenant || page.tenant === 'admin' || page.tenant === 'universal');
-        assert.equal(r.outcome === 'done', expected, `${page.pageId} as ${role} in ${tenant}`);
-        assert.deepEqual(c.navigations, expected ? [page.path] : [], `${page.pageId} as ${role} in ${tenant}`);
+        const r = await runVoiceTool('navigate', { page: id }, c);
+        const target = PALETTE.pages.find((p) => p.pageId === id && inTenant(p, tenant));
+        const expected = navigatePageIds(tenant).includes(id) && !!target && PALETTE.visible(target, tenant, role);
+        assert.equal(r.outcome === 'done', expected, `${id} as ${role} in ${tenant}`);
+        assert.deepEqual(c.navigations, expected ? [target!.path] : [], `${id} as ${role} in ${tenant}`);
       }
     }
   }
+  // A repeated id opens the session's own tenant's page, with a record id where the route takes one.
+  const runs = toolContext({ tenant: 'pipelines', role: 'author' });
+  await runVoiceTool('navigate', { page: 'runs', params: { id: 'run-7' } }, runs);
+  assert.deepEqual(runs.navigations, ['/pipelines/runs/run-7']);
+  const teams = toolContext({ tenant: 'assessment', role: 'assessor' });
+  await runVoiceTool('navigate', { page: 'teams' }, teams);
+  assert.deepEqual(teams.navigations, ['/assessment/teams']);
   const ws = toolContext({ tenant: 'social', role: 'social-member' });
   const out = await runVoiceTool('navigate', { page: 'workspaces' }, ws);
   assert.equal(out.outcome, 'done');
@@ -203,13 +214,8 @@ const request = (over: Record<string, unknown>) => ({
 });
 
 test('access_request_status reads scope=mine only, even for an approver, in the access tenant', async () => {
-  // The catalogue offers voice in orgiq and social only (VOICE_TENANTS), so the
-  // access-tenant branch is driven through its runner directly; it is ready for
-  // the day Access is granted VoiceNavigate.
-  const { TOOL_RUNNERS } = await import('../tools.ts');
   const { fetch, log } = fakeFetch([route('GET', '/api/access/requests', 200, { items: [request({})] })]);
-  assert.equal((await runVoiceTool('access_request_status', { query: 'x' }, toolContext({ tenant: 'access' }))).outcome, 'refused', 'not a voice tenant yet');
-  const r = await TOOL_RUNNERS['access_request_status']!({ query: 'envelope' }, toolContext({ fetch, tenant: 'access', role: 'approver' }));
+  const r = await runVoiceTool('access_request_status', { query: 'envelope' }, toolContext({ fetch, tenant: 'access', role: 'approver' }));
   assert.equal(log.length, 1);
   assert.equal(log[0]!.url, '/api/access/requests?scope=mine&q=envelope');
   const row = (r.output['rows'] as Array<Record<string, unknown>>)[0]!;

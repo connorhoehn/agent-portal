@@ -145,14 +145,24 @@ describe('POST /api/voice/sessions — the mint', () => {
     expect(res.body).not.toHaveProperty('session');
   });
 
-  it('is 403 without VoiceNavigate (an assessment role holds none)', async () => {
-    principal = { sub: USER, role: 'assessor', tenant: 'assessment', grants: {} };
+  it('is 403 without VoiceNavigate (a role the tenant\'s seeds do not hold: an orgiq member parked in assessment)', async () => {
+    principal = { sub: USER, role: 'member', tenant: 'assessment', grants: {} };
     const res = await mint();
     expect(res.status).toBe(403);
     expect(res.body).toMatchObject({ action: 'VoiceNavigate' });
     expect(calls).toHaveLength(0);
     expect(voiceHolds()).toHaveLength(0);
   });
+
+  it.each([['assessor', 'assessment'], ['author', 'pipelines'], ['requester', 'access']])(
+    'an %s (%s) mints and is offered the read tools only (gaps doc Q1)', async (role, tenant) => {
+      principal = { sub: USER, role, tenant, grants: {} };
+      const res = await mint();
+      expect(res.status).toBe(201);
+      expect(res.body.tools.sort()).toEqual(['access_request_status', 'navigate', 'search_records']);
+      const sent = JSON.parse(calls[0]!.init.body!).session;
+      expect(sent.delegation.responses.tools.map((t: { name: string }) => t.name).sort()).toEqual(['access_request_status', 'navigate', 'search_records']);
+    });
 
   it('a social participant may mint, and is offered only the social tools', async () => {
     principal = { sub: USER, role: 'participant', tenant: 'social', grants: {} };

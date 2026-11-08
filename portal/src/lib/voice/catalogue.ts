@@ -45,9 +45,11 @@ export interface VoiceToolSpec {
   tenants: readonly string[];
 }
 
-export const VOICE_TENANTS = ['orgiq', 'social'] as const;
+export const VOICE_TENANTS = ['orgiq', 'social', 'assessment', 'pipelines', 'access'] as const;
+/** Where the machine and people tools reach (the middleware's PEOPLE_TENANTS); the other tenants get reads and navigation only. */
+const PEOPLE_TENANTS = ['orgiq', 'social'] as const;
 
-/** Page ids `navigate` may name (the middleware's NAVIGATE_PAGES, ids and tenants). */
+/** Page ids `navigate` may name (the middleware's NAVIGATE_PAGES, ids and tenants); an id may repeat across tenants. */
 export const NAVIGATE_PAGE_IDS: ReadonlyArray<{ id: string; tenants: readonly string[] }> = [
   { id: 'search', tenants: ['orgiq'] },
   { id: 'computer-lab', tenants: ['orgiq'] },
@@ -56,6 +58,21 @@ export const NAVIGATE_PAGE_IDS: ReadonlyArray<{ id: string; tenants: readonly st
   { id: 'findings', tenants: ['orgiq'] },
   { id: 'teams', tenants: ['social'] },
   { id: 'channels', tenants: ['social'] },
+  { id: 'teams', tenants: ['assessment'] },
+  { id: 'submissions', tenants: ['assessment'] },
+  { id: 'reports', tenants: ['assessment'] },
+  { id: 'feedback', tenants: ['assessment'] },
+  { id: 'runs', tenants: ['assessment'] },
+  { id: 'definitions', tenants: ['pipelines'] },
+  { id: 'runbooks', tenants: ['pipelines'] },
+  { id: 'queues', tenants: ['pipelines'] },
+  { id: 'runs', tenants: ['pipelines'] },
+  { id: 'approvals', tenants: ['pipelines'] },
+  { id: 'artifacts', tenants: ['pipelines'] },
+  { id: 'catalog', tenants: ['access'] },
+  { id: 'requests', tenants: ['access'] },
+  { id: 'open-requests', tenants: ['access'] },
+  { id: 'new-request', tenants: ['access'] },
   { id: 'workspaces', tenants: ['*'] },
 ];
 
@@ -96,7 +113,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
   {
     name: 'navigate',
     parameters: obj({
-      page: str('The page to open.', { enum: NAVIGATE_PAGE_IDS.map((p) => p.id) }),
+      page: str('The page to open.', { enum: [...new Set(NAVIGATE_PAGE_IDS.map((p) => p.id))] }),
       params: obj({
         q: str('Search text for the page, when it takes one.'),
         type: str('A result type filter, when the page takes one.'),
@@ -179,7 +196,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       }, ['kind', 'name']),
       text: str('The message, exactly as dictated.', { minLength: 1, maxLength: 2000 }),
     }, ['target', 'text']),
-    kind: 'people', backing: 'social-activity', confirm: true, action: 'PostMessage', says: "I'll post that to #platform once you confirm.", tenants: VOICE_TENANTS,
+    kind: 'people', backing: 'social-activity', confirm: true, action: 'PostMessage', says: "I'll post that to #platform once you confirm.", tenants: PEOPLE_TENANTS,
   },
   {
     name: 'set_status',
@@ -187,7 +204,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       status: str('The status.', { enum: ['online', 'away', 'busy', 'offline'] }),
       message: str('A short status message.', { maxLength: 120 }),
     }, ['status']),
-    kind: 'people', backing: 'social-activity', confirm: false, action: null, says: 'Setting your status to away: out today.', tenants: VOICE_TENANTS,
+    kind: 'people', backing: 'social-activity', confirm: false, action: null, says: 'Setting your status to away: out today.', tenants: PEOPLE_TENANTS,
   },
   {
     name: 'access_request_status',
@@ -205,5 +222,5 @@ export function voiceToolSpec(name: string): VoiceToolSpec | undefined {
 
 /** Page ids `navigate` offers a session in `tenant`. */
 export function navigatePageIds(tenant: string): string[] {
-  return NAVIGATE_PAGE_IDS.filter((p) => p.tenants.includes('*') || p.tenants.includes(tenant)).map((p) => p.id);
+  return [...new Set(NAVIGATE_PAGE_IDS.filter((p) => p.tenants.includes('*') || p.tenants.includes(tenant)).map((p) => p.id))];
 }

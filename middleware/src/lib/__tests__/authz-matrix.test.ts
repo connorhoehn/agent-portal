@@ -212,6 +212,8 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
     granted: [
       'ViewAssessment', 'ScoreAssessment', 'ManageSubmissions',
       'RunAssessmentAgent', 'Search', 'LabelFeedback',
+      // Voice: reads and navigation only outside orgiq and social (docs/voice-navigator-gaps.md Q1).
+      'VoiceNavigate',
     ],
   },
   'assessment/lead-assessor': {
@@ -219,7 +221,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
     granted: [
       'ViewAssessment', 'ScoreAssessment', 'ManageSubmissions',
       'RunAssessmentAgent', 'Search', 'LabelFeedback',
-      'ApproveException', 'PublishReport', 'ManageKnowledge', 'ViewObservability',
+      'ApproveException', 'PublishReport', 'ManageKnowledge', 'ViewObservability', 'VoiceNavigate',
     ],
   },
   'assessment/program-lead': {
@@ -228,7 +230,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       'ViewAssessment', 'ScoreAssessment', 'ManageSubmissions',
       'RunAssessmentAgent', 'Search', 'LabelFeedback',
       'ApproveException', 'PublishReport', 'ManageKnowledge', 'ViewObservability',
-      'ManageAssessmentConfig', 'ManageUsers',
+      'ManageAssessmentConfig', 'ManageUsers', 'VoiceNavigate',
     ],
   },
   // The social tenant (seeds/roles/social/, docs/social-tenant-design.md §4.1):
@@ -254,30 +256,30 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
   // approves its steps.
   'pipelines/author': {
     tenant: 'pipelines',
-    granted: ['ViewPipelines', 'AuthorDefinition', 'RunPipeline'],
+    granted: ['ViewPipelines', 'AuthorDefinition', 'RunPipeline', 'VoiceNavigate'],
   },
   'pipelines/operator': {
     tenant: 'pipelines',
-    granted: ['ViewPipelines', 'RunPipeline', 'ApproveStep', 'CancelRun'],
+    granted: ['ViewPipelines', 'RunPipeline', 'ApproveStep', 'CancelRun', 'VoiceNavigate'],
   },
   'pipelines/pipeline-admin': {
     tenant: 'pipelines',
-    granted: ['ViewPipelines', 'RunPipeline', 'ApproveStep', 'CancelRun', 'ManagePipelineConfig', 'ManageUsers'],
+    granted: ['ViewPipelines', 'RunPipeline', 'ApproveStep', 'CancelRun', 'ManagePipelineConfig', 'ManageUsers', 'VoiceNavigate'],
   },
   // The access tenant (seeds/roles/access/, docs/access-tenant-goal.md
   // §Cedar): a requester asks, an approver decides but never configures or
   // writes a grant by hand, the access-admin configures and provisions.
   'access/requester': {
     tenant: 'access',
-    granted: ['ViewAccess', 'RequestAccess'],
+    granted: ['ViewAccess', 'RequestAccess', 'VoiceNavigate'],
   },
   'access/approver': {
     tenant: 'access',
-    granted: ['ViewAccess', 'RequestAccess', 'DecideAccess'],
+    granted: ['ViewAccess', 'RequestAccess', 'DecideAccess', 'VoiceNavigate'],
   },
   'access/access-admin': {
     tenant: 'access',
-    granted: ['ViewAccess', 'RequestAccess', 'DecideAccess', 'ManageAccessCatalog', 'ManageAccessPolicy', 'ProvisionAccess', 'ManageUsers'],
+    granted: ['ViewAccess', 'RequestAccess', 'DecideAccess', 'ManageAccessCatalog', 'ManageAccessPolicy', 'ProvisionAccess', 'ManageUsers', 'VoiceNavigate'],
   },
   '*/admin': {
     tenant: null,
@@ -396,12 +398,12 @@ describe('capability boundaries that must not regress', () => {
     }
   });
 
-  test('voice: every orgiq and social role may mint a session, no assessment, pipelines or access role (voice spec §6)', () => {
-    for (const [key, r] of roles) {
+  test('voice: every role of every tenant may mint a session, each scoped to its own tenant (gaps doc Q1)', () => {
+    for (const [key] of roles) {
       if (key === '*/admin') continue;
-      expect(has(key, 'VoiceNavigate')).toBe(r.tenant === 'orgiq' || r.tenant === 'social');
+      expect(has(key, 'VoiceNavigate')).toBe(true);
     }
-    for (const key of ['orgiq/member', 'social/participant']) {
+    for (const key of ['orgiq/member', 'social/participant', 'assessment/assessor', 'pipelines/author', 'access/requester']) {
       expect(role(key).cedar).toMatch(new RegExp(`principal\\.tenant == "${role(key).tenant}"`));
     }
   });

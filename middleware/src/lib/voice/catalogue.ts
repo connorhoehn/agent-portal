@@ -75,12 +75,20 @@ export interface VoiceTool {
   mapsTo: string;
 }
 
-/** Tenants that hold VoiceNavigate in the seeds (§6). */
-export const VOICE_TENANTS = ['orgiq', 'social'] as const;
+/** Tenants that hold VoiceNavigate in the seeds (§6): all five (docs/voice-navigator-gaps.md Q1). */
+export const VOICE_TENANTS = ['orgiq', 'social', 'assessment', 'pipelines', 'access'] as const;
+/**
+ * Where the machine and people tools reach: the Computer Lab is orgiq's and
+ * posting / presence are the social app's (orgiq through the plane). The other
+ * three tenants get reads and navigation only (Q1).
+ */
+const PEOPLE_TENANTS = ['orgiq', 'social'] as const;
 
 /**
  * Page ids `navigate` may name, per tenant, with the route the dock opens.
- * '*' pages are offered in every voice tenant. See the module header.
+ * '*' pages are offered in every voice tenant. See the module header. An id
+ * may repeat across tenants ("teams", "runs"): a session is offered only its
+ * own tenant's row, and the dock resolves the id inside its tenant.
  */
 export const NAVIGATE_PAGES: ReadonlyArray<{ id: string; path: string; tenants: readonly string[] }> = [
   { id: 'search', path: '/iq/search', tenants: ['orgiq'] },
@@ -92,6 +100,21 @@ export const NAVIGATE_PAGES: ReadonlyArray<{ id: string; path: string; tenants: 
   { id: 'findings', path: '/iq/work/findings', tenants: ['orgiq'] },
   { id: 'teams', path: '/social/teams', tenants: ['social'] },
   { id: 'channels', path: '/social/channels', tenants: ['social'] },
+  { id: 'teams', path: '/assessment/teams', tenants: ['assessment'] },
+  { id: 'submissions', path: '/assessment/submissions', tenants: ['assessment'] },
+  { id: 'reports', path: '/assessment/reports', tenants: ['assessment'] },
+  { id: 'feedback', path: '/assessment/feedback', tenants: ['assessment'] },
+  { id: 'runs', path: '/assessment/runs', tenants: ['assessment'] },
+  { id: 'definitions', path: '/pipelines/definitions', tenants: ['pipelines'] },
+  { id: 'runbooks', path: '/pipelines/runbooks', tenants: ['pipelines'] },
+  { id: 'queues', path: '/pipelines/queues', tenants: ['pipelines'] },
+  { id: 'runs', path: '/pipelines/runs', tenants: ['pipelines'] },
+  { id: 'approvals', path: '/pipelines/approvals', tenants: ['pipelines'] },
+  { id: 'artifacts', path: '/pipelines/artifacts', tenants: ['pipelines'] },
+  { id: 'catalog', path: '/access/catalog', tenants: ['access'] },
+  { id: 'requests', path: '/access/requests', tenants: ['access'] },
+  { id: 'open-requests', path: '/access/requests?status=open', tenants: ['access'] },
+  { id: 'new-request', path: '/access/requests/new', tenants: ['access'] },
   // Entering another workspace ends the voice session (§2, §6): offered as the hint, never the switch.
   { id: 'workspaces', path: '/workspaces', tenants: ['*'] },
 ];
@@ -148,7 +171,7 @@ export function searchRecordTypes(tenant: string | null): string[] {
 }
 
 function navigatePageIds(tenant: string | null): string[] {
-  return NAVIGATE_PAGES.filter((p) => tenant == null || p.tenants.includes('*') || p.tenants.includes(tenant)).map((p) => p.id);
+  return [...new Set(NAVIGATE_PAGES.filter((p) => tenant == null || p.tenants.includes('*') || p.tenants.includes(tenant)).map((p) => p.id))];
 }
 
 export const VOICE_TOOLS: readonly VoiceTool[] = [
@@ -266,7 +289,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
       text: str('The message, exactly as dictated.', { minLength: 1, maxLength: 2000 }),
     }, ['target', 'text']),
     kind: 'people', backing: 'social-activity', confirm: true, action: 'PostMessage', gate: 'PostMessage in the gateway', spend: 'none', idempotent: true,
-    says: "I'll post that to #platform once you confirm.", tenants: VOICE_TENANTS,
+    says: "I'll post that to #platform once you confirm.", tenants: PEOPLE_TENANTS,
     mapsTo: 'GET /api/social/resolve?kind=&name= (P6), then useChat(channel).sendMessage(text, { displayName, clientDeliveryId }) over the gateway',
   },
   {
@@ -277,7 +300,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
       message: str('A short status message.', { maxLength: 120 }),
     }, ['status']),
     kind: 'people', backing: 'social-activity', confirm: false, action: null, gate: "the socket's presence admission", spend: 'none', idempotent: true,
-    says: 'Setting your status to away: out today.', tenants: VOICE_TENANTS,
+    says: 'Setting your status to away: out today.', tenants: PEOPLE_TENANTS,
     mapsTo: "usePresence('social:lobby').setStatus(status) and updateMetadata({ statusMessage })",
   },
   {
@@ -301,6 +324,9 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
 export const MOCK_CALLS: Readonly<Record<string, { name: string; arguments: Record<string, unknown>; said: string }>> = {
   orgiq: { name: 'search_people', arguments: { query: 'Kubernetes experts', scope: null, limit: null, sort: 'recent' }, said: 'Find me the latest Kubernetes experts.' },
   social: { name: 'search_records', arguments: { query: 'live huddles', type: 'huddle', scope: null, limit: null }, said: 'Any live huddles right now?' },
+  assessment: { name: 'search_records', arguments: { query: 'teams below target', type: 'team', scope: null, limit: null }, said: 'Which teams are below target?' },
+  pipelines: { name: 'search_records', arguments: { query: 'failed runs', type: 'run', scope: null, limit: null }, said: 'What failed last night?' },
+  access: { name: 'access_request_status', arguments: { query: 'SME', scope: 'mine' }, said: 'Did my SME request get approved?' },
 };
 
 /** §4 rows that are not model functions. */

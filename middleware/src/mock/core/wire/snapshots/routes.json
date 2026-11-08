@@ -4023,17 +4023,17 @@
     {
       "method": "POST",
       "path": "/api/voice/sessions",
-      "source": "src/routes/voice.ts:72"
+      "source": "src/routes/voice.ts:80"
     },
     {
       "method": "POST",
       "path": "/api/voice/sessions/:id/close",
-      "source": "src/routes/voice.ts:217"
+      "source": "src/routes/voice.ts:242"
     },
     {
       "method": "POST",
       "path": "/api/voice/sessions/:id/events",
-      "source": "src/routes/voice.ts:185"
+      "source": "src/routes/voice.ts:210"
     },
     {
       "method": "GET",

@@ -60,3 +60,35 @@ test('the social scripted session searches the social index for huddles and gets
   const search = run.log.filter((r) => r.url.startsWith('/api/social/search'));
   assert.deepEqual(search.map((r) => r.url), ['/api/social/search?q=live+huddles&type=huddle&limit=5']);
 });
+
+test('the assessment, pipelines and access scripted sessions each run their read against that tenant\'s own route', async () => {
+  const runs = [
+    {
+      tenant: 'assessment', role: 'assessor', allow: ['ViewAssessment', 'Search', 'VoiceNavigate'] as Action[],
+      routes: [route('GET', '/api/assessment/search?', 200, { query: 'teams below target', results: [{ type: 'team', id: 't-atlas', title: 'Atlas', kind: 'Team', status: 'in progress', href: '/assessment/teams/t-atlas', score: 2 }], counts: {}, total: 1 })],
+      url: '/api/assessment/search?q=teams+below+target&type=team&limit=5',
+    },
+    {
+      tenant: 'pipelines', role: 'operator', allow: ['ViewPipelines', 'RunPipeline', 'VoiceNavigate'] as Action[],
+      routes: [route('GET', '/api/pipelines/search?', 200, { query: 'failed runs', results: [{ type: 'run', id: 'run-9', title: 'Nightly ingest', kind: 'Run', status: 'failed', href: '/pipelines/runs/run-9', score: 2 }], counts: {}, total: 1 })],
+      url: '/api/pipelines/search?q=failed+runs&type=run&limit=5',
+    },
+    {
+      tenant: 'access', role: 'requester', allow: ['ViewAccess', 'RequestAccess', 'VoiceNavigate'] as Action[],
+      routes: [route('GET', '/api/access/requests?', 200, { items: [{
+        id: 'r1', kind: 'grant', reviewId: null, requester: { id: 'u1', displayName: 'Me' }, beneficiary: { id: 'u1', displayName: 'Me' },
+        item: { id: 'orgiq:sme', title: 'SME in Work' }, justification: 'x', duration: 'standing', status: 'approved', submittedAt: '2026-11-07T10:00:00Z',
+        steps: [{ step: 1, kind: 'manager', status: 'approved', decidedBy: { id: 'm', displayName: 'Maya Manager' }, decidedAt: '2026-11-07T11:00:00Z', eligible: [] }],
+        sod: { verdict: 'clear', conflicts: [] },
+      }] })],
+      url: '/api/access/requests?scope=mine&q=SME',
+    },
+  ];
+  for (const r of runs) {
+    const run = await scriptedRun(r.tenant, { role: r.role, allow: r.allow, routes: r.routes });
+    assert.deepEqual(run.calls, [[run.call.name, 'done']], r.tenant);
+    assert.deepEqual(run.outcomes, ['done'], r.tenant);
+    assert.ok(run.log.some((l) => l.url === r.url), `${r.tenant} read ${r.url}`);
+    assert.doesNotMatch(run.summaries[0]!, /^Nothing|No request/, `${r.tenant} found its row`);
+  }
+});

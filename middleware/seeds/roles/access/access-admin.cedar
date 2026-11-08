@@ -12,7 +12,10 @@ permit (
     OrgIQ::Action::"ManageAccessCatalog",
     OrgIQ::Action::"ManageAccessPolicy",
     OrgIQ::Action::"ProvisionAccess",
-    OrgIQ::Action::"ManageUsers"
+    OrgIQ::Action::"ManageUsers",
+    // Mint a voice navigator session: reads and navigation only in this tenant
+    // (docs/voice-navigator-gaps.md Q1); each tool is gated by its own read's action.
+    OrgIQ::Action::"VoiceNavigate"
   ],
   resource
 )
