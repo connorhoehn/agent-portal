@@ -6,7 +6,7 @@ import { VOICE_RUNNERS } from '../actions.ts';
 import { VoiceClient } from '../client.ts';
 import type { ComputeAccess } from '../tools.ts';
 import type { VoicePhase } from '../machine.ts';
-import { FakeClock, fakeFetch, flush, middlewareVoice, route, toolContext } from './voiceHarness.ts';
+import { FakeClock, fakeFetch, isToolRow, flush, middlewareVoice, route, toolContext } from './voiceHarness.ts';
 
 const ALL_PHASES: VoicePhase[] = ['off', 'connecting', 'listening', 'thinking', 'executing', 'speaking', 'confirming', 'ended', 'unavailable'];
 const SESSION = 'vs_00000000-0000-0000-0000-0000000000aa';
@@ -57,10 +57,11 @@ test('the scripted session drives the dock through its phases, runs the tool, an
   // The tool ran through the page's own fetch and router.
   assert.deepEqual(h.ctx.navigations, ['/iq/search?q=Kubernetes+experts&type=person&tab=results&sort=recent']);
   // One tool-call row, with the arguments' hash and never the arguments.
-  const events = h.log.filter((r) => r.url.endsWith('/events'));
+  const events = h.log.filter((r) => isToolRow(r));
   assert.equal(events.length, 1);
   const row = events[0]!.body as Record<string, unknown>;
-  assert.deepEqual(Object.keys(row).sort(), ['argsSha256', 'durationMs', 'outcome', 'tool']);
+  assert.deepEqual(Object.keys(row).sort(), ['argsSha256', 'durationMs', 'outcome', 'summary', 'tool']);
+  assert.deepEqual(row['summary'], { outcome: 'done', result: 'search_results', rows: 1 });
   assert.equal(row['argsSha256'], await hashToolArgs({ query: 'Kubernetes experts', type: 'person', sort: 'recent' }));
   assert.equal(row['outcome'], 'done');
   assert.doesNotMatch(JSON.stringify(events[0]!.body), /Kubernetes/);
@@ -95,7 +96,7 @@ test('a confirm tool shows the card (confirming) and runs only on confirm, recor
   h.controller.confirm('click');
   await h.clock.advance(2500);
   assert.equal(p.sent.length, 1);
-  const row = h.log.find((r) => r.url.endsWith('/events'))!.body as Record<string, unknown>;
+  const row = h.log.find((r) => isToolRow(r))!.body as Record<string, unknown>;
   assert.equal(row['confirmedBy'], 'click');
   assert.ok(h.phases.includes('confirming') && h.phases.includes('executing'));
   h.controller.dispose();
@@ -108,7 +109,7 @@ test('"yes" by voice confirms, "no" cancels and sends nothing', async () => {
     await h.controller.start();
     await h.clock.advance(3500);
     assert.equal(p.sent.length, expectSent, said);
-    const row = h.log.find((r) => r.url.endsWith('/events'))!.body as Record<string, unknown>;
+    const row = h.log.find((r) => isToolRow(r))!.body as Record<string, unknown>;
     assert.deepEqual([row['outcome'], row['confirmedBy']], [outcome, 'voice'], said);
     assert.equal(h.controller.getSnapshot().pending, null);
     h.controller.dispose();
@@ -140,7 +141,7 @@ test('voice confirm (sweep 2 M2): the first utterance after the card decides; an
     await h.controller.start();
     await h.clock.advance(5000);
     assert.equal(p.sent.length, expected === 'done' ? 1 : 0, label);
-    const row = h.log.find((r) => r.url.endsWith('/events'))?.body as Record<string, unknown> | undefined;
+    const row = h.log.find((r) => isToolRow(r))?.body as Record<string, unknown> | undefined;
     if (expected === 'open') {
       assert.equal(row, undefined, `${label}: no answer yet`);
       assert.notEqual(h.controller.getSnapshot().pending, null, `${label}: the card waits for a click`);
@@ -190,9 +191,9 @@ test('a mint refused with session-open: the dock closes its own earlier session 
 test('a confirm tool whose planner refuses (no Social in this session) answers at once without a card', async () => {
   const h = harness(await mint(POST));
   await h.controller.start();
-  await h.clock.advance(1100);
+  await h.clock.advance(1700);
   assert.ok(!h.phases.includes('confirming'));
-  const row = h.log.find((r) => r.url.endsWith('/events'))!.body as Record<string, unknown>;
+  const row = h.log.find((r) => isToolRow(r))!.body as Record<string, unknown>;
   assert.equal(row['outcome'], 'refused');
   h.controller.dispose();
 });
@@ -200,9 +201,9 @@ test('a confirm tool whose planner refuses (no Social in this session) answers a
 test('a refused call is answered with the refusal and no request', async () => {
   const h = harness(await mint(KUBE), { ctx: { deny: ['Search'] } });
   await h.controller.start();
-  await h.clock.advance(1100);
+  await h.clock.advance(1700);
   assert.equal(h.log.filter((r) => r.url.startsWith('/api/search')).length, 0);
-  const row = h.log.find((r) => r.url.endsWith('/events'))!.body as Record<string, unknown>;
+  const row = h.log.find((r) => isToolRow(r))!.body as Record<string, unknown>;
   assert.equal(row['outcome'], 'refused');
   h.controller.dispose();
 });
@@ -315,7 +316,7 @@ test('computer start: the card lists every initiative, nothing starts before con
     await h.clock.advance(2500);
     assert.deepEqual(f.created, [], 'cancel starts nothing');
     assert.deepEqual(spy.outputs.map((o) => [o['kind'], o['confirmed'], o['by']]), [['cancelled', false, 'click']]);
-    const row = h.log.find((r) => r.url.endsWith('/events'))!.body as Record<string, unknown>;
+    const row = h.log.find((r) => isToolRow(r))!.body as Record<string, unknown>;
     assert.equal(row['outcome'], 'cancelled');
     h.controller.dispose();
   } finally { spy.restore(); }
@@ -329,7 +330,7 @@ test('computer start: confirm starts one computer per initiative, charged to it'
   h.controller.confirm('voice');
   await h.clock.advance(2500);
   assert.deepEqual(f.created, [{ label: 'Alpha', projectId: 'p1' }, { label: 'Beta', projectId: 'p2' }, { label: 'Gamma', projectId: 'p3' }]);
-  const row = h.log.find((r) => r.url.endsWith('/events'))!.body as Record<string, unknown>;
+  const row = h.log.find((r) => isToolRow(r))!.body as Record<string, unknown>;
   assert.deepEqual([row['outcome'], row['confirmedBy']], ['done', 'voice']);
   h.controller.dispose();
 });
@@ -347,7 +348,7 @@ test('computer run through the dock: a smuggled command is ignored, recorded as 
     h.controller.confirm('click');
     await h.clock.advance(2500);
     assert.deepEqual(f.commands, [{ command: 'git log --since=yesterday --oneline', mode: 'safe' }]);
-    const rows = h.log.filter((r) => r.url.endsWith('/events')).map((r) => r.body as Record<string, unknown>);
+    const rows = h.log.filter((r) => isToolRow(r)).map((r) => r.body as Record<string, unknown>);
     assert.deepEqual(rows.map((r) => r['outcome']).sort(), ['done', 'refused']);
     assert.doesNotMatch(JSON.stringify(rows), /curl|evil/);
     assert.deepEqual((spy.outputs[0]!['ignored'] as { fields: string[] }).fields, ['command']);
@@ -365,7 +366,7 @@ test('computer run through the dock: a phrase the server would refuse never reac
   assert.equal(h.controller.getSnapshot().pending, null, 'no card');
   await h.clock.advance(2500);
   assert.deepEqual(f.commands, []);
-  const rows = h.log.filter((r) => r.url.endsWith('/events')).map((r) => r.body as Record<string, unknown>);
+  const rows = h.log.filter((r) => isToolRow(r)).map((r) => r.body as Record<string, unknown>);
   assert.deepEqual(rows.map((r) => r['outcome']), ['refused']);
   h.controller.dispose();
 });
@@ -401,7 +402,7 @@ test('start_call through the dock: cancel starts nothing; confirm calls the host
     if (choice === 'cancel') h.controller.cancel('click'); else h.controller.confirm('voice');
     await h.clock.advance(2500);
     assert.deepEqual(f.started, choice === 'cancel' ? [] : [{ channel: 'social:team:platform:general', title: 'Platform team' }], choice);
-    const row = h.log.find((r) => r.url.endsWith('/events'))!.body as Record<string, unknown>;
+    const row = h.log.find((r) => isToolRow(r))!.body as Record<string, unknown>;
     assert.equal(row['outcome'], choice === 'cancel' ? 'cancelled' : 'done');
     h.controller.dispose();
   }

@@ -4,7 +4,7 @@ import { Layout } from './components/shell/Layout';
 import { RequireRole, RequireTenant } from './lib/auth';
 import { RouteErrorBoundary } from './components/shell/RouteErrorBoundary';
 import { useSession } from './lib/auth';
-import { ACCESS_ENABLED, ASSESSMENT_ENABLED, PIPELINES_ENABLED, SOCIAL_ENABLED, tenantEnabled } from './lib/features';
+import { ACCESS_ENABLED, ASSESSMENT_ENABLED, PIPELINES_ENABLED, SOCIAL_ENABLED, features, tenantEnabled } from './lib/features';
 import { CHOOSER, resolveHome, tenantHome } from './lib/tenantHome';
 import { OptionalGatewayProvider } from './components/OptionalGatewayProvider';
 import { SharedNotificationsProvider } from './components/shell/SharedNotifications';
@@ -16,6 +16,8 @@ import { LoadingState } from '@connorhoehn/ui-components/shared';
 // Dev-only: the design reference sheet (docs/design/README.md). The ternary keeps
 // the chunk out of production builds (cast: this repo has no vite-env.d.ts).
 const ReferenceSheet = (import.meta as unknown as { env: { DEV: boolean } }).env.DEV ? lazy(() => import('./dev/ReferenceSheet')) : null;
+// The voice session log (G20): the dev server with the voice navigator on, as the dock itself.
+const VoiceLogPage = (import.meta as unknown as { env: { DEV: boolean } }).env.DEV && features.voiceNavigator ? lazy(() => import('./pages/voice/VoiceLogPage')) : null;
 const AgentFlowPage = lazy(() => import('./pages/AgentFlowPage'));
 const AgentDetailPage = lazy(() => import('./pages/iq/AgentDetailPage'));
 const ScoresPage = lazy(() => import('./pages/ScoresPage'));
@@ -277,6 +279,7 @@ export function App() {
       <Route element={<Layout />}>
         <Route index element={<HomeRedirect />} />
         <Route path="settings" element={<Page element={<SettingsPage />} />} />
+        {VoiceLogPage && <Route path="voice/log" element={<Page element={<VoiceLogPage />} />} />}
 
         {/* ── /assessment/* — the second tenant, ported from
              agentic-assessment-accelerator. Feature-flagged ON by default

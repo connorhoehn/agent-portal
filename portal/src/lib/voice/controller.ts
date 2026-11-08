@@ -50,6 +50,12 @@
 // VoicePending / VoicePendingChoice key, 2.510.5), so two requests with one
 // title never share a card's state. The choice card no longer moves the phase:
 // the library opens it on `pendingChoice` alone.
+//
+// The session log (G20, sessionEvents.ts): every phase change, refusal,
+// confirm and choice shown or decided, tool call, cutoff and error is an
+// event with the server's kind, batched to POST /:id/events at most once per
+// 500 ms; the tool-call row carries the result's structured summary (counts,
+// never the spoken line). No transcript text ever leaves the dock.
 
 import { VoiceClient, type ClientEvent, type MediaFactory, type StopReason, type VoiceFrame, type VoiceMint } from './client.ts';
 import { initialMachine, phaseAt, reduce, sessionOpen, type MachineEvent, type MachineState, type VoicePhase } from './machine.ts';
@@ -59,6 +65,7 @@ import {
 } from './tools.ts';
 import { VOICE_PLANNERS, VOICE_RUNNERS } from './actions.ts';
 import { DEFAULT_TOAST_SECONDS } from './work.ts';
+import { VoiceEventLog, refusalCode, resultSummary, type DockEvent } from './sessionEvents.ts';
 
 export const TICK_MS = 100;
 export const COMPLETION_GRACE_MS = 1500;
@@ -117,6 +124,8 @@ export interface VoiceSnapshot {
   reason: string | null;
   /** The figure the last close reported, once it has. */
   closedSeconds: number | null;
+  /** The session this dock minted last (live or ended), for the on-device transcript keep; null before any mint. */
+  sessionId: string | null;
 }
 
 type Timer = unknown;
@@ -212,6 +221,8 @@ export class VoiceController {
   private budgetCard: VoicePendingView | null = null;
   private turns: VoiceTurnView[] = [];
   private turnSeq = 0;
+  /** The first turn number of the session minted last: the turns the on-device keep saves under its id. */
+  private sessionTurnFrom = 1;
   private levels = { input: 0, output: 0 };
   private muted = false;
   private warned = false;
@@ -228,6 +239,8 @@ export class VoiceController {
   private readonly clearTimer: (t: Timer) => void;
   private readonly runners: Readonly<Record<string, VoiceToolRunner>>;
   private readonly planners: Readonly<Record<string, VoiceToolPlanner>>;
+  /** The session log's queue (sessionEvents.ts): batched, one request per 500 ms at most. */
+  private readonly log: VoiceEventLog;
 
   private readonly opts: ControllerOptions;
 
@@ -238,6 +251,7 @@ export class VoiceController {
     this.clearTimer = opts.clearTimer ?? ((t) => clearTimeout(t as ReturnType<typeof setTimeout>));
     this.runners = opts.runners ?? VOICE_RUNNERS;
     this.planners = opts.planners ?? VOICE_PLANNERS;
+    this.log = new VoiceEventLog({ fetch: opts.fetch, now: this.now, setTimer: this.setTimer, clearTimer: this.clearTimer });
     this.snapshot = this.build();
   }
 
@@ -337,6 +351,7 @@ export class VoiceController {
     const c = this.choice;
     const picked = c?.candidates[index];
     this.clearChoice();
+    if (c) this.emit({ kind: 'client', data: { event: 'choice-decided', requestId: c.requestId, index, candidates: c.candidates.length, by: c.ordinal ? 'voice' : 'click' } });
     if (!c || !picked?.href) return;
     const ctx = this.opts.toolContext();
     if (!openableHref(picked.href, ctx)) return;
@@ -346,6 +361,7 @@ export class VoiceController {
   }
 
   cancelChoice(): void {
+    if (this.choice) this.emit({ kind: 'client', data: { event: 'choice-cancelled', requestId: this.choice.requestId } });
     this.clearChoice();
   }
 
@@ -361,6 +377,11 @@ export class VoiceController {
     if (this.machine.base === 'live') this.client?.appendThinking(text);
   }
 
+  /** The turns of the session minted last (the strip may still show an earlier session's): what the on-device keep saves. */
+  sessionTurns(): readonly VoiceTurnView[] {
+    return this.turns.filter((t) => Number(t.id.slice(1)) >= this.sessionTurnFrom);
+  }
+
   clearTurns(): void {
     this.turns = [];
     this.publish();
@@ -368,6 +389,7 @@ export class VoiceController {
 
   dispose(): void {
     this.stopTicker();
+    this.log.dispose();
     void this.stop('dropped');
     this.listeners.clear();
   }
@@ -379,6 +401,7 @@ export class VoiceController {
     switch (e.type) {
       case 'minted':
         this.mint = e.mint;
+        this.sessionTurnFrom = this.turnSeq + 1;
         if (typeof e.mint.toastSeconds === 'number' && e.mint.toastSeconds > 0) this.lastToastSeconds = e.mint.toastSeconds;
         if (e.mint.dailyMinutesLeft != null) {
           const m = Math.max(1, e.mint.dailyMinutesLeft);
@@ -400,6 +423,7 @@ export class VoiceController {
         this.dispatch({ type: 'failed', reason: e.reason });
         return;
       case 'dropped':
+        this.emit({ kind: 'error', data: { source: 'connection', event: 'dropped' } });
         this.addLine('assistant', 'The voice connection dropped.');
         return;
       case 'ended':
@@ -422,6 +446,7 @@ export class VoiceController {
     const at = this.now();
     switch (f.kind) {
       case 'started':
+        this.emit({ kind: 'started' });
         this.dispatch({ type: 'started' });
         return;
       case 'input':
@@ -435,6 +460,7 @@ export class VoiceController {
         this.dispatch({ type: 'output', at });
         return;
       case 'delegation':
+        if (!this.delegations.has(f.delegationId)) this.emit({ kind: 'delegation', data: { delegationId: f.delegationId } });
         this.delegation(f.delegationId);
         this.dispatch({ type: 'delegation', id: f.delegationId });
         return;
@@ -453,6 +479,7 @@ export class VoiceController {
         return;
       case 'error':
         // An error for one of our own events (a tool result, a context append) does not end the session.
+        this.emit({ kind: 'error', data: { source: 'provider', message: f.message } });
         this.addLine('assistant', `Voice error: ${f.message}`);
         return;
       case 'closed':
@@ -481,6 +508,7 @@ export class VoiceController {
     if (rec.calls.has(callId)) return;
     if (!this.machine.openDelegations.includes(delegationId)) this.dispatch({ type: 'delegation', id: delegationId });
     rec.calls.set(callId, { name, status: 'running' });
+    this.emit({ kind: 'tool-call', tool: name, data: { callId } });
     const startedAt = this.now();
     const ctx = this.opts.toolContext();
     const prepared = prepareToolCall(name, rawArgs, ctx);
@@ -491,7 +519,8 @@ export class VoiceController {
     const call = prepared.call;
     // A dropped `command` (§6) is its own refused row: the attempt is on record, its text is not (§9).
     if (call.ignored?.length) {
-      void hashToolArgs({ ignored: call.ignored }).then((argsSha256) => client.reportToolCall({ tool: name, argsSha256, outcome: 'refused', durationMs: 0 }));
+      const sessionId = client.mint?.sessionId;
+      void hashToolArgs({ ignored: call.ignored }).then((argsSha256) => { if (sessionId) this.log.toolCall(sessionId, { tool: name, argsSha256, outcome: 'refused', durationMs: 0 }, { outcome: 'refused', ignored: call.ignored!.length }); });
     }
     if (needsConfirm(call) && toolAvailable(name, this.runners)) {
       // The delegation asks one call at a time (parallel_tool_calls: false); a second card would hide the first.
@@ -520,6 +549,7 @@ export class VoiceController {
       this.pending = { callId, delegationId, call, plan, startedAt, heard: { text: '', lastEndMs: null, quiet: null, done: false },
         view: { callId, requestId: ++this.requestSeq, tool: name, ...text, ...(plan?.fields ? { fields: plan.fields } : {}) } };
       this.attachTool(name, 'running', text.title);
+      this.emit({ kind: 'confirm-shown', tool: name, data: { requestId: this.pending.view.requestId, callId, ...(plan?.fields ? { fields: true } : {}) } });
       this.dispatch({ type: 'confirm-shown', callId });
       return;
     }
@@ -545,11 +575,15 @@ export class VoiceController {
     rec.unanswered += 1;
     this.attachTool(name, res.outcome === 'done' ? 'done' : res.outcome === 'failed' ? 'failed' : 'refused', res.summary);
     this.dispatch({ type: 'call-done', callId });
-    // The row keeps a hash of the arguments, never the arguments (§9).
-    void hashToolArgs(args).then((argsSha256) => client.reportToolCall({
-      tool: name, argsSha256, outcome: res.outcome, durationMs: Math.max(0, Math.round(this.now() - startedAt)),
-      ...(confirmedBy ? { confirmedBy } : {}),
-    }));
+    // The refusal's code (no-grant, budget, ambiguous, not-on-this-page…), never its sentence.
+    if (res.outcome === 'refused') this.emit({ kind: 'refused', tool: name, data: { tool: name, reason: refusalCode(res.output), callId } });
+    // The row keeps a hash of the arguments, never the arguments (§9), and the result's counts, never its spoken line.
+    const sessionId = client.mint?.sessionId;
+    const durationMs = Math.max(0, Math.round(this.now() - startedAt));
+    const summary = resultSummary(res.outcome, res.output);
+    void hashToolArgs(args).then((argsSha256) => {
+      if (sessionId) this.log.toolCall(sessionId, { tool: name, argsSha256, outcome: res.outcome, durationMs, ...(confirmedBy ? { confirmedBy } : {}) }, summary);
+    });
     this.maybeContinue(client, delegationId);
   }
 
@@ -567,6 +601,7 @@ export class VoiceController {
           ...(typeof c['subtitle'] === 'string' ? { subtitle: c['subtitle'] } : {}), ...(typeof c['kind'] === 'string' ? { kind: c['kind'] } : {}),
         })),
       };
+      this.emit({ kind: 'client', data: { event: 'choice-shown', requestId: this.choice.requestId, candidates: rows.length } });
     } else this.clearChoice();
     this.publish();
   }
@@ -658,6 +693,7 @@ export class VoiceController {
     if (!p || !client) return;
     if (p.heard.quiet != null) { this.clearTimer(p.heard.quiet); p.heard.quiet = null; }
     this.pending = null;
+    this.emit({ kind: confirmed ? 'confirmed' : 'cancelled', tool: p.call.spec.name, data: { requestId: p.view.requestId, by, callId: p.callId } });
     this.dispatch({ type: 'confirm-resolved', callId: p.callId });
     if (confirmed) {
       void this.execute(client, p.delegationId, p.callId, p.call, p.startedAt, this.opts.toolContext(), by, p.plan, answer);
@@ -681,9 +717,14 @@ export class VoiceController {
     // The ratio from the unrounded spend: the meter's 4-place figure can sit just under 90% for a whole tick.
     const ratio = b.holdUsd > 0 ? ((this.elapsed() / 60) * mint.budget.usdPerMinute) / b.holdUsd : 0;
     const timeRatio = mint.maxSeconds > 0 ? this.elapsed() / mint.maxSeconds : 0;
-    if (ratio >= 1 || timeRatio >= 1) { void this.stop('cutoff'); return; }
+    if (ratio >= 1 || timeRatio >= 1) {
+      this.emit({ kind: 'client', data: { event: 'cutoff', by: ratio >= 1 ? 'budget' : 'time', elapsedSeconds: Math.floor(this.elapsed()) } });
+      void this.stop('cutoff');
+      return;
+    }
     if (!this.warned && (ratio >= BUDGET_WARN_RATIO || timeRatio >= BUDGET_WARN_RATIO)) {
       this.warned = true;
+      this.emit({ kind: 'client', data: { event: 'budget-warning', by: ratio >= BUDGET_WARN_RATIO ? 'budget' : 'time' } });
       const leftSec = Math.min(
         mint.budget.usdPerMinute > 0 ? ((b.holdUsd - b.usedUsd) / mint.budget.usdPerMinute) * 60 : Infinity,
         mint.maxSeconds - this.elapsed(),
@@ -753,6 +794,12 @@ export class VoiceController {
     this.levels = { input: 0, output: 0 };
   }
 
+  /** One event of the session log (sessionEvents.ts), once a mint has named the session. */
+  private emit(e: DockEvent): void {
+    const id = this.mint?.sessionId;
+    if (id) this.log.add(id, e);
+  }
+
   private dispatch(e: MachineEvent, publish = true): void {
     this.machine = reduce(this.machine, e);
     if (publish) this.publish();
@@ -785,6 +832,7 @@ export class VoiceController {
       muted: this.muted,
       reason: this.machine.reason,
       closedSeconds: this.closedSeconds,
+      sessionId: this.mint?.sessionId ?? null,
     };
   }
 
@@ -795,7 +843,8 @@ export class VoiceController {
       && prev.elapsedSeconds === next.elapsedSeconds && prev.pending === next.pending && prev.turns === next.turns
       && prev.choice?.id === next.choice?.id && prev.choice?.ordinal === next.choice?.ordinal
       && prev.lastLine?.text === next.lastLine?.text && prev.muted === next.muted && prev.reason === next.reason
-      && prev.closedSeconds === next.closedSeconds) return;
+      && prev.closedSeconds === next.closedSeconds && prev.sessionId === next.sessionId) return;
+    if (prev.phase !== next.phase) this.emit({ kind: 'client', data: { event: 'phase', phase: next.phase, from: prev.phase } });
     this.snapshot = next;
     for (const l of this.listeners) l();
   }

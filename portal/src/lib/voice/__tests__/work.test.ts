@@ -11,7 +11,7 @@ import { VoiceController } from '../controller.ts';
 import { ResultMemory, runPreparedCall, planPreparedCall, prepareToolCall } from '../tools.ts';
 import { SPOKEN_DETAIL_MAX, VoiceJobTracker, jobNotification, matchByName, outcomeLine, resolveSweep, type JobToastSink, type JobState } from '../work.ts';
 import { addLocalNotification, clearLocalNotifications, getLocalNotifications, mergeNotifications } from '../../localNotifications.ts';
-import { FakeClock, fakeFetch, middlewareVoice, route, toolContext, type Route, type LoggedRequest } from './voiceHarness.ts';
+import { FakeClock, fakeFetch, isToolRow, middlewareVoice, route, toolContext, type Route, type LoggedRequest } from './voiceHarness.ts';
 import type { Action } from '../../capabilities';
 
 type Call = { name: string; arguments: Record<string, unknown>; said: string };
@@ -100,7 +100,7 @@ async function stop(s: { controller: VoiceController; clock: FakeClock }): Promi
 
 const posts = (log: LoggedRequest[], prefix: string) => log.filter((r) => r.method === 'POST' && r.url.startsWith(prefix));
 const reads = (log: LoggedRequest[]) => log.filter((r) => !r.url.startsWith('/api/voice/'));
-const toolRows = (log: LoggedRequest[]) => log.filter((r) => r.url.endsWith('/events')).map((r) => r.body as Record<string, unknown>);
+const toolRows = (log: LoggedRequest[]) => log.filter((r) => isToolRow(r)).map((r) => r.body as Record<string, unknown>);
 
 test('the program owner\'s scripted session queues the nightly sweep, and one toast follows the server\'s job to done, then leaves', async () => {
   const s = await scripted({

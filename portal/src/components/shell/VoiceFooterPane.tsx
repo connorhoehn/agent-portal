@@ -30,6 +30,13 @@
 // card carries the controller's `requestId` (2.510.5 remounts a card per
 // request), and the dock opens either card on its prop alone.
 //
+// The session log (G20): the controller posts the session's structured events
+// (lib/voice/sessionEvents.ts); with "Keep transcripts on this device" on
+// (lib/voice/transcriptKeep.ts, default off) this pane saves the session's
+// turns to IndexedDB under its id, never sending them; the log control beside
+// the transcript one opens the Voice log view (/voice/log, dev server only)
+// at the session last minted.
+//
 // No money in the footer (owner decision, 8 November): the dock shows the
 // phase, the elapsed time and the controls, never a dollar figure, so no
 // `budget` reaches VoiceDock; the hold and the daily cap still enforce in the
@@ -38,7 +45,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { useChat, useGatewayOptional } from '@connorhoehn/realtime-modules/client';
-import { CaptionsIcon } from '@connorhoehn/ui-components';
+import { CaptionsIcon, HistoryIcon } from '@connorhoehn/ui-components';
 import { openOutputTab, openShell, useComputeOptional } from '@connorhoehn/ui-components/compute';
 import { IconButton, Inline, InlinePopover, Tooltip, useToastOptional } from '@connorhoehn/ui-components/shared';
 import { VoiceDock, VoiceTurnStrip, type VoicePending, type VoicePendingChoice, type VoiceTurn } from '@connorhoehn/ui-components/voice';
@@ -48,6 +55,8 @@ import { features } from '../../lib/features';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { useFetch } from '../../hooks/useFetch';
 import { browserMedia } from '../../lib/voice/client';
+import { keepTranscripts, subscribeKeepTranscripts, transcriptStore } from '../../lib/voice/transcriptKeep';
+import { VOICE_LOG_PATH, sessionHref } from '../../pages/voice/voiceLogModel';
 import { VoiceController } from '../../lib/voice/controller';
 import { VoiceJobTracker, jobNotification, type JobNotice } from '../../lib/voice/work';
 import { addLocalNotification } from '../../lib/localNotifications';
@@ -79,6 +88,11 @@ const WORK_EVENT_KINDS: ReadonlySet<string> = new Set(['sweep', 'bot-run', 'job'
 
 /** Social actions whose grant comes from the plane outside the Social tenant (routes/social-plane.ts PLANE_ACTIONS). */
 const PLANE_ACTIONS: ReadonlySet<Action> = new Set<Action>(['PostMessage', 'StartCall']);
+
+/** The Voice log view is registered under the dev server only (App.tsx), as is this control. */
+const VOICE_LOG_AVAILABLE = !!(import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV;
+/** How often a kept transcript is saved while the words stream in. */
+const KEEP_SAVE_MS = 1000;
 
 /** How long a post waits for its conversation's join before giving up. */
 const CHANNEL_JOIN_MS = 8000;
@@ -339,6 +353,18 @@ function VoiceFooterPane() {
     return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('pagehide', onUnload); };
   }, [controller]);
 
+  // The on-device transcript keep (G20): the session's turns, saved under its id while the switch is on; never sent.
+  const keep = useSyncExternalStore(subscribeKeepTranscripts, keepTranscripts, () => false);
+  const keptStore = useMemo(() => transcriptStore(), []);
+  useEffect(() => {
+    const id = snap.sessionId;
+    if (!keep || !id || !keptStore) return undefined;
+    const save = () => { const turns = controller.sessionTurns(); if (turns.length) void keptStore.put(id, turns).catch(() => undefined); };
+    if (snap.phase === 'ended') { save(); return undefined; }
+    const t = setTimeout(save, KEEP_SAVE_MS);
+    return () => clearTimeout(t);
+  }, [keep, keptStore, controller, snap.sessionId, snap.turns, snap.phase]);
+
   const [stripOpen, setStripOpen] = useState(false);
   const anchor = useRef<HTMLDivElement>(null);
   const pending: VoicePending | null = snap.pending ? {
@@ -384,6 +410,10 @@ function VoiceFooterPane() {
         icon={<CaptionsIcon size={16} />} disabled={turns.length === 0}
         onClick={() => setStripOpen((open) => !open)} data-testid="shell-voice-transcript-toggle" />
     </Tooltip>
+    {VOICE_LOG_AVAILABLE && <Tooltip content="Voice log: what ran, refusals and events" placement="top">
+      <IconButton variant="ghost" size="sm" aria-label="Voice log" icon={<HistoryIcon size={16} />}
+        onClick={() => { void navigate(snap.sessionId ? sessionHref(snap.sessionId) : VOICE_LOG_PATH); }} data-testid="shell-voice-log" />
+    </Tooltip>}
     <InlinePopover trigger={anchor} open={stripOpen && turns.length > 0} onClose={() => setStripOpen(false)}
       placement="bottom-end" aria-label="Voice transcript" kind="voice-transcript" data-testid="shell-voice-transcript">
       <VoiceTurnStrip turns={turns} maxVisible={6} onClear={() => { controller.clearTurns(); setStripOpen(false); }} />

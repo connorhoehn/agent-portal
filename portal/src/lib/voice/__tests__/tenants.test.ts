@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { VoiceController } from '../controller.ts';
-import { FakeClock, fakeFetch, middlewareVoice, route, toolContext, type Route } from './voiceHarness.ts';
+import { FakeClock, fakeFetch, isToolRow, middlewareVoice, route, toolContext, type Route } from './voiceHarness.ts';
 import { ResultMemory } from '../tools.ts';
 import type { Action } from '../../capabilities';
 
@@ -45,7 +45,7 @@ export async function scriptedRun(tenant: string, opts: { role: string; allow: A
   const toolCalls = controller.getSnapshot().turns.flatMap((t) => t.toolCalls ?? []);
   const calls = toolCalls.map((c) => [c.name, c.status]);
   const summaries = toolCalls.map((c) => c.summary);
-  const outcomes = log.filter((r) => r.url.endsWith('/events')).map((r) => (r.body as Record<string, unknown>)['outcome']);
+  const outcomes = log.filter((r) => isToolRow(r)).map((r) => (r.body as Record<string, unknown>)['outcome']);
   return { call, calls, summaries, outcomes, log, ctx };
 }
 

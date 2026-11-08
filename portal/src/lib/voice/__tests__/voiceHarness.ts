@@ -136,3 +136,13 @@ export function wireEvent(line: Record<string, unknown>): string {
   const { t: _t, s: _s, dir: _d, ...event } = line;
   return JSON.stringify(event);
 }
+
+/** A tool-call row (POST /:id/events, the legacy form), not a batch of the session log's events. */
+export function isToolRow(r: LoggedRequest): boolean {
+  return r.url.endsWith('/events') && !(r.body && typeof r.body === 'object' && 'events' in (r.body as object));
+}
+
+/** Every session-log event the dock posted, in order, flattened out of its batches. */
+export function loggedEvents(log: readonly LoggedRequest[]): Array<Record<string, unknown>> {
+  return log.filter((r) => r.url.endsWith('/events') && !isToolRow(r)).flatMap((r) => (r.body as { events: Array<Record<string, unknown>> }).events);
+}
