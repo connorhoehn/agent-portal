@@ -509,7 +509,7 @@ function moneyFixtures(belowTier: boolean) {
     route('GET', '/api/graph/projects', 200, [{ id: 'p1', name: 'Alpha migration' }, { id: 'p2', name: 'Beta' }, { id: 'p3', name: 'Alpha rollout' }]),
     route('GET', '/api/spend/report', 200, belowTier
       ? { totals: { unknownCount: 0, entries: 47 }, groups: [{ key: 'p-auth-migration', label: 'Alpha migration', entries: 7 }], budgetAccess: lockedBody }
-      : { totals: { knownUsd: FIGURE, burnPerDay7d: 1.25, projectedPeriodEndUsd: 40.5 }, groups: [{ key: 'u-ada', label: 'Ada', knownUsd: 9.72 }] }),
+      : { totals: { knownUsd: FIGURE, burnPerDay7d: 1.25, projectedPeriodEndUsd: 40.5 }, groups: [{ key: 'p-auth-migration', label: 'Auth Migration', knownUsd: 9.72 }] }),
     ...(belowTier
       ? ['/api/budgets', '/api/user-budgets', '/api/ops/switches'].map((p) => route('GET', p, 403, { error: 'Forbidden', action: 'ManageBudgets', amountUsd: FIGURE }))
       : [route('GET', '/api/budgets', 200, { budgets: [{ orgProjectName: 'Alpha migration', allocatedUsd: 75, spentThisPeriodUsd: 5.45 }] }),
