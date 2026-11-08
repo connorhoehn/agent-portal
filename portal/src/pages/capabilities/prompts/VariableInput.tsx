@@ -1,4 +1,4 @@
-import { Input, Textarea } from '@connorhoehnslalom/ui-components/shared';
+import { Input, Textarea } from '@connorhoehn/ui-components/shared';
 import { VarCombobox } from './VarCombobox';
 import { detectVarType } from './promptFormat';
 

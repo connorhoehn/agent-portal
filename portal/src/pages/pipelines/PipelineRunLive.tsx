@@ -8,7 +8,7 @@
 
 import { useEffect, useRef } from 'react';
 import { usePipelineRunStatus } from '@connorhoehn/realtime-modules/client/pipelines';
-import { Chip, Inline, MetaLine } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, Inline, MetaLine } from '@connorhoehn/ui-components/shared';
 import { phaseMoved, recordBehind } from './pipelinesRealtime';
 
 export function PipelineRunLive({ runId, pipelineId, recordedStatus, onMoved }: { runId: string; pipelineId: string; recordedStatus?: string; onMoved: () => void }) {

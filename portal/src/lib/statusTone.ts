@@ -6,7 +6,7 @@
 // (see __tests__/statusTone.test.ts) rather than only exercised through a
 // rendered Chip.
 
-import type { ChipTone } from '@connorhoehnslalom/ui-components/shared';
+import type { ChipTone } from '@connorhoehn/ui-components/shared';
 
 // ─── Run / job state ─────────────────────────────────────────────────────────
 //

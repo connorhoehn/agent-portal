@@ -5,7 +5,7 @@
 // participant-index client. Storage, capture, compose and permissions remain
 // in platform-api/LVS; this adapter only adds initiative filtering and paging.
 import type { LVSRecording } from '@connorhoehn/realtime-modules/client/video';
-import type { RecordingListItem, TimedReaction, TranscriptSegment } from '@connorhoehnslalom/ui-components/video';
+import type { RecordingListItem, TimedReaction, TranscriptSegment } from '@connorhoehn/ui-components/video';
 import { realtimeEndpoints, realtimeTokenSource, type RealtimeTokenSource } from '../../lib/realtimeToken.ts';
 
 export interface InitiativeRecording extends Pick<LVSRecording, 'recordingId' | 'startedAt'>,

@@ -11,7 +11,7 @@
 // alert instead of a failed upload.
 
 import { useState } from 'react';
-import { Button, FileUploadDrop, Inline, InlineAlert, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, FileUploadDrop, Inline, InlineAlert, Stack } from '@connorhoehn/ui-components/shared';
 import { parseFormsCsv } from '../secondaryFormat';
 import type { ParseResponse } from '../secondaryTypes';
 

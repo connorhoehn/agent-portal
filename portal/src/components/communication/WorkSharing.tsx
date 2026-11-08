@@ -14,8 +14,8 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ActionRowList } from '@connorhoehnslalom/ui-components';
-import { Button, InlineAlert, Inline, MetaLine, SectionLabel, Select, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { ActionRowList } from '@connorhoehn/ui-components';
+import { Button, InlineAlert, Inline, MetaLine, SectionLabel, Select, Stack, T } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { writeJson } from '../../lib/writeJson';
 import { readShareDestinations } from '../../lib/shareToSocial';

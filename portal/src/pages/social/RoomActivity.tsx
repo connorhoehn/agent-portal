@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Card, Chip, EmptyState, Inline, InlineAlert, LoadingState, PageSection, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, Chip, EmptyState, Inline, InlineAlert, LoadingState, PageSection, Stack, T } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSocialPlane } from './socialPlane';
 import { Markdown } from '../../components/Markdown';

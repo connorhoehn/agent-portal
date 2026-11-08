@@ -4,7 +4,7 @@
 // navigates to the detail page, where the SSE progress stream lives, so
 // flashing the idle label on a page that is unmounting is noise.
 
-import { Button, InlineAlert, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, InlineAlert, Stack } from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../../lib/capabilities';
 import { useKbAction } from './useKbAction';
 

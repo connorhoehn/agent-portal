@@ -12,7 +12,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Banner, Button, Chip, CodeBlock, Inline, LoadingState, MetaLine, Modal, SectionLabel, Stack, useToastOptional,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { writeJson } from '../../lib/writeJson';
 
 interface PairStatus { claimed: boolean; claimedAt: string | null; nodeId: string | null; expiresAt: string }

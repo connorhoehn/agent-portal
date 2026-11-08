@@ -7,7 +7,7 @@ import {
   LoadingState,
   SearchInput,
   Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import type { PromptLibraryEntry } from '../../../components/canary/types.js';
 import { friendlyLibraryError } from './libraryError';
 

@@ -5,7 +5,7 @@
 import { memo } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { ResponsiveContainer, LineChart, Line } from 'recharts';
-import { Card, Chip, EntityCell, Inline, MetaLine } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Chip, EntityCell, Inline, MetaLine } from '@connorhoehn/ui-components/shared';
 import type { ScorePanelNodeData } from '../types.js';
 
 export type ScorePanelNodeType = Node<

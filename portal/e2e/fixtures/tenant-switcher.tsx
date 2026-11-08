@@ -3,7 +3,7 @@ import { StrictMode, useEffect, useRef, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router';
 import { GatewayContext, type GatewayContextValue } from '@connorhoehn/realtime-modules/client';
-import { Inline, Stack, SubNavLayout } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, Stack, SubNavLayout } from '@connorhoehn/ui-components/shared';
 import { SessionProvider, useSession } from '../../src/lib/auth';
 import { TenantSwitcher } from '../../src/components/shell/TenantSwitcher';
 import { MasqueradeMenu } from '../../src/components/shell/MasqueradeMenu';

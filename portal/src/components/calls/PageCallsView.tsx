@@ -5,10 +5,10 @@
 // EmptyState, LoadingState, ErrorState); the rows are the BFF's call-log rows
 // (hooks/usePageCalls.ts), listed under the page's own read authority.
 import { useEffect } from 'react';
-import { EmptyState, ErrorState, LoadingState, Stack, T } from '@connorhoehnslalom/ui-components/shared';
-import { CallActivityCard } from '@connorhoehnslalom/ui-components/social';
+import { EmptyState, ErrorState, LoadingState, Stack, T } from '@connorhoehn/ui-components/shared';
+import { CallActivityCard } from '@connorhoehn/ui-components/social';
 import { useCallHost } from '../../lib/conversationCall';
-import { pageHuddleStart } from '@connorhoehnslalom/ui-components/integrations/realtime';
+import { pageHuddleStart } from '@connorhoehn/ui-components/integrations/realtime';
 import { pageCallCard, type PageCallsResponse } from '../../lib/pageCalls';
 import type { NameOf } from '../../pages/social/socialPlatform';
 

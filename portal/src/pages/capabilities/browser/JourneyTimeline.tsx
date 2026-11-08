@@ -1,4 +1,4 @@
-import { Inline, MetaLine, SelectableCard, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, MetaLine, SelectableCard, Stack, T } from '@connorhoehn/ui-components/shared';
 import type { JourneyStep } from './types';
 
 /** The whole journey as a scrollable list, newest step last. Clicking a row

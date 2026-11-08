@@ -15,7 +15,7 @@ import {
   PageSection,
   SearchInput,
   T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
 import { collectionCommandAdapter } from '../../components/collections/collectionCommands';

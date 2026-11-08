@@ -2,7 +2,7 @@
 // vector table. Offered only where the KB is not live.
 
 import { useState } from 'react';
-import { Button, ConfirmDialog, InlineAlert, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, ConfirmDialog, InlineAlert, Stack } from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../../lib/capabilities';
 import { useKbAction } from './useKbAction';
 

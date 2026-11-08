@@ -32,7 +32,7 @@ import {
   Textarea,
   type DataTableColumn,
   Link,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';

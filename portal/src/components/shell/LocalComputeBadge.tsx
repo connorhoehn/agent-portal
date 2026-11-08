@@ -16,7 +16,7 @@ import {
   MachinePresenceMenu,
   type MachineNode,
   type MachineSession,
-} from '@connorhoehnslalom/ui-components/compute';
+} from '@connorhoehn/ui-components/compute';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { useSession } from '../../lib/auth';

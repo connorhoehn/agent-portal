@@ -13,8 +13,8 @@ import { useNavigate } from 'react-router';
 import { useActivity, useCursor, useGatewayOptional, useWorkGraph } from '@connorhoehn/realtime-modules/client';
 import {
   WorkGraph, type WorkActivityView, type WorkActivityWindow, type WorkGraphProps, type WorkGraphSelection, type WorkGraphViewport,
-} from '@connorhoehnslalom/ui-components/graph';
-import { WrappedCursorOverlay } from '@connorhoehnslalom/ui-components/integrations/realtime';
+} from '@connorhoehn/ui-components/graph';
+import { WrappedCursorOverlay } from '@connorhoehn/ui-components/integrations/realtime';
 import { useSession } from '../../lib/auth';
 import {
   calendarDay, createWorkGraphTransport, isWorkGraphHint, workGraphHintChannel, viewerTimezone, workGraphNodeHref,

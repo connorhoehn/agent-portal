@@ -23,7 +23,7 @@ import {
   SearchInput,
   Stack,
   type DataTableColumn, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';

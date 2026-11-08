@@ -1,5 +1,5 @@
 // Fixture (valid): the same decision as a composer prompt — counts as a deck, no decisionmodal.
-import type { ComposerPrompt } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { ConversationComposer } from './composer';
 
 export function Decide({ approve }: { approve: (reason: string) => Promise<void> }) {

@@ -13,7 +13,7 @@ import {
   Banner, Button, Chip, CollectionToolbar, DataTable, DotMeter, EmptyState, IconButton, Inline,
   LoadingState, MetaLine, PauseCircleIcon, PlayCircleIcon, ProgressBar, RepeatIcon, Stack, StatStrip, T,
   type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
 import { UnavailableNotice } from '../../components/UnavailableNotice';

@@ -1,10 +1,10 @@
 // A persistent hangout owns its saved configuration; a call owns live rooms.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { Button, Chip, DataTable, EmptyState, Inline, InlineAlert, KeyValue, PageSection, Stack, T, Tabs, TabPanel } from '@connorhoehnslalom/ui-components/shared';
-import { RosterPanel } from '@connorhoehnslalom/ui-components/video';
+import { Button, Chip, DataTable, EmptyState, Inline, InlineAlert, KeyValue, PageSection, Stack, T, Tabs, TabPanel } from '@connorhoehn/ui-components/shared';
+import { RosterPanel } from '@connorhoehn/ui-components/video';
 import { HangoutCallView, type HangoutCallPane } from './HangoutCallView';
-import { WrappedBreakoutRoomsPanel, meetingRosterProps } from '@connorhoehnslalom/ui-components/integrations/realtime';
+import { WrappedBreakoutRoomsPanel, meetingRosterProps } from '@connorhoehn/ui-components/integrations/realtime';
 import type { NameOf, SocialRoom } from './socialPlatform';
 import type { SocialCall } from './useSocialCall';
 import { CallBlock, useCallHost, useCallMediaPanel } from '../../lib/conversationCall';

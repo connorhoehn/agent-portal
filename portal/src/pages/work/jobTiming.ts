@@ -1,4 +1,4 @@
-import type { WorkflowStep } from '@connorhoehnslalom/ui-components/shared';
+import type { WorkflowStep } from '@connorhoehn/ui-components/shared';
 import { absoluteTime } from '../../lib/relativeTime.ts';
 
 interface JobTiming {

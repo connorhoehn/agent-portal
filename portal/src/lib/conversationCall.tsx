@@ -6,8 +6,8 @@
 import * as video from '@connorhoehn/realtime-modules/client/video';
 import { useMeeting } from '@connorhoehn/realtime-modules/client/meeting';
 import { createElement } from 'react';
-import { createCallBlockHost } from '@connorhoehnslalom/ui-components/integrations/realtime';
-import { StreamVideo } from '@connorhoehnslalom/ui-components/video';
+import { createCallBlockHost } from '@connorhoehn/ui-components/integrations/realtime';
+import { StreamVideo } from '@connorhoehn/ui-components/video';
 import { separateCallScreenTiles } from './callScreenTiles';
 import { documentRecordingNavigation } from '../components/recordings/documentRecordingContext';
 
@@ -32,5 +32,5 @@ export const {
   CallHostProvider, CallMediaOutlet, CallBlock,
   useCallHost, useCallBlock, useCallLobby, useCallMediaPanel, useCallBlockPlacement, useCallBlockPageClaimed, useClaimCallBlock,
 } = calls;
-export { callCounts, callDrawn } from '@connorhoehnslalom/ui-components/integrations/realtime';
-export type { CallHostMeeting, CallLobby, OnCallHostEvent } from '@connorhoehnslalom/ui-components/integrations/realtime';
+export { callCounts, callDrawn } from '@connorhoehn/ui-components/integrations/realtime';
+export type { CallHostMeeting, CallLobby, OnCallHostEvent } from '@connorhoehn/ui-components/integrations/realtime';

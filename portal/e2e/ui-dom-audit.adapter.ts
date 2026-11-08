@@ -158,7 +158,7 @@ export default {
     panes: 'aside, [role="complementary"], [data-column], [data-column-dock], [data-floating-composer-dock], [data-testid="page-conversation-pane"], [data-testid$="-pane-column"], [data-testid$="-pane"]',
     chromeTriggers: '.shell-header, [data-testid="shell-footer"], [data-shell-nav] > div > aside:first-child',
   },
-  revision: () => ({ uiComponents: JSON.parse(readFileSync(new URL('../node_modules/@connorhoehnslalom/ui-components/package.json', import.meta.url), 'utf8')).version, commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(), sourceDigest: sourceDigest(), dirty: Boolean(execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).trim()) }),
+  revision: () => ({ uiComponents: JSON.parse(readFileSync(new URL('../node_modules/@connorhoehn/ui-components/package.json', import.meta.url), 'utf8')).version, commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim(), sourceDigest: sourceDigest(), dirty: Boolean(execFileSync('git', ['status', '--porcelain'], { cwd: repo, encoding: 'utf8' }).trim()) }),
   async cases(options: { tenant?: string; path?: string; all?: boolean }) {
     let routes: InventoryRoute[] = [...staticInventory(), ...paramInventory(), ...OBSERVED_ROUTES.map(r => ({ tenant: r.tenant, path: r.template.replace(':id', encodeURIComponent(r.id ?? r.fallback ?? 'missing')), pattern: r.pattern, source: 'param' as const, kind: /communication|social\/dms/.test(r.pattern) ? 'chat' as const : 'record' as const }))];
     if (options.tenant) routes = routes.filter(r => r.tenant === options.tenant);

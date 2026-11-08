@@ -10,7 +10,7 @@ import { useNavigate, useParams } from 'react-router';
 import {
   Button, Card, CardHeader, Chip, CollectionToolbar, EmptyState, Inline, InlineAlert, LoadingState,
   PageSection, Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
 import { RecordNotFound } from '../../components/UnavailableNotice';

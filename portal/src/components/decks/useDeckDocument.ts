@@ -4,7 +4,7 @@
 // extras (assessment's agent runs, presence).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { DeckSpec } from '@connorhoehnslalom/ui-components/doc-editor';
+import type { DeckSpec } from '@connorhoehn/ui-components/doc-editor';
 import type { DeckRevisionInfo } from './deckApi';
 import { openRevisionId, toEditorRevisions } from './decksModel';
 import { CONFLICT_MESSAGE, deckRefreshAction, headRevisionId, keptLockedIds } from './deckDocumentModel';

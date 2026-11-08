@@ -12,7 +12,7 @@ import {
   Inline,
   PageSection,
   SearchInput, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { formatTokenCount } from '../../lib/format';
 import { collectionCommandAdapter } from '../../components/collections/collectionCommands';

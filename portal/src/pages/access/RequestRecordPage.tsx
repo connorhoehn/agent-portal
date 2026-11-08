@@ -23,7 +23,7 @@
 // holds ProvisionAccess (`can.revoke`). Both go through ConfirmDialog. A
 // revocation created by an access review says which campaign it came from.
 
-import { SidePane } from '@connorhoehnslalom/ui-components';
+import { SidePane } from '@connorhoehn/ui-components';
 import {
   Button,
   CheckIcon,
@@ -45,7 +45,7 @@ import {
   Textarea,
   WorkflowStepper,
   type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useCallback, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { isNotFoundError, UnavailableNotice } from '../../components/UnavailableNotice';

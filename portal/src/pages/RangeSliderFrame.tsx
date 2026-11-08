@@ -13,7 +13,7 @@
  * a direct re-export.
  */
 import type { ReactNode } from 'react';
-import { Inline, Slider } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, Slider } from '@connorhoehn/ui-components/shared';
 
 export interface RangeSliderFrameProps {
   label: string;

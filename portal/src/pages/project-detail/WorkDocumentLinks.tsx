@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { LinkedItemsSection, type LinkableDocument } from '@connorhoehnslalom/ui-components';
-import { Banner, Button, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { LinkedItemsSection, type LinkableDocument } from '@connorhoehn/ui-components';
+import { Banner, Button, Inline, Stack } from '@connorhoehn/ui-components/shared';
 import { useSession } from '../../lib/auth';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';

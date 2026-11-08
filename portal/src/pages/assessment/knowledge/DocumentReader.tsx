@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Button, Drawer, MarkdownView, Stack, Toolbar } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Drawer, MarkdownView, Stack, Toolbar } from '@connorhoehn/ui-components/shared';
 import { DocumentContextPanel, useDocumentContext } from './ExplorerFrame';
-import { DocumentOutline, DocumentStatusBar, type OutlineEntry } from '@connorhoehnslalom/ui-components/doc-editor';
+import { DocumentOutline, DocumentStatusBar, type OutlineEntry } from '@connorhoehn/ui-components/doc-editor';
 
 /** Build navigation from rendered headings, so fenced code never becomes an outline entry. */
 export function DocumentReader({ markdown, reactions }: { markdown: string; reactions?: ReactNode }) {

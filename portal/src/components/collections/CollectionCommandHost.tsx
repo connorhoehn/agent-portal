@@ -2,9 +2,9 @@
 // It never invents a chat channel, invokes an unrelated agent or executes a
 // proposed mutation before the user confirms that specific operation.
 import { Fragment, useRef, useState } from 'react';
-import { ColumnDock } from '@connorhoehnslalom/ui-components';
-import { ConfirmDialog, IconButton, InlinePopover, InfoIcon, Stack, T, Tooltip } from '@connorhoehnslalom/ui-components/shared';
-import type { ComposerPrompt } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { ColumnDock } from '@connorhoehn/ui-components';
+import { ConfirmDialog, IconButton, InlinePopover, InfoIcon, Stack, T, Tooltip } from '@connorhoehn/ui-components/shared';
+import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { ConversationComposer } from '../../lib/conversationComposer';
 import { useSession } from '../../lib/auth';
 import { askTenantAnswer, tenantAnswers, type TenantAnswerFact } from '../../lib/tenantAnswer';

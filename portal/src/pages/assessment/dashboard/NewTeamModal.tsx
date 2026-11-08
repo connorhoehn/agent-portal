@@ -12,7 +12,7 @@ import {
   Modal,
   Select,
   Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { toastError, toastSuccess } from '../../../lib/toastStore';
 import { sendJson } from '../../../lib/writeJson';
 import { validateNewTeamForm, type NewTeamFormState } from '../assessmentFormat';

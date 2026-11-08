@@ -13,7 +13,7 @@ import { useCallback, useState } from 'react';
 import {
   Button, Card, CardHeader, Chip, ConfirmDialog, FormField, InlineAlert, Inline, Input,
   MetaLine, Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 

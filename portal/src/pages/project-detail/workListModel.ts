@@ -6,7 +6,7 @@
 // its epic, which the detail column prints as its breadcrumb. Epics are
 // containers, not work, so they appear only through their children.
 
-import type { WorkListGroup, WorkListItem } from '@connorhoehnslalom/ui-components';
+import type { WorkListGroup, WorkListItem } from '@connorhoehn/ui-components';
 import type { BotRun } from '../bots/BotsPage';
 import { filterWorkItems, flattenWorkItems, type FlatWorkItem } from './projectFormat.ts';
 import type { WorkItemPriority, WorkItemStatus, WorkItemTree } from './types';

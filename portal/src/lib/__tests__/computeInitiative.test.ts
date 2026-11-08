@@ -2,7 +2,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { Computer } from '@connorhoehnslalom/ui-components/compute';
+import type { Computer } from '@connorhoehn/ui-components/compute';
 
 import { computersForInitiative, truncateTask } from '../computeInitiative.ts';
 

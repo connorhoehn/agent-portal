@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Button, Inline, InlinePopover } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Inline, InlinePopover } from '@connorhoehn/ui-components/shared';
 import { SkillFilter } from './SkillFilter';
 import { WeightSlider } from './WeightSlider';
 import { DepartmentFilter } from './DepartmentFilter';

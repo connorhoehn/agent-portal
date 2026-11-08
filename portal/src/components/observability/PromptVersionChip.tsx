@@ -12,7 +12,7 @@
 import { useEffect, useState } from 'react';
 import {
   Button, Chip, CodeBlock, InlineAlert, MetaLine, Modal, SectionLabel, Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { KeyValue } from '../KeyValue';
 import { absoluteTime } from '../../lib/relativeTime';
 

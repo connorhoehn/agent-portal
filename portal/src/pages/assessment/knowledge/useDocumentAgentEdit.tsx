@@ -17,13 +17,13 @@
 
 import { createElement, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useAgentStream } from '@connorhoehn/realtime-modules/agent-streaming/client';
-import { ProposedEditStrip } from '@connorhoehnslalom/ui-components/doc-editor';
-import { Button, InlineAlert, MarkdownView, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { ProposedEditStrip } from '@connorhoehn/ui-components/doc-editor';
+import { Button, InlineAlert, MarkdownView, Stack } from '@connorhoehn/ui-components/shared';
 import { useSession } from '../../../lib/auth';
 import { HttpError } from '../../../lib/writeJson';
 import type { AssessmentSSEEvent } from './types';
 import { applyStoredDocumentProposal, decideDocumentProposal, getDocumentProposal, listDocumentProposals, reviseDocumentProposal, storeDocumentProposal, DocumentProposalReadError, DOCUMENT_DRAFTER_LABEL, ProposalNotInsertedError, type StoredDocumentProposal } from './documentProposalClient';
-import type { ComposerTaskReport } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import type { ComposerTaskReport } from '@connorhoehn/ui-components/social/rich-composer';
 import { describeTurnError } from '../../../components/chat/turnError';
 import {
   DOCUMENT_EDIT_AGENT_ID,

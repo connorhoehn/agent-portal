@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, CodeBlock, CollapsibleSection, FormField, InlineAlert, SectionLabel, Select, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, CodeBlock, CollapsibleSection, FormField, InlineAlert, SectionLabel, Select, Stack, T } from '@connorhoehn/ui-components/shared';
 import { optimizePrompt, type OptimizeMetric } from '../../../components/canary/usePromptLibrary.js';
 
 const METRIC_OPTIONS = [

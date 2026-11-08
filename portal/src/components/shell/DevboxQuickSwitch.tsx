@@ -19,10 +19,10 @@
 // gets to "open pre-filtered to a group".
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { useCompute, type Computer } from '@connorhoehnslalom/ui-components/compute';
+import { useCompute, type Computer } from '@connorhoehn/ui-components/compute';
 import {
   useCommandPalette, useRegisterCommand, type Command,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 
 export type PaletteScope = 'all' | 'devbox';
 

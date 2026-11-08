@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { useNavigate } from 'react-router';
-import { Button, StatusPill } from '@connorhoehnslalom/ui-components/shared';
+import { Button, StatusPill } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 interface KBHealthEntry {

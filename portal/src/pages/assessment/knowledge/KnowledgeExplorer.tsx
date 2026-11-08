@@ -20,7 +20,7 @@ import {
   Stack,
   VisuallyHidden,
   IconButton,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
 import { useCapabilities } from '../../../lib/capabilities';
 import { sendJson } from '../../../lib/writeJson';
@@ -31,7 +31,7 @@ import { compactDocumentPath, presentationFiles } from './documentLibraryModel';
 import { deckPaths, type DeckSummary } from '../decks/decksApi';
 import { DocumentNavigationProvider, useDocumentNavigation } from './DocumentNavigation';
 import { DocumentRail, useSectionPulls, type QuickView } from './DocumentRail';
-import { ScopeHeader } from '@connorhoehnslalom/ui-components';
+import { ScopeHeader } from '@connorhoehn/ui-components';
 import { useShellBreadcrumbItems } from '../../../components/shell/Breadcrumbs';
 import { ExplorerFrame } from './ExplorerFrame';
 import { RenameNodeDialog } from './RenameNodeDialog';

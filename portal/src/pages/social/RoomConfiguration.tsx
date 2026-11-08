@@ -1,5 +1,5 @@
 import { useId, useState } from 'react';
-import { Button, Chip, DataTable, FormField, Inline, InlineAlert, Input, Modal, PersonPicker, Select, Stack, Switch, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Chip, DataTable, FormField, Inline, InlineAlert, Input, Modal, PersonPicker, Select, Stack, Switch, T } from '@connorhoehn/ui-components/shared';
 import { writeJson } from '../../lib/writeJson';
 import { useSocialPlane } from './socialPlane';
 import type { HangoutPlan, NameOf, SocialRoom } from './socialPlatform';

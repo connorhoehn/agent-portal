@@ -1,4 +1,4 @@
-import { ActivityIcon } from '@connorhoehnslalom/ui-components/shared';
+import { ActivityIcon } from '@connorhoehn/ui-components/shared';
 import { useNavigate } from 'react-router';
 import { RunsLedger } from '../../components/runs/RunsLedger';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';

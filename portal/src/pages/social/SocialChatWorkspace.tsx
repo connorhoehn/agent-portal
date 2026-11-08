@@ -39,17 +39,17 @@
 
 import { isValidElement, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
-import { ViewportFillRegion } from '@connorhoehnslalom/ui-components';
+import { ViewportFillRegion } from '@connorhoehn/ui-components';
 import {
   ActivePeopleGrid, AddPeoplePicker, ChannelMentionsPanel, ConversationRail, CreateChannelDialog, CreateTeamDialog, MembersPanel,
   NewConversationPanel, RAIL_SECTION_CONTENT_INSET, RailSectionHeader, TeamChannelTree, useRailSectionMemory,
   type ActivePerson, type ConversationRailSection, type CreateChannelDialogInput, type CreateTeamDialogInput, type RailSelection,
-} from '@connorhoehnslalom/ui-components/social';
+} from '@connorhoehn/ui-components/social';
 import {
   ActivityIcon, AtIcon, Button, ChannelHeader, EmptyState, ErrorState, IconButton, Inline, InlineAlert, LoadingState,
   PhoneIcon, PlayCircleIcon, PlusIcon, Spinner, Stack, T, VisuallyHidden,
-} from '@connorhoehnslalom/ui-components/shared';
-import { WrappedNotificationCenter } from '@connorhoehnslalom/ui-components/integrations/realtime';
+} from '@connorhoehn/ui-components/shared';
+import { WrappedNotificationCenter } from '@connorhoehn/ui-components/integrations/realtime';
 import { useSharedNotifications } from '../../components/shell/SharedNotifications';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
@@ -81,7 +81,7 @@ import { useSocialCall, useSocialFooterContext, type SocialFooterContext } from 
 import { useSocialTeams } from './useSocialTeams';
 import { useSocialPlane } from './socialPlane';
 import { SectionContent } from '../../components/shell/SectionContent';
-import { SectionLabel, useHeaderDensity } from '@connorhoehnslalom/ui-components/shared';
+import { SectionLabel, useHeaderDensity } from '@connorhoehn/ui-components/shared';
 import { SocialReadStatus } from './SocialReadStatus';
 import { conversationRailEmptyLabel } from './socialReadState';
 

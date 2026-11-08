@@ -5,8 +5,8 @@
 // can't do. Row click selects, same as a card — the detail below is shared.
 
 import { useMemo } from 'react';
-import { ArrowRightIcon, Chip, DataTable, IconButton, T } from '@connorhoehnslalom/ui-components/shared';
-import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+import { ArrowRightIcon, Chip, DataTable, IconButton, T } from '@connorhoehn/ui-components/shared';
+import type { DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { dateRange, isOverEnvelope, sprintHealth, STATUS_TONE, usd } from './sprintFormat';
 import type { Sprint } from './types';
 

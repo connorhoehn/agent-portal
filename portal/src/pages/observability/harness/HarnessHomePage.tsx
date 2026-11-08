@@ -13,7 +13,7 @@ import { useNavigate } from 'react-router';
 import {
   ArrowRightIcon, Button, Card, Chip, IconButton, Inline, Input, PageSection, ProgressBar, Stack,
   T, Table, TableBody, TableHead, TableRow, TableTd, TableTh,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import {
   BarChart,
   Bar,

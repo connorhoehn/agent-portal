@@ -21,7 +21,7 @@
 // `local:` id prefix stays because `nodeIdOf` reads the node id back out of it
 // for the machine's log pane.
 
-import type { ComputeClient, Computer } from '@connorhoehnslalom/ui-components/compute';
+import type { ComputeClient, Computer } from '@connorhoehn/ui-components/compute';
 
 /** Marks a `Computer` id as a paired machine rather than a microVM box. */
 export const LOCAL_ID_PREFIX = 'local:';

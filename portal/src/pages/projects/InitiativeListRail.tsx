@@ -35,13 +35,13 @@ import {
   T,
   type DropdownMenuSection,
   type GroupedListRow,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useSession } from '../../lib/auth';
 import { useUrlState } from '../../lib/useUrlState';
-import type { ListRail } from '@connorhoehnslalom/ui-components';
+import type { ListRail } from '@connorhoehn/ui-components';
 import {
   RAIL_NO_MATCH,
   buildInitiativeList,

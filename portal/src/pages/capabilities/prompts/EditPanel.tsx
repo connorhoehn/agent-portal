@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button, Card, Chip, DetailHeader, FormField, Inline, InlineAlert, InlinePlaceholder, Input, SectionLabel, SkeletonCard, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, Chip, DetailHeader, FormField, Inline, InlineAlert, InlinePlaceholder, Input, SectionLabel, SkeletonCard, Stack, T } from '@connorhoehn/ui-components/shared';
 import { InferenceSettings, type InferenceSettingsValue } from './InferenceSettings';
 import { LineNumberedTextarea } from './LineNumberedTextarea';
 import { TemplateHighlighted } from './TemplateHighlighted';

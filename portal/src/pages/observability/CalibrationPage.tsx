@@ -52,7 +52,7 @@ import {
   PageSection,
   Stack,
   useToast, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import {
   CartesianGrid,
   Legend,

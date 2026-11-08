@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, type ReactNode } from 'react';
-import { useSidePane, useSidePaneHost } from '@connorhoehnslalom/ui-components';
-import { Button, Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
-import { useComposerFocus, useComposerFocusReveal } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { useSidePane, useSidePaneHost } from '@connorhoehn/ui-components';
+import { Button, Inline, Stack, T } from '@connorhoehn/ui-components/shared';
+import { useComposerFocus, useComposerFocusReveal } from '@connorhoehn/ui-components/social/rich-composer';
 import { HuddleChatBody, useHuddleChat } from './HuddleChat';
 
 /** One page pane owns both transcripts; opening either never ends the call or edits a draft. */

@@ -20,7 +20,7 @@ import {
   TableRow,
   TableTd,
   TableTh,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { configRows } from './kbFormat';
 import type { KbRegistryEntry } from './types';
 

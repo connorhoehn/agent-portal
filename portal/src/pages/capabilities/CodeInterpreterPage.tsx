@@ -4,7 +4,7 @@ import {
   IconButton, Inline, InlineAlert, InlinePlaceholder, LoadingState, MetaLine, PageSection,
   SectionLabel, Stack, StatStrip, T, Table, TableBody, TableHead, TableRow, TableTd, TableTh,
   Textarea,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { UnavailableNotice, orUnknown } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';

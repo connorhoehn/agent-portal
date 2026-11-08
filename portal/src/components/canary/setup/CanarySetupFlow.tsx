@@ -2,7 +2,7 @@
 // Manages state across all steps: library → versions → (editor?) → config.
 
 import { useState } from 'react';
-import { Button, Card, Inline, SectionLabel, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, Inline, SectionLabel, Stack, T } from '@connorhoehn/ui-components/shared';
 import type { PromptLibraryEntry } from '../types.js';
 import { PromptLibraryStep } from './PromptLibraryStep.js';
 import { VersionPickerStep } from './VersionPickerStep.js';

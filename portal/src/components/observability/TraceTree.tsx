@@ -7,7 +7,7 @@
 // always knows where they are in the chain.
 
 import { useNavigate } from 'react-router';
-import { Chip, Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, Inline, Stack, T } from '@connorhoehn/ui-components/shared';
 import { CostChip } from './CostChip';
 
 export interface TraceNode {

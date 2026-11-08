@@ -17,7 +17,7 @@
 // can hold it (bulk suppressions only record errors, and an unbounded warning
 // is not a gate).
 import tseslint from 'typescript-eslint';
-import uiComponents from '@connorhoehnslalom/ui-components/eslint-plugin';
+import uiComponents from '@connorhoehn/ui-components/eslint-plugin';
 
 const SEPARATORS = 'ui-components/no-hand-rolled-separators';
 

@@ -135,6 +135,7 @@ export class MemoryMessageQueue implements MessageQueue {
     this.checkCancelled(opts);
     const def = this.requireQueue(queue);
     if (opts.consumerGroupId !== undefined) throw new MessageQueueError('The local memory fixture does not support consumer-group subscriptions', 400, 'UnsupportedOperation');
+    if (opts.subscription !== undefined) throw new MessageQueueError('The local memory fixture does not support durable subscriptions', 400, 'UnsupportedOperation');
     const now = this.opts.now();
     const max = Math.max(1, opts.max ?? 1);
     const visibilityMs = this.seconds(opts.visibilityTimeoutSeconds ?? def.visibilityTimeoutSeconds, 43_200);

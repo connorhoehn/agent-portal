@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router';
-import { type SubNavItem, activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
+import { type SubNavItem, activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehn/ui-components/shared';
 import { BuildSectionLayout } from '../../components/shell/BuildSectionLayout';
 import { useFetch } from '../../hooks/useFetch';
 import { ObservabilityHelpButton } from './ObservabilityHelp';

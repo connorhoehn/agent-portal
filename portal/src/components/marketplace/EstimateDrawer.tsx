@@ -8,7 +8,7 @@
 // refusal words — now in lib/dispatchGates.ts, re-exported here for every
 // existing importer. What stays here is the run-side reading of an estimate.
 
-import { Inline } from '@connorhoehnslalom/ui-components/shared';
+import { Inline } from '@connorhoehn/ui-components/shared';
 import { usd as money } from '../../lib/format';
 import type { BotRun } from '../../pages/bots/BotsPage';
 import type { WorkEstimate } from '../../lib/dispatchGates';

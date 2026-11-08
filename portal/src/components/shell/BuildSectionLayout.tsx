@@ -1,5 +1,5 @@
-import { ScopeHeader, type ListRail } from '@connorhoehnslalom/ui-components';
-import { SectionLayout, SubNavLayout, activeNavItemClassName, inactiveNavItemClassName, type BreadcrumbItem, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import { ScopeHeader, type ListRail } from '@connorhoehn/ui-components';
+import { SectionLayout, SubNavLayout, activeNavItemClassName, inactiveNavItemClassName, type BreadcrumbItem, type SubNavItem } from '@connorhoehn/ui-components/shared';
 import type { ComponentProps, ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
 import { useShellBreadcrumbItems } from './Breadcrumbs';

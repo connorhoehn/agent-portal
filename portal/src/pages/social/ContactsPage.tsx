@@ -31,7 +31,7 @@ import {
   Stack,
   T,
   type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useEmbeddedSocial } from '../../components/shell/EmbeddedSocial';

@@ -5,7 +5,7 @@
 
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { Button, ExternalLinkIcon, Inline, MetaLine, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, ExternalLinkIcon, Inline, MetaLine, Stack, T } from '@connorhoehn/ui-components/shared';
 import { useSession } from '../../lib/auth';
 import { CHOOSER } from '../../lib/tenantHome';
 import { sharedKindLabel, sharedUnavailableReason } from '../../pages/social/sharedWorkModel';

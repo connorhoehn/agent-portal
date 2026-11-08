@@ -1,4 +1,4 @@
-import { Card, Modal, SectionLabel } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Modal, SectionLabel } from '@connorhoehn/ui-components/shared';
 import type { CrawlTarget } from './types';
 import { TargetForm, type TargetDraft } from './TargetForm';
 

@@ -3,7 +3,7 @@
 
 import { memo } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
-import { Card, Chip, EntityCell, Inline, StatusDot } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Chip, EntityCell, Inline, StatusDot } from '@connorhoehn/ui-components/shared';
 import type { RouterNodeData } from '../types.js';
 
 export type RouterNodeType = Node<RouterNodeData & Record<string, unknown>, 'routerNode'>;

@@ -12,10 +12,10 @@
 // Without `graph`, nothing changes: no gateway, no section.
 
 import { useActivity, useGatewayOptional } from '@connorhoehn/realtime-modules/client';
-import { WrappedActivityPanel } from '@connorhoehnslalom/ui-components/integrations/realtime';
+import { WrappedActivityPanel } from '@connorhoehn/ui-components/integrations/realtime';
 import { useMemo, type ComponentProps } from 'react';
 import { mergeActivity, type FeedEvent } from '../pages/pipelines/recordedEvents';
-import { DetailSection, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { DetailSection, Stack } from '@connorhoehn/ui-components/shared';
 import { WorkGraphActivity } from './work-graph/WorkGraphActivity';
 import type { WorkGraphSubject } from '../lib/workGraph';
 

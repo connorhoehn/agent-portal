@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
-import { SidePane, usePaneState, useSidePane, useSidePaneHost, type PaneTabSpec } from '@connorhoehnslalom/ui-components';
-import { Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
-import { useComposerFocusReveal } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { SidePane, usePaneState, useSidePane, useSidePaneHost, type PaneTabSpec } from '@connorhoehn/ui-components';
+import { Inline, Stack } from '@connorhoehn/ui-components/shared';
+import { useComposerFocusReveal } from '@connorhoehn/ui-components/social/rich-composer';
 import { HuddleChatBody, useHuddleChat } from '../shell/HuddleChat';
 import { ConversationViewsSlot } from '../chat/useChatPins';
 import './DeckAssistantPane.css';

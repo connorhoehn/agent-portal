@@ -48,7 +48,7 @@ import { envelopeForInitiative, hasKnownBurn, type EnvelopesResponse } from '../
 import { usd } from '../../lib/format.ts';
 import type { AccessRequest } from '../../lib/accessRequests.ts';
 import { JUSTIFICATION_MIN, openStatusText, quickRequestState, waitingOn } from '../projects/budgetAccessModel.ts';
-import type { ComposerPrompt, ComposerPromptField, ComposerPromptResult } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import type { ComposerPrompt, ComposerPromptField, ComposerPromptResult } from '@connorhoehn/ui-components/social/rich-composer';
 import type { FlatWorkItem } from './projectFormat.ts';
 import type { Codebase } from './types.ts';
 

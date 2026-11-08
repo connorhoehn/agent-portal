@@ -1,4 +1,4 @@
-import { Inline, Stack, Table, TableBody, TableHead, TableRow, TableTd, TableTh } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, Stack, Table, TableBody, TableHead, TableRow, TableTd, TableTh } from '@connorhoehn/ui-components/shared';
 import { RadarBatchEntry, RadarAxes } from './OverlayRadar';
 
 const AXIS_ORDER: Array<{ key: keyof RadarAxes; label: string }> = [

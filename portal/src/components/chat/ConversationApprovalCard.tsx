@@ -4,7 +4,7 @@
 // eligible approver may decide; a reader sees it read-only. Once the loop moves on the list drops it.
 
 import { useState } from 'react';
-import { Card, InlineAlert, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Card, InlineAlert, Stack, T } from '@connorhoehn/ui-components/shared';
 import AgentApprovalPrompt from './AgentApprovalPrompt';
 import type { AgentApi, AgentWaitingRun } from './conversationAgent';
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Avatar, Button, DensityProvider, RailNavList } from '@connorhoehnslalom/ui-components/shared';
+import { Avatar, Button, DensityProvider, RailNavList } from '@connorhoehn/ui-components/shared';
 import { Work, WorkRows, ItemDetail, Rail, setRoute } from './v4-pages';
 import { DispatchV5 } from './dispatch-v5';
 import { money, envelopes, budgetRows, work, Status } from './revision3';

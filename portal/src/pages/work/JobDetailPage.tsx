@@ -17,7 +17,7 @@ import { Link, useParams, useNavigate, useSearchParams } from 'react-router';
 import {
   Button, Chip, ConfirmDialog, EmptyState, ErrorState, Inline, LoadingState, PageSection,
   Stack, PageHeader, StatStrip, Tabs, WorkflowStepper,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { crumbLabel, useCrumbLabel } from '../../lib/crumbLabels';

@@ -8,8 +8,8 @@
 // not a Social grant — so this shelf is there for every role of the tenant.
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { EmptyState, ErrorState, LoadingState } from '@connorhoehnslalom/ui-components/shared';
-import { CallLogList } from '@connorhoehnslalom/ui-components/social';
+import { EmptyState, ErrorState, LoadingState } from '@connorhoehn/ui-components/shared';
+import { CallLogList } from '@connorhoehn/ui-components/social';
 import { useSession } from '../../lib/auth';
 import { tenantCallEntries, type TenantCallEntry } from '../../lib/pageCalls';
 import { usePeopleNames, type PageCallsState } from '../../hooks/usePageCalls';

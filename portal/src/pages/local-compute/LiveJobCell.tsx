@@ -10,7 +10,7 @@
 //
 // No progress bar: the wire carries no notion of how far through a run is, and
 // a bar that fills on a timer would be inventing one.
-import { Chip, Inline, MetaLine, Stack, ThinkingDots } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, Inline, MetaLine, Stack, ThinkingDots } from '@connorhoehn/ui-components/shared';
 import { statusLabel, statusTone, liveProgress, type JobStatus } from './localComputeFormat';
 
 export interface LiveJob {

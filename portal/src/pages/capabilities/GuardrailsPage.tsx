@@ -28,7 +28,7 @@ import {
   TableTh,
   Textarea,
   useToast, T, VisuallyHidden,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { writeJson } from '../../lib/writeJson';

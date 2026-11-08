@@ -1,6 +1,6 @@
 // "Sync Now" — kicks a Bedrock ingestion job for the KB's data source.
 
-import { Button, InlineAlert, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, InlineAlert, Stack, T } from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../../lib/capabilities';
 import { useKbAction } from './useKbAction';
 

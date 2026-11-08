@@ -9,7 +9,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Card, Checkbox, Chip, CodeBlock, EmptyState, InlinePlaceholder, LoadingState, SectionLabel,
   Select, SelectableCard, Stack, StatStrip, Inline, Tabs, T, VisuallyHidden,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { usePromptList, usePromptVersions } from '../../components/canary/usePromptLibrary.js';
 import { diffStats, lineDiff } from './diffFormat';
 import { DiffFrame } from './DiffFrame';

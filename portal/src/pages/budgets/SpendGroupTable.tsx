@@ -12,7 +12,7 @@ import {
   type DataTableColumn,
   Inline,
   T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { LockedFigure } from '../projects/BudgetAccess';
 import { usd } from './budgetsFormat';
 import { groupLabel, moneyOrDash, periodHeading, remainingTone, spendFigure } from './spendReportModel';

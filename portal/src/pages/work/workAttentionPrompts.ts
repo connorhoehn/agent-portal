@@ -4,7 +4,7 @@
 // proposed graph changes. One prompt per item, paged with the keyboard; the
 // answers call the page's existing write handlers — the deck never posts.
 // Pure: every rule here is a node test.
-import type { ComposerPrompt, ComposerPromptResult } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import type { ComposerPrompt, ComposerPromptResult } from '@connorhoehn/ui-components/social/rich-composer';
 import type { Job, LabConsult, Proposal } from './workShared';
 
 export interface AttentionHandlers {

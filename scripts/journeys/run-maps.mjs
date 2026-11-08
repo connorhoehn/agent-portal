@@ -210,7 +210,7 @@ for (const e of ENTRIES) test(e.title, async ({ browser }) => {
 }
 
 function stackLine() {
-  try { const v = JSON.parse(fs.readFileSync(path.join(PORTAL, 'node_modules/@connorhoehnslalom/ui-components/package.json'), 'utf8')).version; return `middleware dev:mock :3001, Vite ${BASE}, ui-components ${v}`; } catch { return `middleware dev:mock :3001, Vite ${BASE}`; }
+  try { const v = JSON.parse(fs.readFileSync(path.join(PORTAL, 'node_modules/@connorhoehn/ui-components/package.json'), 'utf8')).version; return `middleware dev:mock :3001, Vite ${BASE}, ui-components ${v}`; } catch { return `middleware dev:mock :3001, Vite ${BASE}`; }
 }
 
 /** Compose and write each walked map's log (and its screenshot) into the family directory. */

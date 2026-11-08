@@ -23,7 +23,7 @@ import {
   type DropdownMenuSection,
   type StackedRailGroup,
   type StackedRailRow,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { usePresence } from '@connorhoehn/realtime-modules/client';
 import { relativeTime } from '../../../lib/relativeTime';
 import { useCapabilities } from '../../../lib/capabilities';

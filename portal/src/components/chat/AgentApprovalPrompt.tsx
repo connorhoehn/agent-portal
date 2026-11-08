@@ -4,7 +4,7 @@
 // card); a reader sees the same question read-only and is told who can decide.
 
 import { useState } from 'react';
-import { Button, InlineAlert, Inline, Input, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, InlineAlert, Inline, Input, Stack, T } from '@connorhoehn/ui-components/shared';
 import { approvalExpiryNote, canDecideApproval, type AgentApproval, type AgentApprovalRole } from './conversationAgent';
 
 export interface AgentApprovalPromptProps {

@@ -5,8 +5,8 @@
 // (same wire shapes). Pure and fetch-injectable so `node --test` loads it
 // without a DOM.
 
-import type { AgentRunStatus, ChatCommand } from '@connorhoehnslalom/ui-components/social';
-import { parseDeckText } from '@connorhoehnslalom/ui-components/doc-editor';
+import type { AgentRunStatus, ChatCommand } from '@connorhoehn/ui-components/social';
+import { parseDeckText } from '@connorhoehn/ui-components/doc-editor';
 import {
   deckCall, deckPost, makeDeckApi, makeNarrativeNotice,
   type DeckDetailCore, type DeckSpec, type Fetch, type NarrativeOutcome as DeckNarrative,

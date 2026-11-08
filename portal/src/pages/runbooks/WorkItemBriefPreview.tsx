@@ -1,6 +1,6 @@
 // A preview opens beside the work item, with its own scrolling surface.
 import { useNavigate } from 'react-router';
-import { Button, ChevronIcon, Inline, LoadingState, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, ChevronIcon, Inline, LoadingState, Stack, T } from '@connorhoehn/ui-components/shared';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';

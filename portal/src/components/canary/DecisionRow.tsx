@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import {
   Button, Chip, ChevronIcon, ChoiceRow, EntityCell, IconButton, Inline, MetaLine, Stack, TableRow, TableTd, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { absoluteTime } from '../../lib/relativeTime';
 import type { ControllerAction, Decision } from './types.js';
 

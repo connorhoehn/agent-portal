@@ -6,7 +6,7 @@
 // Keep operational views compact; configuration and code review retain
 // their existing role gates.
 
-import type { SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import type { SubNavItem } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import type { Summary } from './workShared';
 import { useSession } from '../../lib/auth';

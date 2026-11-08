@@ -4,12 +4,12 @@
 // say so above the text.
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { ProcedureSteps, SourceList } from '@connorhoehnslalom/ui-components';
-import { EditorShell } from '@connorhoehnslalom/ui-components/doc-editor';
+import { ProcedureSteps, SourceList } from '@connorhoehn/ui-components';
+import { EditorShell } from '@connorhoehn/ui-components/doc-editor';
 import {
   Banner, Button, Chip, DataTable, DetailSection, Disclosure, DiffViewer, EmptyState, FormField, Inline, Input, LoadingState, Select, Spinner, Stack, StatusPill, T,
   Textarea, type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';

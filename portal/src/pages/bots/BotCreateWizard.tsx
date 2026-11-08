@@ -35,7 +35,7 @@ import {
   WorkflowStepper,
   type WorkflowStep,
   T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { BOT_STARTERS, type BotStarter } from './botTemplates';
 import { toastError, toastSuccess } from '../../lib/toastStore';

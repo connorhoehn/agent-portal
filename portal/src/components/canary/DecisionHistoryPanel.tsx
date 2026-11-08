@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Chip, Inline, MetaLine, Stack, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useCanaryStore } from './canaryStore.js';
 import { DecisionRow } from './DecisionRow.js';
 import type { Decision } from './types.js';

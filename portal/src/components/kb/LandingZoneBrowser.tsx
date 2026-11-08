@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import {
   T,
   Button, Chip, CodeBlock, DataTable, Inline, InlineAlert, MetaLine, Spinner, Stack,
-} from '@connorhoehnslalom/ui-components/shared';
-import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
+import type { DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';
 

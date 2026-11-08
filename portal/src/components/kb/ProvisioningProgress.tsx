@@ -4,7 +4,7 @@ import {
   Inline,
   Spinner,
   Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

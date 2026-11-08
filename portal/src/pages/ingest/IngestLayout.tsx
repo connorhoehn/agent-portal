@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router';
-import { activeNavItemClassName, inactiveNavItemClassName, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import { activeNavItemClassName, inactiveNavItemClassName, type SubNavItem } from '@connorhoehn/ui-components/shared';
 import { BuildSectionLayout } from '../../components/shell/BuildSectionLayout';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';

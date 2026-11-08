@@ -10,7 +10,7 @@
 // anything: the server then runs the plan's steps in order through the flows
 // that already exist, and each finished step shows that flow's own card.
 
-import type { AgentRunStatus, ChatCommand } from '@connorhoehnslalom/ui-components/social';
+import type { AgentRunStatus, ChatCommand } from '@connorhoehn/ui-components/social';
 
 export type AgentStepKind = 'summarize' | 'deck' | 'diagram' | 'doc' | 'draft' | 'note' | 'document:create' | 'meeting:create' | 'approval';
 export interface AgentPlanStep { kind: AgentStepKind; title: string; instruction: string; acceptance: string; body?: string }

@@ -1,4 +1,4 @@
-import { Chip } from '@connorhoehnslalom/ui-components/shared';
+import { Chip } from '@connorhoehn/ui-components/shared';
 import { statusTone, normalizeStatus } from './projectFormat';
 
 /**

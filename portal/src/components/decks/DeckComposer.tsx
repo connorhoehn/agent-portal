@@ -1,4 +1,4 @@
-import { ComposerSurface } from '@connorhoehnslalom/ui-components/shared';
+import { ComposerSurface } from '@connorhoehn/ui-components/shared';
 // The deck's footer composer: the library's ConversationComposer with a
 // `document` context and no conversation, the way realtime-examples'
 // PresentationEditorPage does
@@ -7,9 +7,9 @@ import { ComposerSurface } from '@connorhoehnslalom/ui-components/shared';
 // huddle enables Chat in this same input. Edit uses the tenant's existing
 // saved-version revise route; Ask uses the host's read-only agent stream.
 
-import type { PresentationInstructContext, PresentationInstructResult } from '@connorhoehnslalom/ui-components/doc-editor';
-import { DropdownMenu, Inline, T } from '@connorhoehnslalom/ui-components/shared';
-import type { ComposerStatus, RichChatDraft } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import type { PresentationInstructContext, PresentationInstructResult } from '@connorhoehn/ui-components/doc-editor';
+import { DropdownMenu, Inline, T } from '@connorhoehn/ui-components/shared';
+import type { ComposerStatus, RichChatDraft } from '@connorhoehn/ui-components/social/rich-composer';
 import { useCallback, useMemo, useState } from 'react';
 import { useCallBlock, useCallHost } from '../../lib/conversationCall';
 import { initiativeFromChannel } from '../../lib/conversationCallModel';

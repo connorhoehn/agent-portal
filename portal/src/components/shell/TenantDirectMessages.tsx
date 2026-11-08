@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useGatewayOptional, usePresence } from '@connorhoehn/realtime-modules/client';
 import { useNavigate } from 'react-router';
-import { Button, ChatIcon, Inline, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, ChatIcon, Inline, T } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { onlineIds, readConversations, readSharedPeople, type SharedPeople } from './tenantDirectModel';
 import { MessagesOverviewDialog } from './MessagesOverviewDialog';

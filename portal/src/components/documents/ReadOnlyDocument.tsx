@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as Y from 'yjs';
 import type { Editor } from '@tiptap/react';
-import { CanvasDocumentView } from '@connorhoehnslalom/ui-components/doc-editor';
-import { LoadingState, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { CanvasDocumentView } from '@connorhoehn/ui-components/doc-editor';
+import { LoadingState, Stack } from '@connorhoehn/ui-components/shared';
 import { createCanvasExtensions, MacroNode, HeadingAnchor, MarkdownClipboard, Callout, CanvasTextAlign } from '@connorhoehn/realtime-modules/adapters/tiptap';
 import { TextStyleKit } from '@tiptap/extension-text-style';
 import { TableKit } from '@tiptap/extension-table';

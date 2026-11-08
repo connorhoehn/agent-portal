@@ -1,4 +1,4 @@
-import { Button, Inline, MetaLine, SectionLabel, Stack , Slider } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Inline, MetaLine, SectionLabel, Stack , Slider } from '@connorhoehn/ui-components/shared';
 
 interface WeightSliderProps {
   value: number;

@@ -25,10 +25,10 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
   SidePane, usePaneState, useSidePane, useSidePaneHost, type PaneStateControl, type PaneTabSpec, type PersonDetail, type PersonEvidenceDocument,
-} from '@connorhoehnslalom/ui-components';
+} from '@connorhoehn/ui-components';
 import {
   Button, Chip, DetailSection, EmptyState, Inline, InlineAlert, KeyValue, LoadingState, MetaLine, Stack, StatusPill, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { ConversationViewsSlot } from '../../components/chat/useChatPins';
 import { ConversationPaneBody, useConversationPane } from '../../components/shell/ConversationPane';
 import { DirectoryPersonCard as PersonDetailCard } from '../../components/people/DirectoryPersonCard';

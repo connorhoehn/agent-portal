@@ -12,8 +12,8 @@
 // Opening a node hands it to the host, which shows it in the far-right pane.
 
 import { useState } from 'react';
-import { ActionRowList } from '@connorhoehnslalom/ui-components';
-import { Button, ChannelHeader, MetaLine, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { ActionRowList } from '@connorhoehn/ui-components';
+import { Button, ChannelHeader, MetaLine, SectionLabel, Stack } from '@connorhoehn/ui-components/shared';
 import { WorkGraphActivity } from '../work-graph/WorkGraphActivity';
 import { readSharing, type SharingEnvelope } from './planeSharingModel';
 import { SharingGrants } from './WorkSharing';

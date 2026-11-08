@@ -17,7 +17,7 @@ tracked. `?view=split|full|details|lab` picks the starting arrangement.
 
 ## Why it lives inside `portal/`
 
-Fidelity and zero setup. `@connorhoehnslalom/ui-components` is already
+Fidelity and zero setup. `@connorhoehn/ui-components` is already
 installed here, and the app's own stylesheet is what these paint from — so a
 prototype cannot drift into colours or spacing the product could not
 reproduce, and it needs no `npm install` of its own. (These deps resolve from

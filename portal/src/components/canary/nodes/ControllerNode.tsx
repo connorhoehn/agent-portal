@@ -6,7 +6,7 @@ import { memo } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import {
   Card, Chip, EntityCell, Inline, InlineAlert, MetaLine, Stack, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { DecisionRow } from '../DecisionRow.js';
 import type {
   ControllerNodeData,

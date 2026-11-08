@@ -9,7 +9,7 @@
 // navigate to the full Social workspace using the existing fallback.
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Button, ChatIcon, Inline } from '@connorhoehnslalom/ui-components/shared';
+import { Button, ChatIcon, Inline } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { writeJson } from '../../lib/writeJson';

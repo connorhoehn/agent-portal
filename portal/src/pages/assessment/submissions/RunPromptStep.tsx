@@ -4,7 +4,7 @@
 // (docs/assessment-tenant.md, docs/agent-runs.md §1).
 
 import { useEffect, useRef, useState } from 'react';
-import { Button, Card, Chip, Inline, MetaLine, Stack, StatusPill } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, Chip, Inline, MetaLine, Stack, StatusPill } from '@connorhoehn/ui-components/shared';
 import { launchResponseMessage, RUN_STATUS_PILL_STATE } from '../secondaryFormat';
 import type { CommitResponse, RunRecord, RunStatus } from '../secondaryTypes';
 import { useCapabilities } from '../../../lib/capabilities';

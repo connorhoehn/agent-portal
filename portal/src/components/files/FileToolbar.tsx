@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Button, IconButton, Inline, RepeatIcon, SearchIcon, Tooltip } from '@connorhoehnslalom/ui-components/shared';
+import { Button, IconButton, Inline, RepeatIcon, SearchIcon, Tooltip } from '@connorhoehn/ui-components/shared';
 import { FileViewToggle, type FileView } from './FileCards';
 
 /** Shared file chrome only; readers, filters and navigation remain with each host. */

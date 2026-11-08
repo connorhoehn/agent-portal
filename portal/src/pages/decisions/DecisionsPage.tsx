@@ -9,7 +9,7 @@ import { useNavigate, useParams } from 'react-router';
 import {
   Chip, CollectionToolbar, DataTable, EmptyState, LoadingState, Stack, T,
   type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { StackedCatalogLayout } from '../../components/shell/StackedCatalogLayout';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { collectionCommandAdapter, resolveCollectionTarget } from '../../components/collections/collectionCommands';

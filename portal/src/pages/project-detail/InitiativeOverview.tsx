@@ -13,7 +13,7 @@ import {
   ActionRowPerson,
   type ActionRowColumn,
   type ActionRowItem,
-} from '@connorhoehnslalom/ui-components';
+} from '@connorhoehn/ui-components';
 import {
   ArrowRightIcon,
   Button,
@@ -25,7 +25,7 @@ import {
   StatStrip,
   T,
   type StatStripItem,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { relativeTime } from '../../lib/relativeTime';
 import { RecordLink } from '../decisions/RecordLink';

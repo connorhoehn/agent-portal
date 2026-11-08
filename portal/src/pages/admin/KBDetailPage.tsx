@@ -32,7 +32,7 @@ import {
   SegmentedControl,
   Stack,
   VisuallyHidden,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch.js';
 import { useCrumbLabel } from '../../lib/crumbLabels';

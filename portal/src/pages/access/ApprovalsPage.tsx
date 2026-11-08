@@ -4,7 +4,7 @@
 // approve / reject / request information are explicit controls with a comment
 // and a confirmation. Bulk decisions are deliberately absent.
 
-import { CollectionToolbar, DataTable, Stack, T, type DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+import { CollectionToolbar, DataTable, Stack, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';

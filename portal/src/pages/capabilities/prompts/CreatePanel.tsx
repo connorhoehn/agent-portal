@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Card, Chip, DetailHeader, FilterChip, FormField, FormRow, Inline, InlineAlert, Input, SectionLabel, Stack, Textarea, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, Chip, DetailHeader, FilterChip, FormField, FormRow, Inline, InlineAlert, Input, SectionLabel, Stack, Textarea, T } from '@connorhoehn/ui-components/shared';
 import { InferenceSettings, type InferenceSettingsValue } from './InferenceSettings';
 import { STARTER_TEMPLATES } from './starterTemplates';
 import {

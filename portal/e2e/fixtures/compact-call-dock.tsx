@@ -1,7 +1,7 @@
 import '../../src/app.css';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { CallDock, type CallDockPhase } from '@connorhoehnslalom/ui-components/video';
+import { CallDock, type CallDockPhase } from '@connorhoehn/ui-components/video';
 
 const noop = () => {};
 function Fixture() {

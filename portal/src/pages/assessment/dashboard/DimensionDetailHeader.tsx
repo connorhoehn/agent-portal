@@ -7,7 +7,7 @@
 // — so this is composed once per docs/ui-components-queue.md rather than
 // fought into a shape it doesn't fit.
 
-import { Chip, Inline, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, Inline, SectionLabel, Stack } from '@connorhoehn/ui-components/shared';
 import type { Dimension } from '../types';
 import { railTracks } from '../assessmentFormat';
 import { LevelBadge } from './LevelBadge';

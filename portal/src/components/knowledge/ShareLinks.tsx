@@ -14,7 +14,7 @@
 import { useCallback, useState } from 'react';
 import {
   Button, Card, Chip, EntityCell, FormField, Inline, Input, MetaLine, SectionLabel, Select, Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 

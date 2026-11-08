@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
-import { PersonDetailCard, type PersonDetailCardProps } from '@connorhoehnslalom/ui-components';
-import { Avatar, Button, Chip, EmptyState, Inline, InlineAlert, LoadingState, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { PersonDetailCard, type PersonDetailCardProps } from '@connorhoehn/ui-components';
+import { Avatar, Button, Chip, EmptyState, Inline, InlineAlert, LoadingState, Stack, T } from '@connorhoehn/ui-components/shared';
 import { useSession } from '../../lib/auth';
 import portraits from '../../lib/demoPortraits.json';
 import { demoPublicProfiles } from './demoPublicProfiles';

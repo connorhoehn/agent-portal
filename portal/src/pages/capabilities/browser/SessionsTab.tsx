@@ -3,7 +3,7 @@ import {
   Button, Card, CardHeader, Chip, CloseIcon, IconButton, Inline, InlinePlaceholder, Input,
   Link as ExternalLink, MetaLine, Stack, T, Table, TableBody, TableHead, TableRow, TableTd,
   TableTh,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../../lib/capabilities';
 import { useFetch } from '../../../hooks/useFetch';
 import { UnavailableNotice } from '../../../components/UnavailableNotice';

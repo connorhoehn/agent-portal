@@ -6,7 +6,7 @@
 //
 // Pure and dependency-light so it can be unit-tested and reused.
 
-import type { OrgGraphPerson as GraphPerson } from '@connorhoehnslalom/ui-components';
+import type { OrgGraphPerson as GraphPerson } from '@connorhoehn/ui-components';
 
 export type { GraphPerson };
 

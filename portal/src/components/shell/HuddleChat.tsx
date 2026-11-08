@@ -17,11 +17,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { useGatewayOptional, type useReactions } from '@connorhoehn/realtime-modules/client';
-import { composerDraftOf, useComposerFocus, useComposerFocusReveal, useThreadInput, type MentionCandidate, type RichChatComposerHandle, type RichChatDraft } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { composerDraftOf, useComposerFocus, useComposerFocusReveal, useThreadInput, type MentionCandidate, type RichChatComposerHandle, type RichChatDraft } from '@connorhoehn/ui-components/social/rich-composer';
 import { PageReferenceCard } from '../chat/PageReferenceCard';
 import { ConversationThread, useConversation, type ConversationRuntime } from '../chat/ConversationThread';
-import { ChatSidePanelFrame, ReactionOverlay, ReactionPicker, SidePaneSplit, useSidePaneHost } from '@connorhoehnslalom/ui-components';
-import { AtIcon, Button, DocumentAddIcon, FloatingPanel, IconButton, Inline, InlineAlert, InlinePopover, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { ChatSidePanelFrame, ReactionOverlay, ReactionPicker, SidePaneSplit, useSidePaneHost } from '@connorhoehn/ui-components';
+import { AtIcon, Button, DocumentAddIcon, FloatingPanel, IconButton, Inline, InlineAlert, InlinePopover, Stack, T } from '@connorhoehn/ui-components/shared';
 import { aboveFooterEnd, useFooterAnchorKey } from './footerPanel';
 import { useSession } from '../../lib/auth';
 import { useGatewayFrames } from '../../lib/gatewayFrames';
@@ -31,7 +31,7 @@ import { INERT_MEETING, announceInstead, huddleChatChannelFor, isBreakoutChat } 
 import { MeetingPane, useCallMeeting } from './CallMeeting';
 import { currentCallPage, isCallContextReference, readCallChatPageReference, type CallPageDescriptor } from '../../lib/callPages';
 import { useCallBlockPageClaimed, useCallHost, useCallMediaPanel, useClaimCallBlock } from '../../lib/conversationCall';
-import { useMeetingChat, type MeetingChatBinding } from '@connorhoehnslalom/ui-components/integrations/realtime';
+import { useMeetingChat, type MeetingChatBinding } from '@connorhoehn/ui-components/integrations/realtime';
 import { callScopeKey, hasJoinedCall, huddleChatScopeTenant } from './callShellModel';
 import { CallReactionPlayback } from '../../lib/callReactionPlayback';
 import { settleHuddleDraft } from '../../lib/huddleDraft';

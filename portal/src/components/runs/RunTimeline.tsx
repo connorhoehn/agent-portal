@@ -24,7 +24,7 @@ import {
 } from 'react';
 import {
   Card, Chip, CodeBlock, EmptyState, Inline, InlineAlert, MetaLine, SectionLabel, Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { Markdown } from '../Markdown';
 import { toolSummary as summarizeTool } from './toolSummary';
 

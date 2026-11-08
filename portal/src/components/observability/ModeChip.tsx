@@ -2,7 +2,7 @@
 // was produced against a LIVE agent runtime or in SIM (deterministic synthetic)
 // mode. Falls back to the raw label for unknown values.
 
-import { Chip } from '@connorhoehnslalom/ui-components/shared';
+import { Chip } from '@connorhoehn/ui-components/shared';
 
 type Tone = 'success' | 'warning' | 'danger' | 'neutral';
 

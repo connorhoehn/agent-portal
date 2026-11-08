@@ -28,7 +28,7 @@ import {
   Select,
   StatusPill,
   T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useNavigate, useParams } from 'react-router';
 import { KeyValue } from '../../components/KeyValue';
 import { RecordLink } from '../decisions/RecordLink';

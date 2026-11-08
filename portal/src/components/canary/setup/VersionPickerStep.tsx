@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import {
   Button, Divider, Inline, InlineAlert, InlinePlaceholder, MetaLine, SectionLabel, SkeletonCard, Stack, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { usePromptVersions } from '../usePromptLibrary.js';
 import type { PromptLibraryEntry } from '../types.js';
 

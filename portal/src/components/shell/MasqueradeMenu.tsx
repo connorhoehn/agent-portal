@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import {
   Button, ChoiceList, ChoiceRow, Inline, InlineAlert, InlinePopover, SectionLabel, Stack, StatusDot, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useSession, type SessionRole } from '../../lib/auth';
 import { CHOOSER } from '../../lib/tenantHome';
 import { TENANT_DISPLAY_NAMES } from '../../lib/tenants.generated.ts';

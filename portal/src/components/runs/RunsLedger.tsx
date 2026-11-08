@@ -10,7 +10,7 @@ import {
   T,
   type CollectionAction,
   type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { RecordLink } from '../../pages/decisions/RecordLink';

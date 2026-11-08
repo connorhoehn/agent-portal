@@ -16,7 +16,7 @@ import {
   Stack,
   TagEditor,
   PageSection,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { writeJson } from '../../lib/writeJson';
 import { decisionTone, inputWiring, rolesForTenantMap, truncateId } from './identityFormat';

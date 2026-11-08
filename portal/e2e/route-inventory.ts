@@ -285,7 +285,7 @@ function shellDepthSpec() {
 /** The library rail model's depth (`railDepth`) under the shell's spec. */
 export function depthOf(url: string): number {
   const u = new URL(url, 'http://x');
-  const { railDepth } = require('@connorhoehnslalom/ui-components/shared') as { railDepth: (l: { pathname: string; search?: string }, s: unknown) => number };
+  const { railDepth } = require('@connorhoehn/ui-components/shared') as { railDepth: (l: { pathname: string; search?: string }, s: unknown) => number };
   return railDepth({ pathname: u.pathname, search: u.search }, shellDepthSpec());
 }
 

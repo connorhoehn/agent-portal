@@ -1,5 +1,5 @@
 // Pure half of useDeckDocument, so `node --test` can load it.
-import type { DocumentSaveState } from '@connorhoehnslalom/ui-components/doc-editor';
+import type { DocumentSaveState } from '@connorhoehn/ui-components/doc-editor';
 
 export const CONFLICT_MESSAGE = 'A newer version exists. Your edits are still here; reload the latest version to compare.';
 

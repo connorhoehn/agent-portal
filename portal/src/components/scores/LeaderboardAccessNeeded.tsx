@@ -6,7 +6,7 @@
 // denial /iq/scores already explains. Neither page carries a route-level
 // RequireRole, so a role without ViewLeaderboard got a navigable sub-rail
 // whose every entry failed raw. docs/orgiq-journeys/sme/DEFECTS.md #6.
-import { CapabilityDeniedFallback } from '@connorhoehnslalom/ui-components/shared';
+import { CapabilityDeniedFallback } from '@connorhoehn/ui-components/shared';
 
 export function LeaderboardAccessNeeded() {
   return (

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Stack } from '@connorhoehn/ui-components/shared';
 import { CollectionCommandHost, type CollectionCommandAdapter } from '../../components/collections/CollectionCommandHost';
 
 /** The observability detail pages render inside BuildSectionLayout, which

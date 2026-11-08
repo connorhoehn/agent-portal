@@ -9,7 +9,7 @@
 
 import { useEffect, type ReactElement } from 'react';
 import { useGatewayOptional, usePresence } from '@connorhoehn/realtime-modules/client';
-import { EMPTY_DECK_PRESENCE, useDeckPresence, type DeckPresence } from '@connorhoehnslalom/ui-components/doc-editor';
+import { EMPTY_DECK_PRESENCE, useDeckPresence, type DeckPresence } from '@connorhoehn/ui-components/doc-editor';
 
 export { EMPTY_DECK_PRESENCE };
 export type { DeckPresence };

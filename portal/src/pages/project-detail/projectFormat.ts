@@ -4,7 +4,7 @@
 // JSX tree — the point rollups, the swimlane bucketing, the "which run speaks
 // for this item" tiebreak — lives here so it can be read and tested on its own.
 
-import type { ChipTone } from '@connorhoehnslalom/ui-components/shared';
+import type { ChipTone } from '@connorhoehn/ui-components/shared';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp.ts';
 import type { BotRun } from '../bots/BotsPage';
 import type {

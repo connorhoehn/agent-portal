@@ -10,8 +10,8 @@ import {
   DetailSection, EmptyState, EntityCell, IconButton, Inline, InlinePlaceholder, MetaLine,
   PageSection, PlayCircleIcon, PresenceDot, SegmentedControl, Select, SendIcon, Stack, Switch, T,
   Tabs, Toolbar, ToolbarLabel, ToolbarSeparator, useToastOptional, type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
-import { LogStream, type LogLine } from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
+import { LogStream, type LogLine } from '@connorhoehn/ui-components/shared';
 import { Link as RouterLink, useSearchParams } from 'react-router';
 import { RunLog } from './RunLog';
 import { CapabilityBrief, ModelChips } from './ModelCapability';

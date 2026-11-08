@@ -2,7 +2,7 @@
 // router, a modified click (new tab) keeps the anchor's own behaviour.
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { Link } from '@connorhoehnslalom/ui-components/shared';
+import { Link } from '@connorhoehn/ui-components/shared';
 
 export function RecordLink({ to, children, ...rest }: { to: string; children: ReactNode; className?: string; title?: string; 'data-testid'?: string }) {
   const navigate = useNavigate();

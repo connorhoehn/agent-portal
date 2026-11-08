@@ -20,7 +20,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { formatTokenCount } from '../lib/format';
-import { Card, Chip, Inline, Stack, StatusDot, T } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Chip, Inline, Stack, StatusDot, T } from '@connorhoehn/ui-components/shared';
 
 // ── Palette + formatters shared with AgentFlowPage.tsx ───────────────────────
 

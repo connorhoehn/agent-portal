@@ -2,7 +2,7 @@ import '../../src/app.css';
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, useLocation, useSearchParams } from 'react-router';
-import { Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Stack } from '@connorhoehn/ui-components/shared';
 import { SessionProvider, useSession } from '../../src/lib/auth';
 import { InitiativeFiles } from '../../src/pages/projects/InitiativeFiles';
 import { PageRecordings } from '../../src/components/recordings/PageRecordings';

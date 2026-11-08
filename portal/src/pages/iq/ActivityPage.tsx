@@ -12,7 +12,7 @@
 
 import { useSearchParams } from 'react-router';
 import { useMemo } from 'react';
-import { Button, Inline, PageHeader, Select, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Inline, PageHeader, Select, Stack } from '@connorhoehn/ui-components/shared';
 import { WorkGraphActivity } from '../../components/work-graph/WorkGraphActivity';
 import { useFetch } from '../../hooks/useFetch';
 import type { WorkGraphSubject } from '../../lib/workGraph';

@@ -8,10 +8,10 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useFlowRun } from '../../../hooks/useFlowRun';
-import { AgentRunCard } from '@connorhoehnslalom/ui-components/social';
-import { PresentationView, svgDataUri, type PresentationRevision } from '@connorhoehnslalom/ui-components/doc-editor';
-import { Button, Card, InlineAlert, Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
-import { ImageThumbnail } from '@connorhoehnslalom/ui-components';
+import { AgentRunCard } from '@connorhoehn/ui-components/social';
+import { PresentationView, svgDataUri, type PresentationRevision } from '@connorhoehn/ui-components/doc-editor';
+import { Button, Card, InlineAlert, Inline, Stack, T } from '@connorhoehn/ui-components/shared';
+import { ImageThumbnail } from '@connorhoehn/ui-components';
 import {
   MAX_POLLS, canSave, deckRunStatusOf, fetchDeckStatus, isTerminal, narrativeNotice, pollDelayMs, saveDeckRun, savedDeckId, socialDeckPaths,
   type DeckRunStatus,

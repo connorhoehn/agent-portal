@@ -3,7 +3,7 @@
 // imported under plain `node --test`) so the filter itself is unit-testable
 // — see __tests__/iqSubNavCatalog.test.ts, DEFECTS.md #10.
 
-import type { SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import type { SubNavItem } from '@connorhoehn/ui-components/shared';
 
 // Prompt Management sub-nav — shared across the prompt-ops overview,
 // /iq/prompts, /iq/canary, and the audit surfaces.

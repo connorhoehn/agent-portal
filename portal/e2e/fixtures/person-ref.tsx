@@ -3,7 +3,7 @@ import '../../src/app.css';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router';
-import { Button, HoverCard, Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, HoverCard, Inline, Stack, T } from '@connorhoehn/ui-components/shared';
 import { SessionProvider, useSession } from '../../src/lib/auth';
 import { PersonRef } from '../../src/pages/project-detail/PersonRef';
 

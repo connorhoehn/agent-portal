@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   Button, EditIcon, IconButton, Input, Modal, Stack, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 
 export interface RenameNodeDialogProps {
   /** The row being renamed, or null when the dialog is closed. */

@@ -3,7 +3,7 @@ import {
   T,
   Button, Card, CodeBlock, FormField, Inline, InlineAlert, Input, MetaLine, Modal,
   SectionLabel, Select, Stack, Textarea,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import type { KbRegistryEntry } from '../../pages/admin/KBRegistryPage.js';
 import { ProvisioningProgress } from './ProvisioningProgress.js';
 

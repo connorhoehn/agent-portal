@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Banner, Button, LoadingState, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Banner, Button, LoadingState, Stack, T } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
 import { deckPaths, type DeckSummary } from '../decks/decksApi';
 import { DocumentLibrary } from '../knowledge/DocumentLibrary';

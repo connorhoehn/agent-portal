@@ -7,7 +7,7 @@
 
 import {
   CardHeader, CodeBlock, Card, Chip, EmptyState, Inline, LoadingState, MetaLine, SectionLabel, Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
 import { UnavailableNotice } from '../../../components/UnavailableNotice';
 import { dimensionLabel, needsInputSentence, pushCommandFor, statusMeta, type Story, type StoriesResponse } from '../assessmentFormat';

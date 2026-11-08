@@ -7,7 +7,7 @@
 // Discussion tab (WorkItemDetail `liveNotes`), which therefore list the same
 // messages and share the `/summarize` cards.
 
-import type { CommentListItem } from '@connorhoehnslalom/ui-components';
+import type { CommentListItem } from '@connorhoehn/ui-components';
 import type { useChat } from '@connorhoehn/realtime-modules/client';
 import type { ConversationRuntime } from '../../components/chat/ConversationThread';
 

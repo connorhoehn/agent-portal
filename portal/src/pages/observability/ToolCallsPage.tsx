@@ -49,7 +49,7 @@ import {
   TableRow,
   TableTd,
   TableTh, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 
 import { useFetch } from '../../hooks/useFetch';
 import { useUrlState } from '../../lib/useUrlState';

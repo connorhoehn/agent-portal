@@ -4,7 +4,7 @@ import { useSession } from '../../lib/auth';
 import { useRealtimeEndpoints } from '../../lib/useRealtimeEndpoints';
 import type { ConnectionState } from '@connorhoehn/realtime-modules/client/ws';
 import { useGateway } from '@connorhoehn/realtime-modules/client/ws';
-import { Inline, StatusDot } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, StatusDot } from '@connorhoehn/ui-components/shared';
 import { nextPollDelay, isDocumentHidden } from '../../hooks/pollSchedule';
 
 // The gateway's URL comes from the realtime-token response (`gatewayUrl`),

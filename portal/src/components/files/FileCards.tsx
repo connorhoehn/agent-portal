@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { CatalogGrid, DocumentIcon, Inline, ListIcon, SegmentedControl, SelectableCard, SplitViewIcon, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { CatalogGrid, DocumentIcon, Inline, ListIcon, SegmentedControl, SelectableCard, SplitViewIcon, Stack, T } from '@connorhoehn/ui-components/shared';
 
 export type FileView = 'cards' | 'list';
 

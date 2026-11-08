@@ -29,7 +29,7 @@ import {
   Stack,
   StatStrip,
   StatusDot, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import {
   ComposedChart,
   Bar,

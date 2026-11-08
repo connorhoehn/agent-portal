@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router';
-import { type SubNavItem, activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
+import { type SubNavItem, activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehn/ui-components/shared';
 import { BuildSectionLayout } from '../../components/shell/BuildSectionLayout';
 
 const ITEMS: SubNavItem[] = [

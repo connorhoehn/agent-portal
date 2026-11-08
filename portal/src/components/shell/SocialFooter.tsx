@@ -19,12 +19,12 @@
 // collapses it back into the footer's hidden thumbnail strip.
 import { useId, useLayoutEffect, useRef } from 'react';
 import { conversationCallDockProps } from '@connorhoehn/realtime-modules/client/video';
-import { Button, IconButton, Inline, Stack, Tooltip } from '@connorhoehnslalom/ui-components/shared';
+import { Button, IconButton, Inline, Stack, Tooltip } from '@connorhoehn/ui-components/shared';
 import { TodayStripSlot } from './FooterTodayStrip';
-import { SettingsGearIcon } from '@connorhoehnslalom/ui-components';
-import { useSidePaneHost } from '@connorhoehnslalom/ui-components';
-import { HuddleBar, type HuddleBarMedia, type HuddleBarPhase } from '@connorhoehnslalom/ui-components/video';
-import { useComposerFocus } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { SettingsGearIcon } from '@connorhoehn/ui-components';
+import { useSidePaneHost } from '@connorhoehn/ui-components';
+import { HuddleBar, type HuddleBarMedia, type HuddleBarPhase } from '@connorhoehn/ui-components/video';
+import { useComposerFocus } from '@connorhoehn/ui-components/social/rich-composer';
 import { useSession } from '../../lib/auth';
 import { useGatewayFrames } from '../../lib/gatewayFrames';
 import { callCounts, callDrawn, useCallBlockPlacement, useCallHost, useCallMediaPanel } from '../../lib/conversationCall';

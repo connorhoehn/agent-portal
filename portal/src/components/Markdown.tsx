@@ -19,7 +19,7 @@
 // wrapper instead of as a second markdown implementation. If the library grows
 // a `scale`/`density` prop, this file becomes a direct re-export.
 
-import { MarkdownView } from '@connorhoehnslalom/ui-components/shared';
+import { MarkdownView } from '@connorhoehn/ui-components/shared';
 
 interface MarkdownProps {
   children: string;

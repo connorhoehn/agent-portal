@@ -12,7 +12,7 @@
 // has no business interrupting someone about to confirm a job.
 
 import { useEffect, useState } from 'react';
-import { Button, Card, Chip, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, Chip, Inline, Stack } from '@connorhoehn/ui-components/shared';
 import { writeJson } from '../../lib/writeJson';
 import { T } from './workShared';
 import {

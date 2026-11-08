@@ -4,7 +4,7 @@
 // row means.
 
 import { Link } from 'react-router';
-import { Chip, type ChipTone } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, type ChipTone } from '@connorhoehn/ui-components/shared';
 import type { JobToolCall } from './toolCallFormat';
 import { runStateChip, severityTone } from '../../lib/statusTone';
 import { usd } from '../../lib/format';
@@ -145,7 +145,7 @@ export function money(n: number | undefined): string {
 // gone the way the twelve `pages/*/Text.tsx` shims already went. The extra
 // `tabIndex`/`onKeyDown` this forwarded existed only for a span pretending
 // to be a link — now a real `<Link>` above.
-export { T } from '@connorhoehnslalom/ui-components/shared';
+export { T } from '@connorhoehn/ui-components/shared';
 
 /** Chip naming the bot behind a queued job. Scheduled maintenance and work a
  * person queued this morning read identically without it — and only one of

@@ -8,7 +8,7 @@
 import type {
   ApiSubmissionEnvelope, FeedbackTask, LinkStatus, RowStatus, RunRecord, RunStatus, SubmissionGroupRef, SubmissionListItem, SubmissionRevisionGroup } from './secondaryTypes';
 import type { AssessmentSSEEvent } from './knowledge/types';
-import type { ChipTone } from '@connorhoehnslalom/ui-components/shared';
+import type { ChipTone } from '@connorhoehn/ui-components/shared';
 import { pgTimestampMs } from '../../lib/pgTimestamp.ts';
 
 // ─── Agent-run status → StatusPill state ────────────────────────────────────

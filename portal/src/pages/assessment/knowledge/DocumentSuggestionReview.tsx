@@ -3,8 +3,8 @@
 // the proposal (documentSuggestionsModel). Readers get the cards without any
 // Accept/Reject controls (the cards hide absent handlers by design).
 
-import { SuggestionCard, SuggestionReviewList } from '@connorhoehnslalom/ui-components/doc-editor';
-import { Chip, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { SuggestionCard, SuggestionReviewList } from '@connorhoehn/ui-components/doc-editor';
+import { Chip, Stack } from '@connorhoehn/ui-components/shared';
 import { proposalProducerLabel, type StoredDocumentProposal } from './documentProposalClient';
 import { splitSuggestionBlocks, type SuggestionMark, type SuggestionMarks } from './documentSuggestionsModel';
 

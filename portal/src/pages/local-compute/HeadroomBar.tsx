@@ -17,7 +17,7 @@
 // here would itself trip validate-component-discipline.sh, which greps the
 // file rather than its syntax tree — so this paragraph spells it out instead.)
 
-import { Inline, ProgressBar, T } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, ProgressBar, T } from '@connorhoehn/ui-components/shared';
 
 /**
  * Where a reading stops being comfortable.

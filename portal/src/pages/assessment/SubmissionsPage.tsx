@@ -38,7 +38,7 @@ import {
   T,
   TrashIcon,
   Wizard,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { RecordNotFound, UnavailableNotice } from '../../components/UnavailableNotice';
 import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
 import { useCrumbLabel } from '../../lib/crumbLabels';

@@ -22,7 +22,7 @@ import {
   Stack,
   T,
   type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';

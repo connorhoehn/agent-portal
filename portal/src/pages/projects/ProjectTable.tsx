@@ -6,7 +6,7 @@ import {
   ProgressBar,
   StatusDot,
   type DataTableColumn, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { Link } from 'react-router';
 import { relativeTime } from '../../lib/relativeTime';
 import { ProjectStatusChip } from './ProjectStatusChip';

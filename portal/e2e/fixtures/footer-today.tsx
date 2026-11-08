@@ -1,12 +1,12 @@
 // Mounted production footer; all identities/calls below are inert fixtures.
-import '@connorhoehnslalom/ui-components/styles.css';
+import '@connorhoehn/ui-components/styles.css';
 import '../../src/app.css';
 import { useState, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, useLocation } from 'react-router';
-import { Button, ChatIcon, Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
-import { SidePaneProvider } from '@connorhoehnslalom/ui-components';
-import { callCounts, callDrawn } from '@connorhoehnslalom/ui-components/integrations/realtime';
+import { Button, ChatIcon, Inline, Stack, T } from '@connorhoehn/ui-components/shared';
+import { SidePaneProvider } from '@connorhoehn/ui-components';
+import { callCounts, callDrawn } from '@connorhoehn/ui-components/integrations/realtime';
 import { SessionProvider, useSession } from '../../src/lib/auth';
 import { TodayPlacementProvider } from '../../src/components/shell/FooterTodayStrip';
 import { SocialFooter } from '../../src/components/shell/SocialFooter';

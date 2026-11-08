@@ -29,13 +29,13 @@ import {
   Textarea,
   Tooltip,
   type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
 import { RecordNotFound } from '../../components/UnavailableNotice';
 import { useCrumbLabel } from '../../lib/crumbLabels';
-import { LoadingState } from '@connorhoehnslalom/ui-components/shared';
+import { LoadingState } from '@connorhoehn/ui-components/shared';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';

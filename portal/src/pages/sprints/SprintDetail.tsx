@@ -21,7 +21,7 @@ import {
   StatStrip,
   TabPanel,
   Tabs,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { SprintBoard } from './SprintBoard';
 import { GrantsPanel } from './GrantsPanel';
 import { dateRange, isOverEnvelope, sprintWindow, STATUS_TONE, timeLeftLabel, usd } from './sprintFormat';

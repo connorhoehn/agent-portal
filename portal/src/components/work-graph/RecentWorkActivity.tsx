@@ -4,8 +4,8 @@
 
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { ActionRowList, ActionRowPerson, type ActionRowColumn } from '@connorhoehnslalom/ui-components';
-import { ArrowRightIcon, Button, Inline, PageSection, T } from '@connorhoehnslalom/ui-components/shared';
+import { ActionRowList, ActionRowPerson, type ActionRowColumn } from '@connorhoehn/ui-components';
+import { ArrowRightIcon, Button, Inline, PageSection, T } from '@connorhoehn/ui-components/shared';
 import { recentWorkEvents, type WorkGraphSubject } from '../../lib/workGraph';
 import { relativeTime } from '../../lib/relativeTime';
 import { useWorkGraphSource } from './WorkGraphActivity';

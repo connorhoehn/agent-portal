@@ -4,7 +4,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Button, Checkbox, FormField, Inline, Input, Modal, Stack, Text } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Checkbox, FormField, Inline, Input, Modal, Stack, Text } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
 import { toastError } from '../../../lib/toastStore';
 import type { TeamDetailResponse } from '../types';

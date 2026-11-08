@@ -19,7 +19,7 @@ import {
   LoadingState,
   MetaLine,
   Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
 import { LevelBadge } from './LevelBadge';
 

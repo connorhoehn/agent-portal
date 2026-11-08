@@ -16,7 +16,7 @@ import {
   KeyValue,
   Stack,
   type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { absoluteTime, durationLabel } from '../../lib/relativeTime';
 import { sendJson, writeJson } from '../../lib/writeJson';
 import { toastError, toastSuccess } from '../../lib/toastStore';

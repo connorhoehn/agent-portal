@@ -39,12 +39,12 @@
 // library composites, and anything missing goes to the library first.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Avatar, Badge, Button, Tabs } from '@connorhoehnslalom/ui-components/shared';
+import { Avatar, Badge, Button, Tabs } from '@connorhoehn/ui-components/shared';
 import {
   ComputeProvider, ComputerLab, fixtureComputers, fixtureModels, fixtureRuntimeStatus,
   installMockShellSocket, installMockTailSource, mockShellUrl, mockTailUrl,
-} from '@connorhoehnslalom/ui-components/compute';
-import type { ComputeClient } from '@connorhoehnslalom/ui-components/compute';
+} from '@connorhoehn/ui-components/compute';
+import type { ComputeClient } from '@connorhoehn/ui-components/compute';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 //

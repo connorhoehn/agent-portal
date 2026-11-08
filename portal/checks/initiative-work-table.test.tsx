@@ -4,7 +4,7 @@ import React from 'react';
 import { test } from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router';
-import { WorkTableView as InitiativeWorkTable, type WorkTableViewProps } from '@connorhoehnslalom/ui-components';
+import { WorkTableView as InitiativeWorkTable, type WorkTableViewProps } from '@connorhoehn/ui-components';
 import { InitiativesExplorer } from '../src/pages/projects/InitiativesExplorer';
 import { WORK_GROUPS } from '../src/pages/project-detail/workListModel';
 

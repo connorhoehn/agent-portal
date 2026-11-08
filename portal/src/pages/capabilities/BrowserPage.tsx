@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { InlineAlert, PageSection, Tabs } from '@connorhoehnslalom/ui-components/shared';
+import { InlineAlert, PageSection, Tabs } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { WebQATab } from './browser/WebQATab';
 import { JourneyTab } from './browser/JourneyTab';

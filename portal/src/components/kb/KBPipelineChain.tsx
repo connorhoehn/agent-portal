@@ -1,6 +1,6 @@
 import type { KbRegistryEntry } from '../../pages/admin/KBRegistryPage.js';
 import {
-  T, Card, Inline, SectionLabel, Stack, StatusDot } from '@connorhoehnslalom/ui-components/shared';
+  T, Card, Inline, SectionLabel, Stack, StatusDot } from '@connorhoehn/ui-components/shared';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 

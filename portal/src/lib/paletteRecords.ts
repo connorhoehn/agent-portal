@@ -3,7 +3,7 @@
 // GET /api/search, the other four GET /api/<tenant>/search
 // (docs/user-search-goal.md S2/S3). Rows come back grouped by type, in the
 // order the server ranked them, each with a chip label and a same-origin href.
-import type { PaletteRecord, PaletteRecordGroup, SearchPaletteRecords } from '@connorhoehnslalom/ui-components';
+import type { PaletteRecord, PaletteRecordGroup, SearchPaletteRecords } from '@connorhoehn/ui-components';
 
 export type PaletteTenant = 'orgiq' | 'assessment' | 'social' | 'pipelines' | 'access';
 

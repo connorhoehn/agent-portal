@@ -1,7 +1,7 @@
 // A run's live status, drawn with library status composites. Used on the deck
 // pages (assessment, pipelines) while a generation or agent revision is in flight.
 
-import { Banner, Inline, Spinner, StatusPill, Text } from '@connorhoehnslalom/ui-components/shared';
+import { Banner, Inline, Spinner, StatusPill, Text } from '@connorhoehn/ui-components/shared';
 import type { DeckRunState } from './deckApi';
 import { runFailureMessage, runProgressLabel } from './decksModel';
 

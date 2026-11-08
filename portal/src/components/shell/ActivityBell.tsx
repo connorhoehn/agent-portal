@@ -17,7 +17,7 @@ import { useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import type { SharedNotificationsApi } from './SharedNotifications';
 import { useSharedNotifications } from './SharedNotifications';
-import { WrappedNotificationBell } from '@connorhoehnslalom/ui-components/integrations/realtime';
+import { WrappedNotificationBell } from '@connorhoehn/ui-components/integrations/realtime';
 import { useSession } from '../../lib/auth';
 
 const KIND_LABEL: Record<string, string> = {

@@ -39,7 +39,7 @@ import {
   MetaLine,
   SectionLabel,
   Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 
 interface Environment {
   id: string;

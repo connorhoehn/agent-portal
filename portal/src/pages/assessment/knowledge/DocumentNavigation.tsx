@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { ConfirmDialog } from '@connorhoehnslalom/ui-components/shared';
+import { ConfirmDialog } from '@connorhoehn/ui-components/shared';
 
 interface NavigationGuard {
   navigate: (action: () => void) => void;

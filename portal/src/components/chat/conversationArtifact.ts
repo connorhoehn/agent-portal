@@ -10,7 +10,7 @@
 // Here both are private run cards over the readable transcript; nothing reaches
 // the conversation until the requester presses Post (diagram) or Save (doc).
 
-import type { AgentRunStatus, ChatCommand } from '@connorhoehnslalom/ui-components/social';
+import type { AgentRunStatus, ChatCommand } from '@connorhoehn/ui-components/social';
 
 export type ArtifactCommandName = 'diagram' | 'doc';
 export interface ArtifactSpan { text: string; messageId: string; author: string }

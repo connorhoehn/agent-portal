@@ -91,7 +91,7 @@ export default defineConfig(async () => ({
       '@tiptap/extension-placeholder', '@tiptap/extension-collaboration',
     ],
     exclude: [
-      '@connorhoehnslalom/ui-components',
+      '@connorhoehn/ui-components',
       '@tiptap/pm/model', '@tiptap/pm/state', '@tiptap/pm/transform', '@tiptap/pm/view',
       'prosemirror-state', 'prosemirror-model', 'prosemirror-transform', 'prosemirror-view',
       'prosemirror-gapcursor', 'prosemirror-dropcursor', 'prosemirror-history',

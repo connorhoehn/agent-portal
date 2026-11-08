@@ -1,6 +1,6 @@
 // Pure formatting for local-compute displays.
 
-import type { ChipTone } from '@connorhoehnslalom/ui-components/shared';
+import type { ChipTone } from '@connorhoehn/ui-components/shared';
 import { runStateChip } from '../../lib/statusTone.ts';
 import { relativeTime } from '../../lib/relativeTime.ts';
 import { pgTimestampMs } from '../../lib/pgTimestamp.ts';

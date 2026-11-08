@@ -4,7 +4,7 @@ import '../../src/app.css';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { conversationCallDockProps, type ConversationCallDockState } from '@connorhoehn/realtime-modules/client/video';
-import { CallDock, StreamVideo, MeetingToolbar, ChatBubbleIcon, UsersIcon, MeetingHandIcon, MeetingReactIcon } from '@connorhoehnslalom/ui-components/video';
+import { CallDock, StreamVideo, MeetingToolbar, ChatBubbleIcon, UsersIcon, MeetingHandIcon, MeetingReactIcon } from '@connorhoehn/ui-components/video';
 import { ConversationComposer } from '../../src/lib/conversationComposer';
 import { separateCallScreenTiles } from '../../src/lib/callScreenTiles';
 

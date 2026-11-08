@@ -10,8 +10,8 @@
 
 import { useState } from 'react';
 import { useFlowRun } from '../../hooks/useFlowRun';
-import { AgentRunCard } from '@connorhoehnslalom/ui-components/social';
-import { Button, Card, InlineAlert, Inline, MarkdownView, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { AgentRunCard } from '@connorhoehn/ui-components/social';
+import { Button, Card, InlineAlert, Inline, MarkdownView, Stack } from '@connorhoehn/ui-components/shared';
 import {
   MAX_POLLS, agentRunStatusOf, canPost, isTerminal, pollDelayMs, reviewMarkdown,
   type PostedSummary, type SummarizeApi, type SummarizeRunStatus,

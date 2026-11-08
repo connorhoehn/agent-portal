@@ -2,7 +2,7 @@
 // lists of the same records read the same (docs/layout-cascade.md "Tables":
 // one thing per cell, numeric dates right-aligned, free text capped).
 
-import { Chip, Link, T, type DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, Link, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { relativeTime } from '../../lib/relativeTime';

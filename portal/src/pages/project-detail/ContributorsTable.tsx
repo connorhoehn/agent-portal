@@ -8,8 +8,8 @@
 // PersonRef — the same link-plus-people-card every other person on this page
 // renders as.
 
-import { DataTable, InlinePlaceholder, T } from '@connorhoehnslalom/ui-components/shared';
-import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+import { DataTable, InlinePlaceholder, T } from '@connorhoehn/ui-components/shared';
+import type { DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { PersonRef } from './PersonRef';
 import { RoleCycleChip } from '../../components/marketplace/GovernanceEditor';
 import type { ProjectContributor } from './types';

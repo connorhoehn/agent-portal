@@ -4,7 +4,7 @@ import '../../src/app.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router';
-import { SidePaneProvider, SidePaneSplit } from '@connorhoehnslalom/ui-components';
+import { SidePaneProvider, SidePaneSplit } from '@connorhoehn/ui-components';
 import { DeckEditorPage, type DeckEditorDocument } from '../../src/components/decks/DeckEditorPage';
 import { useDeckAgentRun } from '../../src/components/decks/useDeckAgentRun';
 import { HuddleChatProvider } from '../../src/components/shell/HuddleChat';

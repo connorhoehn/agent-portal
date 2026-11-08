@@ -25,7 +25,7 @@ import {
   Button, Card, CardHeader, Chip, DataTable, Inline, PageSection,
   SearchInput, SegmentedControl, Table, TableHead, TableBody, TableRow, TableTh, TableTd,
   type DataTableColumn, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { GuardrailRuleBadge } from '../../components/observability/GuardrailRuleBadge';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';

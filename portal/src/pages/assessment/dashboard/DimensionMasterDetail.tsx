@@ -16,7 +16,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router';
-import { ExplorerLayout } from '@connorhoehnslalom/ui-components';
+import { ExplorerLayout } from '@connorhoehn/ui-components';
 import {
   Button,
   Card,
@@ -33,7 +33,7 @@ import {
   useRailFold,
   useToast,
   type TabItem,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { isOpenFollowUp } from '../assessmentFormat';
 import { STANDARDS_FOLDER_ID, enterpriseDocPath, standardFor } from '../dimensionStandards';
 import { useFetch } from '../../../hooks/useFetch';

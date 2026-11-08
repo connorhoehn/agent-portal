@@ -30,7 +30,7 @@ import {
   SectionLabel,
   Stack,
   Tabs,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { useSession } from '../../lib/auth';

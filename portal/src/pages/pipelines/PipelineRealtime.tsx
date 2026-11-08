@@ -5,7 +5,7 @@
 // explicit unavailable notice instead of a dead composer.
 
 import { useRef } from 'react';
-import { PresenceAvatars, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { PresenceAvatars, Stack } from '@connorhoehn/ui-components/shared';
 import { usePresence } from '@connorhoehn/realtime-modules/client';
 import { useCapabilities } from '../../lib/capabilities';
 import { ConversationThread, useConversation } from '../../components/chat/ConversationThread';

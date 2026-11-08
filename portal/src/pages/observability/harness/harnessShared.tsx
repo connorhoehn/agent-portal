@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import {
   Card, Chip, Inline, InlineAlert, PageSection, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 
 /**
  * `labeled` preserves RunDetailPage's "✓ pass"/"✗ fail" text — CompareRunsPage

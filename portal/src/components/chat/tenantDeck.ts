@@ -12,8 +12,8 @@
 //
 // Pure: no React, so node:test covers the routing.
 
-import type { ChatCommand } from '@connorhoehnslalom/ui-components/social';
-import { parseDeckText } from '@connorhoehnslalom/ui-components/doc-editor';
+import type { ChatCommand } from '@connorhoehn/ui-components/social';
+import { parseDeckText } from '@connorhoehn/ui-components/doc-editor';
 import { DECK_WRITE_ACTION, type DeckSpec, type DeckPreviewResult, type DeckDetailCore, type DeckTenantId } from '../decks/deckApi.ts';
 import {
   createInitiativeDeck, getInitiativeDeck, getInitiativeDeckSpec, initiativeDeckPaths, narrativeNotice as initiativeNotice, previewInitiativeDeck,

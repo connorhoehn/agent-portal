@@ -6,8 +6,8 @@
 
 import { useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { Banner, Button, DownloadIcon, DropdownMenu, EmptyState, ErrorState, HistoryIcon, Inline, LoadingState, T, VisuallyHidden, type BreadcrumbItem } from '@connorhoehnslalom/ui-components/shared';
-import { canSaveDeck, DeckPresentationDialog, DeckReader, EditorShell, PresentationEditor, nextRevisionLabel, type PresentationEditorFrame, type PresentationFooterContext } from '@connorhoehnslalom/ui-components/doc-editor';
+import { Banner, Button, DownloadIcon, DropdownMenu, EmptyState, ErrorState, HistoryIcon, Inline, LoadingState, T, VisuallyHidden, type BreadcrumbItem } from '@connorhoehn/ui-components/shared';
+import { canSaveDeck, DeckPresentationDialog, DeckReader, EditorShell, PresentationEditor, nextRevisionLabel, type PresentationEditorFrame, type PresentationFooterContext } from '@connorhoehn/ui-components/doc-editor';
 import { DeckConflictBanner } from './DeckConflictBanner';
 import { deckSaveState } from './deckDocumentModel';
 import { useDeckCollaboration } from './useDeckCollaboration';
@@ -20,7 +20,7 @@ import { useDeckDownload, useDeckSlideTitle } from './useDeckEditorHelpers';
 import type { DeckPreviewResult, DeckSpec } from './deckApi';
 import { useCallBlock, useCallHost } from '../../lib/conversationCall';
 import { HuddleComposerDock } from '../shell/HuddleComposerDock';
-import { useComposerFocus } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { useComposerFocus } from '@connorhoehn/ui-components/social/rich-composer';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import './deckReviewLayout.css';
 

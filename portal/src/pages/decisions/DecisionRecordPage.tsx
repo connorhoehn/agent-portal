@@ -8,7 +8,7 @@ import { useNavigate, useParams } from 'react-router';
 import {
   Avatar, Card, Chip, DetailSection, Inline, KeyValue, LoadingState, MetaLine, PageSection,
   RailLayout, RailSection, SectionLabel, Stack, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { RecordNotFound, UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';

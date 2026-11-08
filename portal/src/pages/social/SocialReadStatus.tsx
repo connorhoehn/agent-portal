@@ -1,4 +1,4 @@
-import { Button, Inline, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Inline, T } from '@connorhoehn/ui-components/shared';
 import { socialReadLabel, socialReadState, type SocialListRead } from './socialReadState';
 
 /** A scoped rail status: one stable line, retry for the affected read, no toast. */

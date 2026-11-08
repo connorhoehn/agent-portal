@@ -15,7 +15,7 @@
 
 import { provenanceNote } from './answerSources';
 import type { AnswerSource, SourceProvenance } from './answerSources';
-import { Chip, Inline, MetaLine, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, Inline, MetaLine, Stack, T } from '@connorhoehn/ui-components/shared';
 
 const SUPERSCRIPT_DIGITS = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'];
 

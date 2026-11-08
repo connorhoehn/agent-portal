@@ -8,7 +8,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   Chip, CodeBlock, EmptyState, Select, SectionLabel, Stack, Inline, Tabs, T, VisuallyHidden,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { usePromptList, usePromptVersions } from '../../components/canary/usePromptLibrary.js';
 import type { PromptLibraryEntry } from '../../components/canary/types.js';
 import { diffStats, lineDiff } from './diffFormat';

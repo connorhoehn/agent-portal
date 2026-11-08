@@ -2,7 +2,7 @@
 // against the live account, the sync-gap detector, and the list's own
 // search/status filter. Nothing here is React — see `__tests__/knowledgeFormat.test.ts`.
 
-import type { ChipTone } from '@connorhoehnslalom/ui-components/shared';
+import type { ChipTone } from '@connorhoehn/ui-components/shared';
 import { relativeTime } from '../../lib/relativeTime.ts';
 
 export type DriftKind = 'missing' | 'unregistered' | 'unprovisioned' | 'status-drift' | 'ok';

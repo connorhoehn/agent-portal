@@ -10,7 +10,7 @@ import {
   SectionLabel,
   Stack,
   StatStrip,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { UnavailableNotice } from '../components/UnavailableNotice';
 import { useCapabilities } from '../lib/capabilities';

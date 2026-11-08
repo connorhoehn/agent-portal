@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Button, Textarea } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Textarea } from '@connorhoehn/ui-components/shared';
 import './budget-request-flow.css';
 
 export function DecisionPath({ stage }: { stage:'choose'|'draft'|'confirm'|'done'|'saved' }) {

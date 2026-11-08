@@ -5,8 +5,8 @@
 // offers them to a role that holds it, and the server refuses anyone else.
 
 import { useState } from 'react';
-import { ActionRowList } from '@connorhoehnslalom/ui-components';
-import { Button, FormField, Inline, Modal, Stack, T, Textarea } from '@connorhoehnslalom/ui-components/shared';
+import { ActionRowList } from '@connorhoehn/ui-components';
+import { Button, FormField, Inline, Modal, Stack, T, Textarea } from '@connorhoehn/ui-components/shared';
 import { sendJson } from '../../lib/writeJson';
 import { surfaceWriteError } from './writeJson';
 import type { ProjectDecision } from './types';

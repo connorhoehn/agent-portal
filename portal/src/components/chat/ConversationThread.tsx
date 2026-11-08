@@ -24,10 +24,10 @@
 
 import { useChat, useChatReadReceipts, useGatewayOptional, useReactions } from '@connorhoehn/realtime-modules/client';
 import { useNavigate } from 'react-router';
-import { WrappedChatPanel, type WrappedChatPanelProps } from '@connorhoehnslalom/ui-components/integrations/realtime';
+import { WrappedChatPanel, type WrappedChatPanelProps } from '@connorhoehn/ui-components/integrations/realtime';
 import { documentRecordHref } from '../../lib/workDocuments';
-import { Button, EmptyState, Inline, InlineAlert, LoadingState, LockIcon, Stack, T } from '@connorhoehnslalom/ui-components/shared';
-import { ThreadInputHandoff, useThreadInput, type ConversationComposerProps } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { Button, EmptyState, Inline, InlineAlert, LoadingState, LockIcon, Stack, T } from '@connorhoehn/ui-components/shared';
+import { ThreadInputHandoff, useThreadInput, type ConversationComposerProps } from '@connorhoehn/ui-components/social/rich-composer';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useChannelFiles } from '../../hooks/useChannelFiles';
 import { useMessagePortraits } from '../../hooks/useMessagePortraits';

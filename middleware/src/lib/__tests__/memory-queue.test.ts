@@ -123,6 +123,7 @@ describe('MemoryMessageQueue', () => {
     await expect(q.ensureQueue({ name: 'work', fifo: false, visibilityTimeoutSeconds: 30 }))
       .rejects.toMatchObject({ code: 'ConfigurationConflict' });
     await expect(q.receive('work', { consumerGroupId: 'g' })).rejects.toMatchObject({ code: 'UnsupportedOperation' });
+    await expect(q.receive('work', { subscription: { id: 's', generation: '00000000-0000-4000-8000-000000000000' } })).rejects.toMatchObject({ code: 'UnsupportedOperation' });
     expect(q.definition('work')!.fifo).toBe(true);
   });
 

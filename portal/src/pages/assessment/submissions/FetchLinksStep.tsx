@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react';
 import {
   Button, Card, CardHeader, CheckIcon, Chip, CloseIcon, DataTable, ExternalLinkIcon, IconButton, Inline, InlineAlert, Stack, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import type { CommitResponse, LinkStatus } from '../secondaryTypes';
 import { linksStepComplete, pendingLinksBanner } from '../secondaryFormat';
 import { useCapabilities } from '../../../lib/capabilities';

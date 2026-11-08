@@ -4,7 +4,7 @@
 import { useSyncExternalStore } from 'react';
 import {
   Chip, CloseIcon, EntityCell, IconButton, Inline, MetaLine, Spinner, Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import {
   subscribeToasts,
   getToasts,

@@ -11,7 +11,7 @@
 //   < $0.01    → '$0.0034'  (4 decimals)
 //   null/undef → '—'        (no tone)
 
-import { Chip } from '@connorhoehnslalom/ui-components/shared';
+import { Chip } from '@connorhoehn/ui-components/shared';
 
 type Tone = 'success' | 'warning' | 'danger' | 'neutral';
 

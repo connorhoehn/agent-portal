@@ -2,7 +2,7 @@
 // ProjectDetailPage. Split out from the rail component so the filtering and
 // truncation logic can be unit-tested without a ComputeProvider or DOM.
 
-import type { Computer } from '@connorhoehnslalom/ui-components/compute';
+import type { Computer } from '@connorhoehn/ui-components/compute';
 
 /** Computers charged to this initiative, in a stable, readable order:
  *  running first (that's the thing you'd click through to watch), then

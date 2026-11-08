@@ -16,7 +16,7 @@ import {
   DataTable,
   T,
   type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useState } from 'react';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
 import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';

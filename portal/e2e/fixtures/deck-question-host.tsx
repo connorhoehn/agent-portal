@@ -5,7 +5,7 @@ import '../../src/app.css';
 import { useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router';
-import type { PresentationFooterContext } from '@connorhoehnslalom/ui-components/doc-editor';
+import type { PresentationFooterContext } from '@connorhoehn/ui-components/doc-editor';
 import { SessionProvider, useSession } from '../../src/lib/auth';
 import { useCapabilities } from '../../src/lib/capabilities';
 import { useDeckAgentRun, type DeckAgentRunConfig } from '../../src/components/decks/useDeckAgentRun';

@@ -35,13 +35,13 @@ import {
   Select,
   Stack,
   Textarea,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { redactUrlCredentials } from '../../lib/redactCredentials.ts';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
-import { openShell, useCompute, type Computer } from '@connorhoehnslalom/ui-components/compute';
+import { openShell, useCompute, type Computer } from '@connorhoehn/ui-components/compute';
 import { DEVBOX_MODELS, DEFAULT_DEVBOX_MODEL } from '../../lib/devboxModels';
 import { usd } from '../../lib/format';
 import { durationLabel, relativeTime } from '../../lib/relativeTime';

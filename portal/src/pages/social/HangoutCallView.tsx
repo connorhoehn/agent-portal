@@ -1,6 +1,6 @@
 import { useId, useRef, type ReactNode } from 'react';
-import { ChatSidePanelFrame } from '@connorhoehnslalom/ui-components';
-import { Button, Inline, PageSection, Stack, Tabs } from '@connorhoehnslalom/ui-components/shared';
+import { ChatSidePanelFrame } from '@connorhoehn/ui-components';
+import { Button, Inline, PageSection, Stack, Tabs } from '@connorhoehn/ui-components/shared';
 
 export type HangoutCallPane = 'conversation' | 'people' | null;
 

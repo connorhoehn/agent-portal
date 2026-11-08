@@ -6,7 +6,7 @@
 
 import { useSearchParams, useNavigate } from 'react-router';
 import { useCallback, useEffect, useState } from 'react';
-import { EmptyState, ErrorState, PageHeader, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { EmptyState, ErrorState, PageHeader, Stack } from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { CreatePanel } from './prompts/CreatePanel';
 import { EditPanel } from './prompts/EditPanel';

@@ -21,7 +21,7 @@ import { useMemo } from 'react';
 import {
   Chip, DataTable, EmptyState, ErrorState, Inline, InlineAlert, KeyValue, LoadingState, PageHeader, PageSection, Stack,
   type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { useCapabilities, type Action } from '../../lib/capabilities';

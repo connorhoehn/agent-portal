@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useSearchParams, Navigate } from 'react-router';
-import { Card, EmptyState, ErrorState, LoadingState, PageHeader, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Card, EmptyState, ErrorState, LoadingState, PageHeader, Stack } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { useCapabilities } from '../lib/capabilities';
 import { DEPT_COLORS } from '../components/scores/types';

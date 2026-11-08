@@ -8,10 +8,10 @@ const { resolveUiAuditSkill } = require('./ui-audit-skill.cjs');
 test('a clean consumer resolves the pinned skill without a sibling checkout or home installation', t => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ui-audit-consumer-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const pkg = path.join(root, 'portal/node_modules/@connorhoehnslalom/ui-components');
+  const pkg = path.join(root, 'portal/node_modules/@connorhoehn/ui-components');
   const installed = path.join(pkg, 'skills/ui-dom-audit');
   fs.mkdirSync(path.join(installed, 'scripts'), { recursive: true });
-  fs.writeFileSync(path.join(pkg, 'package.json'), JSON.stringify({ name: '@connorhoehnslalom/ui-components', exports: { './package.json': './package.json' } }));
+  fs.writeFileSync(path.join(pkg, 'package.json'), JSON.stringify({ name: '@connorhoehn/ui-components', exports: { './package.json': './package.json' } }));
   for (const name of ['audit.mjs', 'source-audit.cjs']) fs.writeFileSync(path.join(installed, 'scripts', name), '');
   const options = { root, home: path.join(root, 'empty-home'), env: {} };
   assert.equal(resolveUiAuditSkill(options), installed);

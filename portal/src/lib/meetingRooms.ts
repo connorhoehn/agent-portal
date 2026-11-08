@@ -16,7 +16,7 @@
 //   Raise and React only), but stays while rooms exist so they can be closed.
 // - Decision 1: a room's chat is the call's huddle channel with the
 //   `~breakout~<roomId>` suffix; the meeting reports it as `activeChat`.
-import type { RMMeetingSource } from '@connorhoehnslalom/ui-components/integrations/realtime';
+import type { RMMeetingSource } from '@connorhoehn/ui-components/integrations/realtime';
 import { huddleChannel } from './huddleRoster.ts';
 
 const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};

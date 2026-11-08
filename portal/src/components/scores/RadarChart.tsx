@@ -1,6 +1,6 @@
 import {
   Card, EmptyState, EntityCell, MetaLine, Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import {
   Radar,
   RadarChart as RechartsRadarChart,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { TenantSwitcher as TenantSwitcherControl } from '@connorhoehnslalom/ui-components/shared';
+import { TenantSwitcher as TenantSwitcherControl } from '@connorhoehn/ui-components/shared';
 import { useSession, type Tenant } from '../../lib/auth';
 import { tenantEnabled } from '../../lib/features';
 import { useSharedNotifications } from './SharedNotifications';

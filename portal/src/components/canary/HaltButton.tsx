@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import {
   Button, Inline, MetaLine, Modal, SectionLabel, Stack, useToast,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import {
   closeHaltConfirm,
   openHaltConfirm,

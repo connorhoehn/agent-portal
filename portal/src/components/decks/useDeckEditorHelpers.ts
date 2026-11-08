@@ -2,7 +2,7 @@
 // presence shows for a slide, and the attachment download of the open revision.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { DeckSpec } from '@connorhoehnslalom/ui-components/doc-editor';
+import type { DeckSpec } from '@connorhoehn/ui-components/doc-editor';
 import { downloadDeckFile } from './downloadDeckFile';
 
 /** "Slide <n> · <title>" for a slide id, undefined when the slide is gone. */

@@ -2,7 +2,7 @@
 // never its eligibility, and reads as a three-dot meter rather than a word
 // (docs/assessment-ux-goal.md slice 4). railTracks remains the source of the
 // domain values.
-import { Chip, DotMeter, Inline, T } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, DotMeter, Inline, T } from '@connorhoehn/ui-components/shared';
 import { confidenceValue, railTracks } from '../assessmentFormat';
 import type { Dimension } from '../types';
 import { LevelBadge } from './LevelBadge';

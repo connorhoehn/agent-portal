@@ -13,7 +13,7 @@
 //   nova-pro
 
 import type { ReactNode } from 'react';
-import { Inline, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, SectionLabel, Stack } from '@connorhoehn/ui-components/shared';
 
 export interface KeyValueProps {
   label: string;

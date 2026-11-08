@@ -5,7 +5,7 @@ import { memo, useState } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import {
   Button, Card, Chip, CodeBlock, Inline, SectionLabel, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import type { PromptVersionNodeData } from '../types.js';
 
 export type PromptVersionNodeType = Node<

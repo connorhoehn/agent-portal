@@ -11,7 +11,7 @@
 import { useCallback, useState } from 'react';
 import {
   Button, Chip, Drawer, Inline, MetaLine, SectionLabel, Select, Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 import { relativeTime } from '../../lib/relativeTime';

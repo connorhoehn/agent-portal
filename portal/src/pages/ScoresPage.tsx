@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Button, CollapsibleSection, EmptyState, ErrorState, LoadingState, PageSection, Stack, T, VisuallyHidden } from '@connorhoehnslalom/ui-components/shared';
+import { Button, CollapsibleSection, EmptyState, ErrorState, LoadingState, PageSection, Stack, T, VisuallyHidden } from '@connorhoehn/ui-components/shared';
 import { CollectionCommandHost } from '../components/collections/CollectionCommandHost';
 import { collectionCommandAdapter, resolveCollectionTarget } from '../components/collections/collectionCommands';
 import { scoreTargets, scoresGrammar } from './scoresCommands';

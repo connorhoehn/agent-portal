@@ -2,7 +2,7 @@
 // loads it): reading the destinations endpoint, naming the file endpoint, and
 // shaping the chat message. The component is
 // components/decks/ShareToSocialAction.tsx.
-import type { ChatAttachmentDescriptor } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import type { ChatAttachmentDescriptor } from '@connorhoehn/ui-components/social/rich-composer';
 
 /** An attachment as a chat send carries it: the upload id and its display fields, never a URL. */
 export type OutgoingAttachment = Omit<ChatAttachmentDescriptor, 'url'>;

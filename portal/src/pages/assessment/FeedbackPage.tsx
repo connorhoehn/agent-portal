@@ -28,7 +28,7 @@ import {
   Textarea,
   StatusPill,
   type StatusPillState,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
 import { RecordNotFound } from '../../components/UnavailableNotice';

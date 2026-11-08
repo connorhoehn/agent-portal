@@ -17,7 +17,7 @@ import {
   Button, Card, CardHeader, CatalogGrid, Chip, CodeBlock, CollapsibleSection,
   DataTable, Inline, InlinePlaceholder, LogStream, PageSection, Stack, StatStrip,
   Switch, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { UnavailableNotice } from '../../components/UnavailableNotice';

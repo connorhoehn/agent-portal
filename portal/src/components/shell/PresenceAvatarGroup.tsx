@@ -1,4 +1,4 @@
-import { PresenceAvatars, type PresenceAvatarUser } from '@connorhoehnslalom/ui-components/shared';
+import { PresenceAvatars, type PresenceAvatarUser } from '@connorhoehn/ui-components/shared';
 import type { PresenceEntry } from '@connorhoehn/realtime-modules/client';
 
 interface PresenceAvatarGroupProps {

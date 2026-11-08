@@ -24,8 +24,8 @@ import {
   SectionLabel,
   SignoffPanel,
   Stack, T,
-} from '@connorhoehnslalom/ui-components/shared';
-import { SidePane, useSidePaneHost } from '@connorhoehnslalom/ui-components';
+} from '@connorhoehn/ui-components/shared';
+import { SidePane, useSidePaneHost } from '@connorhoehn/ui-components';
 import { useFetch } from '../../hooks/useFetch';
 import { RecordNotFound, UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
 import { useCrumbLabel } from '../../lib/crumbLabels';

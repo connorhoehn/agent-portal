@@ -1,4 +1,4 @@
-import { Chip, Inline, InlineAlert, Select, T } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, Inline, InlineAlert, Select, T } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch.js';
 import { blockingInterventions } from './promptFormat';
 import type { GuardrailIntervention, GuardrailSnapshot } from './types';

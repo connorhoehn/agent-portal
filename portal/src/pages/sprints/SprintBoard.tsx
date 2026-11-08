@@ -21,7 +21,7 @@ import {
   Toolbar,
   ToolbarGroup,
   ToolbarLabel,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useUrlState } from '../../lib/useUrlState';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';

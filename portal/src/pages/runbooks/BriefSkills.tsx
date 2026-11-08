@@ -3,7 +3,7 @@
 // went (`dir`: ~/.claude/skills on a devbox, ./.claude/skills in a local worker's checkout, null
 // when the machine does not install it) and every skill's version. The name, one-line description
 // and title are those of the version the run received (GET /api/runs/:ref/brief `skills`).
-import { DataTable, DetailSection, Link, Stack, T, type DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+import { DataTable, DetailSection, Link, Stack, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { runbookHref } from './runbooksModel';
 import type { BriefSkillDetail, SkillLibrary } from './types';
 

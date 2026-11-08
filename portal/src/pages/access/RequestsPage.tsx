@@ -3,7 +3,7 @@
 // (GET /api/access/requests?scope=mine|reports|all). A row opens the record;
 // "New request" opens the wizard. Nothing here decides or withdraws.
 
-import { Button, CollectionToolbar, DataTable, PlusIcon, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, CollectionToolbar, DataTable, PlusIcon, Stack } from '@connorhoehn/ui-components/shared';
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';

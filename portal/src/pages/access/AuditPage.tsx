@@ -4,7 +4,7 @@
 // every event, anyone else the events of the requests they may open (the
 // record's read rule) — and this page says so in its visible description.
 
-import { CollectionToolbar, DataTable, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { CollectionToolbar, DataTable, Stack } from '@connorhoehn/ui-components/shared';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';

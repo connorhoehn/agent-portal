@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { DataTable, ErrorState, PageHeader, Stack, StatStrip } from '@connorhoehnslalom/ui-components/shared';
+import { DataTable, ErrorState, PageHeader, Stack, StatStrip } from '@connorhoehn/ui-components/shared';
 import { formatRelativeTime } from '../secondaryFormat';
 import { listDecks, type DeckSummary } from './decksApi';
 

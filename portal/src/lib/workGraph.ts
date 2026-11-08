@@ -20,10 +20,10 @@ import { createWorkGraphGatewayTransport } from '@connorhoehn/realtime-modules/c
 import type {
   ClientWorkGraphState, WorkGraphClientTransport, WorkGraphGatewayConnection, WorkGraphSnapshotRequest, WorkGraphSocketRequest,
 } from '@connorhoehn/realtime-modules/client';
-import { WORK_NODE_KIND_LABELS } from '@connorhoehnslalom/ui-components/graph';
+import { WORK_NODE_KIND_LABELS } from '@connorhoehn/ui-components/graph';
 import type {
   WorkActivityNodeDetail, WorkActivityPresentation, WorkActivityView, WorkActivityWindow, WorkGraphNodeData, WorkGraphEdgeData,
-} from '@connorhoehnslalom/ui-components/graph';
+} from '@connorhoehn/ui-components/graph';
 
 export const WORK_GRAPH_CHANNEL = 'orgiq:workgraph';
 export const PIPELINES_WORK_GRAPH_CHANNEL = 'pipelines:workgraph';

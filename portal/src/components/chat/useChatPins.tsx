@@ -17,10 +17,10 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { ChannelFilesPanel, PinnedMessagesPanel, type ChannelFileItem, type ChatAttachment } from '@connorhoehnslalom/ui-components/social';
-import { ChatIcon, Inline, InlineAlert, PaperclipIcon, PhoneIcon, PinIcon, SegmentedControl, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { ChannelFilesPanel, PinnedMessagesPanel, type ChannelFileItem, type ChatAttachment } from '@connorhoehn/ui-components/social';
+import { ChatIcon, Inline, InlineAlert, PaperclipIcon, PhoneIcon, PinIcon, SegmentedControl, Stack } from '@connorhoehn/ui-components/shared';
 import { useGatewayOptional, usePins, type useChat } from '@connorhoehn/realtime-modules/client';
-import { useComposerFocusReveal } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { useComposerFocusReveal } from '@connorhoehn/ui-components/social/rich-composer';
 
 type Chat = ReturnType<typeof useChat>;
 type LoadedMessage = Chat['messages'][number];

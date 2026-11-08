@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import {
   Button, Chip, FormField, Inline, InlineAlert, Input, SectionLabel,
   SkeletonCard, Stack, Textarea, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { usePromptVersionDetail, saveDraft, publishVersion } from '../usePromptLibrary.js';
 
 export interface PromptEditorStepProps {

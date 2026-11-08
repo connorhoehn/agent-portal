@@ -11,7 +11,7 @@
 // Pure: no React, so node:test can assert the registry.
 
 import { parseBreakoutChannel } from '@connorhoehn/realtime-modules/client/meeting';
-import type { ChatCommand } from '@connorhoehnslalom/ui-components/social';
+import type { ChatCommand } from '@connorhoehn/ui-components/social';
 import { conversationSummarizeCommand } from './conversationSummarize.ts';
 import { artifactCommand, conversationArtifactApi, socialArtifactApi } from './conversationArtifact.ts';
 import { tenantDeckCommand } from './tenantDeck.ts';

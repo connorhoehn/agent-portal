@@ -2,7 +2,7 @@
 // client (components/chat/conversationSummarize.ts), against
 // middleware/src/routes/social-summarize.ts. The exported names are unchanged.
 
-import type { ChatCommand } from '@connorhoehnslalom/ui-components/social';
+import type { ChatCommand } from '@connorhoehn/ui-components/social';
 import { SOCIAL_SUMMARIZE_BASE, summarizeApi, summarizeCommand, type PostedSummary, type SummarizeRunStatus, type SummarizeStarted } from '../../components/chat/conversationSummarize.ts';
 
 export {

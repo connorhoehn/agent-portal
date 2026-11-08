@@ -15,7 +15,7 @@
 // leave the tier. Presence, slide viewers and Follow ride `orgiq:deck:<id>`.
 
 import { useParams } from 'react-router';
-import { InlineAlert } from '@connorhoehnslalom/ui-components/shared';
+import { InlineAlert } from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../../lib/capabilities';
 import { DeckEditorPage, type DeckEditorDocument, type DeckEditorExtras } from '../../../components/decks/DeckEditorPage';
 import { deckSubject } from '../../../components/decks/deckCrumb';

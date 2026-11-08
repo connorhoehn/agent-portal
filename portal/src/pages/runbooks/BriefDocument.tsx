@@ -3,7 +3,7 @@
 // description, version, the library sha) and the exact markdown the box received.
 // Shared by Runbooks → Briefs, the run page's Brief tab and the work item's Brief preview.
 import { useState } from 'react';
-import { Button, Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Inline, Stack, T } from '@connorhoehn/ui-components/shared';
 import { relativeTime } from '../../lib/relativeTime';
 import { briefDocumentMarkdown } from './briefDocumentMarkdown';
 import { ReadOnlyDocument } from '../../components/documents/ReadOnlyDocument';

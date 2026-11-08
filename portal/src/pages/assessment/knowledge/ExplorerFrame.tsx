@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { ContextColumn, SplitPane, WorkspaceRail, type ContextColumnState } from '@connorhoehnslalom/ui-components';
-import { ChatIcon, Inline, Stack, useRailFold } from '@connorhoehnslalom/ui-components/shared';
+import { ContextColumn, SplitPane, WorkspaceRail, type ContextColumnState } from '@connorhoehn/ui-components';
+import { ChatIcon, Inline, Stack, useRailFold } from '@connorhoehn/ui-components/shared';
 
 // Comments, Versions and Reviews are editor tabs (DocumentShell); the column
 // keeps what belongs beside the page rather than instead of it: the outline,

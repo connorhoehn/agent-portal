@@ -4,7 +4,7 @@
 // served from memory, a failed render retried when asked again.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PresentationPreview } from '@connorhoehnslalom/ui-components/doc-editor';
+import type { PresentationPreview } from '@connorhoehn/ui-components/doc-editor';
 import type { DeckPreviewResult, DeckSpec } from './deckApi';
 import { DECK_PREVIEW_DEBOUNCE_MS, deckRenderKey } from './decksModel';
 

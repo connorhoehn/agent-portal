@@ -7,7 +7,7 @@
 // who cannot read it is simply not notified.
 
 import { useCallback, useRef } from 'react';
-import type { MentionCandidate } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import type { MentionCandidate } from '@connorhoehn/ui-components/social/rich-composer';
 import { readSharedPeople } from '../shell/tenantDirectModel';
 import { reportApiFailure, responseFailure } from '../../lib/apiFailure';
 

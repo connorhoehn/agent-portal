@@ -14,7 +14,7 @@
 // decoder — this module.
 
 import { useEffect, useMemo, useState } from 'react';
-import { LogStream, T, type LogLine } from '@connorhoehnslalom/ui-components/shared';
+import { LogStream, T, type LogLine } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { runLogLines, type RunLogLine } from './runLogLines';
 

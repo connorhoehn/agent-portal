@@ -3,8 +3,8 @@
 // "Tables"): one line per row, the summary and linked work item in columns of
 // their own, the way into the detail pane as the row's Open action.
 
-import { ArrowRightIcon, Chip, DataTable, IconButton, InlinePlaceholder, T } from '@connorhoehnslalom/ui-components/shared';
-import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+import { ArrowRightIcon, Chip, DataTable, IconButton, InlinePlaceholder, T } from '@connorhoehn/ui-components/shared';
+import type { DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { RecordLink } from '../decisions/RecordLink';
 import { DECISION_TONE } from './projectFormat';
 import type { ProjectDecision } from './types';

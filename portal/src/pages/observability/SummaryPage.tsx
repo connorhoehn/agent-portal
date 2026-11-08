@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import {
   Card, Inline, KPIGrid, LineChart, LoadingState, NotificationCenter, PageSection, SectionLabel, Stack, StatCard,
   StatStrip, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { formatTokenCount } from '../../lib/format';

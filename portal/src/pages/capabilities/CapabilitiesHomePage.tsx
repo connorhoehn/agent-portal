@@ -32,7 +32,7 @@ import {
   MetaLine,
   Stack,
   type DataTableColumn, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession, type SessionRole } from '../../lib/auth';
 import { UnavailableNotice } from '../../components/UnavailableNotice';

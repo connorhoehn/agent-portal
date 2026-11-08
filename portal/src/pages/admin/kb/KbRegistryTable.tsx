@@ -14,7 +14,7 @@ import {
   TableRow,
   TableTd,
   TableTh,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { DeleteButton } from './DeleteButton';
 import { ProvisionButton } from './ProvisionButton';
 import { StatusChip } from './StatusChip';

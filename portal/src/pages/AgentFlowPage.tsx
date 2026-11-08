@@ -11,7 +11,7 @@ import { Link, useSearchParams } from 'react-router';
 import {
   Chip, DataTable, Drawer, EmptyState, Inline, InlineAlert, Input, SectionLabel,
   SegmentedControl, Stack, StatStrip, StatusDot, VisuallyHidden, type DataTableColumn, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { UnavailableNotice } from '../components/UnavailableNotice';
 import { KeyValue } from '../components/KeyValue';

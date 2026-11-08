@@ -3,7 +3,7 @@
 // local update; toast on failure.
 
 import { useEffect, useRef, useState } from 'react';
-import { Inline, SectionLabel, Slider, useToast, T } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, SectionLabel, Slider, useToast, T } from '@connorhoehn/ui-components/shared';
 import { setWeight, useCanaryStore } from './canaryStore.js';
 import { writeJson } from '../../lib/writeJson';
 

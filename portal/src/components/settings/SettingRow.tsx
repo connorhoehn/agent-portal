@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, Stack, T } from '@connorhoehn/ui-components/shared';
 
 interface SettingRowProps {
   title: string;

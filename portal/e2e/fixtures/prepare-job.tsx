@@ -1,8 +1,8 @@
 import '../../src/app.css';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { DropdownMenu, Stack } from '@connorhoehnslalom/ui-components/shared';
-import { ComposerPromptDeck } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { DropdownMenu, Stack } from '@connorhoehn/ui-components/shared';
+import { ComposerPromptDeck } from '@connorhoehn/ui-components/social/rich-composer';
 import { ConversationComposer } from '../../src/lib/conversationComposer';
 import { usePrepareJobDeck } from '../../src/pages/project-detail/usePrepareJobDeck';
 import { node } from '../../src/pages/project-detail/__tests__/obsFixture';

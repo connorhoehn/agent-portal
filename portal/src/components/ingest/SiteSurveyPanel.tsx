@@ -14,8 +14,8 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Button, Card, Checkbox, Chip, Disclosure, EntityCell, FormField, Inline, InlineAlert,
   Input, MetaLine, SectionLabel, Select, Stack, Toolbar, TreeView,
-} from '@connorhoehnslalom/ui-components/shared';
-import type { ChipTone, TreeNode } from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
+import type { ChipTone, TreeNode } from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 

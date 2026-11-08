@@ -5,7 +5,7 @@
 // did. Chip's own `dot` swatch takes its colour from the tone, which makes the
 // two halves agree by construction.
 
-import { Chip } from '@connorhoehnslalom/ui-components/shared';
+import { Chip } from '@connorhoehn/ui-components/shared';
 import { statusStyle } from './kbFormat';
 import type { KbStatus } from './types';
 

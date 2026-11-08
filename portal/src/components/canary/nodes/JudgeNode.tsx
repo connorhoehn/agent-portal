@@ -20,7 +20,7 @@
 import { memo, useEffect, useState, useCallback } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { useNavigate } from 'react-router';
-import { Card, Chip, Inline, ProgressBar, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Chip, Inline, ProgressBar, Stack, T } from '@connorhoehn/ui-components/shared';
 import type { JudgeNodeData } from '../types.js';
 import { relativeTimeSeconds } from '../../../lib/relativeTime';
 

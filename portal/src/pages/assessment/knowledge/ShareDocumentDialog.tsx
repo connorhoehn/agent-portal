@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, FormField, InlineAlert, Input, Modal, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, FormField, InlineAlert, Input, Modal, Stack, T } from '@connorhoehn/ui-components/shared';
 
 /** Knowledge pages inherit source-space/role access; a link does not grant access. */
 export function ShareDocumentDialog({ document, onClose }: {

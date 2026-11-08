@@ -16,13 +16,13 @@ import { useMemo, useState } from 'react';
 import * as hangoutRooms from '@connorhoehn/realtime-modules/client/hangout-rooms';
 import {
   createHangoutRoomRow, createHangoutRoomsSection, createWrappedHangoutRoomsList, NewHangoutRoomDialog,
-} from '@connorhoehnslalom/ui-components/integrations/realtime';
-import { Button, LoadingState, Modal, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/integrations/realtime';
+import { Button, LoadingState, Modal, Stack, T } from '@connorhoehn/ui-components/shared';
 import { writeJson } from '../../lib/writeJson';
 import { useSocialPlane } from './socialPlane';
 import { hangoutRoomsFrom, type SocialRoom, type SocialSource } from './socialPlatform';
 import { SocialReadStatus } from './SocialReadStatus';
-import { RAIL_SECTION_CONTENT_INSET, RailSectionHeader } from '@connorhoehnslalom/ui-components/social';
+import { RAIL_SECTION_CONTENT_INSET, RailSectionHeader } from '@connorhoehn/ui-components/social';
 
 const HangoutRoomRow = createHangoutRoomRow({ useRoomOccupancy: hangoutRooms.useRoomOccupancy });
 const HangoutRoomsSection = createHangoutRoomsSection(HangoutRoomRow);

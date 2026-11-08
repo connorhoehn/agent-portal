@@ -4,7 +4,7 @@
 // shown files they could open. It refetches when the view opens and whenever a
 // message carrying an attachment arrives.
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { ChannelFileItem } from '@connorhoehnslalom/ui-components/social';
+import type { ChannelFileItem } from '@connorhoehn/ui-components/social';
 
 interface WireFile { id: string; name: string; size: number; contentType: string; url: string; uploaderName: string; sentAt: string }
 interface ChatMessageLike { id?: string; attachments?: ReadonlyArray<{ id?: string; url?: string }> }

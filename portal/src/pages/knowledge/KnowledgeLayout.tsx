@@ -6,7 +6,7 @@
 // click from the Knowledge home.
 
 import { NavLink, Outlet } from 'react-router';
-import { activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
+import { activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehn/ui-components/shared';
 import { BuildSectionLayout } from '../../components/shell/BuildSectionLayout';
 import { useSession } from '../../lib/auth';
 import { knowledgeItemsFor } from './knowledgeNav';

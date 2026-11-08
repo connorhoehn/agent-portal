@@ -67,7 +67,7 @@ describe('/api/connections under MOCK_AGENTCORE', () => {
   it('GET /:name/github/orgs lists the fixture org', async () => {
     const res = await request(app()).get(`/api/connections/${GITHUB}/github/orgs`);
     expect(res.status).toBe(200);
-    expect(res.body.orgs).toEqual([{ login: 'connorhoehnslalom', description: expect.any(String) as unknown as string }]);
+    expect(res.body.orgs).toEqual([{ login: 'connorhoehn', description: expect.any(String) as unknown as string }]);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 

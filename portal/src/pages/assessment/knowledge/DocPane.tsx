@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Button, Card, Chip, DataTable, DetailHeader, InlinePlaceholder, Stack, T, type BreadcrumbItem } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, Chip, DataTable, DetailHeader, InlinePlaceholder, Stack, T, type BreadcrumbItem } from '@connorhoehn/ui-components/shared';
 import { useSession } from '../../../lib/auth';
 import { relativeTime } from '../../../lib/relativeTime';
 import { CLASSIFICATION_LABEL } from './knowledgeFormat';

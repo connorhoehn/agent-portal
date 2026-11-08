@@ -9,7 +9,7 @@
 
 import {
   Card, Chip, EntityCell, Inline, MetaLine, SectionLabel, Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 interface LabExperience {

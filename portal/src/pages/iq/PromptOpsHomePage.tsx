@@ -18,7 +18,7 @@
 // SSM, runtimes from the AgentCore control plane, experiments from Aurora.
 
 import { Link, useNavigate } from 'react-router';
-import { Badge, Button, Card, CardHeader, CatalogGrid, Chip, EmptyState, Inline, InlineAlert, PageSection, Stack, StatStrip, StatusDot, Tooltip, T } from '@connorhoehnslalom/ui-components/shared';
+import { Badge, Button, Card, CardHeader, CatalogGrid, Chip, EmptyState, Inline, InlineAlert, PageSection, Stack, StatStrip, StatusDot, Tooltip, T } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useSession } from '../../lib/auth';

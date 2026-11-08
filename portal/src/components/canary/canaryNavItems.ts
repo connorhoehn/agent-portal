@@ -5,7 +5,7 @@
 // param to open the matching template/decision drawer. Action items
 // (Halt, Manual weight) call into the store directly.
 
-import type { SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import type { SubNavItem } from '@connorhoehn/ui-components/shared';
 import {
   openHaltConfirm,
   toggleManualSlider,

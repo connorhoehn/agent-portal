@@ -18,7 +18,7 @@
 
 import { offlineReason } from '../../../components/chat/chatConnection';
 import { useState } from 'react';
-import { InlineAlert, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { InlineAlert, Stack } from '@connorhoehn/ui-components/shared';
 import { DocumentContextPanel, useDocumentContext } from './ExplorerFrame';
 import { conversationChannelForDoc } from './knowledgeFormat';
 import { useDocumentAgentEdit, type DocumentAgentEdit } from './useDocumentAgentEdit';

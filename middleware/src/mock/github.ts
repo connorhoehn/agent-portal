@@ -10,7 +10,7 @@
 //
 // Repo full names are not invented — they are the fourteen
 // `agent_projects.repo_full_name` rows schema/seed_program.sql actually
-// inserts, under the same `connorhoehnslalom` account the connected-sources
+// inserts, under the same `connorhoehn` account the connected-sources
 // fixture uses for the one seeded GitHub credential. Contribution logins reuse
 // the initiative owner/sponsor already seeded in mock/people.ts (Nora DaSilva
 // owns p-observability, so `ndasilva` is who orgiq-observability's signal
@@ -41,7 +41,7 @@ export const githubOrgRows = defineFixture<{ login: string; description: string 
   scenarios: {
     default: () => [
       {
-        login: 'connorhoehnslalom',
+        login: 'connorhoehn',
         description: 'OrgIQ demo organization — the repositories the seeded initiatives deliver against.',
       },
     ],
@@ -56,20 +56,20 @@ export const githubRepoRows = defineFixture<RepoRef>({
   key: 'github-repos',
   scenarios: {
     default: () => [
-      { owner: 'connorhoehnslalom', name: 'orgiq-zero-trust', fullName: 'connorhoehn/orgiq-zero-trust', pushedAt: clock.hoursAgo(6) },
-      { owner: 'connorhoehnslalom', name: 'orgiq-inference-platform', fullName: 'connorhoehn/orgiq-inference-platform', pushedAt: clock.daysAgo(1) },
-      { owner: 'connorhoehnslalom', name: 'orgiq-llm-platform', fullName: 'connorhoehn/orgiq-llm-platform', pushedAt: clock.daysAgo(2) },
-      { owner: 'connorhoehnslalom', name: 'orgiq-observability', fullName: 'connorhoehn/orgiq-observability', pushedAt: clock.daysAgo(3) },
-      { owner: 'connorhoehnslalom', name: 'orgiq-auth-service', fullName: 'connorhoehn/orgiq-auth-service', pushedAt: clock.daysAgo(4) },
-      { owner: 'connorhoehnslalom', name: 'orgiq-rag-search', fullName: 'connorhoehn/orgiq-rag-search', pushedAt: clock.daysAgo(5) },
-      { owner: 'connorhoehnslalom', name: 'orgiq-compliance', fullName: 'connorhoehn/orgiq-compliance', pushedAt: clock.daysAgo(6) },
-      { owner: 'connorhoehnslalom', name: 'orgiq-finops', fullName: 'connorhoehn/orgiq-finops', pushedAt: clock.daysAgo(7) },
-      { owner: 'connorhoehnslalom', name: 'orgiq-stream-analytics', fullName: 'connorhoehn/orgiq-stream-analytics', pushedAt: clock.daysAgo(8) },
-      { owner: 'connorhoehnslalom', name: 'orgiq-feature-store', fullName: 'connorhoehn/orgiq-feature-store', pushedAt: clock.daysAgo(9) },
-      { owner: 'connorhoehnslalom', name: 'orgiq-data-lake', fullName: 'connorhoehn/orgiq-data-lake', pushedAt: clock.daysAgo(10) },
-      { owner: 'connorhoehnslalom', name: 'orgiq-design-system', fullName: 'connorhoehn/orgiq-design-system', pushedAt: clock.daysAgo(11) },
-      { owner: 'connorhoehnslalom', name: 'orgiq-design-system-api', fullName: 'connorhoehn/orgiq-design-system-api', pushedAt: clock.daysAgo(12) },
-      { owner: 'connorhoehnslalom', name: 'orgiq-mobile-app', fullName: 'connorhoehn/orgiq-mobile-app', pushedAt: clock.daysAgo(13) },
+      { owner: 'connorhoehn', name: 'orgiq-zero-trust', fullName: 'connorhoehn/orgiq-zero-trust', pushedAt: clock.hoursAgo(6) },
+      { owner: 'connorhoehn', name: 'orgiq-inference-platform', fullName: 'connorhoehn/orgiq-inference-platform', pushedAt: clock.daysAgo(1) },
+      { owner: 'connorhoehn', name: 'orgiq-llm-platform', fullName: 'connorhoehn/orgiq-llm-platform', pushedAt: clock.daysAgo(2) },
+      { owner: 'connorhoehn', name: 'orgiq-observability', fullName: 'connorhoehn/orgiq-observability', pushedAt: clock.daysAgo(3) },
+      { owner: 'connorhoehn', name: 'orgiq-auth-service', fullName: 'connorhoehn/orgiq-auth-service', pushedAt: clock.daysAgo(4) },
+      { owner: 'connorhoehn', name: 'orgiq-rag-search', fullName: 'connorhoehn/orgiq-rag-search', pushedAt: clock.daysAgo(5) },
+      { owner: 'connorhoehn', name: 'orgiq-compliance', fullName: 'connorhoehn/orgiq-compliance', pushedAt: clock.daysAgo(6) },
+      { owner: 'connorhoehn', name: 'orgiq-finops', fullName: 'connorhoehn/orgiq-finops', pushedAt: clock.daysAgo(7) },
+      { owner: 'connorhoehn', name: 'orgiq-stream-analytics', fullName: 'connorhoehn/orgiq-stream-analytics', pushedAt: clock.daysAgo(8) },
+      { owner: 'connorhoehn', name: 'orgiq-feature-store', fullName: 'connorhoehn/orgiq-feature-store', pushedAt: clock.daysAgo(9) },
+      { owner: 'connorhoehn', name: 'orgiq-data-lake', fullName: 'connorhoehn/orgiq-data-lake', pushedAt: clock.daysAgo(10) },
+      { owner: 'connorhoehn', name: 'orgiq-design-system', fullName: 'connorhoehn/orgiq-design-system', pushedAt: clock.daysAgo(11) },
+      { owner: 'connorhoehn', name: 'orgiq-design-system-api', fullName: 'connorhoehn/orgiq-design-system-api', pushedAt: clock.daysAgo(12) },
+      { owner: 'connorhoehn', name: 'orgiq-mobile-app', fullName: 'connorhoehn/orgiq-mobile-app', pushedAt: clock.daysAgo(13) },
     ],
     empty: () => [],
   },

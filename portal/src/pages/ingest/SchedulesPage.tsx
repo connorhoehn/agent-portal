@@ -3,7 +3,7 @@ import {
   Button, Card, CardHeader, Chip, CollectionToolbar, ConfirmDialog, FormField, FormRow, IconButton,
   Input, LoadingState, PageSection, Select, Stack, Switch, T, Table, TableBody, TableHead,
   TableRow, TableTd, TableTh, TrashIcon,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { EmptyState } from '../../components/ingest/ui';

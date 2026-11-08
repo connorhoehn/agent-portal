@@ -1,4 +1,4 @@
-import { FormField, Select } from '@connorhoehnslalom/ui-components/shared';
+import { FormField, Select } from '@connorhoehn/ui-components/shared';
 
 interface Props {
   departments: string[];

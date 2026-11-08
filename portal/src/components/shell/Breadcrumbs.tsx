@@ -9,8 +9,8 @@
 
 import { useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { ScopeHeader } from '@connorhoehnslalom/ui-components';
-import { Breadcrumbs as UIBreadcrumbs, type BreadcrumbItem } from '@connorhoehnslalom/ui-components/shared';
+import { ScopeHeader } from '@connorhoehn/ui-components';
+import { Breadcrumbs as UIBreadcrumbs, type BreadcrumbItem } from '@connorhoehn/ui-components/shared';
 
 import { resolveBreadcrumbs } from './breadcrumbResolve';
 import { useCrumbLabels, useCrumbTrails } from '../../lib/crumbLabels';

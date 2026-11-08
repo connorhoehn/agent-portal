@@ -1,6 +1,6 @@
 import { BuildSectionLayout } from '../../components/shell/BuildSectionLayout';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router';
-import { activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehnslalom/ui-components/shared';
+import { activeNavItemClassName, inactiveNavItemClassName } from '@connorhoehn/ui-components/shared';
 import { useIqSubNav } from './iqSubNavCatalog';
 
 // Reproduces SubNavLayout's own default active/inactive nav-item look (see

@@ -1,6 +1,6 @@
 // Pure formatting/parsing logic for AgentDetailPage, split out so it can be
 // unit-tested without mounting the page.
-import type { ChipTone, LogLevel } from '@connorhoehnslalom/ui-components/shared';
+import type { ChipTone, LogLevel } from '@connorhoehn/ui-components/shared';
 import { STATUS_TONE } from '../agentFleetRows.ts';
 import { relativeTime } from '../../lib/relativeTime.ts';
 

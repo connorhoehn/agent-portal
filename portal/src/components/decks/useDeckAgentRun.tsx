@@ -5,8 +5,8 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Banner, EmptyState } from '@connorhoehnslalom/ui-components/shared';
-import type { PresentationFooterContext, PresentationInstructContext, PresentationInstructResult } from '@connorhoehnslalom/ui-components/doc-editor';
+import { Banner, EmptyState } from '@connorhoehn/ui-components/shared';
+import type { PresentationFooterContext, PresentationInstructContext, PresentationInstructResult } from '@connorhoehn/ui-components/doc-editor';
 import { useFlowRun } from '../../hooks/useFlowRun';
 import { DeckComposer } from './DeckComposer';
 import { DeckRunProgress } from './DeckRunProgress';

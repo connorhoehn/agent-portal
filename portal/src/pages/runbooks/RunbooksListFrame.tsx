@@ -3,10 +3,10 @@
 // title, then the record, and the collection command composer docks at the bottom of the column.
 // A record is a page at its own URL — never a drawer.
 import type { ComponentProps, ReactNode } from 'react';
-import { ListRailLayout, ScopeHeader, useRailFold, useViewportWidth } from '@connorhoehnslalom/ui-components';
+import { ListRailLayout, ScopeHeader, useRailFold, useViewportWidth } from '@connorhoehn/ui-components';
 import {
   EmptyState, GroupedList, Inline, LoadingState, SearchInput, Stack, T, type GroupedListRow,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { CollectionCommandHost, type CollectionCommandAdapter } from '../../components/collections/CollectionCommandHost';
 import { SectionHeader } from '../../components/shell/SectionContent';
 import { UnavailableNotice } from '../../components/UnavailableNotice';

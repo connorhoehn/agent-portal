@@ -14,7 +14,7 @@
 import { useCallback, useState } from 'react';
 import {
   Button, Card, EntityCell, Inline, InlineAlert, MetaLine, ProgressBar, SectionLabel, Stack, Table, TableBody, TableHead, TableRow, TableTd, TableTh,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 
 interface Distribution {
   signal: string; n: number; mean: number; median: number; stdev: number;

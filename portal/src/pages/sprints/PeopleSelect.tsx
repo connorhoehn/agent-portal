@@ -7,7 +7,7 @@
 // possible. Contributors come first, labelled with their role, because they
 // are the common case.
 
-import { Select } from '@connorhoehnslalom/ui-components/shared';
+import { Select } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { peopleGroups } from './sprintFormat';
 import type { Contributor, ProjectDetailLite, RosterResponse } from './types';

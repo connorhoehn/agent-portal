@@ -1,6 +1,6 @@
 import { BuildSectionLayout } from '../../components/shell/BuildSectionLayout';
 import { Outlet, useLocation } from 'react-router';
-import { Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Stack } from '@connorhoehn/ui-components/shared';
 import { useAutomateSpec } from '../work/automateNav';
 
 // Reproduces SubNavLayout's own default active/inactive nav-item look (see

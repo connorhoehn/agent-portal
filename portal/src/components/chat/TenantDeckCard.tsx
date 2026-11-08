@@ -8,9 +8,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { PresentationView, svgDataUri, type PresentationRevision } from '@connorhoehnslalom/ui-components/doc-editor';
-import { Button, Card, InlineAlert, Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
-import { ImageThumbnail } from '@connorhoehnslalom/ui-components';
+import { PresentationView, svgDataUri, type PresentationRevision } from '@connorhoehn/ui-components/doc-editor';
+import { Button, Card, InlineAlert, Inline, Stack, T } from '@connorhoehn/ui-components/shared';
+import { ImageThumbnail } from '@connorhoehn/ui-components';
 import type { DeckPreviewResult } from '../decks/deckApi';
 import { tenantDeckAdapterOf } from './tenantDeck';
 

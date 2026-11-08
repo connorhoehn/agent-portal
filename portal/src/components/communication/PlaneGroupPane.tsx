@@ -11,8 +11,8 @@
 // opens the bound channel's conversation.
 
 import { useNavigate } from 'react-router';
-import { ChannelBindingStrip } from '@connorhoehnslalom/ui-components/social';
-import { Button, ChannelHeader, EmptyState, ExternalLinkIcon, Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { ChannelBindingStrip } from '@connorhoehn/ui-components/social';
+import { Button, ChannelHeader, EmptyState, ExternalLinkIcon, Inline, Stack, T } from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { ChannelThread } from '../chat/ConversationThread';
 import { useChannelBinding } from '../social/ChannelBindingStrip';

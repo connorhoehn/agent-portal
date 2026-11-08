@@ -18,8 +18,8 @@ import {
   EmptyState,
   InlineAlert,
   Stack, T,
-} from '@connorhoehnslalom/ui-components/shared';
-import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
+import type { DataTableColumn } from '@connorhoehn/ui-components/shared';
 import {
   envelopeScopeLabel, envelopeWindowLabel, hasKnownBurn, remainingLabel, spentLabel, usd,
 } from '../../lib/envelopeFormat';

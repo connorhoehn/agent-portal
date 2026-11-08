@@ -2,7 +2,7 @@
 // Room data and authority come from the host's BFF read; opening is navigation,
 // while joining remains the explicit action in RoomPane/useSocialCall.
 import { useState } from 'react';
-import { Button, Card, Chip, CollectionToolbar, EmptyState, Inline, KeyValue, PageSection, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, Chip, CollectionToolbar, EmptyState, Inline, KeyValue, PageSection, Stack, T } from '@connorhoehn/ui-components/shared';
 import type { NameOf, SocialRoom } from './socialPlatform';
 import type { RoomsFetch } from './SocialRoomsSection';
 import { SocialReadStatus } from './SocialReadStatus';

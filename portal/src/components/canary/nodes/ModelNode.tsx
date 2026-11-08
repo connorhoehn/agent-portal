@@ -3,7 +3,7 @@
 
 import { memo } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
-import { Card, Chip, EntityCell, Inline } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Chip, EntityCell, Inline } from '@connorhoehn/ui-components/shared';
 import type { ModelNodeData } from '../types.js';
 
 export type ModelNodeType = Node<ModelNodeData & Record<string, unknown>, 'modelNode'>;

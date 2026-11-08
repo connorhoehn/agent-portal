@@ -7,18 +7,18 @@ export {
   Button, IconButton, Select, Tabs, ChannelHeader, Avatar, PresenceDot, SearchInput, TitledFrame, Chip, StatusPill,
   ChevronIcon, CloseIcon, DocumentIcon, ChatIcon, SearchIcon, PlusIcon, ActivityIcon, AtIcon,
   PhoneIcon, VideoCallIcon, MenuIcon, BranchIcon,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 export {
   DocumentActivityCard, AgentRunCard, ChatSidePanelFrame, ConversationRail, ActivePeopleGrid,
   RailSectionHeader, MessageBody,
-} from '@connorhoehnslalom/ui-components/social';
-export { RichChatComposer } from '@connorhoehnslalom/ui-components/social/rich-composer';
-export type { ComposerCommand, ComposedMessage } from '@connorhoehnslalom/ui-components/social/rich-composer';
+} from '@connorhoehn/ui-components/social';
+export { RichChatComposer } from '@connorhoehn/ui-components/social/rich-composer';
+export type { ComposerCommand, ComposedMessage } from '@connorhoehn/ui-components/social/rich-composer';
 export {
   BaseNode, AgentNode, ServerStepNode, AnimatedEdge, PipelineNodeRuntimeProvider, portCls,
-} from '@connorhoehnslalom/ui-components/pipelines';
+} from '@connorhoehn/ui-components/pipelines';
 export {
   ComputeProvider, ComputerLab, ShellTerminal, TailPane, PaneStatusLine, fixtureComputers, fixtureModels,
   fixtureRuntimeStatus, fixtureWorkspace, installMockShellSocket, installMockTailSource, mockShellUrl, mockTailUrl,
-} from '@connorhoehnslalom/ui-components/compute';
-export type { ComputeClient } from '@connorhoehnslalom/ui-components/compute';
+} from '@connorhoehn/ui-components/compute';
+export type { ComputeClient } from '@connorhoehn/ui-components/compute';

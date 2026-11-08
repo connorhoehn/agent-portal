@@ -2,7 +2,7 @@
 // new story/bug inside an epic.
 
 import { useState } from 'react';
-import { Button, Card, FormRow, Inline, Input, NumberInput, Select, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, FormRow, Inline, Input, NumberInput, Select, Stack } from '@connorhoehn/ui-components/shared';
 import type { WorkItemPriority, WorkItemType } from './types';
 
 const ALL_TYPES: WorkItemType[] = ['epic', 'story', 'bug'];

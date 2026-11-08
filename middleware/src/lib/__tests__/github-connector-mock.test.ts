@@ -60,7 +60,7 @@ describe('github-connector under MOCK_AGENTCORE', () => {
   it('listRepos() filters by org and returns empty for an org this fixture world has no repos under', async () => {
     const none = await listRepos('orgiq-github-connorhoehn', { org: 'some-other-org' });
     expect(none).toEqual([]);
-    const some = await listRepos('orgiq-github-connorhoehn', { org: 'connorhoehnslalom' });
+    const some = await listRepos('orgiq-github-connorhoehn', { org: 'connorhoehn' });
     expect(some.length).toBeGreaterThan(0);
   });
 
@@ -72,14 +72,14 @@ describe('github-connector under MOCK_AGENTCORE', () => {
   it('listOrgs() ignores the token it is handed and returns the fixture org, never fetch', async () => {
     const orgs = await listOrgs('');
     expect(orgs).toEqual([
-      { login: 'connorhoehnslalom', description: expect.any(String) as unknown as string },
+      { login: 'connorhoehn', description: expect.any(String) as unknown as string },
     ]);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('readRepoSignal() returns the seeded contributors for a repo with fixture rows', async () => {
     const signals = await readRepoSignal('orgiq-github-connorhoehn', {
-      owner: 'connorhoehnslalom', name: 'orgiq-observability', fullName: 'connorhoehn/orgiq-observability',
+      owner: 'connorhoehn', name: 'orgiq-observability', fullName: 'connorhoehn/orgiq-observability',
     });
     expect(signals.length).toBe(
       githubSignalRows.rows().filter((s) => s.repo === 'connorhoehn/orgiq-observability').length,
@@ -91,7 +91,7 @@ describe('github-connector under MOCK_AGENTCORE', () => {
 
   it('readRepoSignal() returns [] rather than an error for a repo with no sampled rows', async () => {
     const signals = await readRepoSignal('orgiq-github-connorhoehn', {
-      owner: 'connorhoehnslalom', name: 'orgiq-mobile-app', fullName: 'connorhoehn/orgiq-mobile-app',
+      owner: 'connorhoehn', name: 'orgiq-mobile-app', fullName: 'connorhoehn/orgiq-mobile-app',
     });
     expect(signals).toEqual([]);
   });

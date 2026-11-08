@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from 'react-router';
-import { Button, CommandPaletteHint, Inline, PageSection, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, CommandPaletteHint, Inline, PageSection, T } from '@connorhoehn/ui-components/shared';
 import { useSession } from '../lib/auth';
 import { resolveHome } from '../lib/tenantHome';
 

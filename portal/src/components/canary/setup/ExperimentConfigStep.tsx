@@ -4,7 +4,7 @@
 import { useState, useId } from 'react';
 import {
   Button, Card, Inline, InlineAlert, MetaLine, SectionLabel, Slider, Stack, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { startCanaryExperiment } from '../usePromptLibrary.js';
 
 export interface ExperimentConfigStepProps {

@@ -15,7 +15,7 @@ import {
   MetaLine,
   Modal,
   Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { ProvisioningProgress } from '../../../components/kb/ProvisioningProgress.js';
 import { writeJson } from '../../../lib/writeJson';
 import type { KbRegistryEntry } from './types';

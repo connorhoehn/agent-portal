@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, InlineAlert, Input, Modal, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, InlineAlert, Input, Modal, Stack } from '@connorhoehn/ui-components/shared';
 import { sendJson } from '../../../lib/writeJson';
 
 export interface DraftDestination { sectionKey: string; parentId?: string | null; sourceParentId?: string; parentTitle?: string }

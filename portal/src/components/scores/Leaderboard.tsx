@@ -1,5 +1,5 @@
-import { Card, Checkbox, Chip, DataTable, EntityCell, Inline, MetaLine, Stack } from '@connorhoehnslalom/ui-components/shared';
-import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Checkbox, Chip, DataTable, EntityCell, Inline, MetaLine, Stack } from '@connorhoehn/ui-components/shared';
+import type { DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { ScoreEntry } from './types';
 import { formatScore } from './scoresFormat';
 

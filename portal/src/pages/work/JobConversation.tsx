@@ -1,5 +1,5 @@
-import { ComposerSurface } from '@connorhoehnslalom/ui-components/shared';
-import type { RichChatDraft } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { ComposerSurface } from '@connorhoehn/ui-components/shared';
+import type { RichChatDraft } from '@connorhoehn/ui-components/social/rich-composer';
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { DeckAssistantPane } from '../../components/decks/DeckAssistantPane';

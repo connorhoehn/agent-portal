@@ -4,9 +4,9 @@
 // of the pane — connecting, the live canvas and the reader fallback — renders
 // through this one frame, so the chrome never changes shape under the reader.
 import type { ReactNode } from 'react';
-import { EditorShell, type DocumentSaveState, type EditorShellProps, type EditorShellTab } from '@connorhoehnslalom/ui-components/doc-editor';
-import type { BreadcrumbItem } from '@connorhoehnslalom/ui-components/shared';
-import { Stack } from '@connorhoehnslalom/ui-components/shared';
+import { EditorShell, type DocumentSaveState, type EditorShellProps, type EditorShellTab } from '@connorhoehn/ui-components/doc-editor';
+import type { BreadcrumbItem } from '@connorhoehn/ui-components/shared';
+import { Stack } from '@connorhoehn/ui-components/shared';
 
 export const DOCUMENT_TABS = ['editor', 'comments', 'versions', 'history', 'reviews', 'recordings'] as const;
 export type DocumentTab = (typeof DOCUMENT_TABS)[number];

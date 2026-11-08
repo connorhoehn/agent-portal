@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import {
   Button, Card, Chip, DetailSection, Divider, Inline, Modal, Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { KeyValue } from '../../components/KeyValue';
 import { sendJson } from '../../lib/writeJson';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';

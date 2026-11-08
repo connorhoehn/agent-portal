@@ -9,7 +9,7 @@
 // Composed from Chip/Inline/MetaLine/SectionLabel — the strip is a legend
 // plus seventeen toned chips, which is exactly what those primitives are.
 
-import { Chip, Inline, MetaLine, SectionLabel, Stack, Tooltip, type ChipTone } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, Inline, MetaLine, SectionLabel, Stack, Tooltip, type ChipTone } from '@connorhoehn/ui-components/shared';
 import { evidenceClassOf, evidenceCoverage, type EvidenceClassKey } from '../assessmentFormat';
 import type { Dimension } from '../types';
 

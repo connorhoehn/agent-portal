@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Button, Card, Chip, CollapsibleSection, EntityCell, Inline, MetaLine, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, Chip, CollapsibleSection, EntityCell, Inline, MetaLine, SectionLabel, Stack } from '@connorhoehn/ui-components/shared';
 import { PersonDetail } from './types';
 import { relativeTime } from '../../lib/relativeTime';
 import { formatScore } from './scoresFormat';

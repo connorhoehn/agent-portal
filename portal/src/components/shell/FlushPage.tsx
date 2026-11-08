@@ -1,4 +1,4 @@
-import { Breadcrumbs, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Breadcrumbs, Stack } from '@connorhoehn/ui-components/shared';
 import { useShellBreadcrumbItems } from './Breadcrumbs';
 import { useSectionTrailDrawn } from './sectionTrail';
 

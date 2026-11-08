@@ -2,7 +2,7 @@
 //
 // This page was 825 lines of hand-rolled fleet list, task composer, workspace
 // tree and terminal chrome. All of it now lives in
-// `@connorhoehnslalom/ui-components/compute`: a pane tree with geometry-based
+// `@connorhoehn/ui-components/compute`: a pane tree with geometry-based
 // focus, the xterm lifecycle, the AgentCore shell framing, expiry meters and
 // broadcast are library problems, and the library is what gets tested and
 // storybooked.
@@ -12,8 +12,8 @@
 // consumer of the fleet reads the same list.
 
 import { useSearchParams } from 'react-router';
-import { ErrorState, InlineAlert, Stack, VisuallyHidden } from '@connorhoehnslalom/ui-components/shared';
-import { ComputerLab } from '@connorhoehnslalom/ui-components/compute';
+import { ErrorState, InlineAlert, Stack, VisuallyHidden } from '@connorhoehn/ui-components/shared';
+import { ComputerLab } from '@connorhoehn/ui-components/compute';
 import { useCapabilities } from '../../lib/capabilities';
 import { useSession } from '../../lib/auth';
 import { canOpenComputerLab } from '../../lib/devboxAccess';

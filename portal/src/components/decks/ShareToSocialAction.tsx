@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useChat, useGatewayOptional } from '@connorhoehn/realtime-modules/client';
-import { Button, ChoiceRow, InlineAlert, Inline, Input, Modal, Prose, SectionLabel, ShareIcon, Spinner, Stack, T, FormField } from '@connorhoehnslalom/ui-components/shared';
+import { Button, ChoiceRow, InlineAlert, Inline, Input, Modal, Prose, SectionLabel, ShareIcon, Spinner, Stack, T, FormField } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useChatAttachmentSend } from '../../lib/conversationComposer';
 import { useEmbeddedSocial } from '../shell/EmbeddedSocial';

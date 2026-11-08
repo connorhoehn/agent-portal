@@ -11,7 +11,7 @@ import { SharedNotificationsProvider } from './components/shell/SharedNotificati
 // Eager: a redirect has nothing to lazy-load and must not flash a spinner.
 import RunbooksDistillationRedirect from './pages/runbooks/DistillationRedirect';
 import { ComputeHost } from './components/compute/ComputeHost';
-import { LoadingState } from '@connorhoehnslalom/ui-components/shared';
+import { LoadingState } from '@connorhoehn/ui-components/shared';
 
 const AgentFlowPage = lazy(() => import('./pages/AgentFlowPage'));
 const AgentDetailPage = lazy(() => import('./pages/iq/AgentDetailPage'));

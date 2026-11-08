@@ -2,7 +2,7 @@
 // empty state that says what the page will hold and which lane brings it
 // (pipelinesSurfaces.ts). Composed from the library only.
 
-import { Chip, EmptyState, PageHeader, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, EmptyState, PageHeader, Stack } from '@connorhoehn/ui-components/shared';
 import { PIPELINES_SURFACES, type PipelinesSurfaceId } from './pipelinesSurfaces';
 
 export default function PipelinesSurfacePage({ surface }: { surface: PipelinesSurfaceId }) {

@@ -24,7 +24,7 @@ import { useMemo, useRef, useState, useEffect } from 'react';
 import {
   Button, Chip, CloseIcon, FormField, IconButton, Inline, InlineAlert, Input, MetaLine, Modal,
   SectionLabel, Stack, Textarea,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 
 export interface SaveAsTestCaseSource {
   invocationId: string;

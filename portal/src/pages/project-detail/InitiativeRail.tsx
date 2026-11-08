@@ -19,11 +19,11 @@ import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
   ActionRowList,
   type ActionRowColumn,
-} from '@connorhoehnslalom/ui-components';
+} from '@connorhoehn/ui-components';
 import {
   Button, Chip, DataTable, Inline, InlineAlert, Link as ExternalLink, MetaLine,
   SegmentedControl, Stack, StatusPill, T, type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';

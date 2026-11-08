@@ -1,7 +1,7 @@
 import '../../src/app.css';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ChatPanel } from '@connorhoehnslalom/ui-components/social';
+import { ChatPanel } from '@connorhoehn/ui-components/social';
 
 function Fixture() {
   const [scenario, setScenario] = useState('empty');

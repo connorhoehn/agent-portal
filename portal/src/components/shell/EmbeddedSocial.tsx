@@ -2,9 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { useLocation, useNavigate } from 'react-router';
 import { useGatewayOptional, usePresence } from '@connorhoehn/realtime-modules/client';
 import { useSharedNotifications } from './SharedNotifications';
-import { WrappedNotificationBell } from '@connorhoehnslalom/ui-components/integrations/realtime';
-import { Button, ChatIcon, EmptyState, ExternalLinkIcon, IconButton, Inline, PresenceAvatars, PresenceDot, Stack, T } from '@connorhoehnslalom/ui-components/shared';
-import type { ConversationFeature } from '@connorhoehnslalom/ui-components/social';
+import { WrappedNotificationBell } from '@connorhoehn/ui-components/integrations/realtime';
+import { Button, ChatIcon, EmptyState, ExternalLinkIcon, IconButton, Inline, PresenceAvatars, PresenceDot, Stack, T } from '@connorhoehn/ui-components/shared';
+import type { ConversationFeature } from '@connorhoehn/ui-components/social';
 import { ChannelBinding, useChannelBinding, type ChannelBindingState } from '../social/ChannelBindingStrip';
 import { useSession } from '../../lib/auth';
 import type { CallPageDescriptor } from '../../lib/callPages';

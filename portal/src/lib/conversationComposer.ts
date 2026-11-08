@@ -6,8 +6,8 @@
 // message text plus the metadata citing only what the gateway confirmed, by
 // upload id (a card's Post — a deck file, a diagram — goes through the same path).
 import * as client from '@connorhoehn/realtime-modules/client';
-import { ComposerSurface } from '@connorhoehnslalom/ui-components/shared';
-import { attachmentOnlyText, createConversationComposer, useConversationUploads } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { ComposerSurface } from '@connorhoehn/ui-components/shared';
+import { attachmentOnlyText, createConversationComposer, useConversationUploads } from '@connorhoehn/ui-components/social/rich-composer';
 import { createElement, useCallback, type ComponentProps } from 'react';
 import { useMentionCandidates } from '../components/chat/useMentionCandidates';
 import { CallBlock, callDrawn, useCallHost } from './conversationCall';

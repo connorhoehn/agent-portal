@@ -1,6 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { DensityProvider } from '@connorhoehnslalom/ui-components/shared';
+import { DensityProvider } from '@connorhoehn/ui-components/shared';
 import { Work, Sprints, Budget } from './v4-pages';
 import { DispatchV4 } from './dispatch-v4';
 const page=document.getElementById('review-content')!.dataset.page;

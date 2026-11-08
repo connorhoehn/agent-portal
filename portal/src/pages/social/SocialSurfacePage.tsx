@@ -2,7 +2,7 @@
 // state that says what the page will hold and which lane brings it
 // (socialSurfaces.ts). Composed from the library only.
 
-import { Chip, EmptyState, PageHeader, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, EmptyState, PageHeader, Stack } from '@connorhoehn/ui-components/shared';
 import { SOCIAL_SURFACES, type SocialSurfaceId } from './socialSurfaces';
 
 export default function SocialSurfacePage({ surface }: { surface: SocialSurfaceId }) {

@@ -6,7 +6,7 @@
 // template. Composed here once, fed pre-bucketed cell classes from
 // `trafficFormat.ts` (so no runtime `style=` is needed for the color scale).
 // ≤ 12 raw elements: 1 header-row grid + 1 per-day-row grid template (map) = 2.
-import { Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, Stack, T } from '@connorhoehn/ui-components/shared';
 import { heatmapBucketClass } from './trafficFormat';
 
 const GRID_COLS = 'grid-cols-[40px_repeat(24,minmax(20px,1fr))]';

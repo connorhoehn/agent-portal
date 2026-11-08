@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Inline, Input, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, Input, Stack } from '@connorhoehn/ui-components/shared';
 
 const MAX_SUGGESTIONS = 8;
 

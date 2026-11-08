@@ -9,7 +9,7 @@
 // what its pane renders.
 
 import { useMemo } from 'react';
-import { LogStream, SectionLabel, Stack, T, type LogLine } from '@connorhoehnslalom/ui-components/shared';
+import { LogStream, SectionLabel, Stack, T, type LogLine } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { nodeLogLines, type NodeLogEntry, type NodeLogLine } from './nodeLogLines';

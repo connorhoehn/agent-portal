@@ -24,8 +24,8 @@ import {
   SuggestionCard,
   ThinkingBlock,
   WorkflowStepper, T,
-} from '@connorhoehnslalom/ui-components/shared';
-import { ViewportFillRegion } from '@connorhoehnslalom/ui-components';
+} from '@connorhoehn/ui-components/shared';
+import { ViewportFillRegion } from '@connorhoehn/ui-components';
 import { ShellTrail } from '../components/shell/Breadcrumbs';
 import { ChannelThread } from '../components/chat/ConversationThread';
 import { useSession } from '../lib/auth';

@@ -4,7 +4,7 @@
 // prefix and has ZERO consumers — this tab prints the path and stops. Wiring it
 // up is a feature decision, not a cleanup one, so it is left alone here.
 
-import { Card, CardHeader, Chip, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Card, CardHeader, Chip, Stack } from '@connorhoehn/ui-components/shared';
 import type { KbRegistryEntry } from './types';
 
 export function LandingZoneTab({

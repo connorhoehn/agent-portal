@@ -19,11 +19,11 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import type { ComposerPrompt, ConversationCommand, ConversationOutgoing, ConversationRecipient, RichChatComposerHandle } from '@connorhoehnslalom/ui-components/social/rich-composer';
-import { ComposerSendError, composerDraftOf } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import type { ComposerPrompt, ConversationCommand, ConversationOutgoing, ConversationRecipient, RichChatComposerHandle } from '@connorhoehn/ui-components/social/rich-composer';
+import { ComposerSendError, composerDraftOf } from '@connorhoehn/ui-components/social/rich-composer';
 import { useGatewayOptional } from '@connorhoehn/realtime-modules/client';
-import { Button, Inline, Select, Stack, T, useDensity } from '@connorhoehnslalom/ui-components/shared';
-import { useSidePane } from '@connorhoehnslalom/ui-components';
+import { Button, Inline, Select, Stack, T, useDensity } from '@connorhoehn/ui-components/shared';
+import { useSidePane } from '@connorhoehn/ui-components';
 import { useHuddleChat } from '../../components/shell/HuddleChat';
 import { useEmbeddedSocial } from '../../components/shell/EmbeddedSocial';
 import { ConversationComposer } from '../../lib/conversationComposer';

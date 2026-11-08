@@ -10,7 +10,7 @@
 // full of inert filters reads as broken software, and hid which controls are
 // real. When a page learns to read a param, add its item back here.
 
-import type { SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import type { SubNavItem } from '@connorhoehn/ui-components/shared';
 import { useAutomateSpec } from '../work/automateNav';
 import { useCanaryNavItems } from '../../components/canary/canaryNavItems';
 import { useSession } from '../../lib/auth';

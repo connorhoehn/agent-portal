@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { Card, CardHeader, ChevronIcon, Chip, CollectionToolbar, IconButton, Inline, InlineAlert, InlinePlaceholder, LoadingState, PageSection, ProgressBar, RepeatIcon, Stack, StatStrip, T, Table, TableBody, TableHead, TableRow, TableTd, TableTh } from '@connorhoehnslalom/ui-components/shared';
+import { Card, CardHeader, ChevronIcon, Chip, CollectionToolbar, IconButton, Inline, InlineAlert, InlinePlaceholder, LoadingState, PageSection, ProgressBar, RepeatIcon, Stack, StatStrip, T, Table, TableBody, TableHead, TableRow, TableTd, TableTh } from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { writeJson } from '../../lib/writeJson';
 import { useFetch } from '../../hooks/useFetch';

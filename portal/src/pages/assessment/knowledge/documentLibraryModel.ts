@@ -1,4 +1,4 @@
-import type { DocumentResultItem } from '@connorhoehnslalom/ui-components/shared';
+import type { DocumentResultItem } from '@connorhoehn/ui-components/shared';
 import type { DeckSummary } from '../decks/decksApi.ts';
 import type { KnowledgeNode, KnowledgeSection } from './types.ts';
 import { CLASSIFICATION_LABEL, isFolderNode, nodePath } from './knowledgeFormat.ts';

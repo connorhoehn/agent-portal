@@ -4,7 +4,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useFetch } from '../hooks/useFetch';
-import { Button, ChoiceList, ChoiceRow, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, ChoiceList, ChoiceRow, Inline, Stack } from '@connorhoehn/ui-components/shared';
 
 interface SessionSummary {
   sessionId: string;

@@ -13,9 +13,9 @@
 
 import { useState } from 'react';
 import { useFlowRun } from '../../hooks/useFlowRun';
-import { AgentRunCard } from '@connorhoehnslalom/ui-components/social';
-import { NodeGraph } from '@connorhoehnslalom/ui-components/graph';
-import { Button, Card, InlineAlert, Inline, MarkdownView, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { AgentRunCard } from '@connorhoehn/ui-components/social';
+import { NodeGraph } from '@connorhoehn/ui-components/graph';
+import { Button, Card, InlineAlert, Inline, MarkdownView, Stack } from '@connorhoehn/ui-components/shared';
 import { MAX_POLLS, pollDelayMs } from './conversationSummarize';
 import {
   agentRunStatusOf, canPost, canSave, isTerminal, sourcesMarkdown,

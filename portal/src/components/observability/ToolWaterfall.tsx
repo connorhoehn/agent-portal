@@ -4,8 +4,8 @@
 // only maps tool calls onto spans; it draws nothing itself.
 
 import { useMemo } from 'react';
-import { EmptyState } from '@connorhoehnslalom/ui-components/shared';
-import { TraceTimeline, type TraceSpan } from '@connorhoehnslalom/ui-components/agents';
+import { EmptyState } from '@connorhoehn/ui-components/shared';
+import { TraceTimeline, type TraceSpan } from '@connorhoehn/ui-components/agents';
 
 export interface ToolCall {
   toolCallId: string;

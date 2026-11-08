@@ -1,7 +1,7 @@
 // Native host with explicit inert lifecycle data. No signalling, device,
 // call, recording, message or job mutation is implemented by this fixture.
 import { useSyncExternalStore } from 'react';
-import { createCallBlockHost, type CallBlockCall, type CallBlockModules } from '@connorhoehnslalom/ui-components/integrations/realtime';
+import { createCallBlockHost, type CallBlockCall, type CallBlockModules } from '@connorhoehn/ui-components/integrations/realtime';
 import { conversationCallDockProps } from '@connorhoehn/realtime-modules/client/video';
 let phase: 'idle' | 'live' | 'failed' | 'reconnecting' = 'idle';
 const listeners = new Set<() => void>();
@@ -24,4 +24,4 @@ export const calls = createCallBlockHost({
 } as CallBlockModules);
 export const { CallHostProvider, CallMediaOutlet, CallBlock, useCallHost, useCallBlock, useCallLobby,
   useCallMediaPanel, useCallBlockPlacement, useCallBlockPageClaimed, useClaimCallBlock } = calls;
-export { callCounts, callDrawn } from '@connorhoehnslalom/ui-components/integrations/realtime';
+export { callCounts, callDrawn } from '@connorhoehn/ui-components/integrations/realtime';

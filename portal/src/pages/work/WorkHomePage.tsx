@@ -11,7 +11,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
   Button, Card, CollectionToolbar, InlineAlert, PageSection, Stack, StatStrip,
   DataTable, Divider, PageHeader, Disclosure, type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { collectionCommandAdapter, resolveCollectionTarget } from '../../components/collections/collectionCommands';
 import { INBOX_RUNS_GRAMMAR, recentFinishedRuns } from './workCollectionCommands';

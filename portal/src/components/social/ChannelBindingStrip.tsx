@@ -19,8 +19,8 @@
 // another product, and a person who cannot go through it should not see it.
 
 import { useCallback, useState } from 'react';
-import { MetaLine } from '@connorhoehnslalom/ui-components/shared';
-import { ChannelBindingStrip } from '@connorhoehnslalom/ui-components/social';
+import { MetaLine } from '@connorhoehn/ui-components/shared';
+import { ChannelBindingStrip } from '@connorhoehn/ui-components/social';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { writeJson } from '../../lib/writeJson';

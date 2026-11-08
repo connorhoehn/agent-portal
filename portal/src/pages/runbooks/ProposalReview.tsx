@@ -3,11 +3,11 @@
 // owns the scope — Accept, Reject (a note is required) and Merge into another runbook. Everyone else
 // reads it with an AccessNotice. A refused write says why in a sentence, never a bare status.
 import { useEffect, useRef, useState } from 'react';
-import { AccessNotice, ChangeReviewCard, SourceList } from '@connorhoehnslalom/ui-components';
-import { DocumentOutline, EditorShell } from '@connorhoehnslalom/ui-components/doc-editor';
+import { AccessNotice, ChangeReviewCard, SourceList } from '@connorhoehn/ui-components';
+import { DocumentOutline, EditorShell } from '@connorhoehn/ui-components/doc-editor';
 import {
   Banner, Button, Chip, DetailSection, DiffViewer, FormField, Inline, Input, Select, Spinner, Stack, StatusPill, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';

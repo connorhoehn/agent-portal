@@ -1,7 +1,7 @@
 import React from 'react';
 import {Handle, Position} from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import '@connorhoehnslalom/ui-components/styles.css';
+import '@connorhoehn/ui-components/styles.css';
 import {BaseNode,AgentNode,ServerStepNode,AnimatedEdge,PipelineNodeRuntimeProvider,portCls,Button,IconButton,ChatIcon,TitledFrame,Chip} from './shared';
 import {FailureRain} from './FailureRain';
 import './node-content.css';

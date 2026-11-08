@@ -9,9 +9,9 @@
 
 import { useEffect, useMemo, useState, type ComponentProps } from 'react';
 import { useNavigate } from 'react-router';
-import { ActionRowList } from '@connorhoehnslalom/ui-components';
-import { ActivePeopleGrid } from '@connorhoehnslalom/ui-components/social';
-import { Button, LoadingState, PageSection, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { ActionRowList } from '@connorhoehn/ui-components';
+import { ActivePeopleGrid } from '@connorhoehn/ui-components/social';
+import { Button, LoadingState, PageSection, Stack, T } from '@connorhoehn/ui-components/shared';
 import { landingDecision } from './landingModel';
 import {
   GROUP_NOUN, groupBindingContext, groupDiscussionChannel, groupRowKey, groupRowPreview, unreadFor,

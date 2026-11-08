@@ -3,7 +3,7 @@
 import '../../src/app.css';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { ConversationOutgoing } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import type { ConversationOutgoing } from '@connorhoehn/ui-components/social/rich-composer';
 import { ConversationComposer } from '../../src/lib/conversationComposer';
 
 const channel = 'assessment:team:TEAM-005';

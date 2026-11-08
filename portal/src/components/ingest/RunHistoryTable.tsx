@@ -4,8 +4,8 @@ import {
   DataTable,
   FilterChip,
   Inline,
-} from '@connorhoehnslalom/ui-components/shared';
-import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
+import type { DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { absoluteTime, durationLabel } from '../../lib/relativeTime';
 import { CRAWL_STATUS_TONE, durationOf, formatCost } from './types';
 import type { CrawlSession, CrawlStatus, CrawlTarget } from './types';

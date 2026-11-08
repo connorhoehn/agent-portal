@@ -2,8 +2,8 @@
 // (/iq/runbooks/proposals/:pid). Withdrawing is not offered: the API has no withdraw route.
 import { useMemo, useState } from 'react';
 import { useNavigate, useOutletContext, useParams } from 'react-router';
-import { WorkListFilters } from '@connorhoehnslalom/ui-components';
-import { EmptyState, FilterPopover, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { WorkListFilters } from '@connorhoehn/ui-components';
+import { EmptyState, FilterPopover, Stack } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useRunbookNames } from './useRunbookNames';
 import { ProposalReview } from './ProposalReview';

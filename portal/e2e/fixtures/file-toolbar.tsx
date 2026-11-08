@@ -2,7 +2,7 @@ import '../../src/app.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, useLocation } from 'react-router';
-import { Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Stack, T } from '@connorhoehn/ui-components/shared';
 import { SessionProvider } from '../../src/lib/auth';
 import { InitiativeFiles } from '../../src/pages/projects/InitiativeFiles';
 import { TeamFiles } from '../../src/pages/assessment/dashboard/TeamFiles';

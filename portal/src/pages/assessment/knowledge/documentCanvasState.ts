@@ -1,4 +1,4 @@
-import type { DocumentSaveState } from '@connorhoehnslalom/ui-components/doc-editor';
+import type { DocumentSaveState } from '@connorhoehn/ui-components/doc-editor';
 
 export function documentCanvasSaveState(state: 'idle' | 'pending' | 'saved' | 'error', pending: number, online: boolean, retry: () => void): DocumentSaveState | undefined {
   if (state === 'idle') return undefined;

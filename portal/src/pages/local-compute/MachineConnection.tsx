@@ -27,7 +27,7 @@ import {
   PresenceDot,
   Stack,
   ThinkingDots,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { KeyValue } from '../../components/KeyValue';
 import { absoluteTime } from '../../lib/relativeTime';
 import { elapsedLabel, isLive, when, type JobStatus } from './localComputeFormat';

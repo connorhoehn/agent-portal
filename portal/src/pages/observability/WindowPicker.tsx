@@ -5,7 +5,7 @@
 // six times. One setting with a few values is what the library's
 // SegmentedControl is for: one `role="group"` with a name, aria-pressed on
 // the chosen value, and one place to change how it looks.
-import { SegmentedControl } from '@connorhoehnslalom/ui-components/shared';
+import { SegmentedControl } from '@connorhoehn/ui-components/shared';
 import { useUrlState } from '../../lib/useUrlState';
 
 export interface WindowOption {

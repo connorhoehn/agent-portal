@@ -15,7 +15,7 @@
 // PersonDetailCard fetches `contributions` eagerly, the same way it already
 // fetches `radar` and `history`, so the section has real content as soon as
 // it's expanded instead of racing a fetch that only starts on open.
-import { Inline, MetaLine, SectionLabel } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, MetaLine, SectionLabel } from '@connorhoehn/ui-components/shared';
 
 export interface CollaboratorContribution {
   otherId: string;

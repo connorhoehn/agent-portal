@@ -19,7 +19,7 @@
 import { useState } from 'react';
 import {
   Button, Chip, DropdownMenu, EditIcon, MetaLine, type DropdownMenuSection,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastInfo } from '../../lib/toastStore';
 

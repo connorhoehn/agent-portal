@@ -19,7 +19,7 @@ import {
   StatStrip,
   T,
   type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { durationLabel } from '../../lib/relativeTime';
 import { RecordNotFound, UnavailableNotice } from '../UnavailableNotice';

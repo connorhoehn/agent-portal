@@ -9,7 +9,7 @@ import DesignThreadPage from './DesignThreadPage';
 import {
   Chip, CollectionToolbar, DataTable, EmptyState, Inline, LoadingState, Stack, T,
   type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useUrlState } from '../../lib/useUrlState';

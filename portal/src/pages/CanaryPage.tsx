@@ -23,8 +23,8 @@ import {
   Button, Card, Chip, ConfirmDialog, DataTable, EmptyState, IconButton, Inline, LoadingState,
   PlayCircleIcon, RepeatIcon, Select, Stack, StatusPill, Switch, T, ThinkingDots, Toolbar,
   VisuallyHidden,
-} from '@connorhoehnslalom/ui-components/shared';
-import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
+import type { DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { nodeTypes, edgeTypes } from '../components/canary/index.js';
 import { useCanaryStream } from '../components/canary/useCanaryStream.js';
 import { toastError } from '../lib/toastStore';

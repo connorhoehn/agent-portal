@@ -40,7 +40,7 @@ import {
   Inline,
   Stack,
   T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { usd } from './budgetsFormat';
 import type { GrantRow } from './types';

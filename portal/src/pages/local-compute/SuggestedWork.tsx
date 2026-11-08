@@ -16,7 +16,7 @@
 // clickable "suggestion" would be a button that cannot work. These are things
 // to go and do, phrased as such.
 
-import { Button, Chip, Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Chip, Inline, Stack, T } from '@connorhoehn/ui-components/shared';
 import { Link as RouterLink } from 'react-router';
 import { TIERS, TIER_IDEAS, bestTier } from '../../lib/modelCapability';
 

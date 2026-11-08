@@ -28,7 +28,7 @@ import {
   T,
   Textarea,
   type FormWizardSection,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useFlushTrailItems } from '../../components/shell/FlushPage';

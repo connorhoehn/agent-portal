@@ -17,7 +17,7 @@ import {
   TableRow,
   TableTd,
   TableTh,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { matrixActions } from './identityFormat';
 import { UnavailableNotice } from '../../components/UnavailableNotice';

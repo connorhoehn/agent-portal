@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, DiffViewer, Inline, InlineAlert, LoadingState, Modal, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, DiffViewer, Inline, InlineAlert, LoadingState, Modal, Stack } from '@connorhoehn/ui-components/shared';
 import { sendJson } from '../../../lib/writeJson';
 
 interface SourcePreview {

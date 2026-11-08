@@ -21,7 +21,7 @@
 // and its ordinary empty state is saying "there is genuinely nothing here",
 // and that distinction is the entire point of the marker.
 
-import { Card, Button, ErrorState, PageSection } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Button, ErrorState, PageSection } from '@connorhoehn/ui-components/shared';
 
 export { isNotFoundError } from './notFound';
 

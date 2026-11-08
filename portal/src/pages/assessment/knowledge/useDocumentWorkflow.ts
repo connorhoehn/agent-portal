@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { DocumentLifecycleStatus, LifecycleAction, LifecycleErrorView } from '@connorhoehnslalom/ui-components/doc-editor';
+import type { DocumentLifecycleStatus, LifecycleAction, LifecycleErrorView } from '@connorhoehn/ui-components/doc-editor';
 import { useFetch } from '../../../hooks/useFetch';
 import { writeJson } from '../../../lib/writeJson';
 

@@ -10,8 +10,8 @@ import {
   ViewportFillRegion,
   useSidePaneHost,
   type ListRail,
-} from '@connorhoehnslalom/ui-components';
-import { Breadcrumbs, Divider, Modal, RailNavList, Stack, useRailFold, type BreadcrumbItem } from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components';
+import { Breadcrumbs, Divider, Modal, RailNavList, Stack, useRailFold, type BreadcrumbItem } from '@connorhoehn/ui-components/shared';
 import { initiativeBreadcrumbs, initiativeListHref, type InitiativeCrumb } from './initiativeNavigation';
 import { useDialogueRailFold } from '../../components/shell/useDialogueRailFold';
 

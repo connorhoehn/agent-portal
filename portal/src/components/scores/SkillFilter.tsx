@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Combobox, FilterChip, Inline } from '@connorhoehnslalom/ui-components/shared';
+import { Combobox, FilterChip, Inline } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 interface SkillSummary {

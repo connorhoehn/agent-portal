@@ -4,7 +4,7 @@
 // the editor; spread `shellProps` onto EditorShell and render `followBar`.
 
 import { useMemo, useState, type ReactElement } from 'react';
-import { EMPTY_DECK_PRESENCE, FollowModeBar, type DeckPresence } from '@connorhoehnslalom/ui-components/doc-editor';
+import { EMPTY_DECK_PRESENCE, FollowModeBar, type DeckPresence } from '@connorhoehn/ui-components/doc-editor';
 
 export function useDeckCollaboration() {
   const [presence, setPresence] = useState<DeckPresence>(EMPTY_DECK_PRESENCE);

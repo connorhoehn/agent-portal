@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import {
   ArrowUpIcon, DropdownMenu, FilterIcon, FolderIcon, Inline, Tooltip,
   type DropdownMenuSection,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { SEARCH_LABELS, SEARCH_TYPES, type SearchRecordType, type SearchSort } from './searchTypes';
 
 export interface SearchControlsProps {

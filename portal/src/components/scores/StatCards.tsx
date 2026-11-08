@@ -1,4 +1,4 @@
-import { StatStrip } from '@connorhoehnslalom/ui-components/shared';
+import { StatStrip } from '@connorhoehn/ui-components/shared';
 import { relativeTime } from '../../lib/relativeTime';
 import { useCapabilities } from '../../lib/capabilities';
 

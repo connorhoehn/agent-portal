@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Card, CardHeader, CatalogGrid, Inline, InlineAlert, InlinePlaceholder, Input, SectionLabel, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, CardHeader, CatalogGrid, Inline, InlineAlert, InlinePlaceholder, Input, SectionLabel, Stack, T } from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../../lib/capabilities';
 import { askPage } from './browserApi';
 import type { WebQAResult } from './types';

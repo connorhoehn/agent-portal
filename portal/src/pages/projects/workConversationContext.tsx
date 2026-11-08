@@ -1,5 +1,5 @@
-import type { WrappedChatPanelProps } from '@connorhoehnslalom/ui-components/integrations/realtime';
-import { Button, Chip, Inline, T } from '@connorhoehnslalom/ui-components/shared';
+import type { WrappedChatPanelProps } from '@connorhoehn/ui-components/integrations/realtime';
+import { Button, Chip, Inline, T } from '@connorhoehn/ui-components/shared';
 import type { WorkItem } from '../project-detail/types';
 
 /** References name a record only; its key/title are resolved under this viewer's access. */

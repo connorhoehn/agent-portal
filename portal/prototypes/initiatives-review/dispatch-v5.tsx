@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Avatar, Button, WorkflowStepper } from '@connorhoehnslalom/ui-components/shared';
-import { ComposerPromptDeck, RichChatComposer, type ComposerPrompt, type RichChatDraft } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { Avatar, Button, WorkflowStepper } from '@connorhoehn/ui-components/shared';
+import { ComposerPromptDeck, RichChatComposer, type ComposerPrompt, type RichChatDraft } from '@connorhoehn/ui-components/social/rich-composer';
 import { Rail } from './v4-pages';
 import { money } from './revision3';
 
@@ -48,7 +48,7 @@ export function DispatchV5() {
         <div><dt>Forecast</dt><dd><strong>{model==='Haiku'?'$0.03–$0.30':'Needs updating'}</strong>{model==='Haiku'&&<small>1–6 min · limited history</small>}</dd></div>
       </dl></section>
       <section className="v5-rail-section"><h2>Funding</h2><div className="v5-person"><Avatar name="Nora DaSilva" size={28}/><div><strong>Nora DaSilva</strong><span>{funded?'$12.00 available':'No active envelope'}</span></div></div><p className="v5-rail-note">{funded?'Illustrative funded state':'Sprint envelope required'}</p></section>
-      <section className="v5-rail-section"><h2>Codebase</h2><p className="v5-repo">orgiq-observability</p><span className="v5-rail-note">connorhoehnslalom</span></section>
+      <section className="v5-rail-section"><h2>Codebase</h2><p className="v5-repo">orgiq-observability</p><span className="v5-rail-note">connorhoehn</span></section>
       <div className="v5-preview-state"><label htmlFor="funding-preview">Preview funding state</label><select id="funding-preview" value={funded?'funded':'blocked'} onChange={e=>{const yes=e.target.value==='funded';setFunded(yes);setMode('agent');setStep(yes?'ready':'funding');}}><option value="blocked">Missing funding</option><option value="funded">Funding available</option></select></div>
     </Rail>
     <div className="review-page v5-dispatch">

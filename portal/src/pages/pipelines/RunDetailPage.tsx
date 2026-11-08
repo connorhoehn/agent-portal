@@ -17,7 +17,7 @@
 
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
-import { IconButton, Tooltip, CloseIcon, Button, ConfirmDialog, DetailSection, EmptyState, Inline, InlineAlert, LoadingState, PageHeader, Stack, Tabs, useHeaderDensity } from '@connorhoehnslalom/ui-components/shared';
+import { IconButton, Tooltip, CloseIcon, Button, ConfirmDialog, DetailSection, EmptyState, Inline, InlineAlert, LoadingState, PageHeader, Stack, Tabs, useHeaderDensity } from '@connorhoehn/ui-components/shared';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
 import { writeJson } from '../../lib/writeJson';

@@ -21,7 +21,7 @@ import type { ReactNode } from 'react';
 import { Link as RouterLink } from 'react-router';
 import {
   Card, CodeBlock, Inline, Link, MetaLine, Stack, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 
 import { UnavailableNotice } from '../UnavailableNotice';
 

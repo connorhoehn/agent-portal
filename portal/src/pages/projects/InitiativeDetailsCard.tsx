@@ -4,7 +4,7 @@
 
 import {
   Avatar, IconButton, InfoIcon, KeyValue, Tooltip, Inline, Stack, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import type { ProjectDetail } from '../project-detail/types';
 import type { Sprint } from '../sprints/types';

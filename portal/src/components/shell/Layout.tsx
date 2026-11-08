@@ -25,10 +25,10 @@ import {
   useRailFold,
   useViewportWidth,
   type RailDepthSpec,
-} from '@connorhoehnslalom/ui-components/shared';
-import { DockedColumn, SidePaneProvider, useSidePaneHost } from '@connorhoehnslalom/ui-components';
+} from '@connorhoehn/ui-components/shared';
+import { DockedColumn, SidePaneProvider, useSidePaneHost } from '@connorhoehn/ui-components';
 import { useDialogueRailFold } from './useDialogueRailFold';
-import { ConversationInputProvider } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { ConversationInputProvider } from '@connorhoehn/ui-components/social/rich-composer';
 
 // activeNavItemClassName / inactiveNavItemClassName come from the library, not
 // from local copies. They were briefly replaced with local strings on the
@@ -61,7 +61,7 @@ import { navigationActivity } from './navActivity';
 import { discussionCommandLabel, railCount } from './discussionUnreadModel';
 import { DevboxQuickSwitch, type PaletteScope } from './DevboxQuickSwitch';
 import { ToastHost } from './ToastHost';
-import { ComputeDock } from '@connorhoehnslalom/ui-components/compute';
+import { ComputeDock } from '@connorhoehn/ui-components/compute';
 import { tenantEnabled } from '../../lib/features';
 import { ShellCallHost } from './ShellCallHost';
 import { CallBlock } from '../../lib/conversationCall';

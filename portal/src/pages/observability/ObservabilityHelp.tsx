@@ -11,7 +11,7 @@ import {
   Modal,
   SectionLabel,
   Stack, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { KeyValue } from '../../components/KeyValue';
 
 interface HelpEntry {

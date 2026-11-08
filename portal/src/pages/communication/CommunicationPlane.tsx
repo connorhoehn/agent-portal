@@ -35,9 +35,9 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
-import { SidePane, ViewportFillRegion } from '@connorhoehnslalom/ui-components';
-import { ConversationRail, RAIL_SECTION_CONTENT_INSET, buildRailSection, type ConversationRailSection } from '@connorhoehnslalom/ui-components/social';
-import { Button, EmptyState, ExternalLinkIcon, IconButton, Inline, InlineAlert, PhoneIcon, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { SidePane, ViewportFillRegion } from '@connorhoehn/ui-components';
+import { ConversationRail, RAIL_SECTION_CONTENT_INSET, buildRailSection, type ConversationRailSection } from '@connorhoehn/ui-components/social';
+import { Button, EmptyState, ExternalLinkIcon, IconButton, Inline, InlineAlert, PhoneIcon, Stack, T } from '@connorhoehn/ui-components/shared';
 import { useShellBreadcrumbItems } from '../../components/shell/Breadcrumbs';
 import { SectionContent } from '../../components/shell/SectionContent';
 import { useTenantCalls } from '../../hooks/usePageCalls';

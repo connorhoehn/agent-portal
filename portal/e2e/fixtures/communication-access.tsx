@@ -1,7 +1,7 @@
 import '../../src/app.css';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Button, Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Inline, Stack, T } from '@connorhoehn/ui-components/shared';
 import { CommunicationAccessState, type CommunicationAccessStatus } from '../../src/components/communication/CommunicationAccessState';
 
 function Fixture() {

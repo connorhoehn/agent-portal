@@ -1,4 +1,4 @@
-import { ComposerSurface } from '@connorhoehnslalom/ui-components/shared';
+import { ComposerSurface } from '@connorhoehn/ui-components/shared';
 // The Search composer (goal decision 6): the library `ConversationComposer` —
 // the same composer as the initiative pages — in its `document` presentation,
 // Agent asks Search; a joined huddle enables Chat on the same central input.
@@ -16,8 +16,8 @@ import { ComposerSurface } from '@connorhoehnslalom/ui-components/shared';
 // Beside it, Message opens a social DM with the one selected person
 // (./peopleMessage.tsx — lane E, docs/social-tenant-design.md §4.6).
 
-import { Inline, T } from '@connorhoehnslalom/ui-components/shared';
-import type { ComposedMessage, ConversationCommand, RichChatComposerHandle, RichChatDraft } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { Inline, T } from '@connorhoehn/ui-components/shared';
+import type { ComposedMessage, ConversationCommand, RichChatComposerHandle, RichChatDraft } from '@connorhoehn/ui-components/social/rich-composer';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { ComposerAdvisories, type ComposerAdvisory } from '../../components/chat/ComposerAdvisories';

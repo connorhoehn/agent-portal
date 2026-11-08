@@ -22,7 +22,7 @@ import {
   ArrowRightIcon, Banner, Button, Chip, DataTable, IconButton, Inline, InlineAlert, LinkIcon,
   MetaLine, PageSection, RepeatIcon, SearchInput, SegmentedControl, Stack, StatStrip, T, Toolbar,
   type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';

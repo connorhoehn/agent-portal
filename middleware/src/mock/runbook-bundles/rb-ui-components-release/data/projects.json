@@ -3,7 +3,7 @@
     "repo": "~/Projects/aws-agentcore",
     "libraries": {
       "ui-components": {
-        "package": "@connorhoehnslalom/ui-components",
+        "package": "@connorhoehn/ui-components",
         "repo": "~/Projects/ui-components",
         "remote": "git@github.com:connorhoehn/ui-components.git",
         "vendor": "portal/vendor",

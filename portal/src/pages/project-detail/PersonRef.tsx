@@ -21,7 +21,7 @@
 
 import { useState, type KeyboardEvent } from 'react';
 import { Link } from 'react-router';
-import { Avatar, Chip, HoverCard, Inline, LoadingState, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Avatar, Chip, HoverCard, Inline, LoadingState, Stack, T } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { PublicPersonSummary } from '../../components/people/PublicPersonSummary';

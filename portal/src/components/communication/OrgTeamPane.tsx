@@ -10,8 +10,8 @@
 // a member with no app user cannot be messaged or show presence, and says so.
 
 import { useMemo } from 'react';
-import { ActivePeopleGrid } from '@connorhoehnslalom/ui-components/social';
-import { Button, ChannelHeader, EmptyState, InlineAlert, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { ActivePeopleGrid } from '@connorhoehn/ui-components/social';
+import { Button, ChannelHeader, EmptyState, InlineAlert, Stack } from '@connorhoehn/ui-components/shared';
 import { orgTeamPeople, onlineMembers, type OrgTeam } from './planeRailModel';
 import type { PlaneOrg } from './usePlaneOrg';
 

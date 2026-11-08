@@ -2,7 +2,7 @@
 // function here is a value in, a value out, so the rules that decide what a
 // status LOOKS like are readable (and testable) without mounting a page.
 
-import type { ChipTone } from '@connorhoehnslalom/ui-components/shared';
+import type { ChipTone } from '@connorhoehn/ui-components/shared';
 import type { Reconciled } from '../../knowledge/knowledgeFormat';
 import type { KbRegistryEntry, KbStatus, KbTenant } from './types';
 

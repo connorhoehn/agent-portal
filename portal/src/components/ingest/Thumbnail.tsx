@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Inline } from '@connorhoehnslalom/ui-components/shared';
+import { Inline } from '@connorhoehn/ui-components/shared';
 
 /**
  * Lazily renders a screenshot from

@@ -1,5 +1,5 @@
 // GroupedList still owns focus, keyboard navigation, disclosure and activation.
-import { GroupedList, SegmentedControl, T, type GroupedListRow } from '@connorhoehnslalom/ui-components/shared';
+import { GroupedList, SegmentedControl, T, type GroupedListRow } from '@connorhoehn/ui-components/shared';
 import type { Dimension } from '../types';
 import { DimensionRailSubline } from './DimensionRow';
 import { dimensionRailGroup, dimensionRailGroups, dimensionRailTitle } from './scorecardHeaderModel';

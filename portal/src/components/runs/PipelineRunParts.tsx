@@ -13,7 +13,7 @@
 import {
   Chip, DataTable, DetailHeader, Inline, KeyValue, MetaLine, Stack, WorkflowStepper,
   type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
 import { usd } from '../../lib/format';

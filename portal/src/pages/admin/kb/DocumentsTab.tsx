@@ -13,7 +13,7 @@ import {
   TableRow,
   TableTd,
   TableTh,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch.js';
 import { UnavailableNotice } from '../../../components/UnavailableNotice';
 import { docCountLabel, formatDate } from './kbFormat';

@@ -21,7 +21,7 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { useCallHost, useCallLobby } from '../../../lib/conversationCall';
 import { callAvailability, lobbyPrefix } from '../../../lib/conversationCallModel';
-import { pageHuddleStart } from '@connorhoehnslalom/ui-components/integrations/realtime';
+import { pageHuddleStart } from '@connorhoehn/ui-components/integrations/realtime';
 import { documentCallChannel, documentCallLobby, type AwarenessPerson } from './documentCommentsModel';
 import { conversationChannelForDoc } from './knowledgeFormat';
 

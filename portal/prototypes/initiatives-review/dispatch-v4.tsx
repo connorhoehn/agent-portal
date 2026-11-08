@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Button, WorkflowStepper } from '@connorhoehnslalom/ui-components/shared';
-import { ComposerPromptDeck, RichChatComposer, type ComposerPrompt, type RichChatDraft } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { Button, WorkflowStepper } from '@connorhoehn/ui-components/shared';
+import { ComposerPromptDeck, RichChatComposer, type ComposerPrompt, type RichChatDraft } from '@connorhoehn/ui-components/social/rich-composer';
 import { money } from './revision3';
 
 type Step = 'funding'|'request'|'preview'|'model'|'cap'|'instruction'|'saved'|'ready'|'queued';

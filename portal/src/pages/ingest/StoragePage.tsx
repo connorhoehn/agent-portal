@@ -3,7 +3,7 @@ import {
   T,
   Card, CardHeader, CollectionToolbar, LoadingState, PageSection, StatStrip, Stack, Table, TableBody,
   TableHead, TableRow, TableTd, TableTh,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { formatBytes } from '../../components/ingest/types';
 import type { StorageBreakdown } from '../../components/ingest/types';

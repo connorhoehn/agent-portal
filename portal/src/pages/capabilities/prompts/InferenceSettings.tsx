@@ -1,4 +1,4 @@
-import { Card, FormField, FormRow, Input, SectionLabel, Select, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Card, FormField, FormRow, Input, SectionLabel, Select, Stack } from '@connorhoehn/ui-components/shared';
 import { DEFAULT_TEMPERATURE, MAX_TOKEN_OPTIONS } from './promptFormat';
 import { RangeSliderFrame } from '../../RangeSliderFrame';
 

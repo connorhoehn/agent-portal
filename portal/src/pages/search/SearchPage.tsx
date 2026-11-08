@@ -8,11 +8,11 @@ import {
   type PaneState, type PaneTabSpec, type PathHop,
   type GraphDepartment, type GraphRelationship, type OrgGraphPerson, type PersonDetail, type PersonEvidenceDocument,
   type OrgGraphHandle, type RailNavListItem, type RecordGraphEdge, type RecordGraphRecord,
-} from '@connorhoehnslalom/ui-components';
+} from '@connorhoehn/ui-components';
 import {
   Banner, Button, ChatIcon, CloseIcon, EmptyState, FilterChip, FilterPopover, GraphIcon, IconButton, Inline, Input, LoadingState,
   SegmentedControl, Select, Slider, SlidersIcon, Stack, T, Tooltip, useHeaderDensity, useRailFold,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import InvokePage, { type SearchConversationAPI } from '../InvokePage';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';

@@ -19,8 +19,8 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
-import { ChoiceList, ChoiceRow } from '@connorhoehnslalom/ui-components';
-import { BranchIcon, ChatIcon, ChecklistIcon, GraphIcon, LockIcon, T } from '@connorhoehnslalom/ui-components/shared';
+import { ChoiceList, ChoiceRow } from '@connorhoehn/ui-components';
+import { BranchIcon, ChatIcon, ChecklistIcon, GraphIcon, LockIcon, T } from '@connorhoehn/ui-components/shared';
 import {
   Avatar,
   Button,
@@ -35,7 +35,7 @@ import {
   Stack,
   TabPanel,
   Tabs,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useSession, type DirectoryUser, type Tenant } from '../lib/auth';
 import { toastError } from '../lib/toastStore';
 import { tenantEnabled } from '../lib/features';

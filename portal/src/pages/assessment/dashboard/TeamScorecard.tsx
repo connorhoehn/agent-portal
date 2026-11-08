@@ -32,7 +32,7 @@
 import { useCrumbLabel } from '../../../lib/crumbLabels';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { SidePane, useSidePane } from '@connorhoehnslalom/ui-components';
+import { SidePane, useSidePane } from '@connorhoehn/ui-components';
 import {
   Button,
   Chip,
@@ -52,7 +52,7 @@ import {
   WorkflowStepper,
   useHeaderDensity,
   type StatStripItem,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { usePageHuddleComposer } from '../../../components/shell/HuddleComposerDock';
 import { ConversationPaneBody, useConversationPane } from '../../../components/shell/ConversationPane';
 import { WorkGraphActivity } from '../../../components/work-graph/WorkGraphActivity';

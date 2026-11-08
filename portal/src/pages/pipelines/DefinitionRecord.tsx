@@ -10,7 +10,7 @@ import { useNavigate } from 'react-router';
 import { IconButton, Tooltip, PlayCircleIcon, CheckIcon,
   Button, ConfirmDialog, DataTable, DetailHeader, DetailSection, EmptyState, Inline, InlineAlert, KeyValue, LoadingState,
   MetaLine, Select, Stack, type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';

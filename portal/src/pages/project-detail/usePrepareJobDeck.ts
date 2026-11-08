@@ -11,7 +11,7 @@
 // same dispatch and budget gates.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ComposerPrompt, ComposerPromptResult } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import type { ComposerPrompt, ComposerPromptResult } from '@connorhoehn/ui-components/social/rich-composer';
 import { useFetch } from '../../hooks/useFetch';
 import { storedEstimateFor, type EstimateProvenance, type WorkEstimate } from '../../lib/dispatchGates';
 import type { EnvelopesResponse } from '../../lib/envelopeFormat';

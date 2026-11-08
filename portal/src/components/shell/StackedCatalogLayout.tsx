@@ -1,5 +1,5 @@
-import { ViewportFillRegion, useSidePaneHost } from '@connorhoehnslalom/ui-components';
-import { GroupedList, MasterDetailPage, PageSection, RailNavList, SectionLayout, Select, Stack, useRailFold, activeNavItemClassName, inactiveNavItemClassName, type BreadcrumbItem, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import { ViewportFillRegion, useSidePaneHost } from '@connorhoehn/ui-components';
+import { GroupedList, MasterDetailPage, PageSection, RailNavList, SectionLayout, Select, Stack, useRailFold, activeNavItemClassName, inactiveNavItemClassName, type BreadcrumbItem, type SubNavItem } from '@connorhoehn/ui-components/shared';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { useDialogueRailFold } from './useDialogueRailFold';

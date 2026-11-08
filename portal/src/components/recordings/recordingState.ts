@@ -1,4 +1,4 @@
-import type { RecordingStage } from '@connorhoehnslalom/ui-components/social';
+import type { RecordingStage } from '@connorhoehn/ui-components/social';
 import type { InitiativeRecording, RecordingProgress } from '../../pages/projects/initiativeRecordingApi.ts';
 import { documentRecordingHref, type DocumentRecordingNavigation } from './documentRecordingContext.ts';
 

@@ -9,7 +9,7 @@
 import { Link } from 'react-router';
 import {
   Card, Chip, DotMeter, Inline, LoadingState, MetaLine, SectionLabel, Stack, StatStrip, StatusDot, Toolbar,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
 import { useSession } from '../../lib/auth';

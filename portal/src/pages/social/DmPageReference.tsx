@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router';
-import { Button, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Stack } from '@connorhoehn/ui-components/shared';
 import { PageReferenceCard } from '../../components/chat/PageReferenceCard';
 import { useSession } from '../../lib/auth';
 import { CHOOSER } from '../../lib/tenantHome';

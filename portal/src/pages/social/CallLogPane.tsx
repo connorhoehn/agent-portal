@@ -16,8 +16,8 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import {
   Button, Chip, EmptyState, ErrorState, LoadingState, PageHeader, Stack,
-} from '@connorhoehnslalom/ui-components/shared';
-import { CallLogList } from '@connorhoehnslalom/ui-components/social';
+} from '@connorhoehn/ui-components/shared';
+import { CallLogList } from '@connorhoehn/ui-components/social';
 import { callBackTargets, callRows, roomSlugFromLobby, type CallRow, type NameOf, type SocialCall as SocialCallEntry, type SocialRoom, type SocialSource } from './socialPlatform';
 import type { SocialCall } from './useSocialCall';
 import { useSocialPlane } from './socialPlane';

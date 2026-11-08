@@ -1,7 +1,7 @@
 import { useEffect, useState, type ComponentProps } from 'react';
-import { CanvasDocumentView, VersionHistoryPanel } from '@connorhoehnslalom/ui-components/doc-editor';
-import { useVersionHistory } from '@connorhoehnslalom/ui-components/hooks';
-import { Button, ConfirmDialog, InlineAlert, LoadingState, Modal, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { CanvasDocumentView, VersionHistoryPanel } from '@connorhoehn/ui-components/doc-editor';
+import { useVersionHistory } from '@connorhoehn/ui-components/hooks';
+import { Button, ConfirmDialog, InlineAlert, LoadingState, Modal, Stack } from '@connorhoehn/ui-components/shared';
 import { useCanvasDocument, useGateway } from '@connorhoehn/realtime-modules/client';
 import type * as Y from 'yjs';
 

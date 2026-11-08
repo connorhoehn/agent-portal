@@ -4,7 +4,7 @@
 // `levelTone` in ../types.ts) — L0 danger .. L5 success, N/A / unassessed
 // neutral.
 
-import { Chip, type ChipTone } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, type ChipTone } from '@connorhoehn/ui-components/shared';
 import { levelBadgeLabel, levelTone } from '../types';
 
 export function LevelBadge({

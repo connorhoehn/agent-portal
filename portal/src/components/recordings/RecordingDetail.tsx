@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Chip, Inline, InlineAlert, LoadingState, MarkdownView, Stack, T } from '@connorhoehnslalom/ui-components/shared';
-import { PlaybackReactionsLayer, RecordingPlayer, TranscriptPanel } from '@connorhoehnslalom/ui-components/video';
+import { Button, Chip, Inline, InlineAlert, LoadingState, MarkdownView, Stack, T } from '@connorhoehn/ui-components/shared';
+import { PlaybackReactionsLayer, RecordingPlayer, TranscriptPanel } from '@connorhoehn/ui-components/video';
 import { usePeopleNames } from '../../hooks/usePageCalls';
 import { absoluteTime, durationLabel } from '../../lib/relativeTime';
 import { recordingPlaybackUrl, timedRecordingReactions, type InitiativeRecordingsClient } from '../../pages/projects/initiativeRecordingApi';

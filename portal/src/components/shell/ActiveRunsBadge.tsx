@@ -24,7 +24,7 @@
 
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { ChevronIcon, DropdownMenu, Inline, StatusDot, type DropdownMenuItem } from '@connorhoehnslalom/ui-components/shared';
+import { ChevronIcon, DropdownMenu, Inline, StatusDot, type DropdownMenuItem } from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';

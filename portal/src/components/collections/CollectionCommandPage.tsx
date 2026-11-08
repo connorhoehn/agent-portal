@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react';
-import { CollectionPage, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { CollectionPage, Stack } from '@connorhoehn/ui-components/shared';
 import { FlushTrail } from '../shell/FlushPage';
 
 /** The shell provides a full content column; only the title and the table

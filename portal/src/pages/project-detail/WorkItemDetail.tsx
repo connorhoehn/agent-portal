@@ -31,8 +31,8 @@ import {
   type LinkedItem,
   type WorkMetaOption,
   type WorkPerson,
-} from '@connorhoehnslalom/ui-components';
-import { ArrowRightIcon, Banner, Button, Chip, Inline, Select, Stack } from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components';
+import { ArrowRightIcon, Banner, Button, Chip, Inline, Select, Stack } from '@connorhoehn/ui-components/shared';
 import { DEVBOX_MODELS } from '../../lib/devboxModels';
 import type { BotRun } from '../bots/BotsPage';
 import {

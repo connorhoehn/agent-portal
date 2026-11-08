@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { usePresence } from '@connorhoehn/realtime-modules/client';
-import { PresenceAvatars } from '@connorhoehnslalom/ui-components/shared';
+import { PresenceAvatars } from '@connorhoehn/ui-components/shared';
 import { scopePresenceUsers } from './scopePresenceModel';
 
 /** Announces on `channel` while mounted and shows who else is here. Renders

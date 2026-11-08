@@ -14,8 +14,8 @@ import {
   Button, Card, Checkbox, Chip, CollectionToolbar, ConfirmDialog, DataTable, DetailHeader,
   DetailSection, Drawer, FormField, IconButton, Inline, InlineAlert, Input, KeyValue, LoadingState,
   PageSection, PersonIcon, SectionLabel, Stack, StatStrip, T,
-} from '@connorhoehnslalom/ui-components/shared';
-import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
+import type { DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { useSession } from '../../lib/auth';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';

@@ -12,12 +12,12 @@
 // Not here yet (docs/ui-components-queue.md): `RecordingConsentNotice`, which
 // has no live "this call records" signal to open on.
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ChatSidePanelFrame } from '@connorhoehnslalom/ui-components';
-import { Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
-import { MeetingToolbar, RosterPanel, type MeetingToolbarItem, type RosterParticipant } from '@connorhoehnslalom/ui-components/video';
+import { ChatSidePanelFrame } from '@connorhoehn/ui-components';
+import { Inline, Stack } from '@connorhoehn/ui-components/shared';
+import { MeetingToolbar, RosterPanel, type MeetingToolbarItem, type RosterParticipant } from '@connorhoehn/ui-components/video';
 import {
   meetingRosterProps, meetingToolbarItems, WrappedBreakoutRoomBanner, WrappedBreakoutRoomsPanel, type RMMeetingPerson,
-} from '@connorhoehnslalom/ui-components/integrations/realtime';
+} from '@connorhoehn/ui-components/integrations/realtime';
 import { callCounts, useCallBlockPlacement, useCallHost, type CallHostMeeting } from '../../lib/conversationCall';
 import { meetingBarItems, meetingPeople, meetingStageItems, roomsAllowed, stageHoldsMeeting } from '../../lib/meetingRooms';
 

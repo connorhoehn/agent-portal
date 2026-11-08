@@ -3,8 +3,8 @@
 // Every field is plain text in a React text node (never HTML); the one free-markdown field, `notes`, goes
 // through SafeMarkdown. The exact bytes a box receives sit in a disclosure at the end, with their sha.
 import type { ReactNode } from 'react';
-import { KeyValue, ProcedureSteps } from '@connorhoehnslalom/ui-components';
-import { Chip, CodeBlock, DetailSection, Disclosure, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { KeyValue, ProcedureSteps } from '@connorhoehn/ui-components';
+import { Chip, CodeBlock, DetailSection, Disclosure, Stack, T } from '@connorhoehn/ui-components/shared';
 import { SafeMarkdown } from './SafeMarkdown';
 import { shortSha } from './runbooksModel';
 import type { RunbookCommand, RunbookDoc } from './types';

@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react';
-import { RecordResultList } from '@connorhoehnslalom/ui-components';
+import { RecordResultList } from '@connorhoehn/ui-components';
 
 /** Keep the native typed rows, checkboxes, marks and real navigation links. */
 export function SearchResults(props: ComponentProps<typeof RecordResultList>) {

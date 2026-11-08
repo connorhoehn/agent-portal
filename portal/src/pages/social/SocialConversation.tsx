@@ -24,20 +24,20 @@ import { offlineReason } from '../../components/chat/chatConnection';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuoteReply, type ChatReply } from '../../components/chat/ConversationThread';
 import { ConversationComposer, useChatAttachmentSend } from '../../lib/conversationComposer';
-import { WrappedChatPanel, WrappedConversationSurface } from '@connorhoehnslalom/ui-components/integrations/realtime';
+import { WrappedChatPanel, WrappedConversationSurface } from '@connorhoehn/ui-components/integrations/realtime';
 import {
   ChatCommandProvider, chatCommandsToComposer, documentRefFromMetadata, documentRefsFromMetadata, parseChatCommand,
   useChatCommands, useRunChatCommand,
   type ChannelDocumentItem, type ChannelRecordingItem, type ConversationFeature,
-} from '@connorhoehnslalom/ui-components/social';
-import { Button, DropdownMenu, InlineAlert, Inline, MoreIcon, PresenceAvatars, Stack, type DropdownMenuItem } from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/social';
+import { Button, DropdownMenu, InlineAlert, Inline, MoreIcon, PresenceAvatars, Stack, type DropdownMenuItem } from '@connorhoehn/ui-components/shared';
 import { useUnreadBoundary } from '../../hooks/useUnreadBoundary';
 import { useMessagePortraits } from '../../hooks/useMessagePortraits';
 import { useChat, useChatMembers, useChatReadReceipts, useGatewayOptional, usePresence, useReactions } from '@connorhoehn/realtime-modules/client';
 import { presenceAvatarUsers } from '../assessment/knowledge/knowledgeFormat';
 import { sendAndWaitForSocialChatAck, socialChatError } from './socialChatDelivery';
 import type { EmbeddedSocialTransport } from '../../lib/embeddedSocial';
-import type { ContextComposerProps } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import type { ContextComposerProps } from '@connorhoehn/ui-components/social/rich-composer';
 import type { CallPageDescriptor } from '../../lib/callPages';
 import { readDmPageDescriptor } from '../../lib/dmPageReferences';
 import { useChannelFiles } from '../../hooks/useChannelFiles';

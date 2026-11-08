@@ -20,7 +20,7 @@ import {
   T,
   Textarea,
   type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
 import { UnavailableNotice } from '../../../components/UnavailableNotice';
 import { toastError, toastSuccess } from '../../../lib/toastStore';

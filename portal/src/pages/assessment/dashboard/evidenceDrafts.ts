@@ -4,7 +4,7 @@
 // Every level and count shown comes from `facts`, which the server reads from
 // the provider; the model's prose is only ever shown beside its verbatim quotes.
 
-import type { AgentRunStatus } from '@connorhoehnslalom/ui-components/social';
+import type { AgentRunStatus } from '@connorhoehn/ui-components/social';
 
 export type DraftKind = 'assessment.evidence-summary' | 'assessment.followup-drafts';
 export type DraftPhase = 'received' | 'running' | 'completed' | 'failed';

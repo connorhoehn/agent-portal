@@ -19,7 +19,7 @@ const DIST = join(
   '..',
   '..',
   'node_modules',
-  '@connorhoehnslalom',
+  '@connorhoehn',
   'ui-components',
   'dist',
 );

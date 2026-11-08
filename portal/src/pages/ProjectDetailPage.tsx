@@ -1,4 +1,4 @@
-import { ComposerSurface } from '@connorhoehnslalom/ui-components/shared';
+import { ComposerSurface } from '@connorhoehn/ui-components/shared';
 // An initiative, inside the shared Initiatives frame (InitiativesExplorer):
 // the explorer column on the left, the pane on the right with the
 // initiative's header band over it and the docked composer
@@ -21,7 +21,7 @@ import {
   WorkListView,
   WorkTableView,
   type WorkListViewProps,
-} from '@connorhoehnslalom/ui-components';
+} from '@connorhoehn/ui-components';
 import {
   Button,
   CodeIcon,
@@ -46,7 +46,7 @@ import {
   useHeaderDensity,
   type BreadcrumbItem,
   type HeaderPeopleGroup,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { ConversationOwner, ConversationThread } from '../components/chat/ConversationThread';

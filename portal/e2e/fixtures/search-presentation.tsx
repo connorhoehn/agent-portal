@@ -2,7 +2,7 @@ import '../../src/app.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, useLocation } from 'react-router';
-import { SidePaneProvider } from '@connorhoehnslalom/ui-components';
+import { SidePaneProvider } from '@connorhoehn/ui-components';
 import { SessionProvider } from '../../src/lib/auth';
 import SearchPage from '../../src/pages/search/SearchPage';
 

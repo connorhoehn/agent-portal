@@ -1,6 +1,6 @@
 // Portal-specific command catalog for the shared CommandPalette. Translates
 // the OrgIQ tenant/role/path conventions into the generic Command[] surface
-// exposed by @connorhoehnslalom/ui-components/shared.
+// exposed by @connorhoehn/ui-components/shared.
 //
 // Three contributions:
 //   1. usePortalCommands() — static page jumps + recent harness runs, gated
@@ -15,9 +15,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import type { Command } from '@connorhoehnslalom/ui-components/shared';
+import type { Command } from '@connorhoehn/ui-components/shared';
 import { useSession } from '../../lib/auth';
-import { openShell, useComputeOptional } from '@connorhoehnslalom/ui-components/compute';
+import { openShell, useComputeOptional } from '@connorhoehn/ui-components/compute';
 import { commandKeywords } from './commandKeywords';
 
 type PageTenant = 'orgiq' | 'assessment' | 'social' | 'pipelines' | 'access' | 'admin' | 'universal';

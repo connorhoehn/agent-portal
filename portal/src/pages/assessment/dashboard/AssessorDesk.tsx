@@ -22,7 +22,7 @@ import {
   StatStrip,
   T,
   type ChipTone,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { UnavailableNotice } from '../../../components/UnavailableNotice';
 import { RecordLink } from '../../decisions/RecordLink';
 import { CollectionCommandHost } from '../../../components/collections/CollectionCommandHost';

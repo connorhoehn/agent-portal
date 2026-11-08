@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { meetingToolbarItems } from '@connorhoehnslalom/ui-components/integrations/realtime';
+import { meetingToolbarItems } from '@connorhoehn/ui-components/integrations/realtime';
 import {
   INERT_MEETING, ROOMS_MIN_PARTICIPANTS, SHELL_MEETING, announceInstead, meetingPeople, huddleChatChannelFor, isBreakoutChat, meetingBarItems, meetingEnabledFor, meetingRoomsFlag, meetingStageItems,
   roomsAllowed, stageHoldsMeeting,

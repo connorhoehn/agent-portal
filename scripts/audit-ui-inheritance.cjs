@@ -10,7 +10,7 @@ const root = path.resolve(__dirname, '..');
 const skill = resolveUiAuditSkill({ root, resource: 'scripts/source-audit.cjs' });
 const { createSourceAudit, verifyInstalledArchive } = require(path.join(skill, 'scripts/source-audit.cjs'));
 const { analyzeTsx, scanSource } = createSourceAudit({
-  typescript: ts, packageName: '@connorhoehnslalom/ui-components',
+  typescript: ts, packageName: '@connorhoehn/ui-components',
   densityEntryPoints: ['portal/src/main.tsx'], isPage: file => file.includes('/pages/'),
 });
 
@@ -45,7 +45,7 @@ function audit() {
     requireContract(!/composer-star-(?:drift|twinkle)|\.uic-composer-surface\b|\[data-composer-surface\]/.test(read(file)), `${file}: composer surface geometry/effects belong in ui-components.`);
   }
   failures.push(...verifyInstalledArchive({
-    packageRoot: path.join(root, 'portal'), packageName: '@connorhoehnslalom/ui-components', archivePrefix: 'file:vendor/',
+    packageRoot: path.join(root, 'portal'), packageName: '@connorhoehn/ui-components', archivePrefix: 'file:vendor/',
   }));
   return { findings, failures };
 }

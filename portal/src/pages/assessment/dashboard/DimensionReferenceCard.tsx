@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { Button } from '@connorhoehnslalom/ui-components/shared';
+import { Button } from '@connorhoehn/ui-components/shared';
 import { PageReferenceCard } from '../../../components/chat/PageReferenceCard';
 import { useSession } from '../../../lib/auth';
 import {

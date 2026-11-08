@@ -12,8 +12,8 @@
 // detail in the far-right pane first ("Open page" on demand).
 
 import { useEffect } from 'react';
-import { ActionRowList, type ActionRowItem } from '@connorhoehnslalom/ui-components';
-import { InlineAlert, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { ActionRowList, type ActionRowItem } from '@connorhoehn/ui-components';
+import { InlineAlert, SectionLabel, Stack } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { WorkGraphActivity } from '../../components/work-graph/WorkGraphActivity';
 import { useSocialPlane } from './socialPlane';

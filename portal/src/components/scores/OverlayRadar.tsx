@@ -1,4 +1,4 @@
-import { EmptyState } from '@connorhoehnslalom/ui-components/shared';
+import { EmptyState } from '@connorhoehn/ui-components/shared';
 import {
   Radar,
   RadarChart as RechartsRadarChart,

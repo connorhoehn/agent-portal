@@ -3,7 +3,7 @@
 
 import { memo } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
-import { Card, Chip, EntityCell, Inline, MetaLine, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Chip, EntityCell, Inline, MetaLine, Stack } from '@connorhoehn/ui-components/shared';
 import type { InputNodeData } from '../types.js';
 
 // React Flow's Node<T> requires T to satisfy Record<string, unknown>; plain

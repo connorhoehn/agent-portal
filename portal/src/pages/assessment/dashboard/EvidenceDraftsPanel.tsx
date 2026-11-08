@@ -6,9 +6,9 @@
 // shown come from the provider's facts; Nova writes the prose.
 
 import { useEffect, useRef, useState } from 'react';
-import { AgentRunCard } from '@connorhoehnslalom/ui-components/social';
-import { SuggestionCard, SuggestionReviewList } from '@connorhoehnslalom/ui-components/doc-editor';
-import { Button, Card, Chip, FormField, InlineAlert, Inline, MarkdownView, MetaLine, Stack, Textarea } from '@connorhoehnslalom/ui-components/shared';
+import { AgentRunCard } from '@connorhoehn/ui-components/social';
+import { SuggestionCard, SuggestionReviewList } from '@connorhoehn/ui-components/doc-editor';
+import { Button, Card, Chip, FormField, InlineAlert, Inline, MarkdownView, MetaLine, Stack, Textarea } from '@connorhoehn/ui-components/shared';
 import { useFlowRun } from '../../../hooks/useFlowRun';
 import { isDocumentHidden } from '../../../hooks/pollSchedule';
 import { Can, useCapabilities } from '../../../lib/capabilities';

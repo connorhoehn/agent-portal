@@ -24,7 +24,7 @@ import {
   Toolbar,
   ToolbarGroup,
   ToolbarLabel,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { KBCreateWizard } from '../../components/kb/KBCreateWizard.js';
 import { KBHealthBadge } from '../../components/kb/KBHealthBadge.js';
 import { useCapabilities } from '../../lib/capabilities';

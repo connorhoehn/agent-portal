@@ -4,9 +4,9 @@
 // `node --test`, which strips types but cannot transform JSX. Everything that
 // renders lives here; everything that decides lives there.
 
-import { DEFAULT_PANE_KINDS, TAIL_PANE_KIND } from '@connorhoehnslalom/ui-components/compute';
-import type { PaneKind } from '@connorhoehnslalom/ui-components/compute';
-import { InlineAlert, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { DEFAULT_PANE_KINDS, TAIL_PANE_KIND } from '@connorhoehn/ui-components/compute';
+import type { PaneKind } from '@connorhoehn/ui-components/compute';
+import { InlineAlert, Stack } from '@connorhoehn/ui-components/shared';
 import { NodeLog } from '../../pages/local-compute/NodeLog';
 import { isLocalMachineId, nodeIdOf } from './localMachines';
 

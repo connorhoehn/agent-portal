@@ -7,8 +7,8 @@
 import { Link } from 'react-router';
 import {
   Card, Chip, EntityCell, Inline, MetaLine, SectionLabel, Stack,
-} from '@connorhoehnslalom/ui-components/shared';
-import { COMPUTE_STATUS, useComputeOptional } from '@connorhoehnslalom/ui-components/compute';
+} from '@connorhoehn/ui-components/shared';
+import { COMPUTE_STATUS, useComputeOptional } from '@connorhoehn/ui-components/compute';
 import { computersForInitiative, truncateTask } from '../../lib/computeInitiative';
 
 export function ComputersRailCard({ initiativeId }: { initiativeId: string | undefined }) {

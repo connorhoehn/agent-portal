@@ -6,7 +6,7 @@
    rule from us — and the library's own stylesheet loses the cascade to our
    later-loaded build, so the layout silently collapsed (stat grids rendering
    as a stack). Scanning the dist keeps every library class real here. */
-@source "../node_modules/@connorhoehnslalom/ui-components/dist";
+@source "../node_modules/@connorhoehn/ui-components/dist";
 @source "../patches";
 
 @theme {

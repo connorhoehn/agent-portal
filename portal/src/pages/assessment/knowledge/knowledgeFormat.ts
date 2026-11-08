@@ -21,7 +21,7 @@ import type {
   PresenceViewer,
 } from './types';
 import type { ActivityEvent, ChatMessage as RMChatMessage, Reaction } from '@connorhoehn/realtime-modules/client';
-import type { ReactionSummary } from '@connorhoehnslalom/ui-components/social';
+import type { ReactionSummary } from '@connorhoehn/ui-components/social';
 
 // ─── Section selection ──────────────────────────────────────────────────────
 

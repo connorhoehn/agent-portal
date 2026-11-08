@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { Banner, Button, Inline } from '@connorhoehnslalom/ui-components/shared';
+import { Banner, Button, Inline } from '@connorhoehn/ui-components/shared';
 
 /** "Someone saved after you opened it" with a reload action; both deck pages. */
 export function DeckConflictBanner({ noun, onReload, testId }: { noun: string; onReload: () => void; testId: string }): ReactElement {

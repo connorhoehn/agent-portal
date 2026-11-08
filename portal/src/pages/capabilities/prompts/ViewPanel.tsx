@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Button, Chip, DetailHeader, Inline, InlineAlert, InlinePlaceholder, MetaLine, SectionLabel, SkeletonCard, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Chip, DetailHeader, Inline, InlineAlert, InlinePlaceholder, MetaLine, SectionLabel, SkeletonCard, Stack, T } from '@connorhoehn/ui-components/shared';
 import { relativeTime } from '../../../lib/relativeTime';
 import { TemplateHighlighted } from './TemplateHighlighted';
 import { VersionSelect } from './VersionSelect';

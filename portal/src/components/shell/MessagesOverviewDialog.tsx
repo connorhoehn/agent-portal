@@ -1,8 +1,8 @@
 // A read-only conversation overview. Posting belongs to the Social workspace;
 // this dialog never mounts a composer or creates a conversation.
 import { useEffect, useMemo, useState } from 'react';
-import { ConversationList, type ConversationItem } from '@connorhoehnslalom/ui-components/social';
-import { Avatar, Button, ChatIcon, CloseIcon, ExternalLinkIcon, IconButton, Inline, Modal, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { ConversationList, type ConversationItem } from '@connorhoehn/ui-components/social';
+import { Avatar, Button, ChatIcon, CloseIcon, ExternalLinkIcon, IconButton, Inline, Modal, Stack, T } from '@connorhoehn/ui-components/shared';
 import { relativeTime } from '../../lib/relativeTime';
 
 export interface ConversationPreview {

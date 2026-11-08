@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Card, CardHeader, ChoiceList, ChoiceRow, Inline, InlineAlert, InlinePlaceholder, Input, MetaLine, SectionLabel, SegmentedControl, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, CardHeader, ChoiceList, ChoiceRow, Inline, InlineAlert, InlinePlaceholder, Input, MetaLine, SectionLabel, SegmentedControl, Stack, T } from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../../lib/capabilities';
 import { useFetch } from '../../../hooks/useFetch';
 import { toastError } from '../../../lib/toastStore';

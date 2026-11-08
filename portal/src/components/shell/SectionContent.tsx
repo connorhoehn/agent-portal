@@ -9,8 +9,8 @@
 // Initiatives list draws (264px, caption title + count chip, search header,
 // grouped rows, footer) — and `SectionHeader` as its `header`, so the content
 // column (trail first, then the title, then the record) starts after it.
-import { ScopeHeader } from '@connorhoehnslalom/ui-components';
-import { PageFrame, PageHeader, Stack, type BreadcrumbItem, type Density } from '@connorhoehnslalom/ui-components/shared';
+import { ScopeHeader } from '@connorhoehn/ui-components';
+import { PageFrame, PageHeader, Stack, type BreadcrumbItem, type Density } from '@connorhoehn/ui-components/shared';
 import type { ComponentProps, ReactNode } from 'react';
 import { UNDER_CRUMBS_BAND, UNDER_CRUMBS_BAND_WITH_CONTROLS } from './headerRhythm';
 

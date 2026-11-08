@@ -23,7 +23,7 @@
 // ("close_the_claim" | "advance_practice" | "answer_question") is copied
 // verbatim from the source app; the other shapes invented different strings.
 
-import type { ChipTone } from '@connorhoehnslalom/ui-components/shared';
+import type { ChipTone } from '@connorhoehn/ui-components/shared';
 
 // ─── Cohorts / motions ──────────────────────────────────────────────────────
 

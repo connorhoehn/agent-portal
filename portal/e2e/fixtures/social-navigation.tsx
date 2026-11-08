@@ -1,7 +1,7 @@
 // Actual shell/workspace/native inbox with disconnected inert transport.
 // Every HTTP read is intercepted by the spec; there is no socket. Native
 // subscription/presence discovery frames are inert; messages/calls are forbidden.
-import '@connorhoehnslalom/ui-components/styles.css';
+import '@connorhoehn/ui-components/styles.css';
 import '../../src/app.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';

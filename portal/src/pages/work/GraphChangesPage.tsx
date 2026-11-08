@@ -14,7 +14,7 @@ import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import {
   Button, Card, Chip, EmptyState, FilterChip, Inline, MetaLine, PageSection, SearchInput, Stack, Toolbar, ToolbarGroup,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
 import { GRAPH_UPDATES_GRAMMAR, graphUpdatesFilterValue, matchesText } from './workCollectionCommands';

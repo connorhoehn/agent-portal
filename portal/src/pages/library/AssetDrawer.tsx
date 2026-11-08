@@ -10,7 +10,7 @@
 
 import {
   Card, Chip, ChoiceList, ChoiceRow, DetailSection, Inline, InlinePlaceholder, LoadingState, MetaLine, PageHeader, ProgressBar, Stack, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { RecordNotFound, UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
 import { AssetEvals } from './AssetEvals';

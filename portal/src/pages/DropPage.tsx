@@ -14,7 +14,7 @@ import { useParams } from 'react-router';
 import {
   Banner, Card, CardHeader, ErrorState, FileUploadDrop, Inline, LoadingState,
   MetaLine, Stack, StatusDot, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 
 interface LinkView {
   label: string;

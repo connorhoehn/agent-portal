@@ -1,9 +1,9 @@
 import '../../src/app.css';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { CallDock, RosterPanel, type CallDockParticipant } from '@connorhoehnslalom/ui-components/video';
-import { ContextComposer } from '@connorhoehnslalom/ui-components';
-import { Button } from '@connorhoehnslalom/ui-components/shared';
+import { CallDock, RosterPanel, type CallDockParticipant } from '@connorhoehn/ui-components/video';
+import { ContextComposer } from '@connorhoehn/ui-components';
+import { Button } from '@connorhoehn/ui-components/shared';
 import { HangoutCallView, type HangoutCallPane } from '../../src/pages/social/HangoutCallView';
 const noop = () => {};
 function Fixture() {

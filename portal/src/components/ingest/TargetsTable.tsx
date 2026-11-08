@@ -3,8 +3,8 @@ import {
   Chip,
   DataTable,
   Inline,
-} from '@connorhoehnslalom/ui-components/shared';
-import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
+import type { DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { absoluteTime } from '../../lib/relativeTime';
 import { CRAWL_STATUS_TONE } from './types';
 import type { CrawlTarget } from './types';

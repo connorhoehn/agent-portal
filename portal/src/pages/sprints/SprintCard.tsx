@@ -1,6 +1,6 @@
 // One tile in the sprint picker grid.
 
-import { Avatar, Chip, Inline, MetaLine, ProgressBar, SelectableCard, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Avatar, Chip, Inline, MetaLine, ProgressBar, SelectableCard, Stack, T } from '@connorhoehn/ui-components/shared';
 import { dateRange, mineReasons, sprintHealth, STATUS_TONE, timeLeftLabel, usd, windowProgress } from './sprintFormat';
 import type { Sprint } from './types';
 

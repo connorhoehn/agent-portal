@@ -33,7 +33,7 @@
     "@aws-sdk/signature-v4": "^3.370.0",
     "@connorhoehn/realtime-modules": "file:../portal/vendor/connorhoehn-realtime-modules-0.146.3.tgz",
     "@connorhoehn/service-runtime": "github:connorhoehn/service-runtime#6fb67add20ae9177395edecf4a691be1dbd33ce9",
-    "@connorhoehnslalom/message-queue": "file:vendor/connorhoehnslalom-message-queue-0.4.0.tgz",
+    "@connorhoehn/message-queue": "file:vendor/connorhoehn-message-queue-0.7.0.tgz",
     "@smithy/protocol-http": "^5.3.14",
     "@tiptap/core": "^3.31.3",
     "@tiptap/extension-collaboration": "^3.31.3",

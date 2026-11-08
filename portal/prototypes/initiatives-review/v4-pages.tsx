@@ -1,8 +1,8 @@
 import React, { Fragment, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Button, DensityProvider, RailNavList } from '@connorhoehnslalom/ui-components/shared';
-import { ChatPanel } from '@connorhoehnslalom/ui-components/social';
-import { RichChatComposer, type RichChatDraft } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { Button, DensityProvider, RailNavList } from '@connorhoehn/ui-components/shared';
+import { ChatPanel } from '@connorhoehn/ui-components/social';
+import { RichChatComposer, type RichChatDraft } from '@connorhoehn/ui-components/social/rich-composer';
 import { Status, Chevron, money, envelopes, budgetRows, work, Envelopes } from './revision3';
 import './refinement.css';
 

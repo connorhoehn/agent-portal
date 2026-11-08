@@ -11,7 +11,7 @@
 
 import {
   Card, EmptyState, EntityCell, Inline, MetaLine, Stack, Table, TableBody, TableHead, TableRow, TableTd, TableTh,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { Link } from 'react-router';
 import { useCanaryStore } from './canaryStore.js';
 import { DecisionRow } from './DecisionRow.js';

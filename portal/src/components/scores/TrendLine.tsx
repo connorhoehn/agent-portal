@@ -1,6 +1,6 @@
 import {
   EmptyState, EntityCell, ErrorState, Inline, MetaLine, Sparkline, Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 
 export interface HistorySample {

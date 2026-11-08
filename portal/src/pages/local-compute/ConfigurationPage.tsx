@@ -3,7 +3,7 @@
 // changing its "live" row does not install anything or restart a machine.
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { Chip, CodeBlock, CollectionToolbar, DataTable, Disclosure, EmptyState, Inline, InlineAlert, LoadingState, PageSection, Stack, Tabs, Text, type DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, CodeBlock, CollectionToolbar, DataTable, Disclosure, EmptyState, Inline, InlineAlert, LoadingState, PageSection, Stack, Tabs, Text, type DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useUrlState } from '../../lib/useUrlState';
 import { filterRows } from '../../hooks/useRowSearch';

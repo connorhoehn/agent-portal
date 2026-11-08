@@ -7,11 +7,11 @@
 //
 // The composition of `StackedCatalogLayout` without a section rail of its own:
 // a list page's table opens here, and the list rail's rows reopen records.
-import { ListRailLayout, ViewportFillRegion } from '@connorhoehnslalom/ui-components';
+import { ListRailLayout, ViewportFillRegion } from '@connorhoehn/ui-components';
 import {
   EmptyState, ErrorState, GroupedList, LoadingState, SearchInput, Stack,
   type GroupedListGroup, type GroupedListRow,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import type { ReactNode } from 'react';
 import { SectionHeader } from '../shell/SectionContent';
 import { useShellBreadcrumbItems } from '../shell/Breadcrumbs';

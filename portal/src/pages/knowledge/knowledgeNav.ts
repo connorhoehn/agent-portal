@@ -4,7 +4,7 @@
 // and a "← Knowledge" back-link, so clicking Sources from the Knowledge rail
 // replaced the rail with a differently named one and Overview / Registry
 // vanished. Same pages, one rail, one set of words.
-import type { SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import type { SubNavItem } from '@connorhoehn/ui-components/shared';
 
 export const KNOWLEDGE_ITEMS: SubNavItem[] = [
   { path: '/admin/knowledge',          label: 'Overview', group: 'Knowledge' },

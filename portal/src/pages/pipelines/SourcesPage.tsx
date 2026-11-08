@@ -14,7 +14,7 @@ import {
   DataTable,
   T,
   type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { RecordLink } from '../decisions/RecordLink';

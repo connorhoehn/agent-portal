@@ -5,7 +5,7 @@ import { useState, useId } from 'react';
 import {
   Button, EmptyState, FormField, Inline, InlineAlert, Input,
   MetaLine, SelectableCard, SkeletonCard, Stack, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { usePromptList } from '../usePromptLibrary.js';
 import type { PromptLibraryEntry } from '../types.js';
 import { relativeTime } from '../../../lib/relativeTime';

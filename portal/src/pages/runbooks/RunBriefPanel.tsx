@@ -1,7 +1,7 @@
 // A run's frozen brief, fetched by the run's job reference (GET /api/runs/:ref/brief). A run that was
 // never given one (older than the feature, or not a job) says so rather than showing an empty tab.
 import { useNavigate } from 'react-router';
-import { EmptyState, LoadingState } from '@connorhoehnslalom/ui-components/shared';
+import { EmptyState, LoadingState } from '@connorhoehn/ui-components/shared';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { BriefDocument } from './BriefDocument';

@@ -10,8 +10,8 @@
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { useFlowRun } from '../../hooks/useFlowRun';
-import { AgentRunCard } from '@connorhoehnslalom/ui-components/social';
-import { Button, Card, InlineAlert, Inline, MarkdownView, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { AgentRunCard } from '@connorhoehn/ui-components/social';
+import { Button, Card, InlineAlert, Inline, MarkdownView, Stack, T } from '@connorhoehn/ui-components/shared';
 import { MAX_POLLS, pollDelayMs } from './conversationSummarize';
 import AgentApprovalPrompt from './AgentApprovalPrompt';
 import {

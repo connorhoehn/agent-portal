@@ -21,7 +21,7 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import {
   Card, Chip, Inline, InlinePlaceholder, PageSection, SectionLabel, Stack, StatStrip, Table, TableHead, TableBody, TableRow, TableTh, TableTd, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import {
   BarChart,
   Bar,

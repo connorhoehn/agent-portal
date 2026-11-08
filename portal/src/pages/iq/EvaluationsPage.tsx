@@ -14,7 +14,7 @@ import { relativeTime } from '../../lib/relativeTime';
 import { Link, useNavigate } from 'react-router';
 import {
   Button, Card, Chip, CollapsibleSection, EmptyState, IconButton, Inline, ProgressBar, Select, SectionLabel, SelectableCard, Stack, StatStrip, Switch, T, VisuallyHidden,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useCanaryStream } from '../../components/canary/useCanaryStream.js';
 import {

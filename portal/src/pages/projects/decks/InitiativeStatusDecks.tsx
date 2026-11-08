@@ -6,7 +6,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Button, Checkbox, FormField, InlineAlert, Inline, Input, Modal, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Checkbox, FormField, InlineAlert, Inline, Input, Modal, Stack, T } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
 import { useCapabilities } from '../../../lib/capabilities';
 import { toastError, toastSuccess } from '../../../lib/toastStore';

@@ -1,4 +1,4 @@
-import { AccentStripe, Card, Chip, EntityCell, Histogram, Inline, MetaLine, SectionLabel, Stack, StatusDot, dataAccentProps } from '@connorhoehnslalom/ui-components/shared';
+import { AccentStripe, Card, Chip, EntityCell, Histogram, Inline, MetaLine, SectionLabel, Stack, StatusDot, dataAccentProps } from '@connorhoehn/ui-components/shared';
 import { DEPT_COLORS } from './types';
 
 const BUCKET_LABELS = ['0–20', '20–40', '40–60', '60–80', '80–100'];

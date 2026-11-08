@@ -11,7 +11,7 @@ function resolveUiAuditSkill({ root = path.resolve(__dirname, '../..'), env = pr
   }
   let installed;
   try {
-    const manifest = require.resolve('@connorhoehnslalom/ui-components/package.json', { paths: [path.join(root, 'portal')] });
+    const manifest = require.resolve('@connorhoehn/ui-components/package.json', { paths: [path.join(root, 'portal')] });
     installed = path.join(path.dirname(manifest), 'skills/ui-dom-audit');
   } catch { /* Older consumers may still use a linked skill checkout. */ }
   const candidates = [installed, path.join(root, '.claude/skills/ui-dom-audit'), path.join(home, '.claude/skills/ui-dom-audit'), path.join(home, '.codex/skills/ui-dom-audit')].filter(Boolean);

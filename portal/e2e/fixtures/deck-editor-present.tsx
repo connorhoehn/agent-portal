@@ -3,7 +3,7 @@
 import '../../src/app.css';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router';
-import type { DeckSpec } from '@connorhoehnslalom/ui-components/doc-editor';
+import type { DeckSpec } from '@connorhoehn/ui-components/doc-editor';
 import { DeckEditorPage, type DeckEditorDocument, type DeckEditorExtras } from '../../src/components/decks/DeckEditorPage';
 import type { DeckDocumentApi, DeckDocumentShape } from '../../src/components/decks/useDeckDocument';
 import { ConversationComposer } from '../../src/lib/conversationComposer';

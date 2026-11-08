@@ -11,7 +11,7 @@
 // its scorecard (Activity tab). `?day=YYYY-MM-DD` picks another day in the viewer's zone.
 
 import { useNavigate, useSearchParams } from 'react-router';
-import { Button, PageHeader, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, PageHeader, Stack } from '@connorhoehn/ui-components/shared';
 import { WorkGraphActivity } from '../../components/work-graph/WorkGraphActivity';
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;

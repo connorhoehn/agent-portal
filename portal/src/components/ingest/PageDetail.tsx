@@ -22,7 +22,7 @@ import {
   TableTd,
   TableTh,
   Tabs,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { PAGE_STATUS_TONE, formatBytes } from './types';
 import type { CrawlPage } from './types';
 import { Markdown } from '../Markdown';

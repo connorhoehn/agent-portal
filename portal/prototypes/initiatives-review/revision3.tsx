@@ -1,7 +1,7 @@
 import React, { Fragment, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Button, DensityProvider, WorkflowStepper } from '@connorhoehnslalom/ui-components/shared';
-import { ComposerPromptDeck, RichChatComposer, type ComposerPrompt, type RichChatDraft } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { Button, DensityProvider, WorkflowStepper } from '@connorhoehn/ui-components/shared';
+import { ComposerPromptDeck, RichChatComposer, type ComposerPrompt, type RichChatDraft } from '@connorhoehn/ui-components/social/rich-composer';
 import './review.css';
 
 // Review-only fixtures. No API client, authentication, dispatch, or message transport.

@@ -28,7 +28,7 @@ import {
   Stack,
   useToast, T,
   type DetailPageTab,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { CostChip } from '../../components/observability/CostChip';
 import { PromptVersionChip } from '../../components/observability/PromptVersionChip';
 import { ModeChip } from '../../components/observability/ModeChip';

@@ -11,7 +11,7 @@ import {
   Stack,
   T,
   Textarea,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { writeJson } from '../../lib/writeJson';

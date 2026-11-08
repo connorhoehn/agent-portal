@@ -2,7 +2,7 @@
 //
 // WHY IT LIVES INSIDE `portal/`. A prototype is only worth looking at if it is
 // painted by the real library and the real tokens, and both are already
-// resolved here: `@connorhoehnslalom/ui-components` is installed in
+// resolved here: `@connorhoehn/ui-components` is installed in
 // portal/node_modules, and `src/app.css` is the token sheet the app itself
 // paints from (it also `@source`s the library's dist, so Tailwind emits the
 // classes the library's own composites use). Running from this root means a

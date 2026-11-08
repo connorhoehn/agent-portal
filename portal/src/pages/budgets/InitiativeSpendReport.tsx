@@ -20,7 +20,7 @@ import {
   StatStrip,
   StatusPill,
   T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { LockedFigure } from '../projects/BudgetAccess';

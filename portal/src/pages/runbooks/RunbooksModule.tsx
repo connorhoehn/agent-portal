@@ -3,10 +3,10 @@
 // destination draws ListRailLayout (a flush list rail beside it, then trail → title → record,
 // docs/layout-cascade.md). The Proposals count is polled (no gateway channel is needed to be correct).
 import { Link, Outlet, useLocation } from 'react-router';
-import { ViewportFillRegion } from '@connorhoehnslalom/ui-components';
+import { ViewportFillRegion } from '@connorhoehn/ui-components';
 import {
   Stack, SubNavLayout, activeNavItemClassName, inactiveNavItemClassName, type SubNavItem,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useShellBreadcrumbItems } from '../../components/shell/Breadcrumbs';
 import { useFetch } from '../../hooks/useFetch';
 import { briefsHref, proposalsHref, RUNBOOKS } from './runbooksModel';

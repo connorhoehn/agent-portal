@@ -23,7 +23,7 @@ import {
   Toolbar,
   ToolbarGroup,
   ToolbarLabel,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useRowSearch } from '../../hooks/useRowSearch';
 import { useUrlState } from '../../lib/useUrlState';

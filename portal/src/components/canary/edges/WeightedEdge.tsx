@@ -10,7 +10,7 @@ import {
   type Edge,
   type EdgeProps,
 } from '@xyflow/react';
-import { Inline } from '@connorhoehnslalom/ui-components/shared';
+import { Inline } from '@connorhoehn/ui-components/shared';
 import type { WeightedEdgeData } from '../types.js';
 
 // React Flow's Edge<T> requires T to satisfy Record<string, unknown>; the

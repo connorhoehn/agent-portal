@@ -20,7 +20,7 @@ import {
   TableRow,
   TableTd,
   TableTh, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { streamStatusLabel } from '../../lib/streamStatus';
 import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
 import { ObservabilityCommandSection } from './ObservabilityCommandSection';

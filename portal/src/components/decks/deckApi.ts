@@ -7,7 +7,7 @@
 // Deliberately free of runtime imports so `node --test` can load it: the spec
 // type comes from the library as a type-only import.
 
-import type { DeckSpec } from '@connorhoehnslalom/ui-components/doc-editor';
+import type { DeckSpec } from '@connorhoehn/ui-components/doc-editor';
 
 export type { DeckSpec };
 

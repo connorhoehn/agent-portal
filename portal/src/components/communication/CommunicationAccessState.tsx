@@ -1,4 +1,4 @@
-import { Button, Card, Inline, LockIcon, Spinner, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, Inline, LockIcon, Spinner, Stack, T } from '@connorhoehn/ui-components/shared';
 import './CommunicationAccessState.css';
 
 export type CommunicationAccessStatus = 'loading' | 'invalid' | 'signed-out' | 'unavailable';

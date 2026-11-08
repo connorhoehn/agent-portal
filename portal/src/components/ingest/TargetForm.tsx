@@ -7,7 +7,7 @@ import { Button } from './ui';
 import {
   Checkbox, FormField, InlineAlert, Inline, Input, MetaLine, Select, Stack,
   Slider,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 
 const CRON_PRESETS = [
   { label: 'On-demand only',  expr: ''               },

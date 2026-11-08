@@ -11,9 +11,9 @@
 // the huddle's send route for a huddle).
 
 import { useMemo, useRef, useState } from 'react';
-import { chatCommandsToComposer, parseChatCommand, type ChatCommand } from '@connorhoehnslalom/ui-components/social';
-import type { WrappedLocalMessage } from '@connorhoehnslalom/ui-components/integrations/realtime-modules';
-import type { ConversationCommand } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { chatCommandsToComposer, parseChatCommand, type ChatCommand } from '@connorhoehn/ui-components/social';
+import type { WrappedLocalMessage } from '@connorhoehn/ui-components/integrations/realtime-modules';
+import type { ConversationCommand } from '@connorhoehn/ui-components/social/rich-composer';
 import ConversationSummaryCard from './ConversationSummaryCard';
 import ConversationArtifactCard from './ConversationArtifactCard';
 import ConversationAgentCard from './ConversationAgentCard';

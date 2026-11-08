@@ -8,9 +8,9 @@
 // import preserved), and a notice when earlier comments have not moved yet.
 
 import { useState } from 'react';
-import { CommentThreadNode } from '@connorhoehnslalom/ui-components/doc-editor';
-import { Button, Card, CardHeader, EmptyState, Inline, InlineAlert, LoadingState, Stack, Textarea } from '@connorhoehnslalom/ui-components/shared';
-import { ReactionsBar } from '@connorhoehnslalom/ui-components/social';
+import { CommentThreadNode } from '@connorhoehn/ui-components/doc-editor';
+import { Button, Card, CardHeader, EmptyState, Inline, InlineAlert, LoadingState, Stack, Textarea } from '@connorhoehn/ui-components/shared';
+import { ReactionsBar } from '@connorhoehn/ui-components/social';
 import { commentGroups, commentImportNotice, type CommentThreadView } from './documentCommentsModel';
 import { summarizeStoredReactions } from './knowledgeFormat';
 import type { DocumentCommentsState } from './useDocumentComments';

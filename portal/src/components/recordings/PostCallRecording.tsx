@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { RecordingActivityCard } from '@connorhoehnslalom/ui-components/social';
-import { Button, Inline, InlineAlert, Spinner, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { RecordingActivityCard } from '@connorhoehn/ui-components/social';
+import { Button, Inline, InlineAlert, Spinner, Stack, T } from '@connorhoehn/ui-components/shared';
 import { useSession } from '../../lib/auth';
 import { useCallHost } from '../../lib/conversationCall';
 import { callScopeKey } from '../shell/callShellModel';

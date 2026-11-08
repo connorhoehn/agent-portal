@@ -4,7 +4,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { IconButton, Tooltip, DocumentAddIcon, T, EmptyState, LoadingState, Button, Checkbox, DetailSection, FormField, InlineAlert, Inline, Input, Modal, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { IconButton, Tooltip, DocumentAddIcon, T, EmptyState, LoadingState, Button, Checkbox, DetailSection, FormField, InlineAlert, Inline, Input, Modal, Stack } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
 import { useCapabilities } from '../../../lib/capabilities';
 import { toastError, toastSuccess } from '../../../lib/toastStore';

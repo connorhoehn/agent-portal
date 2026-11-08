@@ -23,7 +23,7 @@ import {
   Switch,
   T,
   type DataTableColumn,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useState } from 'react';
 import { useFlushTrailItems } from '../../components/shell/FlushPage';
 import { UnavailableNotice } from '../../components/UnavailableNotice';

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { SearchInput, T } from '@connorhoehnslalom/ui-components/shared';
+import { SearchInput, T } from '@connorhoehn/ui-components/shared';
 import type { SearchConversationAPI } from '../../src/pages/InvokePage';
 
 /** Only the invocation/call boundary is inert; SearchWorkspace remains real. */

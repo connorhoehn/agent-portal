@@ -13,8 +13,8 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import {
   ChevronIcon, CloudIcon, DropdownMenu, Inline, MonitorIcon, StatusDot, type DropdownMenuItem, type DropdownMenuSection,
-} from '@connorhoehnslalom/ui-components/shared';
-import { useComputeOptional } from '@connorhoehnslalom/ui-components/compute';
+} from '@connorhoehn/ui-components/shared';
+import { useComputeOptional } from '@connorhoehn/ui-components/compute';
 import { useCapabilities } from '../../lib/capabilities';
 import { useSession } from '../../lib/auth';
 import { COMPUTER_LAB_PATH, LOCAL_COMPUTE_PATH, canOpenComputerLab } from '../../lib/devboxAccess';

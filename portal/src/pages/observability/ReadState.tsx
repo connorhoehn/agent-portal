@@ -10,7 +10,7 @@
 // believe its own answer) is not the same fact as an honest empty, so it
 // gets the danger-bordered notice instead of neutral placeholder prose.
 
-import { InlinePlaceholder } from '@connorhoehnslalom/ui-components/shared';
+import { InlinePlaceholder } from '@connorhoehn/ui-components/shared';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 
 export function RowEmpty({ text, degraded }: { text: string; degraded?: string | null }) {

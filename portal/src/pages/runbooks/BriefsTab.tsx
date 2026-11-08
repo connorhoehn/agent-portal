@@ -2,8 +2,8 @@
 // beside it (/iq/runbooks/briefs/:ref). The text is the same bytes the box received, with its sha.
 import { useMemo, useState } from 'react';
 import { useNavigate, useOutletContext, useParams } from 'react-router';
-import { EmptyState, Stack, StatusPill, T } from '@connorhoehnslalom/ui-components/shared';
-import { EditorShell } from '@connorhoehnslalom/ui-components/doc-editor';
+import { EmptyState, Stack, StatusPill, T } from '@connorhoehn/ui-components/shared';
+import { EditorShell } from '@connorhoehn/ui-components/doc-editor';
 import { useFetch } from '../../hooks/useFetch';
 import { useRunbookNames } from './useRunbookNames';
 import { useCrumbLabel } from '../../lib/crumbLabels';
@@ -13,7 +13,7 @@ import { RunbooksListFrame } from './RunbooksListFrame';
 import type { RunbooksOutletContext } from './RunbooksModule';
 import { briefGroups, briefHref, briefRows, briefsCommandAdapter, runPageHref, shortSha } from './runbooksModel';
 import type { BriefSummary } from './types';
-import { Button } from '@connorhoehnslalom/ui-components/shared';
+import { Button } from '@connorhoehn/ui-components/shared';
 
 export default function BriefsTab() {
   const { ref } = useParams();

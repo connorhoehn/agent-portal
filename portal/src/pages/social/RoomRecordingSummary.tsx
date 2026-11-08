@@ -5,7 +5,7 @@
 // sent before that press.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FormField, InlineAlert, Select, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { FormField, InlineAlert, Select, Stack } from '@connorhoehn/ui-components/shared';
 import { useChat, useGatewayOptional } from '@connorhoehn/realtime-modules/client';
 import ConversationSummaryCard from '../../components/chat/ConversationSummaryCard';
 import { inputWiring } from '../identity/identityFormat';

@@ -11,7 +11,7 @@
 
 import type { ReactNode } from 'react';
 import type { ChatMessage } from '@connorhoehn/realtime-modules/client';
-import { Button, Card, DocumentIcon, Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, DocumentIcon, Inline, Stack, T } from '@connorhoehn/ui-components/shared';
 import { readCallChatPageReference, type CallChatPageReference } from '../../lib/callPages';
 import type { AssessmentDimensionPageReference } from '../../lib/assessmentPageReferences';
 

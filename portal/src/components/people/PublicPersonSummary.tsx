@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { Chip, Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, Inline, Stack, T } from '@connorhoehn/ui-components/shared';
 import { demoPublicProfiles } from './demoPublicProfiles';
 
 /** Compact version of the everyday directory card. The demo cast's existing

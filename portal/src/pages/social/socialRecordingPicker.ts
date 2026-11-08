@@ -6,7 +6,7 @@
 // can still type what the deck is about. The rows are THIS conversation's
 // recordings; the BFF re-asks every authority question on send.
 
-import type { ChatCommand, ChannelRecordingItem } from '@connorhoehnslalom/ui-components/social';
+import type { ChatCommand, ChannelRecordingItem } from '@connorhoehn/ui-components/social';
 
 export interface RecordingPick { recordingId: string; label: string; hint?: string }
 

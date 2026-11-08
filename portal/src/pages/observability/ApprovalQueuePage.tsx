@@ -9,7 +9,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { relativeTime, absoluteTime } from '../../lib/relativeTime';
-import { Card, CheckIcon, Chip, CloseIcon, CodeBlock, EyeIcon, EyeOffIcon, IconButton, Inline, Input, LiveRegion, PageSection, SearchInput, StatusDot, T, Table, TableBody, TableHead, TableRow, TableTd, TableTh } from '@connorhoehnslalom/ui-components/shared';
+import { Card, CheckIcon, Chip, CloseIcon, CodeBlock, EyeIcon, EyeOffIcon, IconButton, Inline, Input, LiveRegion, PageSection, SearchInput, StatusDot, T, Table, TableBody, TableHead, TableRow, TableTd, TableTh } from '@connorhoehn/ui-components/shared';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';

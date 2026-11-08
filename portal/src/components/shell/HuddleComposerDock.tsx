@@ -1,5 +1,5 @@
-import { ComposerSurface, Inline, T } from '@connorhoehnslalom/ui-components/shared';
-import type { ConversationRecipient } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { ComposerSurface, Inline, T } from '@connorhoehn/ui-components/shared';
+import type { ConversationRecipient } from '@connorhoehn/ui-components/social/rich-composer';
 import { useMemo, useState, type ReactNode } from 'react';
 import type { CallPageDescriptor } from '../../lib/callPages';
 import { ConversationComposer } from '../../lib/conversationComposer';

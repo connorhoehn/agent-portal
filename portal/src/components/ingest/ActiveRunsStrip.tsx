@@ -6,7 +6,7 @@ import {
   MetaLine,
   ProgressBar,
   Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { durationLabel } from '../../lib/relativeTime';
 import { CRAWL_STATUS_TONE, durationOf } from './types';

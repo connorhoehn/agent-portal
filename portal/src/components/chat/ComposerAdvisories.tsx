@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { IconButton, InlinePopover, Stack, T, Tooltip, WarningIcon } from '@connorhoehnslalom/ui-components/shared';
+import { IconButton, InlinePopover, Stack, T, Tooltip, WarningIcon } from '@connorhoehn/ui-components/shared';
 
 export interface ComposerAdvisory {
   id: string;

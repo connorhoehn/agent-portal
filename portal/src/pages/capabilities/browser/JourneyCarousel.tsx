@@ -1,6 +1,6 @@
-import { Card, IconButton, Inline, InlinePlaceholder, MetaLine, Stack, T } from '@connorhoehnslalom/ui-components/shared';
-import { ImageThumbnail } from '@connorhoehnslalom/ui-components';
-import { SelectableCard } from '@connorhoehnslalom/ui-components/shared';
+import { Card, IconButton, Inline, InlinePlaceholder, MetaLine, Stack, T } from '@connorhoehn/ui-components/shared';
+import { ImageThumbnail } from '@connorhoehn/ui-components';
+import { SelectableCard } from '@connorhoehn/ui-components/shared';
 import type { JourneyStep } from './types';
 
 /** One recorded step, big, with a thumbnail strip to jump between them. */

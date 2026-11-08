@@ -9,7 +9,7 @@
 // can take on" block for the Details tab, where there is room to say it
 // properly.
 
-import { Chip, Inline, MetaLine, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, Inline, MetaLine, Stack, T } from '@connorhoehn/ui-components/shared';
 import {
   TIERS,
   capabilitiesFor,

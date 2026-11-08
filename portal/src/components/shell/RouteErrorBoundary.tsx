@@ -7,7 +7,7 @@
 // to try again, and a route change resets it.
 
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { ErrorState } from '@connorhoehnslalom/ui-components/shared';
+import { ErrorState } from '@connorhoehn/ui-components/shared';
 
 interface Props {
   /** Changes on navigation so a new route gets a clean boundary. */

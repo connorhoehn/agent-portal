@@ -14,7 +14,7 @@ import {
   TableTd,
   Chip,
   PageSection, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { showingLabel } from '../../lib/format';

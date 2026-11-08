@@ -1,4 +1,4 @@
-import { CatalogGrid, EmptyState, ErrorState, LoadingState, PageSection, VisuallyHidden } from '@connorhoehnslalom/ui-components/shared';
+import { CatalogGrid, EmptyState, ErrorState, LoadingState, PageSection, VisuallyHidden } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { useCapabilities } from '../lib/capabilities';
 import { CohortCard, type CohortStats } from '../components/scores/CohortCard';

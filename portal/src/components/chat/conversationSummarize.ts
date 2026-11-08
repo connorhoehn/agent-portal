@@ -8,7 +8,7 @@
 // command) and MessagesPage.tsx:2115 (the private card that waits for "Post to
 // conversation").
 
-import type { AgentRunStatus, ChatCommand } from '@connorhoehnslalom/ui-components/social';
+import type { AgentRunStatus, ChatCommand } from '@connorhoehn/ui-components/social';
 
 export interface SummarizeSpan { text: string; messageId: string; author: string }
 export interface SummarizeResult {

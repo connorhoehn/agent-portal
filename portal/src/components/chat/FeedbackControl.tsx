@@ -28,7 +28,7 @@
 import { useState } from 'react';
 import { useCapabilities } from '../../lib/capabilities';
 import { buildFeedbackBody, buildRunFeedbackBody, type AskFeedbackLabel } from './feedbackBody';
-import { Button, Inline, MetaLine } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Inline, MetaLine } from '@connorhoehn/ui-components/shared';
 
 type Status = 'idle' | 'submitting' | 'submitted' | 'error';
 

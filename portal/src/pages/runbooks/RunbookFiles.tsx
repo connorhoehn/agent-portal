@@ -1,7 +1,7 @@
 // The read-only viewer for a runbook's skill files, shared by the runbook page and the proposal review.
 // File content is untrusted (a box wrote it): CodeBlock always gets language "text", the one path that only
 // HTML-escapes. The other languages inject highlighted <span style> markup via dangerouslySetInnerHTML.
-import { CodeBlock, Disclosure, Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { CodeBlock, Disclosure, Inline, Stack, T } from '@connorhoehn/ui-components/shared';
 import { fileLanguageLabel, fileModeLabel, formatBytes, shortSha } from './runbooksModel';
 import type { RunbookFile } from './types';
 

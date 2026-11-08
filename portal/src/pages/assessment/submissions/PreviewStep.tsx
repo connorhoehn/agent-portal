@@ -4,7 +4,7 @@
 // hand-rolled table.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Checkbox, Chip, DataTable, InlineAlert, MetaLine, Select, Stack, T, Toolbar, ToolbarGroup, ToolbarLabel } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Checkbox, Chip, DataTable, InlineAlert, MetaLine, Select, Stack, T, Toolbar, ToolbarGroup, ToolbarLabel } from '@connorhoehn/ui-components/shared';
 import { formatRelativeTime, resolveRowStatusDisplay } from '../secondaryFormat';
 import type { CommitResponse, CommitSelection, ParsedRow, ParseResponse, TeamOption } from '../secondaryTypes';
 import { useCapabilities } from '../../../lib/capabilities';

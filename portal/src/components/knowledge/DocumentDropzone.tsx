@@ -17,7 +17,7 @@
 import { useCallback, useState } from 'react';
 import {
   Card, EmptyState, FileUploadDrop, Inline, MetaLine, SectionLabel, Stack, StatusDot,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 
 export interface DropTarget {
   /** Registry row id, used for the authenticated upload path. */

@@ -34,7 +34,7 @@ import {
   type SubNavItem,
   activeNavItemClassName,
   inactiveNavItemClassName,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { BuildSectionLayout } from '../../components/shell/BuildSectionLayout';
 import { useShellBreadcrumbItems } from '../../components/shell/Breadcrumbs';
 import { useFetch } from '../../hooks/useFetch';

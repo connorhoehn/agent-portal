@@ -17,7 +17,7 @@ import { useMemo } from 'react';
 import { Link } from 'react-router';
 import {
   Card, CardHeader, Chip, PageSection, Stack, StatStrip, Table, TableBody, TableHead, TableRow, TableTh, TableTd, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import {
   AreaChart,
   Area,

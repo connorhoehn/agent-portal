@@ -1,4 +1,4 @@
-import { Select } from '@connorhoehnslalom/ui-components/shared';
+import { Select } from '@connorhoehn/ui-components/shared';
 import { usePromptVersions } from '../../../components/canary/usePromptLibrary.js';
 
 /** DRAFT plus every published version of one prompt. */

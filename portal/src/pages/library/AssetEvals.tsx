@@ -10,7 +10,7 @@
 import { useState } from 'react';
 import {
   Button, Card, Chip, DetailSection, Inline, InlinePlaceholder, LoadingState, ProgressBar, Stack, T,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';

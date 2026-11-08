@@ -15,10 +15,10 @@
 
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { RecordingList, RecordingPlayer } from '@connorhoehnslalom/ui-components/video';
+import { RecordingList, RecordingPlayer } from '@connorhoehn/ui-components/video';
 import {
   Button, Chip, ConfirmDialog, EmptyState, ErrorState, Inline, InlineAlert, KeyValue, LoadingState, PageHeader, Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { writeJson } from '../../lib/writeJson';
 import RoomRecordingSummary from './RoomRecordingSummary';

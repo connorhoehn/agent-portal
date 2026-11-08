@@ -12,7 +12,7 @@
 import { useEffect, useState } from 'react';
 import { CheckIcon, FormField,
   Button, ErrorState, InlineAlert, KeyValue, LoadingState, PageHeader, PageSection, Select, Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { roleLabel } from '../../lib/pipelineDefinitions';

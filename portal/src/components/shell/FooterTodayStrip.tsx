@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { ActivityTicker, Button, Inline, T, ChartIcon, ChecklistIcon, ChevronIcon, HistoryIcon, InfoIcon, RepeatIcon } from '@connorhoehnslalom/ui-components/shared';
+import { ActivityTicker, Button, Inline, T, ChartIcon, ChecklistIcon, ChevronIcon, HistoryIcon, InfoIcon, RepeatIcon } from '@connorhoehn/ui-components/shared';
 import { callDrawn, useCallHost } from '../../lib/conversationCall';
 import { useSession } from '../../lib/auth';
 import { useFetch } from '../../hooks/useFetch';

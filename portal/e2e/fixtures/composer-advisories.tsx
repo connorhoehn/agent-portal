@@ -1,7 +1,7 @@
 import '../../src/app.css';
 import { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ContextComposer } from '@connorhoehnslalom/ui-components/social/rich-composer';
+import { ContextComposer } from '@connorhoehn/ui-components/social/rich-composer';
 import { ComposerAdvisories } from '../../src/components/chat/ComposerAdvisories';
 function Fixture() {
   const [visible, setVisible] = useState(true);

@@ -17,7 +17,7 @@ import { useNavigate } from 'react-router';
 import {
   ArrowRightIcon, Button, Card, Chip, CodeBlock, IconButton, Inline, PageSection, Select, Stack, T,
   Table, TableBody, TableHead, TableRow, TableTd, TableTh, useToast,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import {
   LineChart,
   Line,

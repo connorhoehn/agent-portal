@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Button, Card, DetailHeader, Inline, InlineAlert, SectionLabel, SkeletonCard, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, DetailHeader, Inline, InlineAlert, SectionLabel, SkeletonCard, Stack, T } from '@connorhoehn/ui-components/shared';
 import { AssistPanel } from './AssistPanel';
 import { GuardrailBanner, GuardrailSelect } from './GuardrailControls';
 import { VariableInput } from './VariableInput';

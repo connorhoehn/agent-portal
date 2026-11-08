@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ComputeProvider, installMockShellSocket, createComputeClient,
   type ComputeNotice, type ComputeProject,
-} from '@connorhoehnslalom/ui-components/compute';
+} from '@connorhoehn/ui-components/compute';
 import { withLocalMachines } from './localMachines';
 import { labPaneKinds } from './localMachines.tsx';
 import { useCapabilities } from '../../lib/capabilities';

@@ -4,7 +4,7 @@ import { tenantHome } from './tenantHome';
 import { clearTenantScopedCaches } from './tenantCaches';
 import { SESSION_INVALID_EVENT } from './apiFailure';
 import { realtimeTokenSource } from './realtimeToken';
-import { Button, Card, Inline, LoadingState, LockIcon, MetaLine, SectionLabel, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, Inline, LoadingState, LockIcon, MetaLine, SectionLabel, Stack, T } from '@connorhoehn/ui-components/shared';
 
 export type Role = 'member' | 'sme' | 'program-owner' | 'org-leader' | 'hr-admin';
 export type SessionRole = Role | 'admin';

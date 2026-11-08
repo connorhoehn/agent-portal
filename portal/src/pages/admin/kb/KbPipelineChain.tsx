@@ -7,8 +7,8 @@
 // A stage that has not been provisioned yet stays neutral rather than taking
 // the KB's overall colour — a green "Bedrock KB: (not provisioned)" is a lie.
 
-import { Card, CardHeader, Stack, StackDiagram } from '@connorhoehnslalom/ui-components/shared';
-import type { ChipTone, StackLayerSpec } from '@connorhoehnslalom/ui-components/shared';
+import { Card, CardHeader, Stack, StackDiagram } from '@connorhoehn/ui-components/shared';
+import type { ChipTone, StackLayerSpec } from '@connorhoehn/ui-components/shared';
 import type { Reconciled } from '../../knowledge/knowledgeFormat';
 import { statusStyle } from './kbFormat';
 import type { KbRegistryEntry } from './types';

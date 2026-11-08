@@ -1,9 +1,9 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import { useParams } from 'react-router';
-import { Button, EditableHeading, FullscreenToggle, Inline, InlineAlert, KeyValue, LoadingState, MarkdownView, MetaLine, PageSection, Stack, T, Textarea } from '@connorhoehnslalom/ui-components/shared';
-import { useFullscreen } from '@connorhoehnslalom/ui-components/hooks';
-import { DocumentSaveStatus, type DocumentSaveState } from '@connorhoehnslalom/ui-components/doc-editor';
+import { Button, EditableHeading, FullscreenToggle, Inline, InlineAlert, KeyValue, LoadingState, MarkdownView, MetaLine, PageSection, Stack, T, Textarea } from '@connorhoehn/ui-components/shared';
+import { useFullscreen } from '@connorhoehn/ui-components/hooks';
+import { DocumentSaveStatus, type DocumentSaveState } from '@connorhoehn/ui-components/doc-editor';
 import { useSession } from '../../lib/auth';
 import { useCapabilities } from '../../lib/capabilities';
 import { useCrumbTrail } from '../../lib/crumbLabels';
@@ -138,7 +138,7 @@ function WorkspacePage({ page, onSaved }: { page: WorkspaceDocument; onSaved: ()
 // now: the live, shared Y.Doc arrives with the Work canvas service, the same
 // step as the page editor's. The stage goes full screen through the library's
 // toggle (Escape leaves), and the title renames in place from the heading.
-const ExcalidrawCanvas = lazy(() => import('@connorhoehnslalom/ui-components/diagram').then(m => ({ default: m.CollaborativeExcalidraw })));
+const ExcalidrawCanvas = lazy(() => import('@connorhoehn/ui-components/diagram').then(m => ({ default: m.CollaborativeExcalidraw })));
 const toBase64 = (bytes: Uint8Array): string => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(s); };
 const fromBase64 = (text: string): Uint8Array => Uint8Array.from(atob(text), c => c.charCodeAt(0));
 function WhiteboardPage({ page, onSaved }: { page: WorkspaceDocument; onSaved: () => void }) {

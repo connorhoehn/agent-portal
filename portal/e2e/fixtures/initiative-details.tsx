@@ -1,10 +1,10 @@
-import '@connorhoehnslalom/ui-components/styles.css';
+import '@connorhoehn/ui-components/styles.css';
 import '../../src/app.css';
 import { createContext, StrictMode, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, useLocation } from 'react-router';
-import { PaneHeader, SidePaneProvider, SidePaneSplit } from '@connorhoehnslalom/ui-components';
-import { Button, IconButton, Inline, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { PaneHeader, SidePaneProvider, SidePaneSplit } from '@connorhoehn/ui-components';
+import { Button, IconButton, Inline, Stack, T } from '@connorhoehn/ui-components/shared';
 import { InitiativeSidePane, useInitiativePane } from '../../src/pages/projects/InitiativeSidePane';
 import { InitiativeDetailsTrigger, type InitiativeFactsInput } from '../../src/pages/projects/InitiativeDetailsCard';
 import { buildOverview } from '../../src/pages/project-detail/overviewModel';

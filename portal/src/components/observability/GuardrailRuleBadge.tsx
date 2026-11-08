@@ -13,7 +13,7 @@
 //   ANONYMIZED → "redacted"
 //   other      → action as-given
 
-import { Chip } from '@connorhoehnslalom/ui-components/shared';
+import { Chip } from '@connorhoehn/ui-components/shared';
 import { severityTone } from '../../lib/statusTone';
 
 interface Props {

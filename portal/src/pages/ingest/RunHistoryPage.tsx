@@ -4,7 +4,7 @@
 // selections stay put") — never a drawer.
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { Card, CollectionToolbar, PageSection, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Card, CollectionToolbar, PageSection, Stack } from '@connorhoehn/ui-components/shared';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
 import { crawlRunHref, crawlRunsAdapter, filterRuns, runTitle } from './ingestCommands';

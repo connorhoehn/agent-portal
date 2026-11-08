@@ -1,15 +1,15 @@
 // Production footer/native controls with explicit inert call state. No media,
 // gateway, API mutations, or message sends are performed by this fixture.
-import '@connorhoehnslalom/ui-components/styles.css';
+import '@connorhoehn/ui-components/styles.css';
 import '../../src/app.css';
 import { StrictMode, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router';
-import { Button, ChatIcon, Inline, PresenceDot, Stack, T } from '@connorhoehnslalom/ui-components/shared';
-import { SidePane, SidePaneProvider } from '@connorhoehnslalom/ui-components';
-import { CallDock } from '@connorhoehnslalom/ui-components/video';
+import { Button, ChatIcon, Inline, PresenceDot, Stack, T } from '@connorhoehn/ui-components/shared';
+import { SidePane, SidePaneProvider } from '@connorhoehn/ui-components';
+import { CallDock } from '@connorhoehn/ui-components/video';
 import { conversationCallDockProps } from '@connorhoehn/realtime-modules/client/video';
-import { callCounts, callDrawn } from '@connorhoehnslalom/ui-components/integrations/realtime';
+import { callCounts, callDrawn } from '@connorhoehn/ui-components/integrations/realtime';
 import { SessionProvider } from '../../src/lib/auth';
 import { SocialFooter } from '../../src/components/shell/SocialFooter';
 export { callCounts, callDrawn };

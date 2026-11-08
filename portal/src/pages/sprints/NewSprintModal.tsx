@@ -12,7 +12,7 @@ import {
   Select,
   Stack,
   Textarea,
-} from '@connorhoehnslalom/ui-components/shared';
+} from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { SPRINT_STATUSES, validateNewSprint, type NewSprintForm } from './sprintForm';

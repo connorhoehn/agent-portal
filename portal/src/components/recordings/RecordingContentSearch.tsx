@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { DocumentResultList } from '@connorhoehnslalom/ui-components';
-import { Button, Inline, InlineAlert, LoadingState, SearchInput, Stack, T } from '@connorhoehnslalom/ui-components/shared';
+import { DocumentResultList } from '@connorhoehn/ui-components';
+import { Button, Inline, InlineAlert, LoadingState, SearchInput, Stack, T } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import type { SearchResponse } from '../../pages/search/searchTypes';
 
