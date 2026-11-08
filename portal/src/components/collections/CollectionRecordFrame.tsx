@@ -27,6 +27,12 @@ export interface CollectionRecordFrameProps {
   count?: number;
   /** The rail's find box over the same rows. */
   search?: { value: string; onChange: (value: string) => void; placeholder: string };
+  /** The rail's one compact filter row (a `SegmentedControl`), under the find box when both are given. */
+  filter?: ReactNode;
+  /** The rail's empty state when the collection holds nothing (no search, no filter match). */
+  empty?: { title: string; description: string };
+  /** The title band's action slot: the record's actions and switches. */
+  actions?: ReactNode;
   /** Rows grouped as the list page groups them (a status, a kind). */
   groups: GroupedListGroup[];
   rows: GroupedListRow[];
@@ -59,12 +65,13 @@ export interface CollectionRecordFrameProps {
 }
 
 export function CollectionRecordFrame({
-  title, description, listTitle, listLabel, count, search, groups, rows, currentId, onOpen,
+  title, description, listTitle, listLabel, count, search, filter, empty, actions, groups, rows, currentId, onOpen,
   loading = false, error = null, onRetry, footer, children, conversation, railType = 'rail', 'data-testid': testId,
 }: CollectionRecordFrameProps) {
   const trail = useShellBreadcrumbItems();
   const body = error ? <ErrorState title={`Couldn't load ${listLabel}`} description={error} {...(onRetry ? { actionLabel: 'Retry', onAction: onRetry } : {})} />
     : loading && rows.length === 0 ? <LoadingState label={`Loading ${listLabel}…`} />
+    : rows.length === 0 && empty && !search?.value ? <EmptyState title={empty.title} description={empty.description} />
     : rows.length === 0 ? <EmptyState title="Nothing matches" description={search?.value ? `Nothing matches “${search.value.trim()}”.` : `No ${listLabel} yet.`} />
     : <GroupedList size={railType === 'app' ? 'sm' : 'md'} currentStyle="bar" groupHeading={railType === 'app' ? 'title' : 'label'} groupCountAlign="end" hideEmptyGroups
         groups={groups} rows={rows} currentId={currentId} onOpenRow={(row) => onOpen(row.id)} />;
@@ -72,13 +79,16 @@ export function CollectionRecordFrame({
     <ViewportFillRegion bottomGap={0} {...(testId ? { 'data-testid': testId } : {})}>
       <Stack gap="none" className="h-full min-h-0 min-w-0 bg-surface" data-shell-flush>
         <ListRailLayout
-          header={<SectionHeader breadcrumbs={trail} title={title} {...(description ? { description } : {})} />}
+          header={<SectionHeader breadcrumbs={trail} title={title} {...(description ? { description } : {})} {...(actions ? { actions } : {})} />}
           list={{
             // The app rail's 14/600 group headings already carry their counts; a 12px
             // caption above them would be a second heading size in one rail.
             ...(railType === 'app' ? {} : { title: listTitle, ...(count !== undefined ? { count } : {}) }),
             label: listLabel,
-            ...(search ? { header: <SearchInput value={search.value} onChange={search.onChange} placeholder={search.placeholder} aria-label={search.placeholder} className="min-w-0 w-full" /> } : {}),
+            ...(search || filter ? { header: <>
+              {search && <SearchInput value={search.value} onChange={search.onChange} placeholder={search.placeholder} aria-label={search.placeholder} className="min-w-0 w-full" />}
+              {filter}
+            </> } : {}),
             body,
           }}
           {...(footer != null ? { footer } : {})}

@@ -45,8 +45,12 @@ export function voiceNavigatorEnabled(env: Record<string, unknown> | undefined):
   return env?.['DEV'] === true;
 }
 
+const VOICE_NAVIGATOR = voiceNavigatorEnabled((import.meta as unknown as { env?: Record<string, unknown> }).env);
+
 export const features = {
-  voiceNavigator: voiceNavigatorEnabled((import.meta as unknown as { env?: Record<string, unknown> }).env),
+  voiceNavigator: VOICE_NAVIGATOR,
+  /** System › Voice log (/iq/voice-log): the dev server with the voice navigator on — the route, its rail item and the dock's log control. */
+  voiceLog: (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true && VOICE_NAVIGATOR,
 } as const;
 
 /** Whether a tenant's portal surfaces are switched on: its manifest

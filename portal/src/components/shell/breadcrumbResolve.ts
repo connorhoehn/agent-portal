@@ -117,6 +117,9 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
         if (!b) return [{ label: 'Operate' }, { label: 'Runs' }];
         return [{ label: 'Operate' }, { label: 'Runs', path: '/iq/runs' }, { label: `Run ${shortId(b)}`, id: b }];
       case 'communication': return [{ label: 'Engage' }, { label: 'Communication' }];
+      case 'voice-log':
+        if (!b) return [{ label: 'System' }, { label: 'Voice log' }];
+        return [{ label: 'System' }, { label: 'Voice log', path: '/iq/voice-log' }, { label: shortId(b), id: b }];
       case 'documents':
         return [{ label: 'Engage' }, { label: 'Search', path: '/iq/search' }, ...(b ? [{ label: shortId(b), id: b }] : [])];
       case 'decks':

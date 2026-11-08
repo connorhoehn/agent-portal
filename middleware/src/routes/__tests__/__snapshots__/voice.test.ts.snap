@@ -73,6 +73,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
             "search",
             "communication",
             "settings",
+            "system-voice-log",
             "workspaces",
             null,
           ],

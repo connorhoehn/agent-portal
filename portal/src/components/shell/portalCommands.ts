@@ -19,6 +19,7 @@ import type { Command } from '@connorhoehn/ui-components/shared';
 import { useSession } from '../../lib/auth';
 import { openShell, useComputeOptional } from '@connorhoehn/ui-components/compute';
 import { commandKeywords } from './commandKeywords';
+import { features } from '../../lib/features';
 
 export type PageTenant = 'orgiq' | 'assessment' | 'social' | 'pipelines' | 'access' | 'admin' | 'universal';
 
@@ -46,6 +47,8 @@ export interface PageEntry {
   /** The id the voice navigator's `navigate` tool names this page by
       (middleware/src/lib/voice/catalogue.ts NAVIGATE_PAGES); omitted = not offered to voice. */
   pageId?: string;
+  /** A page whose route exists only behind a feature (`features` in lib/features.ts): the palette hides it while that is off. */
+  feature?: 'voiceLog';
 }
 
 interface RecentRun {
@@ -240,6 +243,8 @@ export const PAGES: readonly PageEntry[] = [
     keywords: ['policy', 'sandbox', 'authz', 'dry-run', 'cedar'] },
   { label: 'Settings',           hint: 'User preferences',                    path: '/settings',                                   tenant: 'universal', group: 'System', pageId: 'settings',
     keywords: ['settings', 'preferences'] },
+  { label: 'Voice log',          hint: 'Your voice sessions: tool calls, refusals, events', path: '/iq/voice-log',                  tenant: 'orgiq',  group: 'System', pageId: 'system-voice-log', feature: 'voiceLog',
+    keywords: ['voice', 'log', 'session', 'transcript', 'history', 'tool call'] },
   // Assessment tenant — its own map (Assess / Analyze / Informatics / System),
   // mirroring NAV_ITEMS in Layout.tsx. Without these an assessment session's
   // palette listed nothing but Settings.
@@ -430,7 +435,7 @@ export function usePortalCommands(): Command[] {
     // Stable sort: the tenant's rail order between groups, definition order
     // within one — so the palette never leads with Settings.
     const pageCommands: Command[] = PAGES
-      .filter((p) => isPageVisible(p, tenant, role))
+      .filter((p) => isPageVisible(p, tenant, role) && (!p.feature || features[p.feature]))
       .sort((a, b) => groupRank(tenant, a.group) - groupRank(tenant, b.group))
       .map((p) => ({
         id: `page:${p.path}`,

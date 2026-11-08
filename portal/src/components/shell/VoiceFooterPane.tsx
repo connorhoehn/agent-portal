@@ -34,8 +34,8 @@
 // (lib/voice/sessionEvents.ts); with "Keep transcripts on this device" on
 // (lib/voice/transcriptKeep.ts, default off) this pane saves the session's
 // turns to IndexedDB under its id, never sending them; the log control beside
-// the transcript one opens the Voice log view (/voice/log, dev server only)
-// at the session last minted.
+// the transcript one opens System › Voice log (/iq/voice-log/<id>, an orgiq
+// page on the dev server only) at the session last minted.
 //
 // No money in the footer (owner decision, 8 November): the dock shows the
 // phase, the elapsed time and the controls, never a dollar figure, so no
@@ -91,8 +91,8 @@ const WORK_EVENT_KINDS: ReadonlySet<string> = new Set(['sweep', 'bot-run', 'job'
 /** Social actions whose grant comes from the plane outside the Social tenant (routes/social-plane.ts PLANE_ACTIONS). */
 const PLANE_ACTIONS: ReadonlySet<Action> = new Set<Action>(['PostMessage', 'StartCall']);
 
-/** The Voice log view is registered under the dev server only (App.tsx), as is this control. */
-const VOICE_LOG_AVAILABLE = !!(import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV;
+/** System › Voice log is registered under the dev server only (App.tsx features.voiceLog), as is this control; it is an orgiq page, so other tenants' footers leave it out. */
+const VOICE_LOG_AVAILABLE = features.voiceLog;
 /** How often a kept transcript is saved while the words stream in. */
 const KEEP_SAVE_MS = 1000;
 
@@ -429,7 +429,7 @@ function VoiceFooterPane() {
         icon={<CaptionsIcon size={16} />} disabled={turns.length === 0}
         onClick={() => setStripOpen((open) => !open)} data-testid="shell-voice-transcript-toggle" />
     </Tooltip>
-    {VOICE_LOG_AVAILABLE && <Tooltip content="Voice log: what ran, refusals and events" placement="top">
+    {VOICE_LOG_AVAILABLE && tenant === 'orgiq' && <Tooltip content="Voice log: what ran, refusals and events" placement="top">
       <IconButton variant="ghost" size="sm" aria-label="Voice log" icon={<HistoryIcon size={16} />}
         onClick={() => { void navigate(snap.sessionId ? sessionHref(snap.sessionId) : VOICE_LOG_PATH); }} data-testid="shell-voice-log" />
     </Tooltip>}

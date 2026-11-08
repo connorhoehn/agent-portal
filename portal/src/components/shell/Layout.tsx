@@ -62,7 +62,7 @@ import { discussionCommandLabel, railCount } from './discussionUnreadModel';
 import { DevboxQuickSwitch, type PaletteScope } from './DevboxQuickSwitch';
 import { ToastHost } from './ToastHost';
 import { ComputeDock } from '@connorhoehn/ui-components/compute';
-import { tenantEnabled } from '../../lib/features';
+import { features, tenantEnabled } from '../../lib/features';
 import { ShellCallHost } from './ShellCallHost';
 import { CallBlock } from '../../lib/conversationCall';
 import { EmbeddedSocialProvider } from './EmbeddedSocial';
@@ -231,6 +231,8 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/access/audit',         label: 'Audit',         tenant: 'access', group: 'Govern' },
   { path: '/access/configuration', label: 'Configuration', tenant: 'access', group: 'System', requireRoles: ['access-admin', 'admin'] },
   { path: '/settings',      label: 'Settings',    tenant: 'universal', group: 'System' },
+  // The caller's own voice sessions (G20): dev server + the voice navigator flag, like its route.
+  ...(features.voiceLog ? [{ path: '/iq/voice-log', label: 'Voice log', tenant: 'orgiq' as const, group: 'System' }] : []),
 ];
 
 // Platform/admin surfaces, gated by role and grouped SDLC-first.

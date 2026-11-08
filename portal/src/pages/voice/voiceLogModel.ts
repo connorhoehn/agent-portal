@@ -9,8 +9,11 @@
 
 import type { KeptTranscript } from '../../lib/voice/transcriptKeep.ts';
 
-export const VOICE_LOG_PATH = '/voice/log';
+/** System › Voice log (orgiq): the list rail of sessions, a session at `/iq/voice-log/<id>`. */
+export const VOICE_LOG_PATH = '/iq/voice-log';
 export const VOICE_SESSIONS_API = '/api/voice/sessions';
+/** The list read's page size; the route caps it at 100. */
+export const VOICE_SESSIONS_LIMIT = 50;
 
 export interface VoiceSessionListItem {
   id: string;
@@ -39,8 +42,57 @@ export interface VoiceSessionDetail {
   events: Array<{ seq: number; at: string; kind: string; data: Record<string, unknown> }>;
 }
 
-/** `/voice/log?session=<id>`: the view's own link to one session. */
-export const sessionHref = (id: string): string => `${VOICE_LOG_PATH}?session=${encodeURIComponent(id)}`;
+/** `/iq/voice-log/<id>`: one session, opened beside the list rail. */
+export const sessionHref = (id: string): string => `${VOICE_LOG_PATH}/${encodeURIComponent(id)}`;
+
+/** The list rail's filter row: sessions started today, in the last seven days, or all of them. */
+export type VoiceLogRange = 'today' | 'week' | 'all';
+export const VOICE_LOG_RANGES: ReadonlyArray<{ value: VoiceLogRange; label: string }> = [
+  { value: 'today', label: 'Today' },
+  { value: 'week', label: '7 days' },
+  { value: 'all', label: 'All' },
+];
+export const parseRange = (raw: string | null | undefined): VoiceLogRange => (raw === 'today' || raw === 'week' ? raw : 'all');
+
+/** The `since` the list read sends: local midnight today, or seven midnights back; none for all. Stable within a day, so the read's URL does not change per render. */
+export function sinceFor(range: VoiceLogRange, now: Date = new Date()): string | null {
+  if (range === 'all') return null;
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (range === 'week' ? 6 : 0));
+  return d.toISOString();
+}
+
+export function sessionsApi(range: VoiceLogRange, now: Date = new Date()): string {
+  const since = sinceFor(range, now);
+  return `${VOICE_SESSIONS_API}?limit=${VOICE_SESSIONS_LIMIT}${since ? `&since=${encodeURIComponent(since)}` : ''}`;
+}
+
+/** "17:49:02": a rail row's title under its day group. */
+export function clock(iso: string, locale?: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return iso;
+  return new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(t));
+}
+
+/** The rail's day groups, newest first, in the order the rows came (the route answers newest first). */
+export function dayGroups(rows: readonly VoiceSessionListItem[], now: Date = new Date(), locale?: string): {
+  groups: Array<{ id: string; title: string; count: number }>;
+  groupOf: (s: VoiceSessionListItem) => string;
+} {
+  const key = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  const today = key(now);
+  const yesterday = key(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
+  const groupOf = (s: VoiceSessionListItem) => { const t = Date.parse(s.startedAt); return Number.isFinite(t) ? key(new Date(t)) : 'unknown'; };
+  const groups: Array<{ id: string; title: string; count: number }> = [];
+  for (const s of rows) {
+    const id = groupOf(s);
+    const g = groups.find((x) => x.id === id);
+    if (g) { g.count++; continue; }
+    const title = id === today ? 'Today' : id === yesterday ? 'Yesterday' : id === 'unknown' ? 'Undated'
+      : new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' }).format(new Date(Date.parse(s.startedAt)));
+    groups.push({ id, title, count: 1 });
+  }
+  return { groups, groupOf };
+}
 export const sessionApi = (id: string): string => `${VOICE_SESSIONS_API}/${encodeURIComponent(id)}`;
 export const exportApi = (id: string): string => `${sessionApi(id)}/export`;
 
