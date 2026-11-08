@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-07T23:00:22.143Z",
-  "serverHandlerSha": "509bc88f647f18d9b7bad0e306e9e88318fa5927e5e0733acc58b839abe2138a",
-  "baseUrl": "http://127.0.0.1:3012",
+  "capturedAt": "2026-11-08T05:36:02.335Z",
+  "serverHandlerSha": "3c2ba5b982107a50189b906f7a5a1b187d27707c8dc66d8641bd64153c23aea7",
+  "baseUrl": "http://127.0.0.1:3997",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -3883,11 +3883,8 @@
         "$[].key": [
           "ORG-AUTH-1",
           "ORG-AUTH-2",
-          "ORG-AUTH-3",
           "ORG-AUTH-5",
-          "ORG-AUTH-7",
           "ORG-AUTH-8",
-          "ORG-AUTH-9",
           "ORG-COST-2",
           "ORG-COST-3",
           "ORG-COST-6",
@@ -3896,6 +3893,7 @@
           "ORG-DS-4",
           "ORG-DSAPI-1",
           "ORG-DSAPI-2",
+          "ORG-DSAPI-3",
           "ORG-DSAPI-4",
           "ORG-FS-1",
           "ORG-FS-3",
@@ -3906,13 +3904,14 @@
           "ORG-LAKE-4",
           "ORG-LLM-1",
           "ORG-LLM-10",
+          "ORG-LLM-2",
           "ORG-LLM-3",
           "ORG-LLM-4",
+          "ORG-LLM-5",
           "ORG-MOB-2",
           "ORG-MOB-3",
           "ORG-MOB-4",
           "ORG-OBS-10",
-          "ORG-OBS-11",
           "ORG-OBS-12",
           "ORG-OBS-13",
           "ORG-OBS-14",
@@ -3925,6 +3924,7 @@
           "ORG-RTA-2",
           "ORG-RTA-3",
           "ORG-RTA-5",
+          "ORG-SOC2-1",
           "ORG-SOC2-2",
           "ORG-SOC2-3",
           "ORG-SOC2-4",
@@ -4028,6 +4028,7 @@
         "capabilities.jobSchema.ok": "boolean",
         "datastore": "object",
         "datastore.ok": "boolean",
+        "insecureDevMode": "boolean",
         "mocks": "object",
         "mocks.agentcore": "boolean",
         "mocks.aurora": "boolean",
@@ -4437,6 +4438,12 @@
         "schema.OrgIQ.actions.ViewWorkItems.appliesTo.principalTypes[]": "string",
         "schema.OrgIQ.actions.ViewWorkItems.appliesTo.resourceTypes": "array",
         "schema.OrgIQ.actions.ViewWorkItems.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.VoiceNavigate": "object",
+        "schema.OrgIQ.actions.VoiceNavigate.appliesTo": "object",
+        "schema.OrgIQ.actions.VoiceNavigate.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.VoiceNavigate.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.VoiceNavigate.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.VoiceNavigate.appliesTo.resourceTypes[]": "string",
         "schema.OrgIQ.entityTypes": "object"
       },
       "values": {}
@@ -5955,7 +5962,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "null|number",
+        "points[].judgeP50": "number",
         "windowHours": "number"
       },
       "values": {}
@@ -8981,7 +8988,8 @@
           "ViewPipelines",
           "ViewSessionBrief",
           "ViewSocial",
-          "ViewWorkItems"
+          "ViewWorkItems",
+          "VoiceNavigate"
         ],
         "role": [
           "admin"
@@ -9491,6 +9499,9 @@
     "GET /api/social/plane/recordings/:recordingId/transcript": {
       "skipped": "no value found for :recordingId under /api/social/plane/recordings (orgiq/admin); no value found for :recordingId under /api/social/plane/recordings (assessment/admin); no value found for :recordingId under /api/social/plane/recordings (anonymous)"
     },
+    "GET /api/social/plane/resolve": {
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
+    },
     "GET /api/social/plane/rooms": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -9638,6 +9649,9 @@
     },
     "GET /api/social/recordings/:recordingId/transcript": {
       "skipped": "no value found for :recordingId under /api/social/recordings (orgiq/admin); no value found for :recordingId under /api/social/recordings (assessment/admin); no value found for :recordingId under /api/social/recordings (anonymous)"
+    },
+    "GET /api/social/resolve": {
+      "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
     },
     "GET /api/social/rooms": {
       "persona": "orgiq/admin",
@@ -10495,6 +10509,33 @@
       },
       "values": {}
     },
+    "GET /api/work/sweeps/runs": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "runs": "array",
+        "runs[]": "object",
+        "runs[].botId": "null",
+        "runs[].durationMs": "number",
+        "runs[].error": "null",
+        "runs[].findings": "number",
+        "runs[].finishedAt": "string",
+        "runs[].id": "string",
+        "runs[].startedAt": "string",
+        "runs[].status": "string",
+        "runs[].sweep": "string",
+        "runs[].tenant": "string"
+      },
+      "values": {
+        "runs[].status": [
+          "ok"
+        ],
+        "runs[].tenant": [
+          "orgiq"
+        ]
+      }
+    },
     "GET /health": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -10514,6 +10555,7 @@
         "capabilities.jobSchema.ok": "boolean",
         "datastore": "object",
         "datastore.ok": "boolean",
+        "insecureDevMode": "boolean",
         "mocks": "object",
         "mocks.agentcore": "boolean",
         "mocks.aurora": "boolean",
@@ -10640,7 +10682,8 @@
         "ViewPipelines",
         "ViewSessionBrief",
         "ViewSocial",
-        "ViewWorkItems"
+        "ViewWorkItems",
+        "VoiceNavigate"
       ]
     },
     "category": {
