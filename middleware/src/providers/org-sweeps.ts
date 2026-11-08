@@ -10,6 +10,7 @@
 // touches the graph.
 
 import { exec } from './aurora.js';
+import { startSweepRun, finishSweepRun } from './sweep-runs.js';
 import { config } from '../config.js';
 // The offline findings board and its stamps. The rows used to be a bare
 // module-level array seeded by a local `hoursAgo(h)` helper built on
@@ -307,9 +308,26 @@ export const SWEEP_NAMES = Object.keys(SWEEPS) as SweepName[];
  * holder, last night's critical finding must stop shouting. Silence when the
  * problem is fixed is what earns the list a second look.
  */
-export async function runSweep(name: SweepName): Promise<{
-  sweep: SweepName; found: number; created: number; updated: number; resolved: number;
-}> {
+type SweepResult = { sweep: SweepName; found: number; created: number; updated: number; resolved: number };
+
+/**
+ * Run one sweep and record the run in `sweep_runs` (running, then ok with its
+ * findings count or failed with the message). Recording is best effort: the
+ * store never breaks a sweep, and a sweep's own throw still reaches the caller.
+ */
+export async function runSweep(name: SweepName): Promise<SweepResult> {
+  const runId = await startSweepRun(name);
+  try {
+    const result = await runSweepUnrecorded(name);
+    await finishSweepRun(runId, { status: 'ok', findings: result.found });
+    return result;
+  } catch (err) {
+    await finishSweepRun(runId, { status: 'failed', error: err });
+    throw err;
+  }
+}
+
+async function runSweepUnrecorded(name: SweepName): Promise<SweepResult> {
   if (config.mock.aurora) {
     // The sweeps read Aurora; in dev:mock a run re-observes the seeded rows
     // for that sweep (last_seen bumps, nothing created) so the button's

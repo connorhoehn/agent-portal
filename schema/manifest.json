@@ -323,6 +323,12 @@
       "why": "The microVM runner's sessions plus its additive columns (agent_jobs.runner/actor_sub/resume_of_job_id, spend_entries.compute_seconds/compute_usd/session_id, agent_project_runs.runner). FKs agent_jobs, agent_projects, projects and spend_holds and ALTERs agent_jobs, spend_entries and agent_project_runs, so it loads after every file that creates them (agentic_work, agent_projects, spend_ledger, spend_holds). A tenant table, so row_level_security.sql lists it."
     },
     {
+      "id": "sweep_runs",
+      "file": "sweep_runs.sql",
+      "kind": "repeatable",
+      "why": "One row per org-sweep run (started/finished/status/error/findings), so a failed or missing sweep is answerable; agent_findings keeps only what a sweep found. Standalone, no FK, so it can load anywhere. A tenant table, so row_level_security.sql lists it."
+    },
+    {
       "id": "pipeline_schema",
       "file": "pipeline_schema.sql",
       "kind": "repeatable",

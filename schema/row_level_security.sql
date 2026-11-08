@@ -49,7 +49,7 @@
 --     access_catalog_items.tenant, access_reviews.tenant,
 --     access_review_items.tenant, assessment_document_mappings.tenant_id,
 --     microvm_sessions.tenant, github_user_grants.tenant (the microVM
---     runner, docs/microvm-runner-design.md §13)
+--     runner, docs/microvm-runner-design.md §13), sweep_runs.tenant
 --   Two tenant columns:
 --     pipeline_definitions, pipeline_runs  tenant OR context_tenant (a run
 --                                          shows on the page it acted for)
@@ -130,6 +130,7 @@ BEGIN
       ('assessment_document_mappings', 'public.app_tenant_visible(tenant_id)'),
       ('microvm_sessions',             'public.app_tenant_visible(tenant)'),
       ('github_user_grants',           'public.app_tenant_visible(tenant)'),
+      ('sweep_runs',                   'public.app_tenant_visible(tenant)'),
       -- Two tenant columns.
       ('pipeline_definitions',         'public.app_tenant_visible(tenant) OR public.app_tenant_visible(context_tenant)'),
       ('pipeline_runs',                'public.app_tenant_visible(tenant) OR public.app_tenant_visible(context_tenant)'),

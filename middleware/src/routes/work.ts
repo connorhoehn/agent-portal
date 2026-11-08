@@ -9,7 +9,7 @@
 
 import { Router } from 'express';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
-import { resolveSession, requireAction, requireSession } from '../lib/authz.js';
+import { resolveSession, requireAction, requireSession, readForRolesElseAction } from '../lib/authz.js';
 import { type Session } from '../lib/session.js';
 import { userNameFor } from '../lib/user-names.js';
 import { getUser } from '../providers/identity.js';
@@ -26,6 +26,7 @@ import {
   remediationFor, reopenFindingForJob, releaseAbandonedFindings, initiativeIdForFinding,
   SWEEP_NAMES, type SweepName,
 } from '../providers/org-sweeps.js';
+import { listSweepRuns } from '../providers/sweep-runs.js';
 import { grantScopedDispatchVerdict } from '../lib/bot-runner.js';
 import {
   listProposals, decideProposal, proposeGraphChange, proposalStats,
@@ -413,6 +414,30 @@ workRouter.post('/sweeps/run', requireSession('RunSweeps'), asyncHandler(async (
     return;
   }
   res.json(await runAllSweeps());
+}));
+
+/**
+ * Sweep run history: did a sweep run, and did it fail? Same read gate as the
+ * bots' runs (org-leader, hr-admin, program-owner, admin, else ManageBots).
+ * `?since=<iso>&status=failed|all&limit=` (limit capped at 200); the tenant is
+ * the session's, never a parameter. Newest first.
+ */
+const sweepRunsReadGate = readForRolesElseAction(['org-leader', 'hr-admin', 'program-owner'], 'ManageBots');
+workRouter.get('/sweeps/runs', sweepRunsReadGate, asyncHandler(async (req, res) => {
+  const session = resolveSession(req);
+  if (!session) { res.status(401).json({ error: 'unauthenticated' }); return; }
+  const sinceRaw = typeof req.query['since'] === 'string' ? req.query['since'] : '';
+  if (sinceRaw && Number.isNaN(Date.parse(sinceRaw))) throw new ValidationError('since must be an ISO date');
+  const status = typeof req.query['status'] === 'string' ? req.query['status'] : 'all';
+  if (status !== 'failed' && status !== 'all') throw new ValidationError("status must be 'failed' or 'all'");
+  const limit = req.query['limit'] === undefined ? undefined : parseInt(String(req.query['limit']), 10);
+  const runs = await listSweepRuns({
+    tenant: session.tenant,
+    ...(sinceRaw ? { since: new Date(sinceRaw).toISOString() } : {}),
+    failedOnly: status === 'failed',
+    ...(limit !== undefined && Number.isFinite(limit) ? { limit } : {}),
+  });
+  res.json({ runs });
 }));
 
 /**
