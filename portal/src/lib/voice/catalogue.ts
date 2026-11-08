@@ -59,6 +59,26 @@ export const NAVIGATE_PAGE_IDS: ReadonlyArray<{ id: string; tenants: readonly st
   { id: 'workspaces', tenants: ['*'] },
 ];
 
+/** The record types `search_records` may name, per tenant (the middleware's SEARCH_RECORD_TYPES: each tenant's backend search index). */
+export const SEARCH_RECORD_TYPES: Readonly<Record<string, readonly string[]>> = {
+  orgiq: ['team', 'initiative', 'work', 'decision', 'knowledge', 'asset', 'recording'],
+  social: ['channel', 'message', 'pin', 'dm', 'contact', 'team', 'room', 'recording', 'calllog', 'huddle'],
+  assessment: ['team', 'dimension', 'exception', 'feedback', 'run', 'submission', 'story', 'document'],
+  pipelines: ['run', 'definition', 'runbook', 'bot', 'approval', 'queue', 'artifact'],
+  access: ['request', 'catalog', 'policy', 'event', 'review', 'review-item', 'delegation'],
+};
+
+/** The Cedar action each tenant's search mount is gated on (the middleware's SEARCH_ACTIONS). */
+export const SEARCH_ACTIONS: Readonly<Record<string, Action>> = {
+  orgiq: 'Search', social: 'ViewSocial', assessment: 'ViewAssessment', pipelines: 'ViewPipelines', access: 'ViewAccess',
+};
+
+/** `search_records`' type enum for one tenant, or every tenant's types (null) for the base row. */
+export function searchRecordTypes(tenant: string | null): string[] {
+  if (tenant != null) return [...(SEARCH_RECORD_TYPES[tenant] ?? [])];
+  return [...new Set(Object.values(SEARCH_RECORD_TYPES).flat())];
+}
+
 /** The phrase ids `run_command` may name; actions.ts PHRASE_TABLE owns the command text (§6). */
 export const RUN_COMMAND_PHRASES = [
   'latest-commits-since-yesterday', 'commits-since', 'status', 'diff-stat', 'list-files', 'working-directory',
@@ -99,11 +119,11 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
     name: 'search_records',
     parameters: obj({
       query: str('What to search for.', { minLength: 1, maxLength: 200 }),
-      type: str('Which kind of record.', { enum: ['initiative', 'work', 'decision', 'knowledge', 'asset', 'recording'] }),
+      type: str('Which kind of record.', { enum: searchRecordTypes(null) }),
       scope: searchScope,
       limit,
     }, ['query']),
-    kind: 'read', backing: 'search', confirm: false, action: 'Search', says: 'Searching.', tenants: ['orgiq'],
+    kind: 'read', backing: 'search', confirm: false, action: null, says: 'Searching.', tenants: VOICE_TENANTS,
   },
   {
     name: 'list_active_initiatives',

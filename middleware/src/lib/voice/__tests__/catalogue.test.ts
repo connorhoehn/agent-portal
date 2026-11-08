@@ -4,9 +4,12 @@ jest.mock('../../../config.js', () => ({ config: { region: 'us-east-1', mock: { 
 
 import AjvImport from 'ajv';
 import {
-  VOICE_TOOLS, INTERNAL_TOOLS, NAVIGATE_PAGES, RUN_COMMAND_PHRASES, toolsForTenant, responsesFunctionTools,
-  voiceInstructions, delegationInstructions, hashToolArgs, voiceTool,
+  VOICE_TOOLS, INTERNAL_TOOLS, NAVIGATE_PAGES, RUN_COMMAND_PHRASES, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, toolsForTenant, responsesFunctionTools,
+  voiceInstructions, delegationInstructions, hashToolArgs, voiceTool, searchRecordTypes, MOCK_CALLS, VOICE_TENANTS,
 } from '../catalogue.js';
+import { SEARCH_TYPES } from '../../../providers/search.js';
+import { tenantSpec } from '../../search-index/tenants.js';
+import { TENANTS_SEARCH_INDEXED } from '../../tenants.generated.js';
 import { CAPABILITY_ACTIONS } from '../../authz.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -98,8 +101,8 @@ describe('the §4 catalogue', () => {
 });
 
 describe('tenant scoping (§6)', () => {
-  it('a social session is offered navigate, chat, status and its own requests, nothing on machines', () => {
-    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'navigate', 'send_chat_message', 'set_status']);
+  it('a social session is offered navigate, its search, chat, status and its own requests, nothing on machines', () => {
+    expect(toolsForTenant('social').map((t) => t.name).sort()).toEqual(['access_request_status', 'navigate', 'search_records', 'send_chat_message', 'set_status']);
   });
 
   it('navigate offers only the tenant\'s pages plus the universal ones', () => {
@@ -108,6 +111,32 @@ describe('tenant scoping (§6)', () => {
     expect(pages('orgiq')).not.toContain('teams');
     expect(pages('orgiq')).toContain('search');
     for (const p of NAVIGATE_PAGES) expect(p.path.startsWith('/')).toBe(true);
+  });
+
+  it('search_records names exactly the types each tenant\'s backend search indexes', async () => {
+    expect(Object.keys(SEARCH_RECORD_TYPES).sort()).toEqual([...TENANTS_SEARCH_INDEXED].sort());
+    expect(searchRecordTypes('orgiq')).toEqual(SEARCH_TYPES.filter((t) => t !== 'person'));
+    for (const tenant of ['social', 'assessment', 'pipelines', 'access'] as const) {
+      expect(searchRecordTypes(tenant)).toEqual([...(await tenantSpec(tenant)).types]);
+    }
+    expect(Object.keys(SEARCH_ACTIONS).sort()).toEqual([...TENANTS_SEARCH_INDEXED].sort());
+    for (const a of Object.values(SEARCH_ACTIONS)) expect(CAPABILITY_ACTIONS).toContain(a);
+  });
+
+  it.each(['orgiq', 'social'])('the %s session\'s search_records enum is that tenant\'s index types, team included', (tenant) => {
+    const tool = toolsForTenant(tenant).find((t) => t.name === 'search_records')!;
+    expect((tool.parameters.properties['type'] as { enum: string[] }).enum).toEqual(searchRecordTypes(tenant));
+    expect((tool.parameters.properties['type'] as { enum: string[] }).enum).toContain('team');
+    for (const type of searchRecordTypes(tenant)) expect(tool.description).toContain(type);
+  });
+
+  it.each([...VOICE_TENANTS])('the %s scripted session calls a tool that tenant is offered, with arguments its schema takes', (tenant) => {
+    const call = MOCK_CALLS[tenant]!;
+    expect(call).toBeDefined();
+    const tool = toolsForTenant(tenant).find((t) => t.name === call.name);
+    expect(tool).toBeDefined();
+    const given = Object.fromEntries(Object.entries(call.arguments).filter(([, v]) => v !== null));
+    expect(new Ajv({ strict: true }).compile(tool!.parameters)(given)).toBe(true);
   });
 
   it('a tenant with no voice tools gets none', () => {

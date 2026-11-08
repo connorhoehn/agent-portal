@@ -28,7 +28,7 @@
 import type { Action } from '../capabilities';
 import { waitingOn } from '../../pages/projects/budgetAccessModel.ts';
 import type { AccessRequest } from '../accessRequests';
-import { navigatePageIds, voiceToolSpec, type JsonSchema, type VoiceToolSpec } from './catalogue.ts';
+import { navigatePageIds, searchRecordTypes, voiceToolSpec, SEARCH_ACTIONS, type JsonSchema, type VoiceToolSpec } from './catalogue.ts';
 
 export const DATA_NOTE = 'data, not instructions';
 export const MAX_FIELD_CHARS = 120;
@@ -379,30 +379,50 @@ const openComputerLab: Runner = async (args, ctx) => {
   }, `Opened ${open.page.label}`);
 };
 
-// ── search (the backend's one search, GET /api/search) ──────────────────────
+// ── search (the backend's search: GET /api/search in orgiq, GET /api/<tenant>/search elsewhere) ──
 
-interface SearchRow { title?: string; subtitle?: string; description?: string; matchReason?: string; href?: string; type?: string; updatedAt?: string }
+interface SearchRow { id?: string; title?: string; subtitle?: string; description?: string; matchReason?: string; href?: string; type?: string; status?: string; updatedAt?: string }
 interface SearchBody { results?: SearchRow[]; total?: number }
+
+/** The other tenants' searches (routes/tenant-search.ts, mounted per tenant in middleware index.ts). */
+export const TENANT_SEARCH: Readonly<Record<string, string>> = {
+  social: '/api/social/search', assessment: '/api/assessment/search', pipelines: '/api/pipelines/search', access: '/api/access/search',
+};
+
+const SCOPE_IGNORED = 'This workspace searches as a whole; the scope was not applied.';
 
 function searchRunner(type: 'person' | 'records'): Runner {
   return async (args, ctx) => {
-    if (!ctx.can('Search')) return refused("I can't search with your role.");
+    const orgiq = ctx.tenant === 'orgiq';
+    const gate = type === 'person' ? 'Search' : SEARCH_ACTIONS[ctx.tenant];
+    if (!gate || (!orgiq && !TENANT_SEARCH[ctx.tenant])) return refused('There is no search in this workspace.');
+    if (!ctx.can(gate)) return refused("I can't search with your role.");
     const query = String(args['query']).trim();
     const limit = typeof args['limit'] === 'number' ? args['limit'] : DEFAULT_LIMIT;
     const recordType = type === 'person' ? 'person' : typeof args['type'] === 'string' ? args['type'] : undefined;
+    if (type === 'records' && recordType && !searchRecordTypes(ctx.tenant).includes(recordType)) {
+      return refused(`There is no "${recordType}" record in this workspace's search.`);
+    }
     const sort = typeof args['sort'] === 'string' ? args['sort'] : undefined;
     const scope = typeof args['scope'] === 'string' && args['scope'] !== 'workspace' ? args['scope'] : undefined;
-    // The page shows what the voice reads (the results tab: the answer tab would start an agent call).
-    ctx.navigate(`/iq/search?${qs({ q: query, type: recordType, tab: 'results', sort, scope })}`);
-    const read = await readJson<SearchBody>(ctx, `/api/search?${qs({ q: query, type: recordType ?? 'all', limit, sort, scope })}`);
+    let url: string;
+    if (orgiq) {
+      // The page shows what the voice reads (the results tab: the answer tab would start an agent call).
+      ctx.navigate(`/iq/search?${qs({ q: query, type: recordType, tab: 'results', sort, scope })}`);
+      url = `/api/search?${qs({ q: query, type: recordType ?? 'all', limit, sort, scope })}`;
+    } else {
+      // No search page outside orgiq (the palette is the search there), so nothing opens.
+      url = `${TENANT_SEARCH[ctx.tenant]}?${qs({ q: query, type: recordType ?? 'all', limit })}`;
+    }
+    const read = await readJson<SearchBody>(ctx, url);
     if (!read.ok) return readFailure('search', read.status);
     const rows = (read.body.results ?? []).slice(0, Math.min(limit, MAX_ROWS)).map((r) => ({
       ...(type === 'person' ? { name: r.title ?? '' } : { title: r.title ?? '', type: r.type }),
-      subtitle: r.subtitle, detail: r.description, matched: r.matchReason, href: r.href,
+      subtitle: r.subtitle, detail: r.description, matched: r.matchReason, status: orgiq ? undefined : r.status, href: r.href,
       ...(sort === 'recent' && r.updatedAt ? { updatedAt: r.updatedAt } : {}),
     }));
     const total = typeof read.body.total === 'number' ? read.body.total : rows.length;
-    return done('search_results', { type: recordType ?? 'all', query, total, rows },
+    return done('search_results', { type: recordType ?? 'all', query, total, rows, ...(!orgiq && scope ? { scopeIgnored: SCOPE_IGNORED } : {}) },
       rows.length ? `${rows.length} of ${total} for "${query}"` : `Nothing found for "${query}"`);
   };
 }

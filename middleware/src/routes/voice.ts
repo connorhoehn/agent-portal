@@ -40,7 +40,7 @@ import { clock } from '../mock/core/index.js';
 import { voiceConfig, voiceCostUsd, MIN_BILLED_SECONDS } from '../lib/voice/config.js';
 import { bookVoiceSpend } from '../lib/voice/ledger.js';
 import {
-  delegationInstructions, hashToolArgs, responsesFunctionTools, toolsForTenant, voiceInstructions, voiceTool,
+  delegationInstructions, hashToolArgs, responsesFunctionTools, toolsForTenant, voiceInstructions, voiceTool, MOCK_CALLS,
 } from '../lib/voice/catalogue.js';
 import {
   createLiveSession, hangupLiveSession, mockLiveScript, voiceProviderConfigured, MOCK_SDP_ANSWER, VoiceProviderError,
@@ -174,12 +174,6 @@ async function ownSession(req: Request, opts: { sameTenant: boolean }): Promise<
   if (opts.sameTenant && row.tenant !== session.tenant) return null;
   return row;
 }
-
-/** The one tool call each tenant's scripted session makes, in the strict form (null = not given). */
-const MOCK_CALLS: Record<string, { name: string; arguments: Record<string, unknown>; said: string }> = {
-  orgiq: { name: 'search_people', arguments: { query: 'Kubernetes experts', scope: null, limit: null, sort: 'recent' }, said: 'Find me the latest Kubernetes experts.' },
-  social: { name: 'set_status', arguments: { status: 'away', message: 'out today' }, said: "Set my status to away, I'm out today." },
-};
 
 const notFound = (res: Response): void => { res.status(404).json({ error: 'voice session not found' }); };
 

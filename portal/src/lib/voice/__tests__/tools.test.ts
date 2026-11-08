@@ -95,6 +95,29 @@ test('a search the server refuses is a refusal, an outage a failure', async () =
   assert.equal((await runVoiceTool('search_records', { query: 'x' }, toolContext({ fetch: down.fetch }))).outcome, 'failed');
 });
 
+test('search_records outside orgiq reads that tenant\'s own search, with its own types and gate, and opens no page', async () => {
+  const huddle = { type: 'huddle', id: 'h1', title: 'Platform standup', kind: 'Huddle', subtitle: 'In the huddle now: Mira, Lena', status: 'live', href: '/social/calls', score: 3 };
+  const { fetch, log } = fakeFetch([route('GET', '/api/social/search?', 200, { query: 'standup', results: [huddle], counts: { huddle: 1 }, total: 1 })]);
+  const c = toolContext({ fetch, tenant: 'social', role: 'participant', allow: ['ViewSocial'] });
+  const r = await runVoiceTool('search_records', '{"query":"standup","type":"huddle","scope":null,"limit":null}', c);
+  assert.equal(r.outcome, 'done');
+  assert.deepEqual(log.map((l) => l.url), ['/api/social/search?q=standup&type=huddle&limit=5']);
+  assert.deepEqual(c.navigations, [], 'no search page outside orgiq');
+  assert.deepEqual((r.output['rows'] as unknown[])[0], { title: 'Platform standup', type: 'huddle', subtitle: 'In the huddle now: Mira, Lena', status: 'live', href: '/social/calls' });
+
+  // A type another tenant indexes is refused before the network; so is a role without the tenant search's own action.
+  const foreign = await runVoiceTool('search_records', { query: 'x', type: 'initiative' }, toolContext({ fetch, tenant: 'social', allow: ['ViewSocial'] }));
+  assert.equal(foreign.outcome, 'refused');
+  const noView = await runVoiceTool('search_records', { query: 'x' }, toolContext({ fetch, tenant: 'social', allow: ['Search'] }));
+  assert.equal(noView.outcome, 'refused');
+  assert.equal(log.length, 1);
+  // orgiq keeps GET /api/search, and `team` is a type there now.
+  const org = fakeFetch([route('GET', '/api/search?', 200, { results: [{ type: 'team', id: 't1', title: 'Platform', href: '/iq/search?tab=connections' }], total: 1 })]);
+  const t = await runVoiceTool('search_records', { query: 'platform', type: 'team' }, toolContext({ fetch: org.fetch, allow: ['Search'] }));
+  assert.equal(t.outcome, 'done');
+  assert.equal(org.log[0]!.url, '/api/search?q=platform&type=team&limit=5');
+});
+
 test('list_active_initiatives reads the initiatives list the page reads, mine by default', async () => {
   const { fetch, log } = fakeFetch([route('GET', '/api/graph/projects', 200, [
     { id: 'p1', name: 'Alpha', status: 'active', ownerName: 'Ana', contributorCount: 4, openStories: 3, description: 'secret body text' },

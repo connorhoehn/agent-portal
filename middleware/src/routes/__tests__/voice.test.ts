@@ -154,7 +154,18 @@ describe('POST /api/voice/sessions — the mint', () => {
     principal = { sub: USER, role: 'participant', tenant: 'social', grants: {} };
     const res = await mint();
     expect(res.status).toBe(201);
-    expect(res.body.tools.sort()).toEqual(['access_request_status', 'navigate', 'send_chat_message', 'set_status']);
+    expect(res.body.tools.sort()).toEqual(['access_request_status', 'navigate', 'search_records', 'send_chat_message', 'set_status']);
+  });
+
+  it('the social scripted session searches its own index for live huddles', async () => {
+    delete process.env['OPENAI_API_KEY'];
+    process.env['MOCK_VOICE'] = '1';
+    principal = { sub: USER, role: 'participant', tenant: 'social', grants: {} };
+    const res = await mint({});
+    expect(res.status).toBe(201);
+    const done = res.body.mockScript.onStart.find((f: { event: { event?: { type: string } } }) => f.event.event?.type === 'response.output_item.done');
+    expect(done.event.event.item).toMatchObject({ type: 'function_call', name: 'search_records' });
+    expect(JSON.parse(done.event.event.item.arguments)).toMatchObject({ type: 'huddle' });
   });
 
   it('is 503 voice-unavailable with no key and no mock, even under INSECURE_DEV_MODE, and holds nothing', async () => {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { NAVIGATE_PAGE_IDS, VOICE_TOOLS, navigatePageIds } from '../catalogue.ts';
+import { NAVIGATE_PAGE_IDS, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, VOICE_TENANTS, VOICE_TOOLS, navigatePageIds, searchRecordTypes } from '../catalogue.ts';
 import { voicePage, hashToolArgs } from '../tools.ts';
 import { PALETTE, middlewareVoice } from './voiceHarness.ts';
 
@@ -10,6 +10,9 @@ interface MwCatalogue {
   NAVIGATE_PAGES: Array<{ id: string; path: string; tenants: string[] }>;
   toolsForTenant(t: string): MwTool[];
   hashToolArgs(a: unknown): string;
+  VOICE_TENANTS: readonly string[];
+  SEARCH_RECORD_TYPES: Record<string, readonly string[]>;
+  SEARCH_ACTIONS: Record<string, string>;
 }
 
 test('the portal catalogue matches the middleware one the session is minted with', async () => {
@@ -22,9 +25,15 @@ test('the portal catalogue matches the middleware one the session is minted with
     assert.deepEqual([...mine.tenants], [...theirs.tenants], `${mine.name} tenants`);
   }
   assert.deepEqual(NAVIGATE_PAGE_IDS.map((p) => ({ id: p.id, tenants: [...p.tenants] })), mw.NAVIGATE_PAGES.map((p) => ({ id: p.id, tenants: p.tenants })));
-  for (const tenant of ['orgiq', 'social']) {
-    const page = mw.toolsForTenant(tenant).find((t) => t.name === 'navigate')!.parameters as { properties: { page: { enum: string[] } } };
+  assert.deepEqual([...VOICE_TENANTS], [...mw.VOICE_TENANTS]);
+  assert.deepEqual(SEARCH_RECORD_TYPES, mw.SEARCH_RECORD_TYPES);
+  assert.deepEqual(SEARCH_ACTIONS, mw.SEARCH_ACTIONS);
+  for (const tenant of mw.VOICE_TENANTS) {
+    const tools = mw.toolsForTenant(tenant);
+    const page = tools.find((t) => t.name === 'navigate')!.parameters as { properties: { page: { enum: string[] } } };
     assert.deepEqual(navigatePageIds(tenant), page.properties.page.enum, `navigate enum in ${tenant}`);
+    const search = tools.find((t) => t.name === 'search_records')!.parameters as { properties: { type: { enum: string[] } } };
+    assert.deepEqual(searchRecordTypes(tenant), search.properties.type.enum, `search_records enum in ${tenant}`);
   }
 });
 

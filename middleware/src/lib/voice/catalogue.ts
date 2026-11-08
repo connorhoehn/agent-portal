@@ -115,6 +115,38 @@ const limit = { type: 'integer', minimum: 1, maximum: 10, description: 'How many
 /** GET /api/search's `scope`: the whole workspace, or the graph of one initiative. */
 const searchScope = str('Where to search: "workspace" (the default) or one initiative id, to search inside that initiative only.', { minLength: 1, maxLength: 200 });
 
+/**
+ * The record types `search_records` may name, per tenant: what that tenant's
+ * backend search indexes. orgiq is GET /api/search's SEARCH_TYPES
+ * (providers/search.ts) less `person`, which is search_people's; every other
+ * tenant is its TenantIndexSpec.types (lib/search-index/<tenant>.ts
+ * *_DOC_TYPES) behind GET /api/<tenant>/search (routes/tenant-search.ts). Kept
+ * as data, not imported, because the portal's drift test loads this file on
+ * its own; the middleware test pins each row to the index's own list.
+ */
+export const SEARCH_RECORD_TYPES: Readonly<Record<string, readonly string[]>> = {
+  orgiq: ['team', 'initiative', 'work', 'decision', 'knowledge', 'asset', 'recording'],
+  social: ['channel', 'message', 'pin', 'dm', 'contact', 'team', 'room', 'recording', 'calllog', 'huddle'],
+  assessment: ['team', 'dimension', 'exception', 'feedback', 'run', 'submission', 'story', 'document'],
+  pipelines: ['run', 'definition', 'runbook', 'bot', 'approval', 'queue', 'artifact'],
+  access: ['request', 'catalog', 'policy', 'event', 'review', 'review-item', 'delegation'],
+};
+
+/**
+ * The Cedar action each tenant's search mount is gated on (index.ts): orgiq's
+ * GET /api/search takes Search, the others their tenant's View action
+ * (requireAction / socialGate at the /api/<tenant>/search mount).
+ */
+export const SEARCH_ACTIONS: Readonly<Record<string, CapabilityAction>> = {
+  orgiq: 'Search', social: 'ViewSocial', assessment: 'ViewAssessment', pipelines: 'ViewPipelines', access: 'ViewAccess',
+};
+
+/** `search_records`' type enum for one tenant, or every tenant's types (null) for the catalogue's base row. */
+export function searchRecordTypes(tenant: string | null): string[] {
+  if (tenant != null) return [...(SEARCH_RECORD_TYPES[tenant] ?? [])];
+  return [...new Set(Object.values(SEARCH_RECORD_TYPES).flat())];
+}
+
 function navigatePageIds(tenant: string | null): string[] {
   return NAVIGATE_PAGES.filter((p) => tenant == null || p.tenants.includes('*') || p.tenants.includes(tenant)).map((p) => p.id);
 }
@@ -150,15 +182,18 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
   },
   {
     name: 'search_records',
-    description: 'Search the workspace\'s record index (the backend search): initiatives, work, decisions, knowledge, assets or recordings.',
+    // toolsForTenant names the tenant's own types in the description it renders.
+    description: 'Search this workspace\'s record index (the backend search) by kind of record.',
     parameters: obj({
       query: str('What to search for.', { minLength: 1, maxLength: 200 }),
-      type: str('Which kind of record.', { enum: ['initiative', 'work', 'decision', 'knowledge', 'asset', 'recording'] }),
+      type: str('Which kind of record.', { enum: searchRecordTypes(null) }),
       scope: searchScope,
       limit,
     }, ['query']),
-    kind: 'read', backing: 'search', confirm: false, action: 'Search', gate: 'Search', spend: 'none', idempotent: true,
-    says: 'Searching.', tenants: ['orgiq'], mapsTo: 'GET /api/search?q=&type=&scope=',
+    kind: 'read', backing: 'search', confirm: false, action: null,
+    gate: "the tenant search mount's action (SEARCH_ACTIONS: Search in orgiq, the tenant's View action elsewhere)", spend: 'none', idempotent: true,
+    says: 'Searching.', tenants: VOICE_TENANTS,
+    mapsTo: 'GET /api/search?q=&type=&scope= in orgiq; GET /api/<tenant>/search?q=&type=&limit= elsewhere',
   },
   {
     name: 'list_active_initiatives',
@@ -258,6 +293,16 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
   },
 ];
 
+/**
+ * The one tool call each tenant's scripted session (MOCK_VOICE=1, routes/voice.ts)
+ * makes, in the strict form (null = not given). Here rather than in the route
+ * so the portal's harness runs each tenant's real script against its runners.
+ */
+export const MOCK_CALLS: Readonly<Record<string, { name: string; arguments: Record<string, unknown>; said: string }>> = {
+  orgiq: { name: 'search_people', arguments: { query: 'Kubernetes experts', scope: null, limit: null, sort: 'recent' }, said: 'Find me the latest Kubernetes experts.' },
+  social: { name: 'search_records', arguments: { query: 'live huddles', type: 'huddle', scope: null, limit: null }, said: 'Any live huddles right now?' },
+};
+
 /** §4 rows that are not model functions. */
 export const INTERNAL_TOOLS = [
   { name: 'confirm', description: "The dock's pending card; the model receives { confirmed, by: 'voice' | 'click' } as the result of the tool it asked to confirm." },
@@ -269,12 +314,24 @@ export function voiceTool(name: string): VoiceTool | undefined {
   return VOICE_TOOLS.find((t) => t.name === name);
 }
 
-/** The tools a session in `tenant` is offered, with `navigate` narrowed to that tenant's pages. */
+/** One property of a tool's schema with its enum replaced. */
+function withEnum(t: VoiceTool, prop: string, values: string[], description = t.description): VoiceTool {
+  const narrowed = { ...(t.parameters.properties[prop] as Record<string, unknown>), enum: values };
+  return { ...t, description, parameters: { ...t.parameters, properties: { ...t.parameters.properties, [prop]: narrowed } } };
+}
+
+/**
+ * The tools a session in `tenant` is offered: `navigate` narrowed to that
+ * tenant's pages and `search_records` to that tenant's index types.
+ */
 export function toolsForTenant(tenant: string): VoiceTool[] {
-  return VOICE_TOOLS.filter((t) => t.tenants.includes(tenant)).map((t) => {
-    if (t.name !== 'navigate') return t;
-    const page = { ...(t.parameters.properties['page'] as Record<string, unknown>), enum: navigatePageIds(tenant) };
-    return { ...t, parameters: { ...t.parameters, properties: { ...t.parameters.properties, page } } };
+  return VOICE_TOOLS.filter((t) => t.tenants.includes(tenant)).flatMap((t) => {
+    if (t.name === 'navigate') return [withEnum(t, 'page', navigatePageIds(tenant))];
+    if (t.name === 'search_records') {
+      const types = searchRecordTypes(tenant);
+      return types.length ? [withEnum(t, 'type', types, `${t.description.replace(/\.$/, '')}: ${types.join(', ')}.`)] : [];
+    }
+    return [t];
   });
 }
 

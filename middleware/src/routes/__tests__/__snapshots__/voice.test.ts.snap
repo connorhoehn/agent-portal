@@ -114,7 +114,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Search the workspace's record index (the backend search): initiatives, work, decisions, knowledge, assets or recordings.",
+    "description": "Search this workspace's record index (the backend search) by kind of record: team, initiative, work, decision, knowledge, asset, recording.",
     "name": "search_records",
     "parameters": {
       "additionalProperties": false,
@@ -140,6 +140,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
         "type": {
           "description": "Which kind of record.",
           "enum": [
+            "team",
             "initiative",
             "work",
             "decision",
