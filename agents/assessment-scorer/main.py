@@ -18,6 +18,7 @@ from _shared.model_registry import RegistryAgent, invoke_with_fallback, resolve_
 from _shared.agui_stream import stream_agui, wants_stream  # noqa: E402
 from _shared.tenant_guard import reject_wrong_tenant  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
+    attach_usage,
     TraceContext,
     install_bedrock_usage_capture,
     instrumented_tool,
@@ -353,11 +354,15 @@ async def handle(payload: dict) -> AsyncIterator | dict:
     except Exception as exc:  # noqa: BLE001
         log.warning("assessment-scorer: trace emission failed: %s", exc)
 
-    return {
-        "agent": "assessment-scorer",
-        "response": response_text,
-        "invocationId": ctx.invocation_id,
-    }
+    return attach_usage(
+        {
+            "agent": "assessment-scorer",
+            "response": response_text,
+            "invocationId": ctx.invocation_id,
+        },
+        ctx,
+        _agent.model_id,
+    )
 
 
 if __name__ == "__main__":

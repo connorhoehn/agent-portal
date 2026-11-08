@@ -574,6 +574,38 @@ def reset_active_ctx(token: Token) -> None:
         pass
 
 
+def usage_block(ctx: "TraceContext | None") -> dict[str, int] | None:
+    """The Converse token counts a context has accumulated, shaped for the wire.
+
+    The middleware prices a chat turn from a ``usage`` block on the final event
+    or response (``middleware/src/lib/agent-invoke-spend.ts`` ``usageFromEvent``)
+    and writes the ledger row with an unknown cost when there is none. So this
+    returns None when both counts are zero: a run that captured nothing must
+    read as "unknown", never as a priced $0.
+    """
+    if ctx is None:
+        return None
+    it = int(ctx.bedrock_input_tokens or 0)
+    ot = int(ctx.bedrock_output_tokens or 0)
+    if it <= 0 and ot <= 0:
+        return None
+    return {"inputTokens": it, "outputTokens": ot}
+
+
+def attach_usage(response: dict, ctx: "TraceContext | None", model_id: str | None) -> dict:
+    """Add ``usage`` and ``model`` to a synchronous response dict, in place.
+
+    Only when ``usage_block`` has something to say; otherwise the dict is
+    returned untouched so the middleware records an unknown cost.
+    """
+    usage = usage_block(ctx)
+    if usage is not None:
+        response["usage"] = usage
+        if model_id:
+            response["model"] = model_id
+    return response
+
+
 def get_active_ctx() -> "TraceContext | None":
     """Read the currently-active TraceContext. None when no agent is running."""
     return _active_ctx.get()

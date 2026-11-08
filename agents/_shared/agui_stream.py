@@ -46,6 +46,7 @@ from .instrumentation import (
     record_guardrail_action,
     reset_active_ctx,
     set_active_ctx,
+    usage_block,
     with_orgiq_root,
 )
 
@@ -75,6 +76,32 @@ def run_error_event(message: str, code: str = "agent_stream_error"):
         return RunErrorEvent(type=EventType.RUN_ERROR, message=message, code=code)
     except Exception:  # noqa: BLE001
         return {"type": "RUN_ERROR", "message": message, "code": code}
+
+
+def with_usage(event: Any, ctx: TraceContext, model_id: str) -> Any:
+    """``event`` carrying the run's Bedrock usage and the model that served it.
+
+    The middleware prices a chat turn from a ``usage`` block on the final event
+    and records an unknown cost when there is none, so when the context has
+    captured no tokens the event is returned as the very same object: never a
+    guessed zero. Otherwise a new plain dict is built from the original's
+    fields (the original is not mutated) with ``usage`` and ``model`` added.
+    """
+    usage = usage_block(ctx)
+    if usage is None:
+        return event
+    if isinstance(event, dict):
+        out = dict(event)
+    elif hasattr(event, "model_dump"):
+        out = event.model_dump(by_alias=True, exclude_none=True)
+    else:
+        out = dict(event)
+    # An enum `type` serialises as a string on the wire; keep it a plain one.
+    raw_type = out.get("type")
+    out["type"] = str(getattr(raw_type, "value", raw_type) or "")
+    out["usage"] = usage
+    out["model"] = model_id
+    return out
 
 
 def build_run_input(payload: dict, input_text: str):
@@ -202,6 +229,10 @@ async def stream_agui(
                     )
                     if isinstance(delta, str) and delta:
                         streamed_text.append(delta)
+                # The terminal event is where the middleware looks for usage;
+                # the counts are complete by now because the model has finished.
+                if event_type(event) == "RUN_FINISHED":
+                    event = with_usage(event, ctx, model_id)
                 yield event
             record_guardrail_action(oi_span, action=None, pii_detected=None)
     except Exception as exc:  # noqa: BLE001

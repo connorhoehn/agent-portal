@@ -28,6 +28,7 @@ from _shared.agui_stream import (  # noqa: E402
 )
 from _shared.tenant_guard import reject_wrong_mode_tenant  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
+    attach_usage,
     TraceContext,
     install_bedrock_usage_capture,
     instrumented_tool,
@@ -451,11 +452,15 @@ async def _handle_sync(payload: dict) -> dict:
     except Exception as exc:  # noqa: BLE001
         log.warning("assessment-drafter: trace emission failed: %s", exc)
 
-    return {
-        "agent": "assessment-drafter",
-        "response": response_text,
-        "invocationId": ctx.invocation_id,
-    }
+    return attach_usage(
+        {
+            "agent": "assessment-drafter",
+            "response": response_text,
+            "invocationId": ctx.invocation_id,
+        },
+        ctx,
+        _agent.model_id,
+    )
 
 
 if __name__ == "__main__":

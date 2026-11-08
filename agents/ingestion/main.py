@@ -19,6 +19,7 @@ from _shared.kb_resolver import resolve_kb_id_by_slug as _resolve_kb_id_by_slug 
 from _shared.model_registry import RegistryAgent, invoke_with_fallback, resolve_model
 from _shared.agui_stream import stream_agui, wants_stream  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
+    attach_usage,
     TraceContext,
     install_bedrock_usage_capture,
     instrumented_tool,
@@ -412,12 +413,16 @@ async def handle(payload: dict) -> AsyncIterator | dict:
         except Exception as exc:  # noqa: BLE001
             log.warning("ingestion: trace emission failed: %s", exc)
 
-    return {
-        "agent": "ingestion",
-        "response": response_text,
-        "invocationId": ctx.invocation_id,
-        "toolCalls": ctx.project_tool_calls(),
-    }
+    return attach_usage(
+        {
+            "agent": "ingestion",
+            "response": response_text,
+            "invocationId": ctx.invocation_id,
+            "toolCalls": ctx.project_tool_calls(),
+        },
+        ctx,
+        _agent.model_id,
+    )
 
 
 if __name__ == "__main__":

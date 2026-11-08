@@ -23,6 +23,7 @@ from _shared.db_credentials import (  # noqa: E402
     read_secret_arn as _read_secret_arn,
 )
 from _shared.instrumentation import (  # noqa: E402
+    attach_usage,
     TraceContext,
     install_bedrock_usage_capture,
     instrumented_tool,
@@ -332,12 +333,16 @@ async def handle(payload: dict) -> AsyncIterator | dict:
     except Exception as exc:  # noqa: BLE001
         log.warning("advisor: trace emission failed: %s", exc)
 
-    return {
-        "agent": "advisor",
-        "response": response_text,
-        "invocationId": ctx.invocation_id,
-        "toolCalls": ctx.project_tool_calls(),
-    }
+    return attach_usage(
+        {
+            "agent": "advisor",
+            "response": response_text,
+            "invocationId": ctx.invocation_id,
+            "toolCalls": ctx.project_tool_calls(),
+        },
+        ctx,
+        _agent.model_id,
+    )
 
 
 if __name__ == "__main__":

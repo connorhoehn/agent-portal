@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.model_registry import RegistryAgent, invoke_with_fallback, resolve_model
 from _shared.agui_stream import stream_agui, wants_stream  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
+    attach_usage,
     TraceContext,
     install_bedrock_usage_capture,
     instrumented_tool,
@@ -504,7 +505,7 @@ async def handle(payload: dict) -> AsyncIterator | dict:
         }
         if executions:
             response["sandboxExecutions"] = executions
-        return response
+        return attach_usage(response, ctx, _agent.model_id)
     finally:
         _sandbox_log.reset(token)
 

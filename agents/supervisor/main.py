@@ -20,7 +20,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.approval_tool import request_approval  # noqa: E402
 from _shared.prompt_source import resolve_system_prompt
 from _shared.model_registry import invoke_with_fallback, resolve_model  # noqa: E402
+from _shared.agui_stream import with_usage  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
+    attach_usage,
     TraceContext,
     install_bedrock_usage_capture,
     instrumented_tool,
@@ -729,7 +731,13 @@ async def _handle_streaming(payload: dict, input_text: str, role: str, tenant: s
                 # event the portal sees is folded in, synthesized STEP_* below
                 # included, so the recorded run is the streamed one.
                 ctx.observe_agui_event(event)
-                yield event
+                # The middleware prices the turn from a usage block on the
+                # final event; observed above in its original shape so the
+                # recorded run is untouched by the extra fields.
+                yield (
+                    with_usage(event, ctx, _stream_model.model_id)
+                    if etype == "RUN_FINISHED" else event
+                )
 
                 # Synthesize STEP_STARTED/STEP_FINISHED around each sub-agent
                 # routing call (SUB_AGENT_STEP_NAMES). TOOL_CALL_START fires
@@ -878,13 +886,17 @@ async def _handle_sync(payload: dict, input_text: str, role: str, tenant: str = 
         except Exception as exc:
             log.warning("supervisor: trace emission failed: %s", exc)
 
-    return {
-        "agent": "supervisor",
-        "role": role,
-        "response": response_text,
-        "invocationId": ctx.invocation_id,
-        "toolCalls": ctx.project_tool_calls(),
-    }
+    return attach_usage(
+        {
+            "agent": "supervisor",
+            "role": role,
+            "response": response_text,
+            "invocationId": ctx.invocation_id,
+            "toolCalls": ctx.project_tool_calls(),
+        },
+        ctx,
+        served_model,
+    )
 
 
 def _invoke_with_model_fallback(agent: Agent, role: str, input_text: str, messages=None):
