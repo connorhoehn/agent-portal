@@ -3,9 +3,11 @@
 jest.mock('../../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true }, auth: {}, cognito: {} } }));
 
 import AjvImport from 'ajv';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   VOICE_TOOLS, INTERNAL_TOOLS, NAVIGATE_PAGES, RUN_COMMAND_PHRASES, SEARCH_ACTIONS, SEARCH_RECORD_TYPES, toolsForTenant, responsesFunctionTools,
-  voiceInstructions, delegationInstructions, hashToolArgs, voiceTool, searchRecordTypes, MOCK_CALLS, VOICE_TENANTS,
+  voiceInstructions, delegationInstructions, hashToolArgs, voiceTool, searchRecordTypes, MOCK_CALLS, VOICE_TENANTS, mockCallFor,
 } from '../catalogue.js';
 import { SEARCH_TYPES } from '../../../providers/search.js';
 import { tenantSpec } from '../../search-index/tenants.js';
@@ -52,7 +54,7 @@ describe('the §4 catalogue', () => {
       if (t.kind === 'read') expect(t.backing).toBe('search');
       if (t.kind === 'people') expect(t.backing).toBe('social-activity');
     }
-    expect((voiceTool('access_request_status')!.parameters.properties['scope'] as { enum: string[] }).enum).toEqual(['mine']);
+    expect((voiceTool('access_request_status')!.parameters.properties['scope'] as { enum: string[] }).enum).toEqual(['mine', 'approvals', 'reports']);
   });
 
   it('asks first for exactly the tools that spend, run on a machine or reach people', () => {
@@ -166,6 +168,21 @@ describe('tenant scoping (§6)', () => {
     expect(v({ ref: 'person:p1' })).toBe(true);
     expect(v({ ref: '1', href: '/admin/identity' })).toBe(false);
     for (const name of ['search_people', 'search_records']) expect(voiceTool(name)!.description).toMatch(/ref that open_result opens/);
+  });
+
+  it('the access approver\'s scripted session reads approvals, a requester\'s its own requests, and every role key names a real seed role', () => {
+    expect(mockCallFor('access', 'approver').arguments).toMatchObject({ scope: 'approvals' });
+    expect(mockCallFor('access', 'access-admin').arguments).toMatchObject({ scope: 'approvals' });
+    expect(mockCallFor('access', 'requester').arguments).toMatchObject({ scope: 'mine' });
+    expect(mockCallFor('orgiq', 'member')).toBe(MOCK_CALLS['orgiq']);
+    const seeds = join(__dirname, '..', '..', '..', '..', 'seeds', 'roles');
+    for (const key of Object.keys(MOCK_CALLS).filter((k) => k.includes('/'))) {
+      const [tenant, role] = key.split('/') as [string, string];
+      expect(existsSync(join(seeds, tenant, `${role}.cedar`))).toBe(true);
+      const tool = toolsForTenant(tenant).find((t) => t.name === MOCK_CALLS[key]!.name)!;
+      const given = Object.fromEntries(Object.entries(MOCK_CALLS[key]!.arguments).filter(([, v]) => v !== null));
+      expect(new Ajv({ strict: true }).compile(tool.parameters)(given)).toBe(true);
+    }
   });
 
   it('a tenant that holds no voice grant gets no tools', () => {

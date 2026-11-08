@@ -335,7 +335,7 @@ export const PAGES: readonly PageEntry[] = [
     keywords: ['open', 'pending', 'waiting', 'in progress', 'request'] },
   { label: 'New request',        hint: 'Ask for a role or a membership',      path: '/access/requests/new',                        tenant: 'access', group: 'Request', pageId: 'new-request',
     keywords: ['new', 'request', 'ask', 'elevate', 'grant', 'wizard'] },
-  { label: 'Approvals',          hint: 'Requests waiting on your decision',   path: '/access/approvals',                           tenant: 'access', group: 'Approve', roles: ['approver', 'access-admin'],
+  { label: 'Approvals',          hint: 'Requests waiting on your decision',   path: '/access/approvals',                           tenant: 'access', group: 'Approve', pageId: 'approvals', roles: ['approver', 'access-admin'],
     keywords: ['approval', 'approve', 'reject', 'inbox', 'decide', 'waiting'] },
   { label: 'Policies',           hint: 'Separation-of-duties rules',          path: '/access/policies',                            tenant: 'access', group: 'Govern',
     keywords: ['policy', 'sod', 'separation of duties', 'conflict', 'rule'] },

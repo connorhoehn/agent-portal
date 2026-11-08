@@ -117,6 +117,7 @@ export const NAVIGATE_PAGES: ReadonlyArray<{ id: string; path: string; tenants: 
   { id: 'requests', path: '/access/requests', tenants: ['access'] },
   { id: 'open-requests', path: '/access/requests?status=open', tenants: ['access'] },
   { id: 'new-request', path: '/access/requests/new', tenants: ['access'] },
+  { id: 'approvals', path: '/access/approvals', tenants: ['access'] },
   // Entering another workspace ends the voice session (§2, §6): offered as the hint, never the switch.
   { id: 'workspaces', path: '/workspaces', tenants: ['*'] },
 ];
@@ -318,14 +319,15 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
   },
   {
     name: 'access_request_status',
-    description: 'Search the user\'s own access requests (approvals) by the item they asked for, and report status, current step and decider.',
+    description: 'Look up access requests and report status, current step and decider: the user\'s own ("mine", the default), the ones waiting on their decision ("approvals", approvers only) or their reports\' ("reports"). Approvals and reports are read in the Access workspace only. Each row carries a ref that open_result opens.',
     parameters: obj({
-      query: str('The item asked for, as the user named it.', { minLength: 1, maxLength: 120 }),
-      scope: str('Always "mine": the user\'s own requests, even for an approver.', { enum: ['mine'] }),
-    }, ['query']),
-    kind: 'read', backing: 'search', confirm: false, action: null, gate: 'session floor; the caller\'s own requests only', spend: 'none', idempotent: true,
+      query: str('The item asked for or the person, as the user named it; leave out to list them all.', { minLength: 1, maxLength: 120 }),
+      scope: str('"mine" (the default): the user\'s own requests; "approvals": the requests waiting on the user\'s decision; "reports": the requests of people the user manages.', { enum: ['mine', 'approvals', 'reports'] }),
+    }),
+    kind: 'read', backing: 'search', confirm: false, action: null,
+    gate: 'mine: session floor, the caller\'s own requests; approvals: DecideAccess (GET /api/access/approvals); reports: ViewAccess (GET /api/access/requests?scope=reports); approvals and reports in the access tenant only', spend: 'none', idempotent: true,
     says: 'Checking your access requests.', tenants: VOICE_TENANTS,
-    mapsTo: 'GET /api/access-requests/mine (outside the access tenant; GET /api/access/requests?scope=mine&q= inside it)',
+    mapsTo: 'GET /api/access-requests/mine (outside the access tenant); inside it GET /api/access/requests?scope=mine|reports&q= or GET /api/access/approvals',
   },
 ];
 
@@ -333,6 +335,8 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
  * The one tool call each tenant's scripted session (MOCK_VOICE=1, routes/voice.ts)
  * makes, in the strict form (null = not given). Here rather than in the route
  * so the portal's harness runs each tenant's real script against its runners.
+ * A `<tenant>/<role>` key wins over the tenant's own (mockCallFor): an access
+ * approver's session reads their approvals, a requester's their own requests.
  */
 export const MOCK_CALLS: Readonly<Record<string, { name: string; arguments: Record<string, unknown>; said: string }>> = {
   orgiq: { name: 'search_people', arguments: { query: 'Kubernetes experts', scope: null, limit: null, sort: 'recent' }, said: 'Find me the latest Kubernetes experts.' },
@@ -340,7 +344,14 @@ export const MOCK_CALLS: Readonly<Record<string, { name: string; arguments: Reco
   assessment: { name: 'search_records', arguments: { query: 'teams below target', type: 'team', scope: null, limit: null }, said: 'Which teams are below target?' },
   pipelines: { name: 'search_records', arguments: { query: 'failed runs', type: 'run', scope: null, limit: null }, said: 'What failed last night?' },
   access: { name: 'access_request_status', arguments: { query: 'SME', scope: 'mine' }, said: 'Did my SME request get approved?' },
+  'access/approver': { name: 'access_request_status', arguments: { query: null, scope: 'approvals' }, said: 'Show me my approvals.' },
+  'access/access-admin': { name: 'access_request_status', arguments: { query: null, scope: 'approvals' }, said: 'What is waiting on me?' },
 };
+
+/** The scripted call for a session: its role's, else its tenant's, else Social's. */
+export function mockCallFor(tenant: string, role: string): { name: string; arguments: Record<string, unknown>; said: string } {
+  return MOCK_CALLS[`${tenant}/${role}`] ?? MOCK_CALLS[tenant] ?? MOCK_CALLS['social']!;
+}
 
 /** §4 rows that are not model functions. */
 export const INTERNAL_TOOLS = [

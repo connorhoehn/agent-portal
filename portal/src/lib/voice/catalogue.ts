@@ -74,6 +74,7 @@ export const NAVIGATE_PAGE_IDS: ReadonlyArray<{ id: string; tenants: readonly st
   { id: 'requests', tenants: ['access'] },
   { id: 'open-requests', tenants: ['access'] },
   { id: 'new-request', tenants: ['access'] },
+  { id: 'approvals', tenants: ['access'] },
   { id: 'workspaces', tenants: ['*'] },
 ];
 
@@ -217,9 +218,9 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
   {
     name: 'access_request_status',
     parameters: obj({
-      query: str('The item asked for, as the user named it.', { minLength: 1, maxLength: 120 }),
-      scope: str('Always "mine": the user\'s own requests, even for an approver.', { enum: ['mine'] }),
-    }, ['query']),
+      query: str('The item asked for or the person, as the user named it; leave out to list them all.', { minLength: 1, maxLength: 120 }),
+      scope: str('"mine" (the default): the user\'s own requests; "approvals": the requests waiting on the user\'s decision; "reports": the requests of people the user manages.', { enum: ['mine', 'approvals', 'reports'] }),
+    }),
     kind: 'read', backing: 'search', confirm: false, action: null, says: 'Checking your access requests.', tenants: VOICE_TENANTS,
   },
 ];

@@ -171,6 +171,20 @@ describe('POST /api/voice/sessions — the mint', () => {
     expect(res.body.tools.sort()).toEqual(['access_request_status', 'navigate', 'open_result', 'search_records', 'send_chat_message', 'set_status']);
   });
 
+  it('an access approver\'s scripted session reads their approvals; a requester\'s their own requests', async () => {
+    delete process.env['OPENAI_API_KEY'];
+    process.env['MOCK_VOICE'] = '1';
+    const scripted = async (role: string) => {
+      principal = { sub: USER, role, tenant: 'access', grants: {} };
+      const res = await mint({});
+      expect(res.status).toBe(201);
+      const done = res.body.mockScript.onStart.find((f: { event: { event?: { type: string } } }) => f.event.event?.type === 'response.output_item.done');
+      return { name: done.event.event.item.name, args: JSON.parse(done.event.event.item.arguments) };
+    };
+    expect(await scripted('approver')).toEqual({ name: 'access_request_status', args: { query: null, scope: 'approvals' } });
+    expect((await scripted('requester')).args).toMatchObject({ scope: 'mine' });
+  });
+
   it('the social scripted session searches its own index for live huddles', async () => {
     delete process.env['OPENAI_API_KEY'];
     process.env['MOCK_VOICE'] = '1';

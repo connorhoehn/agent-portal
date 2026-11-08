@@ -437,19 +437,24 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Search the user's own access requests (approvals) by the item they asked for, and report status, current step and decider.",
+    "description": "Look up access requests and report status, current step and decider: the user's own ("mine", the default), the ones waiting on their decision ("approvals", approvers only) or their reports' ("reports"). Approvals and reports are read in the Access workspace only. Each row carries a ref that open_result opens.",
     "name": "access_request_status",
     "parameters": {
       "additionalProperties": false,
       "properties": {
         "query": {
-          "description": "The item asked for, as the user named it.",
-          "type": "string",
+          "description": "The item asked for or the person, as the user named it; leave out to list them all.",
+          "type": [
+            "string",
+            "null",
+          ],
         },
         "scope": {
-          "description": "Always "mine": the user's own requests, even for an approver.",
+          "description": ""mine" (the default): the user's own requests; "approvals": the requests waiting on the user's decision; "reports": the requests of people the user manages.",
           "enum": [
             "mine",
+            "approvals",
+            "reports",
             null,
           ],
           "type": [

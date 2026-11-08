@@ -48,7 +48,7 @@ import { clock } from '../mock/core/index.js';
 import { voiceConfig, voiceCostUsd, utcDay, MIN_BILLED_SECONDS, MIN_DAILY_SESSION_SECONDS } from '../lib/voice/config.js';
 import { bookVoiceSpend, boundDelegatedUsage } from '../lib/voice/ledger.js';
 import {
-  delegationInstructions, hashToolArgs, responsesFunctionTools, toolsForTenant, voiceInstructions, voiceTool, MOCK_CALLS,
+  delegationInstructions, hashToolArgs, responsesFunctionTools, toolsForTenant, voiceInstructions, voiceTool, mockCallFor,
 } from '../lib/voice/catalogue.js';
 import {
   createLiveSession, hangupLiveSession, mockLiveScript, voiceProviderConfigured, MOCK_SDP_ANSWER, VoiceProviderError,
@@ -186,7 +186,7 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
     toolsEnabled, tools: toolsEnabled ? tools.map((t) => t.name) : [],
     budget: { holdUsd: held.amountUsd, usdPerMinute: cfg.usdPerMinute },
     ...(dailyMinutesLeft != null ? { dailyMinutesLeft } : {}),
-    ...(cfg.mock ? { mockScript: mockLiveScript(id, MOCK_CALLS[session.tenant] ?? MOCK_CALLS['social']!) } : {}),
+    ...(cfg.mock ? { mockScript: mockLiveScript(id, mockCallFor(session.tenant, session.role)) } : {}),
   });
 }));
 

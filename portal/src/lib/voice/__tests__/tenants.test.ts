@@ -16,10 +16,10 @@ interface MwCatalogue { MOCK_CALLS: Record<string, Call>; VOICE_TENANTS: readonl
 interface MwOpenai { mockLiveScript: (id: string, c: Call) => { onStart: unknown[]; onResponseCreate: unknown[]; onClose: unknown[] } }
 
 /** One tenant's scripted session run to the end; `extraStart` adds frames (a second call) to the script. */
-export async function scriptedRun(tenant: string, opts: { role: string; allow: Action[]; routes: Route[]; extraStart?: unknown[]; ctx?: Parameters<typeof toolContext>[0] }) {
+export async function scriptedRun(tenant: string, opts: { role: string; allow: Action[]; routes: Route[]; extraStart?: unknown[]; ctx?: Parameters<typeof toolContext>[0]; call?: Call }) {
   const { MOCK_CALLS } = await middlewareVoice<MwCatalogue>('catalogue.ts');
   const { mockLiveScript } = await middlewareVoice<MwOpenai>('openai.ts');
-  const call = MOCK_CALLS[tenant];
+  const call = opts.call ?? MOCK_CALLS[tenant];
   assert.ok(call, `${tenant} has a scripted call`);
   const script = mockLiveScript(SESSION, call);
   const body = {
@@ -131,4 +131,27 @@ test('a scripted open_result for a ref no search returned is refused and opens n
   });
   assert.deepEqual(run.calls, [['search_people', 'done'], ['open_result', 'refused']]);
   assert.equal(run.ctx.navigations.length, 1, 'only the search page');
+});
+
+test('an access approver\'s scripted session answers its approvals from the fixtures; a requester\'s reads its own requests', async () => {
+  const ada = { id: 'r-ada', kind: 'grant', reviewId: null, requester: { id: 'u-ada', displayName: 'Ada Okafor' }, beneficiary: { id: 'u-ada', displayName: 'Ada Okafor' },
+    item: { id: 'orgiq:sme', title: 'SME in Work' }, justification: 'x', duration: 'standing', status: 'pending', submittedAt: '2026-11-08T09:00:00Z',
+    steps: [{ step: 1, kind: 'manager', status: 'current', eligible: [{ id: 'u-me', displayName: 'Me' }] }], sod: { verdict: 'clear', conflicts: [] } };
+  const { mockCallFor } = await middlewareVoice<{ mockCallFor: (t: string, r: string) => Call }>('catalogue.ts');
+  assert.equal(mockCallFor('access', 'approver').arguments['scope'], 'approvals');
+  assert.equal(mockCallFor('access', 'requester').arguments['scope'], 'mine');
+  const run = await scriptedRun('access', {
+    role: 'approver', allow: ['ViewAccess', 'RequestAccess', 'DecideAccess', 'VoiceNavigate'], call: mockCallFor('access', 'approver'),
+    routes: [route('GET', '/api/access/approvals', 200, { items: [ada] })],
+  });
+  assert.deepEqual(run.calls, [['access_request_status', 'done']]);
+  assert.equal(run.summaries[0], '1 waiting on you; first: SME in Work from Ada Okafor');
+  assert.ok(run.log.some((l) => l.url === '/api/access/approvals'));
+  // The same script for a requester (no DecideAccess) is refused with no read at all.
+  const req = await scriptedRun('access', {
+    role: 'requester', allow: ['ViewAccess', 'RequestAccess', 'VoiceNavigate'], call: mockCallFor('access', 'approver'),
+    routes: [route('GET', '/api/access/approvals', 200, { items: [ada] })],
+  });
+  assert.deepEqual(req.calls, [['access_request_status', 'refused']]);
+  assert.equal(req.log.filter((l) => l.method === 'GET').length, 0);
 });

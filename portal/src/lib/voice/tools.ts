@@ -337,7 +337,7 @@ export function voicePage(palette: Palette, pageId: string, tenant?: string): Pa
 const ID_PATHS: ReadonlySet<string> = new Set([
   '/social/channels', '/social/contacts', '/iq/projects',
   '/assessment/teams', '/assessment/submissions', '/assessment/feedback', '/assessment/runs',
-  '/pipelines/definitions', '/pipelines/runs', '/pipelines/approvals',
+  '/pipelines/definitions', '/pipelines/runs', '/pipelines/approvals', '/access/requests',
 ]);
 
 function pagePath(page: PalettePage, params: Args): string {
@@ -597,42 +597,70 @@ const botSweepStatus: Runner = async (args, ctx) => {
   }, summary);
 };
 
-// ── access requests (always the caller's own: scope=mine, even for an approver) ──
+// ── access requests: the caller's own (mine), their approvals, their reports' ──
+
+type AccessScope = 'mine' | 'approvals' | 'reports';
 
 const RE_WORDS = /[a-z0-9]+/g;
 const words = (s: string): string[] => s.toLowerCase().match(RE_WORDS) ?? [];
 
-function requestRow(r: AccessRequest) {
+function requestRow(r: AccessRequest, scope: AccessScope) {
   const decided = [...r.steps].reverse().find((s) => s.decidedBy);
   const current = r.steps.find((s) => s.status === 'current' || s.status === 'info-requested');
   return {
-    item: r.item.title, status: r.status, submittedAt: r.submittedAt,
+    ref: `request:${r.id}`, item: r.item.title, status: r.status, submittedAt: r.submittedAt,
+    // Whose request it is, where it is not the caller's own: the approvals and reports pages show the same names.
+    ...(scope !== 'mine' ? { requester: r.requester.displayName, ...(r.beneficiary.id !== r.requester.id ? { for: r.beneficiary.displayName } : {}) } : {}),
     ...(current ? { currentStep: current.kind, waitingOn: waitingOn(r) } : {}),
     ...(decided?.decidedBy ? { decidedBy: decided.decidedBy.displayName, decidedAt: decided.decidedAt ?? undefined } : {}),
   };
 }
 
-function requestsDone(query: string, items: AccessRequest[], hint?: string): ToolResult {
-  const rows = items.slice(0, MAX_ROWS).map(requestRow);
-  return done('access_requests', { query, scope: 'mine', count: items.length, rows, ...(hint ? { hint } : {}) },
-    rows.length ? `${rows[0]!.item}: ${rows[0]!.status}` : `No request of yours matches "${query}"`);
+function requestsDone(query: string, items: AccessRequest[], ctx: ToolContext, scope: AccessScope = 'mine', hint?: string): ToolResult {
+  const rows = items.slice(0, MAX_ROWS).map((r) => requestRow(r, scope));
+  // Each request opens on its own record page (open_result, or navigate requests with params.id).
+  ctx.results?.keep(items.slice(0, MAX_ROWS).map((r) => ({ ref: cap(`request:${r.id}`), title: r.item.title, href: `/access/requests/${encodeURIComponent(r.id)}` })));
+  const what = query ? `"${query}"` : 'that';
+  const none = scope === 'approvals' ? `Nothing ${query ? `matching ${what} ` : ''}is waiting on your decision`
+    : scope === 'reports' ? `No request of your reports matches ${what}` : `No request of yours matches ${what}`;
+  const summary = !rows.length ? none
+    : scope === 'approvals' ? `${items.length} waiting on you; first: ${rows[0]!.item} from ${rows[0]!.requester}`
+    : `${rows[0]!.item}: ${rows[0]!.status}`;
+  return done('access_requests', { query: query || undefined, scope, count: items.length, rows, ...(hint ? { hint } : {}) }, summary);
+}
+
+/** The route's own match (routes/access.ts matchesQuery) over what the approvals page shows, for GET /approvals which takes no q. */
+function matchesRequest(r: AccessRequest, query: string): boolean {
+  if (!query) return true;
+  const needle = query.toLowerCase();
+  return [r.id, r.item.title, r.requester.displayName, r.beneficiary.displayName].some((s) => s.toLowerCase().includes(needle));
 }
 
 const OUTSIDE_ACCESS_HINT = 'Requests for other items are listed in the Access workspace; switching to it ends this voice session.';
+const SCOPE_OUTSIDE_ACCESS = 'Approvals and your reports\' requests are read in the Access workspace; switching to it ends this voice session.';
 
 const accessRequestStatus: Runner = async (args, ctx) => {
-  const query = String(args['query']).trim();
+  const query = typeof args['query'] === 'string' ? args['query'].trim() : '';
+  const scope = (typeof args['scope'] === 'string' ? args['scope'] : 'mine') as AccessScope;
+  // Approvals and reports are the Access tenant's own reads, behind its own gates; refused before any request.
+  if (scope !== 'mine' && ctx.tenant !== 'access') return refused(SCOPE_OUTSIDE_ACCESS, { hint: OUTSIDE_ACCESS_HINT });
   if (ctx.tenant === 'access') {
     if (!ctx.can('ViewAccess')) return refused('Your role cannot read access requests.');
-    const read = await readJson<{ items?: AccessRequest[] }>(ctx, `/api/access/requests?${qs({ scope: 'mine', q: query })}`);
-    if (!read.ok) return readFailure('your access requests', read.status);
-    return requestsDone(query, read.body.items ?? []);
+    if (scope === 'approvals') {
+      if (!ctx.can('DecideAccess')) return refused('Your role does not decide access requests, so nothing waits on your approval.');
+      const read = await readJson<{ items?: AccessRequest[] }>(ctx, '/api/access/approvals');
+      if (!read.ok) return readFailure('your approvals', read.status);
+      return requestsDone(query, (read.body.items ?? []).filter((r) => matchesRequest(r, query)), ctx, scope);
+    }
+    const read = await readJson<{ items?: AccessRequest[] }>(ctx, `/api/access/requests?${qs({ scope, q: query || undefined })}`);
+    if (!read.ok) return readFailure(scope === 'reports' ? 'your reports\' requests' : 'your access requests', read.status);
+    return requestsDone(query, read.body.items ?? [], ctx, scope);
   }
   // Outside Access the only read is the in-tenant quick request's
   // GET /api/access-requests/mine?itemId= (routes/access-requests-quick.ts),
   // one catalog item at a time. In orgiq those items are the budgets read
   // tier and each initiative's sprint envelope; resolve the query to them.
-  if (ctx.tenant !== 'orgiq') return requestsDone(query, [], OUTSIDE_ACCESS_HINT);
+  if (ctx.tenant !== 'orgiq') return requestsDone(query, [], ctx, 'mine', OUTSIDE_ACCESS_HINT);
   const projects = await readJson<Array<ProjectRow & { budgetAccess?: { visible: false; requestItemId: string } }>>(ctx, `/api/graph/projects?${qs({ scope: 'mine', limit: 50 })}`);
   if (!projects.ok) return readFailure('your initiatives', projects.status);
   const list = Array.isArray(projects.body) ? projects.body : [];
@@ -644,13 +672,13 @@ const accessRequestStatus: Runner = async (args, ctx) => {
     if (candidates.length >= 3) break;
     if (words(p.name).some((w) => w.length > 2 && q.has(w))) candidates.push(`envelope:${p.id}`);
   }
-  if (!candidates.length) return requestsDone(query, [], OUTSIDE_ACCESS_HINT);
+  if (!candidates.length) return requestsDone(query, [], ctx, 'mine', OUTSIDE_ACCESS_HINT);
   const reads = await Promise.all(candidates.map((itemId) =>
     readJson<{ items?: AccessRequest[] }>(ctx, `/api/access-requests/mine?${qs({ itemId })}`)));
   const items = reads.flatMap((r) => (r.ok ? r.body.items ?? [] : []))
     .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
   if (!items.length && reads.every((r) => !r.ok)) return readFailure('your access requests', (reads[0] as { status: number }).status);
-  return requestsDone(query, items, items.length ? undefined : OUTSIDE_ACCESS_HINT);
+  return requestsDone(query, items, ctx, 'mine', items.length ? undefined : OUTSIDE_ACCESS_HINT);
 };
 
 /** The read and navigation runners. actions.ts adds the machine and people tools as VOICE_RUNNERS. */

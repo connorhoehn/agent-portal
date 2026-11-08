@@ -13,6 +13,9 @@ const P3_REFUSALS: Array<{ tool: string; args: Record<string, unknown>; ctx: Par
   { tool: 'list_active_initiatives', args: {}, ctx: { tenant: 'social' } },
   { tool: 'bot_sweep_status', args: { since: 'yesterday' }, ctx: { tenant: 'social' } },
   { tool: 'access_request_status', args: { query: 'budgets' }, ctx: { tenant: 'access', deny: ['ViewAccess'] } },
+  { tool: 'access_request_status', args: { scope: 'approvals' }, ctx: { tenant: 'access', role: 'requester', allow: ['ViewAccess', 'RequestAccess'] } },
+  { tool: 'access_request_status', args: { scope: 'approvals' }, ctx: { tenant: 'orgiq' } },
+  { tool: 'access_request_status', args: { scope: 'reports', query: 'sme' }, ctx: { tenant: 'social' } },
 ];
 
 test('every P3 tool refuses on its gate without a network call', async () => {
@@ -50,7 +53,7 @@ test('navigate refuses an unknown page id and a page outside the tenant or the r
   // Every role of every tenant, over every page id: the id resolves to its own tenant's palette row, gated by isPageVisible.
   const roles = ['member', 'sme', 'program-owner', 'org-leader', 'hr-admin', 'admin', 'participant', 'moderator',
     'assessor', 'program-lead', 'author', 'operator', 'requester', 'approver', 'access-admin'];
-  assert.equal(PALETTE.pages.filter((p) => p.pageId).length, 23, 'the real palette table, 23 voice pages');
+  assert.equal(PALETTE.pages.filter((p) => p.pageId).length, 24, 'the real palette table, 24 voice pages');
   const inTenant = (p: { tenant: string }, t: string) => p.tenant === t || p.tenant === 'universal' || (p.tenant === 'admin' && t === 'orgiq');
   const ids = [...new Set(PALETTE.pages.filter((p) => p.pageId).map((p) => p.pageId!))];
   for (const id of ids) {
@@ -272,8 +275,51 @@ test('access_request_status reads scope=mine only, even for an approver, in the 
   assert.equal(log.length, 1);
   assert.equal(log[0]!.url, '/api/access/requests?scope=mine&q=envelope');
   const row = (r.output['rows'] as Array<Record<string, unknown>>)[0]!;
-  assert.deepEqual(row, { item: 'Sprint envelope on Alpha', status: 'pending', submittedAt: '2026-11-07T10:00:00Z', currentStep: 'steward', waitingOn: 'Sam Steward', decidedBy: 'Maya Manager', decidedAt: '2026-11-07T11:00:00Z' });
+  assert.deepEqual(row, { ref: 'request:r1', item: 'Sprint envelope on Alpha', status: 'pending', submittedAt: '2026-11-07T10:00:00Z', currentStep: 'steward', waitingOn: 'Sam Steward', decidedBy: 'Maya Manager', decidedAt: '2026-11-07T11:00:00Z' });
   assert.doesNotMatch(JSON.stringify(r.output), /private reason/, 'the justification never reaches the model');
+});
+
+test('access_request_status: an approver reads what waits on them, a manager their reports\' requests, and each opens by ref', async () => {
+  const waiting = [
+    request({ id: 'r-ada', requester: { id: 'u-ada', displayName: 'Ada Okafor' }, beneficiary: { id: 'u-ada', displayName: 'Ada Okafor' }, item: { id: 'orgiq:sme', title: 'SME in Work' }, submittedAt: '2026-11-08T09:00:00Z' }),
+    request({ id: 'r-bo', requester: { id: 'u-bo', displayName: 'Bo Lin' }, beneficiary: { id: 'u-bo', displayName: 'Bo Lin' }, item: { id: 'social:moderator', title: 'Moderator in Social' } }),
+  ];
+  const { fetch, log } = fakeFetch([
+    route('GET', '/api/access/approvals', 200, { items: waiting }),
+    route('GET', '/api/access/requests?scope=reports', 200, { items: [waiting[1]] }),
+  ]);
+  const results = new ResultMemory();
+  const c = toolContext({ fetch, tenant: 'access', role: 'approver', allow: ['ViewAccess', 'RequestAccess', 'DecideAccess'], results });
+  const all = await runVoiceTool('access_request_status', '{"query":null,"scope":"approvals"}', c);
+  assert.equal(all.outcome, 'done');
+  assert.equal(log[0]!.url, '/api/access/approvals');
+  assert.equal(all.summary, '2 waiting on you; first: SME in Work from Ada Okafor');
+  assert.deepEqual((all.output['rows'] as Array<Record<string, unknown>>).map((r) => [r['ref'], r['requester']]), [['request:r-ada', 'Ada Okafor'], ['request:r-bo', 'Bo Lin']]);
+  assert.doesNotMatch(JSON.stringify(all.output), /private reason/, 'the justification never reaches the model');
+  const bo = await runVoiceTool('access_request_status', { query: 'bo lin', scope: 'approvals' }, c);
+  assert.equal(bo.output['count'], 1, 'the route\'s own match, over requester and item');
+  const reports = await runVoiceTool('access_request_status', { scope: 'reports' }, c);
+  assert.equal(log.at(-1)!.url, '/api/access/requests?scope=reports');
+  assert.equal(reports.summary, 'Moderator in Social: pending');
+  // The kept rows open the request's own record page.
+  assert.equal((await runVoiceTool('open_result', { ref: 'request:r-bo' }, c)).outcome, 'done');
+  assert.deepEqual(c.navigations, ['/access/requests/r-bo']);
+  const nav = toolContext({ tenant: 'access', role: 'requester' });
+  await runVoiceTool('navigate', { page: 'requests', params: { id: 'r-bo' } }, nav);
+  assert.deepEqual(nav.navigations, ['/access/requests/r-bo']);
+  // The approvals page is the approver's palette row; a requester is not offered it.
+  const asRequester = toolContext({ tenant: 'access', role: 'requester' });
+  assert.equal((await runVoiceTool('navigate', { page: 'approvals' }, asRequester)).outcome, 'refused');
+});
+
+test('access_request_status outside Access refuses approvals and reports with the Access hint, before any request', async () => {
+  for (const tenant of ['orgiq', 'social', 'assessment', 'pipelines']) {
+    let calls = 0;
+    const r = await runVoiceTool('access_request_status', { scope: 'approvals' }, toolContext({ tenant, fetch: async () => { calls++; throw new Error('network'); } }));
+    assert.equal(r.outcome, 'refused', tenant);
+    assert.match(String(r.output['hint']), /Access workspace/, tenant);
+    assert.equal(calls, 0, tenant);
+  }
 });
 
 test('access_request_status from orgiq resolves an initiative name to its envelope and reads /mine', async () => {
