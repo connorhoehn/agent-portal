@@ -237,14 +237,21 @@ export default function SelectContextPage() {
   }, [accounts, query]);
 
   const [showEveryone, setShowEveryone] = useState(false);
+  // The row the user pressed, held until the hard redirect lands. The server
+  // answers in milliseconds; the seconds that follow are the browser loading
+  // the workspace, and without this the pressed row showed nothing at all.
+  const [pending, setPending] = useState<{ tenant: Tenant; role: string } | null>(null);
 
   async function choose(tenant: Tenant, role: string) {
+    if (pending) return;
+    setPending({ tenant, role });
     // Mark chosen before entering, since enterContext hard-redirects into the
     // workspace (re-driving the layout from the re-minted cookie).
     markContextChosen(session?.sub ?? '');
     try {
       await enterContext(tenant, role, tenant === 'orgiq' ? referenceReturn : undefined);
     } catch (err) {
+      setPending(null);
       // enterContext hard-navigates on success, so a swallowed failure has NO
       // observable outcome — a chooser full of buttons that sometimes do
       // nothing. The cookie-less fallback identity hits exactly this: the
@@ -444,6 +451,8 @@ export default function SelectContextPage() {
                           title={roleLabel(role)}
                           description={ROLE_META[role]?.hint ?? role}
                           selected={isCurrent}
+                          busy={pending?.tenant === tenant && pending?.role === role}
+                          disabled={pending != null && !(pending.tenant === tenant && pending.role === role)}
                           onSelect={() => void choose(tenant, role)}
                           data-testid={`select-role-${tenant}-${role}`}
                         />
