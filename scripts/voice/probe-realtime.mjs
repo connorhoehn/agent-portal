@@ -2,7 +2,6 @@
 // Probe the OpenAI Live (GPT-Live) API for the voice navigator (docs/voice-navigator-spec.md §1, §12 V1).
 // Node 22+, built-in WebSocket and fetch, no dependencies.
 //
-//   set -a; . chatgpt-live-voice/.env; set +a
 //   node scripts/voice/probe-realtime.mjs <scenario> --wav-dir <dir> --out <file.jsonl>
 //
 // Scenarios (each is one billed session at most):
@@ -21,14 +20,22 @@
 //
 // Findings and the shapes P2/P3 build against: docs/voice-navigator-spec.md §1 ("The Live API, as V1 measured it").
 //
-// The key comes from OPENAI_API_KEY or API_KEY and is never logged. Every logged object passes through redact():
+// The key comes from OPENAI_API_KEY in the environment, else from OPENAI_API_KEY in middleware/.env (gitignored;
+// the same file the middleware reads), and is never logged. Every logged object passes through redact():
 // Authorization / client_secret / ephemeral* keys and any sk- value are replaced, audio payloads become {bytes}.
 // Each line: { t (ms since probe start, monotonic), s (scenario), dir: in|out|http|note, type, ...event }.
 import { readFileSync, appendFileSync, existsSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 
-const KEY = process.env.OPENAI_API_KEY || process.env.API_KEY;
+function keyFromMiddlewareEnv() {
+  try {
+    const f = new URL('../../middleware/.env', import.meta.url);
+    const m = readFileSync(f, 'utf8').match(/^OPENAI_API_KEY=(.*)$/m);
+    return m ? m[1].trim().replace(/^(['"])(.*)\1$/, '$2') : '';
+  } catch { return ''; }
+}
+const KEY = process.env.OPENAI_API_KEY || keyFromMiddlewareEnv();
 const MODEL = process.env.LIVE_MODEL || 'gpt-live-1';
 const DELEGATION_MODEL = process.env.LIVE_DELEGATION_MODEL || 'gpt-6-luna';
 const API = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
@@ -44,7 +51,7 @@ const scenario = args[0];
 const opt = (name, dflt) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : dflt; };
 const WAV_DIR = opt('--wav-dir', '');
 const OUT = opt('--out', '');
-if (!KEY) { console.error('No key: set OPENAI_API_KEY or API_KEY'); process.exit(1); }
+if (!KEY) { console.error('No key: set OPENAI_API_KEY or put it in middleware/.env'); process.exit(1); }
 if (!scenario || !OUT) { console.error('usage: probe-realtime.mjs <scenario> --wav-dir <dir> --out <file.jsonl>'); process.exit(1); }
 
 const T0 = performance.now();

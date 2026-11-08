@@ -51,6 +51,32 @@ try {
   // DEV_OFFLINE takes this path deliberately.
 }
 
+/**
+ * middleware/.env (gitignored) holds local secrets such as OPENAI_API_KEY for the voice navigator.
+ * Same precedence as .env.aws: a value already in the process environment wins. Unlike .env.aws it is
+ * read under DEV_OFFLINE too, because dev:mock is where a developer's own key matters. With
+ * DEV_OFFLINE=true and no usable OPENAI_API_KEY, MOCK_VOICE defaults to 1 so the voice dock runs its
+ * scripted session instead of answering "unavailable" (docs/voice-navigator-spec.md §8).
+ */
+try {
+  const text = readFileSync(resolve(__dirname, '../.env'), 'utf8');
+  for (const line of text.split('\n')) {
+    const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+    if (!m) continue;
+    const value = m[2]!.trim().replace(/^(['"])(.*)\1$/, '$2');
+    if (process.env[m[1]!] === undefined) process.env[m[1]!] = value;
+  }
+} catch {
+  // .env is optional.
+}
+{
+  const openaiKey = (process.env['OPENAI_API_KEY'] ?? '').trim();
+  const hasKey = openaiKey !== '' && !openaiKey.includes('REPLACE_ME');
+  if (process.env['DEV_OFFLINE'] === 'true' && !hasKey && process.env['MOCK_VOICE'] === undefined) {
+    process.env['MOCK_VOICE'] = '1';
+  }
+}
+
 const env = (key: string, fallback = ''): string => process.env[key] ?? fallback;
 const flag = (key: string): boolean => process.env[key] === 'true';
 

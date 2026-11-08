@@ -97,6 +97,17 @@ The middleware image is built with `node scripts/docker/middleware-image-build.m
 
 The stacks create Aurora and the Bedrock knowledge base. Apply the Aurora schema with `schema/apply-schema.sh` (see `schema/README.md`), and generate demo content with `python -m schema.synth all` (see `schema/synth/README.md`).
 
+## Talk to it
+
+The portal footer has a voice dock: press Ctrl+Shift+Space or click it, then speak. It can open pages, search people and records, list your initiatives, open the Computer Lab, start a computer, open a shell and run safe read-only commands, check bot sweeps and access requests, post a chat message after you confirm, and set your presence status.
+
+- Put `OPENAI_API_KEY=...` in `middleware/.env` (gitignored; the middleware loads it, and an exported variable wins). Without a key the mint answers 503 and the dock says it is unavailable.
+- `npm run dev:mock` sets `MOCK_VOICE=1` for you when there is no key, so the dock plays a scripted session offline. Set `MOCK_VOICE=1` yourself to force it with a key present.
+- It costs money per minute of audio. Every session takes a budget hold up front (`VOICE_USD_PER_MINUTE`, default 0.05, times `VOICE_SESSION_MINUTES_P75`) and settles to the billed seconds.
+- The dock is behind `features.voiceNavigator`, which is on under the Vite dev server (`VITE_VOICE_NAVIGATOR=1` turns it on elsewhere).
+
+The design is in [docs/voice-navigator-spec.md](docs/voice-navigator-spec.md); `scripts/voice/probe-realtime.mjs` probes the live API with the same key.
+
 ## Architecture notes
 
 - Each agent's system instructions are kept in Bedrock's managed template store and read at run time with a short cache. The system text hard-coded in each agent's `main.py` is only a fallback.
