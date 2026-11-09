@@ -39,7 +39,7 @@ import {
   type VoiceLogRange, type VoiceSessionDetail, type VoiceSessionListItem,
 } from '../voice/voiceLogModel';
 import {
-  LOGGING_PATH, LOG_SOURCES, dayGroupsBy, inRange, loggingHref, offeredSources, parseLoggingPath, pipelineRunsBase, readOutcome, rowKey,
+  LOG_SOURCES, dayGroupsBy, inRange, loggingBase, loggingHref, offeredSources, parseLoggingPath, pipelineRunsBase, readOutcome, rowKey,
   sourceInTenant, sourceMeta, sourceOptions, took, when, type LogRecord, type LogRow, type LogSource,
 } from './loggingModel';
 import {
@@ -48,7 +48,7 @@ import {
 } from './agentsLogModel';
 import { PIPELINE_RUN, pipelineRecord, pipelineRows, pipelineRunsApi } from './pipelinesLogModel';
 import {
-  AGENT_JOB, SWEEP_JOB, SWEEP_RUNS_API, SWEEP_RUN, WORK_JOBS_API, agentJobRecord, jobRows, sweepJobApi, sweepJobRecord, sweepRunRecord, workJobApi,
+  AGENT_JOB, SWEEP_JOB, SWEEP_JOBS_API, SWEEP_RUNS_API, SWEEP_RUN, WORK_JOBS_API, agentJobRecord, jobRows, sweepJobApi, sweepJobRecord, sweepRunRecord, workJobApi,
   type SweepJob, type SweepRun, type WorkJob,
 } from './jobsLogModel';
 import { useEventFrames } from './useEventFrames';
@@ -173,6 +173,7 @@ export default function LoggingPage() {
   const tenant = session?.tenant ?? null;
   const range = parseRange(params.get('range'));
   const at = useMemo(() => parseLoggingPath(pathname), [pathname]);
+  const base = loggingBase(pathname);
   const poll = (s: LogSource) => (at.source === s ? POLL_MS : undefined);
 
   // Every source's list read, once each (the open source polls): what the rail shows, and what decides the control's options.
@@ -188,6 +189,8 @@ export default function LoggingPage() {
   const jobsReads = sourceInTenant('jobs', tenant);
   const workJobs = useFetch<{ jobs: WorkJob[] }>(jobsReads ? WORK_JOBS_API : null, poll('jobs'));
   const sweepRuns = useFetch<{ runs: SweepRun[] }>(jobsReads ? SWEEP_RUNS_API : null, poll('jobs'));
+  // The caller's own background sweep jobs: an extra rail row kind, so a refusal here never takes the source away.
+  const sweepJobs = useFetch<{ jobs: SweepJob[] }>(jobsReads ? SWEEP_JOBS_API : null, poll('jobs'));
 
   const outcome = (f: { data: unknown; error: string | null; failure: { status: number | null; kind: string } | null }, skipped: boolean) =>
     readOutcome({ ...f, skipped });
@@ -203,11 +206,11 @@ export default function LoggingPage() {
 
   // The bare route opens the first offered source; a source the persona is not offered falls back to it.
   useEffect(() => {
-    if (!at.source) { if (offered[0]) void navigate(`${loggingHref(offered[0])}${search}`, { replace: true }); return; }
+    if (!at.source) { if (offered[0]) void navigate(`${loggingHref(offered[0], null, null, base)}${search}`, { replace: true }); return; }
     if (session && !offered.includes(at.source) && settled(at.source)) {
-      void navigate(`${LOGGING_PATH}${search}`, { replace: true });
+      void navigate(`${base}${search}`, { replace: true });
     }
-  }, [at.source, offeredKey, search, navigate, session]);
+  }, [at.source, offeredKey, search, navigate, session, base]);
 
   const source: LogSource = at.source ?? offered[0] ?? 'voice';
   const now = new Date();
@@ -226,7 +229,7 @@ export default function LoggingPage() {
       case 'jobs': {
         if (!workJobs.data && !sweepRuns.data) return { rows: null, error: workJobs.error && sweepRuns.error ? workJobs.error : null };
         if (reads.jobs.includes('pending')) return { rows: null, error: null };
-        return { rows: jobRows(workJobs.data?.jobs ?? [], sweepRuns.data?.runs ?? []).filter((x) => inRange(x.at, range, now)), error: null };
+        return { rows: jobRows(workJobs.data?.jobs ?? [], sweepRuns.data?.runs ?? [], sweepJobs.data?.jobs ?? []).filter((x) => inRange(x.at, range, now)), error: null };
       }
     }
   };
@@ -236,7 +239,7 @@ export default function LoggingPage() {
   const kind = at.source ? kindOf(at.source) : null;
   const selectedKey = at.id && kind ? `${kind}/${at.id}` : null;
   const newest = list.rows?.[0] ?? null;
-  const newestHref = at.source && newest ? loggingHref(at.source, newest.kind, newest.id) : null;
+  const newestHref = at.source && newest ? loggingHref(at.source, newest.kind, newest.id, base) : null;
 
   // The bare source opens its newest record, so the trail and the URL always name the record on screen.
   useEffect(() => {
@@ -314,10 +317,10 @@ export default function LoggingPage() {
   }, [setParams]);
 
   return <LoggingView
-    source={source} sources={offered} onSourceChange={(s) => navigate(`${loggingHref(s)}${search}`)}
+    source={source} sources={offered} onSourceChange={(s) => navigate(`${loggingHref(s, null, null, base)}${search}`)}
     range={range} onRangeChange={onRangeChange}
     rows={list.rows} rowsError={list.error}
-    selectedKey={selectedKey} onOpen={(row) => navigate(`${loggingHref(row.source, row.kind, row.id)}${search}`)}
+    selectedKey={selectedKey} onOpen={(row) => navigate(`${loggingHref(row.source, row.kind, row.id, base)}${search}`)}
     record={record} recordError={recordError}
     onCopy={onCopy} copied={copied}
     {...(source === 'voice' ? {

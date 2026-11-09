@@ -14,6 +14,13 @@
 import type { VoiceLogRange } from '../voice/voiceLogModel.ts';
 
 export const LOGGING_PATH = '/iq/logging';
+/** The pipelines tenant mounts the same page under its own base (App.tsx), page id `system-logging`. */
+export const PIPELINES_LOGGING_PATH = '/pipelines/logging';
+
+/** The base the page is mounted at, from the path it is open on. */
+export function loggingBase(pathname: string): string {
+  return pathname === '/pipelines' || pathname.startsWith('/pipelines/') ? PIPELINES_LOGGING_PATH : LOGGING_PATH;
+}
 
 export type LogSource = 'voice' | 'agents' | 'pipelines' | 'jobs';
 
@@ -35,9 +42,9 @@ export const isLogSource = (v: unknown): v is LogSource => LOG_SOURCES.some((s) 
 /** The sources split into record kinds carry the kind in the path; voice and pipelines have one kind each. */
 const KINDED: ReadonlySet<LogSource> = new Set<LogSource>(['agents', 'jobs']);
 
-/** `/iq/logging/<source>[/<kind>]/<id>`. */
-export function loggingHref(source: LogSource, kind?: string | null, id?: string | null): string {
-  const base = `${LOGGING_PATH}/${source}`;
+/** `<base>/<source>[/<kind>]/<id>`; the base is `/iq/logging` unless the page is open in the pipelines tenant. */
+export function loggingHref(source: LogSource, kind?: string | null, id?: string | null, root: string = LOGGING_PATH): string {
+  const base = `${root}/${source}`;
   if (!id) return base;
   return KINDED.has(source) && kind ? `${base}/${encodeURIComponent(kind)}/${encodeURIComponent(id)}` : `${base}/${encodeURIComponent(id)}`;
 }
@@ -45,7 +52,7 @@ export function loggingHref(source: LogSource, kind?: string | null, id?: string
 /** The record a path names; nulls where the path stops short (or names no source). */
 export function parseLoggingPath(pathname: string): { source: LogSource | null; kind: string | null; id: string | null } {
   const segs = pathname.split('/').filter(Boolean);
-  if (segs[0] !== 'iq' || segs[1] !== 'logging') return { source: null, kind: null, id: null };
+  if ((segs[0] !== 'iq' && segs[0] !== 'pipelines') || segs[1] !== 'logging') return { source: null, kind: null, id: null };
   const source = isLogSource(segs[2]) ? segs[2] : null;
   if (!source) return { source: null, kind: null, id: null };
   const dec = (s: string | undefined) => { if (!s) return null; try { return decodeURIComponent(s); } catch { return s; } };

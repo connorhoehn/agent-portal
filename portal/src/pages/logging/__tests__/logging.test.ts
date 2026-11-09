@@ -6,12 +6,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  LOGGING_PATH, dayGroupsBy, inRange, legacyVoiceLogTarget, lifecycleEvents, loggingHref, offeredSources, parseLoggingPath, pipelineRunsBase,
+  LOGGING_PATH, dayGroupsBy, inRange, legacyVoiceLogTarget, lifecycleEvents, loggingBase, loggingHref, offeredSources, parseLoggingPath, pipelineRunsBase,
   readOutcome, rowKey, sourceInTenant, sourceOptions, type LogSource, type ReadOutcome,
 } from '../loggingModel.ts';
 import { BOT_RUN, INVOCATION, agentRows, botRunRecord, botRunsApi, invocationRecord, type BotRunRow, type InvocationDetail, type InvocationRow } from '../agentsLogModel.ts';
 import { pipelineEventRows, pipelineRecord, pipelineRows } from '../pipelinesLogModel.ts';
-import { AGENT_JOB, SWEEP_RUN, agentJobRecord, jobRows, sweepJobRecord, sweepRunRecord, type SweepJob, type SweepRun, type WorkJob } from '../jobsLogModel.ts';
+import { AGENT_JOB, SWEEP_JOB, SWEEP_RUN, agentJobRecord, jobRows, sweepJobRecord, sweepRunRecord, type SweepJob, type SweepRun, type WorkJob } from '../jobsLogModel.ts';
 import type { PipelineRun, PipelineStep } from '../../../lib/pipelineRuns.ts';
 import { landing, renderLogging } from './renderLogging.ts';
 
@@ -71,6 +71,13 @@ test('paths: each source and kind round-trips, the bare page names no source', (
   assert.deepEqual(parseLoggingPath('/iq/logging/agents'), { source: 'agents', kind: null, id: null });
   assert.deepEqual(parseLoggingPath(LOGGING_PATH), { source: null, kind: null, id: null });
   assert.deepEqual(parseLoggingPath('/iq/logging/bogus/x'), { source: null, kind: null, id: null });
+  // The pipelines tenant mounts the same page at /pipelines/logging.
+  assert.equal(loggingBase('/pipelines/logging/voice/vs_1'), '/pipelines/logging');
+  assert.equal(loggingBase('/iq/logging/voice/vs_1'), '/iq/logging');
+  assert.equal(loggingHref('pipelines', null, 'r-1', '/pipelines/logging'), '/pipelines/logging/pipelines/r-1');
+  assert.deepEqual(parseLoggingPath('/pipelines/logging/pipelines/agent_jobs%3Ajob-7'), { source: 'pipelines', kind: null, id: 'agent_jobs:job-7' });
+  assert.deepEqual(parseLoggingPath('/pipelines/logging/voice/vs_1'), { source: 'voice', kind: null, id: 'vs_1' });
+  assert.deepEqual(parseLoggingPath('/pipelines/runs/x'), { source: null, kind: null, id: null });
 });
 
 test('the Voice log redirects: /iq/voice-log → /iq/logging, /iq/voice-log/<id> → /iq/logging/voice/<id>, the query kept', async () => {
@@ -180,11 +187,14 @@ test('pipelines: a run row, its steps as the table, and the event stream as the 
 
 // ── Jobs and sweeps ─────────────────────────────────────────────────────────
 
-test('jobs and sweeps: agent jobs and sweep runs share the rail; a sweep job opens by its id', () => {
+test('jobs and sweeps: agent jobs and sweep runs share the rail; sweep jobs are rail rows too', () => {
   const rows = jobRows([JOB], [SWEEP]);
   assert.deepEqual(rows.map(rowKey), [`${AGENT_JOB}/job-9`, `${SWEEP_RUN}/sr-1`]);
   assert.equal(rows[0]!.subline, 'Fix the flaky test · agent job · done');
   assert.equal(rows[1]!.subline, 'The stale docs sweep · failed · 1.8 s');
+  const withJobs = jobRows([JOB], [SWEEP], [SWEEP_JOB_ROW]);
+  assert.deepEqual(withJobs.map(rowKey), [`${SWEEP_JOB}/sj-1`, `${AGENT_JOB}/job-9`, `${SWEEP_RUN}/sr-1`]);
+  assert.equal(withJobs[0]!.subline, 'The nightly org sweeps · done · 3 findings');
   const job = agentJobRecord(JOB);
   assert.deepEqual(job.calls.map((c) => c.name), ['read_file', 'run_tests']);
   assert.deepEqual(job.events.map((e) => e.kind), ['queued', 'claimed', 'running', 'done']);
@@ -225,4 +235,12 @@ test('the view: one frame for every source (trail, one title, the source control
   const empty = await renderLogging({ source: 'jobs', sources: ['voice', 'jobs'], rows: [], selectedKey: null, record: null }, '/iq/logging/jobs');
   assert.match(empty, /data-value="jobs"/, 'the control shows the open source');
   assert.match(empty, /No jobs and sweeps yet/);
+});
+
+test('the pipelines tenant: Voice and Pipelines are offered, and the view renders at /pipelines/logging', async () => {
+  const reads = { voice: ['ok'], agents: ['skipped', 'skipped'], pipelines: ['ok'], jobs: ['skipped', 'skipped'] } as Record<LogSource, ReadOutcome[]>;
+  assert.deepEqual(offeredSources('pipelines', reads), ['voice', 'pipelines']);
+  const html = await renderLogging({ source: 'pipelines', sources: ['voice', 'pipelines'], rows: pipelineRows([RUN]), selectedKey: rowKey(pipelineRecord(RUN, STEPS, null)), record: pipelineRecord(RUN, STEPS, null) }, '/pipelines/logging/pipelines/agent_jobs%3Ajob-7');
+  assert.match(html, /data-testid="logging"/);
+  assert.match(html, /href="\/pipelines\/logging"/, 'the trail links back to the pipelines base');
 });

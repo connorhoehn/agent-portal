@@ -326,6 +326,8 @@ export const PAGES: readonly PageEntry[] = [
   // pipeline-admin only (separation of duties) — rail and route agree.
   { label: 'Configuration',      hint: 'Who approves a step by default',      path: '/pipelines/configuration',                    tenant: 'pipelines', group: 'System', pageId: 'pipelines-configuration', roles: ['pipeline-admin'],
     keywords: ['configuration', 'approver', 'default', 'policy'] },
+  { label: 'Logging',            hint: 'Voice sessions and pipeline runs',    path: '/pipelines/logging',                          tenant: 'pipelines', group: 'System', pageId: 'system-logging', feature: 'voiceLog',
+    keywords: ['logging', 'log', 'voice', 'session', 'transcript', 'history', 'tool call', 'pipeline', 'run', 'trace'] },
   { label: 'Pipeline settings',  hint: 'Your run notifications and views',    path: '/pipelines/settings',                         tenant: 'pipelines', group: 'System', pageId: 'pipeline-settings',
     keywords: ['settings', 'preferences', 'notifications'] },
   // Access tenant — its own map (Request / Approve / Govern / System),

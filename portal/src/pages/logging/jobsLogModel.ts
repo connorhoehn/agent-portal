@@ -3,13 +3,14 @@
 // (GET /api/work/sweeps/runs, the sweep runs' read gate: newest first, the
 // session's tenant) and a background sweep job by its id
 // (GET /api/work/sweeps/jobs/:id, the caller's own: the job a voice toast
-// names). There is no list of sweep jobs (they live an hour in memory), so a
-// sweep job opens by its URL and is not a rail row.
+// names) and the caller's own list of them (GET /api/work/sweeps/jobs, newest
+// first, the same visibility as the by-id read), so a sweep job is a rail row.
 
 import { lifecycleEvents, newestFirst, plural, took, tookMs, when, type LogRecord, type LogRow } from './loggingModel.ts';
 
 export const WORK_JOBS_API = '/api/work/jobs?limit=50';
 export const SWEEP_RUNS_API = '/api/work/sweeps/runs?limit=50';
+export const SWEEP_JOBS_API = '/api/work/sweeps/jobs?limit=50';
 export const workJobApi = (id: string): string => `/api/work/jobs/${encodeURIComponent(id)}`;
 export const sweepJobApi = (id: string): string => `/api/work/sweeps/jobs/${encodeURIComponent(id)}`;
 
@@ -69,8 +70,12 @@ export interface SweepJob {
 
 const sweepName = (s: string) => s.replace(/_/g, ' ');
 
-export function jobRows(jobs: readonly WorkJob[], sweeps: readonly SweepRun[]): LogRow[] {
+export function jobRows(jobs: readonly WorkJob[], sweeps: readonly SweepRun[], sweepJobs: readonly SweepJob[] = []): LogRow[] {
   return newestFirst([
+    ...sweepJobs.map((s): LogRow => ({
+      source: 'jobs', kind: SWEEP_JOB, id: s.jobId, at: s.queuedAt,
+      subline: [s.title, s.state, s.detail].filter(Boolean).join(' · '),
+    })),
     ...jobs.map((j): LogRow => ({
       source: 'jobs', kind: AGENT_JOB, id: j.id, at: j.createdAt,
       subline: [j.title || j.kind, j.botName ? `by ${j.botName}` : 'agent job', j.status.replace(/_/g, ' ')].filter(Boolean).join(' · '),

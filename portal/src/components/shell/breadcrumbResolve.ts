@@ -45,11 +45,11 @@ const SOCIAL_LABELS: Record<string, string> = {
 };
 const PIPELINES_GROUPS: Record<string, string> = { queues: 'Runs',
   definitions: 'Catalog', runbooks: 'Catalog', runs: 'Runs', approvals: 'Runs', artifacts: 'Runs',
-  decks: 'Runs', activity: 'Runs', communication: 'Runs', agents: 'Sources', bots: 'Sources', commands: 'Sources', configuration: 'System', settings: 'System',
+  decks: 'Runs', activity: 'Runs', communication: 'Runs', agents: 'Sources', bots: 'Sources', commands: 'Sources', configuration: 'System', settings: 'System', logging: 'System',
 };
 const PIPELINES_LABELS: Record<string, string> = { queues: 'Queues',
   definitions: 'Definitions', runbooks: 'Runbooks', runs: 'Runs', approvals: 'Approvals', artifacts: 'Artifacts', decks: 'Run reports', activity: 'Work graph', communication: 'Communication',
-  agents: 'Agents', bots: 'Bots', commands: 'Commands', configuration: 'Configuration', settings: 'Pipeline settings',
+  agents: 'Agents', bots: 'Bots', commands: 'Commands', configuration: 'Configuration', settings: 'Pipeline settings', logging: 'Logging',
 };
 // The access tenant's rail (Layout.tsx NAV_ITEMS, docs/access-tenant-design.md §6).
 const ACCESS_GROUPS: Record<string, string> = {
@@ -252,6 +252,11 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
     // The Runs page sits under the Runs group; name the product instead of "Runs › Runs".
     const trail: Crumb[] = [{ label: group === label ? 'Pipelines' : group }];
     if (b && page === 'runs') return [...trail, { label, path: '/pipelines/runs' }, { label: `Run ${shortId(b)}`, id: b }];
+    // Logging (G37b): /pipelines/logging/<source>/<id>; the record is the last segment, as in orgiq.
+    if (page === 'logging') {
+      const rec = segs.length > 3 ? segs[segs.length - 1] : undefined;
+      return rec ? [...trail, { label, path: '/pipelines/logging' }, { label: shortId(rec), id: rec }] : [...trail, { label }];
+    }
     // Any other collection's record, opened beside its list rail; the page registers its title.
     if (b && (page === 'definitions' || page === 'approvals')) return [...trail, { label, path: `/pipelines/${page}` }, { label: shortId(b), id: b }];
     return [...trail, { label }];

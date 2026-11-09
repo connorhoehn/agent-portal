@@ -103,7 +103,7 @@ Every palette page (`PAGES` in `portal/src/components/shell/portalCommands.ts`) 
 - `social-configuration` → /social/configuration (System: Configuration)
 - `social-settings` → /social/settings (System: Social settings)
 
-## pipelines (13)
+## pipelines (14)
 
 - `definitions` → /pipelines/definitions (Catalog: Definitions)
 - `runbooks` → /pipelines/runbooks (Catalog: Runbooks)
@@ -117,6 +117,7 @@ Every palette page (`PAGES` in `portal/src/components/shell/portalCommands.ts`) 
 - `bots` → /pipelines/bots (Sources: Bots)
 - `commands` → /pipelines/commands (Sources: Commands)
 - `pipelines-configuration` → /pipelines/configuration (System: Configuration)
+- `system-logging` → /pipelines/logging (System: Logging; dev server with the voice navigator on)
 - `pipeline-settings` → /pipelines/settings (System: Pipeline settings)
 
 ## access (11)

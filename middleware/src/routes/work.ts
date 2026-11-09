@@ -27,7 +27,7 @@ import {
   SWEEP_NAMES, type SweepName,
 } from '../providers/org-sweeps.js';
 import { listSweepRuns } from '../providers/sweep-runs.js';
-import { activeSweepJob, getSweepJob, startSweepJob } from '../lib/sweep-jobs.js';
+import { activeSweepJob, getSweepJob, listSweepJobs, startSweepJob } from '../lib/sweep-jobs.js';
 import { rateLimit } from '../lib/rate-limit.js';
 import { grantScopedDispatchVerdict } from '../lib/bot-runner.js';
 import {
@@ -464,6 +464,16 @@ workRouter.get('/sweeps/jobs/:id', asyncHandler(async (req, res) => {
   const job = getSweepJob(String(req.params['id'] ?? ''), session);
   if (!job) { res.status(404).json({ error: 'sweep job not found' }); return; }
   res.json(job);
+}));
+
+/** The caller's own background sweep jobs, newest first (`?limit=`, 1..100, default 20); the same visibility as the :id read. */
+workRouter.get('/sweeps/jobs', asyncHandler(async (req, res) => {
+  const session = resolveSession(req);
+  if (!session) { res.status(401).json({ error: 'unauthenticated' }); return; }
+  const raw = req.query['limit'];
+  const parsed = raw === undefined ? 20 : parseInt(String(raw), 10);
+  const limit = Number.isFinite(parsed) ? Math.min(100, Math.max(1, parsed)) : 20;
+  res.json({ jobs: listSweepJobs(session, limit) });
 }));
 
 /**

@@ -219,6 +219,7 @@ export const NAVIGATE_PAGES: ReadonlyArray<{ id: string; path: string; tenants: 
   { id: 'bots', path: '/pipelines/bots', tenants: ['pipelines'] },
   { id: 'commands', path: '/pipelines/commands', tenants: ['pipelines'] },
   { id: 'pipelines-configuration', path: '/pipelines/configuration', tenants: ['pipelines'], roles: ['pipeline-admin'] },
+  { id: 'system-logging', path: '/pipelines/logging', tenants: ['pipelines'] },
   { id: 'pipeline-settings', path: '/pipelines/settings', tenants: ['pipelines'] },
   { id: 'catalog', path: '/access/catalog', tenants: ['access'] },
   { id: 'requests', path: '/access/requests', tenants: ['access'] },

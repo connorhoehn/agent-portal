@@ -215,6 +215,7 @@ const NAV_ITEMS: NavItem[] = [
   // pipeline-admin only: author and operator never see Configuration (the
   // separation-of-duties table, docs/pipelines-tenant-goal.md). `admin` is
   // listed because the tenant-nav filter has no admin bypass.
+  ...(features.voiceLog ? [{ path: '/pipelines/logging', label: 'Logging', tenant: 'pipelines' as const, group: 'System' }] : []),
   { path: '/pipelines/configuration', label: 'Configuration', tenant: 'pipelines', group: 'System', requireRoles: ['pipeline-admin', 'admin'] },
   // The access tenant's own map (docs/access-tenant-design.md §6): REQUEST
   // (what can be asked for, what you asked for) → APPROVE (what waits on you)

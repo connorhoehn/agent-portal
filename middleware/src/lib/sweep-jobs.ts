@@ -169,6 +169,12 @@ export function getSweepJob(jobId: string, caller: { sub: string; tenant: string
   return publicJob(j);
 }
 
+/** The caller's own jobs in its own tenant, newest queued first (what getSweepJob would let it read). */
+export function listSweepJobs(caller: { sub: string; tenant: string }, limit = 20): SweepJob[] {
+  const own = [...jobs.values()].filter((j) => j.owner === caller.sub && j.tenant === caller.tenant);
+  return own.sort((a, b) => Date.parse(b.queuedAt) - Date.parse(a.queuedAt)).slice(0, limit).map(publicJob);
+}
+
 /** Tests only. */
 export function resetSweepJobs(): void {
   jobs.clear();

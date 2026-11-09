@@ -15,17 +15,17 @@
   "serverHandlerSha": "8aff2aaf75c4e9e7879c207594e5221454ac28fc8fc47156f77ca96f0c465f45"
  },
  "summary": {
-  "routes": 843,
-  "routesInSnapshot": 833,
+  "routes": 844,
+  "routesInSnapshot": 834,
   "snapshotDuplicates": 0,
   "routesDeclaredNotInSnapshot": 10,
-  "pages": 110,
+  "pages": 111,
   "byKind": {
    "dev": 13,
    "write": 358,
-   "read": 442,
+   "read": 443,
    "internal": 30,
-   "navigate": 110
+   "navigate": 111
   },
   "byFamily": {
    "dev": {
@@ -159,8 +159,8 @@
     }
    },
    "bots": {
-    "total": 24,
-    "read": 11,
+    "total": 25,
+    "read": 12,
     "write": 13,
     "navigate": 0,
     "internal": 0,
@@ -170,7 +170,7 @@
      "read": 8,
      "never": 9,
      "confirm": 5,
-     "not-yet": 2
+     "not-yet": 3
     }
    },
    "runbooks": {
@@ -349,39 +349,39 @@
     }
    },
    "navigate": {
-    "total": 110,
+    "total": 111,
     "read": 0,
     "write": 0,
-    "navigate": 110,
+    "navigate": 111,
     "internal": 0,
     "dev": 0,
-    "covered": 110,
+    "covered": 111,
     "v2": {
-     "open": 110
+     "open": 111
     }
    }
   },
   "byTenant": {
    "any": 149,
    "access": 27,
-   "orgiq": 417,
+   "orgiq": 418,
    "assessment": 112,
    "pipelines": 30,
    "social": 32,
    "orgiq+assessment+pipelines": 33
   },
-  "peopleRoutes": 800,
-  "peopleReads": 442,
+  "peopleRoutes": 801,
+  "peopleReads": 443,
   "peopleWrites": 358,
   "coveredRoutes": 231,
   "coveredReads": 161,
   "coveredWrites": 70,
-  "coveredPages": 110,
-  "pagesWithPageId": 110,
+  "coveredPages": 111,
+  "pagesWithPageId": 111,
   "v1Tools": 16,
   "v2Tools": 15,
   "v2Decisions": {
-   "not-yet": 173,
+   "not-yet": 174,
    "read": 161,
    "never": 370,
    "confirm": 69,
@@ -405,7 +405,7 @@
   },
   "v2Backlog": {
    "create": 11,
-   "list": 65,
+   "list": 66,
    "queue_work": 6,
    "decide": 15,
    "get": 34,
@@ -416,7 +416,7 @@
   },
   "undecided": [],
   "contradictions": [],
-  "staleSnapshotLines": 2,
+  "staleSnapshotLines": 10,
   "unresolvedDeclarations": [],
   "missingFromSnapshot": [
    "GET /api/social/plane/search (src/routes/tenant-search.ts:127)",
@@ -749,7 +749,7 @@
    ],
    "mapsTo": "useNavigate() to the palette entry's path, the kept row's href, or the kind's href built from a typed ref; a name through the kind's list read (list's routes)",
    "routes": [],
-   "line": 649
+   "line": 650
   },
   {
    "name": "search",
@@ -803,7 +803,7 @@
      "path": "/api/access/search/answer"
     }
    ],
-   "line": 669
+   "line": 670
   },
   {
    "name": "list",
@@ -1041,7 +1041,7 @@
      "path": "/api/access/audit"
     }
    ],
-   "line": 687
+   "line": 688
   },
   {
    "name": "get",
@@ -1279,7 +1279,7 @@
      "path": "/api/access/reviews/:id"
     }
    ],
-   "line": 708
+   "line": 709
   },
   {
    "name": "computer",
@@ -1338,7 +1338,7 @@
      "path": "/api/local-compute/nodes/:nodeId/work"
     }
    ],
-   "line": 721
+   "line": 722
   },
   {
    "name": "summary",
@@ -1436,7 +1436,7 @@
      "path": "/api/access/summary"
     }
    ],
-   "line": 744
+   "line": 745
   },
   {
    "name": "budget",
@@ -1486,7 +1486,7 @@
      "path": "/api/observability/cost/summary"
     }
    ],
-   "line": 757
+   "line": 758
   },
   {
    "name": "activity",
@@ -1515,7 +1515,7 @@
      "path": "/api/search"
     }
    ],
-   "line": 771
+   "line": 772
   },
   {
    "name": "message",
@@ -1546,7 +1546,7 @@
      "path": "/api/social/plane/work-sharing"
     }
    ],
-   "line": 784
+   "line": 785
   },
   {
    "name": "call",
@@ -1577,7 +1577,7 @@
      "path": "/api/social/plane/search"
     }
    ],
-   "line": 800
+   "line": 801
   },
   {
    "name": "set_status",
@@ -1593,7 +1593,7 @@
    ],
    "mapsTo": "usePresence('<tenant>:lobby') (the shell's tenant lobby, manifest presenceLobby) then usePresence('social:lobby') with a Social grant: setStatus(status) and updateMetadata({ statusMessage })",
    "routes": [],
-   "line": 815
+   "line": 816
   },
   {
    "name": "queue_work",
@@ -1810,7 +1810,7 @@
      "path": "/api/pipelines/runs/:id/events"
     }
    ],
-   "line": 827
+   "line": 828
   },
   {
    "name": "decide",
@@ -1919,7 +1919,7 @@
      "path": "/api/assessment/drafts/:runId/discard"
     }
    ],
-   "line": 848
+   "line": 849
   },
   {
    "name": "create",
@@ -1991,7 +1991,7 @@
      "path": "/api/access/delegations"
     }
    ],
-   "line": 863
+   "line": 864
   },
   {
    "name": "update",
@@ -2133,7 +2133,7 @@
      "path": "/api/access/delegations/:id/end"
     }
    ],
-   "line": 896
+   "line": 897
   },
   {
    "name": "access_request_status",
@@ -2163,7 +2163,7 @@
      "path": "/api/access/approvals"
     }
    ],
-   "line": 918
+   "line": 919
   }
  ],
  "navigatePages": [
@@ -2849,6 +2849,13 @@
   {
    "id": "pipelines-configuration",
    "path": "/pipelines/configuration",
+   "tenants": [
+    "pipelines"
+   ]
+  },
+  {
+   "id": "system-logging",
+   "path": "/pipelines/logging",
    "tenants": [
     "pipelines"
    ]
@@ -4628,25 +4635,26 @@
   {"method":"POST","path":"/api/work/dispatch","source":"src/routes/work.ts:375","declaredAt":"src/routes/work.ts:375","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"refused:fires","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"drains the queue; a click"}},
   {"method":"GET","path":"/api/work/events","source":"src/routes/work.ts:381","declaredAt":"src/routes/work.ts:381","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"floor":["ViewWork"],"writePolicy":null,"pageId":null,"coveredBy":["queue_work"],"v2":{"decision":"read","tool":"queue_work","note":"mapsTo"}},
   {"method":"GET","path":"/api/work/findings","source":"src/routes/work.ts:390","declaredAt":"src/routes/work.ts:390","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"floor":["ViewWork"],"writePolicy":null,"pageId":null,"coveredBy":["list","summary","queue_work","update"],"v2":{"decision":"read","tool":"list","note":"mapsTo"}},
-  {"method":"POST","path":"/api/work/findings/:id/analyze","source":"src/routes/work.ts:559","declaredAt":"src/routes/work.ts:559","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":["queue_work"],"v2":{"decision":"confirm","tool":"queue_work","note":"mapsTo"}},
-  {"method":"POST","path":"/api/work/findings/:id/dismiss","source":"src/routes/work.ts:597","declaredAt":"src/routes/work.ts:597","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":["update"],"v2":{"decision":"confirm","tool":"update","note":"mapsTo"}},
-  {"method":"POST","path":"/api/work/findings/:id/promote","source":"src/routes/work.ts:517","declaredAt":"src/routes/work.ts:517","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"DispatchAgentRun","actions":["DispatchAgentRun"],"floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"refused:fires","pageId":null,"coveredBy":["queue_work"],"v2":{"decision":"confirm","tool":"queue_work","note":"mapsTo"}},
-  {"method":"POST","path":"/api/work/findings/analyze-batch","source":"src/routes/work.ts:587","declaredAt":"src/routes/work.ts:587","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"batch spend"}},
-  {"method":"GET","path":"/api/work/findings/stats","source":"src/routes/work.ts:593","declaredAt":"src/routes/work.ts:593","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"floor":["ViewWork"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"summary","note":"an aggregate"}},
+  {"method":"POST","path":"/api/work/findings/:id/analyze","source":"src/routes/work.ts:559","declaredAt":"src/routes/work.ts:569","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":["queue_work"],"v2":{"decision":"confirm","tool":"queue_work","note":"mapsTo"}},
+  {"method":"POST","path":"/api/work/findings/:id/dismiss","source":"src/routes/work.ts:597","declaredAt":"src/routes/work.ts:607","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":["update"],"v2":{"decision":"confirm","tool":"update","note":"mapsTo"}},
+  {"method":"POST","path":"/api/work/findings/:id/promote","source":"src/routes/work.ts:517","declaredAt":"src/routes/work.ts:527","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"DispatchAgentRun","actions":["DispatchAgentRun"],"floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"refused:fires","pageId":null,"coveredBy":["queue_work"],"v2":{"decision":"confirm","tool":"queue_work","note":"mapsTo"}},
+  {"method":"POST","path":"/api/work/findings/analyze-batch","source":"src/routes/work.ts:587","declaredAt":"src/routes/work.ts:597","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"batch spend"}},
+  {"method":"GET","path":"/api/work/findings/stats","source":"src/routes/work.ts:593","declaredAt":"src/routes/work.ts:603","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"floor":["ViewWork"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"summary","note":"an aggregate"}},
   {"method":"GET","path":"/api/work/jobs","source":"src/routes/work.ts:194","declaredAt":"src/routes/work.ts:194","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"floor":["ViewWork"],"writePolicy":null,"pageId":null,"coveredBy":["list","update"],"v2":{"decision":"read","tool":"list","note":"mapsTo"}},
   {"method":"POST","path":"/api/work/jobs","source":"src/routes/work.ts:237","declaredAt":"src/routes/work.ts:237","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"refused:fires","pageId":null,"coveredBy":["queue_work"],"v2":{"decision":"confirm","tool":"queue_work","note":"mapsTo"}},
   {"method":"DELETE","path":"/api/work/jobs/:id","source":"src/routes/work.ts:364","declaredAt":"src/routes/work.ts:364","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"destructive"}},
   {"method":"GET","path":"/api/work/jobs/:id","source":"src/routes/work.ts:201","declaredAt":"src/routes/work.ts:201","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"floor":["ViewWork"],"writePolicy":null,"pageId":null,"coveredBy":["get","queue_work"],"v2":{"decision":"read","tool":"get","note":"mapsTo"}},
   {"method":"POST","path":"/api/work/jobs/:id/requeue","source":"src/routes/work.ts:348","declaredAt":"src/routes/work.ts:348","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"refused:fires","pageId":null,"coveredBy":["update"],"v2":{"decision":"confirm","tool":"update","note":"mapsTo"}},
   {"method":"POST","path":"/api/work/jobs/:id/review","source":"src/routes/work.ts:330","declaredAt":"src/routes/work.ts:330","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"skipped","pageId":null,"coveredBy":["update"],"v2":{"decision":"confirm","tool":"update","note":"mapsTo"}},
-  {"method":"GET","path":"/api/work/proposals","source":"src/routes/work.ts:610","declaredAt":"src/routes/work.ts:610","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"floor":["ViewWork"],"writePolicy":null,"pageId":null,"coveredBy":["list","decide"],"v2":{"decision":"read","tool":"list","note":"mapsTo"}},
-  {"method":"POST","path":"/api/work/proposals","source":"src/routes/work.ts:617","declaredAt":"src/routes/work.ts:617","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"skipped","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"agent-proposed graph writes are the agents' route"}},
-  {"method":"POST","path":"/api/work/proposals/:id/decide","source":"src/routes/work.ts:638","declaredAt":"src/routes/work.ts:638","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":["decide"],"v2":{"decision":"confirm","tool":"decide","note":"mapsTo"}},
+  {"method":"GET","path":"/api/work/proposals","source":"src/routes/work.ts:610","declaredAt":"src/routes/work.ts:620","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"floor":["ViewWork"],"writePolicy":null,"pageId":null,"coveredBy":["list","decide"],"v2":{"decision":"read","tool":"list","note":"mapsTo"}},
+  {"method":"POST","path":"/api/work/proposals","source":"src/routes/work.ts:617","declaredAt":"src/routes/work.ts:627","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"skipped","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"agent-proposed graph writes are the agents' route"}},
+  {"method":"POST","path":"/api/work/proposals/:id/decide","source":"src/routes/work.ts:638","declaredAt":"src/routes/work.ts:648","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageDevbox","actions":["ManageDevbox"],"floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":["decide"],"v2":{"decision":"confirm","tool":"decide","note":"mapsTo"}},
   {"method":"GET","path":"/api/work/suggestions","source":"src/routes/work.ts:143","declaredAt":"src/routes/work.ts:143","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"floor":["WorkSuggestions","ViewWork"],"writePolicy":null,"pageId":null,"coveredBy":["computer","queue_work"],"v2":{"decision":"read","tool":"computer","note":"mapsTo"}},
   {"method":"GET","path":"/api/work/summary","source":"src/routes/work.ts:58","declaredAt":"src/routes/work.ts:58","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"floor":["ViewWork"],"writePolicy":null,"pageId":null,"coveredBy":["summary"],"v2":{"decision":"read","tool":"summary","note":"mapsTo"}},
+  {"method":"GET","path":"/api/work/sweeps/jobs","source":"src/routes/work.ts:470","declaredAt":"src/routes/work.ts:470","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"bots","cedarAction":null,"actions":[],"floor":["ViewWork"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
   {"method":"GET","path":"/api/work/sweeps/jobs/:id","source":"src/routes/work.ts:461","declaredAt":"src/routes/work.ts:461","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"bots","cedarAction":null,"actions":[],"floor":["ViewWork"],"writePolicy":null,"pageId":null,"coveredBy":["queue_work"],"v2":{"decision":"read","tool":"queue_work","note":"mapsTo"}},
   {"method":"POST","path":"/api/work/sweeps/run","source":"src/routes/work.ts:429","declaredAt":"src/routes/work.ts:429","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"bots","cedarAction":null,"actions":[],"floor":["RunSweeps","ViewWork"],"unresolvedGates":["forBackground"],"writePolicy":"allowed","pageId":null,"coveredBy":["queue_work"],"v2":{"decision":"confirm","tool":"queue_work","note":"mapsTo"}},
-  {"method":"GET","path":"/api/work/sweeps/runs","source":"src/routes/work.ts:476","declaredAt":"src/routes/work.ts:476","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"bots","cedarAction":"ManageBots","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageBots","floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":["summary"],"v2":{"decision":"read","tool":"summary","note":"mapsTo"}},
+  {"method":"GET","path":"/api/work/sweeps/runs","source":"src/routes/work.ts:486","declaredAt":"src/routes/work.ts:486","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"bots","cedarAction":"ManageBots","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageBots","floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":["summary"],"v2":{"decision":"read","tool":"summary","note":"mapsTo"}},
   {"method":"GET","path":"/health","source":"src/index.ts:223","declaredAt":"src/index.ts:223","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"health","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
   {"method":"DELETE","path":"/internal/devbox/:sessionId","source":"src/routes/internal-devbox.ts:381","declaredAt":"src/routes/internal-devbox.ts:381","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"compute","cedarAction":null,"actions":[],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
   {"method":"GET","path":"/internal/devbox/:sessionId/files","source":"src/routes/internal-devbox.ts:330","declaredAt":"src/routes/internal-devbox.ts:330","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"compute","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
@@ -4773,17 +4781,18 @@
   {"method":"PAGE","path":"/pipelines/bots","source":"portal/src/components/shell/portalCommands.ts:321","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Bots","group":"Sources","roles":null,"pageId":"bots","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
   {"method":"PAGE","path":"/pipelines/commands","source":"portal/src/components/shell/portalCommands.ts:323","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Commands","group":"Sources","roles":null,"pageId":"commands","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
   {"method":"PAGE","path":"/pipelines/configuration","source":"portal/src/components/shell/portalCommands.ts:325","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Configuration","group":"System","roles":["pipeline-admin"],"pageId":"pipelines-configuration","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/pipelines/settings","source":"portal/src/components/shell/portalCommands.ts:328","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Pipeline settings","group":"System","roles":null,"pageId":"pipeline-settings","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/catalog","source":"portal/src/components/shell/portalCommands.ts:330","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Catalog","group":"Request","roles":null,"pageId":"catalog","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/requests","source":"portal/src/components/shell/portalCommands.ts:336","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Requests","group":"Request","roles":null,"pageId":"requests","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/requests?status=open","source":"portal/src/components/shell/portalCommands.ts:338","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Open requests","group":"Request","roles":null,"pageId":"open-requests","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/requests/new","source":"portal/src/components/shell/portalCommands.ts:340","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"New request","group":"Request","roles":null,"pageId":"new-request","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/approvals","source":"portal/src/components/shell/portalCommands.ts:342","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Approvals","group":"Approve","roles":["approver"],"pageId":"approvals","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/policies","source":"portal/src/components/shell/portalCommands.ts:344","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Policies","group":"Govern","roles":null,"pageId":"policies","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/reviews","source":"portal/src/components/shell/portalCommands.ts:346","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Reviews","group":"Govern","roles":null,"pageId":"reviews","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/reviews?status=open","source":"portal/src/components/shell/portalCommands.ts:348","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Open reviews","group":"Govern","roles":null,"pageId":"open-reviews","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/audit","source":"portal/src/components/shell/portalCommands.ts:350","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Audit","group":"Govern","roles":null,"pageId":"audit","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/configuration","source":"portal/src/components/shell/portalCommands.ts:352","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Configuration","group":"System","roles":["access-admin"],"pageId":"access-configuration","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/settings","source":"portal/src/components/shell/portalCommands.ts:354","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Access settings","group":"System","roles":null,"pageId":"access-settings","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}}
+  {"method":"PAGE","path":"/pipelines/logging","source":"portal/src/components/shell/portalCommands.ts:328","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Logging","group":"System","roles":null,"pageId":"system-logging","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/pipelines/settings","source":"portal/src/components/shell/portalCommands.ts:330","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Pipeline settings","group":"System","roles":null,"pageId":"pipeline-settings","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/catalog","source":"portal/src/components/shell/portalCommands.ts:332","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Catalog","group":"Request","roles":null,"pageId":"catalog","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/requests","source":"portal/src/components/shell/portalCommands.ts:338","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Requests","group":"Request","roles":null,"pageId":"requests","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/requests?status=open","source":"portal/src/components/shell/portalCommands.ts:340","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Open requests","group":"Request","roles":null,"pageId":"open-requests","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/requests/new","source":"portal/src/components/shell/portalCommands.ts:342","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"New request","group":"Request","roles":null,"pageId":"new-request","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/approvals","source":"portal/src/components/shell/portalCommands.ts:344","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Approvals","group":"Approve","roles":["approver"],"pageId":"approvals","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/policies","source":"portal/src/components/shell/portalCommands.ts:346","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Policies","group":"Govern","roles":null,"pageId":"policies","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/reviews","source":"portal/src/components/shell/portalCommands.ts:348","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Reviews","group":"Govern","roles":null,"pageId":"reviews","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/reviews?status=open","source":"portal/src/components/shell/portalCommands.ts:350","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Open reviews","group":"Govern","roles":null,"pageId":"open-reviews","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/audit","source":"portal/src/components/shell/portalCommands.ts:352","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Audit","group":"Govern","roles":null,"pageId":"audit","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/configuration","source":"portal/src/components/shell/portalCommands.ts:354","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Configuration","group":"System","roles":["access-admin"],"pageId":"access-configuration","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/settings","source":"portal/src/components/shell/portalCommands.ts:356","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Access settings","group":"System","roles":null,"pageId":"access-settings","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}}
  ]
 }

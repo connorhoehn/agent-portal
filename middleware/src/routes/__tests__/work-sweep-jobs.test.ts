@@ -81,6 +81,33 @@ describe('background sweeps', () => {
   });
 });
 
+describe('GET /api/work/sweeps/jobs', () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  it('lists the caller\'s own jobs newest first and nobody else\'s; limit is capped and defaults to 20', async () => {
+    const a = await request(app(owner)).post('/api/work/sweeps/run').send({ sweep: 'stale_docs', background: true });
+    await settle();
+    await sleep(5);
+    const b = await request(app(owner)).post('/api/work/sweeps/run').send({ background: true });
+    await settle();
+    await request(app(other)).post('/api/work/sweeps/run').send({ background: true });
+    await settle();
+    const res = await request(app(owner)).get('/api/work/sweeps/jobs');
+    expect(res.status).toBe(200);
+    expect(res.body.jobs.map((j: { jobId: string }) => j.jobId)).toEqual([b.body.jobId, a.body.jobId]);
+    expect(res.body.jobs[0]).not.toHaveProperty('owner');
+    expect((await request(app(owner)).get('/api/work/sweeps/jobs?limit=1')).body.jobs).toHaveLength(1);
+    expect((await request(app(owner)).get('/api/work/sweeps/jobs?limit=9999')).status).toBe(200);
+    // Another tenant's session with the same sub sees none.
+    const elsewhere = await request(app({ ...owner, tenant: 'pipelines' })).get('/api/work/sweeps/jobs');
+    expect(elsewhere.body.jobs).toEqual([]);
+  });
+
+  it('401 without a session', async () => {
+    expect((await request(app(null)).get('/api/work/sweeps/jobs')).status).toBe(401);
+  });
+});
+
 describe('background sweeps are paced (sweep 1, M2)', () => {
   const run = (who: Record<string, unknown>, body: Record<string, unknown> = { background: true }) =>
     request(app(who)).post('/api/work/sweeps/run').send(body);

@@ -419,6 +419,8 @@ export function App() {
               </RequireRole>
             } />
             <Route path="settings" element={<Page element={<PipelinesSurfacePage surface="settings" />} />} />
+            {/* System › Logging in this tenant (G37b): the voice sessions and the pipeline runs it can read; dev server with the voice navigator on. */}
+            {LoggingPage && <Route path="logging/*" element={<Page element={<LoggingPage />} />} />}
           </Route>
         ) : (
           <Route path="pipelines/*" element={<Navigate to="/" replace />} />

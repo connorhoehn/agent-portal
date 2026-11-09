@@ -4062,6 +4062,11 @@
     },
     {
       "method": "GET",
+      "path": "/api/work/sweeps/jobs",
+      "source": "src/routes/work.ts:470"
+    },
+    {
+      "method": "GET",
       "path": "/api/work/sweeps/jobs/:id",
       "source": "src/routes/work.ts:461"
     },
@@ -4073,7 +4078,7 @@
     {
       "method": "GET",
       "path": "/api/work/sweeps/runs",
-      "source": "src/routes/work.ts:476"
+      "source": "src/routes/work.ts:486"
     },
     {
       "method": "GET",

@@ -121,3 +121,8 @@ test('Logging (G37): System › Logging › the record, whatever the source and 
   assert.deepEqual(resolveBreadcrumbs('/iq/logging/voice/vs_1'), [{ label: 'System' }, { label: 'Logging', path: '/iq/logging' }, { label: 'vs_1', id: 'vs_1' }]);
   assert.deepEqual(resolveBreadcrumbs('/iq/logging/jobs/sweep-runs/sr-1').map((c) => c.label), ['System', 'Logging', 'sr-1']);
 });
+
+test('Logging in the pipelines tenant (G37b): System › Logging › the record', () => {
+  assert.deepEqual(resolveBreadcrumbs('/pipelines/logging'), [{ label: 'System' }, { label: 'Logging' }]);
+  assert.deepEqual(resolveBreadcrumbs('/pipelines/logging/voice/vs_1'), [{ label: 'System' }, { label: 'Logging', path: '/pipelines/logging' }, { label: 'vs_1', id: 'vs_1' }]);
+});

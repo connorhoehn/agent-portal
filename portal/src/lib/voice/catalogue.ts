@@ -164,6 +164,7 @@ export const NAVIGATE_PAGE_IDS: ReadonlyArray<{ id: string; tenants: readonly st
   { id: 'bots', tenants: ['pipelines'] },
   { id: 'commands', tenants: ['pipelines'] },
   { id: 'pipelines-configuration', tenants: ['pipelines'], roles: ['pipeline-admin'] },
+  { id: 'system-logging', tenants: ['pipelines'] },
   { id: 'pipeline-settings', tenants: ['pipelines'] },
   { id: 'catalog', tenants: ['access'] },
   { id: 'requests', tenants: ['access'] },
