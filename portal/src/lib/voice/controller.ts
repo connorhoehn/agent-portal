@@ -79,6 +79,12 @@
 // sees the close's answer; the snapshot's `resumable` names it while the
 // window lasts and `start({ resume: true })` mints with `resumeOf`, so the
 // server links the rows, and tells the voice it continues an earlier session.
+//
+// Phase dwell (G36): the phase the dock shows (and logs) holds at least
+// PHASE_DWELL_MS. A change inside the window waits for its end and is then
+// taken from the machine as it stands, so a flap (listening, speaking,
+// thinking within one millisecond) becomes one change or none, and no two
+// phase events are ever closer than PHASE_DWELL_MS.
 
 import { VoiceClient, type ClientEvent, type CloseCause, type CloseWhy, type MediaFactory, type StopReason, type TransportCause, type VoiceFrame, type VoiceMint } from './client.ts';
 import { initialMachine, phaseAt, reduce, sessionOpen, type MachineEvent, type MachineState, type VoicePhase } from './machine.ts';
@@ -95,6 +101,10 @@ import { DelegationContext, PAGE_NOTE_REPLACES, briefOutput, modelOutput, summar
 export const TICK_MS = 100;
 export const COMPLETION_GRACE_MS = 1500;
 export const BUDGET_WARN_RATIO = 0.9;
+/** The least time a shown phase holds before the next one replaces it (G36). */
+export const PHASE_DWELL_MS = 300;
+/** The phases of a live session, the only ones that flap: the dwell holds one of these against another. */
+const LIVE_PHASES: ReadonlySet<VoicePhase> = new Set<VoicePhase>(['listening', 'thinking', 'executing', 'speaking', 'confirming']);
 /** How long the snapshot's `pulse` stays true: one library pulse (600 ms) per flip. */
 export const PULSE_MS = 700;
 /** After a tool result: this long with no user input and a silent voice pulses the dock once (G33 item 4). */
@@ -329,6 +339,10 @@ export class VoiceController {
   private resumeTimer: Timer | null = null;
   /** The session being minted resumes one (the started note says so). */
   private resuming: string | null = null;
+  /** G36: the phase shown and logged, since when, and the timer that re-reads the machine when a dwell ends. */
+  private shownPhase: VoicePhase = 'off';
+  private shownAt = Number.NEGATIVE_INFINITY;
+  private dwellTimer: Timer | null = null;
 
   private readonly opts: ControllerOptions;
 
@@ -519,6 +533,7 @@ export class VoiceController {
     this.clearCardLine();
     if (this.pulseTimer != null) this.clearTimer(this.pulseTimer);
     if (this.resumeTimer != null) this.clearTimer(this.resumeTimer);
+    if (this.dwellTimer != null) this.clearTimer(this.dwellTimer);
     this.log.dispose();
     void this.stop('dropped');
     this.listeners.clear();
@@ -1112,8 +1127,26 @@ export class VoiceController {
     this.ticker = null;
   }
 
+  /**
+   * The phase to show now (G36): the machine's, unless the shown one has held for less than PHASE_DWELL_MS; then the
+   * shown one stays and the machine is read again when the dwell ends (whatever it says then wins, so flaps coalesce).
+   */
+  private settlePhase(): VoicePhase {
+    const raw = phaseAt(this.machine, this.now());
+    if (raw === this.shownPhase) return raw;
+    const held = this.now() - this.shownAt;
+    // Only one live phase against another waits: connecting, the budget card, ended and unavailable show at once.
+    if (held >= PHASE_DWELL_MS || !LIVE_PHASES.has(raw) || !LIVE_PHASES.has(this.shownPhase) || this.machine.base !== 'live') {
+      this.shownPhase = raw;
+      this.shownAt = this.now();
+      return raw;
+    }
+    if (this.dwellTimer == null) this.dwellTimer = this.setTimer(() => { this.dwellTimer = null; this.publish(); }, PHASE_DWELL_MS - held);
+    return this.shownPhase;
+  }
+
   private build(): VoiceSnapshot {
-    const phase = phaseAt(this.machine, this.now());
+    const phase = this.settlePhase();
     const live = this.machine.base === 'live';
     const last = [...this.turns].reverse().find((t) => t.text.trim());
     return {

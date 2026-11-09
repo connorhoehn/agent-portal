@@ -52,6 +52,7 @@ test('the scripted session drives the dock through its phases, runs the tool, an
   const stopping = h.controller.stop();
   await h.clock.advance(300);
   await stopping;
+  // G36: thinking shows for the 300 ms dwell although the delegation followed the words after 100 ms.
   assert.deepEqual(h.phases, ['off', 'connecting', 'listening', 'thinking', 'executing', 'listening', 'speaking', 'listening', 'ended']);
 
   // The tool ran through the page's own fetch and router.
@@ -256,7 +257,9 @@ test('no key: the mint answers 503 and the dock is unavailable with the reason',
 
 test('together the scripted sessions cover every phase', async () => {
   const seen = new Set<VoicePhase>();
-  for (const [body, status, runners] of [[await mint(KUBE), 201, undefined], [await mint(POST), 201, postRunner()], [{ error: 'voice-unavailable', reason: 'no-key' }, 503, undefined]] as const) {
+  // The first session's user speaks again at 3 s and nothing answers: thinking, held past the dwell (G36).
+  const again = [{ atMs: 3000, event: { type: 'session.input_transcript.delta', delta: 'and the rest?', start_ms: 9000, end_ms: 9300 } }];
+  for (const [body, status, runners] of [[await mint(KUBE, {}, again), 201, undefined], [await mint(POST), 201, postRunner()], [{ error: 'voice-unavailable', reason: 'no-key' }, 503, undefined]] as const) {
     const h = harness(body, { mintStatus: status, ...(runners ? { runners: runners.runners, planners: runners.planners } : {}) });
     await h.controller.start();
     await h.clock.advance(1200);
