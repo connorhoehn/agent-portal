@@ -17,6 +17,7 @@
 // cross-pollinate between tenants.
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { DEMO_SUB } from './demo-sub.js';
 import type { Request, Response, NextFunction } from 'express';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { config } from '../config.js';
@@ -120,7 +121,7 @@ export function permissiveGrants(): Grants {
  * signing out (which drops the cookie) starts over. Real users are untouched:
  * their grants come from the identity store and this never applies.
  */
-export const DEMO_SUB = 'demo-user';
+export { DEMO_SUB };
 export function demoScopedGrants(sub: string, tenant: string, role: string, current: Grants): Grants {
   if (sub !== DEMO_SUB) return current;
   if (role === ADMIN_ROLE) return permissiveGrants();

@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   RATIONALE_MAX, decideBody, decisionPageContext, filterDecisions, historyOf, matchesDecision, outcomeFirstLine, outcomeLine, showDecideControl,
-  sortDecisions, standingLine,
+  sortDecisions, standingLine, waitingNotice,
 } from '../decisionFormat.ts';
 import { pageContextNote } from '../../../lib/voice/pageContext.ts';
 import type { DecisionDetail, DecisionSummary } from '../types';
@@ -81,8 +81,24 @@ test('the record publishes itself for the voice, and offers decide only to someo
   assert.deepEqual(page.rows, [{ ref: 'decision:d-eval-judge-model', title: 'Judge model for canary evaluation', status: 'open', href: path }]);
   const note = pageContextNote({ tenant: 'orgiq', pathname: path, pageId: 'decisions', page });
   assert.match(note, /Offered here: This decision is waiting on you: say decide to resolve or reject it \(decide ref decision:d-eval-judge-model, scope this-page/);
-  assert.equal(decisionPageContext(JUDGE, path, false).offer, null);
   assert.doesNotMatch(pageContextNote({ tenant: 'orgiq', pathname: path, pageId: 'decisions', page: decisionPageContext(DECIDED, path, false) }), /Offered here/);
+});
+
+test('a waiting decision the viewer cannot decide says who it waits on, in the page and in the voice offer', () => {
+  const path = '/iq/decisions/d-eval-judge-model';
+  const notice = waitingNotice(JUDGE)!;
+  assert.equal(notice.line, 'Waiting on Nina Rivera. Only Nina, the initiative’s owner or an org-leader can decide this.');
+  assert.equal(notice.personId, 'p-047');
+  assert.equal(waitingNotice({ ...JUDGE, status: 'escalated' })!.name, 'Nina Rivera');
+  assert.equal(waitingNotice(DECIDED), null, 'settled: nothing is waiting');
+  const none = waitingNotice({ status: 'open', participants: [] })!;
+  assert.match(none.line, /^Waiting on an unassigned decider\./);
+  assert.equal(none.personId, null);
+  const offer = decisionPageContext(JUDGE, path, false).offer!;
+  assert.equal(offer, 'This decision waits on Nina Rivera; you cannot decide it. Say message Nina Rivera to ask about it.');
+  assert.doesNotMatch(offer, /say decide/i, 'never the decide offer');
+  assert.equal(decisionPageContext(DECIDED, path, false).offer, null, 'settled: no offer');
+  assert.equal(decisionPageContext({ id: JUDGE.id, topic: JUDGE.topic, status: 'open' }, path, false).offer, null, 'no participants read yet: no offer');
 });
 
 // The owner's second case, as GET /api/graph/decisions/d-otel-vendor answers it on the mock.

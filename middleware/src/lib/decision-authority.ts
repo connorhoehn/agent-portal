@@ -15,11 +15,13 @@
 // Conservative like lib/initiative-scope.ts: an unresolvable caller (no linked
 // person) or a failed lookup is NOT the decider.
 import type { Session } from './session.js';
+import { DEMO_SUB } from './demo-sub.js';
+import { insecureDevMode } from './insecure-dev-mode.js';
 
 /** Roles that decide any decision. NOT hr-admin: G54 names org-leader (and admin). */
 export const DECIDE_OVERRIDE_ROLES = ['org-leader', 'admin'] as const;
 
-export type DecideGrant = 'override' | 'decider' | 'owner';
+export type DecideGrant = 'override' | 'decider' | 'owner' | 'demo';
 export type DecideVerdict =
   | { ok: true; via: DecideGrant; decidesThis: boolean }
   | { ok: false; decidesThis: false };
@@ -68,5 +70,7 @@ export async function mayDecideDecision(session: Session, decision: DecidableDec
   if (isDecider) return { ok: true, via: 'decider', decidesThis };
   if (isOwner) return { ok: true, via: 'owner', decidesThis };
   if ((DECIDE_OVERRIDE_ROLES as readonly string[]).includes(session.role)) return { ok: true, via: 'override', decidesThis };
+  // The demo identity has no person link; under the dev flag it may decide so the demo stays explorable.
+  if (session.sub === DEMO_SUB && insecureDevMode()) return { ok: true, via: 'demo', decidesThis };
   return { ok: false, decidesThis: false };
 }

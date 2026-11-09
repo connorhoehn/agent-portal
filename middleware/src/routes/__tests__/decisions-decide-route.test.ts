@@ -64,6 +64,13 @@ afterEach(() => {
 });
 
 describe('POST /api/graph/decisions/:id/decide', () => {
+  it('the cookie-less demo identity may decide under the dev flag (the demo stays explorable)', async () => {
+    expect((await request(appAs('demo-user', 'sme')).get(JUDGE)).body.viewerMayDecide).toBe(true);
+    const res = await request(appAs('demo-user', 'sme')).post(`${JUDGE}/decide`).send({ outcome: 'resolved', rationale: RATIONALE });
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('resolved');
+  });
+
   it('the decider resolves the waiting judge-model decision: status, who, when, the rationale as the outcome, and a history entry', async () => {
     const before = await request(appAs('u-nina', 'sme')).get(JUDGE);
     expect(before.body).toEqual(expect.objectContaining({ status: 'open', decidedAt: null, decidedBy: null, outcome: null, history: [], viewerMayDecide: true }));

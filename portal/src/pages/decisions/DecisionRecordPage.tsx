@@ -23,7 +23,7 @@ import { usePublishPageContext } from '../../lib/voice/pageContext';
 import { writeJson } from '../../lib/writeJson';
 import {
   DECISIONS_SOURCE, RATIONALE_MAX, STATUS_TONE, asInstant, contributors, decideBody, decider, decisionPageContext,
-  historyOf, outcomeLine, showDecideControl, standingLine, statusLabel,
+  historyOf, outcomeLine, showDecideControl, standingLine, statusLabel, waitingNotice,
 } from './decisionFormat';
 import { RecordLink } from './RecordLink';
 import type { DecideBody, DecisionDetail, DecisionInitiativeRow, InitiativeName } from './types';
@@ -89,7 +89,7 @@ export default function DecisionRecordPage({ onDecided }: { onDecided?: () => vo
   const { data: initiative } = useFetch<InitiativeName>(pid ? `/api/graph/projects/${pid}` : null, 60_000);
   useCrumbLabel(id, decision?.topic);
   const mayDecide = !!decision && ready && showDecideControl(decision, can);
-  usePublishPageContext(decision ? decisionPageContext(decision, pathname, mayDecide) : null);
+  usePublishPageContext(decision ? decisionPageContext(ready ? decision : { id: decision.id, topic: decision.topic, status: decision.status }, pathname, mayDecide) : null);
 
   if (error && isNotFoundError(error)) {
     return <RecordNotFound heading="Decision" size="md" title="Decision not found" body="No decision has this id." backLabel="All decisions" onBack={() => navigate('/iq/decisions')} />;
@@ -102,6 +102,7 @@ export default function DecisionRecordPage({ onDecided }: { onDecided?: () => vo
   const others = contributors(decision.participants);
   const settled = decision.status === 'resolved' || decision.status === 'rejected';
   const projectName = initiative?.name ?? null;
+  const waiting = ready && !mayDecide ? waitingNotice(decision) : null;
   // Once decided in the product, the line names who made the call, not who was assigned it.
   const standing = standingLine({ ...decision, escalatedAt: row?.escalatedAt ?? null, requiredRole: row?.requiredRole ?? null },
     (settled ? decision.decidedBy?.name : null) ?? who?.name ?? null, relativeTime);
@@ -191,6 +192,14 @@ export default function DecisionRecordPage({ onDecided }: { onDecided?: () => vo
                 {decision.summary ?? (settled ? 'No rationale was recorded with this decision.' : 'The question has not been written up yet.')}
               </T>
             </DetailSection>
+            {waiting && (
+              <DetailSection variant="heading" title="Waiting" data-testid="decision-waiting">
+                <Stack gap="xs">
+                  <T size="sm" tone="secondary" wrap as="p">{waiting.line}</T>
+                  {waiting.name && waiting.personId && <RecordLink to={`/iq/people/${encodeURIComponent(waiting.personId)}`}>{waiting.name}</RecordLink>}
+                </Stack>
+              </DetailSection>
+            )}
             {mayDecide && <DecideCard decision={decision} onDecided={() => { refresh(); onDecided?.(); }} />}
           </Stack>
         </RailLayout>

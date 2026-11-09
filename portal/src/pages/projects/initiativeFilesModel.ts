@@ -36,3 +36,25 @@ const OFFER: Record<NewFileChoice, PageOffer> = {
 
 /** The page-context offers for the choices shown: each with the voice call that makes the same thing. */
 export const newFileOffers = (choices: readonly NewFileChoice[]): PageOffer[] => choices.map((c) => OFFER[c]);
+
+/** Beside the disabled New file trigger, when this viewer may create nothing here. */
+export const NEW_FILE_DENIED_HINT = 'Only this initiative’s people and org-leaders add files here.';
+
+/** The New file trigger stays drawn; it is enabled only when there is a choice to make. */
+export const newFileTrigger = (choices: readonly NewFileChoice[]): { disabled: boolean } => ({ disabled: choices.length === 0 });
+
+/** The hint shows once both reads have settled and the viewer may create nothing (not while still loading). */
+export const showNewFileHint = (o: { capabilitiesReady: boolean; pending: boolean; choices: readonly NewFileChoice[] }): boolean =>
+  o.capabilitiesReady && !o.pending && o.choices.length === 0;
+
+export const RECORDINGS_NEED_SOCIAL = 'Recordings need the Social workspace.';
+
+/**
+ * Whether the Docs tab reads recordings. Recordings live in the Social
+ * workspace: a persona without ViewSocial gets an info line and no read (the
+ * read would only fail into a warning). While capabilities load, no read and no line.
+ */
+export function recordingsMode(o: { capabilitiesReady: boolean; canViewSocial: boolean }): 'pending' | 'read' | 'needs-social' {
+  if (!o.capabilitiesReady) return 'pending';
+  return o.canViewSocial ? 'read' : 'needs-social';
+}

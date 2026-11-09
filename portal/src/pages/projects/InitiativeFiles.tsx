@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { usePublishPageOffers } from '../../lib/voice/pageContext';
-import { newFileChoices, newFileOffers, readCanWrite } from './initiativeFilesModel';
+import { NEW_FILE_DENIED_HINT, RECORDINGS_NEED_SOCIAL, newFileChoices, newFileOffers, newFileTrigger, readCanWrite, recordingsMode, showNewFileHint } from './initiativeFilesModel';
 import { Button, ChevronIcon, DocumentIcon, DropdownMenu, Inline, InlineAlert, LoadingState, PlusIcon, SearchInput, Select, Stack, T, type DropdownMenuSection } from '@connorhoehn/ui-components/shared';
 import { FileCards, type FileView } from '../../components/files/FileCards';
 import { FileToolbar } from '../../components/files/FileToolbar';
@@ -69,7 +69,9 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
   const client = useMemo(() => createInitiativeRecordingsClient(), []);
   const itemKey = itemIds?.join(',') ?? null;
   const lobby = `orgiq:initiative:${projectId}`;
-  const recordingRead = useRecordingRead(`${lobby}:${refresh}`, signal => readInitiativeRecordings(client, lobby, signal), page => page.items.some(recordingIsProcessing) ? 5000 : null);
+  // Recordings live in the Social workspace: without ViewSocial there is no read, only an info line.
+  const recordingsState = recordingsMode({ capabilitiesReady, canViewSocial: can('ViewSocial') });
+  const recordingRead = useRecordingRead(recordingsState === 'read' ? `${lobby}:${refresh}` : null, signal => readInitiativeRecordings(client, lobby, signal), page => page.items.some(recordingIsProcessing) ? 5000 : null);
   const recordingRows = (page: RecordingPage): FileRow[] => page.items.map(row => ({ id: `recording:${row.recordingId}`, recordingId: row.recordingId,
     title: `${projectName} huddle`, kind: 'recording', detail: `${recordingProcessingLabel(row)} · ${absoluteTime(row.startedAt)} · ${durationLabel(row.durationMs ?? 0)} · ${row.participantCount ?? row.participants?.length ?? 0} ${(row.participantCount ?? row.participants?.length ?? 0) === 1 ? 'person' : 'people'}` }));
   useEffect(() => {
@@ -131,12 +133,14 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
       label="Project file controls" testId="initiative-files-toolbar">
       <SearchInput size="sm" value={query} onChange={setQuery} onClear={() => setQuery('')} placeholder="Search project files" aria-label="Search project files" className="min-w-0 flex-1" />
       <Select size="sm" className="!w-36" aria-label="File type" value={kind} onChange={event => setKind(event.target.value)} options={[{ value: 'all', label: 'All files' }, { value: 'document', label: 'Documents' }, { value: 'presentation', label: 'Presentations' }, { value: 'recording', label: 'Recordings' }]} />
-      {choices.length > 0 && <DropdownMenu triggerVariant="primary" align="end" sections={newMenu}
+      {showNewFileHint({ capabilitiesReady, pending, choices }) && <T size="xs" tone="secondary" data-testid="initiative-files-new-hint">{NEW_FILE_DENIED_HINT}</T>}
+      <DropdownMenu triggerVariant="primary" align="end" sections={newMenu} disabled={newFileTrigger(choices).disabled}
         trigger={<><PlusIcon size={16} /><span>New</span><ChevronIcon size={14} dir="down" /></>}
-        triggerLabel="New file" triggerTestId="initiative-files-new" data-testid="initiative-files-new-menu" />}
+        triggerLabel="New file" triggerTestId="initiative-files-new" data-testid="initiative-files-new-menu" />
     </FileToolbar>
     {mayDeck && <InitiativeStatusDecks projectId={projectId} projectName={projectName} open={newDeck} onOpenChange={setNewDeck} hideTrigger />}
     {failures.length > 0 && <InlineAlert tone="warning">{failures.join(', ')} could not be read. Other available files are shown. Use Refresh to retry.</InlineAlert>}
+    {recordingsState === 'needs-social' && <InlineAlert tone="info">{RECORDINGS_NEED_SOCIAL}</InlineAlert>}
     {pending ? <LoadingState label="Loading project files…" /> : <>
       <T size="xs" tone="secondary">{shown.length} {shown.length === 1 ? 'file' : 'files'}{query || kind !== 'all' ? ' matching this view' : ' in this initiative'}</T>
       {shown.length === 0 ? <Stack gap="xs" className="rounded-lg border border-dashed border-border p-6"><T size="sm" weight="semibold">{files.length ? 'No matching files' : 'No project files yet'}</T><T size="sm" tone="secondary" wrap>{files.length ? 'Try another search or file type.' : 'Linked work documents, saved project presentations, and recordings you participated in appear here.'}</T></Stack>

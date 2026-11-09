@@ -13,6 +13,8 @@
 // authorization predicate drift, and the one that drifts loose is a hole.
 
 import { type Session } from './session.js';
+import { DEMO_SUB } from './demo-sub.js';
+import { insecureDevMode } from './insecure-dev-mode.js';
 
 // The providers are loaded lazily, inside the function.
 //
@@ -57,6 +59,10 @@ export async function stewardsInitiative(
   const role = session?.role;
   if (role && ORG_WIDE_INITIATIVE_ROLES.includes(role)) return true;
   if (!session?.sub) return false;
+  // The cookie-less demo identity has no person link, so it would never be attached
+  // anywhere; under the dev flag it explores as an org-wide steward (session.ts: "the
+  // demo stays explorable"). Never outside INSECURE_DEV_MODE.
+  if (session.sub === DEMO_SUB && insecureDevMode()) return true;
   try {
     const { getUser, getProject } = await providers();
     const personId = (await getUser(session.sub))?.personId ?? null;

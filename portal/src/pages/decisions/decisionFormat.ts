@@ -123,6 +123,24 @@ export function showDecideControl(
   return can('DecideDecision') && isWaiting(d.status) && d.viewerMayDecide !== false;
 }
 
+/** The first word of a display name, for "Only Nina, the initiative's owner…". */
+const firstName = (name: string): string => name.trim().split(/\s+/)[0] ?? name;
+
+/**
+ * The Waiting section for a decision that waits on someone else: the decider
+ * named (or "an unassigned decider"), who may decide it, and the decider's
+ * person id for a link. Null once settled. Presentation only.
+ */
+export function waitingNotice(d: Pick<DecisionDetail, 'status' | 'participants'>): { line: string; name: string | null; personId: string | null } | null {
+  if (!isWaiting(d.status)) return null;
+  const who = decider(d.participants);
+  if (!who) return { line: 'Waiting on an unassigned decider. Only the initiative’s owner or an org-leader can decide this.', name: null, personId: null };
+  return {
+    line: `Waiting on ${who.name}. Only ${firstName(who.name)}, the initiative’s owner or an org-leader can decide this.`,
+    name: who.name, personId: who.personId,
+  };
+}
+
 /** The body the control sends, or why it cannot be sent yet. */
 export function decideBody(outcome: DecideBody['outcome'], rationale: string): { body: DecideBody } | { error: string } {
   const text = rationale.trim();
@@ -158,8 +176,13 @@ export function outcomeFirstLine(d: Pick<DecisionSummary, 'status' | 'outcome'>)
  * scope "this-page" names it), and, when the control is drawn, the offer.
  */
 export function decisionPageContext(
-  d: Pick<DecisionDetail, 'id' | 'topic' | 'status'>, path: string, mayDecide: boolean,
+  d: Pick<DecisionDetail, 'id' | 'topic' | 'status'> & Partial<Pick<DecisionDetail, 'participants'>>, path: string, mayDecide: boolean,
 ): PublishedPage {
+  // A waiting decision this viewer cannot decide: say who it waits on, never the decide offer.
+  const waiting = !mayDecide && d.participants ? waitingNotice({ status: d.status, participants: d.participants }) : null;
+  const waitingOffer = waiting?.name
+    ? `This decision waits on ${waiting.name}; you cannot decide it. Say message ${waiting.name} to ask about it.`
+    : waiting ? 'This decision waits on an unassigned decider; you cannot decide it.' : null;
   const ref = `decision:${d.id}`;
   return {
     path,
@@ -168,6 +191,6 @@ export function decisionPageContext(
     rows: [{ ref, title: d.topic, status: d.status, href: `/iq/decisions/${encodeURIComponent(d.id)}` }],
     offer: mayDecide
       ? `This decision is waiting on you: say decide to resolve or reject it (decide ref ${ref}, scope this-page, with what was decided and why as the note).`
-      : null,
+      : waitingOffer,
   };
 }
