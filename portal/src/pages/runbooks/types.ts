@@ -121,6 +121,8 @@ export interface BriefSummary {
   sections: BriefSection[];
   omitted: BriefOmission[];
   sha256: string;
+  /** The task the brief's "Your task" line names; null when it has none (absent from an older server). */
+  task_title?: string | null;
 }
 export interface SkillLibrary { sha256: string; dir: string | null; skills: Array<{ name: string; version: number }> }
 export interface Brief extends BriefSummary { markdown: string; skill_library?: SkillLibrary }

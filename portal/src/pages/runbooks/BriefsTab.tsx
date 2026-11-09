@@ -12,7 +12,7 @@ import { RunBriefPanel } from './RunBriefPanel';
 import { RunbooksListFrame } from './RunbooksListFrame';
 import type { RunbooksOutletContext } from './RunbooksModule';
 import { briefsEmpty } from './emptyPick';
-import { briefGroups, briefHref, briefRows, briefsCommandAdapter, runPageHref, shortSha } from './runbooksModel';
+import { briefGroups, briefHref, briefRows, briefTitle, briefsCommandAdapter, runPageHref, shortSha } from './runbooksModel';
 import type { BriefSummary } from './types';
 import { Button } from '@connorhoehn/ui-components/shared';
 
@@ -26,7 +26,7 @@ export default function BriefsTab() {
   const names = useRunbookNames();
   const rows = useMemo(() => briefRows(all, query, names), [all, query, names]);
   const current = all.find((b) => b.run_ref === ref) ?? null;
-  useCrumbLabel(ref, ref ? names.run(ref) : undefined);
+  useCrumbLabel(ref, ref ? (current ? briefTitle(current, names) : names.run(ref)) : undefined);
   const commands = briefsCommandAdapter(rows, { setQuery, refresh: feed.refresh, open: (r) => navigate(briefHref(r)) });
 
   return (
@@ -46,7 +46,8 @@ export default function BriefsTab() {
       errorWhat="the briefs"
       errorSource="Briefs are read from the runbook store"
       groups={briefGroups(rows)}
-      rows={rows.map((r) => ({ id: r.id, groupId: r.groupId, title: r.title, subline: r.subline }))}
+      // The sha is secondary mono text after the facts; the row is named by its task and day.
+      rows={rows.map((r) => ({ id: r.id, groupId: r.groupId, title: r.title, subline: <>{r.subline} · <T as="span" size="xs" tone="tertiary" className="font-mono" title="The brief's sha-256, first 12 characters">{r.sha}</T></> }))}
       currentId={ref ?? null}
       onOpen={(r) => navigate(briefHref(r))}
       emptyTitle="No briefs yet"
@@ -60,7 +61,7 @@ export default function BriefsTab() {
       {ref ? (
         <EditorShell
           headerInset="page" titleSize="md" titleAs="h1" titleOverflow="wrap"
-          title={names.run(ref)}
+          title={current ? briefTitle(current, names) : names.run(ref)}
           statusPill={current ? <StatusPill tone="neutral" label={`sha ${shortSha(current.sha256)}`} size="sm" /> : undefined}
           subtitle={<T size="xs" tone="tertiary">{current ? `${current.initiative_id ? `${names.initiative(current.initiative_id)} · ` : ''}frozen ${relativeTime(current.assembled_at)}` : 'A frozen brief'}</T>}
           tabsTrailing={<Button size="sm" variant="secondary" onClick={() => navigate(runPageHref(ref))}>Open the run</Button>}

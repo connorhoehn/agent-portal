@@ -31,7 +31,7 @@ import { randomBytes } from 'node:crypto';
 import request from '../../test-support/http.js';
 import { SERVICE_AUTH_HEADER, signServiceRequest } from '@connorhoehn/service-runtime';
 import { LAB_CALLBACK_SERVICE_AUTH, SERVICE_NONCE_HEADER, captureRawBody, resetServiceNonceCache } from '../../lib/service-auth.js';
-import { createSessionBriefsRouter } from '../session-briefs.js';
+import { briefTaskTitle, createSessionBriefsRouter } from '../session-briefs.js';
 import { RUN_TOKEN_HEADER, mintRunToken } from '../../lib/run-token.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { briefLibraryOf, loadSkillLibrary, assembleBrief, type RunbookStore } from '../../lib/runbooks/index.js';
@@ -157,6 +157,8 @@ describe('GET /api/briefs', () => {
     const row = res.body.briefs.find((b: { run_ref: string }) => b.run_ref === 'job-1');
     expect(row.sha256).toBe(brief.sha256);
     expect(row.markdown).toBeUndefined();
+    // The row is named by its task, read off the markdown it no longer carries.
+    expect(row.task_title).toBe(briefTaskTitle(brief.markdown));
     expect(Array.isArray(row.sections)).toBe(true);
     expect((await request(appAs(USERS.strayAssessor!)).get('/api/briefs')).status).toBe(403);
     expect((await request(appAs(null)).get('/api/briefs')).status).toBe(401);
@@ -198,5 +200,13 @@ describe('GET /api/work-items/:id/brief-preview', () => {
     const target = '/api/work-items/wi-auth-1/brief-preview';
     expect((await request(appAs(null)).get(target).set(boxHeaders('GET', target))).status).toBe(401); // people only
     expect((await request(appAs(USERS.strayAssessor!)).get(target)).status).toBe(403);
+  });
+});
+
+describe('briefTaskTitle', () => {
+  it('reads the task line, or says there is none', () => {
+    expect(briefTaskTitle('# Brief\n\n## Your task\n**Tenant-by-tenant cutover** (story, 3 pts)\nbody')).toBe('Tenant-by-tenant cutover');
+    expect(briefTaskTitle('# Brief\n\nno task')).toBeNull();
+    expect(briefTaskTitle(null)).toBeNull();
   });
 });

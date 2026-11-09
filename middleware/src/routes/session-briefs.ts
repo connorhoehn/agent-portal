@@ -98,7 +98,7 @@ export function createSessionBriefsRouter(deps: SessionBriefDeps): Router {
         ...(Number.isInteger(rawLimit) && rawLimit > 0 ? { limit: Math.min(rawLimit, 200) } : {}),
       });
       res.json({
-        briefs: page.items.map(({ markdown: _markdown, ...summary }) => summary),
+        briefs: page.items.map(({ markdown, ...summary }) => ({ ...summary, task_title: briefTaskTitle(markdown) })),
         next: page.next,
       });
     }));
@@ -206,3 +206,13 @@ export function createSessionBriefsRouter(deps: SessionBriefDeps): Router {
 export const sessionBriefsRouter: Router = createSessionBriefsRouter({
   store: async () => (await import('../lib/runbooks/store-select.js')).runbookStore(),
 });
+
+/**
+ * The task title a brief's "Your task" section opens with (`**Title** (story, 3 pts, …)`), or null.
+ * The Briefs list names each row by it (`task_title`), read off the markdown the list does not
+ * carry, so a row is never just a run reference and a sha (walk, 9 November).
+ */
+export function briefTaskTitle(markdown: string | null | undefined): string | null {
+  const m = /^## Your task\s*\n\*\*(.+?)\*\*/m.exec(markdown ?? '');
+  return m ? m[1]!.trim().slice(0, 200) : null;
+}

@@ -266,7 +266,10 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
         {(data.files_diff?.text || Boolean(data.proposed_files?.length)) && (
           <DetailSection as="h2" variant="heading" title={sectionTitle('files')} data-testid="proposal-section-files" hint={data.files_diff ? filesDiffSummary(data.files_diff) : undefined}>
             <Stack gap="md">
-              {data.files_diff?.text && <DiffViewer diff={data.files_diff.text} defaultCollapsed={data.files_diff.files.length > 3} data-testid="proposal-files-diff" />}
+              {/* The bundle's files are code and recorded data (a presence snapshot keyed by user id):
+                  each file's diff opens on demand under its path and line counts, exact as written,
+                  so the record reads as its summary first (walk, 9 November). */}
+              {data.files_diff?.text && <DiffViewer diff={data.files_diff.text} defaultCollapsed data-testid="proposal-files-diff" />}
               {data.proposed_files && data.proposed_files.length > 0 && <RunbookFiles files={data.proposed_files} testId="proposal-files-list" />}
             </Stack>
           </DetailSection>

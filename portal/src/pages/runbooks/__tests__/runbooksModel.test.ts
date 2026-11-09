@@ -121,9 +121,14 @@ test('a brief row is titled by its run, grouped by day, and still found by its r
     sections: [{ kind: 'runbook', ref: 'rb-a', version: 1, tokens: 300, reason: 'x' }], omitted: [], sha256: 'ab'.repeat(32),
   };
   const [row] = briefRows([b], '', names);
-  assert.equal(row!.title, 'auth-dep-watch run');
-  assert.equal(row!.subline, 'Auth Migration · 1 runbook · abababababab');
+  // No task line: the run's name and the day it was frozen; the sha is secondary, not the name.
+  assert.equal(row!.title, 'auth-dep-watch run · Oct 11');
+  assert.equal(row!.subline, 'Auth Migration · 1 runbook');
+  assert.equal(row!.sha, 'abababababab');
   assert.equal(briefRows([b], 'job-auth-maint-2', names).length, 1);
+  assert.equal(briefRows([b], 'abababab', names).length, 1);
+  // With a task line, the task names the brief.
+  assert.equal(briefRows([{ ...b, task_title: 'Tenant-by-tenant cutover' }], '', names)[0]!.title, 'Tenant-by-tenant cutover · Oct 11');
 });
 
 test('the task title comes from the brief markdown', () => {

@@ -226,7 +226,17 @@ export function filesDiffSummary(d: { added: number; removed: number; files: Rea
   return `+${d.added} −${d.removed} · ${n} ${n === 1 ? 'file' : 'files'}${parts ? ` (${parts})` : ''}`;
 }
 
-export interface BriefRow { id: string; groupId: string; title: string; subline: string }
+/**
+ * A brief's readable name: the task it set ("Tenant-by-tenant cutover"), else its run's name, and the
+ * day it was frozen ("· Nov 9"). The sha is the row's secondary mono text, never its name (walk, 9 November).
+ */
+export function briefTitle(b: Pick<BriefSummary, 'run_ref' | 'assembled_at' | 'task_title'>, names: Names = NO_NAMES): string {
+  const day = new Date(b.assembled_at);
+  const when = Number.isNaN(day.getTime()) ? '' : ` · ${day.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}`;
+  return `${b.task_title?.trim() || names.run(b.run_ref)}${when}`;
+}
+
+export interface BriefRow { id: string; groupId: string; title: string; subline: string; sha: string }
 export function briefRows(briefs: readonly BriefSummary[], q = '', names: Names = NO_NAMES): BriefRow[] {
   const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   return briefs
@@ -234,12 +244,13 @@ export function briefRows(briefs: readonly BriefSummary[], q = '', names: Names 
       const n = b.sections.filter((s) => s.kind === 'runbook').length;
       return {
         id: b.run_ref, groupId: b.assembled_at.slice(0, 10),
-        title: names.run(b.run_ref),
-        subline: `${b.initiative_id ? `${names.initiative(b.initiative_id)} · ` : ''}${n} ${n === 1 ? 'runbook' : 'runbooks'} · ${shortSha(b.sha256)}`,
+        title: briefTitle(b, names),
+        subline: `${b.initiative_id ? `${names.initiative(b.initiative_id)} · ` : ''}${n} ${n === 1 ? 'runbook' : 'runbooks'}`,
+        sha: shortSha(b.sha256),
       };
     })
-    // The ids stay searchable (a run reference pasted from a log finds its brief) even though they are not shown.
-    .filter((r, i) => terms.every((t) => `${r.id} ${briefs[i]!.work_item_id ?? ''} ${r.title} ${r.subline}`.toLowerCase().includes(t)));
+    // The ids stay searchable (a run reference or a sha pasted from a log finds its brief) even though they are not the name.
+    .filter((r, i) => terms.every((t) => `${r.id} ${briefs[i]!.work_item_id ?? ''} ${r.title} ${r.subline} ${r.sha}`.toLowerCase().includes(t)));
 }
 export function briefGroups(rows: readonly BriefRow[]) {
   const days = [...new Set(rows.map((r) => r.groupId))].sort().reverse();
