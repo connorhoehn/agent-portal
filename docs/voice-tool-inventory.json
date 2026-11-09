@@ -11,8 +11,8 @@
   "pages": "portal/src/components/shell/portalCommands.ts",
   "catalogue": "middleware/src/lib/voice/catalogue.ts",
   "out": "docs/voice-tool-inventory.json",
-  "capturedAt": "2026-11-09T03:06:59.002Z",
-  "serverHandlerSha": "0bd2d7b87bbe4c37c92537ec7acc5400f38314e0c186919504da14d187030270"
+  "capturedAt": "2026-11-09T21:28:31.670Z",
+  "serverHandlerSha": "28f4032a88502ca04784abf5498afef909b67f27e40151b8fab46b27d6c3f499"
  },
  "summary": {
   "routes": 845,
@@ -444,8 +444,8 @@
   "writePolicy": {
    "refused:control-plane": 3,
    "refused:destructive": 42,
-   "allowed": 125,
-   "refused:unclassified": 75,
+   "allowed": 126,
+   "refused:unclassified": 74,
    "refused:spends": 25,
    "refused:fires": 26,
    "skipped": 30,
@@ -4652,7 +4652,7 @@
   {"method":"GET","path":"/api/voice/sessions/:id/export","source":"src/routes/voice-log.ts:120","declaredAt":"src/routes/voice-log.ts:120","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"voice","cedarAction":null,"actions":[],"floor":["VoiceNavigate"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"reading your own voice session log (list, one, latest, export) is a debugging read: the page or curl, never by voice"}},
   {"method":"GET","path":"/api/voice/sessions/latest","source":"src/routes/voice-log.ts:107","declaredAt":"src/routes/voice-log.ts:107","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"voice","cedarAction":null,"actions":[],"floor":["VoiceNavigate"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"reading your own voice session log (list, one, latest, export) is a debugging read: the page or curl, never by voice"}},
   {"method":"GET","path":"/api/voice/settings","source":"src/routes/voice.ts:192","declaredAt":"src/routes/voice.ts:192","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"voice","cedarAction":null,"actions":[],"floor":["VoiceNavigate"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the dock's own mint, events and close"}},
-  {"method":"PUT","path":"/api/voice/settings","source":"src/routes/voice.ts:197","declaredAt":"src/routes/voice.ts:197","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"voice","cedarAction":null,"actions":[],"floor":["VoiceNavigate"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the dock's own mint, events and close"}},
+  {"method":"PUT","path":"/api/voice/settings","source":"src/routes/voice.ts:197","declaredAt":"src/routes/voice.ts:197","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"voice","cedarAction":null,"actions":[],"floor":["VoiceNavigate"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the dock's own mint, events and close"}},
   {"method":"GET","path":"/api/work-graph/initiatives/:id/graph","source":"src/routes/work-graph.ts:37","declaredAt":"src/routes/work-graph.ts:37","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"GET","path":"/api/work-graph/people/:id/graph","source":"src/routes/work-graph.ts:43","declaredAt":"src/routes/work-graph.ts:43","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"GET","path":"/api/work-graph/workspace/graph","source":"src/routes/work-graph.ts:49","declaredAt":"src/routes/work-graph.ts:49","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
