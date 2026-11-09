@@ -51,11 +51,14 @@ export interface DockEvent {
 /** The refusal codes a `refused` event carries as `data.reason` (never the spoken sentence, which can repeat the user's words). */
 export const REFUSAL_CODES = [
   'ambiguous', 'not-found', 'role', 'no-grant', 'budget', 'allowlist', 'not-on-this-page', 'other-workspace',
-  'card-open', 'unavailable', 'invalid-arguments', 'unknown-tool', 'not-in-workspace', 'read-failed', 'other',
+  'card-open', 'unavailable', 'invalid-arguments', 'unknown-tool', 'not-in-workspace', 'read-failed', 'invalid-ref', 'not-read-yet', 'too-many-calls', 'other',
 ] as const;
 export type RefusalCode = typeof REFUSAL_CODES[number];
 
 const REFUSAL_PATTERNS: ReadonlyArray<[RegExp, RefusalCode]> = [
+  // G42: a ref the runner cannot use, or a row nothing read yet, never the catch-all.
+  [/^Pass a row'?s ref|records are not read here|not a message this session has seen|A ref is kind:id|by its ref|exactly as (a result|the refusal|the portal) (gave|named)/i, 'invalid-ref'],
+  [/^There is no row \d+ in the last result|list or search first|list or open it first|read or list it first|Search people first|search messages first/i, 'not-read-yet'],
   [/waiting for the user to confirm/i, 'card-open'],
   [/^There is no ".*" tool\./i, 'unknown-tool'],
   [/is not available in this workspace/i, 'not-in-workspace'],

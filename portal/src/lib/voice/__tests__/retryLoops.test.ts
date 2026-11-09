@@ -30,6 +30,9 @@ test('refusalNext: every refusal code names a change and ends with the no-repeat
     'unknown-tool': { reason: 'There is no "teleport" tool.' },
     'not-in-workspace': { reason: 'computer is not available in this workspace.' },
     'read-failed': { reason: 'The bots could not read (HTTP 500).', code: 'read-failed' },
+    'invalid-ref': { reason: 'That is not a message this session has seen.', code: 'invalid-ref' },
+    'not-read-yet': { reason: 'There is no row 4 in the last result. List or search first.' },
+    'too-many-calls': { reason: 'Too many calls for one request.', code: 'too-many-calls' },
     other: { reason: 'Something odd.' },
   };
   assert.deepEqual(Object.keys(reasons).sort(), [...REFUSAL_CODES].sort(), 'one case per code');

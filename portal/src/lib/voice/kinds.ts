@@ -35,6 +35,8 @@ export interface PartSpec {
   title?: Field;
   subtitle?: Field;
   status?: Field;
+  /** G42: rows of no kind of their own, kept by this ref kind with their text (a channel's recent messages: `message:<id>`). */
+  keepAs?: string;
 }
 
 export interface KindSpec {
@@ -189,7 +191,7 @@ function socialKinds(api: string, pages: string, inSocial: boolean, teamKind = '
     {
       kind: 'channel', label: 'channels', social: true,
       list: { path: `${api}/channels` },
-      ...(inSocial ? { get: { path: `${api}/channels/:slug`, record: 'channel' }, parts: { members: { key: 'members', kind: 'person' }, recent: { key: 'recent' } } } : {}),
+      ...(inSocial ? { get: { path: `${api}/channels/:slug`, record: 'channel' }, parts: { members: { key: 'members', kind: 'person' }, recent: { key: 'recent', keepAs: 'message' } } } : {}),
       id: 'slug', subtitle: 'lastMessagePreview', at: ['lastMessageAt', 'createdAt'],
       href: (id) => `${pages}/channels/${enc(id)}`,
     },

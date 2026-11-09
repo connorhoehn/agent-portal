@@ -95,6 +95,9 @@ export function refusalNext(tool: string, output: Record<string, unknown>, ctx: 
   const people = tool === 'message' || tool === 'call';
   const refTool = tool === 'get' || tool === 'open' || tool === 'decide' || tool === 'update';
   let fix: string;
+  if (code === 'invalid-ref' || code === 'not-read-yet') {
+    return `${REF_SHAPE} ${code === 'not-read-yet' ? 'Nothing in this session read it yet: ' : ''}To find one, list or search that kind first.${allowedClause('list', ctx)} ${NO_REPEAT}`;
+  }
   if (refTool && (code === 'not-found' || code === 'other' || code === 'invalid-arguments') && /\bref\b|\brow\b|result|found no [a-z-]+ "[^"]*" that you can read|records are not read/i.test(reason)) {
     return `${REF_SHAPE} To find one, list or search that kind first.${allowedClause('list', ctx)} ${NO_REPEAT}`;
   }
@@ -151,6 +154,9 @@ export function refusalNext(tool: string, output: Record<string, unknown>, ctx: 
       break;
     case 'not-in-workspace':
       fix = 'That is not offered in this workspace: say so, and offer the nearest page.';
+      break;
+    case 'too-many-calls':
+      fix = 'This request used its calls: stop, and answer the user in one sentence with what you have, or ask them to say what they want in one sentence.';
       break;
     default:
       fix = 'Tell the user what was refused and why, and offer the fix the reason names.';
