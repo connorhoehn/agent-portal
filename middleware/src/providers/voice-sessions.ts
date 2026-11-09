@@ -52,6 +52,8 @@ export interface VoiceSessionRow {
   provider_tokens_in: number | null;
   provider_tokens_out: number | null;
   provider_tokens_cached: number | null;
+  /** The dropped session this one resumes (G35): the same user's, same tenant; null for a cold start. */
+  resume_of?: string | null;
 }
 
 export interface VoiceToolCallRow {
@@ -67,7 +69,7 @@ export interface VoiceToolCallRow {
 }
 
 export type VoiceSessionInsert = Pick<VoiceSessionRow,
-  'id' | 'user_sub' | 'tenant' | 'hold_id' | 'model' | 'voice' | 'mock' | 'max_seconds' | 'usd_per_minute'>;
+  'id' | 'user_sub' | 'tenant' | 'hold_id' | 'model' | 'voice' | 'mock' | 'max_seconds' | 'usd_per_minute'> & { resume_of?: string | null };
 
 export interface VoiceSessionClose {
   seconds: number | null;
@@ -85,7 +87,7 @@ const dbl = (name: string, v: number | null | undefined): SqlParameter =>
 
 const SELECT = `id, user_sub, tenant, hold_id::text AS hold_id, provider_session_id, model, voice, mock, max_seconds,
   usd_per_minute, started_at::text AS started_at, ended_at::text AS ended_at, seconds, cost_usd, cost_basis, stop_reason, tool_calls,
-  provider_seconds, provider_tokens_in, provider_tokens_out, provider_tokens_cached`;
+  provider_seconds, provider_tokens_in, provider_tokens_out, provider_tokens_cached, resume_of`;
 
 function toRow(r: Record<string, unknown>): VoiceSessionRow {
   const str = (k: string): string | null => (r[k] == null ? null : String(r[k]));
@@ -99,6 +101,7 @@ function toRow(r: Record<string, unknown>): VoiceSessionRow {
     stop_reason: str('stop_reason') as VoiceStopReason | null, tool_calls: n('tool_calls') ?? 0,
     provider_seconds: n('provider_seconds'), provider_tokens_in: n('provider_tokens_in'),
     provider_tokens_out: n('provider_tokens_out'), provider_tokens_cached: n('provider_tokens_cached'),
+    resume_of: str('resume_of'),
   };
 }
 
@@ -108,17 +111,18 @@ export async function insertVoiceSession(row: VoiceSessionInsert): Promise<Voice
       ...row, provider_session_id: null, started_at: clock.nowIso(), ended_at: null, seconds: null,
       cost_usd: null, cost_basis: null, stop_reason: null, tool_calls: 0,
       provider_seconds: null, provider_tokens_in: null, provider_tokens_out: null, provider_tokens_cached: null,
+      resume_of: row.resume_of ?? null,
     };
     if (voiceSessions.rows().some((r) => r.id === row.id)) throw new Error(`voice session ${row.id} already exists`);
     voiceSessions.rows().push(full);
     return { ...full };
   }
   const rows = await exec(
-    `INSERT INTO voice_sessions (id, user_sub, tenant, hold_id, model, voice, mock, max_seconds, usd_per_minute)
-     VALUES (:id, :sub, :tenant, :hold::uuid, :model, :voice, :mock, :max, :rate::numeric) RETURNING ${SELECT}`,
+    `INSERT INTO voice_sessions (id, user_sub, tenant, hold_id, model, voice, mock, max_seconds, usd_per_minute, resume_of)
+     VALUES (:id, :sub, :tenant, :hold::uuid, :model, :voice, :mock, :max, :rate::numeric, :resume) RETURNING ${SELECT}`,
     [s('id', row.id), s('sub', row.user_sub), s('tenant', row.tenant), maybe('hold', row.hold_id), maybe('model', row.model),
       maybe('voice', row.voice), { name: 'mock', value: { booleanValue: row.mock } }, int('max', row.max_seconds),
-      dbl('rate', row.usd_per_minute)],
+      dbl('rate', row.usd_per_minute), maybe('resume', row.resume_of)],
   );
   return toRow(rows[0] ?? {});
 }

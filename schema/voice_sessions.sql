@@ -54,6 +54,12 @@ ALTER TABLE voice_sessions ADD COLUMN IF NOT EXISTS provider_tokens_in     BIGIN
 ALTER TABLE voice_sessions ADD COLUMN IF NOT EXISTS provider_tokens_out    BIGINT  CHECK (provider_tokens_out IS NULL OR provider_tokens_out >= 0);
 ALTER TABLE voice_sessions ADD COLUMN IF NOT EXISTS provider_tokens_cached BIGINT  CHECK (provider_tokens_cached IS NULL OR provider_tokens_cached >= 0);
 
+-- A session resumed after its predecessor dropped (G35,
+-- docs/voice-navigator-gaps.md): the dock keeps the dropped session's id for
+-- 60 seconds and mints with `resumeOf`; the mint links the two rows only when
+-- the earlier one is the same user's, in the same tenant. Null otherwise.
+ALTER TABLE voice_sessions ADD COLUMN IF NOT EXISTS resume_of TEXT REFERENCES voice_sessions (id) ON DELETE SET NULL;
+
 CREATE INDEX IF NOT EXISTS voice_sessions_open_idx ON voice_sessions (started_at) WHERE ended_at IS NULL;
 CREATE INDEX IF NOT EXISTS voice_sessions_user_idx ON voice_sessions (user_sub, started_at DESC);
 

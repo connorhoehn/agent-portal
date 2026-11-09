@@ -3,7 +3,7 @@
 // The browser runs every tool (§2); the middleware only mints the session and
 // meters it:
 //
-//   POST /api/voice/sessions             { sdp?, confirmOverUserBudget? }
+//   POST /api/voice/sessions             { sdp?, confirmOverUserBudget?, resumeOf? }
 //     Cedar VoiceNavigate, the tenant from the session, the demo persona refused
 //     outside INSECURE_DEV_MODE, a `voice_session` hold through reserveSpend,
 //     then the mint through lib/voice/openai.ts (or a scripted session under
@@ -26,7 +26,10 @@
 //     retries). Both checks are read again after the insert, so two mints at
 //     once never both go through (at most one does; both may refuse) and never
 //     past the day's minutes. Never the key, the instructions or the session
-//     object.
+//     object. `resumeOf` (G35): the session id the dock kept after a drop; the
+//     new row's resume_of links to it only when that session is the caller's,
+//     in this tenant (anyone else's id, or an unknown one, links nothing and is
+//     not distinguished); the `minted` event records the link.
 //   POST /api/voice/sessions/:id/events  { tool, args? | argsSha256?, outcome, durationMs?, confirmedBy?, summary? }
 //     one voice_tool_calls row; the arguments are hashed and dropped. 201 { id }.
 //     It also writes a `tool-result` row to the session's event log.
@@ -47,7 +50,12 @@
 // sideband (`sideband` for the socket's life, `usage` at most every 30 s and
 // when final), the close (`closed`) and the reaper (`reaper`, `closed`).
 // Read back by the owner only: routes/voice-log.ts.
-//   POST /api/voice/sessions/:id/close   { seconds, reason?, delegated?: { inputTokens, outputTokens, cachedTokens, responses } }
+//   POST /api/voice/sessions/:id/close   { seconds, reason?, cause?, transport?, delegated?: { inputTokens, outputTokens, cachedTokens, responses } }
+//     `cause` (G35) says why a session ended, one of CLOSE_CAUSES (pagehide,
+//     beforeunload, visibilitychange, ice-failed, ice-disconnected,
+//     peer-closed, channel-closed, user, tenant-switch, cutoff); `transport`
+//     the connection's own failure when the page was hidden. The `closed`
+//     event carries it as `data.reason` (else the stop reason).
 //     two ledger rows (lib/voice/ledger.ts, G11), both source voice_session,
 //     provider openai: `<id>` at seconds/60 × rate, which settles the hold,
 //     and `<id>:tokens` (trigger voice-delegation) for the delegated model's
@@ -101,6 +109,25 @@ export const voiceRouter = Router();
 voiceRouter.use(requireSession('VoiceNavigate'));
 
 const SESSION_ID = /^vs_[0-9a-f-]{36}$/;
+
+/** Why a session ended, as the dock saw it (G35): the page going away, the connection failing, or the user. */
+export const CLOSE_CAUSES = [
+  'pagehide', 'beforeunload', 'visibilitychange', 'ice-failed', 'ice-disconnected', 'peer-closed', 'channel-closed', 'user', 'tenant-switch', 'cutoff',
+] as const;
+export type CloseCause = typeof CLOSE_CAUSES[number];
+const TRANSPORT_CAUSES: readonly string[] = ['ice-failed', 'ice-disconnected', 'peer-closed', 'channel-closed'];
+const closeCause = (v: unknown): CloseCause | null => ((CLOSE_CAUSES as readonly unknown[]).includes(v) ? v as CloseCause : null);
+
+/**
+ * The dropped session a mint resumes (G35): the caller's own, in this tenant,
+ * else null. Read as the system (row-level security), with the owner check as
+ * the boundary; an id that is not the caller's is treated as unknown.
+ */
+async function resumable(raw: unknown, session: Session): Promise<string | null> {
+  if (typeof raw !== 'string' || !SESSION_ID.test(raw)) return null;
+  const prior = await runAsSystem(() => getVoiceSession(raw));
+  return prior && prior.user_sub === session.sub && prior.tenant === session.tenant ? prior.id : null;
+}
 const bySub = (req: Request): string | null => resolveSession(req)?.sub ?? null;
 const MAX_SDP_BYTES = 64 * 1024;
 
@@ -213,10 +240,12 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
   const tools = toolsForTenant(session.tenant, { commandAllowlist: commandAllowlist(), role: session.role });
   const toolsEnabled = cfg.mock || (cfg.delegationModel != null && tools.length > 0);
   let row: VoiceSessionRow;
+  let resumeOf: string | null = null;
   try {
+    resumeOf = await resumable(body['resumeOf'], session);
     row = await insertVoiceSession({
       id, user_sub: session.sub, tenant: session.tenant, hold_id: held.holdId, model: cfg.model, voice: cfg.voice,
-      mock: cfg.mock, max_seconds: maxSeconds, usd_per_minute: cfg.usdPerMinute,
+      mock: cfg.mock, max_seconds: maxSeconds, usd_per_minute: cfg.usdPerMinute, resume_of: resumeOf,
     });
   } catch (err) {
     await releaseHold(held.holdId);
@@ -272,6 +301,7 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
   await recordVoiceEvent(row, 'minted', {
     mock: cfg.mock, model: cfg.model, voice: cfg.voice, maxSeconds, toolsEnabled, tools: toolsEnabled ? tools.map((t) => t.name) : [],
     holdUsd: held.amountUsd, usdPerMinute: cfg.usdPerMinute, dailyMinutesLeft,
+    ...(body['resumeOf'] !== undefined ? { resumeOf, resumeLinked: resumeOf != null } : {}),
   });
   // The provider's own usage for this session (G12): best effort, never awaited, never failing the mint.
   if (!cfg.mock && answer.providerSessionId) {
@@ -301,6 +331,7 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
     toolsEnabled, tools: toolsEnabled ? tools.map((t) => t.name) : [],
     budget: { holdUsd: held.amountUsd, usdPerMinute: cfg.usdPerMinute },
     toastSeconds: cfg.toastSeconds,
+    ...(resumeOf ? { resumeOf } : {}),
     ...(dailyMinutesLeft != null ? { dailyMinutesLeft } : {}),
     ...(cfg.mock ? { mockScript: mockLiveScript(id, mockCallFor(session.tenant, session.role)) } : {}),
   });
@@ -404,6 +435,11 @@ voiceRouter.post('/sessions/:id/close', asyncHandler(async (req, res) => {
   if (!row) { notFound(res); return; }
   const body = (req.body ?? {}) as Record<string, unknown>;
   const reason = (CLIENT_STOP_REASONS.includes(body['reason'] as VoiceStopReason) ? body['reason'] : 'closed') as VoiceStopReason;
+  // G35: why it ended, as the dock saw it; the closed event's `reason`.
+  const cause = closeCause(body['cause']);
+  const transportRaw = closeCause(body['transport']);
+  const transport = transportRaw && TRANSPORT_CAUSES.includes(transportRaw) ? transportRaw : null;
+  const why = { reason: cause ?? reason, ...(transport ? { transport } : {}) };
   const raw = body['seconds'];
   // A figure the dock never received (the channel died first) is unknown, never 0.
   // A reported one is floored at the provider's 15-second minimum and capped at
@@ -442,18 +478,18 @@ voiceRouter.post('/sessions/:id/close', asyncHandler(async (req, res) => {
     if (seconds != null && costUsd != null && row.stop_reason === 'reaped' && row.cost_basis === 'unknown') {
       const learnt = await runAsSystem(() => learnReapedSessionCost(row.id, seconds, costUsd));
       if (learnt) await bookVoiceSpend(learnt, delegated);
-      await recordVoiceEvent(row, 'closed', { alreadyClosed: true, reason, learnt: learnt != null, seconds: learnt?.seconds ?? null,
+      await recordVoiceEvent(row, 'closed', { alreadyClosed: true, ...why, stopReason: reason, learnt: learnt != null, seconds: learnt?.seconds ?? null,
         costUsd: learnt?.cost_usd ?? null, basis: learnt?.cost_basis ?? row.cost_basis });
       res.json(closeBody(learnt ?? row, true));
       return;
     }
-    await recordVoiceEvent(row, 'closed', { alreadyClosed: true, reason, stopReason: row.stop_reason });
+    await recordVoiceEvent(row, 'closed', { alreadyClosed: true, ...why, stopReason: row.stop_reason });
     res.json(closeBody(row, true));
     return;
   }
   await bookVoiceSpend(closed, figures.delegated, figures.tokensBasis);
   await recordVoiceEvent(closed, 'closed', {
-    stopReason: reason, seconds: figures.seconds, costUsd: figures.costUsd, basis: figures.basis, dockSeconds: seconds, hungUp,
+    ...why, stopReason: reason, seconds: figures.seconds, costUsd: figures.costUsd, basis: figures.basis, dockSeconds: seconds, hungUp,
     providerFinal: provider?.final ?? false, tokensBasis: figures.delegated ? figures.tokensBasis : null,
     delegatedTokens: figures.delegated ? { inputTokens: figures.delegated.inputTokens, outputTokens: figures.delegated.outputTokens,
       cachedTokens: figures.delegated.cachedTokens, responses: figures.delegated.responses } : null,
@@ -461,7 +497,7 @@ voiceRouter.post('/sessions/:id/close', asyncHandler(async (req, res) => {
   if (figures.seconds != null) emitFleetMetric('voice-session-seconds', { tenant: closed.tenant, seconds: figures.seconds });
   const used = figures.delegated;
   console.log(JSON.stringify({ event: 'voice-session-closed', sessionId: closed.id, seconds: figures.seconds, costUsd: figures.costUsd,
-    basis: figures.basis, dockSeconds: seconds, reason, tokensBasis: used ? figures.tokensBasis : null,
+    basis: figures.basis, dockSeconds: seconds, reason, cause, tokensBasis: used ? figures.tokensBasis : null,
     delegatedTokens: used ? { input: used.inputTokens, output: used.outputTokens, responses: used.responses } : null }));
   res.json(closeBody(closed, false));
 }));

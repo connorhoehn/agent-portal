@@ -44,6 +44,12 @@
 // provider up; zero seconds unless the session is one this dock minted and
 // knows the figure of) and mints again, once.
 
+// Why a session ended (G35): the close carries `cause` (the page going away,
+// the connection failing, the user) and, when the page was hidden as the
+// connection failed, the transport failure as `transport`; the middleware's
+// `closed` event keeps it as `data.reason`. A mint may name `resumeOf`, the
+// session a drop ended moments ago, so the server links the two rows.
+
 export const VOICE_API = '/api/voice/sessions';
 export const CLOSE_WAIT_MS = 5000;
 
@@ -68,10 +74,18 @@ export interface VoiceMint {
   dailyMinutesLeft?: number;
   /** VOICE_TOAST_SECONDS: how long a queued job's toast stays once the job ends (G19). */
   toastSeconds?: number;
+  /** The dropped session this one resumes, when the server linked it (G35). */
+  resumeOf?: string;
   mockScript?: MockScript;
 }
 
 export type StopReason = 'closed' | 'dropped' | 'cutoff' | 'tenant-switch';
+
+/** How the connection itself failed (the peer connection's state, or the data channel closing). */
+export type TransportCause = 'ice-failed' | 'ice-disconnected' | 'peer-closed' | 'channel-closed';
+/** Why a session ended, as the close reports it (the middleware's CLOSE_CAUSES). */
+export type CloseCause = TransportCause | 'pagehide' | 'beforeunload' | 'visibilitychange' | 'user' | 'tenant-switch' | 'cutoff';
+export interface CloseWhy { cause: CloseCause; transport?: TransportCause }
 
 // ── inbound frames ──────────────────────────────────────────────────────────
 
@@ -258,8 +272,8 @@ export interface MediaSession {
 
 export interface MediaHandlers {
   onMessage(data: string): void;
-  /** The channel or the peer connection died. */
-  onDrop(): void;
+  /** The channel or the peer connection died, and how. */
+  onDrop(cause: TransportCause): void;
 }
 
 export type MediaFactory = (handlers: MediaHandlers) => Promise<MediaSession>;
@@ -303,7 +317,7 @@ export function browserMedia(): MediaFactory | null {
     audio.autoplay = true;
     const pc = new RTCPeerConnection();
     let dropped = false;
-    const drop = () => { if (!dropped) { dropped = true; handlers.onDrop(); } };
+    const drop = (cause: TransportCause) => { if (!dropped) { dropped = true; handlers.onDrop(cause); } };
     pc.addEventListener('track', (e) => {
       const stream = e.streams[0] ?? new MediaStream([e.track]);
       audio.srcObject = stream;
@@ -312,13 +326,15 @@ export function browserMedia(): MediaFactory | null {
       audioCtx.createMediaStreamSource(stream).connect(outAnalyser);
     });
     pc.addEventListener('connectionstatechange', () => {
-      if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) drop();
+      const state = pc.connectionState;
+      if (state === 'failed' || state === 'disconnected') drop(`ice-${state}`);
+      else if (state === 'closed') drop('peer-closed');
     });
     mic.getAudioTracks().forEach((t) => pc.addTrack(t, mic));
     // The data channel must exist before the offer is created.
     const dc = pc.createDataChannel('oai-events');
     dc.addEventListener('message', (e) => handlers.onMessage(typeof e.data === 'string' ? e.data : ''));
-    dc.addEventListener('close', drop);
+    dc.addEventListener('close', () => drop('channel-closed'));
     await pc.setLocalDescription(await pc.createOffer());
     await waitForIce(pc);
     let closed = false;
@@ -388,8 +404,8 @@ export type ClientEvent =
   | { type: 'budget-confirm'; estimateUsd: number | null; remainingUsd: number | null; reason: string | null }
   | { type: 'failed'; reason: string }
   | { type: 'frame'; frame: VoiceFrame }
-  | { type: 'dropped' }
-  | { type: 'ended'; reason: StopReason; seconds: number | null };
+  | { type: 'dropped'; cause: TransportCause }
+  | { type: 'ended'; reason: StopReason; seconds: number | null; why?: CloseWhy };
 
 /** A tool-call row (POST /:id/events): the arguments' hash only, never the arguments (§9). */
 export interface ToolCallReport {
@@ -456,10 +472,10 @@ export class VoiceClient {
   }
 
   /** Microphone (when there is one), offer, mint, answer. Reports `minted` or a refusal through onEvent. */
-  async start(opts: { confirmOverUserBudget?: boolean } = {}): Promise<void> {
+  async start(opts: { confirmOverUserBudget?: boolean; resumeOf?: string | null } = {}): Promise<void> {
     if (this.opts.media) {
       try {
-        this.media = await this.opts.media({ onMessage: (d) => this.deliver(d), onDrop: () => this.onDrop() });
+        this.media = await this.opts.media({ onMessage: (d) => this.deliver(d), onDrop: (cause) => this.onDrop(cause) });
       } catch (err) {
         this.opts.onEvent({ type: 'unavailable', reason: err instanceof MediaUnavailable ? err.message : 'This browser cannot open a voice session.' });
         return;
@@ -469,7 +485,10 @@ export class VoiceClient {
       try {
         const res = await this.opts.fetch(VOICE_API, {
           method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...(this.media ? { sdp: this.media.offer } : {}), ...(opts.confirmOverUserBudget ? { confirmOverUserBudget: true } : {}) }),
+          body: JSON.stringify({
+            ...(this.media ? { sdp: this.media.offer } : {}), ...(opts.confirmOverUserBudget ? { confirmOverUserBudget: true } : {}),
+            ...(opts.resumeOf ? { resumeOf: opts.resumeOf } : {}),
+          }),
         });
         return { res, body: await res.json().catch(() => null) };
       } catch {
@@ -594,7 +613,7 @@ export class VoiceClient {
    * Hang up: session.close and wait (bounded) for session.closed, release the
    * media, then POST /:id/close with the seconds, exactly once.
    */
-  async stop(reason: StopReason = 'closed'): Promise<void> {
+  async stop(reason: StopReason = 'closed', why?: CloseWhy): Promise<void> {
     if (this.finished || !this.mint) { this.teardown(); return; }
     if (this.live && reason !== 'dropped' && !this.sawClosed) {
       const closed = new Promise<void>((resolve) => { this.closedWaiter = resolve; });
@@ -608,10 +627,10 @@ export class VoiceClient {
         })]);
       }
     }
-    await this.finish(reason);
+    await this.finish(reason, why);
   }
 
-  private async finish(reason: StopReason): Promise<void> {
+  private async finish(reason: StopReason, why?: CloseWhy): Promise<void> {
     if (this.finished) return;
     this.finished = true;
     const seconds = this.reportedSeconds();
@@ -620,10 +639,10 @@ export class VoiceClient {
     try {
       await this.opts.fetch(`${VOICE_API}/${encodeURIComponent(mint.sessionId)}/close`, {
         method: 'POST', credentials: 'include', keepalive: true, headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ seconds, reason, delegated: { ...this.delegated } }),
+        body: JSON.stringify({ seconds, reason, ...(why ? { cause: why.cause, ...(why.transport ? { transport: why.transport } : {}) } : {}), delegated: { ...this.delegated } }),
       });
     } catch { /* the reaper settles a session whose close never arrived (§7) */ }
-    this.opts.onEvent({ type: 'ended', reason, seconds });
+    this.opts.onEvent({ type: 'ended', reason, seconds, ...(why ? { why } : {}) });
   }
 
   /** The figure the close reports: the provider's cumulative usage when known, else the wall clock. */
@@ -631,10 +650,13 @@ export class VoiceClient {
     return Math.ceil(Math.max(this.usageSeconds ?? 0, this.elapsedSeconds()));
   }
 
-  private onDrop(): void {
+  /** The connection failed under us: the host may name a better cause (a hidden page), else the transport's own. */
+  dropCause: ((transport: TransportCause) => CloseWhy) | null = null;
+
+  private onDrop(cause: TransportCause): void {
     if (!this.live || this.finished) return;
-    this.opts.onEvent({ type: 'dropped' });
-    void this.finish('dropped');
+    this.opts.onEvent({ type: 'dropped', cause });
+    void this.finish('dropped', this.dropCause?.(cause) ?? { cause });
   }
 
   private deliver(data: string): void {

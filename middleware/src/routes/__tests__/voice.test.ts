@@ -42,7 +42,7 @@ import { resetRateLimits } from '../../lib/rate-limit.js';
 import { userBudgets } from '../../mock/user-budgets.js';
 import { spendHolds } from '../../mock/spend-holds.js';
 import { spendEntries } from '../../mock/spend-ledger.js';
-import { voiceSessions, voiceToolCalls } from '../../mock/voice-sessions.js';
+import { voiceSessionEvents, voiceSessions, voiceToolCalls } from '../../mock/voice-sessions.js';
 import type { VoiceSessionRow } from '../../providers/voice-sessions.js';
 import { freezeClock, unfreezeClock } from '../../mock/core/index.js';
 import { userSpendThisPeriod } from '../../providers/user-budgets.js';
@@ -750,4 +750,54 @@ test('the seed directory the authz mock reads is present', () => {
   const dir = join(__dirname, '..', '..', '..', 'seeds', 'roles', 'orgiq', 'member.cedar');
   expect(existsSync(dir)).toBe(true);
   expect(readFileSync(dir, 'utf8')).toContain('VoiceNavigate');
+});
+
+// G35 (docs/voice-navigator-gaps.md, sessions vs_95e5a6c7 and the 15 s one): a dropped close says why, and a
+// session resumed within the dock's 60 s is linked to the one it continues, owner-only.
+describe('G35: why a session ended, and resuming a dropped one', () => {
+  const closedEvent = (id: string) => voiceSessionEvents.rows().filter((e) => e.session_id === id && e.kind === 'closed').map((e) => e.data);
+
+  it('the closed event carries the dock\'s cause as data.reason, and the transport failure behind a hidden page', async () => {
+    budget();
+    const a = (await mint()).body.sessionId as string;
+    await request(app).post(`/api/voice/sessions/${a}/close`).send({ seconds: 20, reason: 'dropped', cause: 'pagehide' });
+    expect(closedEvent(a)).toEqual([expect.objectContaining({ reason: 'pagehide', stopReason: 'dropped' })]);
+    const b = (await mint()).body.sessionId as string;
+    await request(app).post(`/api/voice/sessions/${b}/close`).send({ seconds: 20, reason: 'dropped', cause: 'visibilitychange', transport: 'ice-failed' });
+    expect(closedEvent(b)).toEqual([expect.objectContaining({ reason: 'visibilitychange', transport: 'ice-failed' })]);
+    // No cause, or one not on the list: the stop reason stands in; a transport that is not a transport is dropped.
+    const c = (await mint()).body.sessionId as string;
+    await request(app).post(`/api/voice/sessions/${c}/close`).send({ seconds: 20, cause: 'because I said so', transport: 'pagehide' });
+    expect(closedEvent(c)).toEqual([expect.objectContaining({ reason: 'closed' })]);
+    expect(closedEvent(c)[0]).not.toHaveProperty('transport');
+  });
+
+  it('a mint with resumeOf links the caller\'s own dropped session, and nobody else\'s', async () => {
+    budget();
+    const first = (await mint()).body.sessionId as string;
+    await request(app).post(`/api/voice/sessions/${first}/close`).send({ seconds: 30, reason: 'dropped', cause: 'pagehide' });
+    const resumed = await mint({ sdp: SDP, resumeOf: first });
+    expect(resumed.status).toBe(201);
+    expect(resumed.body.resumeOf).toBe(first);
+    expect(voiceSessions.rows().find((r) => r.id === resumed.body.sessionId)!.resume_of).toBe(first);
+    const minted = voiceSessionEvents.rows().find((e) => e.session_id === resumed.body.sessionId && e.kind === 'minted');
+    expect(minted!.data).toMatchObject({ resumeOf: first, resumeLinked: true });
+    await request(app).post(`/api/voice/sessions/${resumed.body.sessionId}/close`).send({ seconds: 30 });
+
+    // Another user's session, the same user's in another tenant, and an unknown id link nothing, alike.
+    principal = { sub: 'u-other', role: 'member', tenant: 'orgiq', grants: {} };
+    const theirs = await mint({ sdp: SDP, resumeOf: first });
+    expect(theirs.status).toBe(201);
+    expect(theirs.body).not.toHaveProperty('resumeOf');
+    expect(voiceSessions.rows().find((r) => r.id === theirs.body.sessionId)!.resume_of).toBeNull();
+    await request(app).post(`/api/voice/sessions/${theirs.body.sessionId}/close`).send({ seconds: 30 });
+    principal = { sub: USER, role: 'member', tenant: 'social', grants: {} };
+    const elsewhere = await mint({ sdp: SDP, resumeOf: first });
+    expect(elsewhere.body).not.toHaveProperty('resumeOf');
+    await request(app).post(`/api/voice/sessions/${elsewhere.body.sessionId}/close`).send({ seconds: 30 });
+    principal = { sub: USER, role: 'member', tenant: 'orgiq', grants: {} };
+    const unknown = await mint({ sdp: SDP, resumeOf: 'vs_00000000-0000-0000-0000-000000000000' });
+    expect(unknown.body).not.toHaveProperty('resumeOf');
+    expect(voiceSessionEvents.rows().find((e) => e.session_id === unknown.body.sessionId && e.kind === 'minted')!.data).toMatchObject({ resumeOf: null, resumeLinked: false });
+  });
 });

@@ -28,6 +28,8 @@ export interface VoiceSessionListItem {
   toolCallCount: number;
   lastOutcome: string | null;
   stopReason: string | null;
+  /** The dropped session this one resumed (G35), when the server linked it. */
+  resumeOf?: string | null;
 }
 
 export interface VoiceSessionDetail {
@@ -129,6 +131,7 @@ export function sessionFacts(d: VoiceSessionDetail): Array<{ label: string; valu
     { label: 'Ended', value: s.endedAt ? when(s.endedAt) : 'still open' },
     { label: 'Length', value: `${duration(s.seconds)} of ${duration(s.maxSeconds)}` },
     { label: 'Stopped by', value: s.stopReason ?? 'not yet' },
+    ...(s.resumeOf ? [{ label: 'Resumes', value: s.resumeOf, mono: true }] : []),
     { label: 'Model', value: [s.model, s.voice].filter(Boolean).join(' · ') || 'unknown', mono: true },
     { label: 'Cost', value: `${usd(s.costUsd)}${s.costBasis ? ` (${s.costBasis})` : ''}` },
     { label: 'Tool calls', value: `${s.toolCallCount}${s.lastOutcome ? `, last ${s.lastOutcome}` : ''}` },

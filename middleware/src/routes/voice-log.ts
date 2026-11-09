@@ -56,7 +56,7 @@ function listItem(row: VoiceSessionRow, lastOutcome: VoiceToolOutcome | null) {
   return {
     id: row.id, tenant: row.tenant, mock: row.mock, startedAt: row.started_at, endedAt: row.ended_at,
     seconds: row.seconds, maxSeconds: row.max_seconds, costUsd: row.cost_usd, costBasis: row.cost_basis,
-    toolCallCount: row.tool_calls, lastOutcome, stopReason: row.stop_reason,
+    toolCallCount: row.tool_calls, lastOutcome, stopReason: row.stop_reason, resumeOf: row.resume_of ?? null,
   };
 }
 

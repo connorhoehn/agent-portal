@@ -3903,7 +3903,7 @@
     {
       "method": "POST",
       "path": "/api/voice/sessions",
-      "source": "src/routes/voice.ts:142"
+      "source": "src/routes/voice.ts:169"
     },
     {
       "method": "GET",
@@ -3913,12 +3913,12 @@
     {
       "method": "POST",
       "path": "/api/voice/sessions/:id/close",
-      "source": "src/routes/voice.ts:402"
+      "source": "src/routes/voice.ts:433"
     },
     {
       "method": "POST",
       "path": "/api/voice/sessions/:id/events",
-      "source": "src/routes/voice.ts:335"
+      "source": "src/routes/voice.ts:366"
     },
     {
       "method": "GET",

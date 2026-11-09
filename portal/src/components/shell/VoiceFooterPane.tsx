@@ -40,6 +40,15 @@
 // control opens System › Voice log (/iq/voice-log/<id>, an orgiq page on the
 // dev server only) at the session last minted, else the latest.
 //
+// Dropped sessions (G35): a page that goes away closes the session at
+// pagehide, with the cause `beforeunload` when a navigation or reload led
+// there and `pagehide` otherwise (a tab discarded, a mobile switch); a transport drop behind a hidden page is
+// `visibilitychange`. Such a session's id stays in sessionStorage for 60 s
+// (RESUME_MS) and the dock's Start control reads "Resume", which mints with
+// `resumeOf`. Nothing in the voice path loads a full page: tools navigate
+// through the router, and the library's job toast link (a plain anchor outside
+// the router) is caught here and routed (inAppLink.ts).
+//
 // No money in the footer (owner decision, 8 November): the dock shows the
 // phase, the elapsed time and the controls, never a dollar figure, so no
 // `budget` reaches VoiceDock; the hold and the daily cap still enforce in the
@@ -61,7 +70,8 @@ import { keepTranscripts, setKeepTranscripts, subscribeKeepTranscripts, transcri
 import { VOICE_LOG_PATH, sessionHref } from '../../pages/voice/voiceLogModel';
 import { pageContextFor, pageContextNote, pageIdFor, subscribePageContext } from '../../lib/voice/pageContext';
 import { voiceVerbosity } from '../../lib/voice/contextWindow';
-import { VoiceController } from '../../lib/voice/controller';
+import { VoiceController, type ResumeRecord, type ResumeStore } from '../../lib/voice/controller';
+import { routeInAppLinks } from './inAppLink';
 import { VoiceJobTracker, jobNotification, type JobNotice } from '../../lib/voice/work';
 import { addLocalNotification } from '../../lib/localNotifications';
 import { subscribeWorkEvents } from '../../hooks/useWorkEvents';
@@ -97,6 +107,17 @@ const PLANE_ACTIONS: ReadonlySet<Action> = new Set<Action>(['PostMessage', 'Star
 const VOICE_LOG_AVAILABLE = features.voiceLog;
 /** How often a kept transcript is saved while the words stream in. */
 const KEEP_SAVE_MS = 1000;
+
+/** sessionStorage key of the dropped session a Start resumes (G35): per tab, survives the tab's reload. */
+const RESUME_KEY = 'voiceResume';
+const resumeStore: ResumeStore = {
+  load: () => {
+    const raw = window.sessionStorage.getItem(RESUME_KEY);
+    return raw ? JSON.parse(raw) as ResumeRecord : null;
+  },
+  save: (r) => { window.sessionStorage.setItem(RESUME_KEY, JSON.stringify(r)); },
+  clear: () => { window.sessionStorage.removeItem(RESUME_KEY); },
+};
 
 /** How long a post waits for its conversation's join before giving up. */
 const CHANNEL_JOIN_MS = 8000;
@@ -337,6 +358,9 @@ function VoiceFooterPane() {
     },
     // G33: this device's spoken length (the Voice log's "Short answers" switch), read at each session start.
     verbosity: voiceVerbosity,
+    // G35: a dropped session's id for 60 s, and whether the page is hidden when the connection fails.
+    resume: resumeStore,
+    hidden: () => document.visibilityState === 'hidden',
   }), [showOutput, jobs]);
   controllerRef.current = controller;
   const snap = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
@@ -367,12 +391,26 @@ function VoiceFooterPane() {
       e.preventDefault();
       void controller.toggle();
     };
-    // A closed tab stops billing: the close is sent with keepalive and the middleware hangs up (§7).
-    const onUnload = () => { void controller.stop('dropped'); };
+    // A closed tab stops billing: the close is sent with keepalive and the middleware hangs up (§7). The close says
+    // which event it was (G35), and the session stays resumable for 60 s should the page come back.
+    // beforeunload alone ends nothing (a cancelled leave, a download): it only names the pagehide that follows.
+    let unloading = false;
+    const onBeforeUnload = () => { unloading = true; setTimeout(() => { unloading = false; }, 1000); };
+    const onPageHide = () => { void controller.stop('dropped', unloading ? 'beforeunload' : 'pagehide'); };
     window.addEventListener('keydown', onKey);
-    window.addEventListener('pagehide', onUnload);
-    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('pagehide', onUnload); };
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+    };
   }, [controller]);
+
+  // G35: the job toast's link (a plain anchor outside the router) goes through the router, so it never reloads the page.
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
+  useEffect(() => routeInAppLinks(document, (path) => { void navigateRef.current(path); }), []);
 
   // The on-device transcript keep (G20): the session's turns, saved under its id while the switch is on; never sent.
   const keep = useSyncExternalStore(subscribeKeepTranscripts, keepTranscripts, () => false);
@@ -419,7 +457,9 @@ function VoiceFooterPane() {
       pending={pending}
       pendingChoice={pendingChoice}
       lastLine={snap.lastLine}
-      onStart={() => { void controller.start(); }}
+      // G35: within 60 s of a drop the Start control resumes that session (the server links the two rows).
+      startLabel={snap.resumable ? 'Resume' : 'Voice'}
+      onStart={() => { void controller.start(snap.resumable ? { resume: true } : {}); }}
       onStop={() => { void controller.stop('closed'); }}
       onMute={() => controller.toggleMute()}
       muted={snap.muted}

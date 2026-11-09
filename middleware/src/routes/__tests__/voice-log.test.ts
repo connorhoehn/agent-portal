@@ -228,7 +228,7 @@ describe('the read routes are the owner\'s only', () => {
     expect(all.map((s: { id: string }) => s.id)).toEqual([b, a]);
     expect(all[0]).toEqual({
       id: b, tenant: 'orgiq', mock: false, startedAt: '2026-11-08T10:00:00.000Z', endedAt: null, seconds: null, maxSeconds: 1800,
-      costUsd: null, costBasis: null, toolCallCount: 1, lastOutcome: 'refused', stopReason: null,
+      costUsd: null, costBasis: null, toolCallCount: 1, lastOutcome: 'refused', stopReason: null, resumeOf: null,
     });
     expect(all[1]).toEqual(expect.objectContaining({ id: a, stopReason: 'closed', costBasis: 'estimated', lastOutcome: null }));
     expect((await get('/sessions?limit=1')).body.sessions.map((s: { id: string }) => s.id)).toEqual([b]);

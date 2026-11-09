@@ -70,8 +70,17 @@
 // tool result, IDLE_PULSE_MS of no user input while the voice is silent pulses
 // once more and says nothing: the voice speaks unprompted only for inbound
 // events (G23).
+//
+// Dropped sessions (G35): every close says why (CloseWhy: the page going away,
+// the connection failing, a hidden page behind a transport failure, the user).
+// A session the page or the connection ended (never one the user ended) is
+// resumable for RESUME_MS: its id goes to the host's ResumeStore (the pane's
+// sessionStorage) at once, synchronously, since a page that unloads never
+// sees the close's answer; the snapshot's `resumable` names it while the
+// window lasts and `start({ resume: true })` mints with `resumeOf`, so the
+// server links the rows, and tells the voice it continues an earlier session.
 
-import { VoiceClient, type ClientEvent, type MediaFactory, type StopReason, type VoiceFrame, type VoiceMint } from './client.ts';
+import { VoiceClient, type ClientEvent, type CloseCause, type CloseWhy, type MediaFactory, type StopReason, type TransportCause, type VoiceFrame, type VoiceMint } from './client.ts';
 import { initialMachine, phaseAt, reduce, sessionOpen, type MachineEvent, type MachineState, type VoicePhase } from './machine.ts';
 import {
   cancelledResult, hashToolArgs, localHref, needsConfirm, type CardAnswer, openableHref, planPreparedCall, prepareToolCall, refused, runPreparedCall, spokenOrdinal, toolAvailable,
@@ -94,6 +103,21 @@ export const IDLE_PULSE_MS = 6000;
 export const CARD_LINE_WAIT_MS = 2500;
 /** What the user hears when a confirm card opens (G32). */
 export const CARD_LINE = 'I need your OK, the card is in the dock.';
+/** How long a session the page or the connection dropped can be resumed (G35). */
+export const RESUME_MS = 60_000;
+/** The note a resumed session starts with. */
+export const RESUME_NOTE = 'This session continues one that dropped a moment ago; the user may pick up where they left off. Earlier results are not in this session: read again what you need.';
+/** The causes after which a session is resumable: the page went away or the connection failed, never the user's own end. */
+const RESUMABLE: ReadonlySet<CloseCause> = new Set<CloseCause>(['pagehide', 'beforeunload', 'visibilitychange', 'ice-failed', 'ice-disconnected', 'peer-closed', 'channel-closed']);
+
+/** Where the dock keeps a dropped session's id for RESUME_MS (sessionStorage in the browser: it survives a reload of the tab). */
+export interface ResumeRecord { sessionId: string; at: number }
+export interface ResumeStore {
+  load(): ResumeRecord | null;
+  save(r: ResumeRecord): void;
+  clear(): void;
+}
+
 /** The silent note a confirm card sends the voice. */
 export const CARD_NOTE = `A confirm card is open in the dock and nothing happens until the user answers it. Say exactly: "${CARD_LINE}" and then wait.`;
 /** The voice's own words that count as having said CARD_LINE. */
@@ -156,6 +180,8 @@ export interface VoiceSnapshot {
   sessionId: string | null;
   /** True for PULSE_MS each time the dock asks for notice (a card opened, or silence after a result): VoiceDock's `pulse`. */
   pulse: boolean;
+  /** A dropped session that a start now resumes (G35), within RESUME_MS of the drop; else null. */
+  resumable: string | null;
 }
 
 type Timer = unknown;
@@ -185,6 +211,10 @@ export interface ControllerOptions {
   pageContext?(): string | null;
   /** The spoken length this device chose (G33, contextWindow.ts voiceVerbosity); terse when absent. */
   verbosity?(): Verbosity;
+  /** Where a dropped session's id is kept for RESUME_MS (G35); without one nothing is resumable. */
+  resume?: ResumeStore;
+  /** Whether the page is hidden now (document.visibilityState): a transport drop behind a hidden page is `visibilitychange`. */
+  hidden?(): boolean;
 }
 
 interface CallRecord { name: string; status: 'confirming' | 'running' | 'answered' }
@@ -294,6 +324,11 @@ export class VoiceController {
   private idleTimer: Timer | null = null;
   private cardLineTimer: Timer | null = null;
   private saidSinceCard = '';
+  /** G35: the dropped session a start resumes, and the timer that retires it after RESUME_MS. */
+  private resumeRecord: ResumeRecord | null = null;
+  private resumeTimer: Timer | null = null;
+  /** The session being minted resumes one (the started note says so). */
+  private resuming: string | null = null;
 
   private readonly opts: ControllerOptions;
 
@@ -305,6 +340,7 @@ export class VoiceController {
     this.runners = opts.runners ?? VOICE_RUNNERS;
     this.planners = opts.planners ?? VOICE_PLANNERS;
     this.log = new VoiceEventLog({ fetch: opts.fetch, now: this.now, setTimer: this.setTimer, clearTimer: this.clearTimer });
+    this.loadResume();
     this.snapshot = this.build();
   }
 
@@ -330,9 +366,13 @@ export class VoiceController {
 
   // ── commands ─────────────────────────────────────────────────────────────
 
-  async start(opts: { confirmOverUserBudget?: boolean } = {}): Promise<void> {
+  /** `resume`: mint as the continuation of the dropped session the snapshot names (G35); otherwise any kept one is forgotten. */
+  async start(opts: { confirmOverUserBudget?: boolean; resume?: boolean } = {}): Promise<void> {
     if (sessionOpen(this.machine)) return;
+    const resumeOf = opts.resume ? this.currentResumable() : null;
+    this.forgetResume();
     this.reset();
+    this.resuming = resumeOf;
     this.dispatch({ type: 'start' });
     const client = new VoiceClient({
       fetch: this.opts.fetch, media: this.opts.media, onEvent: (e) => this.onClientEvent(client, e),
@@ -340,19 +380,28 @@ export class VoiceController {
       knownSeconds: (id) => this.ownSessions.get(id) ?? null,
       ...(this.opts.closeWaitMs !== undefined ? { closeWaitMs: this.opts.closeWaitMs } : {}),
     });
+    // A transport drop behind a hidden page is the page's doing (G35): say so, and keep the transport's own cause.
+    client.dropCause = (transport: TransportCause): CloseWhy => (this.opts.hidden?.() ? { cause: 'visibilitychange', transport } : { cause: transport });
     this.client = client;
     if (this.opts.autoTick !== false) this.startTicker();
-    await client.start(opts.confirmOverUserBudget ? { confirmOverUserBudget: true } : {});
+    await client.start({ ...(opts.confirmOverUserBudget ? { confirmOverUserBudget: true } : {}), ...(resumeOf ? { resumeOf } : {}) });
   }
 
-  async stop(reason: StopReason = 'closed'): Promise<void> {
+  /**
+   * End the session. `why` (G35) is what the close reports as its cause; by default the user's own end for
+   * `closed`, else the reason. A page or connection cause keeps the session resumable for RESUME_MS, saved now.
+   */
+  async stop(reason: StopReason = 'closed', why?: CloseWhy | CloseCause): Promise<void> {
     const client = this.client;
     if (!client || !sessionOpen(this.machine)) return;
+    const given: CloseWhy | undefined = typeof why === 'string' ? { cause: why } : why;
+    const cause: CloseWhy | undefined = given ?? (reason === 'closed' ? { cause: 'user' } : reason === 'dropped' ? undefined : { cause: reason });
+    if (cause && RESUMABLE.has(cause.cause)) this.keepResumable(client);
     // A card still up is answered as cancelled so the row records it.
     if (this.pending) this.resolvePending(false, 'click');
     this.clearChoice();
     this.dispatch({ type: 'stop' });
-    await client.stop(reason);
+    await client.stop(reason, cause);
   }
 
   toggle(): Promise<void> {
@@ -469,6 +518,7 @@ export class VoiceController {
     this.disarmIdle();
     this.clearCardLine();
     if (this.pulseTimer != null) this.clearTimer(this.pulseTimer);
+    if (this.resumeTimer != null) this.clearTimer(this.resumeTimer);
     this.log.dispose();
     void this.stop('dropped');
     this.listeners.clear();
@@ -503,7 +553,8 @@ export class VoiceController {
         this.dispatch({ type: 'failed', reason: e.reason });
         return;
       case 'dropped':
-        this.emit({ kind: 'error', data: { source: 'connection', event: 'dropped' } });
+        this.keepResumable(client);
+        this.emit({ kind: 'error', data: { source: 'connection', event: 'dropped', reason: e.cause, hidden: this.opts.hidden?.() ?? false } });
         this.addLine('assistant', 'The voice connection dropped.');
         return;
       case 'ended':
@@ -532,6 +583,8 @@ export class VoiceController {
         this.dispatch({ type: 'started' });
         // G33: the device's spoken length, as context (the browser cannot append instructions).
         this.noteContext(verbosityNote(this.opts.verbosity?.() ?? 'terse'));
+        // G35: a resumed session says so (the mint linked the rows when it was the user's own).
+        if (this.resuming) { this.emit({ kind: 'client', data: { event: 'resumed', resumeOf: this.resuming } }); this.noteContext(RESUME_NOTE); this.resuming = null; }
         this.notePage();
         return;
       case 'input':
@@ -903,6 +956,47 @@ export class VoiceController {
     this.turns = [...this.turns.slice(0, -1), { ...last, toolCalls: [...(last.toolCalls ?? []), entry] }];
   }
 
+  // ── resuming a dropped session (G35) ─────────────────────────────────────
+
+  /** The session this client minted, kept for RESUME_MS: written at once (the page may be unloading). */
+  private keepResumable(client: VoiceClient): void {
+    const id = client.mint?.sessionId;
+    if (!id || !this.opts.resume) return;
+    const rec = { sessionId: id, at: this.now() };
+    try { this.opts.resume.save(rec); } catch { /* storage refused: nothing to resume */ }
+    this.resumeRecord = rec;
+    this.armResumeExpiry();
+    this.publish();
+  }
+
+  private loadResume(): void {
+    let rec: ResumeRecord | null = null;
+    try { rec = this.opts.resume?.load() ?? null; } catch { rec = null; }
+    if (rec && typeof rec.sessionId === 'string' && typeof rec.at === 'number' && this.now() - rec.at < RESUME_MS) {
+      this.resumeRecord = rec;
+      this.armResumeExpiry();
+    } else if (rec) { try { this.opts.resume?.clear(); } catch { /* nothing kept */ } }
+  }
+
+  private currentResumable(): string | null {
+    const r = this.resumeRecord;
+    return r && this.now() - r.at < RESUME_MS ? r.sessionId : null;
+  }
+
+  private armResumeExpiry(): void {
+    if (this.resumeTimer != null) this.clearTimer(this.resumeTimer);
+    const r = this.resumeRecord;
+    if (!r) return;
+    this.resumeTimer = this.setTimer(() => { this.resumeTimer = null; this.forgetResume(); this.publish(); }, Math.max(0, r.at + RESUME_MS - this.now()));
+  }
+
+  private forgetResume(): void {
+    if (this.resumeTimer != null) this.clearTimer(this.resumeTimer);
+    this.resumeTimer = null;
+    if (this.resumeRecord) { try { this.opts.resume?.clear(); } catch { /* nothing kept */ } }
+    this.resumeRecord = null;
+  }
+
   // ── noticing the dock (G32, G33 item 4) ─────────────────────────────────
 
   /** One pulse of the dock's control: `pulse` true for PULSE_MS (the library animates once per flip to true). */
@@ -1036,6 +1130,7 @@ export class VoiceController {
       closedSeconds: this.closedSeconds,
       sessionId: this.mint?.sessionId ?? null,
       pulse: this.pulsing,
+      resumable: sessionOpen(this.machine) ? null : this.currentResumable(),
     };
   }
 
@@ -1046,7 +1141,7 @@ export class VoiceController {
       && prev.elapsedSeconds === next.elapsedSeconds && prev.pending === next.pending && prev.turns === next.turns
       && prev.choice?.id === next.choice?.id && prev.choice?.ordinal === next.choice?.ordinal
       && prev.lastLine?.text === next.lastLine?.text && prev.muted === next.muted && prev.reason === next.reason
-      && prev.closedSeconds === next.closedSeconds && prev.sessionId === next.sessionId && prev.pulse === next.pulse) return;
+      && prev.closedSeconds === next.closedSeconds && prev.sessionId === next.sessionId && prev.pulse === next.pulse && prev.resumable === next.resumable) return;
     if (prev.phase !== next.phase) this.emit({ kind: 'client', data: { event: 'phase', phase: next.phase, from: prev.phase } });
     this.snapshot = next;
     for (const l of this.listeners) l();

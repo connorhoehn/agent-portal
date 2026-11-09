@@ -412,6 +412,12 @@ const CASES: KindCase[] = [
     routes: [route('GET', '/api/graph/projects', 200, PROJECTS), route('POST', '/api/conversations/summarize/run', 202, { runId: 'sum-1' }),
       steps('/api/conversations/summarize/runs/sum-1', [{ phase: 'running' }, { phase: 'completed' }])],
     post: ['/api/conversations/summarize/run', { channel: 'orgiq:initiative:p-obs', text: '' }], title: 'Summarise Observability Platform', states: ['queued', 'running', 'done'], href: '/iq/projects/p-obs' },
+  // G35: the document job's toast lands on the initiative (where the draft's Save card is), an in-app path the
+  // pane routes through the router (components/shell/inAppLink.ts), never a full page load.
+  { kind: 'doc', tenant: 'orgiq', allow: [], target: 'observability',
+    routes: [route('GET', '/api/graph/projects', 200, PROJECTS), route('POST', '/api/conversations/doc/run', 202, { runId: 'doc-1' }),
+      steps('/api/conversations/doc/runs/doc-1', [{ phase: 'running' }, { phase: 'completed' }])],
+    post: ['/api/conversations/doc/run', { channel: 'orgiq:initiative:p-obs', text: '' }], title: 'Draft a document from Observability Platform', states: ['queued', 'running', 'done'], href: '/iq/projects/p-obs' },
   { kind: 'diagram', tenant: 'social', allow: ['ViewSocial'], target: 'platform',
     routes: [route('GET', '/api/social/resolve?kind=channel', 200, { kind: 'channel', match: { id: 'platform', name: 'platform', channel: 'social:ch:platform', channelId: 'x' }, candidates: [] }),
       route('POST', '/api/chat/commands/diagram/run', 202, { runId: 'dia-1' }), steps('/api/chat/commands/diagram/runs/dia-1', [{ phase: 'completed' }])],

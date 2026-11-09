@@ -23,6 +23,7 @@ import {
 } from '@connorhoehn/ui-components/shared';
 import { VoiceTurnStrip, type VoiceTurn } from '@connorhoehn/ui-components/voice';
 import { CollectionRecordFrame } from '../../components/collections/CollectionRecordFrame';
+import { deckDownloadName } from '../../components/decks/downloadDeckFile';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { keepTranscripts, setKeepTranscripts, subscribeKeepTranscripts, transcriptStore, type KeptTranscript } from '../../lib/voice/transcriptKeep';
@@ -157,8 +158,8 @@ export default function VoiceLogPage() {
   }, [record, transcript]);
   const onDownload = useCallback(() => {
     if (!selectedId) return;
-    // The route answers an attachment (Content-Disposition), so following it downloads and stays on this page.
-    window.location.assign(exportApi(selectedId));
+    // Fetched, never followed (G35): navigating to an attachment fires beforeunload, which ends a live voice session.
+    void downloadAttachment(exportApi(selectedId), `voice-session-${selectedId}.json`).catch(() => undefined);
   }, [selectedId]);
   const onRangeChange = useCallback((next: VoiceLogRange) => {
     setParams((prev) => {
@@ -174,4 +175,22 @@ export default function VoiceLogPage() {
     terse={terse} onTerseChange={(on) => { setVoiceVerbosity(on ? 'terse' : 'normal'); }}
     onSelect={(id) => navigate(`${sessionHref(id)}${search}`)} onCopy={onCopy} onDownload={onDownload} copied={copied}
     range={range} onRangeChange={onRangeChange} />;
+}
+
+/** Download a same-origin attachment without leaving the page: fetch it and save the blob (the deck download's pattern). */
+async function downloadAttachment(path: string, fallbackName: string): Promise<void> {
+  const res = await fetch(path, { credentials: 'same-origin' });
+  if (!res.ok) throw new Error(`export failed (${res.status})`);
+  const objectUrl = URL.createObjectURL(await res.blob());
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = deckDownloadName(res.headers.get('content-disposition'), fallbackName);
+  anchor.hidden = true;
+  try {
+    document.body.append(anchor);
+    anchor.click();
+  } finally {
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
+  }
 }

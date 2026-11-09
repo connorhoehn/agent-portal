@@ -1,0 +1,182 @@
+// G35 (docs/voice-navigator-gaps.md, sessions closed `dropped`): the close
+// says why; nothing in the voice path loads a full page; a dropped session is
+// resumable for 60 s and the resume names the session it continues.
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { RESUME_MS, RESUME_NOTE, VoiceController, type ResumeRecord, type ResumeStore } from '../controller.ts';
+import { VoiceClient, type MediaHandlers } from '../client.ts';
+import { routedPath, ROUTED_LINKS } from '../../../components/shell/inAppLink.ts';
+import { FakeClock, fakeFetch, loggedEvents, middlewareVoice, route, toolContext } from './voiceHarness.ts';
+
+const A = 'vs_00000000-0000-0000-0000-0000000000d1';
+const B = 'vs_00000000-0000-0000-0000-0000000000d2';
+type Call = { name: string; arguments: Record<string, unknown>; said: string };
+const KUBE: Call = { name: 'search', arguments: { query: 'Kubernetes experts', type: 'person', scope: null, sort: 'recent', limit: null, answer: null }, said: 'Find me the latest Kubernetes experts.' };
+
+function memoryStore(): ResumeStore & { rec: ResumeRecord | null } {
+  const s = { rec: null as ResumeRecord | null, load: () => s.rec, save: (r: ResumeRecord) => { s.rec = r; }, clear: () => { s.rec = null; } };
+  return s;
+}
+
+/** A dock on the virtual clock; each mint answers the next id. `media` stands in for WebRTC (a real, non-mock mint). */
+async function dock(opts: { ids: string[]; clock?: FakeClock; store?: ResumeStore; real?: boolean; hidden?: () => boolean }) {
+  const { mockLiveScript } = await middlewareVoice<{ mockLiveScript: (id: string, c: Call) => { onStart: unknown[]; onResponseCreate: unknown[]; onClose: unknown[] } }>('openai.ts');
+  const clock = opts.clock ?? new FakeClock();
+  const ids = [...opts.ids];
+  const mintBody = () => {
+    const id = ids.shift()!;
+    return {
+      sessionId: id, voiceSessionId: id, holdId: 'h1', maxSeconds: 1800, expiresAt: '2026-11-08T13:00:00Z', sdp: 'v=0', mock: !opts.real,
+      model: 'gpt-live-1', voice: null, toolsEnabled: true, tools: ['search'], budget: { holdUsd: 0.5, usdPerMinute: 0.05 },
+      ...(opts.real ? {} : { mockScript: mockLiveScript(id, KUBE) }),
+    };
+  };
+  const { fetch, log } = fakeFetch([
+    (req) => (req.method === 'POST' && /\/api\/voice\/sessions\/vs_[^/]+\/(events|close)$/.test(req.url) ? { status: 201, body: {} } : undefined),
+    (req) => (req.method === 'POST' && req.url === '/api/voice/sessions' ? { status: 201, body: mintBody() } : undefined),
+    route('GET', '/api/search', 200, { results: [], total: 0 }),
+  ]);
+  let handlers: MediaHandlers | null = null;
+  const media = opts.real ? async (h: MediaHandlers) => {
+    handlers = h;
+    return { offer: 'v=0', applyAnswer: async () => {}, send: () => true, levels: () => ({ input: 0, output: 0 }), setMuted: () => {}, close: () => {} };
+  } : null;
+  const c = new VoiceController({
+    fetch, media, toolContext: () => toolContext({ fetch }), now: clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer,
+    ...(opts.store ? { resume: opts.store } : {}), ...(opts.hidden ? { hidden: opts.hidden } : {}),
+  });
+  return { c, clock, log, drop: (cause: Parameters<MediaHandlers['onDrop']>[0]) => handlers!.onDrop(cause) };
+}
+
+const closes = (log: Array<{ url: string; body: unknown }>) => log.filter((r) => r.url.endsWith('/close')).map((r) => r.body as Record<string, unknown>);
+
+test('G35: a pagehide close records the cause, and a user end says user', async () => {
+  const h = await dock({ ids: [A, B] });
+  await h.c.start();
+  await h.clock.advance(1500);
+  await h.c.stop('dropped', 'pagehide');
+  assert.deepEqual(closes(h.log).map((b) => [b['reason'], b['cause']]), [['dropped', 'pagehide']]);
+  await h.c.start();
+  await h.clock.advance(1500);
+  const stopping = h.c.stop('closed');
+  await h.clock.advance(300);
+  await stopping;
+  assert.deepEqual(closes(h.log).map((b) => [b['reason'], b['cause']]), [['dropped', 'pagehide'], ['closed', 'user']]);
+  h.c.dispose();
+});
+
+test('G35: a transport drop records the ICE or channel cause, and a hidden page turns it into visibilitychange with the transport kept', async () => {
+  let hidden = false;
+  const h = await dock({ ids: [A, B], real: true, hidden: () => hidden });
+  await h.c.start();
+  await h.clock.advance(100);
+  h.drop('ice-failed');
+  await h.clock.advance(100);
+  hidden = true;
+  await h.c.start();
+  await h.clock.advance(100);
+  h.drop('channel-closed');
+  await h.clock.advance(1000);
+  assert.deepEqual(closes(h.log).map((b) => [b['reason'], b['cause'], b['transport'] ?? null]), [['dropped', 'ice-failed', null], ['dropped', 'visibilitychange', 'channel-closed']]);
+  const dropped = loggedEvents(h.log).filter((e) => (e['data'] as Record<string, unknown> | undefined)?.['event'] === 'dropped').map((e) => (e['data'] as Record<string, unknown>)['reason']);
+  assert.deepEqual(dropped, ['ice-failed', 'channel-closed']);
+  h.c.dispose();
+});
+
+test('G35: a dropped session is resumable for 60 s after a reload; the resume mints with resumeOf and tells the voice', async () => {
+  const store = memoryStore();
+  const clock = new FakeClock();
+  const first = await dock({ ids: [A], clock, store });
+  await first.c.start();
+  await clock.advance(1500);
+  void first.c.stop('dropped', 'pagehide');
+  // The id is kept at once, before the close's answer: the page that is unloading never sees it.
+  assert.equal(store.rec?.sessionId, A);
+  first.c.dispose();
+
+  // The reload: a new dock on the same tab's storage, 20 s later.
+  await clock.advance(20_000);
+  const thinking: string[] = [];
+  const proto = VoiceClient.prototype;
+  const orig = proto.appendThinking;
+  proto.appendThinking = function (t: string) { thinking.push(t); return orig.call(this, t); };
+  try {
+    const second = await dock({ ids: [B], clock, store });
+    assert.equal(second.c.getSnapshot().resumable, A, 'the dock offers Resume');
+    await second.c.start({ resume: true });
+    await clock.advance(1500);
+    const mints = second.log.filter((r) => r.url === '/api/voice/sessions');
+    assert.deepEqual(mints.map((m) => (m.body as Record<string, unknown>)['resumeOf']), [A]);
+    assert.equal(store.rec, null, 'a resume uses the kept id up');
+    assert.equal(second.c.getSnapshot().resumable, null);
+    assert.ok(thinking.includes(RESUME_NOTE));
+    assert.ok(loggedEvents(second.log).some((e) => (e['data'] as Record<string, unknown> | undefined)?.['event'] === 'resumed'));
+    second.c.dispose();
+  } finally { proto.appendThinking = orig; }
+});
+
+test('G35: the Resume offer lapses after 60 s, and a session the user ended is never resumable', async () => {
+  const store = memoryStore();
+  const clock = new FakeClock();
+  const h = await dock({ ids: [A, B], clock, store });
+  await h.c.start();
+  await clock.advance(1500);
+  await h.c.stop('dropped', 'pagehide');
+  assert.equal(h.c.getSnapshot().resumable, A);
+  await clock.advance(RESUME_MS - 1000);
+  assert.equal(h.c.getSnapshot().resumable, A);
+  await clock.advance(1100);
+  assert.equal(h.c.getSnapshot().resumable, null, 'gone after 60 s');
+  assert.equal(store.rec, null);
+  // A plain start after a lapse sends no resumeOf; the user's own end keeps nothing.
+  await h.c.start();
+  await clock.advance(1500);
+  const stopping = h.c.stop('closed');
+  await clock.advance(300);
+  await stopping;
+  assert.equal(store.rec, null);
+  assert.equal(h.c.getSnapshot().resumable, null);
+  assert.deepEqual(h.log.filter((r) => r.url === '/api/voice/sessions').map((m) => (m.body as Record<string, unknown>)['resumeOf'] ?? null), [null, null]);
+  // A record older than the window, found at load, is forgotten.
+  store.save({ sessionId: A, at: clock.t - RESUME_MS - 1 });
+  const later = await dock({ ids: [B], clock, store });
+  assert.equal(later.c.getSnapshot().resumable, null);
+  assert.equal(store.rec, null);
+  h.c.dispose(); later.c.dispose();
+});
+
+test('G35: no voice module loads a full page (location.assign, location.href =, location.reload, window.open)', () => {
+  const root = new URL('../../../', import.meta.url);
+  const files = [
+    ...readdirSync(new URL('lib/voice/', root)).filter((f) => f.endsWith('.ts')).map((f) => `lib/voice/${f}`),
+    ...readdirSync(new URL('pages/voice/', root)).filter((f) => /\.tsx?$/.test(f)).map((f) => `pages/voice/${f}`),
+    'components/shell/VoiceFooterPane.tsx', 'components/shell/voiceDockModel.ts', 'components/shell/inAppLink.ts',
+    'lib/localNotifications.ts', 'lib/toastStore.ts',
+  ];
+  const offenders: string[] = [];
+  for (const f of files) {
+    const text = readFileSync(new URL(f, root), 'utf8');
+    text.split('\n').forEach((line, i) => {
+      if (/location\.(assign|replace|reload)\s*\(|location\.href\s*=[^=]|window\.open\s*\(/.test(line)) offenders.push(`${f}:${i + 1}: ${line.trim()}`);
+    });
+  }
+  assert.deepEqual(offenders, []);
+  assert.ok(files.length > 15);
+});
+
+test('G35: the job toast\'s plain anchor is routed in the app on a plain click; new-tab clicks, downloads and other origins are left alone', () => {
+  const origin = 'http://localhost:5192';
+  const click = { button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, defaultPrevented: false };
+  const a = (href: string, target = '', download = false) => ({ href, target, hasAttribute: (n: string) => n === 'download' && download });
+  assert.equal(ROUTED_LINKS, 'a[data-testid="job-toast-link"]');
+  assert.equal(routedPath(click, a(`${origin}/iq/projects/p-obs`), origin), '/iq/projects/p-obs');
+  assert.equal(routedPath(click, a('/iq/work/job-1?tab=log#top'), origin), '/iq/work/job-1?tab=log#top');
+  assert.equal(routedPath({ ...click, metaKey: true }, a('/iq/work/job-1'), origin), null);
+  assert.equal(routedPath({ ...click, button: 1 }, a('/iq/work/job-1'), origin), null);
+  assert.equal(routedPath(click, a('/iq/work/job-1', '_blank'), origin), null);
+  assert.equal(routedPath(click, a('/api/x/export', '', true), origin), null);
+  assert.equal(routedPath(click, a('https://evil.example/iq'), origin), null);
+  assert.equal(routedPath({ ...click, defaultPrevented: true }, a('/iq/work/job-1'), origin), null);
+});

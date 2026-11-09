@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-08T23:22:34.307Z",
-  "serverHandlerSha": "144ceb50f6897493921c832adbebe9833df829792c86f1d686f4d49d4d1a5114",
-  "baseUrl": "http://127.0.0.1:3995",
+  "capturedAt": "2026-11-09T00:24:58.528Z",
+  "serverHandlerSha": "ce180a0a75d069fc1821d5e2ca160acf3b29a57a6f9f343fc4c1966d5b443aca",
+  "baseUrl": "http://127.0.0.1:3992",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -3000,12 +3000,12 @@
         "boxes[].status": "string",
         "boxes[].stopsInMs": "number",
         "boxes[].taskMsLeft": "number",
+        "boxes[].taskStartedAt": "string",
         "boxes[].tokensUsed": "number"
       },
       "values": {
         "boxes[].status": [
           "idle",
-          "provisioning",
           "running",
           "waiting"
         ]
@@ -3893,8 +3893,11 @@
         "$[].key": [
           "ORG-AUTH-1",
           "ORG-AUTH-2",
+          "ORG-AUTH-3",
           "ORG-AUTH-5",
+          "ORG-AUTH-7",
           "ORG-AUTH-8",
+          "ORG-AUTH-9",
           "ORG-COST-2",
           "ORG-COST-3",
           "ORG-COST-6",
@@ -3906,29 +3909,26 @@
           "ORG-FS-1",
           "ORG-FS-3",
           "ORG-INF-1",
-          "ORG-INF-2",
-          "ORG-INF-3",
           "ORG-LAKE-2",
           "ORG-LAKE-3",
           "ORG-LAKE-4",
           "ORG-LLM-1",
           "ORG-LLM-10",
-          "ORG-LLM-2",
           "ORG-LLM-3",
           "ORG-LLM-4",
-          "ORG-LLM-5",
-          "ORG-LLM-7",
-          "ORG-LLM-9",
           "ORG-MOB-2",
           "ORG-MOB-3",
           "ORG-MOB-4",
+          "ORG-OBS-1",
           "ORG-OBS-10",
+          "ORG-OBS-11",
           "ORG-OBS-12",
           "ORG-OBS-13",
           "ORG-OBS-14",
           "ORG-OBS-3",
           "ORG-OBS-4",
           "ORG-OBS-5",
+          "ORG-OBS-6",
           "ORG-OBS-8",
           "ORG-RAG-3",
           "ORG-RAG-4",
@@ -10537,9 +10537,27 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "runs": "array"
+        "runs": "array",
+        "runs[]": "object",
+        "runs[].botId": "null",
+        "runs[].durationMs": "number",
+        "runs[].error": "null",
+        "runs[].findings": "number",
+        "runs[].finishedAt": "string",
+        "runs[].id": "string",
+        "runs[].startedAt": "string",
+        "runs[].status": "string",
+        "runs[].sweep": "string",
+        "runs[].tenant": "string"
       },
-      "values": {}
+      "values": {
+        "runs[].status": [
+          "ok"
+        ],
+        "runs[].tenant": [
+          "orgiq"
+        ]
+      }
     },
     "GET /health": {
       "persona": "orgiq/admin",

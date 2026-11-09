@@ -67,7 +67,7 @@ test('the scripted session drives the dock through its phases, runs the tool, an
   assert.doesNotMatch(JSON.stringify(events[0]!.body), /Kubernetes/);
   // The close posts the seconds, and the delegated tokens the script's two responses used (G11), exactly once.
   const closes = h.log.filter((r) => r.url.endsWith('/close'));
-  assert.deepEqual(closes.map((c) => c.body), [{ seconds: 15, reason: 'closed', delegated: { inputTokens: 2254, outputTokens: 48, cachedTokens: 0, responses: 2 } }]);
+  assert.deepEqual(closes.map((c) => c.body), [{ seconds: 15, reason: 'closed', cause: 'user', delegated: { inputTokens: 2254, outputTokens: 48, cachedTokens: 0, responses: 2 } }]);
   assert.equal(h.controller.getSnapshot().closedSeconds, 15);
   const strip = h.controller.getSnapshot().turns;
   assert.equal(strip[0]!.role, 'you');
