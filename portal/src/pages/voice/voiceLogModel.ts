@@ -8,6 +8,7 @@
 // is merged in here for display and for "Copy as JSON", and never sent.
 
 import type { KeptTranscript } from '../../lib/voice/transcriptKeep.ts';
+import { plural } from '../../lib/plural.ts';
 import { readDiagnostic, type HeardOutcome, type SpokeAfter } from '../../lib/voice/sessionEvents.ts';
 import { dayGroupsBy, took, when, type ConversationRow, type LogRecord, type LogRow } from '../logging/loggingModel.ts';
 
@@ -95,7 +96,6 @@ export function duration(seconds: number | null | undefined): string {
   return m ? `${m}m ${s}s` : `${s}s`;
 }
 
-const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
 /** The rail row's second line: workspace, length, tool calls, how it ended. */
 export function sessionSubline(s: VoiceSessionListItem): string {

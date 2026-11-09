@@ -8,6 +8,7 @@
 // Both lived at the very bottom of a 900-line Work page; a queue's failure
 // lane is not an appendix.
 
+import { plural } from '../../lib/plural';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
@@ -218,16 +219,16 @@ export default function FindingsPage() {
     const n = a.proposals?.length ?? 0;
     if (n === 0) {
       toastSuccess(tid, 'No links found',
-        `Nothing in the graph (${a.candidatesConsidered ?? 0} entities) is genuinely referenced.`);
+        `Nothing in the graph (${plural(a.candidatesConsidered ?? 0, 'entity', 'entities')}) is genuinely referenced.`);
     } else {
-      toastSuccess(tid, `${n} link${n === 1 ? '' : 's'} proposed`, 'review them on the Overview before they touch the graph');
+      toastSuccess(tid, `${plural(n, 'link')} proposed`, 'review them on the Overview before they touch the graph');
     }
     refreshFindings();
   }
 
   async function analyzeBatch(sweep: string, count: number) {
     const n = Math.min(count, 10);
-    const tid = toastPending(`Reading ${n} documents`, 'extracting the links each one should have');
+    const tid = toastPending(`Reading ${plural(n, 'document')}`, 'extracting the links each one should have');
     const res = await writeJson<{
       analysed: number; proposed: number; alreadyKnown: number;
       noLinks: number; failed: number; remaining: number;
@@ -235,13 +236,13 @@ export default function FindingsPage() {
     if (!res.ok) { toastError(tid, 'Batch analysis failed', res.error ?? 'unknown error'); return; }
     const r = res.data!;
     const parts = [
-      r.proposed > 0 ? `${r.proposed} links proposed` : null,
+      r.proposed > 0 ? `${plural(r.proposed, 'link')} proposed` : null,
       r.noLinks > 0 ? `${r.noLinks} had nothing to link` : null,
       r.alreadyKnown > 0 ? `${r.alreadyKnown} already proposed` : null,
       r.failed > 0 ? `${r.failed} failed` : null,
       r.remaining > 0 ? `${r.remaining} still to go` : null,
     ].filter(Boolean);
-    toastSuccess(tid, `Analysed ${r.analysed} documents`, parts.join(' · ') || 'nothing to do');
+    toastSuccess(tid, `Analysed ${plural(r.analysed, 'document')}`, parts.join(' · ') || 'nothing to do');
     refreshFindings();
   }
 
