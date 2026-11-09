@@ -1,4 +1,4 @@
-import { ComposerSurface } from '@connorhoehn/ui-components/shared';
+import { ComposerSurface, useViewportWidth } from '@connorhoehn/ui-components/shared';
 // An initiative, inside the shared Initiatives frame (InitiativesExplorer):
 // the explorer column on the left, the pane on the right with the
 // initiative's header band over it and the docked composer
@@ -194,6 +194,9 @@ function useWideActions() {
 
 function ProjectDetailPage() {
   const { wideActions, measureRef } = useWideActions();
+  // A phone-width window (under 40rem): the composer rests as its one-line row and opens on
+  // focus, rather than the full card covering half the first screen (walk, 9 November, 390 px).
+  const narrowWindow = useViewportWidth() < 640;
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -670,6 +673,9 @@ function ProjectDetailPage() {
         { id: 'contributors', label: 'Contributors', count: contributors.length },
         { id: 'activity', label: 'Activity' },
       ]}
+        // Narrower than the seven tabs: Overview and the current tab stay, the rest are under
+        // More ▾ (library Tabs overflowBelow), not a row cut at the screen's edge.
+        tabsOverflowBelow={600}
         activeTab={tab}
         onTabChange={setTab}
         className="px-6"
@@ -706,7 +712,7 @@ function ProjectDetailPage() {
         return accepted;
       }}
       defaultMode={composerSeed && onWork ? 'agent' : 'chat'}
-      expanded
+      expanded={!narrowWindow}
       dock={<Stack gap="none" className="max-h-64 overflow-y-auto">{initiativeCall.dock}</Stack>}
       setup={{ draft: '', draftKey: `initiative:${project.id}:discussion`, ...composerSetup }}
       // Chat → This item's Discussion posts to the same gateway thread the pane shows (its writers only).

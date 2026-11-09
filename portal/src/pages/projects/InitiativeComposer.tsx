@@ -407,6 +407,9 @@ function DockedComposer({
       // Compact (a canvas tab): a tighter dock, so the graph keeps the column.
       className={compact ? '@container bg-surface pt-0 [--dock-inset:0px]' : '@container bg-surface pt-3 [--dock-inset:1.5rem]'}
       expanded={expanded ?? !compact}
+      // Not held open (a narrow window): the To: row folds with the idle row,
+      // which already names the destination (walk, 9 November).
+      foldRecipients={expanded === false}
       modePlaceholders={{ agent: setup.placeholder }}
       allowEmoji={false}
       defaultDraft={setup.draft}
