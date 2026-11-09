@@ -194,6 +194,23 @@ export function artifactKindLabel(kind: string): string {
 }
 
 /**
+ * Where an artifact lives, in words. A trace's `uri` is the invocation's id
+ * (a UUID, or `mock-inv-0` offline): the reader is told it is the agent's
+ * invocation trace in Observability and the id stays one hover away. Any
+ * other kind's `uri` is a path or key a reader can use as written.
+ */
+export function artifactPlace(a: Pick<PipelineArtifact, 'kind' | 'uri'>): { label: string; title?: string } {
+  if (a.kind === 'trace') return { label: 'Observability · invocation trace', title: a.uri };
+  return { label: a.uri };
+}
+
+/** The step an artifact came from, by the step's name rather than its id ("route-2"). */
+export function artifactStepLabel(a: Pick<PipelineArtifact, 'stepId'>, steps: readonly Pick<PipelineStep, 'stepId' | 'label'>[]): string {
+  if (!a.stepId) return '—';
+  return steps.find((s) => s.stepId === a.stepId)?.label ?? a.stepId;
+}
+
+/**
  * The library WorkflowStepper's shape: a step is `done` once completed or
  * skipped, and the ONE `active` step is the first that is not — the step a
  * reader should look at (it carries `aria-current="step"`). A run whose every

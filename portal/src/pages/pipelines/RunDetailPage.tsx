@@ -162,7 +162,7 @@ export default function RunDetailPage({ apiBase = '/api/pipelines/runs', listPat
           <PipelineRunSteps steps={steps} />
         </DetailSection>
         <DetailSection as="h2" title="Artifacts" hint={`${artifacts.length}`} data-testid="pipeline-artifacts">
-          <PipelineRunArtifacts artifacts={artifacts} />
+          <PipelineRunArtifacts artifacts={artifacts} steps={steps} />
         </DetailSection>
         {cancelable && <RunReportDecks runId={run.id} runTitle={run.context.title} />}
         {realtime && live && <PipelineRunLive key={run.id} runId={run.id} pipelineId={run.definitionId ?? ''} recordedStatus={run.status} onMoved={refresh} />}

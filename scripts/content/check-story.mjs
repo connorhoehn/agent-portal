@@ -18,6 +18,12 @@
 //                            its envelopes, unless DELIBERATE names it
 //   machine-text             a display string carries a raw id or UUID, or says
 //                            mock / fixture / wire-capture / OrgIQ / connorhoehn
+//   mock-id                  a display string carries an offline fixture id
+//                            (`mock-inv-0`, `mock-supervisor-system-prompt`):
+//                            the mock's own key showing through to a reader
+//   run-steps-repeat         an agent run whose steps share a name (the Steps
+//                            table read "route, route"), scanned over the
+//                            supervisor runs the trace fixture projects
 //   surname-crowd            one surname on more than two people
 //
 //   node scripts/content/check-story.mjs     prints every finding; exit 1 on any
@@ -55,13 +61,13 @@ const [
   { budgetGrants }, { seededPeople }, { seedUserForPerson, listUsers }, { workItemComments },
   { CAST, HISTORY, EXTRA_CHANNELS }, { notificationsFixture }, { orgFindings },
   { kbRegistry }, { bots }, { workspaceDocuments }, { savedSearchesFixture },
-  { socialChannelsFixture, socialChannelMessagesFixture },
+  { socialChannelsFixture, socialChannelMessagesFixture }, { traceRows },
 ] = await Promise.all([
   'mock/initiatives.ts', 'mock/work-items.ts', 'mock/decisions.ts', 'mock/sprints.ts',
   'mock/budgets.ts', 'mock/people.ts', 'providers/identity.ts', 'mock/work-item-comments.ts',
   'mock/social-history.ts', 'mock/notifications.ts', 'mock/org-findings.ts',
   'mock/kb-registry.ts', 'mock/bots.ts', 'providers/work-documents.ts', 'providers/saved-searches.ts',
-  'mock/social-channels.ts',
+  'mock/social-channels.ts', 'mock/observability.ts',
 ].map(load));
 
 const findings = [];
@@ -123,9 +129,14 @@ const DISPLAY = new Set(['title', 'name', 'summary', 'description', 'body', 'tex
   'resolution', 'label', 'markdown', 'displayName', 'nextStep', 'nextStepDetail', 'blockedReason',
   'pausedReason', 'reason', 'query', 'actionLabel']);
 
+// A fixture's own key: `mock-` and at least one more hyphenated part.
+const MOCK_ID = /\bmock-[a-z0-9]+(?:-[a-z0-9]+)*\b/i;
+
 let scanned = 0;
 function scanText(where, text) {
   scanned += 1;
+  const mockId = text.match(MOCK_ID);
+  if (mockId) { fail('mock-id', where, `fixture id "${mockId[0]}" in "${clip(text)}"`); return; }
   const id = text.match(RAW_ID) ?? text.match(UUID);
   if (id) fail('machine-text', where, `raw id "${id[0]}" in "${clip(text)}"`);
   for (const [re, word] of WORDS) if (re.test(text)) fail('machine-text', where, `says "${word}": "${clip(text)}"`);
@@ -151,6 +162,16 @@ const tables = {
 };
 for (const [source, rows] of Object.entries(tables)) for (const row of rows) scanRow(source, row);
 for (const [key, where, , , text] of HISTORY) scanText(`chat ${where} ${key}`, text);
+
+// ── Agent runs: the supervisor traces that open a run (pipelines P1) ──
+// Their step names are the run's Steps table; one run never repeats a name.
+for (const row of traceRows().filter((r) => r.agui_run_id && Array.isArray(r.steps))) {
+  const where = `agent run "${clip(row.prompt_snippet ?? row.invocation_id)}"`;
+  const names = row.steps.map((st) => st.name);
+  for (const n of names) scanText(`${where} step`, n);
+  const repeated = names.filter((n, i) => names.indexOf(n) !== i);
+  if (repeated.length) fail('run-steps-repeat', where, `steps ${names.join(', ')} repeat ${[...new Set(repeated)].join(', ')}`);
+}
 for (const ch of EXTRA_CHANNELS) { scanText(`channel ${ch.slug}.name`, ch.name); scanText(`channel ${ch.slug}.description`, ch.description); }
 
 // ── Surnames ──

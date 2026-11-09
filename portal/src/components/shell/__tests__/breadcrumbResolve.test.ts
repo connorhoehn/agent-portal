@@ -126,3 +126,10 @@ test('Logging in the pipelines tenant (G37b): System › Logging › the record'
   assert.deepEqual(resolveBreadcrumbs('/pipelines/logging'), [{ label: 'System' }, { label: 'Logging' }]);
   assert.deepEqual(resolveBreadcrumbs('/pipelines/logging/voice/vs_1'), [{ label: 'System' }, { label: 'Logging', path: '/pipelines/logging' }, { label: 'vs_1', id: 'vs_1' }]);
 });
+
+test('a run crumb names the record by its decoded id and never shows the raw id (walk, 9 November)', () => {
+  // The run page registers its title under the router's decoded id; the crumb must carry the same id.
+  assert.deepEqual(resolveBreadcrumbs('/iq/runs/agent-run%3A79eed77e-7aee'), [{ label: 'Operate' }, { label: 'Runs', path: '/iq/runs' }, { label: 'Run', id: 'agent-run:79eed77e-7aee' }]);
+  // A malformed escape stays as written rather than throwing.
+  assert.equal(resolveBreadcrumbs('/iq/decisions/50%25%zz').at(-1)?.id, '50%25%zz');
+});

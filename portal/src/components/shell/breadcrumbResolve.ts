@@ -83,7 +83,11 @@ function shortId(s: string): string {
 }
 
 export function resolveBreadcrumbs(pathname: string): Crumb[] {
-  const segs = pathname.split('/').filter(Boolean);
+  // Decoded: a record id with a reserved character arrives encoded in the
+  // path (`/iq/runs/agent-run%3A79ee…`) while its page reads the decoded id
+  // from the router and registers its title under that, so an encoded crumb
+  // id never matched and the trail kept the raw id (walk, 9 November).
+  const segs = pathname.split('/').filter(Boolean).map((seg) => { try { return decodeURIComponent(seg); } catch { return seg; } });
   const [root, a, b, c, d] = segs;
 
   if (root === 'iq') {
@@ -115,7 +119,8 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
       // initiative page.
       case 'runs':
         if (!b) return [{ label: 'Operate' }, { label: 'Runs' }];
-        return [{ label: 'Operate' }, { label: 'Runs', path: '/iq/runs' }, { label: `Run ${shortId(b)}`, id: b }];
+        // Until the run page registers its title the crumb says what it is, not its id.
+        return [{ label: 'Operate' }, { label: 'Runs', path: '/iq/runs' }, { label: 'Run', id: b }];
       case 'communication': return [{ label: 'Engage' }, { label: 'Communication' }];
       // Logging (G37): /iq/logging/<source>[/<kind>]/<id>; the record is the last segment.
       case 'logging': {
@@ -166,7 +171,7 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
       case 'budgets': return [{ label: 'Plan' }, { label: 'Budgets' }];
       case 'bots':
         if (!b) return [{ label: 'Build' }, { label: 'Automate' }, { label: 'Bots' }];
-        return [{ label: 'Build' }, { label: 'Automate' }, { label: 'Bots', path: '/admin/bots' }, { label: `Bot ${shortId(b)}`, id: b }];
+        return [{ label: 'Build' }, { label: 'Automate' }, { label: 'Bots', path: '/admin/bots' }, { label: 'Bot', id: b }];
       case 'changes': return [{ label: 'Build' }, { label: 'Automate' }, { label: 'Changes' }];
       case 'devbox': return [{ label: 'Build' }, { label: 'Computer Lab' }];
       case 'knowledge':

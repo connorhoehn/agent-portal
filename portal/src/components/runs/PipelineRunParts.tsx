@@ -11,14 +11,14 @@
 // SSE stream for the events.
 
 import {
-  Chip, DataTable, DetailHeader, Inline, KeyValue, MetaLine, Stack, WorkflowStepper,
+  Chip, DataTable, DetailHeader, Inline, KeyValue, MetaLine, Stack, T, WorkflowStepper,
   type DataTableColumn,
 } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
 import { usd } from '../../lib/format';
 import {
-  artifactKindLabel, attemptItems, kindLabel, runHref, runStatusChip, sourceLabel, sourceStatusNote, stepperSteps, stepStatusChip,
+  artifactKindLabel, artifactPlace, artifactStepLabel, attemptItems, kindLabel, runHref, runStatusChip, sourceLabel, sourceStatusNote, stepperSteps, stepStatusChip,
   type PipelineArtifact, type PipelineRun, type PipelineStep,
 } from '../../lib/pipelineRuns';
 import { RunTimeline } from './RunTimeline';
@@ -122,18 +122,20 @@ export function PipelineRunSteps({ steps }: { steps: PipelineStep[] }) {
   );
 }
 
-const ARTIFACT_COLUMNS: DataTableColumn<PipelineArtifact>[] = [
+// The step by its name and the place in words: ids ("route-2", an invocation
+// uuid) stay one hover away (walk, 9 November).
+const artifactColumns = (steps: readonly PipelineStep[]): DataTableColumn<PipelineArtifact>[] => [
   { key: 'kind', header: 'Kind', render: (a) => <Chip tone="neutral" size="xs">{artifactKindLabel(a.kind)}</Chip> },
   { key: 'title', header: 'Artifact', render: (a) => a.title },
-  { key: 'stepId', header: 'Step', render: (a) => a.stepId ?? '—' },
-  { key: 'uri', header: 'Where', render: (a) => <MetaLine size="xs" tone="tertiary" items={[a.uri]} /> },
+  { key: 'stepId', header: 'Step', render: (a) => <T size="sm" {...(a.stepId ? { title: a.stepId } : {})}>{artifactStepLabel(a, steps)}</T> },
+  { key: 'uri', header: 'Where', render: (a) => { const place = artifactPlace(a); return <T size="xs" tone="tertiary" {...(place.title ? { title: place.title } : {})}>{place.label}</T>; } },
 ];
 
-export function PipelineRunArtifacts({ artifacts }: { artifacts: PipelineArtifact[] }) {
+export function PipelineRunArtifacts({ artifacts, steps = [] }: { artifacts: PipelineArtifact[]; steps?: readonly PipelineStep[] }) {
   return (
     <DataTable
       data={artifacts}
-      columns={ARTIFACT_COLUMNS}
+      columns={artifactColumns(steps)}
       keyField={(a) => a.id}
       staticRows="An artifact is listed with the run that produced it; the Artifacts catalog is where one opens."
       emptyMessage="This run recorded no artifact."

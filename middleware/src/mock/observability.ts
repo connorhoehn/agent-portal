@@ -930,10 +930,18 @@ function attachAguiRuns(rows: MockTraceRow[], fleet: Map<string, { tools: string
     row.agui_thread_id = row.session_id;
     row.tenant = 'orgiq';
     const calls = toolCallsForTrace(row, fleet.get(row.agent_id)?.tools ?? []);
+    // A routing step is named for the specialist it routed to, as the real
+    // supervisor names it (SUB_AGENT_STEP_NAMES): the A2A children this row
+    // adopted first, in call order, then the specialists it did not call yet.
+    // Two calls of one run never share a name, so the Steps table never reads
+    // "route, route" (walk, 9 November).
+    const children = rows.filter((r) => r.parent_invocation_id === row.invocation_id).map((r) => SPECIALIST_STEP[r.agent_id]).filter((n): n is string => !!n);
+    const routeNames = [...new Set([...children, ...rotate(Object.values(SPECIALIST_STEP), hash32(`${row.invocation_id}:route`))])];
+    let routed = 0;
     row.steps = calls.map((c, i): AgentStepRecord => {
       const finishedAt = c.duration_ms === null ? null : new Date(new Date(c.tsIso).getTime() + c.duration_ms).toISOString();
       const status = c.errored ? 'failed' : 'completed';
-      const name = STEP_NAME_OF_TOOL[c.tool_name] ?? c.tool_name;
+      const name = c.tool_name === 'route_to_agent' ? routeNames[routed++ % routeNames.length]! : STEP_NAME_OF_TOOL[c.tool_name] ?? c.tool_name;
       return {
         stepId: `${name}-${i + 1}`, name, status, startedAt: c.tsIso, finishedAt,
         toolCalls: [{ toolCallId: c.tool_call_id, name: c.tool_name, status, startedAt: c.tsIso, finishedAt }],
@@ -942,11 +950,24 @@ function attachAguiRuns(rows: MockTraceRow[], fleet: Map<string, { tools: string
   }
 }
 
-/** The step a supervisor tool call is bracketed as (agents/supervisor/main.py SUB_AGENT_STEP_NAMES). */
+/** The step a supervisor tool call is bracketed as (agents/supervisor/main.py SUB_AGENT_STEP_NAMES); routing calls are named by `SPECIALIST_STEP`. */
 const STEP_NAME_OF_TOOL: Record<string, string> = {
-  route_to_agent: 'route',
   synthesize_responses: 'synthesize',
 };
+
+/** The step a routing call to each specialist is bracketed as (SUB_AGENT_STEP_NAMES, keyed by the specialist's agent id). */
+const SPECIALIST_STEP: Record<string, string> = {
+  'orgiq-search': 'search',
+  'orgiq-scoring': 'scoring',
+  'orgiq-advisor': 'advisor',
+  'orgiq-ingestion': 'ingestion',
+};
+
+/** The list started at `by` (mod its length): a deterministic, per-row order. */
+function rotate<T>(list: readonly T[], by: number): T[] {
+  const k = list.length ? by % list.length : 0;
+  return [...list.slice(k), ...list.slice(0, k)];
+}
 
 /** A UUID-shaped id, deterministic in its key — the middleware mints v4s. */
 function uuidFrom(key: string): string {
