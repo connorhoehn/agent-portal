@@ -68,7 +68,21 @@ rosterRouter.get('/', asyncHandler(async (req, res) => {
 export interface RosterUser { personId: string; userId: string; displayName: string; social?: boolean }
 const MAX_PERSON_IDS = 50;
 
+//
+// GET /api/roster/users?userIds=u-a,u-b → { inTenant, outside } (G24, the voice
+// dock's message with a shared record): which of those users hold a grant in
+// the caller's current tenant, so a link to one of its records is not sent to
+// someone it would not open for. The same facts the personIds form gives, keyed
+// by user; an unknown id reads as outside.
 rosterRouter.get('/users', asyncHandler(async (req, res) => {
+  if (req.query['userIds'] !== undefined && req.query['personIds'] === undefined) {
+    const ids = [...new Set(String(req.query['userIds']).split(',').map((s) => s.trim()).filter(Boolean))].slice(0, MAX_PERSON_IDS);
+    const tenant = req.session?.tenant ?? null;
+    const known = ids.length ? await listUsers() : [];
+    const inTenant = ids.filter((id) => known.some((u) => u.id === id && !!tenant && (u.grants[tenant]?.length ?? 0) > 0));
+    res.json({ inTenant, outside: ids.filter((id) => !inTenant.includes(id)) });
+    return;
+  }
   const raw = String(req.query['personIds'] ?? '');
   const personIds = [...new Set(raw.split(',').map((s) => s.trim()).filter(Boolean))].slice(0, MAX_PERSON_IDS);
   const tenant = req.session?.tenant ?? null;

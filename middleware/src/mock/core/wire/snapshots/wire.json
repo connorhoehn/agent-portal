@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-09T00:24:58.528Z",
-  "serverHandlerSha": "ce180a0a75d069fc1821d5e2ca160acf3b29a57a6f9f343fc4c1966d5b443aca",
+  "capturedAt": "2026-11-09T00:43:33.324Z",
+  "serverHandlerSha": "d9abf3b028322b75c7fb53d8c81ee0b32cb8c0ffcb35fb64e0b2e39b30504211",
   "baseUrl": "http://127.0.0.1:3992",
   "personas": [
     "orgiq/admin",
@@ -3007,6 +3007,7 @@
         "boxes[].status": [
           "idle",
           "running",
+          "stopped",
           "waiting"
         ]
       }
@@ -3893,11 +3894,8 @@
         "$[].key": [
           "ORG-AUTH-1",
           "ORG-AUTH-2",
-          "ORG-AUTH-3",
           "ORG-AUTH-5",
-          "ORG-AUTH-7",
           "ORG-AUTH-8",
-          "ORG-AUTH-9",
           "ORG-COST-2",
           "ORG-COST-3",
           "ORG-COST-6",
@@ -3909,26 +3907,29 @@
           "ORG-FS-1",
           "ORG-FS-3",
           "ORG-INF-1",
+          "ORG-INF-2",
+          "ORG-INF-3",
           "ORG-LAKE-2",
           "ORG-LAKE-3",
           "ORG-LAKE-4",
           "ORG-LLM-1",
           "ORG-LLM-10",
+          "ORG-LLM-2",
           "ORG-LLM-3",
           "ORG-LLM-4",
+          "ORG-LLM-5",
+          "ORG-LLM-7",
+          "ORG-LLM-9",
           "ORG-MOB-2",
           "ORG-MOB-3",
           "ORG-MOB-4",
-          "ORG-OBS-1",
           "ORG-OBS-10",
-          "ORG-OBS-11",
           "ORG-OBS-12",
           "ORG-OBS-13",
           "ORG-OBS-14",
           "ORG-OBS-3",
           "ORG-OBS-4",
           "ORG-OBS-5",
-          "ORG-OBS-6",
           "ORG-OBS-8",
           "ORG-RAG-3",
           "ORG-RAG-4",
@@ -4026,6 +4027,7 @@
         "capabilities.datastore.mandatory": "boolean",
         "capabilities.datastore.ok": "boolean",
         "capabilities.jobSchema": "object",
+        "capabilities.jobSchema.error": "string",
         "capabilities.jobSchema.mandatory": "boolean",
         "capabilities.jobSchema.ok": "boolean",
         "datastore": "object",
@@ -4047,7 +4049,7 @@
       },
       "values": {
         "status": [
-          "ok"
+          "degraded"
         ]
       }
     },
@@ -11006,6 +11008,7 @@
         "running",
         "staged",
         "stale",
+        "stopped",
         "submitted",
         "superseded",
         "unproven",

@@ -11,8 +11,8 @@
   "pages": "portal/src/components/shell/portalCommands.ts",
   "catalogue": "middleware/src/lib/voice/catalogue.ts",
   "out": "docs/voice-tool-inventory.json",
-  "capturedAt": "2026-11-09T00:25:04.119Z",
-  "serverHandlerSha": "ce180a0a75d069fc1821d5e2ca160acf3b29a57a6f9f343fc4c1966d5b443aca"
+  "capturedAt": "2026-11-09T00:43:39.061Z",
+  "serverHandlerSha": "d9abf3b028322b75c7fb53d8c81ee0b32cb8c0ffcb35fb64e0b2e39b30504211"
  },
  "summary": {
   "routes": 841,
@@ -226,12 +226,12 @@
     "navigate": 0,
     "internal": 0,
     "dev": 0,
-    "covered": 29,
+    "covered": 30,
     "v2": {
      "not-yet": 41,
-     "confirm": 13,
+     "confirm": 14,
      "read": 16,
-     "never": 4
+     "never": 3
     }
    },
    "compute": {
@@ -258,11 +258,10 @@
     "navigate": 0,
     "internal": 0,
     "dev": 0,
-    "covered": 3,
+    "covered": 4,
     "v2": {
      "never": 14,
-     "read": 3,
-     "not-yet": 1
+     "read": 4
     }
    },
    "health": {
@@ -374,18 +373,18 @@
   "peopleRoutes": 798,
   "peopleReads": 441,
   "peopleWrites": 357,
-  "coveredRoutes": 229,
-  "coveredReads": 160,
-  "coveredWrites": 69,
+  "coveredRoutes": 231,
+  "coveredReads": 161,
+  "coveredWrites": 70,
   "coveredPages": 110,
   "pagesWithPageId": 110,
   "v1Tools": 16,
   "v2Tools": 15,
   "v2Decisions": {
-   "not-yet": 174,
-   "read": 160,
-   "never": 371,
-   "confirm": 68,
+   "not-yet": 173,
+   "read": 161,
+   "never": 370,
+   "confirm": 69,
    "n/a": 24,
    "open": 1
   },
@@ -400,13 +399,13 @@
    "queue_work": 34,
    "budget": 7,
    "computer": 8,
+   "message": 4,
    "search": 9,
-   "message": 2,
    "activity": 1
   },
   "v2Backlog": {
    "create": 11,
-   "list": 66,
+   "list": 65,
    "queue_work": 6,
    "decide": 15,
    "get": 34,
@@ -1528,7 +1527,7 @@
     "orgiq",
     "social"
    ],
-   "mapsTo": "GET /api/social/resolve?kind=&name= (P6, a read), then on confirm POST /api/social/dms { userId } for a person (G14) and useChat(channel).sendMessage(text, { displayName, clientDeliveryId }) over the gateway; a thread reply (G23) goes to the inbound message\\'s own channel with metadata.replyTo, no resolve",
+   "mapsTo": "GET /api/social/resolve?kind=&name= (P6, a read), then on confirm POST /api/social/dms { userId } for a person (G14) and useChat(channel).sendMessage(text, { displayName, clientDeliveryId }) over the gateway; a thread reply (G23) goes to the inbound message\\'s own channel with metadata.replyTo, no resolve; attach (G24): GET /api/roster/users?userIds= for a person, then on confirm POST /api/social/plane/work-sharing { audience: { kind: conversation, id }, nodeIds, disclosure: summary, durationMs } and the post carries metadata.pageReference { kind, id }",
    "routes": [
     {
      "method": "GET",
@@ -1537,6 +1536,14 @@
     {
      "method": "POST",
      "path": "/api/social/dms"
+    },
+    {
+     "method": "GET",
+     "path": "/api/roster/users"
+    },
+    {
+     "method": "POST",
+     "path": "/api/social/plane/work-sharing"
     }
    ],
    "line": 773
@@ -1570,7 +1577,7 @@
      "path": "/api/social/plane/search"
     }
    ],
-   "line": 788
+   "line": 789
   },
   {
    "name": "set_status",
@@ -1586,7 +1593,7 @@
    ],
    "mapsTo": "usePresence('<tenant>:lobby') (the shell's tenant lobby, manifest presenceLobby) then usePresence('social:lobby') with a Social grant: setStatus(status) and updateMetadata({ statusMessage })",
    "routes": [],
-   "line": 803
+   "line": 804
   },
   {
    "name": "queue_work",
@@ -1803,7 +1810,7 @@
      "path": "/api/pipelines/runs/:id/events"
     }
    ],
-   "line": 815
+   "line": 816
   },
   {
    "name": "decide",
@@ -1912,7 +1919,7 @@
      "path": "/api/assessment/drafts/:runId/discard"
     }
    ],
-   "line": 836
+   "line": 837
   },
   {
    "name": "create",
@@ -1984,7 +1991,7 @@
      "path": "/api/access/delegations"
     }
    ],
-   "line": 851
+   "line": 852
   },
   {
    "name": "update",
@@ -2126,7 +2133,7 @@
      "path": "/api/access/delegations/:id/end"
     }
    ],
-   "line": 882
+   "line": 883
   },
   {
    "name": "access_request_status",
@@ -2156,7 +2163,7 @@
      "path": "/api/access/approvals"
     }
    ],
-   "line": 904
+   "line": 905
   }
  ],
  "navigatePages": [
@@ -3530,7 +3537,7 @@
    "note": "destructive"
   },
   {
-   "pattern": "^POST \\/api\\/social\\/plane\\/work-sharing",
+   "pattern": "^POST \\/api\\/social\\/plane\\/work-sharing\\/:[^/]+\\/transition$",
    "decision": "never",
    "tool": null,
    "note": "work-sharing transitions are the page's"
@@ -4451,7 +4458,7 @@
   {"method":"POST","path":"/api/rediscovery/outcome","source":"src/routes/rediscovery.ts:34","declaredAt":"src/routes/rediscovery.ts:34","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"knowledge","cedarAction":null,"actions":[],"floor":["ViewRediscovery"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"agent-facing: a box asks before it spends"}},
   {"method":"GET","path":"/api/rediscovery/stats","source":"src/routes/rediscovery.ts:54","declaredAt":"src/routes/rediscovery.ts:54","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"knowledge","cedarAction":null,"actions":[],"floor":["ViewRediscovery"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"operator consoles, agent-facing reads and leadership data: the page, not the voice"}},
   {"method":"GET","path":"/api/roster","source":"src/routes/roster.ts:51","declaredAt":"src/routes/roster.ts:51","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"org","cedarAction":null,"actions":[],"floor":["Roster"],"writePolicy":null,"pageId":null,"coveredBy":["list"],"v2":{"decision":"read","tool":"list","note":"mapsTo"}},
-  {"method":"GET","path":"/api/roster/users","source":"src/routes/roster.ts:71","declaredAt":"src/routes/roster.ts:71","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"org","cedarAction":null,"actions":[],"floor":["Roster"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
+  {"method":"GET","path":"/api/roster/users","source":"src/routes/roster.ts:77","declaredAt":"src/routes/roster.ts:77","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"org","cedarAction":null,"actions":[],"floor":["Roster"],"writePolicy":null,"pageId":null,"coveredBy":["message"],"v2":{"decision":"read","tool":"message","note":"mapsTo"}},
   {"method":"GET","path":"/api/runbooks","source":"src/routes/runbooks.ts:266","declaredAt":"src/routes/runbooks.ts:266","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"runbooks","cedarAction":null,"actions":[],"floor":["ViewRunbooks"],"writePolicy":null,"pageId":null,"coveredBy":["list"],"v2":{"decision":"read","tool":"list","note":"mapsTo"}},
   {"method":"GET","path":"/api/runbooks/:id","source":"src/routes/runbooks.ts:332","declaredAt":"src/routes/runbooks.ts:332","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"runbooks","cedarAction":null,"actions":[],"floor":["ViewRunbooks"],"bodyActions":["ReviewRunbook"],"writePolicy":null,"pageId":null,"coveredBy":["get"],"v2":{"decision":"read","tool":"get","note":"mapsTo"}},
   {"method":"GET","path":"/api/runbooks/:id/applications","source":"src/routes/runbooks.ts:368","declaredAt":"src/routes/runbooks.ts:368","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"runbooks","cedarAction":null,"actions":[],"floor":["ViewRunbooks"],"writePolicy":null,"pageId":null,"coveredBy":["get"],"v2":{"decision":"read","tool":"get","note":"mapsTo"}},
@@ -4569,7 +4576,7 @@
   {"method":"POST","path":"/api/social/plane/teams/:teamId/members","source":"src/routes/social-plane.ts:116","declaredAt":"src/routes/social-plane.ts:116","stale":false,"snapshot":true,"tenants":["orgiq","assessment","pipelines"],"kind":"write","family":"social.teams","cedarAction":"ManageTeams","actions":["ManageTeams"],"socialGate":true,"holders":["social/community-admin","social/moderator"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"adding or removing other people"}},
   {"method":"DELETE","path":"/api/social/plane/teams/:teamId/members/:userId","source":"src/routes/social-plane.ts:117","declaredAt":"src/routes/social-plane.ts:117","stale":false,"snapshot":true,"tenants":["orgiq","assessment","pipelines"],"kind":"write","family":"social.teams","cedarAction":null,"actions":[],"socialGate":true,"dynamicActions":["teamMemberAction"],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"adding or removing other people"}},
   {"method":"GET","path":"/api/social/plane/work-graph/conversations/:id/graph","source":"src/routes/social-plane.ts:214","declaredAt":"src/routes/social-plane.ts:214","stale":false,"snapshot":true,"tenants":["orgiq","assessment","pipelines"],"kind":"read","family":"social.chat","cedarAction":"ViewSocial","actions":["ViewSocial"],"socialGate":true,"holders":["social/community-admin","social/moderator","social/participant"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
-  {"method":"POST","path":"/api/social/plane/work-sharing","source":"src/routes/social-plane.ts:177","declaredAt":"src/routes/social-plane.ts:177","stale":false,"snapshot":true,"tenants":["orgiq","assessment","pipelines"],"kind":"write","family":"social.chat","cedarAction":"ViewSocial","actions":["ViewSocial"],"socialGate":true,"holders":["social/community-admin","social/moderator","social/participant"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"work-sharing transitions are the page's"}},
+  {"method":"POST","path":"/api/social/plane/work-sharing","source":"src/routes/social-plane.ts:177","declaredAt":"src/routes/social-plane.ts:177","stale":false,"snapshot":true,"tenants":["orgiq","assessment","pipelines"],"kind":"write","family":"social.chat","cedarAction":"ViewSocial","actions":["ViewSocial"],"socialGate":true,"holders":["social/community-admin","social/moderator","social/participant"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":["message"],"v2":{"decision":"confirm","tool":"message","note":"mapsTo"}},
   {"method":"POST","path":"/api/social/plane/work-sharing/:id/transition","source":"src/routes/social-plane.ts:189","declaredAt":"src/routes/social-plane.ts:189","stale":false,"snapshot":true,"tenants":["orgiq","assessment","pipelines"],"kind":"write","family":"social.chat","cedarAction":"ViewSocial","actions":["ViewSocial"],"socialGate":true,"holders":["social/community-admin","social/moderator","social/participant"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"work-sharing transitions are the page's"}},
   {"method":"GET","path":"/api/social/recordings","source":"src/routes/social.ts:519","declaredAt":"src/routes/social.ts:519","stale":false,"snapshot":true,"tenants":["social"],"kind":"read","family":"social.calls","cedarAction":"ViewSocial","actions":["ViewSocial"],"socialGate":true,"holders":["social/community-admin","social/moderator","social/participant"],"writePolicy":null,"pageId":null,"coveredBy":["list"],"v2":{"decision":"read","tool":"list","note":"mapsTo"}},
   {"method":"DELETE","path":"/api/social/recordings/:recordingId","source":"src/routes/social.ts:537","declaredAt":"src/routes/social.ts:537","stale":false,"snapshot":true,"tenants":["social"],"kind":"write","family":"social.calls","cedarAction":"ManageRecordings","actions":["ManageRecordings"],"socialGate":true,"holders":["social/community-admin","social/moderator"],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"destructive"}},

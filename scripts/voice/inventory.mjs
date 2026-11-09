@@ -545,7 +545,8 @@ export const V2_RULES = [
   [/^PATCH \/api\/social\/(plane\/)?rooms\/:[^/]+$/, 'never', null, 'room settings'],
   [/^POST \/api\/social\/(plane\/)?recordings\/:[^/]+\/share$/, 'never', null, 'sharing a recording reaches people with content'],
   [/^DELETE \/api\/social\/(plane\/)?recordings\/:[^/]+$/, 'never', null, 'destructive'],
-  [/^POST \/api\/social\/plane\/work-sharing/, 'never', null, 'work-sharing transitions are the page\'s'],
+  // Creating a share is message's attach (G24, behind its card); stopping, pausing or expiring one stays the page's.
+  [/^POST \/api\/social\/plane\/work-sharing\/:[^/]+\/transition$/, 'never', null, 'work-sharing transitions are the page\'s'],
   [/^POST \/api\/chat\/pins$/, 'not-yet', 'update', 'pin a message'],
   [/^DELETE \/api\/chat\/pins$/, 'not-yet', 'update', 'unpin'],
   [/^POST \/api\/(chat\/commands|conversations)(\/summarize)?\/(summarize|diagram|doc|deck|agent)?\/?run$/, 'not-yet', 'queue_work', 'a conversation command run'],

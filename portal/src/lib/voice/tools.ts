@@ -101,7 +101,7 @@ export interface SocialAccess {
   /** Why nothing can be posted right now (no Social grant, the socket is down), or null. */
   unavailable: string | null;
   /** Post through useChat(channel).sendMessage with the composer's ack wait; resolves on the persisted receipt. `replyTo` is the composer's quote-reply (G23). */
-  send(input: { channel: string; text: string; deliveryId: string; replyTo?: { messageId: string; author: string; text: string; timestamp?: string } }): Promise<void>;
+  send(input: { channel: string; text: string; deliveryId: string; replyTo?: { messageId: string; author: string; text: string; timestamp?: string }; pageReference?: { kind: 'initiative' | 'work-item'; id: string } }): Promise<void>;
   /** The shell's Social presence entry (usePresence's setStatus + updateMetadata); null when the socket has none. */
   presence: PresenceWriter | null;
   /** Delivery ids by channel and text, kept for the dock's lifetime so a retry reuses one. */

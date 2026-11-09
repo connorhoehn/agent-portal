@@ -780,10 +780,11 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
       }, ['kind', 'name']),
       text: str('The message, exactly as dictated.', { minLength: 1, maxLength: 2000 }),
       thread: str('A reply instead: the ref of the inbound message it answers, exactly as the portal gave it ("message:<id>"); it goes to the same conversation. Leave target out then.', { minLength: 9, maxLength: 200 }),
+      attach: str('A record to share with the message, read-only for 24 hours: a work item or an initiative, by its ref as a result gave it ("work-item:<id>", "initiative:<id>") or its position in the last result.', { minLength: 1, maxLength: 200 }),
     }, ['text']),
     kind: 'people', backing: 'social-activity', confirm: true, action: 'PostMessage', gate: 'PostMessage in the gateway', spend: 'none', idempotent: true,
     says: "I'll post that to #platform once you confirm.", tenants: PEOPLE_TENANTS,
-    mapsTo: 'GET /api/social/resolve?kind=&name= (P6, a read), then on confirm POST /api/social/dms { userId } for a person (G14) and useChat(channel).sendMessage(text, { displayName, clientDeliveryId }) over the gateway; a thread reply (G23) goes to the inbound message\'s own channel with metadata.replyTo, no resolve',
+    mapsTo: 'GET /api/social/resolve?kind=&name= (P6, a read), then on confirm POST /api/social/dms { userId } for a person (G14) and useChat(channel).sendMessage(text, { displayName, clientDeliveryId }) over the gateway; a thread reply (G23) goes to the inbound message\'s own channel with metadata.replyTo, no resolve; attach (G24): GET /api/roster/users?userIds= for a person, then on confirm POST /api/social/plane/work-sharing { audience: { kind: conversation, id }, nodeIds, disclosure: summary, durationMs } and the post carries metadata.pageReference { kind, id }',
   },
   {
     name: 'call',

@@ -545,6 +545,59 @@ interface PostPlan {
   channel: string; name: string; kind: ResolveBody['kind'] | 'thread'; text: string; deliveryId: string; key: string; userId?: string;
   /** A thread reply (G23): the inbound message it quotes, as the composer's `metadata.replyTo`. */
   replyTo?: { messageId: string; author: string; text: string; timestamp?: string };
+  /** A record shared with the message (G24): granted read-only to the conversation at confirm, then referenced in the post. */
+  attachment?: Attachment;
+}
+
+/** G24: what `attach` shares, fixed by the planner from a row this session's reads (or the page) returned. */
+interface Attachment { kind: 'initiative' | 'work-item'; id: string; title: string; href: string | null; nodeId: string }
+
+/** The Communication plane's Share (WorkSharing.tsx ShareNodeForm): a read-only grant of work nodes to one conversation. */
+export const WORK_SHARING_URL = '/api/social/plane/work-sharing';
+/** How long the shared view lasts: the route's own ceiling, a day. */
+export const SHARE_FOR_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * `attach` (G24): only a work item or an initiative this session already read (a kept row or a row of the page
+ * in view), so the voice never shares what the user could not see; for a person, only one who holds a grant in
+ * this workspace (GET /api/roster/users?userIds=), since the link would not open for anyone else.
+ */
+async function planAttachment(ctx: ToolContext, raw: unknown, to: { userId?: string; label: string }): Promise<{ attachment: Attachment } | { result: ToolResult }> {
+  const given = String(raw).trim();
+  const kept = ctx.results?.find(given) ?? null;
+  const onPage = kept ? null : ctx.page?.()?.rows.find((r) => r.ref === given) ?? null;
+  const row = kept ? { ref: kept.ref, title: kept.title, href: kept.href } : onPage ? { ref: onPage.ref, title: onPage.title, href: onPage.href ?? null } : null;
+  if (!row) return { result: refused('Attach a record a result in this session named, by its ref ("work-item:<id>", "initiative:<id>") or its position; list or open it first. Nothing was sent.') };
+  const m = /^(work-item|initiative):([A-Za-z0-9:_-]{1,200})$/.exec(row.ref);
+  if (!m) return { result: refused('Only a work item or an initiative can be shared with a message. Nothing was sent.') };
+  const kind = m[1] as Attachment['kind'];
+  const id = m[2]!;
+  if (to.userId) {
+    const read = await readJson<{ inTenant?: string[] }>(ctx, `/api/roster/users?${qs({ userIds: to.userId })}`);
+    if (!read.ok) return { result: readFailure(`whether ${to.label} can open it`, read.status) };
+    if (!(read.body.inTenant ?? []).includes(to.userId)) {
+      return { result: refused(`${to.label} has no access to this workspace, so a view of "${row.title}" cannot be granted to them. Send the message without it, or pick someone in this workspace. Nothing was sent.`, { code: 'no-grant' }) };
+    }
+  }
+  return { attachment: { kind, id, title: row.title, href: row.href, nodeId: kind === 'work-item' ? `work:${id}` : `initiative:${id}` } };
+}
+
+/** At confirm: grant the conversation a read-only view (the plane's Share); null when granted, else the refusal. */
+async function shareAttachment(ctx: ToolContext, channel: string, a: Attachment, label: string): Promise<ToolResult | null> {
+  let res: Response;
+  try {
+    res = await ctx.fetch(WORK_SHARING_URL, {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ audience: { kind: 'conversation', id: channel }, nodeIds: [a.nodeId], disclosure: 'summary', durationMs: SHARE_FOR_MS }),
+    });
+  } catch {
+    return failed(`Could not reach the server to share "${a.title}"; nothing was sent.`);
+  }
+  if (res.ok) return null;
+  const body = await res.json().catch(() => null) as { error?: unknown } | null;
+  const why = typeof body?.error === 'string' ? body.error : `HTTP ${res.status}`;
+  if (res.status === 403 || res.status === 404 || res.status === 400) return refused(`A view of "${a.title}" cannot be granted to ${label} (${why}); nothing was sent.`, { code: 'no-grant' });
+  return failed(`Sharing "${a.title}" failed (${why}); nothing was sent.`);
 }
 
 /** The DM button's own call (routes/social.ts POST /dms): writes the pair's membership, at confirm only (G14). */
@@ -657,7 +710,9 @@ function planThreadReply(args: Record<string, unknown>, ctx: ToolContext, social
     channel: item.channel, name: label, kind: 'thread', text, deliveryId: record.deliveryId, key: deliveryKey(item.channel, text),
     ...(item.kind === 'message' ? { replyTo: { messageId: item.id, author: item.sender || 'Unknown', text: item.text.slice(0, 280), timestamp: new Date(item.at).toISOString() } } : {}),
   };
-  return Promise.resolve({ plan: { title: `Reply to ${label}`, detail: text, data: plan } });
+  if (args['attach'] == null) return Promise.resolve({ plan: { title: `Reply to ${label}`, detail: text, data: plan } });
+  return planAttachment(ctx, args['attach'], { label }).then((att) => ('result' in att ? att
+    : { plan: { title: `Reply to ${label}`, detail: [text, `With a read-only view of "${att.attachment.title}" for 24 hours.`], data: { ...plan, attachment: att.attachment } } }));
 }
 
 const planSendChat: VoiceToolPlanner = async (args, ctx) => {
@@ -683,7 +738,11 @@ const planSendChat: VoiceToolPlanner = async (args, ctx) => {
   const plan: PostPlan = { channel: body.match.channel, name: body.match.name, kind, text, deliveryId: record.deliveryId, key: deliveryKey(body.match.channel, text),
     ...(kind === 'person' ? { userId: body.match.id } : {}) };
   // The card shows the channel and the text verbatim (§6): the message is sent exactly as shown.
-  return { plan: { title: kind === 'person' ? `Message ${body.match.name}` : `Post to ${label}`, detail: text, data: plan } };
+  const title = kind === 'person' ? `Message ${body.match.name}` : `Post to ${label}`;
+  if (args['attach'] == null) return { plan: { title, detail: text, data: plan } };
+  const att = await planAttachment(ctx, args['attach'], { ...(plan.userId ? { userId: plan.userId } : {}), label });
+  if ('result' in att) return att;
+  return { plan: { title, detail: [text, `With a read-only view of "${att.attachment.title}" for 24 hours.`], data: { ...plan, attachment: att.attachment } } };
 };
 
 const runSendChat: VoiceToolRunner = async (_args, ctx, planned) => {
@@ -699,15 +758,25 @@ const runSendChat: VoiceToolRunner = async (_args, ctx, planned) => {
     const blocked = await openDm(ctx, plan.userId, plan.channel, "I can't message people with your role.");
     if (blocked) return blocked;
   }
+  // G24: the view is granted before anything is posted; a refusal sends nothing.
+  const att = plan.attachment;
+  if (att) {
+    const blocked = await shareAttachment(ctx, plan.channel, att, label);
+    if (blocked) return blocked;
+  }
+  // A direct message carries the record as a page reference (the DM composer's own card); elsewhere its link is in the text.
+  const dm = plan.channel.startsWith('social:dm:');
+  const text = att && !dm && att.href ? `${plan.text}\n${att.title}: ${att.href}` : plan.text;
   social.deliveries.set(plan.key, { ...record, state: 'pending' });
   try {
-    await social.send({ channel: plan.channel, text: plan.text, deliveryId: plan.deliveryId, ...(plan.replyTo ? { replyTo: plan.replyTo } : {}) });
+    await social.send({ channel: plan.channel, text, deliveryId: plan.deliveryId, ...(plan.replyTo ? { replyTo: plan.replyTo } : {}),
+      ...(att && dm ? { pageReference: { kind: att.kind, id: att.id } } : {}) });
   } catch (err) {
     social.deliveries.set(plan.key, { ...record, state: 'failed', at: ctx.now().getTime() });
     return failed(`The message to ${label} was not confirmed: ${(err as Error)?.message ?? 'no receipt'}. A retry reuses the same delivery, so it cannot post twice.`);
   }
   social.deliveries.set(plan.key, { ...record, state: 'sent', at: ctx.now().getTime() });
-  return done('posted', { to: label, posted: true, ...(plan.kind === 'thread' ? { thread: plan.channel } : {}) }, plan.kind === 'thread' ? `Replied to ${label}` : `Posted to ${label}`);
+  return done('posted', { to: label, posted: true, ...(plan.kind === 'thread' ? { thread: plan.channel } : {}), ...(att ? { shared: att.title, sharedFor: '24 hours' } : {}) }, plan.kind === 'thread' ? `Replied to ${label}` : `Posted to ${label}`);
 };
 
 // ── call: start, or join the live huddle the index shows (V2-12) ─────────────

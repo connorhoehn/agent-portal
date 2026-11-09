@@ -123,6 +123,14 @@ describe('GET /api/roster/users (person → user, for the initiative call)', () 
     expect(res.body.unlinked).toEqual(['p-051']);
   });
 
+  it('userIds (G24): says which users hold a grant in the current tenant; unknown ids and other tenants read as outside', async () => {
+    const res = await request(appAs('orgiq')).get('/api/roster/users?userIds=u-vera,u-nora,u-nobody');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ inTenant: ['u-vera', 'u-nora'], outside: ['u-nobody'] });
+    const elsewhere = await request(appAs('assessment')).get('/api/roster/users?userIds=u-nora');
+    expect(elsewhere.body).toEqual({ inTenant: [], outside: ['u-nora'] });
+  });
+
   it('treats a user without a grant in the current tenant as unlinked', async () => {
     const res = await request(appAs('assessment')).get('/api/roster/users?personIds=p-004');
     expect(res.body).toEqual({ users: [], unlinked: ['p-004'] });

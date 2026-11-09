@@ -135,6 +135,7 @@ export function argShape(tool: string, raw: unknown): Record<string, EventScalar
     const t = args['target'] as Record<string, unknown> | undefined;
     if (t && typeof t['kind'] === 'string') out['targetKind'] = t['kind'];
     if (tool === 'message' && typeof args['thread'] === 'string') out['thread'] = true;
+    if (tool === 'message' && typeof args['attach'] === 'string') out['attachKind'] = REF_KIND.exec(args['attach'].trim())?.[1] ?? (/^\d{1,2}$/.test(args['attach'].trim()) ? 'position' : 'other');
   }
   if (tool === 'update' && args['fields'] && typeof args['fields'] === 'object') out['fields'] = Object.keys(args['fields'] as object).filter((k) => (args['fields'] as Record<string, unknown>)[k] != null).sort().join(',').slice(0, 120);
   if (tool === 'create' && args['fields'] && typeof args['fields'] === 'object') out['fields'] = Object.keys(args['fields'] as object).filter((k) => (args['fields'] as Record<string, unknown>)[k] != null).sort().join(',').slice(0, 120);

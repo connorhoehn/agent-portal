@@ -686,6 +686,13 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "parameters": {
       "additionalProperties": false,
       "properties": {
+        "attach": {
+          "description": "A record to share with the message, read-only for 24 hours: a work item or an initiative, by its ref as a result gave it ("work-item:<id>", "initiative:<id>") or its position in the last result.",
+          "type": [
+            "string",
+            "null",
+          ],
+        },
         "target": {
           "additionalProperties": false,
           "properties": {
@@ -728,6 +735,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
         "target",
         "text",
         "thread",
+        "attach",
       ],
       "type": "object",
     },

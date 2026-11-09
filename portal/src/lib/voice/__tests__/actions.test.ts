@@ -50,7 +50,7 @@ function fakeCompute(opts: { canManage?: boolean; stream?: CommandEvent[]; fail?
   };
 }
 
-interface FakeSocial extends SocialAccess { sends: Array<{ channel: string; text: string; deliveryId: string }>; status: unknown[]; meta: unknown[] }
+interface FakeSocial extends SocialAccess { sends: Array<Parameters<SocialAccess['send']>[0]>; status: unknown[]; meta: unknown[] }
 function fakeSocial(opts: { failSends?: number; presence?: boolean; api?: string } = {}): FakeSocial {
   const sends: FakeSocial['sends'] = [];
   const status: unknown[] = [];
@@ -730,4 +730,59 @@ test('G39: list dm with a scope it does not take says what to change', async () 
   assert.equal(r.outcome, 'refused');
   assert.match(String(r.output['reason']), /take no scope; leave filter\.scope out|use ".*", or leave filter\.scope out/);
   assert.equal(r.output['code'], 'invalid-arguments');
+});
+
+// ── G24: message with a read-only share of a record ──
+
+const AUTH_ROW = { ref: 'work-item:w-7', title: 'Fix the login redirect loop', href: '/iq/projects/p-auth?item=w-7' };
+
+test('G24: a channel post with attach grants the conversation a read-only view first, then posts with the link', async () => {
+  const { fetch, log } = fakeFetch([route('GET', '/api/social/plane/resolve', 200, TEAM), route('POST', '/api/social/plane/work-sharing', 201, { grant: { id: 'wsg-1' } })]);
+  const social = fakeSocial();
+  const results = new ResultMemory();
+  results.keep([AUTH_ROW]);
+  const { card, result } = await confirmAndRun('message', { target: { kind: 'team', name: 'platform' }, text: 'Have a look', attach: '1' }, toolContext({ fetch, social, results }));
+  assert.deepEqual(card, { title: 'Post to the Platform team', detail: ['Have a look', 'With a read-only view of "Fix the login redirect loop" for 24 hours.'] });
+  assert.equal(result.outcome, 'done');
+  const share = log.find((r) => r.method === 'POST')!;
+  assert.equal(share.url, '/api/social/plane/work-sharing');
+  assert.deepEqual(share.body, { audience: { kind: 'conversation', id: TEAM.match.channel }, nodeIds: ['work:w-7'], disclosure: 'summary', durationMs: 86_400_000 });
+  assert.equal(social.sends.length, 1);
+  assert.equal(social.sends[0]!.text, 'Have a look\nFix the login redirect loop: /iq/projects/p-auth?item=w-7', 'the posted message carries the share href');
+});
+
+test('G24: a person in the workspace gets the DM with the record as a page reference; one outside it is refused before anything is sent', async () => {
+  const results = new ResultMemory();
+  results.keep([AUTH_ROW]);
+  const inside = fakeFetch([route('GET', '/api/social/plane/resolve', 200, ADA), route('GET', '/api/roster/users?userIds=u-ada', 200, { inTenant: ['u-ada'], outside: [] }),
+    route('POST', '/api/social/dms', 200, { channel: ADA.match.channel, peers: [] }), route('POST', '/api/social/plane/work-sharing', 201, { grant: { id: 'wsg-2' } })]);
+  const social = fakeSocial();
+  const ok = await confirmAndRun('message', { target: { kind: 'dm', name: 'Ada' }, text: 'Read-only view of my ticket', attach: 'work-item:w-7' }, toolContext({ fetch: inside.fetch, social, results }));
+  assert.equal(ok.result.outcome, 'done');
+  assert.deepEqual(inside.log.filter((r) => r.method === 'POST').map((r) => r.url), ['/api/social/dms', '/api/social/plane/work-sharing']);
+  assert.deepEqual(social.sends[0]!.pageReference, { kind: 'work-item', id: 'w-7' });
+  assert.equal(social.sends[0]!.text, 'Read-only view of my ticket');
+
+  const outside = fakeFetch([route('GET', '/api/social/plane/resolve', 200, ADA), route('GET', '/api/roster/users?userIds=u-ada', 200, { inTenant: [], outside: ['u-ada'] })]);
+  const other = fakeSocial();
+  const no = await confirmAndRun('message', { target: { kind: 'dm', name: 'Ada' }, text: 'Read-only view of my ticket', attach: 'work-item:w-7' }, toolContext({ fetch: outside.fetch, social: other, results }));
+  assert.equal(no.card, null);
+  assert.equal(no.result.outcome, 'refused');
+  assert.match(String(no.result.output['reason']), /has no access to this workspace/);
+  assert.equal(other.sends.length, 0);
+  assert.ok(!outside.log.some((r) => r.method === 'POST'));
+});
+
+test('G24: a record this session never read, or one the share route refuses, sends nothing', async () => {
+  const { fetch } = fakeFetch([route('GET', '/api/social/plane/resolve', 200, TEAM)]);
+  const social = fakeSocial();
+  const unknown = await confirmAndRun('message', { target: { kind: 'team', name: 'platform' }, text: 'x', attach: 'work-item:w-404' }, toolContext({ fetch, social, results: new ResultMemory() }));
+  assert.equal(unknown.result.outcome, 'refused');
+  const results = new ResultMemory();
+  results.keep([AUTH_ROW]);
+  const denied = fakeFetch([route('GET', '/api/social/plane/resolve', 200, TEAM), route('POST', '/api/social/plane/work-sharing', 404, { error: 'no such conversation' })]);
+  const r = await confirmAndRun('message', { target: { kind: 'team', name: 'platform' }, text: 'x', attach: '1' }, toolContext({ fetch: denied.fetch, social, results }));
+  assert.equal(r.result.outcome, 'refused');
+  assert.match(String(r.result.output['reason']), /cannot be granted/);
+  assert.equal(social.sends.length, 0);
 });

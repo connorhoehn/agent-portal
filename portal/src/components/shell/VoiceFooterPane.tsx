@@ -132,7 +132,8 @@ const resumeStore: ResumeStore = {
 const CHANNEL_JOIN_MS = 8000;
 
 type ChatReplyTo = { messageId: string; author: string; text: string; timestamp?: string };
-type ChatSender = (text: string, deliveryId: string, replyTo?: ChatReplyTo) => Promise<void>;
+type ChatPageRef = { kind: 'initiative' | 'work-item'; id: string };
+type ChatSender = (text: string, deliveryId: string, replyTo?: ChatReplyTo, pageReference?: ChatPageRef) => Promise<void>;
 type Waiter = { resolve(sender: ChatSender): void; reject(err: Error): void };
 
 /**
@@ -165,13 +166,13 @@ function VoiceChatChannel({ channel, userId, displayName, onReady, onFailed }: {
   const ready = joined !== null && joined === epoch;
   useEffect(() => {
     if (!ready) return undefined;
-    onReady(channel, async (text, deliveryId, replyTo) => {
+    onReady(channel, async (text, deliveryId, replyTo, pageReference) => {
       const { gateway: g } = latest.current;
       if (!g?.onMessage || g.connectionState !== 'connected') throw new Error('Reconnect to send messages.');
       await sendAndWaitForSocialChatAck({
         channel, deliveryId, userId, listen: g.onMessage as (h: (f: Record<string, unknown>) => void) => () => void, signal: abort.current.signal,
         // A thread reply (G23) is the composer's quote-reply: `metadata.replyTo`.
-        send: () => latest.current.chat.sendMessage(text, { displayName, clientDeliveryId: deliveryId, ...(replyTo ? { replyTo } : {}) }),
+        send: () => latest.current.chat.sendMessage(text, { displayName, clientDeliveryId: deliveryId, ...(replyTo ? { replyTo } : {}), ...(pageReference ? { pageReference } : {}) }),
       });
     });
     return () => onReady(channel, null);
@@ -218,7 +219,7 @@ function VoiceFooterPane() {
     for (const w of waiters.current.get(channel) ?? []) w.reject(new Error(message));
     waiters.current.delete(channel);
   }, []);
-  const sendChat = useCallback(async ({ channel, text, deliveryId, replyTo }: { channel: string; text: string; deliveryId: string; replyTo?: ChatReplyTo }) => {
+  const sendChat = useCallback(async ({ channel, text, deliveryId, replyTo, pageReference }: { channel: string; text: string; deliveryId: string; replyTo?: ChatReplyTo; pageReference?: ChatPageRef }) => {
     let sender = senders.current.get(channel);
     if (!sender) {
       if (chatChannelRef.current !== channel) { chatChannelRef.current = channel; setChatChannel(channel); }
@@ -229,7 +230,7 @@ function VoiceFooterPane() {
         waiters.current.set(channel, list);
       });
     }
-    await sender(text, deliveryId, replyTo);
+    await sender(text, deliveryId, replyTo, pageReference);
   }, []);
 
   // ── computer run's captured output: a read-only tab in the compute dock (G9) ──
