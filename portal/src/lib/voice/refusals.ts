@@ -101,6 +101,10 @@ export function refusalNext(tool: string, output: Record<string, unknown>, ctx: 
   if (refTool && (code === 'not-found' || code === 'other' || code === 'invalid-arguments') && /\bref\b|\brow\b|result|found no [a-z-]+ "[^"]*" that you can read|records are not read/i.test(reason)) {
     return `${REF_SHAPE} To find one, list or search that kind first.${allowedClause('list', ctx)} ${NO_REPEAT}`;
   }
+  if (typeof output['switchRole'] === 'string' && output['switchRole']) {
+    // A page gate the session can pass by wearing a role it already holds (lib/pageAccess.ts): no request to file.
+    return `The user's current role cannot open this, but they also hold ${output['switchRole']}: tell them to switch to ${output['switchRole']} from the header's role menu (switching reloads the page and ends nothing else), then ask again. ${NO_REPEAT}`;
+  }
   if (offersAccess && (code === 'role' || code === 'no-grant' || code === 'other')) {
     // G27: where create files an access request, the refusal's item is a turn of its own: offer, file on yes, retry once approved.
     const item = requestItemOf(output);

@@ -20,6 +20,7 @@ import { useSession } from '../../lib/auth';
 import { openShell, useComputeOptional } from '@connorhoehn/ui-components/compute';
 import { commandKeywords } from './commandKeywords';
 import { features } from '../../lib/features';
+import { offerPage } from '../../lib/pageAccess';
 
 export type PageTenant = 'orgiq' | 'assessment' | 'social' | 'pipelines' | 'access' | 'admin' | 'universal';
 
@@ -436,13 +437,17 @@ export function usePortalCommands(): Command[] {
   return useMemo<Command[]>(() => {
     // Stable sort: the tenant's rail order between groups, definition order
     // within one — so the palette never leads with Settings.
+    // A page this role cannot open is offered only when the session holds a role that opens it, and then says
+    // so: the jump lands on the page's "no access" state, which makes the switch (lib/pageAccess.ts).
+    const switchTo = (p: PageEntry): string | null =>
+      isPageVisible(p, tenant, role) || !isPageVisible(p, tenant, 'admin') ? null : offerPage(session, p.roles).switchTo;
     const pageCommands: Command[] = PAGES
-      .filter((p) => isPageVisible(p, tenant, role) && (!p.feature || features[p.feature]))
+      .filter((p) => (isPageVisible(p, tenant, role) || switchTo(p) != null) && (!p.feature || features[p.feature]))
       .sort((a, b) => groupRank(tenant, a.group) - groupRank(tenant, b.group))
       .map((p) => ({
         id: `page:${p.path}`,
         label: p.label,
-        hint: p.hint,
+        hint: switchTo(p) ? `Switch to ${switchTo(p)} to open · ${p.hint}` : p.hint,
         group: p.group,
         // Path stays in the list (paste-a-URL-fragment still matches); the
         // per-page keywords carry the words people type; and the hint's own
@@ -463,7 +468,7 @@ export function usePortalCommands(): Command[] {
     }));
 
     return [...pageCommands, ...runCommands];
-  }, [navigate, tenant, role, runs]);
+  }, [navigate, tenant, role, runs, session]);
 }
 
 /**

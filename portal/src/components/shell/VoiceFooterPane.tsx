@@ -321,8 +321,8 @@ function VoiceFooterPane() {
   const planeActions = planeCaps.data?.actions ?? {};
   const socialRequestItemId = onPlane && planeCaps.data?.actions && !planeCaps.data.actions['PostMessage'] ? planeCaps.data.requestItemId ?? null : null;
   const userId = session?.sub ?? null;
-  const live = useRef({ tenant, role: session?.role ?? 'member', userId, ledger, can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, socialRequestItemId, results, inbox });
-  live.current = { tenant, role: session?.role ?? 'member', userId, ledger, can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, socialRequestItemId, results, inbox };
+  const live = useRef({ tenant, role: session?.role ?? 'member', switchable: session?.switchable?.[tenant] ?? null, userId, ledger, can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, socialRequestItemId, results, inbox });
+  live.current = { tenant, role: session?.role ?? 'member', switchable: session?.switchable?.[tenant] ?? null, userId, ledger, can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, socialRequestItemId, results, inbox };
 
   // ── queue_work (G19): one keyed toast per job, the notification center's entry, the spoken outcome ──
   const toaster = useToastOptional();
@@ -362,6 +362,7 @@ function VoiceFooterPane() {
     toolContext: (): ToolContext => ({
       tenant: live.current.tenant,
       role: live.current.role,
+      switchable: live.current.switchable,
       userId: live.current.userId,
       ledger: live.current.ledger,
       palette: { pages: PAGES, visible: isPageVisible },

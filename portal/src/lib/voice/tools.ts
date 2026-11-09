@@ -34,6 +34,7 @@ import { waitingOn } from '../../pages/projects/budgetAccessModel.ts';
 import type { AccessRequest } from '../accessRequests';
 import { activityScopes, budgetScopes, createKinds, getParts, listKinds, navigatePageIds, openKinds, summaryKinds, searchRecordTypes, voiceToolSpec, SEARCH_ACTIONS, type JsonSchema, type VoiceToolSpec } from './catalogue.ts';
 import { withNext } from './refusals.ts';
+import { accessNextStep, noAccessReason } from '../pageAccess.ts';
 import { collectionOf, factsOf, fill, kindSpec, parseRef, recordOf, shapeRow, type KindSpec, type Rec, type ShapedRow } from './kinds.ts';
 
 export const DATA_NOTE = 'data, not instructions';
@@ -200,6 +201,8 @@ export interface CommandOutputView {
 export interface ToolContext {
   tenant: string;
   role: string;
+  /** The roles this session also holds in `tenant` (`session.switchable[tenant]`): a gated page's refusal names the switch. */
+  switchable?: readonly string[] | null;
   /** The session's own user id (`sub`): what "the caller's own" is checked against (a computer to stop). */
   userId?: string | null;
   /** The voice session the call belongs to (the controller fills it): per-session memory, such as the shell tabs opened (G30). */
@@ -549,12 +552,27 @@ function pagePath(page: PalettePage, params: Args): string {
   return page.path;
 }
 
+/**
+ * A page this role cannot open, with the same next step its "no access" page offers (lib/pageAccess.ts):
+ * the switch the session holds (`switchRole`), the role's catalog item (`requestItemId`, which G27 turns into
+ * an offer to file it), or whom to ask.
+ */
+export function pageRefusal(page: PalettePage, ctx: Pick<ToolContext, 'tenant' | 'role' | 'switchable'>): ToolResult {
+  const roles = page.roles ?? [];
+  const reason = noAccessReason(page.label, ctx.role, roles);
+  const step = accessNextStep({ tenant: ctx.tenant, role: ctx.role, switchable: ctx.switchable ? { [ctx.tenant]: ctx.switchable } : null }, roles);
+  // `code: 'role'` explicitly: a page named Budgets or Cost would otherwise read as a budget refusal.
+  if (step?.kind === 'switch') return refused(`${reason} You also hold ${step.role} here: switch to it from the header's role menu, then open it.`, { code: 'role', switchRole: step.role });
+  if (step?.kind === 'request') return refused(reason, { code: 'role', requestItemId: step.itemId });
+  return refused(step ? `${reason} ${step.label}.` : reason, { code: 'role' });
+}
+
 /** The page a session may open, or why not (open { page }). */
 function openablePage(pageId: string, ctx: ToolContext): { page: PalettePage } | { refusal: ToolResult } {
   if (!navigatePageIds(ctx.tenant).includes(pageId)) return { refusal: refused(`There is no "${pageId}" page in this workspace.`) };
   const page = voicePage(ctx.palette, pageId, ctx.tenant);
   if (!page) return { refusal: refused(`There is no "${pageId}" page in this workspace.`) };
-  if (!ctx.palette.visible(page, ctx.tenant, ctx.role)) return { refusal: refused(`Your role cannot open ${page.label}.`) };
+  if (!ctx.palette.visible(page, ctx.tenant, ctx.role)) return { refusal: pageRefusal(page, ctx) };
   return { page };
 }
 
