@@ -74,6 +74,8 @@
 --     tenant column is a nullable attribute and the observability pages read
 --     every tenant's traces behind ViewObservability.
 --   tenants, app_users — the directory; a user spans tenants.
+--   voice_settings — a person's voice choice, the same in every workspace
+--     (no tenant column); the route reads and writes only the caller's row.
 --   social_decks, social_deck_revisions — built from conversations (dm:,
 --     team:) that live in every tenant's bottom bar, not only in Social.
 --   the org graph and the other Work tables (projects, people, budgets, work

@@ -112,7 +112,7 @@ describe('POST /api/voice/sessions — the mint', () => {
     expect(res.body).toEqual({
       sessionId: expect.stringMatching(/^vs_[0-9a-f-]{36}$/), voiceSessionId: res.body.sessionId,
       holdId: expect.any(String), maxSeconds: 1800, expiresAt: expect.any(String), sdp: ANSWER, mock: false,
-      model: 'gpt-live-1', voice: null, toolsEnabled: true, tools: VOICE_TOOLS.map((t) => t.name),
+      model: 'gpt-live-1', voice: null, style: 'plain', toolsEnabled: true, tools: VOICE_TOOLS.map((t) => t.name),
       budget: { holdUsd: 0.5, usdPerMinute: 0.05 }, toastSeconds: 8,
     });
     expect(calls).toHaveLength(1);

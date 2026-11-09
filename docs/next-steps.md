@@ -462,6 +462,8 @@ Every package landed and is pushed. V1 (`d2dc7813`) found that the prototype spe
 
 Left from the build: command output cannot be written into the library's shell tab (it streams to a log panel above the dock; a shell-output primitive belongs in ui-components); the presence tooltip does not show `detail`, so the status message is wrapped in a `Tooltip` in the portal (library follow-up); `test`, `lint` and `build` phrases are refused unless `DEVBOX_COMMAND_ALLOWLIST` opts in; a budget-overrun confirmation at mint exists but the daily-minutes question is still the owner's; tenants other than orgiq and social do not show the dock; nothing has run in AWS.
 
+G38 voice settings (8 November 2026): Settings › Voice picks the voice (21 described presets, `marin`, `cedar`, and designed voices from `VOICE_CUSTOM_VOICES`), a speaking style and a pace, stored per person in `voice_settings` and applied at mint as the voice plus words-only instruction lines; no real-person imitation (`docs/voice-navigator-gaps.md` G38).
+
 ### Gaps (8 November 2026)
 
 `docs/voice-navigator-gaps.md` is the loop-executable list of what the build left open: a coverage matrix of the owner's utterances against the catalogue, each gap with its root cause and smallest fix, the three open questions decided (every tenant gets the read tools, a shared budget plus `VOICE_DAILY_MINUTES=60`, a batch cap of three computers), and packages G1 to G18.

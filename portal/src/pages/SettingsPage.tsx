@@ -11,6 +11,7 @@ import { useGatewayInfo } from '../hooks/useGatewayInfo';
 import { useSession } from '../lib/auth';
 import { Can } from '../lib/capabilities';
 import { ProfileSection } from './settings/ProfileSection';
+import { VoiceSection } from './settings/VoiceSection';
 
 
 interface Health {
@@ -95,6 +96,10 @@ export function SettingsPage() {
             }
           />
         </Card>
+
+        {/* 1b. Voice — the voice navigator's voice, style and pace (G38).
+            Hidden without the VoiceNavigate grant (the read answers 403). */}
+        <VoiceSection />
 
         {/* 2. Scores — an Org surface; the assessment tenant has no leaderboard.
 

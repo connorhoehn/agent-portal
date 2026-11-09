@@ -106,3 +106,23 @@ CREATE TABLE IF NOT EXISTS voice_session_events (
 );
 
 CREATE INDEX IF NOT EXISTS voice_session_events_at_idx ON voice_session_events (at);
+
+-- A person's voice settings (G38, docs/voice-navigator-gaps.md): the voice,
+-- speaking style and pace the mint applies (middleware/src/lib/voice/voices.ts,
+-- GET/PUT /api/voice/settings). One row per person who saved a choice; no row
+-- = the deployment's default (VOICE_VOICE, else the provider's). No tenant
+-- column: a person's voice is the same in every workspace, like app_users, so
+-- this is not a tenant table and row_level_security.sql does not list it; the
+-- route reads and writes only the caller's own row. The values are checked
+-- for shape here and against the catalogue in the middleware, so a new style
+-- needs no migration. A new table reaches orgiq_app_middleware through
+-- service_roles.sql's schema-wide grant: re-apply it (--roles-only) after
+-- loading this file on an existing cluster.
+CREATE TABLE IF NOT EXISTS voice_settings (
+  user_sub    TEXT        PRIMARY KEY,
+  -- A preset name (lowercase) or an allowlisted designed voice id; null = the default.
+  voice       TEXT        CHECK (voice IS NULL OR voice ~ '^([a-z]{2,20}|voice_[A-Za-z0-9_-]{4,80})$'),
+  style       TEXT        NOT NULL DEFAULT 'plain' CHECK (style ~ '^[a-z][a-z-]{0,39}$'),
+  pace        TEXT        NOT NULL DEFAULT 'normal' CHECK (pace ~ '^[a-z][a-z-]{0,39}$'),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

@@ -9,7 +9,8 @@
 //     then the mint through lib/voice/openai.ts (or a scripted session under
 //     MOCK_VOICE=1). 201:
 //       { sessionId, voiceSessionId, holdId, maxSeconds, expiresAt, sdp, mock,
-//         model, voice, toolsEnabled, tools: [names], budget: { holdUsd, usdPerMinute },
+//         model, voice (the caller's choice, else VOICE_VOICE, else null), style (G38),
+//         toolsEnabled, tools: [names], budget: { holdUsd, usdPerMinute },
 //         toastSeconds (VOICE_TOAST_SECONDS: how long a queued job's toast stays once it ends, G19),
 //         mockScript?: { onStart, onResponseCreate, onClose } }   (MOCK_VOICE only; lib/voice/openai.ts)
 //     sessionId is opaque: the provider's live_… id stays server-side (§6), so a
@@ -44,6 +45,20 @@
 //     MAX_EVENT_BATCH events, each parsed as the event form; any bad one is a
 //     400 naming its index and nothing is written. 201 { seqs } in order;
 //     429 { seqs } with the rows written before the log filled.
+//
+//   GET /api/voice/settings              (G38)
+//     The caller's voice settings: { voice (null = the default), style, pace,
+//     options: { voices: [{ value, name | id, label, language, region,
+//     presentation, bestQuality?, custom? }], styles: [{ id, label, hint }],
+//     paces: [{ id, label }] }, default: { voice } } (lib/voice/voices.ts).
+//   PUT /api/voice/settings              { voice?: string | null, style?, pace? }
+//     Validated against the catalogue: a preset name in any case (stored
+//     lowercase), or a designed voice on VOICE_CUSTOM_VOICES; null resets a
+//     field to its default. 400 { error, field } names the bad field; 200 is
+//     the GET body. The mint applies them: the voice through resolveVoice,
+//     and the designed voice's description, the style and the pace as lines
+//     appended to the voice's instructions. Words only: there is no speed
+//     parameter, and no line names or imitates a person.
 //
 // The event log (lib/voice/session-log.ts): the mint (`minted`, or `error` +
 // `closed` when it fails after the row exists), the dock's events above, the
@@ -97,6 +112,11 @@ import {
   attachSideband, createLiveSession, detachSideband, hangupLiveSession, mockLiveScript, voiceProviderConfigured, waitForSidebandUsage,
   MOCK_SDP_ANSWER, VoiceProviderError, type ProviderUsage,
 } from '../lib/voice/openai.js';
+import {
+  canonicalVoice, isVoicePace, isVoiceStyle, resolveVoice, voiceCatalogueConfig, voiceSettingsView, withVoiceSettings,
+  DEFAULT_VOICE_SETTINGS, type VoiceSettings,
+} from '../lib/voice/voices.js';
+import { getVoiceSettings, putVoiceSettings, type VoiceSettingsPatch } from '../providers/voice-settings.js';
 import { MAX_EVENT_BATCH, parseClientEvent, recordVoiceEvent, type VoiceEventKind } from '../lib/voice/session-log.js';
 import {
   closeVoiceSession, getVoiceSession, insertVoiceSession, insertVoiceToolCall, learnReapedSessionCost, recordProviderUsage, setProviderSessionId,
@@ -164,6 +184,57 @@ async function liveOpenSessions(sub: string): Promise<VoiceSessionRow[]> {
 function voiceForecast(cfg: ReturnType<typeof voiceConfig>, maxSeconds: number) {
   const p75 = voiceCostUsd(Math.min(cfg.p75Minutes * 60, maxSeconds), cfg.usdPerMinute);
   return { costUsdP75: p75, costUsdP25: Math.round((p75 / 4) * 10_000) / 10_000, confidence: 'prior' as const };
+}
+
+const settingsReads = rateLimit('voice-settings-reads', 120, 60_000, bySub);
+const settingsWrites = rateLimit('voice-settings-writes', 30, 60_000, bySub);
+
+voiceRouter.get('/settings', settingsReads, asyncHandler(async (req, res) => {
+  const session = resolveSession(req) as Session;
+  res.json(voiceSettingsView(await getVoiceSettings(session.sub), voiceCatalogueConfig()));
+}));
+
+voiceRouter.put('/settings', settingsWrites, asyncHandler(async (req, res) => {
+  const session = resolveSession(req) as Session;
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  if (typeof body !== 'object' || Array.isArray(body)) { res.status(400).json({ error: 'a JSON object is required' }); return; }
+  const cat = voiceCatalogueConfig();
+  const patch: VoiceSettingsPatch = {};
+  const bad = (field: string, error: string): void => { res.status(400).json({ error, field }); };
+  if ('voice' in body) {
+    const v = body['voice'];
+    if (v === null) patch.voice = null;
+    else if (typeof v !== 'string' || v.length > 100) { bad('voice', 'voice must be a voice name, a designed voice id, or null'); return; }
+    else {
+      const canonical = canonicalVoice(v, cat.customVoices);
+      if (!canonical) { bad('voice', 'voice is not one this deployment offers'); return; }
+      patch.voice = canonical;
+    }
+  }
+  if ('style' in body) {
+    const v = body['style'];
+    if (v === null) patch.style = DEFAULT_VOICE_SETTINGS.style;
+    else if (!isVoiceStyle(v)) { bad('style', 'style is not one of the offered styles'); return; }
+    else patch.style = v;
+  }
+  if ('pace' in body) {
+    const v = body['pace'];
+    if (v === null) patch.pace = DEFAULT_VOICE_SETTINGS.pace;
+    else if (!isVoicePace(v)) { bad('pace', 'pace is not one of brisk, normal, relaxed'); return; }
+    else patch.pace = v;
+  }
+  const saved = Object.keys(patch).length ? await putVoiceSettings(session.sub, patch) : await getVoiceSettings(session.sub);
+  res.json(voiceSettingsView(saved, cat));
+}));
+
+/** The caller's settings for a mint: a read that fails never blocks the session, it speaks in the default voice. */
+async function mintSettings(sub: string): Promise<VoiceSettings> {
+  try {
+    return await getVoiceSettings(sub);
+  } catch (err) {
+    console.warn(`[voice] settings read failed, minting with the defaults: ${String((err as Error)?.message ?? err).slice(0, 120)}`);
+    return { ...DEFAULT_VOICE_SETTINGS };
+  }
 }
 
 voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncHandler(async (req, res) => {
@@ -239,12 +310,16 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
   const { commandAllowlist } = await import('./devbox.js');
   const tools = toolsForTenant(session.tenant, { commandAllowlist: commandAllowlist(), role: session.role });
   const toolsEnabled = cfg.mock || (cfg.delegationModel != null && tools.length > 0);
+  // The caller's voice settings (G38): the voice, and the lines the instructions carry.
+  const catalogue = voiceCatalogueConfig();
+  const settings = await mintSettings(session.sub);
+  const voice = resolveVoice(settings, catalogue);
   let row: VoiceSessionRow;
   let resumeOf: string | null = null;
   try {
     resumeOf = await resumable(body['resumeOf'], session);
     row = await insertVoiceSession({
-      id, user_sub: session.sub, tenant: session.tenant, hold_id: held.holdId, model: cfg.model, voice: cfg.voice,
+      id, user_sub: session.sub, tenant: session.tenant, hold_id: held.holdId, model: cfg.model, voice,
       mock: cfg.mock, max_seconds: maxSeconds, usd_per_minute: cfg.usdPerMinute, resume_of: resumeOf,
     });
   } catch (err) {
@@ -281,8 +356,9 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
     try {
       answer = await createLiveSession(sdp!, {
         // Without a delegation model the voice is told it has no backend (§8), never to delegate into nothing.
-        model: cfg.model, instructions: voiceInstructions(session.tenant, cfg.delegationModel ? tools : []),
-        delegationInstructions: delegationInstructions(session.tenant), voice: cfg.voice,
+        model: cfg.model,
+        instructions: withVoiceSettings(voiceInstructions(session.tenant, cfg.delegationModel ? tools : []), voice, settings, catalogue),
+        delegationInstructions: delegationInstructions(session.tenant), voice,
         delegationModel: cfg.delegationModel, tools: responsesFunctionTools(tools),
       });
     } catch (err) {
@@ -299,7 +375,7 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
   }
   await setProviderSessionId(id, answer.providerSessionId);
   await recordVoiceEvent(row, 'minted', {
-    mock: cfg.mock, model: cfg.model, voice: cfg.voice, maxSeconds, toolsEnabled, tools: toolsEnabled ? tools.map((t) => t.name) : [],
+    mock: cfg.mock, model: cfg.model, voice, style: settings.style, pace: settings.pace, maxSeconds, toolsEnabled, tools: toolsEnabled ? tools.map((t) => t.name) : [],
     holdUsd: held.amountUsd, usdPerMinute: cfg.usdPerMinute, dailyMinutesLeft,
     ...(body['resumeOf'] !== undefined ? { resumeOf, resumeLinked: resumeOf != null } : {}),
   });
@@ -327,7 +403,7 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
   const expiresAt = new Date(Date.parse(row.started_at) + maxSeconds * 1000).toISOString();
   res.status(201).json({
     sessionId: id, voiceSessionId: id, holdId: held.holdId, maxSeconds, expiresAt,
-    sdp: answer.sdp, mock: cfg.mock, model: cfg.model, voice: cfg.voice,
+    sdp: answer.sdp, mock: cfg.mock, model: cfg.model, voice, style: settings.style,
     toolsEnabled, tools: toolsEnabled ? tools.map((t) => t.name) : [],
     budget: { holdUsd: held.amountUsd, usdPerMinute: cfg.usdPerMinute },
     toastSeconds: cfg.toastSeconds,

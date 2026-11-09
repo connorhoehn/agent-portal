@@ -3903,7 +3903,7 @@
     {
       "method": "POST",
       "path": "/api/voice/sessions",
-      "source": "src/routes/voice.ts:169"
+      "source": "src/routes/voice.ts:240"
     },
     {
       "method": "GET",
@@ -3913,12 +3913,12 @@
     {
       "method": "POST",
       "path": "/api/voice/sessions/:id/close",
-      "source": "src/routes/voice.ts:448"
+      "source": "src/routes/voice.ts:509"
     },
     {
       "method": "POST",
       "path": "/api/voice/sessions/:id/events",
-      "source": "src/routes/voice.ts:381"
+      "source": "src/routes/voice.ts:442"
     },
     {
       "method": "GET",
@@ -3929,6 +3929,16 @@
       "method": "GET",
       "path": "/api/voice/sessions/latest",
       "source": "src/routes/voice-log.ts:107"
+    },
+    {
+      "method": "GET",
+      "path": "/api/voice/settings",
+      "source": "src/routes/voice.ts:192"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/voice/settings",
+      "source": "src/routes/voice.ts:197"
     },
     {
       "method": "GET",

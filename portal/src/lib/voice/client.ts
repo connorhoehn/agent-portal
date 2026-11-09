@@ -66,7 +66,10 @@ export interface VoiceMint {
   sdp: string;
   mock: boolean;
   model: string;
+  /** The voice sent to the provider: the user's choice (Settings › Voice), else VOICE_VOICE, else null (the provider's default). */
   voice: string | null;
+  /** The speaking style the instructions carry (G38): `plain` adds none. */
+  style?: string;
   toolsEnabled: boolean;
   tools: string[];
   budget: { holdUsd: number; usdPerMinute: number };
