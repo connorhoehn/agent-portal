@@ -440,9 +440,12 @@ function VoiceFooterPane() {
       if (inbox.add(item)) controller.noteInbound(item);
     }
   }, [noteList, inbox, controller]);
+  const rosterNames = useRef(new Map<string, string>());
+  rosterNames.current = new Map((socialPeople ?? []).map((p) => [p.id, p.name] as [string, string]));
   const listenGateway = gateway?.onMessage;
   useEffect(() => listenGateway?.((frame) => {
-    const item = messageFromFrame(frame, live.current.userId, Date.now());
+    // The sender's name from the shell's own Social roster when it knows them (sweep 6), never only the frame's.
+    const item = messageFromFrame(frame, live.current.userId, Date.now(), (id) => rosterNames.current.get(id) ?? null);
     if (item && inbox.add(item)) controller.noteInbound(item);
   }), [listenGateway, inbox, controller]);
 

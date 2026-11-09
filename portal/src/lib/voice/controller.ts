@@ -92,10 +92,12 @@
 // `by: 'session'` and `coveredBy` the first card's call. A new target, an
 // attachment or a click-only tool always shows a card.
 //
-// Bounded delegations (G43): one delegation runs at most MAX_CALLS_PER_DELEGATION
-// tool calls (a search that only changes its query counts double); the next
-// call is answered `too-many-calls` with stop: true, the round asks for no
-// continuation, and the dock says TOO_MANY_LINE itself.
+// Bounded requests (G43, sweep 6): one user turn (from one `input` frame to the
+// next) runs at most MAX_CALLS_PER_DELEGATION tool calls across however many
+// delegations the voice opens (a search that only changes its query counts
+// double); the next call is answered `too-many-calls` with stop: true, its
+// round asks for no continuation, any further delegation in the same turn is
+// refused alike, and the dock says TOO_MANY_LINE itself, once per turn.
 //
 // Phase dwell (G36): the phase the dock shows (and logs) holds at least
 // PHASE_DWELL_MS. A change inside the window waits for its end and is then
@@ -274,8 +276,6 @@ interface CallRecord { name: string; status: 'confirming' | 'running' | 'answere
 /** `stopped`: a call of this round was a repeat refusal (G29): the round ends without a continuation. */
 interface DelegationRecord {
   calls: Map<string, CallRecord>; completed: boolean; unanswered: number; grace: Timer | null; stopped: boolean;
-  /** G43: the calls this delegation used (weighted) and the shapes of its searches without the query. */
-  used: number; searches: Set<string>; spokeStop?: boolean;
 }
 /** What the card has heard: the first utterance after it, and whether that utterance has ended. */
 interface Heard { text: string; lastEndMs: number | null; quiet: Timer | null; done: boolean }
@@ -392,6 +392,8 @@ export class VoiceController {
   private resuming: string | null = null;
   /** The workspace the session minted last was minted in (G44). */
   private mintTenant: string | null = null;
+  /** G43: the calls this user turn used (weighted), its searches' shapes without the query, and whether it was stopped. */
+  private turn: { used: number; searches: Set<string>; stopped: boolean; spoke: boolean } = { used: 0, searches: new Set(), stopped: false, spoke: false };
   /** G41: the conversations a message card was confirmed for this session, and the call that confirmed each. */
   private coveredTargets = new Map<string, string>();
   /** G36: the phase shown and logged, since when, and the timer that re-reads the machine when a dwell ends. */
@@ -697,8 +699,9 @@ export class VoiceController {
         return;
       case 'input':
         this.context.speech(f.text.length);
-        // The user answered: the idle watch after a result stands down (G33 item 4).
+        // The user answered: the idle watch after a result stands down (G33 item 4), and a new turn has its own calls (G43).
         this.disarmIdle();
+        this.turn = { used: 0, searches: new Set(), stopped: false, spoke: false };
         this.appendTurn('you', f.text, at);
         this.dispatch({ type: 'input', at });
         if (this.pending) this.hearForPending(f.text, f.startMs, f.endMs);
@@ -753,7 +756,7 @@ export class VoiceController {
   private delegation(id: string): DelegationRecord {
     let rec = this.delegations.get(id);
     if (!rec) {
-      rec = { calls: new Map(), completed: false, unanswered: 0, grace: null, stopped: false, used: 0, searches: new Set() };
+      rec = { calls: new Map(), completed: false, unanswered: 0, grace: null, stopped: false };
       this.delegations.set(id, rec);
     }
     return rec;
@@ -769,13 +772,15 @@ export class VoiceController {
     const startedAt = this.now();
     const ctx = this.toolContext();
     // G43: a delegation that has used its calls is told to stop; the round ends here and the dock speaks.
-    const weight = callWeight(rec, name, rawArgs);
-    if (rec.stopped || rec.used + weight > MAX_CALLS_PER_DELEGATION) {
+    const turn = this.turn;
+    const weight = callWeight(turn, name, rawArgs);
+    if (turn.stopped || rec.stopped || turn.used + weight > MAX_CALLS_PER_DELEGATION) {
       rec.stopped = true;
+      turn.stopped = true;
       const res = withNext(refused('Too many calls for one request.', { code: 'too-many-calls', say: TOO_MANY_LINE, stop: true }), name, ctx);
       await this.answer(client, delegationId, callId, name, res, startedAt, rawArgs);
-      if (!rec.spokeStop) {
-        rec.spokeStop = true;
+      if (!turn.spoke) {
+        turn.spoke = true;
         const said = `Tell the user, in one sentence, and do not call anything: ${TOO_MANY_LINE}`;
         this.context.note(said.length);
         client.appendCommentary(said);
@@ -783,7 +788,7 @@ export class VoiceController {
       }
       return;
     }
-    rec.used += weight;
+    turn.used += weight;
     const prepared = prepareToolCall(name, rawArgs, ctx);
     if (!prepared.ok) {
       await this.answer(client, delegationId, callId, name, prepared.result, startedAt, rawArgs);
@@ -987,20 +992,26 @@ export class VoiceController {
   }
 
   /** The first utterance after the card decides it (confirmDecision); a later one is the voice's, not the card's. */
+  /**
+   * The card listens until it resolves (sweep 6): each utterance after it is heard whole; a cancelling word cancels
+   * as soon as it is heard, an affirmation decides once the utterance ends, anything else is let go and the next
+   * utterance is heard afresh. The voice's own card line picked up by the microphone is never an answer.
+   */
   private hearForPending(text: string, startMs: number | null, endMs: number | null): void {
     const p = this.pending;
-    if (!p || p.heard.done) return;
-    const h = p.heard;
-    // The next word starts well after the last one ended: the first utterance is over, and this word is not part of it.
+    if (!p) return;
+    let h = p.heard;
+    // The next word starts well after the last one ended: that utterance is over, and this word begins the next.
     if (h.text.trim() && startMs != null && h.lastEndMs != null && startMs - h.lastEndMs >= UTTERANCE_SPLIT_MS) {
       this.endUtterance(p);
-      return;
+      if (this.pending !== p) return;
+      h = p.heard;
     }
     h.text += text;
     if (endMs != null) h.lastEndMs = endMs;
-    if (confirmDecision(h.text, false) === 'cancel') { this.resolvePending(false, 'voice'); return; }
+    if (!echoesCardLine(h.text, p.line) && confirmDecision(h.text, false) === 'cancel') { this.resolvePending(false, 'voice'); return; }
     if (h.quiet != null) this.clearTimer(h.quiet);
-    h.quiet = this.setTimer(() => { h.quiet = null; if (this.pending === p) this.endUtterance(p); }, UTTERANCE_GAP_MS);
+    h.quiet = this.setTimer(() => { h.quiet = null; if (this.pending === p && p.heard === h) this.endUtterance(p); }, UTTERANCE_GAP_MS);
   }
 
   private endUtterance(p: Pending): void {
@@ -1008,14 +1019,24 @@ export class VoiceController {
     if (h.done) return;
     h.done = true;
     if (h.quiet != null) { this.clearTimer(h.quiet); h.quiet = null; }
+    // The voice's own line through the speaker (no echo cancellation, an external mic) is not the user's answer.
+    if (echoesCardLine(h.text, p.line)) { this.listenAgain(p); return; }
     const decision = confirmDecision(h.text, true);
     // G40: a click-only card (computer, decide, an access request) is never confirmed by voice: the voice says to click, once.
     if (decision === 'confirm' && p.mode === 'click') { this.tellToClick(p); return; }
-    if (decision) this.resolvePending(decision === 'confirm', 'voice');
+    if (decision) { this.resolvePending(decision === 'confirm', 'voice'); return; }
+    this.listenAgain(p);
+  }
+
+  /** The card hears the next utterance afresh (a cancel still cancels it). */
+  private listenAgain(p: Pending): void {
+    if (this.pending === p) p.heard = { text: '', lastEndMs: null, quiet: null, done: false };
   }
 
   private tellToClick(p: Pending): void {
     this.emit({ kind: 'client', data: { event: 'click-required', requestId: p.view.requestId, tool: p.call.spec.name, phrase: confirmPhrase(p.heard.text) } });
+    // Keep listening: a spoken cancel after this still cancels (sweep 6).
+    this.listenAgain(p);
     if (p.toldToClick || !this.client) return;
     p.toldToClick = true;
     this.context.note(p.line.length + 40);
@@ -1241,6 +1262,7 @@ export class VoiceController {
   }
 
   private reset(): void {
+    this.turn = { used: 0, searches: new Set(), stopped: false, spoke: false };
     this.clearDelegations();
     this.coveredTargets.clear();
     this.disarmIdle();
@@ -1347,4 +1369,12 @@ function callWeight(rec: { searches: Set<string> }, name: string, raw: string): 
   const seen = rec.searches.has(shape);
   rec.searches.add(shape);
   return seen ? 2 : 1;
+}
+
+/** Whether what was heard is the card's own line coming back through the microphone (sweep 6), not the user. */
+export function echoesCardLine(heard: string, line: string): boolean {
+  const norm = (t: string) => t.toLowerCase().replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const h = norm(heard);
+  if (h.length < 6) return false;
+  return norm(line).startsWith(h) || /\b(say confirm to|click confirm on the card)\b/.test(h);
 }

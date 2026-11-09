@@ -123,7 +123,7 @@ function words(text: string, opts: { atMs?: number; startMs?: number } = {}) {
   return text.split(/(?=\s)/).map((w, i) => ({ atMs: at + i * 100, event: { type: 'session.input_transcript.delta', delta: w, start_ms: start + i * 200, end_ms: start + i * 200 + 200 } }));
 }
 
-test('voice confirm (sweep 2 M2): the first utterance after the card decides; an affirmation only at its start, "okay" only alone, and "instead" or "no" cancels', async () => {
+test('voice confirm (sweep 2 M2, sweep 6): each utterance after the card is heard whole until one decides; an affirmation only at its start, "okay" only alone, and "instead" or "no" cancels', async () => {
   const cases: Array<[string, unknown[], 'done' | 'cancelled' | 'open']> = [
     ['Okay, send it to the platform team instead', words(' Okay, send it to the platform team instead'), 'cancelled'],
     ['Yes ... instead, in one breath', words(' Yes, but instead post it to Ada'), 'cancelled'],
@@ -133,8 +133,8 @@ test('voice confirm (sweep 2 M2): the first utterance after the card decides; an
     ['go ahead, word by word', words(' Go ahead and post it'), 'done'],
     ['an affirmation mid-sentence is not one', words(' I guess yes'), 'open'],
     ['wait', words(' Wait, what does this do?'), 'cancelled'],
-    // The first utterance said nothing either way; a second one (a gap in the audio) is the voice's, not the card's.
-    ['only the first utterance', [...words(' Hmm, let me read it'), ...words(' Yes', { atMs: 3000, startMs: 9000 })], 'open'],
+    // Sweep 6: the card listens until it resolves; an utterance that said nothing either way is let go, and the next one answers.
+    ['a later utterance still answers', [...words(' Hmm, let me read it'), ...words(' Yes', { atMs: 3000, startMs: 9000 })], 'done'],
   ];
   for (const [label, said, expected] of cases) {
     const p = postRunner();

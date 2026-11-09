@@ -180,9 +180,18 @@ export function designedVoiceLines(voice: string | null, customVoices: readonly 
 }
 
 /** The voice's full instructions: the catalogue's, then the designed voice's description, then style and pace. */
+/** The provider's instructions cap (openai.ts slices the session's instructions here). */
+export const VOICE_INSTRUCTIONS_MAX = 20_000;
+
+/**
+ * The voice's instructions with the user's voice lines appended. The base is cut first so the whole stays under
+ * VOICE_INSTRUCTIONS_MAX with the voice, style and pace lines whole (sweep 6: a long tool list must never silently
+ * drop the user's setting).
+ */
 export function withVoiceSettings(base: string, voice: string | null, settings: Pick<VoiceSettings, 'style' | 'pace'>, cfg: VoiceCatalogueConfig): string {
-  const extra = [...designedVoiceLines(voice, cfg.customVoices), ...voiceStyleLines(settings)];
-  return extra.length ? [base, ...extra].join('\n') : base;
+  const extra = [...designedVoiceLines(voice, cfg.customVoices), ...voiceStyleLines(settings)].join('\n');
+  if (!extra) return base;
+  return `${base.slice(0, Math.max(0, VOICE_INSTRUCTIONS_MAX - extra.length - 1))}\n${extra}`;
 }
 
 export interface VoiceOption {
