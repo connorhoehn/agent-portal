@@ -105,9 +105,41 @@ export const WORKSPACE_TITLE_MAX = 200;
 export const WORKSPACE_MARKDOWN_MAX = 200_000;
 /** A base64 Yjs update of the whiteboard: 2 MB holds a few thousand shapes. */
 export const WORKSPACE_SCENE_MAX = 2_000_000;
-// Starts empty, like a newly migrated database; reset undoes every create.
+// Auth Migration's two pages, so its Docs tab opens on the plan the board and
+// #auth-migration argue about: Vera's cutover plan (on the blocked runbook
+// story) and Nora's session-hygiene whiteboard (on cookie hardening, drawn
+// empty — a board's shapes are a Yjs scene, and an invented one would be
+// unreadable). `empty` is the newly migrated state; reset undoes every create.
+const CUTOVER_PLAN = [
+  '# Tenant cutover plan',
+  '',
+  'Twelve customer tenants and two internal ones leave the SAML shim one at a time, each with the single-tenant cutover runbook.',
+  '',
+  '## Gate for every tenant',
+  '- Pre-flight: the tenant origin is in the Cognito app client callback and sign-out lists.',
+  '- Flip the IdP route for that tenant only.',
+  '- Watch the login error rate and the BFF 401 rate for 15 minutes.',
+  '- Roll back by restoring the shim route: under two minutes, nobody signed out.',
+  '',
+  '## Rehearsals',
+  '- Rehearsal one (internal): passed, zero forced logouts.',
+  '- Rehearsal two (internal): failed at the flip, the tenant origin was missing from the callback list. The runbook edit adding the pre-flight check is in review.',
+  '',
+  '## Order',
+  'Waiting on "Cutover order for legacy SSO tenants", escalated to Sienna Garcia: smallest tenants first, or the two with custom SAML mappings first.',
+].join('\n');
+function seededWorkspaceDocuments(): WorkspaceDocumentRow[] {
+  return [
+    { id: 'wdoc-6b1f3c2e-9a4d-4e7b-8c21-5d0e7f3a9b14', projectId: 'p-auth-migration', workItemId: 'wi-auth-e2-s2',
+      title: 'Tenant cutover plan', kind: 'page', markdown: CUTOVER_PLAN, scene: '', createdBy: 'u-vera',
+      createdAt: clock.daysAgo(6), updatedAt: clock.hoursAgo(1.5) },
+    { id: 'wdoc-0d7a4e93-2c5b-4f18-9e3a-7b6c1d2e8f05', projectId: 'p-auth-migration', workItemId: 'wi-auth-e1-s3',
+      title: 'Session hygiene: cookie lifecycle on a tenant switch', kind: 'whiteboard', markdown: '', scene: '', createdBy: 'u-nora',
+      createdAt: clock.daysAgo(4), updatedAt: clock.daysAgo(2) },
+  ];
+}
 export const workspaceDocuments = defineFixture<WorkspaceDocumentRow>({ key: 'work-documents',
-  scenarios: { default: () => [], empty: () => [] } });
+  scenarios: { default: seededWorkspaceDocuments, empty: () => [] } });
 const withHref = (row: WorkspaceDocumentRow): WorkspaceDocument => ({ ...structuredClone(row), href: documentRecordHref(row.id) });
 function workspaceRow(row: Record<string, unknown>): WorkspaceDocumentRow {
   return { id: String(row.id), projectId: String(row.project_id), workItemId: nullable(row.work_item_id), title: String(row.title),

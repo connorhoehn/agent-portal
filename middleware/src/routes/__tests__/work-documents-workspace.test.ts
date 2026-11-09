@@ -27,7 +27,7 @@ const as = (user: string) => ({ 'x-user': user });
 const list = (user = 'author') => request(app).get(`/api/graph/projects/${PROJECT}/workspace-documents`).set(as(user));
 const create = (body: unknown, user = 'author') => request(app).post(`/api/graph/projects/${PROJECT}/workspace-documents`).set(as(user)).send(body as object);
 beforeEach(() => {
-  jest.clearAllMocks(); workspaceDocuments.reset('default');
+  jest.clearAllMocks(); workspaceDocuments.reset(); workspaceDocuments.rows().splice(0);
   const users = new Map<string, UserInfo>([
     ['author', { id: 'author', epoch: 0, grants: { orgiq: ['org-leader'] }, displayName: 'Author', email: null, personId: null }],
     ['reader', { id: 'reader', epoch: 0, grants: { orgiq: ['member'] }, displayName: 'Reader', email: null, personId: null }]]);

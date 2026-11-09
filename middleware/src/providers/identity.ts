@@ -87,6 +87,30 @@ const FALLBACK_USERS: UserInfo[] = [
     grants: { orgiq: ['sme'], social: ['participant'] }, epoch: 0 },
   { id: 'u-caleb', displayName: 'Caleb Turner', email: 'caleb.turner@orgiq.example', personId: 'p-013',
     grants: { orgiq: ['sme'], social: ['participant'] }, epoch: 0 },
+  // Initiative owners and deciders (the Work story, docs/demo-script.md): every
+  // initiative's owner and every waiting decision's decider can sign in and act
+  // as themselves. Members of Work; a decider decides as the named participant
+  // (lib/decision-authority.ts), so none needs org-leader.
+  { id: 'u-nina', displayName: 'Nina Rivera', email: 'nina.rivera@orgiq.example', personId: 'p-047',
+    grants: { orgiq: ['member'], social: ['participant'] }, epoch: 0 },
+  { id: 'u-paolo', displayName: 'Paolo Mancini', email: 'paolo.mancini@orgiq.example', personId: 'p-049',
+    grants: { orgiq: ['member'], social: ['participant'] }, epoch: 0 },
+  { id: 'u-katya', displayName: 'Katya Petrov', email: 'katya.petrov@orgiq.example', personId: 'p-042',
+    grants: { orgiq: ['member'], social: ['participant'] }, epoch: 0 },
+  { id: 'u-daniel', displayName: 'Daniel Novak', email: 'daniel.novak@orgiq.example', personId: 'p-017',
+    grants: { orgiq: ['member'], social: ['participant'] }, epoch: 0 },
+  { id: 'u-anika', displayName: 'Anika Mehta', email: 'anika.mehta@orgiq.example', personId: 'p-025',
+    grants: { orgiq: ['member'], social: ['participant'] }, epoch: 0 },
+  { id: 'u-ben', displayName: 'Ben Okafor', email: 'ben.okafor@orgiq.example', personId: 'p-035',
+    grants: { orgiq: ['member'], social: ['participant'] }, epoch: 0 },
+  { id: 'u-isabel', displayName: 'Isabel Vasquez', email: 'isabel.vasquez@orgiq.example', personId: 'p-038',
+    grants: { orgiq: ['member'], social: ['participant'] }, epoch: 0 },
+  { id: 'u-lucas', displayName: 'Lucas Kim', email: 'lucas.kim@orgiq.example', personId: 'p-048',
+    grants: { orgiq: ['member'], social: ['participant'] }, epoch: 0 },
+  { id: 'u-diego', displayName: 'Diego Ortiz', email: 'diego.ortiz@orgiq.example', personId: 'p-052',
+    grants: { orgiq: ['member'], social: ['participant'] }, epoch: 0 },
+  { id: 'u-simone', displayName: 'Simone Chang', email: 'simone.chang@orgiq.example', personId: 'p-051',
+    grants: { orgiq: ['member'], social: ['participant'] }, epoch: 0 },
   // Assessment tenant cast — see docs/assessment-tenant.md Roles (Cedar).
   { id: 'u-asha', displayName: 'Asha Nair', email: 'asha.nair@assessment.example', personId: null,
     grants: { assessment: ['assessor'], social: ['participant'] }, epoch: 0 },

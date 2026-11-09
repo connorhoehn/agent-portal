@@ -68,7 +68,7 @@ describe('the mock period window, at a frozen instant', () => {
   // Frozen on the 20th, the day-22 run is August's money and drops out; the
   // other seven sum to 1.0067. Every dollar is cron, so the maintenance floor
   // is the whole of it — which is the point docs/program-operating-model.md
-  // makes about an allocation: $18 against a $1.01 floor.
+  // makes about an allocation: $25 against a $1.01 floor.
   it('sums p-soc2 to the seed\'s own figure, to the cent', async () => {
     await frozen(AT, async ({ budgets }) => {
       expect(budgets.mockInitiativeSpend('p-soc2')).toEqual({
@@ -86,7 +86,7 @@ describe('the mock period window, at a frozen instant', () => {
       const row = (await budgets.listBudgets()).find((b) => b.orgProjectId === 'p-soc2')!;
       expect(row.spentThisPeriodUsd).toBe(1.0067);
       expect(row.runCountThisPeriod).toBe(7);
-      expect(row.allocatedUsd).toBe(18);
+      expect(row.allocatedUsd).toBe(25);
     });
   });
 
@@ -214,19 +214,19 @@ describe('a live dispatch moves every money surface by the same amount', () => {
 });
 
 describe('grant windows come from the sprint calendar', () => {
-  // Frozen on 2026-09-20, spr-auth-s2 (14 days ago → today) is 2026-09-06 to
-  // 2026-09-20. Before the fix every seed grant carried (null, null), which is
+  // Frozen on 2026-09-20, spr-auth-s2 (9 days ago → 5 days ahead) is 2026-09-11
+  // to 2026-09-25. Before the fix every seed grant carried (null, null), which is
   // unbounded on both sides, so this figure was the initiative's lifetime spend.
   it('bounds an envelope on its own sprint, not on all of time', async () => {
     await frozen(AT, async ({ budgets }) => {
       const g = (await budgets.listGrants('p-auth-migration')).find((x) => x.id === 'bg-auth-3')!;
-      expect(g.startsOn).toBe('2026-09-06');
-      expect(g.endsOn).toBe('2026-09-20');
+      expect(g.startsOn).toBe('2026-09-11');
+      expect(g.endsOn).toBe('2026-09-25');
 
       const lifetime = budgets.mockInitiativeWindowSpendUsd('p-auth-migration', null, null);
       const windowed = budgets.mockInitiativeWindowSpendUsd('p-auth-migration', g.startsOn, g.endsOn);
       expect(g.initiativeSpendInWindowUsd).toBe(windowed);
-      // auth-dep-watch's seeded history reaches 28 days back, so a 14-day
+      // auth-dep-watch's seeded history reaches 28 days back, so a 9-day
       // window is a strict slice of it. If these were ever equal the window
       // would not be doing anything.
       expect(windowed).toBeLessThan(lifetime);

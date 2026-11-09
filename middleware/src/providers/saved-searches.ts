@@ -28,7 +28,7 @@ export const savedSearchesFixture = defineFixture<StoredSearch>({
     default: () => [
       { id: '5d1c7e2a-3b0f-4a8e-9c61-0a7f2d4e8b11', name: 'Auth Migration cutover decisions', query: 'legacy SSO cutover order', scope: 'workspace',
         types: ['decision'], tab: 'results', selectedKeys: [], createdAt: clock.daysAgo(9), updatedAt: clock.daysAgo(2), ownerSub: 'u-vera', tenant: 'orgiq' },
-      { id: '9a3e4b60-71c2-4d5f-8e0a-6c2b1f9d3a27', name: 'Cedar policy authoring experts', query: 'who has Cedar policy authoring experience', scope: 'workspace',
+      { id: '9a3e4b60-71c2-4d5f-8e0a-6c2b1f9d3a27', name: 'Identity and access experts', query: 'who knows IAM and zero trust', scope: 'workspace',
         types: ['person'], tab: 'results', selectedKeys: [], createdAt: clock.daysAgo(21), updatedAt: clock.daysAgo(6), ownerSub: 'u-vera', tenant: 'orgiq' },
     ],
     empty: () => [], fresh: () => [],

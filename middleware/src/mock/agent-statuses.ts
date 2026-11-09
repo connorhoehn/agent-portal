@@ -154,15 +154,14 @@ export const agentFleet = defineFixture<AgentDefinition>({
         endpoint: `${RUNTIME}/orgiq-assessment-drafter`,
       },
       {
-        // Not a Strands agent — it runs Claude Code in a microVM, which is
-        // why its model is an inference profile rather than a Nova id. It is
+        // Not a Strands agent — it runs coding tasks in a microVM. It is
         // still a runtime the control plane lists, so leaving it out made the
         // fleet page disagree with `agentcore list`.
         id: 'orgiq-devbox',
         name: 'Devbox',
         status: 'healthy',
         protocol: 'ag-ui',
-        model: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+        model: 'nova-pro-v1',
         tools: ['run_command', 'read_file', 'write_file'],
         guardrails: [],
         endpoint: `${RUNTIME}/orgiq-devbox`,

@@ -48,12 +48,12 @@ function buildApp() {
   return app;
 }
 
-// dev:mock enables every bot whose initiative is alive (mock/bots.ts) and parks
-// rag-index-health, whose initiative shipped, with the seed's own reason. The
-// pause tests below drive a live bot; the resume test brings the parked one up.
+// dev:mock enables every seeded bot (mock/bots.ts; rag-index-health keeps the
+// shipped RAG index fresh). The pause tests below drive a live bot; the resume
+// test parks rag-index-health the way a disabled seed row would and brings it up.
 // obs-nightly-maintenance — the bot this suite drives through the cycle.
 const RUNNING_BOT_ID = '32970d0a-e28e-5100-8fb0-a5cbb87dac99';
-// finops-daily-sweep — the seed's p-cost-opt bot, resumed from parked below.
+// rag-index-health — parked, then resumed, below.
 const PARKED_BOT_ID = 'f595b10b-5f52-50d0-81a0-9117e9334fb4';
 
 describe('POST /api/bots/:id/pause and /resume (dev:mock)', () => {
@@ -97,9 +97,11 @@ describe('POST /api/bots/:id/pause and /resume (dev:mock)', () => {
   });
 
   it('resume also re-enables a bot that was parked disabled from the seed (not just self-paused)', async () => {
+    // The seed runs every bot now, so park one the way a seed row would
+    // (disabled, with a reason); afterEach restores it.
     const parked = MOCK_BOTS.find((b) => b.id === PARKED_BOT_ID)!;
-    expect(parked.enabled).toBe(false);
-    expect(parked.pausedReason).not.toBeNull();
+    parked.enabled = false;
+    parked.pausedReason = 'Parked: the initiative shipped.';
 
     const res = await request(buildApp()).post(`/api/bots/${PARKED_BOT_ID}/resume`).send({});
     expect(res.status).toBe(200);

@@ -15,7 +15,10 @@
 //   - a reply        (assessment, u-farah ← Jonas, on the Rubric Overview thread)
 //   - a mention      (assessment, u-asha  ← Farah, on What Counts as Evidence)
 //   - a missed call  (orgiq,      u-vera  ← Nora, on the auth-migration initiative)
-//   - an approval    (orgiq,      u-release, from the advisor agent)
+//   - an approval    (orgiq,      u-release, from the agent the approval queue is holding)
+//   - Mia's Mobile inbox (orgiq,  u-mia: Ben's routing PR ready for review, the
+//     sprint's planned work against its envelope, and Ben mentioning her on the
+//     Android back-gesture bug)
 // u-jonas starts with nothing, so the §3.6 judge's "reads 1" is his first reply.
 //
 // Timestamps come from the mock clock at read time; ids are stable, so a
@@ -31,7 +34,7 @@ export interface MockNotificationRow {
   /** The recipient. */
   userId: string;
   tenant: string;
-  type: 'reply' | 'mention' | 'message' | 'call-missed' | 'approval-requested';
+  type: 'reply' | 'mention' | 'message' | 'call-missed' | 'approval-requested' | 'system';
   title: string;
   body: string;
   /** A portal path inside `tenant`. */
@@ -98,9 +101,51 @@ function socialNotifications(): MockNotificationRow[] {
   return out;
 }
 
+/** "orgiq-ingestion" → "The ingestion agent": the bell names an agent the way a person would. */
+function agentLabel(agentId: string): string {
+  const name = agentId.replace(/^orgiq-/, '').replace(/-/g, ' ').trim();
+  return name ? `The ${name} agent` : 'An agent';
+}
+
+/**
+ * Mia Singh's Mobile inbox (u-mia, program-owner): the review her initiative is
+ * waiting on, the money she watches, and the question Ben asked her. Each one
+ * names a real row — wi-mob-e1-s2 is in review with its PR open, Sprint 9's
+ * planned work is $13.03 against bg-mob-1's $15, and Ben's comment is
+ * wic-prog-20 on wi-mob-e1-b3 (mock/work-item-comments.ts).
+ */
+function miaNotifications(): MockNotificationRow[] {
+  const item = (id: string, view?: string) =>
+    `/iq/projects/p-mobile-redesign?tab=work&item=${id}${view ? `&view=${view}` : ''}`;
+  return [
+    {
+      id: 'mock-notif-mia-review', userId: 'u-mia', tenant: 'orgiq', type: 'system',
+      title: 'The deep-link routing map is ready for review',
+      body: 'Ben Okafor opened the pull request: every marketing link now opens a real screen or its fallback.',
+      href: item('wi-mob-e1-s2'), actionLabel: 'Open the work item', timestamp: clock.hoursAgo(6),
+      extra: { kind: 'review', workItemId: 'wi-mob-e1-s2', actorId: 'u-ben', actorName: 'Ben Okafor' },
+    },
+    {
+      id: 'mock-notif-mia-envelope', userId: 'u-mia', tenant: 'orgiq', type: 'system',
+      title: 'Mobile App Redesign has 87% of its sprint envelope planned',
+      body: 'Sprint 9 — Routing carries $13.03 of estimated work against its $15 envelope, with five days left.',
+      href: '/iq/projects/p-mobile-redesign', actionLabel: 'Open the initiative', timestamp: clock.hoursAgo(20),
+      extra: { kind: 'budget', initiativeId: 'p-mobile-redesign', sprintId: 'spr-mob-s1', grantId: 'bg-mob-1' },
+    },
+    {
+      id: 'mock-notif-mia-mention', userId: 'u-mia', tenant: 'orgiq', type: 'mention',
+      title: 'Ben Okafor mentioned you',
+      body: 'On “Android back gesture conflicts with drawer swipe”: @Mia Singh do we keep the drawer swipe on Android, or open the drawer from the tab bar only?',
+      href: item('wi-mob-e1-b3', 'comments'), actionLabel: 'Open the discussion', timestamp: clock.hoursAgo(3),
+      extra: { kind: 'mention', workItemId: 'wi-mob-e1-b3', actorId: 'u-ben', actorName: 'Ben Okafor' },
+    },
+  ];
+}
+
 function seedNotifications(): MockNotificationRow[] {
   return [
     ...socialNotifications(),
+    ...miaNotifications(),
     {
       id: 'mock-notif-reply-farah', userId: 'u-farah', tenant: 'assessment', type: 'reply',
       title: 'Jonas Lindqvist replied to your comment',
@@ -120,7 +165,7 @@ function seedNotifications(): MockNotificationRow[] {
     {
       id: 'mock-notif-missed-vera', userId: 'u-vera', tenant: 'orgiq', type: 'call-missed',
       title: 'Missed call from Nora DaSilva',
-      body: 'About the second rehearsal rollback and the callback-list step for the cutover runbook. Nobody answered — on Auth Migration.',
+      body: 'About the second rehearsal rollback and the callback-list step for the cutover runbook, on Auth Migration. Nobody answered.',
       href: '/iq/projects/p-auth-migration', actionLabel: 'Open the initiative',
       timestamp: clock.hoursAgo(1),
       extra: { kind: 'call-missed', callerId: 'u-nora', callerName: 'Nora DaSilva', reason: 'no-answer', channel: 'initiative:p-auth-migration' },
@@ -130,7 +175,7 @@ function seedNotifications(): MockNotificationRow[] {
     // question of the same agent.
     ...approvalRequests.rows().filter((a) => a.status === 'PENDING').map((a): MockNotificationRow => ({
       id: `mock-notif-approval-${a.approval_id.slice(-4)}`, userId: 'u-release', tenant: 'orgiq', type: 'approval-requested',
-      title: `${a.agent_id} is waiting on an approval`,
+      title: `${agentLabel(a.agent_id)} is waiting on your approval`,
       body: a.reason ?? 'An agent is waiting on a human decision.',
       href: '/admin/observability/approvals', actionLabel: 'Open the approval queue',
       timestamp: a.requested_at ?? clock.hoursAgo(1),

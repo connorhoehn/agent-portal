@@ -26,6 +26,8 @@
 //   #moderators      private, Lena's; Lena and Mira only (hidden from everyone else)
 //   #auth-migration  public, Vera's; Vera, Theo, Mia, Sienna — the channel bound to
 //                    the p-auth-migration initiative (mock/social-bindings.ts, lane E)
+//   #observability, #llm-platform  Nora's and Nina's, bound to their initiatives
+//                    (declared with the history, mock/social-history.ts)
 //   DM Lena ↔ Sana, DM Lena ↔ Mira — so the DMs page opens on something.
 // Timestamps come from the mock clock at read time (contract rule 3).
 
@@ -138,7 +140,7 @@ function seedMessages(): ChatMessage[] {
   const dmLenaMira = 'social:dm:u-lena:u-mira';
   return [
     msg('seed-general-1', ch('general'), 'u-mira', 'Mira Okafor', 'Welcome to the community workspace. Channels are where we talk in the open; DMs are for everything else.', clock.daysAgo(21)),
-    msg('seed-general-3', ch('general'), 'u-theo', 'Theo Chang', 'Is the Thursday community call still on? I would like ten minutes on the transcript postmortem.', clock.hoursAgo(6)),
+    msg('seed-general-3', ch('general'), 'u-theo', 'Theo Chang', 'Is the Thursday community call still on? I would like ten minutes on the billing export postmortem.', clock.hoursAgo(6)),
     msg('seed-general-4', ch('general'), 'u-mira', 'Mira Okafor', 'Yes, same time, same room. You are on right after the calendar item.', clock.hoursAgo(5)),
     msg('seed-design-1', ch('design-reviews'), 'u-lena', 'Lena Brandt', 'First pass at the moderation queue redesign is up: bulk actions, a keyboard path through every row, and the reason shown before the action. Comments by Friday, please.', clock.daysAgo(2)),
     msg('seed-design-2', ch('design-reviews'), 'u-farah', 'Farah Osei', 'Keyboard path works end to end. The focus ring on a selected row is 2.4:1 against the selection colour; non-text contrast needs 3:1, so it needs the strong ring token.', clock.hoursAgo(20)),

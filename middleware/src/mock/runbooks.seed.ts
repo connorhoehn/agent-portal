@@ -941,7 +941,7 @@ function specs(): Spec[] {
       ],
       runs: [
         ['sess-auth-04', 8, 'followed', null, null], ['sess-auth-05', 5, 'followed', null, null],
-        ['sess-auth-06', 2, 'followed', null, null], ['sess-auth-04', 1, 'followed', null, null],
+        ['sess-auth-06', 2.2, 'followed', null, null], ['sess-auth-04', 1, 'followed', null, null],
       ],
       story: 'Rewritten from distillation procedure art-009 (steps fact-013 to fact-016) and the run notes of session sess-auth-02; its four runs carried over.',
     },
@@ -959,7 +959,7 @@ function specs(): Spec[] {
       ],
       runs: [
         ['sess-auth-05', 6, 'followed', null, null],
-        ['sess-auth-06', 1.5, 'failed', 2, 'flag flipped but the hosted-UI redirect still resolved to the old domain'],
+        ['sess-auth-06', 2, 'failed', 2, 'flag flipped but the hosted-UI redirect still resolved to the old domain'],
       ],
       story: 'Rewritten from distillation procedure art-010 (steps fact-018 to fact-021) and the run notes of session sess-auth-02; its two runs carried over, the failure at the flip landing on step 2.',
     },
@@ -1070,7 +1070,7 @@ export function seedRunbookProposals(): RunbookProposal[] {
       proposed: tenantCutoverV2Proposed,
       rationale: 'Run sess-auth-06 followed v1 and failed at step 2: the flag flipped but the hosted-UI redirect still resolved to the old domain, because the tenant\'s origin was never on its Cognito app client\'s callback list. This adds that as a new step 2, before the flip, and a failure-mode row for the symptom.',
       source: { kind: 'run', run_ref: 'sess-auth-06', session_id: 'sess-auth-06', work_item_id: 'wi-auth-e2-s2', lab_experience_ids: [] },
-      created_at: clock.hoursAgo(1),
+      created_at: clock.hoursAgo(1.6),
     }, { kind: 'initiative', ref: 'p-auth-migration' }),
     proposal({
       id: 'prop-judge-rubric-weights', kind: 'new', runbook_id: null, base_version: null,

@@ -611,16 +611,20 @@ FIXED_AGE_COMMENTS = [
 # Engineers arguing on tickets (docs/demo-content-engineering-brief.md): the
 # repros, profiles and review asks behind the five arcs. Fixed ages, emitted
 # after the planning notes, so no RNG draw moves and wic-prog-1…10 keep their ids.
+# An age is whole days, or an interval string when the story needs it finer:
+# Simone's review comment lands after the rehearsal-two runbook edit (1.6 hours
+# ago) was proposed, 0.9 hours ago.
 TICKET_COMMENTS = [
     ('auth', 'e1-b4', 'p-002', 'Agreed with Simone. Answer 401 with error="invalid_token" and a session_revoked reason, and the client signs out once. Every other 401 stays retryable with backoff.', 7),
     ('auth', 'e1-b4', 'p-004', 'Repro is in the PR: revoke the grant, leave the tab open, count refresh calls. Before the fix 31 calls in the first minute, after it exactly one, then the sign-in page.', 3),
-    ('auth', 'e2-s2', 'p-051', 'Looking at the callback-list step now. One ask: make it fail closed. If describe-user-pool-client does not list the tenant origin under CallbackURLs, the flip does not start.', 1),
+    ('auth', 'e2-s2', 'p-051', 'Looking at the callback-list step now. One ask: make it fail closed. If describe-user-pool-client does not list the tenant origin under CallbackURLs, the flip does not start.', '54 minutes'),
     ('obs', 'e2-b4', 'p-011', 'The dependency map is about 60 percent derivable from traces: 212 service-to-service edges seen in the last 7 days. The rest are batch jobs and queues that emit no spans, and their owners have to declare them before grouping can trust the map.', 1),
     ('inf', 'e1-b3', 'p-013', 'Profiled one cold start on the embedding model: 11 s pulling the image, 52 s loading weights from S3, 6 s warming the CUDA graphs. Baking the weights into the image removes most of the 52 s, but the image grows from 4 GB to 11 GB.', 4),
     ('inf', 'e1-b3', 'p-049', 'Even baked, a cold start is around 20 s against a 2.5 s p99. I have written the warm floor up as a decision so the standing cost is on record before anyone turns it on.', 3),
     ('llm', 'e1-b3', 'p-042', 'Seen it after every deploy: 43 replicas, 43 GetPrompt calls in the same second, 12 of them throttled. Jitter alone fixes the deploy case. Stale-while-revalidate covers the store being slow.', 5),
     ('cost', 'e1-s2', 'p-011', 'Checked the encryption keys: the three quiet collections each use their own KMS key, which is why they cannot share OCUs. Re-keying means a reindex, about 40 minutes per collection.', 2),
     ('rta', 'e1-b3', 'p-019', 'Raising allowed lateness to 5 minutes would hold window state ten times longer. A side output for late events plus an hourly correction job is cheaper and keeps the aggregates honest.', 4),
+    ('mob', 'e1-b3', 'p-035', '@Mia Singh do we keep the drawer swipe on Android, or open the drawer from the tab bar only? The back gesture and the swipe start from the same edge, and every fix that keeps both breaks one of them on some devices.', '3 hours'),
 ]
 
 # Acceptance-criteria checklists. Each entry is
@@ -1377,7 +1381,8 @@ def main() -> None:
     for ti, (slug, key, author, body, age) in enumerate(TICKET_COMMENTS, start=1):
         emit(
             "INSERT INTO work_item_comments (id, work_item_id, author_id, body, is_system, created_at) "
-            f"VALUES ('wic-prog-{base + ti}', 'wi-{slug}-{key}', '{author}', '{q(body)}', FALSE, {days(age)}) "
+            f"VALUES ('wic-prog-{base + ti}', 'wi-{slug}-{key}', '{author}', '{q(body)}', FALSE, "
+            f"{days(age) if isinstance(age, int) else f'NOW() - INTERVAL {chr(39)}{age}{chr(39)}'}) "
             "ON CONFLICT (id) DO NOTHING"
         )
 

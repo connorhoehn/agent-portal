@@ -15,7 +15,7 @@ const DAY = 86_400_000;
 const NOON = '2026-03-11T12:00:00.000Z';
 let restore = () => {};
 
-beforeEach(() => { restore = freezeClock(NOON); sweepRuns.reset(); orgFindings.reset(); });
+beforeEach(() => { restore = freezeClock(NOON); sweepRuns.reset(); sweepRuns.rows().splice(0); orgFindings.reset(); });
 afterEach(() => { restore(); sweepRuns.reset(); orgFindings.reset(); jest.restoreAllMocks(); });
 
 describe('sweep_runs', () => {

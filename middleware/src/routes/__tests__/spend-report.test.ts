@@ -75,7 +75,7 @@ describe('GET /api/spend/report — grouped', () => {
     expect(res.body.daysLeftInPeriod).toBe(2.5);
     expect(auth.projectedPeriodEndUsd).toBeCloseTo(auth.knownUsd + auth.burnPerDay7d * 2.5, 1);
     // An allocated initiative with no spend is still a row (p-zero-trust is seeded allocated and idle).
-    expect(res.body.groups.find((g: { key: string }) => g.key === 'p-zero-trust')).toMatchObject({ knownUsd: 0, entries: 0, allocatedUsd: 10 });
+    expect(res.body.groups.find((g: { key: string }) => g.key === 'p-zero-trust')).toMatchObject({ knownUsd: 0, entries: 0, allocatedUsd: 20 });
     // Unattributed spend is its own group, never folded into an initiative.
     expect(res.body.groups.some((g: { key: string | null }) => g.key === null)).toBe(true);
   });
@@ -143,7 +143,11 @@ describe('GET /api/spend/report?initiativeId= — the DE-53 blocks', () => {
     // Every grant on the initiative, the grantee's own burn where the grantee has an account.
     const nora = ini.envelopes.find((e: { granteeUserId: string | null }) => e.granteeUserId === 'u-nora');
     expect(nora).toMatchObject({ attributionAvailable: true, allocatedUsd: 15 });
-    const unlinked = ini.envelopes.find((e: { granteeUserId: string | null }) => e.granteeUserId === null);
+    // Simone Chang (p-051) signs in as u-simone now, so her envelope is attributed too.
+    expect(ini.envelopes.find((e: { granteeUserId: string | null }) => e.granteeUserId === 'u-simone')).toMatchObject({ attributionAvailable: true });
+    // A grantee with no account (Joy Chen on SOC2) has a grant and no attributable burn.
+    const soc2 = (await leader({ groupBy: 'actor', initiativeId: 'p-soc2' })).body.initiative;
+    const unlinked = soc2.envelopes.find((e: { granteeUserId: string | null }) => e.granteeUserId === null);
     expect(unlinked).toMatchObject({ spentUsd: null, remainingUsd: null, attributionAvailable: false });
     // People are this initiative's ledger grouped by actor — the groups themselves when groupBy=actor.
     expect(ini.people).toEqual(res.body.groups);

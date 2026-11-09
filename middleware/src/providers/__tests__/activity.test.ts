@@ -38,13 +38,11 @@ describe('getProjectActivitySeries — mock mode', () => {
   });
 
   it('zero-fills an initiative with no runs and no completed work — not an empty series', async () => {
-    // p-data-lake: planning-stage, no mock bot targets it and it carries no
-    // seeded work items at all — a real, activity-free initiative, not a
-    // missing one. (p-mobile-redesign used to be the example here, but its
-    // wi-mob-* fixture now mirrors schema/seed_program.sql exactly —
-    // program-owner.md defect #3 — which includes one item completed 8 days
-    // ago, so it is no longer activity-free.)
-    const result = await getProjectActivitySeries('p-data-lake', 30);
+    // p-zero-trust: no mock bot targets it and none of its work has finished —
+    // a real, activity-free initiative, not a missing one. (p-mobile-redesign
+    // and then p-data-lake used to be the example here; each now has an item
+    // completed inside the window, so neither is activity-free.)
+    const result = await getProjectActivitySeries('p-zero-trust', 30);
     expect(result).not.toBeNull();
     expect(result!.days).toBe(30);
     expect(result!.series.runs).toHaveLength(30);

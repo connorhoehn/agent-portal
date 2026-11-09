@@ -131,7 +131,7 @@ describe('PUT /api/graph/work-items/:id/decisions/:decisionId', () => {
   });
 
   it('409s an org-wide decision — it has no initiative to match', async () => {
-    const res = await request(buildApp(nora)).put(`/api/graph/work-items/${ITEM}/decisions/d-aurora`);
+    const res = await request(buildApp(nora)).put(`/api/graph/work-items/${ITEM}/decisions/d-k8s`);
     expect(res.status).toBe(409);
     expect(res.body.error).toMatch(/org-wide/);
   });

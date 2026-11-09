@@ -60,11 +60,9 @@ const OBSERVABILITY = '4870e01d-9274-5c4a-91af-ea9acb7f857a';
 const AUTH_SERVICE = '7aad75a2-a91c-5f87-a312-2b2691b37b8c';
 const RAG_SEARCH = 'db4978ec-903a-5398-a88a-807447cdaa44';
 
-// Bedrock inference-profile ids, the same strings portal/src/lib/devboxModels.ts
-// sends and the devbox allowlist accepts. A run started by a maintenance bot
-// carries the bot's model instead, which is why both spellings appear.
-const HAIKU = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
-const SONNET = 'us.anthropic.claude-sonnet-5';
+// AWS-native Bedrock model ids, as a run row records them: Nova Pro for the
+// multi-step change work, Nova Lite for the cheap audit a maintenance bot runs.
+const NOVA_PRO = 'us.amazon.nova-pro-v1:0';
 const NOVA_LITE = 'us.amazon.nova-lite-v1:0';
 
 /**
@@ -88,7 +86,7 @@ export const agentProjectRuns = defineFixture<ProjectRunSeed>({
         id: '0b8a1c4e-2f6d-4a51-9c3b-7d1e5a904f11',
         projectId: OBSERVABILITY,
         prompt: 'Enable the span-metrics connector on the gateway collectors for checkout and search only, and add a RED dashboard for each.',
-        model: SONNET,
+        model: NOVA_PRO,
         status: 'running',
         startedAt: clock.hoursAgo(0.2, { keepWithinToday: true }),
         finishedAt: null,
@@ -101,7 +99,7 @@ export const agentProjectRuns = defineFixture<ProjectRunSeed>({
         id: '1c9b2d5f-3a70-4b62-8d4c-8e2f6b015a22',
         projectId: OBSERVABILITY,
         prompt: 'Bound the gateway exporter sending queue at 5,000 batches, put memory_limiter first in the pipeline, and replay the 40k spans/s burst.',
-        model: HAIKU,
+        model: NOVA_PRO,
         status: 'done',
         startedAt: clock.hoursAgo(5, { keepWithinToday: true }),
         finishedAt: clock.hoursAgo(4.8, { keepWithinToday: true }),
@@ -127,7 +125,7 @@ export const agentProjectRuns = defineFixture<ProjectRunSeed>({
         id: '3eb14f71-5c92-4d84-af6e-a04b8d237c44',
         projectId: AUTH_SERVICE,
         prompt: 'Migrate the token verifier off the deprecated JWKS client.',
-        model: SONNET,
+        model: NOVA_PRO,
         status: 'failed',
         startedAt: clock.daysAgo(2),
         finishedAt: clock.daysAgo(1.96),
@@ -141,11 +139,11 @@ export const agentProjectRuns = defineFixture<ProjectRunSeed>({
         id: '4fc25082-6da3-4e95-b07f-b15c9e348d55',
         projectId: AUTH_SERVICE,
         prompt: 'Add a regression test: revoking a grant mid-session produces exactly one refresh call, then a sign-out.',
-        model: HAIKU,
+        model: NOVA_PRO,
         status: 'done',
         startedAt: clock.daysAgo(6),
         finishedAt: clock.daysAgo(5.99),
-        filesChanged: 1,
+        filesChanged: 2,
         diffSummary: '2 files changed, 64 insertions(+), 3 deletions(-) in web/session/refresh.ts and web/session/refresh.test.ts. The new test fails on main (31 refresh calls in a minute) and passes on the branch.',
         error: null,
         costUsd: 0.07,
@@ -154,7 +152,7 @@ export const agentProjectRuns = defineFixture<ProjectRunSeed>({
         id: '50d36193-7eb4-4fa6-b180-c26daf459e66',
         projectId: RAG_SEARCH,
         prompt: 'Pin the retrieval search type to HYBRID on every Retrieve call and re-run the eight ranking cases.',
-        model: SONNET,
+        model: NOVA_PRO,
         status: 'done',
         startedAt: clock.daysAgo(9),
         finishedAt: clock.daysAgo(8.97),

@@ -38,7 +38,7 @@ const create = (sub: string, body: Record<string, unknown>) => request(app).post
 const edit = (sub: string, id: string, body: Record<string, unknown>) => request(app).put(`/api/graph/documents/${id}`).set(as(sub)).send(body);
 
 beforeEach(() => {
-  jest.clearAllMocks(); workspaceDocuments.reset('default');
+  jest.clearAllMocks(); workspaceDocuments.reset(); workspaceDocuments.rows().splice(0);
   jest.mocked(getUser).mockImplementation(async (id) => {
     const p = PEOPLE[id];
     return p ? { id, epoch: 0, grants: { orgiq: [p[0]] }, displayName: id, email: null, personId: p[1] } as UserInfo : null;

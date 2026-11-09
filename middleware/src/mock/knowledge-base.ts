@@ -130,7 +130,7 @@ export const kbDocumentRows = defineFixture<IngestedDoc>({
 
         // ── the first full sync ──
         { id: 'adr-d-aurora', source: 'adr', sourceUri: uri('adr', 'adr-d-aurora'),
-          title: 'ADR: Adopt Aurora over Neptune', ingestedAt: older },
+          title: 'ADR: Service dependency map in Postgres, not a graph database', ingestedAt: older },
         { id: 'adr-d-otel', source: 'adr', sourceUri: uri('adr', 'adr-d-otel'),
           title: 'ADR: Adopt OpenTelemetry', ingestedAt: older },
         { id: 'adr-d-nova', source: 'adr', sourceUri: uri('adr', 'adr-d-nova'),
@@ -218,7 +218,7 @@ export const kbSummaryRows = defineFixture<KbSummary>({
       id: 'KBMOCK0001AB',
       name: 'orgiq-knowledge-base',
       status: 'ACTIVE',
-      description: 'Org docs, ADRs, postmortems, perf reviews — the OrgIQ fleet reads this one.',
+      description: 'Org docs, ADRs, postmortems, perf reviews — every Work agent reads this one.',
       embeddingModelArn: 'arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0',
       embeddingModel: 'amazon.titan-embed-text-v2:0',
       vectorStore: 'RDS',

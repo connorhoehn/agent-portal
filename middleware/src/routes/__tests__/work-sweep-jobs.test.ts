@@ -42,7 +42,7 @@ const other = { sub: 'u-nora', role: 'sme', tenant: 'orgiq' };
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r)); };
 
 beforeEach(() => {
-  sweepRuns.reset(); resetSweepJobs(); resetRateLimits(); (isAllowed as jest.Mock).mockClear();
+  sweepRuns.reset(); sweepRuns.rows().splice(0); resetSweepJobs(); resetRateLimits(); (isAllowed as jest.Mock).mockClear();
   process.env['SWEEP_JOB_MOCK_STEP_MS'] = '0';
 });
 afterAll(() => { sweepRuns.reset(); delete process.env['SWEEP_JOB_MOCK_STEP_MS']; });

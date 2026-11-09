@@ -3,9 +3,10 @@
 // Live: Aurora `social_bindings` (schema/social_schema.sql), read and written
 // by providers/social-bindings.ts. One row per context.
 //
-// The seed binds the p-auth-migration initiative (orgiq) to
-// `social:ch:auth-migration` (mock/social-channels.ts), so the initiative
-// overview opens on a bound discussion; `empty` is the unbound state.
+// The seed binds three initiatives (orgiq) to their channels
+// (mock/social-channels.ts): Auth Migration to #auth-migration, Observability
+// Platform to #observability and LLM Application Platform to #llm-platform, so
+// each overview opens on a bound discussion; `empty` is the unbound state.
 
 import { clock, defineFixture } from './core/index.js';
 
@@ -25,6 +26,8 @@ export const socialBindingsFixture = defineFixture<SocialBindingRow>({
   scenarios: {
     default: () => [
       { tenant: 'orgiq', contextKind: 'initiative', contextId: 'p-auth-migration', channel: 'social:ch:auth-migration', createdBy: 'u-vera', createdAt: clock.daysAgo(8) },
+      { tenant: 'orgiq', contextKind: 'initiative', contextId: 'p-observability', channel: 'social:ch:observability', createdBy: 'u-nora', createdAt: clock.daysAgo(12) },
+      { tenant: 'orgiq', contextKind: 'initiative', contextId: 'p-llm-platform', channel: 'social:ch:llm-platform', createdBy: 'u-nina', createdAt: clock.daysAgo(11) },
     ],
     empty: () => [],
   },

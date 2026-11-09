@@ -114,13 +114,13 @@ describe('GET /api/roster/users (person → user, for the initiative call)', () 
 
   it('maps linked persons to their user ids and lists the rest as unlinked', async () => {
     // Aurora is unconfigured in this test's config, so identity serves its seed mirror.
-    const res = await request(appAs('orgiq')).get('/api/roster/users?personIds=p-002,p-004,p-051');
+    const res = await request(appAs('orgiq')).get('/api/roster/users?personIds=p-002,p-004,p-055');
     expect(res.status).toBe(200);
     expect(res.body.users).toEqual([
       { personId: 'p-002', userId: 'u-vera', displayName: 'Vera Green' },
       { personId: 'p-004', userId: 'u-nora', displayName: 'Nora DaSilva' },
     ]);
-    expect(res.body.unlinked).toEqual(['p-051']);
+    expect(res.body.unlinked).toEqual(['p-055']);
   });
 
   it('userIds (G24): says which users hold a grant in the current tenant; unknown ids and other tenants read as outside', async () => {

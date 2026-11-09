@@ -77,7 +77,7 @@ function seedFindings(): Finding[] {
       id: 'find-mock-2',
       sweep: 'orphan_decisions', severity: 'warning',
       title: 'Decision "Migrate to Kubernetes from ECS" links to no initiative',
-      detail: 'The EKS standard binds twelve teams, but its decider is no longer on the roster and no initiative or work item cites it, so nobody owns the next cluster upgrade.',
+      detail: 'The EKS standard binds twelve teams, but no initiative or work item cites it, so nobody owns the next cluster upgrade.',
       entityType: 'decision', entityId: 'd-k8s',
       evidence: { ownerId: null, citedBy: 0 },
       status: 'open', jobId: null,
@@ -87,10 +87,10 @@ function seedFindings(): Finding[] {
     {
       id: 'find-mock-3',
       sweep: 'stale_docs', severity: 'warning',
-      title: 'ADR-014 "Retry the Data API through an Aurora cold start" is 190 days old',
-      detail: 'Last edited before the schema loader learned to retry the first call against a resuming cluster, so it still tells readers to wait five minutes and rerun by hand.',
+      title: 'ADR-014 "Page on raw 5xx rate per service" is 190 days old',
+      detail: 'Written before the burn-rate alerts, so it still tells on-call to page on any service above 1 percent errors — the rule Sprint 10 replaced with error-budget burn.',
       entityType: 'document', entityId: 'doc-adr-014',
-      evidence: { ageDays: 190, initiative: 'p-observability', lastEditedBy: 'p-002' },
+      evidence: { ageDays: 190, initiative: 'p-observability', lastEditedBy: 'p-011' },
       status: 'promoted', jobId: null,
       firstSeenAt: clock.hoursAgo(120), lastSeenAt: clock.hoursAgo(6),
       fingerprint: 'stale_docs:doc-adr-014',
@@ -106,32 +106,23 @@ function seedFindings(): Finding[] {
       firstSeenAt: clock.hoursAgo(30), lastSeenAt: clock.hoursAgo(6),
       fingerprint: 'stale_docs:doc-runbook-cost-opt',
     },
-    // Was 'dec-cognito-hosted-ui' — mock/decisions.ts has never had an id by
-    // that name (the real Cognito-flavored row there, 'd-cognito-cutover', is
-    // already cited by p-auth-migration and wi-auth-e2, so it isn't an orphan
-    // to begin with). 'd-aurora' is the org-wide ADR that genuinely has
-    // `projectId: null` and no `workItemId` — the other one, 'd-k8s', is
-    // find-mock-2's. Owner is d-aurora's decider.
-    // `evidence.candidateInitiative` STAYS 'p-auth-migration' — it is pinned
-    // by name in routes/__tests__/work-findings-promote.test.ts
-    // (FINDING_AUTH_CANDIDATE), which promotes this exact finding as the
-    // sme persona (Nora, p-004) who holds an active grant there. It reads as
-    // an arbitrary pairing with an Aurora-vs-Neptune decision, and honestly
-    // is one: every initiative depends on the Aurora/pgvector store this
-    // decision picked, so naming any one of them a "candidate" owner is a
-    // little arbitrary — p-auth-migration is not a materially worse home for
-    // it than another initiative would be, which is what the detail below
-    // says instead of pretending a thematic tie that isn't there.
+    // d-legacy-auth is Auth Migration's founding decision, and no work item
+    // cites it: the cutover runbook story (wi-auth-e2-s2) is what carries the
+    // sunset out, so that is the link the finding asks for. Owner is its
+    // decider, Vera Green. `evidence.candidateInitiative` is pinned by name in
+    // routes/__tests__/work-findings-promote.test.ts (FINDING_AUTH_CANDIDATE),
+    // which promotes this exact finding as the sme persona (Nora, p-004) who
+    // holds an active grant there.
     {
       id: 'find-mock-5',
       sweep: 'orphan_decisions', severity: 'warning',
-      title: 'Decision "Adopt Aurora over Neptune" links to no initiative',
-      detail: 'Vikram Patel decided it, but no initiative or work item cites it. Every initiative depends on the Aurora and pgvector store it picked, and Auth Migration, whose session tables live there, is as reasonable a home as any.',
-      entityType: 'decision', entityId: 'd-aurora',
-      evidence: { ownerId: 'p-046', candidateInitiative: 'p-auth-migration', citedBy: 0 },
+      title: 'Decision "Sunset legacy auth service" is cited by no work item',
+      detail: 'Vera Green decided it for Auth Migration, but no work item links it. The cutover runbook story is the work that carries the sunset out, and it should cite the decision it implements.',
+      entityType: 'decision', entityId: 'd-legacy-auth',
+      evidence: { ownerId: 'p-002', candidateInitiative: 'p-auth-migration', citedBy: 0 },
       status: 'open', jobId: null,
       firstSeenAt: clock.hoursAgo(54), lastSeenAt: clock.hoursAgo(6),
-      fingerprint: 'orphan_decisions:d-aurora',
+      fingerprint: 'orphan_decisions:d-legacy-auth',
     },
     // Was 'dec-titan-1024' — no such id in mock/decisions.ts, and there is no
     // Titan/embeddings-dimension decision row to rename it to (the KB's

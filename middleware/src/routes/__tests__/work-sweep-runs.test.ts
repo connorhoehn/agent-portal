@@ -40,7 +40,7 @@ const sme = { sub: 'u-s', role: 'sme', tenant: 'orgiq' };
 
 beforeEach(() => {
   mockAllowed.value = true;
-  sweepRuns.reset();
+  sweepRuns.reset(); sweepRuns.rows().splice(0); // start empty: the seeded morning runs would sit between these
   const base = { botId: null, finishedAt: null, findings: null, durationMs: 1 };
   sweepRuns.rows().push(
     { ...base, id: 'a', tenant: 'orgiq', sweep: 'bus_factor', startedAt: '2026-03-10T00:00:00.000Z', status: 'failed', error: 'x' },

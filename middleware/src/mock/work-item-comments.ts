@@ -82,7 +82,7 @@ export const workItemComments = defineFixture<WorkItemCommentRow>({
         createdAt: clock.daysAgo(3),
         body: 'Repro is in the PR: revoke the grant, leave the tab open, count refresh calls. Before the fix 31 calls in the first minute, after it exactly one, then the sign-in page.' },
       { id: 'wic-prog-13', workItemId: 'wi-auth-e2-s2', authorId: 'p-051', isSystem: false,
-        createdAt: clock.daysAgo(1),
+        createdAt: clock.hoursAgo(0.9),
         body: 'Looking at the callback-list step now. One ask: make it fail closed. If describe-user-pool-client does not list the tenant origin under CallbackURLs, the flip does not start.' },
       { id: 'wic-prog-14', workItemId: 'wi-obs-e2-b4', authorId: 'p-011', isSystem: false,
         createdAt: clock.daysAgo(1),
@@ -102,6 +102,9 @@ export const workItemComments = defineFixture<WorkItemCommentRow>({
       { id: 'wic-prog-19', workItemId: 'wi-rta-e1-b3', authorId: 'p-019', isSystem: false,
         createdAt: clock.daysAgo(4),
         body: 'Raising allowed lateness to 5 minutes would hold window state ten times longer. A side output for late events plus an hourly correction job is cheaper and keeps the aggregates honest.' },
+      { id: 'wic-prog-20', workItemId: 'wi-mob-e1-b3', authorId: 'p-035', isSystem: false,
+        createdAt: clock.hoursAgo(3),
+        body: '@Mia Singh do we keep the drawer swipe on Android, or open the drawer from the tab bar only? The back gesture and the swipe start from the same edge, and every fix that keeps both breaks one of them on some devices.' },
     ],
     // Declared, so an auditor can see the feed's own empty state without
     // damaging the seed — see docs/mock-floor.md's fallback rule.

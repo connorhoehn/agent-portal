@@ -165,7 +165,7 @@ const PEOPLE = [
 ];
 
 const DECISIONS = [
-  'Adopt Aurora over Neptune', 'Migrate to Kubernetes from ECS', 'Standardize on Nova Pro', 'Sunset legacy auth service',
+  'Service dependency map in Postgres, not a graph database', 'Migrate to Kubernetes from ECS', 'Standardize on Nova Pro', 'Sunset legacy auth service',
   'Adopt OpenTelemetry', 'React 19 upgrade timeline', 'Vector DB vendor selection', 'Self-hosted OTel collectors over vendor agents',
   'Judge model for canary evaluation', 'Iceberg over Delta for the lakehouse table format',
 ];
