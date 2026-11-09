@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  LOGGING_PATH, dayGroupsBy, inRange, legacyVoiceLogTarget, lifecycleEvents, loggingBase, loggingHref, offeredSources, parseLoggingPath, pipelineRunsBase,
+  LOGGING_PATH, dayGroupsBy, gatedReads, inRange, legacyVoiceLogTarget, lifecycleEvents, loggingBase, loggingHref, offeredSources, parseLoggingPath, pipelineRunsBase,
   readOutcome, rowKey, sourceInTenant, sourceOptions, type LogSource, type ReadOutcome,
 } from '../loggingModel.ts';
 import { BOT_RUN, INVOCATION, agentRows, botRunRecord, botRunsApi, invocationRecord, type BotRunRow, type InvocationDetail, type InvocationRow } from '../agentsLogModel.ts';
@@ -258,4 +258,18 @@ test('the pipelines tenant: Voice and Pipelines are offered, and the view render
   const html = await renderLogging({ source: 'pipelines', sources: ['voice', 'pipelines'], rows: pipelineRows([RUN]), selectedKey: rowKey(pipelineRecord(RUN, STEPS, null)), record: pipelineRecord(RUN, STEPS, null) }, '/pipelines/logging/pipelines/agent_jobs%3Ajob-7');
   assert.match(html, /data-testid="logging"/);
   assert.match(html, /href="\/pipelines\/logging"/, 'the trail links back to the pipelines base');
+});
+
+test('the bots read gate is probed before reading: a member and the demo persona send none of its three reads (UX walk, 9 November)', () => {
+  const caps = (actions: string[], ready = true) => ({ ready, can: (a: string) => actions.includes(a) });
+  assert.deepEqual(gatedReads('orgiq', 'member', caps([])), { bots: false, pipelineRuns: false, sweepRuns: false });
+  // ManageBots (sme) or a read-tier role (org-leader, hr-admin, program-owner) reads all three.
+  assert.deepEqual(gatedReads('orgiq', 'sme', caps(['ManageBots'])), { bots: true, pipelineRuns: true, sweepRuns: true });
+  assert.deepEqual(gatedReads('orgiq', 'program-owner', caps([])), { bots: true, pipelineRuns: true, sweepRuns: true });
+  // The pipelines tenant reads its own runs on ViewPipelines and has no bots or sweeps.
+  assert.deepEqual(gatedReads('pipelines', 'operator', caps(['ViewPipelines'])), { bots: false, pipelineRuns: true, sweepRuns: false });
+  // Probe in flight: nothing decided, so nothing is read yet.
+  assert.equal(gatedReads('orgiq', 'member', caps([], false)), null);
+  // Skipped reads leave the source offered on what it could read: a member keeps Voice, Agents (traces) and Jobs.
+  assert.deepEqual(offeredSources('orgiq', { voice: ['ok'], agents: ['skipped', 'ok'], pipelines: ['skipped'], jobs: ['ok', 'skipped'] }), ['voice', 'agents', 'jobs']);
 });

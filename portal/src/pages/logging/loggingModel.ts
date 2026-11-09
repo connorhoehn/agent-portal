@@ -95,6 +95,27 @@ export function pipelineRunsBase(tenant: string | null | undefined): string | nu
   return tenant === 'pipelines' ? '/api/pipelines/runs' : tenant === 'orgiq' ? '/api/runs' : null;
 }
 
+/** The roles the bots read gate lets through before it asks Cedar for ManageBots (routes/bots.ts readGate, the same
+ *  gate on the /api/runs façade and on GET /api/work/sweeps/runs). */
+const BOT_READ_ROLES: ReadonlySet<string> = new Set(['org-leader', 'hr-admin', 'program-owner', 'admin']);
+
+/**
+ * Which gated list reads this persona may make (UX walk, 9 November 2026: a member's and the demo persona's
+ * Logging logged three 403s on every load). Probed before reading, with the capability answer the portal
+ * already holds: a read the persona cannot make is never sent, and its source is not offered. `null` while the
+ * capability probe is still in flight — the reads wait, rather than firing and being refused.
+ */
+export function gatedReads(tenant: string | null | undefined, role: string | null | undefined, caps: { ready: boolean; can(action: 'ManageBots' | 'ViewPipelines'): boolean }): { bots: boolean; pipelineRuns: boolean; sweepRuns: boolean } | null {
+  if (!caps.ready) return null;
+  const bots = BOT_READ_ROLES.has(role ?? '') || caps.can('ManageBots');
+  return {
+    bots: sourceInTenant('agents', tenant) && bots,
+    // orgiq reads pipeline runs through /api/runs (the bots read gate); the pipelines tenant through its own ViewPipelines route.
+    pipelineRuns: tenant === 'pipelines' ? caps.can('ViewPipelines') : tenant === 'orgiq' && bots,
+    sweepRuns: sourceInTenant('jobs', tenant) && bots,
+  };
+}
+
 /**
  * The sources the control offers: in the tenant, and at least one of its reads answered (an error that is not a
  * refusal still offers it, so the failure shows in the rail). A source still loading is held back until it answers.

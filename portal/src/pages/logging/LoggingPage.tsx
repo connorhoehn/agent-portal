@@ -32,6 +32,7 @@ import { usePipelineRun } from '../../components/runs/PipelineRunParts';
 import { deckDownloadName } from '../../components/decks/downloadDeckFile';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
+import { useCapabilities } from '../../lib/capabilities';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import type { RunListResponse } from '../../lib/pipelineRuns';
 import { keepTranscripts, setKeepTranscripts, subscribeKeepTranscripts, transcriptStore, type KeptTranscript } from '../../lib/voice/transcriptKeep';
@@ -41,7 +42,7 @@ import {
   type VoiceLogRange, type VoiceSessionDetail, type VoiceSessionListItem,
 } from '../voice/voiceLogModel';
 import {
-  LOG_SOURCES, dayGroupsBy, inRange, loggingBase, loggingHref, offeredSources, parseLoggingPath, pipelineRunsBase, readOutcome, rowKey,
+  LOG_SOURCES, dayGroupsBy, gatedReads, inRange, loggingBase, loggingHref, offeredSources, parseLoggingPath, pipelineRunsBase, readOutcome, rowKey,
   sourceInTenant, sourceMeta, sourceOptions, took, when, type LogEvent, type LogRecord, type LogRow, type LogSource,
 } from './loggingModel';
 import {
@@ -224,25 +225,30 @@ export default function LoggingPage() {
   const voiceUrl = useMemo(() => sessionsApi(range), [range]);
   const voiceList = useFetch<{ sessions: VoiceSessionListItem[] }>(voiceUrl, poll('voice'));
   const orgiqReads = sourceInTenant('agents', tenant);
-  const bots = useFetch<{ bots: BotRow[] }>(orgiqReads ? BOTS_API : null);
+  // The bots read gate (bots, the /api/runs façade, sweep runs) is probed before reading: no read is sent that
+  // the persona's role would refuse (gatedReads; null while the capability probe settles, so those reads wait).
+  const caps = useCapabilities();
+  const gated = gatedReads(tenant, session?.role, caps);
+  const bots = useFetch<{ bots: BotRow[] }>(gated?.bots ? BOTS_API : null);
   const botIds = useMemo(() => (bots.data?.bots ?? []).slice(0, 50).map((b) => b.id), [bots.data]);
   const botRuns = useFetch<{ runs: BotRunRow[] }>(botIds.length ? botRunsApi(botIds) : null, poll('agents'));
   const invocations = useFetch<{ invocations: InvocationRow[] }>(orgiqReads ? INVOCATIONS_API : null, poll('agents'));
   const runsBase = pipelineRunsBase(tenant);
-  const pipelineList = useFetch<RunListResponse>(runsBase ? pipelineRunsApi(runsBase) : null, poll('pipelines'));
+  const pipelineList = useFetch<RunListResponse>(runsBase && gated?.pipelineRuns ? pipelineRunsApi(runsBase) : null, poll('pipelines'));
   const jobsReads = sourceInTenant('jobs', tenant);
   const workJobs = useFetch<{ jobs: WorkJob[] }>(jobsReads ? WORK_JOBS_API : null, poll('jobs'));
-  const sweepRuns = useFetch<{ runs: SweepRun[] }>(jobsReads ? SWEEP_RUNS_API : null, poll('jobs'));
+  const sweepRuns = useFetch<{ runs: SweepRun[] }>(gated?.sweepRuns ? SWEEP_RUNS_API : null, poll('jobs'));
   // The caller's own background sweep jobs: an extra rail row kind, so a refusal here never takes the source away.
   const sweepJobs = useFetch<{ jobs: SweepJob[] }>(jobsReads ? SWEEP_JOBS_API : null, poll('jobs'));
 
   const outcome = (f: { data: unknown; error: string | null; failure: { status: number | null; kind: string } | null }, skipped: boolean) =>
     readOutcome({ ...f, skipped });
+  // A gated read not sent is `skipped` once the probe answered, `pending` until then.
   const reads = {
     voice: [outcome(voiceList, false)],
-    agents: [outcome(bots, !orgiqReads), outcome(invocations, !orgiqReads)],
-    pipelines: [outcome(pipelineList, !runsBase)],
-    jobs: [outcome(workJobs, !jobsReads), outcome(sweepRuns, !jobsReads)],
+    agents: [outcome(bots, !orgiqReads || gated?.bots === false), outcome(invocations, !orgiqReads)],
+    pipelines: [outcome(pipelineList, !runsBase || gated?.pipelineRuns === false)],
+    jobs: [outcome(workJobs, !jobsReads), outcome(sweepRuns, !jobsReads || gated?.sweepRuns === false)],
   } as const;
   const offered = offeredSources(tenant, reads);
   const offeredKey = offered.join(',');
