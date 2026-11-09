@@ -9,7 +9,7 @@ jest.mock('../decisions.js', () => ({ listDecisions: jest.fn(), getDecision: jes
 jest.mock('../../lib/runbooks/search-entries.js', () => ({ listRunbookSearchEntries: jest.fn(), getRunbookSearchEntry: jest.fn() }));
 jest.mock('../prompt-library.js', () => ({ listAssets: jest.fn(), getAsset: jest.fn() }));
 jest.mock('../org-teams.js', () => ({ listOrgTeams: jest.fn(async () => []) }));
-jest.mock('../recording-search.js', () => ({ listRecordingSearchRecords: jest.fn(async () => ({ records: [], partial: [] })), resolveRecordingSearchRecord: jest.fn() }));
+jest.mock('../recording-search.js', () => ({ listRecordingSearchRecords: jest.fn(async () => ({ records: [], partial: [] })), resolveRecordingSearchRecord: jest.fn(), recordingsAreASource: jest.fn(() => true) }));
 import { isAllowed } from '../../lib/authz.js';
 import { aurora } from '../index.js';
 import { listProjects, listProjectSummaries, getProject } from '../projects.js';
@@ -19,7 +19,7 @@ import { listDecisions } from '../decisions.js';
 import { listRunbookSearchEntries } from '../../lib/runbooks/search-entries.js';
 import { listAssets } from '../prompt-library.js';
 import { searchRecords, resolveSearchRecords, resolveSearchContext, recordingSearchResponse } from '../search.js';
-import { listRecordingSearchRecords, resolveRecordingSearchRecord } from '../recording-search.js';
+import { listRecordingSearchRecords, recordingsAreASource, resolveRecordingSearchRecord } from '../recording-search.js';
 import { listOrgTeams } from '../org-teams.js';
 import { __resetSearchIndex } from '../../lib/search-index/registry.js';
 const principal = { sub: 'member', role: 'member', tenant: 'orgiq' };
@@ -30,6 +30,7 @@ beforeEach(() => {
   (listOrgTeams as jest.Mock).mockResolvedValue([]);
   mock(isAllowed).mockResolvedValue(true);
   mock(listRecordingSearchRecords).mockResolvedValue({ records: [], partial: [] });
+  mock(recordingsAreASource).mockReturnValue(true);
   mock(aurora.fetchGraph).mockResolvedValue({ peopleTotal: 2, nodes: [
     { id: 'vera', name: 'Vera Green', title: 'Engineer', department: 'Platform', skills: ['identity'] },
     { id: 'nora', name: 'Simone Chang', title: 'Engineer', department: 'Design', skills: [] },
@@ -75,6 +76,22 @@ test('recording read failures disclose a partial source and selected context is 
   const selected = await resolveSearchContext(principal, [{ type: 'initiative', id: 'auth' }, { type: 'recording', id: 'r1' }]);
   expect(resolveRecordingSearchRecord).toHaveBeenCalledWith(principal, 'r1');
   expect(selected.edges).toContainEqual(expect.objectContaining({ source: 'initiative:auth', target: 'recording:r1' }));
+});
+test('recordings that are not a source for this reader are neither read nor reported missing', async () => {
+  mock(recordingsAreASource).mockReturnValue(false);
+  const result = await searchRecords(principal, { q: 'Auth Migration' });
+  expect(listRecordingSearchRecords).not.toHaveBeenCalled();
+  expect(result.partial).toBeUndefined();
+  expect(result.totalIsLowerBound).toBe(false);
+  expect(result.lowerBoundCounts).toEqual([]);
+});
+test('a failed recordings read makes only the recording count (and all) a floor', async () => {
+  mock(listRecordingSearchRecords).mockRejectedValue(new Error('native unavailable'));
+  const all = await searchRecords(principal, { q: 'Auth Migration' });
+  expect(all.lowerBoundCounts).toEqual(['recording', 'all']);
+  expect(all.totalIsLowerBound).toBe(true);
+  const people = await searchRecords(principal, { q: 'Auth Migration', type: 'person' });
+  expect(people.totalIsLowerBound).toBe(false);
 });
 test('a question finds the existing initiative and its real owner, SME, and assigned work', async () => {
   const r = await searchRecords(principal, { q: 'Who can help finish Auth Migration?' });

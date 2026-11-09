@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { countedLabel, groupResults, openLabelFor, parseSort, partialSourcesTitle, resultsFooter, searchResultType } from '../resultsModel.ts';
+import { countedLabel, groupResults, openLabelFor, parseSort, partialSourcesTitle, resultsFooter, searchResultType, countIsLowerBound } from '../resultsModel.ts';
 import type { SearchRecord } from '../searchTypes.ts';
 
 const records: SearchRecord[] = [
@@ -75,4 +75,15 @@ test('recording results retain a distinct group, action and canonical file link'
   assert.equal(group.id, 'recording');
   assert.equal(group.records[0].href, recording.href);
   assert.equal(openLabelFor('recording'), 'Open recording');
+});
+
+test('only the types a partial source feeds carry a floor', () => {
+  const data = { totalIsLowerBound: true, lowerBoundCounts: ['recording', 'all'] as Array<'recording' | 'all'> };
+  assert.equal(countIsLowerBound(data, 'recording'), true);
+  assert.equal(countIsLowerBound(data, 'all'), true);
+  assert.equal(countIsLowerBound(data, 'person'), false);
+  assert.equal(countIsLowerBound({ totalIsLowerBound: false, lowerBoundCounts: [] }, 'all'), false);
+  // An older server: any short source marks every count.
+  assert.equal(countIsLowerBound({ totalIsLowerBound: true }, 'person'), true);
+  assert.equal(countIsLowerBound(null, 'person'), false);
 });

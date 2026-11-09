@@ -1,4 +1,4 @@
-import { SEARCH_LABELS, SEARCH_TYPES, type SearchRecord, type SearchRecordType, type SearchSort } from './searchTypes.ts';
+import { SEARCH_LABELS, SEARCH_TYPES, type SearchRecord, type SearchRecordType, type SearchResponse, type SearchSort } from './searchTypes.ts';
 
 /** A scoped browse starts with its work. Explicit filters and text searches
  * keep their meaning, including an explicit All results choice. */
@@ -40,6 +40,16 @@ export function groupResults(
 export function countedLabel(label: string, count: number | undefined, lowerBound = false): { label: string; count?: number } {
   if (count === undefined) return { label };
   return lowerBound ? { label: `${label} ${count}+` } : { label, count };
+}
+
+/**
+ * Whether one type's count is a floor. A partial recordings read leaves the
+ * people count exact, so only the types the server names carry "+"; an older
+ * server without `lowerBoundCounts` marks every count when any source was short.
+ */
+export function countIsLowerBound(data: Pick<SearchResponse, 'totalIsLowerBound' | 'lowerBoundCounts'> | null | undefined, kind: SearchRecordType | 'all'): boolean {
+  if (!data) return false;
+  return data.lowerBoundCounts ? data.lowerBoundCounts.includes(kind) : !!data.totalIsLowerBound;
 }
 
 /** The partial-source banner's title: what an incomplete read means for the numbers. */

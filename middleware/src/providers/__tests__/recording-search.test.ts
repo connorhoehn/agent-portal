@@ -9,7 +9,7 @@ import { admitLobbyRead } from '../../lib/gateway/authority.js';
 import { realtimeClaims } from '../../lib/realtime-token.js';
 import { getTeamDetail, getKnowledgeDoc, getKnowledgeTree } from '../assessment.js';
 import { assessmentDocumentLobby } from '../../lib/assessment-document-context.js';
-import { listRecordingSearchRecords, resolveRecordingSearchRecord } from '../recording-search.js';
+import { listRecordingSearchRecords, recordingsAreASource, resolveRecordingSearchRecord } from '../recording-search.js';
 const session = { sub: 'u-nora', name: 'Nora', tenant: 'orgiq', role: 'member', iat: 123, epoch: 4, grants: { orgiq: ['member'] } };
 const row = { recordingId: 'rec-1', lobbyName: 'orgiq:initiative:p-observability', startedAt: '2026-10-10T10:00:00Z', endedAt: '2026-10-10T10:01:00Z', transcriptStatus: 'ready', summaryStatus: 'ready', summaryRunId: 'run-1', stage: 'ready' };
 const mock = (fn: unknown) => fn as jest.Mock;
@@ -217,4 +217,14 @@ test('document scope cannot widen Work tenant or be combined with team scope', a
   await expect(listRecordingSearchRecords(session, undefined, 'orgiq', sourceId)).rejects.toMatchObject({ status: 400 });
   await expect(resolveRecordingSearchRecord(assessment, 'doc-rec', 'TEAM-005', 'assessment', undefined, sourceId)).rejects.toMatchObject({ status: 400 });
   expect(fetcher).not.toHaveBeenCalled();
+});
+
+test('recordings are a search source only with a Social grant and a configured platform', () => {
+  expect(recordingsAreASource(session)).toBe(false);
+  const social = { ...session, grants: { orgiq: ['member'], social: ['participant'] } };
+  expect(recordingsAreASource(social)).toBe(true);
+  // A bare policy principal is left to the read, which refuses it.
+  expect(recordingsAreASource({ sub: 'u-nora', role: 'member', tenant: 'orgiq' })).toBe(true);
+  delete process.env['PLATFORM_API_URL'];
+  expect(recordingsAreASource(social)).toBe(false);
 });

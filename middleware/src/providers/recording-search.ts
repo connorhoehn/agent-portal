@@ -32,6 +32,21 @@ function sessionOf(principal: PrincipalRef, tenant: 'orgiq' | 'assessment' = 'or
   if (!s.grants || !Number.isFinite(s.iat) || s.tenant !== tenant) throw new AppError(503, 'Recording search requires the signed host tenant session');
   return s as Session;
 }
+/**
+ * Whether recordings are one of this reader's orgiq search sources at all.
+ * Recordings live on the Social platform: a reader with no Social grant has
+ * none to search, and a deployment with no recording platform configured has
+ * no recordings source. Neither is an incomplete read, so neither may surface
+ * as "Recordings unavailable" or turn every count into a floor (walk,
+ * 9 November). A bare policy principal (no grants recorded) is left to the
+ * read itself, which refuses it as before. A configured platform that fails
+ * to answer is still a partial source.
+ */
+export function recordingsAreASource(principal: PrincipalRef): boolean {
+  if (!recordingPlatformUrl()) return false;
+  const grants = (principal as Partial<Session>).grants;
+  return grants === undefined || (grants['social']?.length ?? 0) > 0;
+}
 export function recordingPlatformUrl(): string | null {
   const value = process.env['DOCUMENT_PLATFORM_INTERNAL_URL'] || process.env['PLATFORM_API_URL'] || process.env['SOCIAL_PLATFORM_INTERNAL_URL'];
   return value ? value.replace(/\/+$/, '') : null;

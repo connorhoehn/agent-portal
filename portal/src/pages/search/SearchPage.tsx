@@ -28,7 +28,7 @@ import { searchWorkflows } from './searchWorkflows';
 import {
   assistantStripText, nextQueryAfterSend, nextTabAfterSend, parseRecordKeys, readSearchEvidence, readSearchEdges, searchTitle,
 } from './searchModel';
-import { countedLabel, groupResults, parseSort, partialSourcesTitle, resultsFooter, searchResultType } from './resultsModel';
+import { countIsLowerBound, countedLabel, groupResults, parseSort, partialSourcesTitle, resultsFooter, searchResultType } from './resultsModel';
 import { recordKey, SEARCH_LABELS, SEARCH_TYPES, type SearchRecord, type SearchRecordType, type SearchResponse, type SearchTab } from './searchTypes';
 import { SearchControls, searchControlsMenu, type SearchControlsProps } from './SearchControls';
 import { SearchResults } from './SearchResults';
@@ -182,7 +182,7 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
   const typeRows:RailNavListItem[]=[...MAIN_TYPES,...(moreTypes?['asset' as const]:[])].map(kind=>{
     const href=searchHref({type:kind});
     return {id:kind,href,onNavigate:go(href),current:type===kind,
-      ...countedLabel(SEARCH_LABELS[kind],!error&&data?data.counts[kind]:undefined,data?.totalIsLowerBound)};
+      ...countedLabel(SEARCH_LABELS[kind],!error&&data?data.counts[kind]:undefined,countIsLowerBound(data,kind))};
   });
   typeRows.push({id:'more-types',label:moreTypes?'Fewer types ▴':'More types ▾',onSelect:()=>setMoreTypes(!moreTypes)});
   const savedRows:RailNavListItem[]=(saved?.searches??[]).map(s=>({id:`saved:${s.id}`,label:s.name,current:params.get('saved')===s.id,onSelect:()=>{

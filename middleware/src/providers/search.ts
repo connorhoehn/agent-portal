@@ -9,7 +9,7 @@ import { getDesignThread, type DesignReview } from './design-reviews.js';
 import { getDecision } from './decisions.js';
 import { getRunbookSearchEntry, type RunbookSearchEntry } from '../lib/runbooks/search-entries.js';
 import { getAsset } from './prompt-library.js';
-import { listRecordingSearchRecords, resolveRecordingSearchRecord, type RecordingSearchRecord } from './recording-search.js';
+import { listRecordingSearchRecords, recordingsAreASource, resolveRecordingSearchRecord, type RecordingSearchRecord } from './recording-search.js';
 import { ensureIndexed } from '../lib/search-index/registry.js';
 import { PEOPLE_ACL, projectOrgiqRecord } from '../lib/search-index/orgiq.js';
 import { parseQuestion, STOPWORDS, type ParsedQuestion } from '../lib/search-index/question.js';
@@ -57,6 +57,13 @@ export interface SearchResponse {
    * never scored. `partial` names which source caused it.
    */
   totalIsLowerBound: boolean;
+  /**
+   * The `counts` keys that are floors: the record types a partial source feeds
+   * (a windowed initiatives read makes `initiative` a floor, not `person`),
+   * plus `all` whenever any is. `totalIsLowerBound` is this list's answer for
+   * the requested type. Empty when every source was read whole.
+   */
+  lowerBoundCounts: Array<SearchRecordType | 'all'>;
   related: SearchRecord[]; edges: SearchEdge[]; partial?: string[];
 }
 export interface SearchOptions { q?: string; type?: SearchRecordType | 'all'; scope?: string; limit?: number; offset?: number; sort?: SearchSort }
@@ -91,7 +98,33 @@ export function recordingSearchResponse(projection: { records: RecordingSearchRe
   return { query: opts.q ?? '', results: matches.slice(opts.offset ?? 0, (opts.offset ?? 0) + (opts.limit ?? 50)).map(record => {
     const reason = textReason(record, tokens);
     return { ...publicRecord(record, tokens), ...(reason ? { matchReason: reason } : {}), ...(tokens.length ? { highlights: tokens.filter(token => textOf(record).includes(token)) } : {}) };
-  }), total: matches.length, counts, totalIsLowerBound: projection.partial.length > 0, related: [], edges: [], ...(projection.partial.length ? { partial: projection.partial } : {}) };
+  }), total: matches.length, counts, totalIsLowerBound: projection.partial.length > 0,
+  lowerBoundCounts: projection.partial.length > 0 ? ['recording', 'all'] : [], related: [], edges: [], ...(projection.partial.length ? { partial: projection.partial } : {}) };
+}
+
+/**
+ * The record types whose counts a partial source leaves short. Named by the
+ * source's words (lib/search-index/orgiq.ts `read(name, …)` and the window
+ * notes, recording-search.ts): a source this does not recognise — the whole
+ * index failing to load — makes every type a floor.
+ */
+export function partialSourceTypes(source: string): readonly SearchRecordType[] {
+  if (/^People\b/.test(source)) return ['person'];
+  if (/^Teams\b/.test(source)) return ['team'];
+  if (/^Initiative/.test(source)) return ['initiative'];
+  if (/^Work\b/.test(source)) return ['work'];
+  if (/^Decision|design decision/i.test(source)) return ['decision'];
+  if (/^Runbooks\b/.test(source)) return ['knowledge'];
+  if (/^Agent library\b/.test(source)) return ['asset'];
+  if (/^Recording/.test(source)) return ['recording'];
+  return SEARCH_TYPES;
+}
+
+/** `lowerBoundCounts` for a set of partial sources: their types, and `all` when any. */
+export function lowerBoundCountsOf(partial: readonly string[]): Array<SearchRecordType | 'all'> {
+  if (partial.length === 0) return [];
+  const types = new Set<SearchRecordType>(partial.flatMap(source => [...partialSourceTypes(source)]));
+  return [...SEARCH_TYPES.filter(type => types.has(type)), 'all'];
 }
 /** The text half of score(): which part of the record the query hit. */
 function textReason(record: SearchRecord, tokens: string[]): MatchReason | undefined {
@@ -140,7 +173,11 @@ export async function searchRecords(principal: PrincipalRef, opts: SearchOptions
   // still read live here.
   const [indexed, recordings] = await Promise.all([
     ensureIndexed('orgiq').catch(() => { partial.push('Search index unavailable'); return null; }),
-    listRecordingSearchRecords(principal, opts.scope).catch(() => { partial.push('Recordings unavailable'); return { records: [], partial: [] }; }),
+    // Not a source at all (no Social grant, no recording platform): nothing
+    // to read and nothing missing, so no partial note and no floor.
+    recordingsAreASource(principal)
+      ? listRecordingSearchRecords(principal, opts.scope).catch(() => { partial.push('Recordings unavailable'); return { records: [], partial: [] }; })
+      : Promise.resolve({ records: [] as RecordingSearchRecord[], partial: [] as string[] }),
   ]);
   partial.push(...(indexed?.meta.partial ?? []), ...recordings.partial);
   const q = opts.q ?? '';
@@ -273,10 +310,13 @@ export async function searchRecords(principal: PrincipalRef, opts: SearchOptions
   const related = [...records.values()].filter(r => neighbors.has(searchKey(r)) && !visible.has(searchKey(r)) && (!opts.scope || scoped.has(searchKey(r)))).slice(0, 100).map(r => (scores.get(searchKey(r)) ?? 0) > 0 ? annotate(r) : publicRecord(r));
   related.forEach(r => visible.add(searchKey(r)));
   // `total` is the requested type's match count — the same number its tab
-  // badge shows — counted over the records the projection holds. Any partial
-  // source makes it (and every count) a floor, and the response says so.
-  const total = counts[!opts.type || opts.type === 'all' ? 'all' : opts.type];
-  return { query: q, results, counts, total, totalIsLowerBound: partial.length > 0, related, edges: allEdges.filter(e => visible.has(e.source) && visible.has(e.target)), ...(partial.length ? { partial: [...new Set(partial)] } : {}) };
+  // badge shows — counted over the records the projection holds. A partial
+  // source makes the counts of the types it feeds (and `all`) floors, and
+  // the response says which; the total is a floor when its type's count is.
+  const requested = !opts.type || opts.type === 'all' ? 'all' : opts.type;
+  const total = counts[requested];
+  const lowerBoundCounts = lowerBoundCountsOf(partial);
+  return { query: q, results, counts, total, totalIsLowerBound: lowerBoundCounts.includes(requested), lowerBoundCounts, related, edges: allEdges.filter(e => visible.has(e.source) && visible.has(e.target)), ...(partial.length ? { partial: [...new Set(partial)] } : {}) };
 }
 
 const initiative = (id: string): SearchRef => ({ type: 'initiative', id });

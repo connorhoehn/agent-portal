@@ -23,6 +23,8 @@ export interface SearchResponse {
   total: number;
   /** The server read a bounded window of some source, or a source failed: `total` and `counts` are floors. */
   totalIsLowerBound?: boolean;
+  /** The `counts` keys that are floors (the types a partial source feeds, and `all`); absent from an older server. */
+  lowerBoundCounts?: Array<SearchRecordType | 'all'>;
   partial?: string[];
   related?: SearchRecord[];
   edges?: SearchEdge[];
