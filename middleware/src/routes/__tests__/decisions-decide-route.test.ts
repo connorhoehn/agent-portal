@@ -1,0 +1,181 @@
+// POST /api/graph/decisions/:id/decide (G54): a waiting decision is decided,
+// on the page and by voice (both call this route).
+//
+// The REAL authz stack runs (the seed Cedar matrix, no policy store), so the
+// DecideDecision floor is the actual role matrix; identity and the initiative
+// owner are mocked so each persona's relation to the decision is explicit.
+// The owner's acceptance case is d-eval-judge-model ("Judge model for canary
+// evaluation", open, on p-llm-platform, decider p-047 Nina Rivera, who also
+// owns the initiative).
+
+jest.mock('../../lib/role-registry.js', () => ({ roleRegistry: () => jest.requireActual('../../test-support/seed-roles').seedRoleRegistry() }));
+jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn(), withTransaction: jest.fn(), fetchAvatarsById: jest.fn(async () => new Map()) }));
+jest.mock('../../config.js', () => ({
+  config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '', policyStoreId: undefined, cognito: null }, cognito: { portalOrigin: '' }, mock: { aurora: true, agentcore: true } },
+}));
+// sub -> [person, display name]
+const PEOPLE: Record<string, [string | null, string]> = {
+  'u-nina': ['p-047', 'Nina Rivera'],     // d-eval-judge-model's decider (and p-llm-platform's owner)
+  'u-nora': ['p-004', 'Nora DaSilva'],    // an SME with no part in that decision
+  'u-sienna': ['p-005', 'Sienna Garcia'], // d-cognito-cutover's decider
+  'u-vera': ['p-002', 'Vera Green'],      // p-auth-migration's owner, not d-cognito-cutover's decider
+  'u-rhea': ['p-042', 'Rhea'],            // a contributor on d-eval-judge-model
+  'u-ops': [null, 'Platform Operator'],   // an account with no person
+};
+jest.mock('../../providers/identity.js', () => ({
+  getUser: jest.fn(async (sub: string) => {
+    const hit = PEOPLE[sub];
+    return hit ? { id: sub, personId: hit[0], displayName: hit[1] } : null;
+  }),
+}));
+jest.mock('../../providers/projects.js', () => ({
+  getProject: jest.fn(async (id: string) => ({ 'p-llm-platform': { id, ownerId: 'p-047' }, 'p-auth-migration': { id, ownerId: 'p-002' } } as Record<string, unknown>)[id] ?? null),
+}));
+
+import express from 'express';
+import request from '../../test-support/http.js';
+import { decisionsRouter } from '../decisions.js';
+import { errorHandler } from '../../lib/async-handler.js';
+import { fixtureRegistry } from '../../mock/core/index.js';
+import { decisionRows, decisionEventRows } from '../../mock/decisions.js';
+import { exec } from '../../providers/aurora.js';
+import { decideDecision } from '../../providers/decisions.js';
+
+const execMock = exec as unknown as jest.Mock;
+const JUDGE = '/api/graph/decisions/d-eval-judge-model';
+const RATIONALE = 'Go with Nova Pro and halve the sample rate from 20 to 10 percent, so the evaluation bill stays flat.';
+
+function appAs(sub: string | null, role = 'member') {
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    if (sub) (req as unknown as { session: unknown }).session = { sub, role, tenant: 'orgiq', grants: { orgiq: [role] }, iat: 0 };
+    else (req as unknown as { sessionInvalid: boolean }).sessionInvalid = true;
+    next();
+  });
+  app.use('/api/graph/decisions', decisionsRouter);
+  app.use(errorHandler);
+  return app;
+}
+
+afterEach(() => {
+  fixtureRegistry.resetAll('default');
+  execMock.mockReset();
+});
+
+describe('POST /api/graph/decisions/:id/decide', () => {
+  it('the decider resolves the waiting judge-model decision: status, who, when, the rationale as the outcome, and a history entry', async () => {
+    const before = await request(appAs('u-nina', 'sme')).get(JUDGE);
+    expect(before.body).toEqual(expect.objectContaining({ status: 'open', decidedAt: null, decidedBy: null, outcome: null, history: [], viewerMayDecide: true }));
+
+    const res = await request(appAs('u-nina', 'sme')).post(`${JUDGE}/decide`).send({ outcome: 'resolved', rationale: `  ${RATIONALE}  ` });
+    expect(res.status).toBe(200);
+    expect(execMock).not.toHaveBeenCalled();
+    const today = new Date().toISOString().slice(0, 10);
+    expect(res.body).toEqual(expect.objectContaining({
+      id: 'd-eval-judge-model', status: 'resolved', decidedAt: today,
+      decidedBy: { id: 'p-047', name: 'Nina Rivera' }, outcome: RATIONALE,
+    }));
+    expect(res.body.history).toHaveLength(1);
+    expect(res.body.history[0]).toEqual(expect.objectContaining({
+      kind: 'resolved', by: { id: 'p-047', name: 'Nina Rivera' }, rationale: RATIONALE,
+    }));
+    expect(Date.parse(res.body.history[0].at)).not.toBeNaN();
+
+    // The next read is the record the page shows, and the list's Waiting view loses it.
+    const after = await request(appAs('u-nora', 'sme')).get(JUDGE);
+    expect(after.body).toEqual(expect.objectContaining({ status: 'resolved', outcome: RATIONALE, viewerMayDecide: false }));
+    const list = await request(appAs('u-nora', 'sme')).get('/api/graph/decisions?limit=200');
+    const row = list.body.find((d: { id: string }) => d.id === 'd-eval-judge-model');
+    expect(row.status).toBe('resolved');
+    expect(row.decidedAt).toBe(today);
+    expect(row.outcome).toBe(RATIONALE);
+  });
+
+  it('writes the mock store: the decision row and one decision_events row', async () => {
+    await request(appAs('u-nina', 'sme')).post(`${JUDGE}/decide`).send({ outcome: 'rejected', rationale: 'Neither model; rerun the rubric first.' });
+    const row = decisionRows.rows().find((d) => d.id === 'd-eval-judge-model')!;
+    expect(row).toEqual(expect.objectContaining({ status: 'rejected', decidedBy: 'p-047', resolution: 'Neither model; rerun the rubric first.' }));
+    expect(decisionEventRows.rows()).toEqual([expect.objectContaining({ decisionId: 'd-eval-judge-model', kind: 'rejected', actorId: 'p-047', actorName: 'Nina Rivera' })]);
+  });
+
+  it('a non-decider is refused with 403 NOT_DECIDER and nothing is written', async () => {
+    for (const sub of ['u-nora', 'u-rhea', 'u-ops']) {
+      const res = await request(appAs(sub, 'sme')).post(`${JUDGE}/decide`).send({ outcome: 'resolved', rationale: RATIONALE });
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('NOT_DECIDER');
+    }
+    expect(decisionRows.rows().find((d) => d.id === 'd-eval-judge-model')!.status).toBe('open');
+    expect(decisionEventRows.rows()).toEqual([]);
+    // A role without the Cedar floor never reaches the scope check (the social tenant's participant holds none of it).
+    const outsider = await request(appAs('u-nina', 'participant')).post(`${JUDGE}/decide`).send({ outcome: 'resolved', rationale: RATIONALE });
+    expect(outsider.status).toBe(403);
+    expect(outsider.body.action).toBe('DecideDecision');
+    // Anonymous: 401.
+    expect((await request(appAs(null)).post(`${JUDGE}/decide`).send({ outcome: 'resolved', rationale: RATIONALE })).status).toBe(401);
+  });
+
+  it('the initiative\'s owner and an org-leader may decide what they are not the decider of', async () => {
+    // d-cognito-cutover (escalated): decided by Sienna; Vera owns Auth Migration.
+    const owner = await request(appAs('u-vera', 'member')).post('/api/graph/decisions/d-cognito-cutover/decide').send({ outcome: 'resolved', rationale: 'Riskiest first while the shim is warm.' });
+    expect(owner.status).toBe(200);
+    expect(owner.body.decidedBy).toEqual({ id: 'p-002', name: 'Vera Green' });
+    const leader = await request(appAs('u-nora', 'org-leader')).post('/api/graph/decisions/d-inference-warm-floor/decide').send({ outcome: 'rejected', rationale: 'Not until the SLO owners agree.' });
+    expect(leader.status).toBe(200);
+    expect(leader.body.status).toBe('rejected');
+  });
+
+  it('a settled decision is 409 and keeps its record', async () => {
+    const first = await request(appAs('u-nina', 'sme')).post(`${JUDGE}/decide`).send({ outcome: 'resolved', rationale: RATIONALE });
+    expect(first.status).toBe(200);
+    const again = await request(appAs('u-nina', 'sme')).post(`${JUDGE}/decide`).send({ outcome: 'rejected', rationale: 'Changed my mind.' });
+    expect(again.status).toBe(409);
+    expect(again.body).toEqual(expect.objectContaining({ status: 'resolved' }));
+    expect(decisionEventRows.rows()).toHaveLength(1);
+    // A seeded settled ADR, too.
+    const adr = await request(appAs('u-nora', 'org-leader')).post('/api/graph/decisions/d-aurora/decide').send({ outcome: 'rejected', rationale: 'x' });
+    expect(adr.status).toBe(409);
+  });
+
+  it('validates the outcome and the rationale (required, at most 500 characters); an unknown id is 404', async () => {
+    const app = appAs('u-nina', 'sme');
+    expect((await request(app).post(`${JUDGE}/decide`).send({ outcome: 'approve', rationale: RATIONALE })).status).toBe(400);
+    expect((await request(app).post(`${JUDGE}/decide`).send({ outcome: 'resolved' })).status).toBe(400);
+    expect((await request(app).post(`${JUDGE}/decide`).send({ outcome: 'resolved', rationale: '   ' })).status).toBe(400);
+    const long = await request(app).post(`${JUDGE}/decide`).send({ outcome: 'resolved', rationale: 'x'.repeat(501) });
+    expect(long.status).toBe(400);
+    expect(long.body.error).toMatch(/500/);
+    expect((await request(app).post(`${JUDGE}/decide`).send({ outcome: 'resolved', rationale: 'x'.repeat(500) })).status).toBe(200);
+    expect((await request(appAs('u-nina', 'sme')).post('/api/graph/decisions/d-nope/decide').send({ outcome: 'resolved', rationale: RATIONALE })).status).toBe(404);
+  });
+});
+
+describe('the Aurora provider', () => {
+  it('updates only a waiting row and appends its event in one transaction; a lost race reads back as settled', async () => {
+    const config = jest.requireMock('../../config.js').config as { mock: { aurora: boolean } };
+    const aurora = jest.requireMock('../../providers/aurora.js') as { exec: jest.Mock; withTransaction: jest.Mock };
+    config.mock.aurora = false;
+    try {
+      const tx = jest.fn()
+        .mockResolvedValueOnce([{ id: 'd-x' }]) // UPDATE … RETURNING id
+        .mockResolvedValueOnce([]);             // INSERT INTO decision_events
+      aurora.withTransaction.mockImplementation(async (fn: (t: jest.Mock) => Promise<unknown>) => fn(tx));
+      aurora.exec
+        .mockResolvedValueOnce([{ id: 'd-x', topic: 'T', summary: null, status: 'resolved', project_id: null, decided_at: '2026-11-09', resolution: 'Why', decided_by: 'p-047', decided_by_name: 'Nina Rivera' }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ id: '1', kind: 'resolved', at: '2026-11-09T01:00:00Z', actor_id: 'p-047', actor_name: 'Nina Rivera', rationale: 'Why' }]);
+      const ok = await decideDecision('d-x', { outcome: 'resolved', rationale: 'Why', actorId: 'p-047', actorName: 'Nina Rivera' });
+      expect(String(tx.mock.calls[0]![0])).toMatch(/UPDATE decisions[\s\S]*status IN \('open', 'escalated'\)/);
+      expect(String(tx.mock.calls[1]![0])).toMatch(/INSERT INTO decision_events/);
+      expect(ok).toEqual({ kind: 'ok', decision: expect.objectContaining({ decidedBy: { id: 'p-047', name: 'Nina Rivera' }, outcome: 'Why', history: [expect.objectContaining({ kind: 'resolved', rationale: 'Why' })] }) });
+
+      const lost = jest.fn().mockResolvedValueOnce([]);
+      aurora.withTransaction.mockImplementation(async (fn: (t: jest.Mock) => Promise<unknown>) => fn(lost));
+      aurora.exec.mockReset().mockResolvedValueOnce([{ status: 'rejected' }]);
+      expect(await decideDecision('d-x', { outcome: 'resolved', rationale: 'Why', actorId: 'p-047', actorName: 'Nina' })).toEqual({ kind: 'settled', status: 'rejected' });
+      expect(lost).toHaveBeenCalledTimes(1);
+    } finally {
+      config.mock.aurora = true;
+    }
+  });
+});

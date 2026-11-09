@@ -124,6 +124,16 @@ export function collectionOf(body: unknown, key?: string): Rec[] {
 
 export interface ShapedRow { id: string; title: string; subtitle?: string; status?: string; at?: string; href?: string; raw: Rec }
 
+/** A decision's line (G54): "Decided: <outcome>" once settled, "waiting on <decider>" while open or escalated. */
+export function decisionSubtitle(r: Rec): string | undefined {
+  const status = String(r['status'] ?? '');
+  const outcome = typeof r['outcome'] === 'string' && r['outcome'].trim() ? r['outcome'].trim() : null;
+  if (status === 'resolved' || status === 'rejected') return outcome ? `${status === 'rejected' ? 'Rejected' : 'Decided'}: ${outcome}` : undefined;
+  const people = Array.isArray(r['participants']) ? r['participants'] as Rec[] : [];
+  const decider = people.find((p) => String(p['role'] ?? '').toLowerCase() === 'decider')?.['name'];
+  return typeof decider === 'string' && decider ? `waiting on ${decider}` : 'waiting on its decider';
+}
+
 export function shapeRow(spec: Pick<KindSpec, 'id' | 'title' | 'subtitle' | 'status' | 'at' | 'href'>, raw: Rec): ShapedRow | null {
   const id = pick(raw, spec.id, DEFAULTS.id);
   if (!id) return null;
@@ -265,6 +275,8 @@ const ORGIQ: readonly KindSpec[] = [
     kind: 'decision', label: 'decisions',
     list: { path: '/api/graph/decisions' }, get: { path: '/api/graph/decisions/:id' },
     title: 'topic', at: ['decidedAt', 'createdAt'],
+    // G54: a settled decision says what was decided; a waiting one says who it waits on (the detail names the decider).
+    subtitle: decisionSubtitle,
     href: (id) => `/iq/decisions/${enc(id)}`,
   },
   {

@@ -48,6 +48,7 @@ export type Action =
   | 'ConnectLocalCompute'
   // Runbooks (docs/distillation-runbooks-goal.md R3) — in CAPABILITY_ACTIONS server-side
   | 'ReviewRunbook'
+  | 'DecideDecision'
   | 'ViewSessionBrief'
   // The voice navigator (docs/voice-navigator-spec.md §6) — in CAPABILITY_ACTIONS server-side
   | 'VoiceNavigate'

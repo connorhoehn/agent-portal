@@ -143,7 +143,9 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // Comment on work items of initiatives they are on (§9 item 8d).
       'ViewWorkItems',
       // Mint a voice navigator session (docs/voice-navigator-spec.md §6).
-      'VoiceNavigate'],
+      'VoiceNavigate',
+      // G54: anyone can be named a decider; routes/decisions.ts scopes it.
+      'DecideDecision'],
   },
   'orgiq/sme': {
     tenant: 'orgiq',
@@ -164,7 +166,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // conditioned on onInitiative (shell and task also on ownsBox).
       // ManageSdlcPolicies is deliberately absent (DE-43).
       'OpenDevboxShell', 'RunDevboxTask', 'DecideAgentChange', 'DeliverAgentChange',
-      'VoiceNavigate',
+      'VoiceNavigate', 'DecideDecision',
     ],
   },
   'orgiq/program-owner': {
@@ -177,7 +179,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // ManageBudgets only on initiatives they own (a forbid, §9 item 8a).
       'Search', 'ViewOrgChart', 'ViewObservability', 'LabelFeedback', 'ViewWorkItems',
       'DispatchAgentRun', 'ManageSprints', 'ManageBots', 'ManageBudgets',
-      'ViewSessionBrief', 'ReviewRunbook', 'VoiceNavigate',
+      'ViewSessionBrief', 'ReviewRunbook', 'VoiceNavigate', 'DecideDecision',
     ],
   },
   'orgiq/org-leader': {
@@ -188,7 +190,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       'ApproveTransaction', 'EnterEnvironment', 'ManageEnvironments', 'ConnectLocalCompute',
       'ViewSessionBrief', 'ReviewRunbook',
       // §9 items 8b and 8c: the SDLC policy editor and the guardrail editor.
-      'ManageSdlcPolicies', 'EditGuardrail', 'VoiceNavigate',
+      'ManageSdlcPolicies', 'EditGuardrail', 'VoiceNavigate', 'DecideDecision',
     ],
   },
   'orgiq/hr-admin': {
@@ -204,7 +206,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // policies: that is ManageSdlcPolicies, which a devbox operator never
       // holds (§9 item 8b).
       'OpenDevboxShell', 'RunDevboxTask', 'DecideAgentChange', 'DeliverAgentChange',
-      'VoiceNavigate',
+      'VoiceNavigate', 'DecideDecision',
     ],
   },
   'assessment/assessor': {
@@ -327,6 +329,11 @@ describe('capability boundaries that must not regress', () => {
     }
     for (const r of ['orgiq/sme', 'orgiq/program-owner', 'orgiq/org-leader']) expect(has(r, 'ReviewRunbook')).toBe(true);
     for (const r of ['orgiq/member', 'orgiq/hr-admin']) expect(has(r, 'ReviewRunbook')).toBe(false);
+  });
+
+  test('deciding a decision (G54): every orgiq role holds the floor; no other tenant\'s role does', () => {
+    for (const r of ['orgiq/member', 'orgiq/sme', 'orgiq/program-owner', 'orgiq/org-leader', 'orgiq/hr-admin']) expect(has(r, 'DecideDecision')).toBe(true);
+    for (const [key, spec] of Object.entries(MATRIX)) if (spec.tenant && spec.tenant !== 'orgiq') expect(has(key, 'DecideDecision')).toBe(false);
   });
 
   test('sme adds dispatch + sprints only; never budgets, ingest, approval, masquerade', () => {

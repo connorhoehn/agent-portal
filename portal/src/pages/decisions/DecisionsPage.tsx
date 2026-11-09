@@ -18,7 +18,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useUrlState } from '../../lib/useUrlState';
 import { relativeTime } from '../../lib/relativeTime';
 import { DECISION_GRAMMAR } from './decisionCommands';
-import { DECISIONS_SOURCE, asInstant, filterDecisions, matchesDecision, sortDecisions, statusLabel, STATUS_TONE } from './decisionFormat';
+import { DECISIONS_SOURCE, asInstant, filterDecisions, matchesDecision, outcomeFirstLine, sortDecisions, statusLabel, STATUS_TONE } from './decisionFormat';
 import DecisionRecordPage from './DecisionRecordPage';
 import { RecordLink } from './RecordLink';
 import type { DecisionSummary, InitiativeName } from './types';
@@ -81,6 +81,14 @@ export default function DecisionsPage() {
       render: (d) => <Chip tone={STATUS_TONE[d.status] ?? 'neutral'} size="sm" dot="static">{statusLabel(d.status)}</Chip>,
     },
     {
+      // G54: what a settled decision decided, its first line; a waiting one has none yet.
+      key: 'outcome', header: 'Outcome',
+      render: (d) => {
+        const line = outcomeFirstLine(d);
+        return <T size="xs" tone={line ? 'secondary' : 'tertiary'} className="block max-w-64 truncate" title={line ?? undefined}>{line ?? '—'}</T>;
+      },
+    },
+    {
       key: 'participantCount', header: 'People', align: 'right', numeric: true,
       render: (d) => <T size="xs" tone="tertiary">{d.participantCount}</T>,
     },
@@ -97,7 +105,7 @@ export default function DecisionsPage() {
       catalogOverview navigation="combined" title="Decisions" group="Plan" basePath="/iq/decisions" listTitle={current}
       overviewDescription="The calls the organisation has made or still has to make — who decides, what it holds up, and how it was settled."
       items={FILTERS.map((f) => ({ path: `/iq/decisions?status=${f.value}`, label: f.label, group: 'Status', active: filter === f.value }))}
-      rows={rows.map((d) => ({ id: d.id, title: d.topic, subline: statusLabel(d.status), description: nameOf(d.projectId) ?? 'Organisation-wide' }))}
+      rows={rows.map((d) => ({ id: d.id, title: d.topic, subline: outcomeFirstLine(d) ?? statusLabel(d.status), description: nameOf(d.projectId) ?? 'Organisation-wide' }))}
       selectedId={id} selectedTitle={data?.find((d) => d.id === id)?.topic}
       onSelect={open}
       footer={id ? <CollectionCommandHost inPlace adapter={adapter} /> : undefined}
@@ -105,7 +113,7 @@ export default function DecisionsPage() {
         : isLoading && !data ? <LoadingState label="Loading decisions…" />
         : rows.length === 0 ? <EmptyState align="start" title="No decisions in this view" /> : undefined}
     >
-      {id ? <DecisionRecordPage key={id} /> : (
+      {id ? <DecisionRecordPage key={id} onDecided={refresh} /> : (
         <Stack gap="sm" className="min-w-0">
           <CollectionToolbar label="Decision filters"
             search={{ value: query, onChange: setQuery, placeholder: 'Search decisions', 'aria-label': 'Search decisions' }}

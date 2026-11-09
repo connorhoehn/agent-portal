@@ -43,6 +43,14 @@ BOT_CREATORS = {
 RUN_NOTES = json.loads((Path(__file__).resolve().parent.parent.parent / 'middleware/src/mock/bot-run-notes.json').read_text())
 
 
+
+# What each settled decision decided, one sentence from its summary's own
+# "we chose" line (G54). schema/seed.sql carries the org-graph ADRs' outcomes.
+DECISION_OUTCOMES = {
+    'd-otel-vendor': 'Self-hosted OpenTelemetry collectors in an agent and gateway topology, exporting OTLP to the current backend.',
+    'd-iceberg': 'Iceberg as the lakehouse table format, for its engine-neutral catalog across Spark, Trino and Flink.',
+}
+
 def run_note(prefix: str, seq: int) -> dict:
     notes = RUN_NOTES.get(prefix) or []
     if not notes:
@@ -1132,10 +1140,16 @@ def main() -> None:
             # resolved row put a settled call in with the undecided ones.
             decided = f'({resolved})::date' if status == 'resolved' else 'NULL'
             role_sql = f"'{req_role}'" if req_role else 'NULL'
+            # G54: a settled decision records what was decided (one sentence,
+            # DECISION_OUTCOMES) and who decided it (its decider); a waiting one
+            # has neither until someone decides it in the product.
+            settled = status in ('resolved', 'rejected')
+            outcome_sql = f"'{q(DECISION_OUTCOMES[did])}'" if settled else 'NULL'
+            decided_by_sql = f"'{decider}'" if settled else 'NULL'
             emit(
-                "INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id) "
+                "INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id, resolution, decided_by) "
                 f"VALUES ('{did}', '{q(topic)}', '{q(summary)}', '{status}', '{pid}', {role_sql}, {decided}, {escalated}, {resolved}, "
-                f"'wi-{slug}-{dec_ekey}') "
+                f"'wi-{slug}-{dec_ekey}', {outcome_sql}, {decided_by_sql}) "
                 "ON CONFLICT (id) DO NOTHING"
             )
             # Who was in the room. Every decision in seed.sql carries this;

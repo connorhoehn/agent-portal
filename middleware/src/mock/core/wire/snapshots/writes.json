@@ -4962,6 +4962,57 @@
         "rule": "unclassified",
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
+    },
+    "POST /api/graph/decisions/:id/decide": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "decidedAt": "string",
+        "decidedBy": "object",
+        "decidedBy.id": "string",
+        "decidedBy.name": "string",
+        "history": "array",
+        "history[]": "object",
+        "history[].at": "string",
+        "history[].by": "object",
+        "history[].by.id": "string",
+        "history[].by.name": "string",
+        "history[].id": "string",
+        "history[].kind": "string",
+        "history[].rationale": "string",
+        "id": "string",
+        "outcome": "string",
+        "participants": "array",
+        "participants[]": "object",
+        "participants[].avatarUrl": "string",
+        "participants[].name": "string",
+        "participants[].personId": "string",
+        "participants[].role": "string",
+        "participants[].title": "string",
+        "participants[].weight": "number",
+        "projectId": "string",
+        "status": "string",
+        "summary": "string",
+        "topic": "string",
+        "viewerMayDecide": "boolean"
+      },
+      "values": {
+        "history[].kind": [
+          "rejected"
+        ],
+        "participants[].role": [
+          "contributor",
+          "decider"
+        ],
+        "status": [
+          "rejected"
+        ]
+      },
+      "sent": [
+        "outcome",
+        "rationale"
+      ]
     }
   }
 }

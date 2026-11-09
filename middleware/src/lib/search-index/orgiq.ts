@@ -217,7 +217,7 @@ export async function buildOrgiqDocs(tenant: string): Promise<OrgiqBuild> {
   teams.forEach(t => docs.push(teamDoc(tenant, t)));
   projects.forEach((p, i) => docs.push(initiativeDoc(tenant, p, summaries.get(p.id) ?? details[i]?.summary ?? null, details[i]?.contributors ?? [])));
   work.forEach(w => docs.push(workDoc(tenant, w)));
-  decisions.forEach((d, i) => docs.push(decisionDoc(tenant, decisionDetails[i] ?? { ...d, participants: [] })));
+  decisions.forEach((d, i) => docs.push(decisionDoc(tenant, decisionDetails[i] ?? { ...d, participants: [], decidedBy: null, history: [] })));
   const decisionIds = new Set(decisions.map(d => d.id));
   designs.forEach(d => {
     // Decisions (d-*) and designs (des-*) use distinct id namespaces; never overwrite one with the other.

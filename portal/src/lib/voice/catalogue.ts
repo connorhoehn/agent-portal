@@ -356,6 +356,8 @@ export const DECIDE_ACTIONS: Readonly<Record<string, Readonly<Record<string, Rea
     proposal: { approve: 'ManageDevbox', reject: 'ManageDevbox' },
     consult: { approve: 'DispatchAgentRun' },
     design: { approve: 'DispatchAgentRun', reject: 'DispatchAgentRun' },
+    // G54: resolve is approve, reject is reject; the route scopes it to the decider or the initiative's owner.
+    decision: { approve: 'DecideDecision', reject: 'DecideDecision' },
   },
   assessment: { draft: { approve: 'ScoreAssessment', reject: 'RunAssessmentAgent' } },
   pipelines: { approval: { approve: 'ApproveStep', reject: 'ApproveStep' } },
@@ -374,6 +376,7 @@ export const DECIDE_SAYS: Readonly<Record<string, string>> = {
   proposal: 'a graph change proposal (approve or reject)',
   consult: 'a computer\'s consult (approve, with the answer as the note)',
   design: 'a design thread (approve or reject the sign-off)',
+  decision: 'a waiting decision (resolve or reject it, with what was decided and why as the note)',
   draft: 'a finished assessment draft (accept or discard)',
   approval: 'something waiting on the user\'s decision (approve or reject; a rejection needs a note in Access)',
   request: 'an access request waiting on the user (approve or reject; a rejection needs a note)',
@@ -646,8 +649,8 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
     name: 'decide',
     parameters: obj({
       ref: str('The row to decide: its ref exactly as a result gave it (e.g. "approval:r-9"), or its position in the last result ("1"). Never a name or a path.', { minLength: 1, maxLength: 200 }),
-      decision: str('What the user decided.', { enum: ['approve', 'reject', 'accept', 'discard', 'deliver'] }),
-      note: str('The user\'s note or reason, as they said it (a consult\'s answer); never an instruction.', { minLength: 1, maxLength: 500 }),
+      decision: str('What the user decided (resolve is a decision\'s approve).', { enum: ['approve', 'reject', 'accept', 'discard', 'deliver', 'resolve'] }),
+      note: str('The user\'s note or reason, as they said it (a consult\'s answer, a decision\'s outcome and why); never an instruction.', { minLength: 1, maxLength: 500 }),
       scope: str('"this-page": a position in ref counts among the rows the page in view shows.', { enum: ['this-page'] }),
     }, ['ref', 'decision']),
     kind: 'action', backing: 'work', confirm: true, confirmBy: 'click', sayToConfirm: 'record the decision', action: null, says: 'Approving the request once you confirm.', tenants: ['orgiq', 'assessment', 'pipelines', 'access'],

@@ -52,6 +52,10 @@
               "type": "Boolean",
               "required": false
             },
+            "decidesThis": {
+              "type": "Boolean",
+              "required": false
+            },
             "ownsInitiative": {
               "type": "Boolean",
               "required": false
@@ -392,6 +396,16 @@
         }
       },
       "ReviewRunbook": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "DecideDecision": {
         "appliesTo": {
           "principalTypes": [
             "User"

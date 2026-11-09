@@ -48,6 +48,11 @@ permit (
     // Read the session brief a run was given (GET /api/runs/:ref/brief, the work-item
     // brief preview). Every role that can see work can see what a box was told.
     OrgIQ::Action::"ViewSessionBrief",
+    // Resolve or reject a waiting decision (G54, POST /api/graph/decisions/:id/decide).
+    // Role-wide, because anyone can be named a decision's decider; the route
+    // scopes it to the decider and the initiative's owner, with org-leader and
+    // admin overriding (`decidesThis`, the forbid in member.cedar).
+    OrgIQ::Action::"DecideDecision",
     // Mint a voice navigator session (docs/voice-navigator-spec.md §6). Each tool the
     // voice runs is then gated by the action of the button it stands in for.
     OrgIQ::Action::"VoiceNavigate"

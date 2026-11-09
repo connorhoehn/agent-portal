@@ -54,7 +54,7 @@ interface DecidePlan {
   id: string;
   title: string;
   /** The verbs this row offers, each a fixed request; `note` is filled in at send time. */
-  sends: Partial<Record<Verb, { send: (note: string | undefined) => Send; needsNote?: string; said: string }>>;
+  sends: Partial<Record<Verb, { send: (note: string | undefined) => Send; needsNote?: string; said: string; word?: string }>>;
   verb: Verb;
   note?: string;
   href: string;
@@ -66,6 +66,10 @@ interface Resolved {
   detail: string[];
   href: string;
   sends: DecidePlan['sends'];
+  /** The card's note field placeholder, when the row names its own. */
+  notePlaceholder?: string;
+  /** The needed note may be typed on the card: the card is shown without it, and Confirm without one sends nothing. */
+  noteOnCard?: boolean;
 }
 
 type Resolver = (id: string, ctx: ToolContext) => Promise<Resolved | { result: ToolResult }>;
@@ -256,6 +260,38 @@ const design: Resolver = async (id, ctx) => {
   };
 };
 
+/**
+ * Work: a waiting decision (GET /api/graph/decisions/:id, G54), resolved or
+ * rejected with the outcome and why as the note (the route's `rationale`, at
+ * most 500 characters, required). The page's own gate: open or escalated, and
+ * `viewerMayDecide` (the decider, the initiative's owner, an org-leader); the
+ * route checks both again.
+ */
+const decisionRecord: Resolver = async (id, ctx) => {
+  const read = await readJson<Rec>(ctx, `/api/graph/decisions/${enc(id)}`);
+  if (!read.ok) return { result: read.status === 404 ? notWaiting('decision').result : readFailure('that decision', read.status) };
+  const d = read.body;
+  const status = String(d['status'] ?? '');
+  const topic = str(d['topic']) ?? id;
+  if (status !== 'open' && status !== 'escalated') return { result: refused(`"${topic}" is already ${status === 'resolved' ? 'decided' : status || 'settled'}.`) };
+  const people = Array.isArray(d['participants']) ? d['participants'] as Rec[] : [];
+  const decider = str(people.find((p) => String(p['role'] ?? '').toLowerCase() === 'decider')?.['name']);
+  if (d['viewerMayDecide'] === false) return { result: refused(`"${topic}" is waiting on ${decider ?? 'its decider'}, not you; only the decider, the initiative's owner or an org-leader can decide it.`) };
+  const url = `/api/graph/decisions/${enc(id)}/decide`;
+  const needsNote = 'A decision needs its outcome and why; say it as the note.';
+  return {
+    title: `"${topic}"`,
+    detail: [`It is ${status}${decider ? `; ${decider} decides` : ''}.`],
+    href: `/iq/decisions/${enc(id)}`,
+    notePlaceholder: 'What was decided, and why (needed)',
+    noteOnCard: true,
+    sends: {
+      approve: { said: 'Resolved', word: 'Resolve', needsNote, send: (note) => ({ method: 'POST', url, body: { outcome: 'resolved', rationale: note } }) },
+      reject: { said: 'Rejected', word: 'Reject', needsNote, send: (note) => ({ method: 'POST', url, body: { outcome: 'rejected', rationale: note } }) },
+    },
+  };
+};
+
 /** Assessment: a finished draft (GET /api/assessment/drafts/:runId) not yet decided: accept writes it into the team, discard drops it. */
 const draft: Resolver = async (id, ctx) => {
   const read = await readJson<Rec>(ctx, `/api/assessment/drafts/${enc(id)}`);
@@ -277,7 +313,7 @@ const draft: Resolver = async (id, ctx) => {
 
 /** The resolver per tenant and ref kind (the catalogue's DECIDE_ACTIONS has the same keys; the drift test holds them together). */
 export const DECIDE_RESOLVERS: Readonly<Record<string, Readonly<Record<string, Resolver>>>> = {
-  orgiq: { 'hitl-approval': hitlApproval, change, 'runbook-proposal': runbookProposal, proposal: graphProposal, consult, design },
+  orgiq: { 'hitl-approval': hitlApproval, change, 'runbook-proposal': runbookProposal, proposal: graphProposal, consult, design, decision: decisionRecord },
   assessment: { draft },
   pipelines: { approval: stepApproval },
   access: { approval: accessRequest, request: accessRequest, 'review-item': reviewItem },
@@ -312,14 +348,14 @@ const planDecide: VoiceToolPlanner = async (args, ctx) => {
   const chosen = row.sends[verb];
   if (!chosen) return { result: refused(`${row.title} cannot be ${verb === 'approve' ? 'approved' : verb === 'reject' ? 'rejected' : 'delivered'} now; ${row.detail[0] ?? 'see its page'}`) };
   const note = typeof args['note'] === 'string' && args['note'].trim() ? args['note'].trim() : undefined;
-  if (chosen.needsNote && !note && verb !== 'reject') return { result: refused(chosen.needsNote) };
+  if (chosen.needsNote && !note && verb !== 'reject' && !row.noteOnCard) return { result: refused(chosen.needsNote) };
   const both = !!row.sends.approve && !!row.sends.reject && verb !== 'deliver';
   const plan: DecidePlan = { kind: parsed.kind, id: parsed.id, title: row.title, sends: row.sends, verb, href: row.href, ...(note ? { note } : {}) };
   const card: ConfirmPlan = {
-    title: `${VERB_WORD[verb]} ${row.title}`,
+    title: `${chosen.word ?? VERB_WORD[verb]} ${row.title}`,
     detail: [...row.detail, ...(note ? [`Note: ${note}`] : [])],
     // Both ways open: the library's toggle and note, starting where the user said; Confirm answers { decision, note }.
-    ...(both ? { fields: { decision: verb === 'reject' ? 'reject' : 'approve', notePlaceholder: row.sends.reject?.needsNote ? 'Reason (needed to reject)' : 'Note (optional)' } } : {}),
+    ...(both ? { fields: { decision: verb === 'reject' ? 'reject' : 'approve', notePlaceholder: row.notePlaceholder ?? (row.sends.reject?.needsNote ? 'Reason (needed to reject)' : 'Note (optional)') } } : {}),
     data: plan,
   };
   return { plan: card };

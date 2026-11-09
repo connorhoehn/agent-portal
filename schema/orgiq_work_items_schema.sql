@@ -82,6 +82,26 @@ COMMENT ON COLUMN decisions.status IS
 CREATE INDEX IF NOT EXISTS decisions_project_id_idx ON decisions (project_id);
 CREATE INDEX IF NOT EXISTS decisions_status_idx     ON decisions (status);
 
+-- G54: a waiting decision is decided in the product (POST
+-- /api/graph/decisions/:id/decide). `decided_by` is the person id the decider
+-- acts under, else their account subject (an unlinked account), so no FK;
+-- `resolution` holds the decider's rationale as the outcome text.
+ALTER TABLE decisions ADD COLUMN IF NOT EXISTS decided_by TEXT;
+
+-- The decision's recorded history: one row per call made in the product, who
+-- made it, when and why. The seeds write none; a seeded decision's history is
+-- derived from its columns.
+CREATE TABLE IF NOT EXISTS decision_events (
+  id          BIGSERIAL PRIMARY KEY,
+  decision_id TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
+  kind        TEXT NOT NULL CHECK (kind IN ('resolved','rejected')),
+  actor_id    TEXT NOT NULL,
+  actor_name  TEXT NOT NULL,
+  rationale   TEXT NOT NULL,
+  at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS decision_events_decision_idx ON decision_events (decision_id, at DESC);
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Upgrade projects: add description + github_url
 -- ─────────────────────────────────────────────────────────────────────────────

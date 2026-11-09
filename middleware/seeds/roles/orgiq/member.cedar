@@ -26,6 +26,11 @@ permit (
     // Read the session brief a run was given (GET /api/runs/:ref/brief, the work-item
     // brief preview). Every role that can see work can see what a box was told.
     OrgIQ::Action::"ViewSessionBrief",
+    // Resolve or reject a waiting decision (G54, POST /api/graph/decisions/:id/decide).
+    // Role-wide, because anyone can be named a decision's decider; the route
+    // scopes it to the decider and the initiative's owner, with org-leader and
+    // admin overriding (`decidesThis`, the forbid in member.cedar).
+    OrgIQ::Action::"DecideDecision",
     // Mint a voice navigator session (docs/voice-navigator-spec.md §6). Each tool the
     // voice runs is then gated by the action of the button it stands in for.
     OrgIQ::Action::"VoiceNavigate"
@@ -56,3 +61,19 @@ forbid (
   resource
 )
 when { principal.role == "member" };
+
+// A decision is decided by its decider or its initiative's owner (G54). The
+// route computes `decidesThis` and refuses first (403 NOT_DECIDER), because
+// the local seed matrix ignores `when` clauses; this is the production copy,
+// for every orgiq role but the org-leader, who overrides (admin is never
+// matched: its role is not in the list). A bare capability probe sends no
+// attribute, so the control's capability still answers.
+forbid (
+  principal,
+  action == OrgIQ::Action::"DecideDecision",
+  resource
+)
+when {
+  resource has decidesThis && !resource.decidesThis &&
+  ["member", "sme", "program-owner", "hr-admin"].contains(principal.role)
+};

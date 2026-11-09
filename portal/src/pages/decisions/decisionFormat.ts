@@ -1,7 +1,8 @@
 // Pure derivations for the decision record pages. No React — testable under
 // node:test like the other format modules.
 
-import type { DecisionDetail, DecisionInitiativeRow, DecisionParticipant, DecisionSummary } from './types';
+import type { PublishedPage } from '../../lib/voice/pageContext';
+import type { DecideBody, DecisionDetail, DecisionInitiativeRow, DecisionParticipant, DecisionSummary } from './types';
 
 export const DECISIONS_SOURCE = 'Decisions are read from the org graph';
 
@@ -40,10 +41,10 @@ export function filterDecisions<T extends { status: string }>(rows: readonly T[]
 }
 
 export function matchesDecision(
-  row: Pick<DecisionSummary, 'id' | 'topic' | 'summary'>, query: string, initiativeName?: string | null,
+  row: Pick<DecisionSummary, 'id' | 'topic' | 'summary'> & { outcome?: string | null }, query: string, initiativeName?: string | null,
 ): boolean {
   const q = query.trim().toLowerCase();
-  return !q || [row.id, row.topic, row.summary ?? '', initiativeName ?? ''].some((f) => f.toLowerCase().includes(q));
+  return !q || [row.id, row.topic, row.summary ?? '', row.outcome ?? '', initiativeName ?? ''].some((f) => f.toLowerCase().includes(q));
 }
 
 export const decider = (people: readonly DecisionParticipant[]): DecisionParticipant | null =>
@@ -68,13 +69,22 @@ export function standingLine(d: Pick<DecisionDetail, 'status' | 'decidedAt'> & {
 
 export interface HistoryEvent { id: string; at: string | null; label: string; detail: string }
 
-/** The record's history, newest first, from the columns the table keeps. */
+/**
+ * The record's history, newest first: the calls recorded in the product
+ * (`history`, G54: who, when and why), then what the table's columns say.
+ * A recorded call replaces the column-derived "Decided" line, which could only
+ * name the assigned decider, not who actually made it.
+ */
 export function historyOf(
   d: DecisionDetail, row: DecisionInitiativeRow | null, projectName: string | null,
 ): HistoryEvent[] {
   const who = decider(d.participants)?.name ?? null;
-  const events: HistoryEvent[] = [];
-  if (d.status === 'resolved' || d.status === 'rejected') {
+  const events: HistoryEvent[] = (d.history ?? []).map((e) => ({
+    id: `event-${e.id}`, at: e.at,
+    label: e.kind === 'resolved' ? 'Decided' : 'Rejected',
+    detail: `${e.by.name} ${e.kind === 'resolved' ? 'decided' : 'rejected it'}: ${e.rationale}`,
+  }));
+  if ((d.status === 'resolved' || d.status === 'rejected') && events.length === 0) {
     events.push({
       id: 'settled', at: d.decidedAt,
       label: d.status === 'resolved' ? 'Decided' : 'Rejected',
@@ -92,4 +102,72 @@ export function historyOf(
     detail: projectName ? `Raised against ${projectName}.` : 'Raised as an organisation-wide call.',
   });
   return events;
+}
+
+// ─── Deciding (G54) ─────────────────────────────────────────────────────────
+
+/** The longest rationale the route keeps (routes/decisions.ts RATIONALE_MAX). */
+export const RATIONALE_MAX = 500;
+
+export const isWaiting = (status: string): boolean => status === 'open' || status === 'escalated';
+
+/**
+ * Whether the record draws its Decide control: the session holds
+ * DecideDecision, the decision is still waiting, and the server did not say
+ * this viewer is someone the write would refuse (not the decider, not the
+ * initiative's owner, not an org-leader). Presentation only: the route decides.
+ */
+export function showDecideControl(
+  d: Pick<DecisionDetail, 'status' | 'viewerMayDecide'>, can: (action: 'DecideDecision') => boolean,
+): boolean {
+  return can('DecideDecision') && isWaiting(d.status) && d.viewerMayDecide !== false;
+}
+
+/** The body the control sends, or why it cannot be sent yet. */
+export function decideBody(outcome: DecideBody['outcome'], rationale: string): { body: DecideBody } | { error: string } {
+  const text = rationale.trim();
+  if (!text) return { error: 'Write what was decided and why.' };
+  if (text.length > RATIONALE_MAX) return { error: `Keep it to ${RATIONALE_MAX} characters (${text.length} now).` };
+  return { body: { outcome, rationale: text } };
+}
+
+/**
+ * The record's outcome line for a settled decision: "Decided <when> by <who>:
+ * <outcome>" (or "Rejected …"), each part only when the record has it; null
+ * while it waits, or when nothing says what was decided.
+ */
+export function outcomeLine(
+  d: Pick<DecisionDetail, 'status' | 'outcome' | 'decidedAt' | 'decidedBy'>, relative: (iso: string) => string,
+): string | null {
+  if (isWaiting(d.status) || !d.outcome) return null;
+  const when = d.decidedAt ? ` ${relative(asInstant(d.decidedAt))}` : '';
+  const who = d.decidedBy?.name ? ` by ${d.decidedBy.name}` : '';
+  return `${d.status === 'rejected' ? 'Rejected' : 'Decided'}${when}${who}: ${d.outcome}`;
+}
+
+/** A settled row's outcome, first line only, for the list; null while it waits. */
+export function outcomeFirstLine(d: Pick<DecisionSummary, 'status' | 'outcome'>): string | null {
+  if (isWaiting(d.status) || !d.outcome) return null;
+  const first = d.outcome.split(/\r?\n/).map((l) => l.trim()).find(Boolean);
+  return first ?? null;
+}
+
+/**
+ * What the record publishes for the voice (lib/voice/pageContext.ts): the
+ * decision as the record in view and as the page's one row (so `decide` with
+ * scope "this-page" names it), and, when the control is drawn, the offer.
+ */
+export function decisionPageContext(
+  d: Pick<DecisionDetail, 'id' | 'topic' | 'status'>, path: string, mayDecide: boolean,
+): PublishedPage {
+  const ref = `decision:${d.id}`;
+  return {
+    path,
+    record: { ref, title: d.topic },
+    rowsLabel: 'decision',
+    rows: [{ ref, title: d.topic, status: d.status, href: `/iq/decisions/${encodeURIComponent(d.id)}` }],
+    offer: mayDecide
+      ? `This decision is waiting on you: say decide to resolve or reject it (decide ref ${ref}, scope this-page, with what was decided and why as the note).`
+      : null,
+  };
 }

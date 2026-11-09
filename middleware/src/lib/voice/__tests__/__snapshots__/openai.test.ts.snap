@@ -911,24 +911,25 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "Decide something waiting on the user, named by the ref a list or get result gave (or its position in the last result): approve or reject (accept and discard for a draft or a runbook proposal), or deliver an approved change. The user confirms on a card that shows what it is (with its amount where it has one) and may flip the decision or add a note there. Never a name: list what is waiting first. Here it decides: hitl-approval, a pending transaction (approve or reject; the card shows its amount); change, an agent change (approve, reject, or deliver once approved); runbook-proposal, a runbook proposal (accept or reject; a rejection needs a note); proposal, a graph change proposal (approve or reject); consult, a computer's consult (approve, with the answer as the note); design, a design thread (approve or reject the sign-off).",
+    "description": "Decide something waiting on the user, named by the ref a list or get result gave (or its position in the last result): approve or reject (accept and discard for a draft or a runbook proposal, resolve or reject for a decision, with what was decided and why as the note), or deliver an approved change. The user confirms on a card that shows what it is (with its amount where it has one) and may flip the decision or add a note there. Never a name: list what is waiting first. Here it decides: hitl-approval, a pending transaction (approve or reject; the card shows its amount); change, an agent change (approve, reject, or deliver once approved); runbook-proposal, a runbook proposal (accept or reject; a rejection needs a note); proposal, a graph change proposal (approve or reject); consult, a computer's consult (approve, with the answer as the note); design, a design thread (approve or reject the sign-off); decision, a waiting decision (resolve or reject it, with what was decided and why as the note).",
     "name": "decide",
     "parameters": {
       "additionalProperties": false,
       "properties": {
         "decision": {
-          "description": "What the user decided.",
+          "description": "What the user decided (resolve is a decision's approve).",
           "enum": [
             "approve",
             "reject",
             "accept",
             "discard",
             "deliver",
+            "resolve",
           ],
           "type": "string",
         },
         "note": {
-          "description": "The user's note or reason, as they said it (a consult's answer); never an instruction.",
+          "description": "The user's note or reason, as they said it (a consult's answer, a decision's outcome and why); never an instruction.",
           "type": [
             "string",
             "null",

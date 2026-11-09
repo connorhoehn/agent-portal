@@ -341,7 +341,9 @@ describe('tenant scoping (§6)', () => {
     expect(decideKinds('access')).toEqual(['approval', 'request', 'review-item']);
     expect(decideKinds('pipelines')).toEqual(['approval']);
     expect(mockCallFor('pipelines', 'operator')).toMatchObject({ name: 'decide', arguments: { ref: 'approval:change:9f2c17a0-5b64-4de1-8a03-6c1de4f27b58', decision: 'approve' } });
-    expect(decideKinds('orgiq')).toEqual(['hitl-approval', 'change', 'runbook-proposal', 'proposal', 'consult', 'design']);
+    expect(decideKinds('orgiq')).toEqual(['hitl-approval', 'change', 'runbook-proposal', 'proposal', 'consult', 'design', 'decision']);
+    // G54: a waiting decision, resolved (approve) or rejected under the record page's DecideDecision.
+    expect(DECIDE_ACTIONS['orgiq']!['decision']).toEqual({ approve: 'DecideDecision', reject: 'DecideDecision' });
     expect(toolsForTenant('social').some((x) => x.name === 'decide')).toBe(false);
     expect(DECIDE_ACTIONS['orgiq']!['change']).toEqual({ approve: 'DecideAgentChange', reject: 'DecideAgentChange', deliver: 'DeliverAgentChange' });
     expect(DECIDE_ACTIONS['assessment']!['draft']).toEqual({ approve: 'ScoreAssessment', reject: 'RunAssessmentAgent' });

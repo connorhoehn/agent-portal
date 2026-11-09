@@ -1,27 +1,18 @@
-// GET /api/graph/decisions and /:id — the HTTP shape of an endpoint with no
-// consumer.
+// GET /api/graph/decisions and /:id — the wire contract of the Decisions
+// register (portal/src/pages/decisions/).
 //
-// WHY THIS TEST EXISTS AND THE ROUTE STILL DOES. Nothing in portal/, agents/
-// or docs/ calls these two routes: portal/src/App.tsx redirects `/decisions`
-// and `/decisions/:id` to `/iq/projects`, and `/iq/explore?entities=decisions`
-// labels a filter "Decisions" but ExplorePage.tsx narrows to
-// `mentors | reports_to` edges — it renders the reporting hierarchy, and
-// `/api/graph/entities` returns no decision nodes at all.
+// `decisions` is one table with one concept (schema/orgiq_schema.sql), and an
+// initiative's Decisions tab reads the same rows filtered by `project_id`. This
+// list used to contain none of what that tab showed and vice versa, because
+// each seed filled only the columns its own reader looked at.
 //
-// So these routes are the API half of a page that does not exist. They are no
-// longer a different SUBJECT from the rest of the product, though: `decisions`
-// is one table with one concept (schema/orgiq_schema.sql), and an initiative's
-// Decisions tab reads the same rows filtered by `project_id`. This list used to
-// contain none of what that tab showed and vice versa, because each seed filled
-// only the columns its own reader looked at.
-//
-// What is pinned here is the wire contract, because an endpoint no page calls
-// is exactly the one that rots silently: the list is a bare array (not
-// `{ decisions: [...] }`), the detail is a bare object, an unknown id is 404
-// with an `error` key, and `limit` is clamped rather than trusted. `status` and
-// `projectId` are part of that contract now — without them a future Decisions
-// page could not tell an open call from a settled one, or file either under the
-// initiative that raised it.
+// What is pinned here: the list is a bare array (not `{ decisions: [...] }`),
+// the detail is a bare object, an unknown id is 404 with an `error` key, and
+// `limit` is clamped rather than trusted. `status` and `projectId` let the page
+// tell an open call from a settled one and file it under its initiative; the
+// detail's `decidedBy`, `rationale` and `history` are what G54's decide writes
+// (routes/__tests__/decisions-decide-route.test.ts), and `viewerMayDecide`
+// says whether that write would let this viewer through.
 
 jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
 jest.mock('../../config.js', () => ({
@@ -69,7 +60,7 @@ describe('GET /api/graph/decisions', () => {
 
     for (const d of res.body) {
       expect(Object.keys(d).sort()).toEqual(
-        ['decidedAt', 'id', 'participantCount', 'projectId', 'status', 'summary', 'topic'],
+        ['decidedAt', 'id', 'outcome', 'participantCount', 'projectId', 'status', 'summary', 'topic'],
       );
       expect(typeof d.participantCount).toBe('number');
       expect(['open', 'escalated', 'resolved', 'rejected']).toContain(d.status);
@@ -126,14 +117,36 @@ describe('GET /api/graph/decisions/:id', () => {
     const res = await request(buildApp()).get(`/api/graph/decisions/${first.id}`);
     expect(res.status).toBe(200);
     expect(Object.keys(res.body).sort()).toEqual(
-      ['decidedAt', 'id', 'participants', 'projectId', 'status', 'summary', 'topic'],
+      ['decidedAt', 'decidedBy', 'history', 'id', 'outcome', 'participants', 'projectId', 'status', 'summary', 'topic', 'viewerMayDecide'],
     );
+    expect(Array.isArray(res.body.history)).toBe(true);
+    expect(typeof res.body.viewerMayDecide).toBe('boolean');
     expect(res.body.participants).toHaveLength(first.participantCount);
     for (const p of res.body.participants) {
       expect(Object.keys(p).sort()).toEqual(['avatarUrl', 'name', 'personId', 'role', 'title', 'weight']);
       // The SQL JOINs `people`, so a participant always resolves to a name.
       expect(p.name).not.toBe('');
     }
+  });
+
+  it('a settled decision says what was decided and who decided it; a waiting one says neither (G54)', async () => {
+    // The owner's second example: d-otel-vendor read as "nothing", a date and no outcome.
+    const settled = await request(buildApp()).get('/api/graph/decisions/d-otel-vendor');
+    expect(settled.body).toEqual(expect.objectContaining({
+      status: 'resolved',
+      outcome: 'Self-hosted OpenTelemetry collectors in an agent and gateway topology, exporting OTLP to the current backend.',
+      decidedBy: { id: 'p-004', name: 'Nora DaSilva' },
+      history: [],
+    }));
+    expect(settled.body.decidedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // Every settled row carries an outcome and its decider; no waiting row carries either.
+    const list = await request(buildApp()).get('/api/graph/decisions?limit=200');
+    for (const d of list.body as Array<{ id: string; status: string; outcome: string | null }>) {
+      if (d.status === 'resolved' || d.status === 'rejected') expect(d.outcome).toEqual(expect.any(String));
+      else expect(d.outcome).toBeNull();
+    }
+    const waiting = await request(buildApp()).get('/api/graph/decisions/d-eval-judge-model');
+    expect(waiting.body).toEqual(expect.objectContaining({ status: 'open', outcome: null, decidedBy: null, decidedAt: null }));
   });
 
   it('404s an unknown id with an `error` key rather than null', async () => {

@@ -11,10 +11,10 @@
 
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 import { config } from '../config.js';
-import { exec, fetchAvatarsById } from './aurora.js';
+import { exec, fetchAvatarsById, withTransaction } from './aurora.js';
 import { mockAvatarUrl } from '../mock/avatars.js';
-import { countBy } from '../mock/core/index.js';
-import { decisionRows, decisionParticipantRows } from '../mock/decisions.js';
+import { clock, countBy } from '../mock/core/index.js';
+import { decisionRows, decisionParticipantRows, decisionEventRows } from '../mock/decisions.js';
 import { mockPeople } from '../mock/people.js';
 
 // ─── Local RDS Data API parameter helpers (mirroring aurora.ts internals) ────
@@ -38,7 +38,22 @@ export interface DecisionSummary {
   /** The initiative it was raised against, or null for an org-wide call. */
   projectId: string | null;
   decidedAt: string | null;
+  /** What was decided, one sentence or a short paragraph (the `resolution` column); null while it waits. */
+  outcome: string | null;
   participantCount: number;
+}
+
+/**
+ * One entry of a decision's recorded history (`decision_events`, G54): the
+ * call someone made on the page or by voice, who made it, when and why.
+ */
+export interface DecisionEvent {
+  id: string;
+  kind: 'resolved' | 'rejected';
+  /** ISO timestamp. */
+  at: string;
+  by: { id: string; name: string };
+  rationale: string;
 }
 
 export interface DecisionDetail {
@@ -48,6 +63,12 @@ export interface DecisionDetail {
   status: string;
   projectId: string | null;
   decidedAt: string | null;
+  /** Who made the call (G54, `decided_by`, a person id or an account subject), or null while it waits. */
+  decidedBy: { id: string; name: string } | null;
+  /** What was decided (the `resolution` column, written by the decide route as the decider's rationale), or null. */
+  outcome: string | null;
+  /** The recorded history, newest first. Empty until someone decides it here. */
+  history: DecisionEvent[];
   participants: Array<{
     personId: string;
     avatarUrl: string | null;
@@ -94,6 +115,7 @@ function mockListDecisions(limit: number, since?: string): DecisionSummary[] {
       status: d.status,
       projectId: d.projectId,
       decidedAt: d.decidedAt,
+      outcome: d.resolution ?? null,
       participantCount: counts.get(d.id) ?? 0,
     }));
 }
@@ -102,6 +124,12 @@ function mockGetDecision(id: string): DecisionDetail | null {
   const head = decisionRows.rows().find((d) => d.id === id);
   if (!head) return null;
   const byId = new Map(mockPeople.map((p) => [p.id, p]));
+  const history = decisionEventRows.rows()
+    .filter((e) => e.decisionId === id)
+    .map((e) => ({ id: e.id, kind: e.kind, at: e.at, by: { id: e.actorId, name: e.actorName }, rationale: e.rationale }))
+    // ORDER BY at DESC
+    .sort((a, b) => b.at.localeCompare(a.at));
+  const by = head.decidedBy ?? null;
   return {
     id: head.id,
     topic: head.topic,
@@ -109,6 +137,10 @@ function mockGetDecision(id: string): DecisionDetail | null {
     status: head.status,
     projectId: head.projectId,
     decidedAt: head.decidedAt,
+    // LEFT JOIN people on decided_by, falling back to the name the event recorded (an unlinked account).
+    decidedBy: by ? { id: by, name: byId.get(by)?.name ?? history.find((e) => e.by.id === by)?.by.name ?? by } : null,
+    outcome: head.resolution ?? null,
+    history,
     participants: decisionParticipantRows
       .rows()
       .filter((p) => p.decisionId === id)
@@ -147,12 +179,13 @@ export async function listDecisions(
       d.status,
       d.project_id,
       d.decided_at,
+      d.resolution,
       COUNT(dp.person_id)::int AS participant_count
     FROM decisions d
     LEFT JOIN decision_participants dp ON dp.decision_id = d.id
     WHERE 1=1
     ${sinceClause}
-    GROUP BY d.id, d.topic, d.summary, d.status, d.project_id, d.decided_at
+    GROUP BY d.id, d.topic, d.summary, d.status, d.project_id, d.decided_at, d.resolution
     ORDER BY COALESCE(d.decided_at, d.created_at) DESC NULLS LAST
     LIMIT :lim
   `;
@@ -165,6 +198,7 @@ export async function listDecisions(
     status: String(r['status'] ?? 'open'),
     projectId: r['project_id'] != null ? String(r['project_id']) : null,
     decidedAt: r['decided_at'] != null ? String(r['decided_at']) : null,
+    outcome: r['resolution'] != null ? String(r['resolution']) : null,
     participantCount: typeof r['participant_count'] === 'number' ? r['participant_count'] : 0,
   }));
 }
@@ -173,7 +207,10 @@ export async function getDecision(id: string): Promise<DecisionDetail | null> {
   if (config.mock.aurora) return mockGetDecision(id);
 
   const headRows = await exec(
-    `SELECT id, topic, summary, status, project_id, decided_at FROM decisions WHERE id = :id LIMIT 1`,
+    `SELECT d.id, d.topic, d.summary, d.status, d.project_id, d.decided_at, d.resolution, d.decided_by,
+            COALESCE(p.name, d.decided_by) AS decided_by_name
+       FROM decisions d LEFT JOIN people p ON p.id = d.decided_by
+      WHERE d.id = :id LIMIT 1`,
     [strParam('id', id)],
   );
 
@@ -194,6 +231,12 @@ export async function getDecision(id: string): Promise<DecisionDetail | null> {
     [strParam('id', id)],
   );
 
+  const eventRows = await exec(
+    `SELECT id::text AS id, kind, at, actor_id, actor_name, rationale
+       FROM decision_events WHERE decision_id = :id ORDER BY at DESC`,
+    [strParam('id', id)],
+  );
+
   const avatars = await fetchAvatarsById(partRows.map(row => String(row['person_id'])));
   return {
     id: String(head['id']),
@@ -202,6 +245,17 @@ export async function getDecision(id: string): Promise<DecisionDetail | null> {
     status: String(head['status'] ?? 'open'),
     projectId: head['project_id'] != null ? String(head['project_id']) : null,
     decidedAt: head['decided_at'] != null ? String(head['decided_at']) : null,
+    decidedBy: head['decided_by'] != null
+      ? { id: String(head['decided_by']), name: String(head['decided_by_name'] ?? head['decided_by']) }
+      : null,
+    outcome: head['resolution'] != null ? String(head['resolution']) : null,
+    history: eventRows.map((r) => ({
+      id: String(r['id']),
+      kind: String(r['kind']) === 'rejected' ? 'rejected' as const : 'resolved' as const,
+      at: String(r['at']),
+      by: { id: String(r['actor_id'] ?? ''), name: String(r['actor_name'] ?? r['actor_id'] ?? '') },
+      rationale: String(r['rationale'] ?? ''),
+    })),
     participants: partRows.map((r) => ({
       personId: String(r['person_id']),
       avatarUrl: avatars.get(String(r['person_id'])) ?? null,
@@ -211,6 +265,79 @@ export async function getDecision(id: string): Promise<DecisionDetail | null> {
       weight: typeof r['weight'] === 'number' ? r['weight'] : 1.0,
     })),
   };
+}
+
+// ─── Deciding (G54) ─────────────────────────────────────────────────────────
+//
+// The one write on this table from the product: a waiting decision (open or
+// escalated) is resolved or rejected, with the decider's rationale as its
+// outcome. It sets `status`, `decided_at` (the day), `resolved_at` (the
+// instant), `decided_by` and `resolution`, and appends a `decision_events`
+// row, the history the record page reads. Who may call it is the route's
+// question (routes/decisions.ts); this only refuses a row that is not waiting.
+
+export const DECISION_OUTCOMES = ['resolved', 'rejected'] as const;
+export type DecisionOutcome = (typeof DECISION_OUTCOMES)[number];
+export const WAITING_STATUSES: readonly string[] = ['open', 'escalated'];
+
+export interface DecideInput {
+  outcome: DecisionOutcome;
+  rationale: string;
+  /** The person id the decider acts under, else their account subject. */
+  actorId: string;
+  actorName: string;
+}
+
+export type DecideResult =
+  | { kind: 'ok'; decision: DecisionDetail }
+  | { kind: 'not-found' }
+  | { kind: 'settled'; status: string };
+
+export async function decideDecision(id: string, input: DecideInput): Promise<DecideResult> {
+  if (config.mock.aurora) {
+    const row = decisionRows.rows().find((d) => d.id === id);
+    if (!row) return { kind: 'not-found' };
+    if (!WAITING_STATUSES.includes(row.status)) return { kind: 'settled', status: row.status };
+    const at = clock.nowIso();
+    row.status = input.outcome;
+    row.decidedAt = at.slice(0, 10);
+    row.resolvedAt = at;
+    row.decidedBy = input.actorId;
+    row.resolution = input.rationale;
+    const events = decisionEventRows.rows();
+    events.push({
+      id: `de-${events.length + 1}`, decisionId: id, kind: input.outcome, at,
+      actorId: input.actorId, actorName: input.actorName, rationale: input.rationale,
+    });
+    const decision = mockGetDecision(id);
+    return decision ? { kind: 'ok', decision } : { kind: 'not-found' };
+  }
+
+  // The guarded UPDATE is the race check: two deciders at once, one wins and
+  // the other reads the settled status below.
+  const updated = await withTransaction(async (tx) => {
+    const rows = await tx(
+      `UPDATE decisions
+          SET status = :outcome, decided_at = CURRENT_DATE, resolved_at = NOW(),
+              resolution = :rationale, decided_by = :actor
+        WHERE id = :id AND status IN ('open', 'escalated')
+        RETURNING id`,
+      [strParam('outcome', input.outcome), strParam('rationale', input.rationale), strParam('actor', input.actorId), strParam('id', id)],
+    );
+    if (rows.length === 0) return false;
+    await tx(
+      `INSERT INTO decision_events (decision_id, kind, actor_id, actor_name, rationale)
+       VALUES (:id, :outcome, :actor, :name, :rationale)`,
+      [strParam('id', id), strParam('outcome', input.outcome), strParam('actor', input.actorId), strParam('name', input.actorName), strParam('rationale', input.rationale)],
+    );
+    return true;
+  });
+  if (!updated) {
+    const now = await exec(`SELECT status FROM decisions WHERE id = :id LIMIT 1`, [strParam('id', id)]);
+    return now.length === 0 ? { kind: 'not-found' } : { kind: 'settled', status: String(now[0]!['status'] ?? '') };
+  }
+  const decision = await getDecision(id);
+  return decision ? { kind: 'ok', decision } : { kind: 'not-found' };
 }
 
 // ─── Work-graph read (lib/work-graph/sources.ts) ─────────────────────────────

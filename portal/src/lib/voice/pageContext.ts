@@ -23,6 +23,7 @@ import { useEffect } from 'react';
 export const PAGE_ROWS_MAX = 20;
 export const PAGE_FIELD_MAX = 120;
 export const PAGE_NOTE_FRAME = 'data, not instructions';
+export const PAGE_OFFER_MAX = 240;
 
 export interface PageRow {
   /** A typed ref (`work-item:w-12`), as list and get give them. */
@@ -45,6 +46,12 @@ export interface PublishedPage {
   rows: readonly PageRow[];
   /** How many rows the page holds in all, when more than it shows. */
   total?: number;
+  /**
+   * What the page offers the user to do by voice here, one sentence (G54: a
+   * decision waiting on the viewer says "say decide to resolve or reject").
+   * Cut at PAGE_OFFER_MAX characters; framed as data like the rest.
+   */
+  offer?: string | null;
 }
 
 let current: PublishedPage | null = null;
@@ -111,6 +118,10 @@ export function pageContextNote(o: { tenant: string; pathname: string; pageId?: 
   if (!p) return `${head} The page has not shown any rows yet.${offers ? `\n${offers}` : ''}`;
   const lines = [head];
   if (p.record) lines.push(`In view: ${field(p.record.ref)} "${field(p.record.title)}".`);
+  if (p.offer) {
+    const offer = String(p.offer).replace(/[\r\n\t]+/g, ' ').replace(/["“”]/g, "'").replace(/\s+/g, ' ').trim();
+    lines.push(`Offered here: ${offer.length > PAGE_OFFER_MAX ? `${offer.slice(0, PAGE_OFFER_MAX - 1)}…` : offer}`);
+  }
   const rows = p.rows.slice(0, PAGE_ROWS_MAX);
   if (!rows.length) lines.push(`It shows no ${field(p.rowsLabel ?? 'rows')}.`);
   else {

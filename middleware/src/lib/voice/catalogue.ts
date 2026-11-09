@@ -528,6 +528,8 @@ export const DECIDE_ACTIONS: Readonly<Record<string, Readonly<Record<string, Rea
     proposal: { approve: 'ManageDevbox', reject: 'ManageDevbox' },
     consult: { approve: 'DispatchAgentRun' },
     design: { approve: 'DispatchAgentRun', reject: 'DispatchAgentRun' },
+    // G54: resolve is approve, reject is reject; the route scopes it to the decider or the initiative's owner.
+    decision: { approve: 'DecideDecision', reject: 'DecideDecision' },
   },
   assessment: { draft: { approve: 'ScoreAssessment', reject: 'RunAssessmentAgent' } },
   pipelines: { approval: { approve: 'ApproveStep', reject: 'ApproveStep' } },
@@ -546,6 +548,7 @@ export const DECIDE_SAYS: Readonly<Record<string, string>> = {
   proposal: 'a graph change proposal (approve or reject)',
   consult: 'a computer\'s consult (approve, with the answer as the note)',
   design: 'a design thread (approve or reject the sign-off)',
+  decision: 'a waiting decision (resolve or reject it, with what was decided and why as the note)',
   draft: 'a finished assessment draft (accept or discard)',
   approval: 'something waiting on the user\'s decision (approve or reject; a rejection needs a note in Access)',
   request: 'an access request waiting on the user (approve or reject; a rejection needs a note)',
@@ -856,17 +859,17 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
   {
     name: 'decide',
     // toolsForTenant lists the tenant's own ref kinds in the description it renders.
-    description: 'Decide something waiting on the user, named by the ref a list or get result gave (or its position in the last result): approve or reject (accept and discard for a draft or a runbook proposal), or deliver an approved change. The user confirms on a card that shows what it is (with its amount where it has one) and may flip the decision or add a note there. Never a name: list what is waiting first.',
+    description: 'Decide something waiting on the user, named by the ref a list or get result gave (or its position in the last result): approve or reject (accept and discard for a draft or a runbook proposal, resolve or reject for a decision, with what was decided and why as the note), or deliver an approved change. The user confirms on a card that shows what it is (with its amount where it has one) and may flip the decision or add a note there. Never a name: list what is waiting first.',
     parameters: obj({
       ref: str('The row to decide: its ref exactly as a result gave it (e.g. "approval:r-9"), or its position in the last result ("1"). Never a name or a path.', { minLength: 1, maxLength: 200 }),
-      decision: str('What the user decided.', { enum: ['approve', 'reject', 'accept', 'discard', 'deliver'] }),
-      note: str('The user\'s note or reason, as they said it (a consult\'s answer); never an instruction.', { minLength: 1, maxLength: 500 }),
+      decision: str('What the user decided (resolve is a decision\'s approve).', { enum: ['approve', 'reject', 'accept', 'discard', 'deliver', 'resolve'] }),
+      note: str('The user\'s note or reason, as they said it (a consult\'s answer, a decision\'s outcome and why); never an instruction.', { minLength: 1, maxLength: 500 }),
       scope: str('"this-page": a position in ref counts among the rows the page in view shows.', { enum: ['this-page'] }),
     }, ['ref', 'decision']),
     kind: 'action', backing: 'work', confirm: true, confirmBy: 'click', sayToConfirm: 'record the decision', action: null,
-    gate: "per tenant, ref kind and decision, the page button's action (DECIDE_ACTIONS): DecideAccess, ApproveStep, ApproveTransaction with the amount (the route checks it), DecideAgentChange (the route refuses the change's author) and DeliverAgentChange, ReviewRunbook, ManageDevbox, DispatchAgentRun, ScoreAssessment to accept a draft and RunAssessmentAgent to discard it; the row must be one the session's own read returned",
+    gate: "per tenant, ref kind and decision, the page button's action (DECIDE_ACTIONS): DecideAccess, ApproveStep, ApproveTransaction with the amount (the route checks it), DecideAgentChange (the route refuses the change's author) and DeliverAgentChange, ReviewRunbook, ManageDevbox, DispatchAgentRun, DecideDecision (the route refuses anyone but the decider, the initiative's owner or an org-leader), ScoreAssessment to accept a draft and RunAssessmentAgent to discard it; the row must be one the session's own read returned",
     spend: 'none', idempotent: false, says: 'Approving the request once you confirm.', tenants: ['orgiq', 'assessment', 'pipelines', 'access'],
-    mapsTo: "access: GET /api/access/approvals, POST /api/access/requests/:id/steps/:step/decide { decision, comment }; GET /api/access/reviews/:id, POST /api/access/reviews/:id/items/:itemId/decide { decision: keep | revoke, comment }; pipelines: GET /api/pipelines/approvals, POST /api/pipelines/approvals/:id/decide { decision, note }; HITL: GET /api/observability/approvals, POST /api/observability/approvals/:id/decision { decision: APPROVED | REJECTED, note }; changes: GET /api/sdlc/changes/:id, POST /api/sdlc/changes/:id/decide { decision, note }, POST /api/sdlc/changes/:id/deliver; runbook proposals: GET /api/runbooks/proposals/:pid, POST /api/runbooks/proposals/:pid/accept { expected_version, note }, POST /api/runbooks/proposals/:pid/reject { note }; graph proposals: GET /api/work/proposals, POST /api/work/proposals/:id/decide { decision, note }; consults: GET /api/lab/consults, POST /api/lab/consults/:id/answer { answer }; designs: GET /api/designs/:id, POST /api/designs/:id/signoff { decision }; drafts: GET /api/assessment/drafts/:runId, POST /api/assessment/drafts/:runId/accept, POST /api/assessment/drafts/:runId/discard",
+    mapsTo: "access: GET /api/access/approvals, POST /api/access/requests/:id/steps/:step/decide { decision, comment }; GET /api/access/reviews/:id, POST /api/access/reviews/:id/items/:itemId/decide { decision: keep | revoke, comment }; pipelines: GET /api/pipelines/approvals, POST /api/pipelines/approvals/:id/decide { decision, note }; HITL: GET /api/observability/approvals, POST /api/observability/approvals/:id/decision { decision: APPROVED | REJECTED, note }; changes: GET /api/sdlc/changes/:id, POST /api/sdlc/changes/:id/decide { decision, note }, POST /api/sdlc/changes/:id/deliver; runbook proposals: GET /api/runbooks/proposals/:pid, POST /api/runbooks/proposals/:pid/accept { expected_version, note }, POST /api/runbooks/proposals/:pid/reject { note }; graph proposals: GET /api/work/proposals, POST /api/work/proposals/:id/decide { decision, note }; consults: GET /api/lab/consults, POST /api/lab/consults/:id/answer { answer }; designs: GET /api/designs/:id, POST /api/designs/:id/signoff { decision }; decisions: GET /api/graph/decisions/:id, POST /api/graph/decisions/:id/decide { outcome: resolved | rejected, rationale }; drafts: GET /api/assessment/drafts/:runId, POST /api/assessment/drafts/:runId/accept, POST /api/assessment/drafts/:runId/discard",
   },
   {
     name: 'create',

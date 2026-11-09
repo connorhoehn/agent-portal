@@ -3287,6 +3287,7 @@
         "$[]": "object",
         "$[].decidedAt": "null|string",
         "$[].id": "string",
+        "$[].outcome": "null|string",
         "$[].participantCount": "number",
         "$[].projectId": "null|string",
         "$[].status": "string",
@@ -3307,7 +3308,10 @@
       "shape": {
         "$": "object",
         "decidedAt": "null",
+        "decidedBy": "null",
+        "history": "array",
         "id": "string",
+        "outcome": "null",
         "participants": "array",
         "participants[]": "object",
         "participants[].avatarUrl": "string",
@@ -3319,7 +3323,8 @@
         "projectId": "string",
         "status": "string",
         "summary": "string",
-        "topic": "string"
+        "topic": "string",
+        "viewerMayDecide": "boolean"
       },
       "values": {
         "participants[].role": [

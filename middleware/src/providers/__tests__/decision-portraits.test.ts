@@ -7,7 +7,7 @@ beforeEach(() => jest.resetAllMocks());
 it('resolves photos only for the people in the decision and preserves missing photos', async () => {
   (exec as jest.Mock).mockResolvedValueOnce([{ id: 'd1', topic: 'Migration' }]).mockResolvedValueOnce([
     { person_id: 'p1', name: 'Vera' }, { person_id: 'p2', name: 'Nora' },
-  ]);
+  ]).mockResolvedValueOnce([]); // decision_events (G54): no recorded history
   (fetchAvatarsById as jest.Mock).mockResolvedValue(new Map([['p1', '/portraits/vera.jpg']]));
   const detail = await getDecision('d1');
   expect(fetchAvatarsById).toHaveBeenCalledWith(['p1', 'p2']);
