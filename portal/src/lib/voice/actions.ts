@@ -76,6 +76,8 @@ import {
   type CallAccess, type ConfirmPlan, type DeliveryRecord, type PresenceWriter, type ProjectRow, type ToolContext, type ToolResult,
   type VoiceComputer, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
+import { messageAvailability } from '../../pages/search/searchMessageModel.ts';
+import type { RosterUser } from '../conversationCallModel.ts';
 import { inboundRef } from './inbound.ts';
 import { matchByName, WORK_PLANNERS, WORK_RUNNERS } from './work.ts';
 import { RECORD_PLANNERS, RECORD_RUNNERS } from './records.ts';
@@ -587,6 +589,56 @@ export function deliveryFor(book: Map<string, DeliveryRecord>, channel: string, 
 
 const where = (kind: PostPlan['kind'], name: string) => (kind === 'person' || kind === 'thread' ? name : kind === 'team' ? `the ${name} team` : `#${name}`);
 
+type Match = NonNullable<ResolveBody['match']>;
+type Target = { kind: 'team' | 'channel' | 'dm'; name: string };
+
+/**
+ * Where a message or a call goes (G39, session vs_8bb50a16): the Social
+ * resolver first (GET …/resolve, the Social roster's names, teams and
+ * channels). For a person it does not know, outside the Social tenant, the
+ * Search page's own bridge: the name matched against the people this
+ * session's reads showed (`person:` rows; else one GET /api/search
+ * type=person in orgiq), then GET /api/roster/users?personIds= and the page's
+ * rules (searchMessageModel.ts messageAvailability: no Work sign-in, not in
+ * Social, yourself). A match carries the user id and the DM lobby, and the
+ * confirm-time POST /api/social/dms opens it as before (G14).
+ */
+async function resolveTarget(ctx: ToolContext, social: NonNullable<ToolContext['social']>, target: Target, say: { verb: string; nothing: string }): Promise<{ kind: ResolveBody['kind']; match: Match } | { result: ToolResult }> {
+  const kind = target.kind === 'dm' ? 'person' : target.kind;
+  const read = await readJson<ResolveBody>(ctx, `${social.api}/resolve?${qs({ kind, name: target.name })}`);
+  if (!read.ok) {
+    if (read.status === 404 && kind === 'person' && ctx.tenant !== 'social') return directoryPerson(ctx, target.name, say);
+    if (read.status === 404) return { result: refused(`There is no ${kind} called "${target.name}" you can ${say.verb}.`) };
+    if (read.status === 0) return { result: failed(`Could not reach the server to find the ${kind === 'person' ? 'person' : kind}.`) };
+    return { result: readFailure(kind === 'person' ? 'the person' : `the ${kind}`, read.status) };
+  }
+  if (!read.body.match) {
+    return { result: ambiguous(`Several ${kind === 'person' ? 'people' : `${kind}s`} match "${target.name}". Ask which one; ${say.nothing}.`,
+      read.body.candidates.map((c) => ({ id: c.id, name: c.name }))) };
+  }
+  return { kind, match: read.body.match };
+}
+
+/** The directory half of resolveTarget: a person the page showed, bridged to the user who signs in as them. */
+async function directoryPerson(ctx: ToolContext, name: string, say: { verb: string; nothing: string }): Promise<{ kind: 'person'; match: Match } | { result: ToolResult }> {
+  const nobody = (): { result: ToolResult } => ({ result: refused(`No one in Social or the directory is called "${name}". Search people first, then ${say.verb} a row by name.`, { code: 'not-found' }) });
+  let people: Array<{ personId: string; name: string }> = (ctx.results?.ofKind('person') ?? []).map((r) => ({ personId: r.ref.slice('person:'.length), name: r.title }));
+  let hits = matchByName(people, (p) => p.name, name);
+  if (!hits.length && ctx.tenant === 'orgiq' && ctx.can('Search')) {
+    const found = await readJson<{ results?: Array<{ id?: string; title?: string; type?: string }> }>(ctx, `/api/search?${qs({ q: name, type: 'person', limit: 5 })}`);
+    people = found.ok ? (found.body.results ?? []).flatMap((r) => (r.id && r.title && (r.type ?? 'person') === 'person' ? [{ personId: r.id, name: r.title }] : [])) : [];
+    hits = matchByName(people, (p) => p.name, name);
+  }
+  if (!hits.length) return nobody();
+  if (hits.length > 1) return { result: ambiguous(`Several people match "${name}". Ask which one; ${say.nothing}.`, hits.slice(0, 10).map((p) => ({ name: p.name, ref: `person:${p.personId}` }))) };
+  const person = hits[0]!;
+  const roster = await readJson<{ users?: RosterUser[]; unlinked?: string[] }>(ctx, `/api/roster/users?${qs({ personIds: person.personId })}`);
+  if (!roster.ok) return { result: readFailure(`who signs in as ${person.name}`, roster.status) };
+  const verdict = messageAvailability({ people: [person], users: roster.body.users ?? [], selfUserId: ctx.userId ?? null });
+  if (!verdict.ok) return { result: refused(`${verdict.reason}.`) };
+  return { kind: 'person', match: { id: verdict.target.userId, name: verdict.target.displayName, channelId: verdict.lobby, channel: verdict.lobby } };
+}
+
 /**
  * A reply to an inbound message (G23): its own conversation, a quote-reply of it, no resolve. Only a message
  * that reached this user's socket in this dock's life (inbound.ts), and only one with a conversation to answer in.
@@ -616,20 +668,10 @@ const planSendChat: VoiceToolPlanner = async (args, ctx) => {
   const target = args['target'] as { kind: 'team' | 'channel' | 'dm'; name: string } | undefined;
   if (!target) return { result: refused('Say where it goes: a team, a channel or a person (target), or the inbound message it answers (thread).') };
   const text = String(args['text']);
-  const kind = target.kind === 'dm' ? 'person' : target.kind;
-  let res: Response;
-  try {
-    res = await ctx.fetch(`${social.api}/resolve?${qs({ kind, name: target.name })}`, { credentials: 'include' });
-  } catch {
-    return { result: failed('Could not reach the server to find the recipient.') };
-  }
-  if (res.status === 404) return { result: refused(`There is no ${kind} called "${target.name}" you can post to.`) };
-  if (!res.ok) return { result: readFailure('the recipient', res.status) };
-  const body = await res.json() as ResolveBody;
-  if (!body.match) {
-    return { result: ambiguous(`Several ${kind === 'person' ? 'people' : `${kind}s`} match "${target.name}". Ask which one; nothing was sent.`,
-      body.candidates.map((c) => ({ id: c.id, name: c.name }))) };
-  }
+  const resolved = await resolveTarget(ctx, social, target, { verb: 'post to', nothing: 'nothing was sent' });
+  if ('result' in resolved) return resolved;
+  const { kind, match } = resolved;
+  const body = { match };
   const now = ctx.now().getTime();
   const record = deliveryFor(social.deliveries, body.match.channel, text, now);
   const label = where(kind, body.match.name);
@@ -687,18 +729,9 @@ const planStartCall: VoiceToolPlanner = async (args, ctx) => {
   if ('result' in gate) return gate;
   const social = ctx.social!;
   const target = args['target'] as { kind: 'team' | 'channel' | 'dm'; name: string };
-  const kind = target.kind === 'dm' ? 'person' : target.kind;
-  const read = await readJson<ResolveBody>(ctx, `${social.api}/resolve?${qs({ kind, name: target.name })}`);
-  if (!read.ok) {
-    if (read.status === 404) return { result: refused(`There is no ${kind} called "${target.name}" you can call.`) };
-    return { result: readFailure(kind === 'person' ? 'the person' : `the ${kind}`, read.status) };
-  }
-  const body = read.body;
-  if (!body.match) {
-    return { result: ambiguous(`Several ${kind === 'person' ? 'people' : `${kind}s`} match "${target.name}". Ask which one; no call was started.`,
-      body.candidates.map((c) => ({ id: c.id, name: c.name }))) };
-  }
-  const m = body.match;
+  const resolved = await resolveTarget(ctx, social, target, { verb: 'call', nothing: 'no call was started' });
+  if ('result' in resolved) return resolved;
+  const { kind, match: m } = resolved;
   const plan: CallPlan = kind === 'person'
     ? { kind, name: m.name, channel: m.channel, userId: m.id, title: m.name }
     // A channel is named by its slug (the resolver's id), as the Social page's own call names it (`#<slug>`).
@@ -765,16 +798,9 @@ const planJoinCall: VoiceToolPlanner = async (args, ctx) => {
     }
     target = { kind: 'channel', name: inChannels[0]! };
   }
-  const kind = target.kind === 'dm' ? 'person' : target.kind;
-  const read = await readJson<ResolveBody>(ctx, `${social.api}/resolve?${qs({ kind, name: target.name })}`);
-  if (!read.ok) {
-    if (read.status === 404) return { result: refused(`There is no ${kind} called "${target.name}" you can join.`) };
-    return { result: readFailure(kind === 'person' ? 'the person' : `the ${kind}`, read.status) };
-  }
-  if (!read.body.match) {
-    return { result: ambiguous(`Several ${kind === 'person' ? 'people' : `${kind}s`} match "${target.name}". Ask which one; nothing was joined.`, read.body.candidates.map((c) => ({ id: c.id, name: c.name }))) };
-  }
-  const m = read.body.match;
+  const resolved = await resolveTarget(ctx, social, target, { verb: 'join', nothing: 'nothing was joined' });
+  if ('result' in resolved) return resolved;
+  const { kind, match: m } = resolved;
   // The index names a huddle by where it is: "#<slug>" for a channel, the team's name, the people in a DM.
   const where = kind === 'channel' ? `#${m.id}` : m.name;
   const huddle = live.rows.find((h) => h.title.toLowerCase() === `live huddle in ${where.toLowerCase()}`)

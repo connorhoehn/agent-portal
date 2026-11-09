@@ -593,6 +593,11 @@ export class ResultMemory {
     return null;
   }
   get empty(): boolean { return this.sets.every((s) => s.length === 0); }
+  /** Every kept row whose ref is of `kind` (newest set first, each ref once): the people a search showed, for G39. */
+  ofKind(kind: string): KeptRow[] {
+    const seen = new Set<string>();
+    return this.sets.flat().filter((r) => r.ref.startsWith(`${kind}:`) && !seen.has(r.ref) && !!seen.add(r.ref));
+  }
 }
 
 /** A link inside this portal: a path, never another origin or a scheme. */
@@ -773,7 +778,13 @@ const list: Runner = async (args, ctx) => {
   const q = typeof filter['q'] === 'string' ? filter['q'].trim() : '';
   const status = typeof filter['status'] === 'string' ? filter['status'].trim() : '';
   const scope = typeof filter['scope'] === 'string' ? filter['scope'] : spec.list.scopes?.[0];
-  if (scope && !spec.list.scopes?.includes(scope)) return refused(`${spec.label[0]!.toUpperCase()}${spec.label.slice(1)} take no "${scope}" scope here.`);
+  if (scope && !spec.list.scopes?.includes(scope)) {
+    // G39: say what to change (G29), never only that it was wrong.
+    const Label = `${spec.label[0]!.toUpperCase()}${spec.label.slice(1)}`;
+    return refused(spec.list.scopes?.length
+      ? `${Label} take no "${scope}" scope; use ${spec.list.scopes.map((x) => `"${x}"`).join(' or ')}, or leave filter.scope out.`
+      : `${Label} take no scope; leave filter.scope out and list them again.`, { code: 'invalid-arguments' });
+  }
   const sinceRaw = typeof filter['since'] === 'string' ? filter['since'] : '';
   const since = sinceRaw ? parseSince(sinceRaw, ctx.now()) : null;
   if (sinceRaw && !since) return refused(`I could not read "${sinceRaw}" as a past date.`);

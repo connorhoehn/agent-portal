@@ -11,7 +11,7 @@ import {
 } from '../actions.ts';
 import { RUN_COMMAND_PHRASES } from '../catalogue.ts';
 import {
-  MAX_FIELD_CHARS, MAX_ROWS, needsConfirm, planPreparedCall, prepareToolCall, runPreparedCall,
+  MAX_FIELD_CHARS, MAX_ROWS, needsConfirm, planPreparedCall, prepareToolCall, ResultMemory, runPreparedCall,
   type CallAccess, type CommandEvent, type CommandOutputView, type ComputeAccess, type DeliveryRecord, type SocialAccess, type ToolResult, type VoiceComputer,
 } from '../tools.ts';
 import { presenceAvatarUsers } from '../../../pages/assessment/knowledge/knowledgeFormat.ts';
@@ -649,4 +649,85 @@ test('property: no P4 result carries a string over 120 characters or a list over
     walk(result.output, name);
     assert.ok(result.summary.length <= MAX_FIELD_CHARS, name);
   }
+});
+
+// ── G39 (session vs_8bb50a16): a person the Search page showed, not only the Social roster ──
+
+const PRIYA_ROW = { ref: 'person:p-002', title: 'Priya Raman', href: '/iq/people/p-002' };
+const NOT_ON_ROSTER = route('GET', '/api/social/plane/resolve', 404, { kind: 'person', match: null, candidates: [] });
+const roster = (body: unknown) => route('GET', '/api/roster/users?personIds=p-002', 200, body);
+
+async function planOnly(name: string, args: unknown, ctx: ReturnType<typeof toolContext>) {
+  const prepared = prepareToolCall(name, args, ctx);
+  assert.ok(prepared.ok);
+  return planPreparedCall(prepared.call, ctx, VOICE_PLANNERS);
+}
+
+function keptPeople(rows = [PRIYA_ROW]) {
+  const results = new ResultMemory();
+  results.keep(rows);
+  return results;
+}
+
+test('G39: a person the search showed is messaged and called through the page\'s bridge (roster users), not refused as unknown', async () => {
+  const { dmLobbyName } = await import('@connorhoehn/realtime-modules/client/video');
+  const lobby = dmLobbyName(['u-me', 'u-priya'], { prefix: 'social:' });
+  for (const [tool, args, title] of [
+    ['message', { target: { kind: 'dm', name: 'Priya Raman' }, text: 'Can you look at the release?' }, 'Message Priya Raman'],
+    ['call', { action: 'start', target: { kind: 'dm', name: 'Priya' } }, 'Call Priya Raman'],
+  ] as const) {
+    const { fetch, log } = fakeFetch([NOT_ON_ROSTER, roster({ users: [{ personId: 'p-002', userId: 'u-priya', displayName: 'Priya Raman', social: true }], unlinked: [] })]);
+    const planned = await planOnly(tool, args, toolContext({ fetch, social: fakeSocial(), calls: fakeCalls(), results: keptPeople() }));
+    assert.ok(planned && 'plan' in planned, `${tool}: ${JSON.stringify(planned)}`);
+    assert.equal(planned.plan.title, title);
+    const data = planned.plan.data as { userId: string; channel: string };
+    assert.equal(data.userId, 'u-priya');
+    assert.equal(data.channel, lobby);
+    assert.ok(!log.some((r) => r.method === 'POST'), 'nothing is opened before the confirm');
+    assert.ok(log.some((r) => r.url === '/api/roster/users?personIds=p-002'));
+  }
+});
+
+test('G39: the page\'s own rules: no Work sign-in, not in Social; nothing kept and nothing found asks for a search; no DM is opened', async () => {
+  const unlinked = fakeFetch([NOT_ON_ROSTER, roster({ users: [], unlinked: ['p-002'] })]);
+  const a = await planOnly('message', { target: { kind: 'dm', name: 'Priya Raman' }, text: 'hi' }, toolContext({ fetch: unlinked.fetch, social: fakeSocial(), results: keptPeople() }));
+  assert.ok(a && 'result' in a);
+  assert.match(String(a.result.output['reason']), /no Work sign-in/);
+
+  const outside = fakeFetch([NOT_ON_ROSTER, roster({ users: [{ personId: 'p-002', userId: 'u-priya', displayName: 'Priya Raman', social: false }], unlinked: [] })]);
+  const b = await planOnly('message', { target: { kind: 'dm', name: 'Priya Raman' }, text: 'hi' }, toolContext({ fetch: outside.fetch, social: fakeSocial(), results: keptPeople() }));
+  assert.ok(b && 'result' in b);
+  assert.match(String(b.result.output['reason']), /is not in Social/);
+
+  const empty = fakeFetch([NOT_ON_ROSTER, route('GET', '/api/search', 200, { results: [], total: 0 })]);
+  const c = await planOnly('message', { target: { kind: 'dm', name: 'Nobody Here' }, text: 'hi' }, toolContext({ fetch: empty.fetch, social: fakeSocial(), results: new ResultMemory() }));
+  assert.ok(c && 'result' in c);
+  assert.match(String(c.result.output['reason']), /No one in Social or the directory is called "Nobody Here"\. Search people first/);
+  assert.ok(empty.log.some((r) => r.url.startsWith('/api/search?') && r.url.includes('type=person')), 'one person search when nothing is kept');
+  for (const l of [unlinked.log, outside.log, empty.log]) assert.ok(!l.some((r) => r.method === 'POST'));
+});
+
+test('G39: with nothing kept, one person search finds them; two matches are a choice; the Social tenant keeps its roster answer', async () => {
+  const { fetch } = fakeFetch([NOT_ON_ROSTER, route('GET', '/api/search', 200, { results: [{ id: 'p-002', title: 'Priya Raman', type: 'person', href: '/iq/people/p-002' }] }),
+    roster({ users: [{ personId: 'p-002', userId: 'u-priya', displayName: 'Priya Raman', social: true }], unlinked: [] })]);
+  const found = await planOnly('message', { target: { kind: 'dm', name: 'Priya Raman' }, text: 'hi' }, toolContext({ fetch, social: fakeSocial(), results: new ResultMemory() }));
+  assert.ok(found && 'plan' in found);
+  const two = fakeFetch([NOT_ON_ROSTER]);
+  const both = await planOnly('message', { target: { kind: 'dm', name: 'Priya' }, text: 'hi' }, toolContext({ fetch: two.fetch, social: fakeSocial(),
+    results: keptPeople([PRIYA_ROW, { ref: 'person:p-090', title: 'Priya Venkataraman', href: '/iq/people/p-090' }]) }));
+  assert.ok(both && 'result' in both);
+  assert.equal(both.result.output['kind'], 'ambiguous');
+  const social = fakeFetch([route('GET', '/api/social/resolve', 404, { kind: 'person', match: null, candidates: [] })]);
+  const inSocial = await planOnly('message', { target: { kind: 'dm', name: 'Priya Raman' }, text: 'hi' }, toolContext({ tenant: 'social', fetch: social.fetch, social: fakeSocial({ api: '/api/social' }), results: keptPeople() }));
+  assert.ok(inSocial && 'result' in inSocial);
+  assert.match(String(inSocial.result.output['reason']), /There is no person called "Priya Raman" you can post to/);
+});
+
+test('G39: list dm with a scope it does not take says what to change', async () => {
+  const { fetch } = fakeFetch([]);
+  const prepared = prepareToolCall('list', { kind: 'dm', filter: { scope: 'all', q: 'Priya' } }, toolContext({ fetch, social: fakeSocial() }));
+  const r = prepared.ok ? await runPreparedCall(prepared.call, toolContext({ fetch, social: fakeSocial() }), VOICE_RUNNERS) : prepared.result;
+  assert.equal(r.outcome, 'refused');
+  assert.match(String(r.output['reason']), /take no scope; leave filter\.scope out|use ".*", or leave filter\.scope out/);
+  assert.equal(r.output['code'], 'invalid-arguments');
 });
