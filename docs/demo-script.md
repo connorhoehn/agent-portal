@@ -4,17 +4,17 @@ A walk through three tenants on the mock backend, in the order [project-story.md
 
 Written from the routes and fixtures, not from a recorded run: the first time through, check each "you should see" line and fix the script where it is off. People are picked on `/workspaces`; the cast is in `portal/src/pages/SelectContextPage.tsx`.
 
-## 1. orgiq: who knows what (3 minutes)
+## 1. Work (orgiq): one initiative, end to end (3 minutes)
 
-Sign in as Vera Green (`u-vera`, org leader) on `/workspaces` and enter the orgiq workspace. If a page says you lack access, switch role to org-leader in the header menu.
+The Work tenant is Halyard, a B2B commerce company, and the walk follows one initiative: Auth Migration, moving every tenant off the legacy SAML shim onto Cognito. Vera Green owns it; Nora DaSilva and Simone Chang are its SMEs; the cutover order is waiting on Sienna Garcia. Sign in as Vera Green (`u-vera`, org leader) on `/workspaces` and enter the Work workspace. `node scripts/content/check-story.mjs` keeps the data behind these steps consistent (deciders on their initiative, owners who can sign in, sprints with days left and inside their envelopes).
 
-1. `/iq/projects`. A table of initiatives, starting with "Observability Platform", each with an owner and SMEs. Click it: `/iq/projects/p-observability` shows the team, work and activity. This is the knowledge graph the first agents built (story section 9).
-2. `/iq/search`. Type "who knows Kubernetes" in the composer at the bottom (`ComposerSurface`). The mock agent streams an answer and `SearchResults` lists people with sources. Say this is the AG-UI stream over SSE.
-3. `/iq/scores`. The leaderboard, Vera first (composite 95.8). Open `/iq/scores/compare` to compare two people.
-4. `/iq/agents`, then `/iq/runs`. The agent fleet and recent runs; open one run to see its steps.
-5. `/iq/decisions`. A `DataTable` of decisions; open one for its record.
+1. **Open Auth Migration.** `/iq/projects`, then "Auth Migration". Walk the tabs: Work (the cutover runbook story is blocked on a decision; the logout cookie bug is open), Decisions ("Cutover order for legacy SSO tenants", escalated two days ago), Docs (Vera's "Tenant cutover plan" and Nora's session-hygiene whiteboard), the bound #auth-migration channel, and Agents.
+2. **Decide the cutover order.** Open the decision and choose "Riskiest two tenants first". Vera decides as an org leader overriding the escalation; switch to Sienna Garcia (`u-release`) first to decide as the named decider. The runbook story it blocks ("Tenant-by-tenant cutover runbook with rollback") loses its blocker.
+3. **A deck of last sprint.** In the composer: "Make a deck of this initiative's progress this past sprint." It covers Sprint 9 — OIDC core: the PKCE flow, JWKS verification and the shim-consumer inventory, all merged.
+4. **Tell the channel.** "Tell #auth-migration the cutover order is decided; rehearsal Thursday." The message lands in the channel the initiative is bound to, after Nora's note on the failed second rehearsal and Sienna's promise to decide once the retry is clean.
+5. **Hand work to an agent.** Switch to Nora DaSilva (`u-nora`, SME, holding her own envelope on Sprint 10 — Session hygiene) and say "Send the logout cookie bug to an agent." The run appears on the work item and her envelope moves. Close on `/iq/search` with "Who knows identity and access?": the security and platform people with IAM and zero-trust skills (Simone Chang, Diego Ortiz, Joy Chen, Vera, Nora) should lead the answer.
 
-Point out: one backend, Cedar roles per tenant, and the composer at the bottom of every page (story section 12).
+Point out: one backend, Cedar roles per tenant, and the composer at the bottom of every page (story section 12). The other initiatives carry their own threads if there is time: LLM Application Platform (Nina Rivera's open judge-model decision), Inference Platform (Paolo Mancini, spending with no allocation), and Mobile App Redesign (sign in as Mia Singh for her inbox: a review, the sprint envelope and Ben's question).
 
 ## 2. assessment: a second product on the same backend (3 minutes)
 
