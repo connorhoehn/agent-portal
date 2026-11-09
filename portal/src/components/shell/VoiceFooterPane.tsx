@@ -79,6 +79,7 @@ import { pageContextFor, pageContextNote, pageIdFor, subscribePageContext } from
 import { voiceVerbosity } from '../../lib/voice/contextWindow';
 import { VoiceController, type ResumeRecord, type ResumeStore } from '../../lib/voice/controller';
 import { routeInAppLinks } from './inAppLink';
+import { TENANT_SWITCH_EVENT } from '../../lib/voice/tenantSwitch';
 import { InboundMemory, messageFromFrame, notificationItem } from '../../lib/voice/inbound';
 import { useSharedNotificationsOptional } from './SharedNotifications';
 import { VoiceJobTracker, jobNotification, type JobNotice } from '../../lib/voice/work';
@@ -376,6 +377,7 @@ function VoiceFooterPane() {
     // G35: a dropped session's id for 60 s, and whether the page is hidden when the connection fails.
     resume: resumeStore,
     hidden: () => document.visibilityState === 'hidden',
+    tenant: () => live.current.tenant,
   }), [showOutput, jobs]);
   controllerRef.current = controller;
   const snap = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
@@ -443,6 +445,13 @@ function VoiceFooterPane() {
     const item = messageFromFrame(frame, live.current.userId, Date.now());
     if (item && inbox.add(item)) controller.noteInbound(item);
   }), [listenGateway, inbox, controller]);
+
+  // G44: the tenant switch announces itself before it reloads, so the session closes as a tenant switch, not a drop.
+  useEffect(() => {
+    const onSwitch = () => { void controller.stop('tenant-switch', 'tenant-switch'); };
+    window.addEventListener(TENANT_SWITCH_EVENT, onSwitch);
+    return () => window.removeEventListener(TENANT_SWITCH_EVENT, onSwitch);
+  }, [controller]);
 
   // G35: the job toast's link (a plain anchor outside the router) goes through the router, so it never reloads the page.
   const navigateRef = useRef(navigate);

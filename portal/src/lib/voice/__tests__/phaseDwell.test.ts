@@ -91,7 +91,39 @@ test('G36: a change inside the dwell shows when the window ends, taken from the 
   await clock.advance(3990, 1);
   assert.equal(c.getSnapshot().phase, 'listening');
   await clock.advance(20, 1);
-  // The user spoke and nothing answers: thinking at once (listening had held for well over the dwell).
+  // The user just spoke: listening until the utterance has ended (G44: 700 ms), then thinking at once (the dwell long over).
+  assert.equal(c.getSnapshot().phase, 'listening');
+  await clock.advance(700, 1);
   assert.equal(c.getSnapshot().phase, 'thinking');
   c.dispose();
+});
+
+test('G44: words with 400 ms pauses never flip the ring to thinking; no listening and thinking pair is closer than 700 ms', async () => {
+  const { mockLiveScript } = await middlewareVoice<{ mockLiveScript: (id: string, c: Call) => { onStart: unknown[]; onResponseCreate: unknown[]; onClose: unknown[] } }>('openai.ts');
+  const script = mockLiveScript(SESSION, KUBE);
+  const words = Array.from({ length: 8 }, (_, i) => said(5000 + i * 400, `word${i} `));
+  const clock = new FakeClock();
+  const { fetch } = fakeFetch([
+    route('POST', `/api/voice/sessions/${SESSION}/events`, 201, {}),
+    route('POST', `/api/voice/sessions/${SESSION}/close`, 200, {}),
+    route('POST', '/api/voice/sessions', 201, {
+      sessionId: SESSION, voiceSessionId: SESSION, holdId: 'h1', maxSeconds: 1800, expiresAt: '2026-11-08T13:00:00Z', sdp: 'v=0', mock: true,
+      model: 'gpt-live-1', voice: null, toolsEnabled: true, tools: ['search'], budget: { holdUsd: 0.5, usdPerMinute: 0.05 },
+      mockScript: { ...script, onStart: [...script.onStart, ...words] },
+    }),
+    route('GET', '/api/search', 200, { results: [], total: 0 }),
+  ]);
+  const c = new VoiceController({ fetch, media: null, toolContext: () => toolContext({ fetch }), now: clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer });
+  const shown: Array<{ at: number; phase: string }> = [];
+  c.subscribe(() => { const p = c.getSnapshot().phase; if (shown.at(-1)?.phase !== p) shown.push({ at: clock.t, phase: p }); });
+  await c.start();
+  await clock.advance(12_000, 5);
+  c.dispose();
+  const during = shown.filter((e) => e.at >= 5000 && e.at < 5000 + 7 * 400 + 700);
+  assert.ok(!during.some((e) => e.phase === 'thinking'), JSON.stringify(during));
+  const lt = shown.filter((e) => e.phase === 'listening' || e.phase === 'thinking');
+  for (let i = 1; i < lt.length; i++) {
+    if (lt[i]!.phase !== lt[i - 1]!.phase) assert.ok(lt[i]!.at - lt[i - 1]!.at >= 700, `${JSON.stringify(lt[i - 1])} -> ${JSON.stringify(lt[i])}`);
+  }
+  assert.ok(shown.some((e) => e.phase === 'thinking' && e.at >= 5000 + 7 * 400 + 700), 'thinking once the words stop');
 });

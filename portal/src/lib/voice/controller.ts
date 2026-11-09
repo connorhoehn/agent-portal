@@ -144,7 +144,7 @@ export const RESUME_NOTE = 'This session continues one that dropped a moment ago
 const RESUMABLE: ReadonlySet<CloseCause> = new Set<CloseCause>(['pagehide', 'beforeunload', 'visibilitychange', 'ice-failed', 'ice-disconnected', 'peer-closed', 'channel-closed']);
 
 /** Where the dock keeps a dropped session's id for RESUME_MS (sessionStorage in the browser: it survives a reload of the tab). */
-export interface ResumeRecord { sessionId: string; at: number }
+export interface ResumeRecord { sessionId: string; at: number; /** The workspace it was minted in (G44): never resumed from another. */ tenant?: string }
 export interface ResumeStore {
   load(): ResumeRecord | null;
   save(r: ResumeRecord): void;
@@ -260,6 +260,8 @@ export interface ControllerOptions {
   resume?: ResumeStore;
   /** Whether the page is hidden now (document.visibilityState): a transport drop behind a hidden page is `visibilitychange`. */
   hidden?(): boolean;
+  /** The workspace the shell is in now (G44): a kept session from another one is not resumable here. */
+  tenant?(): string;
 }
 
 interface CallRecord { name: string; status: 'confirming' | 'running' | 'answered' }
@@ -382,6 +384,8 @@ export class VoiceController {
   private resumeTimer: Timer | null = null;
   /** The session being minted resumes one (the started note says so). */
   private resuming: string | null = null;
+  /** The workspace the session minted last was minted in (G44). */
+  private mintTenant: string | null = null;
   /** G36: the phase shown and logged, since when, and the timer that re-reads the machine when a dwell ends. */
   private shownPhase: VoicePhase = 'off';
   private shownAt = Number.NEGATIVE_INFINITY;
@@ -430,6 +434,7 @@ export class VoiceController {
     this.forgetResume();
     this.reset();
     this.resuming = resumeOf;
+    this.mintTenant = this.opts.tenant?.() ?? null;
     this.dispatch({ type: 'start' });
     const client = new VoiceClient({
       fetch: this.opts.fetch, media: this.opts.media, onEvent: (e) => this.onClientEvent(client, e),
@@ -621,6 +626,11 @@ export class VoiceController {
     switch (e.type) {
       case 'minted':
         this.mint = e.mint;
+        // G44: only a resume the server linked (the mint echoes resumeOf) is announced and told to the voice.
+        if (this.resuming && e.mint.resumeOf !== this.resuming) {
+          this.emit({ kind: 'client', data: { event: 'resume-unlinked' } });
+          this.resuming = null;
+        }
         this.sessionTurnFrom = this.turnSeq + 1;
         if (typeof e.mint.toastSeconds === 'number' && e.mint.toastSeconds > 0) this.lastToastSeconds = e.mint.toastSeconds;
         if (e.mint.dailyMinutesLeft != null) {
@@ -1087,7 +1097,7 @@ export class VoiceController {
   private keepResumable(client: VoiceClient): void {
     const id = client.mint?.sessionId;
     if (!id || !this.opts.resume) return;
-    const rec = { sessionId: id, at: this.now() };
+    const rec: ResumeRecord = { sessionId: id, at: this.now(), ...(this.mintTenant ? { tenant: this.mintTenant } : {}) };
     try { this.opts.resume.save(rec); } catch { /* storage refused: nothing to resume */ }
     this.resumeRecord = rec;
     this.armResumeExpiry();
@@ -1105,7 +1115,10 @@ export class VoiceController {
 
   private currentResumable(): string | null {
     const r = this.resumeRecord;
-    return r && this.now() - r.at < RESUME_MS ? r.sessionId : null;
+    if (!r || this.now() - r.at >= RESUME_MS) return null;
+    // G44: a session minted in another workspace is never resumed here (the server would not link it either).
+    const here = this.opts.tenant?.();
+    return r.tenant && here && r.tenant !== here ? null : r.sessionId;
   }
 
   private armResumeExpiry(): void {

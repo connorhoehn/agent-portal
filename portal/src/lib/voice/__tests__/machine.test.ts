@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initialMachine, phaseAt, reduce, MIC_QUIET_MS, SPEAKING_HOLD_MS, THINKING_MAX_MS, type MachineEvent, type MachineState } from '../machine.ts';
+import { initialMachine, phaseAt, reduce, MIC_QUIET_MS, SPEAKING_HOLD_MS, SPEECH_RUN_MS, THINKING_MAX_MS, UTTERANCE_END_MS, type MachineEvent, type MachineState } from '../machine.ts';
 
 const run = (events: MachineEvent[], from: MachineState = initialMachine) => events.reduce(reduce, from);
 const live = run([{ type: 'start' }, { type: 'started' }]);
@@ -20,13 +20,20 @@ test('speaking needs a transcript delta within 1.5 s or output level above 0.08,
   assert.equal(phaseAt(reduce(live, { type: 'levels', at: 0, input: 0, output: 0.2 }), 0), 'speaking');
 });
 
-test('thinking runs from the user\'s turn ending until output or a delegation, and needs the mic quiet', () => {
+test('thinking runs from the end of the utterance (700 ms with no words and no speech run) until output or a delegation (G44)', () => {
   const said = run([{ type: 'levels', at: 900, input: 0.3, output: 0 }, { type: 'input', at: 1000 }], live);
-  assert.equal(phaseAt(said, 1000), 'listening', 'the mic was loud 100 ms ago: still the user\'s turn');
-  assert.equal(phaseAt(said, 900 + MIC_QUIET_MS), 'thinking');
+  assert.equal(phaseAt(said, 1000), 'listening', 'the user just spoke');
+  assert.equal(phaseAt(said, 1000 + MIC_QUIET_MS), 'listening', 'a 300 ms pause inside an utterance is not thinking (G44)');
+  assert.equal(phaseAt(said, 1000 + UTTERANCE_END_MS), 'thinking');
   assert.equal(phaseAt(said, 1000 + THINKING_MAX_MS), 'listening', 'an ignored utterance stops spinning');
   assert.equal(phaseAt(reduce(said, { type: 'output', at: 1300 }), 1300), 'speaking');
   assert.equal(phaseAt(reduce(said, { type: 'delegation', id: 'd1' }), 1300), 'executing');
+  // A blip (one loud tick, a cough) does not end thinking; a run of speech of SPEECH_RUN_MS does.
+  const blip = run([{ type: 'levels', at: 1800, input: 0.3, output: 0 }], said);
+  assert.equal(phaseAt(blip, 1850), 'thinking');
+  const talk = run([1800, 1900, 2000, 2100, 2150].map((at) => ({ type: 'levels' as const, at, input: 0.3, output: 0 })), said);
+  assert.ok(2150 - 1800 >= SPEECH_RUN_MS);
+  assert.equal(phaseAt(talk, 2200), 'listening', 'new speech ends thinking');
 });
 
 test('executing holds through the delegation and running calls; confirming outranks it', () => {

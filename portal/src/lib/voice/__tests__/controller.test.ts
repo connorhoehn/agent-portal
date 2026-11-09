@@ -52,8 +52,8 @@ test('the scripted session drives the dock through its phases, runs the tool, an
   const stopping = h.controller.stop();
   await h.clock.advance(300);
   await stopping;
-  // G36: thinking shows for the 300 ms dwell although the delegation followed the words after 100 ms.
-  assert.deepEqual(h.phases, ['off', 'connecting', 'listening', 'thinking', 'executing', 'listening', 'speaking', 'listening', 'ended']);
+  // G44: the delegation followed the words after 100 ms, before the utterance counted as ended (700 ms): no thinking.
+  assert.deepEqual(h.phases, ['off', 'connecting', 'listening', 'executing', 'listening', 'speaking', 'listening', 'ended']);
 
   // The tool ran through the page's own fetch and router.
   assert.deepEqual(h.ctx.navigations, ['/iq/search?q=Kubernetes+experts&type=person&tab=results&sort=recent']);

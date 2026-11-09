@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { clearContextChosen, markContextChosen } from './contextChoice';
+import { announceTenantSwitch } from './voice/tenantSwitch';
 import { tenantHome } from './tenantHome';
 import { clearTenantScopedCaches } from './tenantCaches';
 import { SESSION_INVALID_EVENT } from './apiFailure';
@@ -288,6 +289,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const actor = subRef.current;
     try {
       await withIdentityChange(async () => {
+        // A live voice session closes as a tenant switch before the cookie changes and the page reloads (G44).
+        announceTenantSwitch(tenant);
         await post('/api/session/tenant', { tenant });
         tenantChanged = true;
         if (role) await post('/api/session/role', { role });

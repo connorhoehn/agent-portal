@@ -3,13 +3,17 @@
 // plus `phaseAt(state, now)`, because two of the phases are inferred from
 // time, not announced:
 //
-//   thinking   The Live API sends no thinking event. It runs from the user's
-//              last input transcript delta until the first output transcript
-//              delta or session.delegation.created. The last delta cannot be
-//              known when it arrives (mid-sentence gaps reach 700 ms in the
-//              V1 log), so the microphone decides: thinking needs the mic
-//              quiet for MIC_QUIET_MS. It gives up after THINKING_MAX_MS (a
-//              cough the model ignores must not spin the ring forever).
+//   thinking   The Live API sends no thinking event. It runs from the end of
+//              the user's utterance until the first output transcript delta
+//              or session.delegation.created. The last delta cannot be known
+//              when it arrives (mid-sentence gaps reach 700 ms in the V1 log),
+//              so the utterance ends only after UTTERANCE_END_MS with no new
+//              words and no run of speech on the microphone (G44: the 300 ms
+//              mic quiet that drove it flipped the ring on every pause). A run
+//              of at least SPEECH_RUN_MS is speech and ends it; a shorter blip
+//              (a cough) does not. It gives up after
+//              THINKING_MAX_MS (a cough the model ignores must not spin the
+//              ring forever).
 //   speaking   Output audio streams silence continuously (V1), so frames
 //              arriving mean nothing: speaking needs an output transcript
 //              delta within SPEAKING_HOLD_MS, or output level above
@@ -27,6 +31,10 @@ export const SPEAKING_LEVEL = 0.08;
 export const MIC_ACTIVE_LEVEL = 0.06;
 export const MIC_QUIET_MS = 300;
 export const THINKING_MAX_MS = 8000;
+/** G44: an utterance has ended after this long with no new words and a quiet microphone (the controller's UTTERANCE_GAP_MS). */
+export const UTTERANCE_END_MS = 700;
+/** G44: microphone activity this long is new speech, which ends thinking; a shorter blip (a cough) does not. */
+export const SPEECH_RUN_MS = 300;
 
 type Base = 'off' | 'connecting' | 'live' | 'closing' | 'ended' | 'unavailable';
 
@@ -37,6 +45,8 @@ export interface MachineState {
   lastInputAt: number | null;
   lastOutputAt: number | null;
   lastMicActiveAt: number | null;
+  /** When the current run of microphone activity began (G44); null while the microphone is quiet. */
+  micRunStart: number | null;
   /** The user spoke and nothing has answered yet. */
   awaitingReply: boolean;
   outputLevel: number;
@@ -69,7 +79,7 @@ export type MachineEvent =
 export const BUDGET_CONFIRMING = 'budget';
 
 export const initialMachine: MachineState = {
-  base: 'off', reason: null, lastInputAt: null, lastOutputAt: null, lastMicActiveAt: null, awaitingReply: false,
+  base: 'off', reason: null, lastInputAt: null, lastOutputAt: null, lastMicActiveAt: null, micRunStart: null, awaitingReply: false,
   outputLevel: 0, openDelegations: [], runningCalls: [], confirming: null,
 };
 
@@ -94,8 +104,15 @@ export function reduce(s: MachineState, e: MachineEvent): MachineState {
       return s.base === 'live' ? { ...s, lastInputAt: e.at, lastOutputAt: null, awaitingReply: true } : s;
     case 'output':
       return s.base === 'live' ? { ...s, lastOutputAt: e.at, awaitingReply: false } : s;
-    case 'levels':
-      return { ...s, outputLevel: e.output, lastMicActiveAt: e.input > MIC_ACTIVE_LEVEL ? e.at : s.lastMicActiveAt };
+    case 'levels': {
+      const active = e.input > MIC_ACTIVE_LEVEL;
+      // A run continues across short dips (one level tick); a longer quiet ends it.
+      const running = s.micRunStart != null && s.lastMicActiveAt != null && e.at - s.lastMicActiveAt <= MIC_QUIET_MS;
+      return {
+        ...s, outputLevel: e.output, lastMicActiveAt: active ? e.at : s.lastMicActiveAt,
+        micRunStart: active ? (running ? s.micRunStart : e.at) : running ? s.micRunStart : null,
+      };
+    }
     case 'delegation':
       return s.base === 'live' ? { ...s, awaitingReply: false, openDelegations: withId(s.openDelegations, e.id) } : s;
     case 'delegation-done':
@@ -128,8 +145,10 @@ export function phaseAt(s: MachineState, now: number): VoicePhase {
   if (s.confirming) return 'confirming';
   if (s.runningCalls.length > 0 || s.openDelegations.length > 0) return 'executing';
   if ((s.lastOutputAt != null && now - s.lastOutputAt <= SPEAKING_HOLD_MS) || s.outputLevel > SPEAKING_LEVEL) return 'speaking';
-  if (s.awaitingReply && s.lastInputAt != null && now - s.lastInputAt < THINKING_MAX_MS
-    && (s.lastMicActiveAt == null || now - s.lastMicActiveAt >= MIC_QUIET_MS)) return 'thinking';
+  // G44: only once the utterance has ended (no words and a quiet microphone for UTTERANCE_END_MS), and not while a
+  // run of speech of at least SPEECH_RUN_MS is going on.
+  const speaking = s.micRunStart != null && s.lastMicActiveAt != null && now - s.lastMicActiveAt < MIC_QUIET_MS && s.lastMicActiveAt - s.micRunStart >= SPEECH_RUN_MS;
+  if (s.awaitingReply && s.lastInputAt != null && now - s.lastInputAt >= UTTERANCE_END_MS && now - s.lastInputAt < THINKING_MAX_MS && !speaking) return 'thinking';
   return 'listening';
 }
 

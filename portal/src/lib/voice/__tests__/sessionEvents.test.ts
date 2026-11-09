@@ -58,7 +58,8 @@ test('the scripted session posts its phases, start, delegation and tool call as 
   for (const k of kinds) assert.ok((DOCK_EVENT_KINDS as readonly unknown[]).includes(k), `${String(k)} is a kind the server takes`);
   assert.ok(kinds.includes('started') && kinds.includes('delegation') && kinds.includes('tool-call'));
   const phases = r.events.filter((e) => e['kind'] === 'client' && (e['data'] as Record<string, unknown>)['event'] === 'phase').map((e) => (e['data'] as Record<string, unknown>)['phase']);
-  assert.deepEqual(phases, ['listening', 'thinking', 'executing', 'listening', 'speaking', 'listening', 'ended']);
+  // G44: thinking only after the utterance ends (700 ms); the delegation came 100 ms after the words.
+  assert.deepEqual(phases, ['listening', 'executing', 'listening', 'speaking', 'listening', 'ended']);
   const call = r.events.find((e) => e['kind'] === 'tool-call')!;
   assert.equal(call['tool'], 'search');
   // The call's shape: its enum arguments, never the query.

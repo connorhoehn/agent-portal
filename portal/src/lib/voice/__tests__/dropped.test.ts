@@ -21,7 +21,7 @@ function memoryStore(): ResumeStore & { rec: ResumeRecord | null } {
 }
 
 /** A dock on the virtual clock; each mint answers the next id. `media` stands in for WebRTC (a real, non-mock mint). */
-async function dock(opts: { ids: string[]; clock?: FakeClock; store?: ResumeStore; real?: boolean; hidden?: () => boolean }) {
+async function dock(opts: { ids: string[]; clock?: FakeClock; store?: ResumeStore; real?: boolean; hidden?: () => boolean; tenant?: () => string; links?: boolean }) {
   const { mockLiveScript } = await middlewareVoice<{ mockLiveScript: (id: string, c: Call) => { onStart: unknown[]; onResponseCreate: unknown[]; onClose: unknown[] } }>('openai.ts');
   const clock = opts.clock ?? new FakeClock();
   const ids = [...opts.ids];
@@ -35,7 +35,12 @@ async function dock(opts: { ids: string[]; clock?: FakeClock; store?: ResumeStor
   };
   const { fetch, log } = fakeFetch([
     (req) => (req.method === 'POST' && /\/api\/voice\/sessions\/vs_[^/]+\/(events|close)$/.test(req.url) ? { status: 201, body: {} } : undefined),
-    (req) => (req.method === 'POST' && req.url === '/api/voice/sessions' ? { status: 201, body: mintBody() } : undefined),
+    // The server links a resume and echoes resumeOf (G44: the dock announces only a linked one).
+    (req) => {
+      if (req.method !== 'POST' || req.url !== '/api/voice/sessions') return undefined;
+      const resumeOf = (req.body as Record<string, unknown> | null)?.['resumeOf'];
+      return { status: 201, body: { ...mintBody(), ...(typeof resumeOf === 'string' && (opts.links ?? true) ? { resumeOf } : {}) } };
+    },
     route('GET', '/api/search', 200, { results: [], total: 0 }),
   ]);
   let handlers: MediaHandlers | null = null;
@@ -45,7 +50,7 @@ async function dock(opts: { ids: string[]; clock?: FakeClock; store?: ResumeStor
   } : null;
   const c = new VoiceController({
     fetch, media, toolContext: () => toolContext({ fetch }), now: clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer,
-    ...(opts.store ? { resume: opts.store } : {}), ...(opts.hidden ? { hidden: opts.hidden } : {}),
+    ...(opts.store ? { resume: opts.store } : {}), ...(opts.hidden ? { hidden: opts.hidden } : {}), ...(opts.tenant ? { tenant: opts.tenant } : {}),
   });
   return { c, clock, log, drop: (cause: Parameters<MediaHandlers['onDrop']>[0]) => handlers!.onDrop(cause) };
 }
@@ -179,4 +184,46 @@ test('G35: the job toast\'s plain anchor is routed in the app on a plain click; 
   assert.equal(routedPath(click, a('/api/x/export', '', true), origin), null);
   assert.equal(routedPath(click, a('https://evil.example/iq'), origin), null);
   assert.equal(routedPath({ ...click, defaultPrevented: true }, a('/iq/work/job-1'), origin), null);
+});
+
+test('G44: a session dropped in one workspace is not resumable in another; a resume the server did not link is not announced', async () => {
+  const store = memoryStore();
+  const clock = new FakeClock();
+  let tenant = 'assessment';
+  const first = await dock({ ids: [A], clock, store, tenant: () => tenant });
+  await first.c.start();
+  await clock.advance(1500);
+  void first.c.stop('dropped', 'beforeunload');
+  assert.equal(store.rec?.tenant, 'assessment');
+  first.c.dispose();
+  tenant = 'social';
+  const elsewhere = await dock({ ids: [B], clock, store, tenant: () => tenant });
+  assert.equal(elsewhere.c.getSnapshot().resumable, null, 'no resume across workspaces');
+  await elsewhere.c.start({ resume: true });
+  await clock.advance(1500);
+  assert.deepEqual(elsewhere.log.filter((r) => r.url === '/api/voice/sessions').map((m) => (m.body as Record<string, unknown>)['resumeOf'] ?? null), [null]);
+  elsewhere.c.dispose();
+
+  // Same workspace, but the server answers without linking: no `resumed`, no resume note.
+  store.save({ sessionId: A, at: clock.t, tenant: 'social' });
+  const unlinked = await dock({ ids: [B], clock, store, tenant: () => 'social', links: false });
+  await unlinked.c.start({ resume: true });
+  await clock.advance(1500);
+  const events = loggedEvents(unlinked.log).map((e) => (e['data'] as Record<string, unknown> | undefined)?.['event']);
+  assert.ok(!events.includes('resumed'));
+  assert.ok(events.includes('resume-unlinked'));
+  unlinked.c.dispose();
+});
+
+test('G44: a tenant switch closes the session as tenant-switch and keeps nothing to resume', async () => {
+  const store = memoryStore();
+  const h = await dock({ ids: [A], store, tenant: () => 'assessment' });
+  await h.c.start();
+  await h.clock.advance(1500);
+  const stopping = h.c.stop('tenant-switch', 'tenant-switch');
+  await h.clock.advance(300);
+  await stopping;
+  assert.deepEqual(closes(h.log).map((b) => [b['reason'], b['cause']]), [['tenant-switch', 'tenant-switch']]);
+  assert.equal(store.rec, null);
+  h.c.dispose();
 });
