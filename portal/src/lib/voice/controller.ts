@@ -61,6 +61,15 @@
 // event with the server's kind, batched to POST /:id/events at most once per
 // 500 ms; the tool-call row carries the result's structured summary (counts,
 // never the spoken line). No transcript text ever leaves the dock.
+//
+// Noticing the dock (G32, G33 item 4): when a confirm or choice card opens the
+// dock pulses its control once (the library's `pulse`, 2.510.6). A confirm card
+// also gets a silent note asking the voice for CARD_LINE ("I need your OK, the
+// card is in the dock."); if the voice has not said it within
+// CARD_LINE_WAIT_MS the dock appends it as commentary itself, once. After a
+// tool result, IDLE_PULSE_MS of no user input while the voice is silent pulses
+// once more and says nothing: the voice speaks unprompted only for inbound
+// events (G23).
 
 import { VoiceClient, type ClientEvent, type MediaFactory, type StopReason, type VoiceFrame, type VoiceMint } from './client.ts';
 import { initialMachine, phaseAt, reduce, sessionOpen, type MachineEvent, type MachineState, type VoicePhase } from './machine.ts';
@@ -77,6 +86,18 @@ import { DelegationContext, PAGE_NOTE_REPLACES, briefOutput, modelOutput, summar
 export const TICK_MS = 100;
 export const COMPLETION_GRACE_MS = 1500;
 export const BUDGET_WARN_RATIO = 0.9;
+/** How long the snapshot's `pulse` stays true: one library pulse (600 ms) per flip. */
+export const PULSE_MS = 700;
+/** After a tool result: this long with no user input and a silent voice pulses the dock once (G33 item 4). */
+export const IDLE_PULSE_MS = 6000;
+/** How long the voice has to say CARD_LINE itself before the dock appends it (G32). */
+export const CARD_LINE_WAIT_MS = 2500;
+/** What the user hears when a confirm card opens (G32). */
+export const CARD_LINE = 'I need your OK, the card is in the dock.';
+/** The silent note a confirm card sends the voice. */
+export const CARD_NOTE = `A confirm card is open in the dock and nothing happens until the user answers it. Say exactly: "${CARD_LINE}" and then wait.`;
+/** The voice's own words that count as having said CARD_LINE. */
+const CARD_SAID = /\b(ok|okay)\b[^.]*\bcard\b|\bcard\b[^.]*\bdock\b/i;
 const MAX_TURNS = 50;
 
 export type ToolStatus = 'running' | 'done' | 'refused' | 'failed';
@@ -133,6 +154,8 @@ export interface VoiceSnapshot {
   closedSeconds: number | null;
   /** The session this dock minted last (live or ended), for the on-device transcript keep; null before any mint. */
   sessionId: string | null;
+  /** True for PULSE_MS each time the dock asks for notice (a card opened, or silence after a result): VoiceDock's `pulse`. */
+  pulse: boolean;
 }
 
 type Timer = unknown;
@@ -264,6 +287,13 @@ export class VoiceController {
   private readonly refusals = new RefusalGuard();
   /** The dock's model of what a delegation reads (G31): recent results in full, older ones as a line, one page note. */
   private readonly context = new DelegationContext();
+  /** G32 / G33 item 4: the pulse flag, its reset timer, the idle watch after a result, and what the voice said since a card opened. */
+  private pulsing = false;
+  private pulseTimer: Timer | null = null;
+  private idleArmed = false;
+  private idleTimer: Timer | null = null;
+  private cardLineTimer: Timer | null = null;
+  private saidSinceCard = '';
 
   private readonly opts: ControllerOptions;
 
@@ -436,6 +466,9 @@ export class VoiceController {
 
   dispose(): void {
     this.stopTicker();
+    this.disarmIdle();
+    this.clearCardLine();
+    if (this.pulseTimer != null) this.clearTimer(this.pulseTimer);
     this.log.dispose();
     void this.stop('dropped');
     this.listeners.clear();
@@ -481,6 +514,8 @@ export class VoiceController {
           if (this.ownSessions.size > 10) this.ownSessions.delete(this.ownSessions.keys().next().value!);
         }
         this.clearDelegations();
+        this.disarmIdle();
+        this.clearCardLine();
         this.stopTicker();
         this.dispatch({ type: 'closed', reason: e.reason === 'cutoff' ? 'The session reached its budget and was ended.' : e.reason === 'dropped' ? 'The connection dropped.' : null });
         return;
@@ -501,6 +536,8 @@ export class VoiceController {
         return;
       case 'input':
         this.context.speech(f.text.length);
+        // The user answered: the idle watch after a result stands down (G33 item 4).
+        this.disarmIdle();
         this.appendTurn('you', f.text, at);
         this.dispatch({ type: 'input', at });
         if (this.pending) this.hearForPending(f.text, f.startMs, f.endMs);
@@ -508,6 +545,9 @@ export class VoiceController {
         return;
       case 'output':
         this.context.speech(f.text.length);
+        if (this.pending) this.saidSinceCard += f.text;
+        // The voice is still talking: the 6 s of silence count from its last word.
+        if (this.idleArmed) this.scheduleIdle(IDLE_PULSE_MS);
         this.appendTurn('assistant', f.text, at);
         this.dispatch({ type: 'output', at });
         return;
@@ -607,6 +647,7 @@ export class VoiceController {
       this.attachTool(name, 'running', text.title);
       this.emit({ kind: 'confirm-shown', tool: name, data: { requestId: this.pending.view.requestId, callId, ...(plan?.fields ? { fields: true } : {}) } });
       this.dispatch({ type: 'confirm-shown', callId });
+      this.cardOpened(client);
       return;
     }
     await this.execute(client, delegationId, callId, call, startedAt, ctx);
@@ -637,6 +678,7 @@ export class VoiceController {
     const wire = JSON.stringify(modelOutput(briefOutput(name, args, res.output)));
     client.sendToolOutput(callId, wire);
     this.context.result(wire.length, summaryLine(name, res.summary));
+    this.armIdle();
     if (verdict?.speak) {
       const line = refusalLine(given.output);
       const said = `Tell the user, in one sentence, and do not call anything: ${line}`;
@@ -680,6 +722,7 @@ export class VoiceController {
         })),
       };
       this.emit({ kind: 'client', data: { event: 'choice-shown', requestId: this.choice.requestId, candidates: rows.length } });
+      this.pulseOnce('card');
     } else this.clearChoice();
     this.publish();
   }
@@ -773,6 +816,7 @@ export class VoiceController {
     if (!p || !client) return;
     if (p.heard.quiet != null) { this.clearTimer(p.heard.quiet); p.heard.quiet = null; }
     this.pending = null;
+    this.clearCardLine();
     this.emit({ kind: confirmed ? 'confirmed' : 'cancelled', tool: p.call.spec.name, data: { requestId: p.view.requestId, by, callId: p.callId } });
     this.dispatch({ type: 'confirm-resolved', callId: p.callId });
     if (confirmed) {
@@ -859,6 +903,73 @@ export class VoiceController {
     this.turns = [...this.turns.slice(0, -1), { ...last, toolCalls: [...(last.toolCalls ?? []), entry] }];
   }
 
+  // ── noticing the dock (G32, G33 item 4) ─────────────────────────────────
+
+  /** One pulse of the dock's control: `pulse` true for PULSE_MS (the library animates once per flip to true). */
+  private pulseOnce(cause: 'card' | 'idle'): void {
+    if (this.pulsing) return;
+    this.pulsing = true;
+    this.emit({ kind: 'client', data: { event: 'pulse', cause } });
+    this.publish();
+    this.pulseTimer = this.setTimer(() => { this.pulseTimer = null; this.pulsing = false; this.publish(); }, PULSE_MS);
+  }
+
+  /** A confirm card opened: pulse, ask the voice for CARD_LINE, and say it ourselves if it has not within CARD_LINE_WAIT_MS. */
+  private cardOpened(client: VoiceClient): void {
+    this.disarmIdle();
+    this.pulseOnce('card');
+    this.saidSinceCard = '';
+    this.noteContext(CARD_NOTE);
+    this.clearCardLine();
+    const p = this.pending;
+    this.cardLineTimer = this.setTimer(() => {
+      this.cardLineTimer = null;
+      if (!p || this.pending !== p || client !== this.client || this.machine.base !== 'live') return;
+      if (CARD_SAID.test(this.saidSinceCard)) return;
+      this.context.note(CARD_LINE.length + 40);
+      client.appendCommentary(`Tell the user, in these words: ${CARD_LINE}`);
+      this.addLine('assistant', CARD_LINE);
+      this.emit({ kind: 'client', data: { event: 'card-line', requestId: p.view.requestId } });
+    }, CARD_LINE_WAIT_MS);
+  }
+
+  private clearCardLine(): void {
+    if (this.cardLineTimer != null) this.clearTimer(this.cardLineTimer);
+    this.cardLineTimer = null;
+  }
+
+  /** A result went to the voice: watch for IDLE_PULSE_MS of silence from both sides. */
+  private armIdle(): void {
+    this.idleArmed = true;
+    this.scheduleIdle(IDLE_PULSE_MS);
+  }
+
+  private scheduleIdle(ms: number): void {
+    if (this.idleTimer != null) this.clearTimer(this.idleTimer);
+    this.idleTimer = this.setTimer(() => { this.idleTimer = null; this.idleCheck(); }, ms);
+  }
+
+  private disarmIdle(): void {
+    this.idleArmed = false;
+    if (this.idleTimer != null) this.clearTimer(this.idleTimer);
+    this.idleTimer = null;
+  }
+
+  /**
+   * Six seconds after the result (or the voice's last word): the user has said
+   * nothing. While the voice is still talking or the backend still working,
+   * wait another round; a card already pulsed for itself. Otherwise pulse once
+   * and say nothing (no commentary, no response).
+   */
+  private idleCheck(): void {
+    if (!this.idleArmed || this.machine.base !== 'live') return;
+    if (this.pending || this.choice) { this.disarmIdle(); return; }
+    const phase = phaseAt(this.machine, this.now());
+    if (phase === 'speaking' || phase === 'executing' || phase === 'thinking') { this.scheduleIdle(IDLE_PULSE_MS); return; }
+    this.disarmIdle();
+    this.pulseOnce('idle');
+  }
+
   // ── plumbing ─────────────────────────────────────────────────────────────
 
   /** The page's tool context, with the session this dock minted last (per-session memory: G30's shell tabs). */
@@ -869,6 +980,8 @@ export class VoiceController {
 
   private reset(): void {
     this.clearDelegations();
+    this.disarmIdle();
+    this.clearCardLine();
     this.refusals.reset();
     this.context.reset();
     this.pending = null;
@@ -922,6 +1035,7 @@ export class VoiceController {
       reason: this.machine.reason,
       closedSeconds: this.closedSeconds,
       sessionId: this.mint?.sessionId ?? null,
+      pulse: this.pulsing,
     };
   }
 
@@ -932,7 +1046,7 @@ export class VoiceController {
       && prev.elapsedSeconds === next.elapsedSeconds && prev.pending === next.pending && prev.turns === next.turns
       && prev.choice?.id === next.choice?.id && prev.choice?.ordinal === next.choice?.ordinal
       && prev.lastLine?.text === next.lastLine?.text && prev.muted === next.muted && prev.reason === next.reason
-      && prev.closedSeconds === next.closedSeconds && prev.sessionId === next.sessionId) return;
+      && prev.closedSeconds === next.closedSeconds && prev.sessionId === next.sessionId && prev.pulse === next.pulse) return;
     if (prev.phase !== next.phase) this.emit({ kind: 'client', data: { event: 'phase', phase: next.phase, from: prev.phase } });
     this.snapshot = next;
     for (const l of this.listeners) l();

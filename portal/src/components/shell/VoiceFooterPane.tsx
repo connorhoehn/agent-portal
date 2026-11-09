@@ -423,6 +423,7 @@ function VoiceFooterPane() {
       onStop={() => { void controller.stop('closed'); }}
       onMute={() => controller.toggleMute()}
       muted={snap.muted}
+      pulse={snap.pulse}
       {...dockTranscriptProps({
         open: stripOpen, toggle: () => setStripOpen((open) => !open), turns,
         keep, setKeep: (on) => { void setKeepTranscripts(on, keptStore); },

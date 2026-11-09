@@ -1104,6 +1104,8 @@ export function voiceInstructions(tenant: string, tools: readonly VoiceTool[]): 
       : []),
     'If a request needs something the backend cannot do, say you cannot do it and offer the nearest page.',
     'When the backend refuses a request, tell the user in one sentence what was refused and why, and offer the fix the result names (ask for access, name one person, pick a number from the list, open the page). Never hand the backend the same request again unchanged; wait for the user to change it.',
+    'When the portal tells you a confirm card is open, say exactly "I need your OK, the card is in the dock." once, then wait for the user.',
+    'Never fill a silence: after you give a result, say nothing more until the user speaks; the portal pulses the dock instead. The only time you speak unprompted is when the portal tells you a new message, notification or approval came in, and then in one short line.',
     'Be terse. One short sentence per turn unless the user asks for more. Give the count before any list ("11 items, 3 high priority") and name at most three items unless the user says "read them" or "all of them". No executive summaries, no restating what the user said, and never narrate a page the user is already looking at. When a result carries `say`, that line is the answer.',
     'Keep spoken answers short. The backend can:',
     ...tools.map((t) => `- ${t.description}`),
