@@ -86,6 +86,12 @@
 // mid-utterance (no words for INBOUND_QUIET_MS and the microphone quiet),
 // waited for at most INBOUND_WAIT_MS; the voice speaks unprompted only here.
 //
+// Fewer cards (G41): once the user confirmed a message to a conversation, a
+// later message to the same one in this session (no attachment, a tool the
+// user may confirm by voice) runs without a card; its confirmed event says
+// `by: 'session'` and `coveredBy` the first card's call. A new target, an
+// attachment or a click-only tool always shows a card.
+//
 // Bounded delegations (G43): one delegation runs at most MAX_CALLS_PER_DELEGATION
 // tool calls (a search that only changes its query counts double); the next
 // call is answered `too-many-calls` with stop: true, the round asks for no
@@ -386,6 +392,8 @@ export class VoiceController {
   private resuming: string | null = null;
   /** The workspace the session minted last was minted in (G44). */
   private mintTenant: string | null = null;
+  /** G41: the conversations a message card was confirmed for this session, and the call that confirmed each. */
+  private coveredTargets = new Map<string, string>();
   /** G36: the phase shown and logged, since when, and the timer that re-reads the machine when a dwell ends. */
   private shownPhase: VoicePhase = 'off';
   private shownAt = Number.NEGATIVE_INFINITY;
@@ -809,6 +817,13 @@ export class VoiceController {
           return;
         }
       }
+      // G41: a message to a conversation the user already confirmed this session needs no second card.
+      const covered = this.coveredBy(name, call, plan);
+      if (covered) {
+        this.emit({ kind: 'confirmed', tool: name, data: { callId, by: 'session', coveredBy: covered, afterMs: 0 } });
+        await this.execute(client, delegationId, callId, call, startedAt, ctx, undefined, plan, undefined, covered);
+        return;
+      }
       rec.calls.set(callId, { name, status: 'confirming' });
       const described = this.opts.describeConfirm?.(call, plan) ?? (plan ? { title: plan.title, ...(plan.detail ? { detail: plan.detail } : {}) } : defaultConfirmText(call));
       // G40: the card says who may answer it, under its own text (the library's detail lines).
@@ -826,13 +841,27 @@ export class VoiceController {
     await this.execute(client, delegationId, callId, call, startedAt, ctx);
   }
 
-  private async execute(client: VoiceClient, delegationId: string, callId: string, call: PreparedCall, startedAt: number, ctx: ToolContext, confirmedBy?: 'voice' | 'click', plan?: ConfirmPlan | null, answer?: CardAnswer): Promise<void> {
+  /** G41: the call that confirmed this message's conversation earlier in the session, when it covers this one; else null. */
+  private coveredBy(name: string, call: PreparedCall, plan: ConfirmPlan | null): string | null {
+    if (name !== 'message' || confirmModeOf(call) !== 'voice' || !plan?.data || typeof plan.data !== 'object') return null;
+    const d = plan.data as { channel?: unknown; attachment?: unknown };
+    if (typeof d.channel !== 'string' || d.attachment) return null;
+    return this.coveredTargets.get(d.channel) ?? null;
+  }
+
+  private async execute(client: VoiceClient, delegationId: string, callId: string, call: PreparedCall, startedAt: number, ctx: ToolContext, confirmedBy?: 'voice' | 'click', plan?: ConfirmPlan | null, answer?: CardAnswer, coveredBy?: string): Promise<void> {
     this.attachTool(call.spec.name, 'running', call.spec.says);
     this.dispatch({ type: 'call-running', callId });
     // A card without fields carries no answer, whatever the click sent.
     const given = plan?.fields ? answer : undefined;
     let res = await runPreparedCall(call, ctx, this.runners, plan?.data, given);
     if (confirmedBy) res = { ...res, output: { ...res.output, confirmed: true, by: confirmedBy, ...(given ? { decision: given.decision } : {}) } };
+    if (coveredBy) res = { ...res, output: { ...res.output, confirmed: true, by: 'session', covered: 'confirmed for this conversation earlier in the session' } };
+    // G41: a confirmed message covers its conversation for the rest of the session (no attachment).
+    if (confirmedBy && call.spec.name === 'message' && res.outcome === 'done' && plan?.data && typeof plan.data === 'object') {
+      const d = plan.data as { channel?: unknown; attachment?: unknown };
+      if (typeof d.channel === 'string' && !d.attachment && !this.coveredTargets.has(d.channel)) this.coveredTargets.set(d.channel, callId);
+    }
     await this.answer(client, delegationId, callId, call.spec.name, res, startedAt, call.args, confirmedBy);
   }
 
@@ -1213,6 +1242,7 @@ export class VoiceController {
 
   private reset(): void {
     this.clearDelegations();
+    this.coveredTargets.clear();
     this.disarmIdle();
     this.clearCardLine();
     this.refusals.reset();
