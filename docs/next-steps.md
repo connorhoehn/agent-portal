@@ -476,6 +476,8 @@ G56 (9 November): the Docs tab's Document and Whiteboard follow the initiative's
 
 G57 (9 November): the decision dialogue. The record page's Decide card became a dialogue in the page's agent box: a waiting decision's own options (new `options` jsonb, seeded for the three waiting decisions), then Something else… and Reject, numbered and picked with the keypad (the library's `ComposerPromptDeck`), an optional one-line why, Enter sends, Esc gives the table commands back; `POST …/decide` takes `optionId` (the label is the outcome, the rationale optional), and the voice's `decide` takes `option` by number or label (docs/voice-navigator-gaps.md G57).
 
+G58 (9 November): held-but-inactive roles. The login still lands on the least-privileged role; a decision waiting on someone else and a Docs tab the viewer cannot write now offer one "Switch to org-leader to decide" / "…to add files" button when the session holds org-leader or admin in the tenant without acting as it, through the existing role switch (docs/voice-navigator-gaps.md G58).
+
 ### Gaps (8 November 2026)
 
 `docs/voice-navigator-gaps.md` is the loop-executable list of what the build left open: a coverage matrix of the owner's utterances against the catalogue, each gap with its root cause and smallest fix, the three open questions decided (every tenant gets the read tools, a shared budget plus `VOICE_DAILY_MINUTES=60`, a batch cap of three computers), and packages G1 to G18.

@@ -8,25 +8,29 @@
 // `onPrompt`, while the decision is open or escalated, with
 // can('DecideDecision'), and when the server says this viewer may decide it;
 // the route checks all of it again. A viewer who cannot decide sees who it
-// waits on (the Waiting section).
+// waits on (the Waiting section); one who holds a higher grant they are not
+// acting as (G58) is also offered the role switch.
 
 import { useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 import {
-  Avatar, Card, Chip, DetailSection, Inline, KeyValue, LoadingState, MetaLine, PageSection,
+  Avatar, Button, Card, Chip, DetailSection, Inline, KeyValue, LoadingState, MetaLine, PageSection,
   RailLayout, RailSection, SectionLabel, Stack, T,
 } from '@connorhoehn/ui-components/shared';
 import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { RecordNotFound, UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
+import { useSession } from '../../lib/auth';
 import { useCapabilities } from '../../lib/capabilities';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { absoluteTime, relativeTime } from '../../lib/relativeTime';
+import { roleSwitchOffer } from '../../lib/roleSwitchOffer';
+import { toastError } from '../../lib/toastStore';
 import { usePublishPageContext } from '../../lib/voice/pageContext';
 import { writeJson } from '../../lib/writeJson';
 import {
   DECISIONS_SOURCE, STATUS_TONE, asInstant, contributors, decider, decisionPageContext,
-  historyOf, outcomeLine, showDecideControl, standingLine, statusLabel, waitingNotice,
+  historyOf, isWaiting, outcomeLine, showDecideControl, standingLine, statusLabel, waitingNotice,
 } from './decisionFormat';
 import { decisionDialogue } from './decisionDialogue';
 import { RecordLink } from './RecordLink';
@@ -41,6 +45,7 @@ export default function DecisionRecordPage({ onDecided, onPrompt }: {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { can, ready } = useCapabilities();
+  const { session, setRole } = useSession();
   const { data: decision, isLoading, error, refresh } =
     useFetch<DecisionDetail>(id ? `/api/graph/decisions/${encodeURIComponent(id)}` : null, 20_000);
   const pid = decision?.projectId ? encodeURIComponent(decision.projectId) : null;
@@ -82,6 +87,8 @@ export default function DecisionRecordPage({ onDecided, onPrompt }: {
   const outcome = outcomeLine(decision, relativeTime);
   const history = historyOf(decision, row, projectName);
   const projectHref = decision.projectId ? `/iq/projects/${encodeURIComponent(decision.projectId)}` : null;
+  // G58: waiting on someone else, but the viewer holds org-leader or admin here without acting as it.
+  const switchTo = isWaiting(decision.status) && decision.viewerMayDecide === false ? roleSwitchOffer(session, 'decide') : null;
 
   const rail = (
     <>
@@ -144,6 +151,10 @@ export default function DecisionRecordPage({ onDecided, onPrompt }: {
         <Inline align="center" gap="sm">
           <Chip tone={STATUS_TONE[decision.status] ?? 'neutral'} size="sm" dot="static">{statusLabel(decision.status)}</Chip>
           <MetaLine size="sm" items={[standing]} />
+          {switchTo && (
+            <Button size="sm" variant="secondary" onClick={() => { void setRole(switchTo.role).catch((err: unknown) => toastError(null, 'Could not switch role', err instanceof Error ? err.message : 'Try again.')); }}
+              data-testid="decision-switch-role">{switchTo.label}</Button>
+          )}
         </Inline>
         <RailLayout rail={rail}>
           <Stack gap="md">

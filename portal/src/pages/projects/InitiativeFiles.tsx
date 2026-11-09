@@ -6,6 +6,7 @@ import { Button, ChevronIcon, DocumentIcon, DropdownMenu, Inline, InlineAlert, L
 import { FileCards, type FileView } from '../../components/files/FileCards';
 import { FileToolbar } from '../../components/files/FileToolbar';
 import { useSession } from '../../lib/auth';
+import { roleSwitchOffer } from '../../lib/roleSwitchOffer';
 import { createWorkspaceDocument, documentRecordHref, readWorkDocuments, readWorkspaceDocuments } from '../../lib/workDocuments';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError } from '../../lib/toastStore';
@@ -39,6 +40,7 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
   // (DispatchAgentRun). Each choice shows only to whoever may; the routes refuse
   // regardless (initiativeFilesModel.ts).
   const { can, ready: capabilitiesReady } = useCapabilities();
+  const { session, setRole } = useSession();
   const [creating, setCreating] = useState(false);
   const [newDeck, setNewDeck] = useState(false);
   // No title dialog: the page is created as "Untitled page" and opens at once,
@@ -57,6 +59,9 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
   const [read, setRead] = useState<Read>({ files: [], recordings: null, pending: true, failures: [], canWritePages: false });
   const choices = newFileChoices({ capabilitiesReady, canWritePages: read.canWritePages, canDispatch: can('DispatchAgentRun') });
   const mayDeck = choices.includes('presentation');
+  // G58: the pages read answered "not yours to write" for the role this session acts as, but it holds a
+  // higher grant here (org-leader, admin) it is not acting as: offer the switch rather than a silent lock.
+  const switchTo = !read.pending && !read.canWritePages && !read.failures.includes('Pages') ? roleSwitchOffer(session, 'add files') : null;
   const newMenu: DropdownMenuSection[] = [{ items: [
     ...(choices.includes('document') ? [{ label: 'Document', description: 'A page written in this initiative; opens so you can write it', onSelect: () => void newDocument('page') }] : []),
     ...(choices.includes('whiteboard') ? [{ label: 'Whiteboard', description: 'A canvas drawn in this initiative; opens so you can sketch it', onSelect: () => void newDocument('whiteboard') }] : []),
@@ -137,6 +142,8 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
       <DropdownMenu triggerVariant="primary" align="end" sections={newMenu} disabled={newFileTrigger(choices).disabled}
         trigger={<><PlusIcon size={16} /><span>New</span><ChevronIcon size={14} dir="down" /></>}
         triggerLabel="New file" triggerTestId="initiative-files-new" data-testid="initiative-files-new-menu" />
+      {switchTo && <Button size="sm" variant="secondary" data-testid="initiative-files-switch-role"
+        onClick={() => { void setRole(switchTo.role).catch((err: unknown) => toastError(null, 'Could not switch role', err instanceof Error ? err.message : 'Try again.')); }}>{switchTo.label}</Button>}
     </FileToolbar>
     {mayDeck && <InitiativeStatusDecks projectId={projectId} projectName={projectName} open={newDeck} onOpenChange={setNewDeck} hideTrigger />}
     {failures.length > 0 && <InlineAlert tone="warning">{failures.join(', ')} could not be read. Other available files are shown. Use Refresh to retry.</InlineAlert>}
