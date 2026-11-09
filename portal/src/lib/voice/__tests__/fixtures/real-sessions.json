@@ -1,0 +1,6093 @@
+{
+ "about": "The owner's real voice sessions (middleware/.voice-log), summarized for realSessions.test.ts by scripts/voice/sessions-to-replay.mjs. No words: shapes, outcomes, codes, timings (ms from start, 100 ms).",
+ "sessions": [
+  {
+   "id": "vs_30d12ab0-3ec7-46b2-8720-56a927d91aff",
+   "tenant": "orgiq",
+   "date": "2026-11-08T22:59",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 22400,
+   "counts": {
+    "delegations": 1,
+    "calls": 1,
+    "done": 1,
+    "refused": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 0
+   },
+   "delegations": [
+    {
+     "atMs": 9200,
+     "seq": 11,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 13,
+       "atMs": 10400,
+       "tool": "open",
+       "shape": {},
+       "argsKey": "4ca465bf116e",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 15,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "dropped",
+    "reason": null
+   }
+  },
+  {
+   "id": "vs_d682196b-c28e-42bc-a44f-81d044dcd427",
+   "tenant": "orgiq",
+   "date": "2026-11-08T22:59",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 41900,
+   "counts": {
+    "delegations": 2,
+    "calls": 6,
+    "done": 4,
+    "refused": 2,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 0
+   },
+   "delegations": [
+    {
+     "atMs": 5900,
+     "seq": 6,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 8,
+       "atMs": 8000,
+       "tool": "search",
+       "shape": {},
+       "argsKey": "b82fcc2eca52",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 5,
+       "resultSeq": 10,
+       "durationMs": 100
+      },
+      {
+       "seq": 11,
+       "atMs": 10100,
+       "tool": "open",
+       "shape": {},
+       "argsKey": "31bfeba02f27",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 12,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 22500,
+     "seq": 25,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 27,
+       "atMs": 24200,
+       "tool": "queue_work",
+       "shape": {},
+       "argsKey": "d456ad6cbe8f",
+       "outcome": "refused",
+       "result": "refused",
+       "resultSeq": 29,
+       "durationMs": 0
+      },
+      {
+       "seq": 30,
+       "atMs": 26000,
+       "tool": "queue_work",
+       "shape": {},
+       "argsKey": "74f028be4a36",
+       "outcome": "refused",
+       "result": "refused",
+       "resultSeq": 32,
+       "durationMs": 0
+      },
+      {
+       "seq": 33,
+       "atMs": 27700,
+       "tool": "list",
+       "shape": {},
+       "argsKey": "f7e7cf0cb110",
+       "outcome": "done",
+       "result": "list",
+       "count": 0,
+       "rows": 0,
+       "of": "work-item",
+       "resultSeq": 34,
+       "durationMs": 0
+      },
+      {
+       "seq": 35,
+       "atMs": 29600,
+       "tool": "get",
+       "shape": {},
+       "argsKey": "fc9cbb4d0364",
+       "outcome": "done",
+       "result": "record_part",
+       "count": 3,
+       "rows": 3,
+       "resultSeq": 36,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "dropped",
+    "reason": null
+   }
+  },
+  {
+   "id": "vs_c8af088e-cdcd-492a-b7f8-ee655d69ae9b",
+   "tenant": "orgiq",
+   "date": "2026-11-08T23:00",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 61200,
+   "counts": {
+    "delegations": 2,
+    "calls": 8,
+    "done": 8,
+    "refused": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 0
+   },
+   "delegations": [
+    {
+     "atMs": 9200,
+     "seq": 12,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 14,
+       "atMs": 10600,
+       "tool": "list",
+       "shape": {},
+       "argsKey": "7461ec16179d",
+       "outcome": "done",
+       "result": "list",
+       "count": 0,
+       "rows": 0,
+       "of": "computer",
+       "resultSeq": 16,
+       "durationMs": 0
+      },
+      {
+       "seq": 17,
+       "atMs": 13800,
+       "tool": "list",
+       "shape": {},
+       "argsKey": "d4b45bb06d0e",
+       "outcome": "done",
+       "result": "list",
+       "count": 8,
+       "rows": 8,
+       "of": "computer",
+       "resultSeq": 18,
+       "durationMs": 0
+      },
+      {
+       "seq": 19,
+       "atMs": 16100,
+       "tool": "summary",
+       "shape": {},
+       "argsKey": "5369f4e10e77",
+       "outcome": "done",
+       "result": "summary",
+       "of": "machines",
+       "resultSeq": 20,
+       "durationMs": 0
+      },
+      {
+       "seq": 21,
+       "atMs": 18400,
+       "tool": "open",
+       "shape": {},
+       "argsKey": "be941f529d8a",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 22,
+       "durationMs": 0
+      },
+      {
+       "seq": 23,
+       "atMs": 21100,
+       "tool": "search",
+       "shape": {},
+       "argsKey": "751cb3133c9e",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 0,
+       "resultSeq": 24,
+       "durationMs": 0
+      },
+      {
+       "seq": 25,
+       "atMs": 23200,
+       "tool": "open",
+       "shape": {},
+       "argsKey": "7034bdb6da62",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 26,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 43600,
+     "seq": 42,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 45,
+       "atMs": 45200,
+       "tool": "search",
+       "shape": {},
+       "argsKey": "f9c81c0fb167",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 5,
+       "resultSeq": 46,
+       "durationMs": 0
+      },
+      {
+       "seq": 47,
+       "atMs": 48500,
+       "tool": "open",
+       "shape": {},
+       "argsKey": "5c12132c1b27",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 48,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": null,
+    "reason": "dropped"
+   }
+  },
+  {
+   "id": "vs_b5b201d8-c218-4631-9e17-ecba698e882d",
+   "tenant": "orgiq",
+   "date": "2026-11-08T23:01",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "rows-only",
+   "durationMs": 100300,
+   "counts": {
+    "delegations": 3,
+    "calls": 4,
+    "done": 3,
+    "refused": 1,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 0
+   },
+   "delegations": [
+    {
+     "atMs": 9300,
+     "seq": 3,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 3,
+       "atMs": 9300,
+       "tool": "search",
+       "shape": {},
+       "argsKey": "1734b968990d",
+       "outcome": "done",
+       "resultSeq": 3,
+       "durationMs": 0
+      },
+      {
+       "seq": 5,
+       "atMs": 11200,
+       "tool": "activity",
+       "shape": {},
+       "argsKey": "a36583836fb5",
+       "outcome": "done",
+       "resultSeq": 5,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 14900,
+     "seq": 6,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 6,
+       "atMs": 14900,
+       "tool": "search",
+       "shape": {},
+       "argsKey": "87db52f25936",
+       "outcome": "done",
+       "resultSeq": 6,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 65900,
+     "seq": 8,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 8,
+       "atMs": 65900,
+       "tool": "message",
+       "shape": {},
+       "argsKey": "e5e4e63d03ca",
+       "outcome": "refused",
+       "resultSeq": 8,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "closed",
+    "reason": null
+   }
+  },
+  {
+   "id": "vs_a215e96c-d792-4753-95fd-8b071271253b",
+   "tenant": "orgiq",
+   "date": "2026-11-08T23:03",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "rows-only",
+   "durationMs": 520500,
+   "counts": {
+    "delegations": 22,
+    "calls": 41,
+    "done": 31,
+    "refused": 9,
+    "failed": 0,
+    "cancelled": 1,
+    "unfinished": 0,
+    "cards": 7
+   },
+   "delegations": [
+    {
+     "atMs": 8200,
+     "seq": 3,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 3,
+       "atMs": 8200,
+       "tool": "activity",
+       "shape": {},
+       "argsKey": "a36583836fb5",
+       "outcome": "done",
+       "resultSeq": 3,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 40700,
+     "seq": 5,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 5,
+       "atMs": 40700,
+       "tool": "search",
+       "shape": {},
+       "argsKey": "e853d7474647",
+       "outcome": "done",
+       "resultSeq": 5,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 84700,
+     "seq": 8,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 8,
+       "atMs": 84700,
+       "tool": "message",
+       "shape": {},
+       "argsKey": "40865b81fc01",
+       "outcome": "refused",
+       "resultSeq": 8,
+       "durationMs": 0
+      },
+      {
+       "seq": 9,
+       "atMs": 87500,
+       "tool": "message",
+       "shape": {},
+       "argsKey": "a7bbee52e589",
+       "outcome": "refused",
+       "resultSeq": 9,
+       "durationMs": 0
+      },
+      {
+       "seq": 10,
+       "atMs": 89800,
+       "tool": "search",
+       "shape": {},
+       "argsKey": "af85a0d36517",
+       "outcome": "done",
+       "resultSeq": 10,
+       "durationMs": 0
+      },
+      {
+       "seq": 11,
+       "atMs": 92300,
+       "tool": "list",
+       "shape": {},
+       "argsKey": "568210466d6e",
+       "outcome": "refused",
+       "resultSeq": 11,
+       "durationMs": 0
+      },
+      {
+       "seq": 12,
+       "atMs": 94400,
+       "tool": "list",
+       "shape": {},
+       "argsKey": "967a3ccd07a7",
+       "outcome": "done",
+       "resultSeq": 12,
+       "durationMs": 0
+      },
+      {
+       "seq": 13,
+       "atMs": 96300,
+       "tool": "list",
+       "shape": {},
+       "argsKey": "8a95a6e5c77d",
+       "outcome": "done",
+       "resultSeq": 13,
+       "durationMs": 0
+      },
+      {
+       "seq": 14,
+       "atMs": 98600,
+       "tool": "open",
+       "shape": {},
+       "argsKey": "267c536b8ba5",
+       "outcome": "done",
+       "resultSeq": 14,
+       "durationMs": 0
+      },
+      {
+       "seq": 15,
+       "atMs": 101400,
+       "tool": "message",
+       "shape": {},
+       "argsKey": "168e2168c895",
+       "outcome": "refused",
+       "resultSeq": 15,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 121000,
+     "seq": 17,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 17,
+       "atMs": 121000,
+       "tool": "activity",
+       "shape": {},
+       "argsKey": "a36583836fb5",
+       "outcome": "done",
+       "resultSeq": 17,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 130900,
+     "seq": 18,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 18,
+       "atMs": 130900,
+       "tool": "list",
+       "shape": {},
+       "argsKey": "674f4fbd15a4",
+       "outcome": "done",
+       "resultSeq": 18,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 135200,
+     "seq": 20,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 20,
+       "atMs": 135200,
+       "tool": "list",
+       "shape": {},
+       "argsKey": "7f295cb1a630",
+       "outcome": "done",
+       "resultSeq": 20,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 159400,
+     "seq": 22,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 22,
+       "atMs": 159400,
+       "tool": "message",
+       "shape": {},
+       "argsKey": "5a459350829a",
+       "outcome": "done",
+       "resultSeq": 22,
+       "durationMs": 24300,
+       "card": {
+        "shownMs": 159400,
+        "mode": null,
+        "decision": "confirmed",
+        "by": "click",
+        "afterMs": 24300,
+        "inferred": true
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 223000,
+     "seq": 24,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 24,
+       "atMs": 223000,
+       "tool": "activity",
+       "shape": {},
+       "argsKey": "ed2d8c77d6b1",
+       "outcome": "done",
+       "resultSeq": 24,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 242700,
+     "seq": 26,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 26,
+       "atMs": 242700,
+       "tool": "message",
+       "shape": {},
+       "argsKey": "cb94215afe36",
+       "outcome": "done",
+       "resultSeq": 26,
+       "durationMs": 2700,
+       "card": {
+        "shownMs": 242700,
+        "mode": null,
+        "decision": "confirmed",
+        "by": "click",
+        "afterMs": 2700,
+        "inferred": true
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 267000,
+     "seq": 27,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 27,
+       "atMs": 267000,
+       "tool": "open",
+       "shape": {},
+       "argsKey": "7034bdb6da62",
+       "outcome": "done",
+       "resultSeq": 27,
+       "durationMs": 0
+      },
+      {
+       "seq": 29,
+       "atMs": 270000,
+       "tool": "list",
+       "shape": {},
+       "argsKey": "bb636569ac2e",
+       "outcome": "refused",
+       "resultSeq": 29,
+       "durationMs": 0
+      },
+      {
+       "seq": 30,
+       "atMs": 272100,
+       "tool": "list",
+       "shape": {},
+       "argsKey": "f4f8f69f1964",
+       "outcome": "done",
+       "resultSeq": 30,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 310800,
+     "seq": 32,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 32,
+       "atMs": 310800,
+       "tool": "computer",
+       "shape": {},
+       "argsKey": "b57b4754364e",
+       "outcome": "done",
+       "resultSeq": 32,
+       "durationMs": 0
+      },
+      {
+       "seq": 33,
+       "atMs": 312400,
+       "tool": "computer",
+       "shape": {},
+       "argsKey": "81493254a6ab",
+       "outcome": "done",
+       "resultSeq": 33,
+       "durationMs": 0
+      },
+      {
+       "seq": 34,
+       "atMs": 314500,
+       "tool": "computer",
+       "shape": {},
+       "argsKey": "869475015fab",
+       "outcome": "done",
+       "resultSeq": 34,
+       "durationMs": 0
+      },
+      {
+       "seq": 35,
+       "atMs": 316000,
+       "tool": "computer",
+       "shape": {},
+       "argsKey": "e8356e7b0839",
+       "outcome": "done",
+       "resultSeq": 35,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 324400,
+     "seq": 36,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 36,
+       "atMs": 324400,
+       "tool": "computer",
+       "shape": {},
+       "argsKey": "a677483ffca3",
+       "outcome": "done",
+       "resultSeq": 36,
+       "durationMs": 2800,
+       "card": {
+        "shownMs": 324400,
+        "mode": null,
+        "decision": "confirmed",
+        "by": "click",
+        "afterMs": 2800,
+        "inferred": true
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 332400,
+     "seq": 38,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 38,
+       "atMs": 332400,
+       "tool": "computer",
+       "shape": {},
+       "argsKey": "7733cbcc6805",
+       "outcome": "done",
+       "resultSeq": 38,
+       "durationMs": 3500,
+       "card": {
+        "shownMs": 332400,
+        "mode": null,
+        "decision": "confirmed",
+        "by": "click",
+        "afterMs": 3500,
+        "inferred": true
+       }
+      },
+      {
+       "seq": 39,
+       "atMs": 337600,
+       "tool": "computer",
+       "shape": {},
+       "argsKey": "98cb51cb0653",
+       "outcome": "cancelled",
+       "resultSeq": 39,
+       "durationMs": 1000,
+       "card": {
+        "shownMs": 337600,
+        "mode": null,
+        "decision": "cancelled",
+        "by": "click",
+        "afterMs": 1000,
+        "inferred": true
+       }
+      },
+      {
+       "seq": 40,
+       "atMs": 341100,
+       "tool": "computer",
+       "shape": {},
+       "argsKey": "872609efe26d",
+       "outcome": "done",
+       "resultSeq": 40,
+       "durationMs": 1600,
+       "card": {
+        "shownMs": 341100,
+        "mode": null,
+        "decision": "confirmed",
+        "by": "click",
+        "afterMs": 1600,
+        "inferred": true
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 407100,
+     "seq": 43,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 43,
+       "atMs": 407100,
+       "tool": "open",
+       "shape": {},
+       "argsKey": "9989901ce60c",
+       "outcome": "done",
+       "resultSeq": 43,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 414500,
+     "seq": 44,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 44,
+       "atMs": 414500,
+       "tool": "list",
+       "shape": {},
+       "argsKey": "cfcc97c96350",
+       "outcome": "done",
+       "resultSeq": 44,
+       "durationMs": 100
+      },
+      {
+       "seq": 45,
+       "atMs": 416300,
+       "tool": "open",
+       "shape": {},
+       "argsKey": "991b7ca3adf4",
+       "outcome": "done",
+       "resultSeq": 45,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 423800,
+     "seq": 46,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 46,
+       "atMs": 423800,
+       "tool": "get",
+       "shape": {},
+       "argsKey": "991b7ca3adf4",
+       "outcome": "done",
+       "resultSeq": 46,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 428400,
+     "seq": 47,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 47,
+       "atMs": 428400,
+       "tool": "get",
+       "shape": {},
+       "argsKey": "48ad2c89feff",
+       "outcome": "refused",
+       "resultSeq": 47,
+       "durationMs": 0
+      },
+      {
+       "seq": 48,
+       "atMs": 430400,
+       "tool": "get",
+       "shape": {},
+       "argsKey": "58723e01fad9",
+       "outcome": "refused",
+       "resultSeq": 48,
+       "durationMs": 0
+      },
+      {
+       "seq": 49,
+       "atMs": 432700,
+       "tool": "get",
+       "shape": {},
+       "argsKey": "cb38f699a38e",
+       "outcome": "refused",
+       "resultSeq": 49,
+       "durationMs": 0
+      },
+      {
+       "seq": 50,
+       "atMs": 434500,
+       "tool": "search",
+       "shape": {},
+       "argsKey": "1cd853d3196e",
+       "outcome": "done",
+       "resultSeq": 50,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 440100,
+     "seq": 52,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 52,
+       "atMs": 440100,
+       "tool": "search",
+       "shape": {},
+       "argsKey": "4d7dc93ef42f",
+       "outcome": "done",
+       "resultSeq": 52,
+       "durationMs": 0
+      },
+      {
+       "seq": 53,
+       "atMs": 442500,
+       "tool": "get",
+       "shape": {},
+       "argsKey": "103973e7fb62",
+       "outcome": "refused",
+       "resultSeq": 53,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 446600,
+     "seq": 54,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 54,
+       "atMs": 446600,
+       "tool": "search",
+       "shape": {},
+       "argsKey": "273cf77350d2",
+       "outcome": "done",
+       "resultSeq": 54,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 478700,
+     "seq": 56,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 56,
+       "atMs": 478700,
+       "tool": "activity",
+       "shape": {},
+       "argsKey": "d01b07930663",
+       "outcome": "done",
+       "resultSeq": 56,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 499300,
+     "seq": 58,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 58,
+       "atMs": 499300,
+       "tool": "activity",
+       "shape": {},
+       "argsKey": "27d4cd85328c",
+       "outcome": "done",
+       "resultSeq": 58,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 513200,
+     "seq": 59,
+     "heardBefore": true,
+     "inferred": true,
+     "calls": [
+      {
+       "seq": 59,
+       "atMs": 513200,
+       "tool": "message",
+       "shape": {},
+       "argsKey": "c1d8a2852b05",
+       "outcome": "done",
+       "resultSeq": 59,
+       "durationMs": 1800,
+       "card": {
+        "shownMs": 513200,
+        "mode": null,
+        "decision": "confirmed",
+        "by": "click",
+        "afterMs": 1800,
+        "inferred": true
+       }
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "closed",
+    "reason": null
+   }
+  },
+  {
+   "id": "vs_95e5a6c7-6e5d-45d4-bb6d-c8e47df8f05a",
+   "tenant": "orgiq",
+   "date": "2026-11-08T23:52",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 151900,
+   "counts": {
+    "delegations": 8,
+    "calls": 6,
+    "done": 6,
+    "refused": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 1
+   },
+   "delegations": [
+    {
+     "atMs": 5900,
+     "seq": 11,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 13,
+       "atMs": 6800,
+       "tool": "open",
+       "shape": {
+        "scope": "this-page",
+        "refKind": "position"
+       },
+       "argsKey": "9bb80a7e82a3",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 15,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 17300,
+     "seq": 20,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 22,
+       "atMs": 18700,
+       "tool": "list",
+       "shape": {
+        "kind": "work-item",
+        "scope": "this-page"
+       },
+       "argsKey": "5e0f64f6913f",
+       "outcome": "done",
+       "result": "list",
+       "count": 11,
+       "rows": 10,
+       "of": "work-item",
+       "resultSeq": 23,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 54200,
+     "seq": 33,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 35,
+       "atMs": 55800,
+       "tool": "open",
+       "shape": {
+        "refKind": "work-item"
+       },
+       "argsKey": "b75a695d3e20",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 36,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 64500,
+     "seq": 46,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 48,
+       "atMs": 65700,
+       "tool": "budget",
+       "shape": {
+        "scope": "envelopes"
+       },
+       "argsKey": "bdfa63ad5b2c",
+       "outcome": "done",
+       "result": "budget",
+       "count": 1,
+       "rows": 1,
+       "of": "envelopes",
+       "resultSeq": 49,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 87800,
+     "seq": 63,
+     "heardBefore": true,
+     "calls": []
+    },
+    {
+     "atMs": 111500,
+     "seq": 76,
+     "heardBefore": true,
+     "calls": []
+    },
+    {
+     "atMs": 124900,
+     "seq": 85,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 87,
+       "atMs": 126100,
+       "tool": "get",
+       "shape": {
+        "part": "documents",
+        "refKind": "work-item"
+       },
+       "argsKey": "149308d9ab9d",
+       "outcome": "done",
+       "result": "record_part",
+       "count": 0,
+       "rows": 0,
+       "resultSeq": 88,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 138900,
+     "seq": 94,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 96,
+       "atMs": 143800,
+       "tool": "queue_work",
+       "shape": {
+        "kind": "doc"
+       },
+       "argsKey": "48d1fc8806ba",
+       "outcome": "done",
+       "result": "work_queued",
+       "resultSeq": 101,
+       "durationMs": 2400,
+       "card": {
+        "shownMs": 144300,
+        "mode": null,
+        "decision": "confirmed",
+        "by": "click"
+       }
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "dropped",
+    "reason": null
+   }
+  },
+  {
+   "id": "vs_f420d509-bdcc-42a3-a1c1-69a876c96ea8",
+   "tenant": "access",
+   "date": "2026-11-09T00:20",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "summary",
+    "budget",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 32000,
+   "counts": {
+    "delegations": 1,
+    "calls": 6,
+    "done": 4,
+    "refused": 2,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 0
+   },
+   "delegations": [
+    {
+     "atMs": 6200,
+     "seq": 6,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 8,
+       "atMs": 7000,
+       "tool": "list",
+       "shape": {
+        "kind": "request",
+        "filterScope": "all",
+        "filteredBy": "since"
+       },
+       "argsKey": "0b371b9bbea4",
+       "outcome": "refused",
+       "reason": "no-grant",
+       "result": "refused",
+       "resultSeq": 11,
+       "durationMs": 0
+      },
+      {
+       "seq": 12,
+       "atMs": 9300,
+       "tool": "list",
+       "shape": {
+        "kind": "request",
+        "filteredBy": "status,since"
+       },
+       "argsKey": "1f2281eee6eb",
+       "outcome": "done",
+       "result": "list",
+       "count": 0,
+       "rows": 0,
+       "of": "request",
+       "resultSeq": 13,
+       "durationMs": 0
+      },
+      {
+       "seq": 14,
+       "atMs": 11400,
+       "tool": "list",
+       "shape": {
+        "kind": "request",
+        "scope": "this-page",
+        "filteredBy": "since"
+       },
+       "argsKey": "3a6ddbac23ec",
+       "outcome": "refused",
+       "reason": "not-on-this-page",
+       "result": "refused",
+       "resultSeq": 16,
+       "durationMs": 0
+      },
+      {
+       "seq": 17,
+       "atMs": 13700,
+       "tool": "open",
+       "shape": {
+        "page": "open-requests"
+       },
+       "argsKey": "37c9ad0810fb",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 18,
+       "durationMs": 0
+      },
+      {
+       "seq": 19,
+       "atMs": 16700,
+       "tool": "search",
+       "shape": {
+        "type": "request",
+        "sort": "recent",
+        "answer": false
+       },
+       "argsKey": "79d39a0952d9",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 1,
+       "resultSeq": 20,
+       "durationMs": 0
+      },
+      {
+       "seq": 21,
+       "atMs": 19100,
+       "tool": "search",
+       "shape": {
+        "type": "request",
+        "sort": "recent",
+        "answer": false
+       },
+       "argsKey": "f6900b59439d",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 1,
+       "resultSeq": 22,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "dropped",
+    "reason": null
+   }
+  },
+  {
+   "id": "vs_8bb50a16-8419-4d21-b08e-4a0dbc347660",
+   "tenant": "orgiq",
+   "date": "2026-11-09T00:21",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 189500,
+   "counts": {
+    "delegations": 12,
+    "calls": 12,
+    "done": 10,
+    "refused": 2,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 0
+   },
+   "delegations": [
+    {
+     "atMs": 8800,
+     "seq": 12,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 14,
+       "atMs": 11900,
+       "tool": "open",
+       "shape": {
+        "page": "codebases"
+       },
+       "argsKey": "78a15bec7b4b",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 16,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 24300,
+     "seq": 20,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 22,
+       "atMs": 25400,
+       "tool": "open",
+       "shape": {
+        "page": "computer-lab"
+       },
+       "argsKey": "7034bdb6da62",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 23,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 47900,
+     "seq": 35,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 37,
+       "atMs": 49300,
+       "tool": "open",
+       "shape": {
+        "page": "agent-library"
+       },
+       "argsKey": "86645c8b2c6a",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 38,
+       "durationMs": 0
+      },
+      {
+       "seq": 39,
+       "atMs": 52700,
+       "tool": "list",
+       "shape": {
+        "kind": "library"
+       },
+       "argsKey": "b21cb6fbd03a",
+       "outcome": "done",
+       "result": "list",
+       "count": 12,
+       "rows": 5,
+       "of": "library",
+       "resultSeq": 40,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 59500,
+     "seq": 43,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 45,
+       "atMs": 60200,
+       "tool": "open",
+       "shape": {
+        "page": "budgets"
+       },
+       "argsKey": "0c2880feafe7",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 46,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 76300,
+     "seq": 61,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 63,
+       "atMs": 77100,
+       "tool": "open",
+       "shape": {
+        "page": "search"
+       },
+       "argsKey": "791a210b5e00",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 64,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 86500,
+     "seq": 70,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 72,
+       "atMs": 87600,
+       "tool": "search",
+       "shape": {
+        "type": "person",
+        "sort": "relevance"
+       },
+       "argsKey": "b76f47b4bd33",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 5,
+       "resultSeq": 73,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 104100,
+     "seq": 83,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 86,
+       "atMs": 105100,
+       "tool": "activity",
+       "shape": {
+        "scope": "online"
+       },
+       "argsKey": "a36583836fb5",
+       "outcome": "done",
+       "result": "activity",
+       "count": 0,
+       "rows": 0,
+       "resultSeq": 87,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 106900,
+     "seq": 89,
+     "heardBefore": true,
+     "calls": []
+    },
+    {
+     "atMs": 115900,
+     "seq": 98,
+     "heardBefore": true,
+     "calls": []
+    },
+    {
+     "atMs": 130700,
+     "seq": 104,
+     "heardBefore": true,
+     "calls": []
+    },
+    {
+     "atMs": 143300,
+     "seq": 111,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 113,
+       "atMs": 145200,
+       "tool": "message",
+       "shape": {
+        "targetKind": "dm"
+       },
+       "argsKey": "db98bcba95ea",
+       "outcome": "refused",
+       "reason": "not-found",
+       "result": "refused",
+       "resultSeq": 115,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 171100,
+     "seq": 126,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 128,
+       "atMs": 173500,
+       "tool": "list",
+       "shape": {
+        "kind": "dm",
+        "filterScope": "all",
+        "filteredBy": "q"
+       },
+       "argsKey": "24ad7e6a4e65",
+       "outcome": "refused",
+       "reason": "other",
+       "result": "refused",
+       "resultSeq": 130,
+       "durationMs": 0
+      },
+      {
+       "seq": 131,
+       "atMs": 175700,
+       "tool": "list",
+       "shape": {
+        "kind": "dm",
+        "filteredBy": "q"
+       },
+       "argsKey": "5bb81a77f6f6",
+       "outcome": "done",
+       "result": "list",
+       "count": 0,
+       "rows": 0,
+       "of": "dm",
+       "resultSeq": 132,
+       "durationMs": 0
+      },
+      {
+       "seq": 133,
+       "atMs": 177500,
+       "tool": "list",
+       "shape": {
+        "kind": "dm",
+        "filteredBy": "q"
+       },
+       "argsKey": "26521a0e2b15",
+       "outcome": "done",
+       "result": "list",
+       "count": 0,
+       "rows": 0,
+       "of": "dm",
+       "resultSeq": 134,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "closed",
+    "reason": null
+   }
+  },
+  {
+   "id": "vs_16ca8e51-aa73-4599-ac93-8f2f8c8da82d",
+   "tenant": "assessment",
+   "date": "2026-11-09T00:40",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "summary",
+    "budget",
+    "activity",
+    "set_status",
+    "queue_work",
+    "decide",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 67200,
+   "counts": {
+    "delegations": 3,
+    "calls": 8,
+    "done": 8,
+    "refused": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 0
+   },
+   "delegations": [
+    {
+     "atMs": 19200,
+     "seq": 10,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 12,
+       "atMs": 20500,
+       "tool": "search",
+       "shape": {
+        "type": "team",
+        "sort": "relevance",
+        "answer": true
+       },
+       "argsKey": "cfc931ed9596",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 0,
+       "resultSeq": 13,
+       "durationMs": 0
+      },
+      {
+       "seq": 14,
+       "atMs": 22000,
+       "tool": "list",
+       "shape": {
+        "kind": "team"
+       },
+       "argsKey": "e51ed66b1f1d",
+       "outcome": "done",
+       "result": "list",
+       "count": 7,
+       "rows": 7,
+       "of": "team",
+       "resultSeq": 15,
+       "durationMs": 0
+      },
+      {
+       "seq": 16,
+       "atMs": 24300,
+       "tool": "list",
+       "shape": {
+        "kind": "team",
+        "filteredBy": "status"
+       },
+       "argsKey": "997a456f9843",
+       "outcome": "done",
+       "result": "list",
+       "count": 1,
+       "rows": 1,
+       "of": "team",
+       "resultSeq": 17,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 33600,
+     "seq": 22,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 24,
+       "atMs": 34700,
+       "tool": "open",
+       "shape": {
+        "refKind": "team"
+       },
+       "argsKey": "9c66d82b22bb",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 25,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 39600,
+     "seq": 30,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 32,
+       "atMs": 40400,
+       "tool": "get",
+       "shape": {
+        "refKind": "team"
+       },
+       "argsKey": "9c66d82b22bb",
+       "outcome": "done",
+       "result": "record",
+       "resultSeq": 33,
+       "durationMs": 0
+      },
+      {
+       "seq": 34,
+       "atMs": 42500,
+       "tool": "search",
+       "shape": {
+        "type": "team",
+        "sort": "relevance",
+        "answer": true
+       },
+       "argsKey": "a5b2f5d12efb",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 1,
+       "resultSeq": 35,
+       "durationMs": 0
+      },
+      {
+       "seq": 37,
+       "atMs": 44400,
+       "tool": "search",
+       "shape": {
+        "sort": "relevance",
+        "answer": true
+       },
+       "argsKey": "719c24d1b9ea",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 5,
+       "resultSeq": 38,
+       "durationMs": 0
+      },
+      {
+       "seq": 39,
+       "atMs": 45900,
+       "tool": "get",
+       "shape": {
+        "refKind": "run"
+       },
+       "argsKey": "b022479296da",
+       "outcome": "done",
+       "result": "record",
+       "resultSeq": 40,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "dropped",
+    "reason": "beforeunload"
+   }
+  },
+  {
+   "id": "vs_f86d7b03-7e6c-4005-9ef1-883b0f10dc31",
+   "tenant": "social",
+   "date": "2026-11-09T00:42",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 158400,
+   "counts": {
+    "delegations": 9,
+    "calls": 15,
+    "done": 14,
+    "refused": 1,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 3
+   },
+   "delegations": [
+    {
+     "atMs": 8600,
+     "seq": 9,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 11,
+       "atMs": 11300,
+       "tool": "open",
+       "shape": {
+        "kind": "channel",
+        "byName": true
+       },
+       "argsKey": "f1f6a714d0c6",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 13,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 22400,
+     "seq": 26,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 28,
+       "atMs": 25200,
+       "tool": "queue_work",
+       "shape": {
+        "kind": "summarize"
+       },
+       "argsKey": "07f6bb3eec7f",
+       "outcome": "done",
+       "result": "work_queued",
+       "resultSeq": 34,
+       "durationMs": 2200,
+       "card": {
+        "shownMs": 25700,
+        "mode": null,
+        "decision": "confirmed",
+        "by": "click"
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 44600,
+     "seq": 44,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 46,
+       "atMs": 48200,
+       "tool": "get",
+       "shape": {
+        "part": "recent",
+        "refKind": "channel"
+       },
+       "argsKey": "68bb024f7a5f",
+       "outcome": "done",
+       "result": "record_part",
+       "count": 17,
+       "rows": 10,
+       "resultSeq": 47,
+       "durationMs": 0
+      },
+      {
+       "seq": 48,
+       "atMs": 52200,
+       "tool": "search",
+       "shape": {
+        "type": "message",
+        "sort": "recent",
+        "answer": false
+       },
+       "argsKey": "0106db8511cc",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 10,
+       "resultSeq": 49,
+       "durationMs": 0
+      },
+      {
+       "seq": 50,
+       "atMs": 55600,
+       "tool": "get",
+       "shape": {
+        "refKind": "message"
+       },
+       "argsKey": "ae5e02364076",
+       "outcome": "refused",
+       "reason": "other",
+       "result": "refused",
+       "resultSeq": 52,
+       "durationMs": 0
+      },
+      {
+       "seq": 53,
+       "atMs": 57900,
+       "tool": "open",
+       "shape": {
+        "refKind": "message"
+       },
+       "argsKey": "ae5e02364076",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 54,
+       "durationMs": 0
+      },
+      {
+       "seq": 55,
+       "atMs": 59800,
+       "tool": "search",
+       "shape": {
+        "type": "message",
+        "sort": "recent",
+        "answer": false
+       },
+       "argsKey": "8b6fdc8fc1de",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 10,
+       "resultSeq": 56,
+       "durationMs": 0
+      },
+      {
+       "seq": 57,
+       "atMs": 64300,
+       "tool": "search",
+       "shape": {
+        "type": "message",
+        "sort": "recent",
+        "answer": false
+       },
+       "argsKey": "ad6279fe9c95",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 2,
+       "resultSeq": 58,
+       "durationMs": 0
+      },
+      {
+       "seq": 59,
+       "atMs": 67500,
+       "tool": "search",
+       "shape": {
+        "type": "message",
+        "sort": "recent",
+        "answer": false
+       },
+       "argsKey": "7294c3205729",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 10,
+       "resultSeq": 60,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 78400,
+     "seq": 66,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 68,
+       "atMs": 81100,
+       "tool": "message",
+       "shape": {
+        "targetKind": "channel"
+       },
+       "argsKey": "8f8db2ed2e70",
+       "outcome": "done",
+       "result": "posted",
+       "resultSeq": 74,
+       "durationMs": 1900,
+       "card": {
+        "shownMs": 81600,
+        "mode": null,
+        "decision": "confirmed",
+        "by": "click"
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 90600,
+     "seq": 79,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 81,
+       "atMs": 91900,
+       "tool": "open",
+       "shape": {
+        "kind": "channel",
+        "byName": true
+       },
+       "argsKey": "d4992cb19a6a",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 82,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 111500,
+     "seq": 92,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 94,
+       "atMs": 114700,
+       "tool": "message",
+       "shape": {
+        "targetKind": "channel"
+       },
+       "argsKey": "7625eb8b1fa2",
+       "outcome": "done",
+       "result": "posted",
+       "resultSeq": 100,
+       "durationMs": 3500,
+       "card": {
+        "shownMs": 115200,
+        "mode": null,
+        "decision": "confirmed",
+        "by": "click"
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 127500,
+     "seq": 111,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 113,
+       "atMs": 130100,
+       "tool": "open",
+       "shape": {
+        "page": "hangouts"
+       },
+       "argsKey": "fb474e142473",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 114,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 138900,
+     "seq": 124,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 126,
+       "atMs": 141000,
+       "tool": "open",
+       "shape": {
+        "kind": "room",
+        "byName": true
+       },
+       "argsKey": "c1d4a261a714",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 127,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 149300,
+     "seq": 134,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 136,
+       "atMs": 152300,
+       "tool": "open",
+       "shape": {
+        "refKind": "room"
+       },
+       "argsKey": "88a2c0b56bc1",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 137,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": null
+  },
+  {
+   "id": "vs_89440153-7ecf-47fb-b219-bb79ae36f63a",
+   "tenant": "orgiq",
+   "date": "2026-11-09T01:33",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 43500,
+   "counts": {
+    "delegations": 1,
+    "calls": 1,
+    "done": 1,
+    "refused": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 0
+   },
+   "delegations": [
+    {
+     "atMs": 35700,
+     "seq": 16,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 18,
+       "atMs": 37000,
+       "tool": "open",
+       "shape": {
+        "page": "initiatives"
+       },
+       "argsKey": "078bdb29f97d",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 19,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "closed",
+    "reason": "user"
+   }
+  },
+  {
+   "id": "vs_df89af16-3c79-4a64-80bc-3436463c12f6",
+   "tenant": "orgiq",
+   "date": "2026-11-09T01:34",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 25500,
+   "counts": {
+    "delegations": 2,
+    "calls": 1,
+    "done": 1,
+    "refused": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 0
+   },
+   "delegations": [
+    {
+     "atMs": 7200,
+     "seq": 7,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 9,
+       "atMs": 9600,
+       "tool": "open",
+       "shape": {
+        "page": "initiatives"
+       },
+       "argsKey": "078bdb29f97d",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 11,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 16400,
+     "seq": 15,
+     "heardBefore": true,
+     "calls": []
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "dropped",
+    "reason": "beforeunload"
+   }
+  },
+  {
+   "id": "vs_36de5050-1141-4b22-bae9-650983ec8c33",
+   "tenant": "orgiq",
+   "date": "2026-11-09T01:35",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 20000,
+   "counts": {
+    "delegations": 2,
+    "calls": 2,
+    "done": 2,
+    "refused": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 0
+   },
+   "delegations": [
+    {
+     "atMs": 9000,
+     "seq": 7,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 9,
+       "atMs": 10100,
+       "tool": "open",
+       "shape": {
+        "page": "initiatives"
+       },
+       "argsKey": "078bdb29f97d",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 11,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 15200,
+     "seq": 16,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 18,
+       "atMs": 16300,
+       "tool": "open",
+       "shape": {
+        "scope": "this-page",
+        "refKind": "position"
+       },
+       "argsKey": "9bb80a7e82a3",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 19,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": null
+  },
+  {
+   "id": "vs_d69bbb23-e17a-488e-8a70-8c327ccf3e74",
+   "tenant": "orgiq",
+   "date": "2026-11-09T01:36",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 399000,
+   "counts": {
+    "delegations": 23,
+    "calls": 37,
+    "done": 30,
+    "refused": 6,
+    "failed": 1,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 1
+   },
+   "delegations": [
+    {
+     "atMs": 11200,
+     "seq": 10,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 12,
+       "atMs": 14100,
+       "tool": "open",
+       "shape": {
+        "refKind": "initiative"
+       },
+       "argsKey": "5dcb5ee3460e",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 14,
+       "durationMs": 0
+      },
+      {
+       "seq": 15,
+       "atMs": 16000,
+       "tool": "get",
+       "shape": {
+        "part": "decisions",
+        "refKind": "initiative"
+       },
+       "argsKey": "d892de9277ef",
+       "outcome": "done",
+       "result": "record_part",
+       "count": 2,
+       "rows": 2,
+       "resultSeq": 16,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 24000,
+     "seq": 23,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 25,
+       "atMs": 25600,
+       "tool": "open",
+       "shape": {
+        "refKind": "decision"
+       },
+       "argsKey": "03c862177d9d",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 26,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 41200,
+     "seq": 32,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 34,
+       "atMs": 44100,
+       "tool": "search",
+       "shape": {
+        "sort": "relevance",
+        "answer": false
+       },
+       "argsKey": "47a38fbe643c",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 5,
+       "resultSeq": 36,
+       "durationMs": 100
+      },
+      {
+       "seq": 37,
+       "atMs": 47900,
+       "tool": "search",
+       "shape": {
+        "type": "recording",
+        "sort": "relevance",
+        "answer": false
+       },
+       "argsKey": "ff7cd852bf5c",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 0,
+       "resultSeq": 38,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 55200,
+     "seq": 44,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 46,
+       "atMs": 57400,
+       "tool": "open",
+       "shape": {
+        "refKind": "decision"
+       },
+       "argsKey": "03c862177d9d",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 47,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 62100,
+     "seq": 52,
+     "heardBefore": true,
+     "calls": []
+    },
+    {
+     "atMs": 75200,
+     "seq": 61,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 63,
+       "atMs": 77800,
+       "tool": "get",
+       "shape": {
+        "refKind": "decision"
+       },
+       "argsKey": "b8f3950cf441",
+       "outcome": "done",
+       "result": "record",
+       "resultSeq": 65,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 98200,
+     "seq": 69,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 71,
+       "atMs": 100200,
+       "tool": "open",
+       "shape": {
+        "refKind": "initiative"
+       },
+       "argsKey": "3436724d0eee",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 72,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 106800,
+     "seq": 75,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 77,
+       "atMs": 108900,
+       "tool": "get",
+       "shape": {
+        "part": "decisions",
+        "refKind": "initiative"
+       },
+       "argsKey": "64487d6ade79",
+       "outcome": "done",
+       "result": "record_part",
+       "count": 1,
+       "rows": 1,
+       "resultSeq": 79,
+       "durationMs": 0
+      },
+      {
+       "seq": 80,
+       "atMs": 110500,
+       "tool": "open",
+       "shape": {
+        "refKind": "decision"
+       },
+       "argsKey": "275b02438a46",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 81,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 123400,
+     "seq": 92,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 94,
+       "atMs": 126000,
+       "tool": "open",
+       "shape": {
+        "refKind": "initiative"
+       },
+       "argsKey": "3436724d0eee",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 95,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 135400,
+     "seq": 101,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 103,
+       "atMs": 137400,
+       "tool": "search",
+       "shape": {
+        "type": "work",
+        "scope": "initiative",
+        "sort": "relevance",
+        "answer": false
+       },
+       "argsKey": "bcdf9361bb6d",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 0,
+       "resultSeq": 104,
+       "durationMs": 0
+      },
+      {
+       "seq": 105,
+       "atMs": 139500,
+       "tool": "search",
+       "shape": {
+        "type": "work",
+        "sort": "relevance",
+        "answer": false
+       },
+       "argsKey": "e6ae9e6b45a4",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 0,
+       "resultSeq": 107,
+       "durationMs": 0
+      },
+      {
+       "seq": 108,
+       "atMs": 142500,
+       "tool": "list",
+       "shape": {
+        "kind": "work-item",
+        "filterScope": "all",
+        "filteredBy": "q"
+       },
+       "argsKey": "746de5fd58ad",
+       "outcome": "refused",
+       "reason": "invalid-arguments",
+       "result": "refused",
+       "resultSeq": 110,
+       "durationMs": 0
+      },
+      {
+       "seq": 111,
+       "atMs": 145200,
+       "tool": "list",
+       "shape": {
+        "kind": "work-item",
+        "filteredBy": "q"
+       },
+       "argsKey": "fe334c91b9b6",
+       "outcome": "done",
+       "result": "list",
+       "count": 0,
+       "rows": 0,
+       "of": "work-item",
+       "resultSeq": 112,
+       "durationMs": 0
+      },
+      {
+       "seq": 113,
+       "atMs": 148200,
+       "tool": "search",
+       "shape": {
+        "type": "initiative",
+        "sort": "relevance",
+        "answer": false
+       },
+       "argsKey": "bb1c71b327cb",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 0,
+       "resultSeq": 114,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 151400,
+     "seq": 117,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 119,
+       "atMs": 156100,
+       "tool": "open",
+       "shape": {
+        "kind": "work-item",
+        "byName": true
+       },
+       "argsKey": "9c38c482cdd7",
+       "outcome": "refused",
+       "reason": "not-found",
+       "result": "refused",
+       "resultSeq": 121,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 160100,
+     "seq": 123,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 125,
+       "atMs": 161600,
+       "tool": "open",
+       "shape": {
+        "refKind": "initiative"
+       },
+       "argsKey": "3436724d0eee",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 126,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 170200,
+     "seq": 131,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 133,
+       "atMs": 172200,
+       "tool": "open",
+       "shape": {
+        "scope": "this-page",
+        "refKind": "position"
+       },
+       "argsKey": "9bb80a7e82a3",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 135,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 178200,
+     "seq": 140,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 142,
+       "atMs": 180000,
+       "tool": "queue_work",
+       "shape": {
+        "kind": "dispatch",
+        "targetKind": "work-item"
+       },
+       "argsKey": "863b1f3c5b0a",
+       "outcome": "refused",
+       "reason": "not-found",
+       "result": "refused",
+       "resultSeq": 144,
+       "durationMs": 0
+      },
+      {
+       "seq": 145,
+       "atMs": 182800,
+       "tool": "list",
+       "shape": {
+        "kind": "work-item",
+        "scope": "this-page"
+       },
+       "argsKey": "57a35b10380c",
+       "outcome": "done",
+       "result": "list",
+       "count": 3,
+       "rows": 3,
+       "of": "work-item",
+       "resultSeq": 146,
+       "durationMs": 0
+      },
+      {
+       "seq": 147,
+       "atMs": 186100,
+       "tool": "queue_work",
+       "shape": {
+        "kind": "dispatch",
+        "scope": "this-page",
+        "rowCount": 1
+       },
+       "argsKey": "f8a422ca5177",
+       "outcome": "failed",
+       "result": "failed",
+       "resultSeq": 153,
+       "durationMs": 7100,
+       "card": {
+        "shownMs": 186600,
+        "mode": "voice",
+        "decision": "confirmed",
+        "by": "voice",
+        "afterMs": 4600,
+        "phrase": "yeah"
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 196100,
+     "seq": 155,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 157,
+       "atMs": 204200,
+       "tool": "queue_work",
+       "shape": {
+        "kind": "dispatch",
+        "scope": "this-page",
+        "rowCount": 1
+       },
+       "argsKey": "f8a422ca5177",
+       "outcome": "refused",
+       "reason": "other",
+       "result": "refused",
+       "resultSeq": 160,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 207700,
+     "seq": 162,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 164,
+       "atMs": 209200,
+       "tool": "open",
+       "shape": {
+        "page": "computer-lab"
+       },
+       "argsKey": "7034bdb6da62",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 165,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 214000,
+     "seq": 167,
+     "heardBefore": true,
+     "calls": []
+    },
+    {
+     "atMs": 226200,
+     "seq": 174,
+     "heardBefore": true,
+     "calls": []
+    },
+    {
+     "atMs": 232100,
+     "seq": 177,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 179,
+       "atMs": 235400,
+       "tool": "open",
+       "shape": {
+        "refKind": "initiative"
+       },
+       "argsKey": "3e5a23868e67",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 181,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 247400,
+     "seq": 185,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 187,
+       "atMs": 251700,
+       "tool": "open",
+       "shape": {
+        "page": "designs"
+       },
+       "argsKey": "2e235c4508f9",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 188,
+       "durationMs": 0
+      },
+      {
+       "seq": 189,
+       "atMs": 254100,
+       "tool": "open",
+       "shape": {
+        "page": "runbooks"
+       },
+       "argsKey": "99bde94fde39",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 190,
+       "durationMs": 0
+      },
+      {
+       "seq": 191,
+       "atMs": 259700,
+       "tool": "open",
+       "shape": {
+        "page": "agent-library"
+       },
+       "argsKey": "86645c8b2c6a",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 192,
+       "durationMs": 0
+      },
+      {
+       "seq": 193,
+       "atMs": 263900,
+       "tool": "open",
+       "shape": {
+        "page": "runbooks"
+       },
+       "argsKey": "99bde94fde39",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 194,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 279500,
+     "seq": 207,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 209,
+       "atMs": 282500,
+       "tool": "open",
+       "shape": {
+        "refKind": "initiative"
+       },
+       "argsKey": "3e5a23868e67",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 210,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 305600,
+     "seq": 223,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 225,
+       "atMs": 307700,
+       "tool": "open",
+       "shape": {
+        "page": "communication"
+       },
+       "argsKey": "b2b62094a136",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 226,
+       "durationMs": 0
+      },
+      {
+       "seq": 227,
+       "atMs": 312500,
+       "tool": "activity",
+       "shape": {
+        "scope": "online"
+       },
+       "argsKey": "a36583836fb5",
+       "outcome": "done",
+       "result": "activity",
+       "count": 0,
+       "rows": 0,
+       "resultSeq": 228,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 318200,
+     "seq": 231,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 233,
+       "atMs": 321000,
+       "tool": "open",
+       "shape": {
+        "kind": "channel",
+        "byName": true
+       },
+       "argsKey": "a08bd10436c1",
+       "outcome": "refused",
+       "reason": "not-found",
+       "result": "refused",
+       "resultSeq": 235,
+       "durationMs": 0
+      },
+      {
+       "seq": 236,
+       "atMs": 323200,
+       "tool": "list",
+       "shape": {
+        "kind": "channel",
+        "filteredBy": "q"
+       },
+       "argsKey": "302d5c8df797",
+       "outcome": "done",
+       "result": "list",
+       "count": 0,
+       "rows": 0,
+       "of": "channel",
+       "resultSeq": 237,
+       "durationMs": 0
+      },
+      {
+       "seq": 238,
+       "atMs": 325300,
+       "tool": "list",
+       "shape": {
+        "kind": "team",
+        "filteredBy": "q"
+       },
+       "argsKey": "61c355549919",
+       "outcome": "done",
+       "result": "list",
+       "count": 0,
+       "rows": 0,
+       "of": "team",
+       "resultSeq": 239,
+       "durationMs": 0
+      },
+      {
+       "seq": 240,
+       "atMs": 328500,
+       "tool": "list",
+       "shape": {
+        "kind": "channel",
+        "filteredBy": "q"
+       },
+       "argsKey": "88b50dbf5672",
+       "outcome": "done",
+       "result": "list",
+       "count": 0,
+       "rows": 0,
+       "of": "channel",
+       "resultSeq": 241,
+       "durationMs": 0
+      },
+      {
+       "seq": 243,
+       "atMs": 331400,
+       "tool": "list",
+       "shape": {
+        "kind": "channel"
+       },
+       "argsKey": "aa6960c311f6",
+       "outcome": "refused",
+       "reason": "too-many-calls",
+       "result": "refused",
+       "resultSeq": 245,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [
+    {
+     "seq": 243,
+     "atMs": 331400,
+     "kind": "too-many-calls",
+     "tool": "list"
+    }
+   ],
+   "close": {
+    "stopReason": "closed",
+    "reason": "user"
+   }
+  },
+  {
+   "id": "vs_900938ca-cd43-419d-a03f-f5eaeac595d4",
+   "tenant": "orgiq",
+   "date": "2026-11-09T01:42",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 92800,
+   "counts": {
+    "delegations": 4,
+    "calls": 6,
+    "done": 2,
+    "refused": 0,
+    "failed": 4,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 5
+   },
+   "delegations": [
+    {
+     "atMs": 8700,
+     "seq": 6,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 8,
+       "atMs": 10400,
+       "tool": "message",
+       "shape": {
+        "targetKind": "channel"
+       },
+       "argsKey": "2a3458731f72",
+       "outcome": "failed",
+       "result": "failed",
+       "resultSeq": 15,
+       "durationMs": 6100,
+       "card": {
+        "shownMs": 10900,
+        "mode": "voice",
+        "decision": "confirmed",
+        "by": "voice",
+        "afterMs": 6100,
+        "phrase": "confirm"
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 19400,
+     "seq": 17,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 19,
+       "atMs": 27500,
+       "tool": "message",
+       "shape": {
+        "targetKind": "channel"
+       },
+       "argsKey": "2a3458731f72",
+       "outcome": "failed",
+       "result": "failed",
+       "resultSeq": 25,
+       "durationMs": 11400,
+       "card": {
+        "shownMs": 28000,
+        "mode": "voice",
+        "decision": "confirmed",
+        "by": "voice",
+        "afterMs": 3400,
+        "phrase": "confirm"
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 41200,
+     "seq": 28,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 30,
+       "atMs": 42800,
+       "tool": "list",
+       "shape": {
+        "kind": "channel",
+        "filteredBy": "q"
+       },
+       "argsKey": "004c1511e54c",
+       "outcome": "done",
+       "result": "list",
+       "count": 1,
+       "rows": 1,
+       "of": "channel",
+       "resultSeq": 31,
+       "durationMs": 0
+      },
+      {
+       "seq": 32,
+       "atMs": 44300,
+       "tool": "update",
+       "shape": {
+        "refKind": "channel",
+        "fields": "member"
+       },
+       "argsKey": "b79c36187703",
+       "outcome": "done",
+       "result": "updated",
+       "resultSeq": 38,
+       "durationMs": 4300,
+       "card": {
+        "shownMs": 44800,
+        "mode": "voice",
+        "decision": "confirmed",
+        "by": "voice",
+        "afterMs": 4300,
+        "phrase": "confirm"
+       }
+      },
+      {
+       "seq": 39,
+       "atMs": 57000,
+       "tool": "message",
+       "shape": {
+        "targetKind": "channel"
+       },
+       "argsKey": "2a3458731f72",
+       "outcome": "failed",
+       "result": "failed",
+       "resultSeq": 45,
+       "durationMs": 9100,
+       "card": {
+        "shownMs": 57500,
+        "mode": "voice",
+        "decision": "confirmed",
+        "by": "click",
+        "afterMs": 1100
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 68700,
+     "seq": 47,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 49,
+       "atMs": 69900,
+       "tool": "message",
+       "shape": {
+        "targetKind": "channel"
+       },
+       "argsKey": "2a3458731f72",
+       "outcome": "failed",
+       "result": "failed",
+       "resultSeq": 56,
+       "durationMs": 9400,
+       "card": {
+        "shownMs": 70400,
+        "mode": "voice",
+        "decision": "confirmed",
+        "by": "click",
+        "afterMs": 1300
+       }
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "closed",
+    "reason": "user"
+   }
+  },
+  {
+   "id": "vs_d3cd28ad-67c5-42ec-983e-63bbf880770c",
+   "tenant": "orgiq",
+   "date": "2026-11-09T13:28",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 59200,
+   "counts": {
+    "delegations": 2,
+    "calls": 4,
+    "done": 4,
+    "refused": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 0
+   },
+   "delegations": [
+    {
+     "atMs": 12100,
+     "seq": 7,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 10,
+       "atMs": 28800,
+       "tool": "search",
+       "shape": {
+        "type": "person",
+        "sort": "relevance",
+        "answer": false
+       },
+       "argsKey": "ca4f4cc25ba4",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 5,
+       "resultSeq": 11,
+       "durationMs": 100
+      },
+      {
+       "seq": 12,
+       "atMs": 35400,
+       "tool": "activity",
+       "shape": {
+        "scope": "online"
+       },
+       "argsKey": "a36583836fb5",
+       "outcome": "done",
+       "result": "activity",
+       "count": 0,
+       "rows": 0,
+       "resultSeq": 13,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 42700,
+     "seq": 15,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 18,
+       "atMs": 44800,
+       "tool": "search",
+       "shape": {
+        "type": "person",
+        "sort": "relevance",
+        "answer": false
+       },
+       "argsKey": "5cb4028d52ac",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 1,
+       "resultSeq": 19,
+       "durationMs": 0
+      },
+      {
+       "seq": 20,
+       "atMs": 46200,
+       "tool": "activity",
+       "shape": {
+        "scope": "online"
+       },
+       "argsKey": "dff6aaf89793",
+       "outcome": "done",
+       "result": "activity",
+       "count": 0,
+       "rows": 0,
+       "resultSeq": 21,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "dropped",
+    "reason": "beforeunload"
+   }
+  },
+  {
+   "id": "vs_5144e356-5dd5-4990-acec-1b9641cf69bd",
+   "tenant": "orgiq",
+   "date": "2026-11-09T13:29",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 56200,
+   "counts": {
+    "delegations": 2,
+    "calls": 3,
+    "done": 2,
+    "refused": 1,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 0
+   },
+   "delegations": [
+    {
+     "atMs": 5400,
+     "seq": 6,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 8,
+       "atMs": 6300,
+       "tool": "activity",
+       "shape": {
+        "scope": "online"
+       },
+       "argsKey": "a36583836fb5",
+       "outcome": "done",
+       "result": "activity",
+       "count": 0,
+       "rows": 0,
+       "resultSeq": 10,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 19200,
+     "seq": 17,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 19,
+       "atMs": 22000,
+       "tool": "open",
+       "shape": {
+        "kind": "initiative",
+        "byName": true
+       },
+       "argsKey": "59a576819e46",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 20,
+       "durationMs": 0
+      },
+      {
+       "seq": 21,
+       "atMs": 25700,
+       "tool": "get",
+       "shape": {
+        "part": "decisions",
+        "refKind": "initiative"
+       },
+       "argsKey": "ba9fb91a5767",
+       "outcome": "refused",
+       "reason": "navigated",
+       "result": "refused",
+       "resultSeq": 23,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [
+    {
+     "seq": 21,
+     "atMs": 25700,
+     "kind": "navigated",
+     "tool": "get"
+    }
+   ],
+   "close": {
+    "stopReason": "dropped",
+    "reason": "beforeunload"
+   }
+  },
+  {
+   "id": "vs_8ec235e3-ca86-4cfe-8c20-053e83633707",
+   "tenant": "orgiq",
+   "date": "2026-11-09T13:30",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 58900,
+   "counts": {
+    "delegations": 3,
+    "calls": 3,
+    "done": 2,
+    "refused": 1,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 0
+   },
+   "delegations": [
+    {
+     "atMs": 4800,
+     "seq": 10,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 12,
+       "atMs": 6600,
+       "tool": "open",
+       "shape": {
+        "kind": "work-item",
+        "scope": "this-page",
+        "refKind": "position"
+       },
+       "argsKey": "ed47073482ef",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 14,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 15700,
+     "seq": 21,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 23,
+       "atMs": 21500,
+       "tool": "create",
+       "shape": {
+        "kind": "access-request",
+        "fields": "item"
+       },
+       "argsKey": "37953f1836c7",
+       "outcome": "refused",
+       "reason": "no-grant",
+       "result": "refused",
+       "resultSeq": 25,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 35000,
+     "seq": 29,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 31,
+       "atMs": 37700,
+       "tool": "activity",
+       "shape": {
+        "scope": "online"
+       },
+       "argsKey": "a36583836fb5",
+       "outcome": "done",
+       "result": "activity",
+       "count": 0,
+       "rows": 0,
+       "resultSeq": 33,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "dropped",
+    "reason": "beforeunload"
+   }
+  },
+  {
+   "id": "vs_7c98fdc7-21fb-43f4-a6b3-3314cc9e20d2",
+   "tenant": "orgiq",
+   "date": "2026-11-09T13:31",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 53600,
+   "counts": {
+    "delegations": 2,
+    "calls": 3,
+    "done": 2,
+    "refused": 1,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 0
+   },
+   "delegations": [
+    {
+     "atMs": 10900,
+     "seq": 9,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 11,
+       "atMs": 11500,
+       "tool": "open",
+       "shape": {
+        "kind": "initiative",
+        "byName": true
+       },
+       "argsKey": "cb726a8f618f",
+       "outcome": "refused",
+       "reason": "ambiguous",
+       "result": "ambiguous",
+       "candidates": 1,
+       "resultSeq": 16,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 20900,
+     "seq": 26,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 28,
+       "atMs": 22800,
+       "tool": "open",
+       "shape": {
+        "refKind": "initiative"
+       },
+       "argsKey": "0e8ba79a35df",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 29,
+       "durationMs": 0
+      },
+      {
+       "seq": 30,
+       "atMs": 26100,
+       "tool": "list",
+       "shape": {
+        "kind": "work-item",
+        "scope": "this-page"
+       },
+       "argsKey": "61531668d51b",
+       "outcome": "done",
+       "result": "list",
+       "count": 11,
+       "rows": 10,
+       "of": "work-item",
+       "resultSeq": 31,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "closed",
+    "reason": "user"
+   }
+  },
+  {
+   "id": "vs_9b06806f-a6c5-42a2-b786-d40db26e2bf9",
+   "tenant": "orgiq",
+   "date": "2026-11-09T13:32",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 127500,
+   "counts": {
+    "delegations": 6,
+    "calls": 20,
+    "done": 17,
+    "refused": 2,
+    "failed": 0,
+    "cancelled": 1,
+    "unfinished": 0,
+    "cards": 1
+   },
+   "delegations": [
+    {
+     "atMs": 10500,
+     "seq": 7,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 9,
+       "atMs": 11700,
+       "tool": "open",
+       "shape": {
+        "page": "initiatives"
+       },
+       "argsKey": "078bdb29f97d",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 11,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 19300,
+     "seq": 16,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 18,
+       "atMs": 22500,
+       "tool": "open",
+       "shape": {
+        "kind": "initiative",
+        "byName": true
+       },
+       "argsKey": "59a576819e46",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 19,
+       "durationMs": 0
+      },
+      {
+       "seq": 20,
+       "atMs": 27500,
+       "tool": "list",
+       "shape": {
+        "kind": "work-item",
+        "scope": "this-page",
+        "filterScope": "all"
+       },
+       "argsKey": "866b5bab63a9",
+       "outcome": "done",
+       "result": "list",
+       "count": 11,
+       "rows": 5,
+       "of": "work-item",
+       "resultSeq": 21,
+       "durationMs": 0
+      },
+      {
+       "seq": 22,
+       "atMs": 32200,
+       "tool": "list",
+       "shape": {
+        "kind": "work-item",
+        "scope": "this-page",
+        "filterScope": "all",
+        "filteredBy": "status"
+       },
+       "argsKey": "8473d1a2185d",
+       "outcome": "done",
+       "result": "list",
+       "count": 1,
+       "rows": 1,
+       "of": "work-item",
+       "resultSeq": 23,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 35700,
+     "seq": 25,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 27,
+       "atMs": 36700,
+       "tool": "open",
+       "shape": {
+        "kind": "work-item",
+        "scope": "this-page",
+        "refKind": "position"
+       },
+       "argsKey": "dec741d13b01",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 28,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 47300,
+     "seq": 34,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 36,
+       "atMs": 49000,
+       "tool": "open",
+       "shape": {
+        "scope": "this-page",
+        "tab": "decisions"
+       },
+       "argsKey": "dff157d39878",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 37,
+       "durationMs": 0
+      },
+      {
+       "seq": 38,
+       "atMs": 50900,
+       "tool": "list",
+       "shape": {
+        "kind": "decision",
+        "scope": "this-page",
+        "filterScope": "all"
+       },
+       "argsKey": "26304581d4ed",
+       "outcome": "refused",
+       "reason": "not-on-this-page",
+       "result": "refused",
+       "resultSeq": 40,
+       "durationMs": 0
+      },
+      {
+       "seq": 41,
+       "atMs": 53300,
+       "tool": "list",
+       "shape": {
+        "kind": "decision",
+        "filterScope": "all"
+       },
+       "argsKey": "1d7627b34d91",
+       "outcome": "done",
+       "result": "list",
+       "count": 12,
+       "rows": 5,
+       "of": "decision",
+       "resultSeq": 42,
+       "durationMs": 0
+      },
+      {
+       "seq": 43,
+       "atMs": 56000,
+       "tool": "list",
+       "shape": {
+        "kind": "decision",
+        "filterScope": "mine"
+       },
+       "argsKey": "cabe71e013db",
+       "outcome": "refused",
+       "reason": "invalid-arguments",
+       "result": "refused",
+       "resultSeq": 45,
+       "durationMs": 0
+      },
+      {
+       "seq": 46,
+       "atMs": 58900,
+       "tool": "get",
+       "shape": {
+        "refKind": "decision"
+       },
+       "argsKey": "991b7ca3adf4",
+       "outcome": "done",
+       "result": "record",
+       "resultSeq": 47,
+       "durationMs": 0
+      },
+      {
+       "seq": 48,
+       "atMs": 60700,
+       "tool": "get",
+       "shape": {
+        "refKind": "decision"
+       },
+       "argsKey": "63ace98289be",
+       "outcome": "done",
+       "result": "record",
+       "resultSeq": 49,
+       "durationMs": 0
+      },
+      {
+       "seq": 50,
+       "atMs": 62700,
+       "tool": "get",
+       "shape": {
+        "refKind": "decision"
+       },
+       "argsKey": "27b9defa5bee",
+       "outcome": "done",
+       "result": "record",
+       "resultSeq": 51,
+       "durationMs": 0
+      },
+      {
+       "seq": 52,
+       "atMs": 65400,
+       "tool": "list",
+       "shape": {
+        "kind": "decision"
+       },
+       "argsKey": "38700e361461",
+       "outcome": "done",
+       "result": "list",
+       "count": 12,
+       "rows": 5,
+       "of": "decision",
+       "resultSeq": 53,
+       "durationMs": 0
+      },
+      {
+       "seq": 54,
+       "atMs": 71100,
+       "tool": "list",
+       "shape": {
+        "kind": "decision",
+        "filteredBy": "status"
+       },
+       "argsKey": "09b40a14848c",
+       "outcome": "done",
+       "result": "list",
+       "count": 2,
+       "rows": 2,
+       "of": "decision",
+       "resultSeq": 55,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 74700,
+     "seq": 58,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 60,
+       "atMs": 79900,
+       "tool": "search",
+       "shape": {
+        "type": "decision",
+        "sort": "relevance",
+        "answer": false
+       },
+       "argsKey": "9bd5853ff11e",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 3,
+       "resultSeq": 61,
+       "durationMs": 0
+      },
+      {
+       "seq": 62,
+       "atMs": 83600,
+       "tool": "open",
+       "shape": {
+        "page": "computer-lab"
+       },
+       "argsKey": "7034bdb6da62",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 63,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 93500,
+     "seq": 67,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 69,
+       "atMs": 96500,
+       "tool": "list",
+       "shape": {
+        "kind": "computer",
+        "filterScope": "all"
+       },
+       "argsKey": "6cace96dbc76",
+       "outcome": "done",
+       "result": "list",
+       "count": 4,
+       "rows": 4,
+       "of": "computer",
+       "resultSeq": 70,
+       "durationMs": 0
+      },
+      {
+       "seq": 71,
+       "atMs": 99200,
+       "tool": "list",
+       "shape": {
+        "kind": "computer",
+        "filterScope": "all"
+       },
+       "argsKey": "5df5f83ae3f6",
+       "outcome": "done",
+       "result": "list",
+       "count": 4,
+       "rows": 4,
+       "of": "computer",
+       "resultSeq": 72,
+       "durationMs": 0
+      },
+      {
+       "seq": 74,
+       "atMs": 113500,
+       "tool": "computer",
+       "shape": {
+        "action": "open-shell"
+       },
+       "argsKey": "e8356e7b0839",
+       "outcome": "done",
+       "result": "shell_opened",
+       "resultSeq": 75,
+       "durationMs": 0
+      },
+      {
+       "seq": 76,
+       "atMs": 120000,
+       "tool": "computer",
+       "shape": {
+        "action": "run",
+        "phrase": "list-files"
+       },
+       "argsKey": "98cb51cb0653",
+       "outcome": "cancelled",
+       "result": "cancelled",
+       "resultSeq": 83,
+       "durationMs": 2800,
+       "card": {
+        "shownMs": 120500,
+        "mode": "click",
+        "decision": "cancelled",
+        "by": "click",
+        "afterMs": 2800
+       }
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "closed",
+    "reason": "user"
+   }
+  },
+  {
+   "id": "vs_f00c7f2b-45a4-45fb-9e68-758460bc361e",
+   "tenant": "orgiq",
+   "date": "2026-11-09T13:35",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 141100,
+   "counts": {
+    "delegations": 5,
+    "calls": 9,
+    "done": 6,
+    "refused": 2,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 1,
+    "cards": 1
+   },
+   "delegations": [
+    {
+     "atMs": 22800,
+     "seq": 10,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 12,
+       "atMs": 27700,
+       "tool": "summary",
+       "shape": {
+        "kind": "machines"
+       },
+       "argsKey": "5369f4e10e77",
+       "outcome": "done",
+       "result": "summary",
+       "of": "machines",
+       "resultSeq": 13,
+       "durationMs": 0
+      },
+      {
+       "seq": 14,
+       "atMs": 29400,
+       "tool": "list",
+       "shape": {
+        "kind": "work-item",
+        "filterScope": "all"
+       },
+       "argsKey": "dae6ccccdf9e",
+       "outcome": "done",
+       "result": "list",
+       "count": 50,
+       "rows": 5,
+       "of": "work-item",
+       "resultSeq": 15,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 44100,
+     "seq": 21,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 23,
+       "atMs": 45800,
+       "tool": "list",
+       "shape": {
+        "kind": "initiative",
+        "filterScope": "mine"
+       },
+       "argsKey": "a584949efd9c",
+       "outcome": "done",
+       "result": "list",
+       "count": 2,
+       "rows": 2,
+       "of": "initiative",
+       "resultSeq": 24,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 57600,
+     "seq": 28,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 30,
+       "atMs": 58800,
+       "tool": "computer",
+       "shape": {
+        "action": "start",
+        "targets": 2
+       },
+       "argsKey": "c3e3194e5ff5",
+       "outcome": "refused",
+       "reason": "ambiguous",
+       "result": "ambiguous",
+       "candidates": 2,
+       "resultSeq": 32,
+       "durationMs": 0
+      },
+      {
+       "seq": 33,
+       "atMs": 60700,
+       "tool": "computer",
+       "shape": {
+        "action": "start",
+        "targets": 2
+       },
+       "argsKey": "093931faf2ab",
+       "outcome": "done",
+       "result": "computers",
+       "count": 2,
+       "rows": 2,
+       "resultSeq": 43,
+       "durationMs": 21600,
+       "card": {
+        "shownMs": 61200,
+        "mode": "click",
+        "decision": "confirmed",
+        "by": "click",
+        "afterMs": 21500,
+        "clickRequired": 3
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 84600,
+     "seq": 45,
+     "heardBefore": true,
+     "calls": []
+    },
+    {
+     "atMs": 106400,
+     "seq": 57,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 59,
+       "atMs": 109700,
+       "tool": "list",
+       "shape": {
+        "kind": "computer",
+        "filterScope": "mine"
+       },
+       "argsKey": "a554984e68ff",
+       "outcome": "refused",
+       "reason": "invalid-arguments",
+       "result": "refused",
+       "resultSeq": 61,
+       "durationMs": 0
+      },
+      {
+       "seq": 62,
+       "atMs": 117100,
+       "tool": "list",
+       "shape": {
+        "kind": "computer"
+       },
+       "argsKey": "bf2ea422cc63",
+       "outcome": "done",
+       "result": "list",
+       "count": 6,
+       "rows": 5,
+       "of": "computer",
+       "resultSeq": 63,
+       "durationMs": 0
+      },
+      {
+       "seq": 64,
+       "atMs": 127100,
+       "tool": "list",
+       "shape": {
+        "kind": "computer"
+       },
+       "argsKey": "7e82789d960c",
+       "outcome": "done",
+       "result": "list",
+       "count": 6,
+       "rows": 6,
+       "of": "computer",
+       "resultSeq": 65,
+       "durationMs": 0
+      },
+      {
+       "seq": 68,
+       "atMs": 139600,
+       "tool": "computer",
+       "shape": {
+        "action": "stop"
+       },
+       "argsKey": null,
+       "outcome": "unfinished"
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "dropped",
+    "reason": "beforeunload"
+   }
+  },
+  {
+   "id": "vs_5ab9f3cb-c805-48a3-91fc-052f02ab922f",
+   "tenant": "orgiq",
+   "date": "2026-11-09T13:38",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 170400,
+   "counts": {
+    "delegations": 8,
+    "calls": 8,
+    "done": 8,
+    "refused": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 2
+   },
+   "delegations": [
+    {
+     "atMs": 8800,
+     "seq": 9,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 11,
+       "atMs": 13600,
+       "tool": "list",
+       "shape": {
+        "kind": "decision",
+        "filterScope": "all",
+        "filteredBy": "status"
+       },
+       "argsKey": "7b4eae6a95b9",
+       "outcome": "done",
+       "result": "list",
+       "count": 0,
+       "rows": 0,
+       "of": "decision",
+       "resultSeq": 13,
+       "durationMs": 0
+      },
+      {
+       "seq": 14,
+       "atMs": 15400,
+       "tool": "list",
+       "shape": {
+        "kind": "hitl-approval",
+        "filterScope": "all",
+        "filteredBy": "status"
+       },
+       "argsKey": "3f73aa451024",
+       "outcome": "done",
+       "result": "list",
+       "count": 1,
+       "rows": 1,
+       "of": "hitl-approval",
+       "resultSeq": 15,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 23000,
+     "seq": 20,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 22,
+       "atMs": 24100,
+       "tool": "open",
+       "shape": {
+        "refKind": "hitl-approval"
+       },
+       "argsKey": "073d27f8f894",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 23,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 37900,
+     "seq": 28,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 30,
+       "atMs": 39100,
+       "tool": "activity",
+       "shape": {
+        "scope": "online"
+       },
+       "argsKey": "a36583836fb5",
+       "outcome": "done",
+       "result": "activity",
+       "count": 0,
+       "rows": 0,
+       "resultSeq": 31,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 61100,
+     "seq": 40,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 42,
+       "atMs": 63800,
+       "tool": "list",
+       "shape": {
+        "kind": "channel",
+        "filterScope": "all",
+        "filteredBy": "q"
+       },
+       "argsKey": "d499149069dd",
+       "outcome": "done",
+       "result": "list",
+       "count": 1,
+       "rows": 1,
+       "of": "channel",
+       "resultSeq": 43,
+       "durationMs": 0
+      },
+      {
+       "seq": 44,
+       "atMs": 67200,
+       "tool": "message",
+       "shape": {
+        "targetKind": "channel"
+       },
+       "argsKey": "d0ea9deac095",
+       "outcome": "done",
+       "result": "posted",
+       "resultSeq": 50,
+       "durationMs": 4900,
+       "card": {
+        "shownMs": 67700,
+        "mode": "voice",
+        "decision": "confirmed",
+        "by": "voice",
+        "afterMs": 4900,
+        "phrase": "confirm"
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 93700,
+     "seq": 57,
+     "heardBefore": true,
+     "calls": []
+    },
+    {
+     "atMs": 106600,
+     "seq": 64,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 66,
+       "atMs": 108200,
+       "tool": "open",
+       "shape": {
+        "scope": "this-page",
+        "tab": "docs"
+       },
+       "argsKey": "6399db481f3d",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 67,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 117200,
+     "seq": 75,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 77,
+       "atMs": 122900,
+       "tool": "create",
+       "shape": {
+        "kind": "whiteboard",
+        "fields": "initiative,title"
+       },
+       "argsKey": "3c82a25706b6",
+       "outcome": "done",
+       "result": "whiteboard",
+       "resultSeq": 83,
+       "durationMs": 4300,
+       "card": {
+        "shownMs": 123400,
+        "mode": "voice",
+        "decision": "confirmed",
+        "by": "voice",
+        "afterMs": 4200,
+        "phrase": "confirm"
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 137700,
+     "seq": 89,
+     "heardBefore": true,
+     "calls": []
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "closed",
+    "reason": "user"
+   }
+  },
+  {
+   "id": "vs_3fc44f95-1ba5-46d3-b242-06a7d691c47c",
+   "tenant": "orgiq",
+   "date": "2026-11-09T13:41",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 22100,
+   "counts": {
+    "delegations": 1,
+    "calls": 1,
+    "done": 0,
+    "refused": 0,
+    "failed": 0,
+    "cancelled": 1,
+    "unfinished": 0,
+    "cards": 1
+   },
+   "delegations": [
+    {
+     "atMs": 15400,
+     "seq": 7,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 9,
+       "atMs": 18100,
+       "tool": "message",
+       "shape": {
+        "targetKind": "channel"
+       },
+       "argsKey": "bd150ffc100f",
+       "outcome": "cancelled",
+       "result": "cancelled",
+       "resultSeq": 15,
+       "durationMs": 1300,
+       "card": {
+        "shownMs": 18600,
+        "mode": "voice",
+        "decision": "cancelled",
+        "by": "click",
+        "afterMs": 1300
+       }
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "dropped",
+    "reason": "beforeunload"
+   }
+  },
+  {
+   "id": "vs_262a5b9d-0cba-4593-a7e5-48ceaa012c9e",
+   "tenant": "orgiq",
+   "date": "2026-11-09T13:42",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 38500,
+   "counts": {
+    "delegations": 3,
+    "calls": 1,
+    "done": 1,
+    "refused": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 1
+   },
+   "delegations": [
+    {
+     "atMs": 14500,
+     "seq": 10,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 12,
+       "atMs": 16900,
+       "tool": "message",
+       "shape": {
+        "targetKind": "channel"
+       },
+       "argsKey": "9bc1e0cac297",
+       "outcome": "done",
+       "result": "posted",
+       "resultSeq": 18,
+       "durationMs": 4100,
+       "card": {
+        "shownMs": 17400,
+        "mode": "voice",
+        "decision": "confirmed",
+        "by": "voice",
+        "afterMs": 4100,
+        "phrase": "yep"
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 24100,
+     "seq": 20,
+     "heardBefore": true,
+     "calls": []
+    },
+    {
+     "atMs": 29200,
+     "seq": 23,
+     "heardBefore": true,
+     "calls": []
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "closed",
+    "reason": "user"
+   }
+  },
+  {
+   "id": "vs_9b2868a7-d428-4fd9-a05c-756b4133ac56",
+   "tenant": "orgiq",
+   "date": "2026-11-09T13:43",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 46600,
+   "counts": {
+    "delegations": 3,
+    "calls": 4,
+    "done": 1,
+    "refused": 1,
+    "failed": 0,
+    "cancelled": 1,
+    "unfinished": 1,
+    "cards": 1
+   },
+   "delegations": [
+    {
+     "atMs": 7000,
+     "seq": 5,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 7,
+       "atMs": 9000,
+       "tool": "open",
+       "shape": {
+        "page": "communication",
+        "tab": "channels"
+       },
+       "argsKey": "2db2630e01a3",
+       "outcome": "refused",
+       "reason": "other",
+       "result": "refused",
+       "resultSeq": 10,
+       "durationMs": 0
+      },
+      {
+       "seq": 11,
+       "atMs": 11500,
+       "tool": "open",
+       "shape": {
+        "page": "communication"
+       },
+       "argsKey": "b2b62094a136",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 12,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 35800,
+     "seq": 27,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 29,
+       "atMs": 38500,
+       "tool": "message",
+       "shape": {
+        "targetKind": "channel"
+       },
+       "argsKey": "6d0c3f1e09e1",
+       "outcome": "cancelled",
+       "result": "cancelled",
+       "resultSeq": 35,
+       "durationMs": 3000,
+       "card": {
+        "shownMs": 39000,
+        "mode": "voice",
+        "decision": "cancelled",
+        "by": "click",
+        "afterMs": 3000
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 43400,
+     "seq": 38,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 40,
+       "atMs": 45800,
+       "tool": "message",
+       "shape": {
+        "targetKind": "channel"
+       },
+       "argsKey": null,
+       "outcome": "unfinished"
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "dropped",
+    "reason": "beforeunload"
+   }
+  },
+  {
+   "id": "vs_017bcb19-26cd-4c31-9cdb-7056d09a6149",
+   "tenant": "orgiq",
+   "date": "2026-11-09T13:44",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 23000,
+   "counts": {
+    "delegations": 2,
+    "calls": 1,
+    "done": 1,
+    "refused": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 0
+   },
+   "delegations": [
+    {
+     "atMs": 9100,
+     "seq": 12,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 14,
+       "atMs": 11100,
+       "tool": "open",
+       "shape": {
+        "refKind": "initiative"
+       },
+       "argsKey": "3a2e387bc96b",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 16,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 20400,
+     "seq": 21,
+     "heardBefore": true,
+     "calls": []
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "dropped",
+    "reason": "beforeunload"
+   }
+  },
+  {
+   "id": "vs_282864af-2438-4a90-a070-3cd4c6cba31a",
+   "tenant": "orgiq",
+   "date": "2026-11-09T13:45",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 86500,
+   "counts": {
+    "delegations": 6,
+    "calls": 5,
+    "done": 5,
+    "refused": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 1
+   },
+   "delegations": [
+    {
+     "atMs": 6400,
+     "seq": 9,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 11,
+       "atMs": 8800,
+       "tool": "open",
+       "shape": {
+        "refKind": "initiative"
+       },
+       "argsKey": "3a2e387bc96b",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 12,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 20900,
+     "seq": 23,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 25,
+       "atMs": 22800,
+       "tool": "open",
+       "shape": {
+        "scope": "this-page",
+        "tab": "docs"
+       },
+       "argsKey": "6399db481f3d",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 26,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 33600,
+     "seq": 30,
+     "heardBefore": true,
+     "calls": []
+    },
+    {
+     "atMs": 43600,
+     "seq": 37,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 40,
+       "atMs": 45100,
+       "tool": "create",
+       "shape": {
+        "kind": "whiteboard",
+        "fields": "initiative,title"
+       },
+       "argsKey": "3466044d0808",
+       "outcome": "done",
+       "result": "whiteboard",
+       "resultSeq": 46,
+       "durationMs": 5200,
+       "card": {
+        "shownMs": 45600,
+        "mode": "voice",
+        "decision": "confirmed",
+        "by": "voice",
+        "afterMs": 5200,
+        "phrase": "confirm"
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 51900,
+     "seq": 48,
+     "heardBefore": false,
+     "calls": []
+    },
+    {
+     "atMs": 65200,
+     "seq": 57,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 59,
+       "atMs": 70500,
+       "tool": "open",
+       "shape": {
+        "kind": "channel",
+        "byName": true
+       },
+       "argsKey": "45600befbd31",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 60,
+       "durationMs": 0
+      },
+      {
+       "seq": 62,
+       "atMs": 74900,
+       "tool": "activity",
+       "shape": {
+        "scope": "online"
+       },
+       "argsKey": "a36583836fb5",
+       "outcome": "done",
+       "result": "activity",
+       "count": 0,
+       "rows": 0,
+       "resultSeq": 63,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "closed",
+    "reason": "user"
+   }
+  },
+  {
+   "id": "vs_65d8c19c-a96e-4f97-a69d-715bfab0679d",
+   "tenant": "orgiq",
+   "date": "2026-11-09T13:45",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 22500,
+   "counts": {
+    "delegations": 1,
+    "calls": 1,
+    "done": 1,
+    "refused": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 0
+   },
+   "delegations": [
+    {
+     "atMs": 10200,
+     "seq": 10,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 13,
+       "atMs": 16000,
+       "tool": "open",
+       "shape": {
+        "refKind": "initiative"
+       },
+       "argsKey": "3a2e387bc96b",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 14,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "dropped",
+    "reason": "beforeunload"
+   }
+  },
+  {
+   "id": "vs_71839299-ef01-4ab2-a071-49cb07201092",
+   "tenant": "orgiq",
+   "date": "2026-11-09T13:47",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 156500,
+   "counts": {
+    "delegations": 9,
+    "calls": 11,
+    "done": 9,
+    "refused": 2,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 2
+   },
+   "delegations": [
+    {
+     "atMs": 6200,
+     "seq": 5,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 7,
+       "atMs": 9500,
+       "tool": "open",
+       "shape": {
+        "scope": "this-page",
+        "refKind": "initiative"
+       },
+       "argsKey": "f6c8c1605155",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 9,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 15100,
+     "seq": 12,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 14,
+       "atMs": 20700,
+       "tool": "open",
+       "shape": {
+        "scope": "this-page",
+        "tab": "docs"
+       },
+       "argsKey": "6399db481f3d",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 15,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 31400,
+     "seq": 20,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 22,
+       "atMs": 34300,
+       "tool": "create",
+       "shape": {
+        "kind": "whiteboard",
+        "fields": "initiative,title"
+       },
+       "argsKey": "7860f0194322",
+       "outcome": "done",
+       "result": "whiteboard",
+       "resultSeq": 28,
+       "durationMs": 2900,
+       "card": {
+        "shownMs": 34800,
+        "mode": "voice",
+        "decision": "confirmed",
+        "by": "voice",
+        "afterMs": 2900,
+        "phrase": "yeah"
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 49800,
+     "seq": 35,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 37,
+       "atMs": 52300,
+       "tool": "open",
+       "shape": {
+        "page": "communication"
+       },
+       "argsKey": "b2b62094a136",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 38,
+       "durationMs": 0
+      },
+      {
+       "seq": 39,
+       "atMs": 55500,
+       "tool": "list",
+       "shape": {
+        "kind": "channel",
+        "scope": "this-page",
+        "filterScope": "mine"
+       },
+       "argsKey": "6370f4a7619f",
+       "outcome": "refused",
+       "reason": "not-on-this-page",
+       "result": "refused",
+       "resultSeq": 41,
+       "durationMs": 0
+      },
+      {
+       "seq": 42,
+       "atMs": 58000,
+       "tool": "list",
+       "shape": {
+        "kind": "channel",
+        "filterScope": "mine"
+       },
+       "argsKey": "0a2bea6f2557",
+       "outcome": "refused",
+       "reason": "invalid-arguments",
+       "result": "refused",
+       "resultSeq": 44,
+       "durationMs": 0
+      },
+      {
+       "seq": 45,
+       "atMs": 59900,
+       "tool": "list",
+       "shape": {
+        "kind": "channel"
+       },
+       "argsKey": "14bc7c296f03",
+       "outcome": "done",
+       "result": "list",
+       "count": 6,
+       "rows": 5,
+       "of": "channel",
+       "resultSeq": 46,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 63400,
+     "seq": 52,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 54,
+       "atMs": 66000,
+       "tool": "message",
+       "shape": {
+        "targetKind": "channel"
+       },
+       "argsKey": "3f2e1c0a2a06",
+       "outcome": "done",
+       "result": "posted",
+       "resultSeq": 60,
+       "durationMs": 4100,
+       "card": {
+        "shownMs": 66500,
+        "mode": "voice",
+        "decision": "confirmed",
+        "by": "voice",
+        "afterMs": 4100,
+        "phrase": "confirm"
+       }
+      },
+      {
+       "seq": 61,
+       "atMs": 71200,
+       "tool": "activity",
+       "shape": {
+        "scope": "online"
+       },
+       "argsKey": "a36583836fb5",
+       "outcome": "done",
+       "result": "activity",
+       "count": 0,
+       "rows": 0,
+       "resultSeq": 62,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 73700,
+     "seq": 65,
+     "heardBefore": true,
+     "calls": []
+    },
+    {
+     "atMs": 89700,
+     "seq": 78,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 80,
+       "atMs": 91800,
+       "tool": "search",
+       "shape": {
+        "type": "person",
+        "scope": "workspace",
+        "sort": "relevance",
+        "answer": false
+       },
+       "argsKey": "2b888eb10308",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 4,
+       "resultSeq": 81,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 108600,
+     "seq": 86,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 88,
+       "atMs": 113900,
+       "tool": "search",
+       "shape": {
+        "type": "person",
+        "scope": "workspace",
+        "sort": "relevance",
+        "answer": false
+       },
+       "argsKey": "6f97d61d33ff",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 0,
+       "resultSeq": 89,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 118500,
+     "seq": 91,
+     "heardBefore": true,
+     "calls": []
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "dropped",
+    "reason": "beforeunload"
+   }
+  },
+  {
+   "id": "vs_9e107da2-a2ba-45d2-9d3c-2c11b559ba37",
+   "tenant": "orgiq",
+   "date": "2026-11-09T13:51",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 18500,
+   "counts": {
+    "delegations": 1,
+    "calls": 1,
+    "done": 1,
+    "refused": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 0
+   },
+   "delegations": [
+    {
+     "atMs": 7300,
+     "seq": 8,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 10,
+       "atMs": 12500,
+       "tool": "open",
+       "shape": {
+        "kind": "initiative",
+        "byName": true
+       },
+       "argsKey": "f80f2d188092",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 12,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "closed",
+    "reason": "user"
+   }
+  },
+  {
+   "id": "vs_bcb4e2d8-5629-49b2-ae81-51886339833a",
+   "tenant": "orgiq",
+   "date": "2026-11-09T13:51",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 24700,
+   "counts": {
+    "delegations": 2,
+    "calls": 1,
+    "done": 1,
+    "refused": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 0
+   },
+   "delegations": [
+    {
+     "atMs": 5500,
+     "seq": 5,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 7,
+       "atMs": 9800,
+       "tool": "open",
+       "shape": {
+        "scope": "this-page",
+        "refKind": "initiative"
+       },
+       "argsKey": "f6c8c1605155",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 9,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 20300,
+     "seq": 12,
+     "heardBefore": true,
+     "calls": []
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "dropped",
+    "reason": "beforeunload"
+   }
+  },
+  {
+   "id": "vs_0d1c427b-c158-40ba-8ff7-1447ac500cd9",
+   "tenant": "orgiq",
+   "date": "2026-11-09T13:52",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 52100,
+   "counts": {
+    "delegations": 4,
+    "calls": 3,
+    "done": 3,
+    "refused": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 1
+   },
+   "delegations": [
+    {
+     "atMs": 6700,
+     "seq": 6,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 8,
+       "atMs": 7900,
+       "tool": "open",
+       "shape": {
+        "scope": "this-page",
+        "refKind": "position"
+       },
+       "argsKey": "d1566015db8b",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 10,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 16900,
+     "seq": 14,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 16,
+       "atMs": 18400,
+       "tool": "open",
+       "shape": {
+        "scope": "this-page",
+        "tab": "docs"
+       },
+       "argsKey": "6399db481f3d",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 17,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 29700,
+     "seq": 23,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 25,
+       "atMs": 30800,
+       "tool": "create",
+       "shape": {
+        "kind": "whiteboard",
+        "fields": "initiative,title"
+       },
+       "argsKey": "503eed49fc1f",
+       "outcome": "done",
+       "result": "whiteboard",
+       "resultSeq": 32,
+       "durationMs": 14200,
+       "card": {
+        "shownMs": 31300,
+        "mode": "voice",
+        "decision": "confirmed",
+        "by": "voice",
+        "afterMs": 14200,
+        "phrase": "confirm"
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 46600,
+     "seq": 34,
+     "heardBefore": false,
+     "calls": []
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "dropped",
+    "reason": "beforeunload"
+   }
+  },
+  {
+   "id": "vs_89fba6d6-a5e6-41f7-a825-e0cff5b99e45",
+   "tenant": "orgiq",
+   "date": "2026-11-09T13:53",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 441200,
+   "counts": {
+    "delegations": 12,
+    "calls": 10,
+    "done": 9,
+    "refused": 1,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 2
+   },
+   "delegations": [
+    {
+     "atMs": 5300,
+     "seq": 10,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 12,
+       "atMs": 7400,
+       "tool": "open",
+       "shape": {
+        "kind": "initiative",
+        "byName": true
+       },
+       "argsKey": "efa9303a333b",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 14,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 14300,
+     "seq": 17,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 19,
+       "atMs": 15600,
+       "tool": "open",
+       "shape": {
+        "scope": "this-page",
+        "tab": "docs"
+       },
+       "argsKey": "6399db481f3d",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 20,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 25300,
+     "seq": 24,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 26,
+       "atMs": 27100,
+       "tool": "create",
+       "shape": {
+        "kind": "whiteboard",
+        "fields": "initiative,title"
+       },
+       "argsKey": "866598468f0a",
+       "outcome": "done",
+       "result": "whiteboard",
+       "resultSeq": 32,
+       "durationMs": 5600,
+       "card": {
+        "shownMs": 27600,
+        "mode": "voice",
+        "decision": "confirmed",
+        "by": "voice",
+        "afterMs": 5600,
+        "phrase": "confirm"
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 34300,
+     "seq": 34,
+     "heardBefore": false,
+     "calls": []
+    },
+    {
+     "atMs": 46800,
+     "seq": 47,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 49,
+       "atMs": 48200,
+       "tool": "open",
+       "shape": {
+        "page": "communication"
+       },
+       "argsKey": "b2b62094a136",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 50,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 59900,
+     "seq": 53,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 55,
+       "atMs": 65800,
+       "tool": "message",
+       "shape": {
+        "targetKind": "channel"
+       },
+       "argsKey": "d09b152be99b",
+       "outcome": "done",
+       "result": "posted",
+       "resultSeq": 61,
+       "durationMs": 5100,
+       "card": {
+        "shownMs": 66300,
+        "mode": "voice",
+        "decision": "confirmed",
+        "by": "voice",
+        "afterMs": 5100,
+        "phrase": "yep"
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 72900,
+     "seq": 63,
+     "heardBefore": true,
+     "calls": []
+    },
+    {
+     "atMs": 81500,
+     "seq": 68,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 70,
+       "atMs": 85400,
+       "tool": "search",
+       "shape": {
+        "type": "person",
+        "scope": "workspace",
+        "sort": "relevance",
+        "answer": false
+       },
+       "argsKey": "a76dac346014",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 5,
+       "resultSeq": 71,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 104400,
+     "seq": 84,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 86,
+       "atMs": 106100,
+       "tool": "search",
+       "shape": {
+        "scope": "workspace",
+        "sort": "relevance",
+        "answer": false
+       },
+       "argsKey": "6c3ded0fa2cd",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 5,
+       "resultSeq": 87,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 124000,
+     "seq": 99,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 101,
+       "atMs": 126500,
+       "tool": "open",
+       "shape": {
+        "kind": "initiative",
+        "byName": true
+       },
+       "argsKey": "fc59ff60a49f",
+       "outcome": "refused",
+       "reason": "ambiguous",
+       "result": "ambiguous",
+       "candidates": 1,
+       "resultSeq": 105,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 134700,
+     "seq": 112,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 114,
+       "atMs": 137000,
+       "tool": "open",
+       "shape": {
+        "refKind": "initiative"
+       },
+       "argsKey": "0e8ba79a35df",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 115,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 152700,
+     "seq": 120,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 122,
+       "atMs": 155000,
+       "tool": "open",
+       "shape": {
+        "scope": "this-page",
+        "refKind": "position"
+       },
+       "argsKey": "bde709256f26",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 123,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "closed",
+    "reason": "user"
+   }
+  }
+ ]
+}
