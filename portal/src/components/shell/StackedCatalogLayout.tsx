@@ -14,7 +14,18 @@ function groupsOf(rows: Array<{ subline?: string }>, fallback: string) {
 export function StackedCatalogLayout({
   title, group = 'Design', basePath, items, rows, selectedId, selectedTitle, listTitle,
   onSelect, railHeader, railNotice, children, footer, catalogOverview = false, overviewDescription, overviewActions, navigation = 'stacked', recordHeading = false,
+  narrow = false,
 }: {
+  /**
+   * The narrow form (`combined` only; library `MasterDetailPage narrow`, since
+   * 2.515.1): under 40rem of the frame's own width the rail and the record stop
+   * sitting side by side. With no record open the title band and then the rail
+   * fill the width, and the rail carries the records as the page's list (on a
+   * wide frame the overview's table is that list, so the rail shows only the
+   * views); with one open, the record fills the width under a back control
+   * ("All <title>") that returns to the list with its view kept.
+   */
+  narrow?: boolean;
   catalogOverview?: boolean;
   /** Keep status views and record navigation in one rail, as in Initiatives. */
   navigation?: 'stacked' | 'combined';
@@ -29,7 +40,9 @@ export function StackedCatalogLayout({
   group?: string;
   basePath: string;
   items: Array<SubNavItem & { active?: boolean }>;
-  rows: Array<{ id: string; title: string; subline?: string; description?: string }>;
+  /** `subline` groups the rows (a status, a kind); `description` is a row's
+   *  second line, and `detail` (combined only) a further line under it. */
+  rows: Array<{ id: string; title: string; subline?: string; description?: string; detail?: string }>;
   selectedId?: string | null;
   selectedTitle?: string;
   listTitle: string;
@@ -69,6 +82,12 @@ export function StackedCatalogLayout({
   ];
   if (navigation === 'combined') {
     const active = items.find(item => item.active) ?? items[0];
+    // A row's second line is its `description`; a `detail` (a decision's outcome) goes under it,
+    // so the line every row shares (the initiative) stays in one place.
+    const records = <GroupedList size="md" rowStyle="ruled" currentStyle="bar" groupHeading="label" groupCountAlign="end"
+      groups={groupsOf(rows, listTitle)} rows={rows.map(row => ({ id: row.id, title: row.title, groupId: row.subline ?? listTitle,
+        ...(row.detail ? { meta: row.description, subline: row.detail } : { subline: row.description }) }))}
+      currentId={selectedId ?? null} onOpenRow={row => onSelect(row.id)} />;
     // The library MasterDetailPage with a docked record column: the trail and
     // title head the column; the rail holds the views (RailNavList on the
     // overview, a view Select beside a record) over the grouped records; the
@@ -90,10 +109,11 @@ export function StackedCatalogLayout({
                     onNavigate: event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return; event.preventDefault(); navigate(item.path); } }))} />}
               {railHeader}
             </Stack>,
-            body: selectedId ? railNotice ?? <GroupedList size="md" rowStyle="ruled" currentStyle="bar" groupHeading="label" groupCountAlign="end"
-              groups={groupsOf(rows, listTitle)} rows={rows.map(row => ({ id: row.id, title: row.title, groupId: row.subline ?? listTitle, subline: row.description }))}
-              currentId={selectedId} onOpenRow={row => onSelect(row.id)} /> : null,
+            body: selectedId ? railNotice ?? records
+              // Narrow overview: the list is the rail (the container query hides it beside the wide overview's table).
+              : narrow ? <Stack gap="none" className="min-w-0 @min-[40rem]:hidden" data-testid="catalog-narrow-list">{railNotice ?? records}</Stack> : null,
           }}
+          {...(narrow ? { narrow: { onBack: () => navigate(listHref), backLabel: `All ${title.toLowerCase()}` } } : {})}
           emptyDetail={<Stack gap="md" className="min-w-0" data-testid="catalog-overview">{children}</Stack>}
           data-testid="catalog-explorer">
           {selectedId ? children : null}

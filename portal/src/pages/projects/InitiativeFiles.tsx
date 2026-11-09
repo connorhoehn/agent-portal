@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { usePublishPageOffers } from '../../lib/voice/pageContext';
-import { NEW_FILE_DENIED_HINT, RECORDINGS_NEED_SOCIAL, newFileChoices, newFileOffers, newFileTrigger, readCanWrite, recordingsMode, showNewFileHint } from './initiativeFilesModel';
+import { NEW_FILE_DENIED_HINT, holdsSocialRole, newFileChoices, newFileOffers, newFileTrigger, readCanWrite, recordingsMode, recordingsNote, showNewFileHint } from './initiativeFilesModel';
 import { Button, ChevronIcon, DocumentIcon, DropdownMenu, Inline, InlineAlert, LoadingState, PlusIcon, SearchInput, Select, Stack, T, type DropdownMenuSection } from '@connorhoehn/ui-components/shared';
 import { FileCards, type FileView } from '../../components/files/FileCards';
 import { FileToolbar } from '../../components/files/FileToolbar';
@@ -74,8 +74,9 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
   const client = useMemo(() => createInitiativeRecordingsClient(), []);
   const itemKey = itemIds?.join(',') ?? null;
   const lobby = `orgiq:initiative:${projectId}`;
-  // Recordings live in the Social workspace: without ViewSocial there is no read, only an info line.
-  const recordingsState = recordingsMode({ capabilitiesReady, canViewSocial: can('ViewSocial') });
+  // Recordings live in the Social workspace: without ViewSocial (here, or through a held Social role) there
+  // is no read, only an info line.
+  const recordingsState = recordingsMode({ capabilitiesReady, canViewSocial: can('ViewSocial') || holdsSocialRole(session?.grants) });
   const recordingRead = useRecordingRead(recordingsState === 'read' ? `${lobby}:${refresh}` : null, signal => readInitiativeRecordings(client, lobby, signal), page => page.items.some(recordingIsProcessing) ? 5000 : null);
   const recordingRows = (page: RecordingPage): FileRow[] => page.items.map(row => ({ id: `recording:${row.recordingId}`, recordingId: row.recordingId,
     title: `${projectName} huddle`, kind: 'recording', detail: `${recordingProcessingLabel(row)} · ${absoluteTime(row.startedAt)} · ${durationLabel(row.durationMs ?? 0)} · ${row.participantCount ?? row.participants?.length ?? 0} ${(row.participantCount ?? row.participants?.length ?? 0) === 1 ? 'person' : 'people'}` }));
@@ -116,7 +117,9 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
     return () => abort.abort();
   }, [projectId, projectName, itemKey, refresh, client, lobby]); // eslint-disable-line react-hooks/exhaustive-deps
   const files = recordingRead.error ? read.files.filter(row => row.kind !== 'recording') : [...new Map([...read.files, ...(recordingRead.value ? recordingRows(recordingRead.value) : [])].map(row => [row.id, row])).values()];
-  const failures = [...read.failures, ...(recordingRead.error ? ['Recordings'] : [])];
+  // A failed recordings read says its own reason in the info line (recordingsNote), not in this list.
+  const failures = read.failures;
+  const recordingsLine = recordingsNote(recordingsState, recordingRead.error);
   const cursor = read.recordings ? read.recordings.cursor : recordingRead.value?.cursor;
   const pending = read.pending || recordingRead.loading;
   const shown = files.filter(row => (kind === 'all' || kind === row.kind) && row.title.toLowerCase().includes(query.trim().toLowerCase()));
@@ -136,18 +139,20 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
     <FileToolbar view={view} onViewChange={setView} refreshing={pending}
       onRefresh={() => { setOlderBusy(false); setRefresh(n => n + 1); }} onOpenWorkspace={() => navigate(workspaceHref)}
       label="Project file controls" testId="initiative-files-toolbar">
-      <SearchInput size="sm" value={query} onChange={setQuery} onClear={() => setQuery('')} placeholder="Search project files" aria-label="Search project files" className="min-w-0 flex-1" />
+      {/* Keeps a working width: the row wraps (New and the switch go under it) before the box shrinks to a stub. */}
+      <SearchInput size="sm" value={query} onChange={setQuery} onClear={() => setQuery('')} placeholder="Search project files" aria-label="Search project files" className="min-w-48 flex-1" />
       <Select size="sm" className="!w-36" aria-label="File type" value={kind} onChange={event => setKind(event.target.value)} options={[{ value: 'all', label: 'All files' }, { value: 'document', label: 'Documents' }, { value: 'presentation', label: 'Presentations' }, { value: 'recording', label: 'Recordings' }]} />
-      {showNewFileHint({ capabilitiesReady, pending, choices }) && <T size="xs" tone="secondary" data-testid="initiative-files-new-hint">{NEW_FILE_DENIED_HINT}</T>}
       <DropdownMenu triggerVariant="primary" align="end" sections={newMenu} disabled={newFileTrigger(choices).disabled}
         trigger={<><PlusIcon size={16} /><span>New</span><ChevronIcon size={14} dir="down" /></>}
         triggerLabel="New file" triggerTestId="initiative-files-new" data-testid="initiative-files-new-menu" />
       {switchTo && <Button size="sm" variant="secondary" data-testid="initiative-files-switch-role"
         onClick={() => { void setRole(switchTo.role).catch((err: unknown) => toastError(null, 'Could not switch role', err instanceof Error ? err.message : 'Try again.')); }}>{switchTo.label}</Button>}
     </FileToolbar>
+    {/* Why New is disabled: a line under the toolbar, not a cell squeezing the search box. */}
+    {showNewFileHint({ capabilitiesReady, pending, choices }) && <T size="xs" tone="secondary" wrap data-testid="initiative-files-new-hint">{NEW_FILE_DENIED_HINT}</T>}
     {mayDeck && <InitiativeStatusDecks projectId={projectId} projectName={projectName} open={newDeck} onOpenChange={setNewDeck} hideTrigger />}
     {failures.length > 0 && <InlineAlert tone="warning">{failures.join(', ')} could not be read. Other available files are shown. Use Refresh to retry.</InlineAlert>}
-    {recordingsState === 'needs-social' && <InlineAlert tone="info">{RECORDINGS_NEED_SOCIAL}</InlineAlert>}
+    {recordingsLine && <InlineAlert tone="info" data-testid="initiative-files-recordings-note">{recordingsLine}</InlineAlert>}
     {pending ? <LoadingState label="Loading project files…" /> : <>
       <T size="xs" tone="secondary">{shown.length} {shown.length === 1 ? 'file' : 'files'}{query || kind !== 'all' ? ' matching this view' : ' in this initiative'}</T>
       {shown.length === 0 ? <Stack gap="xs" className="rounded-lg border border-dashed border-border p-6"><T size="sm" weight="semibold">{files.length ? 'No matching files' : 'No project files yet'}</T><T size="sm" tone="secondary" wrap>{files.length ? 'Try another search or file type.' : 'Linked work documents, saved project presentations, and recordings you participated in appear here.'}</T></Stack>

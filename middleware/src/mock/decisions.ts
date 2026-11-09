@@ -29,7 +29,9 @@ import { clock, defineFixture } from './core/index.js';
  * One row of `decisions`, whole. `decidedAt` is a DATE in the seed and the RDS
  * Data API hands a DATE back as 'YYYY-MM-DD' — the same spelling the real
  * provider passes through `String(r['decided_at'])`; the TIMESTAMPTZ columns
- * come back as ISO strings.
+ * come back as ISO strings. A decide made in the product stores the ISO
+ * instant here (the provider's reads serve `resolved_at` over the day, so the
+ * fixture holds what Aurora's read answers).
  *
  * `projectId: null` is org-wide, not unknown. `decidedAt` is set exactly when
  * `status` is a settled one. `workItemId` names the work this decision blocks

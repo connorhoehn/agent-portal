@@ -26,9 +26,11 @@ export function FileToolbar({ children, view, onViewChange, onRefresh, refreshin
   testId?: string;
 }) {
   // Each field keeps its editing keys; the native radio control owns view arrows.
+  // The host's controls keep 12rem (a search box's working width): on a narrow
+  // pane the view switch and refresh wrap under them instead of squeezing them.
   return <Inline gap="sm" align="center" justify="between" wrap role="group" aria-label={label} data-testid={testId}
     className="min-w-0 rounded-lg border border-border bg-surface-panel px-2 py-1.5">
-    <Inline gap="sm" align="center" wrap className="min-w-0 flex-1">{children}</Inline>
+    <Inline gap="sm" align="center" wrap className="min-w-48 flex-1">{children}</Inline>
     <Inline gap="xs" align="center" wrap={false} className="shrink-0">
       <FileViewToggle value={view} onChange={onViewChange} />
       {onRefresh && <FileRefreshAction onRefresh={onRefresh} refreshing={refreshing} />}

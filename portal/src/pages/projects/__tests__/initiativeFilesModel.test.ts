@@ -3,7 +3,7 @@
 // (a deck spends); nothing shows to a persona who may make nothing.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { NEW_FILE_DENIED_HINT, RECORDINGS_NEED_SOCIAL, newFileChoices, newFileTrigger, readCanWrite, recordingsMode, showNewFileHint } from '../initiativeFilesModel.ts';
+import { NEW_FILE_DENIED_HINT, RECORDINGS_NEED_SOCIAL, holdsSocialRole, newFileChoices, newFileTrigger, readCanWrite, recordingsMode, recordingsNote, showNewFileHint } from '../initiativeFilesModel.ts';
 
 test('a contributor without DispatchAgentRun sees Document and Whiteboard, never Presentation', () => {
   assert.deepEqual(newFileChoices({ capabilitiesReady: true, canWritePages: true, canDispatch: false }), ['document', 'whiteboard']);
@@ -34,6 +34,21 @@ test('recordings are read only with ViewSocial; without it the Docs tab says so 
   assert.equal(recordingsMode({ capabilitiesReady: true, canViewSocial: false }), 'needs-social');
   assert.equal(recordingsMode({ capabilitiesReady: false, canViewSocial: false }), 'pending');
   assert.equal(RECORDINGS_NEED_SOCIAL, 'Recordings need the Social workspace.');
+});
+
+test('a Social role reads recordings from any workspace (Sienna: orgiq member or org-leader, Social participant)', () => {
+  const sienna = { orgiq: ['org-leader', 'member'], social: ['participant'] };
+  assert.equal(holdsSocialRole(sienna), true);
+  assert.equal(holdsSocialRole({ orgiq: ['member'] }), false);
+  assert.equal(holdsSocialRole({ orgiq: ['member'], social: [] }), false);
+  assert.equal(holdsSocialRole(null), false);
+  const mode = recordingsMode({ capabilitiesReady: true, canViewSocial: false || holdsSocialRole(sienna) });
+  assert.equal(mode, 'read');
+  assert.equal(recordingsNote(mode, null), null, 'no "need the Social workspace" line for a Social participant');
+  // A read that fails says why, in the same info line.
+  assert.equal(recordingsNote(mode, 'The call recording service is not configured.'), 'Recordings: The call recording service is not configured.');
+  assert.equal(recordingsNote('needs-social', null), RECORDINGS_NEED_SOCIAL);
+  assert.equal(recordingsNote('pending', 'x'), null);
 });
 
 test('only the route\'s literal `canWrite: true` opens the page choices', () => {

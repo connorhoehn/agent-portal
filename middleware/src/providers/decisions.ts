@@ -39,6 +39,7 @@ export interface DecisionSummary {
   status: string;
   /** The initiative it was raised against, or null for an org-wide call. */
   projectId: string | null;
+  /** When it was decided: an ISO instant, or a 'YYYY-MM-DD' day where only the DATE is known; null while it waits. */
   decidedAt: string | null;
   /** What was decided, one sentence or a short paragraph (the `resolution` column); null while it waits. */
   outcome: string | null;
@@ -166,6 +167,14 @@ function mockGetDecision(id: string): DecisionDetail | null {
   };
 }
 
+/**
+ * When a decision was made, as the list and the record read it: the instant
+ * (`resolved_at`, set by every decide and by the seeds) as an ISO string,
+ * else the DATE column's day. A day alone is ambiguous across zones; the
+ * portal reads one as that day and never as a time still to come.
+ */
+const DECIDED_INSTANT = `COALESCE(to_char(d.resolved_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), d.decided_at::text)`;
+
 export async function listDecisions(
   opts: { limit?: number; since?: string } = {},
 ): Promise<DecisionSummary[]> {
@@ -187,14 +196,14 @@ export async function listDecisions(
       d.summary,
       d.status,
       d.project_id,
-      d.decided_at,
+      ${DECIDED_INSTANT} AS decided_at,
       d.resolution,
       COUNT(dp.person_id)::int AS participant_count
     FROM decisions d
     LEFT JOIN decision_participants dp ON dp.decision_id = d.id
     WHERE 1=1
     ${sinceClause}
-    GROUP BY d.id, d.topic, d.summary, d.status, d.project_id, d.decided_at, d.resolution
+    GROUP BY d.id, d.topic, d.summary, d.status, d.project_id, d.decided_at, d.resolved_at, d.resolution
     ORDER BY COALESCE(d.decided_at, d.created_at) DESC NULLS LAST
     LIMIT :lim
   `;
@@ -216,7 +225,7 @@ export async function getDecision(id: string): Promise<DecisionDetail | null> {
   if (config.mock.aurora) return mockGetDecision(id);
 
   const headRows = await exec(
-    `SELECT d.id, d.topic, d.summary, d.status, d.project_id, d.decided_at, d.resolution, d.decided_by,
+    `SELECT d.id, d.topic, d.summary, d.status, d.project_id, ${DECIDED_INSTANT} AS decided_at, d.resolution, d.decided_by,
             d.options::text AS options,
             COALESCE(p.name, d.decided_by) AS decided_by_name
        FROM decisions d LEFT JOIN people p ON p.id = d.decided_by
@@ -301,7 +310,8 @@ export function parseDecisionOptions(raw: unknown): DecisionOption[] {
 // The one write on this table from the product: a waiting decision (open or
 // escalated) is resolved or rejected, with the decider's rationale as its
 // outcome. It sets `status`, `decided_at` (the day), `resolved_at` (the
-// instant), `decided_by` and `resolution`, and appends a `decision_events`
+// instant, which the reads serve as `decidedAt`), `decided_by` and
+// `resolution`, and appends a `decision_events`
 // row, the history the record page reads. Who may call it is the route's
 // question (routes/decisions.ts); this only refuses a row that is not waiting.
 
@@ -329,7 +339,10 @@ export async function decideDecision(id: string, input: DecideInput): Promise<De
     if (!WAITING_STATUSES.includes(row.status)) return { kind: 'settled', status: row.status };
     const at = clock.nowIso();
     row.status = input.outcome;
-    row.decidedAt = at.slice(0, 10);
+    // The instant, not the day: a date-only value read as noon UTC once
+    // printed "Decided in 8h" (walk, 9 November). Aurora keeps the day in
+    // `decided_at` and the instant in `resolved_at`; reads serve the instant.
+    row.decidedAt = at;
     row.resolvedAt = at;
     row.decidedBy = input.actorId;
     row.resolution = input.rationale;
@@ -402,7 +415,7 @@ export async function listDecisionActivity(opts: { projectId?: string } = {}): P
       .filter((d) => (d.decidedAt || d.escalatedAt) && (!opts.projectId || d.projectId === opts.projectId))
       .map((d) => ({
         id: d.id, topic: d.topic, summary: d.summary, status: d.status, projectId: d.projectId, workItemId: d.workItemId,
-        requiredRole: d.requiredRole, decidedAt: d.decidedAt, escalatedAt: d.escalatedAt,
+        requiredRole: d.requiredRole, decidedAt: d.decidedAt ? d.decidedAt.slice(0, 10) : null, escalatedAt: d.escalatedAt,
         participants: decisionParticipantRows.rows().filter((p) => p.decisionId === d.id)
           .flatMap((p) => { const person = byId.get(p.personId); return person ? [{ personId: p.personId, avatarUrl: mockAvatarUrl(p.personId), name: person.name, role: p.role }] : []; }),
       }))

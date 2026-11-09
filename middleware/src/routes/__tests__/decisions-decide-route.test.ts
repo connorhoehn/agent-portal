@@ -45,11 +45,11 @@ const execMock = exec as unknown as jest.Mock;
 const JUDGE = '/api/graph/decisions/d-eval-judge-model';
 const RATIONALE = 'Go with Nova Pro and halve the sample rate from 20 to 10 percent, so the evaluation bill stays flat.';
 
-function appAs(sub: string | null, role = 'member') {
+function appAs(sub: string | null, role = 'member', name?: string) {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
-    if (sub) (req as unknown as { session: unknown }).session = { sub, role, tenant: 'orgiq', grants: { orgiq: [role] }, iat: 0 };
+    if (sub) (req as unknown as { session: unknown }).session = { sub, role, tenant: 'orgiq', grants: { orgiq: [role] }, iat: 0, ...(name ? { name } : {}) };
     else (req as unknown as { sessionInvalid: boolean }).sessionInvalid = true;
     next();
   });
@@ -66,9 +66,23 @@ afterEach(() => {
 describe('POST /api/graph/decisions/:id/decide', () => {
   it('the cookie-less demo identity may decide under the dev flag (the demo stays explorable)', async () => {
     expect((await request(appAs('demo-user', 'sme')).get(JUDGE)).body.viewerMayDecide).toBe(true);
-    const res = await request(appAs('demo-user', 'sme')).post(`${JUDGE}/decide`).send({ outcome: 'resolved', rationale: RATIONALE });
+    const res = await request(appAs('demo-user', 'sme', 'Demo User')).post(`${JUDGE}/decide`).send({ outcome: 'resolved', rationale: RATIONALE });
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('resolved');
+    // Walk, 9 November: never "Decided by demo-user". No app user row, so the session's own name is recorded.
+    expect(res.body.decidedBy).toEqual({ id: 'demo-user', name: 'Demo User' });
+    expect(res.body.history[0].by).toEqual({ id: 'demo-user', name: 'Demo User' });
+  });
+
+  it('a decider known only by an account id reads as "you" to themselves and as the id to anyone else', async () => {
+    const res = await request(appAs('u-ghost', 'org-leader')).post(`${JUDGE}/decide`).send({ outcome: 'resolved', rationale: RATIONALE });
+    expect(res.status).toBe(200);
+    expect(res.body.decidedBy).toEqual({ id: 'u-ghost', name: 'you' });
+    expect(res.body.history[0].by).toEqual({ id: 'u-ghost', name: 'you' });
+    const other = await request(appAs('u-nora', 'sme')).get(JUDGE);
+    expect(other.body.decidedBy).toEqual({ id: 'u-ghost', name: 'u-ghost' });
+    // The stored rows keep the id: "you" is presentation, per viewer.
+    expect(decisionEventRows.rows()[0]).toEqual(expect.objectContaining({ actorId: 'u-ghost', actorName: 'u-ghost' }));
   });
 
   it('the decider resolves the waiting judge-model decision: status, who, when, the rationale as the outcome, and a history entry', async () => {
@@ -79,8 +93,10 @@ describe('POST /api/graph/decisions/:id/decide', () => {
     expect(res.status).toBe(200);
     expect(execMock).not.toHaveBeenCalled();
     const today = new Date().toISOString().slice(0, 10);
+    // The instant, not the day (a day read as noon UTC printed "Decided in 8h").
+    const instant = new RegExp(`^${today}T\\d{2}:\\d{2}:\\d{2}`);
     expect(res.body).toEqual(expect.objectContaining({
-      id: 'd-eval-judge-model', status: 'resolved', decidedAt: today,
+      id: 'd-eval-judge-model', status: 'resolved', decidedAt: expect.stringMatching(instant),
       decidedBy: { id: 'p-047', name: 'Nina Rivera' }, outcome: RATIONALE,
     }));
     expect(res.body.history).toHaveLength(1);
@@ -95,7 +111,7 @@ describe('POST /api/graph/decisions/:id/decide', () => {
     const list = await request(appAs('u-nora', 'sme')).get('/api/graph/decisions?limit=200');
     const row = list.body.find((d: { id: string }) => d.id === 'd-eval-judge-model');
     expect(row.status).toBe('resolved');
-    expect(row.decidedAt).toBe(today);
+    expect(row.decidedAt).toMatch(instant);
     expect(row.outcome).toBe(RATIONALE);
   });
 
@@ -242,6 +258,8 @@ describe('the Aurora provider', () => {
       expect(String(tx.mock.calls[0]![0])).toMatch(/UPDATE decisions[\s\S]*status IN \('open', 'escalated'\)/);
       expect(String(tx.mock.calls[1]![0])).toMatch(/INSERT INTO decision_events/);
       expect(ok).toEqual({ kind: 'ok', decision: expect.objectContaining({ decidedBy: { id: 'p-047', name: 'Nina Rivera' }, outcome: 'Why', history: [expect.objectContaining({ kind: 'resolved', rationale: 'Why' })] }) });
+      // The record reads the instant (`resolved_at`) over the DATE column's day.
+      expect(String(aurora.exec.mock.calls[0]![0])).toMatch(/COALESCE\(to_char\(d\.resolved_at AT TIME ZONE 'UTC'[\s\S]*d\.decided_at::text\) AS decided_at/);
       // G57: the jsonb options column, read as text; malformed entries are dropped, never invented.
       expect(ok.kind === 'ok' && ok.decision.options).toEqual([{ id: 'a', label: 'Option A', detail: 'why A' }]);
 

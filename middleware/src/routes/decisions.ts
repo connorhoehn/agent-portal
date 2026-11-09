@@ -27,7 +27,7 @@ import { Router } from 'express';
 import { asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
 import { isAllowed, requireAction, resolveSession } from '../lib/authz.js';
 import { eventFromSession, logAuthz } from '../lib/audit.js';
-import { decisionActor, mayDecideDecision } from '../lib/decision-authority.js';
+import { decisionActor, mayDecideDecision, nameDeciders } from '../lib/decision-authority.js';
 import { noteSearchWriteSoon } from '../lib/search-index/writes.js';
 import {
   DECISION_OUTCOMES, WAITING_STATUSES, decideDecision, getDecision, listDecisions, type DecisionOutcome,
@@ -75,7 +75,7 @@ decisionsRouter.get(
     // only: the write asks the same question again, and Cedar.
     const session = resolveSession(req);
     const viewerMayDecide = session ? (await mayDecideDecision(session, decision)).ok : false;
-    res.json({ ...decision, viewerMayDecide });
+    res.json({ ...await nameDeciders(session, decision), viewerMayDecide });
   }),
 );
 
@@ -151,6 +151,6 @@ decisionsRouter.post(
     }
     logAuthz(eventFromSession(session, 'DecideDecision', 'ALLOW', { path: req.path, reason: `${outcome}${typeof optionId === 'string' ? ` (option ${optionId.trim()})` : ''} via ${verdict.via}` }));
     noteSearchWriteSoon({ type: 'decision', id });
-    res.json({ ...out.decision, viewerMayDecide: true });
+    res.json({ ...await nameDeciders(session, out.decision), viewerMayDecide: true });
   }),
 );

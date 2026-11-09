@@ -21,7 +21,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useUrlState } from '../../lib/useUrlState';
 import { relativeTime } from '../../lib/relativeTime';
 import { DECISION_GRAMMAR } from './decisionCommands';
-import { DECISIONS_SOURCE, asInstant, filterDecisions, matchesDecision, outcomeFirstLine, sortDecisions, statusLabel, STATUS_TONE } from './decisionFormat';
+import { DECISIONS_SOURCE, decidedWhen, filterDecisions, matchesDecision, outcomeFirstLine, sortDecisions, statusLabel, STATUS_TONE } from './decisionFormat';
 import DecisionRecordPage from './DecisionRecordPage';
 import { RecordLink } from './RecordLink';
 import type { DecisionSummary, InitiativeName } from './types';
@@ -100,20 +100,26 @@ export default function DecisionsPage() {
     {
       key: 'decidedAt', header: 'Decided', align: 'right', sortable: true,
       compare: (a, b) => (a.decidedAt ?? '').localeCompare(b.decidedAt ?? ''),
-      render: (d) => <T size="xs" tone="tertiary" className="whitespace-nowrap">{d.decidedAt ? relativeTime(asInstant(d.decidedAt)) : '—'}</T>,
+      render: (d) => <T size="xs" tone="tertiary" className="whitespace-nowrap">{d.decidedAt ? decidedWhen(d.decidedAt, relativeTime) : '—'}</T>,
     },
   ];
 
   const current = FILTERS.find((f) => f.value === filter)?.label ?? 'All decisions';
   return (
     <StackedCatalogLayout
-      catalogOverview navigation="combined" title="Decisions" group="Plan" basePath="/iq/decisions" listTitle={current}
+      catalogOverview navigation="combined" narrow title="Decisions" group="Plan" basePath="/iq/decisions" listTitle={current}
       overviewDescription="The calls the organisation has made or still has to make — who decides, what it holds up, and how it was settled."
       items={FILTERS.map((f) => ({ path: `/iq/decisions?status=${f.value}`, label: f.label, group: 'Status', active: filter === f.value }))}
-      rows={rows.map((d) => ({ id: d.id, title: d.topic, subline: outcomeFirstLine(d) ?? statusLabel(d.status), description: nameOf(d.projectId) ?? 'Organisation-wide' }))}
+      // Grouped by status (one Decided group, not one per outcome); every row's second line is its
+      // initiative, and a settled row adds its outcome's first line under it.
+      rows={rows.map((d) => ({ id: d.id, title: d.topic, subline: statusLabel(d.status), description: nameOf(d.projectId) ?? 'Organisation-wide',
+        ...(outcomeFirstLine(d) ? { detail: outcomeFirstLine(d)! } : {}) }))}
       selectedId={id} selectedTitle={data?.find((d) => d.id === id)?.topic}
       onSelect={open}
-      footer={id ? <CollectionCommandHost inPlace adapter={adapter} prompts={recordPrompt ? [recordPrompt] : undefined} /> : undefined}
+      // Keyed on whether a dialogue rides it: once the decision is settled (or the record has none)
+      // the host mounts afresh as the plain one-line table-command composer, never the expanded
+      // rich-text box the dialogue left behind (walk, 9 November).
+      footer={id ? <CollectionCommandHost key={recordPrompt ? 'dialogue' : 'commands'} inPlace adapter={adapter} prompts={recordPrompt ? [recordPrompt] : undefined} /> : undefined}
       railNotice={failure ? <UnavailableNotice error={failure} what="decisions" source={DECISIONS_SOURCE} onRetry={refresh} />
         : isLoading && !data ? <LoadingState label="Loading decisions…" />
         : rows.length === 0 ? <EmptyState align="start" title="No decisions in this view" /> : undefined}

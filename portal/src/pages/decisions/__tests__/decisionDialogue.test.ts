@@ -8,7 +8,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { deckKeyAction, type ComposerPrompt, type ComposerPromptAnswer } from '@connorhoehn/ui-components/social/rich-composer';
+import { deckKeyAction, pageKeypadTarget, type ComposerPrompt, type ComposerPromptAnswer } from '@connorhoehn/ui-components/social/rich-composer';
 import { REJECT, SOMETHING_ELSE, decisionDialogue, dialogueRows, matchDialogueRow, optionBody, optionOutcome } from '../decisionDialogue.ts';
 import { decisionPageContext } from '../decisionFormat.ts';
 import { PAGE_OFFER_MAX, pageContextNote } from '../../../lib/voice/pageContext.ts';
@@ -131,6 +131,18 @@ test('Esc hides the dialogue (the table commands are back); Alt+Backspace on a f
   assert.deepEqual(press(why, 'Backspace', { inDeck: false, canBack: true }, true), { type: 'back' });
   // Hidden, the digits are the composer's own again.
   assert.equal(press(prompt, '2', { collapsed: true, inDeck: false }), null);
+});
+
+test('the keypad listens on the whole page while the rows are open, never in a field (walk, 9 November)', async () => {
+  const prompt = decisionDialogue(CUTOVER, true, recorder().send)!;
+  assert.equal(prompt.keypad, 'page', 'the rows take digits from the page body, not only from inside the dialogue');
+  // The rule the library applies (ui-components 2.515.2): the body, the record, a link — yes; a field or another dialog — no.
+  assert.equal(pageKeypadTarget(null), true);
+  assert.equal(pageKeypadTarget({ closest: () => null } as unknown as EventTarget), true, 'plain content or a link');
+  assert.equal(pageKeypadTarget({ closest: () => ({}) } as unknown as EventTarget), false, 'an input, textarea, rich-text box or another dialog');
+  // The follow-up's why is typed text: it does not ask for page digits.
+  const why = await pick(prompt, 'riskiest-first');
+  assert.notEqual(why.keypad, 'page');
 });
 
 test('the voice names a row by its number or its words, in the same numbering', () => {

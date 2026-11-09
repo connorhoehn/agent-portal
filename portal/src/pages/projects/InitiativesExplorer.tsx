@@ -126,6 +126,12 @@ export function InitiativesExplorer({
             panePadding="none"
             paneHeader={band}
             paneFooter={composer}
+            // An initiative is a record of the list rail: under 40rem of the frame's width (a phone, the huddle
+            // pane squeezing the column) it fills the width under "All initiatives", which reopens the list,
+            // rather than sitting at ~60px beside the full-width rail (walk, 9 November: the Docs tab). A focused
+            // work item keeps its split pane and its own narrow modal below.
+            {...(!focusedWork ? { narrow: { showing: 'record' as const, backLabel: 'All initiatives',
+              onBack: () => navigate(initiativeListHref(search, scope, lens === 'sprints')) } } : {})}
           >{children}</ExplorerLayout>
         ) : (
         // The list routes (All / My / Sprints) take the same single section

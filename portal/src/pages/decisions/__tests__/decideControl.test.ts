@@ -3,14 +3,15 @@
 // model for canary evaluation", open, on the LLM Application Platform, decided
 // by Nina Rivera) shows the Decide card only with can('DecideDecision'), while
 // it waits, and when the server says this viewer may decide it; once decided
-// it reads "Decided <when> by <who>: <outcome>", the history names who and
-// why, and the Waiting view drops it. d-otel-vendor (resolved six days ago by
+// it reads its outcome under "The decision", names who decided once (its
+// Decided line: "<when> by <who>"), the history keeps why, and the Waiting
+// view drops it. d-otel-vendor (resolved six days ago by
 // Nora DaSilva) read as a date and nothing else; it now reads its outcome.
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  RATIONALE_MAX, decideBody, decisionPageContext, filterDecisions, historyOf, matchesDecision, outcomeFirstLine, outcomeLine, showDecideControl,
+  RATIONALE_MAX, asInstant, decideBody, decidedLine, decisionPageContext, filterDecisions, historyOf, matchesDecision, outcomeFirstLine, outcomeLine, showDecideControl,
   sortDecisions, standingLine, waitingNotice,
 } from '../decisionFormat.ts';
 import { pageContextNote } from '../../../lib/voice/pageContext.ts';
@@ -28,7 +29,7 @@ const JUDGE: DecisionDetail = {
 };
 /** What the route answers once Nina resolves it. */
 const DECIDED: DecisionDetail = {
-  ...JUDGE, status: 'resolved', decidedAt: '2026-11-09', decidedBy: { id: 'p-047', name: 'Nina Rivera' }, outcome: RATIONALE,
+  ...JUDGE, status: 'resolved', decidedAt: '2026-11-09T01:40:00Z', decidedBy: { id: 'p-047', name: 'Nina Rivera' }, outcome: RATIONALE,
   history: [{ id: '1', kind: 'resolved', at: '2026-11-09T01:40:00Z', by: { id: 'p-047', name: 'Nina Rivera' }, rationale: RATIONALE }],
 };
 const holds = (...actions: string[]) => (a: string) => actions.includes(a);
@@ -53,17 +54,23 @@ test('the body: the outcome and a trimmed rationale, required, at most 500 chara
 
 const rel = (iso: string) => `rel(${iso})`;
 
-test('decided: the record reads "Decided <when> by <who>: <outcome>", and the history says who, when and why', () => {
-  assert.equal(outcomeLine(JUDGE, rel), null, 'a waiting decision has no outcome line');
-  assert.equal(outcomeLine(DECIDED, rel), `Decided rel(2026-11-09T12:00:00Z) by Nina Rivera: ${RATIONALE}`);
-  assert.equal(outcomeLine({ ...DECIDED, status: 'rejected' }, rel), `Rejected rel(2026-11-09T12:00:00Z) by Nina Rivera: ${RATIONALE}`);
-  assert.equal(outcomeLine({ status: 'resolved', outcome: null, decidedAt: '2026-01-01', decidedBy: null }, rel), null);
+test('decided: the outcome alone under "The decision", one Decided line "<when> by <who>", and the history keeps why', () => {
+  assert.equal(outcomeLine(JUDGE), null, 'a waiting decision has no outcome line');
+  assert.equal(outcomeLine(DECIDED), RATIONALE);
+  assert.equal(outcomeLine({ ...DECIDED, status: 'rejected' }), RATIONALE);
+  assert.equal(outcomeLine({ status: 'resolved', outcome: null }), null);
+  assert.equal(decidedLine(JUDGE, rel), null, 'a waiting decision has no Decided line');
+  assert.equal(decidedLine(DECIDED, rel), 'rel(2026-11-09T01:40:00Z) by Nina Rivera');
+  assert.equal(decidedLine({ ...DECIDED, decidedBy: null }, rel), 'rel(2026-11-09T01:40:00Z)');
   const ev = historyOf(DECIDED, null, 'LLM Application Platform');
   assert.deepEqual(ev.map((e) => e.id), ['event-1', 'raised'], 'the recorded call replaces the column-derived one');
   assert.equal(ev[0]!.label, 'Decided');
   assert.equal(ev[0]!.at, '2026-11-09T01:40:00Z');
-  assert.equal(ev[0]!.detail, `Nina Rivera decided: ${RATIONALE}`);
-  assert.equal(standingLine(DECIDED, DECIDED.decidedBy!.name, (iso) => iso), 'Decided by Nina Rivera 2026-11-09T12:00:00Z');
+  assert.equal(ev[0]!.detail, RATIONALE);
+  assert.equal(standingLine(DECIDED, DECIDED.decidedBy!.name, (iso) => iso), 'Decided 2026-11-09T01:40:00Z');
+  // Walk, 9 November: "by" once per screen — status line, Decided line, outcome and history together name Nina once.
+  const screen = [standingLine(DECIDED, DECIDED.decidedBy!.name, rel), decidedLine(DECIDED, rel), outcomeLine(DECIDED), ...ev.map((e) => e.detail)].join('\n');
+  assert.equal(screen.split('Nina Rivera').length - 1, 1);
 });
 
 test('the list\'s Waiting view drops the decision once it is decided', () => {
@@ -113,11 +120,12 @@ const OTEL_VENDOR: DecisionDetail = {
 };
 
 test('a settled decision (d-otel-vendor) reads what was decided, when and by whom, and offers no Decide control', () => {
-  assert.equal(outcomeLine(OTEL_VENDOR, rel),
-    'Decided rel(2026-11-03T12:00:00Z) by Nora DaSilva: Self-hosted OpenTelemetry collectors in an agent and gateway topology, exporting OTLP to the current backend.');
+  assert.equal(outcomeLine(OTEL_VENDOR),
+    'Self-hosted OpenTelemetry collectors in an agent and gateway topology, exporting OTLP to the current backend.');
+  assert.equal(decidedLine(OTEL_VENDOR, rel), `rel(${asInstant('2026-11-03')}) by Nora DaSilva`);
   assert.equal(showDecideControl(OTEL_VENDOR, holds('DecideDecision')), false, 'settled: no control even for its decider');
   assert.equal(decisionPageContext(OTEL_VENDOR, '/iq/decisions/d-otel-vendor', false).offer, null);
-  // Its history, with no recorded call, still names the decider from the columns.
+  // Its history, with no recorded call, still has the settled entry (who is on the Decided line).
   assert.deepEqual(historyOf(OTEL_VENDOR, null, 'Observability').map((e) => e.id), ['settled', 'raised']);
 });
 

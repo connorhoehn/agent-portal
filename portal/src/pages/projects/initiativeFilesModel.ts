@@ -50,11 +50,38 @@ export const showNewFileHint = (o: { capabilitiesReady: boolean; pending: boolea
 export const RECORDINGS_NEED_SOCIAL = 'Recordings need the Social workspace.';
 
 /**
+ * Whether the identity holds a Social role, whatever workspace it acts in now.
+ * Every Social role holds ViewSocial (participant, moderator, community-admin:
+ * middleware/seeds/roles/social/*.cedar), and the server reads Social through
+ * any held Social role, not the active one (lib/live-principal.ts
+ * `socialActionRole`). So Sienna, a Social `participant` acting as an orgiq
+ * member or org-leader, reads recordings although `can('ViewSocial')` — the
+ * active role's answer — is false (walk, 9 November).
+ */
+export function holdsSocialRole(grants: Readonly<Record<string, readonly string[]>> | null | undefined): boolean {
+  return (grants?.['social']?.length ?? 0) > 0;
+}
+
+/**
  * Whether the Docs tab reads recordings. Recordings live in the Social
- * workspace: a persona without ViewSocial gets an info line and no read (the
- * read would only fail into a warning). While capabilities load, no read and no line.
+ * workspace: a persona with neither ViewSocial in its active role nor a Social
+ * role (`holdsSocialRole`) gets an info line and no read (the read would only
+ * fail into a warning). While capabilities load, no read and no line.
  */
 export function recordingsMode(o: { capabilitiesReady: boolean; canViewSocial: boolean }): 'pending' | 'read' | 'needs-social' {
   if (!o.capabilitiesReady) return 'pending';
   return o.canViewSocial ? 'read' : 'needs-social';
+}
+
+/**
+ * The Docs tab's one info line about recordings: why there is no read
+ * (RECORDINGS_NEED_SOCIAL), or, when the read was made and failed, the reason
+ * it gave ("Recordings: The call recording service is not configured."), so
+ * a persona who may read them is never told to go to the Social workspace.
+ * Null when there is nothing to say.
+ */
+export function recordingsNote(mode: ReturnType<typeof recordingsMode>, readError: string | null): string | null {
+  if (mode === 'needs-social') return RECORDINGS_NEED_SOCIAL;
+  if (mode === 'read' && readError) return `Recordings: ${readError}`;
+  return null;
 }

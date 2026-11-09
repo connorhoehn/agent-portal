@@ -42,16 +42,59 @@ async function providers() {
   return { getUser: identity.getUser, getProject: projects.getProject };
 }
 
-/** Who the caller acts as: their linked person (p-…) and display name, else the account subject. */
+/**
+ * Who the caller acts as: their linked person (p-…), else the account subject,
+ * and the name the history records — the account's display name, else the
+ * session's own (the demo identity's "Demo User"), and only then the subject.
+ */
 export async function decisionActor(session: Session): Promise<{ id: string; personId: string | null; name: string }> {
+  const sessionName = session.name?.trim() || session.sub;
   try {
     const { getUser } = await providers();
     const user = await getUser(session.sub);
     const personId = user?.personId ?? null;
-    return { id: personId ?? session.sub, personId, name: user?.displayName?.trim() || session.sub };
+    return { id: personId ?? session.sub, personId, name: user?.displayName?.trim() || sessionName };
   } catch {
-    return { id: session.sub, personId: null, name: session.sub };
+    return { id: session.sub, personId: null, name: sessionName };
   }
+}
+
+interface NamedBy { id: string; name: string }
+
+/**
+ * The names a record shows for who decided (walk, 9 November: "Decided by
+ * demo-user"). The provider names a decider from its person row, else from
+ * the name the event recorded; what is left is a bare id (an account with no
+ * person, an event recorded before its name was known). Such a name becomes
+ * the account's display name, else "you" when it is the viewer's own account
+ * or person, else stays the id. Presentation only: the stored rows keep the id.
+ */
+export async function nameDeciders<T extends { decidedBy: NamedBy | null; history: Array<{ by: NamedBy }> }>(
+  session: Session | null, decision: T,
+): Promise<T> {
+  const bare = (by: NamedBy | null | undefined) => !!by && (!by.name.trim() || by.name === by.id);
+  const ids = [...new Set([decision.decidedBy, ...decision.history.map((e) => e.by)].filter(bare).map((by) => by!.id))];
+  if (ids.length === 0) return decision;
+  const names = new Map<string, string>();
+  let viewerPerson: string | null = null;
+  try {
+    const { getUser } = await providers();
+    if (session) viewerPerson = (await getUser(session.sub))?.personId ?? null;
+    for (const id of ids) {
+      const shown = (await getUser(id))?.displayName?.trim();
+      if (shown) names.set(id, shown);
+    }
+  } catch { /* an unresolvable name stays the id (or "you") */ }
+  const name = (by: NamedBy): NamedBy => {
+    if (!bare(by)) return by;
+    const own = !!session && (by.id === session.sub || (!!viewerPerson && by.id === viewerPerson));
+    return { id: by.id, name: names.get(by.id) ?? (own ? 'you' : by.id) };
+  };
+  return {
+    ...decision,
+    decidedBy: decision.decidedBy ? name(decision.decidedBy) : null,
+    history: decision.history.map((e) => ({ ...e, by: name(e.by) })),
+  };
 }
 
 export async function mayDecideDecision(session: Session, decision: DecidableDecision): Promise<DecideVerdict> {

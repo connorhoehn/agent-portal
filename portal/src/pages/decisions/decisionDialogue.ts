@@ -18,6 +18,16 @@
 // and why as free text; "Reject" takes why. Esc hides the dialogue and the
 // table commands are back (the deck keeps a Show to reopen it).
 //
+// Where the keypad listens (walk, 9 November: after Esc, Show and a click on
+// the record, "1" did nothing). While the rows are open, a digit picks its row
+// with focus ANYWHERE in the page body — on the record, on a link, on nothing
+// after a click — except in a text field (an input, a textarea, a select, a
+// rich-text box) or inside another dialog or menu, which keep their own keys
+// (ui-components 2.515.2 `keypad: 'page'`, `pageKeypadTarget`). Only the digits
+// reach the rows from the page: Enter, Esc and Back act from the dialogue
+// itself. Hidden (after Esc) the dialogue takes no digits until Show reopens
+// it. The follow-up's why is typed, so there a digit is text, never a pick.
+//
 // The rows' numbering is the voice's too (`decide { option: 2 }`), so it lives
 // here, once: `dialogueRows` and `matchDialogueRow`. No React and only type
 // imports from the library, so node:test runs it.
@@ -163,7 +173,7 @@ export function decisionDialogue(
   if (!mayDecide || (d.status !== 'open' && d.status !== 'escalated')) return null;
   const rows = dialogueRows(d.options);
   return {
-    id: `decision:${d.id}`, scope: `decision:${d.id}`, kind: 'choice',
+    id: `decision:${d.id}`, scope: `decision:${d.id}`, kind: 'choice', keypad: 'page',
     eyebrow: 'Decision', title: d.topic,
     question: 'What did you decide?',
     options: rows.map((r) => ({ id: r.id, label: r.label, ...(r.detail ? { hint: r.detail } : {}), ...(r.kind === 'reject' ? { emphasis: 'danger' as const } : {}) })),

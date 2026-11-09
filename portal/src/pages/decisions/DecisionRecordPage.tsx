@@ -29,7 +29,7 @@ import { toastError } from '../../lib/toastStore';
 import { usePublishPageContext } from '../../lib/voice/pageContext';
 import { writeJson } from '../../lib/writeJson';
 import {
-  DECISIONS_SOURCE, STATUS_TONE, asInstant, contributors, decider, decisionPageContext,
+  DECISIONS_SOURCE, STATUS_TONE, asInstant, contributors, decidedLine, decidedWhen, decider, decisionPageContext,
   historyOf, isWaiting, outcomeLine, showDecideControl, standingLine, statusLabel, waitingNotice,
 } from './decisionFormat';
 import { decisionDialogue } from './decisionDialogue';
@@ -81,10 +81,11 @@ export default function DecisionRecordPage({ onDecided, onPrompt }: {
   const settled = decision.status === 'resolved' || decision.status === 'rejected';
   const projectName = initiative?.name ?? null;
   const waiting = ready && !mayDecide ? waitingNotice(decision) : null;
-  // Once decided in the product, the line names who made the call, not who was assigned it.
+  // Waiting, the line names the decider; settled, it says when — who made the call is the Decided row's.
   const standing = standingLine({ ...decision, escalatedAt: row?.escalatedAt ?? null, requiredRole: row?.requiredRole ?? null },
-    (settled ? decision.decidedBy?.name : null) ?? who?.name ?? null, relativeTime);
-  const outcome = outcomeLine(decision, relativeTime);
+    who?.name ?? null, relativeTime);
+  const outcome = outcomeLine(decision);
+  const decided = decidedLine(decision, relativeTime);
   const history = historyOf(decision, row, projectName);
   const projectHref = decision.projectId ? `/iq/projects/${encodeURIComponent(decision.projectId)}` : null;
   // G58: waiting on someone else, but the viewer holds org-leader or admin here without acting as it.
@@ -134,7 +135,7 @@ export default function DecisionRecordPage({ onDecided, onPrompt }: {
           {history.map((event) => (
             <Stack key={event.id} gap="none">
               <Inline align="center" gap="xs"><T weight="semibold">{event.label}</T>
-                {event.at && <T tone="tertiary" title={absoluteTime(asInstant(event.at))}>{relativeTime(asInstant(event.at))}</T>}</Inline>
+                {event.at && <T tone="tertiary" title={absoluteTime(asInstant(event.at))}>{decidedWhen(event.at, relativeTime)}</T>}</Inline>
               <T tone="secondary" wrap>{event.detail}</T>
             </Stack>
           ))}
@@ -145,7 +146,8 @@ export default function DecisionRecordPage({ onDecided, onPrompt }: {
 
   return (
     <PageSection size="sm" title={decision.topic}
-      actions={<RecordLink to="/iq/decisions">← All decisions</RecordLink>}
+      // Under 40rem the frame's own back control ("All decisions", StackedCatalogLayout narrow) says this once.
+      actions={<RecordLink to="/iq/decisions" className="@max-[40rem]:hidden">← All decisions</RecordLink>}
       data-testid="decision-record">
       <Stack gap="md">
         <Inline align="center" gap="sm">
@@ -162,8 +164,8 @@ export default function DecisionRecordPage({ onDecided, onPrompt }: {
               <KeyValue labelWidth="w-28" items={[
                 { label: 'Decider', value: who ? `${who.name}${who.title ? `, ${who.title}` : ''}` : 'Not assigned', muted: !who },
                 { label: 'Needs', value: row?.requiredRole ?? 'Any steward', muted: !row?.requiredRole },
-                ...(settled && decision.decidedAt ? [{ label: 'Decided', value: relativeTime(asInstant(decision.decidedAt)) }] : []),
-                ...(settled && decision.decidedBy ? [{ label: 'Decided by', value: decision.decidedBy.name }] : []),
+                // The one line that says who made the call (walk, 9 November: "by" once per screen).
+                ...(settled && decided ? [{ label: decision.status === 'rejected' ? 'Rejected' : 'Decided', value: decided }] : []),
               ]} />
             </Card>
             {outcome && (

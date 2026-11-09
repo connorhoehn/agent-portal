@@ -21,8 +21,38 @@ export const STATUS_TONE: Record<string, 'warning' | 'danger' | 'success' | 'neu
   rejected: 'neutral',
 };
 
-/** A DATE column ('YYYY-MM-DD') as an instant, so it reads as "9d ago" rather than falling through as raw text. */
-export const asInstant = (value: string): string => (/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00Z` : value);
+const DAY_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * A DATE column ('YYYY-MM-DD') as an instant: the start of that day, here, so
+ * it reads as "9d ago" rather than falling through as raw text. Not noon UTC:
+ * a same-day date read as noon is still to come every morning, and the record
+ * said "Decided in 8h" (walk, 9 November). Anything else passes through.
+ */
+export function asInstant(value: string): string {
+  const day = DAY_ONLY.exec(value);
+  return day ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3])).toISOString() : value;
+}
+
+const calendarDay = (iso: string): string =>
+  new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+/**
+ * When a decision was made, for the list and the record: "3h ago" from an
+ * instant; "today" for a bare date that is today (a day has no hour to count
+ * from); otherwise the relative day. A decided date is never "in …": anything
+ * the clock puts in the future (a bare date ahead of this zone, clock skew of
+ * more than the "just now" window) renders as the date.
+ */
+export function decidedWhen(value: string, relative: (iso: string) => string, now: number = Date.now()): string {
+  const iso = asInstant(value);
+  const at = Date.parse(iso);
+  if (!Number.isFinite(at)) return value;
+  if (DAY_ONLY.test(value) && new Date(at).toDateString() === new Date(now).toDateString()) return 'today';
+  if (at > now) return calendarDay(iso);
+  const said = relative(iso);
+  return said.startsWith('in ') ? calendarDay(iso) : said;
+}
 
 export const statusLabel = (status: string): string => STATUS_LABEL[status] ?? status;
 
@@ -54,12 +84,15 @@ export const decider = (people: readonly DecisionParticipant[]): DecisionPartici
 export const contributors = (people: readonly DecisionParticipant[]): DecisionParticipant[] =>
   people.filter((p) => (p.role ?? '').toLowerCase() !== 'decider');
 
-/** One line on where the decision stands, for the list rail's row and the record's header. */
+/**
+ * One line on where the decision stands, for the record's header. A settled
+ * one says when, not who: the record names who decided once, on its Decided
+ * line (`decidedLine`), so `deciderName` is only the waiting forms' decider.
+ */
 export function standingLine(d: Pick<DecisionDetail, 'status' | 'decidedAt'> & { escalatedAt?: string | null; requiredRole?: string | null },
   deciderName: string | null, relative: (iso: string) => string): string {
   if (d.status === 'resolved' || d.status === 'rejected') {
-    const who = deciderName ? ` by ${deciderName}` : '';
-    return `${d.status === 'resolved' ? 'Decided' : 'Rejected'}${who}${d.decidedAt ? ` ${relative(asInstant(d.decidedAt))}` : ''}`;
+    return `${d.status === 'resolved' ? 'Decided' : 'Rejected'}${d.decidedAt ? ` ${decidedWhen(d.decidedAt, relative)}` : ''}`;
   }
   if (d.status === 'escalated') {
     const to = deciderName ?? (d.requiredRole ? `the ${d.requiredRole}` : 'its decider');
@@ -80,16 +113,18 @@ export function historyOf(
   d: DecisionDetail, row: DecisionInitiativeRow | null, projectName: string | null,
 ): HistoryEvent[] {
   const who = decider(d.participants)?.name ?? null;
+  // Who made a recorded call is on the record's Decided line; the history keeps what was said.
   const events: HistoryEvent[] = (d.history ?? []).map((e) => ({
     id: `event-${e.id}`, at: e.at,
     label: e.kind === 'resolved' ? 'Decided' : 'Rejected',
-    detail: `${e.by.name} ${e.kind === 'resolved' ? 'decided' : 'rejected it'}: ${e.rationale}`,
+    detail: e.rationale,
   }));
   if ((d.status === 'resolved' || d.status === 'rejected') && events.length === 0) {
     events.push({
       id: 'settled', at: d.decidedAt,
       label: d.status === 'resolved' ? 'Decided' : 'Rejected',
-      detail: who ? `${who} made the call.` : 'The call was made.',
+      // Who is the Decided line's to say (and with no recorded call, only the assigned decider is known).
+      detail: 'The call was made.',
     });
   }
   if (row?.escalatedAt) {
@@ -151,17 +186,28 @@ export function decideBody(outcome: DecideBody['outcome'], rationale: string): {
 }
 
 /**
- * The record's outcome line for a settled decision: "Decided <when> by <who>:
- * <outcome>" (or "Rejected …"), each part only when the record has it; null
- * while it waits, or when nothing says what was decided.
+ * The record's outcome for a settled decision, under "The decision": what was
+ * decided, alone. When and by whom are the Decided line's (`decidedLine`) —
+ * the record says "by" once. Null while it waits, or when nothing says what
+ * was decided.
  */
-export function outcomeLine(
-  d: Pick<DecisionDetail, 'status' | 'outcome' | 'decidedAt' | 'decidedBy'>, relative: (iso: string) => string,
-): string | null {
+export function outcomeLine(d: Pick<DecisionDetail, 'status' | 'outcome'>): string | null {
   if (isWaiting(d.status) || !d.outcome) return null;
-  const when = d.decidedAt ? ` ${relative(asInstant(d.decidedAt))}` : '';
-  const who = d.decidedBy?.name ? ` by ${d.decidedBy.name}` : '';
-  return `${d.status === 'rejected' ? 'Rejected' : 'Decided'}${when}${who}: ${d.outcome}`;
+  return d.outcome;
+}
+
+/**
+ * The record's one Decided line (its key-value row): "<when> by <who>", each
+ * part only when the record has it; null while it waits. The only place the
+ * record names who made the call.
+ */
+export function decidedLine(
+  d: Pick<DecisionDetail, 'status' | 'decidedAt' | 'decidedBy'>, relative: (iso: string) => string,
+): string | null {
+  if (isWaiting(d.status)) return null;
+  const when = d.decidedAt ? decidedWhen(d.decidedAt, relative) : null;
+  const who = d.decidedBy?.name ? `by ${d.decidedBy.name}` : null;
+  return [when, who].filter(Boolean).join(' ') || null;
 }
 
 /** A settled row's outcome, first line only, for the list; null while it waits. */
