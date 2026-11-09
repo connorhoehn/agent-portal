@@ -111,3 +111,69 @@ test('get decision: a settled one carries its outcome, a waiting one says who it
   const waiting = await run(JUDGE, 'd-eval-judge-model');
   assert.equal(waiting.output['subtitle'], 'waiting on Nina Rivera');
 });
+
+// G57: the decision's numbered options by voice. The record page lists them in its context ("option 1. …"), so
+// "decide 2" or "go with Nova Pro" is decide { option } mapped to the route's optionId; the card shows the choice.
+const OPTIONS = [
+  { id: 'nova-pro-10', label: 'Nova Pro, sample rate halved to 10%', detail: '82 percent agreement with human labels, at the current spend.' },
+  { id: 'nova-lite-20', label: 'Nova Lite at the current 20% sample rate', detail: '71 percent agreement, at about a sixth of the cost per judged answer.' },
+];
+const WITH_OPTIONS = { ...JUDGE, options: OPTIONS };
+const readWith = () => route('GET', '/api/graph/decisions/d-eval-judge-model', 200, WITH_OPTIONS);
+
+test('decide takes an option: "decide 2" resolves with the second option, shown on the card, and sends its optionId', async () => {
+  const tool = VOICE_TOOLS.find((t) => t.name === 'decide')!;
+  assert.ok(JSON.stringify(tool.parameters).includes('"option"'));
+  const r = await decide({ ref: 'decision:d-eval-judge-model', decision: 'resolve', option: '2', scope: 'this-page' }, {
+    routes: [readWith(), route('POST', POST, 200, { ...WITH_OPTIONS, status: 'resolved' })], answer: { decision: 'approve', note: '' },
+  });
+  assert.equal(r.card!.title, 'Resolve "Judge model for canary evaluation"');
+  assert.deepEqual(r.card!.detail, ['It is open; Nina Rivera decides.', 'Option 2: Nova Lite at the current 20% sample rate']);
+  assert.deepEqual(r.card!.fields, { decision: 'approve', notePlaceholder: 'Why (optional)' });
+  assert.deepEqual(writes(r.log), [['POST', POST, { optionId: 'nova-lite-20', outcome: 'resolved' }]]);
+  assert.equal(r.result.summary, 'Resolved: "Judge model for canary evaluation" (Nova Lite at the current 20% sample rate)');
+  assert.equal(r.result.output['option'], 'Nova Lite at the current 20% sample rate');
+});
+
+test('an option by its words, with the why said as the note', async () => {
+  const r = await decide({ ref: 'decision:d-eval-judge-model', decision: 'resolve', option: 'go with Nova Pro', note: 'it agrees with human labels' }, {
+    routes: [readWith(), route('POST', POST, 200, {})], answer: { decision: 'approve', note: '' },
+  });
+  assert.deepEqual(r.card!.detail, ['It is open; Nina Rivera decides.', 'Option 1: Nova Pro, sample rate halved to 10%', 'Why: it agrees with human labels']);
+  assert.deepEqual(writes(r.log), [['POST', POST, { optionId: 'nova-pro-10', outcome: 'resolved', rationale: 'it agrees with human labels' }]]);
+});
+
+test('the last numbered rows: Reject is a reject (with why), Something else is a resolve whose note is the outcome; a wrong option is refused', async () => {
+  const rejected = await decide({ ref: 'decision:d-eval-judge-model', decision: 'resolve', option: '4', note: 'rerun the rubric first' }, {
+    routes: [readWith(), route('POST', POST, 200, {})], answer: { decision: 'reject', note: '' },
+  });
+  assert.equal(rejected.card!.title, 'Reject "Judge model for canary evaluation"');
+  assert.deepEqual(writes(rejected.log), [['POST', POST, { outcome: 'rejected', rationale: 'rerun the rubric first' }]]);
+
+  const other = await decide({ ref: 'decision:d-eval-judge-model', decision: 'resolve', option: 'something else', note: 'Nova Pro on the hard set only' }, {
+    routes: [readWith(), route('POST', POST, 200, {})], answer: { decision: 'approve', note: '' },
+  });
+  assert.deepEqual(writes(other.log), [['POST', POST, { outcome: 'resolved', rationale: 'Nova Pro on the hard set only' }]]);
+
+  const none = await decide({ ref: 'decision:d-eval-judge-model', decision: 'resolve', option: '7' }, { routes: [readWith()] });
+  assert.equal(none.result.outcome, 'refused');
+  assert.match(none.result.summary, /no option "7"; choose 1 to 4/);
+  assert.deepEqual(none.result.output['options'], ['1. Nova Pro, sample rate halved to 10%', '2. Nova Lite at the current 20% sample rate', '3. Something else…', '4. Reject']);
+
+  const mixed = await decide({ ref: 'decision:d-eval-judge-model', decision: 'reject', option: '1' }, { routes: [readWith()] });
+  assert.equal(mixed.result.outcome, 'refused');
+  assert.match(mixed.result.summary, /a rejection takes no option/);
+});
+
+test('an option flipped to reject on the card drops the option: with no why nothing is sent', async () => {
+  const r = await decide({ ref: 'decision:d-eval-judge-model', decision: 'resolve', option: '1' }, {
+    routes: [readWith(), route('POST', POST, 200, {})], answer: { decision: 'reject', note: ' ' },
+  });
+  assert.equal(r.result.outcome, 'refused');
+  assert.deepEqual(writes(r.log), []);
+});
+
+test('the record page lists the options for the voice as numbered rows', () => {
+  const page = decisionPageContext(WITH_OPTIONS, PATH, true);
+  assert.deepEqual(page.choices, ['Nova Pro, sample rate halved to 10%', 'Nova Lite at the current 20% sample rate', 'Something else…', 'Reject']);
+});

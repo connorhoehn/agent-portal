@@ -1678,17 +1678,17 @@
     {
       "method": "GET",
       "path": "/api/graph/decisions",
-      "source": "src/routes/decisions.ts:42"
+      "source": "src/routes/decisions.ts:51"
     },
     {
       "method": "GET",
       "path": "/api/graph/decisions/:id",
-      "source": "src/routes/decisions.ts:55"
+      "source": "src/routes/decisions.ts:64"
     },
     {
       "method": "POST",
       "path": "/api/graph/decisions/:id/decide",
-      "source": "src/routes/decisions.ts:79"
+      "source": "src/routes/decisions.ts:95"
     },
     {
       "method": "GET",

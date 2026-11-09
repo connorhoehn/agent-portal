@@ -80,7 +80,7 @@ test('the record publishes itself for the voice, and offers decide only to someo
   assert.deepEqual(page.record, { ref: 'decision:d-eval-judge-model', title: 'Judge model for canary evaluation' });
   assert.deepEqual(page.rows, [{ ref: 'decision:d-eval-judge-model', title: 'Judge model for canary evaluation', status: 'open', href: path }]);
   const note = pageContextNote({ tenant: 'orgiq', pathname: path, pageId: 'decisions', page });
-  assert.match(note, /Offered here: This decision is waiting on you: say decide to resolve or reject it \(decide ref decision:d-eval-judge-model, scope this-page/);
+  assert.match(note, /Offered here: This decision is waiting on you: say decide with an option's number or label to resolve it \(decide ref decision:d-eval-judge-model, scope this-page, option/);
   assert.doesNotMatch(pageContextNote({ tenant: 'orgiq', pathname: path, pageId: 'decisions', page: decisionPageContext(DECIDED, path, false) }), /Offered here/);
 });
 

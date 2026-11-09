@@ -2,9 +2,12 @@
 // still has to make — escalated and open ones first, settled ones after —
 // each one a record page (`/iq/decisions/:id`) with its initiative, work item,
 // people and history. Same catalog frame as Designs: section rail, flush list
-// rail beside an open record, command composer docked under the column.
+// rail beside an open record, command composer docked under the column. On a
+// waiting decision's record that composer is the decision dialogue (G57): the
+// record page hands it the prompt, and Esc returns it to the table commands.
 
 import { useMemo, useState } from 'react';
+import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { useNavigate, useParams } from 'react-router';
 import {
   Chip, CollectionToolbar, DataTable, EmptyState, LoadingState, Stack, T,
@@ -49,6 +52,8 @@ export default function DecisionsPage() {
   }, [initiatives]);
 
   const [query, setQuery] = useState('');
+  // G57: the open record's decision dialogue, drawn by the docked composer instead of its free text.
+  const [recordPrompt, setRecordPrompt] = useState<ComposerPrompt | null>(null);
   const all = useMemo(() => sortDecisions(data ?? []), [data]);
   const rows = useMemo(
     () => filterDecisions(all, filter).filter((d) => matchesDecision(d, query, nameOf(d.projectId))),
@@ -108,12 +113,12 @@ export default function DecisionsPage() {
       rows={rows.map((d) => ({ id: d.id, title: d.topic, subline: outcomeFirstLine(d) ?? statusLabel(d.status), description: nameOf(d.projectId) ?? 'Organisation-wide' }))}
       selectedId={id} selectedTitle={data?.find((d) => d.id === id)?.topic}
       onSelect={open}
-      footer={id ? <CollectionCommandHost inPlace adapter={adapter} /> : undefined}
+      footer={id ? <CollectionCommandHost inPlace adapter={adapter} prompts={recordPrompt ? [recordPrompt] : undefined} /> : undefined}
       railNotice={failure ? <UnavailableNotice error={failure} what="decisions" source={DECISIONS_SOURCE} onRetry={refresh} />
         : isLoading && !data ? <LoadingState label="Loading decisions…" />
         : rows.length === 0 ? <EmptyState align="start" title="No decisions in this view" /> : undefined}
     >
-      {id ? <DecisionRecordPage key={id} onDecided={refresh} /> : (
+      {id ? <DecisionRecordPage key={id} onDecided={refresh} onPrompt={setRecordPrompt} /> : (
         <Stack gap="sm" className="min-w-0">
           <CollectionToolbar label="Decision filters"
             search={{ value: query, onChange: setQuery, placeholder: 'Search decisions', 'aria-label': 'Search decisions' }}

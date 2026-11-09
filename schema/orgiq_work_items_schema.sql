@@ -88,6 +88,12 @@ CREATE INDEX IF NOT EXISTS decisions_status_idx     ON decisions (status);
 -- `resolution` holds the decider's rationale as the outcome text.
 ALTER TABLE decisions ADD COLUMN IF NOT EXISTS decided_by TEXT;
 
+-- G57: the pre-canned answers a waiting decision offers, in order, as
+-- [{ "id", "label", "detail"? }]. The record page's decision dialogue numbers
+-- them; POST …/decide { optionId } records the chosen label as `resolution`.
+-- NULL (no options) for settled rows and for a decision nobody wrote any for.
+ALTER TABLE decisions ADD COLUMN IF NOT EXISTS options JSONB;
+
 -- The decision's recorded history: one row per call made in the product, who
 -- made it, when and why. The seeds write none; a seeded decision's history is
 -- derived from its columns.

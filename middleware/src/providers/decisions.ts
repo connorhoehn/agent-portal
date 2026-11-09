@@ -14,7 +14,9 @@ import { config } from '../config.js';
 import { exec, fetchAvatarsById, withTransaction } from './aurora.js';
 import { mockAvatarUrl } from '../mock/avatars.js';
 import { clock, countBy } from '../mock/core/index.js';
-import { decisionRows, decisionParticipantRows, decisionEventRows } from '../mock/decisions.js';
+import { decisionRows, decisionParticipantRows, decisionEventRows, type DecisionOption } from '../mock/decisions.js';
+
+export type { DecisionOption } from '../mock/decisions.js';
 import { mockPeople } from '../mock/people.js';
 
 // ─── Local RDS Data API parameter helpers (mirroring aurora.ts internals) ────
@@ -69,6 +71,12 @@ export interface DecisionDetail {
   outcome: string | null;
   /** The recorded history, newest first. Empty until someone decides it here. */
   history: DecisionEvent[];
+  /**
+   * G57: the pre-canned answers it offers (the `options` jsonb column), in
+   * order; the record page numbers them and `POST /:id/decide { optionId }`
+   * records the chosen label. Empty for a settled seed row.
+   */
+  options: DecisionOption[];
   participants: Array<{
     personId: string;
     avatarUrl: string | null;
@@ -141,6 +149,7 @@ function mockGetDecision(id: string): DecisionDetail | null {
     decidedBy: by ? { id: by, name: byId.get(by)?.name ?? history.find((e) => e.by.id === by)?.by.name ?? by } : null,
     outcome: head.resolution ?? null,
     history,
+    options: (head.options ?? []).map((o) => ({ ...o })),
     participants: decisionParticipantRows
       .rows()
       .filter((p) => p.decisionId === id)
@@ -208,6 +217,7 @@ export async function getDecision(id: string): Promise<DecisionDetail | null> {
 
   const headRows = await exec(
     `SELECT d.id, d.topic, d.summary, d.status, d.project_id, d.decided_at, d.resolution, d.decided_by,
+            d.options::text AS options,
             COALESCE(p.name, d.decided_by) AS decided_by_name
        FROM decisions d LEFT JOIN people p ON p.id = d.decided_by
       WHERE d.id = :id LIMIT 1`,
@@ -256,6 +266,7 @@ export async function getDecision(id: string): Promise<DecisionDetail | null> {
       by: { id: String(r['actor_id'] ?? ''), name: String(r['actor_name'] ?? r['actor_id'] ?? '') },
       rationale: String(r['rationale'] ?? ''),
     })),
+    options: parseDecisionOptions(head['options']),
     participants: partRows.map((r) => ({
       personId: String(r['person_id']),
       avatarUrl: avatars.get(String(r['person_id'])) ?? null,
@@ -265,6 +276,24 @@ export async function getDecision(id: string): Promise<DecisionDetail | null> {
       weight: typeof r['weight'] === 'number' ? r['weight'] : 1.0,
     })),
   };
+}
+
+/**
+ * The `options` jsonb column as the record's options (G57): an array of
+ * `{ id, label, detail? }`, read through `::text` (the Data API hands jsonb
+ * back as a string). Anything malformed is dropped, never invented: a row
+ * with no usable options offers none.
+ */
+export function parseDecisionOptions(raw: unknown): DecisionOption[] {
+  let value: unknown = raw;
+  if (typeof raw === 'string') { try { value = JSON.parse(raw); } catch { return []; } }
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((o): DecisionOption[] => {
+    if (!o || typeof o !== 'object') return [];
+    const { id, label, detail } = o as Record<string, unknown>;
+    if (typeof id !== 'string' || !id.trim() || typeof label !== 'string' || !label.trim()) return [];
+    return [{ id: id.trim(), label: label.trim(), ...(typeof detail === 'string' && detail.trim() ? { detail: detail.trim() } : {}) }];
+  });
 }
 
 // ─── Deciding (G54) ─────────────────────────────────────────────────────────

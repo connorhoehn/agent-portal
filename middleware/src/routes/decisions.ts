@@ -36,6 +36,15 @@ import {
 /** The longest rationale a decision keeps (G54). */
 export const RATIONALE_MAX = 500;
 
+/**
+ * The outcome recorded for a chosen option (G57): its label, then ", because
+ * <rationale>" when one was given (a leading "because" is not doubled).
+ */
+export function optionOutcome(label: string, rationale: string): string {
+  const why = rationale.trim().replace(/^because\b[\s,:]*/i, '').trim();
+  return why ? `${label}, because ${why}` : label;
+}
+
 export const decisionsRouter = Router();
 
 // GET /api/graph/decisions?limit=N&since=ISO
@@ -70,12 +79,19 @@ decisionsRouter.get(
   }),
 );
 
-// POST /api/graph/decisions/:id/decide { outcome: 'resolved' | 'rejected', rationale }
+// POST /api/graph/decisions/:id/decide { optionId?, outcome: 'resolved' | 'rejected', rationale? }
 //
-// 400 a bad outcome or a rationale that is empty or over RATIONALE_MAX; 404 no
-// such decision; 403 the caller is neither its decider, its initiative's
-// owner, nor an org-leader / admin (NOT_DECIDER); 409 it is no longer waiting
-// (already resolved or rejected). 200 answers the decision as the record reads it.
+// G57: a waiting decision offers pre-canned `options`; resolving with an
+// `optionId` records that option's label as the outcome (", because
+// <rationale>" appended when one is given), so the rationale is optional
+// there. Without an option the rationale is the outcome and is required, as
+// in G54. A rejection takes no option (an `optionId` with `rejected` is a 400).
+//
+// 400 a bad outcome, an option the decision does not offer, or a rationale
+// that is missing (no option) or over RATIONALE_MAX; 404 no such decision; 403
+// the caller is neither its decider, its initiative's owner, nor an
+// org-leader / admin (NOT_DECIDER); 409 it is no longer waiting (already
+// resolved or rejected). 200 answers the decision as the record reads it.
 decisionsRouter.post(
   '/:id/decide',
   requireAction('DecideDecision'),
@@ -83,13 +99,17 @@ decisionsRouter.post(
     const session = resolveSession(req);
     if (!session) { res.status(401).json({ error: 'Unauthenticated', code: 'SESSION_INVALID' }); return; }
     const id = String(req.params['id'] ?? '');
-    const body = (req.body ?? {}) as { outcome?: unknown; rationale?: unknown };
+    const body = (req.body ?? {}) as { optionId?: unknown; outcome?: unknown; rationale?: unknown };
     if (!(DECISION_OUTCOMES as readonly unknown[]).includes(body.outcome)) {
       throw new ValidationError(`outcome must be one of ${DECISION_OUTCOMES.join(', ')}`);
     }
     const outcome = body.outcome as DecisionOutcome;
+    const optionId = body.optionId == null ? null : body.optionId;
+    if (optionId !== null && (typeof optionId !== 'string' || !optionId.trim())) throw new ValidationError('optionId must be a non-empty string');
+    if (optionId !== null && outcome === 'rejected') throw new ValidationError('optionId is for resolving with one of the options; a rejection takes a rationale');
+    if (body.rationale != null && typeof body.rationale !== 'string') throw new ValidationError('rationale must be a string');
     const rationale = typeof body.rationale === 'string' ? body.rationale.trim() : '';
-    if (!rationale) throw new ValidationError('rationale is required: say what was decided and why');
+    if (!rationale && optionId === null) throw new ValidationError('rationale is required: say what was decided and why, or choose one of the options');
     if (rationale.length > RATIONALE_MAX) throw new ValidationError(`rationale must be at most ${RATIONALE_MAX} characters`);
 
     const decision = await getDecision(id);
@@ -108,6 +128,13 @@ decisionsRouter.post(
       res.status(409).json({ error: `this decision is already ${decision.status}`, status: decision.status });
       return;
     }
+    // G57: the option must be one this decision offers; its label is what was decided.
+    let recorded = rationale;
+    if (typeof optionId === 'string') {
+      const option = decision.options.find((o) => o.id === optionId.trim());
+      if (!option) throw new ValidationError(`this decision offers no option "${optionId.trim()}"`);
+      recorded = optionOutcome(option.label, rationale);
+    }
     // Production's copy of the scope rule (member.cedar's forbid reads decidesThis).
     if (!await isAllowed(session, 'DecideDecision', { decidesThis: verdict.decidesThis })) {
       logAuthz(eventFromSession(session, 'DecideDecision', 'DENY', { path: req.path, reason: 'cedar refused decidesThis' }));
@@ -116,13 +143,13 @@ decisionsRouter.post(
     }
 
     const actor = await decisionActor(session);
-    const out = await decideDecision(id, { outcome, rationale, actorId: actor.id, actorName: actor.name });
+    const out = await decideDecision(id, { outcome, rationale: recorded, actorId: actor.id, actorName: actor.name });
     if (out.kind === 'not-found') throw new NotFoundError('Decision not found');
     if (out.kind === 'settled') {
       res.status(409).json({ error: `this decision is already ${out.status}`, status: out.status });
       return;
     }
-    logAuthz(eventFromSession(session, 'DecideDecision', 'ALLOW', { path: req.path, reason: `${outcome} via ${verdict.via}` }));
+    logAuthz(eventFromSession(session, 'DecideDecision', 'ALLOW', { path: req.path, reason: `${outcome}${typeof optionId === 'string' ? ` (option ${optionId.trim()})` : ''} via ${verdict.via}` }));
     noteSearchWriteSoon({ type: 'decision', id });
     res.json({ ...out.decision, viewerMayDecide: true });
   }),

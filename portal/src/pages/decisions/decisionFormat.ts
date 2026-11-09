@@ -2,6 +2,7 @@
 // node:test like the other format modules.
 
 import type { PublishedPage } from '../../lib/voice/pageContext';
+import { dialogueRows } from './decisionDialogue.ts';
 import type { DecideBody, DecisionDetail, DecisionInitiativeRow, DecisionParticipant, DecisionSummary } from './types';
 
 export const DECISIONS_SOURCE = 'Decisions are read from the org graph';
@@ -173,10 +174,12 @@ export function outcomeFirstLine(d: Pick<DecisionSummary, 'status' | 'outcome'>)
 /**
  * What the record publishes for the voice (lib/voice/pageContext.ts): the
  * decision as the record in view and as the page's one row (so `decide` with
- * scope "this-page" names it), and, when the control is drawn, the offer.
+ * scope "this-page" names it), and, when the viewer may decide it, the offer
+ * and the decision dialogue's numbered rows (G57: "decide 2", "go with the
+ * riskiest first" name one; decisionDialogue.ts numbers them the same way).
  */
 export function decisionPageContext(
-  d: Pick<DecisionDetail, 'id' | 'topic' | 'status'> & Partial<Pick<DecisionDetail, 'participants'>>, path: string, mayDecide: boolean,
+  d: Pick<DecisionDetail, 'id' | 'topic' | 'status'> & Partial<Pick<DecisionDetail, 'participants' | 'options'>>, path: string, mayDecide: boolean,
 ): PublishedPage {
   // A waiting decision this viewer cannot decide: say who it waits on, never the decide offer.
   const waiting = !mayDecide && d.participants ? waitingNotice({ status: d.status, participants: d.participants }) : null;
@@ -184,13 +187,15 @@ export function decisionPageContext(
     ? `This decision waits on ${waiting.name}; you cannot decide it. Say message ${waiting.name} to ask about it.`
     : waiting ? 'This decision waits on an unassigned decider; you cannot decide it.' : null;
   const ref = `decision:${d.id}`;
+  const dialogue = mayDecide && isWaiting(d.status);
   return {
     path,
     record: { ref, title: d.topic },
     rowsLabel: 'decision',
     rows: [{ ref, title: d.topic, status: d.status, href: `/iq/decisions/${encodeURIComponent(d.id)}` }],
     offer: mayDecide
-      ? `This decision is waiting on you: say decide to resolve or reject it (decide ref ${ref}, scope this-page, with what was decided and why as the note).`
+      ? `This decision is waiting on you: say decide with an option's number or label to resolve it (decide ref ${ref}, scope this-page, option; any why as the note), or reject it with why.`
       : waitingOffer,
+    ...(dialogue ? { choices: dialogueRows(d.options).map((r) => r.label) } : {}),
   };
 }

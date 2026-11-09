@@ -1483,7 +1483,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     route: 'POST /api/graph/decisions/:id/decide',
     persona: 'orgiq/admin',
     safe: 'Mutates the registered `graph-decisions` fixture row and appends to the registered `graph-decision-events` fixture (G54); reset restores both. Under the mock providers no SQL runs. A decision the list hands out first may already be settled, which the route answers 409 and the capture records.',
-    bodyFrom: "routes/decisions.ts: `outcome` ∈ DECISION_OUTCOMES ('resolved','rejected'), `rationale` non-blank and at most RATIONALE_MAX (500).",
+    bodyFrom: "routes/decisions.ts: `outcome` ∈ DECISION_OUTCOMES ('resolved','rejected'), `rationale` non-blank and at most RATIONALE_MAX (500). The optional `optionId` (G57) is left out: a rejection takes none, so the rejection body stays valid whichever waiting decision the list hands out first.",
     build: async (ctx) => ({ outcome: 'rejected', rationale: ctx.label() }),
   },
   {

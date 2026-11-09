@@ -117,10 +117,11 @@ describe('GET /api/graph/decisions/:id', () => {
     const res = await request(buildApp()).get(`/api/graph/decisions/${first.id}`);
     expect(res.status).toBe(200);
     expect(Object.keys(res.body).sort()).toEqual(
-      ['decidedAt', 'decidedBy', 'history', 'id', 'outcome', 'participants', 'projectId', 'status', 'summary', 'topic', 'viewerMayDecide'],
+      ['decidedAt', 'decidedBy', 'history', 'id', 'options', 'outcome', 'participants', 'projectId', 'status', 'summary', 'topic', 'viewerMayDecide'],
     );
     expect(Array.isArray(res.body.history)).toBe(true);
     expect(typeof res.body.viewerMayDecide).toBe('boolean');
+    expect(Array.isArray(res.body.options)).toBe(true);
     expect(res.body.participants).toHaveLength(first.participantCount);
     for (const p of res.body.participants) {
       expect(Object.keys(p).sort()).toEqual(['avatarUrl', 'name', 'personId', 'role', 'title', 'weight']);

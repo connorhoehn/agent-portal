@@ -28,6 +28,7 @@ import { CREATE_ACTIONS, CREATE_FIELDS, DECIDE_ACTIONS, UPDATE_ACTIONS } from '.
 import { parseRef, type Rec } from './kinds.ts';
 import { DELEGATION_REASON_MIN, DELEGATION_WINDOWS, JUSTIFICATION_MIN, delegationBody } from '../accessRequests.ts';
 import { WORK_PLANNERS, WORK_RUNNERS, matchByName } from './work.ts';
+import { dialogueRows, matchDialogueRow, optionOutcome, type DialogueRow } from '../../pages/decisions/decisionDialogue.ts';
 import {
   ambiguous, deliveryIdFor, done, failed, findByName, localHref, once, pageRowNamed, qs, readFailure, readJson, refused, socialGrantRefusal,
   type CardAnswer, type ConfirmPlan, type ToolContext, type ToolResult, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
@@ -54,10 +55,12 @@ interface DecidePlan {
   id: string;
   title: string;
   /** The verbs this row offers, each a fixed request; `note` is filled in at send time. */
-  sends: Partial<Record<Verb, { send: (note: string | undefined) => Send; needsNote?: string; said: string; word?: string }>>;
+  sends: Partial<Record<Verb, { send: (note: string | undefined, optionId?: string) => Send; needsNote?: string; said: string; word?: string }>>;
   verb: Verb;
   note?: string;
   href: string;
+  /** G57: the decision option the user chose (resolving only): the note is then the optional why. */
+  option?: { id: string; n: number; label: string };
 }
 
 /** A row's decision options, read again through its page's own read. */
@@ -70,6 +73,8 @@ interface Resolved {
   notePlaceholder?: string;
   /** The needed note may be typed on the card: the card is shown without it, and Confirm without one sends nothing. */
   noteOnCard?: boolean;
+  /** G57: the numbered rows a decision's dialogue offers (its options, Something else…, Reject); `option` names one. */
+  choices?: DialogueRow[];
 }
 
 type Resolver = (id: string, ctx: ToolContext) => Promise<Resolved | { result: ToolResult }>;
@@ -278,15 +283,22 @@ const decisionRecord: Resolver = async (id, ctx) => {
   const decider = str(people.find((p) => String(p['role'] ?? '').toLowerCase() === 'decider')?.['name']);
   if (d['viewerMayDecide'] === false) return { result: refused(`"${topic}" is waiting on ${decider ?? 'its decider'}, not you; only the decider, the initiative's owner or an org-leader can decide it.`) };
   const url = `/api/graph/decisions/${enc(id)}/decide`;
-  const needsNote = 'A decision needs its outcome and why; say it as the note.';
+  const needsNote = 'A decision needs its outcome and why; say it as the note, or choose one of its options.';
+  const options = Array.isArray(d['options']) ? (d['options'] as Rec[]).flatMap((o) => {
+    const oid = str(o['id']); const label = str(o['label']);
+    return oid && label ? [{ id: oid, label }] : [];
+  }) : [];
   return {
     title: `"${topic}"`,
     detail: [`It is ${status}${decider ? `; ${decider} decides` : ''}.`],
     href: `/iq/decisions/${enc(id)}`,
     notePlaceholder: 'What was decided, and why (needed)',
     noteOnCard: true,
+    choices: dialogueRows(options),
     sends: {
-      approve: { said: 'Resolved', word: 'Resolve', needsNote, send: (note) => ({ method: 'POST', url, body: { outcome: 'resolved', rationale: note } }) },
+      // G57: with an option the route records its label (and ", because <note>"); without one the note is the outcome.
+      approve: { said: 'Resolved', word: 'Resolve', needsNote, send: (note, optionId) => ({ method: 'POST', url, body: optionId
+        ? { optionId, outcome: 'resolved', ...(note ? { rationale: note } : {}) } : { outcome: 'resolved', rationale: note } }) },
       reject: { said: 'Rejected', word: 'Reject', needsNote, send: (note) => ({ method: 'POST', url, body: { outcome: 'rejected', rationale: note } }) },
     },
   };
@@ -338,24 +350,41 @@ const planDecide: VoiceToolPlanner = async (args, ctx) => {
   const kinds = DECIDE_ACTIONS[ctx.tenant] ?? {};
   const resolve = DECIDE_RESOLVERS[ctx.tenant]?.[parsed.kind];
   if (!(parsed.kind in kinds) || !resolve) return { result: refused(`A ${parsed.kind.replace(/-/g, ' ')} is not decided by voice in this workspace.`) };
-  const verb = verbOf(String(args['decision']));
+  let verb = verbOf(String(args['decision']));
+  const saidOption = args['option'] == null || args['option'] === '' ? null : args['option'];
+  if (saidOption !== null && parsed.kind !== 'decision') return { result: refused(`A ${parsed.kind.replace(/-/g, ' ')} has no numbered options; say approve or reject.`) };
   const action = kinds[parsed.kind]![verb];
   if (action === undefined) return { result: refused(`A ${parsed.kind.replace(/-/g, ' ')} cannot be "${String(args['decision'])}".`) };
   // The page button's own action, before any request (prepareToolCall cannot: it depends on the ref and the decision).
   if (action && !ctx.can(action)) return { result: refused(`I can't ${String(args['decision'])} that with your role.`) };
   const row = await resolve(parsed.id, ctx);
   if ('result' in row) return row;
+  // G57: the option the user named, by the dialogue's numbering: an option resolves with it, Something else is a
+  // resolve whose note is the outcome, Reject is a reject.
+  let option: DecidePlan['option'];
+  if (saidOption !== null) {
+    const hit = matchDialogueRow(row.choices ?? [], typeof saidOption === 'number' ? saidOption : String(saidOption));
+    if ('error' in hit) {
+      const rows = row.choices ?? [];
+      return { result: refused(`${row.title} has no option "${String(saidOption)}"; choose 1 to ${rows.length} as its page numbers them.`,
+        { options: rows.map((r) => `${r.n}. ${r.label}`) }) };
+    }
+    if (hit.row.kind === 'reject') verb = 'reject';
+    else if (verb === 'reject') return { result: refused(`${row.title}: a rejection takes no option. Say reject with why, or decide option ${hit.row.n}.`) };
+    else if (hit.row.kind === 'option') option = { id: hit.row.id, n: hit.row.n, label: hit.row.label };
+  }
   const chosen = row.sends[verb];
   if (!chosen) return { result: refused(`${row.title} cannot be ${verb === 'approve' ? 'approved' : verb === 'reject' ? 'rejected' : 'delivered'} now; ${row.detail[0] ?? 'see its page'}`) };
   const note = typeof args['note'] === 'string' && args['note'].trim() ? args['note'].trim() : undefined;
-  if (chosen.needsNote && !note && verb !== 'reject' && !row.noteOnCard) return { result: refused(chosen.needsNote) };
+  if (chosen.needsNote && !note && verb !== 'reject' && !row.noteOnCard && !option) return { result: refused(chosen.needsNote) };
   const both = !!row.sends.approve && !!row.sends.reject && verb !== 'deliver';
-  const plan: DecidePlan = { kind: parsed.kind, id: parsed.id, title: row.title, sends: row.sends, verb, href: row.href, ...(note ? { note } : {}) };
+  const plan: DecidePlan = { kind: parsed.kind, id: parsed.id, title: row.title, sends: row.sends, verb, href: row.href, ...(note ? { note } : {}), ...(option ? { option } : {}) };
   const card: ConfirmPlan = {
     title: `${chosen.word ?? VERB_WORD[verb]} ${row.title}`,
-    detail: [...row.detail, ...(note ? [`Note: ${note}`] : [])],
+    // The chosen option first (G57), then what the user said as its why.
+    detail: [...row.detail, ...(option ? [`Option ${option.n}: ${option.label}`] : []), ...(note ? [`${option ? 'Why' : 'Note'}: ${note}`] : [])],
     // Both ways open: the library's toggle and note, starting where the user said; Confirm answers { decision, note }.
-    ...(both ? { fields: { decision: verb === 'reject' ? 'reject' : 'approve', notePlaceholder: row.notePlaceholder ?? (row.sends.reject?.needsNote ? 'Reason (needed to reject)' : 'Note (optional)') } } : {}),
+    ...(both ? { fields: { decision: verb === 'reject' ? 'reject' : 'approve', notePlaceholder: option ? 'Why (optional)' : row.notePlaceholder ?? (row.sends.reject?.needsNote ? 'Reason (needed to reject)' : 'Note (optional)') } } : {}),
     data: plan,
   };
   return { plan: card };
@@ -383,8 +412,10 @@ const runDecide: VoiceToolRunner = async (_args, ctx, planned, answer?: CardAnsw
   if (!chosen) return refused(`${plan.title} cannot be ${verb === 'reject' ? 'rejected' : 'approved'} by voice.`);
   const action = DECIDE_ACTIONS[ctx.tenant]?.[plan.kind]?.[verb];
   if (action && !ctx.can(action)) return refused(`I can't ${verb} that with your role.`);
-  if (chosen.needsNote && !note) return refused(`${chosen.needsNote} Nothing was decided.`);
-  const send = chosen.send(note);
+  // G57: a chosen option holds only while resolving; flipped to reject on the card, the note is the why and is needed.
+  const option = verb === 'approve' ? plan.option : undefined;
+  if (chosen.needsNote && !note && !option) return refused(`${chosen.needsNote} Nothing was decided.`);
+  const send = chosen.send(note, option?.id);
   return once(ctx, `${send.method} ${send.url} ${verb}`, async () => {
     let res: Response;
     try {
@@ -395,8 +426,8 @@ const runDecide: VoiceToolRunner = async (_args, ctx, planned, answer?: CardAnsw
     const body = await res.json().catch(() => null) as Rec | null;
     if (!res.ok) return decideRefusal(res.status, body, plan.title);
     const prUrl = str(body?.['prUrl']);
-    return done('decided', { ref: `${plan.kind}:${plan.id}`, decision: verb, title: plan.title, href: plan.href, ...(note ? { note } : {}), ...(prUrl ? { delivered: true } : {}) },
-      `${chosen.said}: ${plan.title}`);
+    return done('decided', { ref: `${plan.kind}:${plan.id}`, decision: verb, title: plan.title, href: plan.href, ...(note ? { note } : {}), ...(option ? { option: option.label } : {}), ...(prUrl ? { delivered: true } : {}) },
+      `${chosen.said}: ${plan.title}${option ? ` (${optionOutcome(option.label, note ?? '')})` : ''}`);
   }, () => done('decided', { ref: `${plan.kind}:${plan.id}`, decision: verb, title: plan.title, alreadyDecided: true }, `${plan.title} was already decided; nothing was sent again`));
 };
 

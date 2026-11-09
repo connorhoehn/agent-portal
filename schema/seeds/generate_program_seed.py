@@ -51,6 +51,25 @@ DECISION_OUTCOMES = {
     'd-iceberg': 'Iceberg as the lakehouse table format, for its engine-neutral catalog across Spark, Trino and Flink.',
 }
 
+# The pre-canned answers each waiting decision offers (G57), taken from its own
+# summary; middleware/src/mock/decisions.ts carries the same rows. Settled
+# decisions offer none (NULL).
+DECISION_OPTIONS = {
+    'd-cognito-cutover': [
+        {'id': 'smallest-first', 'label': 'Smallest tenants first', 'detail': 'Keeps the blast radius low while the team learns the runbook.'},
+        {'id': 'riskiest-first', 'label': 'Riskiest two tenants first', 'detail': 'The custom SAML mappings move while the shim is warm and rollback is a route flip.'},
+    ],
+    'd-eval-judge-model': [
+        {'id': 'nova-pro-10', 'label': 'Nova Pro, sample rate halved to 10%', 'detail': '82 percent agreement with human labels, at the current spend.'},
+        {'id': 'nova-lite-20', 'label': 'Nova Lite at the current 20% sample rate', 'detail': '71 percent agreement, at about a sixth of the cost per judged answer.'},
+    ],
+    'd-inference-warm-floor': [
+        {'id': 'warm-floor', 'label': 'Warm floor of one replica per tier-1 model', 'detail': 'No cold start, at about $380 a month per model.'},
+        {'id': 'bake-weights', 'label': 'Bake weights into the image', 'detail': 'Loads in about 20 seconds at no standing cost, but still breaches the SLO.'},
+        {'id': 'scale-to-zero', 'label': 'Keep scale-to-zero', 'detail': 'No standing cost; the 40 to 90 second cold start stays.'},
+    ],
+}
+
 def run_note(prefix: str, seq: int) -> dict:
     notes = RUN_NOTES.get(prefix) or []
     if not notes:
@@ -1146,10 +1165,12 @@ def main() -> None:
             settled = status in ('resolved', 'rejected')
             outcome_sql = f"'{q(DECISION_OUTCOMES[did])}'" if settled else 'NULL'
             decided_by_sql = f"'{decider}'" if settled else 'NULL'
+            # G57: a waiting decision offers its pre-canned answers (DECISION_OPTIONS).
+            options_sql = f"'{q(json.dumps(DECISION_OPTIONS[did], ensure_ascii=False))}'::jsonb" if not settled and did in DECISION_OPTIONS else 'NULL'
             emit(
-                "INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id, resolution, decided_by) "
+                "INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id, resolution, decided_by, options) "
                 f"VALUES ('{did}', '{q(topic)}', '{q(summary)}', '{status}', '{pid}', {role_sql}, {decided}, {escalated}, {resolved}, "
-                f"'wi-{slug}-{dec_ekey}', {outcome_sql}, {decided_by_sql}) "
+                f"'wi-{slug}-{dec_ekey}', {outcome_sql}, {decided_by_sql}, {options_sql}) "
                 "ON CONFLICT (id) DO NOTHING"
             )
             # Who was in the room. Every decision in seed.sql carries this;

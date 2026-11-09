@@ -52,7 +52,16 @@ export interface PublishedPage {
    * Cut at PAGE_OFFER_MAX characters; framed as data like the rest.
    */
   offer?: string | null;
+  /**
+   * G57: the numbered answers the page's dialogue offers for the record in
+   * view (a waiting decision's options, then Something else… and Reject), in
+   * the page's numbering, so "decide 2" or "go with the riskiest first" names
+   * one. At most PAGE_CHOICES_MAX, each cut at PAGE_FIELD_MAX.
+   */
+  choices?: readonly string[];
 }
+
+export const PAGE_CHOICES_MAX = 9;
 
 let current: PublishedPage | null = null;
 const listeners = new Set<() => void>();
@@ -162,6 +171,10 @@ export function pageContextNote(o: { tenant: string; pathname: string; pageId?: 
   if (p.offer) {
     const offer = String(p.offer).replace(/[\r\n\t]+/g, ' ').replace(/["“”]/g, "'").replace(/\s+/g, ' ').trim();
     lines.push(`Offered here: ${offer.length > PAGE_OFFER_MAX ? `${offer.slice(0, PAGE_OFFER_MAX - 1)}…` : offer}`);
+  }
+  if (p.choices?.length) {
+    lines.push(`Its options, numbered as the page shows them (decide's option is the number or the label):`);
+    p.choices.slice(0, PAGE_CHOICES_MAX).forEach((c, i) => lines.push(`  option ${i + 1}. "${field(c)}"`));
   }
   const rows = p.rows.slice(0, PAGE_ROWS_MAX);
   if (!rows.length) lines.push(`It shows no ${field(p.rowsLabel ?? 'rows')}.`);

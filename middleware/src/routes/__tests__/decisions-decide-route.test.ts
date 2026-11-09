@@ -157,6 +157,72 @@ describe('POST /api/graph/decisions/:id/decide', () => {
   });
 });
 
+describe('POST /api/graph/decisions/:id/decide with an option (G57)', () => {
+  it('the detail lists the waiting decision\'s options in order; a settled one offers none', async () => {
+    const judge = await request(appAs('u-nina', 'sme')).get(JUDGE);
+    expect(judge.body.options).toEqual([
+      { id: 'nova-pro-10', label: 'Nova Pro, sample rate halved to 10%', detail: '82 percent agreement with human labels, at the current spend.' },
+      { id: 'nova-lite-20', label: 'Nova Lite at the current 20% sample rate', detail: '71 percent agreement, at about a sixth of the cost per judged answer.' },
+    ]);
+    const cutover = await request(appAs('u-sienna', 'member')).get('/api/graph/decisions/d-cognito-cutover');
+    expect(cutover.body.options.map((o: { label: string }) => o.label)).toEqual(['Smallest tenants first', 'Riskiest two tenants first']);
+    const warm = await request(appAs('u-nora', 'sme')).get('/api/graph/decisions/d-inference-warm-floor');
+    expect(warm.body.options).toHaveLength(3);
+    const adr = await request(appAs('u-nora', 'sme')).get('/api/graph/decisions/d-aurora');
+    expect(adr.body.options).toEqual([]);
+  });
+
+  it('an option with no rationale records its label as the outcome', async () => {
+    const res = await request(appAs('u-nina', 'sme')).post(`${JUDGE}/decide`).send({ optionId: 'nova-pro-10', outcome: 'resolved' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(expect.objectContaining({ status: 'resolved', outcome: 'Nova Pro, sample rate halved to 10%' }));
+    expect(res.body.history[0]).toEqual(expect.objectContaining({ kind: 'resolved', rationale: 'Nova Pro, sample rate halved to 10%' }));
+  });
+
+  it('an option with a rationale records "<label>, because <rationale>" (a said "because" is not doubled)', async () => {
+    const res = await request(appAs('u-sienna', 'member')).post('/api/graph/decisions/d-cognito-cutover/decide')
+      .send({ optionId: 'riskiest-first', outcome: 'resolved', rationale: '  because rollback is still a route flip ' });
+    expect(res.status).toBe(200);
+    expect(res.body.outcome).toBe('Riskiest two tenants first, because rollback is still a route flip');
+    expect(decisionRows.rows().find((d) => d.id === 'd-cognito-cutover')!.resolution).toBe('Riskiest two tenants first, because rollback is still a route flip');
+  });
+
+  it('an option the decision does not offer, an option with reject, or a non-string option is a 400 and writes nothing', async () => {
+    const app = appAs('u-nina', 'sme');
+    const unknown = await request(app).post(`${JUDGE}/decide`).send({ optionId: 'smallest-first', outcome: 'resolved' });
+    expect(unknown.status).toBe(400);
+    expect(unknown.body.error).toMatch(/offers no option/);
+    const rejecting = await request(app).post(`${JUDGE}/decide`).send({ optionId: 'nova-pro-10', outcome: 'rejected', rationale: 'No.' });
+    expect(rejecting.status).toBe(400);
+    expect((await request(app).post(`${JUDGE}/decide`).send({ optionId: 2, outcome: 'resolved' })).status).toBe(400);
+    expect((await request(app).post(`${JUDGE}/decide`).send({ optionId: '  ', outcome: 'resolved' })).status).toBe(400);
+    expect((await request(app).post(`${JUDGE}/decide`).send({ optionId: 'nova-pro-10', outcome: 'resolved', rationale: 'x'.repeat(501) })).status).toBe(400);
+    expect(decisionRows.rows().find((d) => d.id === 'd-eval-judge-model')!.status).toBe('open');
+    expect(decisionEventRows.rows()).toEqual([]);
+  });
+
+  it('without an option the rationale is still required; a rejection needs no option', async () => {
+    const app = appAs('u-nina', 'sme');
+    const bare = await request(app).post(`${JUDGE}/decide`).send({ outcome: 'resolved' });
+    expect(bare.status).toBe(400);
+    expect(bare.body.error).toMatch(/rationale is required/);
+    expect((await request(app).post(`${JUDGE}/decide`).send({ outcome: 'rejected' })).status).toBe(400);
+    const rejected = await request(app).post(`${JUDGE}/decide`).send({ outcome: 'rejected', rationale: 'Rerun the rubric first.' });
+    expect(rejected.status).toBe(200);
+    expect(rejected.body.outcome).toBe('Rerun the rubric first.');
+  });
+
+  it('403 and 409 hold with an option, as without one', async () => {
+    const stranger = await request(appAs('u-nora', 'sme')).post(`${JUDGE}/decide`).send({ optionId: 'nova-pro-10', outcome: 'resolved' });
+    expect(stranger.status).toBe(403);
+    expect(stranger.body.code).toBe('NOT_DECIDER');
+    expect((await request(appAs('u-nina', 'sme')).post(`${JUDGE}/decide`).send({ optionId: 'nova-pro-10', outcome: 'resolved' })).status).toBe(200);
+    const again = await request(appAs('u-nina', 'sme')).post(`${JUDGE}/decide`).send({ optionId: 'nova-lite-20', outcome: 'resolved' });
+    expect(again.status).toBe(409);
+    expect(decisionEventRows.rows()).toHaveLength(1);
+  });
+});
+
 describe('the Aurora provider', () => {
   it('updates only a waiting row and appends its event in one transaction; a lost race reads back as settled', async () => {
     const config = jest.requireMock('../../config.js').config as { mock: { aurora: boolean } };
@@ -168,13 +234,16 @@ describe('the Aurora provider', () => {
         .mockResolvedValueOnce([]);             // INSERT INTO decision_events
       aurora.withTransaction.mockImplementation(async (fn: (t: jest.Mock) => Promise<unknown>) => fn(tx));
       aurora.exec
-        .mockResolvedValueOnce([{ id: 'd-x', topic: 'T', summary: null, status: 'resolved', project_id: null, decided_at: '2026-11-09', resolution: 'Why', decided_by: 'p-047', decided_by_name: 'Nina Rivera' }])
+        .mockResolvedValueOnce([{ id: 'd-x', topic: 'T', summary: null, status: 'resolved', project_id: null, decided_at: '2026-11-09', resolution: 'Why', decided_by: 'p-047', decided_by_name: 'Nina Rivera',
+          options: '[{"id":"a","label":"Option A","detail":"why A"},{"id":"","label":"dropped"},{"label":"no id"}]' }])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([{ id: '1', kind: 'resolved', at: '2026-11-09T01:00:00Z', actor_id: 'p-047', actor_name: 'Nina Rivera', rationale: 'Why' }]);
       const ok = await decideDecision('d-x', { outcome: 'resolved', rationale: 'Why', actorId: 'p-047', actorName: 'Nina Rivera' });
       expect(String(tx.mock.calls[0]![0])).toMatch(/UPDATE decisions[\s\S]*status IN \('open', 'escalated'\)/);
       expect(String(tx.mock.calls[1]![0])).toMatch(/INSERT INTO decision_events/);
       expect(ok).toEqual({ kind: 'ok', decision: expect.objectContaining({ decidedBy: { id: 'p-047', name: 'Nina Rivera' }, outcome: 'Why', history: [expect.objectContaining({ kind: 'resolved', rationale: 'Why' })] }) });
+      // G57: the jsonb options column, read as text; malformed entries are dropped, never invented.
+      expect(ok.kind === 'ok' && ok.decision.options).toEqual([{ id: 'a', label: 'Option A', detail: 'why A' }]);
 
       const lost = jest.fn().mockResolvedValueOnce([]);
       aurora.withTransaction.mockImplementation(async (fn: (t: jest.Mock) => Promise<unknown>) => fn(lost));

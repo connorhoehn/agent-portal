@@ -58,6 +58,21 @@ export interface DecisionRow {
   decidedBy?: string | null;
   resolution?: string | null;
   resolvedAt?: string | null;
+  /**
+   * G57: the pre-canned answers a waiting decision offers (the `options`
+   * jsonb column), each taken from the decision's own summary; the record
+   * page's decision dialogue numbers them, and `decide { optionId }` records
+   * the chosen label as the outcome. Settled rows carry none.
+   */
+  options?: DecisionOption[] | null;
+}
+
+/** One pre-canned answer to a waiting decision (G57). */
+export interface DecisionOption {
+  id: string;
+  label: string;
+  /** One line on what choosing it means, from the summary. */
+  detail?: string;
 }
 
 /** `NOW() - INTERVAL 'n days'` as the seeds write it. Through the clock, so a
@@ -135,12 +150,20 @@ export const decisionRows = defineFixture<DecisionRow>({
     summary:
       'Twelve customer tenants remain on the SAML shim, and each moves with the single-tenant cutover runbook. Smallest first keeps the blast radius low while the team learns the runbook. Riskiest first moves the two tenants with custom SAML attribute mappings while the shim is still warm and rollback is a route flip, but a failure there is loud and customer-visible. The order decides who is warned and when, so it is a release call.',
     status: 'escalated', projectId: 'p-auth-migration', requiredRole: 'org-leader',
-    decidedAt: null, escalatedAt: D(2), workItemId: 'wi-auth-e2' },
+    decidedAt: null, escalatedAt: D(2), workItemId: 'wi-auth-e2',
+    options: [
+      { id: 'smallest-first', label: 'Smallest tenants first', detail: 'Keeps the blast radius low while the team learns the runbook.' },
+      { id: 'riskiest-first', label: 'Riskiest two tenants first', detail: 'The custom SAML mappings move while the shim is warm and rollback is a route flip.' },
+    ] },
   { id: 'd-eval-judge-model', topic: 'Judge model for canary evaluation',
     summary:
       'The canary judge scores every sampled answer, so its model sets both the evaluation bill and how far the scores can be trusted. On the 120-question pilot set Nova Pro agrees with human labels 82 percent of the time and Nova Lite 71 percent, at about six times the cost per judged answer. Halving the sample rate from 20 to 10 percent would fund Nova Pro at the current spend. Open until the final rubric weights have run on both.',
     status: 'open', projectId: 'p-llm-platform', requiredRole: null,
-    decidedAt: null, escalatedAt: null, workItemId: 'wi-llm-e1' },
+    decidedAt: null, escalatedAt: null, workItemId: 'wi-llm-e1',
+    options: [
+      { id: 'nova-pro-10', label: 'Nova Pro, sample rate halved to 10%', detail: '82 percent agreement with human labels, at the current spend.' },
+      { id: 'nova-lite-20', label: 'Nova Lite at the current 20% sample rate', detail: '71 percent agreement, at about a sixth of the cost per judged answer.' },
+    ] },
   { id: 'd-iceberg', topic: 'Iceberg over Delta for the lakehouse table format',
     summary:
       'The lakehouse is read by Spark, Trino and Flink, so the table format had to work well in all three. Iceberg\'s engine-neutral catalog, hidden partitioning and snapshot isolation fit that roadmap. Delta was faster under Spark in our benchmark but weaker in the other two engines. The consequence: compaction and snapshot expiry are a job we run, not a feature we buy.',
@@ -153,7 +176,12 @@ export const decisionRows = defineFixture<DecisionRow>({
     summary:
       'Tier-1 models scale to zero after 15 minutes idle, and the next request pays a 40 to 90 second cold start against a 2.5-second p99 SLO. A warm floor of one replica per tier-1 model removes the cold start at about $380 a month per model. Baking weights into the image cuts the load to about 20 seconds at no standing cost, but still breaches the SLO. Open until the teams that own the SLO agree what a breach costs them.',
     status: 'open', projectId: 'p-inference-platform', requiredRole: null,
-    decidedAt: null, escalatedAt: null, workItemId: 'wi-inf-e1' },
+    decidedAt: null, escalatedAt: null, workItemId: 'wi-inf-e1',
+    options: [
+      { id: 'warm-floor', label: 'Warm floor of one replica per tier-1 model', detail: 'No cold start, at about $380 a month per model.' },
+      { id: 'bake-weights', label: 'Bake weights into the image', detail: 'Loads in about 20 seconds at no standing cost, but still breaches the SLO.' },
+      { id: 'scale-to-zero', label: 'Keep scale-to-zero', detail: 'No standing cost; the 40 to 90 second cold start stays.' },
+    ] },
     ],
     empty: () => [],
   },

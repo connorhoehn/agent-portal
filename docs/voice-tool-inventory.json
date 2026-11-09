@@ -1829,7 +1829,7 @@
     "pipelines",
     "access"
    ],
-   "mapsTo": "access: GET /api/access/approvals, POST /api/access/requests/:id/steps/:step/decide { decision, comment }; GET /api/access/reviews/:id, POST /api/access/reviews/:id/items/:itemId/decide { decision: keep | revoke, comment }; pipelines: GET /api/pipelines/approvals, POST /api/pipelines/approvals/:id/decide { decision, note }; HITL: GET /api/observability/approvals, POST /api/observability/approvals/:id/decision { decision: APPROVED | REJECTED, note }; changes: GET /api/sdlc/changes/:id, POST /api/sdlc/changes/:id/decide { decision, note }, POST /api/sdlc/changes/:id/deliver; runbook proposals: GET /api/runbooks/proposals/:pid, POST /api/runbooks/proposals/:pid/accept { expected_version, note }, POST /api/runbooks/proposals/:pid/reject { note }; graph proposals: GET /api/work/proposals, POST /api/work/proposals/:id/decide { decision, note }; consults: GET /api/lab/consults, POST /api/lab/consults/:id/answer { answer }; designs: GET /api/designs/:id, POST /api/designs/:id/signoff { decision }; decisions: GET /api/graph/decisions/:id, POST /api/graph/decisions/:id/decide { outcome: resolved | rejected, rationale }; drafts: GET /api/assessment/drafts/:runId, POST /api/assessment/drafts/:runId/accept, POST /api/assessment/drafts/:runId/discard",
+   "mapsTo": "access: GET /api/access/approvals, POST /api/access/requests/:id/steps/:step/decide { decision, comment }; GET /api/access/reviews/:id, POST /api/access/reviews/:id/items/:itemId/decide { decision: keep | revoke, comment }; pipelines: GET /api/pipelines/approvals, POST /api/pipelines/approvals/:id/decide { decision, note }; HITL: GET /api/observability/approvals, POST /api/observability/approvals/:id/decision { decision: APPROVED | REJECTED, note }; changes: GET /api/sdlc/changes/:id, POST /api/sdlc/changes/:id/decide { decision, note }, POST /api/sdlc/changes/:id/deliver; runbook proposals: GET /api/runbooks/proposals/:pid, POST /api/runbooks/proposals/:pid/accept { expected_version, note }, POST /api/runbooks/proposals/:pid/reject { note }; graph proposals: GET /api/work/proposals, POST /api/work/proposals/:id/decide { decision, note }; consults: GET /api/lab/consults, POST /api/lab/consults/:id/answer { answer }; designs: GET /api/designs/:id, POST /api/designs/:id/signoff { decision }; decisions: GET /api/graph/decisions/:id, POST /api/graph/decisions/:id/decide { optionId?, outcome: resolved | rejected, rationale }; drafts: GET /api/assessment/drafts/:runId, POST /api/assessment/drafts/:runId/accept, POST /api/assessment/drafts/:runId/discard",
    "routes": [
     {
      "method": "GET",
@@ -2016,7 +2016,7 @@
      "path": "/api/access/delegations"
     }
    ],
-   "line": 875
+   "line": 876
   },
   {
    "name": "update",
@@ -2158,7 +2158,7 @@
      "path": "/api/access/delegations/:id/end"
     }
    ],
-   "line": 909
+   "line": 910
   },
   {
    "name": "access_request_status",
@@ -2188,7 +2188,7 @@
      "path": "/api/access/approvals"
     }
    ],
-   "line": 931
+   "line": 932
   }
  ],
  "navigatePages": [
@@ -4199,9 +4199,9 @@
   {"method":"POST","path":"/api/grants","source":"src/routes/grants.ts:70","declaredAt":"src/routes/grants.ts:70","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"budgets","cedarAction":"ManageBudgets","actions":["ManageBudgets"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"allocations, caps, grants, kill switches, policy profiles"}},
   {"method":"DELETE","path":"/api/grants/:id","source":"src/routes/grants.ts:148","declaredAt":"src/routes/grants.ts:148","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"budgets","cedarAction":"ManageBudgets","actions":["ManageBudgets"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner"],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"allocations, caps, grants, kill switches, policy profiles"}},
   {"method":"PATCH","path":"/api/grants/:id","source":"src/routes/grants.ts:114","declaredAt":"src/routes/grants.ts:114","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"budgets","cedarAction":"ManageBudgets","actions":["ManageBudgets"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"allocations, caps, grants, kill switches, policy profiles"}},
-  {"method":"GET","path":"/api/graph/decisions","source":"src/routes/decisions.ts:42","declaredAt":"src/routes/decisions.ts:42","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":["list"],"v2":{"decision":"read","tool":"list","note":"mapsTo"}},
-  {"method":"GET","path":"/api/graph/decisions/:id","source":"src/routes/decisions.ts:55","declaredAt":"src/routes/decisions.ts:55","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":["get","decide"],"v2":{"decision":"read","tool":"get","note":"mapsTo"}},
-  {"method":"POST","path":"/api/graph/decisions/:id/decide","source":"src/routes/decisions.ts:79","declaredAt":"src/routes/decisions.ts:79","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"DecideDecision","actions":["DecideDecision"],"bodyActions":["DecideDecision"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":["decide"],"v2":{"decision":"confirm","tool":"decide","note":"mapsTo"}},
+  {"method":"GET","path":"/api/graph/decisions","source":"src/routes/decisions.ts:51","declaredAt":"src/routes/decisions.ts:51","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":["list"],"v2":{"decision":"read","tool":"list","note":"mapsTo"}},
+  {"method":"GET","path":"/api/graph/decisions/:id","source":"src/routes/decisions.ts:64","declaredAt":"src/routes/decisions.ts:64","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":["get","decide"],"v2":{"decision":"read","tool":"get","note":"mapsTo"}},
+  {"method":"POST","path":"/api/graph/decisions/:id/decide","source":"src/routes/decisions.ts:95","declaredAt":"src/routes/decisions.ts:95","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"DecideDecision","actions":["DecideDecision"],"bodyActions":["DecideDecision"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":["decide"],"v2":{"decision":"confirm","tool":"decide","note":"mapsTo"}},
   {"method":"GET","path":"/api/graph/documents/:documentId","source":"src/routes/work-documents.ts:53","declaredAt":"src/routes/work-documents.ts:75","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"documents","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":["get"],"v2":{"decision":"read","tool":"get","note":"mapsTo"}},
   {"method":"PUT","path":"/api/graph/documents/:documentId","source":"src/routes/work-documents.ts:66","declaredAt":"src/routes/work-documents.ts:88","stale":true,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"documents","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"document content"}},
   {"method":"GET","path":"/api/graph/entities","source":"src/routes/graph.ts:8","declaredAt":"src/routes/graph.ts:8","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"org","cedarAction":"ViewOrgChart","actions":["ViewOrgChart"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"operator consoles, agent-facing reads and leadership data: the page, not the voice"}},

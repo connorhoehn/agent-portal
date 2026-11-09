@@ -474,6 +474,8 @@ G55 (9 November): "a PowerPoint of this initiative's progress this past sprint" 
 
 G56 (9 November): the Docs tab's Document and Whiteboard follow the initiative's own people (owner, contributor or org-wide role, with ViewWorkItems; the route's `canWrite`), not DispatchAgentRun; Presentation keeps DispatchAgentRun because a deck spends (docs/voice-navigator-gaps.md G56).
 
+G57 (9 November): the decision dialogue. The record page's Decide card became a dialogue in the page's agent box: a waiting decision's own options (new `options` jsonb, seeded for the three waiting decisions), then Something else… and Reject, numbered and picked with the keypad (the library's `ComposerPromptDeck`), an optional one-line why, Enter sends, Esc gives the table commands back; `POST …/decide` takes `optionId` (the label is the outcome, the rationale optional), and the voice's `decide` takes `option` by number or label (docs/voice-navigator-gaps.md G57).
+
 ### Gaps (8 November 2026)
 
 `docs/voice-navigator-gaps.md` is the loop-executable list of what the build left open: a coverage matrix of the owner's utterances against the catalogue, each gap with its root cause and smallest fix, the three open questions decided (every tenant gets the read tools, a shared budget plus `VOICE_DAILY_MINUTES=60`, a batch cap of three computers), and packages G1 to G18.

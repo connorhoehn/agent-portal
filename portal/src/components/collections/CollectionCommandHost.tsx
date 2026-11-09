@@ -37,7 +37,10 @@ export function CollectionCommandHost({ adapter, disabled = false, prompts, inPl
   adapter: CollectionCommandAdapter;
   disabled?: boolean;
   /** Items on the page that wait on a person (agent questions, work to review), as the composer's
-   *  prompt deck — answered here, paged with the keyboard, instead of a block above the composer. */
+   *  prompt deck — answered here, paged with the keyboard, instead of a block above the composer.
+   *  A record page's own dialogue rides here too (G57: a waiting decision's numbered options,
+   *  picked with 1–9): while one is open the composer draws it instead of the free text, and
+   *  Esc hides it to give the table commands back. */
   prompts?: readonly ComposerPrompt[];
   /** Render where it is mounted instead of docking at the enclosing column's bottom. A list-rail
    *  frame passes the host as its `footer`, which already sits under the record only: docking it

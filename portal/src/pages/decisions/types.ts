@@ -2,7 +2,7 @@
 // (the list), `/:id` (the detail with its participants and history), an
 // initiative's `GET /api/graph/projects/:id/decisions` (the escalation columns
 // the list and detail do not carry), and the one write, `POST /:id/decide`
-// (G54). One table.
+// (G54; G57 adds the pre-canned `options` and `optionId`). One table.
 
 export type DecisionStatus = 'open' | 'escalated' | 'resolved' | 'rejected';
 
@@ -54,10 +54,19 @@ export interface DecisionDetail {
   history?: DecisionEvent[];
   /** Whether POST /:id/decide would let this viewer through (decider, initiative owner, org-leader). */
   viewerMayDecide?: boolean;
+  /** G57: the pre-canned answers a waiting decision offers, in order (the decision dialogue numbers them). */
+  options?: DecisionOption[];
 }
 
-/** POST /api/graph/decisions/:id/decide's body. */
-export interface DecideBody { outcome: 'resolved' | 'rejected'; rationale: string }
+/** One pre-canned answer to a waiting decision (G57). */
+export interface DecisionOption { id: string; label: string; detail?: string }
+
+/**
+ * POST /api/graph/decisions/:id/decide's body. With `optionId` (resolving
+ * only) the option's label is the recorded outcome and `rationale` is the
+ * optional why; without one `rationale` is the outcome and is required.
+ */
+export interface DecideBody { optionId?: string; outcome: 'resolved' | 'rejected'; rationale?: string }
 
 /** The initiative-scoped row: who it needs, when it escalated, the work it holds up. */
 export interface DecisionInitiativeRow {
