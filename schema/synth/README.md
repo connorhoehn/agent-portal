@@ -7,7 +7,7 @@ S3 + the Bedrock Knowledge Base and the `documents` / `mentions` tables.
 ## Setup
 
 ```bash
-cd /Users/connorhoehn/Projects/aws-agentcore
+cd ~/Projects/aws-agentcore
 python3.11 -m venv .venv-synth
 .venv-synth/bin/pip install -r schema/synth/requirements.txt
 ```

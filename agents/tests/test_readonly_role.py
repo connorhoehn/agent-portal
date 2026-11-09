@@ -64,9 +64,9 @@ RUNTIME_STACK = REPO / "infra" / "lib" / "agentcore-runtime-stack.ts"
 
 ROLE = "orgiq_graph_reader"
 
-READONLY_ARN = "arn:aws:secretsmanager:us-east-1:647757222309:secret:orgiq-aurora-readonly-credentials-r0"
-ADMIN_ARN = "arn:aws:secretsmanager:us-east-1:647757222309:secret:orgiq-aurora-admin-a0"
-CLUSTER_ARN = "arn:aws:rds:us-east-1:647757222309:cluster:orgiq-aurora"
+READONLY_ARN = "arn:aws:secretsmanager:us-east-1:123456789012:secret:orgiq-aurora-readonly-credentials-r0"
+ADMIN_ARN = "arn:aws:secretsmanager:us-east-1:123456789012:secret:orgiq-aurora-admin-a0"
+CLUSTER_ARN = "arn:aws:rds:us-east-1:123456789012:cluster:orgiq-aurora"
 
 
 def strip_sql_comments(sql: str) -> str:

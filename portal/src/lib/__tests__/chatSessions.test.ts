@@ -23,7 +23,7 @@ import { fetchSessionMessages, SessionHistoryError } from '../chatSessions.ts';
 import { deriveSources } from '../../components/chat/answerSources.ts';
 import { summarizeToolCalls } from '../../components/chat/toolCallSummary.ts';
 
-const S3 = 's3://orgiq-documents-647757222309-us-east-1/adr/adr-012.txt';
+const S3 = 's3://orgiq-documents-123456789012-us-east-1/adr/adr-012.txt';
 
 /** Stub `fetch` for one call, restoring whatever was there before. */
 function withFetch<T>(impl: () => Promise<Response> | Promise<never>, run: () => Promise<T>): Promise<T> {

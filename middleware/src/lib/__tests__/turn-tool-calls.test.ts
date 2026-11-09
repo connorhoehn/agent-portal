@@ -54,7 +54,7 @@ function retrievalResult(n: number): string {
     Array.from({ length: n }, (_, i) => ({
       content: 'x'.repeat(2_000),
       score: 0.9,
-      source: `s3://orgiq-documents-647757222309-us-east-1/perf/doc-${String(i).padStart(2, '0')}.txt`,
+      source: `s3://orgiq-documents-123456789012-us-east-1/perf/doc-${String(i).padStart(2, '0')}.txt`,
       title: `Doc ${i}`,
     })),
   );

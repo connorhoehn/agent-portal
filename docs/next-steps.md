@@ -10,7 +10,7 @@ The twelve repositories and how they depend on each other are described in [proj
 |---|---|---|
 | aws-agentcore | main | Clean, pushed. 181 commits in the last two weeks. |
 | ui-components | main | Pushed. The local checkout is 11 commits behind and has 139 uncommitted files (mostly `dist/`, nine under `src/components`). |
-| realtime-modules | main | Clean, pushed to both remotes (`origin` and `slalom`). |
+| realtime-modules | main | Clean, pushed to `origin` (the old `slalom` remote is retired). |
 | service-runtime, pipeline-runtime, distributed-core, message-queue, platform-api, managed-nosql-store, live-video-streaming | main | Clean, pushed. |
 | event-catalog | main | Work is on `ui-components-2501`, 10 commits ahead of `main`. |
 | realtime-examples | main | Work is on `ui-components-2501`, 14 commits ahead of `main`. |

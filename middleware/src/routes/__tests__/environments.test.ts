@@ -92,10 +92,10 @@ const isAllowedMock = isAllowed as unknown as jest.Mock;
 const PROD = {
   id: 'b1f0a1e1-0001-4a00-8000-000000000003',
   orgProjectId: 'p-observability', orgProjectName: 'Unified Observability',
-  name: 'prod', kind: 'eks', awsAccountId: '647757222309', awsRegion: 'us-east-1',
-  clusterName: 'orgiq-prod', clusterArn: 'arn:aws:eks:us-east-1:647757222309:cluster/orgiq-prod',
+  name: 'prod', kind: 'eks', awsAccountId: '123456789012', awsRegion: 'us-east-1',
+  clusterName: 'orgiq-prod', clusterArn: 'arn:aws:eks:us-east-1:123456789012:cluster/orgiq-prod',
   namespace: 'observability',
-  accessRoleArn: 'arn:aws:iam::647757222309:role/orgiq-env-prod-access',
+  accessRoleArn: 'arn:aws:iam::123456789012:role/orgiq-env-prod-access',
   rank: 30, status: 'active', createdAt: '', updatedAt: '',
 };
 
@@ -226,7 +226,7 @@ describe('mutation is narrow', () => {
     createMock.mockResolvedValue(PROD);
     const res = await request(app('org-leader')).post('/api/environments').send({
       orgProjectId: 'p-observability', name: 'prod', kind: 'eks',
-      awsAccountId: '647757222309', awsRegion: 'us-east-1', rank: 30,
+      awsAccountId: '123456789012', awsRegion: 'us-east-1', rank: 30,
       accessRoleArn: PROD.accessRoleArn,
     });
     expect(res.status).toBe(201);
@@ -235,12 +235,12 @@ describe('mutation is narrow', () => {
 
   test.each([
     ['awsAccountId', { orgProjectId: 'p', name: 'prod', awsAccountId: '12345' }],
-    ['awsRegion', { orgProjectId: 'p', name: 'prod', awsAccountId: '647757222309', awsRegion: 'moon-1' }],
-    ['kind', { orgProjectId: 'p', name: 'prod', awsAccountId: '647757222309', kind: 'kubernetes' }],
-    ['status', { orgProjectId: 'p', name: 'prod', awsAccountId: '647757222309', status: 'on' }],
-    ['accessRoleArn', { orgProjectId: 'p', name: 'prod', awsAccountId: '647757222309', accessRoleArn: 'orgiq-env-prod-access' }],
-    ['name', { orgProjectId: 'p', awsAccountId: '647757222309' }],
-    ['orgProjectId', { name: 'prod', awsAccountId: '647757222309' }],
+    ['awsRegion', { orgProjectId: 'p', name: 'prod', awsAccountId: '123456789012', awsRegion: 'moon-1' }],
+    ['kind', { orgProjectId: 'p', name: 'prod', awsAccountId: '123456789012', kind: 'kubernetes' }],
+    ['status', { orgProjectId: 'p', name: 'prod', awsAccountId: '123456789012', status: 'on' }],
+    ['accessRoleArn', { orgProjectId: 'p', name: 'prod', awsAccountId: '123456789012', accessRoleArn: 'orgiq-env-prod-access' }],
+    ['name', { orgProjectId: 'p', awsAccountId: '123456789012' }],
+    ['orgProjectId', { name: 'prod', awsAccountId: '123456789012' }],
   ])('a bad %s is rejected before the provider', async (_field, body) => {
     const res = await request(app('org-leader')).post('/api/environments').send(body);
     expect(res.status).toBe(400);
@@ -381,8 +381,8 @@ describe('GET /api/environments/:id/enter', () => {
 describe('GET /api/environments/:id', () => {
   const ENV = {
     id: 'env-prod', orgProjectId: 'p-observability', name: 'prod', kind: 'eks',
-    rank: 3, status: 'active', awsAccountId: '647757222309', awsRegion: 'us-east-1',
-    clusterName: 'orgiq-prod', accessRoleArn: 'arn:aws:iam::647757222309:role/orgiq-prod-access',
+    rank: 3, status: 'active', awsAccountId: '123456789012', awsRegion: 'us-east-1',
+    clusterName: 'orgiq-prod', accessRoleArn: 'arn:aws:iam::123456789012:role/orgiq-prod-access',
   };
 
   it('returns the record wrapped, for a plain member', async () => {
@@ -393,7 +393,7 @@ describe('GET /api/environments/:id', () => {
     const res = await request(app('member')).get('/api/environments/env-prod');
     expect(res.status).toBe(200);
     expect(Object.keys(res.body)).toEqual(['environment']);
-    expect(res.body.environment.awsAccountId).toBe('647757222309');
+    expect(res.body.environment.awsAccountId).toBe('123456789012');
     expect(getMock).toHaveBeenCalledWith('env-prod');
   });
 

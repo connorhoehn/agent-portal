@@ -40,7 +40,7 @@ const REGISTRY_ROW = {
 /** The real AccessDenied shape, so the assertion is about a real failure. */
 function accessDenied(action: string): Error {
   return new Error(
-    `User: arn:aws:sts::647757222309:assumed-role/orgiq-middleware-task-role/x ` +
+    `User: arn:aws:sts::123456789012:assumed-role/orgiq-middleware-task-role/x ` +
     `is not authorized to perform: ${action} because no identity-based policy ` +
     `allows the ${action} action`,
   );

@@ -53,7 +53,7 @@ describe('resolveDevboxArn offline', () => {
   });
 
   it('still lets DEVBOX_RUNTIME_ARN win — an operator pointing at a real runtime is not overridden', async () => {
-    process.env['DEVBOX_RUNTIME_ARN'] = 'arn:aws:bedrock-agentcore:us-east-1:647757222309:runtime/orgiq_devbox-abc';
+    process.env['DEVBOX_RUNTIME_ARN'] = 'arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/orgiq_devbox-abc';
     expect(await resolveDevboxArn()).toBe(process.env['DEVBOX_RUNTIME_ARN']);
   });
 

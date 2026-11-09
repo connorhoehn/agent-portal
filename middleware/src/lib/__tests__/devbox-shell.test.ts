@@ -19,7 +19,7 @@ jest.mock('@aws-sdk/credential-provider-node', () => ({
 
 import { presignShellUrl, isValidShellId } from '../devbox-shell.js';
 
-const ARN = 'arn:aws:bedrock-agentcore:us-east-1:647757222309:runtime/orgiq_devbox-AbC123';
+const ARN = 'arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/orgiq_devbox-AbC123';
 const SESSION = 'd6bafcff-26a0-4cf9-a196-53f8b6c97383b633';
 
 async function url(over: Partial<Parameters<typeof presignShellUrl>[1]> = {}): Promise<URL> {

@@ -160,7 +160,7 @@ test, table only: `document-canvas.ts:23` (`configuration()` is private), `route
 
 ## Appendix: commands
 
-Main session (all read-only; `R=/Users/connorhoehn/Projects`, `S=` the session scratchpad):
+Main session (all read-only; `R=~/Projects`, `S=` the session scratchpad):
 
 ```
 for r in <12 repos>; do (cd $R/$r && git rev-parse --abbrev-ref HEAD && git log -1 --format='%h %s' && git status --short | head -5); done

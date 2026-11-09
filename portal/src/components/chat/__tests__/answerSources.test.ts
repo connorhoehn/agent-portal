@@ -16,7 +16,7 @@ import {
 } from '../answerSources.ts';
 import { friendlyToolName, summarizeToolCalls } from '../toolCallSummary.ts';
 
-const S3 = 's3://orgiq-documents-647757222309-us-east-1/perf/perf-Theo%20Williams.txt';
+const S3 = 's3://orgiq-documents-123456789012-us-east-1/perf/perf-Theo%20Williams.txt';
 
 // ── The four cases the audit named ───────────────────────────────────────────
 
@@ -103,7 +103,7 @@ test('an opaque object key does not render as a bare UUID', () => {
 });
 
 test('a label never falls back to the whole URI', () => {
-  assert.equal(labelFor('s3://orgiq-documents-647757222309-us-east-1/'), 'orgiq-documents-647757222309-us-east-1');
+  assert.equal(labelFor('s3://orgiq-documents-123456789012-us-east-1/'), 'orgiq-documents-123456789012-us-east-1');
 });
 
 test('the middleware-annotated title wins over the derived label', () => {
@@ -321,7 +321,7 @@ test('friendlyToolName maps a single tool id the same way summarizeToolCalls doe
 // shape the search walk saw render as two lists both numbered "1." with the
 // sub-bullets flat: the three-space indent is what nests them.
 test('tidy keeps list indentation so numbered items keep their sub-bullets', () => {
-  const text = 'I found relevant information about auth across documents and the knowledge graph.\n\n**Key Decisions:**\n\n1. **Auth Middleware Rewrite** (2026-03-15)\n   - Decision: Migrate from session-based to JWT + refresh tokens\n   - Participants: Theo Chang, Sarah Thompson, Sienna Garcia\n   - Status: In progress (Phase 2 of 3)\n\n2. **SSO Provider Selection** (2026-02-01)\n   - Decision: Adopt AWS Cognito with SAML federation\n   - Participants: Sarah Thompson, Sienna Garcia, Tara Chen\n   - Status: Completed\n\n**Subject Matter Experts:**\n- **Sarah Thompson** (Security Engineer) — Led the security assessment\n\n*Sources: s3://orgiq-documents-647757222309-us-east-1/synth/internal/postmortem/postmortem-p-auth-migration.md, s3://orgiq-documents-647757222309-us-east-1/synth/internal/slack/slack-p-auth-migration-00.md*';
+  const text = 'I found relevant information about auth across documents and the knowledge graph.\n\n**Key Decisions:**\n\n1. **Auth Middleware Rewrite** (2026-03-15)\n   - Decision: Migrate from session-based to JWT + refresh tokens\n   - Participants: Theo Chang, Sarah Thompson, Sienna Garcia\n   - Status: In progress (Phase 2 of 3)\n\n2. **SSO Provider Selection** (2026-02-01)\n   - Decision: Adopt AWS Cognito with SAML federation\n   - Participants: Sarah Thompson, Sienna Garcia, Tara Chen\n   - Status: Completed\n\n**Subject Matter Experts:**\n- **Sarah Thompson** (Security Engineer) — Led the security assessment\n\n*Sources: s3://orgiq-documents-123456789012-us-east-1/synth/internal/postmortem/postmortem-p-auth-migration.md, s3://orgiq-documents-123456789012-us-east-1/synth/internal/slack/slack-p-auth-migration-00.md*';
   const { cleaned } = extractSources(text);
   assert.match(cleaned, /\n1\. \*\*Auth Middleware Rewrite\*\* \(2026-03-15\)\n {3}- Decision: Migrate/);
   assert.match(cleaned, /\n2\. \*\*SSO Provider Selection\*\* \(2026-02-01\)\n {3}- Decision: Adopt/);

@@ -8,8 +8,8 @@ import {
   publishTargets, repairedPolicy, scanBundle,
 } from '../../portal-publish.mjs';
 
-const ARN = 'arn:aws:cloudfront::647757222309:distribution/E2EXAMPLE';
-const BUCKET = 'orgiq-portal-647757222309-us-east-1';
+const ARN = 'arn:aws:cloudfront::123456789012:distribution/E2EXAMPLE';
+const BUCKET = 'orgiq-portal-123456789012-us-east-1';
 
 test('the build blanks every local override, beating portal/.env.local', () => {
   const env = buildEnv({ VITE_GATEWAY_URL: 'http://localhost:3001', PATH: '/bin' });

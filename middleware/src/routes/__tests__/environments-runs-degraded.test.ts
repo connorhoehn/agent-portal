@@ -82,10 +82,10 @@ const runsMock = listWorkflowRuns as unknown as jest.Mock;
 const PROD = {
   id: 'b1f0a1e1-0001-4a00-8000-000000000003',
   orgProjectId: 'p-observability', orgProjectName: 'Unified Observability',
-  name: 'prod', kind: 'eks', awsAccountId: '647757222309', awsRegion: 'us-east-1',
-  clusterName: 'orgiq-prod', clusterArn: 'arn:aws:eks:us-east-1:647757222309:cluster/orgiq-prod',
+  name: 'prod', kind: 'eks', awsAccountId: '123456789012', awsRegion: 'us-east-1',
+  clusterName: 'orgiq-prod', clusterArn: 'arn:aws:eks:us-east-1:123456789012:cluster/orgiq-prod',
   namespace: 'observability',
-  accessRoleArn: 'arn:aws:iam::647757222309:role/orgiq-env-prod-access',
+  accessRoleArn: 'arn:aws:iam::123456789012:role/orgiq-env-prod-access',
   rank: 30, status: 'active', createdAt: '', updatedAt: '',
 };
 
