@@ -253,6 +253,7 @@ export default {
         missingDeck: !!spec.auditMissingDeck && await page.getByText(/^Couldn't open the /).first().isVisible(),
         missingRecord: !!spec.auditMissingRecord && await visible('[role="alert"], [data-testid$="-unavailable"], [data-testid$="-missing"], [data-testid="load-error"]'),
         recordDetail: spec.kind === 'record' && await visible(`${selectors.sectionTitles}, h1, h2, [data-testid="page-header"], [data-testid="page-section-title"], ${selectors.rightPane}, [data-testid$="-pane-column"], [data-testid$="-record-page"], [data-testid$="-detail-page"]`),
+        logView: await visible('[data-testid="logging"]'),
         channelNotJoined: await visible('[data-testid="social-channel-not-joined"]'),
         sharedWorkView: await visible('[data-testid="social-shared-work"]'),
       });
@@ -274,6 +275,7 @@ export default {
         configurationReadOnly: await page.getByTestId('pipelines-configuration-details').isVisible() && !(await page.getByTestId('pipelines-default-approver').isVisible()),
         settingsPlaceholder: await page.getByTestId('pipelines-empty-settings').isVisible(),
         missingDeck: !!spec.auditMissingDeck && await page.getByText("Couldn't open the report", { exact: true }).isVisible(),
+        logView: await page.getByTestId('logging').isVisible(),
       });
       if (policy) return policy;
     }

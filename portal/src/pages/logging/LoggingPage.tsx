@@ -70,6 +70,8 @@ export interface LoggingViewProps {
   /** `kind/id` of the record open beside the rail. */
   selectedKey: string | null;
   onOpen(row: LogRow): void;
+  /** Narrow width: the record's back control, back to the source's list. */
+  onShowList?: () => void;
   record: LogRecord | null;
   recordError?: string | null;
   onCopy(): void;
@@ -93,17 +95,22 @@ export function LoggingView(p: LoggingViewProps) {
   const { groups, groupOf } = dayGroupsBy(rows, (r) => r.at);
   const r = p.record;
   const range = p.range ?? 'all';
+  // Switches, then the record's buttons as one row of their own: on a narrow
+  // column the group wraps under the title and the buttons stay a row.
+  const buttons = r ? <Inline gap="sm" align="center" wrap={false}>
+    <Button variant="secondary" size="sm" onClick={p.onCopy} data-testid="logging-copy">{p.copied ? 'Copied' : 'Copy as JSON'}</Button>
+    {p.onDownload && <Button variant="secondary" size="sm" onClick={p.onDownload} data-testid="logging-export">Download export</Button>}
+  </Inline> : null;
   const actions = <Inline gap="sm" align="center" wrap>
     {p.voice && <FormField label="Keep transcripts on this device" layout="inline"
       hint={p.voice.keep ? 'Turning this off deletes the kept transcripts.' : 'Off: no words are kept anywhere.'}>
-      {(f) => <Switch checked={p.voice!.keep} onChange={p.voice!.onKeepChange} aria-labelledby={f.id} size="sm" data-testid="logging-keep" />}
+      {(f) => <Switch checked={p.voice!.keep} onChange={p.voice!.onKeepChange} aria-labelledby={f.labelId} size="sm" data-testid="logging-keep" />}
     </FormField>}
     {p.voice?.onTerseChange && <FormField label="Short answers" layout="inline"
       hint={p.voice.terse ? 'The voice gives the count and at most three names.' : 'The voice may answer in a few sentences.'}>
-      {(f) => <Switch checked={!!p.voice!.terse} onChange={p.voice!.onTerseChange!} aria-labelledby={f.id} size="sm" data-testid="logging-terse" />}
+      {(f) => <Switch checked={!!p.voice!.terse} onChange={p.voice!.onTerseChange!} aria-labelledby={f.labelId} size="sm" data-testid="logging-terse" />}
     </FormField>}
-    {r && <Button variant="secondary" size="sm" onClick={p.onCopy} data-testid="logging-copy">{p.copied ? 'Copied' : 'Copy as JSON'}</Button>}
-    {r && p.onDownload && <Button variant="secondary" size="sm" onClick={p.onDownload} data-testid="logging-export">Download export</Button>}
+    {buttons}
   </Inline>;
   const options = sourceOptions(p.source, p.sources);
   const filter = <Stack gap="sm">
@@ -112,15 +119,21 @@ export function LoggingView(p: LoggingViewProps) {
       value={range} onChange={(v) => p.onRangeChange?.(v as VoiceLogRange)} />
   </Stack>;
   const byKey = new Map(rows.map((x) => [rowKey(x), x]));
+  const empty = range === 'all'
+    ? { title: `No ${meta.listLabel} yet`, description: p.source === 'voice' ? 'Start one from the Voice control in the footer; it shows here once it begins.' : 'They show here once one runs.' }
+    : { title: 'Nothing in this range', description: 'Pick All to see everything this source holds.' };
   let body: ReactNode;
-  if (!p.selectedKey) body = rows.length ? <EmptyState title="Pick a record" description="Its facts, its calls and its events show here." /> : null;
+  // Nothing held: the content column says so too (the rail's own state is its list's; the column is never blank).
+  if (!p.selectedKey) body = rows.length ? <EmptyState title="Pick a record" description="Its facts, its calls and its events show here." />
+    : p.rows ? <EmptyState title={empty.title} description={empty.description} testId="logging-empty" /> : null;
   else if (!r) body = p.recordError ? <ErrorState title="That record did not load" description={p.recordError} /> : <LoadingState label="Loading the record" />;
   else body = <Stack gap="md" className="min-w-0" data-testid="logging-detail">
-    <DetailSection title={RECORD_HEADING[r.kind] ?? 'Record'} first>
+    <DetailSection as="h2" title={RECORD_HEADING[r.kind] ?? 'Record'} first>
       <KeyValue items={r.facts} aria-label={RECORD_HEADING[r.kind] ?? 'Record'} />
     </DetailSection>
-    <DetailSection title={r.callsTitle} hint={String(r.calls.length)}>
+    <DetailSection as="h2" title={r.callsTitle} hint={String(r.calls.length)}>
       <DataTable data={r.calls} keyField={(c) => c.id} emptyMessage={`No ${r.callsTitle.toLowerCase()}.`} rowHeight="fixed" data-testid="logging-calls"
+        staticRows="A call or step is read in place, in the record it belongs to; it has no page of its own."
         columns={[
           { key: 'at', header: 'At', render: (c) => when(c.at) },
           { key: 'name', header: r.callsTitle === 'Steps' ? 'Step' : 'Tool' },
@@ -129,8 +142,9 @@ export function LoggingView(p: LoggingViewProps) {
           { key: 'tookMs', header: 'Took', numeric: true, render: (c) => took(c.tookMs) },
         ]} />
     </DetailSection>
-    <DetailSection title="Events" hint={String(r.events.length)}>
+    <DetailSection as="h2" title="Events" hint={String(r.events.length)}>
       <DataTable data={r.events} keyField={(e) => String(e.seq)} emptyMessage="No events." rowHeight="content" pageSize={100} data-testid="logging-events"
+        staticRows="An event is one line of the record's own log, read in place; it has no page of its own."
         columns={[
           { key: 'seq', header: '#', numeric: true },
           { key: 'at', header: 'At', render: (e) => when(e.at) },
@@ -138,7 +152,7 @@ export function LoggingView(p: LoggingViewProps) {
           { key: 'data', header: 'Data', className: 'whitespace-normal min-w-0', render: (e) => <T size="xs" tone="secondary" className="font-mono break-all">{e.data}</T> },
         ]} />
     </DetailSection>
-    {p.voice && <DetailSection title="Transcript" hint="this device only">
+    {p.voice && <DetailSection as="h2" title="Transcript" hint="this device only">
       {p.voice.transcript?.turns.length
         ? <VoiceTurnStrip size="panel" turns={p.voice.transcript.turns as VoiceTurn[]} maxVisible={p.voice.transcript.turns.length} data-testid="logging-transcript" />
         : <T size="sm" tone="tertiary" as="p">{p.voice.keep ? 'This device kept no transcript of this session.' : 'Not kept. Turn on "Keep transcripts on this device" to keep the words of later sessions here.'}</T>}
@@ -149,10 +163,10 @@ export function LoggingView(p: LoggingViewProps) {
     description={meta.description}
     listTitle={meta.listTitle} listLabel={meta.listLabel} {...(p.rows ? { count: rows.length } : {})}
     filter={filter}
-    empty={range === 'all'
-      ? { title: `No ${meta.listLabel} yet`, description: p.source === 'voice' ? 'Start one from the Voice control in the footer; it shows here once it begins.' : 'They show here once one runs.' }
-      : { title: 'Nothing in this range', description: 'Pick All to see everything this source holds.' }}
+    empty={empty}
     actions={actions}
+    countStyle="plain"
+    {...(p.onShowList ? { narrow: { onBack: p.onShowList } } : {})}
     groups={groups}
     rows={rows.map((x) => ({ id: rowKey(x), groupId: groupOf(x), title: clock(x.at), subline: x.subline }))}
     currentId={p.selectedKey} onOpen={(key) => { const row = byKey.get(key); if (row) p.onOpen(row); }}
@@ -167,7 +181,7 @@ const POLL_MS = 15_000;
 
 export default function LoggingPage() {
   const navigate = useNavigate();
-  const { pathname, search } = useLocation();
+  const { pathname, search, state } = useLocation();
   const [params, setParams] = useSearchParams();
   const { session } = useSession();
   const tenant = session?.tenant ?? null;
@@ -241,10 +255,12 @@ export default function LoggingPage() {
   const newest = list.rows?.[0] ?? null;
   const newestHref = at.source && newest ? loggingHref(at.source, newest.kind, newest.id, base) : null;
 
-  // The bare source opens its newest record, so the trail and the URL always name the record on screen.
+  // The bare source opens its newest record, so the trail and the URL always name the record on screen,
+  // unless the reader asked for the list (the narrow layout's back control).
+  const listAsked = (state as { loggingList?: boolean } | null)?.loggingList === true;
   useEffect(() => {
-    if (!at.id && newestHref) void navigate(`${newestHref}${search}`, { replace: true });
-  }, [at.id, newestHref, search, navigate]);
+    if (!at.id && newestHref && !listAsked) void navigate(`${newestHref}${search}`, { replace: true });
+  }, [at.id, newestHref, search, navigate, listAsked]);
 
   // The record's own reads.
   const id = at.id;
@@ -321,6 +337,7 @@ export default function LoggingPage() {
     range={range} onRangeChange={onRangeChange}
     rows={list.rows} rowsError={list.error}
     selectedKey={selectedKey} onOpen={(row) => navigate(`${loggingHref(row.source, row.kind, row.id, base)}${search}`)}
+    onShowList={() => navigate(`${loggingHref(source, null, null, base)}${search}`, { state: { loggingList: true } })}
     record={record} recordError={recordError}
     onCopy={onCopy} copied={copied}
     {...(source === 'voice' ? {

@@ -69,6 +69,12 @@ test('every documented alias is an App.tsx index/Navigate door and nothing else 
   // The alias target is exact: a door cannot certify a sibling page.
   assert.equal(matchesAuditLocation('/iq', '/iq/projects'), false);
   assert.equal(matchesAuditLocation('/admin/identity', '/admin/identity/users'), false);
+  // Logging lands on Voice or its newest session, and nowhere else.
+  assert.equal(matchesAuditLocation('/iq/logging', '/iq/logging/voice'), true);
+  assert.equal(matchesAuditLocation('/iq/logging', '/iq/logging/voice/vs-123'), true);
+  assert.equal(matchesAuditLocation('/pipelines/logging', '/pipelines/logging/voice/vs-123'), true);
+  assert.equal(matchesAuditLocation('/iq/logging', '/iq/logging/agents/bot-runs/br-1'), false);
+  assert.equal(matchesAuditLocation('/iq/logging', '/iq/work'), false);
   // An undocumented redirect still fails readiness.
   assert.equal(matchesAuditLocation('/iq/scores/cohorts', '/iq/scores'), false);
   assert.equal(matchesAuditLocation('/assessment/teams', '/assessment/teams/TEAM-001'), false);

@@ -26,7 +26,7 @@ export function selectAuditRoutes<T extends { path: string; pattern?: string }>(
  * Anything else that redirects fails readiness, because a redirect cannot
  * certify the page that was asked for.
  */
-export const AUDIT_ROUTE_ALIASES: ReadonlyArray<{ pattern: RegExp; target: string; why: string }> = [
+export const AUDIT_ROUTE_ALIASES: ReadonlyArray<{ pattern: RegExp; target: string; why: string; lands?: RegExp }> = [
   { pattern: /^\/pipelines$/, target: '/pipelines/runs', why: 'tenant root opens Runs' },
   { pattern: /^\/iq$/, target: '/iq/work', why: 'tenant root opens Work' },
   { pattern: /^\/assessment$/, target: '/assessment/teams', why: 'tenant root opens Teams' },
@@ -34,6 +34,10 @@ export const AUDIT_ROUTE_ALIASES: ReadonlyArray<{ pattern: RegExp; target: strin
   { pattern: /^\/access$/, target: '/access/requests', why: 'tenant root opens Requests' },
   { pattern: /^\/admin\/identity$/, target: '/admin/identity/roles', why: 'section index opens Roles' },
   { pattern: /^\/admin\/observability$/, target: '/admin/observability/summary', why: 'section index opens Summary' },
+  // Logging opens its first offered source (Voice), and a source with records opens its newest one, so the
+  // trail and URL always name the record on screen (LoggingPage.tsx). `lands` is the only place it may stop.
+  { pattern: /^\/iq\/logging$/, target: '/iq/logging/voice', lands: /^\/iq\/logging\/voice(?:\/[^/]+)?$/, why: 'Logging opens Voice, then its newest session when there is one' },
+  { pattern: /^\/pipelines\/logging$/, target: '/pipelines/logging/voice', lands: /^\/pipelines\/logging\/voice(?:\/[^/]+)?$/, why: 'Logging opens Voice, then its newest session when there is one' },
   { pattern: /^\/iq\/scores\/compare$/, target: '/iq/scores', why: 'a comparison with no selected people returns to Scores (ScoresComparePage)' },
 ];
 export function auditAliasTarget(pathname: string): string {
@@ -44,8 +48,8 @@ export function auditAliasTarget(pathname: string): string {
 export function matchesAuditLocation(requestedPath: string, actualURL: string): boolean {
   const requested = new URL(requestedPath, 'http://audit.local');
   const actual = new URL(actualURL, 'http://audit.local');
-  const expectedPath = auditAliasTarget(requested.pathname);
-  if (actual.pathname !== expectedPath) return false;
+  const alias = AUDIT_ROUTE_ALIASES.find(a => a.pattern.test(requested.pathname));
+  if (alias?.lands ? !alias.lands.test(actual.pathname) : actual.pathname !== auditAliasTarget(requested.pathname)) return false;
   return [...new Set(requested.searchParams.keys())].every(key => {
     const expected = requested.searchParams.getAll(key);
     const values = actual.searchParams.getAll(key);

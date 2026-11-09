@@ -303,6 +303,8 @@ const SHELL_RAIL_DEPTH: RailDepthSpec = {
   drillParams: ['item', 'dimension', 'step', 'sample', 'run', 'candidate'],
   leafRoutes: [
     /^\/(iq|pipelines)\/runs\/[^/]+$/,
+    // Logging always draws its list rail, empty or not: one band, so the primary rail does not jump between the two.
+    /^\/(iq|pipelines)\/logging(\/|$)/,
     /^\/iq\/documents\/[^/]+$/,
     /^\/(iq|assessment|social|pipelines)\/decks\/[^/]+$/,
     /^\/iq\/(designs|library|decisions)\/[^/]+$/,

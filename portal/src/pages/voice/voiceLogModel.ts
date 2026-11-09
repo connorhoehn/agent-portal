@@ -107,7 +107,8 @@ export function sessionFacts(d: VoiceSessionDetail): Array<{ label: string; valu
   const s = d.session;
   const usd = (v: number | null) => (v == null ? 'unknown' : `$${v.toFixed(4)}`);
   return [
-    { label: 'Session', value: s.id, mono: true },
+    // 'Id', not 'Session': the section heading over these facts already says Session.
+    { label: 'Id', value: s.id, mono: true },
     { label: 'Workspace', value: s.tenant },
     { label: 'Started', value: when(s.startedAt) },
     { label: 'Ended', value: s.endedAt ? when(s.endedAt) : 'still open' },

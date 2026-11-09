@@ -5,7 +5,7 @@
 // and option shaping live in voiceSettingsModel.ts; this file fetches, saves
 // and draws.
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   Card, Divider, SectionLabel, Select, RadioGroup, Button, InlineAlert, T,
 } from '@connorhoehn/ui-components/shared';
@@ -24,6 +24,8 @@ export function VoiceSection() {
   // The last body the server answered with, PUT or GET: a save shows at once.
   const [saved, setSaved] = useState<VoiceSettingsBody | null>(null);
   const [save, setSave] = useState<SaveState>({ state: 'idle' });
+  // The row the last change was made in: its outcome shows under that row's control.
+  const [field, setField] = useState<VoiceField | null>(null);
   const body = saved ?? read.data;
   const forbidden = read.failure?.kind === 'forbidden';
 
@@ -32,6 +34,7 @@ export function VoiceSection() {
   async function change(patch: { voice?: string | null; style?: string; pace?: string }) {
     if (!body) return;
     const before = body;
+    setField((Object.keys(patch)[0] as VoiceField | undefined) ?? null);
     setSaved({ ...body, ...patch });
     setSave({ state: 'pending' });
     try {
@@ -52,7 +55,12 @@ export function VoiceSection() {
     }
   }
 
-  const status = saveStatusText(save);
+  const text = saveStatusText(save);
+  const status = text ? (
+    <T size="xs" tone={save.state === 'error' ? 'danger' : save.state === 'saved' ? 'success' : 'tertiary'} role="status" data-testid="voice-settings-status">
+      {text}
+    </T>
+  ) : null;
 
   return (
     <Card padding="md" aria-label="Voice" data-testid="settings-voice">
@@ -66,26 +74,22 @@ export function VoiceSection() {
         </InlineAlert>
       ) : (
         <>
-          <VoiceRows body={body} pending={save.state === 'pending'} onChange={(p) => { void change(p); }} />
+          <VoiceRows body={body} pending={save.state === 'pending'} status={status} statusField={field ?? 'voice'} onChange={(p) => { void change(p); }} />
           <T size="xs" tone="secondary" className="block pt-1.5">{VOICE_NOTE}</T>
-          {status && (
-            <T
-              size="xs"
-              className={`block pt-1.5 ${save.state === 'error' ? 'text-danger' : save.state === 'saved' ? 'text-success' : 'text-text-tertiary'}`}
-              data-testid="voice-settings-status"
-            >
-              {status}
-            </T>
-          )}
         </>
       )}
     </Card>
   );
 }
 
-function VoiceRows({ body, pending, onChange }: {
+type VoiceField = 'voice' | 'style' | 'pace';
+
+function VoiceRows({ body, pending, status, statusField, onChange }: {
   body: VoiceSettingsBody;
   pending: boolean;
+  /** The last change's outcome, drawn under the control it was made with. */
+  status: ReactNode;
+  statusField: VoiceField;
   onChange: (patch: { voice?: string | null; style?: string; pace?: string }) => void;
 }) {
   const voice = voiceSelect(body);
@@ -94,6 +98,7 @@ function VoiceRows({ body, pending, onChange }: {
       <SettingRow
         title="Voice"
         description={VOICE_ROW_HINT}
+        status={statusField === 'voice' ? status : null}
         control={
           <Select
             aria-label="Voice"
@@ -111,6 +116,7 @@ function VoiceRows({ body, pending, onChange }: {
       <SettingRow
         title="Speaking style"
         description={STYLE_ROW_HINT}
+        status={statusField === 'style' ? status : null}
         control={
           <Select
             aria-label="Speaking style"
@@ -127,6 +133,7 @@ function VoiceRows({ body, pending, onChange }: {
       <SettingRow
         title="Pace"
         description={PACE_ROW_HINT}
+        status={statusField === 'pace' ? status : null}
         control={
           <RadioGroup
             name="voice-pace"

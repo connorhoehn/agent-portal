@@ -61,12 +61,23 @@ export interface CollectionRecordFrameProps {
    * (`/access/policies/:id`). Moves to the default when the rail release lands.
    */
   railType?: 'rail' | 'app';
+  /** How the rail's count reads: the library `chip` (default) or `plain` 12px
+   *  text, the count the Initiatives, Search and Dimension rails carry. */
+  countStyle?: 'chip' | 'plain';
+  /**
+   * The narrow form (library `ListRailLayout narrow`): under 40rem of the
+   * frame's width the rail and the record stop sitting side by side. With no
+   * record open (`currentId` null) the title band and then the rail fill the
+   * width as the page's list; with one open, the record fills it under a back
+   * control (`backLabel`, default "All <listLabel>") that calls `onBack`.
+   */
+  narrow?: { onBack: () => void; backLabel?: string };
   'data-testid'?: string;
 }
 
 export function CollectionRecordFrame({
   title, description, listTitle, listLabel, count, search, filter, empty, actions, groups, rows, currentId, onOpen,
-  loading = false, error = null, onRetry, footer, children, conversation, railType = 'rail', 'data-testid': testId,
+  loading = false, error = null, onRetry, footer, children, conversation, railType = 'rail', countStyle, narrow, 'data-testid': testId,
 }: CollectionRecordFrameProps) {
   const trail = useShellBreadcrumbItems();
   const body = error ? <ErrorState title={`Couldn't load ${listLabel}`} description={error} {...(onRetry ? { actionLabel: 'Retry', onAction: onRetry } : {})} />
@@ -92,6 +103,8 @@ export function CollectionRecordFrame({
             body,
           }}
           {...(footer != null ? { footer } : {})}
+          {...(countStyle ? { countStyle } : {})}
+          {...(narrow ? { narrow: { showing: currentId ? 'record' as const : 'list' as const, onBack: narrow.onBack, backLabel: narrow.backLabel ?? `All ${listLabel}` } } : {})}
         >
           <Stack gap="md" className="w-full min-w-0 px-[var(--ui-page-gutter)] pb-[var(--ui-page-gutter)]">{children}</Stack>
           {conversation}

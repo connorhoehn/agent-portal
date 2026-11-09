@@ -10,9 +10,17 @@ export interface PipelineViewEvidence {
   missingDeck?: boolean;
   /** The run API returned 404 and the visible view says Run not found. */
   missingRun?: boolean;
+  /** The Logging frame (`[data-testid="logging"]`) is visible: the read-only log of runs and sessions. */
+  logView?: boolean;
 }
+
+/** The one reviewed reason a Logging page (orgiq and pipelines) has no composer. */
+export const LOGGING_EXEMPTION = "System › Logging is a read-only trace of the caller's own voice sessions and the tenant's agent runs, pipeline runs and jobs: the rail picks a record, the record is facts and event tables, and nothing on it can be created, changed or commanded, so there is no collection command for a composer to send.";
+/** System › Logging and every source/record under it (LoggingPage.tsx). */
+const LOGGING_PATH = /^\/(?:iq|pipelines)\/logging(?:\/.*)?$/;
 export function pipelineComposerPolicy(path: string, view: PipelineViewEvidence = {}): ComposerPolicy | undefined {
   const pathname = new URL(path, 'http://audit.local').pathname;
+  if (LOGGING_PATH.test(pathname) && view.logView) return { mode: 'exempt', reason: LOGGING_EXEMPTION };
   if (/^\/pipelines\/runs\/[^/]+$/.test(pathname) && view.missingRun) return { mode: 'exempt', reason: 'The run endpoint returned 404 and Run not found is visible; there is no run discussion to compose in. Loaded runs and the Runs collection still require their composer.' };
   if (/^\/pipelines(?:\/(?:runs(?:\/[^/]+)?|definitions|runbooks|queues|artifacts|approvals|agents|bots|commands))?$/.test(pathname)) return { mode: 'required' };
   if (pathname === '/pipelines/activity' && view.graph) return { mode: 'exempt', reason: 'The spatial work graph uses its own date, focus and node controls; collection commands are available in Runs.' };
@@ -79,6 +87,8 @@ export interface TenantViewEvidence {
   missingRecord?: boolean;
   /** Record route that rendered a titled detail (section titles, heading or pane). */
   recordDetail?: boolean;
+  /** The Logging frame (`[data-testid="logging"]`) is visible: the read-only log of runs and sessions. */
+  logView?: boolean;
   /** Social channel states. */
   channelNotJoined?: boolean;
   sharedWorkView?: boolean;
@@ -145,6 +155,9 @@ export function tenantComposerPolicy(spec: TenantRouteSpec, view: TenantViewEvid
   // list rail whose shared command composer docks under the column — on the record pages too, so a missing
   // record keeps it. No evidence can exempt one.
   if (/^\/iq\/runbooks(?:\/(?:proposals|briefs))?(?:\/[^/]+)?$/.test(pathname)) return { mode: 'required' };
+  // Logging (G37): a read-only log with a list rail. Its own evidence comes before the list-rail rule,
+  // and a composer that ever appears there is still required to be real.
+  if (LOGGING_PATH.test(pathname) && view.logView && !view.composer) return { mode: 'exempt', reason: LOGGING_EXEMPTION };
   // Decisions (L6): the register and every record keep the shared command composer docked under the column; a record with no evidence of one still owes it.
   if (/^\/iq\/decisions(?:\/[^/]+)?$/.test(pathname)) return { mode: 'required' };
   // This query switches the submissions collection to its upload form. The

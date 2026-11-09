@@ -235,6 +235,21 @@ test('the view: one frame for every source (trail, one title, the source control
   const empty = await renderLogging({ source: 'jobs', sources: ['voice', 'jobs'], rows: [], selectedKey: null, record: null }, '/iq/logging/jobs');
   assert.match(empty, /data-value="jobs"/, 'the control shows the open source');
   assert.match(empty, /No jobs and sweeps yet/);
+  assert.match(empty, /data-testid="logging-empty"/, 'the content column says so too, never blank');
+  assert.match(empty, /data-count-style="plain"/, 'the rail count is the plain 12px count, not the 11px chip');
+});
+
+test('narrow width: the list rail stacks; a record shows full width under a back control to the list', async () => {
+  const rows = jobRows([JOB], [SWEEP]);
+  const record = sweepRunRecord(SWEEP);
+  const open = await renderLogging({ source: 'jobs', rows, selectedKey: rowKey(record), record, onShowList: () => undefined }, '/iq/logging/jobs/sweep-runs/sr-1');
+  assert.match(open, /data-narrow="record"/);
+  assert.match(open, />All jobs and sweeps</, 'the back control names the list');
+  const list = await renderLogging({ source: 'jobs', rows, selectedKey: null, record: null, onShowList: () => undefined }, '/iq/logging/jobs');
+  assert.match(list, /data-narrow="list"/);
+  assert.doesNotMatch(list, /narrow-back/, 'no back control on the list');
+  const wide = await renderLogging({ source: 'jobs', rows, selectedKey: rowKey(record), record }, '/iq/logging/jobs/sweep-runs/sr-1');
+  assert.doesNotMatch(wide, /data-narrow=/, 'without onShowList the frame has no narrow form');
 });
 
 test('the pipelines tenant: Voice and Pipelines are offered, and the view renders at /pipelines/logging', async () => {

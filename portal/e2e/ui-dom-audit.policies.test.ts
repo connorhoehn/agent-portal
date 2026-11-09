@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { pipelineComposerPolicy, tenantComposerPolicy } from './ui-dom-audit.policies.ts';
+import { LOGGING_EXEMPTION, pipelineComposerPolicy, tenantComposerPolicy } from './ui-dom-audit.policies.ts';
 
 test('all inspected collections require input even when empty', () => {
   for (const path of ['', '/runs', '/runs/abc', '/definitions', '/queues', '/runbooks', '/artifacts', '/approvals', '/agents', '/bots', '/commands']) {
@@ -159,4 +159,15 @@ test('a document occupying the primary column has no separate message input', ()
   assert.equal(tenantComposerPolicy(spec, { focusedDocument: true })?.mode, 'exempt');
   assert.equal(tenantComposerPolicy(spec, {})?.mode, 'required');
   assert.equal(tenantComposerPolicy(spec, { focusedDocument: true, composer: true })?.mode, 'required');
+});
+
+test('Logging is exempt only with its frame visible and no composer; the list-rail rule cannot override it', () => {
+  const exempt = { mode: 'exempt', reason: LOGGING_EXEMPTION };
+  assert.deepEqual(tenantComposerPolicy({ tenant: 'orgiq', path: '/iq/logging/voice' }, { logView: true, listRail: true }), exempt);
+  assert.deepEqual(tenantComposerPolicy({ tenant: 'orgiq', path: '/iq/logging/agents/bot-runs/br-1' }, { logView: true, listRail: true }), exempt);
+  assert.deepEqual(tenantComposerPolicy({ tenant: 'orgiq', path: '/iq/logging/voice' }, { listRail: true }), { mode: 'required' }, 'no frame, no exemption');
+  assert.deepEqual(tenantComposerPolicy({ tenant: 'orgiq', path: '/iq/logging/voice' }, { logView: true, composer: true }), { mode: 'required' });
+  assert.deepEqual(tenantComposerPolicy({ tenant: 'orgiq', path: '/iq/work' }, { logView: true, listRail: true }), { mode: 'required' }, 'the evidence cannot exempt another route');
+  assert.deepEqual(pipelineComposerPolicy('/pipelines/logging/voice', { logView: true }), exempt);
+  assert.equal(pipelineComposerPolicy('/pipelines/logging/voice'), undefined);
 });
