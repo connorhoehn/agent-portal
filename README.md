@@ -7,7 +7,7 @@ Agent Portal is an application for exploring an organization's people, knowledge
 For the quickest local setup, paste this into a Codex or Claude session:
 
 ```text
-Clone https://github.com/connorhoehn/aws-agentcore.git if it is not already here.
+Clone https://github.com/connorhoehn/agent-portal.git if it is not already here.
 Set up Agent Portal for local development using its README. Check that Node.js,
 git, npm, and any required GitHub access are available; explain anything I need
 to install or authenticate. Install the portal and middleware dependencies,

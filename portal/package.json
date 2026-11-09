@@ -1,5 +1,10 @@
 {
   "name": "agent-portal",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/connorhoehn/agent-portal.git",
+    "directory": "portal"
+  },
   "version": "0.1.0",
   "type": "module",
   "scripts": {
