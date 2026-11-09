@@ -141,6 +141,9 @@ test('voice confirm (sweep 2 M2, sweep 6): each utterance after the card is hear
     const h = harness(await mint(POST, {}, said), { runners: p.runners, planners: p.planners });
     await h.controller.start();
     await h.clock.advance(5000);
+    // The tool row is posted after the runner settles and the event batch flushes; a late "Yes" (3000 ms + the
+    // utterance gap) lands close to the 5 s mark, so give a decided card its flush before reading the log (CI raced here).
+    if (expected !== 'open') await h.clock.advance(1500);
     assert.equal(p.sent.length, expected === 'done' ? 1 : 0, label);
     const row = h.log.find((r) => isToolRow(r))?.body as Record<string, unknown> | undefined;
     if (expected === 'open') {
