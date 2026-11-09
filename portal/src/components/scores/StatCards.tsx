@@ -41,13 +41,18 @@ export function StatCards({ peopleScoredLabel, avgComposite, topScore, departmen
       aria-label="Scoring summary"
       variant="line"
       items={[
-        { label: 'people scored', value: peopleScoredLabel },
+        // The value already names the noun ("59 people", "Showing the first 14
+        // of 56 people"), so the label is the verb: "59 people scored", not
+        // "59 people people scored" (walk, 9 November).
+        { label: 'scored', value: peopleScoredLabel },
         { label: 'avg composite', value: String(avgComposite) },
         { label: 'top score', value: String(topScore) },
         { label: 'departments', value: String(departmentCount) },
         {
           label: 'updated',
-          value: relativeTime(mostRecentScoredAt),
+          // relativeTime(null) is '' — an empty value after "updated". No
+          // scoring run yet is a fact to state, not a blank.
+          value: mostRecentScoredAt ? relativeTime(mostRecentScoredAt) : 'never',
           ...(mostRecentScoredAt === null && staleHint ? { title: staleHint } : {}),
         },
       ]}
