@@ -247,7 +247,7 @@ describe('tenant scoping (§6)', () => {
       expect(kinds).toEqual(openKinds(tenant));
       for (const k of kinds) expect(listKinds(tenant)).toContain(k);
     }
-    expect(voiceTool('search')!.description).toMatch(/ref that open opens/);
+    expect(delegationInstructions('orgiq')).toMatch(/rows carry a ref that open opens/);
     for (const gone of ['navigate', 'open_result', 'open_computer_lab', 'search_people', 'search_records', 'list_active_initiatives', 'bot_sweep_status']) expect(voiceTool(gone)).toBeUndefined();
   });
 
@@ -540,7 +540,7 @@ describe('the rendered session', () => {
     expect(backend).toMatch(/You exist to call them/);
     expect(backend).toMatch(/When no function applies to the request, reply immediately with one short sentence/);
     expect(backend).toMatch(/pass detail true only when the user asked for every row/);
-    expect(backend).toMatch(/Never repeat a refused call with the same arguments/);
+    expect(backend).toMatch(/Never repeat a refused call unchanged/);
     // G23: the inbound note's ref, read with get and answered with message's thread.
     expect(backend).toMatch(/get with its ref \("message:<id>", or "message:latest"\) reads it whole, and message with thread set to that ref/);
   });
@@ -552,7 +552,7 @@ describe('the rendered session', () => {
   it('G49: open takes a tab; on a record page a tab is opened with scope this-page, never searched', () => {
     const open = voiceTool('open')!;
     expect(Object.keys(open.parameters.properties)).toEqual(['page', 'ref', 'kind', 'name', 'scope', 'tab', 'params']);
-    expect(open.description).toMatch(/a tab of the page in view \(scope "this-page" and tab: "open decisions" on an initiative\)/);
+    expect(open.description).toMatch(/a tab of the page in view \(scope "this-page" and tab\)/);
     const backend = delegationInstructions('orgiq');
     expect(backend).toMatch(/"open", "show" or "go to" one of those tabs .* is open with scope "this-page" and tab: never a search and never a record open/);
     expect(backend).toMatch(/Never use search for what the page in view shows/);

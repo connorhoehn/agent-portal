@@ -124,6 +124,9 @@ test('G31 acceptance: across a 20-turn scripted session the estimated input per 
     assert.ok(turnsWithTools.every((x) => x.status === 'done'), JSON.stringify(turnsWithTools.filter((x) => x.status !== 'done')));
     assert.ok(Math.max(...perDelegation) < 10_000, `max ${Math.max(...perDelegation)} tokens`);
     assert.ok(estimateTokens(base + est.windowChars) < 10_000);
+    // Headroom: at least 5 % under the budget (38,000 of 40,000 characters), so the next catalogue addition fails here
+    // before it breaks the 10 k ceiling (G53: the wording was trimmed 10 % when it left 19 characters to spare).
+    assert.ok(Math.max(...perDelegation) * 4 <= 38_000, `no headroom: ${Math.max(...perDelegation) * 4} of 40000 characters`);
     // Every output is compact and carries no link.
     for (const o of sent) { assert.ok(o.length <= OUTPUT_MAX_CHARS, `${o.length}`); assert.doesNotMatch(o, /"href"/); }
     // The page note: sent only when the page changed (it says it replaces the earlier ones), never once per result.

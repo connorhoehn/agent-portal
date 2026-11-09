@@ -3,7 +3,7 @@
 exports[`POST /api/voice/sessions — the mint the session object names exactly the catalogue's functions and no web_search 1`] = `
 [
   {
-    "description": "Open, in the current workspace, a page, a row of the last result (by its ref or position: "the second one" is "2"), a record by kind and name ("open the payments initiative" is kind initiative, name payments), or a tab of the page in view (scope "this-page" and tab: "open decisions" on an initiative). Several matches come back as a numbered choice the user picks by saying its number or clicking it. Never a path.",
+    "description": "Open, in the current workspace, a page, a row of the last result (ref or position), a record by kind and name ("open the payments initiative" is kind initiative, name payments), or a tab of the page in view (scope "this-page" and tab). Several matches come back as a numbered choice the user picks by number or click.",
     "name": "open",
     "parameters": {
       "additionalProperties": false,
@@ -47,7 +47,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           ],
         },
         "name": {
-          "description": "With kind: the record's name as the user said it; several matches come back as a numbered choice.",
+          "description": "With kind: the record's name.",
           "type": [
             "string",
             "null",
@@ -118,14 +118,14 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           ],
         },
         "ref": {
-          "description": "A row to open: its ref exactly as a result gave it (e.g. "initiative:p-12"), or its position in the last result ("2" for the second row). Never a name or a path.",
+          "description": "A row to open: a ref or a position in the last result.",
           "type": [
             "string",
             "null",
           ],
         },
         "scope": {
-          "description": ""this-page": the ref (a position, "2" for the second row) or the name is one of the rows the page in view shows, as the page context lists them; kind is then optional. With tab and nothing else: a tab of the page in view.",
+          "description": ""this-page": the ref or name is one of the rows the page in view shows; kind is then optional. With tab alone: a tab of that page.",
           "enum": [
             "this-page",
             null,
@@ -136,7 +136,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           ],
         },
         "tab": {
-          "description": "A tab to show, as the page context lists them ("decisions", "work", "docs"): with scope "this-page" the page in view's tab; with a ref, that record's tab.",
+          "description": "A tab, as the page context lists them ("decisions", "work", "docs"): of the page in view with scope "this-page", else of the ref's record.",
           "type": [
             "string",
             "null",
@@ -158,27 +158,27 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Search this workspace's backend index by free text: people by skill, topic or name, records, and questions such as "who decided X" or "which teams are below target". Narrow it with a type; "latest" means sort recent; pass answer true when the user asks a question that wants one fact. Each row carries a ref that open opens. The kinds here: person, team, initiative, work, decision, knowledge, asset, recording.",
+    "description": "Search this workspace's backend index by free text: people by skill, topic or name, records, and questions such as "who decided X". Narrow it with a type; "latest" means sort recent. The kinds here: person, team, initiative, work, decision, knowledge, asset, recording.",
     "name": "search",
     "parameters": {
       "additionalProperties": false,
       "properties": {
         "answer": {
-          "description": "True when the user asked a question that wants one fact (who, how many, which): the backend answers it from the index, with the records it read.",
+          "description": "True when the question wants one fact (who, how many, which): answered from the index.",
           "type": [
             "boolean",
             "null",
           ],
         },
         "detail": {
-          "description": "True only when the user asked for every row ("read them", "all of them"): the full list instead of the count and the top three.",
+          "description": "True only when the user asked for every row: the full list.",
           "type": [
             "boolean",
             "null",
           ],
         },
         "limit": {
-          "description": "How many results, 1 to 10. Default 5.",
+          "description": "Default 5.",
           "type": [
             "integer",
             "null",
@@ -189,7 +189,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           "type": "string",
         },
         "scope": {
-          "description": "Where to search: "workspace" (the default) or one initiative id, to search inside that initiative only.",
+          "description": ""workspace" (default) or one initiative id to search inside.",
           "type": [
             "string",
             "null",
@@ -241,13 +241,13 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "List one kind of record in this workspace through the same read its page uses, optionally filtered by words, status, scope or a time. Each row carries a ref that open opens and get reads. The kinds here: initiative, work-item, decision, design, job, finding, proposal, hitl-approval, consult, bot, run, computer, environment, runbook, runbook-proposal, change, sprint, deck, codebase, person, saved-search, library, brief, channel, team, dm, room, recording, call.",
+    "description": "List one kind of record through the same read its page uses, optionally filtered by words, status, scope or a time. The kinds here: initiative, work-item, decision, design, job, finding, proposal, hitl-approval, consult, bot, run, computer, environment, runbook, runbook-proposal, change, sprint, deck, codebase, person, saved-search, library, brief, channel, team, dm, room, recording, call.",
     "name": "list",
     "parameters": {
       "additionalProperties": false,
       "properties": {
         "detail": {
-          "description": "True only when the user asked for every row ("read them", "all of them"): the full list instead of the count and the top three.",
+          "description": "True only when the user asked for every row: the full list.",
           "type": [
             "boolean",
             "null",
@@ -257,7 +257,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           "additionalProperties": false,
           "properties": {
             "q": {
-              "description": "Words the record's name should contain, as the user said them.",
+              "description": "Words the name should contain.",
               "type": [
                 "string",
                 "null",
@@ -277,14 +277,14 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
               ],
             },
             "since": {
-              "description": "Only records since: "yesterday", "last night", "today", "this morning", "3 hours ago", "3 days ago", "last week" or a YYYY-MM-DD date.",
+              "description": "Only records since: "yesterday", "last night", "3 hours ago", "last week" or a YYYY-MM-DD date.",
               "type": [
                 "string",
                 "null",
               ],
             },
             "status": {
-              "description": "A status, as the page shows it (open, failed, active, pending…).",
+              "description": "A status, as the page shows it.",
               "type": [
                 "string",
                 "null",
@@ -338,14 +338,14 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           "type": "string",
         },
         "limit": {
-          "description": "How many results, 1 to 10. Default 5.",
+          "description": "Default 5.",
           "type": [
             "integer",
             "null",
           ],
         },
         "scope": {
-          "description": ""this-page": the rows the page in view already shows (an initiative's work, in the page's order) instead of reading again; filter and limit still apply.",
+          "description": ""this-page": the rows the page in view shows, in its order, instead of reading again; filter and limit still apply.",
           "enum": [
             "this-page",
             null,
@@ -369,20 +369,20 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Read one record a result named, by its ref or its position in the last result: its summary, or one part of it (an initiative's work, a run's steps, a channel's members…).",
+    "description": "Read one record a result named: its summary, or one part of it (an initiative's work, a run's steps, a channel's members…).",
     "name": "get",
     "parameters": {
       "additionalProperties": false,
       "properties": {
         "detail": {
-          "description": "True only when the user asked for every row ("read them", "all of them"): the full list instead of the count and the top three.",
+          "description": "True only when the user asked for every row: the full list.",
           "type": [
             "boolean",
             "null",
           ],
         },
         "part": {
-          "description": "One part of the record instead of its summary, where the kind has it (its work, steps, members, versions…).",
+          "description": "One part instead of the summary, where the kind has it.",
           "enum": [
             "work",
             "decisions",
@@ -406,7 +406,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           ],
         },
         "ref": {
-          "description": "A row's ref exactly as a result gave it (e.g. "initiative:p-12"), or its position in the last result ("1" for the first row). Never a name or a path.",
+          "description": "The record: a ref or a position in the last result.",
           "type": "string",
         },
       },
@@ -421,7 +421,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Act on the user's computers. "start": one cloud computer per initiative in \`initiatives\` (ids from a list, or the names the user said; a running one is reused; for "each of my active projects" list the initiatives first, kind initiative, scope mine). "stop": stop one of the user's own computers (\`computer\`). "open-shell": open a shell tab on a computer. "run": run one read-only command on a computer, chosen by \`phrase\` from a fixed list, never a free-form command (for anything else tell the user to open the shell and type it). "hand-work": hand a work item or a bot's mission (\`job\`, as the user named it) to one of the user's paired machines (\`machine\`). Everything except open-shell asks the user first.",
+    "description": "Act on the user's computers. "start": one cloud computer per initiative in \`initiatives\` (a running one is reused; for "each of my active projects" list the initiatives first, kind initiative, scope mine). "stop": stop one of the user's own computers. "open-shell": open a shell tab on one. "run": run one read-only command, chosen by \`phrase\` from a fixed list, never free-form (for anything else tell the user to open the shell and type it). "hand-work": hand a work item or a bot's mission (\`job\`) to one of the user's paired machines (\`machine\`). Everything except open-shell asks the user first.",
     "name": "computer",
     "parameters": {
       "additionalProperties": false,
@@ -438,14 +438,14 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           "type": "string",
         },
         "computer": {
-          "description": "For stop, open-shell and run: the computer, by the id a result gave or the name or initiative the user said.",
+          "description": "For stop, open-shell and run: the computer, by id, name or initiative.",
           "type": [
             "string",
             "null",
           ],
         },
         "initiatives": {
-          "description": "For start: the initiatives, as ids from a list or search, or the names the user said.",
+          "description": "For start: the initiatives, as ids or names.",
           "items": {
             "description": "An initiative id or name.",
             "type": "string",
@@ -456,14 +456,14 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           ],
         },
         "job": {
-          "description": "For hand-work: the work item or the bot whose mission to hand over, as the user named it; never an instruction.",
+          "description": "For hand-work: the work item or bot whose mission to hand over.",
           "type": [
             "string",
             "null",
           ],
         },
         "machine": {
-          "description": "For hand-work: the paired machine, as the user named it.",
+          "description": "For hand-work: the paired machine.",
           "type": [
             "string",
             "null",
@@ -487,7 +487,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           ],
         },
         "since": {
-          "description": "For run's commits-since: "yesterday", "last night", "today", "this morning", "3 hours ago", "3 days ago", "last week" or a YYYY-MM-DD date.",
+          "description": "For run's commits-since: "yesterday", "last night", "3 hours ago", "last week" or a YYYY-MM-DD date.",
           "type": [
             "string",
             "null",
@@ -509,7 +509,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Read one aggregate of this workspace as a few figures: what failed since a time ("what failed last night", "any issues with the sweeps"), the work queue, the fleet, paired machines, platform health, ingestion, what is on today, unread discussions, who is live, the program rollup or the access summary. The kinds here: sweeps, work, fleet, machines, health, ingest, today, unread, live.",
+    "description": "Read one aggregate as a few figures: what failed since a time ("what failed last night"), the work queue, the fleet, paired machines, platform health, ingestion, what is on today, unread discussions, who is live, the program rollup or the access summary. The kinds here: sweeps, work, fleet, machines, health, ingest, today, unread, live.",
     "name": "summary",
     "parameters": {
       "additionalProperties": false,
@@ -530,7 +530,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           "type": "string",
         },
         "since": {
-          "description": "Since when, for sweeps, pipelines, machines and unread: "yesterday", "last night", "today", "this morning", "3 hours ago", "3 days ago", "last week" or a YYYY-MM-DD date; yesterday by default for sweeps and pipelines.",
+          "description": "Since when, for sweeps, pipelines, machines and unread: "yesterday", "last night", "3 hours ago", "last week" or a YYYY-MM-DD date (default yesterday for sweeps and pipelines).",
           "type": [
             "string",
             "null",
@@ -547,7 +547,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Read money: what the user spent this month, an initiative's or the org's spend and pace, allocations, people's budgets, whether the fleet is paused, sprint envelopes or agent cost. Figures beyond the user's own need the budgets read tier; below it the result offers the access request instead. Say only the figures the result gives. The scopes here: me, initiative, org, allocations, users, switches, envelopes, cost.",
+    "description": "Read money: what the user spent this month, an initiative's or the org's spend and pace, allocations, people's budgets, whether the fleet is paused, sprint envelopes or agent cost. Figures beyond the user's own need the budgets read tier; below it the result offers the access request instead. The scopes here: me, initiative, org, allocations, users, switches, envelopes, cost.",
     "name": "budget",
     "parameters": {
       "additionalProperties": false,
@@ -597,13 +597,13 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Read what is happening around the user from the social app's activity and the presence roster: who is online, who is in a call or huddle now, the user's missed calls, recent messages or pinned messages (optionally from or about one person), what a person worked on, or everything recent since a time. Each row carries a ref that open opens.",
+    "description": "Read what is happening around the user from the social app's activity and the presence roster: who is online, who is in a call or huddle now, the user's missed calls, recent messages or pinned messages (optionally from or about one person), what a person worked on, or everything recent since a time.",
     "name": "activity",
     "parameters": {
       "additionalProperties": false,
       "properties": {
         "scope": {
-          "description": "What to read: "online" (who is online now), "live-calls" (who is in a call or huddle now), "missed-calls" (the user's missed calls), "messages", "pins", "work" (what a person worked on, in the Work workspace) or "recent" (messages, pins, missed calls and, in Work, work items, since a time; yesterday by default).",
+          "description": "What to read: "online", "live-calls" (a call or huddle now), "missed-calls", "messages", "pins", "work" (what a person worked on, in Work) or "recent" (messages, pins, missed calls and, in Work, work items, since a time; yesterday by default).",
           "enum": [
             "online",
             "live-calls",
@@ -616,14 +616,14 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           "type": "string",
         },
         "since": {
-          "description": "Since when, for messages, pins, missed-calls, work and recent: "yesterday", "last night", "today", "this morning", "3 hours ago", "3 days ago", "last week" or a YYYY-MM-DD date.",
+          "description": "Since when, for messages, pins, missed-calls, work and recent: "yesterday", "last night", "3 hours ago", "last week" or a YYYY-MM-DD date.",
           "type": [
             "string",
             "null",
           ],
         },
         "who": {
-          "description": "One person, as the user named them, to narrow the read to ("what did Ada work on", "is Ada on a call").",
+          "description": "One person to narrow the read to ("what did Ada work on").",
           "type": [
             "string",
             "null",
@@ -647,7 +647,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
       "additionalProperties": false,
       "properties": {
         "attach": {
-          "description": "A record to share with the message, read-only for 24 hours: a work item or an initiative, by its ref as a result gave it ("work-item:<id>", "initiative:<id>") or its position in the last result.",
+          "description": "A work item or initiative to share, read-only for 24 hours: its ref or position.",
           "type": [
             "string",
             "null",
@@ -666,7 +666,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
               "type": "string",
             },
             "name": {
-              "description": "The team, channel or person, as the user said it.",
+              "description": "The team, channel or person.",
               "type": "string",
             },
           },
@@ -684,7 +684,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           "type": "string",
         },
         "thread": {
-          "description": "A reply instead: the ref of the inbound message it answers, exactly as the portal gave it ("message:<id>"); it goes to the same conversation. Leave target out then.",
+          "description": "A reply instead: the inbound message's ref ("message:<id>"), in the same conversation; leave target out.",
           "type": [
             "string",
             "null",
@@ -729,7 +729,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
               "type": "string",
             },
             "name": {
-              "description": "The team, channel or person, as the user said it.",
+              "description": "The team, channel or person.",
               "type": "string",
             },
           },
@@ -786,13 +786,13 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Queue background work the user asks for and report back when it ends. The user confirms first. Say it is queued and that you will say when it is done; the portal shows its progress and tells you the outcome. The kinds here: "sweep" runs the org sweeps now (target "all" or "nightly", or one of bus factor, stale docs, orphan decisions); "bot-run" runs one bot now (target: the bot); "job" queues one of the suggested jobs for the fleet (target: the suggestion); "dispatch" dispatches a work item to an agent (target: the work item; model: Haiku, Sonnet or Opus if the user named one); the card shows the forecast; "finding-promote" turns a finding into a job (target: the finding); "finding-analyze" analyses a document finding (target: the finding); "change-rereview" re-reviews an agent change (target: the change); "change-address" has an agent address a change's review comments (target: the change); "deck" builds a status deck, a PowerPoint (target: the initiative in Work, the team in Assessment, the run in Pipelines, the channel in Social; in Work, on an initiative's page, scope "this-page" builds it for the initiative in view, and focus carries what it should cover in the user's own words, e.g. "progress this past sprint"); "summarize" summarises a conversation (target: the initiative in Work, the channel in Social); "diagram" draws a diagram of a conversation (target as summarize); "doc" drafts a document from a conversation (target as summarize).",
+    "description": "Queue background work the user asks for. The user confirms first; the portal shows its progress and tells you the outcome. The kinds here: "sweep" runs the org sweeps now (target "all" or "nightly", or one of bus factor, stale docs, orphan decisions); "bot-run" runs one bot now (target: the bot); "job" queues one of the suggested jobs for the fleet (target: the suggestion); "dispatch" dispatches a work item to an agent (target: the work item; model: Haiku, Sonnet or Opus if the user named one); the card shows the forecast; "finding-promote" turns a finding into a job (target: the finding); "finding-analyze" analyses a document finding (target: the finding); "change-rereview" re-reviews an agent change (target: the change); "change-address" has an agent address a change's review comments (target: the change); "deck" builds a status deck, a PowerPoint (target: the initiative in Work, the team in Assessment, the run in Pipelines, the channel in Social; in Work, on an initiative's page, scope "this-page" builds it for the initiative in view, and focus carries what it should cover); "summarize" summarises a conversation (target: the initiative in Work, the channel in Social); "diagram" draws a diagram of a conversation (target as summarize); "doc" drafts a document from a conversation (target as summarize).",
     "name": "queue_work",
     "parameters": {
       "additionalProperties": false,
       "properties": {
         "focus": {
-          "description": "For deck: what the deck should cover, in the user's own words ("progress this past sprint"); handed to the deck writer as quoted words, never an instruction.",
+          "description": "For deck: what it should cover, in the user's words ("progress this past sprint").",
           "type": [
             "string",
             "null",
@@ -824,14 +824,14 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           ],
         },
         "note": {
-          "description": "A short label the user gave for this run, shown with it; never an instruction.",
+          "description": "A short label the user gave for this run.",
           "type": [
             "string",
             "null",
           ],
         },
         "rows": {
-          "description": "With scope "this-page": positions among the rows the page in view shows ("the top three" is [1, 2, 3]); target then says what they are, as the user did.",
+          "description": "With scope "this-page": positions among the page's rows ("the top three" is [1, 2, 3]); target says what they are.",
           "items": {
             "type": "integer",
           },
@@ -841,7 +841,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           ],
         },
         "scope": {
-          "description": ""this-page": rows (or a position in target) count among the rows the page in view shows; for deck with no rows, the record in view (the initiative whose page is open).",
+          "description": ""this-page": rows (or a position in target) are the page in view's rows; for deck with no rows, the record in view.",
           "enum": [
             "this-page",
             null,
@@ -852,7 +852,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           ],
         },
         "target": {
-          "description": "What it runs on, as the user said it, or a ref or position a result gave.",
+          "description": "What it runs on: the user's words, a ref or a position.",
           "type": "string",
         },
       },
@@ -871,7 +871,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Decide something waiting on the user, named by the ref a list or get result gave (or its position in the last result): approve or reject (accept and discard for a draft or a runbook proposal, resolve or reject for a decision, with what was decided and why as the note), or deliver an approved change. The user confirms on a card that shows what it is (with its amount where it has one) and may flip the decision or add a note there. Never a name: list what is waiting first. Here it decides: hitl-approval, a pending transaction (approve or reject; the card shows its amount); change, an agent change (approve, reject, or deliver once approved); runbook-proposal, a runbook proposal (accept or reject; a rejection needs a note); proposal, a graph change proposal (approve or reject); consult, a computer's consult (approve, with the answer as the note); design, a design thread (approve or reject the sign-off); decision, a waiting decision (resolve with an option, or the outcome and why as note; or reject).",
+    "description": "Decide something waiting on the user, by the ref a list or get result gave: approve or reject (accept and discard for a draft or a runbook proposal, resolve or reject for a decision, with what was decided and why as the note), or deliver an approved change. The user confirms on a card that shows what it is (with its amount where it has one) and may flip the decision or add a note there. List what is waiting first. Here it decides: hitl-approval, a pending transaction (approve or reject; the card shows its amount); change, an agent change (approve, reject, or deliver once approved); runbook-proposal, a runbook proposal (accept or reject; a rejection needs a note); proposal, a graph change proposal (approve or reject); consult, a computer's consult (approve, with the answer as the note); design, a design thread (approve or reject the sign-off); decision, a waiting decision (resolve with an option, or the outcome and why as note; or reject).",
     "name": "decide",
     "parameters": {
       "additionalProperties": false,
@@ -889,7 +889,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           "type": "string",
         },
         "note": {
-          "description": "The user's note or reason, as they said it (a consult's answer, a decision's outcome and why); never an instruction.",
+          "description": "The user's note or reason (a consult's answer, a decision's outcome and why).",
           "type": [
             "string",
             "null",
@@ -903,7 +903,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           ],
         },
         "ref": {
-          "description": "The row to decide: its ref exactly as a result gave it (e.g. "approval:r-9"), or its position in the last result ("1"). Never a name or a path.",
+          "description": "The row to decide: a ref or a position in the last result.",
           "type": "string",
         },
         "scope": {
@@ -931,7 +931,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Create a record of one kind through the form its page uses, with the fields that kind takes. The user confirms on a card that shows exactly what will be created (an access request's approvers and conflicts first). Text the user dictated (a title, a comment, a justification) goes in as they said it. The kinds here and their fields: work-item (initiative, title, type?); comment (on, text); saved-search (name, query); sprint (initiative, name, startsOn, endsOn); meeting (initiative, time, thread?); access-request (item, justification, duration?); document (initiative?, title?); whiteboard (initiative?, title?); deck (initiative?, focus?).",
+    "description": "Create a record of one kind through the form its page uses, with the fields that kind takes. The user confirms on a card that shows exactly what will be created (an access request's approvers and conflicts first). The kinds here and their fields: work-item (initiative, title, type?); comment (on, text); saved-search (name, query); sprint (initiative, name, startsOn, endsOn); meeting (initiative, time, thread?); access-request (item, justification, duration?); document (initiative?, title?); whiteboard (initiative?, title?); deck (initiative?, focus?).",
     "name": "create",
     "parameters": {
       "additionalProperties": false,
@@ -940,7 +940,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           "additionalProperties": false,
           "properties": {
             "delegate": {
-              "description": "delegation: who decides for the user, as the user named them.",
+              "description": "delegation: who decides for the user.",
               "type": [
                 "string",
                 "null",
@@ -975,28 +975,28 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
               ],
             },
             "focus": {
-              "description": "deck: what the deck should cover, in the user's own words ("progress this past sprint"); never an instruction.",
+              "description": "deck: what it should cover, in the user's words.",
               "type": [
                 "string",
                 "null",
               ],
             },
             "initiative": {
-              "description": "work-item, sprint, meeting, document, whiteboard, deck: the initiative, as the user named it or by the ref a result gave; for document, whiteboard and deck "this-page" (or left out) is the initiative whose page is open.",
+              "description": "work-item, sprint, meeting, document, whiteboard, deck: the initiative, by name or ref; for document, whiteboard and deck "this-page" (or left out) is the one in view.",
               "type": [
                 "string",
                 "null",
               ],
             },
             "item": {
-              "description": "access-request: the catalog item, as the user named it or by the ref a result gave; outside Access, exactly the requestItemId a refusal named.",
+              "description": "access-request: the catalog item, by name or ref; outside Access, the requestItemId a refusal named.",
               "type": [
                 "string",
                 "null",
               ],
             },
             "justification": {
-              "description": "access-request: why, in the user's words (in Access at least 20 characters).",
+              "description": "access-request: why (in Access at least 20 characters).",
               "type": [
                 "string",
                 "null",
@@ -1010,7 +1010,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
               ],
             },
             "on": {
-              "description": "comment: the work item it is on, by the ref a result gave or its position. Never a name.",
+              "description": "comment: the work item it is on (ref or position).",
               "type": [
                 "string",
                 "null",
@@ -1036,7 +1036,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
               ],
             },
             "reason": {
-              "description": "delegation: why, in the user's words (at least 10 characters).",
+              "description": "delegation: why (at least 10 characters).",
               "type": [
                 "string",
                 "null",
@@ -1050,7 +1050,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
               ],
             },
             "text": {
-              "description": "comment: the comment, exactly as dictated.",
+              "description": "comment: the comment.",
               "type": [
                 "string",
                 "null",
@@ -1064,14 +1064,14 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
               ],
             },
             "time": {
-              "description": "meeting: when, as the user said it ("5 pm", "tomorrow at 10").",
+              "description": "meeting: when ("5 pm", "tomorrow at 10").",
               "type": [
                 "string",
                 "null",
               ],
             },
             "title": {
-              "description": "work-item, document, whiteboard: its title, as the user said it (a document or whiteboard without one is "Untitled").",
+              "description": "work-item, document, whiteboard: its title (without one a document or whiteboard is "Untitled").",
               "type": [
                 "string",
                 "null",
@@ -1199,7 +1199,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
               ],
             },
             "response": {
-              "description": "feedback resolved: the response, as the user said it.",
+              "description": "feedback resolved: the response.",
               "type": [
                 "string",
                 "null",
@@ -1251,7 +1251,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           "type": "object",
         },
         "ref": {
-          "description": "The row to change: its ref exactly as a result gave it (e.g. "work-item:w-9"), its position in the last result, or "report:program" for the assessment program report. Never a name or a path.",
+          "description": "The row to change: a ref, a position in the last result, or "report:program" for the assessment program report.",
           "type": "string",
         },
       },
@@ -1265,13 +1265,13 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Look up access requests and report status, current step and decider: the user's own ("mine", the default), the ones waiting on their decision ("approvals", approvers only) or their reports' ("reports"). Approvals and reports are read in the Access workspace only. Each row carries a ref that open opens.",
+    "description": "Look up access requests and report status, current step and decider: the user's own (the default), those waiting on their decision (approvers only) or their reports'. Approvals and reports are read in the Access workspace only.",
     "name": "access_request_status",
     "parameters": {
       "additionalProperties": false,
       "properties": {
         "query": {
-          "description": "The item asked for or the person, as the user named it; leave out to list them all.",
+          "description": "The item or the person; leave out to list them all.",
           "type": [
             "string",
             "null",
