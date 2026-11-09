@@ -438,7 +438,8 @@ export function usePortalCommands(): Command[] {
     // Stable sort: the tenant's rail order between groups, definition order
     // within one — so the palette never leads with Settings.
     // A page this role cannot open is offered only when the session holds a role that opens it, and then says
-    // so: the jump lands on the page's "no access" state, which makes the switch (lib/pageAccess.ts).
+    // so: the jump lands on the page's "no access" state, which makes the switch (lib/pageAccess.ts). The rail
+    // does not: it lists only what the current role opens (Layout.tsx).
     const switchTo = (p: PageEntry): string | null =>
       isPageVisible(p, tenant, role) || !isPageVisible(p, tenant, 'admin') ? null : offerPage(session, p.roles).switchTo;
     const pageCommands: Command[] = PAGES

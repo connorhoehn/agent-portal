@@ -1,6 +1,6 @@
 // UX walk, 9 November 2026, defect 1: a page this role cannot open says so in
-// place and names the next step — switch, request, or ask — and the palette,
-// rail and voice `open` agree with it.
+// place and names the next step — switch, request, or ask — and the palette
+// and voice `open` agree with it; the rail lists only the current role's pages.
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -41,7 +41,7 @@ test('nothing requestable opens it: ask an org-leader', () => {
   assert.deepEqual(accessNextStep(THEO, ['hr-admin', 'program-owner']), { kind: 'ask', label: 'Ask an org-leader for program-owner or hr-admin' });
 });
 
-test('palette and rail offer a gated page only when the session can switch into it', () => {
+test('the palette offers a gated page only when the session can switch into it', () => {
   assert.deepEqual(offerPage(THEO, PLATFORM), { offer: false, switchTo: null });
   assert.deepEqual(offerPage(DEMO, PLATFORM), { offer: true, switchTo: 'org-leader' });
   assert.deepEqual(offerPage({ role: 'org-leader', tenant: 'orgiq' }, PLATFORM), { offer: true, switchTo: null });

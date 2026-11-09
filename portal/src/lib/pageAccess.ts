@@ -3,9 +3,9 @@
 // RequireRole used to fall back to the tenant's front door, so a deep link,
 // a bookmark or a voice `open` to a gated page landed on the empty "My
 // initiatives" view with no word about why. The route now keeps its URL and
-// renders a "no access" page (components/NoAccessPage.tsx), and the palette,
-// the rail and the voice `open` refusal all name the same next step, decided
-// here:
+// renders a "no access" page (pages/NoAccessPage.tsx), and the palette and
+// the voice `open` refusal name the same next step, decided here (the rail
+// lists only what the current role opens):
 //
 //   1. switch — the session already holds a role that opens the page
 //      (`switchable[tenant]`, the G58 pattern: POST /api/session/role);
@@ -84,7 +84,7 @@ export function accessNextStep(session: AccessSession | null | undefined, roles:
   return { kind: 'ask', label: `Ask ${ASK_WHOM[session.tenant] ?? 'an admin'} for ${rolesPhrase(gate)}` };
 }
 
-/** Whether a gated page is still worth offering in the palette or rail: the viewer opens it, or can switch into a role that does. */
+/** Whether the ⌘K palette offers a gated page: the viewer opens it, or can switch into a role that does (the rail lists current-role pages only). */
 export function offerPage(session: AccessSession | null | undefined, roles: readonly string[] | null | undefined): { offer: boolean; switchTo: string | null } {
   if (!session) return { offer: false, switchTo: null };
   const step = accessNextStep(session, roles);

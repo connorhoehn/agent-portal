@@ -46,7 +46,6 @@ import { ConversationInputProvider } from '@connorhoehn/ui-components/social/ric
 // rails had also stopped agreeing with each other.
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
-import { offerPage } from '../../lib/pageAccess';
 import { Breadcrumbs } from './Breadcrumbs';
 import { AmbientVisitorTargets } from '../ambient/AmbientVisitor';
 import { TenantSwitcher } from './TenantSwitcher';
@@ -407,22 +406,14 @@ function ShellLayout() {
     [rawGetDynamicCommands, scopeCommand],
   );
 
-  // A gated door the role cannot open stays off the rail — unless the session holds a role that opens it
-  // (lib/pageAccess.ts `offerPage`): then it is shown with the switch as its hint, and opening it lands on
-  // the page's "no access" state, which makes the switch (UX walk, 9 November 2026).
-  const switchHints = new Map<string, string>();
-  const offered = (item: NavItem, roles: readonly string[] | undefined): boolean => {
-    if (!roles || (session && roles.includes(session.role ?? ''))) return true;
-    const { offer, switchTo } = offerPage(session, roles);
-    if (offer && switchTo) switchHints.set(item.path, `Switch to ${switchTo} to open`);
-    return offer;
-  };
+  // The rail lists only what the role the viewer is acting as can open. A page another held role opens is
+  // offered by the ⌘K palette and voice `open` with the switch as its hint (lib/pageAccess.ts), never here.
   const navItems = NAV_ITEMS.filter((item) => {
     if (item.tenant !== 'universal' && item.tenant !== 'admin' && !tenantEnabled(item.tenant)) return false;
     if (item.tenant === 'universal') return true;
     if (session?.role === 'admin') return item.tenant === session?.tenant;
-    if (item.tenant !== session?.tenant) return false;
-    return offered(item, item.requireRoles);
+    if (item.requireRoles && !(session && item.requireRoles.includes(session.role ?? ''))) return false;
+    return item.tenant === session?.tenant;
   });
 
   // Platform surfaces (Build tooling, Operate, Identity) are org-tenant
@@ -448,8 +439,8 @@ function ShellLayout() {
         if (!session) return false;
         // The cross-tenant admin role passes every role gate.
         if (session.role === 'admin') return true;
-        if (!item.requireRoles) return isPlatformRole || offered(item, ['org-leader', 'hr-admin']);
-        return offered(item, item.requireRoles);
+        if (!item.requireRoles) return isPlatformRole;
+        return item.requireRoles.includes(session.role ?? '');
       })
     : [];
 
@@ -469,7 +460,6 @@ function ShellLayout() {
     .map((i) => ({
       path: i.path,
       label: i.label,
-      ...(switchHints.has(i.path) ? { hint: switchHints.get(i.path)! } : {}),
       ...(i.group ? { group: i.group } : {}),
       ...(activities[i.path] ? { activity: activities[i.path] } : {}),
       // The blocked-on-a-human count rides the Delivery door now that the
