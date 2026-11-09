@@ -177,8 +177,28 @@ function FooterIdle() {
   />;
 }
 
+/**
+ * Marks each slot of a wrapping row that starts a line (`data-line-start`).
+ * A slot's left rule separates it from the slot before it on the same line;
+ * at a narrow width whole slots wrap, and a rule at the start of the second
+ * or third line separated nothing (walk, 9 November, 390 px). Which slot
+ * starts a line is a layout fact, so it is read after layout, not guessed
+ * from a breakpoint.
+ */
+export function markLineStarts(row: HTMLElement): void {
+  let previousTop: number | null = null;
+  for (const child of Array.from(row.children) as HTMLElement[]) {
+    const top = child.offsetTop;
+    const starts = previousTop !== null && top > previousTop + 1;
+    if (starts) child.setAttribute('data-line-start', '');
+    else child.removeAttribute('data-line-start');
+    previousTop = top;
+  }
+}
+
 export function SocialFooter() {
   const footer = useRef<HTMLElement>(null);
+  const row = useRef<HTMLElement>(null);
   const host = useCallHost();
   const drawn = !!host?.lobby && callDrawn(host.call.phase, true);
   const media = useCallMediaPanel();
@@ -188,10 +208,14 @@ export function SocialFooter() {
     if (!element) return;
     // Floating conversations reserve the actual footer — the row plus an
     // expanded video panel — so Leave remains reachable while they open.
-    const measure = () => document.documentElement.style.setProperty('--shell-collaboration-floor',
-      `${Math.max(0, Math.ceil(window.innerHeight - element.getBoundingClientRect().top))}px`);
+    const measure = () => {
+      document.documentElement.style.setProperty('--shell-collaboration-floor',
+        `${Math.max(0, Math.ceil(window.innerHeight - element.getBoundingClientRect().top))}px`);
+      if (row.current) markLineStarts(row.current);
+    };
     const observer = new ResizeObserver(measure);
-    observer.observe(element); window.addEventListener('resize', measure); measure();
+    observer.observe(element); if (row.current) observer.observe(row.current);
+    window.addEventListener('resize', measure); measure();
     return () => {
       observer.disconnect(); window.removeEventListener('resize', measure);
       document.documentElement.style.removeProperty('--shell-collaboration-floor');
@@ -201,7 +225,8 @@ export function SocialFooter() {
     data-testid="shell-footer">
     <ShellCallMedia id={mediaId} />
     {/* The HuddleBar is a size container, so it has no intrinsic width: `basis-[14rem]` is what makes the row wrap it onto its own line. Wide: one row. Narrow: whole slots wrap onto a second line (none shrinks over its neighbour); the measured floor follows the row's height. */}
-    <Inline gap="sm" align="center" justify="between" className="min-h-11 min-w-0 px-4 py-1" data-testid="shell-footer-row">
+    {/* A slot that starts a wrapped line drops its left rule (markLineStarts). */}
+    <Inline ref={row} gap="sm" align="center" justify="between" className="min-h-11 min-w-0 px-4 py-1 [&>[data-line-start]]:border-l-0 [&>[data-line-start]]:pl-0" data-testid="shell-footer-row">
       <EmbeddedSocialEntry />
       <TodayStripSlot placement="footer" activeCall={drawn} />
       {/* The voice navigator (docs/voice-navigator-spec.md §5): renders nothing unless features.voiceNavigator and can('VoiceNavigate'). */}
