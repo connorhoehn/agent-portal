@@ -558,7 +558,9 @@ export function decideKinds(tenant: string | null): string[] {
  * (editor acts on a document's anchors and reviewers).
  */
 export const CREATE_ACTIONS: Readonly<Record<string, Readonly<Record<string, CapabilityAction | null>>>> = {
-  orgiq: { 'work-item': 'DispatchAgentRun', comment: null, 'saved-search': 'Search', sprint: 'ManageSprints' },
+  // meeting (G25): the initiative's huddle room and a time, said in the thread it answers; access-request (G27): the
+  // Social plane's own request item through the quick route (the route checks it is that item).
+  orgiq: { 'work-item': 'DispatchAgentRun', comment: null, 'saved-search': 'Search', sprint: 'ManageSprints', meeting: null, 'access-request': null },
   social: { channel: 'ManageChannels', team: 'ManageTeams', room: 'ManageChannels' },
   access: { 'access-request': 'RequestAccess', delegation: 'DecideAccess' },
 };
@@ -572,7 +574,8 @@ export const CREATE_FIELDS: Readonly<Record<string, readonly [readonly string[],
   channel: [['name'], ['description', 'privacy']],
   team: [['name'], ['description', 'privacy']],
   room: [['name'], ['description', 'privacy']],
-  'access-request': [['item', 'justification', 'duration'], []],
+  'access-request': [['item', 'justification'], ['duration']],
+  meeting: [['initiative', 'time'], ['thread']],
   delegation: [['delegate', 'window', 'reason'], []],
 };
 
@@ -856,7 +859,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     parameters: obj({
       kind: str('What to create.', { enum: createKinds(null) }),
       fields: obj({
-        initiative: str('work-item, sprint: the initiative, as the user named it or by the ref a result gave.', { minLength: 1, maxLength: 200 }),
+        initiative: str('work-item, sprint, meeting: the initiative, as the user named it or by the ref a result gave.', { minLength: 1, maxLength: 200 }),
         title: str('work-item: its title, as the user said it.', { minLength: 1, maxLength: 200 }),
         type: str('work-item: story (default), bug or epic.', { enum: ['story', 'bug', 'epic'] }),
         on: str('comment: the work item it is on, by the ref a result gave or its position. Never a name.', { minLength: 1, maxLength: 200 }),
@@ -867,9 +870,11 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
         endsOn: str('sprint: its last day, YYYY-MM-DD.', { minLength: 10, maxLength: 10 }),
         description: str('channel, team, room: one line about it.', { minLength: 1, maxLength: 280 }),
         privacy: str('channel, team, room: public (default) or private.', { enum: ['public', 'private'] }),
-        item: str('access-request: the catalog item, as the user named it or by the ref a result gave.', { minLength: 1, maxLength: 200 }),
-        justification: str('access-request: why, in the user\'s words (at least 20 characters).', { minLength: 1, maxLength: 2000 }),
-        duration: str('access-request: how long.', { enum: ['8h', '24h', '7d', '30d'] }),
+        item: str('access-request: the catalog item, as the user named it or by the ref a result gave; outside Access, exactly the requestItemId a refusal named.', { minLength: 1, maxLength: 200 }),
+        justification: str('access-request: why, in the user\'s words (in Access at least 20 characters).', { minLength: 1, maxLength: 2000 }),
+        duration: str('access-request: how long (outside Access, a week when not said).', { enum: ['8h', '24h', '7d', '30d'] }),
+        time: str('meeting: when, as the user said it ("5 pm", "tomorrow at 10").', { minLength: 1, maxLength: 40 }),
+        thread: str('meeting: the inbound message it answers ("message:<id>"); the time and the room go back there.', { minLength: 9, maxLength: 200 }),
         delegate: str('delegation: who decides for the user, as the user named them.', { minLength: 1, maxLength: 120 }),
         window: str('delegation: for how long.', { enum: ['1d', '3d', '7d', '14d'] }),
         reason: str('delegation: why, in the user\'s words (at least 10 characters).', { minLength: 1, maxLength: 2000 }),

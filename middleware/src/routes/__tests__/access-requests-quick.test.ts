@@ -21,14 +21,17 @@ jest.mock('../../lib/role-registry.js', () => {
   // cannot load under jest: import.meta.url). Same derivation as access.test.ts.
   const fs = jest.requireActual<typeof import('node:fs')>('node:fs');
   const path = jest.requireActual<typeof import('node:path')>('node:path');
-  const dir = path.join(__dirname, '..', '..', '..', 'seeds', 'roles', 'access');
-  const roles = fs.readdirSync(dir).filter((f: string) => f.endsWith('.cedar')).map((f: string) => {
+  // Social's too (G27): the plane names the Social role that grants posting by asking these.
+  const roles = ['access', 'social'].flatMap((tenant: string) => {
+    const dir = path.join(__dirname, '..', '..', '..', 'seeds', 'roles', tenant);
+    return fs.readdirSync(dir).filter((f: string) => f.endsWith('.cedar')).map((f: string) => ({ f, dir, tenant }));
+  }).map(({ f, dir, tenant }: { f: string; dir: string; tenant: string }) => {
     const cedar = fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\/[^\n]*/g, '');
     const caps = new Set<string>();
     for (const block of cedar.split(/\bpermit\b/).slice(1)) {
       for (const m of (block.split(';')[0] ?? '').matchAll(/OrgIQ::Action::"([^"]+)"/g)) caps.add(m[1]!);
     }
-    return { id: f.replace(/\.cedar$/, ''), tenant: 'access', label: '', summary: '', capabilities: [...caps] };
+    return { id: f.replace(/\.cedar$/, ''), tenant, label: '', summary: '', capabilities: [...caps] };
   });
   return { roleRegistry: () => [...roles, { id: 'admin', tenant: null, label: 'Admin', summary: '', capabilities: ['*'] }] };
 });
@@ -200,6 +203,18 @@ describe('quick request refusals', () => {
     expect((await request(app).get('/api/access-requests/mine?itemId=role:assessment:assessor').set('Cookie', theo)).status).toBe(403);
     // Nothing was filed by any of those.
     expect(accessRequestsFixture.rows().filter((r) => r.requesterId === 'u-theo')).toEqual([]);
+  });
+
+  it('files the Social plane\'s own request item from another workspace (G27), and only that one', async () => {
+    const helen = await signIn('u-hr');
+    const plane = await request(app).get('/api/access-requests/mine?itemId=role:social:moderator').set('Cookie', helen);
+    expect(plane.status).toBe(200);
+    const filed = await quick(helen, { itemId: 'role:social:moderator', justification: 'Requested by voice from the orgiq workspace: I need to message the team.', duration: '7d' });
+    expect(filed.status).toBe(201);
+    expect(filed.body).toMatchObject({ item: expect.objectContaining({ id: 'role:social:moderator' }), status: expect.any(String) });
+    // Any other Social item stays another workspace's.
+    const other = await quick(helen, { itemId: 'role:social:community-admin', justification: JUST, duration: '7d' });
+    expect([400, 403]).toContain(other.status);
   });
 
   it('runs the same separation-of-duties pre-check as the Access form', async () => {

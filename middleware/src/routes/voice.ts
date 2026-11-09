@@ -333,7 +333,7 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
     toastSeconds: cfg.toastSeconds,
     ...(resumeOf ? { resumeOf } : {}),
     ...(dailyMinutesLeft != null ? { dailyMinutesLeft } : {}),
-    ...(cfg.mock ? { mockScript: mockLiveScript(id, mockCallFor(session.tenant, session.role)) } : {}),
+    ...(cfg.mock ? { mockScript: mockLiveScript(id, devMockCall() ?? mockCallFor(session.tenant, session.role)) } : {}),
   });
 }));
 
@@ -352,6 +352,21 @@ async function ownSession(req: Request, opts: { sameTenant: boolean }): Promise<
   if (!row || row.user_sub !== session.sub) return null;
   if (opts.sameTenant && row.tenant !== session.tenant) return null;
   return row;
+}
+
+/**
+ * MOCK_VOICE only: VOICE_MOCK_CALL (JSON `{ name, arguments, said }`, a catalogue tool) replaces the
+ * persona's scripted call, so a headless walk can drive one specific tool through the real mint (G27).
+ * Ignored outside the mock, and when it does not name a catalogue tool.
+ */
+function devMockCall(): { name: string; arguments: Record<string, unknown>; said: string } | null {
+  const raw = process.env['VOICE_MOCK_CALL'];
+  if (!raw) return null;
+  try {
+    const c = JSON.parse(raw) as { name?: unknown; arguments?: unknown; said?: unknown };
+    if (typeof c.name !== 'string' || !voiceTool(c.name) || !c.arguments || typeof c.arguments !== 'object') return null;
+    return { name: c.name, arguments: c.arguments as Record<string, unknown>, said: typeof c.said === 'string' ? c.said : '' };
+  } catch { return null; }
 }
 
 const notFound = (res: Response): void => { res.status(404).json({ error: 'voice session not found' }); };

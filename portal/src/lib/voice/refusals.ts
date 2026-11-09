@@ -38,6 +38,19 @@ const MAX_NAMED = 30;
 
 type Ctx = { tenant: string; role?: string };
 
+/** The access-catalog item a refusal names (`requestItemId`, or its hint's `item`), else null. */
+export function requestItemOf(output: Record<string, unknown>): string | null {
+  if (typeof output['requestItemId'] === 'string' && output['requestItemId']) return output['requestItemId'];
+  const hint = output['hint'];
+  const item = hint && typeof hint === 'object' ? (hint as Record<string, unknown>)['item'] : null;
+  return typeof item === 'string' && item ? item : null;
+}
+
+/** G27: what the model does with a refusal that names a request it can file. */
+export function fileRequestNext(item: string): string {
+  return `The user lacks the access this needs. Say in one sentence what is missing and offer to file the access request. If they say yes, call create with kind "access-request" and fields { item: "${item}", justification: their reason in their own words }; say the request id it returns, and offer to try the original request again once the approval comes in (the portal tells you when a notification arrives). ${NO_REPEAT}`;
+}
+
 /** The enum a tool's main argument takes in this workspace: [the argument's words, the values]. */
 function allowed(tool: string, ctx: Ctx): [string, string[]] | null {
   const t = ctx.tenant;
@@ -86,6 +99,9 @@ export function refusalNext(tool: string, output: Record<string, unknown>, ctx: 
     return `${REF_SHAPE} To find one, list or search that kind first.${allowedClause('list', ctx)} ${NO_REPEAT}`;
   }
   if (offersAccess && (code === 'role' || code === 'no-grant' || code === 'other')) {
+    // G27: where create files an access request, the refusal's item is a turn of its own: offer, file on yes, retry once approved.
+    const item = requestItemOf(output);
+    if (item && createKinds(ctx.tenant).includes('access-request')) return fileRequestNext(item);
     return `The user lacks the access this needs: tell them, and offer to ask for access with the request this result names. ${NO_REPEAT}`;
   }
   switch (code) {

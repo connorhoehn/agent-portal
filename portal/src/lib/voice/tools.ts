@@ -32,7 +32,7 @@ import { PAGE_ROWS_MAX, type PageRow, type PublishedPage } from './pageContext.t
 import { inboundRef, type InboundMemory } from './inbound.ts';
 import { waitingOn } from '../../pages/projects/budgetAccessModel.ts';
 import type { AccessRequest } from '../accessRequests';
-import { activityScopes, budgetScopes, getParts, listKinds, navigatePageIds, openKinds, summaryKinds, searchRecordTypes, voiceToolSpec, SEARCH_ACTIONS, type JsonSchema, type VoiceToolSpec } from './catalogue.ts';
+import { activityScopes, budgetScopes, createKinds, getParts, listKinds, navigatePageIds, openKinds, summaryKinds, searchRecordTypes, voiceToolSpec, SEARCH_ACTIONS, type JsonSchema, type VoiceToolSpec } from './catalogue.ts';
 import { withNext } from './refusals.ts';
 import { collectionOf, factsOf, fill, kindSpec, parseRef, recordOf, shapeRow, type KindSpec, type Rec, type ShapedRow } from './kinds.ts';
 
@@ -1735,7 +1735,9 @@ export const accessRequestHref = (itemId: string): string => `/access/requests/n
 export function socialGrantRefusal(ctx: Pick<ToolContext, 'tenant' | 'socialRequestItemId'>, fallback: string): ToolResult {
   const item = ctx.tenant !== 'social' ? ctx.socialRequestItemId : null;
   if (!item) return refused(fallback);
-  return refused("You don't have Social access here. I can open the access request.", {
+  // G27: where create files access requests the voice offers to file it; elsewhere it opens the request.
+  return refused(createKinds(ctx.tenant).includes('access-request') ? "You don't have Social access here. I can file the access request for you." : "You don't have Social access here. I can open the access request.", {
+    requestItemId: item,
     hint: {
       label: 'Request Social access', href: accessRequestHref(item), item,
       note: 'The request is filed in the Access workspace; switching to it ends this voice session.',

@@ -11,8 +11,8 @@
   "pages": "portal/src/components/shell/portalCommands.ts",
   "catalogue": "middleware/src/lib/voice/catalogue.ts",
   "out": "docs/voice-tool-inventory.json",
-  "capturedAt": "2026-11-09T00:43:39.061Z",
-  "serverHandlerSha": "d9abf3b028322b75c7fb53d8c81ee0b32cb8c0ffcb35fb64e0b2e39b30504211"
+  "capturedAt": "2026-11-09T00:52:34.463Z",
+  "serverHandlerSha": "8aff2aaf75c4e9e7879c207594e5221454ac28fc8fc47156f77ca96f0c465f45"
  },
  "summary": {
   "routes": 841,
@@ -749,7 +749,7 @@
    ],
    "mapsTo": "useNavigate() to the palette entry's path, the kept row's href, or the kind's href built from a typed ref; a name through the kind's list read (list's routes)",
    "routes": [],
-   "line": 638
+   "line": 641
   },
   {
    "name": "search",
@@ -803,7 +803,7 @@
      "path": "/api/access/search/answer"
     }
    ],
-   "line": 658
+   "line": 661
   },
   {
    "name": "list",
@@ -1041,7 +1041,7 @@
      "path": "/api/access/audit"
     }
    ],
-   "line": 676
+   "line": 679
   },
   {
    "name": "get",
@@ -1279,7 +1279,7 @@
      "path": "/api/access/reviews/:id"
     }
    ],
-   "line": 697
+   "line": 700
   },
   {
    "name": "computer",
@@ -1338,7 +1338,7 @@
      "path": "/api/local-compute/nodes/:nodeId/work"
     }
    ],
-   "line": 710
+   "line": 713
   },
   {
    "name": "summary",
@@ -1436,7 +1436,7 @@
      "path": "/api/access/summary"
     }
    ],
-   "line": 733
+   "line": 736
   },
   {
    "name": "budget",
@@ -1486,7 +1486,7 @@
      "path": "/api/observability/cost/summary"
     }
    ],
-   "line": 746
+   "line": 749
   },
   {
    "name": "activity",
@@ -1515,7 +1515,7 @@
      "path": "/api/search"
     }
    ],
-   "line": 760
+   "line": 763
   },
   {
    "name": "message",
@@ -1546,7 +1546,7 @@
      "path": "/api/social/plane/work-sharing"
     }
    ],
-   "line": 773
+   "line": 776
   },
   {
    "name": "call",
@@ -1577,7 +1577,7 @@
      "path": "/api/social/plane/search"
     }
    ],
-   "line": 789
+   "line": 792
   },
   {
    "name": "set_status",
@@ -1593,7 +1593,7 @@
    ],
    "mapsTo": "usePresence('<tenant>:lobby') (the shell's tenant lobby, manifest presenceLobby) then usePresence('social:lobby') with a Social grant: setStatus(status) and updateMetadata({ statusMessage })",
    "routes": [],
-   "line": 804
+   "line": 807
   },
   {
    "name": "queue_work",
@@ -1810,7 +1810,7 @@
      "path": "/api/pipelines/runs/:id/events"
     }
    ],
-   "line": 816
+   "line": 819
   },
   {
    "name": "decide",
@@ -1919,7 +1919,7 @@
      "path": "/api/assessment/drafts/:runId/discard"
     }
    ],
-   "line": 837
+   "line": 840
   },
   {
    "name": "create",
@@ -1991,7 +1991,7 @@
      "path": "/api/access/delegations"
     }
    ],
-   "line": 852
+   "line": 855
   },
   {
    "name": "update",
@@ -2133,7 +2133,7 @@
      "path": "/api/access/delegations/:id/end"
     }
    ],
-   "line": 883
+   "line": 888
   },
   {
    "name": "access_request_status",
@@ -2163,7 +2163,7 @@
      "path": "/api/access/approvals"
     }
    ],
-   "line": 905
+   "line": 910
   }
  ],
  "navigatePages": [
@@ -3843,9 +3843,9 @@
   {"method":"DELETE","path":"/api/__mock/scope/:id","source":"src/routes/mock-control.ts:755","declaredAt":"src/routes/mock-control.ts:755","stale":false,"snapshot":true,"tenants":["any"],"kind":"dev","family":"dev","cedarAction":null,"actions":[],"machineAuth":true,"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"dev"}},
   {"method":"GET","path":"/api/__mock/scope/:id","source":"src/routes/mock-control.ts:749","declaredAt":"src/routes/mock-control.ts:749","stale":false,"snapshot":true,"tenants":["any"],"kind":"dev","family":"dev","cedarAction":null,"actions":[],"machineAuth":true,"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"dev"}},
   {"method":"GET","path":"/api/__mock/state","source":"src/routes/mock-control.ts:549","declaredAt":"src/routes/mock-control.ts:549","stale":false,"snapshot":true,"tenants":["any"],"kind":"dev","family":"dev","cedarAction":null,"actions":[],"machineAuth":true,"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"dev"}},
-  {"method":"POST","path":"/api/access-requests/envelope","source":"src/routes/access-requests-quick.ts:79","declaredAt":"src/routes/access-requests-quick.ts:79","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"access","cedarAction":null,"actions":[],"floor":["QuickAccessRequest"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"create","note":"the in-tenant quick request"}},
-  {"method":"GET","path":"/api/access-requests/mine","source":"src/routes/access-requests-quick.ts:98","declaredAt":"src/routes/access-requests-quick.ts:98","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"access","cedarAction":null,"actions":[],"floor":["QuickAccessRequest"],"writePolicy":null,"pageId":null,"coveredBy":["access_request_status"],"v2":{"decision":"read","tool":"access_request_status","note":"mapsTo"}},
-  {"method":"POST","path":"/api/access-requests/quick","source":"src/routes/access-requests-quick.ts:59","declaredAt":"src/routes/access-requests-quick.ts:59","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"access","cedarAction":null,"actions":[],"floor":["QuickAccessRequest"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"create","note":"the in-tenant quick request"}},
+  {"method":"POST","path":"/api/access-requests/envelope","source":"src/routes/access-requests-quick.ts:88","declaredAt":"src/routes/access-requests-quick.ts:88","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"access","cedarAction":null,"actions":[],"floor":["QuickAccessRequest"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"create","note":"the in-tenant quick request"}},
+  {"method":"GET","path":"/api/access-requests/mine","source":"src/routes/access-requests-quick.ts:107","declaredAt":"src/routes/access-requests-quick.ts:107","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"access","cedarAction":null,"actions":[],"floor":["QuickAccessRequest"],"writePolicy":null,"pageId":null,"coveredBy":["access_request_status"],"v2":{"decision":"read","tool":"access_request_status","note":"mapsTo"}},
+  {"method":"POST","path":"/api/access-requests/quick","source":"src/routes/access-requests-quick.ts:68","declaredAt":"src/routes/access-requests-quick.ts:68","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"access","cedarAction":null,"actions":[],"floor":["QuickAccessRequest"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"create","note":"the in-tenant quick request"}},
   {"method":"GET","path":"/api/access/approvals","source":"src/routes/access.ts:337","declaredAt":"src/routes/access.ts:337","stale":false,"snapshot":true,"tenants":["access"],"kind":"read","family":"access","cedarAction":"DecideAccess","actions":["DecideAccess"],"holders":["access/access-admin","access/approver"],"writePolicy":null,"pageId":null,"coveredBy":["list","decide","access_request_status"],"v2":{"decision":"read","tool":"list","note":"mapsTo"}},
   {"method":"GET","path":"/api/access/audit","source":"src/routes/access.ts:351","declaredAt":"src/routes/access.ts:351","stale":false,"snapshot":true,"tenants":["access"],"kind":"read","family":"access","cedarAction":"ViewAccess","actions":["ViewAccess"],"holders":["access/access-admin","access/approver","access/requester"],"writePolicy":null,"pageId":null,"coveredBy":["list"],"v2":{"decision":"read","tool":"list","note":"mapsTo"}},
   {"method":"GET","path":"/api/access/beneficiaries","source":"src/routes/access.ts:740","declaredAt":"src/routes/access.ts:740","stale":false,"snapshot":true,"tenants":["access"],"kind":"read","family":"access","cedarAction":"RequestAccess","actions":["RequestAccess"],"holders":["access/access-admin","access/approver","access/requester"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
@@ -4614,8 +4614,8 @@
   {"method":"GET","path":"/api/voice/sessions","source":"src/routes/voice-log.ts:91","declaredAt":"src/routes/voice-log.ts:91","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"voice","cedarAction":null,"actions":[],"floor":["VoiceNavigate"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"reading your own voice session log (list, one, latest, export) is a debugging read: the page or curl, never by voice"}},
   {"method":"POST","path":"/api/voice/sessions","source":"src/routes/voice.ts:169","declaredAt":"src/routes/voice.ts:169","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"voice","cedarAction":"VoiceNavigate","actions":[],"floor":["VoiceNavigate"],"bodyActions":["VoiceNavigate"],"holders":["access/access-admin","access/approver","access/requester","assessment/assessor","assessment/lead-assessor","assessment/program-lead","orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme","pipelines/author","pipelines/operator","pipelines/pipeline-admin","social/community-admin","social/moderator","social/participant"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the dock's own mint, events and close"}},
   {"method":"GET","path":"/api/voice/sessions/:id","source":"src/routes/voice-log.ts:114","declaredAt":"src/routes/voice-log.ts:114","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"voice","cedarAction":null,"actions":[],"floor":["VoiceNavigate"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"reading your own voice session log (list, one, latest, export) is a debugging read: the page or curl, never by voice"}},
-  {"method":"POST","path":"/api/voice/sessions/:id/close","source":"src/routes/voice.ts:433","declaredAt":"src/routes/voice.ts:433","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"voice","cedarAction":null,"actions":[],"floor":["VoiceNavigate"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the dock's own mint, events and close"}},
-  {"method":"POST","path":"/api/voice/sessions/:id/events","source":"src/routes/voice.ts:366","declaredAt":"src/routes/voice.ts:366","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"voice","cedarAction":null,"actions":[],"floor":["VoiceNavigate"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the dock's own mint, events and close"}},
+  {"method":"POST","path":"/api/voice/sessions/:id/close","source":"src/routes/voice.ts:448","declaredAt":"src/routes/voice.ts:448","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"voice","cedarAction":null,"actions":[],"floor":["VoiceNavigate"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the dock's own mint, events and close"}},
+  {"method":"POST","path":"/api/voice/sessions/:id/events","source":"src/routes/voice.ts:381","declaredAt":"src/routes/voice.ts:381","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"voice","cedarAction":null,"actions":[],"floor":["VoiceNavigate"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"the dock's own mint, events and close"}},
   {"method":"GET","path":"/api/voice/sessions/:id/export","source":"src/routes/voice-log.ts:120","declaredAt":"src/routes/voice-log.ts:120","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"voice","cedarAction":null,"actions":[],"floor":["VoiceNavigate"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"reading your own voice session log (list, one, latest, export) is a debugging read: the page or curl, never by voice"}},
   {"method":"GET","path":"/api/voice/sessions/latest","source":"src/routes/voice-log.ts:107","declaredAt":"src/routes/voice-log.ts:107","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"voice","cedarAction":null,"actions":[],"floor":["VoiceNavigate"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"reading your own voice session log (list, one, latest, export) is a debugging read: the page or curl, never by voice"}},
   {"method":"GET","path":"/api/work-graph/initiatives/:id/graph","source":"src/routes/work-graph.ts:37","declaredAt":"src/routes/work-graph.ts:37","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},

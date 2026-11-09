@@ -29,7 +29,7 @@ import { parseRef, type Rec } from './kinds.ts';
 import { DELEGATION_REASON_MIN, DELEGATION_WINDOWS, JUSTIFICATION_MIN, delegationBody } from '../accessRequests.ts';
 import { matchByName } from './work.ts';
 import {
-  ambiguous, done, failed, findByName, once, pageRowNamed, qs, readFailure, readJson, refused, socialGrantRefusal,
+  ambiguous, deliveryIdFor, done, failed, findByName, once, pageRowNamed, qs, readFailure, readJson, refused, socialGrantRefusal,
   type CardAnswer, type ConfirmPlan, type ToolContext, type ToolResult, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 
@@ -379,7 +379,24 @@ const runDecide: VoiceToolRunner = async (_args, ctx, planned, answer?: CardAnsw
 // persona's own read returns), the page button's route. A channel is joined
 // only with PostMessage (the route's own gate), left with the Social grant.
 
-interface ActPlan { key: string; send: Send; done: string; result: Record<string, unknown>; href?: string }
+interface ActPlan {
+  key: string; send: Send; done: string; result: Record<string, unknown>; href?: string;
+  /** Where the route's answer names the record it made (an access request's `id`): spoken back as `id` (G27). */
+  idAt?: string;
+  /** A meeting (G25) sends no request of its own: the time and the room go back to the thread it answers. */
+  meeting?: MeetingPlan;
+}
+
+/** G25: the initiative's huddle room (the meeting-rooms lobby) and a time; there is no calendar object to create. */
+interface MeetingPlan { initiativeId: string; initiative: string; time: string; href: string; reply: { channel: string; to: string; replyTo?: { messageId: string; author: string; text: string; timestamp?: string } } | null }
+
+/** What the voice says about a meeting: the portal keeps no calendar, so nothing is booked beyond the room. */
+export const NO_CALENDAR = 'There is no calendar in the portal, so nothing is booked; the room is the initiative\'s huddle, started from its page.';
+
+/** The justification an access request filed by voice carries outside Access: the user's own words, at most 200 characters. */
+export function voiceJustification(tenant: string, said: string): string {
+  return `Requested by voice in the ${tenant} workspace: ${said.replace(/\s+/g, ' ').trim().slice(0, 200)}`;
+}
 
 const MAX_CREATE = { justification: JUSTIFICATION_MIN, reason: DELEGATION_REASON_MIN };
 
@@ -445,7 +462,27 @@ async function planCreateKind(kind: string, f: Rec, ctx: ToolContext): Promise<{
       return card(`Create ${label}`, [priv ? 'Private: only the people you add see it.' : 'Open to everyone in Social.', ...(description ? [description] : [])],
         { key: `POST ${url} ${name.toLowerCase()}`, send: { method: 'POST', url, body }, done: `Created ${label}`, result: { kind, name }, href: kind === 'channel' ? '/social/channels' : kind === 'team' ? '/social/teams' : '/social/rooms' });
     }
+    case 'meeting': {
+      const found = await findByName(ctx, 'initiative', String(f['initiative']));
+      if ('result' in found) return found;
+      const time = String(f['time']).replace(/\s+/g, ' ').trim().slice(0, 40);
+      const href = `/iq/projects/${enc(found.row.id)}`;
+      let reply: MeetingPlan['reply'] = null;
+      if (f['thread'] != null) {
+        const item = ctx.inbox?.find(String(f['thread'])) ?? null;
+        if (!item?.channel) return { result: refused('There is no inbound message with that ref to answer; pass the ref the portal gave ("message:<id>"), or leave thread out.') };
+        if (!ctx.social) return { result: socialGrantRefusal(ctx, 'The reply goes through Social, which this session cannot reach.') };
+        reply = { channel: item.channel, to: item.sender || 'them', ...(item.kind === 'message' ? { replyTo: { messageId: item.id, author: item.sender || 'Unknown', text: item.text.slice(0, 280), timestamp: new Date(item.at).toISOString() } } : {}) };
+      }
+      const meeting: MeetingPlan = { initiativeId: found.row.id, initiative: found.row.title, time, href, reply };
+      return card(`Meet at ${time} in the ${found.row.title} huddle`, [
+        reply ? `Tells ${reply.to}, in your conversation: the time and the room.` : 'Nobody is told: name the message it answers to send them the time.',
+        NO_CALENDAR,
+      ], { key: `meeting ${found.row.id} ${time} ${reply?.channel ?? ''}`, send: { method: 'POST', url: '', body: {} }, done: `Meeting at ${time} in the ${found.row.title} huddle`, result: { kind: 'meeting', at: time, room: `${found.row.title} huddle`, calendar: false }, href, meeting });
+    }
     case 'access-request': {
+      if (ctx.tenant !== 'access') return planQuickAccessRequest(ctx, f, card);
+      if (f['duration'] == null) return { result: refused('Say how long: 8 hours, 24 hours, 7 days or 30 days.') };
       const justification = String(f['justification']).trim();
       if (justification.length < MAX_CREATE.justification) return { result: refused(`Say why in at least ${JUSTIFICATION_MIN} characters; the approvers read it.`) };
       const found = await findByName(ctx, 'catalog-item', String(f['item']));
@@ -524,15 +561,59 @@ async function act(ctx: ToolContext, plan: ActPlan, verb: string): Promise<ToolR
       if (res.status === 400 || res.status === 409 || res.status === 422) return refused(`Not ${verb}: ${error ?? `the server refused it (${res.status})`}.`);
       return failed(`Not ${verb} (HTTP ${res.status})${error ? `: ${error}` : ''}.`);
     }
-    return done(verb === 'created' ? 'created' : 'updated', { ...plan.result, ...(plan.href ? { href: plan.href } : {}) }, plan.done);
+    const id = plan.idAt ? str(dig(body, plan.idAt)) : undefined;
+    return done(verb === 'created' ? 'created' : 'updated', { ...plan.result, ...(plan.href ? { href: plan.href } : {}), ...(id ? { id, say: `${plan.done}: request ${id}. I'll tell you when it is decided.` } : {}) },
+      id ? `${plan.done} (${id})` : plan.done);
   }, () => done(verb === 'created' ? 'created' : 'updated', { ...plan.result, already: true }, `${plan.done} already; nothing was sent again`));
 }
 
 const runCreate: VoiceToolRunner = async (_args, ctx, planned) => {
   const plan = planned as ActPlan | undefined;
   if (!plan?.send) return refused('Nothing is created until the user confirms its card.');
+  if (plan.meeting) return runMeeting(ctx, plan, plan.meeting);
   return act(ctx, plan, 'created');
 };
+
+/**
+ * G27: outside Access, the request a refusal named, filed through the quick route (the Access tenant's own
+ * fileRequest: the same chain, refusals and approvers' bells), which takes only this workspace's items and the
+ * Social plane's own request item. One card; the user's words are the justification.
+ */
+async function planQuickAccessRequest(ctx: ToolContext, f: Rec, card: (title: string, detail: string[], act: ActPlan) => { plan: ConfirmPlan }): Promise<{ plan: ConfirmPlan } | { result: ToolResult }> {
+  const item = String(f['item']).trim();
+  if (!/^[a-z][a-z-]*:[A-Za-z0-9:._-]{1,200}$/.test(item)) return { result: refused('Pass the item exactly as the refusal named it (its requestItemId, such as "role:social:moderator").') };
+  const said = String(f['justification']).trim();
+  if (said.length < 3) return { result: refused('Ask the user why they need it, in a few words; the approvers read it.') };
+  const duration = typeof f['duration'] === 'string' ? f['duration'] : '7d';
+  // An open request for the same item is the route's own 409; reading it first keeps the card honest.
+  const mine = await readJson<{ items?: Array<{ id: string; status: string }> }>(ctx, `/api/access-requests/mine?${qs({ itemId: item })}`);
+  if (!mine.ok) return { result: mine.status === 403 ? refused(`"${item}" is requested in its own workspace, not from here.`) : readFailure('your access requests', mine.status) };
+  const open = (mine.body.items ?? []).find((r) => r.status === 'pending' || r.status === 'in_review' || r.status === 'submitted');
+  if (open) return { result: refused(`You already asked for it: request ${open.id} is ${open.status}. I will say when it is decided.`, { existing: `request:${open.id}` }) };
+  const body = { itemId: item, justification: voiceJustification(ctx.tenant, said), duration };
+  return card(`Request ${item} for ${duration === '7d' ? 'a week' : duration}`, [said, 'Your manager and the item\'s steward approve it in Access; the access arrives on this session once approved.'],
+    { key: `POST /api/access-requests/quick ${item} ${duration}`, send: { method: 'POST', url: '/api/access-requests/quick', body }, done: `Requested ${item}`, result: { kind: 'access-request', item }, idAt: 'id' });
+}
+
+/** G25: the meeting's reply in its thread (the time and the room), or nothing to send; the result says no calendar exists. */
+async function runMeeting(ctx: ToolContext, plan: ActPlan, m: MeetingPlan): Promise<ToolResult> {
+  return once(ctx, plan.key, async () => {
+    if (m.reply) {
+      const social = ctx.social;
+      if (!social) return socialGrantRefusal(ctx, 'The reply goes through Social, which this session cannot reach.');
+      const text = `Let's meet at ${m.time} in the ${m.initiative} huddle: ${m.href} (no calendar invite; start or join the huddle from that page).`;
+      try {
+        await social.send({ channel: m.reply.channel, text, deliveryId: deliveryIdFor(ctx, plan.key), ...(m.reply.replyTo ? { replyTo: m.reply.replyTo } : {}) });
+      } catch (err) {
+        return failed(`The meeting note to ${m.reply.to} was not confirmed: ${(err as Error)?.message ?? 'no receipt'}.`);
+      }
+    }
+    return done('meeting', {
+      ...plan.result, href: m.href, ...(m.reply ? { told: m.reply.to } : {}),
+      say: `${m.reply ? `I told ${m.reply.to}: ${m.time} in the ${m.initiative} huddle. ` : ''}${NO_CALENDAR}`,
+    }, plan.done);
+  }, () => done('meeting', { ...plan.result, already: true }, `${plan.done} already; nothing was sent again`));
+}
 
 // ── update ──
 

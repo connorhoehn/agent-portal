@@ -17,7 +17,11 @@
 //     the caller stands in their own tenant;
 //   * the caller is always requester AND beneficiary (no beneficiaryId);
 //   * only catalog items whose tenant is the caller's CURRENT tenant — a Work
-//     session cannot file for an Assessment role from here (403);
+//     session cannot file for an Assessment role from here (403) — and one
+//     more: the Social role the embedded Social plane itself names as the way
+//     to post here (GET /api/social/plane/capabilities `requestItemId`,
+//     socialPostRequestItemId), since the plane is part of every workspace and
+//     its refusal offers exactly that request (G10, voice G27);
 //   * it never decides, withdraws or provisions anything.
 // Wire shapes: docs/access-tenant-api.md "Quick request".
 
@@ -27,17 +31,22 @@ import { requireSession, resolveSession } from '../lib/authz.js';
 import { envelopeItemId } from '../lib/access/items.js';
 import { listCatalog } from '../providers/access.js';
 import { bodyOf, context, fileRequest, ownRequestsFor, parseSubmission, type Ctx } from './access.js';
+import { socialPostRequestItemId } from './social-plane.js';
 import type { Request, Response } from 'express';
 
 export const accessQuickRouter = Router();
 
 accessQuickRouter.use(requireSession('QuickAccessRequest'));
 
-/** The catalog item `itemId`, refused unless it belongs to the caller's current tenant. Sends the refusal and returns null. */
-function itemInTenant(req: Request, res: Response, itemId: string): ReturnType<typeof listCatalog>[number] | null {
+/**
+ * The catalog item `itemId`, refused unless it belongs to the caller's current tenant (or, with `planeItem`, is
+ * the Social plane's own request item for this caller). Sends the refusal and returns null.
+ */
+async function itemInTenant(req: Request, res: Response, itemId: string, opts: { planeItem?: boolean } = {}): Promise<ReturnType<typeof listCatalog>[number] | null> {
   const session = resolveSession(req)!;
   const item = listCatalog().find((i) => i.id === itemId);
   if (!item) { res.status(400).json({ error: `Unknown catalog item: ${itemId}` }); return null; }
+  if (item.tenant !== session.tenant && opts.planeItem && session.tenant !== 'social' && item.id === await socialPostRequestItemId(session.sub)) return item;
   if (item.tenant !== session.tenant) {
     res.status(403).json({ error: `${item.title} belongs to another workspace; request it from there, or in Access` });
     return null;
@@ -58,7 +67,7 @@ async function requesterContext(res: Response, req: Request): Promise<Ctx | null
 // POST /api/access-requests/quick  { itemId, justification, duration }
 accessQuickRouter.post('/quick', asyncHandler(async (req, res) => {
   const sub = parseSubmission(bodyOf(req, ['itemId', 'justification', 'duration']));
-  if (!itemInTenant(req, res, sub.itemId)) return;
+  if (!await itemInTenant(req, res, sub.itemId, { planeItem: true })) return;
   const ctx = await requesterContext(res, req);
   if (!ctx) return;
   const out = await fileRequest(ctx, { itemId: sub.itemId, justification: sub.justification, duration: sub.duration });
@@ -81,7 +90,7 @@ accessQuickRouter.post('/envelope', asyncHandler(async (req, res) => {
   const initiativeId = typeof b['initiativeId'] === 'string' ? b['initiativeId'].trim() : '';
   if (!initiativeId) throw new ValidationError('initiativeId is required');
   const itemId = envelopeItemId(initiativeId);
-  const item = itemInTenant(req, res, itemId);
+  const item = await itemInTenant(req, res, itemId);
   if (!item) return;
   const sub = parseSubmission({
     itemId, justification: b['justification'], duration: b['duration'] ?? item.defaultDuration,
@@ -100,7 +109,7 @@ accessQuickRouter.get('/mine', asyncHandler(async (req, res) => {
   if (unknown.length) { res.status(400).json({ error: `Unknown parameter${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}` }); return; }
   const itemId = typeof req.query['itemId'] === 'string' ? req.query['itemId'].trim() : '';
   if (!itemId) { res.status(400).json({ error: 'itemId is required' }); return; }
-  if (!itemInTenant(req, res, itemId)) return;
+  if (!await itemInTenant(req, res, itemId, { planeItem: true })) return;
   const ctx = await requesterContext(res, req);
   if (!ctx) return;
   res.setHeader('Cache-Control', 'no-store');

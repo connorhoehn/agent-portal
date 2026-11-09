@@ -68,8 +68,10 @@ test('send_chat_message without PostMessage: refused before any read, with the a
   const { card, result } = await call('message', { target: { kind: 'team', name: 'platform' }, text: "I'm out today" },
     toolContext({ role: 'member', fetch, social: null, deny: ['PostMessage', 'StartCall'], socialRequestItemId: ITEM }));
   assert.equal(card, false);
+  // G27: in orgiq the voice files the request itself (create access-request); the hint to open it stays for the page.
+  assert.equal(result.output['reason'], "You don't have Social access here. I can file the access request for you.");
+  assert.equal(result.output['requestItemId'], ITEM);
   assert.equal(result.outcome, 'refused');
-  assert.equal(result.output['reason'], "You don't have Social access here. I can open the access request.");
   const hint = result.output['hint'] as { href: string; item: string; note: string };
   assert.ok(hint.href.startsWith('/access/requests/new?'), hint.href);
   assert.equal(hint.href, `/access/requests/new?item=${encodeURIComponent(ITEM)}`);

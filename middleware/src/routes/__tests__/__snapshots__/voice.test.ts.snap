@@ -906,7 +906,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Create a record of one kind through the form its page uses, with the fields that kind takes. The user confirms on a card that shows exactly what will be created (an access request's approvers and conflicts first). Text the user dictated (a title, a comment, a justification) goes in as they said it. The kinds here and their fields: work-item (initiative, title, type?); comment (on, text); saved-search (name, query); sprint (initiative, name, startsOn, endsOn).",
+    "description": "Create a record of one kind through the form its page uses, with the fields that kind takes. The user confirms on a card that shows exactly what will be created (an access request's approvers and conflicts first). Text the user dictated (a title, a comment, a justification) goes in as they said it. The kinds here and their fields: work-item (initiative, title, type?); comment (on, text); saved-search (name, query); sprint (initiative, name, startsOn, endsOn); meeting (initiative, time, thread?); access-request (item, justification, duration?).",
     "name": "create",
     "parameters": {
       "additionalProperties": false,
@@ -929,7 +929,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
               ],
             },
             "duration": {
-              "description": "access-request: how long.",
+              "description": "access-request: how long (outside Access, a week when not said).",
               "enum": [
                 "8h",
                 "24h",
@@ -950,21 +950,21 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
               ],
             },
             "initiative": {
-              "description": "work-item, sprint: the initiative, as the user named it or by the ref a result gave.",
+              "description": "work-item, sprint, meeting: the initiative, as the user named it or by the ref a result gave.",
               "type": [
                 "string",
                 "null",
               ],
             },
             "item": {
-              "description": "access-request: the catalog item, as the user named it or by the ref a result gave.",
+              "description": "access-request: the catalog item, as the user named it or by the ref a result gave; outside Access, exactly the requestItemId a refusal named.",
               "type": [
                 "string",
                 "null",
               ],
             },
             "justification": {
-              "description": "access-request: why, in the user's words (at least 20 characters).",
+              "description": "access-request: why, in the user's words (in Access at least 20 characters).",
               "type": [
                 "string",
                 "null",
@@ -1024,6 +1024,20 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
                 "null",
               ],
             },
+            "thread": {
+              "description": "meeting: the inbound message it answers ("message:<id>"); the time and the room go back there.",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "time": {
+              "description": "meeting: when, as the user said it ("5 pm", "tomorrow at 10").",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
             "title": {
               "description": "work-item: its title, as the user said it.",
               "type": [
@@ -1074,6 +1088,8 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
             "item",
             "justification",
             "duration",
+            "time",
+            "thread",
             "delegate",
             "window",
             "reason",
@@ -1087,6 +1103,8 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
             "comment",
             "saved-search",
             "sprint",
+            "meeting",
+            "access-request",
           ],
           "type": "string",
         },

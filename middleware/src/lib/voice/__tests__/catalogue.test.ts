@@ -355,7 +355,7 @@ describe('tenant scoping (§6)', () => {
   it('create and update (V2-11) ask first, take one field set per kind, and gate each on its form\'s or button\'s action', () => {
     expect(voiceTool('create')).toMatchObject({ confirm: true, action: null, kind: 'action', backing: 'work', tenants: ['orgiq', 'social', 'access'] });
     expect(voiceTool('update')).toMatchObject({ confirm: true, action: null, kind: 'action', backing: 'work', tenants: ['orgiq', 'social', 'assessment', 'pipelines', 'access'] });
-    expect(createKinds('orgiq')).toEqual(['work-item', 'comment', 'saved-search', 'sprint']);
+    expect(createKinds('orgiq')).toEqual(['work-item', 'comment', 'saved-search', 'sprint', 'meeting', 'access-request']);
     expect(createKinds('social')).toEqual(['channel', 'team', 'room']);
     expect(createKinds('access')).toEqual(['access-request', 'delegation']);
     for (const t of ['assessment', 'pipelines']) expect(toolsForTenant(t).some((x) => x.name === 'create')).toBe(false);
@@ -374,7 +374,7 @@ describe('tenant scoping (§6)', () => {
     expect(u({ ref: 'work-item:w-1', fields: { assigneeId: 'u-1' } })).toBe(false);
     const created = toolsForTenant('access').find((x) => x.name === 'create')!;
     expect((created.parameters.properties['kind'] as { enum: string[] }).enum).toEqual(['access-request', 'delegation']);
-    expect(created.description).toContain('access-request (item, justification, duration)');
+    expect(created.description).toContain('access-request (item, justification, duration?)');
     expect(toolsForTenant('pipelines').find((x) => x.name === 'update')!.description).toContain('run (status)');
   });
 

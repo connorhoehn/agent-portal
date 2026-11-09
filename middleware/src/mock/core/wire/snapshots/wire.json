@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-09T00:43:33.324Z",
-  "serverHandlerSha": "d9abf3b028322b75c7fb53d8c81ee0b32cb8c0ffcb35fb64e0b2e39b30504211",
+  "capturedAt": "2026-11-09T00:52:26.586Z",
+  "serverHandlerSha": "8aff2aaf75c4e9e7879c207594e5221454ac28fc8fc47156f77ca96f0c465f45",
   "baseUrl": "http://127.0.0.1:3992",
   "personas": [
     "orgiq/admin",
@@ -3000,14 +3000,13 @@
         "boxes[].status": "string",
         "boxes[].stopsInMs": "number",
         "boxes[].taskMsLeft": "number",
-        "boxes[].taskStartedAt": "string",
         "boxes[].tokensUsed": "number"
       },
       "values": {
         "boxes[].status": [
           "idle",
+          "provisioning",
           "running",
-          "stopped",
           "waiting"
         ]
       }
@@ -3894,11 +3893,15 @@
         "$[].key": [
           "ORG-AUTH-1",
           "ORG-AUTH-2",
+          "ORG-AUTH-3",
           "ORG-AUTH-5",
+          "ORG-AUTH-7",
           "ORG-AUTH-8",
+          "ORG-AUTH-9",
           "ORG-COST-2",
           "ORG-COST-3",
           "ORG-COST-6",
+          "ORG-DS-1",
           "ORG-DS-3",
           "ORG-DS-4",
           "ORG-DSAPI-1",
@@ -3906,20 +3909,15 @@
           "ORG-DSAPI-4",
           "ORG-FS-1",
           "ORG-FS-3",
+          "ORG-FS-4",
           "ORG-INF-1",
-          "ORG-INF-2",
-          "ORG-INF-3",
           "ORG-LAKE-2",
           "ORG-LAKE-3",
           "ORG-LAKE-4",
           "ORG-LLM-1",
           "ORG-LLM-10",
-          "ORG-LLM-2",
           "ORG-LLM-3",
           "ORG-LLM-4",
-          "ORG-LLM-5",
-          "ORG-LLM-7",
-          "ORG-LLM-9",
           "ORG-MOB-2",
           "ORG-MOB-3",
           "ORG-MOB-4",
@@ -3936,6 +3934,7 @@
           "ORG-RTA-2",
           "ORG-RTA-3",
           "ORG-RTA-5",
+          "ORG-SOC2-1",
           "ORG-SOC2-2",
           "ORG-SOC2-3",
           "ORG-SOC2-4",
@@ -3982,7 +3981,15 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "criteria": "array"
+        "criteria": "array",
+        "criteria[]": "object",
+        "criteria[].createdAt": "string",
+        "criteria[].done": "boolean",
+        "criteria[].id": "string",
+        "criteria[].position": "number",
+        "criteria[].text": "string",
+        "criteria[].updatedAt": "string",
+        "criteria[].workItemId": "string"
       },
       "values": {}
     },
@@ -4027,7 +4034,6 @@
         "capabilities.datastore.mandatory": "boolean",
         "capabilities.datastore.ok": "boolean",
         "capabilities.jobSchema": "object",
-        "capabilities.jobSchema.error": "string",
         "capabilities.jobSchema.mandatory": "boolean",
         "capabilities.jobSchema.ok": "boolean",
         "datastore": "object",
@@ -4049,7 +4055,7 @@
       },
       "values": {
         "status": [
-          "degraded"
+          "ok"
         ]
       }
     },
@@ -5966,7 +5972,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "number",
+        "points[].judgeP50": "null|number",
         "windowHours": "number"
       },
       "values": {}
@@ -10539,27 +10545,9 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "runs": "array",
-        "runs[]": "object",
-        "runs[].botId": "null",
-        "runs[].durationMs": "number",
-        "runs[].error": "null",
-        "runs[].findings": "number",
-        "runs[].finishedAt": "string",
-        "runs[].id": "string",
-        "runs[].startedAt": "string",
-        "runs[].status": "string",
-        "runs[].sweep": "string",
-        "runs[].tenant": "string"
+        "runs": "array"
       },
-      "values": {
-        "runs[].status": [
-          "ok"
-        ],
-        "runs[].tenant": [
-          "orgiq"
-        ]
-      }
+      "values": {}
     },
     "GET /health": {
       "persona": "orgiq/admin",
@@ -11008,7 +10996,6 @@
         "running",
         "staged",
         "stale",
-        "stopped",
         "submitted",
         "superseded",
         "unproven",
