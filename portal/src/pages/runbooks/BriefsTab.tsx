@@ -11,6 +11,7 @@ import { relativeTime } from '../../lib/relativeTime';
 import { RunBriefPanel } from './RunBriefPanel';
 import { RunbooksListFrame } from './RunbooksListFrame';
 import type { RunbooksOutletContext } from './RunbooksModule';
+import { briefsEmpty } from './emptyPick';
 import { briefGroups, briefHref, briefRows, briefsCommandAdapter, runPageHref, shortSha } from './runbooksModel';
 import type { BriefSummary } from './types';
 import { Button } from '@connorhoehn/ui-components/shared';
@@ -73,7 +74,11 @@ export default function BriefsTab() {
         </EditorShell>
       ) : (
         <Stack gap="md" className="w-full max-w-3xl px-6 pb-6">
-          <EmptyState title={feed.isLoading ? 'Loading…' : 'Choose a brief'} description="Pick a run from the list to read the exact text it was given." />
+          {feed.isLoading && !feed.data ? <EmptyState title="Loading…" /> : (() => {
+            const pick = briefsEmpty(rows, briefHref, '/iq/work');
+            return <EmptyState title={pick.title} description={pick.description}
+              {...(pick.action ? { actionLabel: pick.action.label, onAction: () => navigate(pick.action!.href) } : {})} />;
+          })()}
         </Stack>
       )}
     </RunbooksListFrame>

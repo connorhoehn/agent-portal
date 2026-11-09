@@ -8,6 +8,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useRunbookNames } from './useRunbookNames';
 import { ProposalReview } from './ProposalReview';
 import { RunbooksListFrame } from './RunbooksListFrame';
+import { proposalsEmpty } from './emptyPick';
 import type { RunbooksOutletContext } from './RunbooksModule';
 import {
   PROPOSAL_STATUS_FILTERS, proposalGroups, proposalHref, proposalRows, proposalsCommandAdapter,
@@ -86,7 +87,11 @@ export default function ProposalsTab() {
         />
       ) : (
         <Stack gap="md" className="w-full max-w-3xl px-6 pb-6">
-          <EmptyState title={feed.isLoading ? 'Loading…' : openCount ? 'Choose a proposal' : 'Nothing to review'} description="Pick a proposal from the list to read its diff." />
+          {feed.isLoading && !feed.data ? <EmptyState title="Loading…" /> : (() => {
+            const pick = proposalsEmpty(rows, proposalHref, '/iq/runbooks');
+            return <EmptyState title={pick.title} description={pick.description}
+              {...(pick.action ? { actionLabel: pick.action.label, onAction: () => navigate(pick.action!.href) } : {})} />;
+          })()}
         </Stack>
       )}
     </RunbooksListFrame>

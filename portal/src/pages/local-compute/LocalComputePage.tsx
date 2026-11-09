@@ -714,7 +714,9 @@ export default function LocalComputePage() {
                     with it, so the page no longer explains the same state
                     twice in two different voices. */}
                 {upNext.length === 0 ? (
-                  <InlinePlaceholder>
+                  // The one action that fills it, where this viewer may dispatch (UX walk, 9 November 2026).
+                  <InlinePlaceholder data-testid="machine-queue-empty"
+                    {...(canDispatch ? { action: <Button size="sm" variant="secondary" onClick={() => setTab('hand')}>Assign work</Button> } : {})}>
                     Nothing queued for this machine. Work reaches it from a bot's schedule or an initiative's work item, in the kinds it registered
                     {selectedNode.jobKinds.length > 0 ? ` (${selectedNode.jobKinds.join(', ')})` : ''}.
                   </InlinePlaceholder>
