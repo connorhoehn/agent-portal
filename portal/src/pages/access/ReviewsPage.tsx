@@ -7,6 +7,7 @@
 // opens the campaign's record, where its owner or an access admin decides
 // each item. The command composer only searches, filters, refreshes and opens.
 
+import { ofTotal } from '../../lib/plural';
 import {
   Button,
   Chip,
@@ -129,7 +130,7 @@ export default function ReviewsPage() {
             label: 'Review filters',
             search: { value: query, onChange: setQuery, placeholder: 'Search reviews', 'aria-label': 'Search reviews' },
             filters: [{ id: 'status', label: 'Status', value: status, onChange: setStatus, options: STATUS_OPTIONS }],
-            summary: data ? `${rows.length} of ${all.length} campaigns` : undefined,
+            summary: data ? `${ofTotal(rows.length, all.length, 'campaign')}` : undefined,
             notices: ['A campaign’s owner or an access admin keeps or revokes each standing grant; a revoke becomes a pre-approved revocation request. You see the items you may decide, or your own.'],
             onRefresh: refresh, refreshing: isLoading,
           }} />

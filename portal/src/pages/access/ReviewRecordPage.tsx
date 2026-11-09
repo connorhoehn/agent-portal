@@ -12,6 +12,7 @@
 // (collection commands over the items — search, filter, refresh, open) docks
 // at the bottom like every other access collection; it never decides.
 
+import { ofTotal } from '../../lib/plural';
 import {
   Button,
   CheckIcon,
@@ -168,7 +169,7 @@ function ReviewRecord({ id }: { id: string }) {
             label: 'Review item filters',
             search: { value: query, onChange: setQuery, placeholder: 'Search items', 'aria-label': 'Search review items' },
             filters: [{ id: 'decision', label: 'Decision', value: decision, onChange: setDecision, options: DECISION_OPTIONS }],
-            summary: `${rows.length} of ${all.length} items`,
+            summary: `${ofTotal(rows.length, all.length, 'item')}`,
             notices: [review.can.decide
               ? 'Keep or revoke each grant. A revoke removes it at once through a pre-approved revocation request; nobody decides their own grant.'
               : `${page.description} Only the campaign’s owner or an access admin decides; you see ${all.length ? 'the items you may see' : 'no item of yours here'}.`],

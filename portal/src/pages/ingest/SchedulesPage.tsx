@@ -1,3 +1,4 @@
+import { ofTotal } from '../../lib/plural';
 import { useState } from 'react';
 import {
   Button, Card, CardHeader, Chip, CollectionToolbar, ConfirmDialog, FormField, FormRow, IconButton,
@@ -120,7 +121,7 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
 
         <CollectionToolbar label="Schedule filters"
           search={{ value: query, onChange: setQuery, placeholder: 'Search schedules', 'aria-label': 'Search schedules' }}
-          summary={data ? `${shown.length} of ${schedules.length} schedules` : undefined}
+          summary={data ? `${ofTotal(shown.length, schedules.length, 'schedule')}` : undefined}
           onRefresh={refresh} refreshing={isLoading} />
 
         {failure && !data ? (

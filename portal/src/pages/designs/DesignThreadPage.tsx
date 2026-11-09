@@ -9,6 +9,7 @@
 // structural, not prompt-deep), and an APPROVED review is immutable — a
 // change of direction is a new design that supersedes this one.
 
+import { plural } from '../../lib/plural';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import {
@@ -205,7 +206,7 @@ export default function DesignThreadPage() {
             size="sm"
             items={[
               thread.orgProjectName,
-              `${thread.postCount} posts`,
+              plural(thread.postCount, 'post'),
               thread.openQuestions > 0 ? `${thread.openQuestions} open question${thread.openQuestions === 1 ? '' : 's'}` : null,
             ]}
           />

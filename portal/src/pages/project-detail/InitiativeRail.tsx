@@ -14,6 +14,7 @@
 // bot roster (configuration) stays behind its own gate and only the Bots view
 // reads it.
 
+import { plural } from '../../lib/plural';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
@@ -219,7 +220,7 @@ export function InitiativeRail({
               columns={columns}
               keyField={(r) => r.run.id}
               loading={isLoading && !data}
-              emptyMessage={`No agent runs in the last ${days} days — authorize one from an open story or bug.`}
+              emptyMessage={`No agent runs in the last ${plural(days, 'day')} — authorize one from an open story or bug.`}
               data-testid="initiative-agents-runs"
             />
           </>

@@ -16,6 +16,7 @@
 // documents land in storage, storage syncs into a knowledge base, and agents
 // retrieve from it.
 
+import { plural, pluralWord } from '../../lib/plural';
 import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
@@ -451,8 +452,8 @@ export default function KnowledgeHomePage() {
       {behind && syncTarget && (
         <Banner variant="warning" className="mb-5">
           {neverRan
-            ? `${stored.toLocaleString()} documents are in storage but have never been indexed.`
-            : `The knowledge base is behind storage — it last indexed ${(syncTarget.lastSyncScanned ?? 0).toLocaleString()} of ${stored.toLocaleString()} documents.`}
+            ? `${plural(stored, 'document')} ${pluralWord(stored, 'is', 'are')} in storage but ${pluralWord(stored, 'has', 'have')} never been indexed.`
+            : `The knowledge base is behind storage — it last indexed ${(syncTarget.lastSyncScanned ?? 0).toLocaleString()} of ${plural(stored, 'document')}.`}
           {' '}Agents can only cite what the knowledge base has read. Syncing starts a Bedrock ingestion job over{' '}
           <strong>{syncTarget.name}</strong>; it runs in the background and costs embedding tokens once per document
           that changed.

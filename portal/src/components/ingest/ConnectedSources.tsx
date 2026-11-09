@@ -14,6 +14,7 @@
 // would move expertise scores, and scores that move for reasons nobody
 // inspected are how a system stops being trusted.
 
+import { plural } from '../../lib/plural';
 import { useCallback, useState } from 'react';
 import {
   Button, Card, Chip, ConfirmDialog, EmptyState, EntityCell, FilterChip, FormField, Inline, Input,
@@ -317,7 +318,7 @@ export function ConnectedSources() {
                     {signals.rows.slice(0, 10).map((row) => (
                       <Inline key={row.login} gap="sm" className="px-2.5 py-1.5 border-b border-border last:border-b-0">
                         <EntityCell mono label={row.login} className="w-36 shrink-0" />
-                        <MetaLine size="xs" tone="secondary" className="w-16 shrink-0 tabular-nums" items={[`${row.commits} commits`]} />
+                        <MetaLine size="xs" tone="secondary" className="w-16 shrink-0 tabular-nums" items={[plural(row.commits, 'commit')]} />
                         <MetaLine
                           size="xs"
                           className="flex-1 min-w-0"

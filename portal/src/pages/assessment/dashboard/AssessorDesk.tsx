@@ -4,6 +4,7 @@
 // moves it next. The motion (cohort) is a filter on this table, not a
 // separate landing page — three cards that each said "2 teams" were a page
 // spent on a number the strip already carries.
+import { ofTotal } from '../../../lib/plural';
 import type React from 'react';
 import { useMemo, useState } from 'react';
 import {
@@ -171,7 +172,7 @@ export function AssessorDesk({
               { id: 'motion', label: 'Assessment motion', value: cohort === ALL ? '' : cohort, onChange: (v) => onCohortChange(v ? v as Cohort : ALL), options: motionOptions },
               { id: 'status', label: 'Status', value: status === ALL ? '' : status, onChange: (v) => setStatus(v || ALL), options: statusFilterOptions },
             ]}
-            summary={`${rows.length} of ${teams.length} teams`}
+            summary={`${ofTotal(rows.length, teams.length, 'team')}`}
             onRefresh={onRetry}
           />
 

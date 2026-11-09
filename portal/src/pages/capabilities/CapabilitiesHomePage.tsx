@@ -18,6 +18,7 @@
 // fallback that failed soft — all traced back to it, each diagnosed on its
 // own. One line here would have replaced all three.
 
+import { ofTotal } from '../../lib/plural';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
@@ -265,7 +266,7 @@ export default function CapabilitiesHomePage() {
       <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)] pb-[var(--ui-page-gutter)]">
       <CollectionToolbar label="Capability filters"
         search={{ value: query, onChange: setQuery, placeholder: 'Search capabilities', 'aria-label': 'Search capabilities' }}
-        summary={data ? `${rows.length} of ${caps.length} capabilities` : undefined}
+        summary={data ? `${ofTotal(rows.length, caps.length, 'capability', 'capabilities')}` : undefined}
         onRefresh={refresh} refreshing={isLoading} />
       {error && (
         <UnavailableNotice

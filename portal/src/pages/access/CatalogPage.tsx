@@ -4,6 +4,7 @@
 // from the actor's current grants. "Request" opens the wizard on that item; the
 // catalog itself changes nothing.
 
+import { ofTotal } from '../../lib/plural';
 import {
   Chip,
   CollectionToolbar,
@@ -103,7 +104,7 @@ export default function CatalogPage() {
             label: 'Catalog filters',
             search: { value: query, onChange: setQuery, placeholder: 'Search the catalog', 'aria-label': 'Search the catalog' },
             filters: [{ id: 'tenant', label: 'Workspace', value: tenant, onChange: setTenant, options: TENANT_OPTIONS }],
-            summary: data ? `${rows.length} of ${all.length} items` : undefined,
+            summary: data ? `${ofTotal(rows.length, all.length, 'item')}` : undefined,
             notices: mayRequest ? ['A sensitive item adds an access-admin step to its approval chain.'] : ['Your role can browse the catalog but not request from it.'],
             onRefresh: refresh, refreshing: isLoading,
           }} />

@@ -5,6 +5,7 @@
 // until "Save deck". In memory only, like the /summarize card — a reload loses
 // the card (a saved deck is kept and reachable from its page).
 
+import { plural } from '../../../lib/plural';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useFlowRun } from '../../../hooks/useFlowRun';
@@ -87,7 +88,7 @@ export default function SocialDeckCard({ runId, instruction, requestedBy, onPost
         {revision && status?.phase === 'completed' && (
           <PresentationView
             title={status.result?.title ?? 'Conversation deck'}
-            subtitle={`${status.result?.messageCount ?? 0} messages cited`}
+            subtitle={`${plural(status.result?.messageCount ?? 0, 'message')} cited`}
             revisions={[revision]} revisionId={revision.id} onRevisionChange={() => undefined}
             slideIndex={slideIndex} onSlideChange={setSlideIndex} maxSlideWidth={560}
             data-testid="social-deck-view" />

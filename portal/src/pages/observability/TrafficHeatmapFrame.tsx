@@ -6,6 +6,7 @@
 // template. Composed here once, fed pre-bucketed cell classes from
 // `trafficFormat.ts` (so no runtime `style=` is needed for the color scale).
 // ≤ 12 raw elements: 1 header-row grid + 1 per-day-row grid template (map) = 2.
+import { plural } from '../../lib/plural';
 import { Inline, Stack, T } from '@connorhoehn/ui-components/shared';
 import { heatmapBucketClass } from './trafficFormat';
 
@@ -53,8 +54,8 @@ export function TrafficHeatmapFrame({ grid, max }: { grid: number[][]; max: numb
               key={h}
               count={count}
               max={max}
-              title={`${DOW_LABELS[rIdx]} ${String(h).padStart(2, '0')}:00 — ${count} invocations`}
-              ariaLabel={`${DOW_LABELS[rIdx]} ${h}:00, ${count} invocations`}
+              title={`${DOW_LABELS[rIdx]} ${String(h).padStart(2, '0')}:00 — ${plural(count, 'invocation')}`}
+              ariaLabel={`${DOW_LABELS[rIdx]} ${h}:00, ${plural(count, 'invocation')}`}
             />
           ))}
         </div>

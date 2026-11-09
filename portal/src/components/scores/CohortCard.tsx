@@ -1,3 +1,4 @@
+import { plural } from '../../lib/plural';
 import { AccentStripe, Card, Chip, EntityCell, Histogram, Inline, MetaLine, SectionLabel, Stack, StatusDot, dataAccentProps } from '@connorhoehn/ui-components/shared';
 import { DEPT_COLORS } from './types';
 
@@ -77,7 +78,7 @@ export function CohortCard({ cohort }: CohortCardProps) {
               <Inline key={b.id} gap="xs" align="center">
                 <StatusDot size="sm" {...dataAccentProps(deptColor)} />
                 <MetaLine size="sm" items={[b.name]} />
-                <MetaLine size="xs" items={[`(touches ${b.departmentsTouched} teams)`]} />
+                <MetaLine size="xs" items={[`(touches ${plural(b.departmentsTouched, 'team')})`]} />
               </Inline>
             ))}
           </Stack>

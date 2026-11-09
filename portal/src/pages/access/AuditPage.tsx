@@ -4,6 +4,7 @@
 // every event, anyone else the events of the requests they may open (the
 // record's read rule) — and this page says so in its visible description.
 
+import { ofTotal } from '../../lib/plural';
 import { CollectionToolbar, DataTable, Stack } from '@connorhoehn/ui-components/shared';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -52,7 +53,7 @@ export default function AuditPage() {
             label: 'Audit filters',
             search: { value: query, onChange: setQuery, placeholder: 'Search events', 'aria-label': 'Search events' },
             filters: [{ id: 'kind', label: 'Event', value: kind, onChange: setKind, options: KIND_OPTIONS }],
-            summary: data ? `${rows.length} of ${all.length} events` : undefined,
+            summary: data ? `${ofTotal(rows.length, all.length, 'event')}` : undefined,
             notices: [scope],
             onRefresh: refresh, refreshing: isLoading,
           }} />

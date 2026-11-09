@@ -11,6 +11,7 @@
 // stands, with no search box (17 rows do not need one), and Discussion is the
 // shell's right pane, not a tab.
 
+import { ofTotal } from '../../../lib/plural.ts';
 import { hasOpenClaim, highestVerifiedLevel, type Dimension, type TeamCertification } from '../types.ts';
 
 /** The scorecard's tabs. Discussion is not one: it is the right pane. */
@@ -89,7 +90,7 @@ export function scorecardFacts(team: HeaderFactsInput, activeStepLabel?: string 
       label: 'assessed',
       value: `${team.dimensions_assessed}/${team.dimensions_total}`,
       tone: 'default',
-      title: `${team.dimensions_assessed} of ${team.dimensions_total} dimensions assessed`,
+      title: `${ofTotal(team.dimensions_assessed, team.dimensions_total, 'dimension')} assessed`,
       progress: null,
     },
     {

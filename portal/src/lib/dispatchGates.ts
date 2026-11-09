@@ -5,6 +5,7 @@
 // same refusal reads the same way in either place. Moved out of
 // EstimateDrawer.tsx (which re-exports them) so node tests can import them.
 
+import { plural } from './plural.ts';
 import { usd as money } from './format.ts';
 
 // ─── Types (the /api/bots/estimate contract) ─────────────────────────────────
@@ -115,7 +116,7 @@ export function overAllocationBody(over: OverAllocation): string {
       ? `This run is forecast at ${range}, but nothing has run on this model here yet — that range is a deliberately wide prior, not a measurement.`
       : over.confidence === 'run-history'
         ? `This run is forecast at ${range} from ${est.sampleCount} run${est.sampleCount === 1 ? '' : 's'} of run-level history — a bracket, not a figure scaled to this item's size.`
-        : `This run is forecast at ${range}${est.points != null ? ` for ${est.points} points` : ''}, from ${est.sampleCount} comparable pointed runs.`;
+        : `This run is forecast at ${range}${est.points != null ? ` for ${plural(est.points, 'point')}` : ''}, from ${plural(est.sampleCount, 'comparable pointed run')}.`;
   return `${ledger} ${forecast} Dispatching anyway spends over the allocation.`;
 }
 

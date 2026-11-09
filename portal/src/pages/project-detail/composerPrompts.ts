@@ -8,6 +8,7 @@
 // rows say. The Agent mode only ASKS (the read-only org agent on the Ask
 // page); dispatching a run stays in Run setup behind its capability gate.
 
+import { plural } from '../../lib/plural.ts';
 import type { ProjectSummary } from '../projects/types';
 import type { BriefFacts } from './briefModel.ts';
 import type { FlatWorkItem } from './projectFormat.ts';
@@ -197,7 +198,7 @@ function itemLine(r: FlatWorkItem): string {
 function initiativeLine(p: ProjectSummary): string {
   const parts: string[] = [p.status ?? 'no status'];
   if (p.ownerName) parts.push(`owner ${p.ownerName}`);
-  if (p.pointsDone != null && p.pointsTotal != null) parts.push(`${p.pointsDone}/${p.pointsTotal} points`);
+  if (p.pointsDone != null && p.pointsTotal != null) parts.push(`${p.pointsDone}/${plural(p.pointsTotal, 'point')}`);
   if (p.activeAgentRuns != null) parts.push(p.activeAgentRuns > 0 ? `${p.activeAgentRuns} running` : 'idle');
   return `- ${p.name} (${parts.join(', ')})`;
 }

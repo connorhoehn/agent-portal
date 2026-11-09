@@ -8,6 +8,7 @@
 // facts, the person link and the grant matrix, each with an explicit Save; a
 // grant change still confirms. Creating a user or tenant stays a header form.
 
+import { ofTotal } from '../../lib/plural';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
@@ -270,7 +271,7 @@ function UsersPage() {
         <Stack gap="md" className="min-w-0">
         <CollectionToolbar label="User filters"
           search={{ value: query, onChange: setQuery, placeholder: 'Search users…', 'aria-label': 'Search users' }}
-          summary={usersData ? `${shownUsers.length} of ${users.length} users` : undefined}
+          summary={usersData ? `${ofTotal(shownUsers.length, users.length, 'user')}` : undefined}
           onRefresh={load} refreshing={usersLoading} />
         <DataTable
           data={shownUsers}

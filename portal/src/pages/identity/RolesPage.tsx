@@ -1,3 +1,4 @@
+import { ofTotal } from '../../lib/plural';
 import { useMemo, useState } from 'react';
 import {
   T,
@@ -84,7 +85,7 @@ function RolesPage() {
       <Stack gap="md" className="min-w-0">
       <CollectionToolbar label="Permission matrix filters"
         search={{ value: query, onChange: setQuery, placeholder: 'Search actions', 'aria-label': 'Search actions' }}
-        summary={`${shownActions.length} of ${actions.length} actions`}
+        summary={`${ofTotal(shownActions.length, actions.length, 'action')}`}
         onRefresh={() => void refresh()} refreshing={isLoading} />
       <DetailSection title="Permission matrix" first>
         {schemaError && (

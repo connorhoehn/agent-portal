@@ -52,6 +52,7 @@
 //
 // No React and only `.ts` imports, so `node --test` runs it.
 
+import { plural } from '../plural.ts';
 import type { Notification } from '@connorhoehn/realtime-modules/client';
 import { QUEUE_WORK_ACTIONS, type QueueWorkKind } from './catalogue.ts';
 import { DEFAULT_DEVBOX_MODEL, DEVBOX_MODELS } from '../devboxModels.ts';
@@ -652,7 +653,7 @@ async function runDispatch(plan: WorkPlan, items: readonly DispatchItem[], ctx: 
   return done('work_queued', {
     workKind: 'dispatch', title: plan.title, state: 'queued', count: queued.length, jobs: queued,
     next: 'Say they are queued and that you will say as each is done. The portal shows their progress.',
-  }, `${queued.length} dispatches queued`);
+  }, `${plural(queued.length, 'dispatch', 'dispatches')} queued`);
 }
 
 function runKindResultOf(q: { jobId: string; title: string; href: string } | undefined, plan: WorkPlan): ToolResult {

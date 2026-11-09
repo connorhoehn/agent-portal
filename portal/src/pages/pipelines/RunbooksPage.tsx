@@ -5,6 +5,7 @@
 // Dry-run (RunPipeline holders only) queues a governed run on the existing
 // queue; a row opens the runbook's definition.
 
+import { ofTotal } from '../../lib/plural';
 import {
   CollectionToolbar,
   Stack,
@@ -81,7 +82,7 @@ export default function RunbooksPage() {
         filters: [{ id: 'promotion', label: 'Promotion', value: filter, onChange: setFilter, options: [
           { value: '', label: 'All runbooks' }, { value: 'passed', label: 'Dry-run passed' },
           { value: 'needs-dry-run', label: 'Needs dry-run' }, { value: 'promoted', label: 'Promoted' },
-        ] }], summary: data ? `${rows.length} of ${all.length} runbooks · ${rows.filter(r => r.runbook.promotionToSkill.ok).length} with a completed dry-run` : undefined,
+        ] }], summary: data ? `${ofTotal(rows.length, all.length, 'runbook')} · ${rows.filter(r => r.runbook.promotionToSkill.ok).length} with a completed dry-run` : undefined,
         onRefresh: refresh, refreshing: isLoading,
       }} />
 

@@ -11,6 +11,7 @@
 // is stored. A source whose reads all answer 401/403/404, or that the session's
 // tenant does not have, is not offered in the source control.
 
+import { plural } from '../../lib/plural.ts';
 import type { VoiceLogRange } from '../voice/voiceLogModel.ts';
 
 export const LOGGING_PATH = '/iq/logging';
@@ -267,4 +268,4 @@ export function lifecycleEvents(marks: ReadonlyArray<{ at: string | null | undef
     .map(({ m }, i) => ({ seq: i + 1, at: m.at ?? null, kind: m.kind, data: compact(m.data) }));
 }
 
-export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+export { plural };

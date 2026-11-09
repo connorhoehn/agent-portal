@@ -17,6 +17,7 @@ import {
 import { useComputeOptional } from '@connorhoehn/ui-components/compute';
 import { useCapabilities } from '../../lib/capabilities';
 import { useSession } from '../../lib/auth';
+import { plural } from '../../lib/plural';
 import { COMPUTER_LAB_PATH, LOCAL_COMPUTE_PATH, canOpenComputerLab } from '../../lib/devboxAccess';
 import { DISPATCHED_RUNS_PATH } from '../../pages/work/dispatchedRuns';
 import { isLocalMachineId } from '../compute/localMachines';
@@ -24,7 +25,6 @@ import { useActiveRuns } from './ActiveRunsBadge';
 import { useLocalNodes } from './LocalComputeBadge';
 import { GatewayStatusBadge } from './GatewayStatusBadge';
 
-const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
 export function FleetIndicator() {
   const navigate = useNavigate();

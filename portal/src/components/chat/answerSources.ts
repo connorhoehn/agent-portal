@@ -28,6 +28,8 @@
 //     rather than a silent absence. With zero documents ingested today, that is
 //     the case a user actually hits.
 
+import { plural } from '../../lib/plural.ts';
+
 /** What kind of thing a chip points at. Only `document`/`web` have a URI. */
 export type SourceKind = 'document' | 'graph' | 'web';
 
@@ -418,7 +420,7 @@ export function provenanceNote(
     parts.push(
       provenance.unverifiedClaims === 1
         ? 'removed 1 citation with no source behind it'
-        : `removed ${provenance.unverifiedClaims} citations with no source behind them`,
+        : `removed ${plural(provenance.unverifiedClaims, 'citation')} with no source behind them`,
     );
   }
   if (parts.length === 0 && sources.length === 0) {

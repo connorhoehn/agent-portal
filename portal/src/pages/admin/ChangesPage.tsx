@@ -12,6 +12,7 @@
 // nothing of the collaboration furniture a human-authored PR carries, because
 // there is no team discussing this change, only a decision to make about it.
 
+import { ofTotal } from '../../lib/plural';
 import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
@@ -176,7 +177,7 @@ export default function ChangesPage() {
           <CollectionToolbar
             label="Change filters"
             search={{ value: query, onChange: setQuery, placeholder: 'Search title, codebase or initiative', 'aria-label': 'Search changes' }}
-            summary={data ? `${shown.length} of ${changes.length} changes` : undefined}
+            summary={data ? `${ofTotal(shown.length, changes.length, 'change')}` : undefined}
             onRefresh={refresh}
             refreshing={isLoading}
           />

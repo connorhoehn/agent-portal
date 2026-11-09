@@ -7,6 +7,7 @@
 // Before slice 3 of docs/assessment-ux-goal.md this page had no view of the
 // portfolio by dimension: a program lead could see 41 dimensions at target
 // but not which ones, nor which teams' claims run ahead of their evidence.
+import { ofTotal } from '../../lib/plural';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
@@ -311,7 +312,7 @@ export default function ReportsPage() {
                     onChange: (v) => setHeatmapMotion(v ? v as Cohort : 'all'),
                     options: [{ value: '', label: 'All motions' }, ...MOTIONS.map((m) => ({ value: m.cohort, label: m.title }))],
                   }]}
-                  summary={`${heatmapTeams.length} of ${teams.length} teams`}
+                  summary={`${ofTotal(heatmapTeams.length, teams.length, 'team')}`}
                 />
                 <MaturityHeatmap teams={heatmapTeams} onSelectTeam={openTeam} filtered={heatmapFiltered} />
                 <CollectionCommandHost adapter={heatmapAdapter} />

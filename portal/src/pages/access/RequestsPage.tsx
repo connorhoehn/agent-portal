@@ -3,6 +3,7 @@
 // (GET /api/access/requests?scope=mine|reports|all). A row opens the record;
 // "New request" opens the wizard. Nothing here decides or withdraws.
 
+import { ofTotal } from '../../lib/plural';
 import { Button, CollectionToolbar, DataTable, PlusIcon, Stack } from '@connorhoehn/ui-components/shared';
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -98,7 +99,7 @@ function RequestsWorkspace() {
               }] : []),
               { id: 'status', label: 'Status', value: status, onChange: setStatus, options: STATUS_OPTIONS },
             ],
-            summary: data ? `${rows.length} of ${all.length} requests` : undefined,
+            summary: data ? `${ofTotal(rows.length, all.length, 'request')}` : undefined,
             notices: decides ? ['“My reports’” lists requests for the people who report to you.'] : [],
             onRefresh: refresh, refreshing: isLoading,
           }} />

@@ -11,6 +11,7 @@
 // and because every link is labelled you can answer "where did this file come
 // from" later, which anonymous credentials can never tell you.
 
+import { plural } from '../../lib/plural';
 import { useCallback, useState } from 'react';
 import {
   Button, Card, Chip, EntityCell, FormField, Inline, Input, MetaLine, SectionLabel, Select, Stack,
@@ -211,7 +212,7 @@ export function ShareLinks({ kbSlug }: { kbSlug: string | null }) {
               <MetaLine
                 size="xs"
                 items={[
-                  `${l.filesUsed}/${l.maxFiles} files`,
+                  `${l.filesUsed}/${plural(l.maxFiles, 'file')}`,
                   l.lastUsedAt ? `last used ${when(l.lastUsedAt)}` : 'never used',
                   l.status === 'live' ? `expires ${when(l.expiresAt)}` : null,
                   l.createdBy ? `by ${l.createdByName ?? l.createdBy}` : null,

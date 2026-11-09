@@ -1,3 +1,4 @@
+import { ofTotal } from '../../lib/plural';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { Card, CardHeader, ChevronIcon, Chip, CollectionToolbar, IconButton, Inline, InlineAlert, InlinePlaceholder, LoadingState, PageSection, ProgressBar, RepeatIcon, Stack, StatStrip, T, Table, TableBody, TableHead, TableRow, TableTd, TableTh } from '@connorhoehn/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
@@ -123,7 +124,7 @@ function DataSourcesPage() {
       <Stack gap="md" className="min-w-0">
         <CollectionToolbar label="KB sync filters"
           search={{ value: query, onChange: setQuery, placeholder: 'Search data sources and jobs', 'aria-label': 'Search data sources and jobs' }}
-          summary={sourcesData || jobsData ? `${shownSources.length} of ${sources.length} sources · ${shownJobs.length} of ${jobs.length} jobs` : undefined}
+          summary={sourcesData || jobsData ? `${ofTotal(shownSources.length, sources.length, 'source')} · ${ofTotal(shownJobs.length, jobs.length, 'job')}` : undefined}
           onRefresh={refreshAll} refreshing={sourcesLoading || jobsLoading} />
         {actionMessage && (
           <InlineAlert

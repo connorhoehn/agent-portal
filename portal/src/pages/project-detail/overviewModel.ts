@@ -12,6 +12,7 @@
 // read is its own state, never the "Nothing is blocked" copy.
 
 import { sumForestPoints, type FlatWorkItem } from './projectFormat.ts';
+import { plural, pluralWord } from '../../lib/plural.ts';
 import { isBlocked, workRows } from './workListModel.ts';
 import type { ProjectDetail, WorkItemTree } from './types';
 
@@ -22,16 +23,15 @@ export function money(n: number): string {
   return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-const plural = (n: number, one: string, many = `${one}s`) => (n === 1 ? one : many);
 
 /** "5 points", "1 point". */
 export function pointsLabel(n: number): string {
-  return `${n} ${plural(n, 'point')}`;
+  return `${n} ${pluralWord(n, 'point')}`;
 }
 
 /** The row column's short form: "5 pts", "1 pt". */
 export function ptsLabel(n: number): string {
-  return `${n} ${plural(n, 'pt')}`;
+  return `${n} ${pluralWord(n, 'pt')}`;
 }
 
 /** First name for prose ("what Eli needs"); null when there is no name. */
@@ -60,12 +60,12 @@ function pointsStat(tree: WorkItemTree[] | null): OverviewStat {
   const { done, total } = sumForestPoints(tree);
   // 0/0 is "nothing sized yet", not 0% — no bar to draw.
   if (total <= 0) return { id: 'points', value: '0', label: 'points planned', muted: true };
-  return { id: 'points', value: String(done), label: `/ ${total} points delivered`, progress: Math.min(1, done / total) };
+  return { id: 'points', value: String(done), label: `/ ${plural(total, 'point')} delivered`, progress: Math.min(1, done / total) };
 }
 
 function agentsStat(runs: number | null | undefined): OverviewStat {
   if (runs == null) return { id: 'agents', value: '—', label: 'agents running', muted: true };
-  return { id: 'agents', value: String(runs), label: `${plural(runs, 'agent')} running`, muted: runs === 0 };
+  return { id: 'agents', value: String(runs), label: `${pluralWord(runs, 'agent')} running`, muted: runs === 0 };
 }
 
 /** "$1.73 of $95 spent"; with no allocation, just "$1.73 spent". */
@@ -92,7 +92,7 @@ export function headerStatsLine(project: ProjectDetail, tree: WorkItemTree[] | n
   const parts: string[] = [];
   if (tree != null) {
     const { done, total } = sumForestPoints(tree);
-    if (total > 0) parts.push(`${done} / ${total} points delivered`);
+    if (total > 0) parts.push(`${done} / ${plural(total, 'point')} delivered`);
   }
   if (project.agentSpendUsd != null) parts.push(`${money(project.agentSpendUsd)} spent`);
   return parts.length > 0 ? parts.join(' · ') : null;

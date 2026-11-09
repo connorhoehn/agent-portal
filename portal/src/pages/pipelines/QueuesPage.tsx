@@ -1,3 +1,4 @@
+import { ofTotal } from '../../lib/plural';
 import { useUrlState } from '../../lib/useUrlState';
 import { useGatewayOptional } from '@connorhoehn/realtime-modules/client';
 import { Banner, BranchIcon, Chip, CollapsibleSection, CollectionToolbar, DataTable, IconButton, Inline, KeyValue, ListIcon, PageSection, Stack, StatStrip, T, Tooltip, type DataTableColumn } from '@connorhoehn/ui-components/shared';
@@ -44,7 +45,7 @@ export default function QueuesPage() {
           { value: '', label: 'All queues' }, { value: 'available', label: 'Available' }, { value: 'missing', label: 'Not created' },
           { value: 'unavailable', label: 'Unavailable' }, { value: 'dead-letter', label: 'Dead-letter' }, { value: 'work', label: 'Work queues' },
         ] }],
-        summary: data ? `${filtered.length} of ${rows.length} queues · ${data.backend === 'http' ? 'Message-queue service' : 'In-process queue'}` : 'Reading queue metadata…',
+        summary: data ? `${ofTotal(filtered.length, rows.length, 'queue')} · ${data.backend === 'http' ? 'Message-queue service' : 'In-process queue'}` : 'Reading queue metadata…',
         notices: data ? [`Checked ${new Date(data.observedAt).toLocaleTimeString()}. Refreshes every 15 seconds.`] : [],
         onRefresh: refresh, refreshing: isLoading,
       }} />

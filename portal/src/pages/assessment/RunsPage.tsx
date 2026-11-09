@@ -6,6 +6,7 @@
 // source before reserving a run (docs/assessment-tenant.md "Agentic support"). Launch responses are mapped per docs/agent-runs.md §1: 202 toasts
 // and adds the row, 400/403/409/429 each get their own explanation.
 
+import { ofTotal } from '../../lib/plural';
 import { useEffect, useRef, useState } from 'react';
 import {
   Button,
@@ -342,7 +343,7 @@ export default function RunsPage() {
         <EmptyState title="No activity yet" />
       ) : (
         <>
-        {statusFilter && <T size="xs" tone="secondary">{`Showing ${shown.length} of ${runs.length} runs with status ${statusFilter}. Clear the status in the pipeline runs command box to see them all.`}</T>}
+        {statusFilter && <T size="xs" tone="secondary">{`Showing ${ofTotal(shown.length, runs.length, 'run')} with status ${statusFilter}. Clear the status in the pipeline runs command box to see them all.`}</T>}
         <DataTable<RunRecord>
           data={shown}
           keyField={(r) => r.id}

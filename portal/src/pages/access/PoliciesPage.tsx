@@ -6,6 +6,7 @@
 // as the list rail beside it; PUT /api/access/policies/:id) — never a drawer.
 // Others see no edit control at all — absent, not disabled.
 
+import { ofTotal } from '../../lib/plural';
 import {
   Button,
   Chip,
@@ -186,7 +187,7 @@ export default function PoliciesPage() {
             label: 'Policy filters',
             search: { value: query, onChange: setQuery, placeholder: 'Search policies', 'aria-label': 'Search policies' },
             filters: [{ id: 'severity', label: 'Severity', value: severity, onChange: setSeverity, options: SEVERITY_OPTIONS }],
-            summary: data ? `${rows.length} of ${all.length} policies` : undefined,
+            summary: data ? `${ofTotal(rows.length, all.length, 'policy', 'policies')}` : undefined,
             notices: [mayEdit
               ? 'A blocking conflict stops a request at submit unless an access admin records an override.'
               : 'Only an access admin changes a policy. A blocking conflict stops a request at submit.'],

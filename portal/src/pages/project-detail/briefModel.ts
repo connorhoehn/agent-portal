@@ -9,6 +9,7 @@
 // could not read is the honest-numbers class-3 lie.
 
 import { firstName } from './overviewModel.ts';
+import { pluralWord } from '../../lib/plural.ts';
 import { isBlocked } from './workListModel.ts';
 import type { FlatWorkItem } from './projectFormat.ts';
 import type { ProjectDecision, WorkItemPriority } from './types';
@@ -85,7 +86,6 @@ export interface BriefRow {
   action: { label: string; disabledReason: string | null } | null;
 }
 
-const plural = (n: number, one: string, many = `${one}s`) => (n === 1 ? one : many);
 
 function row(
   id: BriefRowId,
@@ -145,7 +145,7 @@ export function buildBrief(input: BriefInputs): BriefModel {
       (n) => `${n} linked`,
       () => ({ label: 'Add context', disabledReason: denied })),
     row('notes', 'Planning notes', notes, 'notes', 'No notes added',
-      (n) => `${n} ${plural(n, 'note')}`,
+      (n) => `${n} ${pluralWord(n, 'note')}`,
       () => ({ label: 'Add a note', disabledReason: denied })),
   ];
   return { rows, showTable: !rows.every((r) => r.filled) };

@@ -23,6 +23,7 @@
 // ("close_the_claim" | "advance_practice" | "answer_question") is copied
 // verbatim from the source app; the other shapes invented different strings.
 
+import { ofTotal } from '../../lib/plural.ts';
 import type { ChipTone } from '@connorhoehn/ui-components/shared';
 
 // ─── Cohorts / motions ──────────────────────────────────────────────────────
@@ -197,7 +198,7 @@ export const teamCertificationHeadline = (
   if (cert.headline) return cert.headline;
   if (!cert.assessed) return 'Not yet assessed';
   if (cert.at_or_above_target >= 1) {
-    return `Verified to Level ${cert.target_level} on ${cert.at_or_above_target} of ${cert.applicable} dimensions`;
+    return `Verified to Level ${cert.target_level} on ${ofTotal(cert.at_or_above_target, cert.applicable, 'dimension')}`;
   }
   const max = highestVerifiedLevel(cert);
   return max === null
@@ -218,7 +219,7 @@ export const teamCertificationSubline = (
     parts.push(`Claims above verification on ${open} dimension${open === 1 ? '' : 's'} — evidence requested`);
   }
   const total = cert.applicable;
-  if (cert.assessed < total) parts.push(`${cert.assessed} of ${total} dimensions assessed`);
+  if (cert.assessed < total) parts.push(`${ofTotal(cert.assessed, total, 'dimension')} assessed`);
   return parts.length > 0 ? parts.join(' · ') : null;
 };
 

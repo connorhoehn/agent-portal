@@ -1,3 +1,4 @@
+import { plural, pluralWord } from '../../lib/plural';
 import type React from 'react';
 import { Link } from 'react-router';
 import {
@@ -136,7 +137,7 @@ function deriveNextSteps(
   if (failing.length > 0) {
     steps.push({
       label: `Read the failures on ${failing.map((a) => a.name).join(', ')}`,
-      detail: `${failing.reduce((n, a) => n + a.errorsLast24h, 0)} errored invocations in the last 24h.`,
+      detail: `${plural(failing.reduce((n, a) => n + a.errorsLast24h, 0), 'errored invocation')} in the last 24h.`,
       // Invocations seeds its filters from the query (`invocationsFilters.ts`),
       // so the link lands on the failures it names, not on the full tail.
       to: failing.length === 1
@@ -155,7 +156,7 @@ function deriveNextSteps(
     steps.push({
       label: 'Agents ran but emitted no traces',
       detail:
-        `${summary.totalInvocations24h} invocations in 24h and zero spans in X-Ray. Check that ` +
+        `${plural(summary.totalInvocations24h, 'invocation')} in 24h and zero spans in X-Ray. Check that ` +
         `the agent images install aws-opentelemetry-distro rather than the vanilla distro, and ` +
         `that X-Ray Transaction Search is enabled on the account.`,
       to: '/admin/observability/invocations',
@@ -166,7 +167,7 @@ function deriveNextSteps(
   if (agents.length > 0 && summary && summary.totalInvocations24h === 0) {
     steps.push({
       label: 'Nothing has run in 24h',
-      detail: `${agents.length} runtimes are deployed but idle. Ask something to exercise them.`,
+      detail: `${plural(agents.length, 'runtime')} ${pluralWord(agents.length, 'is', 'are')} deployed but idle. Ask something to exercise them.`,
       to: '/iq/invoke',
       urgent: false,
     });
@@ -253,7 +254,7 @@ function SummaryPage() {
           value={runtimes.length || '—'}
           hint={(
             <Stack gap="none">
-              <T size="sm">{blind ? 'unknown' : `${healthy} healthy${runtimes.length > healthy ? ` · ${runtimes.length - healthy} not` : ''}`}</T>
+              <T size="sm">{blind ? 'unknown' : `${healthy} healthy${runtimes.length > healthy ? ` · ${runtimes.length - healthy} not healthy` : ''}`}</T>
               <T size="xs" className="text-text-tertiary" wrap>
                 {blind
                   ? 'Cannot list runtimes while the backend is unreachable.'
@@ -286,7 +287,7 @@ function SummaryPage() {
           danger={!blind && (summary?.totalErrors24h ?? 0) > 0}
           hint={(
             <Stack gap="none">
-              <T size="sm">{blind ? 'no data' : `of ${summary?.totalInvocations24h ?? 0} runs`}</T>
+              <T size="sm">{blind ? 'no data' : `of ${plural(summary?.totalInvocations24h ?? 0, 'run')}`}</T>
               <T size="xs" className="text-text-tertiary">System failures, not answer quality.</T>
               <Link to="/admin/observability/invocations?status=error" className="text-xs text-primary hover:underline">
                 Open Runs →
@@ -312,7 +313,7 @@ function SummaryPage() {
                 hint={
                   a.invocationsLast24h === 0
                     ? 'no runs in 24h'
-                    : `p50 ${a.latencyP50Ms}ms${a.errorsLast24h > 0 ? ` · ${a.errorsLast24h} errors` : ''}`
+                    : `p50 ${a.latencyP50Ms}ms${a.errorsLast24h > 0 ? ` · ${plural(a.errorsLast24h, 'error')}` : ''}`
                 }
               />
             ))}

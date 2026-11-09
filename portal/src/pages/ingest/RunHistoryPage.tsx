@@ -2,6 +2,7 @@
 // page, `/admin/ingest/history/:crawlId` (`crawlRunHref`), the run list as the
 // flush list rail beside it (docs/layout-cascade.md, "Records open as pages;
 // selections stay put") — never a drawer.
+import { ofTotal } from '../../lib/plural';
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { Card, CollectionToolbar, PageSection, Stack } from '@connorhoehn/ui-components/shared';
@@ -105,7 +106,7 @@ function RunHistoryPage() {
       <Stack gap="md" className="min-w-0">
         <CollectionToolbar label="Crawl run filters"
           search={{ value: query, onChange: setQuery, placeholder: 'Search crawl runs', 'aria-label': 'Search crawl runs' }}
-          summary={crawlsData ? `${shownCrawls.length} of ${historyCrawls.length} runs` : undefined}
+          summary={crawlsData ? `${ofTotal(shownCrawls.length, historyCrawls.length, 'run')}` : undefined}
           onRefresh={refreshCrawls} refreshing={crawlsLoading} />
         <Card padding="md">
           {crawlsFailure && !crawlsData ? (

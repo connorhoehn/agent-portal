@@ -2,6 +2,7 @@
 // The library owns pane layout and rich editing. The gateway owns canvas
 // content; the BFF retains source-bound comments, reactions and sync actions.
 
+import { ofTotal } from '../../../lib/plural';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
@@ -329,7 +330,7 @@ function KnowledgeExplorerContent({ mode }: KnowledgeExplorerProps) {
     const pulledItems = activitySection
       ? pulledEventsForSection(sse.events, activitySection.key).map((e) => ({
         id: `pull-${e.ts}`, actor: 'Confluence sync', action: 'pulled',
-        subject: `${e.files_pulled} of ${e.pages} pages`, timeLabel: e.ts, kind: 'status',
+        subject: ofTotal(e.files_pulled, e.pages, 'page'), timeLabel: e.ts, kind: 'status',
       }))
       : [];
     const items = [...pulledItems, ...runItems];

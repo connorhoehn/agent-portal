@@ -4,6 +4,7 @@
 // Live metrics from /api/topology/a2a are merged in once data arrives; the
 // static topology always renders so the graph is meaningful from first load.
 
+import { ofTotal, plural } from '../lib/plural';
 import { useEffect, useMemo, useState } from 'react';
 import { relativeTime } from '../lib/relativeTime';
 import { MarkerType, type Node, type Edge } from '@xyflow/react';
@@ -552,7 +553,7 @@ function FleetList({
           className="max-w-[320px]"
         />
         <T size="xs" className="text-text-tertiary">
-          {rows.length === total ? `${total} agents` : `${rows.length} of ${total} agents`}
+          {rows.length === total ? plural(total, 'agent') : `${ofTotal(rows.length, total, 'agent')}`}
         </T>
       </Inline>
       {rows.length === 0 ? (

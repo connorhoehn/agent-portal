@@ -1,3 +1,4 @@
+import { plural } from '../../lib/plural';
 import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
@@ -242,8 +243,8 @@ function InvocationsPage() {
       title="Runs"
       description={
         errorCount > 0
-          ? `Live · last ${filtered.length} invocations, ${errorCount} of them errored · 5s refresh`
-          : `Live · last ${filtered.length} invocations · 5s refresh`
+          ? `Live · last ${plural(filtered.length, 'invocation')}, ${errorCount} of them errored · 5s refresh`
+          : `Live · last ${plural(filtered.length, 'invocation')} · 5s refresh`
       }
       actions={
         <Inline gap="sm" align="center">

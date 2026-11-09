@@ -23,6 +23,7 @@
 // holds ProvisionAccess (`can.revoke`). Both go through ConfirmDialog. A
 // revocation created by an access review says which campaign it came from.
 
+import { plural } from '../../lib/plural';
 import { SidePane } from '@connorhoehn/ui-components';
 import {
   Button,
@@ -250,9 +251,9 @@ function RequestRecord({ id }: { id: string }) {
           ]} />
         </DetailSection>
 
-        <DetailSection variant="heading" title="Approval chain" hint={`${request.steps.length} steps`} data-testid="access-request-chain">
+        <DetailSection variant="heading" title="Approval chain" hint={plural(request.steps.length, 'step')} data-testid="access-request-chain">
           <Stack gap="md">
-            <WorkflowStepper size="compact" steps={chainSteps(request.steps)} aria-label={step ? `Waiting on step ${step.step} of ${request.steps.length}` : `Chain of ${request.steps.length} steps`} />
+            <WorkflowStepper size="compact" steps={chainSteps(request.steps)} aria-label={step ? `Waiting on step ${step.step} of ${request.steps.length}` : `Chain of ${plural(request.steps.length, 'step')}`} />
             <DataTable data-testid="access-request-steps" data={request.steps} columns={stepColumns(request.status)} keyField={(s) => String(s.step)}
               staticRows="The request's approval steps, read in place; each is decided on this record"
               emptyMessage="No approval steps were computed for this request." />
@@ -313,7 +314,7 @@ function RequestRecord({ id }: { id: string }) {
         </DetailSection>
 
         {request.can.viewAudit && (
-          <DetailSection variant="heading" title="Audit" hint={audit.data ? `${audit.data.items.length} events` : undefined} data-testid="access-request-audit">
+          <DetailSection variant="heading" title="Audit" hint={audit.data ? plural(audit.data.items.length, 'event') : undefined} data-testid="access-request-audit">
             {audit.error ? (
               <UnavailableNotice error={audit.error} what="this request's events" source="Events are read from access_events" onRetry={audit.refresh} />
             ) : (

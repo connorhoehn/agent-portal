@@ -1,3 +1,4 @@
+import { ofTotal } from '../../lib/plural';
 import { useState } from 'react';
 import {
   T,
@@ -28,7 +29,7 @@ function StoragePage() {
       <Stack gap="md" className="min-w-0">
         <CollectionToolbar label="Storage filters"
           search={{ value: query, onChange: setQuery, placeholder: 'Search file types and prefixes', 'aria-label': 'Search file types and prefixes' }}
-          summary={storage ? `${byType.length} of ${storage.byType.length} file types · ${byPrefix.length} of ${storage.byPrefix.length} prefixes` : undefined}
+          summary={storage ? `${ofTotal(byType.length, storage.byType.length, 'file type', 'file types')} · ${ofTotal(byPrefix.length, storage.byPrefix.length, 'prefix', 'prefixes')}` : undefined}
           onRefresh={refresh} refreshing={isLoading} />
         {failure && (
           <UnavailableNotice

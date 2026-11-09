@@ -8,6 +8,7 @@
 //
 // Table-first: one compact filter row, then the DataTable above the fold.
 
+import { ofTotal, plural } from '../../lib/plural';
 import {
   CollectionToolbar,
   Stack,
@@ -97,7 +98,7 @@ export default function DefinitionsPage() {
         {...(data ? { count: rows.length } : {})}
         search={{ value: query, onChange: setQuery, placeholder: 'Find a definition' }}
         groups={kinds.map((k) => ({ id: k, title: kindLabel(k), count: rows.filter((d) => d.kind === k).length }))}
-        rows={rows.map((d) => ({ id: d.id, groupId: d.kind, title: d.title, subline: `${d.enabled ? 'active' : d.orphaned ? 'orphaned' : 'inactive'} · ${d.runCount} runs` }))}
+        rows={rows.map((d) => ({ id: d.id, groupId: d.kind, title: d.title, subline: `${d.enabled ? 'active' : d.orphaned ? 'orphaned' : 'inactive'} · ${plural(d.runCount, 'run')}` }))}
         currentId={openId}
         onOpen={open}
         loading={isLoading && !data}
@@ -118,7 +119,7 @@ export default function DefinitionsPage() {
       <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)]">
       <CollectionToolbar {...{ label: 'Definition filters', search: { value: query, onChange: setQuery, placeholder: 'Search definitions', 'aria-label': 'Search definitions' },
         filters: [{ id: 'kind', label: 'Kind', value: kind, onChange: setKind, options: DEFINITION_KIND_OPTIONS }],
-        summary: data ? `${rows.length} of ${all.length} definitions` : undefined,
+        summary: data ? `${ofTotal(rows.length, all.length, 'definition')}` : undefined,
         notices: data ? [`Unnamed approvers default to ${data.defaultApproverRole}.`] : [],
         onRefresh: refresh, refreshing: isLoading,
       }} />

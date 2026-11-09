@@ -14,6 +14,7 @@
 // (docs/layout-cascade.md rules 5 and 8). Nothing about a submission opens in a
 // drawer or modal; only the delete/clear confirmations do.
 
+import { ofTotal, plural } from '../../lib/plural';
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import {
@@ -420,7 +421,7 @@ export default function SubmissionsPage() {
       <CollectionToolbar
         label="Submission filters"
         search={{ value: search.query, onChange: search.setQuery, placeholder: 'Search submissions', 'aria-label': 'Search submissions' }}
-        summary={data ? `${shown.length} of ${groups.length} submissions` : undefined}
+        summary={data ? `${ofTotal(shown.length, groups.length, 'submission')}` : undefined}
         onRefresh={load}
         refreshing={loading}
         {...(canManage ? {
@@ -549,7 +550,7 @@ export default function SubmissionsPage() {
                 const fetched = g.current.links_total - g.current.links_pending;
                 if (!g.processed && g.current.links_pending > 0) {
                   return (
-                    <Chip tone="warning" size="xs" mono title={`${fetched}/${g.current.links_total} links fetched`}>
+                    <Chip tone="warning" size="xs" mono title={`${fetched}/${plural(g.current.links_total, 'link')} fetched`}>
                       Fetch {g.current.links_pending}
                     </Chip>
                   );

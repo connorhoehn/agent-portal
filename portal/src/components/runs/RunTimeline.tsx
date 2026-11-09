@@ -13,6 +13,7 @@
 // Callers that want them subscribe via `onEvent`, which sees every raw frame
 // before it is transformed.
 
+import { plural } from '../../lib/plural';
 import {
   forwardRef,
   useCallback,
@@ -372,7 +373,7 @@ export const RunTimeline = forwardRef<RunTimelineHandle, RunTimelineProps>(funct
                 size="sm"
                 items={[
                   item.subtype,
-                  `${item.turns} turns`,
+                  plural(item.turns, 'turn'),
                   `${(item.durationMs / 1000).toFixed(0)}s`,
                   `$${item.costUsd.toFixed(4)}`,
                 ]}

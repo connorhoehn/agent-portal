@@ -1,3 +1,4 @@
+import { plural } from '../../lib/plural';
 import {
   Card,
   Chip,
@@ -99,7 +100,7 @@ function ActiveRunCard({
             size="xs"
             tone="secondary"
             items={[
-              `${pagesDone} / ${session.maxPages} pages`,
+              `${pagesDone} / ${plural(session.maxPages, 'page')}`,
               session.queued > 0 ? `${session.queued} queued` : null,
               latestPage ? `current: ${latestPage.status}` : null,
             ]}

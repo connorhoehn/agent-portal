@@ -10,6 +10,7 @@
 // which sections are worth indexing. What you get is a tree you can choose
 // from, and the choice becomes the crawl target's scope.
 
+import { plural } from '../../lib/plural';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Button, Card, Checkbox, Chip, Disclosure, EntityCell, FormField, Inline, InlineAlert,
@@ -128,7 +129,7 @@ export function SiteSurveyPanel({ onTargetCreated }: { onTargetCreated?: () => v
   const createTarget = useCallback(async () => {
     if (!survey || selected.size === 0) return;
     setCreating(true);
-    const tid = toastPending('Creating crawl target', `${selected.size} sections`);
+    const tid = toastPending('Creating crawl target', plural(selected.size, 'section'));
     try {
       const res = await fetch(`/api/ingest/survey/${survey.id}/target`, {
         method: 'POST', credentials: 'include',
@@ -138,7 +139,7 @@ export function SiteSurveyPanel({ onTargetCreated }: { onTargetCreated?: () => v
       const body = await res.json() as { target?: { label: string }; pagesInScope?: number; error?: string };
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
       toastSuccess(tid, 'Crawl target created',
-        `${body.target?.label} — scoped to ${body.pagesInScope} pages.`);
+        `${body.target?.label} — scoped to ${plural(body.pagesInScope ?? 0, 'page')}.`);
       onTargetCreated?.();
     } catch (err) {
       toastError(tid, 'Could not create the target', (err as Error).message);
@@ -304,7 +305,7 @@ export function SiteSurveyPanel({ onTargetCreated }: { onTargetCreated?: () => v
               variant="plain"
               density="compact"
               className="border-b border-border"
-              summary={`Structure (${survey.tree.pageCount} pages)`}
+              summary={`Structure (${plural(survey.tree.pageCount, 'page')})`}
               bodyClassName="px-3.5 pb-3 max-h-[320px] overflow-auto"
             >
               <SurveyTree root={survey.tree} selected={selected} />
@@ -325,8 +326,8 @@ export function SiteSurveyPanel({ onTargetCreated }: { onTargetCreated?: () => v
                 size="xs"
                 items={[selected.size === 0
                   ? 'Nothing selected.'
-                  : `${selected.size} ${selected.size === 1 ? 'section' : 'sections'} · about `
-                    + `${selectedPages} pages will be crawled and indexed.`]}
+                  : `${plural(selected.size, 'section')} · about `
+                    + `${plural(selectedPages, 'page')} will be crawled and indexed.`]}
               />
             </Inline>
           )}

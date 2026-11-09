@@ -5,6 +5,7 @@
 // pages; selections stay put"). A crawl run opens its own page under
 // /admin/ingest/history — never a drawer. "New target" stays a dialog: it
 // creates, it does not open a record.
+import { ofTotal } from '../../lib/plural';
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
@@ -176,7 +177,7 @@ function CrawlTargetsPage() {
           <Stack gap="none" className="mb-3">
             <CollectionToolbar label="Crawl target filters"
               search={{ value: query, onChange: setQuery, placeholder: 'Search crawl targets', 'aria-label': 'Search crawl targets' }}
-              summary={targetsData ? `${shownTargets.length} of ${targets.length} targets` : undefined}
+              summary={targetsData ? `${ofTotal(shownTargets.length, targets.length, 'target')}` : undefined}
               onRefresh={refreshTargets} refreshing={targetsLoading} />
           </Stack>
           {targetsLoading && targets.length === 0 ? (

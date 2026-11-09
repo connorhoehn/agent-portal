@@ -1,6 +1,7 @@
 // A room directory inside the existing Social/Communication workspace.
 // Room data and authority come from the host's BFF read; opening is navigation,
 // while joining remains the explicit action in RoomPane/useSocialCall.
+import { pluralWord } from '../../lib/plural';
 import { useState } from 'react';
 import { Button, Card, Chip, CollectionToolbar, EmptyState, Inline, KeyValue, PageSection, Stack, T } from '@connorhoehn/ui-components/shared';
 import type { NameOf, SocialRoom } from './socialPlatform';
@@ -49,7 +50,7 @@ export default function RoomDirectory({ rooms, read, nameOf, activeLobby, mayCre
       actions={mayCreate ? <Button variant="primary" size="sm" onClick={onCreate} data-testid="social-directory-new-room">New hangout</Button> : undefined} />
     {available.length > 0 && <CollectionToolbar layout="cards" label="Find a hangout" search={{ value: query, onChange: setQuery, placeholder: 'Find a hangout by name or purpose', 'aria-label': 'Find a hangout' }}
       filters={[{ id: 'access', label: 'Who can join', value: access, onChange: setAccess, options: [{ value: '', label: 'All available hangouts' }, { value: 'org', label: 'Open to the workspace' }, { value: 'private', label: 'Members only' }] }]}
-      summary={`${matches.length} of ${available.length}${read.data?.cursor ? " loaded" : ""} hangouts`} onRefresh={read.refresh} refreshing={read.isLoading} />}
+      summary={`${matches.length} of ${available.length}${read.data?.cursor ? " loaded" : ""} ${pluralWord(available.length, 'hangout')}`} onRefresh={read.refresh} refreshing={read.isLoading} />}
     {read.error && <SocialReadStatus source="Hangouts" read={read} retry={read.refresh} testId="social-directory-read-status" />}
     {available.length === 0 ? <EmptyState align="start" testId="social-rooms-empty" title="No hangouts available yet"
       description={mayCreate ? 'Create a hangout, then configure its call settings and saved rooms.' : 'Hangouts are ongoing places to meet. A moderator or community admin can create one and add you to a private hangout.'} />

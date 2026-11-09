@@ -30,6 +30,7 @@
 // subtitle says the window does not apply to it. Silently letting the error
 // tail ignore the selector would have it contradict the table directly above.
 
+import { ofTotal } from '../../lib/plural';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import {
@@ -252,7 +253,7 @@ function ToolCallsPage() {
           <T size="xs" tone="tertiary">
             {tableBlind
               ? 'tool count unavailable'
-              : `${fmtInt(visibleRows.length)} of ${fmtInt(rows.length)} tools`}
+              : `${ofTotal(visibleRows.length, rows.length, 'tool')}`}
           </T>
         </Inline>
 
@@ -332,7 +333,7 @@ function ToolCallsPage() {
                     numeric
                     title={r.withCost === 0
                       ? 'No priced rows — this tool spends no model tokens'
-                      : `${fmtInt(r.withCost)} of ${fmtInt(r.count)} calls carried a cost estimate`}
+                      : `${ofTotal(r.withCost, r.count, 'call')} carried a cost estimate`}
                   >
                     {fmtToolCost(r.totalCostUsd, r.withCost)}
                   </TableTd>

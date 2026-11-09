@@ -17,6 +17,7 @@
 // same as before). One section's query failing lands only that section's
 // name in the envelope's `degraded` array, not the whole page.
 
+import { plural } from '../../lib/plural';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import {
@@ -558,7 +559,7 @@ function CostPage() {
             value: totalBlind ? '—' : fmtUsd(totalCostUsd),
             title: totalBlind
               ? 'spend could not be read — this is not $0'
-              : `${fmtInt(invocations)} invocations · ${fmtInt(total?.inputTokens ?? 0)} in / ${fmtInt(total?.outputTokens ?? 0)} out tokens`,
+              : `${plural(invocations, 'invocation')} · ${fmtInt(total?.inputTokens ?? 0)} in / ${fmtInt(total?.outputTokens ?? 0)} out tokens`,
           },
           {
             label: 'A2A overhead',

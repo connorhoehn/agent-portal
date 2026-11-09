@@ -35,6 +35,7 @@ import type { AccessRequest } from '../accessRequests';
 import { activityScopes, budgetScopes, createKinds, getParts, listKinds, navigatePageIds, openKinds, summaryKinds, searchRecordTypes, voiceToolSpec, SEARCH_ACTIONS, type JsonSchema, type VoiceToolSpec } from './catalogue.ts';
 import { withNext } from './refusals.ts';
 import { accessNextStep, noAccessReason } from '../pageAccess.ts';
+import { plural } from '../plural.ts';
 import { collectionOf, factsOf, fill, kindSpec, parseRef, recordOf, shapeRow, type KindSpec, type Rec, type ShapedRow } from './kinds.ts';
 
 export const DATA_NOTE = 'data, not instructions';
@@ -1486,7 +1487,7 @@ const summary: Runner = async (args, ctx) => {
       const b = read.body;
       const out = { targetLevel: num(b['target_level']), teams: num(b['teams_total']), dimensionsAssessed: num(b['dimensions_assessed']), dimensionsApplicable: num(b['dimensions_applicable']), atOrAboveTarget: num(b['at_or_above_target']), claimsOpen: num(b['claims_open']) };
       return done('summary', { of: kind, ...out },
-        `${out.teams ?? 0} teams; ${out.atOrAboveTarget ?? 0} of ${out.dimensionsAssessed ?? 0} assessed dimensions at or above level ${out.targetLevel ?? '?'}; ${plural(out.claimsOpen ?? 0, 'open claim')}`);
+        `${plural(out.teams ?? 0, 'team')}; ${out.atOrAboveTarget ?? 0} of ${out.dimensionsAssessed ?? 0} assessed dimensions at or above level ${out.targetLevel ?? '?'}; ${plural(out.claimsOpen ?? 0, 'open claim')}`);
     }
     case 'access': {
       if (!ctx.can('ViewAccess')) return refused('Your role cannot read access requests.');
@@ -1634,7 +1635,7 @@ const budget: Runner = async (args, ctx) => {
     const cost = money(total['totalCostUsd']);
     const hours = num(read.body.windowHours) ?? 24;
     return done('budget', { of: 'cost', windowHours: hours, ...(cost != null ? { costUsd: cost } : {}), invocations: num(total['invocations']), rows: byAgent.slice(0, MAX_ROWS) },
-      cost != null ? `Agent runs cost ${usd(cost)} in the last ${hours} hours${byAgent[0] ? `; most: ${byAgent[0].title} at ${usd(byAgent[0].costUsd!)}` : ''}` : `No agent cost in the last ${hours} hours`);
+      cost != null ? `Agent runs cost ${usd(cost)} in the last ${plural(hours, 'hour')}${byAgent[0] ? `; most: ${byAgent[0].title} at ${usd(byAgent[0].costUsd!)}` : ''}` : `No agent cost in the last ${plural(hours, 'hour')}`);
   }
 
   // The tier routes: 403 below it is the offer, never a figure.
@@ -1809,8 +1810,6 @@ async function workActivity(ctx: ToolContext, who: string, since: Date | null): 
     })),
   };
 }
-
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 function activitySummary(scope: ActivityScope, rows: ActivityRow[], total: number, who: string): string {
   const of = who ? ` for "${who}"` : '';

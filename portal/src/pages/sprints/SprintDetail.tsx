@@ -9,6 +9,7 @@
 // screen at a time; the default is Work, because that is what the SME the page
 // was written for opens it to see.
 
+import { ofTotal, plural } from '../../lib/plural';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import {
@@ -38,7 +39,7 @@ function SprintMoney({ s }: { s: Sprint }) {
         aria-label="Sprint money"
         variant="line"
         items={[
-          { label: 'points', value: `${s.pointsDone} / ${s.pointsTotal}`, title: `${s.doneItemCount} of ${s.itemCount} items done` },
+          { label: 'points', value: `${s.pointsDone} / ${s.pointsTotal}`, title: `${ofTotal(s.doneItemCount, s.itemCount, 'item')} done` },
           { label: 'planned', value: usd(s.estimatedCostUsd), title: "Sum of the sprint's work-item dollar estimates" },
           {
             label: 'envelope granted',
@@ -128,7 +129,7 @@ export function SprintDetail({ s, personId, canManageSprints, canManageBudgets, 
                 items={[{
                   label: 'points done',
                   value: `${s.pointsDone} / ${s.pointsTotal}`,
-                  title: `${s.doneItemCount} of ${s.itemCount} items done`,
+                  title: `${ofTotal(s.doneItemCount, s.itemCount, 'item')} done`,
                   progress: s.pointsTotal > 0 ? { value: s.pointsDone, max: s.pointsTotal } : null,
                 }]}
               />
@@ -137,7 +138,7 @@ export function SprintDetail({ s, personId, canManageSprints, canManageBudgets, 
                   variant="line"
                   aria-label="Sprint window"
                   items={[{
-                    label: `of ${span.days} days`,
+                    label: `of ${plural(span.days, 'day')}`,
                     value: `Day ${span.day}`,
                     title: `${Math.round(span.progress * 100)}% of the window elapsed`,
                     progress: { value: span.progress, max: 1 },
