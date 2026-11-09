@@ -9,7 +9,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { VoiceController } from '../controller.ts';
 import { ResultMemory } from '../tools.ts';
-import { loggedEvents, FakeClock, fakeFetch, middlewareVoice, route, toolContext, type Route } from './voiceHarness.ts';
+import { isToolRow, loggedEvents, FakeClock, fakeFetch, middlewareVoice, route, toolContext, type Route } from './voiceHarness.ts';
+import { withFailure } from '../refusals.ts';
 import type { PublishedPage } from '../pageContext.ts';
 
 const SESSION = 'vs_00000000-0000-0000-0000-0000000000a2';
@@ -116,4 +117,20 @@ test('a cancel sends nothing', async () => {
   const r = await run({ confirm: false });
   assert.ok(r.card);
   assert.equal(r.log.filter((l) => l.url === '/api/bots/dispatch-work').length, 0);
+});
+
+test('G47: a dispatch the run-budget gate refuses logs code http-409 and gate run-budget, and the line names the gate', async () => {
+  const brake = { error: 'over the per-run cap', gate: 'run-budget', confirmFlag: 'confirmOverRunBudget' };
+  const r = await run({ dispatch: (req) => (req.method === 'POST' && req.url === '/api/bots/dispatch-work' ? { status: 409, body: brake } : undefined) });
+  const row = r.log.find(isToolRow)!.body as Record<string, unknown>;
+  assert.deepEqual([row['outcome'], (row['summary'] as Record<string, unknown>)['code'], (row['summary'] as Record<string, unknown>)['gate']], ['refused', 'http-409', 'run-budget']);
+  // The line the voice says (the result's `say`): the gate by name, never the server's sentence.
+  const said = withFailure({ outcome: 'refused', output: { kind: 'refused', reason: 'Not queued', code: 'http-409', gate: 'run-budget', workKind: 'dispatch' } }, 'queue_work');
+  assert.equal((said.output as Record<string, unknown>)['say'], 'Dispatch was refused by the budget gate (the per-run cap); its page can take it over the limit.');
+  // A server error is `failed`, with its status as the code.
+  const down = await run({ dispatch: (req) => (req.method === 'POST' && req.url === '/api/bots/dispatch-work' ? { status: 503, body: { error: 'store down' } } : undefined) });
+  const failedRow = down.log.find(isToolRow)!.body as Record<string, unknown>;
+  assert.deepEqual([failedRow['outcome'], (failedRow['summary'] as Record<string, unknown>)['code']], ['failed', 'http-503']);
+  const calls = down.after.turns.flatMap((t) => t.toolCalls ?? []);
+  assert.equal(calls[0]!.status, 'failed');
 });

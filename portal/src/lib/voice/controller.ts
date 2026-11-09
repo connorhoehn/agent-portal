@@ -114,7 +114,7 @@ import {
 import { VOICE_PLANNERS, VOICE_RUNNERS } from './actions.ts';
 import { DEFAULT_TOAST_SECONDS } from './work.ts';
 import { VoiceEventLog, argShape, refusalCode, resultSummary, type DockEvent } from './sessionEvents.ts';
-import { RefusalGuard, STOP_NEXT, refusalLine, withNext } from './refusals.ts';
+import { RefusalGuard, STOP_NEXT, refusalLine, withFailure, withNext } from './refusals.ts';
 import { inboundLine, inboundNote, type InboundItem } from './inbound.ts';
 import { DelegationContext, PAGE_NOTE_REPLACES, briefOutput, modelOutput, summaryLine, verbosityNote, type Verbosity } from './contextWindow.ts';
 
@@ -872,7 +872,8 @@ export class VoiceController {
 
   private async answer(client: VoiceClient, delegationId: string, callId: string, name: string, given: ToolResult, startedAt: number, args: unknown, confirmedBy?: 'voice' | 'click'): Promise<void> {
     if (client !== this.client || this.machine.base !== 'live') return;
-    let res = given;
+    // G47: a failed call (or a route's brake) says why: its code, its gate and the one line to say.
+    let res = withFailure(given, name);
     // G29: the second identical refused call of the session is terminal. Its output says stop, the round asks for no
     // continuation (so the delegation cannot try a third time), and the dock speaks the refusal line itself, once.
     const verdict = res.outcome === 'refused' ? this.refusals.refused(name, args, res.output) : null;

@@ -78,6 +78,41 @@ const REFUSAL_PATTERNS: ReadonlyArray<[RegExp, RefusalCode]> = [
 ];
 
 /**
+ * G47: why a call did not happen when the route or the transport said no, a closed vocabulary: the socket or
+ * server could not be reached (`not-connected`), the sender is not in the channel (`not-a-member`), the persisted
+ * receipt never came (`receipt-timeout`), it did not answer in time (`timeout`), the server refused it with a
+ * status (`http-<4xx|5xx>`, the status itself), or anything else (`rejected`). A route's brake adds `gate`.
+ */
+export const FAILURE_CODES = ['not-connected', 'not-a-member', 'receipt-timeout', 'timeout', 'rejected'] as const;
+export type FailureCode = typeof FAILURE_CODES[number] | `http-${number}`;
+const HTTP_CODE = /^http-[45]\d\d$/;
+
+/** The failure code of a result: the runner's own when it is in the vocabulary, else read from its status or wording. */
+export function failureCode(output: Record<string, unknown>): FailureCode {
+  const given = output['code'];
+  if (typeof given === 'string' && ((FAILURE_CODES as readonly string[]).includes(given) || HTTP_CODE.test(given))) return given as FailureCode;
+  const status = output['status'];
+  if (typeof status === 'number' && status >= 400 && status <= 599) return `http-${status}`;
+  const reason = typeof output['reason'] === 'string' ? output['reason'] : '';
+  const http = /\bHTTP ([45]\d\d)\b/.exec(reason);
+  if (http) return `http-${Number(http[1])}`;
+  if (/could not reach|not connected|offline/i.test(reason)) return 'not-connected';
+  if (/not a member of/i.test(reason)) return 'not-a-member';
+  if (/receipt|was not confirmed/i.test(reason)) return 'receipt-timeout';
+  if (/in time|timed out/i.test(reason)) return 'timeout';
+  return 'rejected';
+}
+
+/** A route's brake (its `gate`, as the route named it): letters, digits, dashes and underscores only, else null. */
+export function gateOf(output: Record<string, unknown>): string | null {
+  const g = output['gate'];
+  return typeof g === 'string' && /^[a-z][a-z0-9_-]{0,39}$/i.test(g) ? g : null;
+}
+
+/** The brakes that are about money (lib/spend-refusal.ts, routes/bots.ts): a refusal under one is `budget`. */
+export const MONEY_GATES: ReadonlySet<string> = new Set(['run-budget', 'user-budget', 'allocation', 'envelope', 'spend-hold', 'budget-state', 'run-limit', 'paused']);
+
+/**
  * The code of a refused result: the runner's own `code` when it set one,
  * `ambiguous` for several matches, else read from the refusal's wording (the
  * runners' fixed sentences), `other` when nothing fits.
@@ -86,7 +121,7 @@ export function refusalCode(output: Record<string, unknown>): RefusalCode {
   const given = output['code'];
   if (typeof given === 'string' && (REFUSAL_CODES as readonly string[]).includes(given)) return given as RefusalCode;
   if (output['kind'] === 'ambiguous') return 'ambiguous';
-  if (output['gate'] != null || output['budget'] != null) return 'budget';
+  if (output['budget'] != null || MONEY_GATES.has(gateOf(output) ?? '')) return 'budget';
   const reason = typeof output['reason'] === 'string' ? output['reason'] : '';
   for (const [re, code] of REFUSAL_PATTERNS) if (re.test(reason)) return code;
   return 'other';
@@ -152,6 +187,11 @@ export function argShape(tool: string, raw: unknown): Record<string, EventScalar
 export function resultSummary(outcome: string, output: Record<string, unknown>): Record<string, EventScalar> {
   const s: Record<string, EventScalar> = { outcome };
   if (outcome === 'refused') s['reason'] = refusalCode(output);
+  // G47: a failed call always says why; a refusal the route or the transport gave carries the same code and gate.
+  const gate = gateOf(output);
+  const given = typeof output['code'] === 'string' ? output['code'] : '';
+  if (outcome === 'failed' || (outcome === 'refused' && (gate || HTTP_CODE.test(given)))) s['code'] = failureCode(output);
+  if (gate) s['gate'] = gate;
   if (typeof output['kind'] === 'string') s['result'] = output['kind'];
   if (typeof output['count'] === 'number') s['count'] = output['count'];
   if (Array.isArray(output['rows'])) s['rows'] = output['rows'].length;

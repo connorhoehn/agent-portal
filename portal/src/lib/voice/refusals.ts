@@ -25,7 +25,7 @@ import {
   activityScopes, budgetScopes, createKinds, getParts, listKinds, navigatePageIds, openKinds, queueWorkKinds, searchRecordTypes, summaryKinds,
   updateKinds, decideKinds, VOICE_TOOLS,
 } from './catalogue.ts';
-import { refusalCode, type RefusalCode } from './sessionEvents.ts';
+import { failureCode, gateOf, refusalCode, MONEY_GATES, type RefusalCode } from './sessionEvents.ts';
 
 /** The closing clause of every `next`. */
 export const NO_REPEAT = 'Do not repeat this call with the same arguments.';
@@ -171,6 +171,52 @@ export function refusalNext(tool: string, output: Record<string, unknown>, ctx: 
     fix += ` The pages here: ${named(navigatePageIds(ctx.tenant, ctx.role))}.`;
   }
   return `${fix} ${NO_REPEAT}`;
+}
+
+/** Who did not happen, per tool (G47), for the `say` line; queue_work names its kind. */
+const FAILURE_SUBJECT: Readonly<Record<string, string>> = {
+  message: 'The message', call: 'The call', decide: 'The decision', create: 'It', update: 'The change',
+  computer: 'The computer action', set_status: 'The status', queue_work: 'The work',
+};
+const WORK_SUBJECT: Readonly<Record<string, string>> = {
+  dispatch: 'Dispatch', sweep: 'The sweep', 'bot-run': 'The bot run', pipeline: 'The dry-run', deck: 'The deck', summarize: 'The summary', draft: 'The draft',
+};
+/** How a brake is said: the money gates as "the budget gate", the rest by their own name. */
+const GATE_WORDS: Readonly<Record<string, string>> = {
+  'run-budget': 'budget gate (the per-run cap)', 'user-budget': 'budget gate (your monthly budget)', allocation: 'budget gate (the initiative\'s allocation)',
+  envelope: 'budget gate (the sprint envelope)', 'spend-hold': 'spend hold', 'budget-state': 'budget gate (the budget could not be read)',
+  'run-limit': 'run limit', paused: 'pause on this spend',
+};
+
+/**
+ * G47: the one line the voice says for a failed call (or a route's brake), from its code and gate: "Dispatch was
+ * refused by the budget gate (the per-run cap).", "The message receipt never came." Never the server's own words.
+ */
+export function failureSay(tool: string, output: Record<string, unknown>): string {
+  const kind = typeof output['workKind'] === 'string' ? output['workKind'] : '';
+  const who = (tool === 'queue_work' && WORK_SUBJECT[kind]) || FAILURE_SUBJECT[tool] || 'It';
+  const gate = gateOf(output);
+  if (gate) return `${who} was refused by the ${GATE_WORDS[gate] ?? `${gate.replace(/[-_]/g, ' ')} gate`}${MONEY_GATES.has(gate) ? '; its page can take it over the limit' : ''}.`;
+  const code = failureCode(output);
+  switch (code) {
+    case 'not-connected': return tool === 'message' || tool === 'call' ? 'Social isn\'t connected right now, so nothing was sent.' : `${who} did not go through: the server could not be reached.`;
+    case 'not-a-member': return 'You\'re not a member of that channel, so nothing was posted.';
+    case 'receipt-timeout': return `${tool === 'message' ? 'The message' : who} receipt never came; check the conversation before trying again.`;
+    case 'timeout': return `${who} did not answer in time.`;
+    case 'rejected': return `${who} was rejected.`;
+    default: {
+      const status = Number(code.slice(5));
+      return status >= 500 ? `${who} failed: the server had an error (HTTP ${status}).` : `${who} was refused by the server (HTTP ${status}).`;
+    }
+  }
+}
+
+/** G47: a failed result (and a route's brake) carries its code, its gate and the line to say, unless the runner wrote one. */
+export function withFailure<T extends { outcome: string; output: Record<string, unknown> }>(res: T, tool: string): T {
+  const gate = gateOf(res.output);
+  if (res.outcome !== 'failed' && !(res.outcome === 'refused' && gate)) return res;
+  const output = { ...res.output, code: failureCode(res.output), ...(typeof res.output['say'] === 'string' ? {} : { say: failureSay(tool, res.output) }) };
+  return { ...res, output };
 }
 
 /** The result's output with `next` (kept when the runner already wrote one). */

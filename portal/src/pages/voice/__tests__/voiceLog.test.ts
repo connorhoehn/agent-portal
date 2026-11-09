@@ -5,7 +5,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dayGroups, eventData, logJson, parseRange, sessionFacts, sessionHref, sessionSubline, sessionsApi, sinceFor, voiceRecord, voiceRows, type VoiceSessionDetail, type VoiceSessionListItem } from '../voiceLogModel.ts';
+import { dayGroups, eventData, logJson, parseRange, sessionFacts, sessionHref, sessionSubline, sessionsApi, sinceFor, voiceRecord, voiceRows, callDetail, type VoiceSessionDetail, type VoiceSessionListItem } from '../voiceLogModel.ts';
 import { renderLogging } from '../../logging/__tests__/renderLogging.ts';
 
 const ID = 'vs_00000000-0000-0000-0000-0000000000dd';
@@ -95,4 +95,16 @@ test('the model: subline, facts, event data and the copy with the kept transcrip
   assert.equal(copied.events.length, 4);
   assert.deepEqual(copied.transcript.turns, [{ role: 'you', text: 'hi', at: 1 }]);
   assert.equal(JSON.parse(logJson(DETAIL, null)).transcript, undefined);
+});
+
+test('G47: the record\'s call Detail shows a failed call\'s code and gate from its tool-result summary', () => {
+  const events = [
+    { seq: 1, at: '2026-11-09T01:40:00Z', kind: 'tool-result', data: { toolCallId: 'c1', summary: { outcome: 'refused', reason: 'budget', code: 'http-409', gate: 'run-budget' } } },
+    { seq: 2, at: '2026-11-09T01:40:01Z', kind: 'tool-result', data: { toolCallId: 'c2', summary: { outcome: 'failed', code: 'receipt-timeout' } } },
+    { seq: 3, at: '2026-11-09T01:40:02Z', kind: 'tool-result', data: { toolCallId: 'c3', summary: { outcome: 'refused', reason: 'not-found' } } },
+  ];
+  assert.equal(callDetail({ id: 'c1', outcome: 'refused', confirmedBy: 'voice' }, events), 'confirmed by voice · code: http-409 · gate:run-budget');
+  assert.equal(callDetail({ id: 'c2', outcome: 'failed', confirmedBy: 'click' }, events), 'confirmed by click · code: receipt-timeout');
+  assert.equal(callDetail({ id: 'c3', outcome: 'refused', confirmedBy: null }, events), 'refused: not-found');
+  assert.equal(callDetail({ id: 'c9', outcome: 'done', confirmedBy: null }, events), '');
 });

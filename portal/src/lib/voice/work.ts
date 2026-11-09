@@ -547,14 +547,17 @@ async function post(ctx: ToolContext, url: string, body: Record<string, unknown>
 /** A route's refusal in words: a money brake names its page, never a confirm the voice cannot give. */
 function postRefusal(plan: WorkPlan, posted: Extract<Posted, { ok: false }>, page: string): ToolResult {
   const error = typeof posted.body?.['error'] === 'string' ? posted.body['error'] as string : null;
-  if (posted.status === 0) return failed('Could not reach the server; nothing was queued.');
+  // G47: the status as a code, the route's brake by name, and the work's kind (the spoken line names them).
+  const gate = typeof posted.body?.['gate'] === 'string' ? { gate: posted.body['gate'] as string } : {};
+  const why = { code: posted.status ? `http-${posted.status}` : 'not-connected', ...gate, workKind: plan.kind };
+  if (posted.status === 0) return failed('Could not reach the server; nothing was queued.', why);
   if (posted.status === 401 || posted.status === 403) return refused(error && posted.status === 403 && !/^forbidden/i.test(error) ? `Not queued: ${error}.` : ROLE_REFUSAL[plan.kind] ?? "I can't queue that with your role.");
   if (posted.status === 404) return refused(`${plan.title} is gone, or you can no longer reach it; nothing was queued.`);
   if (posted.body?.['confirmFlag'] || posted.status === 402 || posted.status === 409 || posted.status === 423 || posted.status === 429) {
-    return refused(`Not queued; it needs ${posted.body?.['confirmFlag'] ? 'a confirm on its page, not by voice' : 'a look on its page'}: ${error ?? `the server answered ${posted.status}`}`, { page });
+    return refused(`Not queued; it needs ${posted.body?.['confirmFlag'] ? 'a confirm on its page, not by voice' : 'a look on its page'}: ${error ?? `the server answered ${posted.status}`}`, { page, ...why });
   }
   if (posted.status === 400) return refused(`Not queued: ${error ?? 'the server refused it'}.`, { page });
-  return failed(`${plan.title} could not be queued (HTTP ${posted.status})${error ? `: ${error}` : ''}.`);
+  return failed(`${plan.title} could not be queued (HTTP ${posted.status})${error ? `: ${error}` : ''}.`, why);
 }
 
 /** The 409 that names the caller's running background sweep (routes/work.ts), as the job to follow, else null. */
@@ -610,7 +613,7 @@ async function runKind(plan: WorkPlan, ctx: ToolContext, jobs: JobTracking): Pro
         next: 'Say it is done, in one short sentence.' }, `${plan.title}: done${detail ? ` (${detail})` : ''}`);
     }
     const id = idAt(posted.body, spec.idAt);
-    if (!id || !spec.follow) return failed(`${plan.title} was accepted but the server named no job to follow; check its page.`, { page: href(null) });
+    if (!id || !spec.follow) return failed(`${plan.title} was accepted but the server named no job to follow; check its page.`, { page: href(null), code: 'rejected', workKind: plan.kind });
     const job: QueuedJob = { jobId: id, kind: plan.kind, title: plan.title, href: href(id), follow: { url: fillId(spec.follow.url, id), reader: spec.follow.reader }, ...(plan.note ? { note: plan.note } : {}) };
     jobs.track(job);
     return done('work_queued', { jobId: id, workKind: plan.kind, title: plan.title, state: 'queued', href: job.href,

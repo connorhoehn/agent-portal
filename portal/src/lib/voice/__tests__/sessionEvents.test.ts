@@ -7,6 +7,8 @@ import assert from 'node:assert/strict';
 import { VoiceController } from '../controller.ts';
 import { VOICE_RUNNERS } from '../actions.ts';
 import { EVENT_FLUSH_MS, MAX_EVENT_BATCH, VoiceEventLog, DOCK_EVENT_KINDS, argShape, refusalCode, resultSummary } from '../sessionEvents.ts';
+import { failureCode as g47FailureCode, resultSummary as g47Summary } from '../sessionEvents.ts';
+import { failureSay, withFailure } from '../refusals.ts';
 import { refused, ambiguous, type VoiceToolRunner } from '../tools.ts';
 import { FakeClock, fakeFetch, isToolRow, loggedEvents, middlewareVoice, route, toolContext } from './voiceHarness.ts';
 
@@ -150,4 +152,38 @@ test('a call\'s shape tells calls of one tool apart, with no argument text, name
   assert.deepEqual(argShape('search', 'not json'), {});
   const all = JSON.stringify([argShape('message', { target: { kind: 'dm', name: 'Ada' }, text: 'secret words' }), argShape('get', { ref: 'initiative:p-secret-12' })]);
   assert.doesNotMatch(all, /Ada|secret|p-secret/);
+});
+
+test('G47: a failed result always has a code from the closed vocabulary, and the summary keeps it with the gate', () => {
+  const cases: Array<[Record<string, unknown>, string]> = [
+    [{ reason: 'x', code: 'receipt-timeout' }, 'receipt-timeout'],
+    [{ reason: 'x', code: 'http-409' }, 'http-409'],
+    [{ reason: 'x', code: 'made-up' }, 'rejected'],
+    [{ reason: 'x', status: 502 }, 'http-502'],
+    [{ reason: 'Bots could not be queued (HTTP 500): boom.' }, 'http-500'],
+    [{ reason: 'Could not reach the server; nothing was queued.' }, 'not-connected'],
+    [{ reason: '"npm test" on alpha did not finish in time.' }, 'timeout'],
+    [{ reason: 'The message to #general was not confirmed: no receipt.' }, 'receipt-timeout'],
+    [{ reason: 'Something odd.' }, 'rejected'],
+  ];
+  for (const [output, code] of cases) assert.equal(g47FailureCode(output), code, JSON.stringify(output));
+  assert.deepEqual(g47Summary('failed', { kind: 'failed', reason: 'x (HTTP 503).' }), { outcome: 'failed', code: 'http-503', result: 'failed' });
+  assert.deepEqual(g47Summary('refused', { kind: 'refused', reason: 'Not queued', code: 'http-409', gate: 'run-budget' }),
+    { outcome: 'refused', reason: 'budget', code: 'http-409', gate: 'run-budget', result: 'refused' });
+  // A plain refusal carries no failure code.
+  assert.equal(g47Summary('refused', { kind: 'refused', reason: 'Your role cannot.' })['code'], undefined);
+  // A brake that is not about money is not `budget`.
+  assert.equal(g47Summary('refused', { kind: 'refused', reason: 'Not decided', code: 'http-409', gate: 'self-approval' })['reason'], 'other');
+});
+
+test('G47: the spoken line names the code or the gate, and a runner\'s own say is kept', () => {
+  assert.equal(failureSay('message', { code: 'receipt-timeout' }), 'The message receipt never came; check the conversation before trying again.');
+  assert.equal(failureSay('message', { code: 'not-connected' }), 'Social isn\'t connected right now, so nothing was sent.');
+  assert.equal(failureSay('queue_work', { code: 'http-503', workKind: 'sweep' }), 'The sweep failed: the server had an error (HTTP 503).');
+  assert.equal(failureSay('update', { code: 'http-422' }), 'The change was refused by the server (HTTP 422).');
+  assert.equal(failureSay('decide', { code: 'http-409', gate: 'not-pending' }), 'The decision was refused by the not pending gate.');
+  const kept = withFailure({ outcome: 'failed', output: { reason: 'x', say: 'Mine.' } }, 'message');
+  assert.deepEqual([(kept.output as Record<string, unknown>)['say'], (kept.output as Record<string, unknown>)['code']], ['Mine.', 'rejected']);
+  const done = { outcome: 'done', output: { kind: 'posted' } };
+  assert.equal(withFailure(done, 'message'), done, 'a done result is untouched');
 });

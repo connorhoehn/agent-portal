@@ -159,12 +159,31 @@ export function voiceRows(sessions: readonly VoiceSessionListItem[]): LogRow[] {
   return sessions.map((s) => ({ source: 'voice', kind: 'session', id: s.id, at: s.startedAt, subline: sessionSubline(s) }));
 }
 
+/**
+ * G47: a call's Detail: who confirmed it, and for a failed call (or a route's brake) why, from its `tool-result`
+ * event's summary: the code (`http-409`, `receipt-timeout`…) and the gate (`gate:run-budget`), or the refusal's code.
+ */
+export function callDetail(call: { id: string; outcome: string; confirmedBy: string | null }, events: VoiceSessionDetail['events']): string {
+  const result = events.find((e) => e.kind === 'tool-result' && e.data?.['toolCallId'] === call.id);
+  const summary = (result?.data?.['summary'] ?? {}) as Record<string, unknown>;
+  const parts: string[] = [];
+  if (call.confirmedBy) parts.push(`confirmed by ${call.confirmedBy}`);
+  const word = (v: unknown) => (typeof v === 'string' && /^[a-z][a-z0-9:_-]{0,60}$/i.test(v) ? v : null);
+  const code = word(summary['code']);
+  const gate = word(summary['gate']);
+  const reason = word(summary['reason']);
+  if (code) parts.push(`code: ${code}`);
+  if (gate) parts.push(`gate:${gate}`);
+  if (!code && call.outcome === 'refused' && reason) parts.push(`refused: ${reason}`);
+  return parts.join(' · ');
+}
+
 export function voiceRecord(d: VoiceSessionDetail): LogRecord {
   return {
     source: 'voice', kind: 'session', id: d.session.id, label: `Session ${when(d.session.startedAt)}`,
     facts: sessionFacts(d),
     callsTitle: 'Tool calls',
-    calls: d.toolCalls.map((c) => ({ id: c.id, at: c.at, name: c.tool, outcome: c.outcome, detail: c.confirmedBy ? `confirmed by ${c.confirmedBy}` : '', tookMs: c.durationMs })),
+    calls: d.toolCalls.map((c) => ({ id: c.id, at: c.at, name: c.tool, outcome: c.outcome, detail: callDetail(c, d.events), tookMs: c.durationMs })),
     events: d.events.map((e) => ({ seq: e.seq, at: e.at, kind: e.kind, data: eventData(e.data) })),
     raw: d,
   };

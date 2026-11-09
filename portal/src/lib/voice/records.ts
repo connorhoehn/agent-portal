@@ -364,13 +364,13 @@ const planDecide: VoiceToolPlanner = async (args, ctx) => {
 /** The route's refusal as the route said it: the author, an already decided row, a role the route refuses. */
 function decideRefusal(status: number, body: Rec | null, title: string): ToolResult {
   const error = str(body?.['error']);
-  if (status === 0) return failed('Could not reach the server; nothing was decided.');
+  if (status === 0) return failed('Could not reach the server; nothing was decided.', { code: 'not-connected' });
   if (body?.['gate'] === 'self-approval') return refused(`Not decided: ${error ?? 'you asked for this, so someone else must decide it'}.`);
   if (status === 401 || status === 403) return refused(`Not decided: ${error && !/^forbidden$/i.test(error) ? error : 'your role cannot decide that'}.`);
   if (status === 404) return refused(`${title} is no longer waiting; it may already be decided.`);
   if (status === 409) return refused(`Not decided: ${error ?? 'it was already decided'}.`);
   if (status === 400 || status === 422) return refused(`Not decided: ${error ?? 'the server refused it'}.`);
-  return failed(`${title} could not be decided (HTTP ${status})${error ? `: ${error}` : ''}.`);
+  return failed(`${title} could not be decided (HTTP ${status})${error ? `: ${error}` : ''}.`, { code: `http-${status}`, ...(str(body?.['gate']) ? { gate: str(body?.['gate']) } : {}) });
 }
 
 const runDecide: VoiceToolRunner = async (_args, ctx, planned, answer?: CardAnswer) => {
@@ -639,7 +639,7 @@ async function act(ctx: ToolContext, plan: ActPlan, verb: string): Promise<ToolR
       if (res.status === 401 || res.status === 403) return refused(`Not ${verb}: ${error && !/^forbidden$/i.test(error) ? error : 'your role cannot do that'}.`);
       if (res.status === 404) return refused(`Not ${verb}: it is gone, or you can no longer reach it.`);
       if (res.status === 400 || res.status === 409 || res.status === 422) return refused(`Not ${verb}: ${error ?? `the server refused it (${res.status})`}.`);
-      return failed(`Not ${verb} (HTTP ${res.status})${error ? `: ${error}` : ''}.`);
+      return failed(`Not ${verb} (HTTP ${res.status})${error ? `: ${error}` : ''}.`, { code: `http-${res.status}`, ...(str(body?.['gate']) ? { gate: str(body?.['gate']) } : {}) });
     }
     const id = plan.idAt ? str(dig(body, plan.idAt)) : undefined;
     // G55: a page or a whiteboard opens in its editor once made (the route's own link, only inside the portal).
