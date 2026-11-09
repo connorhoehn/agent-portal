@@ -1,10 +1,11 @@
 // G29 (docs/voice-navigator-gaps.md, the 23:03 session): every refusal names
 // what to change, and the second identical refused call of a session is
-// terminal: one spoken refusal, no continuation, no third call.
+// terminal: no third call runs. G59: the terminal round is still continued
+// (the continuation says the refusal), or the voice falls silent for good.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { VoiceController } from '../controller.ts';
+import { MAX_STOPPED_CONTINUATIONS, VoiceController } from '../controller.ts';
 import { VoiceClient } from '../client.ts';
 import { runVoiceTool } from '../tools.ts';
 import { FAILED_TWICE_NEXT, FailureGuard, NO_REPEAT, RETRY_NEXT, STOP_NEXT, RefusalGuard, callKey, refusalNext } from '../refusals.ts';
@@ -102,7 +103,7 @@ function retryScript(args: Record<string, unknown>) {
   };
 }
 
-test('G29 acceptance: a scripted session that refuses get twice with the same ref speaks one refusal and makes no third call', async () => {
+test('G29 + G59 acceptance: a scripted session that refuses get twice with the same ref runs no third call, and the stopped round is still continued', async () => {
   const outputs: Array<Record<string, unknown>> = [];
   const commentary: string[] = [];
   let continuations = 0;
@@ -129,23 +130,24 @@ test('G29 acceptance: a scripted session that refuses get twice with the same re
     await c.start();
     await clock.advance(6000);
 
-    assert.equal(outputs.length, 2, 'two calls answered, no third');
     assert.equal(outputs[0]!['kind'], 'refused');
     assert.match(String(outputs[0]!['next']), /kind:id|list or search/);
     assert.equal(outputs[0]!['stop'], undefined);
     assert.equal(outputs[1]!['stop'], true);
     assert.equal(outputs[1]!['next'], STOP_NEXT);
-    assert.equal(continuations, 1, 'only the first refusal is continued');
-    assert.equal(commentary.length, 1, 'the dock speaks the refusal once');
-    assert.match(commentary[0]!, /I found no initiative "nope" that you can read\./);
-    const lines = c.getSnapshot().turns.filter((t) => t.role === 'assistant' && /I found no initiative/.test(t.text));
-    assert.equal(lines.length, 1, 'the strip shows the line once');
+    // G59: the stopped round is continued; this script's delegation calls again every time, and each later call is
+    // refused before it runs (stop), until the dock gives up after MAX_STOPPED_CONTINUATIONS.
+    assert.equal(continuations, 1 + MAX_STOPPED_CONTINUATIONS, 'the first refusal, then the stopped round, continued');
+    assert.equal(outputs.length, 2 + MAX_STOPPED_CONTINUATIONS);
+    assert.ok(outputs.slice(2).every((o) => o['kind'] === 'refused' && o['stop'] === true), JSON.stringify(outputs.slice(2)));
+    assert.equal(log.filter((r) => r.url.startsWith('/api/graph/projects/nope')).length, 2, 'no third call runs');
+    assert.equal(commentary.length, 0, 'the continuation says the refusal; the dock adds nothing');
     assert.equal(c.getSnapshot().phase === 'executing', false, 'the delegation is closed');
-    // Both refusals are on the log with their code, and the repeat is marked.
+    // The refusals are on the log with their code, the repeat is marked, and the dock giving up is too.
     const events = loggedEvents(log);
-    assert.equal(events.filter((e) => e['kind'] === 'refused').length, 2);
     assert.equal(events.filter((e) => (e['data'] as Record<string, unknown> | undefined)?.['event'] === 'refusal-repeated').length, 1);
-    assert.equal(log.filter((r) => isToolRow(r)).length, 2);
+    assert.equal(events.filter((e) => (e['data'] as Record<string, unknown> | undefined)?.['event'] === 'delegation-stuck').length, 1);
+    assert.equal(log.filter((r) => isToolRow(r)).length, outputs.length);
     c.dispose();
   } finally {
     proto.sendToolOutput = orig.out; proto.appendCommentary = orig.com; proto.requestResponse = orig.resp;
@@ -236,7 +238,9 @@ test('G48 acceptance: failed then the same call runs once the user asked; on its
   assert.equal(own.reads, asked.reads / 2, 'and read nothing');
   // A refusal (404) repeated is still the G29 repeat, user turn or not.
   const refusedTwice = await failSession(true, 404);
-  assert.deepEqual(refusedTwice.outputs.map((o) => [o['kind'], o['stop'] ?? null]), [['refused', null], ['refused', true]]);
+  assert.deepEqual(refusedTwice.outputs.slice(0, 2).map((o) => [o['kind'], o['stop'] ?? null]), [['refused', null], ['refused', true]]);
+  // G59: the stopped round is continued; what the script's delegation calls after it is refused before it runs.
+  assert.ok(refusedTwice.outputs.slice(2).every((o) => o['kind'] === 'refused' && o['stop'] === true));
 });
 
 /** A scripted turn: the first call, then each continuation asks the second (the 01:40 turn that opened four pages). */
@@ -290,15 +294,26 @@ async function twoCalls(first: { name: string; args: Record<string, unknown> }, 
   }
 }
 
-test('G51 acceptance: a turn asking for two pages opens the first and stops; the dock says its line once', async () => {
+test('G51 + G59 acceptance: a turn asking for two pages opens the first and stops; the refusal carries the page line for the continuation', async () => {
   const r = await twoCalls({ name: 'open', args: { page: 'designs' } }, { name: 'open', args: { page: 'runbooks' } });
   assert.equal(r.outputs[0]!['kind'], 'navigated');
   assert.equal(r.outputs[0]!['stop'], true);
   assert.match(String(r.outputs[0]!['say']), /^Opened /);
   assert.equal(r.outputs[1]!['kind'], 'refused');
   assert.equal(r.outputs[1]!['code'], 'navigated');
+  assert.equal(r.outputs[1]!['stop'], true);
+  assert.equal(r.outputs[1]!['say'], r.outputs[0]!['say'], 'the continuation is handed the page line to say');
   assert.equal(r.navigations.length, 1, 'the second page never opens');
-  assert.equal(r.commentary.filter((c) => /Opened /.test(c)).length, 1, 'the dock speaks the page line once');
+  assert.equal(r.commentary.length, 0, 'G59: the continuation says the line; the dock adds none');
+});
+
+test('G51: a get of the record just opened, by its ref, is a read of that page (vs_5144e356 13:29:44)', async () => {
+  const page = { path: '/iq/projects/p1', record: { ref: 'initiative:p1', title: 'Alpha' }, rows: [] };
+  const r = await twoCalls({ name: 'open', args: { ref: 'initiative:p1' } }, { name: 'get', args: { ref: 'initiative:p1', part: 'decisions' } }, { page: () => page });
+  assert.equal(r.outputs[0]!['stop'], true);
+  assert.notEqual(r.outputs[1]!['code'], 'navigated', JSON.stringify(r.outputs[1]));
+  const other = await twoCalls({ name: 'open', args: { ref: 'initiative:p1' } }, { name: 'get', args: { ref: 'initiative:p2', part: 'decisions' } }, { page: () => page });
+  assert.equal(other.outputs[1]!['code'], 'navigated', 'another record is still another request');
 });
 
 test('G51: a read of the page just opened may follow; a row or tab of the page in view does not end the turn', async () => {

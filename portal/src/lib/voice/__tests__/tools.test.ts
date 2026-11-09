@@ -701,25 +701,36 @@ test('G50 nameScore: case, punctuation, plurals and run-together words are the s
   assert.equal(nameScore('Anything', ''), 0);
 });
 
-test('G50 acceptance: "open the on-boarding work item" offers "Onboarding flow" on the choice card; "open channel general" with #general-chat is a choice', async () => {
+test('G50 + G62 acceptance: "open the on-boarding work item" opens "Onboarding flow", the one near name, and says so; two near names are a choice; "open channel general" with #general-chat opens it', async () => {
   const { fetch } = fakeFetch([route('GET', '/api/graph/work', 200, [
     { id: 'w-9', title: 'Onboarding flow', projectId: 'p-auth' }, { id: 'w-2', title: 'Rotate the signing keys', projectId: 'p-auth' },
   ])]);
   const c = toolContext({ fetch, results: new ResultMemory() });
   const work = await runVoiceTool('open', { kind: 'work-item', name: 'the on-boarding work item' }, c);
-  assert.equal(work.output['kind'], 'ambiguous', 'a choice, not not-found');
-  assert.deepEqual(work.output['candidates'], [{ ref: 'work-item:w-9', title: 'Onboarding flow', kind: 'work-item', href: '/iq/projects/p-auth' }]);
-  assert.deepEqual(c.navigations, [], 'nothing opens until the user picks');
+  // G62: one candidate is not a choice: it opens, and the line names it as the nearest.
+  assert.equal(work.output['kind'], 'navigated', 'not not-found, and not a one-row choice');
+  assert.equal(work.output['say'], 'Opened Onboarding flow, the nearest to "the on-boarding work item".');
+  assert.equal(work.output['stop'], true);
+  assert.deepEqual(c.navigations, ['/iq/projects/p-auth']);
   // The same name in other words opens at once.
   await runVoiceTool('open', { kind: 'work-item', name: 'on-boarding flow' }, c);
-  assert.deepEqual(c.navigations, ['/iq/projects/p-auth']);
+  assert.deepEqual(c.navigations, ['/iq/projects/p-auth', '/iq/projects/p-auth']);
+  // Two near names stay a choice; nothing opens until the user picks.
+  const { fetch: two } = fakeFetch([route('GET', '/api/graph/work', 200, [
+    { id: 'w-9', title: 'Onboarding flow', projectId: 'p-auth' }, { id: 'w-8', title: 'Onboarding docs', projectId: 'p-auth' },
+  ])]);
+  const c2 = toolContext({ fetch: two, results: new ResultMemory() });
+  const both = await runVoiceTool('open', { kind: 'work-item', name: 'onboarding' }, c2);
+  assert.equal(both.output['kind'], 'ambiguous');
+  assert.deepEqual((both.output['candidates'] as Array<Record<string, unknown>>).map((x) => x['title']), ['Onboarding flow', 'Onboarding docs']);
+  assert.deepEqual(c2.navigations, []);
   const social = { api: '/api/social/plane', unavailable: null, send: async () => {}, presence: null, deliveries: new Map() };
   const { fetch: ch } = fakeFetch([route('GET', '/api/social/plane/channels', 200, { channels: [{ slug: 'general-chat', name: 'general-chat' }, { slug: 'design', name: 'Design reviews' }] })]);
   const chat = toolContext({ fetch: ch, results: new ResultMemory(), social });
   const general = await runVoiceTool('open', { kind: 'channel', name: 'general' }, chat);
-  assert.equal(general.output['kind'], 'ambiguous');
-  assert.deepEqual((general.output['candidates'] as Array<Record<string, unknown>>).map((x) => x['title']), ['general-chat']);
-  assert.deepEqual(chat.navigations, []);
+  assert.equal(general.output['kind'], 'navigated', 'G62: the one near channel opens');
+  assert.equal(general.output['title'], 'general-chat');
+  assert.equal(chat.navigations.length, 1);
   // Nothing near: not-found, naming the three closest rows of the kind.
   const none = await runVoiceTool('open', { kind: 'channel', name: 'zebra' }, chat);
   assert.equal(none.outcome, 'refused');

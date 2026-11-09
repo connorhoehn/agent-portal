@@ -495,6 +495,10 @@ export interface MockLiveFrame { atMs: number; event: Record<string, unknown> }
  *                    spoken summary;
  *   onClose          after the dock's session.close: session.closed with the
  *                    cumulative usage.seconds.
+ * The dock's replay (portal/src/lib/voice/client.ts mockDeliver, G59) keeps
+ * the Live rule this script cannot: a function call answered without the
+ * response.create that continues it holds every later delegation, as the
+ * real API did (scripts/voice/probe-realtime.mjs live-unresolved).
  */
 export function mockLiveScript(sessionId: string, call: { name: string; arguments: Record<string, unknown>; said: string }): {
   onStart: MockLiveFrame[]; onResponseCreate: MockLiveFrame[]; onClose: MockLiveFrame[];

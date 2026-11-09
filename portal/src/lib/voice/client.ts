@@ -20,7 +20,9 @@
 // client then plays those frames through the same parser on timers (no
 // WebRTC, no microphone), replaying `onResponseCreate` after each
 // response.create and `onClose` after session.close, so every phase runs
-// under `node --test`.
+// under `node --test`. The replay keeps the Live API's "silent while a call is
+// unresolved" rule (G59, mockDeliver): a function call the dock never answers
+// and continues holds every later delegation of the voice.
 //
 // Debugging a live session: VITE_VOICE_DEBUG=1 (read when vite starts), or
 // `localStorage.voiceDebug = '1'` in an open tab (read at each session start,
@@ -54,7 +56,11 @@ export const VOICE_API = '/api/voice/sessions';
 export const CLOSE_WAIT_MS = 5000;
 
 export interface MockFrame { atMs: number; event: Record<string, unknown> }
-export interface MockScript { onStart: MockFrame[]; onResponseCreate: MockFrame[]; onClose: MockFrame[] }
+/**
+ * `onResponseCreateSeq` (tests, G59): the nth response.create plays the nth list instead of `onResponseCreate`, so a
+ * scripted session can hold several delegations, each with its own continuation.
+ */
+export interface MockScript { onStart: MockFrame[]; onResponseCreate: MockFrame[]; onClose: MockFrame[]; onResponseCreateSeq?: MockFrame[][] }
 
 /** The mint's 201 body (middleware/src/routes/voice.ts). */
 export interface VoiceMint {
@@ -574,7 +580,14 @@ export class VoiceClient {
     const ev = { event_id: id, ...event };
     this.debugLog?.('out', ev);
     if (this.mocked) {
-      if (ev.type === 'response.create') this.play(this.mint?.mockScript?.onResponseCreate ?? []);
+      this.mockSent(ev);
+      if (ev.type === 'response.create') {
+        const script = this.mint?.mockScript;
+        const nth = script?.onResponseCreateSeq?.[this.mockResponses++];
+        const continued = this.mockContinued;
+        // `$continued` in a scripted continuation names the delegation this response.create continued.
+        this.play((nth ?? script?.onResponseCreate ?? []).map((f) => (f.event['delegation_id'] === '$continued' && continued ? { ...f, event: { ...f.event, delegation_id: continued } } : f)));
+      }
       if (ev.type === 'session.close') this.play(this.mint?.mockScript?.onClose ?? []);
       return id;
     }
@@ -696,10 +709,52 @@ export class VoiceClient {
 
   private play(frames: MockFrame[]): void {
     for (const f of frames) {
-      const t = this.setTimer(() => { this.timers.delete(t); this.deliver(JSON.stringify(f.event)); }, f.atMs);
+      const t = this.setTimer(() => { this.timers.delete(t); this.mockDeliver(f.event); }, f.atMs);
       this.timers.add(t);
     }
   }
+
+  /**
+   * G59: the scripted session keeps the Live API's rule (spec §1) as the real sessions showed it: while a delegation
+   * has a function call without its output, or outputs without the response.create that continues them, the voice
+   * takes no new request. A new delegation (and another delegation's events) is held until that delegation is
+   * continued; a dock that never continues it never sees another delegation, as vs_d69bbb23 and vs_5144e356 did.
+   * The voice's own words still pass: the real voice says its acknowledgement, the card line and an appended
+   * commentary line while a call is open (the G32 card line was heard in vs_89fba6d6 with the create call open).
+   */
+  private mockDeliver(event: Record<string, unknown>): void {
+    const d = typeof event['delegation_id'] === 'string' ? event['delegation_id'] : null;
+    const inner = event['event'] as { type?: unknown; item?: { type?: unknown; call_id?: unknown } } | undefined;
+    const blocked = [...this.mockCalls.entries()].some(([id, calls]) => id !== d && (calls.size > 0 || this.mockUncontinued.has(id)));
+    const voiceFrame = event['type'] === 'session.delegation.created' || (event['type'] === 'response.event' && d != null);
+    if (blocked && voiceFrame) { this.mockHeld.push(event); return; }
+    if (d && inner?.type === 'response.output_item.done' && inner.item?.type === 'function_call' && typeof inner.item.call_id === 'string') {
+      const calls = this.mockCalls.get(d) ?? new Set<string>();
+      calls.add(inner.item.call_id);
+      this.mockCalls.set(d, calls);
+    }
+    this.deliver(JSON.stringify(event));
+  }
+
+  /** What the scripted session learns from the dock's own events: an output answers its call; response.create continues. */
+  private mockSent(ev: Record<string, unknown>): void {
+    const item = ev['item'] as { type?: unknown; call_id?: unknown } | undefined;
+    if (ev['type'] === 'response.item.create' && item?.type === 'function_call_output' && typeof item.call_id === 'string') {
+      for (const [id, calls] of this.mockCalls) if (calls.delete(item.call_id)) this.mockUncontinued.add(id);
+    }
+    if (ev['type'] !== 'response.create') return;
+    for (const [id, calls] of this.mockCalls) if (calls.size === 0) { this.mockContinued = id; this.mockCalls.delete(id); this.mockUncontinued.delete(id); }
+    const held = this.mockHeld;
+    this.mockHeld = [];
+    for (const e of held) this.mockDeliver(e);
+  }
+
+  /** The scripted session's open calls per delegation, the delegations answered but not continued, and the frames held. */
+  private mockCalls = new Map<string, Set<string>>();
+  private mockUncontinued = new Set<string>();
+  private mockHeld: Array<Record<string, unknown>> = [];
+  private mockResponses = 0;
+  private mockContinued: string | null = null;
 
   private teardown(): void {
     this.live = false;

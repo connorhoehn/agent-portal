@@ -95,9 +95,24 @@
 // Bounded requests (G43, sweep 6): one user turn (from one `input` frame to the
 // next) runs at most MAX_CALLS_PER_DELEGATION tool calls across however many
 // delegations the voice opens (a search that only changes its query counts
-// double); the next call is answered `too-many-calls` with stop: true, its
-// round asks for no continuation, any further delegation in the same turn is
-// refused alike, and the dock says TOO_MANY_LINE itself, once per turn.
+// double); the next call is answered `too-many-calls` with stop: true and
+// `say: TOO_MANY_LINE`, and any further delegation in the same turn is
+// refused alike.
+//
+// Stopped rounds (G59): a round with a terminal answer (too many calls, a
+// navigation G51, a repeat refusal G29, a second failure G48) is still
+// continued with one response.create, as every round is: a delegation whose
+// outputs are never continued never resolves, and the Live API keeps the
+// voice silent for the rest of the session (vs_d69bbb23, vs_5144e356). The
+// continuation says the stop's line; a call it makes anyway is refused before
+// it runs; after MAX_STOPPED_CONTINUATIONS the dock lets it go
+// (`delegation-stuck`). G60 watches every delegation and continuation for
+// DELEGATION_EMPTY_MS: no call and no word from the voice after it completed
+// sends DELEGATION_EMPTY_NOTE (silent) and logs `delegation-empty`. G61 counts
+// the user's utterances the voice let pass (no word, no delegation; words
+// for a card or a running call do not count): UNANSWERED_UTTERANCES of them
+// log `unanswered` and raise the restart card ("Not answering: restart
+// voice"), whose Confirm ends the session and starts one resuming it.
 //
 // Phase dwell (G36): the phase the dock shows (and logs) holds at least
 // PHASE_DWELL_MS. A change inside the window waits for its end and is then
@@ -106,7 +121,7 @@
 // phase events are ever closer than PHASE_DWELL_MS.
 
 import { VoiceClient, type ClientEvent, type CloseCause, type CloseWhy, type MediaFactory, type StopReason, type TransportCause, type VoiceFrame, type VoiceMint } from './client.ts';
-import { MIC_QUIET_MS, initialMachine, phaseAt, reduce, sessionOpen, type MachineEvent, type MachineState, type VoicePhase } from './machine.ts';
+import { MIC_QUIET_MS, SPEAKING_LEVEL, initialMachine, phaseAt, reduce, sessionOpen, type MachineEvent, type MachineState, type VoicePhase } from './machine.ts';
 import {
   cancelledResult, confirmLine, confirmModeOf, hashToolArgs, localHref, needsConfirm, type CardAnswer, openableHref, planPreparedCall, prepareToolCall, refused, runPreparedCall, spokenOrdinal, toolAvailable,
   type ConfirmPlan, type PreparedCall, type ToolContext, type ToolResult, type VoiceToolPlanner, type VoiceToolRunner,
@@ -114,7 +129,7 @@ import {
 import { VOICE_PLANNERS, VOICE_RUNNERS } from './actions.ts';
 import { DEFAULT_TOAST_SECONDS } from './work.ts';
 import { VoiceEventLog, argShape, refusalCode, resultSummary, type DockEvent } from './sessionEvents.ts';
-import { FAILED_TWICE_NEXT, FailureGuard, RETRY_NEXT, RefusalGuard, STOP_NEXT, refusalLine, withFailure, withNext } from './refusals.ts';
+import { FAILED_TWICE_NEXT, FailureGuard, RETRY_NEXT, RefusalGuard, STOP_NEXT, withFailure, withNext } from './refusals.ts';
 import { inboundLine, inboundNote, type InboundItem } from './inbound.ts';
 import { DelegationContext, PAGE_NOTE_REPLACES, briefOutput, modelOutput, summaryLine, verbosityNote, type Verbosity } from './contextWindow.ts';
 
@@ -131,6 +146,32 @@ const INBOUND_RECHECK_MS = 400;
 export const MAX_CALLS_PER_DELEGATION = 4;
 /** What the user hears when a delegation runs out of calls. */
 export const TOO_MANY_LINE = 'Say what you want in one sentence.';
+/**
+ * G59: the continuations a stopped round still gets. A stopped round's outputs are always continued (the Live API keeps
+ * the voice silent while a delegation's call has no continuation); a call the continuation makes anyway is refused
+ * before it runs, and after this many the delegation is left (`delegation-stuck`) for G60 and G61 to catch.
+ */
+export const MAX_STOPPED_CONTINUATIONS = 2;
+/** G60: a delegation (or a continuation) that called nothing and left the voice silent this long gets the note. */
+export const DELEGATION_EMPTY_MS = 6000;
+/** G60: a response that completed this recently may still be on its way to the voice: wait this long more. */
+export const DELEGATION_ANSWER_GRACE_MS = 2000;
+/** G60: the silent note when a delegation produced nothing to say. */
+export const DELEGATION_EMPTY_NOTE = 'The last request reached the backend, but nothing ran and nothing came back to say. Answer the user now in one short sentence from what you already know, or say you could not do it and ask them to say it another way.';
+/** G61: this many utterances in a row with no word and no delegation from the voice is a session that stopped answering. */
+export const UNANSWERED_UTTERANCES = 3;
+/** G61: words this far apart (wall clock) begin a new utterance. */
+export const UTTERANCE_APART_MS = 1500;
+/** G61: how long after the last utterance the voice has to answer before the session counts as not answering. */
+export const UNANSWERED_WAIT_MS = 5000;
+/** G61: the card id of the restart card (not a tool call). */
+export const STALLED_CARD = 'voice-stalled';
+/** G61: the restart card's words. */
+export const STALLED_TEXT = {
+  title: 'Not answering: restart voice',
+  detail: 'The voice has not answered your last three requests. Restart picks up where you left off.',
+  hint: 'Click Confirm to restart.',
+} as const;
 
 /** The least time a shown phase holds before the next one replaces it (G36). */
 export const PHASE_DWELL_MS = 300;
@@ -273,10 +314,17 @@ export interface ControllerOptions {
 }
 
 interface CallRecord { name: string; status: 'confirming' | 'running' | 'answered' }
-/** `stopped`: a call of this round was a repeat refusal (G29): the round ends without a continuation. */
+/**
+ * `stopped`: a call of this round was terminal (a repeat refusal G29, too many calls G43, a navigation G51, failed twice
+ * G48): every later call of the delegation is refused before it runs. `closing` (G59): the continuations sent since.
+ */
 interface DelegationRecord {
-  calls: Map<string, CallRecord>; completed: boolean; unanswered: number; grace: Timer | null; stopped: boolean;
+  calls: Map<string, CallRecord>; completed: boolean; unanswered: number; grace: Timer | null; stopped: boolean; closing: number;
 }
+/** One user turn (G43, G51): the calls it used, its searches' shapes, whether it was stopped, and the page it opened. */
+interface Turn { used: number; searches: Set<string>; stopped: boolean; navigated?: string; navigatedRef?: string }
+/** G60: one delegation (or continuation) watched for an empty answer: since when, whether it called, when it completed. */
+interface EmptyWatch { timer: Timer | null; since: number; called: boolean; completedAt: number | null; continuation: boolean }
 /** What the card has heard: the first utterance after it, and whether that utterance has ended. */
 interface Heard { text: string; lastEndMs: number | null; quiet: Timer | null; done: boolean }
 interface Pending {
@@ -396,7 +444,17 @@ export class VoiceController {
   private mintTenant: string | null = null;
   /** G43: the calls this user turn used (weighted), its searches' shapes without the query, and whether it was stopped. */
   /** `navigated` (G51): this user turn opened a page or a record; it is done, and any further call is refused. */
-  private turn: { used: number; searches: Set<string>; stopped: boolean; spoke: boolean; navigated?: string } = { used: 0, searches: new Set(), stopped: false, spoke: false };
+  private turn: Turn = { used: 0, searches: new Set(), stopped: false };
+  /** The turn each running call was made in (G59): its answer marks that turn, not whichever is current when it lands. */
+  private callTurns = new Map<string, Turn>();
+  /** G60: the delegations watched for an empty answer, and when the voice last spoke. */
+  private watches = new Map<string, EmptyWatch>();
+  private lastVoiceAt: number | null = null;
+  /** G61: utterances heard since the voice last answered, when the last word was heard, the check, and the restart card. */
+  private unheard = 0;
+  private lastHeardAt: number | null = null;
+  private unheardTimer: Timer | null = null;
+  private stalledCard: VoicePendingView | null = null;
   /** G41: the conversations a message card was confirmed for this session, and the call that confirmed each. */
   private coveredTargets = new Map<string, string>();
   /** G36: the phase shown and logged, since when, and the timer that re-reads the machine when a dwell ends. */
@@ -433,6 +491,8 @@ export class VoiceController {
       const l = this.client.levels();
       this.levels = { input: l.input, output: l.output };
       this.dispatch({ type: 'levels', at: this.now(), input: l.input, output: l.output }, false);
+      // The voice audibly talking is an answer (G60, G61), whether or not its transcript reached the data channel.
+      if (l.output > SPEAKING_LEVEL) this.voiceAnswered(this.now());
       this.checkBudget();
     }
     this.publish();
@@ -493,15 +553,37 @@ export class VoiceController {
   /** `answer`: what a card with fields answered on a click (its toggle and note); a voice "yes" leaves the arguments standing. */
   confirm(by: 'voice' | 'click' = 'click', answer?: CardAnswer): void {
     if (this.budgetCard) { this.budgetCard = null; void this.start({ confirmOverUserBudget: true }); return; }
+    if (this.stalledCard && !this.pending) { void this.restart(); return; }
     this.resolvePending(true, by, answer);
   }
   cancel(by: 'voice' | 'click' = 'click'): void {
+    if (this.stalledCard && !this.pending) {
+      this.emit({ kind: 'client', data: { event: 'unanswered-dismissed' } });
+      this.clearStalled();
+      return;
+    }
     if (this.budgetCard) {
       this.budgetCard = null;
       this.dispatch({ type: 'unavailable', reason: 'Not started: this session would go over your budget.' });
       return;
     }
     this.resolvePending(false, by);
+  }
+
+  /**
+   * G61: end this session and start one that resumes it (the server links the rows, the voice is told it continues).
+   * The restart card's Confirm; the close is the user's own (they clicked it), the resume is kept here, not by cause.
+   */
+  async restart(): Promise<void> {
+    const client = this.client;
+    if (!client || this.machine.base !== 'live') return;
+    this.emit({ kind: 'client', data: { event: 'restart', cause: 'unanswered' } });
+    this.clearStalled();
+    const id = client.mint?.sessionId;
+    if (this.opts.resume) this.keepResumable(client);
+    else if (id) this.resumeRecord = { sessionId: id, at: this.now(), ...(this.mintTenant ? { tenant: this.mintTenant } : {}) };
+    await this.stop('closed', 'user');
+    await this.start({ resume: true });
   }
 
   /**
@@ -627,6 +709,7 @@ export class VoiceController {
     if (this.pulseTimer != null) this.clearTimer(this.pulseTimer);
     if (this.resumeTimer != null) this.clearTimer(this.resumeTimer);
     if (this.dwellTimer != null) this.clearTimer(this.dwellTimer);
+    if (this.unheardTimer != null) this.clearTimer(this.unheardTimer);
     this.log.dispose();
     void this.stop('dropped');
     this.listeners.clear();
@@ -704,7 +787,8 @@ export class VoiceController {
         this.context.speech(f.text.length);
         // The user answered: the idle watch after a result stands down (G33 item 4), and a new turn has its own calls (G43).
         this.disarmIdle();
-        this.turn = { used: 0, searches: new Set(), stopped: false, spoke: false };
+        this.turn = { used: 0, searches: new Set(), stopped: false };
+        this.heard(at);
         this.appendTurn('you', f.text, at);
         this.dispatch({ type: 'input', at });
         if (this.pending) this.hearForPending(f.text, f.startMs, f.endMs);
@@ -712,6 +796,7 @@ export class VoiceController {
         return;
       case 'output':
         this.context.speech(f.text.length);
+        this.voiceAnswered(at);
         if (this.pending) this.saidSinceCard += f.text;
         // The voice is still talking: the 6 s of silence count from its last word.
         if (this.idleArmed) this.scheduleIdle(IDLE_PULSE_MS);
@@ -722,7 +807,10 @@ export class VoiceController {
         if (!this.delegations.has(f.delegationId)) {
           this.emit({ kind: 'delegation', data: { delegationId: f.delegationId } });
           this.context.newTurn();
+          this.watchEmpty(f.delegationId, false);
         }
+        // The voice took the request (G61): it is answering.
+        this.answeredByVoice();
         this.delegation(f.delegationId);
         this.dispatch({ type: 'delegation', id: f.delegationId });
         return;
@@ -730,10 +818,10 @@ export class VoiceController {
         void this.onCall(client, f.delegationId ?? `solo_${f.callId}`, f.callId, f.name, f.arguments);
         return;
       case 'response-completed':
-        if (f.delegationId) this.onCompleted(client, f.delegationId);
+        if (f.delegationId) { this.watchCompleted(f.delegationId); this.onCompleted(client, f.delegationId); }
         return;
       case 'response-failed':
-        if (f.delegationId) this.closeDelegation(f.delegationId);
+        if (f.delegationId) { this.watchCompleted(f.delegationId); this.closeDelegation(f.delegationId); }
         return;
       case 'muted':
         this.muted = f.muted;
@@ -759,7 +847,7 @@ export class VoiceController {
   private delegation(id: string): DelegationRecord {
     let rec = this.delegations.get(id);
     if (!rec) {
-      rec = { calls: new Map(), completed: false, unanswered: 0, grace: null, stopped: false };
+      rec = { calls: new Map(), completed: false, unanswered: 0, grace: null, stopped: false, closing: 0 };
       this.delegations.set(id, rec);
     }
     return rec;
@@ -770,25 +858,22 @@ export class VoiceController {
     if (rec.calls.has(callId)) return;
     if (!this.machine.openDelegations.includes(delegationId)) this.dispatch({ type: 'delegation', id: delegationId });
     rec.calls.set(callId, { name, status: 'running' });
+    // G60: a call is something to say; the delegation is not empty.
+    this.watchCalled(delegationId);
     // The call's shape (its enum arguments, a ref's kind), never its words: four open-shells read apart from four starts.
     this.emit({ kind: 'tool-call', tool: name, data: { callId, ...argShape(name, rawArgs) } });
     const startedAt = this.now();
     const ctx = this.toolContext();
-    // G43: a delegation that has used its calls is told to stop; the round ends here and the dock speaks.
+    // G43: a delegation that has used its calls is told to stop. G59: a stopped round is still continued (maybeContinue),
+    // so the delegation can end in the one line its stop output asks for; the voice speaks it, the dock adds nothing.
     const turn = this.turn;
+    this.callTurns.set(callId, turn);
     // G51: a navigation ended this request; another page (or anything else) waits for the user's next words. Only a
     // read of the page just opened ("open this initiative, what should I work on") may follow.
-    if (turn.navigated !== undefined && !readsThisPage(name, rawArgs)) {
+    if (turn.navigated !== undefined && !readsThisPage(name, rawArgs, turn.navigatedRef)) {
       rec.stopped = true;
-      await this.answer(client, delegationId, callId, name, withNext(refused('This request already opened a page, so nothing more runs for it. Say the one line about that page.', { code: 'navigated', stop: true }), name, ctx), startedAt, rawArgs);
-      // The round ends without a continuation, so the dock says the page's line itself, once.
-      if (!turn.spoke && turn.navigated) {
-        turn.spoke = true;
-        const said = `Tell the user, in one sentence, and do not call anything: ${turn.navigated}`;
-        this.context.note(said.length);
-        client.appendCommentary(said);
-        this.addLine('assistant', turn.navigated);
-      }
+      const say = turn.navigated || 'The page is open.';
+      await this.answer(client, delegationId, callId, name, withNext(refused('This request already opened a page, so nothing more runs for it. Say the one line about that page and call nothing more.', { code: 'navigated', say, stop: true }), name, ctx), startedAt, rawArgs);
       return;
     }
     const weight = callWeight(turn, name, rawArgs);
@@ -797,13 +882,6 @@ export class VoiceController {
       turn.stopped = true;
       const res = withNext(refused('Too many calls for one request.', { code: 'too-many-calls', say: TOO_MANY_LINE, stop: true }), name, ctx);
       await this.answer(client, delegationId, callId, name, res, startedAt, rawArgs);
-      if (!turn.spoke) {
-        turn.spoke = true;
-        const said = `Tell the user, in one sentence, and do not call anything: ${TOO_MANY_LINE}`;
-        this.context.note(said.length);
-        client.appendCommentary(said);
-        this.addLine('assistant', TOO_MANY_LINE);
-      }
       return;
     }
     turn.used += weight;
@@ -814,7 +892,7 @@ export class VoiceController {
     }
     const call = prepared.call;
     // G48: a call that failed runs again only once, and only after the user asked (a new turn); never on the model's own.
-    const retry = this.failures.check(name, call.args, this.turn);
+    const retry = this.failures.check(name, call.args, turn);
     if (retry) {
       await this.answer(client, delegationId, callId, name, withNext(refused(retry.reason, { code: retry.code }), name, ctx), startedAt, call.args);
       return;
@@ -901,37 +979,41 @@ export class VoiceController {
   }
 
   private async answer(client: VoiceClient, delegationId: string, callId: string, name: string, given: ToolResult, startedAt: number, args: unknown, confirmedBy?: 'voice' | 'click'): Promise<void> {
+    // G59: the turn this call was made in (a card's answer can land after the user spoke again).
+    const turn = this.callTurns.get(callId) ?? this.turn;
+    this.callTurns.delete(callId);
     if (client !== this.client || this.machine.base !== 'live') return;
     // G47: a failed call (or a route's brake) says why: its code, its gate and the one line to say.
     let res = withFailure(given, name);
     // G48: a failure may be retried once when the user asks; the second failure of the same call ends the round.
     if (res.outcome === 'failed') {
-      const { last } = this.failures.failed(name, args, this.turn);
+      const { last } = this.failures.failed(name, args, turn);
       res = { ...res, output: { ...res.output, next: last ? FAILED_TWICE_NEXT : RETRY_NEXT, ...(last ? { stop: true } : {}) } };
     } else if (res.outcome === 'done') this.failures.succeeded(name, args);
-    // G51: a navigation that ends the request (open's stop) closes the turn to further calls.
-    if (name === 'open' && res.outcome === 'done' && res.output['stop'] === true) this.turn.navigated = typeof res.output['say'] === 'string' ? res.output['say'] : '';
-    // G29: the second identical refused call of the session is terminal. Its output says stop, the round asks for no
-    // continuation (so the delegation cannot try a third time), and the dock speaks the refusal line itself, once.
+    // G51: a navigation that ends the request (open's stop) closes the turn to further calls, but a read of the record
+    // it opened ("open Alpha, what are its decisions": get with that ref) is that page's read (vs_5144e356).
+    if (name === 'open' && res.outcome === 'done' && res.output['stop'] === true) {
+      turn.navigated = typeof res.output['say'] === 'string' ? res.output['say'] : '';
+      if (typeof res.output['ref'] === 'string') turn.navigatedRef = res.output['ref'];
+    }
+    // G29: the second identical refused call of the session is terminal. Its output says stop and the round is stopped:
+    // its continuation (G59: always sent, or the voice falls silent for good) may only say the refusal; any further call
+    // of the delegation is refused before it runs.
     const verdict = res.outcome === 'refused' ? this.refusals.refused(name, args, res.output) : null;
     if (verdict?.terminal) {
       res = { ...res, output: { ...res.output, stop: true, next: STOP_NEXT } };
       this.delegation(delegationId).stopped = true;
     }
+    // G48: the second failure of the same call stops the round alike.
+    if (res.outcome === 'failed' && res.output['stop'] === true) this.delegation(delegationId).stopped = true;
     // G31: the model gets the compact form (no links, lists cut to fit); the strip, the log and the kept rows the full one.
     // G33: list, search and get hand the model the count, three rows, `more` and a ready `say` line, unless `detail`.
     const wire = JSON.stringify(modelOutput(briefOutput(name, args, res.output)));
     client.sendToolOutput(callId, wire);
     this.context.result(wire.length, summaryLine(name, res.summary));
     this.armIdle();
-    if (verdict?.speak) {
-      const line = refusalLine(given.output);
-      const said = `Tell the user, in one sentence, and do not call anything: ${line}`;
-      this.context.note(said.length);
-      client.appendCommentary(said);
-      this.addLine('assistant', line);
-      this.emit({ kind: 'client', data: { event: 'refusal-repeated', tool: name, reason: refusalCode(res.output) } });
-    }
+    // The repeat is on the log; the continuation says the refusal (STOP_NEXT), so the dock does not say it again.
+    if (verdict?.speak) this.emit({ kind: 'client', data: { event: 'refusal-repeated', tool: name, reason: refusalCode(res.output) } });
     // The page the result left the user on (G21), before the continuation reads it.
     this.notePage();
     this.noteChoice(res);
@@ -956,7 +1038,8 @@ export class VoiceController {
   private noteChoice(res: ToolResult): void {
     const cands = res.output['kind'] === 'ambiguous' && Array.isArray(res.output['candidates']) ? res.output['candidates'] as Array<Record<string, unknown>> : null;
     const rows = cands?.filter((c) => typeof c['title'] === 'string' && typeof c['href'] === 'string' && localHref(c['href'] as string)) ?? [];
-    if (cands && rows.length && rows.length === cands.length) {
+    // G62: one candidate is not a choice; a card needs at least two rows to choose between.
+    if (cands && rows.length > 1 && rows.length === cands.length) {
       this.clearChoice();
       this.choice = {
         id: `choice-${++this.choiceSeq}`, requestId: ++this.requestSeq, heard: '',
@@ -993,13 +1076,25 @@ export class VoiceController {
         return;
       }
       if (rec.grace != null) { this.clearTimer(rec.grace); rec.grace = null; }
-      // A repeat refusal ended the round (G29): no continuation, so no third call; the dock has spoken.
-      if (rec.stopped) { this.closeDelegation(delegationId); return; }
+      // G59: a stopped round (G29 repeat, G43 too many, G51 navigated, G48 failed twice) is continued like any other.
+      // Without the response.create the delegation never resolves and the Live API keeps the voice silent for the rest
+      // of the session (vs_d69bbb23 01:41:41, vs_5144e356 13:29:44). Its output told the delegation to stop and say one
+      // line; a call it makes anyway is refused before it runs; after MAX_STOPPED_CONTINUATIONS the dock gives up on it.
+      if (rec.stopped) {
+        if (rec.closing >= MAX_STOPPED_CONTINUATIONS) {
+          this.emit({ kind: 'client', data: { event: 'delegation-stuck', delegationId } });
+          this.closeDelegation(delegationId);
+          return;
+        }
+        rec.closing += 1;
+      }
       // One response.create for every output of this round (§1).
       rec.unanswered = 0;
       rec.completed = false;
       rec.calls.clear();
       client.requestResponse();
+      // G60: the continuation is watched like the delegation was: a call or the voice's words, or the note.
+      this.watchEmpty(delegationId, true);
       return;
     }
     // The continuation (or a delegation that called nothing) completed: it is done.
@@ -1016,7 +1111,100 @@ export class VoiceController {
   private clearDelegations(): void {
     for (const rec of this.delegations.values()) if (rec.grace != null) this.clearTimer(rec.grace);
     this.delegations.clear();
+    for (const w of this.watches.values()) if (w.timer != null) this.clearTimer(w.timer);
+    this.watches.clear();
+    this.callTurns.clear();
   }
+
+  // ── G60: a delegation that ends with nothing to say ─────────────────────
+
+  /** Watch a delegation (or its continuation): DELEGATION_EMPTY_MS for a call, or for the voice's words after it completes. */
+  private watchEmpty(id: string, continuation: boolean): void {
+    const old = this.watches.get(id);
+    if (old?.timer != null) this.clearTimer(old.timer);
+    const w: EmptyWatch = { timer: null, since: this.now(), called: false, completedAt: null, continuation };
+    w.timer = this.setTimer(() => this.checkEmpty(id, w), DELEGATION_EMPTY_MS);
+    this.watches.set(id, w);
+  }
+
+  private watchCalled(id: string): void {
+    const w = this.watches.get(id);
+    if (!w) return;
+    w.called = true;
+    if (w.timer != null) this.clearTimer(w.timer);
+    this.watches.delete(id);
+  }
+
+  private watchCompleted(id: string): void {
+    const w = this.watches.get(id);
+    if (w && w.completedAt == null) w.completedAt = this.now();
+  }
+
+  /**
+   * The watch is due: a call, or the voice's words after the response completed, answered it; a response that
+   * completed a moment ago gets DELEGATION_ANSWER_GRACE_MS more. Otherwise the voice is told, silently, to answer or
+   * to say it could not, and the log says `delegation-empty` (vs_71839299 13:49:41, vs_0d1c427b 13:53:04).
+   */
+  private checkEmpty(id: string, w: EmptyWatch): void {
+    w.timer = null;
+    if (this.watches.get(id) !== w) return;
+    if (w.called || this.machine.base !== 'live') { this.watches.delete(id); return; }
+    const now = this.now();
+    if (w.completedAt != null && now - w.completedAt < DELEGATION_ANSWER_GRACE_MS) {
+      w.timer = this.setTimer(() => this.checkEmpty(id, w), DELEGATION_ANSWER_GRACE_MS - (now - w.completedAt));
+      return;
+    }
+    this.watches.delete(id);
+    if (w.completedAt != null && this.lastVoiceAt != null && this.lastVoiceAt >= w.completedAt) return;
+    this.emit({ kind: 'client', data: { event: 'delegation-empty', delegationId: id, completed: w.completedAt != null, continuation: w.continuation } });
+    this.noteContext(DELEGATION_EMPTY_NOTE);
+  }
+
+  // ── G61: a session that stopped answering ───────────────────────────────
+
+  /** The voice spoke (a transcript word, or its audio above the speaking level): it is answering. */
+  private voiceAnswered(at: number): void {
+    this.lastVoiceAt = at;
+    this.answeredByVoice();
+  }
+
+  private answeredByVoice(): void {
+    this.unheard = 0;
+    if (this.unheardTimer != null) { this.clearTimer(this.unheardTimer); this.unheardTimer = null; }
+    if (this.stalledCard) this.clearStalled();
+  }
+
+  /**
+   * A word from the user. Words UTTERANCE_APART_MS after the last one begin an utterance; UNANSWERED_UTTERANCES of them
+   * with no word and no delegation from the voice in between, and UNANSWERED_WAIT_MS after the last, is a session that
+   * stopped answering (vs_89fba6d6 13:56:38 to 14:00:25). Words for a card (confirm, a choice) or during a running
+   * call are not requests to the voice and do not count.
+   */
+  private heard(at: number): void {
+    const forDock = this.pending != null || this.choice != null || this.stalledCard != null || this.machine.runningCalls.length > 0;
+    const fresh = this.lastHeardAt == null || at - this.lastHeardAt >= UTTERANCE_APART_MS;
+    this.lastHeardAt = at;
+    if (forDock) return;
+    if (fresh) this.unheard += 1;
+    if (this.unheardTimer != null) this.clearTimer(this.unheardTimer);
+    this.unheardTimer = this.setTimer(() => { this.unheardTimer = null; this.checkUnanswered(); }, UNANSWERED_WAIT_MS);
+  }
+
+  private checkUnanswered(): void {
+    if (this.unheard < UNANSWERED_UTTERANCES || this.machine.base !== 'live' || this.pending || this.choice || this.stalledCard) return;
+    this.emit({ kind: 'client', data: { event: 'unanswered', utterances: this.unheard } });
+    this.stalledCard = { callId: STALLED_CARD, requestId: ++this.requestSeq, tool: 'voice_session', ...STALLED_TEXT };
+    this.pulseOnce('card');
+    this.publish();
+  }
+
+  private clearStalled(): void {
+    this.unheard = 0;
+    if (!this.stalledCard) return;
+    this.stalledCard = null;
+    this.publish();
+  }
+
 
   /** "The second one": the card is told the ordinal and chooses it (once per value); a number past the rows is ignored. */
   private hearForChoice(text: string): void {
@@ -1300,8 +1488,14 @@ export class VoiceController {
   }
 
   private reset(): void {
-    this.turn = { used: 0, searches: new Set(), stopped: false, spoke: false };
+    this.turn = { used: 0, searches: new Set(), stopped: false };
     this.clearDelegations();
+    this.lastVoiceAt = null;
+    this.lastHeardAt = null;
+    this.unheard = 0;
+    if (this.unheardTimer != null) this.clearTimer(this.unheardTimer);
+    this.unheardTimer = null;
+    this.stalledCard = null;
     this.coveredTargets.clear();
     this.disarmIdle();
     this.clearCardLine();
@@ -1369,7 +1563,7 @@ export class VoiceController {
       level: live ? round(this.levels.input) : 0,
       outputLevel: live ? round(this.levels.output) : 0,
       elapsedSeconds: Math.floor(this.elapsed()),
-      pending: this.pending?.view ?? this.budgetCard ?? null,
+      pending: this.pending?.view ?? this.budgetCard ?? this.stalledCard ?? null,
       choice: this.choice ? { id: this.choice.id, requestId: this.choice.requestId, title: this.choice.title, candidates: this.choice.candidates, ...(this.choice.ordinal ? { ordinal: this.choice.ordinal } : {}) } : null,
       lastLine: last ? { role: last.role, text: last.text.trim() } : null,
       turns: this.turns,
@@ -1399,10 +1593,16 @@ export class VoiceController {
 const round = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 20) / 20;
 
 /** G43: one call's weight against the delegation's budget: a search that only changes its query counts double. */
-/** G51: the one call a navigation lets follow in its turn: list or get of the page in view (scope "this-page"). */
-function readsThisPage(name: string, raw: string): boolean {
+/**
+ * G51: the one call a navigation lets follow in its turn: list or get of the page in view (scope "this-page"), or a get
+ * of the record it opened by that record's ref (vs_5144e356: open Alpha, then get Alpha's decisions, was refused).
+ */
+function readsThisPage(name: string, raw: string, openedRef?: string): boolean {
   if (name !== 'list' && name !== 'get') return false;
-  try { return (JSON.parse(raw) as Record<string, unknown>)['scope'] === 'this-page'; } catch { return false; }
+  try {
+    const a = JSON.parse(raw) as Record<string, unknown>;
+    return a['scope'] === 'this-page' || (name === 'get' && openedRef != null && a['ref'] === openedRef);
+  } catch { return false; }
 }
 
 function callWeight(rec: { searches: Set<string> }, name: string, raw: string): number {

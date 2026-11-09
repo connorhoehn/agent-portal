@@ -13,6 +13,10 @@
 //                       session.thinking.append / instructions.append / commentary.append.
 //   live-client         Live primary WebSocket, client delegation; answers session.delegation.created with
 //                       session.commentary.append.
+//   live-unresolved     G59: answers the first function call with its output and (UNRESOLVED_MODE=no-continue, the
+//                       default) no response.create, then speaks a second request; records whether the voice still
+//                       delegates or speaks. UNRESOLVED_MODE=continue is the control; UNRESOLVED_COMMENTARY=1 adds the
+//                       old dock's stop line. At most 28 s.
 //   mint-webrtc         POST /v1/live/sessions with a synthetic SDP offer (what chatgpt-live-voice/server.mjs
 //                       does), attaches a sideband, then POST /v1/live/sessions/{id}/hangup with the sideband still
 //                       open so session.closed reports the billed seconds. MINT_RESTRICT=1 adds the
@@ -374,6 +378,70 @@ async function liveClient() {
   await s.close();
 }
 
+// G59 (docs/voice-navigator-gaps.md, "Real sessions, 9 November 2026 13:47–14:01"): is the voice silent for good once
+// a delegation's function call has its output but no response.create? UNRESOLVED_MODE=no-continue (default) answers
+// the first call with the output only, as the dock's stopped rounds did before G59; UNRESOLVED_MODE=continue sends the
+// response.create too (the control). UNRESOLVED_COMMENTARY=1 also appends the old dock's line ("Tell the user, in one
+// sentence, and do not call anything: …"). Then a second request is spoken; the result says whether the voice
+// delegated or spoke after it. One session, at most UNRESOLVED_CAP_MS (28 s).
+async function liveUnresolved() {
+  const MODE = process.env.UNRESOLVED_MODE === 'continue' ? 'continue' : 'no-continue';
+  const COMMENTARY = process.env.UNRESOLVED_COMMENTARY === '1';
+  const CAP = Number(process.env.UNRESOLVED_CAP_MS || 28_000);
+  const s = new Live(`${WSS}/live/sessions`, {});
+  let phase = 'first';
+  const after = { delegations: 0, calls: 0, transcript: '', voiced: 0, firstMs: null };
+  let secondAt = null;
+  s.onEvent = (ev) => {
+    if (ev.type === 'response.event' && ev.event?.type === 'response.output_item.done' && ev.event.item?.type === 'function_call') {
+      const it = ev.event.item;
+      note('tool.call', { call_id: it.call_id, name: it.name, phase });
+      if (phase === 'first') {
+        phase = 'answered';
+        s.send({ type: 'response.item.create', event_id: `tool_result_${it.call_id}`, item: { type: 'function_call_output', call_id: it.call_id, output: JSON.stringify({ ...runTool(it.name, it.arguments), stop: true, say: 'Opened the Computer Lab.' }) } });
+        if (MODE === 'continue') s.send({ type: 'response.create', event_id: `continue_${it.call_id}` });
+        if (COMMENTARY) s.send({ type: 'session.commentary.append', event_id: 'stop_line', delegation_id: null, content: 'Tell the user, in one sentence, and do not call anything: Opened the Computer Lab.' });
+      } else if (phase === 'second') {
+        after.calls++;
+        s.send({ type: 'response.item.create', event_id: `tool_result_${it.call_id}`, item: { type: 'function_call_output', call_id: it.call_id, output: JSON.stringify(runTool(it.name, it.arguments)) } });
+        s.send({ type: 'response.create', event_id: `continue_${it.call_id}` });
+      }
+    }
+    if (phase !== 'second') return;
+    const mark = () => { if (after.firstMs == null) after.firstMs = now() - secondAt; };
+    if (ev.type === 'session.delegation.created') { after.delegations++; mark(); }
+    if (ev.type === 'session.output_transcript.delta') { after.transcript += ev.delta ?? ''; mark(); }
+    if (ev.type === 'session.output_audio.delta' && rms(ev.delta) > VOICED) after.voiced++;
+  };
+  await s.opened;
+  s.send({
+    type: 'session.start', event_id: 'start_unresolved',
+    session: {
+      model: MODEL, instructions: LIVE_INSTRUCTIONS,
+      audio: { format: { type: 'audio/pcm', rate: RATE }, output: { voice: 'marin' } },
+      delegation: { type: 'responses', responses: { model: DELEGATION_MODEL, instructions: BACKEND_INSTRUCTIONS, tools: FUNCTIONS, tool_choice: 'auto', parallel_tool_calls: false } },
+    },
+  });
+  const started = await s.waitFor((e) => e.type === 'session.started' || e.type === 'error', 10_000, 'session.started');
+  if (started?.type !== 'session.started') { note('result', { unresolved: started?.type ?? 'no answer' }); try { s.ws.close(1000); } catch {} return; }
+  let capped = null;
+  const cap = setTimeout(() => { note('hard.cap', { ms: CAP }); capped = s.close(); }, CAP);
+  s.startMic();
+  await sleep(500);
+  s.say(utterance(3), 'Open the computer lab.'); await s.utteranceDone();
+  await s.waitFor((e) => e.type === 'response.event' && e.event?.type === 'response.output_item.done' && e.event.item?.type === 'function_call', 9000, 'first call');
+  await sleep(4000);
+  phase = 'second';
+  secondAt = now();
+  s.say(utterance(2), 'Find me the latest Kubernetes experts.'); await s.utteranceDone();
+  await s.waitFor((e) => e.type === 'session.delegation.created', 8000, 'second delegation');
+  await s.quiet(1500, 4000, 'second answer', secondAt);
+  note('result', { mode: MODE, commentary: COMMENTARY, delegated_after: after.delegations > 0, calls_after: after.calls, spoke_after: after.transcript.length > 0, transcript_after: after.transcript, voiced_chunks_after: after.voiced, first_after_ms: after.firstMs });
+  clearTimeout(cap);
+  // Wait for session.closed (its billed seconds) even when the cap began the close.
+  await (capped ?? s.close());
+}
+
 function syntheticOffer() {
   const ufrag = randomBytes(3).toString('hex');
   const pwd = randomBytes(12).toString('hex');
@@ -432,7 +500,7 @@ async function mintWebrtc() {
   await sleep(300);
 }
 
-const SCENARIOS = { 'realtime-handshake': realtimeHandshake, 'live-plain-tools': livePlainTools, 'live-responses': liveResponses, 'live-client': liveClient, 'mint-webrtc': mintWebrtc };
+const SCENARIOS = { 'realtime-handshake': realtimeHandshake, 'live-plain-tools': livePlainTools, 'live-responses': liveResponses, 'live-client': liveClient, 'mint-webrtc': mintWebrtc, 'live-unresolved': liveUnresolved };
 if (!SCENARIOS[scenario]) { console.error(`unknown scenario ${scenario}; one of ${Object.keys(SCENARIOS).join(', ')}`); process.exit(1); }
 note('probe.start', { model: MODEL, delegation_model: DELEGATION_MODEL, node: process.version });
 const killer = setTimeout(() => { note('probe.killed', { after_ms: 70_000 }); process.exit(2); }, 70_000);

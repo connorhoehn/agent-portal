@@ -1132,6 +1132,12 @@ async function openByName(kind: string, name: string, ctx: ToolContext): Promise
   const near = hits.length ? [] : nearMatches(openable, (r) => r.title, name, drop);
   if (near.length && near[0]!.score === 1 && (near.length === 1 || near[1]!.score < 1)) return opened(`${kind}:${near[0]!.row.id}`, near[0]!.row.title, near[0]!.row.href!, ctx);
   const choices = hits.length ? hits : near.map((x) => x.row);
+  // G62: one candidate is not a choice (vs_89fba6d6 13:55:54 showed a card with one row): open it, and say which it is.
+  if (choices.length === 1) {
+    const only = choices[0]!;
+    const res = opened(`${kind}:${only.id}`, only.title, only.href!, ctx);
+    return res.outcome === 'done' ? { ...res, output: { ...res.output, say: `Opened ${only.title}, the nearest to "${name}".`, nearest: true } } : res;
+  }
   if (choices.length) {
     const shown = choices.slice(0, MAX_ROWS);
     keepShaped(ctx, kind, shown);

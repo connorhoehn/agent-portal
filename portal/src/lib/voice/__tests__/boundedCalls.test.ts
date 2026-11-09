@@ -49,7 +49,7 @@ async function run(calls: Array<[string, Record<string, unknown>]>) {
   } finally { Object.assign(proto, { sendToolOutput: orig.out, appendCommentary: orig.c, requestResponse: orig.r }); }
 }
 
-test('G43: six calls in one delegation: four run, the fifth and sixth are too-many-calls, no continuation, one spoken line', async () => {
+test('G43 + G59: six calls in one delegation: four run, the fifth and sixth are too-many-calls, and the round is still continued once', async () => {
   const lists: Array<[string, Record<string, unknown>]> = Array.from({ length: 6 }, (_, i) => ['list', { kind: 'initiative', filter: { q: `x${i}` } }]);
   const r = await run(lists);
   assert.equal(r.outputs.length, 6);
@@ -57,8 +57,10 @@ test('G43: six calls in one delegation: four run, the fifth and sixth are too-ma
   assert.equal(r.outputs[4]!['code'], 'too-many-calls');
   assert.equal(r.outputs[4]!['stop'], true);
   assert.equal(r.outputs[4]!['say'], TOO_MANY_LINE);
-  assert.equal(r.responses, 0, 'the round asks for no continuation');
-  assert.equal(r.said.filter((s) => s.includes(TOO_MANY_LINE)).length, 1);
+  // G59: the stopped round is continued (no continuation left the voice silent for good, vs_d69bbb23); the
+  // continuation's own text says TOO_MANY_LINE, so the dock appends no commentary of its own.
+  assert.equal(r.responses, 1, 'the stopped round is continued once');
+  assert.equal(r.said.filter((s) => s.includes(TOO_MANY_LINE)).length, 0);
   const refusedEvents = loggedEvents(r.log).filter((e) => e['kind'] === 'refused').map((e) => (e['data'] as Record<string, unknown>)['reason']);
   assert.ok(refusedEvents.includes('too-many-calls'), JSON.stringify(loggedEvents(r.log).map((e) => e['kind'])));
   assert.equal(MAX_CALLS_PER_DELEGATION, 4);
