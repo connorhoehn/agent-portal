@@ -2,7 +2,7 @@ import { Router, type Request } from 'express';
 import { AppError, asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { currentLiveSession } from '../lib/live-principal.js';
 import { isAllowed } from '../lib/authz.js';
-import { requireInitiativeScope } from '../lib/initiative-scope.js';
+import { requireInitiativeScope, stewardsInitiative } from '../lib/initiative-scope.js';
 import { getWorkItem } from '../providers/work-items.js';
 import { getProject } from '../providers/projects.js';
 import { notifyWorkGraphChanged } from '../lib/work-graph/live.js';
@@ -26,6 +26,28 @@ async function authority(source: Session | undefined, write = false): Promise<Se
   }
   // A remote policy read may outlive a directory epoch/grant change.
   return currentLiveSession(session);
+}
+/**
+ * G56: who writes a workspace page or whiteboard. The initiative's own people —
+ * its owner, a contributor, or an org-wide role (lib/initiative-scope.ts
+ * stewardsInitiative, the rule projects.ts holds a steward to) — with the Cedar
+ * action every orgiq role that sees work holds (ViewWorkItems). Writing a page
+ * spends nothing, so no agent-run grant: that stays on linking corpus records to
+ * work items (authority(…, true) below) and on decks (they spend).
+ */
+const PAGE_WRITE_ACTION = 'ViewWorkItems';
+async function pageAuthority(source: Session | undefined): Promise<Session> {
+  const session = await authority(source);
+  if (!await isAllowed({ sub: session.sub, tenant: session.tenant, role: session.role }, PAGE_WRITE_ACTION)) {
+    throw new AppError(403, 'Your role cannot write pages in initiatives');
+  }
+  return currentLiveSession(session);
+}
+/** The same rule as a yes/no for the portal, which only hides the New menu with it; the write routes decide. */
+async function mayWritePages(session: Session, projectId: string): Promise<boolean> {
+  try {
+    return await isAllowed({ sub: session.sub, tenant: session.tenant, role: session.role }, PAGE_WRITE_ACTION) && await stewardsInitiative(session, projectId);
+  } catch { return false; }
 }
 function emptyBody(req: Request) {
   if (req.body !== undefined && (req.body === null || typeof req.body !== 'object' || Array.isArray(req.body)
@@ -57,23 +79,23 @@ workDocumentsRouter.get('/documents/:documentId', asyncHandler(async (req, res) 
   await authority(session);
   if (page) {
     // The page's place, for the portal's trail: its initiative by name.
-    const project = await getProject(page.projectId);
-    res.set('Cache-Control', 'no-store').json({ ...workspaceRecord(page), projectName: project?.name ?? null }); return;
+    const [project, canWrite] = await Promise.all([getProject(page.projectId), mayWritePages(session, page.projectId)]);
+    res.set('Cache-Control', 'no-store').json({ ...workspaceRecord(page), projectName: project?.name ?? null, canWrite }); return;
   }
   if (!doc) throw new AppError(404, 'Document record not found');
   res.set('Cache-Control', 'no-store').json({ ...doc, href: documentRecordHref(doc.id) });
 }));
 workDocumentsRouter.put('/documents/:documentId', asyncHandler(async (req, res) => {
   const fields = workspaceFields(req, { create: false });
-  let session = await authority(req.session, true);
+  let session = await pageAuthority(req.session);
   const documentId = id(req.params.documentId);
   const page = await getWorkspaceDocument(documentId);
   if (!page) throw new AppError(404, 'Workspace document not found');
   if (!await requireInitiativeScope(req, res, page.projectId, { action: 'edit documents' })) return;
-  session = await authority(session, true);
+  session = await pageAuthority(session);
   const updated = await updateWorkspaceDocument(documentId, { ...(fields.title !== undefined ? { title: fields.title } : {}), ...(fields.markdown !== undefined ? { markdown: fields.markdown } : {}),
     ...(fields.scene !== undefined ? { scene: fields.scene } : {}) });
-  await authority(session, true);
+  await pageAuthority(session);
   if (!updated) throw new AppError(404, 'Workspace document is no longer available');
   void notifyWorkGraphChanged(page.projectId, 'work-document');
   res.set('Cache-Control', 'no-store').json({ document: workspaceRecord(updated) });
@@ -81,24 +103,25 @@ workDocumentsRouter.put('/documents/:documentId', asyncHandler(async (req, res) 
 workDocumentsRouter.get('/projects/:projectId/workspace-documents', asyncHandler(async (req, res) => {
   const session = await authority(req.session), projectId = id(req.params.projectId);
   if (!await getProject(projectId)) throw new AppError(404, 'Initiative not found');
-  const documents = (await listWorkspaceDocuments(projectId)).map(workspaceRecord);
+  const [documents, canWrite] = await Promise.all([listWorkspaceDocuments(projectId).then(rows => rows.map(workspaceRecord)), mayWritePages(session, projectId)]);
   await authority(session);
-  res.set('Cache-Control', 'no-store').json({ projectId, documents });
+  // canWrite (G56): whether this caller may write pages and whiteboards here; the Docs tab hides New › Document / Whiteboard without it.
+  res.set('Cache-Control', 'no-store').json({ projectId, documents, canWrite });
 }));
 workDocumentsRouter.post('/projects/:projectId/workspace-documents', asyncHandler(async (req, res) => {
   const fields = workspaceFields(req, { create: true });
-  let session = await authority(req.session, true);
+  let session = await pageAuthority(req.session);
   const projectId = id(req.params.projectId);
   if (!await getProject(projectId)) throw new AppError(404, 'Initiative not found');
   if (fields.workItemId) {
     const work = await getWorkItem(fields.workItemId);
     if (!work || work.projectId !== projectId) throw new AppError(404, 'Work item not found on this initiative');
   }
-  // Writing a page into an initiative is its stewards' call, like linking a record (DE-44 row 23).
+  // Writing a page into an initiative is its own people's call (G56: owner, contributor or an org-wide role).
   if (!await requireInitiativeScope(req, res, projectId, { action: 'create documents' })) return;
-  session = await authority(session, true);
+  session = await pageAuthority(session);
   const document = await createWorkspaceDocument({ projectId, workItemId: fields.workItemId, title: fields.title!, kind: fields.kind, markdown: fields.markdown ?? '' }, session.sub);
-  await authority(session, true);
+  await pageAuthority(session);
   void notifyWorkGraphChanged(projectId, 'work-document');
   res.status(201).set('Cache-Control', 'no-store').json({ projectId, document: workspaceRecord(document) });
 }));

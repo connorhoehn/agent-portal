@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { newFileChoices, readCanWrite } from './initiativeFilesModel';
 import { Button, ChevronIcon, DocumentIcon, DropdownMenu, Inline, InlineAlert, LoadingState, PlusIcon, SearchInput, Select, Stack, T, type DropdownMenuSection } from '@connorhoehn/ui-components/shared';
 import { FileCards, type FileView } from '../../components/files/FileCards';
 import { FileToolbar } from '../../components/files/FileToolbar';
@@ -18,7 +19,7 @@ import { useRecordingRead } from '../../components/recordings/useRecordingRead';
 import { recordingIsProcessing, recordingProcessingLabel } from '../../components/recordings/recordingState';
 
 type FileRow = { id: string; title: string; kind: 'document' | 'presentation' | 'recording'; detail: string; href?: string; recordingId?: string };
-type Read = { files: FileRow[]; recordings: RecordingPage | null; pending: boolean; failures: string[] };
+type Read = { files: FileRow[]; recordings: RecordingPage | null; pending: boolean; failures: string[]; canWritePages: boolean };
 
 /** Project files use each native source's existing reader authority. No global
  * workspace search or guessed project association is used to populate this list. */
@@ -29,12 +30,13 @@ export function InitiativeFiles(props: { projectId: string; projectName: string;
 }
 function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording }: Parameters<typeof InitiativeFiles>[0]) {
   const navigate = useNavigate();
-  // New › Document / Presentation (the user, 2026-11-02: create a doc here the
-  // way a meeting chat does). Writing into the initiative is the stewards'
-  // call (DispatchAgentRun, then the server's initiative scope), so the menu
-  // only shows for a role that may; the server refuses regardless.
+  // New › Document / Whiteboard / Presentation (the user, 2026-11-02: create a
+  // doc here the way a meeting chat does). G56: a page or a whiteboard is the
+  // initiative's own people's to write (owner, contributor or an org-wide role;
+  // the list read's `canWrite` is the route's answer), a presentation spends
+  // (DispatchAgentRun). Each choice shows only to whoever may; the routes refuse
+  // regardless (initiativeFilesModel.ts).
   const { can, ready: capabilitiesReady } = useCapabilities();
-  const mayCreate = capabilitiesReady && can('DispatchAgentRun');
   const [creating, setCreating] = useState(false);
   const [newDeck, setNewDeck] = useState(false);
   // No title dialog: the page is created as "Untitled page" and opens at once,
@@ -46,16 +48,18 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
     catch (cause) { toastError(null, kind === 'whiteboard' ? 'Could not create the whiteboard' : 'Could not create the document', cause instanceof Error ? cause.message : 'Try again.'); }
     finally { setCreating(false); }
   };
-  const newMenu: DropdownMenuSection[] = [{ items: [
-    { label: 'Document', description: 'A page written in this initiative; opens so you can write it', onSelect: () => void newDocument('page') },
-    { label: 'Whiteboard', description: 'A canvas drawn in this initiative; opens so you can sketch it', onSelect: () => void newDocument('whiteboard') },
-    { label: 'Presentation', description: 'A status deck built from this initiative', onSelect: () => setNewDeck(true) },
-  ] }];
   const [view, setView] = useState<FileView>('cards');
   const [kind, setKind] = useState('all');
   const [query, setQuery] = useState('');
   const [refresh, setRefresh] = useState(0);
-  const [read, setRead] = useState<Read>({ files: [], recordings: null, pending: true, failures: [] });
+  const [read, setRead] = useState<Read>({ files: [], recordings: null, pending: true, failures: [], canWritePages: false });
+  const choices = newFileChoices({ capabilitiesReady, canWritePages: read.canWritePages, canDispatch: can('DispatchAgentRun') });
+  const mayDeck = choices.includes('presentation');
+  const newMenu: DropdownMenuSection[] = [{ items: [
+    ...(choices.includes('document') ? [{ label: 'Document', description: 'A page written in this initiative; opens so you can write it', onSelect: () => void newDocument('page') }] : []),
+    ...(choices.includes('whiteboard') ? [{ label: 'Whiteboard', description: 'A canvas drawn in this initiative; opens so you can sketch it', onSelect: () => void newDocument('whiteboard') }] : []),
+    ...(mayDeck ? [{ label: 'Presentation', description: 'A status deck built from this initiative', onSelect: () => setNewDeck(true) }] : []),
+  ] }];
   const [olderBusy, setOlderBusy] = useState(false);
   const [olderError, setOlderError] = useState<string | null>(null);
   const client = useMemo(() => createInitiativeRecordingsClient(), []);
@@ -71,7 +75,7 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
   }, [lobby, recordingRead.refresh]);
   useEffect(() => {
     const abort = new AbortController();
-    setRead({ files: [], recordings: null, pending: true, failures: [] }); setOlderError(null); setOlderBusy(false);
+    setRead({ files: [], recordings: null, pending: true, failures: [], canWritePages: false }); setOlderError(null); setOlderBusy(false);
     const get = async (url: string) => { const response = await fetch(url, { credentials: 'include', cache: 'no-store', signal: abort.signal }); if (!response.ok) throw new Error('Unavailable'); return response.json(); };
     const docs = async (): Promise<{ files: FileRow[]; partial: boolean }> => {
       if (itemKey === null) throw new Error('Work documents are still unavailable');
@@ -80,9 +84,13 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
       const lists = results.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
       return { partial: results.some(result => result.status === 'rejected'), files: workspaceDocuments(lists).map(doc => ({ id: `document:${doc.id}`, title: doc.title ?? doc.id, kind: 'document', detail: documentKind(doc).label, href: documentRecordHref(doc.id) })) };
     };
-    // Pages written here (New › Document), newest edit first; they open on their own page.
-    const pages = async (): Promise<FileRow[]> => readWorkspaceDocuments(await get(`/api/graph/projects/${encodeURIComponent(projectId)}/workspace-documents`), projectId)
-      .map(doc => ({ id: `document:${doc.id}`, title: doc.title ?? doc.id, kind: 'document', detail: `${doc.kind === 'whiteboard' ? 'Whiteboard' : 'Page'} · edited ${relativeTime(doc.updatedAt)}`, href: doc.href }));
+    // Pages written here (New › Document), newest edit first; they open on their own page. The same read
+    // answers whether this persona writes pages here (G56 `canWrite`).
+    const pages = async (): Promise<{ rows: FileRow[]; canWrite: boolean }> => {
+      const body: unknown = await get(`/api/graph/projects/${encodeURIComponent(projectId)}/workspace-documents`);
+      return { canWrite: readCanWrite(body), rows: readWorkspaceDocuments(body, projectId)
+        .map(doc => ({ id: `document:${doc.id}`, title: doc.title ?? doc.id, kind: 'document', detail: `${doc.kind === 'whiteboard' ? 'Whiteboard' : 'Page'} · edited ${relativeTime(doc.updatedAt)}`, href: doc.href })) };
+    };
     const decks = async (): Promise<FileRow[]> => {
       const rows: InitiativeDeckSummary[] = await get(initiativeDeckPaths.list(projectId));
       if (!Array.isArray(rows) || rows.some(row => row.projectId !== projectId || typeof row.id !== 'string' || typeof row.title !== 'string')) throw new Error('Invalid project presentations');
@@ -90,8 +98,8 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
     };
     void Promise.allSettled([docs(), decks(), pages()]).then(([documents, presentations, written]) => {
       if (abort.signal.aborted) return;
-      setRead({ pending: false, files: [...(written.status === 'fulfilled' ? written.value : []), ...(documents.status === 'fulfilled' ? documents.value.files : []), ...(presentations.status === 'fulfilled' ? presentations.value : [])],
-        recordings: null,
+      setRead({ pending: false, files: [...(written.status === 'fulfilled' ? written.value.rows : []), ...(documents.status === 'fulfilled' ? documents.value.files : []), ...(presentations.status === 'fulfilled' ? presentations.value : [])],
+        recordings: null, canWritePages: written.status === 'fulfilled' && written.value.canWrite,
         failures: [written.status === 'rejected' ? 'Pages' : '', documents.status === 'rejected' || documents.value.partial ? 'Some documents' : '', presentations.status === 'rejected' ? 'Presentations' : ''].filter(Boolean) });
     });
     return () => abort.abort();
@@ -119,11 +127,11 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
       label="Project file controls" testId="initiative-files-toolbar">
       <SearchInput size="sm" value={query} onChange={setQuery} onClear={() => setQuery('')} placeholder="Search project files" aria-label="Search project files" className="min-w-0 flex-1" />
       <Select size="sm" className="!w-36" aria-label="File type" value={kind} onChange={event => setKind(event.target.value)} options={[{ value: 'all', label: 'All files' }, { value: 'document', label: 'Documents' }, { value: 'presentation', label: 'Presentations' }, { value: 'recording', label: 'Recordings' }]} />
-      {mayCreate && <DropdownMenu triggerVariant="primary" align="end" sections={newMenu}
+      {choices.length > 0 && <DropdownMenu triggerVariant="primary" align="end" sections={newMenu}
         trigger={<><PlusIcon size={16} /><span>New</span><ChevronIcon size={14} dir="down" /></>}
         triggerLabel="New file" triggerTestId="initiative-files-new" data-testid="initiative-files-new-menu" />}
     </FileToolbar>
-    {mayCreate && <InitiativeStatusDecks projectId={projectId} projectName={projectName} open={newDeck} onOpenChange={setNewDeck} hideTrigger />}
+    {mayDeck && <InitiativeStatusDecks projectId={projectId} projectName={projectName} open={newDeck} onOpenChange={setNewDeck} hideTrigger />}
     {failures.length > 0 && <InlineAlert tone="warning">{failures.join(', ')} could not be read. Other available files are shown. Use Refresh to retry.</InlineAlert>}
     {pending ? <LoadingState label="Loading project files…" /> : <>
       <T size="xs" tone="secondary">{shown.length} {shown.length === 1 ? 'file' : 'files'}{query || kind !== 'all' ? ' matching this view' : ' in this initiative'}</T>

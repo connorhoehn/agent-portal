@@ -42,6 +42,8 @@ export interface WorkspaceDocument extends DocumentRecord {
   scene: string;
   /** The initiative's name, on a single page read. */
   projectName?: string | null;
+  /** On a single page read: whether this caller writes it (G56, the initiative's own people); the editor hides Write without it. */
+  canWrite?: boolean;
 }
 export function readWorkspaceDocument(value: unknown): WorkspaceDocument {
   const base = record(value);
@@ -50,7 +52,8 @@ export function readWorkspaceDocument(value: unknown): WorkspaceDocument {
     || (row.kind !== 'page' && row.kind !== 'whiteboard') || typeof row.createdBy !== 'string' || typeof row.createdAt !== 'string' || typeof row.updatedAt !== 'string'
     || row.href !== documentRecordHref(base.id) || (row.projectName !== undefined && row.projectName !== null && typeof row.projectName !== 'string')) throw new Error('Invalid workspace document');
   return { ...base, projectId: row.projectId, workItemId: row.workItemId as string | null, kind: row.kind, markdown: row.markdown, scene: row.scene,
-    createdBy: row.createdBy, createdAt: row.createdAt, updatedAt: row.updatedAt, href: row.href, ...(typeof row.projectName === 'string' ? { projectName: row.projectName } : {}) };
+    createdBy: row.createdBy, createdAt: row.createdAt, updatedAt: row.updatedAt, href: row.href, ...(typeof row.projectName === 'string' ? { projectName: row.projectName } : {}),
+    ...(typeof row.canWrite === 'boolean' ? { canWrite: row.canWrite } : {}) };
 }
 /** True when a `/api/graph/documents/:id` answer is a workspace page rather than a corpus record. */
 export const isWorkspaceDocument = (value: unknown): boolean => !!value && typeof value === 'object' && (value as Record<string, unknown>).source === 'workspace';

@@ -3,7 +3,7 @@ jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 jest.mock('../../providers/work-items.js', () => ({ getWorkItem: jest.fn() }));
 jest.mock('../../providers/projects.js', () => ({ getProject: jest.fn() }));
 jest.mock('../../lib/authz.js', () => ({ isAllowed: jest.fn() }));
-jest.mock('../../lib/initiative-scope.js', () => ({ requireInitiativeScope: jest.fn() }));
+jest.mock('../../lib/initiative-scope.js', () => ({ requireInitiativeScope: jest.fn(), stewardsInitiative: jest.fn(async () => true) }));
 jest.mock('../../lib/work-graph/live.js', () => ({ notifyWorkGraphChanged: jest.fn(async () => {}) }));
 import express from 'express';
 import request from '../../test-support/http.js';
@@ -33,7 +33,8 @@ beforeEach(() => {
     ['reader', { id: 'reader', epoch: 0, grants: { orgiq: ['member'] }, displayName: 'Reader', email: null, personId: null }]]);
   const sessions = new Map<string, Session>([['author', session], ['reader', { ...session, sub: 'reader', role: 'member', grants: { orgiq: ['member'] } }]]);
   jest.mocked(getUser).mockImplementation(async id => users.get(id) ?? null);
-  jest.mocked(isAllowed).mockImplementation(async (principal, action) => principal.role === 'org-leader' && action === 'DispatchAgentRun');
+  // G56: pages and whiteboards are written with ViewWorkItems (+ the initiative's own people, mocked here); this member holds neither.
+  jest.mocked(isAllowed).mockImplementation(async (principal, action) => principal.role === 'org-leader' && (action === 'DispatchAgentRun' || action === 'ViewWorkItems'));
   jest.mocked(getProject).mockImplementation(async id => id === PROJECT ? { id, name: 'Auth Migration' } as Awaited<ReturnType<typeof getProject>> : null);
   jest.mocked(getWorkItem).mockImplementation(async id => id === WORK ? { id, projectId: PROJECT } as Awaited<ReturnType<typeof getWorkItem>> : null);
   jest.mocked(requireInitiativeScope).mockResolvedValue(true);
@@ -41,7 +42,8 @@ beforeEach(() => {
   app.use('/api/graph', workDocumentsRouter); app.use(errorHandler);
 });
 it('creates a page in the initiative, lists it newest first, reads it back by id with its body, and edits it', async () => {
-  expect((await list()).body).toEqual({ projectId: PROJECT, documents: [] });
+  expect((await list()).body).toEqual({ projectId: PROJECT, documents: [], canWrite: true });
+  expect((await list('reader')).body.canWrite).toBe(false);
   const created = await create({ title: '  Cutover runbook  ', workItemId: WORK });
   expect(created.status).toBe(201);
   const doc = created.body.document;

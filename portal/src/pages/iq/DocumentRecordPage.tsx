@@ -85,7 +85,8 @@ function useCheckpointSave(commit: () => Promise<void>, changes: number): { stat
 // field.
 function WorkspacePage({ page, onSaved }: { page: WorkspaceDocument; onSaved: () => void }) {
   const { can, ready } = useCapabilities();
-  const mayEdit = ready && can('DispatchAgentRun');
+  // G56: the route's answer (the initiative's own people); an older answer without it falls back to the agent-run grant.
+  const mayEdit = page.canWrite ?? (ready && can('DispatchAgentRun'));
   const title = page.title ?? 'Untitled page';
   // The page's place: under its initiative, not under Search (the resolver only sees the URL).
   useCrumbTrail(page.id, [{ label: 'Plan' }, { label: 'Initiatives', path: '/iq/projects' },
@@ -144,7 +145,8 @@ const fromBase64 = (text: string): Uint8Array => Uint8Array.from(atob(text), c =
 function WhiteboardPage({ page, onSaved }: { page: WorkspaceDocument; onSaved: () => void }) {
   const { session } = useSession();
   const { can, ready } = useCapabilities();
-  const mayEdit = ready && can('DispatchAgentRun');
+  // G56: the route's answer (the initiative's own people); an older answer without it falls back to the agent-run grant.
+  const mayEdit = page.canWrite ?? (ready && can('DispatchAgentRun'));
   const title = page.title ?? 'Untitled whiteboard';
   useCrumbTrail(page.id, [{ label: 'Plan' }, { label: 'Initiatives', path: '/iq/projects' },
     { label: page.projectName ?? page.projectId, path: `/iq/projects/${encodeURIComponent(page.projectId)}` }, { label: title, id: page.id }]);
