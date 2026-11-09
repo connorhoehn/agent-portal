@@ -22,7 +22,7 @@
 //   PATCH  /api/observability/calibration/cases/:id
 //   DELETE /api/observability/calibration/cases/:id
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   Card,
   CardHeader,
@@ -493,9 +493,9 @@ function CalibrationPage() {
               {worstResults.map((r) => {
                 const isOpen = expandedResult === r.calibrationId;
                 return (
-                  <>
+                  // The row and its detail row are one keyed child of the body.
+                  <Fragment key={r.calibrationId}>
                     <TableRow
-                      key={r.calibrationId}
                       onClick={() =>
                         setExpandedResult((cur) => (cur === r.calibrationId ? null : r.calibrationId))
                       }
@@ -540,7 +540,7 @@ function CalibrationPage() {
                         </TableTd>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </TableBody>

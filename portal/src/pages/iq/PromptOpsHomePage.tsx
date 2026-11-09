@@ -63,7 +63,10 @@ export default function PromptOpsHomePage() {
       .filter(Boolean),
   );
   const livePrompts = allPrompts.filter((p) => liveArns.has(p.id));
-  const agentCopies = allPrompts.filter((p) => runtimeForSystemPrompt(p.name));
+  // A canary subject can also be an agent's system prompt; the library list
+  // shows each prompt once (its canary badge wins), so the two groups never
+  // hold the same row (React keyed both copies by the prompt id).
+  const agentCopies = allPrompts.filter((p) => !liveArns.has(p.id) && runtimeForSystemPrompt(p.name));
   const otherPrompts = allPrompts.filter(
     (p) => !liveArns.has(p.id) && !runtimeForSystemPrompt(p.name),
   );
