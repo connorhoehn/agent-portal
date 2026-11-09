@@ -26,6 +26,8 @@ test('refusalNext: every refusal code names a change and ends with the no-repeat
     'other-workspace': { reason: 'That is in another workspace.' },
     'card-open': { reason: 'Another action is waiting for the user to confirm. Ask again after it.' },
     unavailable: { reason: 'Presence is not connected right now. Try again in a moment.' },
+    'not-connected': { reason: 'Social is not connected right now. Try again in a moment.', code: 'not-connected' },
+    'not-a-member': { reason: 'You are not a member of #General.', code: 'not-a-member' },
     'invalid-arguments': { reason: 'I could not use those details: "kind" must be one of the listed values.' },
     'unknown-tool': { reason: 'There is no "teleport" tool.' },
     'not-in-workspace': { reason: 'computer is not available in this workspace.' },

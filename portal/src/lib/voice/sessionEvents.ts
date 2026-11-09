@@ -51,7 +51,7 @@ export interface DockEvent {
 /** The refusal codes a `refused` event carries as `data.reason` (never the spoken sentence, which can repeat the user's words). */
 export const REFUSAL_CODES = [
   'ambiguous', 'not-found', 'role', 'no-grant', 'budget', 'allowlist', 'not-on-this-page', 'other-workspace',
-  'card-open', 'unavailable', 'invalid-arguments', 'unknown-tool', 'not-in-workspace', 'read-failed', 'invalid-ref', 'not-read-yet', 'too-many-calls', 'other',
+  'card-open', 'unavailable', 'not-connected', 'not-a-member', 'invalid-arguments', 'unknown-tool', 'not-in-workspace', 'read-failed', 'invalid-ref', 'not-read-yet', 'too-many-calls', 'other',
 ] as const;
 export type RefusalCode = typeof REFUSAL_CODES[number];
 
@@ -67,7 +67,10 @@ const REFUSAL_PATTERNS: ReadonlyArray<[RegExp, RefusalCode]> = [
   [/another workspace|switching to it ends/i, 'other-workspace'],
   [/allowlist|not allowed to run|phrase table/i, 'allowlist'],
   [/budget|allocation|envelope|over the (run )?cap|spend hold|hold/i, 'budget'],
-  [/grant|request access|access request|don'?t have \w+ access|which this session cannot reach|Social is not connected/i, 'no-grant'],
+  // G46: the socket down is not a missing grant.
+  [/Social is not connected/i, 'not-connected'],
+  [/not a member of/i, 'not-a-member'],
+  [/grant|request access|access request|don'?t have \w+ access|which this session cannot reach/i, 'no-grant'],
   [/your role|role cannot|with your role/i, 'role'],
   [/could not be reached|offline|not connected|try again in a moment|did not open in time/i, 'unavailable'],
   [/could not read|did not answer|failed to read/i, 'read-failed'],

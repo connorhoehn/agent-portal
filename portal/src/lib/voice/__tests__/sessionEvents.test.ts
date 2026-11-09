@@ -108,7 +108,9 @@ test('a refusal posts `refused` with its tool and code, never its sentence', asy
 test('refusal codes: the runner\'s own code first, then ambiguous, then the wording', () => {
   assert.equal(refusalCode(refused('x', { code: 'not-on-this-page' }).output), 'not-on-this-page');
   assert.equal(refusalCode(ambiguous('Several initiatives match "Alpha".', [{ title: 'Alpha' }]).output), 'ambiguous');
-  assert.equal(refusalCode(refused('Social is not connected right now. Try again in a moment.').output), 'no-grant');
+  // G46: the socket down is its own code, never a missing grant.
+  assert.equal(refusalCode(refused('Social is not connected right now. Try again in a moment.').output), 'not-connected');
+  assert.equal(refusalCode(refused('x', { code: 'not-a-member' }).output), 'not-a-member');
   assert.equal(refusalCode(refused('This run goes over the initiative\'s allocation.').output), 'budget');
   assert.equal(refusalCode(refused('That command is not on the allowlist.').output), 'allowlist');
   assert.equal(refusalCode(refused('I found no initiative called "Zeta".').output), 'not-found');

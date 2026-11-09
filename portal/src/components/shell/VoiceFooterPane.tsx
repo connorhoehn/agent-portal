@@ -88,7 +88,7 @@ import { subscribeWorkEvents } from '../../hooks/useWorkEvents';
 import { ResultMemory, type CallAccess, type CommandOutputView, type ComputeAccess, type DeliveryRecord, type PresenceAccess, type PresencePerson, type SocialAccess, type ToolContext, type VoiceComputer } from '../../lib/voice/tools';
 import { useCallHost } from '../../lib/conversationCall';
 import { useSocialCall } from '../../pages/social/useSocialCall';
-import { sendAndWaitForSocialChatAck, socialChatError } from '../../pages/social/socialChatDelivery';
+import { SocialSendError, sendAndWaitForSocialChatAck, socialChatError, socialChatErrorCode, type SocialSendFailure } from '../../pages/social/socialChatDelivery';
 import { useEmbeddedSocial } from './EmbeddedSocial';
 import { PAGES, isPageVisible } from './portalCommands';
 import { dockPending, dockTranscriptProps, isVoiceHotkey, voiceDockVisible, voiceLogHref } from './voiceDockModel';
@@ -146,7 +146,7 @@ type Waiter = { resolve(sender: ChatSender): void; reject(err: Error): void };
 function VoiceChatChannel({ channel, userId, displayName, onReady, onFailed }: {
   channel: string; userId: string; displayName: string;
   onReady(channel: string, sender: ChatSender | null): void;
-  onFailed(channel: string, message: string): void;
+  onFailed(channel: string, message: string, code: SocialSendFailure): void;
 }) {
   const gateway = useGatewayOptional();
   const chat = useChat(channel);
@@ -160,7 +160,7 @@ function VoiceChatChannel({ channel, userId, displayName, onReady, onFailed }: {
   useEffect(() => listen?.((frame) => {
     const f = frame as Record<string, unknown>;
     const failure = socialChatError(f, channel);
-    if (failure) onFailed(channel, failure);
+    if (failure) onFailed(channel, failure, socialChatErrorCode(f));
     if (f['type'] === 'chat' && f['channel'] === channel && f['action'] === 'joined') setJoined(epoch);
   }), [listen, channel, epoch, onFailed]);
   useEffect(() => { setJoined(null); }, [channel, epoch]);
@@ -169,7 +169,7 @@ function VoiceChatChannel({ channel, userId, displayName, onReady, onFailed }: {
     if (!ready) return undefined;
     onReady(channel, async (text, deliveryId, replyTo, pageReference) => {
       const { gateway: g } = latest.current;
-      if (!g?.onMessage || g.connectionState !== 'connected') throw new Error('Reconnect to send messages.');
+      if (!g?.onMessage || g.connectionState !== 'connected') throw new SocialSendError('Social is not connected right now.', 'not-connected');
       await sendAndWaitForSocialChatAck({
         channel, deliveryId, userId, listen: g.onMessage as (h: (f: Record<string, unknown>) => void) => () => void, signal: abort.current.signal,
         // A thread reply (G23) is the composer's quote-reply: `metadata.replyTo`.
@@ -206,33 +206,51 @@ function VoiceFooterPane() {
   const inbox = useMemo(() => new InboundMemory(), [session?.sub]);
 
   // ── the post path: one conversation mounted at a time, a sender per joined channel ──
-  const [chatChannel, setChatChannel] = useState<string | null>(null);
+  // G46 (session vs_900938ca): a join the gateway refused (`not-a-member`) or that never answered drops the mount, so
+  // the next post mounts it afresh and joins again; a mount kept after a failure never re-joined, and every later post
+  // (even after the user joined the channel) waited out CHANNEL_JOIN_MS. `n` keys the remount.
+  const [chatMount, setChatMount] = useState<{ channel: string; n: number } | null>(null);
   const chatChannelRef = useRef<string | null>(null);
+  const mounts = useRef(0);
   const senders = useRef(new Map<string, ChatSender>());
   const waiters = useRef(new Map<string, Waiter[]>());
+  const dropMount = useCallback((channel: string) => {
+    if (chatChannelRef.current !== channel) return;
+    chatChannelRef.current = null;
+    senders.current.delete(channel);
+    setChatMount(null);
+  }, []);
   const onReady = useCallback((channel: string, sender: ChatSender | null) => {
     if (!sender) { senders.current.delete(channel); return; }
     senders.current.set(channel, sender);
     for (const w of waiters.current.get(channel) ?? []) w.resolve(sender);
     waiters.current.delete(channel);
   }, []);
-  const onFailed = useCallback((channel: string, message: string) => {
-    for (const w of waiters.current.get(channel) ?? []) w.reject(new Error(message));
+  const onFailed = useCallback((channel: string, message: string, code: SocialSendFailure) => {
+    // A joined conversation's error belongs to the send in flight (its own ack wait reports it), never to the join.
+    if (senders.current.has(channel)) return;
+    for (const w of waiters.current.get(channel) ?? []) w.reject(new SocialSendError(message, code));
     waiters.current.delete(channel);
-  }, []);
+    dropMount(channel);
+  }, [dropMount]);
   const sendChat = useCallback(async ({ channel, text, deliveryId, replyTo, pageReference }: { channel: string; text: string; deliveryId: string; replyTo?: ChatReplyTo; pageReference?: ChatPageRef }) => {
     let sender = senders.current.get(channel);
     if (!sender) {
-      if (chatChannelRef.current !== channel) { chatChannelRef.current = channel; setChatChannel(channel); }
+      if (chatChannelRef.current !== channel) { chatChannelRef.current = channel; mounts.current += 1; setChatMount({ channel, n: mounts.current }); }
       sender = await new Promise<ChatSender>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('The conversation did not open in time.')), CHANNEL_JOIN_MS);
+        const timer = setTimeout(() => {
+          waiters.current.set(channel, (waiters.current.get(channel) ?? []).filter((w) => w !== waiter));
+          dropMount(channel);
+          reject(new SocialSendError('The conversation did not open in time.', 'timeout'));
+        }, CHANNEL_JOIN_MS);
         const list = waiters.current.get(channel) ?? [];
-        list.push({ resolve: (s) => { clearTimeout(timer); resolve(s); }, reject: (e) => { clearTimeout(timer); reject(e); } });
+        const waiter: Waiter = { resolve: (s) => { clearTimeout(timer); resolve(s); }, reject: (e) => { clearTimeout(timer); reject(e); } };
+        list.push(waiter);
         waiters.current.set(channel, list);
       });
     }
     await sender(text, deliveryId, replyTo, pageReference);
-  }, []);
+  }, [dropMount]);
 
   // ── computer run's captured output: a read-only tab in the compute dock (G9) ──
   // Read through a ref: the controller is built once per pane, and a new computer list must not rebuild it (that ends the session).
@@ -515,7 +533,7 @@ function VoiceFooterPane() {
       className="min-w-0 flex-1"
       data-testid="shell-voice-dock"
     />
-    {chatChannel && session && <VoiceChatChannel key={chatChannel} channel={chatChannel} userId={session.sub}
+    {chatMount && session && <VoiceChatChannel key={`${chatMount.channel}#${chatMount.n}`} channel={chatMount.channel} userId={session.sub}
       displayName={social?.me?.displayName ?? session.name ?? session.sub} onReady={onReady} onFailed={onFailed} />}
   </Inline>;
 }

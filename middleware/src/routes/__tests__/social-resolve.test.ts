@@ -98,10 +98,19 @@ describe('GET /api/social/resolve (mock provider)', () => {
   });
   it('channel slug or name → the channel; a private one the caller is not in is invisible', async () => {
     const bySlug = await resolve(sana(), 'channel', 'design-reviews');
-    expect(bySlug.body.match).toEqual({ id: 'design-reviews', name: 'Design reviews', channelId: 'design-reviews', channel: 'social:ch:design-reviews' });
+    expect(bySlug.body.match).toEqual({ id: 'design-reviews', name: 'Design reviews', channelId: 'design-reviews', channel: 'social:ch:design-reviews', joined: false });
     expect((await resolve(sana(), 'channel', '#General')).body.match.channel).toBe('social:ch:general');
     const hidden = await resolve(sana(), 'channel', 'moderators');
     expect(hidden.status).toBe(404); expect(hidden.body.match).toBeNull();
+  });
+  it('G46: a channel match says whether the caller is a member, and a join flips it (the voice refuses a post before its card otherwise)', async () => {
+    const before = await resolve(sana(), 'channel', 'design-reviews');
+    expect(before.body.match.joined).toBe(false);
+    expect((await request(sana()).post('/api/social/channels/design-reviews/join').send({})).status).toBe(200);
+    const after = await resolve(sana(), 'channel', 'design-reviews');
+    expect(after.body.match.joined).toBe(true);
+    // Teams and people carry no `joined`: a team's channel is the caller's own, a DM opens at confirm (G14).
+    expect((await resolve(sana(), 'team', 'community')).body.match.joined).toBeUndefined();
   });
   it('a person → the DM channel for the caller, named but not opened: the conversations are unchanged until POST /dms (G14)', async () => {
     const channel = dmChannelFor(['u-sana', 'u-lena']);

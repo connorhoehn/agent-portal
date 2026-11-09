@@ -537,7 +537,8 @@ const runRunCommand: VoiceToolRunner = async (_args, ctx, planned) => {
 
 interface ResolveBody {
   kind: 'team' | 'channel' | 'person';
-  match: { id: string; name: string; channelId: string; channel: string } | null;
+  /** `joined` (channels only, G46): whether the caller is a member and so may post there now. */
+  match: { id: string; name: string; channelId: string; channel: string; joined?: boolean } | null;
   candidates: Array<{ id: string; name: string }>;
 }
 
@@ -715,10 +716,18 @@ function planThreadReply(args: Record<string, unknown>, ctx: ToolContext, social
     : { plan: { title: `Reply to ${label}`, detail: [text, `With a read-only view of "${att.attachment.title}" for 24 hours.`], data: { ...plan, attachment: att.attachment } } }));
 }
 
+/** The post failures the chat host names (socialChatDelivery.ts SocialSendFailure); anything else is `rejected`. */
+const SEND_FAILURES: ReadonlySet<string> = new Set(['not-connected', 'not-a-member', 'rejected', 'receipt-timeout', 'timeout']);
+const sendFailure = (err: unknown): string => {
+  const code = (err as { code?: unknown } | null)?.code;
+  return typeof code === 'string' && SEND_FAILURES.has(code) ? code : 'rejected';
+};
+
 const planSendChat: VoiceToolPlanner = async (args, ctx) => {
   const social = ctx.social;
   if (!social) return { result: socialGrantRefusal(ctx, 'Messages go through Social, which this session cannot reach.') };
-  if (social.unavailable) return { result: refused(social.unavailable) };
+  // G46: the socket is down, so no card: the voice says Social is not connected instead of a card whose post fails.
+  if (social.unavailable) return { result: refused(social.unavailable, { code: 'not-connected' }) };
   if (typeof args['thread'] === 'string' && args['thread'].trim()) return planThreadReply(args, ctx, social);
   const target = args['target'] as { kind: 'team' | 'channel' | 'dm'; name: string } | undefined;
   if (!target) return { result: refused('Say where it goes: a team, a channel or a person (target), or the inbound message it answers (thread).') };
@@ -726,6 +735,11 @@ const planSendChat: VoiceToolPlanner = async (args, ctx) => {
   const resolved = await resolveTarget(ctx, social, target, { verb: 'post to', nothing: 'nothing was sent' });
   if ('result' in resolved) return resolved;
   const { kind, match } = resolved;
+  // G46: a channel the caller never joined refuses the socket's join (`not-a-member`), so the post could only fail.
+  if (kind === 'channel' && match.joined === false) {
+    return { result: refused(`You are not a member of #${match.name}, so nothing can be posted there yet. Offer to join it (update ref "channel:${match.id}", fields member true), then post.`,
+      { code: 'not-a-member', channel: `channel:${match.id}` }) };
+  }
   const body = { match };
   const now = ctx.now().getTime();
   const record = deliveryFor(social.deliveries, body.match.channel, text, now);
@@ -767,13 +781,17 @@ const runSendChat: VoiceToolRunner = async (_args, ctx, planned) => {
   // A direct message carries the record as a page reference (the DM composer's own card); elsewhere its link is in the text.
   const dm = plan.channel.startsWith('social:dm:');
   const text = att && !dm && att.href ? `${plan.text}\n${att.title}: ${att.href}` : plan.text;
+  // G46: the socket went down while the card was open: nothing is sent, and the voice says why.
+  if (social.unavailable) return failed(`Nothing was posted to ${label}: ${social.unavailable}`, { code: 'not-connected' });
   social.deliveries.set(plan.key, { ...record, state: 'pending' });
   try {
     await social.send({ channel: plan.channel, text, deliveryId: plan.deliveryId, ...(plan.replyTo ? { replyTo: plan.replyTo } : {}),
       ...(att && dm ? { pageReference: { kind: att.kind, id: att.id } } : {}) });
   } catch (err) {
     social.deliveries.set(plan.key, { ...record, state: 'failed', at: ctx.now().getTime() });
-    return failed(`The message to ${label} was not confirmed: ${(err as Error)?.message ?? 'no receipt'}. A retry reuses the same delivery, so it cannot post twice.`);
+    const code = sendFailure(err);
+    if (code === 'not-a-member') return failed(`You are not a member of ${label}, so nothing was posted. Join it first, then post.`, { code });
+    return failed(`The message to ${label} was not confirmed: ${(err as Error)?.message ?? 'no receipt'}. A retry reuses the same delivery, so it cannot post twice.`, { code });
   }
   social.deliveries.set(plan.key, { ...record, state: 'sent', at: ctx.now().getTime() });
   return done('posted', { to: label, posted: true, ...(plan.kind === 'thread' ? { thread: plan.channel } : {}), ...(att ? { shared: att.title, sharedFor: '24 hours' } : {}) }, plan.kind === 'thread' ? `Replied to ${label}` : `Posted to ${label}`);

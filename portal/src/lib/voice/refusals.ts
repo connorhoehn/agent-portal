@@ -146,6 +146,12 @@ export function refusalNext(tool: string, output: Record<string, unknown>, ctx: 
     case 'unavailable':
       fix = 'It cannot be reached right now: tell the user, and try again only when they ask.';
       break;
+    case 'not-connected':
+      fix = 'Social is not connected right now, so nothing was sent and no card was shown: tell the user in one sentence, and try again only when they ask.';
+      break;
+    case 'not-a-member':
+      fix = 'The user is not a member of that channel: say so, and offer to join it with the update this result names; post only after the join is done.';
+      break;
     case 'read-failed':
       fix = 'The read failed: tell the user, and offer to open the page instead.';
       break;

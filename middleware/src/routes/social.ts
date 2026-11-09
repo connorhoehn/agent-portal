@@ -356,14 +356,14 @@ socialRouter.get('/dms', socialGate('ViewSocial'), socialHandler('get /dms', asy
  * with them. A read, nothing more (G14): the DM's membership is written only when the user confirms, by
  * POST /dms, so a cancelled or ambiguous "message Ada" leaves no conversation behind. Tenant-scoped by the
  * sources: the caller's teams, the channels they may see, the social roster. Nothing fits → 404 with
- * `match: null`; several fit → 200, `match: null` and the candidates.
+ * `match: null`; several fit → 200, `match: null` and the candidates. A channel match says `joined` (G46: the voice refuses a non-member's post before its card).
  */
 socialRouter.get('/resolve', socialGate('ViewSocial'), socialHandler('get /resolve', asyncHandler(async (req, res) => {
   const kind = String(req.query['kind'] ?? '');
   const name = typeof req.query['name'] === 'string' ? req.query['name'] : '';
   if (kind !== 'team' && kind !== 'channel' && kind !== 'person') throw new ValidationError('kind is team, channel or person');
   if (!name.trim() || name.length > NAME_MAX) throw new ValidationError(`name is 1–${NAME_MAX} characters`);
-  type Target = ResolveRow & { channelId: string; channel: string };
+  type Target = ResolveRow & { channelId: string; channel: string; joined?: boolean };
   let rows: Target[] = [];
   if (kind === 'team') {
     for (const team of await listTeams(sessionOf(req))) {
@@ -377,7 +377,7 @@ socialRouter.get('/resolve', socialGate('ViewSocial'), socialHandler('get /resol
     const directory = await listChannels();
     await Promise.all(directory.map((row) => chat.membershipStore.hydrate(channelForSlug(row.slug))));
     rows = directory.filter((r) => r.privacy === 'public' || chat.membershipStore.isActiveMember(channelForSlug(r.slug), userId))
-      .map((r) => ({ id: r.slug, name: r.name, slug: r.slug, channelId: r.slug, channel: channelForSlug(r.slug) }));
+      .map((r) => ({ id: r.slug, name: r.name, slug: r.slug, channelId: r.slug, channel: channelForSlug(r.slug), joined: chat.membershipStore.isActiveMember(channelForSlug(r.slug), userId) }));
   } else {
     const self = req.session?.sub ?? '';
     let roster;
@@ -388,7 +388,7 @@ socialRouter.get('/resolve', socialGate('ViewSocial'), socialHandler('get /resol
       .map((p) => { const channel = dmChannelFor([self, p.userId]); return { id: p.userId, name: p.displayName, channelId: channel, channel }; });
   }
   const { match, candidates } = resolveByName(rows, name);
-  const body = { kind, match: match ? { id: match.id, name: match.name, channelId: match.channelId, channel: match.channel } : null, candidates };
+  const body = { kind, match: match ? { id: match.id, name: match.name, channelId: match.channelId, channel: match.channel, ...(match.joined !== undefined ? { joined: match.joined } : {}) } : null, candidates };
   res.status(candidates.length ? 200 : 404).json(body);
 })));
 

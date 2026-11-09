@@ -590,6 +590,33 @@ test('message: several matches go back as candidates with no card and no send; n
   assert.equal(social.sends.length, 0);
 });
 
+test('message (G46): a channel the user never joined, or a socket that is down, refuses before any card; a failed post names its code', async () => {
+  const notJoined = { kind: 'channel', match: { id: 'general', name: 'General', channelId: 'general', channel: 'social:ch:general', joined: false }, candidates: [{ id: 'general', name: 'General' }] };
+  const { fetch } = fakeFetch([route('GET', '/api/social/plane/resolve', 200, notJoined)]);
+  const social = fakeSocial();
+  const outsider = await confirmAndRun('message', { target: { kind: 'channel', name: 'general' }, text: 'hello' }, toolContext({ fetch, social }));
+  assert.equal(outsider.card, null, 'no card for a post that could only fail');
+  assert.equal(outsider.result.outcome, 'refused');
+  assert.equal(outsider.result.output['code'], 'not-a-member');
+  assert.match(String(outsider.result.output['reason']), /not a member of #General/);
+  assert.equal(social.sends.length, 0);
+  // A member's channel posts as before.
+  const { fetch: member } = fakeFetch([route('GET', '/api/social/plane/resolve', 200, { ...notJoined, match: { ...notJoined.match, joined: true } })]);
+  assert.equal((await confirmAndRun('message', { target: { kind: 'channel', name: 'general' }, text: 'hello' }, toolContext({ fetch: member, social }))).result.outcome, 'done');
+  // The socket down: refused before the resolve, with the code, and no card.
+  let reads = 0;
+  const down = await confirmAndRun('message', { target: { kind: 'channel', name: 'general' }, text: 'hi' },
+    toolContext({ fetch: async () => { reads++; throw new Error('network'); }, social: { ...fakeSocial(), unavailable: 'Social is not connected right now. Try again in a moment.' } }));
+  assert.deepEqual([down.card, down.result.outcome, down.result.output['code'], reads], [null, 'refused', 'not-connected', 0]);
+  // A post the gateway refused or never acknowledged carries the chat host's code.
+  for (const code of ['not-a-member', 'receipt-timeout', 'timeout', 'rejected'] as const) {
+    const { fetch: f } = fakeFetch([route('GET', '/api/social/plane/resolve', 200, RESOLVED)]);
+    const failing: FakeSocial = { ...fakeSocial(), send: async () => { throw Object.assign(new Error('nope'), { code }); } };
+    const r = await confirmAndRun('message', { target: { kind: 'team', name: 'platform' }, text: `t-${code}` }, toolContext({ fetch: f, social: failing }));
+    assert.deepEqual([r.result.outcome, r.result.output['code']], ['failed', code], code);
+  }
+});
+
 // ── set_status ──
 
 test('set_status calls setStatus and updateMetadata with the dictated message and nothing else, with no card', async () => {

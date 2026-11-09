@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sendAndWaitForSocialChatAck, socialChatError } from '../socialChatDelivery.ts';
+import { SocialSendError, sendAndWaitForSocialChatAck, socialChatError, socialSendFailure } from '../socialChatDelivery.ts';
 
 function connection() {
   const handlers = new Set<(frame: Record<string, unknown>) => void>();
@@ -65,4 +65,17 @@ test('chat errors from another channel or service cannot contaminate this conver
   assert.equal(socialChatError({ type: 'error', service: 'chat', channel: 'social:ch:general', error: 'other conversation' }, channel), null);
   assert.equal(socialChatError({ type: 'error', service: 'presence', error: 'presence' }, channel), null);
   assert.equal(socialChatError({ type: 'error', service: 'chat', channel, error: { message: 'store unavailable' } }, channel), 'store unavailable');
+});
+
+test('G46: a failed send says which failure it was (not a member, rejected, no receipt)', async () => {
+  const socket = connection();
+  const notMember = sendAndWaitForSocialChatAck({ ...attempt, listen: socket.listen, signal: new AbortController().signal,
+    send: () => socket.emit({ type: 'error', service: 'chat', channel, error: { code: 'not-a-member', message: 'You are not a member of this channel' } }) });
+  await assert.rejects(notMember, (e: unknown) => e instanceof SocialSendError && e.code === 'not-a-member' && /not a member/.test(e.message));
+  const rejected = sendAndWaitForSocialChatAck({ ...attempt, listen: socket.listen, signal: new AbortController().signal,
+    send: () => socket.emit({ type: 'error', service: 'chat', error: { message: 'Slow down' } }) });
+  await assert.rejects(rejected, (e: unknown) => socialSendFailure(e) === 'rejected');
+  await assert.rejects(sendAndWaitForSocialChatAck({ ...attempt, listen: socket.listen, signal: new AbortController().signal, timeoutMs: 2, send: () => {} }),
+    (e: unknown) => socialSendFailure(e) === 'receipt-timeout');
+  assert.equal(socialSendFailure(new Error('plain')), 'rejected');
 });

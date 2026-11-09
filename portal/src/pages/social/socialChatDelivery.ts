@@ -1,5 +1,29 @@
 type ChatFrame = Record<string, unknown>;
 
+/**
+ * Why a post did not land (voice G46/G47), a closed vocabulary: the socket was down, the gateway refused the
+ * conversation's join because the sender is not a member, it refused the send, the persisted receipt never came,
+ * or the conversation never opened.
+ */
+export type SocialSendFailure = 'not-connected' | 'not-a-member' | 'rejected' | 'receipt-timeout' | 'timeout';
+
+/** An Error that says which of the failures it is (the composer reads only `message`; the voice reads `code`). */
+export class SocialSendError extends Error {
+  readonly code: SocialSendFailure;
+  constructor(message: string, code: SocialSendFailure) { super(message); this.name = 'SocialSendError'; this.code = code; }
+}
+
+/** The failure code of an error a post threw: the error's own, else `rejected`. */
+export function socialSendFailure(err: unknown): SocialSendFailure {
+  return err instanceof SocialSendError ? err.code : 'rejected';
+}
+
+/** The code of a chat error frame for this channel: `not-a-member` when the gateway said so, else `rejected`. */
+export function socialChatErrorCode(frame: ChatFrame): SocialSendFailure {
+  const error = frame.error as { code?: unknown } | null | undefined;
+  return error && typeof error === 'object' && error.code === 'not-a-member' ? 'not-a-member' : 'rejected';
+}
+
 /** Chat errors can omit their channel, but always identify their service. */
 export function socialChatError(frame: ChatFrame, channel: string): string | null {
   if (frame.type !== 'error' || frame.service !== 'chat' || (frame.channel && frame.channel !== channel)) return null;
@@ -29,11 +53,11 @@ export function sendAndWaitForSocialChatAck(options: {
       clearTimeout(timer); unsubscribe(); options.signal.removeEventListener('abort', aborted);
       if (error) reject(error); else resolve();
     };
-    const aborted = () => finish(new Error('The conversation changed before the message was confirmed.'));
-    const timer = setTimeout(() => finish(new Error('The message receipt was not confirmed. Check the conversation before retrying.')), options.timeoutMs ?? 10_000);
+    const aborted = () => finish(new SocialSendError('The conversation changed before the message was confirmed.', 'rejected'));
+    const timer = setTimeout(() => finish(new SocialSendError('The message receipt was not confirmed. Check the conversation before retrying.', 'receipt-timeout')), options.timeoutMs ?? 10_000);
     unsubscribe = options.listen(frame => {
       const error = socialChatError(frame, options.channel);
-      if (error) { finish(new Error(error)); return; }
+      if (error) { finish(new SocialSendError(error, socialChatErrorCode(frame))); return; }
       if (frame.type !== 'chat' || frame.channel !== options.channel) return;
       if (frame.action === 'sent' && typeof frame.messageId === 'string') {
         acknowledged.add(frame.messageId);
@@ -50,6 +74,6 @@ export function sendAndWaitForSocialChatAck(options: {
     });
     options.signal.addEventListener('abort', aborted, { once: true });
     if (options.signal.aborted) { aborted(); return; }
-    try { options.send(); } catch (cause) { finish(cause instanceof Error ? cause : new Error('The message could not be sent.')); }
+    try { options.send(); } catch (cause) { finish(new SocialSendError(cause instanceof Error ? cause.message : 'The message could not be sent.', 'rejected')); }
   });
 }
