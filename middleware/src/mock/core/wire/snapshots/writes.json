@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-09T00:52:34.463Z",
-  "serverHandlerSha": "8aff2aaf75c4e9e7879c207594e5221454ac28fc8fc47156f77ca96f0c465f45",
-  "baseUrl": "http://127.0.0.1:3992",
+  "capturedAt": "2026-11-09T03:06:59.002Z",
+  "serverHandlerSha": "0bd2d7b87bbe4c37c92537ec7acc5400f38314e0c186919504da14d187030270",
+  "baseUrl": "http://127.0.0.1:3986",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -536,9 +536,9 @@
         "blockedReason": "null",
         "childCount": "number",
         "childDoneCount": "number",
-        "completedAt": "string",
+        "completedAt": "null",
         "createdAt": "string",
-        "description": "null",
+        "description": "string",
         "estimateForecast": "null",
         "estimateModel": "null",
         "estimateReviewedAt": "null",
@@ -555,25 +555,25 @@
         "nextStep": "null",
         "nextStepDetail": "null",
         "parentId": "string",
-        "prStatus": "string",
-        "prUrl": "string",
+        "prStatus": "null",
+        "prUrl": "null",
         "priority": "string",
         "projectId": "string",
         "projectName": "string",
-        "sprintId": "string",
+        "sprintId": "null",
         "status": "string",
         "storyPoints": "number",
-        "summary": "null",
+        "summary": "string",
         "title": "string",
         "type": "string",
         "updatedAt": "string"
       },
       "values": {
         "key": [
-          "ORG-LLM-10"
+          "ORG-OBS-13"
         ],
         "status": [
-          "done"
+          "open"
         ],
         "type": [
           "story"
@@ -2588,6 +2588,65 @@
         "sprintId"
       ]
     },
+    "POST /api/graph/decisions/:id/decide": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "decidedAt": "string",
+        "decidedBy": "object",
+        "decidedBy.id": "string",
+        "decidedBy.name": "string",
+        "history": "array",
+        "history[]": "object",
+        "history[].at": "string",
+        "history[].by": "object",
+        "history[].by.id": "string",
+        "history[].by.name": "string",
+        "history[].id": "string",
+        "history[].kind": "string",
+        "history[].rationale": "string",
+        "id": "string",
+        "options": "array",
+        "options[]": "object",
+        "options[].detail": "string",
+        "options[].id": "string",
+        "options[].label": "string",
+        "outcome": "string",
+        "participants": "array",
+        "participants[]": "object",
+        "participants[].avatarUrl": "string",
+        "participants[].name": "string",
+        "participants[].personId": "string",
+        "participants[].role": "string",
+        "participants[].title": "string",
+        "participants[].weight": "number",
+        "projectId": "string",
+        "status": "string",
+        "summary": "string",
+        "topic": "string",
+        "viewerMayDecide": "boolean"
+      },
+      "values": {
+        "history[].kind": [
+          "rejected"
+        ],
+        "outcome": [
+          "wire-capture-22"
+        ],
+        "participants[].role": [
+          "contributor",
+          "decider"
+        ],
+        "status": [
+          "rejected"
+        ]
+      },
+      "sent": [
+        "outcome",
+        "rationale"
+      ]
+    },
     "POST /api/graph/projects/:id/discussion/comments": {
       "refused": {
         "rule": "unclassified",
@@ -4354,12 +4413,6 @@
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
     },
-    "PUT /api/voice/settings": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
-    },
     "POST /api/work/dispatch": {
       "refused": {
         "rule": "fires",
@@ -4963,61 +5016,11 @@
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
     },
-    "POST /api/graph/decisions/:id/decide": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "decidedAt": "string",
-        "decidedBy": "object",
-        "decidedBy.id": "string",
-        "decidedBy.name": "string",
-        "history": "array",
-        "history[]": "object",
-        "history[].at": "string",
-        "history[].by": "object",
-        "history[].by.id": "string",
-        "history[].by.name": "string",
-        "history[].id": "string",
-        "history[].kind": "string",
-        "history[].rationale": "string",
-        "id": "string",
-        "options": "array",
-        "options[]": "object",
-        "options[].detail": "string",
-        "options[].id": "string",
-        "options[].label": "string",
-        "outcome": "string",
-        "participants": "array",
-        "participants[]": "object",
-        "participants[].avatarUrl": "string",
-        "participants[].name": "string",
-        "participants[].personId": "string",
-        "participants[].role": "string",
-        "participants[].title": "string",
-        "participants[].weight": "number",
-        "projectId": "string",
-        "status": "string",
-        "summary": "string",
-        "topic": "string",
-        "viewerMayDecide": "boolean"
-      },
-      "values": {
-        "history[].kind": [
-          "rejected"
-        ],
-        "participants[].role": [
-          "contributor",
-          "decider"
-        ],
-        "status": [
-          "rejected"
-        ]
-      },
-      "sent": [
-        "outcome",
-        "rationale"
-      ]
+    "PUT /api/voice/settings": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
     }
   }
 }

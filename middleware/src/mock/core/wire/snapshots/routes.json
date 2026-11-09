@@ -1693,12 +1693,12 @@
     {
       "method": "GET",
       "path": "/api/graph/documents/:documentId",
-      "source": "src/routes/work-documents.ts:53"
+      "source": "src/routes/work-documents.ts:75"
     },
     {
       "method": "PUT",
       "path": "/api/graph/documents/:documentId",
-      "source": "src/routes/work-documents.ts:66"
+      "source": "src/routes/work-documents.ts:88"
     },
     {
       "method": "GET",
@@ -1783,12 +1783,12 @@
     {
       "method": "GET",
       "path": "/api/graph/projects/:projectId/workspace-documents",
-      "source": "src/routes/work-documents.ts:81"
+      "source": "src/routes/work-documents.ts:103"
     },
     {
       "method": "POST",
       "path": "/api/graph/projects/:projectId/workspace-documents",
-      "source": "src/routes/work-documents.ts:88"
+      "source": "src/routes/work-documents.ts:111"
     },
     {
       "method": "GET",
@@ -1858,22 +1858,22 @@
     {
       "method": "GET",
       "path": "/api/graph/work-items/:id/documents",
-      "source": "src/routes/work-documents.ts:105"
+      "source": "src/routes/work-documents.ts:128"
     },
     {
       "method": "DELETE",
       "path": "/api/graph/work-items/:id/documents/:documentId",
-      "source": "src/routes/work-documents.ts:135"
+      "source": "src/routes/work-documents.ts:158"
     },
     {
       "method": "PUT",
       "path": "/api/graph/work-items/:id/documents/:documentId",
-      "source": "src/routes/work-documents.ts:121"
+      "source": "src/routes/work-documents.ts:144"
     },
     {
       "method": "GET",
       "path": "/api/graph/work-items/:id/documents/candidates",
-      "source": "src/routes/work-documents.ts:112"
+      "source": "src/routes/work-documents.ts:135"
     },
     {
       "method": "GET",
@@ -2113,42 +2113,42 @@
     {
       "method": "GET",
       "path": "/api/initiative-decks",
-      "source": "src/routes/initiative-decks.ts:64"
+      "source": "src/routes/initiative-decks.ts:66"
     },
     {
       "method": "GET",
       "path": "/api/initiative-decks/:id",
-      "source": "src/routes/initiative-decks.ts:69"
+      "source": "src/routes/initiative-decks.ts:71"
     },
     {
       "method": "POST",
       "path": "/api/initiative-decks/:id/preview",
-      "source": "src/routes/initiative-decks.ts:73"
+      "source": "src/routes/initiative-decks.ts:75"
     },
     {
       "method": "POST",
       "path": "/api/initiative-decks/:id/revise",
-      "source": "src/routes/initiative-decks.ts:72"
+      "source": "src/routes/initiative-decks.ts:74"
     },
     {
       "method": "POST",
       "path": "/api/initiative-decks/:id/revisions",
-      "source": "src/routes/initiative-decks.ts:71"
+      "source": "src/routes/initiative-decks.ts:73"
     },
     {
       "method": "GET",
       "path": "/api/initiative-decks/:id/revisions/:rid/file",
-      "source": "src/routes/initiative-decks.ts:74"
+      "source": "src/routes/initiative-decks.ts:76"
     },
     {
       "method": "GET",
       "path": "/api/initiative-decks/:id/revisions/:rid/spec",
-      "source": "src/routes/initiative-decks.ts:70"
+      "source": "src/routes/initiative-decks.ts:72"
     },
     {
       "method": "POST",
       "path": "/api/initiative-decks/projects/:projectId",
-      "source": "src/routes/initiative-decks.ts:57"
+      "source": "src/routes/initiative-decks.ts:59"
     },
     {
       "method": "POST",
@@ -3918,12 +3918,12 @@
     {
       "method": "POST",
       "path": "/api/voice/sessions/:id/close",
-      "source": "src/routes/voice.ts:509"
+      "source": "src/routes/voice.ts:524"
     },
     {
       "method": "POST",
       "path": "/api/voice/sessions/:id/events",
-      "source": "src/routes/voice.ts:442"
+      "source": "src/routes/voice.ts:457"
     },
     {
       "method": "GET",
@@ -3988,27 +3988,27 @@
     {
       "method": "POST",
       "path": "/api/work/findings/:id/analyze",
-      "source": "src/routes/work.ts:559"
+      "source": "src/routes/work.ts:569"
     },
     {
       "method": "POST",
       "path": "/api/work/findings/:id/dismiss",
-      "source": "src/routes/work.ts:597"
+      "source": "src/routes/work.ts:607"
     },
     {
       "method": "POST",
       "path": "/api/work/findings/:id/promote",
-      "source": "src/routes/work.ts:517"
+      "source": "src/routes/work.ts:527"
     },
     {
       "method": "POST",
       "path": "/api/work/findings/analyze-batch",
-      "source": "src/routes/work.ts:587"
+      "source": "src/routes/work.ts:597"
     },
     {
       "method": "GET",
       "path": "/api/work/findings/stats",
-      "source": "src/routes/work.ts:593"
+      "source": "src/routes/work.ts:603"
     },
     {
       "method": "GET",
@@ -4043,17 +4043,17 @@
     {
       "method": "GET",
       "path": "/api/work/proposals",
-      "source": "src/routes/work.ts:610"
+      "source": "src/routes/work.ts:620"
     },
     {
       "method": "POST",
       "path": "/api/work/proposals",
-      "source": "src/routes/work.ts:617"
+      "source": "src/routes/work.ts:627"
     },
     {
       "method": "POST",
       "path": "/api/work/proposals/:id/decide",
-      "source": "src/routes/work.ts:638"
+      "source": "src/routes/work.ts:648"
     },
     {
       "method": "GET",
