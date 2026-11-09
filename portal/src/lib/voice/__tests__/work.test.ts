@@ -413,7 +413,7 @@ const CASES: KindCase[] = [
       steps('/api/conversations/summarize/runs/sum-1', [{ phase: 'running' }, { phase: 'completed' }])],
     post: ['/api/conversations/summarize/run', { channel: 'orgiq:initiative:p-obs', text: '' }], title: 'Summarise Observability Platform', states: ['queued', 'running', 'done'], href: '/iq/projects/p-obs' },
   // G35: the document job's toast lands on the initiative (where the draft's Save card is), an in-app path the
-  // pane routes through the router (components/shell/inAppLink.ts), never a full page load.
+  // pane routes through the router (the toast's onNavigate, ui-components 2.514.1), never a full page load.
   { kind: 'doc', tenant: 'orgiq', allow: [], target: 'observability',
     routes: [route('GET', '/api/graph/projects', 200, PROJECTS), route('POST', '/api/conversations/doc/run', 202, { runId: 'doc-1' }),
       steps('/api/conversations/doc/runs/doc-1', [{ phase: 'running' }, { phase: 'completed' }])],

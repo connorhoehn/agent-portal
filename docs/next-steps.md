@@ -464,6 +464,8 @@ Left from the build: command output cannot be written into the library's shell t
 
 G38 voice settings (8 November 2026): Settings › Voice picks the voice (21 described presets, `marin`, `cedar`, and designed voices from `VOICE_CUSTOM_VOICES`), a speaking style and a pace, stored per person in `voice_settings` and applied at mint as the voice plus words-only instruction lines; no real-person imitation (`docs/voice-navigator-gaps.md` G38).
 
+Portal on ui-components 2.514.1, one release line (the Studio line merged onto main): no portal breakage; the job toast's link routes through the router (`onNavigate`) and the confirm card's hint is its own prop (docs/voice-navigator-gaps.md G35, G40).
+
 G37 (8 November): System › Voice log became **Logging** at `/iq/logging` (page id `system-logging`), one list rail with four read-only sources (Voice, Agents, Pipelines, Jobs and sweeps), each read through its own page's route and gate; `/iq/voice-log` redirects (docs/voice-navigator-gaps.md G37).
 
 ### Gaps (8 November 2026)

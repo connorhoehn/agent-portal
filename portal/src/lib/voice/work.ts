@@ -668,10 +668,14 @@ export const WORK_PLANNERS: Readonly<Record<string, VoiceToolPlanner>> = { queue
 
 export type JobState = 'queued' | 'running' | 'done' | 'failed';
 
-/** The library's useToast() keyed job toast (ui-components 2.510.3 `toastJob` / `dismissJobToast`). */
+/**
+ * The library's useToast() keyed job toast (ui-components 2.510.3 `toastJob` / `dismissJobToast`;
+ * 2.514.1 `onNavigate`: the link's click comes here default-prevented, so the router takes it).
+ */
 export interface JobToastSink {
   toastJob(opts: {
     id: string; title: string; state: JobState; detail?: string; href?: string; hrefLabel?: string;
+    onNavigate?(href: string): void;
     dismissAfterMs?: number;
     onSettled?(job: { id: string; title: string; state: 'done' | 'failed'; detail?: string; href?: string }): void;
   }): void;
@@ -700,6 +704,11 @@ export interface JobTrackerOptions {
   notify(notice: JobNotice): void;
   /** Say the outcome; the controller speaks only while a session is live. */
   speak(line: string): void;
+  /**
+   * G35: the router's navigate. The toast's link goes through it (the library's `onNavigate`), so following
+   * it never reloads the page and never drops a live voice session.
+   */
+  navigate?(href: string): void;
   /** VOICE_TOAST_SECONDS from the mint (default DEFAULT_TOAST_SECONDS). */
   toastSeconds(): number;
   /** The stream that says a job may have moved; returns the unsubscribe. */
@@ -881,6 +890,7 @@ export class VoiceJobTracker implements JobTracking {
       id: job.jobId, title: job.title, state: f.state,
       ...(f.detail ? { detail: f.detail } : {}),
       href: job.href, hrefLabel: 'Open',
+      ...(this.opts.navigate ? { onNavigate: (href: string) => this.opts.navigate!(href) } : {}),
       dismissAfterMs: Math.max(1, this.opts.toastSeconds() || DEFAULT_TOAST_SECONDS) * 1000,
       onSettled: (s) => {
         const notice: JobNotice = { jobId: job.jobId, kind: job.kind, title: job.title, state: s.state, href: job.href, ...(s.detail ? { detail: s.detail } : {}) };

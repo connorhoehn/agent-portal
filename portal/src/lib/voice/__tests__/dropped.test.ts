@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { RESUME_MS, RESUME_NOTE, VoiceController, type ResumeRecord, type ResumeStore } from '../controller.ts';
 import { VoiceClient, type MediaHandlers } from '../client.ts';
-import { routedPath, ROUTED_LINKS } from '../../../components/shell/inAppLink.ts';
+import { VoiceJobTracker, type JobToastSink } from '../work.ts';
 import { FakeClock, fakeFetch, loggedEvents, middlewareVoice, route, toolContext } from './voiceHarness.ts';
 
 const A = 'vs_00000000-0000-0000-0000-0000000000d1';
@@ -157,7 +157,7 @@ test('G35: no voice module loads a full page (location.assign, location.href =, 
   const files = [
     ...readdirSync(new URL('lib/voice/', root)).filter((f) => f.endsWith('.ts')).map((f) => `lib/voice/${f}`),
     ...readdirSync(new URL('pages/voice/', root)).filter((f) => /\.tsx?$/.test(f)).map((f) => `pages/voice/${f}`),
-    'components/shell/VoiceFooterPane.tsx', 'components/shell/voiceDockModel.ts', 'components/shell/inAppLink.ts',
+    'components/shell/VoiceFooterPane.tsx', 'components/shell/voiceDockModel.ts',
     'lib/localNotifications.ts', 'lib/toastStore.ts',
   ];
   const offenders: string[] = [];
@@ -171,19 +171,33 @@ test('G35: no voice module loads a full page (location.assign, location.href =, 
   assert.ok(files.length > 15);
 });
 
-test('G35: the job toast\'s plain anchor is routed in the app on a plain click; new-tab clicks, downloads and other origins are left alone', () => {
-  const origin = 'http://localhost:5192';
-  const click = { button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, defaultPrevented: false };
-  const a = (href: string, target = '', download = false) => ({ href, target, hasAttribute: (n: string) => n === 'download' && download });
-  assert.equal(ROUTED_LINKS, 'a[data-testid="job-toast-link"]');
-  assert.equal(routedPath(click, a(`${origin}/iq/projects/p-obs`), origin), '/iq/projects/p-obs');
-  assert.equal(routedPath(click, a('/iq/work/job-1?tab=log#top'), origin), '/iq/work/job-1?tab=log#top');
-  assert.equal(routedPath({ ...click, metaKey: true }, a('/iq/work/job-1'), origin), null);
-  assert.equal(routedPath({ ...click, button: 1 }, a('/iq/work/job-1'), origin), null);
-  assert.equal(routedPath(click, a('/iq/work/job-1', '_blank'), origin), null);
-  assert.equal(routedPath(click, a('/api/x/export', '', true), origin), null);
-  assert.equal(routedPath(click, a('https://evil.example/iq'), origin), null);
-  assert.equal(routedPath({ ...click, defaultPrevented: true }, a('/iq/work/job-1'), origin), null);
+test('G35: the job toast\'s link goes through the router (the library\'s onNavigate, 2.514.1), never a full page load', () => {
+  type ToastOpts = Parameters<JobToastSink['toastJob']>[0];
+  const tracker = (navigate?: (href: string) => void) => {
+    const shown: ToastOpts[] = [];
+    const jobs = new VoiceJobTracker({
+      fetch: () => Promise.reject(new Error('no reads')), toast: { toastJob: (o) => { shown.push(o); }, dismissJobToast: () => {} },
+      notify: () => {}, speak: () => {}, toastSeconds: () => 8, ...(navigate ? { navigate } : {}),
+    });
+    return { jobs, shown };
+  };
+  const routed: string[] = [];
+  const { jobs, shown } = tracker((href) => { routed.push(href); });
+  jobs.finished({ jobId: 'doc-1', kind: 'doc', title: 'Draft a document from Observability Platform', href: '/iq/projects/p-obs' }, 'done');
+  assert.equal(shown.length, 1);
+  assert.equal(shown[0]!.href, '/iq/projects/p-obs');
+  assert.equal(shown[0]!.hrefLabel, 'Open');
+  assert.equal(typeof shown[0]!.onNavigate, 'function', 'every toast routes its link through the host');
+  shown[0]!.onNavigate!('/iq/projects/p-obs');
+  assert.deepEqual(routed, ['/iq/projects/p-obs']);
+  // Without a router (a host that never wired one) the link stays the library's plain anchor.
+  const bare = tracker();
+  bare.jobs.finished({ jobId: 'doc-2', kind: 'doc', title: 'x', href: '/iq/projects/p-obs' }, 'done');
+  assert.equal(bare.shown[0]!.onNavigate, undefined);
+  // The pane wires the router into the tracker and no longer intercepts document clicks.
+  const pane = readFileSync(new URL('../../../components/shell/VoiceFooterPane.tsx', import.meta.url), 'utf8');
+  assert.match(pane, /navigate: \(href\) => \{ void live\.current\.navigate\(href\); \}/);
+  assert.doesNotMatch(pane, /addEventListener\('click'/);
 });
 
 test('G44: a session dropped in one workspace is not resumable in another; a resume the server did not link is not announced', async () => {

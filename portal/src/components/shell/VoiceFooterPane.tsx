@@ -54,8 +54,8 @@
 // `visibilitychange`. Such a session's id stays in sessionStorage for 60 s
 // (RESUME_MS) and the dock's Start control reads "Resume", which mints with
 // `resumeOf`. Nothing in the voice path loads a full page: tools navigate
-// through the router, and the library's job toast link (a plain anchor outside
-// the router) is caught here and routed (inAppLink.ts).
+// through the router, and so does the library's job toast link (its
+// `onNavigate`, ui-components 2.514.1, wired through VoiceJobTracker).
 //
 // No money in the footer (owner decision, 8 November): the dock shows the
 // phase, the elapsed time and the controls, never a dollar figure, so no
@@ -67,7 +67,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { useChat, useGatewayOptional } from '@connorhoehn/realtime-modules/client';
 import { openOutputTab, openShell, useComputeOptional } from '@connorhoehn/ui-components/compute';
 import { Inline, useToastOptional } from '@connorhoehn/ui-components/shared';
-import { VoiceDock, type VoicePending, type VoicePendingChoice } from '@connorhoehn/ui-components/voice';
+import { VoiceDock, type VoiceConfirmResult, type VoicePending, type VoicePendingChoice } from '@connorhoehn/ui-components/voice';
 import { useSession } from '../../lib/auth';
 import { useCapabilities, type Action } from '../../lib/capabilities';
 import { features } from '../../lib/features';
@@ -79,7 +79,6 @@ import { VOICE_LOG_PATH, sessionHref } from '../../pages/voice/voiceLogModel';
 import { pageContextFor, pageContextNote, pageIdFor, subscribePageContext } from '../../lib/voice/pageContext';
 import { voiceVerbosity } from '../../lib/voice/contextWindow';
 import { VoiceController, type ResumeRecord, type ResumeStore } from '../../lib/voice/controller';
-import { routeInAppLinks } from './inAppLink';
 import { TENANT_SWITCH_EVENT } from '../../lib/voice/tenantSwitch';
 import { InboundMemory, messageFromFrame, notificationItem } from '../../lib/voice/inbound';
 import { useSharedNotificationsOptional } from './SharedNotifications';
@@ -92,7 +91,7 @@ import { useSocialCall } from '../../pages/social/useSocialCall';
 import { sendAndWaitForSocialChatAck, socialChatError } from '../../pages/social/socialChatDelivery';
 import { useEmbeddedSocial } from './EmbeddedSocial';
 import { PAGES, isPageVisible } from './portalCommands';
-import { dockTranscriptProps, isVoiceHotkey, voiceDockVisible, voiceLogHref } from './voiceDockModel';
+import { dockPending, dockTranscriptProps, isVoiceHotkey, voiceDockVisible, voiceLogHref } from './voiceDockModel';
 import { tenantLobbyPresence } from './tenantPresence';
 
 /** The footer's voice slot: nothing at all unless the flag is on. */
@@ -322,6 +321,8 @@ function VoiceFooterPane() {
     },
     notify: (n: JobNotice) => addLocalNotification(jobNotification(n, tenantRef.current, new Date())),
     speak: (line) => controllerRef.current?.noteJobOutcome(line),
+    // G35: the toast's link goes through the router (the library's `onNavigate`), never a full page load.
+    navigate: (href) => { void live.current.navigate(href); },
     toastSeconds: () => controllerRef.current?.toastSeconds() ?? 8,
     // The stream the page already holds: the Work pages' /api/work/events in orgiq (the sweep jobs and the
     // dispatcher's jobs both emit there), the run's own event stream in pipelines.
@@ -457,11 +458,6 @@ function VoiceFooterPane() {
     return () => window.removeEventListener(TENANT_SWITCH_EVENT, onSwitch);
   }, [controller]);
 
-  // G35: the job toast's link (a plain anchor outside the router) goes through the router, so it never reloads the page.
-  const navigateRef = useRef(navigate);
-  navigateRef.current = navigate;
-  useEffect(() => routeInAppLinks(document, (path) => { void navigateRef.current(path); }), []);
-
   // The on-device transcript keep (G20): the session's turns, saved under its id while the switch is on; never sent.
   const keep = useSyncExternalStore(subscribeKeepTranscripts, keepTranscripts, () => false);
   const keptStore = useMemo(() => transcriptStore(), []);
@@ -477,16 +473,11 @@ function VoiceFooterPane() {
   // G26: CC toggles the strip inline above the dock (the library's `transcriptOpen`), never a popover.
   const [stripOpen, setStripOpen] = useState(false);
   const openLog = useCallback(() => { void navigate(voiceLogHref(snap.sessionId, { list: VOICE_LOG_PATH, session: sessionHref })); }, [navigate, snap.sessionId]);
-  const pending: VoicePending | null = snap.pending ? {
-    title: snap.pending.title,
-    requestId: snap.pending.requestId,
-    // G40: the card's own hint ("Say confirm, or cancel.") is its last detail line, under the text.
-    ...(snap.pending.detail || snap.pending.hint ? { detail: [...(snap.pending.detail == null ? [] : Array.isArray(snap.pending.detail) ? snap.pending.detail : [snap.pending.detail]), ...(snap.pending.hint ? [snap.pending.hint] : [])] } : {}),
-    // decide's card (2.510.5 `fields`): the approve / reject toggle and a note; Confirm hands back { decision, note }.
-    ...(snap.pending.fields ? { fields: snap.pending.fields } : {}),
-    onConfirm: (result) => controller.confirm('click', result),
-    onCancel: () => controller.cancel('click'),
-  } : null;
+  // G40: the who-may-answer line is the card's own `hint` (2.514.1); decide's `fields` hand back { decision, note }.
+  const pending: VoicePending | null = snap.pending ? dockPending<VoiceConfirmResult>(snap.pending, {
+    confirm: (result) => controller.confirm('click', result),
+    cancel: () => controller.cancel('click'),
+  }) : null;
   // open's ambiguous name (catalogue v2): the library's choice card, picked by click or by the number the user said
   // (the controller hears it and sets `ordinal`; the card chooses that row once and calls back here).
   const pendingChoice: VoicePendingChoice | null = snap.choice ? {

@@ -831,7 +831,7 @@ export class VoiceController {
       }
       rec.calls.set(callId, { name, status: 'confirming' });
       const described = this.opts.describeConfirm?.(call, plan) ?? (plan ? { title: plan.title, ...(plan.detail ? { detail: plan.detail } : {}) } : defaultConfirmText(call));
-      // G40: the card says who may answer it, under its own text (the library's detail lines).
+      // G40: the card says who may answer it, in its own hint line under Confirm / Cancel (ui-components 2.514.1).
       const mode = confirmModeOf(call);
       const text = { ...described, hint: CARD_HINT[mode], confirmBy: mode };
       this.pending = { callId, delegationId, call, plan, startedAt, heard: { text: '', lastEndMs: null, quiet: null, done: false },

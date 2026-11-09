@@ -9,7 +9,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { isVoiceHotkey, voiceDockVisible } from '../voiceDockModel.ts';
+import { dockPending, isVoiceHotkey, voiceDockVisible } from '../voiceDockModel.ts';
+import { CARD_HINT } from '../../../lib/voice/controller.ts';
 import { voiceNavigatorEnabled } from '../../../lib/features.ts';
 
 test('the dock shows only with the flag on, a session, and VoiceNavigate settled true', () => {
@@ -24,6 +25,26 @@ test('the flag defaults on under the dev server, off in a build, and the variabl
   assert.equal(voiceNavigatorEnabled(undefined), false);
   assert.equal(voiceNavigatorEnabled({ DEV: false, VITE_VOICE_NAVIGATOR: '1' }), true);
   assert.equal(voiceNavigatorEnabled({ DEV: true, VITE_VOICE_NAVIGATOR: 'false' }), false);
+});
+
+test('G40: the card\'s who-may-answer line is the library\'s hint prop (2.514.1), never a detail line', () => {
+  const calls: unknown[] = [];
+  const on = { confirm: (r?: unknown) => { calls.push(['confirm', r]); }, cancel: () => { calls.push(['cancel']); } };
+  const voice = dockPending({ title: 'Post to #platform', requestId: 3, detail: ['"Deploy is green"'], hint: CARD_HINT.voice }, on);
+  assert.equal(voice.hint, 'Say confirm, or cancel.');
+  assert.deepEqual(voice.detail, ['"Deploy is green"']);
+  const click = dockPending({ title: 'Start a call', requestId: 4, detail: 'With Mina', hint: CARD_HINT.click }, on);
+  assert.equal(click.hint, 'Click Confirm on the card; say cancel to drop it.');
+  assert.equal(click.detail, 'With Mina');
+  // The budget card has no hint and no lines: neither key is sent.
+  const bare = dockPending({ title: 'Keep going?', requestId: 5 }, on);
+  assert.equal('hint' in bare, false);
+  assert.equal('detail' in bare, false);
+  const decide = dockPending({ title: 'Approve the request', requestId: 6, fields: { decision: 'approve' }, hint: CARD_HINT.click }, on);
+  assert.deepEqual(decide.fields, { decision: 'approve' });
+  decide.onConfirm({ decision: 'reject', note: 'later' });
+  decide.onCancel();
+  assert.deepEqual(calls, [['confirm', { decision: 'reject', note: 'later' }], ['cancel']]);
 });
 
 test('Ctrl+Shift+Space is the hotkey, nothing else', () => {
