@@ -114,7 +114,7 @@ import {
 import { VOICE_PLANNERS, VOICE_RUNNERS } from './actions.ts';
 import { DEFAULT_TOAST_SECONDS } from './work.ts';
 import { VoiceEventLog, argShape, refusalCode, resultSummary, type DockEvent } from './sessionEvents.ts';
-import { RefusalGuard, STOP_NEXT, refusalLine, withFailure, withNext } from './refusals.ts';
+import { FAILED_TWICE_NEXT, FailureGuard, RETRY_NEXT, RefusalGuard, STOP_NEXT, refusalLine, withFailure, withNext } from './refusals.ts';
 import { inboundLine, inboundNote, type InboundItem } from './inbound.ts';
 import { DelegationContext, PAGE_NOTE_REPLACES, briefOutput, modelOutput, summaryLine, verbosityNote, type Verbosity } from './contextWindow.ts';
 
@@ -376,6 +376,8 @@ export class VoiceController {
   private readonly log: VoiceEventLog;
   /** The calls refused in this session (G29): the second identical one is terminal. */
   private readonly refusals = new RefusalGuard();
+  /** G48: the calls that failed in this session: retried once, and only when the user asked again. */
+  private readonly failures = new FailureGuard();
   /** The dock's model of what a delegation reads (G31): recent results in full, older ones as a line, one page note. */
   private readonly context = new DelegationContext();
   /** G32 / G33 item 4: the pulse flag, its reset timer, the idle watch after a result, and what the voice said since a card opened. */
@@ -795,6 +797,12 @@ export class VoiceController {
       return;
     }
     const call = prepared.call;
+    // G48: a call that failed runs again only once, and only after the user asked (a new turn); never on the model's own.
+    const retry = this.failures.check(name, call.args, this.turn);
+    if (retry) {
+      await this.answer(client, delegationId, callId, name, withNext(refused(retry.reason, { code: retry.code }), name, ctx), startedAt, call.args);
+      return;
+    }
     // A dropped `command` (§6) is its own refused row: the attempt is on record, its text is not (§9).
     if (call.ignored?.length) {
       const sessionId = client.mint?.sessionId;
@@ -874,6 +882,11 @@ export class VoiceController {
     if (client !== this.client || this.machine.base !== 'live') return;
     // G47: a failed call (or a route's brake) says why: its code, its gate and the one line to say.
     let res = withFailure(given, name);
+    // G48: a failure may be retried once when the user asks; the second failure of the same call ends the round.
+    if (res.outcome === 'failed') {
+      const { last } = this.failures.failed(name, args, this.turn);
+      res = { ...res, output: { ...res.output, next: last ? FAILED_TWICE_NEXT : RETRY_NEXT, ...(last ? { stop: true } : {}) } };
+    } else if (res.outcome === 'done') this.failures.succeeded(name, args);
     // G29: the second identical refused call of the session is terminal. Its output says stop, the round asks for no
     // continuation (so the delegation cannot try a third time), and the dock speaks the refusal line itself, once.
     const verdict = res.outcome === 'refused' ? this.refusals.refused(name, args, res.output) : null;
@@ -1269,6 +1282,7 @@ export class VoiceController {
     this.disarmIdle();
     this.clearCardLine();
     this.refusals.reset();
+    this.failures.reset();
     this.context.reset();
     this.pending = null;
     this.choice = null;

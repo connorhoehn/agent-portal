@@ -161,6 +161,9 @@ export function refusalNext(tool: string, output: Record<string, unknown>, ctx: 
     case 'not-in-workspace':
       fix = 'That is not offered in this workspace: say so, and offer the nearest page.';
       break;
+    case 'repeat-failed':
+      fix = 'That call already failed: tell the user why in one sentence; call it again only when they ask in a new request, at most once.';
+      break;
     case 'too-many-calls':
       fix = 'This request used its calls: stop, and answer the user in one sentence with what you have, or ask them to say what they want in one sentence.';
       break;
@@ -269,6 +272,42 @@ export class RefusalGuard {
     entry.spoken = true;
     return { terminal: true, speak };
   }
+
+  reset(): void { this.seen.clear(); }
+}
+
+/**
+ * G48: a failed call may be retried once, with the same arguments, when the user asks ("try again"). The repeat
+ * guard above counts refusals only; this one counts failures. A retry in the same user turn (the model trying again
+ * on its own) is refused, so is a third try after two failures; a new turn's first retry runs.
+ */
+export const RETRY_NEXT = 'Tell the user in one sentence why it failed (the say line). If they ask to try again, call it once more with the same arguments; never retry on your own.';
+export const FAILED_TWICE_NEXT = 'It failed twice: tell the user why in one sentence, and do not try it again in this session.';
+
+export class FailureGuard {
+  private seen = new Map<string, { count: number; turn: unknown }>();
+
+  /** Before a call runs: null to let it run, else why not (`repeat-failed`). `turn` is the user turn it was asked in. */
+  check(tool: string, args: unknown, turn: unknown): { reason: string; code: 'repeat-failed' } | null {
+    const entry = this.seen.get(callKey(tool, args));
+    if (!entry) return null;
+    if (entry.count >= 2) return { reason: 'That failed twice in this session, so I will not try it a third time.', code: 'repeat-failed' };
+    if (entry.turn === turn) return { reason: 'That just failed. Tell the user why; try again only when they ask.', code: 'repeat-failed' };
+    return null;
+  }
+
+  /** A call failed: whether this was its last allowed try. */
+  failed(tool: string, args: unknown, turn: unknown): { last: boolean } {
+    const key = callKey(tool, args);
+    const entry = this.seen.get(key) ?? { count: 0, turn };
+    entry.count += 1;
+    entry.turn = turn;
+    this.seen.set(key, entry);
+    return { last: entry.count >= 2 };
+  }
+
+  /** It landed: a later failure of the same call starts again. */
+  succeeded(tool: string, args: unknown): void { this.seen.delete(callKey(tool, args)); }
 
   reset(): void { this.seen.clear(); }
 }
