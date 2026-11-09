@@ -86,6 +86,11 @@
 // mid-utterance (no words for INBOUND_QUIET_MS and the microphone quiet),
 // waited for at most INBOUND_WAIT_MS; the voice speaks unprompted only here.
 //
+// Bounded delegations (G43): one delegation runs at most MAX_CALLS_PER_DELEGATION
+// tool calls (a search that only changes its query counts double); the next
+// call is answered `too-many-calls` with stop: true, the round asks for no
+// continuation, and the dock says TOO_MANY_LINE itself.
+//
 // Phase dwell (G36): the phase the dock shows (and logs) holds at least
 // PHASE_DWELL_MS. A change inside the window waits for its end and is then
 // taken from the machine as it stands, so a flap (listening, speaking,
@@ -113,6 +118,11 @@ export const INBOUND_QUIET_MS = 1200;
 /** G23: how long an inbound line waits for the user to finish before it is left to the note alone. */
 export const INBOUND_WAIT_MS = 10_000;
 const INBOUND_RECHECK_MS = 400;
+
+/** G43: the calls one delegation may make; the next is refused and ends it. */
+export const MAX_CALLS_PER_DELEGATION = 4;
+/** What the user hears when a delegation runs out of calls. */
+export const TOO_MANY_LINE = 'Say what you want in one sentence.';
 
 /** The least time a shown phase holds before the next one replaces it (G36). */
 export const PHASE_DWELL_MS = 300;
@@ -254,7 +264,11 @@ export interface ControllerOptions {
 
 interface CallRecord { name: string; status: 'confirming' | 'running' | 'answered' }
 /** `stopped`: a call of this round was a repeat refusal (G29): the round ends without a continuation. */
-interface DelegationRecord { calls: Map<string, CallRecord>; completed: boolean; unanswered: number; grace: Timer | null; stopped: boolean }
+interface DelegationRecord {
+  calls: Map<string, CallRecord>; completed: boolean; unanswered: number; grace: Timer | null; stopped: boolean;
+  /** G43: the calls this delegation used (weighted) and the shapes of its searches without the query. */
+  used: number; searches: Set<string>; spokeStop?: boolean;
+}
 /** What the card has heard: the first utterance after it, and whether that utterance has ended. */
 interface Heard { text: string; lastEndMs: number | null; quiet: Timer | null; done: boolean }
 interface Pending {
@@ -721,7 +735,7 @@ export class VoiceController {
   private delegation(id: string): DelegationRecord {
     let rec = this.delegations.get(id);
     if (!rec) {
-      rec = { calls: new Map(), completed: false, unanswered: 0, grace: null, stopped: false };
+      rec = { calls: new Map(), completed: false, unanswered: 0, grace: null, stopped: false, used: 0, searches: new Set() };
       this.delegations.set(id, rec);
     }
     return rec;
@@ -736,6 +750,22 @@ export class VoiceController {
     this.emit({ kind: 'tool-call', tool: name, data: { callId, ...argShape(name, rawArgs) } });
     const startedAt = this.now();
     const ctx = this.toolContext();
+    // G43: a delegation that has used its calls is told to stop; the round ends here and the dock speaks.
+    const weight = callWeight(rec, name, rawArgs);
+    if (rec.stopped || rec.used + weight > MAX_CALLS_PER_DELEGATION) {
+      rec.stopped = true;
+      const res = withNext(refused('Too many calls for one request.', { code: 'too-many-calls', say: TOO_MANY_LINE, stop: true }), name, ctx);
+      await this.answer(client, delegationId, callId, name, res, startedAt, rawArgs);
+      if (!rec.spokeStop) {
+        rec.spokeStop = true;
+        const said = `Tell the user, in one sentence, and do not call anything: ${TOO_MANY_LINE}`;
+        this.context.note(said.length);
+        client.appendCommentary(said);
+        this.addLine('assistant', TOO_MANY_LINE);
+      }
+      return;
+    }
+    rec.used += weight;
     const prepared = prepareToolCall(name, rawArgs, ctx);
     if (!prepared.ok) {
       await this.answer(client, delegationId, callId, name, prepared.result, startedAt, rawArgs);
@@ -1264,3 +1294,14 @@ export class VoiceController {
 
 const round = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 20) / 20;
 
+/** G43: one call's weight against the delegation's budget: a search that only changes its query counts double. */
+function callWeight(rec: { searches: Set<string> }, name: string, raw: string): number {
+  if (name !== 'search') return 1;
+  let args: Record<string, unknown> = {};
+  try { args = JSON.parse(raw) as Record<string, unknown>; } catch { return 1; }
+  const { query: _q, ...rest } = args;
+  const shape = JSON.stringify(Object.keys(rest).sort().map((k) => [k, rest[k]]));
+  const seen = rec.searches.has(shape);
+  rec.searches.add(shape);
+  return seen ? 2 : 1;
+}
