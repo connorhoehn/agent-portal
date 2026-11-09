@@ -24,7 +24,40 @@ export interface InitiativeDeckSummary {
   id: string; projectId: string; title: string; includesBudget: boolean; latestRevision: DeckRevisionInfo | null; updatedAt: string;
 }
 
-export interface CreatedInitiativeDeck { deckId: string; revisionId: string; includesBudget: boolean; narrative: NarrativeOutcome }
+/** The sprint a focus such as "this past sprint" selected (the route's `brief.window`, from the initiative's own sprint rows). */
+export interface DeckBriefWindow { sprintId: string; name: string; startsOn: string | null; endsOn: string | null; status: string; which: 'last-ended' | 'current' }
+export interface CreatedInitiativeDeck { deckId: string; revisionId: string; includesBudget: boolean; narrative: NarrativeOutcome; brief?: { words: string; window: DeckBriefWindow | null } | null }
+
+/** The Presentation dialog's Focus field: the same words the voice path sends as `brief` (G55); the route caps them at 200. */
+export const DECK_FOCUS_MAX = 200;
+/** One line, control characters and runs of spaces folded, cut to the cap; null when nothing is left. */
+export function cleanFocus(raw: string): string | null {
+  // eslint-disable-next-line no-control-regex
+  const words = raw.replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, DECK_FOCUS_MAX).trim();
+  return words || null;
+}
+
+/**
+ * The body the dialog posts. A focus steers the narrative (that is where the route uses it, as the voice path does:
+ * `{ narrative: true, brief }`), so typing one turns the narrative on; with none the body is exactly what it was.
+ */
+export function deckCreateBody(input: { title: string; narrative: boolean; includeBudget: boolean; focus: string }): { title?: string; narrative?: boolean; includeBudget?: boolean; brief?: string } {
+  const focus = cleanFocus(input.focus);
+  return {
+    ...(input.title.trim() ? { title: input.title.trim() } : {}),
+    ...(input.narrative || focus ? { narrative: true } : {}),
+    ...(!input.includeBudget ? { includeBudget: false } : {}),
+    ...(focus ? { brief: focus } : {}),
+  };
+}
+
+/** What the created deck was focused on: the sprint window the route chose, else the words; null when no focus was given. */
+export function focusDetail(brief: CreatedInitiativeDeck['brief']): string | null {
+  if (!brief) return null;
+  const w = brief.window;
+  if (w) return `Focus: ${w.name} (${w.startsOn ?? '?'} to ${w.endsOn ?? '?'}), the ${w.which === 'current' ? 'current' : 'last ended'} sprint.`;
+  return `Focus: “${brief.words}”. No sprint window matched, so the deck covers the whole record.`;
+}
 
 const api = makeDeckApi<InitiativeDeckDetail>({ tenant: 'orgiq', base: BASE, decksPath: '', listParam: 'projectId', revise: true });
 
@@ -34,7 +67,7 @@ export const initiativeDeckPaths = {
   page: (deckId: string) => `/iq/decks/${encodeURIComponent(deckId)}`,
 } as const;
 
-export const createInitiativeDeck = (projectId: string, input: { title?: string; narrative?: boolean; includeBudget?: boolean }): Promise<CreatedInitiativeDeck> =>
+export const createInitiativeDeck = (projectId: string, input: { title?: string; narrative?: boolean; includeBudget?: boolean; brief?: string }): Promise<CreatedInitiativeDeck> =>
   deckPost(initiativeDeckPaths.create(projectId), input);
 export const getInitiativeDeck = api.getDeck;
 export const getInitiativeDeckSpec = api.getRevisionSpec;

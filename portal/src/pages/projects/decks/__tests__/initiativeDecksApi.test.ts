@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 
 import { DeckRevisionConflictError, DeckApiError } from '../../../../components/decks/deckApi.ts';
 import {
-  createInitiativeDeck, initiativeDeckPaths, narrativeNotice, previewInitiativeDeck, reviseInitiativeDeck, saveInitiativeDeckRevision, shareWithheldReason,
+  DECK_FOCUS_MAX, cleanFocus, createInitiativeDeck, deckCreateBody, focusDetail, initiativeDeckPaths, narrativeNotice, previewInitiativeDeck, reviseInitiativeDeck, saveInitiativeDeckRevision, shareWithheldReason,
 } from '../initiativeDecksApi.ts';
 
 type Call = { url: string; init: RequestInit };
@@ -81,4 +81,22 @@ test('status deck dialog: reader/no deck, reader/with deck, builder/no deck', as
   assert.equal(r1.showBuild, false); assert.equal(r1.primary, 'open'); assert.ok(r1.notice); assert.equal(r1.emptyText, null);
   const b0 = statusDeckDialogState({ canBuild: true, deckCount: 0, projectName: 'Auth' });
   assert.equal(b0.showBuild, true); assert.equal(b0.primary, 'build'); assert.equal(b0.notice, null); assert.match(b0.emptyText!, /No status deck for Auth yet/);
+});
+
+test('G55: the dialog posts the focus as `brief` (what the voice path sends), turns the narrative on, and a blank focus changes nothing', async () => {
+  assert.deepEqual(deckCreateBody({ title: '', narrative: false, includeBudget: true, focus: '' }), {});
+  assert.deepEqual(deckCreateBody({ title: ' Q4 ', narrative: false, includeBudget: false, focus: '   ' }), { title: 'Q4', includeBudget: false });
+  assert.deepEqual(deckCreateBody({ title: '', narrative: false, includeBudget: true, focus: ' progress\n this  past sprint ' }), { narrative: true, brief: 'progress this past sprint' });
+  assert.equal(cleanFocus('x'.repeat(300))!.length, DECK_FOCUS_MAX);
+  const calls = stubFetch(201, { deckId: 'd1', revisionId: 'r1', includesBudget: true, narrative: { requested: true, status: 'applied', templatedSlideIds: [] }, brief: { words: 'progress this past sprint', window: { sprintId: 's3', name: 'Sprint 3', startsOn: '2026-10-05', endsOn: '2026-10-16', status: 'done', which: 'last-ended' } } });
+  const out = await createInitiativeDeck('p-soc2', deckCreateBody({ title: '', narrative: false, includeBudget: true, focus: 'progress this past sprint' }));
+  assert.deepEqual(JSON.parse(String(calls[0]!.init.body)), { narrative: true, brief: 'progress this past sprint' });
+  assert.equal(focusDetail(out.brief), 'Focus: Sprint 3 (2026-10-05 to 2026-10-16), the last ended sprint.');
+});
+
+test('G55: the created deck names the window when the route chose one, the words when none fit, nothing without a focus', () => {
+  assert.equal(focusDetail(undefined), null);
+  assert.equal(focusDetail(null), null);
+  assert.match(focusDetail({ words: 'security work', window: null })!, /^Focus: “security work”\. No sprint window matched/);
+  assert.match(focusDetail({ words: 'this sprint', window: { sprintId: 's4', name: 'Sprint 4', startsOn: null, endsOn: '2026-10-30', status: 'active', which: 'current' } })!, /Sprint 4 \(\? to 2026-10-30\), the current sprint/);
 });

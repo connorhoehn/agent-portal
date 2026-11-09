@@ -10,7 +10,7 @@ import { Button, Checkbox, FormField, InlineAlert, Inline, Input, Modal, Stack, 
 import { useFetch } from '../../../hooks/useFetch';
 import { useCapabilities } from '../../../lib/capabilities';
 import { toastError, toastSuccess } from '../../../lib/toastStore';
-import { createInitiativeDeck, initiativeDeckPaths, narrativeNotice, statusDeckDialogState, type InitiativeDeckSummary } from './initiativeDecksApi';
+import { DECK_FOCUS_MAX, createInitiativeDeck, deckCreateBody, focusDetail, initiativeDeckPaths, narrativeNotice, statusDeckDialogState, type InitiativeDeckSummary } from './initiativeDecksApi';
 
 export function InitiativeStatusDecks({ projectId, projectName, open: openProp, onOpenChange, hideTrigger = false }: {
   projectId: string; projectName: string;
@@ -24,6 +24,7 @@ export function InitiativeStatusDecks({ projectId, projectName, open: openProp, 
   const setOpen = (next: boolean) => { setOpenState(next); onOpenChange?.(next); };
   const [title, setTitle] = useState('');
   const [narrative, setNarrative] = useState(false);
+  const [focus, setFocus] = useState('');
   const [budget, setBudget] = useState(true);
   const [busy, setBusy] = useState(false);
   const decks = useFetch<InitiativeDeckSummary[]>(open ? initiativeDeckPaths.list(projectId) : null);
@@ -35,12 +36,8 @@ export function InitiativeStatusDecks({ projectId, projectName, open: openProp, 
   async function submit() {
     setBusy(true);
     try {
-      const out = await createInitiativeDeck(projectId, {
-        ...(title.trim() ? { title: title.trim() } : {}),
-        ...(narrative ? { narrative: true } : {}),
-        ...(canBudget && !budget ? { includeBudget: false } : {}),
-      });
-      const notice = narrativeNotice(out.narrative);
+      const out = await createInitiativeDeck(projectId, deckCreateBody({ title, narrative, includeBudget: !(canBudget && !budget), focus }));
+      const notice = [narrativeNotice(out.narrative), focusDetail(out.brief)].filter(Boolean).join(' ');
       if (notice) toastSuccess(null, 'Status deck built', notice);
       setOpen(false);
       navigate(initiativeDeckPaths.page(out.deckId));
@@ -82,6 +79,9 @@ export function InitiativeStatusDecks({ projectId, projectName, open: openProp, 
             <Stack gap="md">
               <FormField label="Title">
                 {({ id }) => <Input id={id} value={title} placeholder={`${projectName} — status`} onChange={(e) => setTitle(e.target.value)} />}
+              </FormField>
+              <FormField label="Focus" hint="Optional. What the deck should cover; it steers the Nova narrative, so a focus turns the narrative on.">
+                {({ id }) => <Input id={id} value={focus} maxLength={DECK_FOCUS_MAX} placeholder="e.g. progress this past sprint" onChange={(e) => setFocus(e.target.value)} data-testid="initiative-deck-focus" />}
               </FormField>
               <FormField label="Write a narrative with Nova" layout="inline">
                 {({ labelId, id }) => <Checkbox id={id} checked={narrative} onChange={setNarrative} aria-labelledby={labelId} data-testid="initiative-deck-narrative" />}
