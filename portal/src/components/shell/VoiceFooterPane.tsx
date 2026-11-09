@@ -1,7 +1,10 @@
 // The voice navigator's footer pane (docs/voice-navigator-spec.md §5): the
 // library's VoiceDock at `size="footer"` (HuddleBar's metrics: sm ring, xs
-// labels, a quiet "Voice" / "End" control, mute, the confirm card) and, on demand, VoiceTurnStrip in a popover
-// that opens above the row. Mounted in SocialFooter beside the huddle half,
+// labels, a quiet "Voice" / "End" control, mute, the confirm card). Its CC
+// control (G26, ui-components 2.510.6 `transcriptOpen`) shows the library's
+// VoiceTurnStrip inline in a row above the dock at the footer's scale, never a
+// popover or a dialog; the strip's extras row holds the "Keep transcripts on
+// this device" switch and the history control. Mounted in SocialFooter beside the huddle half,
 // only when `features.voiceNavigator` is on and can('VoiceNavigate') says
 // yes; with either off, `VoiceFooterSlot` returns null before any hook runs,
 // so the footer is unchanged.
@@ -33,9 +36,9 @@
 // The session log (G20): the controller posts the session's structured events
 // (lib/voice/sessionEvents.ts); with "Keep transcripts on this device" on
 // (lib/voice/transcriptKeep.ts, default off) this pane saves the session's
-// turns to IndexedDB under its id, never sending them; the log control beside
-// the transcript one opens System › Voice log (/iq/voice-log/<id>, an orgiq
-// page on the dev server only) at the session last minted.
+// turns to IndexedDB under its id, never sending them; the dock's history
+// control opens System › Voice log (/iq/voice-log/<id>, an orgiq page on the
+// dev server only) at the session last minted, else the latest.
 //
 // No money in the footer (owner decision, 8 November): the dock shows the
 // phase, the elapsed time and the controls, never a dollar figure, so no
@@ -45,17 +48,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { useChat, useGatewayOptional } from '@connorhoehn/realtime-modules/client';
-import { CaptionsIcon, HistoryIcon } from '@connorhoehn/ui-components';
 import { openOutputTab, openShell, useComputeOptional } from '@connorhoehn/ui-components/compute';
-import { IconButton, Inline, InlinePopover, Tooltip, useToastOptional } from '@connorhoehn/ui-components/shared';
-import { VoiceDock, VoiceTurnStrip, type VoicePending, type VoicePendingChoice, type VoiceTurn } from '@connorhoehn/ui-components/voice';
+import { Inline, useToastOptional } from '@connorhoehn/ui-components/shared';
+import { VoiceDock, type VoicePending, type VoicePendingChoice } from '@connorhoehn/ui-components/voice';
 import { useSession } from '../../lib/auth';
 import { useCapabilities, type Action } from '../../lib/capabilities';
 import { features } from '../../lib/features';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { useFetch } from '../../hooks/useFetch';
 import { browserMedia } from '../../lib/voice/client';
-import { keepTranscripts, subscribeKeepTranscripts, transcriptStore } from '../../lib/voice/transcriptKeep';
+import { keepTranscripts, setKeepTranscripts, subscribeKeepTranscripts, transcriptStore } from '../../lib/voice/transcriptKeep';
 import { VOICE_LOG_PATH, sessionHref } from '../../pages/voice/voiceLogModel';
 import { pageContextFor, pageContextNote, pageIdFor, subscribePageContext } from '../../lib/voice/pageContext';
 import { voiceVerbosity } from '../../lib/voice/contextWindow';
@@ -69,7 +71,7 @@ import { useSocialCall } from '../../pages/social/useSocialCall';
 import { sendAndWaitForSocialChatAck, socialChatError } from '../../pages/social/socialChatDelivery';
 import { useEmbeddedSocial } from './EmbeddedSocial';
 import { PAGES, isPageVisible } from './portalCommands';
-import { isVoiceHotkey, voiceDockVisible } from './voiceDockModel';
+import { dockTranscriptProps, isVoiceHotkey, voiceDockVisible, voiceLogHref } from './voiceDockModel';
 import { tenantLobbyPresence } from './tenantPresence';
 
 /** The footer's voice slot: nothing at all unless the flag is on. */
@@ -384,8 +386,9 @@ function VoiceFooterPane() {
     return () => clearTimeout(t);
   }, [keep, keptStore, controller, snap.sessionId, snap.turns, snap.phase]);
 
+  // G26: CC toggles the strip inline above the dock (the library's `transcriptOpen`), never a popover.
   const [stripOpen, setStripOpen] = useState(false);
-  const anchor = useRef<HTMLDivElement>(null);
+  const openLog = useCallback(() => { void navigate(voiceLogHref(snap.sessionId, { list: VOICE_LOG_PATH, session: sessionHref })); }, [navigate, snap.sessionId]);
   const pending: VoicePending | null = snap.pending ? {
     title: snap.pending.title,
     requestId: snap.pending.requestId,
@@ -405,8 +408,8 @@ function VoiceFooterPane() {
     onChoose: (index) => controller.choose(index),
     onCancel: () => controller.cancelChoice(),
   } : null;
-  const turns = snap.turns as VoiceTurn[];
-  return <Inline ref={anchor} gap="xs" align="center" wrap={false} className="min-w-0 max-w-[30rem] shrink border-l border-border pl-2" data-testid="shell-footer-voice">
+  const turns = snap.turns;
+  return <Inline gap="xs" align="center" wrap={false} className="min-w-0 max-w-[30rem] shrink border-l border-border pl-2" data-testid="shell-footer-voice">
     <VoiceDock
       size="footer"
       phase={snap.phase}
@@ -420,23 +423,15 @@ function VoiceFooterPane() {
       onStop={() => { void controller.stop('closed'); }}
       onMute={() => controller.toggleMute()}
       muted={snap.muted}
+      {...dockTranscriptProps({
+        open: stripOpen, toggle: () => setStripOpen((open) => !open), turns,
+        keep, setKeep: (on) => { void setKeepTranscripts(on, keptStore); },
+        openLog: VOICE_LOG_AVAILABLE && tenant === 'orgiq' ? openLog : null,
+      })}
       {...(snap.reason ? { unavailableReason: snap.reason } : {})}
       className="min-w-0 flex-1"
       data-testid="shell-voice-dock"
     />
-    <Tooltip content={stripOpen ? 'Hide what was said' : 'What was said and what ran'} placement="top">
-      <IconButton variant="ghost" size="sm" aria-label="Voice transcript" aria-pressed={stripOpen}
-        icon={<CaptionsIcon size={16} />} disabled={turns.length === 0}
-        onClick={() => setStripOpen((open) => !open)} data-testid="shell-voice-transcript-toggle" />
-    </Tooltip>
-    {VOICE_LOG_AVAILABLE && tenant === 'orgiq' && <Tooltip content="Voice log: what ran, refusals and events" placement="top">
-      <IconButton variant="ghost" size="sm" aria-label="Voice log" icon={<HistoryIcon size={16} />}
-        onClick={() => { void navigate(snap.sessionId ? sessionHref(snap.sessionId) : VOICE_LOG_PATH); }} data-testid="shell-voice-log" />
-    </Tooltip>}
-    <InlinePopover trigger={anchor} open={stripOpen && turns.length > 0} onClose={() => setStripOpen(false)}
-      placement="bottom-end" aria-label="Voice transcript" kind="voice-transcript" data-testid="shell-voice-transcript">
-      <VoiceTurnStrip turns={turns} maxVisible={6} onClear={() => { controller.clearTurns(); setStripOpen(false); }} />
-    </InlinePopover>
     {chatChannel && session && <VoiceChatChannel key={chatChannel} channel={chatChannel} userId={session.sub}
       displayName={social?.me?.displayName ?? session.name ?? session.sub} onReady={onReady} onFailed={onFailed} />}
   </Inline>;

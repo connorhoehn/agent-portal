@@ -114,7 +114,7 @@ export function VoiceLogView(p: VoiceLogViewProps) {
         </DetailSection>
         <DetailSection title="Transcript" hint="this device only">
           {p.transcript?.turns.length
-            ? <VoiceTurnStrip turns={p.transcript.turns as VoiceTurn[]} maxVisible={p.transcript.turns.length} data-testid="voice-log-transcript" />
+            ? <VoiceTurnStrip size="panel" turns={p.transcript.turns as VoiceTurn[]} maxVisible={p.transcript.turns.length} data-testid="voice-log-transcript" />
             : <T size="sm" tone="tertiary" as="p">{p.keep ? 'This device kept no transcript of this session.' : 'Not kept. Turn on "Keep transcripts on this device" to keep the words of later sessions here.'}</T>}
         </DetailSection>
       </Stack>}
