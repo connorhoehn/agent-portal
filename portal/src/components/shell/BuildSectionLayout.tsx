@@ -1,4 +1,4 @@
-import { ScopeHeader, type ListRail } from '@connorhoehn/ui-components';
+import { ScopeHeader, type ExplorerNarrow, type ListRail } from '@connorhoehn/ui-components';
 import { SectionLayout, SubNavLayout, activeNavItemClassName, inactiveNavItemClassName, type BreadcrumbItem, type SubNavItem } from '@connorhoehn/ui-components/shared';
 import type { ComponentProps, ReactNode } from 'react';
 import { Link, useLocation } from 'react-router';
@@ -17,6 +17,13 @@ export interface SectionListRail {
   description?: string;
   /** Docked under the content — the page's command composer (`CollectionCommandHost inPlace`). */
   footer?: ReactNode;
+  /**
+   * The list rail's narrow form (library `SectionLayout narrow.list`): under
+   * 40rem of the frame's width the list and the content stop sitting side by
+   * side — `record` the content under a back control, `list` the list alone.
+   * Omitted: the list rail stays beside the content at every width.
+   */
+  narrow?: ExplorerNarrow;
 }
 
 /** Keep the module menu beside its list and detail pages at every depth.
@@ -68,6 +75,10 @@ export function BuildSectionLayout({
     {...(railWidth ? { railWidth } : {})}
     {...(secondaryItems?.length ? { secondary: { items: secondaryItems, ...(secondaryTitle ? { title: secondaryTitle } : {}), ...(secondaryStorageKey ? { storageKey: secondaryStorageKey } : {}), ...(secondaryRailWidth ? { railWidth: secondaryRailWidth } : {}) } } : {})}
     contentLabel={contentLabel ?? `${title} workspace`}
+    // Every section's narrow form: under 40rem of the frame (a phone) the
+    // section rail becomes one scrolling row of links over the content
+    // instead of a 220px column beside it (walk, 9 November, 390 px).
+    narrow={list?.narrow ? { list: list.narrow } : {}}
     renderNavItem={renderNavItem ?? ((item, body) => {
       const active = isBuildNavActive(item.path, pathname, search);
       return <Link to={item.path} aria-current={active ? 'page' : undefined}

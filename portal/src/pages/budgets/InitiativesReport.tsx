@@ -17,7 +17,6 @@ import {
   IconButton,
   Inline,
   Input,
-  ProgressBar,
   Select,
   Stack,
   T,
@@ -28,7 +27,6 @@ import { toastError, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
 import { usd, ago, rowBudgetStats, budgetPeriodLabel } from './budgetsFormat';
 import type { BudgetAccessLock, BudgetRow, InitiativeOption } from './types';
-import { absoluteTime } from '../../lib/relativeTime';
 import { LockedFigure } from '../projects/BudgetAccess';
 import { SpendFigureCell } from './SpendGroupTable';
 import { discretionaryBudget, floorFigure, moneyOrDash, remainingTone, type InitiativeLedgerRow } from './spendReportModel';
@@ -47,11 +45,16 @@ async function putAllocation(orgProjectId: string, allocatedUsd: number): Promis
 
 // ─── Inline allocation editor ────────────────────────────────────────────────
 
-function AllocationCell({ row, canManage, onSaved }: {
+function AllocationCell({ row, canManage, onSaved, onRemove }: {
   row: BudgetRow;
   canManage: boolean;
   onSaved: () => void;
+  /** Remove this allocation (confirmed by the report); its control sits after the amount. */
+  onRemove?: () => void;
 }) {
+  // The budget period ("2026-11", a sprint) is the amount's tooltip, not a second figure in the cell.
+  const periodKey = budgetPeriodLabel(row).key;
+  const periodTitle = periodKey ? `in force for ${periodKey}` : undefined;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -125,35 +128,47 @@ function AllocationCell({ row, canManage, onSaved }: {
     );
   }
 
+  // Unallocated reads in the amount's own place and size — a link-sized "Set budget", or a dash
+  // titled "unallocated" — so the row keeps the table's grid; the name's "blind spot" chip says
+  // why it matters (walk, 9 November: a secondary button and a warning word broke the row).
   if (row.allocatedUsd == null) {
-    return (
-      <Inline align="center" justify="end" gap="sm" wrap={false}>
-        <T size="xs" className="text-warning">unallocated</T>
-        {canManage && (
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={beginEdit}
-            data-allocation-trigger={row.orgProjectId}
-          >
-            Set budget
-          </Button>
-        )}
-      </Inline>
-    );
+    return canManage ? (
+      <Button
+        variant="link"
+        onClick={beginEdit}
+        title="Unallocated: set this initiative's monthly budget"
+        data-allocation-trigger={row.orgProjectId}
+      >
+        Set budget
+      </Button>
+    ) : <T tone="tertiary" title="Unallocated">—</T>;
   }
 
-  if (!canManage) return <T tabular>{usd(row.allocatedUsd)}</T>;
+  if (!canManage) return <T tabular title={periodTitle}>{usd(row.allocatedUsd)}</T>;
+  // The remove control rides the amount it removes rather than a separate Actions column, so the
+  // ledger fits beside two rails (walk, 9 November).
   return (
+    <Inline align="center" justify="end" gap="xs" wrap={false}>
     <Button
       variant="link"
       onClick={beginEdit}
-      title="Click to edit the monthly allocation"
+      title={`Click to edit the monthly allocation${periodTitle ? ` · ${periodTitle}` : ''}`}
       aria-label={`Edit monthly budget for ${row.orgProjectName ?? row.orgProjectId}: ${usd(row.allocatedUsd)}`}
       data-allocation-trigger={row.orgProjectId}
     >
       <T tabular>{usd(row.allocatedUsd)}</T>
     </Button>
+    {onRemove && (
+      <IconButton
+        variant="ghost"
+        size="sm"
+        icon={<TrashIcon size={14} />}
+        onClick={onRemove}
+        title="Remove this allocation"
+        aria-label={`Remove allocation for ${row.orgProjectName ?? row.orgProjectId}`}
+      />
+    )}
+    </Inline>
   );
 }
 
@@ -297,6 +312,14 @@ export function InitiativesReport({
   // in tabular figures, the burn meter INLINE beside the remaining figure,
   // and the maintenance share of spend a pill with its explanation in the
   // tooltip rather than a second line under the value.
+  //
+  // It fits the content column beside two rails at 1440 (walk, 9 November:
+  // nine columns clipped "Last activity" and the row actions off the right
+  // edge): short headers with the full name as the narrow card's label, Held
+  // only when some row holds money or the figures are locked, and the last
+  // agent activity in the initiative's tooltip. Under 40rem of its width the
+  // table is the library's card form (`narrow`).
+  const showHeld = !!lock || budgets.some((row) => (row.heldUsd ?? 0) > 0);
   const columns: DataTableColumn<InitiativeLedgerRow>[] = [
     {
       key: 'initiative',
@@ -305,8 +328,8 @@ export function InitiativesReport({
         <Inline align="center" gap="sm" wrap={false} className="min-w-0">
           <Link
             to={reportHref(row.orgProjectId)}
-            className="truncate text-text-primary no-underline hover:text-primary hover:underline"
-            title="Open this initiative’s spend report"
+            className="max-w-[10rem] truncate text-text-primary no-underline hover:text-primary hover:underline"
+            title={`Open this initiative’s spend report · last agent activity ${ago(row.lastAgentActivityAt)}`}
           >
             {row.orgProjectName ?? row.orgProjectId}
           </Link>
@@ -325,16 +348,10 @@ export function InitiativesReport({
     },
     {
       key: 'allocated',
-      header: 'Allocated',
+      header: 'Budget',
+      label: 'Allocated',
       numeric: true,
-      render: (row) => (
-        <Inline align="center" justify="end" gap="sm" wrap={false}>
-          {budgetPeriodLabel(row).key && row.allocatedUsd != null && (
-            <T size="xs" tone="tertiary" title="The budget period this allocation is in force for">{budgetPeriodLabel(row).key}</T>
-          )}
-          <AllocationCell row={row} canManage={canManage} onSaved={refresh} />
-        </Inline>
-      ),
+      render: (row) => <AllocationCell row={row} canManage={canManage} onSaved={refresh} onRemove={() => setConfirmDelete(row)} />,
     },
     {
       key: 'floor',
@@ -347,7 +364,8 @@ export function InitiativesReport({
     },
     {
       key: 'discretionarySpent',
-      header: 'Discretionary spent',
+      header: 'Spent',
+      label: 'Discretionary spent',
       numeric: true,
       sortable: true,
       compare: (a, b) => (a.discretionarySpentUsd ?? a.spentThisPeriodUsd) - (b.discretionarySpentUsd ?? b.spentThisPeriodUsd),
@@ -355,7 +373,8 @@ export function InitiativesReport({
     },
     {
       key: 'discretionaryRemaining',
-      header: 'Discretionary left',
+      header: 'Left',
+      label: 'Discretionary left',
       numeric: true,
       sortable: true,
       compare: (a, b) => (a.discretionaryRemainingUsd ?? Infinity) - (b.discretionaryRemainingUsd ?? Infinity),
@@ -366,32 +385,24 @@ export function InitiativesReport({
         if (remaining == null || budget == null) return <T tone="tertiary">—</T>;
         const used = Math.max(0, budget - remaining);
         const tone = remainingTone(remaining, budget);
+        // The burn is the figure's tone (warning, danger) and its title; the inline meter
+        // cost the column the width the table needed beside two rails (walk, 9 November).
         return (
-          <Inline align="center" justify="end" gap="sm" wrap={false}>
-            <T tabular weight={tone === 'danger' ? 'semibold' : undefined} className={tone === 'danger' ? 'text-danger' : tone === 'warning' ? 'text-warning' : undefined}>
-              {usd(remaining)}
-            </T>
-            <ProgressBar
-              value={Math.min(used, budget)}
-              max={budget > 0 ? budget : 1}
-              size="sm"
-              showRatio={false}
-              className="w-16 shrink-0"
-              color={tone === 'danger' ? 'var(--color-danger)' : tone === 'warning' ? 'var(--color-warning)' : undefined}
-              aria-label={budget > 0 ? `Discretionary burn: ${Math.round((used / budget) * 100)}%` : 'No discretionary money after the floor'}
-            />
-          </Inline>
+          <T tabular weight={tone === 'danger' ? 'semibold' : undefined} tone={tone === 'danger' ? 'danger' : tone === 'warning' ? 'warning' : undefined}
+            title={budget > 0 ? `Discretionary burn: ${Math.round((used / budget) * 100)}% of ${usd(budget)}` : 'No discretionary money after the floor'}>
+            {usd(remaining)}
+          </T>
         );
       },
     },
-    {
+    ...(showHeld ? [{
       key: 'held',
       header: 'Held',
       numeric: true,
-      render: (row) => row.heldUsd === undefined && lock
+      render: (row: InitiativeLedgerRow) => row.heldUsd === undefined && lock
         ? <LockedFigure lock={lock} />
         : <T tabular tone={row.heldUsd ? undefined : 'tertiary'} title="Forecast p75 reserved by dispatches still in flight">{row.heldUsd ? usd(row.heldUsd) : '—'}</T>,
-    },
+    }] : []),
     {
       key: 'projected',
       header: 'Projected',
@@ -408,15 +419,6 @@ export function InitiativesReport({
         );
       },
     },
-    {
-      key: 'lastActivity',
-      header: 'Last activity',
-      // A readable local time, not the raw wire string; the tooltip carries
-      // the precise moment.
-      render: (row) => (
-        <T tone="tertiary" title={absoluteTime(row.lastAgentActivityAt)}>{ago(row.lastAgentActivityAt)}</T>
-      ),
-    },
   ];
 
   return (
@@ -428,20 +430,11 @@ export function InitiativesReport({
           one table over the spend ledger (DEFECTS.md #2). */}
       <DataTable
         data-testid="budgets-initiatives-table"
+        narrow
         data={budgets.filter((row) => matchesBudget(row, query))}
         emptyMessage="No initiative matches this search."
         columns={columns}
         keyField={(row) => row.orgProjectId}
-        {...(canManage ? { rowActions: (row: InitiativeLedgerRow) => row.allocatedUsd != null ? (
-          <IconButton
-            variant="ghost"
-            size="sm"
-            icon={<TrashIcon size={14} />}
-            onClick={() => setConfirmDelete(row)}
-            title="Remove this allocation"
-            aria-label={`Remove allocation for ${row.orgProjectName ?? row.orgProjectId}`}
-          />
-        ) : null } : {})}
       />
 
       <ConfirmDialog

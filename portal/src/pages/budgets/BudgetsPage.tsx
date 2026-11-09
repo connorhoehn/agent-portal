@@ -111,12 +111,16 @@ export default function BudgetsPage() {
   const shownBudgets = budgets.filter((row) => matchesBudget(row, query));
   const shownGrants = grants.filter((row) => matchesGrant(row, query));
 
+  // The phone form (under 40rem of the frame): the report or one initiative's report fills the
+  // width under "‹ All initiatives"; that control shows the rail as the list, and choosing a row
+  // goes back to the report (walk, 9 November: two rails filled 390 px, the table off-screen).
+  const [narrowList, setNarrowList] = useState(false);
   const setView = (patch: Record<string, string | null>) => {
     const next = new URLSearchParams(params);
     for (const [k, v] of Object.entries(patch)) { if (v == null) next.delete(k); else next.set(k, v); }
     setParams(next, { replace: true });
   };
-  const openInitiative = (id: string | null) => setView({ initiative: id && id !== OVERVIEW_ROW_ID ? id : null });
+  const openInitiative = (id: string | null) => { setNarrowList(false); setView({ initiative: id && id !== OVERVIEW_ROW_ID ? id : null }); };
   const reportHref = (id: string) => {
     const next = new URLSearchParams(params);
     next.set('initiative', id);
@@ -327,6 +331,7 @@ export default function BudgetsPage() {
             footer: <T size="sm" tone="secondary">{budgets.length} initiatives · {MONTH_LABEL}</T>,
           },
           footer: <CollectionCommandHost key={`${report}-${initiativeId ?? 'all'}`} inPlace adapter={adapter} />,
+          narrow: { showing: narrowList ? 'list' : 'record', onBack: () => setNarrowList(true), backLabel: 'All initiatives' },
         },
       } : {})}
       renderNavItem={(item, children) => {

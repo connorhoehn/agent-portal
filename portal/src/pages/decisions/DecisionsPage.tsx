@@ -74,12 +74,12 @@ export default function DecisionsPage() {
   const columns: DataTableColumn<DecisionSummary>[] = [
     {
       key: 'topic', header: 'Decision', sortable: true,
-      render: (d) => <RecordLink to={href(d.id, search)} className="block max-w-[200px] truncate" title={d.topic}>{d.topic}</RecordLink>,
+      render: (d) => <RecordLink to={href(d.id, search)} className="block max-w-[11rem] truncate" title={d.topic}>{d.topic}</RecordLink>,
     },
     {
       key: 'projectId', header: 'Initiative', sortable: true,
       compare: (a, b) => (nameOf(a.projectId) ?? '').localeCompare(nameOf(b.projectId) ?? ''),
-      render: (d) => <T size="xs" tone="secondary" className="block max-w-48 truncate" title={nameOf(d.projectId) ?? 'Organisation-wide'}>{nameOf(d.projectId) ?? 'Organisation-wide'}</T>,
+      render: (d) => <T size="xs" tone="secondary" className="block max-w-40 truncate" title={nameOf(d.projectId) ?? 'Organisation-wide'}>{nameOf(d.projectId) ?? 'Organisation-wide'}</T>,
     },
     {
       key: 'status', header: 'Status', sortable: true,
@@ -90,7 +90,7 @@ export default function DecisionsPage() {
       key: 'outcome', header: 'Outcome',
       render: (d) => {
         const line = outcomeFirstLine(d);
-        return <T size="xs" tone={line ? 'secondary' : 'tertiary'} className="block max-w-64 truncate" title={line ?? undefined}>{line ?? '—'}</T>;
+        return <T size="xs" tone={line ? 'secondary' : 'tertiary'} className="block max-w-48 truncate" title={line ?? undefined}>{line ?? '—'}</T>;
       },
     },
     {
@@ -135,7 +135,8 @@ export default function DecisionsPage() {
             : rows.length === 0 ? (
               <EmptyState title="No decisions" description={query.trim() ? 'No loaded decision matches this search.' : 'Nothing is recorded in this view yet.'} />
             ) : (
-              <DataTable<DecisionSummary> data={rows} columns={columns} keyField={(d) => d.id}
+              // Narrow: under 40rem of its width each decision is a card of label/value pairs.
+              <DataTable<DecisionSummary> narrow data={rows} columns={columns} keyField={(d) => d.id}
                 onRowClick={(d) => open(d.id)} pageSize={25} emptyMessage="No decisions" />
             )}
           <CollectionCommandHost adapter={adapter} />
