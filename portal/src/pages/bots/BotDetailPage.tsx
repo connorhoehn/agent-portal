@@ -43,7 +43,7 @@ import { RunTimeline } from '../../components/runs/RunTimeline';
 import {
   PipelineRunArtifacts, PipelineRunEvents, PipelineRunSteps, PipelineRunSummary, usePipelineRun,
 } from '../../components/runs/PipelineRunParts';
-import type { RunListResponse } from '../../lib/pipelineRuns';
+import { runStatusChip, type RunListResponse } from '../../lib/pipelineRuns';
 import { DEVBOX_MODELS } from '../../lib/devboxModels';
 import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
 import { relativeTime } from '../../lib/relativeTime';
@@ -466,16 +466,18 @@ export default function BotDetailPage() {
                     <TableTd className="text-text-tertiary whitespace-nowrap" title={new Date(r.startedAt).toLocaleString()}>
                       {relativeTime(r.startedAt)}
                     </TableTd>
-                    <TableTd className="max-w-[22rem]">
-                      <Inline gap="sm" wrap={false} title={o.summary}>
+                    <TableTd className="max-w-[26rem]">
+                      {/* The outcome wraps (two lines at most, the whole text in the
+                          title) and its links keep their width: a one-line truncate
+                          cut the sentence mid-word and pushed "job →" past the edge
+                          (walk, 9 November). */}
+                      <Inline gap="sm" wrap={false} align="start" title={o.summary ?? o.reason}>
                         {o.reason && (
-                          r.status === 'failed'
-                            ? <Chip tone="danger" size="xs">{o.reason}</Chip>
-                            : <T as="span" tone="inherit" className="min-w-0 truncate">{o.reason}</T>
+                          <T as="span" size="sm" tone={r.status === 'failed' ? 'danger' : 'inherit'} wrap className="min-w-0 flex-1 line-clamp-2">{o.reason}</T>
                         )}
                         {o.changeId && (
-                          <Link to="/admin/changes" className="text-primary no-underline hover:underline">
-                            change {o.changeId.slice(0, 8)}
+                          <Link to="/admin/changes" title="Open the change this firing recorded" className="shrink-0 whitespace-nowrap text-primary no-underline hover:underline">
+                            change →
                           </Link>
                         )}
                         {o.prUrl && (
@@ -490,16 +492,17 @@ export default function BotDetailPage() {
                         {canLinkRun && (
                           <Link
                             to={`/admin/projects?project=${bot.agentProjectId}&run=${r.runId}`}
-                            className="text-xs text-text-secondary no-underline hover:text-primary hover:underline font-mono"
+                            title="Open the devbox run this firing produced"
+                            className="shrink-0 whitespace-nowrap text-xs text-text-secondary no-underline hover:text-primary hover:underline"
                           >
-                            run {r.runId!.slice(0, 8)}
+                            run →
                           </Link>
                         )}
                         {!canLinkRun && r.jobId && (
                           <Link
                             to={`/iq/work/${encodeURIComponent(r.jobId)}`}
                             title="Open the queued job this firing produced"
-                            className="text-xs text-text-secondary no-underline hover:text-primary hover:underline font-mono"
+                            className="shrink-0 whitespace-nowrap text-xs text-text-secondary no-underline hover:text-primary hover:underline"
                           >
                             job →
                           </Link>
@@ -547,9 +550,10 @@ export default function BotDetailPage() {
                     className="max-w-[280px]"
                     value={pipelineRunId ?? ''}
                     onChange={(e) => setPickedRunId(e.target.value)}
+                    // When it fired and how it ended: the source row's id ("job-obs-maint-1") is no name.
                     options={pipelineRuns.map((r) => ({
                       value: r.id,
-                      label: `${r.context.id} · ${r.startedAt ? relativeTime(r.startedAt) : 'not started'}`,
+                      label: `${r.startedAt ? relativeTime(r.startedAt) : 'not started'} · ${runStatusChip(r.status).label}`,
                     }))}
                   />
                 )}
@@ -563,7 +567,7 @@ export default function BotDetailPage() {
                 <PipelineRunSteps steps={pipelineRun.steps} />
               </DetailSection>
               <DetailSection title="Artifacts" hint={`${pipelineRun.artifacts.length}`} data-testid="pipeline-artifacts">
-                <PipelineRunArtifacts artifacts={pipelineRun.artifacts} />
+                <PipelineRunArtifacts artifacts={pipelineRun.artifacts} steps={pipelineRun.steps} />
               </DetailSection>
               <DetailSection title="Events" data-testid="pipeline-events">
                 <PipelineRunEvents eventsUrl={pipelineRun.eventsUrl} />
