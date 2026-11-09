@@ -509,7 +509,7 @@ function VoiceFooterPane() {
     onCancel: () => controller.cancelChoice(),
   } : null;
   const turns = snap.turns;
-  return <Inline gap="xs" align="center" wrap={false} className="min-w-0 max-w-[30rem] shrink border-l border-border pl-2" data-testid="shell-footer-voice">
+  return <Inline gap="xs" align="center" wrap={false} className="min-w-0 max-w-[min(30rem,100%)] shrink border-l border-border pl-2" data-testid="shell-footer-voice">
     <VoiceDock
       size="footer"
       phase={snap.phase}

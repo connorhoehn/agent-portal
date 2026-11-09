@@ -14,7 +14,8 @@ import { MessagesOverviewDialog } from './MessagesOverviewDialog';
 import { tenantLobbyPresence } from './tenantPresence';
 
 // A segment of the shell footer row (SocialFooter.tsx), which draws the bar itself.
-const BAR = 'min-w-0';
+// A slot of the footer row: it keeps its own width (the row wraps whole slots under it at narrow widths), never shrinks over its neighbour.
+const BAR = 'shrink-0';
 
 /** Announces this session on the tenant lobby; mounted only while connected. */
 function TenantLobby({ directory, onOnline }: { directory: SharedPeople; onOnline(ids: Set<string>): void }) {
@@ -48,7 +49,7 @@ export function TenantDirectEntry() {
     : fetched.error ? 'People you share this workspace with could not be loaded.' : null;
   return <>
     {directory && connected && <TenantLobby key={`presence:${directory.lobby}`} directory={directory} onOnline={setOnline} />}
-    <Inline gap="sm" align="center" className={BAR} data-testid="shell-tenant-bar">
+    <Inline gap="sm" align="center" wrap={false} className={BAR} data-testid="shell-tenant-bar">
       <Button variant="ghost" size="sm" className="text-xs" onClick={() => setOpen(o => !o)} aria-pressed={open} data-testid="shell-tenant-open">
         <Inline gap="xs" align="center"><ChatIcon size={14} />Messages</Inline>
       </Button>

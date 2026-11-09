@@ -132,7 +132,7 @@ export function LoggingView(p: LoggingViewProps) {
       <KeyValue items={r.facts} aria-label={RECORD_HEADING[r.kind] ?? 'Record'} />
     </DetailSection>
     <DetailSection as="h2" title={r.callsTitle} hint={String(r.calls.length)}>
-      <DataTable data={r.calls} keyField={(c) => c.id} emptyMessage={`No ${r.callsTitle.toLowerCase()}.`} rowHeight="fixed" data-testid="logging-calls"
+      <DataTable data={r.calls} keyField={(c) => c.id} emptyMessage={`No ${r.callsTitle.toLowerCase()}.`} rowHeight="fixed" narrow data-testid="logging-calls"
         staticRows="A call or step is read in place, in the record it belongs to; it has no page of its own."
         columns={[
           { key: 'at', header: 'At', render: (c) => when(c.at) },
@@ -143,7 +143,7 @@ export function LoggingView(p: LoggingViewProps) {
         ]} />
     </DetailSection>
     <DetailSection as="h2" title="Events" hint={String(r.events.length)}>
-      <DataTable data={r.events} keyField={(e) => String(e.seq)} emptyMessage="No events." rowHeight="content" pageSize={100} data-testid="logging-events"
+      <DataTable data={r.events} keyField={(e) => String(e.seq)} emptyMessage="No events." rowHeight="content" pageSize={100} narrow data-testid="logging-events"
         staticRows="An event is one line of the record's own log, read in place; it has no page of its own."
         columns={[
           { key: 'seq', header: '#', numeric: true },

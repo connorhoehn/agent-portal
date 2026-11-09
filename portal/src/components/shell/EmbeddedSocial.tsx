@@ -260,7 +260,7 @@ function SocialEntryRow({ social }: { social: EmbeddedSocialContextValue }) {
   };
   const activityPath = socialActivityPath(session?.tenant, !!socialRole);
   const messagesOn = state.open && !social.pageOpen && !state.activity;
-  return <Inline gap="sm" align="center" wrap={false} className="min-w-0" data-testid="shell-social-bar">
+  return <Inline gap="sm" align="center" wrap={false} className="shrink-0" data-testid="shell-social-bar">
     <Inline gap="none" align="center" wrap={false}>
       <Button variant="ghost" size="sm" onClick={openSocial} title="Social — Alt-click for the quick message panel"
         aria-pressed={messagesOn} data-testid="shell-social-open">

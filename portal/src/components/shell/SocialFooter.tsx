@@ -123,7 +123,7 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
     </>}
     {...(meetingItems && joined && !over && !barShown ? { meetingItems } : {})}
     {...(barShown && !over ? {} : { onLeave: () => void call.leave(), leaveLabel })}
-    className="shell-collaboration-bar min-w-0 flex-1 border-l border-border"
+    className="shell-collaboration-bar shrink-0 grow basis-[14rem] border-l border-border"
     data-testid="shell-call-dock"
   />;
 }
@@ -158,7 +158,7 @@ function FooterIdle() {
     chatLabel="Message"
     {...(messageReason ? { chatDisabledReason: messageReason } : {})}
     extras={<DeviceSettings onClick={() => host?.checkDevices()} disabled={!host} />}
-    className="shell-collaboration-bar min-w-0 flex-1 border-l border-border"
+    className="shell-collaboration-bar shrink-0 grow basis-[14rem] border-l border-border"
     data-testid="shell-footer-context"
   />;
   return <HuddleBar
@@ -172,7 +172,7 @@ function FooterIdle() {
     chatLabel="Message"
     {...(messageReason ? { chatDisabledReason: messageReason } : {})}
     extras={<DeviceSettings onClick={() => host?.checkDevices()} disabled={!host} />}
-    className="shell-collaboration-bar min-w-0 flex-1 border-l border-border"
+    className="shell-collaboration-bar shrink-0 grow basis-[14rem] border-l border-border"
     data-testid="shell-footer-context"
   />;
 }
@@ -200,7 +200,8 @@ export function SocialFooter() {
   return <Stack as="footer" ref={footer} gap="none" aria-label="Social and huddle" className="shell-social-footer shrink-0 border-t border-border bg-surface"
     data-testid="shell-footer">
     <ShellCallMedia id={mediaId} />
-    <Inline gap="md" align="center" justify="between" wrap={false} className="min-h-11 min-w-0 overflow-x-auto px-4 py-1" data-testid="shell-footer-row">
+    {/* The HuddleBar is a size container, so it has no intrinsic width: `basis-[14rem]` is what makes the row wrap it onto its own line. Wide: one row. Narrow: whole slots wrap onto a second line (none shrinks over its neighbour); the measured floor follows the row's height. */}
+    <Inline gap="sm" align="center" justify="between" className="min-h-11 min-w-0 px-4 py-1" data-testid="shell-footer-row">
       <EmbeddedSocialEntry />
       <TodayStripSlot placement="footer" activeCall={drawn} />
       {/* The voice navigator (docs/voice-navigator-spec.md §5): renders nothing unless features.voiceNavigator and can('VoiceNavigate'). */}
