@@ -1,12 +1,12 @@
-# aws-agentcore
+# Agent Portal
 
-OrgIQ, the Organizational Intelligence Platform, is a multi-agent system on Amazon Bedrock AgentCore. It ingests organisational documents, builds a knowledge graph in Aurora, scores expertise, and answers "who knows what" through conversational search.
+Agent Portal is an organizational intelligence application for exploring people, knowledge and work with conversational and voice-assisted tools. It includes a React portal, an Express backend, agents, and infrastructure for running the application.
 
 The product is split into tenants that share one backend: work (`orgiq`), `assessment`, `social`, `pipelines` and `access`. Each has its own section of the portal and its own API prefix.
 
 How this repository and its siblings came to be, and how they depend on each other, is told in [docs/project-story.md](docs/project-story.md). What is loose and what comes next is in [docs/next-steps.md](docs/next-steps.md).
 
-## What's in the repo
+## Project layout
 
 - `agents/` holds the Strands agents (Python 3.12) that run on AgentCore Runtime, plus shared helpers in `agents/_shared`, the base image in `agents/base`, and the golden-set tests in `agents/tests`.
 - `infra/` is the CDK (TypeScript) code for every AWS stack, with deploy and teardown wrappers in `infra/scripts`.
@@ -75,27 +75,9 @@ Run the full middleware suite on its own. Two concurrent runs can hang.
 
 CI: `.github/workflows/ci.yml` runs typecheck and tests on push; it has not run yet (no GitHub access from the machine that wrote it).
 
-### Deploy
+### Deployment
 
-Everything is deployed with CDK through the wrapper script, not with `agentcore deploy`.
-
-```bash
-cd infra
-./scripts/deploy.sh [Stack] [--context key=value]
-DEPLOY_PLAN_ONLY=true ./scripts/deploy.sh [Stack]    # prints the plan, changes nothing
-./scripts/destroy.sh                                  # teardown
-```
-
-Agent runtimes need their container images to exist first, so they deploy in phases:
-
-1. `./scripts/deploy.sh OrgIQ-AgentCoreRuntime` creates the image repositories.
-2. `agents/base/build.sh` builds and pushes the base image.
-3. `agents/build-all.sh` builds and pushes every agent image.
-4. `./scripts/deploy.sh OrgIQ-AgentCoreRuntime --context deployRuntimes=true` creates the runtimes.
-
-The middleware image is built with `node scripts/docker/middleware-image-build.mjs` (add `--dry-run` to preview) and goes live with `--context deployMiddlewareService=true`. The portal is built, then published to S3 and CloudFront with `node scripts/portal-publish.mjs` after deploying with `--context deployPortal=true`.
-
-The stacks create Aurora and the Bedrock knowledge base. Apply the Aurora schema with `schema/apply-schema.sh` (see `schema/README.md`), and generate demo content with `python -m schema.synth all` (see `schema/synth/README.md`).
+Deployment infrastructure and scripts live in `infra/` and `infra/scripts/`.
 
 ## Talk to it
 
@@ -112,13 +94,10 @@ The design is in [docs/voice-navigator-spec.md](docs/voice-navigator-spec.md); `
 
 ## Architecture notes
 
-- Each agent's system instructions are kept in Bedrock's managed template store and read at run time with a short cache. The system text hard-coded in each agent's `main.py` is only a fallback.
-- The organisation graph is plain relational tables in Aurora PostgreSQL. Agents and the backend reach it through the RDS Data API with parameterised SQL, and the agents' read tools only accept `SELECT` and `WITH`.
-- AG-UI streaming runs over SSE with `POST`, not `EventSource`, so the request can carry a body and headers.
-- Embeddings use Titan Embeddings V2 at 1024 dimensions everywhere. Knowledge base searches pin the search type explicitly rather than relying on the default.
-- Users, tenants and grants live in Aurora (`schema/identity_schema.sql`). Authorisation uses Cedar policies per tenant, in `middleware/seeds/roles/<tenant>/`.
-- `npm run dev:mock` runs the backend against fixtures that follow a contract: they return rows and selectors rather than precomputed counts, take timestamps from a shared clock, and register every write so `POST /api/__mock/reset` undoes it. `POST /api/__mock/scenario` produces empty and error states without touching shared data.
-- The portal's realtime socket connects to the gateway on `/ws`, authenticated with a short-lived token from `GET /api/session/realtime-token`.
+- The portal is a React and Vite application; the middleware is its Express backend.
+- The mock backend provides fixtures for local development and can reset writes through `POST /api/__mock/reset`.
+- Agent responses stream over SSE. Realtime features use a gateway and short-lived session tokens.
+- Production agents, data stores and deployment infrastructure live alongside the application in this repository.
 
 ## Related repositories
 
