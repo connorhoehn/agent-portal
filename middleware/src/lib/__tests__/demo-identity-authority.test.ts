@@ -33,7 +33,7 @@ describe('stewardsInitiative, demo identity', () => {
 describe('mayDecideDecision, demo identity', () => {
   it('flag on: the demo identity may decide, via demo', async () => {
     process.env.INSECURE_DEV_MODE = 'true';
-    expect(await mayDecideDecision(as(DEMO_SUB), decision)).toEqual({ ok: true, via: 'demo', decidesThis: false });
+    expect(await mayDecideDecision(as(DEMO_SUB), decision)).toEqual({ ok: true, via: 'demo', decidesThis: true });
   });
   it('flag off: unchanged, refused', async () => {
     process.env.INSECURE_DEV_MODE = 'false';

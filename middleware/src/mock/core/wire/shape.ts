@@ -113,25 +113,47 @@ export const WIRE_FIELDS = new Set([
   'key',
 ]);
 
-function harvest(values: Map<string, Set<string>>, path: string, value: string): void {
-  if (!WIRE_FIELDS.has(fieldName(path))) return;
+/**
+ * Routes whose response carries a WIRE_FIELDS name as FREE TEXT. A decision's
+ * `outcome` is the rationale the decider typed (or an option label), so on the
+ * decisions routes it is not an enum and its values must never be witnessed.
+ * Keyed by route ("METHOD /path"), matched as a prefix on the path.
+ */
+const FREE_TEXT_BY_ROUTE: ReadonlyArray<{ route: RegExp; fields: ReadonlySet<string> }> = [
+  { route: /^(GET|POST) \/api\/graph\/decisions(\/|$)/, fields: new Set(['outcome']) },
+  { route: /^GET \/api\/graph\/projects\/[^/]+\/decisions(\/|$)/, fields: new Set(['outcome']) },
+  { route: /^GET \/api\/graph\/work-items\/[^/]+\/decisions\//, fields: new Set(['outcome']) },
+];
+
+/** The WIRE_FIELDS names that are free text on this route (empty when none, or no route given). */
+export function freeTextFieldsFor(route: string | undefined): ReadonlySet<string> {
+  if (!route) return NO_FIELDS;
+  for (const e of FREE_TEXT_BY_ROUTE) if (e.route.test(route)) return e.fields;
+  return NO_FIELDS;
+}
+const NO_FIELDS: ReadonlySet<string> = new Set();
+
+function harvest(values: Map<string, Set<string>>, path: string, value: string, skip: ReadonlySet<string>): void {
+  const name = fieldName(path);
+  if (!WIRE_FIELDS.has(name) || skip.has(name)) return;
   let set = values.get(path);
   if (!set) values.set(path, (set = new Set()));
   set.add(value);
 }
 
 /** Walk one response body. Merges into `into` so several bodies can share a shape. */
-export function describe(body: Json, into?: ShapeResult): ShapeResult {
+export function describe(body: Json, into?: ShapeResult, route?: string): ShapeResult {
+  const skip = freeTextFieldsFor(route);
   const out: ShapeResult = into ?? { shape: {}, values: new Map() };
 
   const walk = (v: Json, path: string): void => {
     if (looksLikeDictionary(v)) {
       add(out.shape, path, 'object(dictionary)');
-      for (const k of Object.keys(v)) harvest(out.values, path, k);
+      for (const k of Object.keys(v)) harvest(out.values, path, k, skip);
       return;
     }
     add(out.shape, path, typeOf(v));
-    if (typeof v === 'string') harvest(out.values, path, v);
+    if (typeof v === 'string') harvest(out.values, path, v, skip);
     if (Array.isArray(v)) {
       for (const item of v) walk(item, `${path}[]`);
       return;

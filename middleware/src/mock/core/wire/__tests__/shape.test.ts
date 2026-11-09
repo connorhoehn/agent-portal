@@ -31,6 +31,13 @@ describe('shape', () => {
     expect(values.has('key')).toBe(false);
   });
 
+  it('does not witness a decision\'s free-text `outcome`, but still does for an enum route', () => {
+    const body: Json = { outcome: 'because the budget moved' };
+    expect(describeBody(body, undefined, 'POST /api/graph/decisions/:id/decide').values.has('outcome')).toBe(false);
+    expect(describeBody(body, undefined, 'GET /api/graph/decisions').values.has('outcome')).toBe(false);
+    expect([...(describeBody({ outcome: 'answered' }, undefined, 'POST /api/other').values.get('outcome') ?? [])]).toEqual(['answered']);
+  });
+
   it('ignores values of fields that are open sets', () => {
     // `title` is free text; asserting a fixture may only use titles the seed
     // happens to contain is not this checker's job.

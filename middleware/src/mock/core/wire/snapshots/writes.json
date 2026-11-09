@@ -2631,9 +2631,6 @@
         "history[].kind": [
           "rejected"
         ],
-        "outcome": [
-          "wire-capture-22"
-        ],
         "participants[].role": [
           "contributor",
           "decider"

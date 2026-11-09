@@ -61,3 +61,45 @@ test('G41: the second message to #platform needs no card; #general does; an atta
   assert.equal((covered[0]!['data'] as Record<string, unknown>)['coveredBy'], 'call_1');
   c.dispose();
 });
+
+test('G41 x G48: a retried message never reuses the session cover, and a failed post clears it', async () => {
+  const msg = (text: string) => ({ target: { kind: 'channel', name: 'platform' }, text });
+  const heard = (at: number, words: string) => ({ atMs: at, event: { type: 'session.input_transcript.delta', delta: words, start_ms: at, end_ms: at + 500 } });
+  const onStart = [
+    { atMs: 0, event: { type: 'session.started', session: { id: 'live_x' } } },
+    ...turn(500, 1, msg('first')),      // card, confirmed, posted: covers #platform
+    heard(2900, 'Post the second one.'),
+    ...turn(3000, 2, msg('second')),    // covered, no card, the transport fails
+    heard(5900, 'Try again.'),
+    ...turn(6000, 3, msg('second')),    // the retry must show a card
+  ];
+  const clock = new FakeClock();
+  const { fetch, log } = fakeFetch([
+    route('POST', `/api/voice/sessions/${SESSION}/events`, 201, {}),
+    route('POST', `/api/voice/sessions/${SESSION}/close`, 200, {}),
+    route('POST', '/api/voice/sessions', 201, { sessionId: SESSION, voiceSessionId: SESSION, holdId: 'h1', maxSeconds: 1800, expiresAt: '2026-11-08T13:00:00Z', sdp: 'v=0', mock: true,
+      model: 'gpt-live-1', voice: null, toolsEnabled: true, tools: ['message'], budget: { holdUsd: 0.5, usdPerMinute: 0.05 },
+      mockScript: { onStart, onResponseCreate: [], onClose: [{ atMs: 50, event: { type: 'session.closed', reason: 'close_requested' } }] } }),
+  ]);
+  const planner: VoiceToolPlanner = async (args) => ({ plan: { title: 'Post to #platform', detail: String(args['text']), data: { channel: 'social:ch:platform' } } });
+  const ran: string[] = [];
+  const runner: VoiceToolRunner = async (_a, _c, plan) => {
+    ran.push(String((plan as { channel: string }).channel));
+    return ran.length === 2 ? { outcome: 'failed', output: { kind: 'failed', code: 'http-500' }, summary: 'Failed' } : { outcome: 'done', output: { kind: 'posted' }, summary: 'Posted' };
+  };
+  const c = new VoiceController({ fetch, media: null, toolContext: () => toolContext({ fetch }), now: clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer,
+    runners: { ...VOICE_RUNNERS, message: runner }, planners: { message: planner } });
+  await c.start();
+  await clock.advance(1000); assert.ok(c.getSnapshot().pending, 'the first message shows its card'); c.confirm('click');
+  await clock.advance(2500); assert.equal(c.getSnapshot().pending, null, 'success covered the channel: the second message shows no card');
+  assert.equal(ran.length, 2, 'the covered post ran and failed');
+  await clock.advance(3000);
+  assert.equal(c.getSnapshot().pending?.title, 'Post to #platform', 'the retry of the failed post shows a card');
+  assert.equal(ran.length, 2, 'and waits for the click');
+  c.confirm('click');
+  await clock.advance(1000);
+  assert.equal(ran.length, 3);
+  const covered = loggedEvents(log).filter((e) => e['kind'] === 'confirmed' && (e['data'] as Record<string, unknown>)['by'] === 'session');
+  assert.equal(covered.length, 1, 'only the first follow-up rode the cover');
+  c.dispose();
+});

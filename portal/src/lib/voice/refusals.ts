@@ -309,6 +309,9 @@ export class FailureGuard {
     return { last: entry.count >= 2 };
   }
 
+  /** Whether this exact call has failed and not landed since (so a run of it now is a retry). */
+  has(tool: string, args: unknown): boolean { return this.seen.has(callKey(tool, args)); }
+
   /** It landed: a later failure of the same call starts again. */
   succeeded(tool: string, args: unknown): void { this.seen.delete(callKey(tool, args)); }
 

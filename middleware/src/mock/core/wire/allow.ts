@@ -48,14 +48,6 @@ export const ALLOWED: { file: string; entries: AllowEntry[] } = {
   file: 'middleware/src/mock/core/wire/allow.ts',
   entries: [
     {
-      file: 'middleware/src/routes/__tests__/decisions-decide-route.test.ts',
-      field: 'outcome',
-      value: 'Why',
-      reason:
-        'Free text, not an enum. A decision\'s `outcome` is the rationale the decider typed (or an option label), ' +
-        'so the capture sees only the label it sent (`wire-capture-N`). `outcome` stays in WIRE_FIELDS for the enums that use it.',
-    },
-    {
       file: 'middleware/src/lib/__tests__/authz-open-mode.test.ts',
       field: 'role',
       value: 'ghost',

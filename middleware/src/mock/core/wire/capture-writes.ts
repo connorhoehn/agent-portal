@@ -270,7 +270,7 @@ export async function captureWrites(log: (s: string) => void = () => {}): Promis
         continue;
       }
 
-      const one = describe(res.body);
+      const one = describe(res.body, undefined, route);
       const values: Record<string, string[]> = {};
       for (const p of [...one.values.keys()].sort()) {
         const seen = [...one.values.get(p)!].sort();

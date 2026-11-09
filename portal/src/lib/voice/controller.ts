@@ -847,7 +847,8 @@ export class VoiceController {
         }
       }
       // G41: a message to a conversation the user already confirmed this session needs no second card.
-      const covered = this.coveredBy(name, call, plan);
+      // A retry of a failed message is never covered: the card shows again so the text is confirmed afresh.
+      const covered = this.failures.has(name, call.args) ? null : this.coveredBy(name, call, plan);
       if (covered) {
         this.emit({ kind: 'confirmed', tool: name, data: { callId, by: 'session', coveredBy: covered, afterMs: 0 } });
         await this.execute(client, delegationId, callId, call, startedAt, ctx, undefined, plan, undefined, covered);
@@ -890,6 +891,11 @@ export class VoiceController {
     if (confirmedBy && call.spec.name === 'message' && res.outcome === 'done' && plan?.data && typeof plan.data === 'object') {
       const d = plan.data as { channel?: unknown; attachment?: unknown };
       if (typeof d.channel === 'string' && !d.attachment && !this.coveredTargets.has(d.channel)) this.coveredTargets.set(d.channel, callId);
+    }
+    // A post that failed no longer stands as confirmed: the conversation needs its card again.
+    if (call.spec.name === 'message' && res.outcome === 'failed' && plan?.data && typeof plan.data === 'object') {
+      const d = plan.data as { channel?: unknown };
+      if (typeof d.channel === 'string') this.coveredTargets.delete(d.channel);
     }
     await this.answer(client, delegationId, callId, call.spec.name, res, startedAt, call.args, confirmedBy);
   }

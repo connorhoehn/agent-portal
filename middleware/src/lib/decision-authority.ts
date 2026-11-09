@@ -112,8 +112,8 @@ export async function mayDecideDecision(session: Session, decision: DecidableDec
   const decidesThis = isDecider || isOwner;
   if (isDecider) return { ok: true, via: 'decider', decidesThis };
   if (isOwner) return { ok: true, via: 'owner', decidesThis };
-  if ((DECIDE_OVERRIDE_ROLES as readonly string[]).includes(session.role)) return { ok: true, via: 'override', decidesThis };
+  if ((DECIDE_OVERRIDE_ROLES as readonly string[]).includes(session.role)) return { ok: true, via: 'override', decidesThis: true };
   // The demo identity has no person link; under the dev flag it may decide so the demo stays explorable.
-  if (session.sub === DEMO_SUB && insecureDevMode()) return { ok: true, via: 'demo', decidesThis };
+  if (session.sub === DEMO_SUB && insecureDevMode()) return { ok: true, via: 'demo', decidesThis: true };
   return { ok: false, decidesThis: false };
 }

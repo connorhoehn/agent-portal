@@ -424,3 +424,36 @@ describe('§9 item 8: the program-owner budget forbid and the new org-leader gra
     expect(forbids(role('orgiq/org-leader')).some((s) => /ManageSdlcPolicies|EditGuardrail/.test(s))).toBe(false);
   });
 });
+
+// ===========================================================================
+// DecideDecision scope (G54): the production copy of the route's decidesThis rule.
+// ===========================================================================
+describe('DecideDecision: the decidesThis forbid against the real orgiq policy set', () => {
+  /** The roles the forbid names, read from the shipped member.cedar. */
+  const forbid = forbids(role('orgiq/member')).find((s) => /DecideDecision/.test(s))!;
+  const named = [...(forbid.match(/\[([^\]]*)\]\.contains\(principal\.role\)/)?.[1] ?? '').matchAll(/"([^"]+)"/g)].map((m) => m[1]!);
+  /** Cedar's answer for a role asking DecideDecision: permitted by its seed, and not hit by the forbid. */
+  const allowed = (roleId: string, decidesThis: boolean | undefined): boolean => {
+    const permitted = permits(role(`orgiq/${roleId}`)).some((s) => /OrgIQ::Action::"DecideDecision"/.test(s));
+    const forbidden = decidesThis === false && named.includes(roleId);
+    return permitted && !forbidden;
+  };
+
+  test('the forbid only fires when decidesThis is present and false', () => {
+    expect(whenBody(forbid)).toMatch(/^resource has decidesThis && !resource\.decidesThis &&/);
+  });
+
+  test('an org-leader deciding a decision they neither own nor are assigned is allowed (the route sends decidesThis: true for the override)', () => {
+    expect(named).not.toContain('org-leader');
+    expect(allowed('org-leader', true)).toBe(true);
+    // Even a stray false would not refuse them: the role is not in the forbid's list.
+    expect(allowed('org-leader', false)).toBe(true);
+  });
+
+  test('a member deciding a decision they neither own nor are assigned is forbidden; the decider or owner is allowed', () => {
+    expect(named).toContain('member');
+    expect(allowed('member', false)).toBe(false);
+    expect(allowed('member', true)).toBe(true);
+    expect(allowed('member', undefined)).toBe(true); // a bare capability probe sends no attribute
+  });
+});

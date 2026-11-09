@@ -166,8 +166,8 @@ export async function capture(log: (s: string) => void = () => {}): Promise<Wire
         note(key, `${why} (${persona.name})`);
         continue;
       }
-      describe(res.body, merged);
-      const one = describe(res.body);
+      describe(res.body, merged, key);
+      const one = describe(res.body, undefined, key);
       const values: Record<string, string[]> = {};
       for (const path of [...one.values.keys()].sort()) {
         const seen = [...one.values.get(path)!].sort();
