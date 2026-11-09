@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-09T03:06:53.625Z",
-  "serverHandlerSha": "0bd2d7b87bbe4c37c92537ec7acc5400f38314e0c186919504da14d187030270",
-  "baseUrl": "http://127.0.0.1:3986",
+  "capturedAt": "2026-11-09T21:28:26.367Z",
+  "serverHandlerSha": "28f4032a88502ca04784abf5498afef909b67f27e40151b8fab46b27d6c3f499",
+  "baseUrl": "http://127.0.0.1:3980",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -2147,7 +2147,7 @@
         "bots[].name": "string",
         "bots[].orgProjectId": "string",
         "bots[].orgProjectName": "string",
-        "bots[].pausedReason": "null|string",
+        "bots[].pausedReason": "null",
         "bots[].prompt": "string",
         "bots[].requiresReview": "boolean",
         "bots[].template": "string",
@@ -3007,6 +3007,7 @@
         "boxes[].status": [
           "idle",
           "running",
+          "stopped",
           "waiting"
         ]
       }
@@ -3295,17 +3296,6 @@
         "$[].topic": "string"
       },
       "values": {
-        "$[].outcome": [
-          "Adopt OpenTelemetry SDKs with W3C trace context everywhere, exporting OTLP to X-Ray and the metrics backend.",
-          "Aurora PostgreSQL with relational edge tables and recursive CTEs, not Neptune, with centrality scores as a nightly batch job.",
-          "Iceberg as the lakehouse table format, for its engine-neutral catalog across Spark, Trino and Flink.",
-          "Move every service to Cognito with the BFF holding tokens server-side, and delete the SAML shim once the last tenant has cut over.",
-          "Nova Pro is the default for every agent, with Nova Lite allowed for routing and classification steps that pass the same golden set.",
-          "Self-hosted OpenTelemetry collectors in an agent and gateway topology, exporting OTLP to the current backend.",
-          "Standardise on EKS with one golden-path Helm chart and Karpenter for node provisioning.",
-          "The design system upgrades to React 19 first, then each app moves once its test suite passes against it.",
-          "pgvector with an HNSW index inside Aurora, revisited above 20 million vectors."
-        ],
         "$[].status": [
           "escalated",
           "open",
@@ -3474,8 +3464,8 @@
         "$[].nextStep": "null|string",
         "$[].nextStepDetail": "null|string",
         "$[].parentId": "null|string",
-        "$[].prStatus": "null",
-        "$[].prUrl": "null",
+        "$[].prStatus": "null|string",
+        "$[].prUrl": "null|string",
         "$[].priority": "string",
         "$[].projectId": "string",
         "$[].projectName": "string",
@@ -3542,8 +3532,7 @@
       "values": {
         "$[].status": [
           "completed",
-          "in_progress",
-          "planning"
+          "in_progress"
         ],
         "$[].team[].role": [
           "owner",
@@ -3583,8 +3572,7 @@
       "values": {
         "projects[].status": [
           "completed",
-          "in_progress",
-          "planning"
+          "in_progress"
         ]
       }
     },
@@ -5992,7 +5980,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "null|number",
+        "points[].judgeP50": "number",
         "windowHours": "number"
       },
       "values": {}
@@ -7045,7 +7033,7 @@
         "definitions[].meta.initiativeName": "string",
         "definitions[].meta.model": "string",
         "definitions[].meta.observationCount": "number",
-        "definitions[].meta.pausedReason": "null|string",
+        "definitions[].meta.pausedReason": "null",
         "definitions[].meta.promptDoc": "string",
         "definitions[].meta.proposedKind": "string",
         "definitions[].meta.protocol": "string",
@@ -10912,16 +10900,7 @@
     "outcome": {
       "open": false,
       "values": [
-        "Adopt OpenTelemetry SDKs with W3C trace context everywhere, exporting OTLP to X-Ray and the metrics backend.",
-        "Aurora PostgreSQL with relational edge tables and recursive CTEs, not Neptune, with centrality scores as a nightly batch job.",
-        "Iceberg as the lakehouse table format, for its engine-neutral catalog across Spark, Trino and Flink.",
-        "Move every service to Cognito with the BFF holding tokens server-side, and delete the SAML shim once the last tenant has cut over.",
-        "Nova Pro is the default for every agent, with Nova Lite allowed for routing and classification steps that pass the same golden set.",
-        "Self-hosted OpenTelemetry collectors in an agent and gateway topology, exporting OTLP to the current backend.",
-        "Standardise on EKS with one golden-path Helm chart and Karpenter for node provisioning.",
-        "The design system upgrades to React 19 first, then each app moves once its test suite passes against it.",
         "pass",
-        "pgvector with an HNSW index inside Aurora, revisited above 20 million vectors.",
         "requires_approval"
       ]
     },
@@ -11073,7 +11052,6 @@
         "online",
         "open",
         "pending",
-        "planning",
         "promoted",
         "proven",
         "provisioning",
@@ -11086,6 +11064,7 @@
         "running",
         "staged",
         "stale",
+        "stopped",
         "submitted",
         "superseded",
         "unproven",

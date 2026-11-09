@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-09T03:06:59.002Z",
-  "serverHandlerSha": "0bd2d7b87bbe4c37c92537ec7acc5400f38314e0c186919504da14d187030270",
-  "baseUrl": "http://127.0.0.1:3986",
+  "capturedAt": "2026-11-09T21:28:31.670Z",
+  "serverHandlerSha": "28f4032a88502ca04784abf5498afef909b67f27e40151b8fab46b27d6c3f499",
+  "baseUrl": "http://127.0.0.1:3980",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -536,9 +536,9 @@
         "blockedReason": "null",
         "childCount": "number",
         "childDoneCount": "number",
-        "completedAt": "null",
+        "completedAt": "string",
         "createdAt": "string",
-        "description": "string",
+        "description": "null",
         "estimateForecast": "null",
         "estimateModel": "null",
         "estimateReviewedAt": "null",
@@ -555,25 +555,25 @@
         "nextStep": "null",
         "nextStepDetail": "null",
         "parentId": "string",
-        "prStatus": "null",
-        "prUrl": "null",
+        "prStatus": "string",
+        "prUrl": "string",
         "priority": "string",
         "projectId": "string",
         "projectName": "string",
-        "sprintId": "null",
+        "sprintId": "string",
         "status": "string",
         "storyPoints": "number",
-        "summary": "string",
+        "summary": "null",
         "title": "string",
         "type": "string",
         "updatedAt": "string"
       },
       "values": {
         "key": [
-          "ORG-OBS-13"
+          "ORG-LLM-10"
         ],
         "status": [
-          "open"
+          "done"
         ],
         "type": [
           "story"
@@ -5014,10 +5014,41 @@
       }
     },
     "PUT /api/voice/settings": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "default": "object",
+        "default.voice": "string",
+        "options": "object",
+        "options.paces": "array",
+        "options.paces[]": "object",
+        "options.paces[].id": "string",
+        "options.paces[].label": "string",
+        "options.styles": "array",
+        "options.styles[]": "object",
+        "options.styles[].hint": "string",
+        "options.styles[].id": "string",
+        "options.styles[].label": "string",
+        "options.voices": "array",
+        "options.voices[]": "object",
+        "options.voices[].bestQuality": "boolean",
+        "options.voices[].label": "string",
+        "options.voices[].language": "string",
+        "options.voices[].name": "string",
+        "options.voices[].presentation": "null|string",
+        "options.voices[].region": "null|string",
+        "options.voices[].value": "string",
+        "pace": "string",
+        "style": "string",
+        "voice": "string"
+      },
+      "values": {},
+      "sent": [
+        "pace",
+        "style",
+        "voice"
+      ]
     }
   }
 }
