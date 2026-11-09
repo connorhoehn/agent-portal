@@ -87,8 +87,28 @@ export class FakeClock {
   }
 }
 
+// The one real-async step under the fake clock is the argument hash (tools.ts, crypto.subtle.digest), which runs on
+// the thread pool: on a loaded runner it can outlast five immediates, and the row it gates is then read too early
+// (CI raced on this twice). Count the digests in flight and let flush wait for them.
+let digestsInFlight = 0;
+{
+  const subtle = globalThis.crypto.subtle;
+  const digest = subtle.digest.bind(subtle);
+  Object.defineProperty(subtle, 'digest', {
+    configurable: true, writable: true,
+    value: (...args: Parameters<SubtleCrypto['digest']>) => {
+      digestsInFlight++;
+      return digest(...args).finally(() => { digestsInFlight--; });
+    },
+  });
+}
+
 export async function flush(): Promise<void> {
-  for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
+  for (let round = 0; round < 200; round++) {
+    for (let i = 0; i < 5; i++) await new Promise((r) => setImmediate(r));
+    if (digestsInFlight === 0) return;
+    await new Promise((r) => setTimeout(r, 1));
+  }
 }
 
 export interface LoggedRequest { method: string; url: string; body: unknown }
