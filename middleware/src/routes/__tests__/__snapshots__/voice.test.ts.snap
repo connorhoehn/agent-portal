@@ -633,7 +633,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Post a message the user dictated to a team, a channel or a person, as a social-app activity. Always read it back and ask the user first.",
+    "description": "Post a message the user dictated to a team, a channel or a person (target), or reply to an inbound message in its own conversation (thread), as a social-app activity. Always read it back and ask the user first.",
     "name": "message",
     "parameters": {
       "additionalProperties": false,
@@ -659,16 +659,27 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
             "kind",
             "name",
           ],
-          "type": "object",
+          "type": [
+            "object",
+            "null",
+          ],
         },
         "text": {
           "description": "The message, exactly as dictated.",
           "type": "string",
         },
+        "thread": {
+          "description": "A reply instead: the ref of the inbound message it answers, exactly as the portal gave it ("message:<id>"); it goes to the same conversation. Leave target out then.",
+          "type": [
+            "string",
+            "null",
+          ],
+        },
       },
       "required": [
         "target",
         "text",
+        "thread",
       ],
       "type": "object",
     },

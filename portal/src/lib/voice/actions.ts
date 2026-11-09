@@ -76,6 +76,7 @@ import {
   type CallAccess, type ConfirmPlan, type DeliveryRecord, type PresenceWriter, type ProjectRow, type ToolContext, type ToolResult,
   type VoiceComputer, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
+import { inboundRef } from './inbound.ts';
 import { matchByName, WORK_PLANNERS, WORK_RUNNERS } from './work.ts';
 import { RECORD_PLANNERS, RECORD_RUNNERS } from './records.ts';
 
@@ -538,7 +539,11 @@ interface ResolveBody {
   candidates: Array<{ id: string; name: string }>;
 }
 
-interface PostPlan { channel: string; name: string; kind: ResolveBody['kind']; text: string; deliveryId: string; key: string; userId?: string }
+interface PostPlan {
+  channel: string; name: string; kind: ResolveBody['kind'] | 'thread'; text: string; deliveryId: string; key: string; userId?: string;
+  /** A thread reply (G23): the inbound message it quotes, as the composer's `metadata.replyTo`. */
+  replyTo?: { messageId: string; author: string; text: string; timestamp?: string };
+}
 
 /** The DM button's own call (routes/social.ts POST /dms): writes the pair's membership, at confirm only (G14). */
 export const OPEN_DM_URL = '/api/social/dms';
@@ -580,13 +585,36 @@ export function deliveryFor(book: Map<string, DeliveryRecord>, channel: string, 
   return fresh;
 }
 
-const where = (kind: ResolveBody['kind'], name: string) => (kind === 'person' ? name : kind === 'team' ? `the ${name} team` : `#${name}`);
+const where = (kind: PostPlan['kind'], name: string) => (kind === 'person' || kind === 'thread' ? name : kind === 'team' ? `the ${name} team` : `#${name}`);
+
+/**
+ * A reply to an inbound message (G23): its own conversation, a quote-reply of it, no resolve. Only a message
+ * that reached this user's socket in this dock's life (inbound.ts), and only one with a conversation to answer in.
+ */
+function planThreadReply(args: Record<string, unknown>, ctx: ToolContext, social: NonNullable<ToolContext['social']>): ReturnType<VoiceToolPlanner> {
+  const thread = String(args['thread']).trim();
+  const item = /^message:[A-Za-z0-9_.:-]{1,190}$/.test(thread) ? ctx.inbox?.find(thread) ?? null : null;
+  if (!item) return Promise.resolve({ result: refused('There is no inbound message with that ref in this session; pass the ref the portal gave ("message:<id>").') });
+  if (!item.channel) return Promise.resolve({ result: refused('That notification has no conversation to reply in. Name a person, team or channel instead.') });
+  const text = String(args['text']);
+  const now = ctx.now().getTime();
+  const record = deliveryFor(social.deliveries, item.channel, text, now);
+  const label = item.where === 'a direct message' ? item.sender || 'them' : item.where || item.sender || 'that conversation';
+  if (record.state === 'sent') return Promise.resolve({ result: done('posted', { to: label, posted: true, alreadyPosted: true, thread: inboundRef(item) }, `Already replied to ${label}; nothing was sent again`) });
+  const plan: PostPlan = {
+    channel: item.channel, name: label, kind: 'thread', text, deliveryId: record.deliveryId, key: deliveryKey(item.channel, text),
+    ...(item.kind === 'message' ? { replyTo: { messageId: item.id, author: item.sender || 'Unknown', text: item.text.slice(0, 280), timestamp: new Date(item.at).toISOString() } } : {}),
+  };
+  return Promise.resolve({ plan: { title: `Reply to ${label}`, detail: text, data: plan } });
+}
 
 const planSendChat: VoiceToolPlanner = async (args, ctx) => {
   const social = ctx.social;
   if (!social) return { result: socialGrantRefusal(ctx, 'Messages go through Social, which this session cannot reach.') };
   if (social.unavailable) return { result: refused(social.unavailable) };
-  const target = args['target'] as { kind: 'team' | 'channel' | 'dm'; name: string };
+  if (typeof args['thread'] === 'string' && args['thread'].trim()) return planThreadReply(args, ctx, social);
+  const target = args['target'] as { kind: 'team' | 'channel' | 'dm'; name: string } | undefined;
+  if (!target) return { result: refused('Say where it goes: a team, a channel or a person (target), or the inbound message it answers (thread).') };
   const text = String(args['text']);
   const kind = target.kind === 'dm' ? 'person' : target.kind;
   let res: Response;
@@ -631,13 +659,13 @@ const runSendChat: VoiceToolRunner = async (_args, ctx, planned) => {
   }
   social.deliveries.set(plan.key, { ...record, state: 'pending' });
   try {
-    await social.send({ channel: plan.channel, text: plan.text, deliveryId: plan.deliveryId });
+    await social.send({ channel: plan.channel, text: plan.text, deliveryId: plan.deliveryId, ...(plan.replyTo ? { replyTo: plan.replyTo } : {}) });
   } catch (err) {
     social.deliveries.set(plan.key, { ...record, state: 'failed', at: ctx.now().getTime() });
     return failed(`The message to ${label} was not confirmed: ${(err as Error)?.message ?? 'no receipt'}. A retry reuses the same delivery, so it cannot post twice.`);
   }
   social.deliveries.set(plan.key, { ...record, state: 'sent', at: ctx.now().getTime() });
-  return done('posted', { to: label, posted: true }, `Posted to ${label}`);
+  return done('posted', { to: label, posted: true, ...(plan.kind === 'thread' ? { thread: plan.channel } : {}) }, plan.kind === 'thread' ? `Replied to ${label}` : `Posted to ${label}`);
 };
 
 // ── call: start, or join the live huddle the index shows (V2-12) ─────────────

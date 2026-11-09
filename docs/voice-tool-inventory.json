@@ -1528,7 +1528,7 @@
     "orgiq",
     "social"
    ],
-   "mapsTo": "GET /api/social/resolve?kind=&name= (P6, a read), then on confirm POST /api/social/dms { userId } for a person (G14) and useChat(channel).sendMessage(text, { displayName, clientDeliveryId }) over the gateway",
+   "mapsTo": "GET /api/social/resolve?kind=&name= (P6, a read), then on confirm POST /api/social/dms { userId } for a person (G14) and useChat(channel).sendMessage(text, { displayName, clientDeliveryId }) over the gateway; a thread reply (G23) goes to the inbound message\\'s own channel with metadata.replyTo, no resolve",
    "routes": [
     {
      "method": "GET",
@@ -1570,7 +1570,7 @@
      "path": "/api/social/plane/search"
     }
    ],
-   "line": 787
+   "line": 788
   },
   {
    "name": "set_status",
@@ -1586,7 +1586,7 @@
    ],
    "mapsTo": "usePresence('<tenant>:lobby') (the shell's tenant lobby, manifest presenceLobby) then usePresence('social:lobby') with a Social grant: setStatus(status) and updateMetadata({ statusMessage })",
    "routes": [],
-   "line": 802
+   "line": 803
   },
   {
    "name": "queue_work",
@@ -1803,7 +1803,7 @@
      "path": "/api/pipelines/runs/:id/events"
     }
    ],
-   "line": 814
+   "line": 815
   },
   {
    "name": "decide",
@@ -1912,7 +1912,7 @@
      "path": "/api/assessment/drafts/:runId/discard"
     }
    ],
-   "line": 835
+   "line": 836
   },
   {
    "name": "create",
@@ -1984,7 +1984,7 @@
      "path": "/api/access/delegations"
     }
    ],
-   "line": 850
+   "line": 851
   },
   {
    "name": "update",
@@ -2126,7 +2126,7 @@
      "path": "/api/access/delegations/:id/end"
     }
    ],
-   "line": 881
+   "line": 882
   },
   {
    "name": "access_request_status",
@@ -2156,7 +2156,7 @@
      "path": "/api/access/approvals"
     }
    ],
-   "line": 903
+   "line": 904
   }
  ],
  "navigatePages": [

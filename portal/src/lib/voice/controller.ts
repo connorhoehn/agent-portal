@@ -80,6 +80,12 @@
 // window lasts and `start({ resume: true })` mints with `resumeOf`, so the
 // server links the rows, and tells the voice it continues an earlier session.
 //
+// Inbound awareness (G23, inbound.ts): a new direct message or notification
+// during a live session is a silent note at once (sender, where, the first
+// 120 characters, its ref) and one spoken line once the user is not
+// mid-utterance (no words for INBOUND_QUIET_MS and the microphone quiet),
+// waited for at most INBOUND_WAIT_MS; the voice speaks unprompted only here.
+//
 // Phase dwell (G36): the phase the dock shows (and logs) holds at least
 // PHASE_DWELL_MS. A change inside the window waits for its end and is then
 // taken from the machine as it stands, so a flap (listening, speaking,
@@ -87,7 +93,7 @@
 // phase events are ever closer than PHASE_DWELL_MS.
 
 import { VoiceClient, type ClientEvent, type CloseCause, type CloseWhy, type MediaFactory, type StopReason, type TransportCause, type VoiceFrame, type VoiceMint } from './client.ts';
-import { initialMachine, phaseAt, reduce, sessionOpen, type MachineEvent, type MachineState, type VoicePhase } from './machine.ts';
+import { MIC_QUIET_MS, initialMachine, phaseAt, reduce, sessionOpen, type MachineEvent, type MachineState, type VoicePhase } from './machine.ts';
 import {
   cancelledResult, hashToolArgs, localHref, needsConfirm, type CardAnswer, openableHref, planPreparedCall, prepareToolCall, refused, runPreparedCall, spokenOrdinal, toolAvailable,
   type ConfirmPlan, type PreparedCall, type ToolContext, type ToolResult, type VoiceToolPlanner, type VoiceToolRunner,
@@ -96,11 +102,18 @@ import { VOICE_PLANNERS, VOICE_RUNNERS } from './actions.ts';
 import { DEFAULT_TOAST_SECONDS } from './work.ts';
 import { VoiceEventLog, argShape, refusalCode, resultSummary, type DockEvent } from './sessionEvents.ts';
 import { RefusalGuard, STOP_NEXT, refusalLine, withNext } from './refusals.ts';
+import { inboundLine, inboundNote, type InboundItem } from './inbound.ts';
 import { DelegationContext, PAGE_NOTE_REPLACES, briefOutput, modelOutput, summaryLine, verbosityNote, type Verbosity } from './contextWindow.ts';
 
 export const TICK_MS = 100;
 export const COMPLETION_GRACE_MS = 1500;
 export const BUDGET_WARN_RATIO = 0.9;
+/** G23: the user counts as mid-utterance until this long after their last word (and the microphone is quiet). */
+export const INBOUND_QUIET_MS = 1200;
+/** G23: how long an inbound line waits for the user to finish before it is left to the note alone. */
+export const INBOUND_WAIT_MS = 10_000;
+const INBOUND_RECHECK_MS = 400;
+
 /** The least time a shown phase holds before the next one replaces it (G36). */
 export const PHASE_DWELL_MS = 300;
 /** The phases of a live session, the only ones that flap: the dwell holds one of these against another. */
@@ -453,6 +466,38 @@ export class VoiceController {
     this.context.note(line.length + 15);
     this.client.appendCommentary(`Tell the user: ${line}`);
     this.addLine('assistant', line);
+  }
+
+  /**
+   * Something reached the user (G23, inbound.ts): the voice gets the note now and says the one line once the user is
+   * not mid-utterance (or never, after INBOUND_WAIT_MS of talking). Nothing outside a live session.
+   */
+  noteInbound(item: InboundItem): void {
+    const client = this.client;
+    if (this.machine.base !== 'live' || !client) return;
+    this.noteContext(inboundNote(item));
+    const started = this.now();
+    const sayWhenQuiet = () => {
+      if (client !== this.client || this.machine.base !== 'live') return;
+      if (this.midUtterance()) {
+        if (this.now() - started >= INBOUND_WAIT_MS) { this.emit({ kind: 'client', data: { event: 'inbound', kind: item.kind, spoken: false } }); return; }
+        this.setTimer(sayWhenQuiet, INBOUND_RECHECK_MS);
+        return;
+      }
+      const line = inboundLine(item);
+      this.context.note(line.length + 50);
+      client.appendCommentary(`Tell the user in one short line, then wait for them: ${line}`);
+      this.addLine('assistant', line);
+      this.emit({ kind: 'client', data: { event: 'inbound', kind: item.kind, spoken: true } });
+    };
+    sayWhenQuiet();
+  }
+
+  /** The user is talking: words within INBOUND_QUIET_MS, or the microphone active within the machine's quiet window. */
+  private midUtterance(): boolean {
+    const now = this.now();
+    const m = this.machine;
+    return (m.lastInputAt != null && now - m.lastInputAt < INBOUND_QUIET_MS) || (m.lastMicActiveAt != null && now - m.lastMicActiveAt < MIC_QUIET_MS);
   }
 
   /** How long a job toast stays once its job ends: the last mint's VOICE_TOAST_SECONDS, else the default. */

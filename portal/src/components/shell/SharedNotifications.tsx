@@ -33,3 +33,8 @@ export function useSharedNotifications(): SharedNotificationsApi {
   if (!ctx) throw new Error('useSharedNotifications must be used inside <SharedNotificationsProvider>');
   return ctx;
 }
+
+/** The app-wide inbox, or null outside <SharedNotificationsProvider> (a host that mounts the footer alone). */
+export function useSharedNotificationsOptional(): SharedNotificationsApi | null {
+  return useContext(SharedNotificationsContext);
+}

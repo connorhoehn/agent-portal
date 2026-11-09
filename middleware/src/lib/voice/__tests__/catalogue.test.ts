@@ -539,6 +539,8 @@ describe('the rendered session', () => {
     expect(backend).toMatch(/When no function applies to the request, reply immediately with one short sentence/);
     expect(backend).toMatch(/pass detail true only when the user asked for every row/);
     expect(backend).toMatch(/Never repeat a refused call with the same arguments/);
+    // G23: the inbound note's ref, read with get and answered with message's thread.
+    expect(backend).toMatch(/get with its ref \("message:<id>", or "message:latest"\) reads it whole, and message with thread set to that ref/);
   });
 
   it('list, search and get take detail (G33), a boolean the model sets only for every row', () => {

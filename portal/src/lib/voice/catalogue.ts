@@ -583,7 +583,8 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
         name: str('The team, channel or person, as the user said it.', { minLength: 1, maxLength: 120 }),
       }, ['kind', 'name']),
       text: str('The message, exactly as dictated.', { minLength: 1, maxLength: 2000 }),
-    }, ['target', 'text']),
+      thread: str('A reply instead: the ref of the inbound message it answers, exactly as the portal gave it ("message:<id>"); it goes to the same conversation. Leave target out then.', { minLength: 9, maxLength: 200 }),
+    }, ['text']),
     kind: 'people', backing: 'social-activity', confirm: true, action: 'PostMessage', says: "I'll post that to #platform once you confirm.", tenants: PEOPLE_TENANTS,
   },
   {

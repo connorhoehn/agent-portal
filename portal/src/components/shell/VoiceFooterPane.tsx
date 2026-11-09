@@ -40,6 +40,13 @@
 // control opens System › Voice log (/iq/voice-log/<id>, an orgiq page on the
 // dev server only) at the session last minted, else the latest.
 //
+// Inbound awareness (G23): the pane listens where the shell already does: the
+// app-wide notification inbox (SharedNotificationsProvider) and the shell's
+// gateway socket for direct-message frames. Each new item (never the backlog
+// present when the pane mounted) goes to lib/voice/inbound.ts's memory, where
+// `get message:<id>` reads it and `message { thread }` answers it, and to the
+// controller, which tells a live session (a note, then one spoken line).
+//
 // Dropped sessions (G35): a page that goes away closes the session at
 // pagehide, with the cause `beforeunload` when a navigation or reload led
 // there and `pagehide` otherwise (a tab discarded, a mobile switch); a transport drop behind a hidden page is
@@ -72,8 +79,10 @@ import { pageContextFor, pageContextNote, pageIdFor, subscribePageContext } from
 import { voiceVerbosity } from '../../lib/voice/contextWindow';
 import { VoiceController, type ResumeRecord, type ResumeStore } from '../../lib/voice/controller';
 import { routeInAppLinks } from './inAppLink';
+import { InboundMemory, messageFromFrame, notificationItem } from '../../lib/voice/inbound';
+import { useSharedNotificationsOptional } from './SharedNotifications';
 import { VoiceJobTracker, jobNotification, type JobNotice } from '../../lib/voice/work';
-import { addLocalNotification } from '../../lib/localNotifications';
+import { addLocalNotification, getLocalNotifications } from '../../lib/localNotifications';
 import { subscribeWorkEvents } from '../../hooks/useWorkEvents';
 import { ResultMemory, type CallAccess, type CommandOutputView, type ComputeAccess, type DeliveryRecord, type PresenceAccess, type PresencePerson, type SocialAccess, type ToolContext, type VoiceComputer } from '../../lib/voice/tools';
 import { useCallHost } from '../../lib/conversationCall';
@@ -122,7 +131,8 @@ const resumeStore: ResumeStore = {
 /** How long a post waits for its conversation's join before giving up. */
 const CHANNEL_JOIN_MS = 8000;
 
-type ChatSender = (text: string, deliveryId: string) => Promise<void>;
+type ChatReplyTo = { messageId: string; author: string; text: string; timestamp?: string };
+type ChatSender = (text: string, deliveryId: string, replyTo?: ChatReplyTo) => Promise<void>;
 type Waiter = { resolve(sender: ChatSender): void; reject(err: Error): void };
 
 /**
@@ -155,12 +165,13 @@ function VoiceChatChannel({ channel, userId, displayName, onReady, onFailed }: {
   const ready = joined !== null && joined === epoch;
   useEffect(() => {
     if (!ready) return undefined;
-    onReady(channel, async (text, deliveryId) => {
+    onReady(channel, async (text, deliveryId, replyTo) => {
       const { gateway: g } = latest.current;
       if (!g?.onMessage || g.connectionState !== 'connected') throw new Error('Reconnect to send messages.');
       await sendAndWaitForSocialChatAck({
         channel, deliveryId, userId, listen: g.onMessage as (h: (f: Record<string, unknown>) => void) => () => void, signal: abort.current.signal,
-        send: () => latest.current.chat.sendMessage(text, { displayName, clientDeliveryId: deliveryId }),
+        // A thread reply (G23) is the composer's quote-reply: `metadata.replyTo`.
+        send: () => latest.current.chat.sendMessage(text, { displayName, clientDeliveryId: deliveryId, ...(replyTo ? { replyTo } : {}) }),
       });
     });
     return () => onReady(channel, null);
@@ -189,6 +200,8 @@ function VoiceFooterPane() {
   // The rows this tenant's reads returned, for open and get by position; a new tenant or another person starts empty
   // (G14: a row one persona's read returned is never opened for another in the same tab).
   const results = useMemo(() => new ResultMemory(), [tenant, session?.sub]);
+  // G23: what reached this person during the dock's life, for get message:<id> and a thread reply.
+  const inbox = useMemo(() => new InboundMemory(), [session?.sub]);
 
   // ── the post path: one conversation mounted at a time, a sender per joined channel ──
   const [chatChannel, setChatChannel] = useState<string | null>(null);
@@ -205,7 +218,7 @@ function VoiceFooterPane() {
     for (const w of waiters.current.get(channel) ?? []) w.reject(new Error(message));
     waiters.current.delete(channel);
   }, []);
-  const sendChat = useCallback(async ({ channel, text, deliveryId }: { channel: string; text: string; deliveryId: string }) => {
+  const sendChat = useCallback(async ({ channel, text, deliveryId, replyTo }: { channel: string; text: string; deliveryId: string; replyTo?: ChatReplyTo }) => {
     let sender = senders.current.get(channel);
     if (!sender) {
       if (chatChannelRef.current !== channel) { chatChannelRef.current = channel; setChatChannel(channel); }
@@ -216,7 +229,7 @@ function VoiceFooterPane() {
         waiters.current.set(channel, list);
       });
     }
-    await sender(text, deliveryId);
+    await sender(text, deliveryId, replyTo);
   }, []);
 
   // ── computer run's captured output: a read-only tab in the compute dock (G9) ──
@@ -288,8 +301,8 @@ function VoiceFooterPane() {
   const planeActions = planeCaps.data?.actions ?? {};
   const socialRequestItemId = onPlane && planeCaps.data?.actions && !planeCaps.data.actions['PostMessage'] ? planeCaps.data.requestItemId ?? null : null;
   const userId = session?.sub ?? null;
-  const live = useRef({ tenant, role: session?.role ?? 'member', userId, ledger, can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, socialRequestItemId, results });
-  live.current = { tenant, role: session?.role ?? 'member', userId, ledger, can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, socialRequestItemId, results };
+  const live = useRef({ tenant, role: session?.role ?? 'member', userId, ledger, can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, socialRequestItemId, results, inbox });
+  live.current = { tenant, role: session?.role ?? 'member', userId, ledger, can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, socialRequestItemId, results, inbox };
 
   // ── queue_work (G19): one keyed toast per job, the notification center's entry, the spoken outcome ──
   const toaster = useToastOptional();
@@ -341,6 +354,7 @@ function VoiceFooterPane() {
       presence: live.current.presence,
       socialRequestItemId: live.current.socialRequestItemId,
       results: live.current.results,
+      inbox: live.current.inbox,
       toast: {
         pending: (title, detail) => toastPending(title, detail),
         success: (id, title, detail) => { toastSuccess(id, title, detail); },
@@ -406,6 +420,28 @@ function VoiceFooterPane() {
       window.removeEventListener('beforeunload', onBeforeUnload);
     };
   }, [controller]);
+
+  // G23: new notifications and direct messages reach the voice. The entries present at mount are the backlog, never announced.
+  const notifications = useSharedNotificationsOptional();
+  const seenNotes = useRef<Set<string> | null>(null);
+  const noteList = notifications?.notifications;
+  useEffect(() => {
+    const list = noteList ?? [];
+    if (!seenNotes.current) { seenNotes.current = new Set(list.map((n) => n.id)); return; }
+    for (const n of list) {
+      if (seenNotes.current.has(n.id)) continue;
+      seenNotes.current.add(n.id);
+      // The portal's own entries (a voice-queued job that ended, G19) are spoken by the job tracker already.
+      if (n.read || getLocalNotifications().some((l) => l.id === n.id)) continue;
+      const item = notificationItem(n, Date.now());
+      if (inbox.add(item)) controller.noteInbound(item);
+    }
+  }, [noteList, inbox, controller]);
+  const listenGateway = gateway?.onMessage;
+  useEffect(() => listenGateway?.((frame) => {
+    const item = messageFromFrame(frame, live.current.userId, Date.now());
+    if (item && inbox.add(item)) controller.noteInbound(item);
+  }), [listenGateway, inbox, controller]);
 
   // G35: the job toast's link (a plain anchor outside the router) goes through the router, so it never reloads the page.
   const navigateRef = useRef(navigate);
