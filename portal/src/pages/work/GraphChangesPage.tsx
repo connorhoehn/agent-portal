@@ -12,6 +12,7 @@
 
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
+import { GRAPH_UPDATES_FILTERS, statusChip, type GraphUpdatesFilter } from './graphUpdatesChips';
 import {
   Button, Card, Chip, EmptyState, FilterChip, Inline, MetaLine, PageSection, SearchInput, Stack, Toolbar, ToolbarGroup,
 } from '@connorhoehn/ui-components/shared';
@@ -56,7 +57,7 @@ const KIND_LABELS: Record<string, string> = {
   add_skill: 'Added a skill',
 };
 
-type Filter = 'all' | 'applied' | 'pending' | 'rejected' | 'failed';
+type Filter = GraphUpdatesFilter;
 
 /** What actually changed, in the graph's own vocabulary. */
 function describe(p: Proposal): string {
@@ -156,11 +157,14 @@ export default function GraphChangesPage() {
       <Stack gap="sm" className="min-w-0">
         <Toolbar wrap aria-label="Change filters">
           <ToolbarGroup aria-label="Status">
-            {(['all', 'applied', 'pending', 'rejected', 'failed'] as const).map((f) => (
-              <FilterChip key={f} active={filter === f} onClick={() => setFilter(f)} size="sm">
-                {f}{filter === 'all' && f !== 'all' && counts[f] ? ` (${counts[f]})` : ''}
-              </FilterChip>
-            ))}
+            {GRAPH_UPDATES_FILTERS.map((f) => {
+              const chip = statusChip(f, filter, data ? counts : null);
+              return (
+                <FilterChip key={f} active={filter === f} onClick={() => setFilter(chip.next)} size="sm" title={chip.title} disabled={chip.disabled}>
+                  {chip.label}
+                </FilterChip>
+              );
+            })}
           </ToolbarGroup>
           <ToolbarGroup aria-label="Search">
             <SearchInput size="sm" value={query} onChange={setQuery} placeholder="Search graph updates…" aria-label="Search graph updates" className="w-56 max-w-full" />

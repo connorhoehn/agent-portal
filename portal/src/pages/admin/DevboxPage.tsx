@@ -17,6 +17,7 @@ import { ComputerLab } from '@connorhoehn/ui-components/compute';
 import { useCapabilities } from '../../lib/capabilities';
 import { useSession } from '../../lib/auth';
 import { canOpenComputerLab } from '../../lib/devboxAccess';
+import { READ_ONLY_REASON, refuseInstruction } from './devboxReadOnly';
 
 export default function DevboxPage() {
   const { can, ready } = useCapabilities();
@@ -75,8 +76,7 @@ export default function DevboxPage() {
       <VisuallyHidden as="h1">Computer Lab</VisuallyHidden>
       {readOnly && (
         <InlineAlert tone="info" className="mx-4 mt-3 mb-3">
-          You can see the fleet but not drive it. Opening a shell or dispatching work
-          needs computer access, which an SME or a platform operator can grant.
+          {READ_ONLY_REASON}
         </InlineAlert>
       )}
       {/* Paired machines are IN the lab now, not stacked above it. They used
@@ -102,6 +102,10 @@ export default function DevboxPage() {
           title={null}
           onClose={() => {}}
           focusComputerId={focusComputerId}
+          // Read-only: the Nudge bar's task route (RunDevboxTask) answers this role 403. The library has no prop to
+          // turn the bar off, so it is refused here, before any request, with the banner's reason (the text is kept).
+          // Keys only toggles the keyboard-shortcut sheet: it writes nothing, so it stays.
+          {...(readOnly ? { onInstruct: refuseInstruction } : {})}
         />
       </Stack>
     </Stack>

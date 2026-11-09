@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useSearchParams, Navigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { Card, EmptyState, ErrorState, LoadingState, PageHeader, Stack } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { useCapabilities } from '../lib/capabilities';
@@ -11,6 +11,7 @@ import type { RadarBatchEntry } from '../components/scores/OverlayRadar';
 
 function ScoresComparePage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const idsParam = searchParams.get('ids') ?? '';
 
   const ids = useMemo(() => {
@@ -31,16 +32,26 @@ function ScoresComparePage() {
     : '';
   const { data, isLoading, error } = useFetch<RadarBatchEntry[]>(fetchUrl);
 
-  if (!isValid) {
-    return <Navigate to="/iq/scores" replace />;
-  }
-
   // Capabilities not resolved yet is LOADING, not denied — see ScoresPage.tsx.
   if (!capsReady) {
     return <LoadingState label="Loading…" />;
   }
   if (!mayViewLeaderboard) {
     return <LeaderboardAccessNeeded />;
+  }
+
+  // Opened with no pair (the rail, the palette, voice `open score-compare`): say what the page needs and
+  // where to pick it, instead of the old silent bounce to the leaderboard (UX walk, 9 November 2026).
+  if (!isValid) {
+    return (
+      <EmptyState
+        title="Pick two to four people to compare"
+        body={ids.length > 4 ? `Compare takes at most four people; ${ids.length} were named.` : 'Tick two to four people on the Scores leaderboard and choose Compare: their radars are overlaid here, with the score deltas between them.'}
+        actionLabel="Choose people on the leaderboard"
+        onAction={() => navigate('/iq/scores')}
+        testId="scores-compare-empty"
+      />
+    );
   }
 
   const backUrl = searchParams.get('w') ? `/iq/scores?w=${searchParams.get('w')}` : '/iq/scores';
