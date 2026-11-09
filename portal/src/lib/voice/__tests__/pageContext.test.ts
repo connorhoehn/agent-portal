@@ -97,8 +97,10 @@ async function onInitiativePage(call: Call) {
 test('on an initiative page the scripted session answers "what should I work on" from the page\'s rows, with no search and no read', async () => {
   const run = await onInitiativePage({ name: 'list', arguments: { kind: 'work-item', scope: 'this-page', filter: null, limit: null }, said: 'Is there anything I should be working on?' });
   // The voice was given the page once at start; the same page after the result is not appended again.
-  assert.equal(run.thoughts.length, 1);
-  assert.match(run.thoughts[0]!, /Rotate the signing keys/);
+  // (The speaking preference, G33, is its own note at start; the page is given once.)
+  const pages = run.thoughts.filter((t) => t.startsWith('Page context'));
+  assert.equal(pages.length, 1);
+  assert.match(pages[0]!, /Rotate the signing keys/);
   // The answer came from the page: nothing was searched or read again.
   assert.deepEqual(run.log.filter((r) => !r.url.startsWith('/api/voice/')).map((r) => r.url), []);
   const calls = run.controller.getSnapshot().turns.flatMap((t) => t.toolCalls ?? []);

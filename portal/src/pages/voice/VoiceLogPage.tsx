@@ -18,6 +18,7 @@ import {
 import { VoiceTurnStrip, type VoiceTurn } from '@connorhoehn/ui-components/voice';
 import { useFetch } from '../../hooks/useFetch';
 import { keepTranscripts, setKeepTranscripts, subscribeKeepTranscripts, transcriptStore, type KeptTranscript } from '../../lib/voice/transcriptKeep';
+import { setVoiceVerbosity, subscribeVoiceVerbosity, voiceVerbosity } from '../../lib/voice/contextWindow';
 import {
   VOICE_SESSIONS_API, eventData, exportApi, logJson, sessionApi, sessionFacts, sessionHref, sessionSubline, when,
   type VoiceSessionDetail, type VoiceSessionListItem,
@@ -32,6 +33,9 @@ export interface VoiceLogViewProps {
   transcript: KeptTranscript | null;
   keep: boolean;
   onKeepChange(on: boolean): void;
+  /** G33: this device's spoken length; the switch shows only when both are given. */
+  terse?: boolean;
+  onTerseChange?(on: boolean): void;
   onSelect(id: string): void;
   onCopy(): void;
   onDownload(): void;
@@ -45,8 +49,13 @@ export function VoiceLogView(p: VoiceLogViewProps) {
     hint={p.keep ? 'Turning this off deletes the kept transcripts.' : 'Off: no words are kept anywhere.'}>
     {(f) => <Switch checked={p.keep} onChange={p.onKeepChange} aria-labelledby={f.id} size="sm" data-testid="voice-log-keep" />}
   </FormField>;
+  const terseControl = p.onTerseChange ? <FormField label="Short answers" layout="inline"
+    hint={p.terse ? 'The voice gives the count and at most three names.' : 'The voice may answer in a few sentences.'}>
+    {(f) => <Switch checked={!!p.terse} onChange={p.onTerseChange!} aria-labelledby={f.id} size="sm" data-testid="voice-log-terse" />}
+  </FormField> : null;
   const actions = <Inline gap="sm" align="center" wrap>
     {keepControl}
+    {terseControl}
     {p.detail && <Button variant="secondary" size="sm" onClick={p.onCopy} data-testid="voice-log-copy">{p.copied ? 'Copied' : 'Copy as JSON'}</Button>}
     {p.detail && <Button variant="secondary" size="sm" onClick={p.onDownload} data-testid="voice-log-export">Download export</Button>}
   </Inline>;
@@ -106,6 +115,7 @@ export default function VoiceLogPage() {
   const selectedId = params.get('session');
   const detail = useFetch<VoiceSessionDetail>(selectedId ? sessionApi(selectedId) : null, 10_000);
   const keep = useSyncExternalStore(subscribeKeepTranscripts, keepTranscripts, () => false);
+  const terse = useSyncExternalStore(subscribeVoiceVerbosity, () => voiceVerbosity() === 'terse', () => true);
   const store = useMemo(() => transcriptStore(), []);
   const [transcript, setTranscript] = useState<KeptTranscript | null>(null);
   const [copied, setCopied] = useState(false);
@@ -129,5 +139,6 @@ export default function VoiceLogPage() {
     sessions={list.data?.sessions ?? null} sessionsError={list.error}
     selectedId={selectedId} detail={detail.data && detail.data.session.id === selectedId ? detail.data : null} detailError={detail.error}
     transcript={transcript} keep={keep} onKeepChange={(on) => { void setKeepTranscripts(on, store); }}
+    terse={terse} onTerseChange={(on) => { setVoiceVerbosity(on ? 'terse' : 'normal'); }}
     onSelect={(id) => navigate(sessionHref(id))} onCopy={onCopy} onDownload={onDownload} copied={copied} />;
 }

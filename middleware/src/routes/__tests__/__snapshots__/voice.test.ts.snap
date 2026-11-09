@@ -161,6 +161,13 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
             "null",
           ],
         },
+        "detail": {
+          "description": "True only when the user asked for every row ("read them", "all of them"): the full list instead of the count and the top three.",
+          "type": [
+            "boolean",
+            "null",
+          ],
+        },
         "limit": {
           "description": "How many results, 1 to 10. Default 5.",
           "type": [
@@ -217,6 +224,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
         "sort",
         "limit",
         "answer",
+        "detail",
       ],
       "type": "object",
     },
@@ -229,6 +237,13 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "parameters": {
       "additionalProperties": false,
       "properties": {
+        "detail": {
+          "description": "True only when the user asked for every row ("read them", "all of them"): the full list instead of the count and the top three.",
+          "type": [
+            "boolean",
+            "null",
+          ],
+        },
         "filter": {
           "additionalProperties": false,
           "properties": {
@@ -337,6 +352,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
         "filter",
         "scope",
         "limit",
+        "detail",
       ],
       "type": "object",
     },
@@ -349,6 +365,13 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "parameters": {
       "additionalProperties": false,
       "properties": {
+        "detail": {
+          "description": "True only when the user asked for every row ("read them", "all of them"): the full list instead of the count and the top three.",
+          "type": [
+            "boolean",
+            "null",
+          ],
+        },
         "part": {
           "description": "One part of the record instead of its summary, where the kind has it (its work, steps, members, versions…).",
           "enum": [
@@ -381,6 +404,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
       "required": [
         "ref",
         "part",
+        "detail",
       ],
       "type": "object",
     },

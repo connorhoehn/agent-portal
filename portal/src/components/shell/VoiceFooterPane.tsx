@@ -58,6 +58,7 @@ import { browserMedia } from '../../lib/voice/client';
 import { keepTranscripts, subscribeKeepTranscripts, transcriptStore } from '../../lib/voice/transcriptKeep';
 import { VOICE_LOG_PATH, sessionHref } from '../../pages/voice/voiceLogModel';
 import { pageContextFor, pageContextNote, pageIdFor, subscribePageContext } from '../../lib/voice/pageContext';
+import { voiceVerbosity } from '../../lib/voice/contextWindow';
 import { VoiceController } from '../../lib/voice/controller';
 import { VoiceJobTracker, jobNotification, type JobNotice } from '../../lib/voice/work';
 import { addLocalNotification } from '../../lib/localNotifications';
@@ -332,6 +333,8 @@ function VoiceFooterPane() {
       const path = window.location.pathname;
       return pageContextNote({ tenant: live.current.tenant, pathname: path, pageId: pageIdFor(PAGES, live.current.tenant, path), page: pageContextFor(path) });
     },
+    // G33: this device's spoken length (the Voice log's "Short answers" switch), read at each session start.
+    verbosity: voiceVerbosity,
   }), [showOutput, jobs]);
   controllerRef.current = controller;
   const snap = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);

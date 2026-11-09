@@ -89,8 +89,8 @@ export function refusalCode(output: Record<string, unknown>): RefusalCode {
 /** The enum-valued arguments that tell one call of a tool from another (never free text, names or ids). */
 const SHAPE_KEYS: Readonly<Record<string, readonly string[]>> = {
   computer: ['action', 'phrase'],
-  list: ['kind', 'scope'], get: ['part'], create: ['kind'], update: [], queue_work: ['kind', 'scope'], decide: ['decision', 'scope'],
-  search: ['type', 'scope', 'sort', 'answer'], budget: ['scope', 'groupBy'], summary: ['kind'], activity: ['scope'],
+  list: ['kind', 'scope', 'detail'], get: ['part', 'detail'], create: ['kind'], update: [], queue_work: ['kind', 'scope'], decide: ['decision', 'scope'],
+  search: ['type', 'scope', 'sort', 'answer', 'detail'], budget: ['scope', 'groupBy'], summary: ['kind'], activity: ['scope'],
   open: ['page', 'kind', 'scope'], call: ['action'], set_status: ['status'], access_request_status: ['scope'],
 };
 const REF_KIND = /^([a-z][a-z-]{0,39}):./;

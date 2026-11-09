@@ -156,3 +156,80 @@ export class DelegationContext {
 
 /** Characters to estimated tokens. */
 export const estimateTokens = (chars: number): number => Math.ceil(chars / CHARS_PER_TOKEN);
+
+// ── G33: terse by default ───────────────────────────────────────────────────
+
+/** The rows list, search and get hand the model unless the call asked for `detail`. */
+export const BRIEF_ROWS = 3;
+/** Words per name in the `say` line. */
+const SAY_NAME_WORDS = 5;
+const BRIEF_TOOLS: ReadonlySet<string> = new Set(['list', 'search', 'get']);
+
+function shortName(t: unknown): string {
+  const words = String(t ?? '').replace(/\s+/g, ' ').trim().split(' ');
+  return words.length > SAY_NAME_WORDS ? `${words.slice(0, SAY_NAME_WORDS).join(' ')}…` : words.join(' ');
+}
+
+function labelOf(output: Record<string, unknown>, n: number): string {
+  const of = typeof output['of'] === 'string' ? output['of'] : typeof output['part'] === 'string' ? output['part'] : null;
+  if (!of) return n === 1 ? 'result' : 'results';
+  const words = of.replace(/-/g, ' ');
+  return n === 1 ? words : words.endsWith('s') ? words : `${words}s`;
+}
+
+/**
+ * What list, search and get hand the model by default (G33): the count, the
+ * first BRIEF_ROWS rows, `more` (how many the model was not given) and `say`,
+ * a ready line of the count and the top names ("11 work items, 3 high
+ * priority: A, B and C, and 8 more."). `detail: true` in the call's arguments
+ * hands over every row the runner returned. The kept rows are the runner's,
+ * untouched, so "open the fifth one" still works.
+ */
+export function briefOutput(tool: string, args: unknown, output: Record<string, unknown>): Record<string, unknown> {
+  if (!BRIEF_TOOLS.has(tool) || !Array.isArray(output['rows'])) return output;
+  let a: Record<string, unknown> = {};
+  if (typeof args === 'string') { try { a = JSON.parse(args) as Record<string, unknown>; } catch { a = {}; } } else if (args && typeof args === 'object') a = args as Record<string, unknown>;
+  const rows = output['rows'] as Array<Record<string, unknown>>;
+  const total = typeof output['count'] === 'number' ? output['count'] : typeof output['total'] === 'number' ? output['total'] : rows.length;
+  if (a['detail'] === true || !rows.length) return output;
+  const top = rows.slice(0, BRIEF_ROWS);
+  const more = Math.max(0, total - top.length);
+  const high = rows.filter((r) => /^(high|urgent|critical|p0|p1)$/i.test(String(r['priority'] ?? ''))).length;
+  const names = top.map((r) => shortName(r['title'] ?? r['ref']));
+  const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0];
+  const say = `${total} ${labelOf(output, total)}${high ? `, ${high} high priority` : ''}: ${list}${more ? `, and ${more} more` : ''}.`;
+  return { ...output, rows: top, count: total, more, say, detail: 'Pass detail true to get every row; only when the user asks for all of them.' };
+}
+
+/** The spoken length the user chose on this device (G33): terse by default. */
+export type Verbosity = 'terse' | 'normal';
+export const VERBOSITY_KEY = 'voiceVerbosity';
+const verbosityListeners = new Set<() => void>();
+
+function prefs(): Storage | null {
+  try { return (globalThis as { localStorage?: Storage }).localStorage ?? null; } catch { return null; }
+}
+
+export function voiceVerbosity(): Verbosity {
+  try { return prefs()?.getItem(VERBOSITY_KEY) === 'normal' ? 'normal' : 'terse'; } catch { return 'terse'; }
+}
+
+export function setVoiceVerbosity(v: Verbosity): void {
+  try { prefs()?.setItem(VERBOSITY_KEY, v); } catch { /* a private window keeps the default */ }
+  for (const l of verbosityListeners) l();
+}
+
+export function subscribeVoiceVerbosity(listener: () => void): () => void {
+  verbosityListeners.add(listener);
+  return () => { verbosityListeners.delete(listener); };
+}
+
+/**
+ * The note the controller appends when a session starts (session.thinking.append: the data channel's allowlist
+ * leaves session.instructions.append to the server, so the browser can only add context, never instructions).
+ */
+export function verbosityNote(v: Verbosity): string {
+  return v === 'normal'
+    ? 'Speaking preference (from the user\'s settings): normal length. Answer in a few sentences when the result warrants it; still give counts before lists and name at most three items unless asked for all.'
+    : 'Speaking preference (from the user\'s settings): terse. One short sentence per turn: the count, then at most three names. No summaries, no restating the request, nothing about a page the user is looking at. Say more only when the user asks.';
+}

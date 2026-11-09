@@ -127,8 +127,9 @@ test('G31 acceptance: across a 20-turn scripted session the estimated input per 
     // Every output is compact and carries no link.
     for (const o of sent) { assert.ok(o.length <= OUTPUT_MAX_CHARS, `${o.length}`); assert.doesNotMatch(o, /"href"/); }
     // The page note: sent only when the page changed (it says it replaces the earlier ones), never once per result.
-    assert.ok(thoughts.length <= pageChanges + 1 && thoughts.length < 20, `${thoughts.length} page notes for ${pageChanges} page changes`);
-    for (const n of thoughts) assert.ok(n.endsWith(PAGE_NOTE_REPLACES));
+    const pageNotes = thoughts.filter((n) => n.startsWith('Page context'));
+    assert.ok(pageNotes.length <= pageChanges + 1 && pageNotes.length < 20, `${pageNotes.length} page notes for ${pageChanges} page changes`);
+    for (const n of pageNotes) assert.ok(n.endsWith(PAGE_NOTE_REPLACES));
     // The window is what keeps it flat: past the sixth turn a turn adds a line, not a result. Five turns apart the
     // rotation is at the same step (same page, same result), so the difference is five lines and five utterances.
     assert.ok(perDelegation[19]! - perDelegation[14]! < 300 && perDelegation[14]! - perDelegation[9]! < 300, `growth ${perDelegation.join(', ')}`);

@@ -55,7 +55,7 @@ describe('the mint body', () => {
 describe('strict schemas', () => {
   it('list every property as required at every level, optional ones nullable', () => {
     const s = liveFunctionTool(tools.find((t) => t.name === 'search')!)['parameters'] as Record<string, any>;
-    expect(s['required']).toEqual(['query', 'type', 'scope', 'sort', 'limit', 'answer']);
+    expect(s['required']).toEqual(['query', 'type', 'scope', 'sort', 'limit', 'answer', 'detail']);
     expect(s['properties'].answer.type).toEqual(['boolean', 'null']);
     expect(s['properties'].limit.type).toEqual(['integer', 'null']);
     expect(s['properties'].sort.enum).toEqual(['relevance', 'recent', null]);
@@ -69,7 +69,7 @@ describe('strict schemas', () => {
   it('every strict schema compiles, and a strict call with nulls validates once its nulls are dropped', () => {
     const ajv = new Ajv({ strict: false });
     for (const t of tools) ajv.compile(strictSchema(t.parameters as unknown as Record<string, unknown>));
-    const call = { query: 'Kubernetes experts', type: 'person', scope: null, sort: 'recent', limit: null, answer: null };
+    const call = { query: 'Kubernetes experts', type: 'person', scope: null, sort: 'recent', limit: null, answer: null, detail: null };
     expect(ajv.compile(strictSchema(voiceTool('search')!.parameters as unknown as Record<string, unknown>))(call)).toBe(true);
     const dropped = Object.fromEntries(Object.entries(call).filter(([, v]) => v !== null));
     expect(new Ajv({ strict: true }).compile(voiceTool('search')!.parameters)(dropped)).toBe(true);

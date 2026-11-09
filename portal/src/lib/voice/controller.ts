@@ -72,7 +72,7 @@ import { VOICE_PLANNERS, VOICE_RUNNERS } from './actions.ts';
 import { DEFAULT_TOAST_SECONDS } from './work.ts';
 import { VoiceEventLog, argShape, refusalCode, resultSummary, type DockEvent } from './sessionEvents.ts';
 import { RefusalGuard, STOP_NEXT, refusalLine, withNext } from './refusals.ts';
-import { DelegationContext, PAGE_NOTE_REPLACES, modelOutput, summaryLine } from './contextWindow.ts';
+import { DelegationContext, PAGE_NOTE_REPLACES, briefOutput, modelOutput, summaryLine, verbosityNote, type Verbosity } from './contextWindow.ts';
 
 export const TICK_MS = 100;
 export const COMPLETION_GRACE_MS = 1500;
@@ -160,6 +160,8 @@ export interface ControllerOptions {
    * tool result, once per distinct text.
    */
   pageContext?(): string | null;
+  /** The spoken length this device chose (G33, contextWindow.ts voiceVerbosity); terse when absent. */
+  verbosity?(): Verbosity;
 }
 
 interface CallRecord { name: string; status: 'confirming' | 'running' | 'answered' }
@@ -493,6 +495,8 @@ export class VoiceController {
       case 'started':
         this.emit({ kind: 'started' });
         this.dispatch({ type: 'started' });
+        // G33: the device's spoken length, as context (the browser cannot append instructions).
+        this.noteContext(verbosityNote(this.opts.verbosity?.() ?? 'terse'));
         this.notePage();
         return;
       case 'input':
@@ -629,7 +633,8 @@ export class VoiceController {
       this.delegation(delegationId).stopped = true;
     }
     // G31: the model gets the compact form (no links, lists cut to fit); the strip, the log and the kept rows the full one.
-    const wire = JSON.stringify(modelOutput(res.output));
+    // G33: list, search and get hand the model the count, three rows, `more` and a ready `say` line, unless `detail`.
+    const wire = JSON.stringify(modelOutput(briefOutput(name, args, res.output)));
     client.sendToolOutput(callId, wire);
     this.context.result(wire.length, summaryLine(name, res.summary));
     if (verdict?.speak) {

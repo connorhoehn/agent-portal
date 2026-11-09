@@ -469,6 +469,9 @@ const obj = (properties: Record<string, JsonSchema>, required: string[] = []): J
   ({ type: 'object', properties, required, additionalProperties: false });
 const str = (description: string, extra: Partial<JsonSchema> = {}): JsonSchema => ({ type: 'string', description, ...extra });
 const limit: JsonSchema = { type: 'integer', minimum: 1, maximum: 10, description: 'How many results, 1 to 10. Default 5.' };
+
+/** G33: list, search and get hand the model a count, three rows and `more` unless the user asked for everything. */
+const detail: JsonSchema = { type: 'boolean', description: 'True only when the user asked for every row ("read them", "all of them"): the full list instead of the count and the top three.' };
 const searchScope = str('Where to search: "workspace" (the default) or one initiative id, to search inside that initiative only.', { minLength: 1, maxLength: 200 });
 
 export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
@@ -497,6 +500,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       sort: str('relevance (default) or recent.', { enum: ['relevance', 'recent'] }),
       limit,
       answer: { type: 'boolean', description: 'True when the user asked a question that wants one fact (who, how many, which): the backend answers it from the index, with the records it read.' },
+      detail,
     }, ['query']),
     kind: 'read', backing: 'search', confirm: false, action: null, says: 'Searching for the Kubernetes experts.', tenants: VOICE_TENANTS,
   },
@@ -512,6 +516,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       }),
       scope: str('"this-page": the rows the page in view already shows (an initiative\'s work, in the page\'s order) instead of reading again; filter and limit still apply.', { enum: ['this-page'] }),
       limit,
+      detail,
     }, ['kind']),
     kind: 'read', backing: 'search', confirm: false, action: null, says: 'Looking up your initiatives.', tenants: VOICE_TENANTS,
   },
@@ -520,6 +525,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
     parameters: obj({
       ref: str('A row\'s ref exactly as a result gave it (e.g. "initiative:p-12"), or its position in the last result ("1" for the first row). Never a name or a path.', { minLength: 1, maxLength: 200 }),
       part: str('One part of the record instead of its summary, where the kind has it (its work, steps, members, versions…).', { enum: getParts(null) }),
+      detail,
     }, ['ref']),
     kind: 'read', backing: 'search', confirm: false, action: null, says: 'Reading that initiative.', tenants: VOICE_TENANTS,
   },

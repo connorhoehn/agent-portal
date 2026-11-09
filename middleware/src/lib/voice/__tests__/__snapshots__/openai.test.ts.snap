@@ -206,6 +206,13 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
             "null",
           ],
         },
+        "detail": {
+          "description": "True only when the user asked for every row ("read them", "all of them"): the full list instead of the count and the top three.",
+          "type": [
+            "boolean",
+            "null",
+          ],
+        },
         "limit": {
           "description": "How many results, 1 to 10. Default 5.",
           "type": [
@@ -262,6 +269,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
         "sort",
         "limit",
         "answer",
+        "detail",
       ],
       "type": "object",
     },
@@ -274,6 +282,13 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "parameters": {
       "additionalProperties": false,
       "properties": {
+        "detail": {
+          "description": "True only when the user asked for every row ("read them", "all of them"): the full list instead of the count and the top three.",
+          "type": [
+            "boolean",
+            "null",
+          ],
+        },
         "filter": {
           "additionalProperties": false,
           "properties": {
@@ -382,6 +397,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
         "filter",
         "scope",
         "limit",
+        "detail",
       ],
       "type": "object",
     },
@@ -394,6 +410,13 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "parameters": {
       "additionalProperties": false,
       "properties": {
+        "detail": {
+          "description": "True only when the user asked for every row ("read them", "all of them"): the full list instead of the count and the top three.",
+          "type": [
+            "boolean",
+            "null",
+          ],
+        },
         "part": {
           "description": "One part of the record instead of its summary, where the kind has it (its work, steps, members, versions…).",
           "enum": [
@@ -426,6 +449,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
       "required": [
         "ref",
         "part",
+        "detail",
       ],
       "type": "object",
     },

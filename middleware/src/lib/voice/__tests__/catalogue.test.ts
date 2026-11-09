@@ -519,6 +519,32 @@ describe('the rendered session', () => {
     expect(text).toMatch(/Never invent names, results/);
   });
 
+  // G33 (terse by default) and G34 (no silent delegations): the contracts both instruction sets carry.
+  it('the voice is terse, answers what it already has without delegating, and delegates only for a tool', () => {
+    for (const tenant of VOICE_TENANTS) {
+      const text = voiceInstructions(tenant, toolsForTenant(tenant));
+      expect(text).toMatch(/One short sentence per turn/);
+      expect(text).toMatch(/count before any list/);
+      expect(text).toMatch(/at most three items unless the user says "read them" or "all of them"/);
+      expect(text).toMatch(/No executive summaries, no restating what the user said, and never narrate a page the user is already looking at/);
+      expect(text).toMatch(/Answer without delegating when you already have what is needed[^\n]*"what did you just say"/);
+      expect(text).toMatch(/Delegate only when a tool is needed, and once per request/);
+      expect(text.length).toBeLessThanOrEqual(20_000);
+    }
+    const backend = delegationInstructions('orgiq');
+    expect(backend).toMatch(/You exist to call them/);
+    expect(backend).toMatch(/When no function applies to the request, reply immediately with one short sentence/);
+    expect(backend).toMatch(/pass detail true only when the user asked for every row/);
+    expect(backend).toMatch(/Never repeat a refused call with the same arguments/);
+  });
+
+  it('list, search and get take detail (G33), a boolean the model sets only for every row', () => {
+    for (const name of ['list', 'search', 'get']) {
+      expect((voiceTool(name)!.parameters.properties['detail'] as { type: string }).type).toBe('boolean');
+      expect(voiceTool(name)!.parameters.required).not.toContain('detail');
+    }
+  });
+
   it('the backend is told never to invent a result either', () => {
     expect(delegationInstructions('orgiq')).toMatch(/never invent names, people, results or statuses: report only what a function returned/);
   });
