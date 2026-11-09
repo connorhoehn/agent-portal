@@ -687,3 +687,57 @@ test('the catalogue has a runner for every tool', async () => {
   const { VOICE_RUNNERS } = await import('../actions.ts');
   assert.deepEqual(Object.keys(VOICE_RUNNERS).sort(), VOICE_TOOLS.map((t) => t.name).sort());
 });
+
+// ── G50: near-match names ──
+
+test('G50 nameScore: case, punctuation, plurals and run-together words are the same name; a near name scores at least 0.5', async () => {
+  const { nameScore, NEAR_MATCH, kindWords } = await import('../tools.ts');
+  assert.equal(nameScore('Onboarding flow', 'on-boarding flow'), 1);
+  assert.equal(nameScore('Dashboard', 'dashboards'), 1);
+  assert.equal(nameScore('Résumé review', 'resume review'), 1);
+  assert.ok(nameScore('Onboarding flow', 'the on-boarding work item', kindWords('work-item', 'work items')) >= NEAR_MATCH);
+  assert.ok(nameScore('general-chat', 'general', kindWords('channel', 'channels')) >= NEAR_MATCH);
+  assert.ok(nameScore('Rotate the signing keys', 'on-boarding') < NEAR_MATCH);
+  assert.equal(nameScore('Anything', ''), 0);
+});
+
+test('G50 acceptance: "open the on-boarding work item" offers "Onboarding flow" on the choice card; "open channel general" with #general-chat is a choice', async () => {
+  const { fetch } = fakeFetch([route('GET', '/api/graph/work', 200, [
+    { id: 'w-9', title: 'Onboarding flow', projectId: 'p-auth' }, { id: 'w-2', title: 'Rotate the signing keys', projectId: 'p-auth' },
+  ])]);
+  const c = toolContext({ fetch, results: new ResultMemory() });
+  const work = await runVoiceTool('open', { kind: 'work-item', name: 'the on-boarding work item' }, c);
+  assert.equal(work.output['kind'], 'ambiguous', 'a choice, not not-found');
+  assert.deepEqual(work.output['candidates'], [{ ref: 'work-item:w-9', title: 'Onboarding flow', kind: 'work-item', href: '/iq/projects/p-auth' }]);
+  assert.deepEqual(c.navigations, [], 'nothing opens until the user picks');
+  // The same name in other words opens at once.
+  await runVoiceTool('open', { kind: 'work-item', name: 'on-boarding flow' }, c);
+  assert.deepEqual(c.navigations, ['/iq/projects/p-auth']);
+  const social = { api: '/api/social/plane', unavailable: null, send: async () => {}, presence: null, deliveries: new Map() };
+  const { fetch: ch } = fakeFetch([route('GET', '/api/social/plane/channels', 200, { channels: [{ slug: 'general-chat', name: 'general-chat' }, { slug: 'design', name: 'Design reviews' }] })]);
+  const chat = toolContext({ fetch: ch, results: new ResultMemory(), social });
+  const general = await runVoiceTool('open', { kind: 'channel', name: 'general' }, chat);
+  assert.equal(general.output['kind'], 'ambiguous');
+  assert.deepEqual((general.output['candidates'] as Array<Record<string, unknown>>).map((x) => x['title']), ['general-chat']);
+  assert.deepEqual(chat.navigations, []);
+  // Nothing near: not-found, naming the three closest rows of the kind.
+  const none = await runVoiceTool('open', { kind: 'channel', name: 'zebra' }, chat);
+  assert.equal(none.outcome, 'refused');
+  assert.equal(none.output['code'], 'not-found');
+  assert.deepEqual((none.output['closest'] as Array<Record<string, unknown>>).map((x) => x['title']).sort(), ['Design reviews', 'general-chat']);
+});
+
+test('G50: findByName and matchByName offer near names instead of not-found', async () => {
+  const { findByName } = await import('../tools.ts');
+  const { matchByName } = await import('../work.ts');
+  const { fetch } = fakeFetch([route('GET', '/api/graph/work', 200, [{ id: 'w-9', title: 'Onboarding flow', projectId: 'p-auth' }, { id: 'w-2', title: 'Rotate keys', projectId: 'p-auth' }])]);
+  const found = await findByName(toolContext({ fetch, results: new ResultMemory() }), 'work-item', 'onboard docs');
+  assert.ok('result' in found && found.result.output['kind'] === 'ambiguous');
+  assert.deepEqual(('result' in found ? found.result.output['candidates'] as Array<Record<string, unknown>> : []).map((x) => x['ref']), ['work-item:w-9']);
+  const same = await findByName(toolContext({ fetch, results: new ResultMemory() }), 'work-item', 'On-Boarding Flows');
+  assert.ok('row' in same && same.row.id === 'w-9', 'the same name in other words is the row');
+  const bots = [{ name: 'Nightly dependency sweep' }, { name: 'Docs linter' }];
+  assert.deepEqual(matchByName(bots, (b) => b.name, 'dependency sweeps').map((b) => b.name), ['Nightly dependency sweep']);
+  assert.deepEqual(matchByName(bots, (b) => b.name, 'doc-linter').map((b) => b.name), ['Docs linter']);
+  assert.deepEqual(matchByName(bots, (b) => b.name, 'zebra'), []);
+});

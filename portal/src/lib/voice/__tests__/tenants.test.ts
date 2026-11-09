@@ -437,3 +437,19 @@ test('V2-10 in Pipelines: an operator\'s scripted session approves the step wait
     [[`/api/pipelines/approvals/${encodeURIComponent(id)}/decide`, { decision: 'approve', note: null }]]);
   assert.deepEqual(run.calls, [['decide', 'done']]);
 });
+
+test('G50: a near name ("the on-boarding work item" for "Onboarding flow") shows the choice card instead of not-found', async () => {
+  let seen: unknown = null;
+  const run = await scriptedRun('orgiq', {
+    role: 'member', allow: ['Search', 'VoiceNavigate'],
+    call: { name: 'open', arguments: { page: null, ref: null, kind: 'work-item', name: 'the on-boarding work item', params: null }, said: 'Open the on-boarding work item.' },
+    routes: [route('GET', '/api/graph/work', 200, [{ id: 'w-9', title: 'Onboarding flow', projectId: 'p-auth' }, { id: 'w-2', title: 'Rotate keys', projectId: 'p-auth' }])],
+    beforeStop: (c) => {
+      const choice = c.getSnapshot().choice;
+      seen = choice ? choice.candidates.map((x) => [x.title, x.href]) : null;
+      if (choice) c.choose(0);
+    },
+  });
+  assert.deepEqual(seen, [['Onboarding flow', '/iq/projects/p-auth']]);
+  assert.deepEqual(run.ctx.navigations, ['/iq/projects/p-auth']);
+});

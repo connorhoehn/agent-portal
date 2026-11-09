@@ -737,6 +737,62 @@ function kindGate(spec: KindSpec, ctx: ToolContext, action: KindSpec['action'] =
 
 const wordsOf = (s: string): string[] => s.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
 
+// ── near-match names (G50) ──────────────────────────────────────────────────
+//
+// "the on-boarding work item" against a row titled "Onboarding flow", "general" against "#general-chat": a name is
+// compared as words (lower case, accents and punctuation gone, a plural made singular, filler and the kind's own
+// words dropped), whole (the words run together, so "on-boarding" is "onboarding") and word by word (a word the user
+// said equal to, or the start of, a word of the title). A score of 1 is the same name; NEAR_MATCH and above is offered
+// as a numbered choice instead of "not found"; below it nothing is offered, and the refusal names the closest rows.
+
+export const NEAR_MATCH = 0.5;
+/** Words that never name a record: articles, politeness, and generic record words. */
+const NAME_FILLER: ReadonlySet<string> = new Set(['the', 'a', 'an', 'my', 'our', 'your', 'this', 'that', 'please', 'called', 'named', 'one', 'of', 'for']);
+const singular = (w: string): string => (w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w);
+
+/** A name as the words it compares by. `drop`: the kind's own words ("channel", "work", "item"), dropped when others remain. */
+export function nameWords(s: string, drop: ReadonlySet<string> = new Set()): string[] {
+  const all = (s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).map(singular);
+  const meaningful = all.filter((w) => !NAME_FILLER.has(w));
+  const named = meaningful.filter((w) => !drop.has(w));
+  return named.length ? named : meaningful.length ? meaningful : all;
+}
+
+/** How close `title` is to what the user `said`, 0 to 1 (1: the same name). */
+export function nameScore(title: string, said: string, drop: ReadonlySet<string> = new Set()): number {
+  const s = nameWords(said, drop);
+  const t = nameWords(title);
+  if (!s.length || !t.length) return 0;
+  const cs = s.join('');
+  const ct = t.join('');
+  if (cs === ct) return 1;
+  let best = 0;
+  if (cs.length >= 3 && ct.startsWith(cs)) best = 0.85;
+  else if (ct.length >= 3 && cs.startsWith(ct)) best = 0.75;
+  else if (cs.length >= 4 && ct.includes(cs)) best = 0.6;
+  const hit = (w: string, h: string) => h === w || (w.length >= 3 && h.startsWith(w)) || (h.length >= 4 && w.startsWith(h));
+  const said_ = s.filter((w) => t.some((h) => hit(w, h))).length;
+  const title_ = t.filter((h) => s.some((w) => hit(w, h))).length;
+  return Math.max(best, 0.7 * (said_ / s.length) + 0.3 * (title_ / t.length));
+}
+
+/** The kind's own words ("work item" for work-item, "channel" for channels), dropped from a name the user said. */
+export function kindWords(kind: string, label?: string): ReadonlySet<string> {
+  return new Set([...nameWords(kind.replace(/-/g, ' ')), ...(label ? nameWords(label) : [])]);
+}
+
+/** Rows scored against `said`, best first, at or above `min`. */
+export function nearMatches<T>(rows: readonly T[], title: (r: T) => string, said: string, drop?: ReadonlySet<string>, min = NEAR_MATCH): Array<{ row: T; score: number }> {
+  return rows.map((row) => ({ row, score: nameScore(title(row), said, drop) })).filter((x) => x.score >= min)
+    .sort((a, b) => b.score - a.score);
+}
+
+/** The three rows closest to `said` (any score), for a refusal that found nothing near: so the voice can offer them. */
+function closestRows(kind: string, rows: readonly ShapedRow[], said: string, drop: ReadonlySet<string>): Array<{ ref: string; title: string }> {
+  return rows.map((r) => ({ r, score: nameScore(r.title, said, drop) })).sort((a, b) => b.score - a.score).slice(0, 3)
+    .map(({ r }) => ({ ref: `${kind}:${r.id}`, title: r.title }));
+}
+
 /** The row as the model hears it: the typed ref, what it is called, where it stands, when, and its page. */
 function rowOut(kind: string, r: ShapedRow) {
   return { ref: `${kind}:${r.id}`, title: r.title, subtitle: r.subtitle, status: r.status, at: r.at, href: r.href };
@@ -963,13 +1019,20 @@ export async function findByName(ctx: ToolContext, kind: string, name: string, o
   const exact = rows.filter((r) => r.title.toLowerCase() === q);
   const hits = exact.length ? exact : needles.length ? rows.filter((r) => needles.every((w) => `${r.title} ${r.subtitle ?? ''}`.toLowerCase().includes(w))) : [];
   if (hits.length === 1) return { row: hits[0]! };
-  if (hits.length > 1) {
-    const shown = hits.slice(0, MAX_ROWS);
+  // G50: nothing holds every word: the near names (case, punctuation, plurals, run-together words), one of them the same name.
+  const drop = kindWords(kind, spec.label);
+  const near = hits.length ? [] : nearMatches(rows, (r) => r.title, said, drop);
+  if (near.length && near[0]!.score === 1 && (near.length === 1 || near[1]!.score < 1)) return { row: near[0]!.row };
+  const choices = hits.length ? hits : near.map((x) => x.row);
+  if (choices.length) {
+    const shown = choices.slice(0, MAX_ROWS);
     keepShaped(ctx, kind, shown);
-    return { result: ambiguous(`Several ${spec.label} match "${name}". Read them out and ask which; then ask again with its ref or position.`,
+    return { result: ambiguous(hits.length ? `Several ${spec.label} match "${name}". Read them out and ask which; then ask again with its ref or position.`
+      : `No ${one} is called exactly "${name}"; the nearest ${shown.length === 1 ? 'is' : 'are'} below. Read ${shown.length === 1 ? 'it' : 'them'} out and ask which; then ask again with its ref or position.`,
       shown.map((r) => ({ ref: `${kind}:${r.id}`, title: r.title, subtitle: r.subtitle, status: r.status }))) };
   }
-  return { result: refused(`I found no ${one} called "${name}" that you can act on.`) };
+  const closest = closestRows(kind, rows, said, drop);
+  return { result: refused(`I found no ${one} called "${name}" that you can act on.${closest.length ? ` The closest: ${closest.map((c) => c.title).join(', ')}.` : ''}`, { code: 'not-found', ...(closest.length ? { closest } : {}) }) };
 }
 
 /** Ordinal words a user says to pick a row of a choice ("the second one", "number three", "4"). */
@@ -1054,15 +1117,26 @@ async function openByName(kind: string, name: string, ctx: ToolContext): Promise
     if (running.length === 1) hits = running;
   }
   hits = hits.filter((r) => r.href && openableHref(r.href, ctx));
-  if (hits.length === 1) return opened(`${kind}:${hits[0]!.id}`, hits[0]!.title, hits[0]!.href!, ctx);
-  if (hits.length > 1) {
-    const shown = hits.slice(0, MAX_ROWS);
+  // G50: a name compared as words (case, punctuation, plurals, the kind's own words, run-together words), scored.
+  const drop = kindWords(kind, spec.label);
+  const openable = rows.filter((r) => r.href && openableHref(r.href, ctx));
+  // One row holding every word opens at once when it is the name (or a computer by its initiative); a looser one is offered.
+  if (hits.length === 1 && (exact.length || kind === 'computer' || nameScore(hits[0]!.title, name, drop) >= 0.9)) return opened(`${kind}:${hits[0]!.id}`, hits[0]!.title, hits[0]!.href!, ctx);
+  const near = hits.length ? [] : nearMatches(openable, (r) => r.title, name, drop);
+  if (near.length && near[0]!.score === 1 && (near.length === 1 || near[1]!.score < 1)) return opened(`${kind}:${near[0]!.row.id}`, near[0]!.row.title, near[0]!.row.href!, ctx);
+  const choices = hits.length ? hits : near.map((x) => x.row);
+  if (choices.length) {
+    const shown = choices.slice(0, MAX_ROWS);
     keepShaped(ctx, kind, shown);
-    return ambiguous(`Several ${spec.label} match "${name}". Read them out and ask which; the user picks by number or on the card.`,
+    const exactly = hits.length > 1 ? `Several ${spec.label} match "${name}".` : `No ${spec.one ?? spec.label.replace(/s$/, '')} is called exactly "${name}"; ${shown.length === 1 ? 'this one is near' : 'these are near'}.`;
+    return ambiguous(`${exactly} Read ${shown.length === 1 ? 'it' : 'them'} out and ask which; the user picks by number or on the card.`,
       shown.map((r) => ({ ref: `${kind}:${r.id}`, title: r.title, subtitle: r.subtitle, kind, href: r.href })));
   }
   const page = nearestPage(ctx, spec.href('x', {}));
-  return refused(`I found no ${spec.one ?? spec.label.replace(/s$/, '')} called "${name}".`, page ? { nearest: { page: page.pageId, label: page.label } } : {});
+  // Nothing near: name the three closest rows of the kind, so the voice can offer them instead of a dead end.
+  const closest = closestRows(kind, openable, name, drop);
+  return refused(`I found no ${spec.one ?? spec.label.replace(/s$/, '')} called "${name}".${closest.length ? ` The closest: ${closest.map((c) => c.title).join(', ')}.` : ''}`,
+    { code: 'not-found', ...(closest.length ? { closest } : {}), ...(page ? { nearest: { page: page.pageId, label: page.label } } : {}) });
 }
 
 /** `href` with `?tab=` set (G49), keeping its other parameters except an open item, which belongs to the Work tab. */

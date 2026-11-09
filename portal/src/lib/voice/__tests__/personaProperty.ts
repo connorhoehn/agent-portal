@@ -72,7 +72,8 @@ export function strings(v: unknown, out: Set<string> = new Set()): Set<string> {
 }
 
 /** Keys whose values are the fixtures' vocabulary (a status, a kind, a label), not a row's name: never "foreign". */
-const VOCAB_KEYS = new Set(['rowsLabel', 'status', 'kind', 'type', 'priority', 'visibility', 'direction', 'severity']);
+// `path`: a page's route (the page in view's), which both personas reach; a row's own link is its href (G50: a near-name choice names the persona's own rows' hrefs, which begin with it).
+const VOCAB_KEYS = new Set(['rowsLabel', 'status', 'kind', 'type', 'priority', 'visibility', 'direction', 'severity', 'path']);
 
 /** The strings of a world that name its rows: every string but the vocabulary's. */
 export function rowStrings(v: unknown, out: Set<string> = new Set()): Set<string> {

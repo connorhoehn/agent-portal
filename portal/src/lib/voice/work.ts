@@ -56,7 +56,7 @@ import type { Notification } from '@connorhoehn/realtime-modules/client';
 import { QUEUE_WORK_ACTIONS, type QueueWorkKind } from './catalogue.ts';
 import { DEFAULT_DEVBOX_MODEL, DEVBOX_MODELS } from '../devboxModels.ts';
 import {
-  ambiguous, done, failed, findByName, localHref, once, pageRowAt, pageRowNamed, qs, readFailure, readJson, refused,
+  ambiguous, done, failed, findByName, localHref, nearMatches, once, pageRowAt, pageRowNamed, qs, readFailure, readJson, refused,
   type ConfirmPlan, type JobFollow, type JobTracking, type QueuedJob, type ToolContext, type ToolResult, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 import type { PageRow } from './pageContext.ts';
@@ -91,16 +91,24 @@ export function sweepTitle(sweep: SweepName | null): string {
 const STOP = new Set(['the', 'a', 'an', 'bot', 'bots', 'run', 'runs', 'pipeline', 'pipelines', 'runbook', 'dry', 'for', 'of', 'now', 'please', 'my']);
 const tokens = (s: string): string[] => s.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 
-/** Rows whose name holds every meaningful word the user said (an exact name wins). */
+/**
+ * Rows whose name holds every meaningful word the user said (an exact name wins); when none does (G50), the near
+ * names (case, punctuation, plurals, run-together words: "on-boarding" is "Onboarding flow"), best first, so a caller
+ * offers them (several) or names the one on its confirm card, never "not found" for a near miss.
+ */
 export function matchByName<T>(rows: readonly T[], name: (r: T) => string, said: string): T[] {
   const want = tokens(said).filter((w) => !STOP.has(w));
   const exact = rows.filter((r) => tokens(name(r)).join(' ') === tokens(said).join(' '));
   if (exact.length) return exact;
   if (!want.length) return [];
-  return rows.filter((r) => {
+  const all = rows.filter((r) => {
     const have = tokens(name(r));
     return want.every((w) => have.some((h) => h === w || (w.length >= 3 && h.startsWith(w))));
   });
+  if (all.length) return all;
+  const near = nearMatches(rows, name, want.join(' '), STOP);
+  // The same name in other words is the one; else every near row, best first.
+  return near.length && near[0]!.score === 1 && (near.length === 1 || near[1]!.score < 1) ? [near[0]!.row] : near.map((x) => x.row);
 }
 
 // ── planner and runner ──────────────────────────────────────────────────────
