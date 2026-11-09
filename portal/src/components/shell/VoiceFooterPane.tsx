@@ -37,8 +37,9 @@
 // (lib/voice/sessionEvents.ts); with "Keep transcripts on this device" on
 // (lib/voice/transcriptKeep.ts, default off) this pane saves the session's
 // turns to IndexedDB under its id, never sending them; the dock's history
-// control opens System › Voice log (/iq/voice-log/<id>, an orgiq page on the
-// dev server only) at the session last minted, else the latest.
+// control opens System › Logging on its Voice source (/iq/logging/voice/<id>,
+// G37; an orgiq page on the dev server only) at the session last minted, else
+// the latest.
 //
 // Inbound awareness (G23): the pane listens where the shell already does: the
 // app-wide notification inbox (SharedNotificationsProvider) and the shell's
@@ -113,7 +114,7 @@ const WORK_EVENT_KINDS: ReadonlySet<string> = new Set(['sweep', 'bot-run', 'job'
 /** Social actions whose grant comes from the plane outside the Social tenant (routes/social-plane.ts PLANE_ACTIONS). */
 const PLANE_ACTIONS: ReadonlySet<Action> = new Set<Action>(['PostMessage', 'StartCall']);
 
-/** System › Voice log is registered under the dev server only (App.tsx features.voiceLog), as is this control; it is an orgiq page, so other tenants' footers leave it out. */
+/** System › Logging (G37) is registered under the dev server only (App.tsx features.voiceLog), as is this control; it is an orgiq page, so other tenants' footers leave it out. */
 const VOICE_LOG_AVAILABLE = features.voiceLog;
 /** How often a kept transcript is saved while the words stream in. */
 const KEEP_SAVE_MS = 1000;
@@ -372,7 +373,7 @@ function VoiceFooterPane() {
       const path = window.location.pathname;
       return pageContextNote({ tenant: live.current.tenant, pathname: path, pageId: pageIdFor(PAGES, live.current.tenant, path), page: pageContextFor(path) });
     },
-    // G33: this device's spoken length (the Voice log's "Short answers" switch), read at each session start.
+    // G33: this device's spoken length (Logging's "Short answers" switch on its Voice source), read at each session start.
     verbosity: voiceVerbosity,
     // G35: a dropped session's id for 60 s, and whether the page is hidden when the connection fails.
     resume: resumeStore,

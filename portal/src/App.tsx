@@ -10,14 +10,15 @@ import { OptionalGatewayProvider } from './components/OptionalGatewayProvider';
 import { SharedNotificationsProvider } from './components/shell/SharedNotifications';
 // Eager: a redirect has nothing to lazy-load and must not flash a spinner.
 import RunbooksDistillationRedirect from './pages/runbooks/DistillationRedirect';
+import LegacyVoiceLogRedirect from './pages/logging/LegacyVoiceLogRedirect';
 import { ComputeHost } from './components/compute/ComputeHost';
 import { LoadingState } from '@connorhoehn/ui-components/shared';
 
 // Dev-only: the design reference sheet (docs/design/README.md). The ternary keeps
 // the chunk out of production builds (cast: this repo has no vite-env.d.ts).
 const ReferenceSheet = (import.meta as unknown as { env: { DEV: boolean } }).env.DEV ? lazy(() => import('./dev/ReferenceSheet')) : null;
-// System › Voice log (G20): the dev server with the voice navigator on, as the dock itself.
-const VoiceLogPage = (import.meta as unknown as { env: { DEV: boolean } }).env.DEV && features.voiceLog ? lazy(() => import('./pages/voice/VoiceLogPage')) : null;
+// System › Logging (G37; the Voice log of G20 is its Voice source): the dev server with the voice navigator on, as the dock itself.
+const LoggingPage = (import.meta as unknown as { env: { DEV: boolean } }).env.DEV && features.voiceLog ? lazy(() => import('./pages/logging/LoggingPage')) : null;
 const AgentFlowPage = lazy(() => import('./pages/AgentFlowPage'));
 const AgentDetailPage = lazy(() => import('./pages/iq/AgentDetailPage'));
 const ScoresPage = lazy(() => import('./pages/ScoresPage'));
@@ -551,9 +552,11 @@ export function App() {
           <Route path="decisions/:id" element={<Page element={<DecisionsPage />} />} />
           <Route path="projects" element={<Page element={<ProjectsPage />} />} />
           <Route path="projects/:id" element={<Page element={<ProjectDetailPage />} />} />
-          {/* System › Voice log: the caller's own voice sessions as a list rail, one opened beside it. */}
-          {VoiceLogPage && <Route path="voice-log" element={<Page element={<VoiceLogPage />} />} />}
-          {VoiceLogPage && <Route path="voice-log/:sessionId" element={<Page element={<VoiceLogPage />} />} />}
+          {/* System › Logging: one source's records as a list rail (voice, agents, pipelines, jobs), one opened beside it;
+              the Voice log's old addresses redirect to the same record. */}
+          {LoggingPage && <Route path="logging/*" element={<Page element={<LoggingPage />} />} />}
+          {LoggingPage && <Route path="voice-log" element={<LegacyVoiceLogRedirect />} />}
+          {LoggingPage && <Route path="voice-log/:sessionId" element={<LegacyVoiceLogRedirect />} />}
           {/* Initiative status deck (agentic-flows slice 6): reached from the
               initiative page, not the rail. The server gates every read. */}
           <Route path="decks/:deckId" element={<Page element={<InitiativeDeckPage />} />} />

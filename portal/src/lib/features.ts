@@ -49,7 +49,7 @@ const VOICE_NAVIGATOR = voiceNavigatorEnabled((import.meta as unknown as { env?:
 
 export const features = {
   voiceNavigator: VOICE_NAVIGATOR,
-  /** System › Voice log (/iq/voice-log): the dev server with the voice navigator on — the route, its rail item and the dock's log control. */
+  /** System › Logging (/iq/logging, G37; was the Voice log): the dev server with the voice navigator on — the route, its rail item and the dock's log control. */
   voiceLog: (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true && VOICE_NAVIGATOR,
 } as const;
 

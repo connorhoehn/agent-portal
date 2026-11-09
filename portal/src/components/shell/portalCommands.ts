@@ -243,8 +243,8 @@ export const PAGES: readonly PageEntry[] = [
     keywords: ['policy', 'sandbox', 'authz', 'dry-run', 'cedar'] },
   { label: 'Settings',           hint: 'User preferences',                    path: '/settings',                                   tenant: 'universal', group: 'System', pageId: 'settings',
     keywords: ['settings', 'preferences'] },
-  { label: 'Voice log',          hint: 'Your voice sessions: tool calls, refusals, events', path: '/iq/voice-log',                  tenant: 'orgiq',  group: 'System', pageId: 'system-voice-log', feature: 'voiceLog',
-    keywords: ['voice', 'log', 'session', 'transcript', 'history', 'tool call'] },
+  { label: 'Logging',            hint: 'Voice sessions, agent runs, pipelines, jobs', path: '/iq/logging',                        tenant: 'orgiq',  group: 'System', pageId: 'system-logging', feature: 'voiceLog',
+    keywords: ['logging', 'log', 'voice', 'session', 'transcript', 'history', 'tool call', 'agent run', 'bot run', 'invocation', 'pipeline', 'job', 'sweep', 'trace'] },
   // Assessment tenant — its own map (Assess / Analyze / Informatics / System),
   // mirroring NAV_ITEMS in Layout.tsx. Without these an assessment session's
   // palette listed nothing but Settings.

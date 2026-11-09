@@ -114,3 +114,10 @@ test('Runbooks trails: Library, a runbook, Proposals and a proposal, Briefs and 
 test('design breadcrumbs name the collection once', () => {
   assert.deepEqual(resolveBreadcrumbs('/iq/designs/des-obs-dashboards').map(c => c.label).slice(0, -1), ['Designs']);
 });
+
+test('Logging (G37): System › Logging › the record, whatever the source and kind', () => {
+  assert.deepEqual(resolveBreadcrumbs('/iq/logging'), [{ label: 'System' }, { label: 'Logging' }]);
+  assert.deepEqual(resolveBreadcrumbs('/iq/logging/agents'), [{ label: 'System' }, { label: 'Logging' }]);
+  assert.deepEqual(resolveBreadcrumbs('/iq/logging/voice/vs_1'), [{ label: 'System' }, { label: 'Logging', path: '/iq/logging' }, { label: 'vs_1', id: 'vs_1' }]);
+  assert.deepEqual(resolveBreadcrumbs('/iq/logging/jobs/sweep-runs/sr-1').map((c) => c.label), ['System', 'Logging', 'sr-1']);
+});

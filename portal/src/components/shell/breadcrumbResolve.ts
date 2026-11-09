@@ -117,9 +117,12 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
         if (!b) return [{ label: 'Operate' }, { label: 'Runs' }];
         return [{ label: 'Operate' }, { label: 'Runs', path: '/iq/runs' }, { label: `Run ${shortId(b)}`, id: b }];
       case 'communication': return [{ label: 'Engage' }, { label: 'Communication' }];
-      case 'voice-log':
-        if (!b) return [{ label: 'System' }, { label: 'Voice log' }];
-        return [{ label: 'System' }, { label: 'Voice log', path: '/iq/voice-log' }, { label: shortId(b), id: b }];
+      // Logging (G37): /iq/logging/<source>[/<kind>]/<id>; the record is the last segment.
+      case 'logging': {
+        const rec = segs.length > 3 ? segs[segs.length - 1] : undefined;
+        if (!rec) return [{ label: 'System' }, { label: 'Logging' }];
+        return [{ label: 'System' }, { label: 'Logging', path: '/iq/logging' }, { label: shortId(rec), id: rec }];
+      }
       case 'documents':
         return [{ label: 'Engage' }, { label: 'Search', path: '/iq/search' }, ...(b ? [{ label: shortId(b), id: b }] : [])];
       case 'decks':

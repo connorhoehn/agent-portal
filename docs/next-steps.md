@@ -464,6 +464,8 @@ Left from the build: command output cannot be written into the library's shell t
 
 G38 voice settings (8 November 2026): Settings › Voice picks the voice (21 described presets, `marin`, `cedar`, and designed voices from `VOICE_CUSTOM_VOICES`), a speaking style and a pace, stored per person in `voice_settings` and applied at mint as the voice plus words-only instruction lines; no real-person imitation (`docs/voice-navigator-gaps.md` G38).
 
+G37 (8 November): System › Voice log became **Logging** at `/iq/logging` (page id `system-logging`), one list rail with four read-only sources (Voice, Agents, Pipelines, Jobs and sweeps), each read through its own page's route and gate; `/iq/voice-log` redirects (docs/voice-navigator-gaps.md G37).
+
 ### Gaps (8 November 2026)
 
 `docs/voice-navigator-gaps.md` is the loop-executable list of what the build left open: a coverage matrix of the owner's utterances against the catalogue, each gap with its root cause and smallest fix, the three open questions decided (every tenant gets the read tools, a shared budget plus `VOICE_DAILY_MINUTES=60`, a batch cap of three computers), and packages G1 to G18.

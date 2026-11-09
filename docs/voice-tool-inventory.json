@@ -2602,8 +2602,8 @@
    ]
   },
   {
-   "id": "system-voice-log",
-   "path": "/iq/voice-log",
+   "id": "system-logging",
+   "path": "/iq/logging",
    "tenants": [
     "orgiq"
    ]
@@ -4737,7 +4737,7 @@
   {"method":"PAGE","path":"/admin/identity/users","source":"portal/src/components/shell/portalCommands.ts:239","tenants":["admin"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Identity Users","group":"System","roles":["hr-admin"],"pageId":"identity-users","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
   {"method":"PAGE","path":"/admin/identity/test","source":"portal/src/components/shell/portalCommands.ts:241","tenants":["admin"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Policy sandbox","group":"System","roles":["hr-admin"],"pageId":"identity-policy-sandbox","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
   {"method":"PAGE","path":"/settings","source":"portal/src/components/shell/portalCommands.ts:243","tenants":["universal"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Settings","group":"System","roles":null,"pageId":"settings","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/iq/voice-log","source":"portal/src/components/shell/portalCommands.ts:245","tenants":["orgiq"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Voice log","group":"System","roles":null,"pageId":"system-voice-log","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/iq/logging","source":"portal/src/components/shell/portalCommands.ts:245","tenants":["orgiq"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Logging","group":"System","roles":null,"pageId":"system-logging","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
   {"method":"PAGE","path":"/assessment/teams","source":"portal/src/components/shell/portalCommands.ts:247","tenants":["assessment"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Dashboard","group":"Assess","roles":null,"pageId":"teams","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
   {"method":"PAGE","path":"/assessment/communication","source":"portal/src/components/shell/portalCommands.ts:252","tenants":["assessment"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Communication","group":"Assess","roles":null,"pageId":"communication","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
   {"method":"PAGE","path":"/assessment/submissions","source":"portal/src/components/shell/portalCommands.ts:254","tenants":["assessment"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Submissions","group":"Assess","roles":null,"pageId":"submissions","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},

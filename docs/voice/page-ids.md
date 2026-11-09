@@ -26,7 +26,7 @@ Every palette page (`PAGES` in `portal/src/components/shell/portalCommands.ts`) 
 - `score-compare` → /iq/scores/compare (Engage: Score compare)
 - `prompt-ops-deployed` → /iq/prompt-ops (Design: What is deployed)
 - `prompt-rollout` → /iq/canary (Design: Rollout)
-- `system-voice-log` → /iq/voice-log (System: Voice log; dev server with the voice navigator on)
+- `system-logging` → /iq/logging (System: Logging; dev server with the voice navigator on)
 
 ## admin (39)
 

@@ -183,7 +183,7 @@ export const NAVIGATE_PAGES: ReadonlyArray<{ id: string; path: string; tenants: 
   { id: 'identity-users', path: '/admin/identity/users', tenants: ['orgiq'], roles: ['hr-admin'] },
   { id: 'identity-policy-sandbox', path: '/admin/identity/test', tenants: ['orgiq'], roles: ['hr-admin'] },
   { id: 'settings', path: '/settings', tenants: ['*'] },
-  { id: 'system-voice-log', path: '/iq/voice-log', tenants: ['orgiq'] },
+  { id: 'system-logging', path: '/iq/logging', tenants: ['orgiq'] },
   { id: 'teams', path: '/assessment/teams', tenants: ['assessment'] },
   { id: 'communication', path: '/assessment/communication', tenants: ['assessment'] },
   { id: 'submissions', path: '/assessment/submissions', tenants: ['assessment'] },

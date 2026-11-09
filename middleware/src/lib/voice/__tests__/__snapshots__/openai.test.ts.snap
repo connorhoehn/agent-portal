@@ -118,7 +118,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
             "identity-users",
             "identity-policy-sandbox",
             "settings",
-            "system-voice-log",
+            "system-logging",
             "workspaces",
             null,
           ],

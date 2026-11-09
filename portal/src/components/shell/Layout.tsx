@@ -231,8 +231,8 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/access/audit',         label: 'Audit',         tenant: 'access', group: 'Govern' },
   { path: '/access/configuration', label: 'Configuration', tenant: 'access', group: 'System', requireRoles: ['access-admin', 'admin'] },
   { path: '/settings',      label: 'Settings',    tenant: 'universal', group: 'System' },
-  // The caller's own voice sessions (G20): dev server + the voice navigator flag, like its route.
-  ...(features.voiceLog ? [{ path: '/iq/voice-log', label: 'Voice log', tenant: 'orgiq' as const, group: 'System' }] : []),
+  // Logging (G37; the voice sessions of G20 are one source): dev server + the voice navigator flag, like its route.
+  ...(features.voiceLog ? [{ path: '/iq/logging', label: 'Logging', tenant: 'orgiq' as const, group: 'System' }] : []),
 ];
 
 // Platform/admin surfaces, gated by role and grouped SDLC-first.

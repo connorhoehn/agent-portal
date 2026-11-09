@@ -1,15 +1,13 @@
-// The Voice log view (G20): a fixture session rendered through the real page
-// component (bundled with esbuild, rendered with react-dom/server) at its
-// System › Voice log route, and the model's pure formatting and copy.
+// The Voice log (G20), now System › Logging's Voice source (G37): a fixture
+// session rendered through the real Logging view (bundled with esbuild,
+// rendered with react-dom/server) at its route, and the model's pure
+// formatting and copy.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dayGroups, eventData, logJson, parseRange, sessionFacts, sessionHref, sessionSubline, sessionsApi, sinceFor, type VoiceSessionDetail, type VoiceSessionListItem } from '../voiceLogModel.ts';
+import { dayGroups, eventData, logJson, parseRange, sessionFacts, sessionHref, sessionSubline, sessionsApi, sinceFor, voiceRecord, voiceRows, type VoiceSessionDetail, type VoiceSessionListItem } from '../voiceLogModel.ts';
+import { renderLogging } from '../../logging/__tests__/renderLogging.ts';
 
-const PORTAL = fileURLToPath(new URL('../../../../', import.meta.url));
-const OUT = `${PORTAL}node_modules/.cache/voice-log-test`;
 const ID = 'vs_00000000-0000-0000-0000-0000000000dd';
 
 const ITEM: VoiceSessionListItem = {
@@ -27,29 +25,13 @@ const DETAIL: VoiceSessionDetail = {
   ],
 };
 
-async function renderView(props: Record<string, unknown>, at = `/iq/voice-log/${ID}`): Promise<string> {
-  const { build } = await import('esbuild');
-  mkdirSync(OUT, { recursive: true });
-  await build({
-    stdin: {
-      contents: `import { renderToStaticMarkup } from 'react-dom/server'; import { createElement } from 'react'; import { MemoryRouter } from 'react-router';
-        import { VoiceLogView } from './src/pages/voice/VoiceLogPage.tsx';
-        export const render = (p, at) => renderToStaticMarkup(createElement(MemoryRouter, { initialEntries: [at] }, createElement(VoiceLogView, p)));`,
-      resolveDir: PORTAL, loader: 'tsx',
-    },
-    bundle: true, platform: 'node', format: 'esm', packages: 'external', jsx: 'automatic', logLevel: 'error', outfile: `${OUT}/view.mjs`,
-    plugins: [{
-      name: 'voice-log-stubs',
-      setup(b) {
-        b.onResolve({ filter: /hooks\/useFetch$/ }, () => ({ path: 'fetch', namespace: 'stub' }));
-        b.onResolve({ filter: /\.css$/ }, () => ({ path: 'css', namespace: 'stub' }));
-        b.onLoad({ filter: /.*/, namespace: 'stub' }, (a) => ({ loader: 'js', contents: a.path === 'fetch' ? 'export const useFetch = () => ({ data: null, error: null });' : '' }));
-      },
-    }],
-  });
-  const m = await import(`${OUT}/view.mjs?${Date.now()}`) as { render(p: unknown, at: string): string };
+function renderView(p: { sessions: VoiceSessionListItem[]; selectedId: string | null; detail: VoiceSessionDetail | null; keep: boolean; transcript: unknown; range?: string }, at = `/iq/logging/voice/${ID}`): Promise<string> {
   const noop = () => {};
-  return m.render({ onKeepChange: noop, onSelect: noop, onCopy: noop, onDownload: noop, ...props }, at);
+  return renderLogging({
+    source: 'voice', rows: voiceRows(p.sessions), selectedKey: p.selectedId ? `session/${p.selectedId}` : null,
+    record: p.detail ? voiceRecord(p.detail) : null, onDownload: noop, ...(p.range ? { range: p.range } : {}),
+    voice: { keep: p.keep, onKeepChange: noop, transcript: p.transcript },
+  }, at);
 }
 
 test('the view renders a fixture session: the rail row, the facts, the tool call, every event and the kept turns', async () => {
@@ -57,14 +39,16 @@ test('the view renders a fixture session: the rail row, the facts, the tool call
     sessions: [ITEM], selectedId: ID, detail: DETAIL, keep: true,
     transcript: { sessionId: ID, savedAt: '2026-11-08T22:10:16Z', turns: [{ role: 'you', text: 'Dispatch the top three', at: 1 }, { role: 'assistant', text: 'That is over the budget.', at: 2 }] },
   });
-  assert.match(html, /data-testid="voice-log"/);
+  assert.match(html, /data-testid="logging"/);
   // The house cascade: the flush list rail (ListRailLayout), the shell trail first, one title.
   assert.match(html, /data-shell-flush/, 'a flush page, not a box inside the content');
   assert.match(html, /data-testid="section-crumbs"/, 'the trail band leads the content column');
   assert.match(html, />System</, 'the trail names the System section');
   assert.equal((html.match(/<h1\b/g) ?? []).length, 1, 'one title');
-  assert.match(html, /<h1[^>]*>[^<]*Voice log/, 'the title is the collection');
-  assert.match(html, /aria-label="Sessions started"/, 'the rail filter row');
+  assert.match(html, /<h1[^>]*>[^<]*Logging/, 'the title is the page, not the source');
+  assert.match(html, />Logging</, 'the trail names Logging');
+  assert.match(html, /aria-label="Source"/, 'the source control leads the filter row');
+  assert.match(html, /aria-label="Started"/, 'the range control');
   assert.match(html, /orgiq · 15s · 1 tool call · closed · scripted/, 'the rail row');
   assert.match(html, new RegExp(ID), 'the session id in the facts');
   assert.match(html, /queue_work/);
@@ -80,18 +64,18 @@ test('the view renders a fixture session: the rail row, the facts, the tool call
 test('without a kept transcript the view says so, and with nothing picked it asks for a pick', async () => {
   const off = await renderView({ sessions: [ITEM], selectedId: ID, detail: DETAIL, keep: false, transcript: null });
   assert.match(off, /Not kept\. Turn on/);
-  const none = await renderView({ sessions: [ITEM], selectedId: null, detail: null, keep: false, transcript: null }, '/iq/voice-log');
-  assert.match(none, /Pick a session/);
+  const none = await renderView({ sessions: [ITEM], selectedId: null, detail: null, keep: false, transcript: null }, '/iq/logging/voice');
+  assert.match(none, /Pick a record/);
   assert.doesNotMatch(none, /Copy as JSON/);
-  const empty = await renderView({ sessions: [], selectedId: null, detail: null, keep: false, transcript: null }, '/iq/voice-log');
+  const empty = await renderView({ sessions: [], selectedId: null, detail: null, keep: false, transcript: null }, '/iq/logging/voice');
   assert.match(empty, /No voice sessions yet/);
-  const narrowed = await renderView({ sessions: [], selectedId: null, detail: null, keep: false, transcript: null, range: 'today' }, '/iq/voice-log');
-  assert.match(narrowed, /No sessions in this range/);
+  const narrowed = await renderView({ sessions: [], selectedId: null, detail: null, keep: false, transcript: null, range: 'today' }, '/iq/logging/voice');
+  assert.match(narrowed, /Nothing in this range/);
 });
 
 test('the model: subline, facts, event data and the copy with the kept transcript', () => {
   assert.equal(sessionSubline(ITEM), 'orgiq · 15s · 1 tool call · closed · scripted');
-  assert.equal(sessionHref(ID), `/iq/voice-log/${ID}`);
+  assert.equal(sessionHref(ID), `/iq/logging/voice/${ID}`);
   assert.equal(parseRange('today'), 'today');
   assert.equal(parseRange('bogus'), 'all');
   const now = new Date(2026, 10, 8, 17, 49);

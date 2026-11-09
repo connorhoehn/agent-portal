@@ -8,9 +8,12 @@
 // is merged in here for display and for "Copy as JSON", and never sent.
 
 import type { KeptTranscript } from '../../lib/voice/transcriptKeep.ts';
+import { dayGroupsBy, when, type LogRecord, type LogRow } from '../logging/loggingModel.ts';
 
-/** System › Voice log (orgiq): the list rail of sessions, a session at `/iq/voice-log/<id>`. */
-export const VOICE_LOG_PATH = '/iq/voice-log';
+export { when };
+
+/** System › Logging's Voice source (orgiq, G37): the list rail of sessions, a session at `/iq/logging/voice/<id>`. */
+export const VOICE_LOG_PATH = '/iq/logging/voice';
 export const VOICE_SESSIONS_API = '/api/voice/sessions';
 /** The list read's page size; the route caps it at 100. */
 export const VOICE_SESSIONS_LIMIT = 50;
@@ -44,7 +47,7 @@ export interface VoiceSessionDetail {
   events: Array<{ seq: number; at: string; kind: string; data: Record<string, unknown> }>;
 }
 
-/** `/iq/voice-log/<id>`: one session, opened beside the list rail. */
+/** `/iq/logging/voice/<id>`: one session, opened beside the list rail. */
 export const sessionHref = (id: string): string => `${VOICE_LOG_PATH}/${encodeURIComponent(id)}`;
 
 /** The list rail's filter row: sessions started today, in the last seven days, or all of them. */
@@ -80,31 +83,10 @@ export function dayGroups(rows: readonly VoiceSessionListItem[], now: Date = new
   groups: Array<{ id: string; title: string; count: number }>;
   groupOf: (s: VoiceSessionListItem) => string;
 } {
-  const key = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-  const today = key(now);
-  const yesterday = key(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
-  const groupOf = (s: VoiceSessionListItem) => { const t = Date.parse(s.startedAt); return Number.isFinite(t) ? key(new Date(t)) : 'unknown'; };
-  const groups: Array<{ id: string; title: string; count: number }> = [];
-  for (const s of rows) {
-    const id = groupOf(s);
-    const g = groups.find((x) => x.id === id);
-    if (g) { g.count++; continue; }
-    const title = id === today ? 'Today' : id === yesterday ? 'Yesterday' : id === 'unknown' ? 'Undated'
-      : new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' }).format(new Date(Date.parse(s.startedAt)));
-    groups.push({ id, title, count: 1 });
-  }
-  return { groups, groupOf };
+  return dayGroupsBy(rows, (s) => s.startedAt, now, locale);
 }
 export const sessionApi = (id: string): string => `${VOICE_SESSIONS_API}/${encodeURIComponent(id)}`;
 export const exportApi = (id: string): string => `${sessionApi(id)}/export`;
-
-/** "8 Nov, 17:49" in the reader's locale and zone; the raw string when it does not parse. */
-export function when(iso: string | null | undefined, locale?: string): string {
-  if (!iso) return '';
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return iso;
-  return new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(t));
-}
 
 export function duration(seconds: number | null | undefined): string {
   if (seconds == null) return 'open';
@@ -168,4 +150,21 @@ export function confirmationsLine(events: ReadonlyArray<{ kind: string; data: Re
     return `${tool} ${e.kind === 'confirmed' ? 'confirmed' : 'cancelled'} by ${by}${phrase}${after}`;
   });
   return rows.length ? rows.join('; ') : null;
+}
+
+// ── Logging's Voice source (G37): the session as the page's one record shape ──
+
+export function voiceRows(sessions: readonly VoiceSessionListItem[]): LogRow[] {
+  return sessions.map((s) => ({ source: 'voice', kind: 'session', id: s.id, at: s.startedAt, subline: sessionSubline(s) }));
+}
+
+export function voiceRecord(d: VoiceSessionDetail): LogRecord {
+  return {
+    source: 'voice', kind: 'session', id: d.session.id, label: `Session ${when(d.session.startedAt)}`,
+    facts: sessionFacts(d),
+    callsTitle: 'Tool calls',
+    calls: d.toolCalls.map((c) => ({ id: c.id, at: c.at, name: c.tool, outcome: c.outcome, detail: c.confirmedBy ? `confirmed by ${c.confirmedBy}` : '', tookMs: c.durationMs })),
+    events: d.events.map((e) => ({ seq: e.seq, at: e.at, kind: e.kind, data: eventData(e.data) })),
+    raw: d,
+  };
 }

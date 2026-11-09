@@ -128,7 +128,7 @@ export const NAVIGATE_PAGE_IDS: ReadonlyArray<{ id: string; tenants: readonly st
   { id: 'identity-users', tenants: ['orgiq'], roles: ['hr-admin'] },
   { id: 'identity-policy-sandbox', tenants: ['orgiq'], roles: ['hr-admin'] },
   { id: 'settings', tenants: ['*'] },
-  { id: 'system-voice-log', tenants: ['orgiq'] },
+  { id: 'system-logging', tenants: ['orgiq'] },
   { id: 'teams', tenants: ['assessment'] },
   { id: 'communication', tenants: ['assessment'] },
   { id: 'submissions', tenants: ['assessment'] },

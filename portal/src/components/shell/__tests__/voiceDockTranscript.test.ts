@@ -6,6 +6,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { VoiceDock } from '@connorhoehn/ui-components/voice';
 import { dockTranscriptProps, voiceLogHref, type DockTurn } from '../voiceDockModel.ts';
+import { VOICE_LOG_PATH, sessionHref } from '../../../pages/voice/voiceLogModel.ts';
 
 const turns: DockTurn[] = [
   { id: 't1', role: 'you', text: 'open the initiatives', at: 1 },
@@ -49,7 +50,8 @@ test('CC toggles the strip inline at the footer scale; no dialog, no popover, ev
 test('the history control renders only where the log exists, and goes to the session or the latest', () => {
   assert.doesNotMatch(dock(false, () => {}), /shell-voice-dock-history/);
   assert.match(dock(false, () => {}, { openLog: () => {} }), /shell-voice-dock-history/);
-  const paths = { list: '/iq/voice-log', session: (id: string) => `/iq/voice-log/${id}` };
-  assert.equal(voiceLogHref('vs_1', paths), '/iq/voice-log/vs_1');
-  assert.equal(voiceLogHref(null, paths), '/iq/voice-log');
+  // G37: the footer's paths are Logging's Voice source.
+  const paths = { list: VOICE_LOG_PATH, session: sessionHref };
+  assert.equal(voiceLogHref('vs_1', paths), '/iq/logging/voice/vs_1');
+  assert.equal(voiceLogHref(null, paths), '/iq/logging/voice');
 });
