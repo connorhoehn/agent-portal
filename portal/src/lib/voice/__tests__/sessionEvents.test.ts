@@ -8,6 +8,7 @@ import { VoiceController } from '../controller.ts';
 import { VOICE_RUNNERS } from '../actions.ts';
 import { EVENT_FLUSH_MS, MAX_EVENT_BATCH, VoiceEventLog, DOCK_EVENT_KINDS, argShape, refusalCode, resultSummary } from '../sessionEvents.ts';
 import { failureCode as g47FailureCode, resultSummary as g47Summary } from '../sessionEvents.ts';
+import { countWords, frameKey, readDiagnostic } from '../sessionEvents.ts';
 import { failureSay, withFailure } from '../refusals.ts';
 import { refused, ambiguous, type VoiceToolRunner } from '../tools.ts';
 import { FakeClock, fakeFetch, isToolRow, loggedEvents, middlewareVoice, route, toolContext } from './voiceHarness.ts';
@@ -186,4 +187,45 @@ test('G47: the spoken line names the code or the gate, and a runner\'s own say i
   assert.deepEqual([(kept.output as Record<string, unknown>)['say'], (kept.output as Record<string, unknown>)['code']], ['Mine.', 'rejected']);
   const done = { outcome: 'done', output: { kind: 'posted' } };
   assert.equal(withFailure(done, 'message'), done, 'a done result is untouched');
+});
+
+// ── G63: the diagnostics' parsing (diagnostics.ts writes these, the Logging record reads them) ──
+
+test('G63 countWords: words across transcript deltas, contractions and hyphens joined, punctuation not a word; nothing kept', () => {
+  const deltas = [' Hey', ', I', ' want', ' to', ' do', ' search.'];
+  let prev: string | null = null;
+  let words = 0;
+  for (const d of deltas) { const c = countWords(d, prev); words += c.words; prev = c.last; }
+  assert.equal(words, 6);
+  assert.equal(countWords("don't open the Kubernetes-based one", null).words, 5);
+  assert.equal(countWords('...', null).words, 0);
+  assert.equal(countWords('3 items', null).words, 2);
+  // A word split across two deltas counts once.
+  const first = countWords(' Kuber', null);
+  assert.equal(first.words + countWords('netes', first.last).words, 1);
+});
+
+test('G63 frameKey: a known Live frame type as a row key, anything else `unknown`', () => {
+  assert.equal(frameKey('session.input_audio.muted'), 'session_input_audio_muted');
+  assert.equal(frameKey('rate_limits.updated'), 'rate_limits_updated');
+  assert.equal(frameKey('info'), 'info');
+  assert.equal(frameKey('Find me the experts'), 'unknown');
+  assert.equal(frameKey('session.brand_new'), 'unknown');
+});
+
+test('G63 readDiagnostic: each kind typed back from its row; not-a-diagnostic and malformed rows are null', () => {
+  assert.deepEqual(readDiagnostic('client', { event: 'heard', n: 2, wordCount: 6, ms: 1800, outcome: 'ignored', afterMs: null, delegations: 0, atMs: 5 }),
+    { event: 'heard', n: 2, wordCount: 6, ms: 1800, outcome: 'ignored', afterMs: null, delegations: 0, atMs: 5 });
+  assert.deepEqual(readDiagnostic('client', { event: 'spoke', n: 1, wordCount: 9, ms: 4000, after: 'result', atMs: 7 }),
+    { event: 'spoke', n: 1, wordCount: 9, ms: 4000, after: 'result', atMs: 7 });
+  assert.deepEqual(readDiagnostic('client', { event: 'context', ratio: 0.0153, seconds: 34 }), { event: 'context', ratio: 0.0153, seconds: 34 });
+  assert.deepEqual(readDiagnostic('client', { event: 'frames', windowS: 60, counts: { info: 2, unknown: 'x' } }), { event: 'frames', windowS: 60, counts: { info: 2 } });
+  assert.deepEqual(readDiagnostic('client', { event: 'mic', muted: false, by: 'provider' }), { event: 'mic', muted: false, by: 'provider' });
+  assert.deepEqual(readDiagnostic('client', { event: 'level', windowS: 30, samples: 300, min: 0, avg: 0.04, max: 0.6, mutedPct: 0 }),
+    { event: 'level', windowS: 30, samples: 300, min: 0, avg: 0.04, max: 0.6, mutedPct: 0 });
+  assert.equal(readDiagnostic('client', { event: 'heard', wordCount: 3, outcome: 'whatever' }), null);
+  assert.equal(readDiagnostic('client', { event: 'spoke', after: 'user' }), null);
+  assert.equal(readDiagnostic('client', { event: 'context', ratio: 2 }), null);
+  assert.equal(readDiagnostic('client', { event: 'phase', phase: 'listening' }), null);
+  assert.equal(readDiagnostic('usage', { event: 'heard', wordCount: 1, outcome: 'answered' }), null);
 });

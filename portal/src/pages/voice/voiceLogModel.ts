@@ -8,7 +8,8 @@
 // is merged in here for display and for "Copy as JSON", and never sent.
 
 import type { KeptTranscript } from '../../lib/voice/transcriptKeep.ts';
-import { dayGroupsBy, when, type LogRecord, type LogRow } from '../logging/loggingModel.ts';
+import { readDiagnostic, type HeardOutcome, type SpokeAfter } from '../../lib/voice/sessionEvents.ts';
+import { dayGroupsBy, took, when, type ConversationRow, type LogRecord, type LogRow } from '../logging/loggingModel.ts';
 
 export { when };
 
@@ -209,12 +210,91 @@ export function callDetail(call: { id: string; outcome: string; confirmedBy: str
   return parts.join(' · ');
 }
 
+// ── G63: the conversation, as the session's heard and spoke rows ───────────
+
+const HEARD_LABEL: Record<HeardOutcome, string> = { answered: 'answered', delegated: 'delegated', card: 'card', ignored: 'ignored' };
+const SPOKE_LABEL: Record<SpokeAfter, string> = { result: 'after a result', commentary: 'after the dock', user: 'after you', unprompted: 'unprompted' };
+
+/** The heard and spoke rows in the order they began (their `atMs`, then the log's order), as the Conversation table shows them. */
+export function conversationRows(events: VoiceSessionDetail['events']): ConversationRow[] {
+  const rows: Array<ConversationRow & { order: number }> = [];
+  for (const e of events) {
+    const g = readDiagnostic(e.kind, e.data);
+    if (g?.event === 'heard') {
+      rows.push({ id: `h${e.seq}`, seq: e.seq, atMs: g.atMs, who: 'you', wordCount: g.wordCount, ms: g.ms, outcome: g.outcome, label: HEARD_LABEL[g.outcome],
+        detail: [g.afterMs != null ? `${took(g.afterMs)} after` : null, g.delegations > 1 || (g.delegations === 1 && g.outcome !== 'delegated') ? `${g.delegations} delegations` : null].filter(Boolean).join(' · '),
+        order: g.atMs || Date.parse(e.at) || 0 });
+    } else if (g?.event === 'spoke') {
+      rows.push({ id: `s${e.seq}`, seq: e.seq, atMs: g.atMs, who: 'voice', wordCount: g.wordCount, ms: g.ms, outcome: g.after, label: SPOKE_LABEL[g.after], detail: '',
+        order: g.atMs || Date.parse(e.at) || 0 });
+    }
+  }
+  return rows.sort((a, b) => a.order - b.order || a.seq - b.seq).map(({ order: _o, ...r }) => r);
+}
+
+/** "12 heard: 7 delegated, 3 answered, 2 ignored · the voice spoke 9 times (2 unprompted)"; null when the log has no heard or spoke rows. */
+export function conversationHealth(rows: readonly ConversationRow[]): string | null {
+  const heard = rows.filter((r) => r.who === 'you');
+  const spoke = rows.filter((r) => r.who === 'voice');
+  if (!heard.length && !spoke.length) return null;
+  const order: HeardOutcome[] = ['delegated', 'answered', 'card', 'ignored'];
+  const parts = order.map((o) => [o, heard.filter((r) => r.outcome === o).length] as const).filter(([, n]) => n > 0).map(([o, n]) => `${n} ${o}`);
+  const unprompted = spoke.filter((r) => r.outcome === 'unprompted').length;
+  const head = `${heard.length} heard${parts.length ? `: ${parts.join(', ')}` : ''}`;
+  const tail = spoke.length ? ` · the voice spoke ${spoke.length} time${spoke.length === 1 ? '' : 's'}${unprompted ? ` (${unprompted} unprompted)` : ''}` : '';
+  return head + tail;
+}
+
+/**
+ * G63 item 6: the words this device kept (transcriptKeep, owner-only, never sent) beside the rows: each kept turn goes
+ * to the row of its side (you → heard, assistant → spoke) that began nearest to it, within KEPT_MATCH_MS. Nothing
+ * changes server-side; with no kept transcript every row's words are empty.
+ */
+export const KEPT_MATCH_MS = 3000;
+export function keptWordsFor(rows: readonly ConversationRow[], transcript: KeptTranscript | null): Map<string, string> {
+  const out = new Map<string, string>();
+  if (!transcript) return out;
+  for (const t of transcript.turns) {
+    const text = t.text.trim();
+    if (!text) continue;
+    const who = t.role === 'you' ? 'you' : 'voice';
+    let best: ConversationRow | null = null;
+    for (const r of rows) {
+      if (r.who !== who || !r.atMs) continue;
+      const gap = Math.abs(r.atMs - t.at);
+      if (gap <= KEPT_MATCH_MS && (!best || gap < Math.abs(best.atMs - t.at))) best = r;
+    }
+    if (best) out.set(best.id, out.has(best.id) ? `${out.get(best.id)} ${text}` : text);
+  }
+  return out;
+}
+
+/** The voice's own context use (G63): the highest usage ratio the log saw, from the dock's `context` rows or the sideband's usage rows. */
+export function contextFact(events: VoiceSessionDetail['events']): string | null {
+  let max: number | null = null;
+  for (const e of events) {
+    const g = readDiagnostic(e.kind, e.data);
+    const r = g?.event === 'context' ? g.ratio : e.kind === 'usage' && typeof e.data?.['contextRatio'] === 'number' ? e.data['contextRatio'] as number : null;
+    if (r != null && Number.isFinite(r) && (max == null || r > max)) max = r;
+  }
+  return max == null ? null : `${(max * 100).toFixed(1)}% of its window at most`;
+}
+
 export function voiceRecord(d: VoiceSessionDetail): LogRecord {
   const perResponse = tokensPerResponse(d.events);
   const fact = tokensFact(d.events);
+  const rows = conversationRows(d.events);
+  const health = conversationHealth(rows);
+  const context = contextFact(d.events);
   return {
     source: 'voice', kind: 'session', id: d.session.id, label: `Session ${when(d.session.startedAt)}`,
-    facts: fact ? [...sessionFacts(d), { label: 'Input per response', value: fact }] : sessionFacts(d),
+    facts: [
+      ...sessionFacts(d),
+      ...(fact ? [{ label: 'Input per response', value: fact }] : []),
+      ...(health ? [{ label: 'Conversation', value: health }] : []),
+      ...(context ? [{ label: 'Voice context', value: context }] : []),
+    ],
+    ...(rows.length ? { conversation: { rows, health: health ?? '' } } : {}),
     callsTitle: 'Tool calls',
     calls: d.toolCalls.map((c) => ({ id: c.id, at: c.at, name: c.tool, outcome: c.outcome, detail: callDetail(c, d.events), tookMs: c.durationMs })),
     events: d.events.map((e) => {

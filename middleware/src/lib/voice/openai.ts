@@ -224,6 +224,37 @@ export interface ProviderUsage {
   final: boolean;
 }
 
+/**
+ * G63: the sideband's view of the session beyond its bill, for the usage row. `contextRatio` is the voice's own
+ * `session.usage.updated.context_window.usage_ratio` (0..1, its 128 k context; spec §1 "Delegation context growth").
+ * `openResponses`: nested responses created and not yet completed or failed. `awaiting`: delegations whose last
+ * response ended in a function call with no response after it, i.e. waiting on the dock's output and continuation
+ * (the G59 state). `delegations`: `session.delegation.created` frames seen.
+ */
+export interface SidebandView {
+  contextRatio: number | null;
+  openResponses: number;
+  awaiting: number;
+  delegations: number;
+}
+
+/**
+ * The Live API's server frame types the logs name (spec §1, docs/voice/live-events.jsonl, and the Realtime names an
+ * unexpected event would carry). Anything else is counted as `unknown`. Keys are the type with dots as underscores
+ * (a row key may not hold a dot). The portal keeps the same list (lib/voice/sessionEvents.ts LIVE_FRAME_TYPES), and
+ * session-log.ts checks the dock's `frames` counts against it.
+ */
+export const LIVE_FRAME_TYPES = [
+  'session.started', 'session.updated', 'session.closed', 'session.usage.updated',
+  'session.input_transcript.delta', 'session.output_transcript.delta', 'session.output_audio.delta',
+  'session.input_audio.muted', 'session.input_audio.unmuted', 'session.delegation.created',
+  'session.thinking.appended', 'session.commentary.appended', 'session.instructions.appended',
+  'response.event', 'error', 'info', 'rate_limits.updated',
+  'input_audio_buffer.speech_started', 'input_audio_buffer.speech_stopped', 'input_audio_buffer.committed',
+  'conversation.item.truncated', 'turn_detection.updated',
+] as const;
+export const frameKey = (type: string): string => type.replace(/\./g, '_');
+
 /** The part of a WebSocket the sideband uses (Node 22's built-in, or a test's fake). */
 export interface SidebandSocket {
   close(code?: number, reason?: string): void;
@@ -255,7 +286,14 @@ interface Sideband {
   connects: number;
   /** Detached, final, or out of reconnects: nothing more will arrive. */
   ended: boolean;
-  onUsage?: (usage: ProviderUsage) => void | Promise<void>;
+  /** G63: the view (SidebandView) and its working sets, and the frame types counted since the last take. */
+  contextRatio: number | null;
+  openResponses: Set<string>;
+  /** Per delegation: true while its last response ended in a function call and no response followed. */
+  calling: Map<string, boolean>;
+  delegations: number;
+  frames: Map<string, number>;
+  onUsage?: (usage: ProviderUsage, view: SidebandView) => void | Promise<void>;
   onEvent?: (event: SidebandEvent) => void;
   waiters: Array<() => void>;
   timers: Set<ReturnType<typeof setTimeout>>;
@@ -280,6 +318,59 @@ function tell(sb: Sideband, event: SidebandEvent): void {
 
 const snapshot = (sb: Sideband): ProviderUsage => ({ ...sb.usage });
 
+const viewOf = (sb: Sideband): SidebandView => ({
+  contextRatio: sb.contextRatio, openResponses: sb.openResponses.size,
+  awaiting: [...sb.calling.values()].filter(Boolean).length, delegations: sb.delegations,
+});
+
+/** The frame types counted by name (LIVE_FRAME_TYPES above); any other is `unknown`. */
+const KNOWN_FRAMES: ReadonlySet<string> = new Set<string>(LIVE_FRAME_TYPES);
+
+/** G63: what the sideband learns besides the bill: the context ratio, open responses, calls awaiting output, frame types. */
+function observe(sb: Sideband, ev: Record<string, unknown>): void {
+  const type = typeof ev['type'] === 'string' ? ev['type'] : '';
+  const key = KNOWN_FRAMES.has(type) ? frameKey(type) : 'unknown';
+  sb.frames.set(key, (sb.frames.get(key) ?? 0) + 1);
+  if (type === 'session.usage.updated') {
+    const ratio = (ev['context_window'] as { usage_ratio?: unknown } | undefined)?.usage_ratio;
+    if (typeof ratio === 'number' && Number.isFinite(ratio) && ratio >= 0 && ratio <= 1) sb.contextRatio = ratio;
+  }
+  if (type === 'session.delegation.created') sb.delegations += 1;
+  if (type !== 'response.event') return;
+  const d = typeof ev['delegation_id'] === 'string' ? ev['delegation_id'] : '';
+  const inner = (ev['event'] ?? {}) as Record<string, unknown>;
+  const id = typeof (inner['response'] as { id?: unknown } | undefined)?.id === 'string' ? (inner['response'] as { id: string }).id : null;
+  if (inner['type'] === 'response.created') {
+    if (id) sb.openResponses.add(id);
+    if (d) sb.calling.set(d, false);
+  } else if (inner['type'] === 'response.completed' || inner['type'] === 'response.failed' || inner['type'] === 'response.cancelled') {
+    if (id) sb.openResponses.delete(id);
+  } else if (inner['type'] === 'response.output_item.done' && (inner['item'] as { type?: unknown } | undefined)?.type === 'function_call' && d) {
+    sb.calling.set(d, true);
+  }
+}
+
+/** G63: the frame types this sideband counted since the last take (dots as underscores, unknown types as `unknown`), reset. */
+export function takeSidebandFrames(providerSessionId: string): Record<string, number> {
+  const sb = sidebands.get(providerSessionId);
+  if (!sb) return {};
+  const out = Object.fromEntries(sb.frames);
+  sb.frames.clear();
+  return out;
+}
+
+/**
+ * G63: the fields the sideband's `usage` row adds (routes/voice.ts): the voice's own context ratio (4 places), what
+ * it sees open, and the frame types since the last row (taken, so each row counts its own interval).
+ */
+export function sidebandViewRow(providerSessionId: string, view: SidebandView): Record<string, unknown> {
+  return {
+    contextRatio: view.contextRatio == null ? null : Math.round(view.contextRatio * 10_000) / 10_000,
+    openResponses: view.openResponses, awaiting: view.awaiting, delegations: view.delegations,
+    frames: takeSidebandFrames(providerSessionId),
+  };
+}
+
 function later(sb: Sideband, ms: number, fn: () => void): void {
   const t = setTimeout(() => { sb.timers.delete(t); fn(); }, ms);
   (t as { unref?: () => void }).unref?.();
@@ -293,7 +384,7 @@ function wake(sb: Sideband): void {
 function emitUsage(sb: Sideband): void {
   if (!sb.onUsage) return;
   try {
-    void Promise.resolve(sb.onUsage(snapshot(sb))).catch((err: Error) => {
+    void Promise.resolve(sb.onUsage(snapshot(sb), viewOf(sb))).catch((err: Error) => {
       console.warn(`[voice] sideband usage write failed: ${String(err?.message ?? err).slice(0, 120)}`);
     });
   } catch { /* a sink that throws is the sink's problem, never the socket's */ }
@@ -369,6 +460,7 @@ function connect(sb: Sideband): void {
     } catch { return; }
     if (!ev || typeof ev !== 'object') return;
     const wasFinal = sb.usage.final;
+    observe(sb, ev as Record<string, unknown>);
     if (onFrame(sb, ev as Record<string, unknown>)) emitUsage(sb);
     if (sb.usage.final && !wasFinal) {
       const reason = (ev as Record<string, unknown>)['reason'];
@@ -401,13 +493,14 @@ function retry(sb: Sideband): void {
  * socket's own life (SidebandEvent), for the session's event log.
  */
 export function attachSideband(providerSessionId: string, opts: {
-  onUsage?: (usage: ProviderUsage) => void | Promise<void>; onEvent?: (event: SidebandEvent) => void; lifetimeMs?: number;
+  onUsage?: (usage: ProviderUsage, view: SidebandView) => void | Promise<void>; onEvent?: (event: SidebandEvent) => void; lifetimeMs?: number;
 } = {}): boolean {
   try {
     if (process.env['MOCK_VOICE'] === '1' || !apiKey() || !socketCtor() || !/^[\w-]{1,200}$/.test(providerSessionId)) return false;
     if (sidebands.has(providerSessionId)) return true;
     const sb: Sideband = {
       providerSessionId, socket: null, seenResponses: new Set(), connected: false, connects: 0, ended: false,
+      contextRatio: null, openResponses: new Set(), calling: new Map(), delegations: 0, frames: new Map(),
       usage: { seconds: null, inputTokens: null, outputTokens: null, cachedTokens: null, responses: 0, final: false },
       waiters: [], timers: new Set(), ...(opts.onUsage ? { onUsage: opts.onUsage } : {}), ...(opts.onEvent ? { onEvent: opts.onEvent } : {}),
     };

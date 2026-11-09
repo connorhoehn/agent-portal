@@ -27,8 +27,10 @@ import { join, resolve } from 'node:path';
 import { clock } from '../../mock/core/index.js';
 import type { VoiceEventKind, VoiceSessionEventRow } from '../../providers/voice-sessions.js';
 import { insecureDevMode } from '../insecure-dev-mode.js';
+import { LIVE_FRAME_TYPES, frameKey } from './openai.js';
 
 export { VOICE_EVENT_KINDS, type VoiceEventKind } from '../../providers/voice-sessions.js';
+export { LIVE_FRAME_TYPES, frameKey };
 
 /** The kinds the dock may post through POST /:id/events; the rest are the middleware's own. */
 export const CLIENT_EVENT_KINDS: readonly VoiceEventKind[] = [
@@ -189,6 +191,68 @@ export async function sweepVoiceEventRetention(now: number = clock.now().getTime
   return gone;
 }
 
+// ─── G63: the session's diagnostics, numbers and enums only ─────────────────
+//
+// Six `client` events explain a session that went quiet without storing a
+// word (docs/voice-navigator-gaps.md G63; portal lib/voice/diagnostics.ts):
+//   heard   one finished user utterance: its word count (`wordCount`: `words`
+//           is a forbidden key), audio ms, and how it
+//           ended (answered: the voice spoke without delegating; delegated;
+//           card: it resolved a pending card; ignored: nothing within 8 s)
+//   spoke   one voice utterance: word count, ms, and what it followed
+//   context the voice's own context_window.usage_ratio, at most every 30 s
+//   frames  the frame types the dock does not use, counted per minute
+//   mic     a mute or unmute, and who made it
+//   level   the microphone meter per 30 s: min, average, max (0..1)
+// Unlike the other client events (whose fields only pass the sanitizer),
+// these are checked field by field: a key outside the event's schema, a
+// string outside its enum or a number out of range refuses the event, so no
+// free text can ride in one.
+
+const FRAME_KEYS: ReadonlySet<string> = new Set([...LIVE_FRAME_TYPES.map(frameKey), 'unknown']);
+
+/** How a finished user utterance ended. */
+export const HEARD_OUTCOMES = ['answered', 'delegated', 'card', 'ignored'] as const;
+/** What a voice utterance followed: a delegation result, the dock's commentary, the user's words, or nothing. */
+export const SPOKE_AFTER = ['result', 'commentary', 'user', 'unprompted'] as const;
+
+type FieldCheck = (v: unknown) => boolean;
+const int = (max: number): FieldCheck => (v) => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= max;
+const intOrNull = (max: number): FieldCheck => (v) => v === null || int(max)(v);
+const unit: FieldCheck = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1;
+const oneOf = (values: readonly string[]): FieldCheck => (v) => typeof v === 'string' && values.includes(v);
+const bool: FieldCheck = (v) => typeof v === 'boolean';
+const frameCounts: FieldCheck = (v) => !!v && typeof v === 'object' && !Array.isArray(v)
+  && Object.entries(v as Record<string, unknown>).every(([k, n]) => FRAME_KEYS.has(k) && int(1_000_000)(n));
+const MS = 86_400_000;
+/** Epoch milliseconds (the utterance's start on the dock's clock, to line kept words up beside the row). */
+const EPOCH = 10_000_000_000_000;
+
+/** Every field each diagnostic event may carry, and what it must hold. `event` is the name itself. */
+export const DIAGNOSTIC_SCHEMAS: Readonly<Record<string, Readonly<Record<string, FieldCheck>>>> = {
+  heard: { n: int(100_000), wordCount: int(10_000), ms: intOrNull(MS), outcome: oneOf(HEARD_OUTCOMES), afterMs: intOrNull(MS), delegations: int(1000), atMs: int(EPOCH) },
+  spoke: { n: int(100_000), wordCount: int(10_000), ms: intOrNull(MS), after: oneOf(SPOKE_AFTER), atMs: int(EPOCH) },
+  context: { ratio: unit, seconds: intOrNull(MS) },
+  frames: { windowS: int(3600), counts: frameCounts },
+  mic: { muted: bool, by: oneOf(['user', 'provider']) },
+  level: { windowS: int(3600), samples: int(1_000_000), min: unit, avg: unit, max: unit, mutedPct: int(100) },
+};
+export const DIAGNOSTIC_EVENTS: readonly string[] = Object.keys(DIAGNOSTIC_SCHEMAS);
+
+/** A diagnostic event's data, checked: an error naming the first field that is not allowed, else null. */
+export function checkDiagnostic(data: Record<string, unknown>): string | null {
+  const name = String(data['event']);
+  const schema = DIAGNOSTIC_SCHEMAS[name];
+  if (!schema) return `event ${name} is not a diagnostic event`;
+  for (const [k, v] of Object.entries(data)) {
+    if (k === 'event') continue;
+    const check = schema[k];
+    if (!check) return `${name}: ${k} is not a field of this event`;
+    if (!check(v)) return `${name}: ${k} is not an allowed value`;
+  }
+  return null;
+}
+
 // ─── The dock's events (POST /api/voice/sessions/:id/events with `kind`) ─────
 
 const TOOL_NAME = /^[a-z][a-z0-9_]{0,63}$/;
@@ -215,6 +279,15 @@ export function parseClientEvent(
   const given = body['data'];
   if (given !== undefined && (given === null || typeof given !== 'object' || Array.isArray(given))) return { error: 'data must be an object' };
   const data: Record<string, unknown> = { ...(given as Record<string, unknown> | undefined ?? {}) };
+  // G63: a diagnostic event is its schema's numbers and enums and nothing else: no tool, note, summary or arguments.
+  if (kind === 'client' && typeof data['event'] === 'string' && DIAGNOSTIC_EVENTS.includes(data['event'])) {
+    for (const extra of ['tool', 'args', 'argsSha256', 'summary', 'note']) {
+      if (body[extra] !== undefined) return { error: `${data['event']}: ${extra} is not allowed on a diagnostic event` };
+    }
+    const bad = checkDiagnostic(data);
+    if (bad) return { error: bad };
+    return { kind, data };
+  }
   // The arguments never pass this point: hashed, then dropped from both places they could come from.
   const args = body['args'] !== undefined ? body['args'] : data['args'] ?? data['arguments'];
   delete data['args']; delete data['arguments'];

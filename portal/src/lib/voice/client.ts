@@ -108,7 +108,7 @@ export type VoiceFrame =
   | { kind: 'response-completed'; delegationId: string | null; responseId: string | null; usage: ResponseUsage | null }
   | { kind: 'response-failed'; delegationId: string | null; responseId: string | null; message: string }
   | { kind: 'response-progress'; delegationId: string | null; type: string }
-  | { kind: 'usage'; seconds: number }
+  | { kind: 'usage'; seconds: number | null; contextRatio: number | null }
   | { kind: 'closed'; reason: string | null; seconds: number | null }
   | { kind: 'muted'; muted: boolean }
   | { kind: 'ack'; type: string; clientEventId: string | null }
@@ -180,7 +180,10 @@ export function parseFrame(data: unknown): VoiceFrame | null {
     }
     case 'session.usage.updated': {
       const seconds = isObj(ev['usage']) ? numOr(ev['usage']['seconds']) : null;
-      return seconds == null ? { kind: 'other', type } : { kind: 'usage', seconds };
+      // G63: the voice's own context use, 0..1 of its window (spec §1 "Usage"), when the frame carries it.
+      const ratio = isObj(ev['context_window']) ? numOr(ev['context_window']['usage_ratio']) : null;
+      const contextRatio = ratio != null && ratio >= 0 && ratio <= 1 ? ratio : null;
+      return seconds == null && contextRatio == null ? { kind: 'other', type } : { kind: 'usage', seconds, contextRatio };
     }
     case 'session.closed':
       return { kind: 'closed', reason: strOr(ev['reason']), seconds: isObj(ev['usage']) ? numOr(ev['usage']['seconds']) : null };
@@ -685,7 +688,7 @@ export class VoiceClient {
     const frame = parseFrame(data);
     if (!frame) return;
     if (frame.kind === 'started' && this.startedAt == null) this.startedAt = this.now();
-    if (frame.kind === 'usage') this.usageSeconds = frame.seconds;
+    if (frame.kind === 'usage' && frame.seconds != null) this.usageSeconds = frame.seconds;
     if (frame.kind === 'response-completed' && frame.usage) {
       // Per response, never cumulative: each nested usage is that response's own.
       const d = this.delegated, u = frame.usage;

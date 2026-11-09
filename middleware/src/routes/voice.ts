@@ -109,7 +109,7 @@ import {
   delegationInstructions, hashToolArgs, responsesFunctionTools, toolsForTenant, voiceInstructions, voiceTool, mockCallFor,
 } from '../lib/voice/catalogue.js';
 import {
-  attachSideband, createLiveSession, detachSideband, hangupLiveSession, mockLiveScript, voiceProviderConfigured, waitForSidebandUsage,
+  attachSideband, createLiveSession, detachSideband, hangupLiveSession, mockLiveScript, sidebandViewRow, voiceProviderConfigured, waitForSidebandUsage,
   MOCK_SDP_ANSWER, VoiceProviderError, type ProviderUsage,
 } from '../lib/voice/openai.js';
 import {
@@ -385,13 +385,13 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
     let lastUsageLog = 0;
     attachSideband(answer.providerSessionId, {
       lifetimeMs: expiresInMs + SIDEBAND_LINGER_PAST_HOLD_MS,
-      onUsage: async (u) => {
+      onUsage: async (u, view) => {
         await recordProviderUsage(id, tenant, u);
         const now = clock.now().getTime();
         if (u.final || now - lastUsageLog >= USAGE_LOG_EVERY_MS) {
           lastUsageLog = now;
           await recordVoiceEvent(row, 'usage', { source: 'sideband', seconds: u.seconds, inputTokens: u.inputTokens,
-            outputTokens: u.outputTokens, cachedTokens: u.cachedTokens, responses: u.responses, final: u.final });
+            outputTokens: u.outputTokens, cachedTokens: u.cachedTokens, responses: u.responses, final: u.final, ...sidebandViewRow(answer.providerSessionId!, view) });
         }
       },
       onEvent: (e) => { void recordVoiceEvent(row, 'sideband', { ...e }); },

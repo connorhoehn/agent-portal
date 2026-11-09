@@ -27,7 +27,7 @@ import { FakeSideband, SilentSideband } from '../../test-support/fake-sideband.j
 import { hashToolArgs } from '../../lib/voice/catalogue.js';
 import { sweepVoiceSessions, defaultVoiceReaperDeps } from '../../lib/voice/reaper.js';
 import {
-  sanitizeEventData, sweepVoiceEventRetention, voiceLogFile, MAX_EVENT_BATCH, MAX_EVENT_DATA_BYTES, VOICE_EVENT_KINDS,
+  checkDiagnostic, parseClientEvent, sanitizeEventData, sweepVoiceEventRetention, voiceLogFile, LIVE_FRAME_TYPES, MAX_EVENT_BATCH, MAX_EVENT_DATA_BYTES, VOICE_EVENT_KINDS,
 } from '../../lib/voice/session-log.js';
 import { resetRateLimits } from '../../lib/rate-limit.js';
 import { userBudgets } from '../../mock/user-budgets.js';
@@ -380,5 +380,90 @@ describe('sanitizeEventData', () => {
     const sql = readFileSync(join(__dirname, '..', '..', '..', '..', 'schema', 'voice_sessions.sql'), 'utf8');
     const check = /kind\s+TEXT\s+NOT NULL CHECK \(kind IN \(([^)]*)\)\)/.exec(sql)![1]!;
     expect([...check.matchAll(/'([a-z-]+)'/g)].map((m) => m[1])).toEqual([...VOICE_EVENT_KINDS]);
+  });
+});
+
+// G63 (docs/voice-navigator-gaps.md): the dock's diagnostics are numbers and enums, checked field by field.
+describe('G63 diagnostics without words', () => {
+  const HEARD = { event: 'heard', n: 3, wordCount: 7, ms: 2400, outcome: 'ignored', afterMs: null, delegations: 0, atMs: 1794141391000 };
+  const SPOKE = { event: 'spoke', n: 2, wordCount: 11, ms: 5100, after: 'unprompted', atMs: 1794141393000 };
+  const GOOD = [
+    HEARD, SPOKE,
+    { event: 'context', ratio: 0.0153, seconds: 34 },
+    { event: 'frames', windowS: 60, counts: { info: 2, rate_limits_updated: 1, unknown: 1 } },
+    { event: 'mic', muted: true, by: 'user' },
+    { event: 'level', windowS: 30, samples: 300, min: 0, avg: 0.041, max: 0.62, mutedPct: 0 },
+  ];
+  const deps = { knownTool: () => true, hashArgs: () => '0'.repeat(64) };
+
+  it('takes each diagnostic as given, numbers and enums only', async () => {
+    const id = await mint();
+    const res = await post(id, { events: GOOD.map((data) => ({ kind: 'client', data })) });
+    expect(res.status).toBe(201);
+    const events = (await get(`/sessions/${id}`)).body.events as Array<{ kind: string; data: Record<string, unknown> }>;
+    expect(events.slice(1).map((e) => e.data)).toEqual(GOOD);
+  });
+
+  it('refuses free text in any of them: a sentence for an enum, an extra key, a word as a frame name, a tool or a note', async () => {
+    const refused: Array<Record<string, unknown>> = [
+      { ...HEARD, outcome: 'the user asked for the budget' },
+      { ...HEARD, said: 'what is on my plate' },
+      { ...HEARD, wordCount: 'seven' },
+      { ...HEARD, words: 7 },
+      { ...SPOKE, after: 'Here is what I found' },
+      { ...SPOKE, ms: -5 },
+      { event: 'frames', windowS: 60, counts: { 'Find me the Kubernetes experts': 1 } },
+      { event: 'frames', windowS: 60, counts: { 'session.output_transcript.delta': 1 } },
+      { event: 'frames', windowS: 60, counts: { info: 'two' } },
+      { event: 'context', ratio: 1.5, seconds: 3 },
+      { event: 'mic', muted: 'yes', by: 'user' },
+      { event: 'mic', muted: true, by: 'my manager' },
+      { event: 'level', windowS: 30, samples: 3, min: -1, avg: 0, max: 0, mutedPct: 0 },
+    ];
+    for (const data of refused) {
+      const one = parseClientEvent({ kind: 'client', data }, deps);
+      expect(one).toEqual({ error: expect.stringMatching(new RegExp(`^${String(data['event'])}: `)) });
+    }
+    expect(parseClientEvent({ kind: 'client', tool: 'search', data: HEARD }, deps)).toEqual({ error: expect.stringContaining('tool is not allowed') });
+    expect(parseClientEvent({ kind: 'client', note: 'the user said hi', data: SPOKE }, deps)).toEqual({ error: expect.stringContaining('note is not allowed') });
+    expect(parseClientEvent({ kind: 'client', args: { q: 'x' }, data: SPOKE }, deps)).toEqual({ error: expect.stringContaining('args is not allowed') });
+    expect(checkDiagnostic({ event: 'phase', phase: 'listening' })).toMatch(/not a diagnostic event/);
+    // The other client events are untouched: their fields still pass the sanitizer alone.
+    expect(parseClientEvent({ kind: 'client', data: { event: 'phase', phase: 'listening', from: 'speaking' } }, deps)).toEqual({ kind: 'client', data: { event: 'phase', phase: 'listening', from: 'speaking' } });
+    // Over the route: one bad diagnostic refuses its whole batch, and nothing of it is written.
+    const id = await mint();
+    const res = await post(id, { events: [{ kind: 'client', data: { event: 'phase', phase: 'listening' } }, { kind: 'client', data: { ...HEARD, outcome: 'open the budget page' } }] });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/^events\[1\]: heard: outcome/);
+    expect((await get(`/sessions/${id}`)).body.events).toHaveLength(1);
+  });
+
+  it('every frame name is a row key the sanitizer keeps', () => {
+    const counts = Object.fromEntries([...LIVE_FRAME_TYPES.map((t) => t.replace(/\./g, '_')), 'unknown'].map((k) => [k, 1]));
+    expect(checkDiagnostic({ event: 'frames', windowS: 60, counts })).toBeNull();
+    expect(sanitizeEventData({ event: 'frames', windowS: 60, counts })).toEqual({ event: 'frames', windowS: 60, counts });
+  });
+
+  it('the sideband\'s usage row carries the voice\'s context ratio, what it sees open, and the frame types since the last row', async () => {
+    _setVoiceWebSocket(FakeSideband);
+    const id = await mint();
+    const socket = FakeSideband.sockets[0]!.open();
+    const env = (event: Record<string, unknown>) => ({ type: 'response.event', delegation_id: 'item_1', event });
+    socket.frame({ type: 'session.input_transcript.delta', delta: 'the secret plan', start_ms: 0, end_ms: 200 });
+    socket.frame({ type: 'session.delegation.created', delegation: { id: 'item_1', type: 'delegation', target: 'responses' } });
+    socket.frame(env({ type: 'response.created', response: { id: 'resp_1' } }));
+    socket.frame(env({ type: 'response.output_item.done', item: { type: 'function_call', call_id: 'call_1', name: 'search', arguments: '{"query":"secret"}' } }));
+    socket.frame(env({ type: 'response.completed', response: { id: 'resp_1', output: [] } }));
+    socket.frame({ type: 'rate_limits.updated', rate_limits: [] });
+    socket.frame({ type: 'brand.new.event' });
+    socket.frame({ type: 'session.usage.updated', usage: { seconds: 12 }, context_window: { usage_ratio: 0.012345678 } });
+    await new Promise((r) => setTimeout(r, 20));
+    const events = (await get(`/sessions/${id}`)).body.events as Array<{ kind: string; data: Record<string, unknown> }>;
+    const usage = events.filter((e) => e.kind === 'usage').at(-1)!.data;
+    expect(usage).toEqual(expect.objectContaining({
+      source: 'sideband', seconds: 12, contextRatio: 0.0123, openResponses: 0, awaiting: 1, delegations: 1,
+      frames: { session_input_transcript_delta: 1, session_delegation_created: 1, response_event: 3, rate_limits_updated: 1, unknown: 1, session_usage_updated: 1 },
+    }));
+    expect(JSON.stringify(events)).not.toContain('secret');
   });
 });

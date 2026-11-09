@@ -171,6 +171,23 @@ export interface LogCall { id: string; at: string | null; name: string; outcome:
 /** `tokens` (voice G53): the delegated model's input tokens per response over the interval a usage row closes, when known. */
 export interface LogEvent { seq: number; at: string | null; kind: string; data: string; tokens?: string }
 
+/**
+ * G63: one line of a voice session's conversation, from its `heard` (you) or `spoke` (voice) row: the word count, how
+ * long, and the outcome (heard: answered, delegated, card, ignored; spoke: what it followed). Never the words.
+ */
+export interface ConversationRow {
+  id: string;
+  seq: number;
+  /** When it began, epoch ms on the dock's clock (0 when unknown): what the kept words are matched by. */
+  atMs: number;
+  who: 'you' | 'voice';
+  wordCount: number;
+  ms: number | null;
+  outcome: string;
+  label: string;
+  detail: string;
+}
+
 export interface LogRecord {
   source: LogSource;
   kind: string;
@@ -182,6 +199,8 @@ export interface LogRecord {
   callsTitle: string;
   calls: LogCall[];
   events: LogEvent[];
+  /** The voice source (G63): the heard and spoke rows and the one-line health summary. */
+  conversation?: { rows: ConversationRow[]; health: string };
   /** What "Copy as JSON" copies: the reads the record was built from. */
   raw: unknown;
 }

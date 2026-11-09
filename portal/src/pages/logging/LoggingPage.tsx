@@ -16,8 +16,10 @@
 // column opens with the shell's trail (System › Logging › the record), the one
 // title with the record's actions, then the record in one shape for every
 // source: KeyValue facts, the calls or steps DataTable and the events
-// DataTable in DetailSections; the Voice source adds the kept transcript
-// through the library's VoiceTurnStrip and its server export.
+// DataTable in DetailSections; the Voice source adds the Conversation table
+// (G63: each utterance heard and spoken, its word count and outcome, never the
+// words; with the on-device keep on, this device's kept words beside them), the
+// kept transcript through the library's VoiceTurnStrip and its server export.
 
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
@@ -35,7 +37,7 @@ import type { RunListResponse } from '../../lib/pipelineRuns';
 import { keepTranscripts, setKeepTranscripts, subscribeKeepTranscripts, transcriptStore, type KeptTranscript } from '../../lib/voice/transcriptKeep';
 import { setVoiceVerbosity, subscribeVoiceVerbosity, voiceVerbosity } from '../../lib/voice/contextWindow';
 import {
-  VOICE_LOG_RANGES, clock, exportApi, logJson, parseRange, sessionApi, sessionsApi, voiceRecord, voiceRows,
+  VOICE_LOG_RANGES, clock, exportApi, keptWordsFor, logJson, parseRange, sessionApi, sessionsApi, voiceRecord, voiceRows,
   type VoiceLogRange, type VoiceSessionDetail, type VoiceSessionListItem,
 } from '../voice/voiceLogModel';
 import {
@@ -131,6 +133,7 @@ export function LoggingView(p: LoggingViewProps) {
     <DetailSection as="h2" title={RECORD_HEADING[r.kind] ?? 'Record'} first>
       <KeyValue items={r.facts} aria-label={RECORD_HEADING[r.kind] ?? 'Record'} />
     </DetailSection>
+    {r.conversation && <ConversationSection rows={r.conversation.rows} health={r.conversation.health} transcript={p.voice?.transcript ?? null} />}
     <DetailSection as="h2" title={r.callsTitle} hint={String(r.calls.length)}>
       <DataTable data={r.calls} keyField={(c) => c.id} emptyMessage={`No ${r.callsTitle.toLowerCase()}.`} rowHeight="fixed" narrow data-testid="logging-calls"
         staticRows="A call or step is read in place, in the record it belongs to; it has no page of its own."
@@ -177,6 +180,31 @@ export function LoggingView(p: LoggingViewProps) {
     data-testid="logging">
     {body}
   </CollectionRecordFrame>;
+}
+
+/**
+ * G63: the session's heard and spoke rows, compact: who, when, how many words, how long, and how it ended. The
+ * Said column appears only when this device kept the words (transcriptKeep); nothing of it came from the server.
+ */
+function ConversationSection(p: { rows: NonNullable<LogRecord['conversation']>['rows']; health: string; transcript: KeptTranscript | null }) {
+  const kept = keptWordsFor(p.rows, p.transcript);
+  const data = p.rows.map((c) => ({
+    id: c.id, at: c.atMs ? clock(new Date(c.atMs).toISOString()) : '', who: c.who === 'you' ? 'You' : 'Voice',
+    wordCount: c.wordCount, tookMs: c.ms, outcome: c.label, detail: c.detail, said: kept.get(c.id) ?? '',
+  }));
+  return <DetailSection as="h2" title="Conversation" hint={p.health}>
+    <DataTable data={data} keyField={(c) => c.id} emptyMessage="Nothing heard or spoken." rowHeight="content" pageSize={50} narrow data-testid="logging-conversation"
+      staticRows="A line of the conversation is read in place; it has no page of its own."
+      columns={[
+        { key: 'at', header: 'At' },
+        { key: 'who', header: 'Who' },
+        { key: 'wordCount', header: 'Words', numeric: true },
+        { key: 'tookMs', header: 'Took', numeric: true, render: (c) => took(c.tookMs) },
+        { key: 'outcome', header: 'Outcome' },
+        { key: 'detail', header: 'Detail' },
+        ...(kept.size ? [{ key: 'said' as const, header: 'Said (this device)', className: 'whitespace-normal min-w-0' }] : []),
+      ]} />
+  </DetailSection>;
 }
 
 const POLL_MS = 15_000;

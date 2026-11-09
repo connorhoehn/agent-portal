@@ -114,6 +114,13 @@
 // log `unanswered` and raise the restart card ("Not answering: restart
 // voice"), whose Confirm ends the session and starts one resuming it.
 //
+// Diagnostics without words (G63, diagnostics.ts): each finished user
+// utterance is a `heard` row (word count, audio ms, and whether the voice
+// answered, delegated, it resolved a card, or nothing came within 8 s), each
+// voice utterance a `spoke` row (and what it followed), plus the voice's
+// context ratio, the frame types the dock drops, mute changes and the meter
+// per 30 s. Numbers and enums only; the middleware refuses anything else.
+//
 // Phase dwell (G36): the phase the dock shows (and logs) holds at least
 // PHASE_DWELL_MS. A change inside the window waits for its end and is then
 // taken from the machine as it stands, so a flap (listening, speaking,
@@ -131,6 +138,7 @@ import { DEFAULT_TOAST_SECONDS } from './work.ts';
 import { VoiceEventLog, argShape, refusalCode, resultSummary, type DockEvent } from './sessionEvents.ts';
 import { FAILED_TWICE_NEXT, FailureGuard, RETRY_NEXT, RefusalGuard, STOP_NEXT, withFailure, withNext } from './refusals.ts';
 import { inboundLine, inboundNote, type InboundItem } from './inbound.ts';
+import { SessionDiagnostics } from './diagnostics.ts';
 import { DelegationContext, PAGE_NOTE_REPLACES, briefOutput, modelOutput, summaryLine, verbosityNote, type Verbosity } from './contextWindow.ts';
 
 export const TICK_MS = 100;
@@ -311,6 +319,8 @@ export interface ControllerOptions {
   hidden?(): boolean;
   /** The workspace the shell is in now (G44): a kept session from another one is not resumable here. */
   tenant?(): string;
+  /** G63: epoch milliseconds for a `now()` reading (the `atMs` the heard and spoke rows carry); default the wall clock. */
+  epoch?(at: number): number;
 }
 
 interface CallRecord { name: string; status: 'confirming' | 'running' | 'answered' }
@@ -422,6 +432,8 @@ export class VoiceController {
   private readonly planners: Readonly<Record<string, VoiceToolPlanner>>;
   /** The session log's queue (sessionEvents.ts): batched, one request per 500 ms at most. */
   private readonly log: VoiceEventLog;
+  /** G63: heard/spoke outcomes, context, dropped frames and the microphone, as numbers (diagnostics.ts). */
+  private readonly diag: SessionDiagnostics;
   /** The calls refused in this session (G29): the second identical one is terminal. */
   private readonly refusals = new RefusalGuard();
   /** G48: the calls that failed in this session: retried once, and only when the user asked again. */
@@ -472,6 +484,10 @@ export class VoiceController {
     this.runners = opts.runners ?? VOICE_RUNNERS;
     this.planners = opts.planners ?? VOICE_PLANNERS;
     this.log = new VoiceEventLog({ fetch: opts.fetch, now: this.now, setTimer: this.setTimer, clearTimer: this.clearTimer });
+    this.diag = new SessionDiagnostics({
+      emit: (data) => this.emit({ kind: 'client', data }), now: this.now, setTimer: this.setTimer, clearTimer: this.clearTimer,
+      ...(opts.epoch ? { epoch: opts.epoch } : {}),
+    });
     this.loadResume();
     this.snapshot = this.build();
   }
@@ -491,6 +507,7 @@ export class VoiceController {
       const l = this.client.levels();
       this.levels = { input: l.input, output: l.output };
       this.dispatch({ type: 'levels', at: this.now(), input: l.input, output: l.output }, false);
+      this.diag.levelSample(l.input, this.muted);
       // The voice audibly talking is an answer (G60, G61), whether or not its transcript reached the data channel.
       if (l.output > SPEAKING_LEVEL) this.voiceAnswered(this.now());
       this.checkBudget();
@@ -535,6 +552,8 @@ export class VoiceController {
     // A card still up is answered as cancelled so the row records it.
     if (this.pending) this.resolvePending(false, 'click');
     this.clearChoice();
+    // G63: the open utterances and windows are written before the close.
+    this.diag.flush();
     this.dispatch({ type: 'stop' });
     await client.stop(reason, cause);
   }
@@ -547,6 +566,7 @@ export class VoiceController {
     if (!this.client || this.machine.base !== 'live') return;
     this.muted = !this.muted;
     this.client.setMuted(this.muted);
+    this.diag.mic(this.muted, 'user');
     this.publish();
   }
 
@@ -594,7 +614,7 @@ export class VoiceController {
   noteJobOutcome(line: string): void {
     if (this.machine.base !== 'live' || !this.client) return;
     this.context.note(line.length + 15);
-    this.client.appendCommentary(`Tell the user: ${line}`);
+    this.commentary(this.client, `Tell the user: ${line}`);
     this.addLine('assistant', line);
   }
 
@@ -616,7 +636,7 @@ export class VoiceController {
       }
       const line = inboundLine(item);
       this.context.note(line.length + 50);
-      client.appendCommentary(`Tell the user in one short line, then wait for them: ${line}`);
+      this.commentary(client, `Tell the user in one short line, then wait for them: ${line}`);
       this.addLine('assistant', line);
       this.emit({ kind: 'client', data: { event: 'inbound', kind: item.kind, spoken: true } });
     };
@@ -644,6 +664,7 @@ export class VoiceController {
     const picked = c?.candidates[index];
     this.clearChoice();
     if (c) this.emit({ kind: 'client', data: { event: 'choice-decided', requestId: c.requestId, index, candidates: c.candidates.length, by: c.ordinal ? 'voice' : 'click' } });
+    if (c?.ordinal) this.diag.cardResolved();
     if (!c || !picked?.href) return;
     const ctx = this.toolContext();
     if (!openableHref(picked.href, ctx)) return;
@@ -754,6 +775,7 @@ export class VoiceController {
         this.addLine('assistant', 'The voice connection dropped.');
         return;
       case 'ended':
+        this.diag.flush();
         this.elapsedFrozen = client.elapsedSeconds();
         this.closedSeconds = e.seconds;
         if (client.mint && e.seconds != null) {
@@ -789,6 +811,7 @@ export class VoiceController {
         this.disarmIdle();
         this.turn = { used: 0, searches: new Set(), stopped: false };
         this.heard(at);
+        this.diag.userWords(f.text, f.startMs, f.endMs);
         this.appendTurn('you', f.text, at);
         this.dispatch({ type: 'input', at });
         if (this.pending) this.hearForPending(f.text, f.startMs, f.endMs);
@@ -797,6 +820,7 @@ export class VoiceController {
       case 'output':
         this.context.speech(f.text.length);
         this.voiceAnswered(at);
+        this.diag.voiceWords(f.text, f.startMs, f.endMs);
         if (this.pending) this.saidSinceCard += f.text;
         // The voice is still talking: the 6 s of silence count from its last word.
         if (this.idleArmed) this.scheduleIdle(IDLE_PULSE_MS);
@@ -806,6 +830,7 @@ export class VoiceController {
       case 'delegation':
         if (!this.delegations.has(f.delegationId)) {
           this.emit({ kind: 'delegation', data: { delegationId: f.delegationId } });
+          this.diag.delegated();
           this.context.newTurn();
           this.watchEmpty(f.delegationId, false);
         }
@@ -824,6 +849,8 @@ export class VoiceController {
         if (f.delegationId) { this.watchCompleted(f.delegationId); this.closeDelegation(f.delegationId); }
         return;
       case 'muted':
+        // G63: the provider's word on the microphone, logged when it disagrees with the dock's.
+        if (f.muted !== this.muted) this.diag.mic(f.muted, 'provider');
         this.muted = f.muted;
         this.publish();
         return;
@@ -832,12 +859,18 @@ export class VoiceController {
         this.emit({ kind: 'error', data: { source: 'provider', message: f.message } });
         this.addLine('assistant', `Voice error: ${f.message}`);
         return;
-      case 'closed':
       case 'usage':
+        if (f.contextRatio != null) this.diag.contextRatio(f.contextRatio, f.seconds);
+        this.publish();
+        return;
+      case 'other':
+        this.diag.droppedFrame(f.type);
+        this.publish();
+        return;
+      case 'closed':
       case 'audio':
       case 'ack':
       case 'response-progress':
-      case 'other':
         this.publish();
     }
   }
@@ -1010,6 +1043,7 @@ export class VoiceController {
     // G33: list, search and get hand the model the count, three rows, `more` and a ready `say` line, unless `detail`.
     const wire = JSON.stringify(modelOutput(briefOutput(name, args, res.output)));
     client.sendToolOutput(callId, wire);
+    this.diag.resultSent();
     this.context.result(wire.length, summaryLine(name, res.summary));
     this.armIdle();
     // The repeat is on the log; the continuation says the refusal (STOP_NEXT), so the dock does not say it again.
@@ -1266,7 +1300,7 @@ export class VoiceController {
     if (p.toldToClick || !this.client) return;
     p.toldToClick = true;
     this.context.note(p.line.length + 40);
-    this.client.appendCommentary(`Tell the user, in these words: ${p.line}`);
+    this.commentary(this.client, `Tell the user, in these words: ${p.line}`);
     this.addLine('assistant', p.line);
   }
 
@@ -1283,6 +1317,7 @@ export class VoiceController {
       requestId: p.view.requestId, by, callId: p.callId, afterMs: Math.max(0, Math.round(this.now() - p.shownAt)), ...(phrase ? { phrase } : {}),
     } });
     this.dispatch({ type: 'confirm-resolved', callId: p.callId });
+    if (by === 'voice') this.diag.cardResolved();
     if (confirmed) {
       void this.execute(client, p.delegationId, p.callId, p.call, p.startedAt, this.toolContext(), by, p.plan, answer);
     } else {
@@ -1319,7 +1354,7 @@ export class VoiceController {
       );
       const minutes = Math.max(1, Math.round(leftSec / 60));
       const line = `About ${minutes} minute${minutes === 1 ? '' : 's'} left on this voice session.`;
-      this.client.appendCommentary(`Tell the user: ${line}`);
+      this.commentary(this.client, `Tell the user: ${line}`);
       this.addLine('assistant', line);
     }
   }
@@ -1436,7 +1471,7 @@ export class VoiceController {
       if (this.pending !== p || client !== this.client || this.machine.base !== 'live') return;
       if (CARD_SAID.test(this.saidSinceCard)) return;
       this.context.note(p.line.length + 40);
-      client.appendCommentary(`Tell the user, in these words: ${p.line}`);
+      this.commentary(client, `Tell the user, in these words: ${p.line}`);
       this.addLine('assistant', p.line);
       this.emit({ kind: 'client', data: { event: 'card-line', requestId: p.view.requestId } });
     }, CARD_LINE_WAIT_MS);
@@ -1488,6 +1523,7 @@ export class VoiceController {
   }
 
   private reset(): void {
+    this.diag.reset();
     this.turn = { used: 0, searches: new Set(), stopped: false };
     this.clearDelegations();
     this.lastVoiceAt = null;
@@ -1512,6 +1548,12 @@ export class VoiceController {
     this.elapsedFrozen = null;
     this.closedSeconds = null;
     this.levels = { input: 0, output: 0 };
+  }
+
+  /** Spoken context (session.commentary.append): what the voice says next follows it (G63 `spoke` after `commentary`). */
+  private commentary(client: VoiceClient, text: string): void {
+    client.appendCommentary(text);
+    this.diag.commentarySent();
   }
 
   /** One event of the session log (sessionEvents.ts), once a mint has named the session. */

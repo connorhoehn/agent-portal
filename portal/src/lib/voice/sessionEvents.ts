@@ -201,6 +201,106 @@ export function resultSummary(outcome: string, output: Record<string, unknown>):
   return s;
 }
 
+// ── G63: diagnostics without words (diagnostics.ts writes them, the Logging record reads them) ──
+
+/**
+ * The Live API frame types the logs name; any other is `unknown`. The middleware keeps the same list
+ * (lib/voice/openai.ts LIVE_FRAME_TYPES) and refuses a `frames` count under any other key.
+ */
+export const LIVE_FRAME_TYPES = [
+  'session.started', 'session.updated', 'session.closed', 'session.usage.updated',
+  'session.input_transcript.delta', 'session.output_transcript.delta', 'session.output_audio.delta',
+  'session.input_audio.muted', 'session.input_audio.unmuted', 'session.delegation.created',
+  'session.thinking.appended', 'session.commentary.appended', 'session.instructions.appended',
+  'response.event', 'error', 'info', 'rate_limits.updated',
+  'input_audio_buffer.speech_started', 'input_audio_buffer.speech_stopped', 'input_audio_buffer.committed',
+  'conversation.item.truncated', 'turn_detection.updated',
+] as const;
+const KNOWN_FRAMES: ReadonlySet<string> = new Set<string>(LIVE_FRAME_TYPES);
+/** A frame type as a row key: dots as underscores (a key may not hold a dot); an unlisted type is `unknown`. */
+export const frameKey = (type: string): string => (KNOWN_FRAMES.has(type) ? type.replace(/\./g, '_') : 'unknown');
+
+/** How a finished user utterance ended: the voice spoke without delegating, it delegated, it resolved a card, or nothing within 8 s. */
+export const HEARD_OUTCOMES = ['answered', 'delegated', 'card', 'ignored'] as const;
+export type HeardOutcome = typeof HEARD_OUTCOMES[number];
+/** What a voice utterance followed: a delegation result, the dock's commentary, the user's words, or nothing at all. */
+export const SPOKE_AFTER = ['result', 'commentary', 'user', 'unprompted'] as const;
+export type SpokeAfter = typeof SPOKE_AFTER[number];
+
+const WORD_CHAR = /[\p{L}\p{N}]/u;
+const INNER_CHAR = /['’\-]/;
+
+/**
+ * The words that begin in `text`, a transcript delta, given the character the previous delta of the same utterance
+ * ended on (null at its start): a word starts at a letter or digit that does not follow one (an apostrophe or hyphen
+ * between two letters joins them). Only the count and the last character leave; the words are not kept.
+ */
+export function countWords(text: string, prev: string | null): { words: number; last: string | null } {
+  let words = 0;
+  let last = prev;
+  let before: string | null = null;
+  for (const ch of text) {
+    if (WORD_CHAR.test(ch) && !(last != null && (WORD_CHAR.test(last) || (INNER_CHAR.test(last) && before != null && WORD_CHAR.test(before))))) words += 1;
+    before = last;
+    last = ch;
+  }
+  return { words, last };
+}
+
+export type Diagnostic =
+  | { event: 'heard'; n: number; wordCount: number; ms: number | null; outcome: HeardOutcome; afterMs: number | null; delegations: number; atMs: number }
+  | { event: 'spoke'; n: number; wordCount: number; ms: number | null; after: SpokeAfter; atMs: number }
+  | { event: 'context'; ratio: number; seconds: number | null }
+  | { event: 'frames'; windowS: number; counts: Record<string, number> }
+  | { event: 'mic'; muted: boolean; by: 'user' | 'provider' }
+  | { event: 'level'; windowS: number; samples: number; min: number; avg: number; max: number; mutedPct: number };
+
+const n0 = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null);
+const inList = <T extends string>(list: readonly T[], v: unknown): T | null => (typeof v === 'string' && (list as readonly string[]).includes(v) ? v as T : null);
+
+/**
+ * A logged `client` event's data read back as a diagnostic, or null when it is not one or does not hold its shape
+ * (an older row, a field missing). The server checked every field when it was written; this only types it.
+ */
+export function readDiagnostic(kind: string, data: Record<string, unknown> | null | undefined): Diagnostic | null {
+  if (kind !== 'client' || !data) return null;
+  const d = data;
+  switch (d['event']) {
+    case 'heard': {
+      const outcome = inList(HEARD_OUTCOMES, d['outcome']);
+      const wordCount = n0(d['wordCount']);
+      if (!outcome || wordCount == null) return null;
+      return { event: 'heard', n: n0(d['n']) ?? 0, wordCount, ms: n0(d['ms']), outcome, afterMs: n0(d['afterMs']), delegations: n0(d['delegations']) ?? 0, atMs: n0(d['atMs']) ?? 0 };
+    }
+    case 'spoke': {
+      const after = inList(SPOKE_AFTER, d['after']);
+      const wordCount = n0(d['wordCount']);
+      if (!after || wordCount == null) return null;
+      return { event: 'spoke', n: n0(d['n']) ?? 0, wordCount, ms: n0(d['ms']), after, atMs: n0(d['atMs']) ?? 0 };
+    }
+    case 'context': {
+      const ratio = n0(d['ratio']);
+      return ratio == null || ratio > 1 ? null : { event: 'context', ratio, seconds: n0(d['seconds']) };
+    }
+    case 'frames': {
+      const c = d['counts'];
+      if (!c || typeof c !== 'object' || Array.isArray(c)) return null;
+      const counts: Record<string, number> = {};
+      for (const [k, v] of Object.entries(c as Record<string, unknown>)) { const x = n0(v); if (x != null) counts[k] = x; }
+      return { event: 'frames', windowS: n0(d['windowS']) ?? 0, counts };
+    }
+    case 'mic':
+      return typeof d['muted'] === 'boolean' && (d['by'] === 'user' || d['by'] === 'provider') ? { event: 'mic', muted: d['muted'], by: d['by'] } : null;
+    case 'level': {
+      const [min, avg, max] = [n0(d['min']), n0(d['avg']), n0(d['max'])];
+      if (min == null || avg == null || max == null) return null;
+      return { event: 'level', windowS: n0(d['windowS']) ?? 0, samples: n0(d['samples']) ?? 0, min, avg, max, mutedPct: n0(d['mutedPct']) ?? 0 };
+    }
+    default:
+      return null;
+  }
+}
+
 function clean(v: unknown, depth: number): unknown {
   if (v == null || typeof v === 'boolean') return v ?? null;
   if (typeof v === 'number') return Number.isFinite(v) ? v : null;
