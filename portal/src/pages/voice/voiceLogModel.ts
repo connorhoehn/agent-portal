@@ -132,6 +132,7 @@ export function sessionFacts(d: VoiceSessionDetail): Array<{ label: string; valu
     { label: 'Length', value: `${duration(s.seconds)} of ${duration(s.maxSeconds)}` },
     { label: 'Stopped by', value: s.stopReason ?? 'not yet' },
     ...(s.resumeOf ? [{ label: 'Resumes', value: s.resumeOf, mono: true }] : []),
+    ...(confirmationsLine(d.events) ? [{ label: 'Confirmations', value: confirmationsLine(d.events)! }] : []),
     { label: 'Model', value: [s.model, s.voice].filter(Boolean).join(' · ') || 'unknown', mono: true },
     { label: 'Cost', value: `${usd(s.costUsd)}${s.costBasis ? ` (${s.costBasis})` : ''}` },
     { label: 'Tool calls', value: `${s.toolCallCount}${s.lastOutcome ? `, last ${s.lastOutcome}` : ''}` },
@@ -151,4 +152,20 @@ export function logJson(detail: VoiceSessionDetail, transcript: KeptTranscript |
     ...detail,
     ...(transcript ? { transcript: { keptOn: 'this device', savedAt: transcript.savedAt, turns: transcript.turns } } : {}),
   }, null, 2);
+}
+
+/**
+ * G40: every card the session answered, in order: the tool, who answered (voice or click), the matched word of a
+ * spoken answer (the closed vocabulary, never the utterance) and how long the card waited. Null when none was.
+ */
+export function confirmationsLine(events: ReadonlyArray<{ kind: string; data: Record<string, unknown> }>): string | null {
+  const rows = events.filter((e) => e.kind === 'confirmed' || e.kind === 'cancelled').map((e) => {
+    const d = e.data ?? {};
+    const tool = typeof d['tool'] === 'string' ? d['tool'] : 'card';
+    const by = typeof d['by'] === 'string' ? d['by'] : 'click';
+    const phrase = typeof d['phrase'] === 'string' ? ` "${d['phrase']}"` : '';
+    const after = typeof d['afterMs'] === 'number' ? `, ${(d['afterMs'] / 1000).toFixed(1)} s` : '';
+    return `${tool} ${e.kind === 'confirmed' ? 'confirmed' : 'cancelled'} by ${by}${phrase}${after}`;
+  });
+  return rows.length ? rows.join('; ') : null;
 }

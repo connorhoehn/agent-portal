@@ -6,7 +6,7 @@ import { voicePage, hashToolArgs } from '../tools.ts';
 import { commandAllowedBy, composeCommand } from '../actions.ts';
 import { PALETTE, middlewareVoice } from './voiceHarness.ts';
 
-interface MwTool { name: string; parameters: unknown; kind: string; backing: string; confirm: boolean; action: string | null; says: string; tenants: readonly string[]; noConfirm?: unknown; actionBy?: unknown }
+interface MwTool { name: string; parameters: unknown; kind: string; backing: string; confirm: boolean; action: string | null; says: string; tenants: readonly string[]; noConfirm?: unknown; actionBy?: unknown; confirmBy?: unknown; clickFor?: unknown; sayToConfirm?: unknown }
 interface MwCatalogue {
   VOICE_TOOLS: MwTool[];
   NAVIGATE_PAGES: Array<{ id: string; path: string; tenants: readonly string[]; roles?: readonly string[] }>;
@@ -38,6 +38,7 @@ test('the portal catalogue matches the middleware one the session is minted with
     for (const k of ['kind', 'backing', 'confirm', 'action', 'says'] as const) assert.equal(mine[k], theirs[k], `${mine.name}.${k}`);
     assert.deepEqual([...mine.tenants], [...theirs.tenants], `${mine.name} tenants`);
     assert.deepEqual(mine.noConfirm, theirs.noConfirm, `${mine.name} noConfirm`);
+    assert.deepEqual([mine.confirmBy, mine.clickFor, mine.sayToConfirm], [theirs.confirmBy, theirs.clickFor, theirs.sayToConfirm], `${mine.name} confirm policy (G40)`);
     assert.deepEqual(mine.actionBy, theirs.actionBy, `${mine.name} actionBy`);
   }
   assert.deepEqual(COMPUTER_ACTIONS, mw.COMPUTER_ACTIONS);

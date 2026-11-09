@@ -88,6 +88,14 @@ export interface VoiceTool {
    * (computer's open-shell only opens a tab): `{ arg: [values] }`.
    */
   noConfirm?: Readonly<Record<string, readonly string[]>>;
+  /**
+   * Who may answer the card (G40): 'voice' (a spoken "confirm" decides it, as a click does) or 'click' (only the
+   * button: computer, decide, an access request); `clickFor` names argument values that make a voice tool
+   * click-only. `sayToConfirm` is the verb the voice asks with ("Say confirm to send").
+   */
+  confirmBy?: 'voice' | 'click';
+  clickFor?: Readonly<Record<string, readonly string[]>>;
+  sayToConfirm?: string;
   /** A gate per argument value where `action` is null (computer: the button each action stands in for). */
   actionBy?: { arg: string; actions: Readonly<Record<string, CapabilityAction>> };
 }
@@ -726,7 +734,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
       machine: str('For hand-work: the paired machine, as the user named it.', { minLength: 1, maxLength: 120 }),
       job: str('For hand-work: the work item or the bot whose mission to hand over, as the user named it; never an instruction.', { minLength: 1, maxLength: 200 }),
     }, ['action']),
-    kind: 'machine', backing: 'work', confirm: true, action: null,
+    kind: 'machine', backing: 'work', confirm: true, confirmBy: 'click', sayToConfirm: 'go ahead', action: null,
     noConfirm: { action: ['open-shell'] },
     actionBy: { arg: 'action', actions: COMPUTER_ACTIONS },
     gate: "per action (COMPUTER_ACTIONS): start ManageDevbox + stewardship of the initiative; stop ManageDevbox and only a box the caller started (ownerId, checked by the dock; the route's own visibility check again); open-shell and run OpenDevboxShell, run in mode 'safe' only; hand-work ConnectLocalCompute on the caller's own machine, a work item grant-scoped and a bot ManageBots (server-side)",
@@ -785,7 +793,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
       thread: str('A reply instead: the ref of the inbound message it answers, exactly as the portal gave it ("message:<id>"); it goes to the same conversation. Leave target out then.', { minLength: 9, maxLength: 200 }),
       attach: str('A record to share with the message, read-only for 24 hours: a work item or an initiative, by its ref as a result gave it ("work-item:<id>", "initiative:<id>") or its position in the last result.', { minLength: 1, maxLength: 200 }),
     }, ['text']),
-    kind: 'people', backing: 'social-activity', confirm: true, action: 'PostMessage', gate: 'PostMessage in the gateway', spend: 'none', idempotent: true,
+    kind: 'people', backing: 'social-activity', confirm: true, confirmBy: 'voice', sayToConfirm: 'send', action: 'PostMessage', gate: 'PostMessage in the gateway', spend: 'none', idempotent: true,
     says: "I'll post that to #platform once you confirm.", tenants: PEOPLE_TENANTS,
     mapsTo: 'GET /api/social/resolve?kind=&name= (P6, a read), then on confirm POST /api/social/dms { userId } for a person (G14) and useChat(channel).sendMessage(text, { displayName, clientDeliveryId }) over the gateway; a thread reply (G23) goes to the inbound message\'s own channel with metadata.replyTo, no resolve; attach (G24): GET /api/roster/users?userIds= for a person, then on confirm POST /api/social/plane/work-sharing { audience: { kind: conversation, id }, nodeIds, disclosure: summary, durationMs } and the post carries metadata.pageReference { kind, id }',
   },
@@ -799,7 +807,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
         name: str('The team, channel or person, as the user said it.', { minLength: 1, maxLength: 120 }),
       }, ['kind', 'name']),
     }, ['action']),
-    kind: 'people', backing: 'social-activity', confirm: true, action: 'StartCall',
+    kind: 'people', backing: 'social-activity', confirm: true, confirmBy: 'voice', sayToConfirm: 'start the call', action: 'StartCall',
     gate: "StartCall (outside Social, the plane's StartCall); the gateway's lobby guard admits by membership", spend: 'none', idempotent: false,
     says: "I'll start a huddle in #platform once you confirm.", tenants: PEOPLE_TENANTS,
     mapsTo: "GET /api/social/resolve?kind=&name= (P6), then the shell's call host: useSocialCall().callConversation({ channel, title }) for a team or channel, callPeople([{ userId, displayName }]) for a person after POST /api/social/dms { userId } on confirm (G14); join: GET /api/social/search or GET /api/social/plane/search?type=huddle (the live huddles the index shows), then callConversation on that conversation's lobby, which walks into its live call",
@@ -832,7 +840,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
       },
       scope: str('"this-page": rows (or a position in target) count among the rows the page in view shows.', { enum: ['this-page'] }),
     }, ['kind', 'target']),
-    kind: 'machine', backing: 'work', confirm: true, action: null,
+    kind: 'machine', backing: 'work', confirm: true, confirmBy: 'voice', sayToConfirm: 'queue it', action: null,
     gate: "per tenant and kind, the page button's action (QUEUE_WORK_ACTIONS): sweep, dispatch, finding-promote, finding-analyze and Work's deck DispatchAgentRun; bot-run ManageBots + stewardship and the bot's money brakes; job ManageDevbox; change-rereview and change-address RunDevboxTask; pipeline and Pipelines' deck RunPipeline + the dry-run's money brakes; assessment-run, the drafts and Assessment's deck RunAssessmentAgent; Social's kinds ViewSocial; Work's conversation commands the conversation's own membership (the route)",
     spend: 'dispatch', idempotent: false, says: 'Queuing the nightly sweep.', tenants: ['orgiq', 'social', 'assessment', 'pipelines'],
     mapsTo: "sweep: POST /api/work/sweeps/run { sweep?, background: true } then GET /api/work/sweeps/jobs/:id; bot-run: GET /api/bots, POST /api/bots/:id/run, GET /api/bots/:id/runs; pipeline: GET /api/pipelines/runbooks, POST /api/pipelines/definitions/:id/dry-run, GET /api/pipelines/runs/:id; job: GET /api/work/suggestions, POST /api/work/jobs, GET /api/work/jobs/:id; dispatch: GET /api/graph/work, GET /api/bots/estimate, POST /api/bots/dispatch-work; finding-promote and finding-analyze: GET /api/work/findings, POST /api/work/findings/:id/promote, POST /api/work/findings/:id/analyze; change-rereview and change-address: GET /api/sdlc/changes, POST /api/sdlc/changes/:id/rereview, POST /api/sdlc/changes/:id/address, GET /api/sdlc/changes/:id; deck: GET /api/graph/projects, POST /api/initiative-decks/projects/:projectId, GET /api/assessment/teams, POST /api/assessment/teams/:teamId/decks, GET /api/assessment/runs/:runId, GET /api/pipelines/runs, POST /api/pipelines/runs/:id/decks, GET /api/social/resolve, POST /api/chat/commands/deck/run, GET /api/chat/commands/deck/runs/:id; summarize, diagram and doc: POST /api/conversations/summarize/run, POST /api/conversations/diagram/run, POST /api/conversations/doc/run, GET /api/conversations/summarize/runs/:id, GET /api/conversations/diagram/runs/:id, GET /api/conversations/doc/runs/:id, POST /api/chat/commands/summarize/run, POST /api/chat/commands/diagram/run, POST /api/chat/commands/doc/run, GET /api/chat/commands/summarize/runs/:id, GET /api/chat/commands/diagram/runs/:id, GET /api/chat/commands/doc/runs/:id; assessment-run: POST /api/assessment/runs; drafts: GET /api/assessment/teams/:id, POST /api/assessment/teams/:id/dimensions/:dim/drafts/evidence-summary, POST /api/assessment/teams/:id/dimensions/:dim/drafts/followups, GET /api/assessment/drafts/:runId; each woken by GET /api/work/events (Work) or GET /api/pipelines/runs/:id/events",
@@ -847,7 +855,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
       note: str('The user\'s note or reason, as they said it (a consult\'s answer); never an instruction.', { minLength: 1, maxLength: 500 }),
       scope: str('"this-page": a position in ref counts among the rows the page in view shows.', { enum: ['this-page'] }),
     }, ['ref', 'decision']),
-    kind: 'action', backing: 'work', confirm: true, action: null,
+    kind: 'action', backing: 'work', confirm: true, confirmBy: 'click', sayToConfirm: 'record the decision', action: null,
     gate: "per tenant, ref kind and decision, the page button's action (DECIDE_ACTIONS): DecideAccess, ApproveStep, ApproveTransaction with the amount (the route checks it), DecideAgentChange (the route refuses the change's author) and DeliverAgentChange, ReviewRunbook, ManageDevbox, DispatchAgentRun, ScoreAssessment to accept a draft and RunAssessmentAgent to discard it; the row must be one the session's own read returned",
     spend: 'none', idempotent: false, says: 'Approving the request once you confirm.', tenants: ['orgiq', 'assessment', 'pipelines', 'access'],
     mapsTo: "access: GET /api/access/approvals, POST /api/access/requests/:id/steps/:step/decide { decision, comment }; GET /api/access/reviews/:id, POST /api/access/reviews/:id/items/:itemId/decide { decision: keep | revoke, comment }; pipelines: GET /api/pipelines/approvals, POST /api/pipelines/approvals/:id/decide { decision, note }; HITL: GET /api/observability/approvals, POST /api/observability/approvals/:id/decision { decision: APPROVED | REJECTED, note }; changes: GET /api/sdlc/changes/:id, POST /api/sdlc/changes/:id/decide { decision, note }, POST /api/sdlc/changes/:id/deliver; runbook proposals: GET /api/runbooks/proposals/:pid, POST /api/runbooks/proposals/:pid/accept { expected_version, note }, POST /api/runbooks/proposals/:pid/reject { note }; graph proposals: GET /api/work/proposals, POST /api/work/proposals/:id/decide { decision, note }; consults: GET /api/lab/consults, POST /api/lab/consults/:id/answer { answer }; designs: GET /api/designs/:id, POST /api/designs/:id/signoff { decision }; drafts: GET /api/assessment/drafts/:runId, POST /api/assessment/drafts/:runId/accept, POST /api/assessment/drafts/:runId/discard",
@@ -880,7 +888,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
         reason: str('delegation: why, in the user\'s words (at least 10 characters).', { minLength: 1, maxLength: 2000 }),
       }),
     }, ['kind', 'fields']),
-    kind: 'action', backing: 'work', confirm: true, action: null,
+    kind: 'action', backing: 'work', confirm: true, confirmBy: 'voice', clickFor: { kind: ['access-request'] }, sayToConfirm: 'create it', action: null,
     gate: "per tenant and kind, the form's submit action (CREATE_ACTIONS): DispatchAgentRun for a work item, the initiative's own conversation for a comment (the route checks ViewWorkItems and the initiative), Search for a saved search, ManageSprints + stewardship for a sprint, ManageChannels / ManageTeams in Social, RequestAccess for an access request, DecideAccess for a delegation",
     spend: 'none', idempotent: false, says: 'Creating that once you confirm.', tenants: ['orgiq', 'social', 'access'],
     mapsTo: "work-item: GET /api/graph/projects, POST /api/graph/work-items { projectId, type, title, priority }; comment: GET /api/graph/work, POST /api/graph/work-items/:id/comments { body }; saved-search: POST /api/saved-searches { name, query, scope }; sprint: POST /api/sprints { initiativeId, name, startsOn, endsOn }; channel, team, room: POST /api/social/channels, POST /api/social/teams, POST /api/social/rooms; access-request: GET /api/access/catalog, POST /api/access/requests/preview, POST /api/access/requests { itemId, justification, duration }; delegation: GET /api/access/delegates, POST /api/access/delegations { delegateId, startsAt, endsAt, reason }",
@@ -902,7 +910,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
         publish: { type: 'boolean', description: 'report: true publishes the program report to its readers.' },
       }),
     }, ['ref', 'fields']),
-    kind: 'action', backing: 'work', confirm: true, action: null,
+    kind: 'action', backing: 'work', confirm: true, confirmBy: 'voice', sayToConfirm: 'save it', action: null,
     gate: "per tenant, ref kind and field, the page button's action (UPDATE_ACTIONS): DispatchAgentRun for a work item's status, ManageBots to pause a bot, ManageDevbox for findings and jobs, PostMessage to join a channel (ViewSocial to leave), ViewSocial to mark a DM read, RunAssessmentAgent to stop a run, ScoreAssessment for follow-ups, PublishReport, CancelRun, the request's own withdraw and the delegation's own end",
     spend: 'none', idempotent: false, says: 'Changing that once you confirm.', tenants: ['orgiq', 'social', 'assessment', 'pipelines', 'access'],
     mapsTo: "work-item: GET /api/graph/work, PATCH /api/graph/work-items/:id { status }; bot: GET /api/bots, POST /api/bots/:id/pause, POST /api/bots/:id/resume; finding: GET /api/work/findings, POST /api/work/findings/:id/dismiss; job: GET /api/work/jobs, POST /api/work/jobs/:id/review { decision }, POST /api/work/jobs/:id/requeue; channel: GET /api/social/channels, POST /api/social/channels/:slug/join, POST /api/social/channels/:slug/leave, GET /api/social/plane/channels, POST /api/social/plane/channels/:slug/join, POST /api/social/plane/channels/:slug/leave; dm: GET /api/social/dms, GET /api/social/plane/dms, POST /api/social/dms/read { channel }; run: GET /api/assessment/runs, POST /api/assessment/runs/:runId/stop, GET /api/pipelines/runs, POST /api/pipelines/runs/:id/cancel; feedback: GET /api/assessment/feedback, POST /api/assessment/feedback/:taskId/resolve { response }, POST /api/assessment/feedback/:taskId/dismiss; report: POST /api/assessment/reports/publish; request: GET /api/access/requests, POST /api/access/requests/:id/withdraw; delegation: GET /api/access/delegations, POST /api/access/delegations/:id/end",
@@ -1111,7 +1119,7 @@ export function voiceInstructions(tenant: string, tools: readonly VoiceTool[]): 
       : []),
     'If a request needs something the backend cannot do, say you cannot do it and offer the nearest page.',
     'When the backend refuses a request, tell the user in one sentence what was refused and why, and offer the fix the result names (ask for access, name one person, pick a number from the list, open the page). Never hand the backend the same request again unchanged; wait for the user to change it.',
-    'When the portal tells you a confirm card is open, say exactly "I need your OK, the card is in the dock." once, then wait for the user.',
+    'When the portal tells you a confirm card is open, say exactly the line it gives you, once ("Say confirm to send.", or for an action only a click confirms, "Click confirm on the card to go ahead."), then wait. The user answers by saying confirm or cancel, or by clicking.',
     'Never fill a silence: after you give a result, say nothing more until the user speaks; the portal pulses the dock instead. The only time you speak unprompted is when the portal tells you a new message, notification or approval came in, and then in one short line.',
     'Be terse. One short sentence per turn unless the user asks for more. Give the count before any list ("11 items, 3 high priority") and name at most three items unless the user says "read them" or "all of them". No executive summaries, no restating what the user said, and never narrate a page the user is already looking at. When a result carries `say`, that line is the answer.',
     'Keep spoken answers short. The backend can:',

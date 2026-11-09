@@ -530,7 +530,7 @@ describe('the rendered session', () => {
       expect(text).toMatch(/Answer without delegating when you already have what is needed[^\n]*"what did you just say"/);
       expect(text).toMatch(/Delegate only when a tool is needed, and once per request/);
       // G32 and G33 item 4: the card line, and no speaking into a silence except for an inbound event (G23).
-      expect(text).toContain('say exactly "I need your OK, the card is in the dock." once');
+      expect(text).toContain('say exactly the line it gives you, once ("Say confirm to send."');
       expect(text).toMatch(/Never fill a silence[^\n]*The only time you speak unprompted is when the portal tells you a new message, notification or approval came in/);
       expect(text.length).toBeLessThanOrEqual(20_000);
     }

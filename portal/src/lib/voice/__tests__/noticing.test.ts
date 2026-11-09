@@ -6,7 +6,11 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CARD_LINE, CARD_LINE_WAIT_MS, CARD_NOTE, IDLE_PULSE_MS, PULSE_MS, VoiceController } from '../controller.ts';
+import { CARD_LINE_WAIT_MS, IDLE_PULSE_MS, PULSE_MS, VoiceController, cardNote } from '../controller.ts';
+
+/** A message card's line (G40: voice may confirm it). */
+const CARD_LINE = 'Say confirm to send.';
+const CARD_NOTE = cardNote(CARD_LINE);
 import { VoiceClient } from '../client.ts';
 import { VOICE_RUNNERS } from '../actions.ts';
 import type { VoiceToolRunner } from '../tools.ts';
@@ -72,7 +76,7 @@ test('G32: a confirm card pulses once, asks the voice for the line, and the dock
     await h.clock.advance(CARD_LINE_WAIT_MS);
     const said = s.sent.filter((e) => e.type === 'commentary');
     assert.equal(said.length, 1);
-    assert.match(said[0]!.text!, /I need your OK, the card is in the dock\./);
+    assert.match(said[0]!.text!, /Say confirm to send\./);
     assert.ok(h.c.getSnapshot().turns.some((t) => t.text === CARD_LINE), 'the spoken line is in the transcript');
     await h.clock.advance(10_000);
     assert.equal(s.sent.filter((e) => e.type === 'commentary').length, 1, 'said once');

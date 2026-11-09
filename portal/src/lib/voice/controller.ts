@@ -64,8 +64,8 @@
 //
 // Noticing the dock (G32, G33 item 4): when a confirm or choice card opens the
 // dock pulses its control once (the library's `pulse`, 2.510.6). A confirm card
-// also gets a silent note asking the voice for CARD_LINE ("I need your OK, the
-// card is in the dock."); if the voice has not said it within
+// also gets a silent note asking the voice for its card line (G40: "Say confirm
+// to send.", or "Click confirm on the card to …" where only a click decides); if the voice has not said it within
 // CARD_LINE_WAIT_MS the dock appends it as commentary itself, once. After a
 // tool result, IDLE_PULSE_MS of no user input while the voice is silent pulses
 // once more and says nothing: the voice speaks unprompted only for inbound
@@ -95,7 +95,7 @@
 import { VoiceClient, type ClientEvent, type CloseCause, type CloseWhy, type MediaFactory, type StopReason, type TransportCause, type VoiceFrame, type VoiceMint } from './client.ts';
 import { MIC_QUIET_MS, initialMachine, phaseAt, reduce, sessionOpen, type MachineEvent, type MachineState, type VoicePhase } from './machine.ts';
 import {
-  cancelledResult, hashToolArgs, localHref, needsConfirm, type CardAnswer, openableHref, planPreparedCall, prepareToolCall, refused, runPreparedCall, spokenOrdinal, toolAvailable,
+  cancelledResult, confirmLine, confirmModeOf, hashToolArgs, localHref, needsConfirm, type CardAnswer, openableHref, planPreparedCall, prepareToolCall, refused, runPreparedCall, spokenOrdinal, toolAvailable,
   type ConfirmPlan, type PreparedCall, type ToolContext, type ToolResult, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 import { VOICE_PLANNERS, VOICE_RUNNERS } from './actions.ts';
@@ -122,10 +122,10 @@ const LIVE_PHASES: ReadonlySet<VoicePhase> = new Set<VoicePhase>(['listening', '
 export const PULSE_MS = 700;
 /** After a tool result: this long with no user input and a silent voice pulses the dock once (G33 item 4). */
 export const IDLE_PULSE_MS = 6000;
-/** How long the voice has to say CARD_LINE itself before the dock appends it (G32). */
+/** How long the voice has to say the card line itself before the dock appends it (G32). */
 export const CARD_LINE_WAIT_MS = 2500;
-/** What the user hears when a confirm card opens (G32). */
-export const CARD_LINE = 'I need your OK, the card is in the dock.';
+/** G40: the hint the card shows under its text, per who may answer it. */
+export const CARD_HINT = { voice: 'Say confirm, or cancel.', click: 'Click Confirm on the card; say cancel to drop it.' } as const;
 /** How long a session the page or the connection dropped can be resumed (G35). */
 export const RESUME_MS = 60_000;
 /** The note a resumed session starts with. */
@@ -141,10 +141,19 @@ export interface ResumeStore {
   clear(): void;
 }
 
-/** The silent note a confirm card sends the voice. */
-export const CARD_NOTE = `A confirm card is open in the dock and nothing happens until the user answers it. Say exactly: "${CARD_LINE}" and then wait.`;
-/** The voice's own words that count as having said CARD_LINE. */
-const CARD_SAID = /\b(ok|okay)\b[^.]*\bcard\b|\bcard\b[^.]*\bdock\b/i;
+/** The silent note a confirm card sends the voice, with the line it asks for (G32, G40). */
+export const cardNote = (line: string): string => `A confirm card is open in the dock and nothing happens until the user answers it. Say exactly: "${line}" and then wait.`;
+/** The voice's own words that count as having said the card line. */
+const CARD_SAID = /\bconfirm\b|\bcard\b/i;
+
+/** The closed vocabulary a spoken answer is logged as (G40): the matched word, never the utterance. */
+export function confirmPhrase(utterance: string): string | null {
+  const t = utterance.toLowerCase();
+  const cancel = /\b(instead|no|nope|cancel|wait|stop|don'?t|never ?mind)\b/.exec(t)?.[1];
+  if (cancel) return cancel.replace(/\s+/g, ' ');
+  const yes = /^[\s"'“]*(yes|yeah|yep|confirmed|confirm|do it|go ahead|ok|okay|sure)\b/.exec(t)?.[1];
+  return yes ?? null;
+}
 const MAX_TURNS = 50;
 
 export type ToolStatus = 'running' | 'done' | 'refused' | 'failed';
@@ -167,6 +176,9 @@ export interface VoicePendingView {
   detail?: string | string[];
   /** A decision (decide): the library's approve / reject toggle and note; Confirm answers `{ decision, note }`. */
   fields?: { decision: 'approve' | 'reject'; notePlaceholder?: string };
+  /** G40: the line the card shows under its text (who may answer it), and that policy. Absent on the budget card. */
+  hint?: string;
+  confirmBy?: 'voice' | 'click';
 }
 
 /**
@@ -245,7 +257,11 @@ interface CallRecord { name: string; status: 'confirming' | 'running' | 'answere
 interface DelegationRecord { calls: Map<string, CallRecord>; completed: boolean; unanswered: number; grace: Timer | null; stopped: boolean }
 /** What the card has heard: the first utterance after it, and whether that utterance has ended. */
 interface Heard { text: string; lastEndMs: number | null; quiet: Timer | null; done: boolean }
-interface Pending { callId: string; delegationId: string; call: PreparedCall; plan: ConfirmPlan | null; startedAt: number; heard: Heard; view: VoicePendingView }
+interface Pending {
+  callId: string; delegationId: string; call: PreparedCall; plan: ConfirmPlan | null; startedAt: number; heard: Heard; view: VoicePendingView;
+  /** G40: who may answer, the line the voice asks with, when the card opened, and whether a spoken yes was already told to click. */
+  mode: 'voice' | 'click'; line: string; shownAt: number; toldToClick?: boolean;
+}
 
 /** The card id of a mint that waits on the user's budget (not a tool call). */
 export const BUDGET_CARD = 'voice-budget';
@@ -754,11 +770,15 @@ export class VoiceController {
         }
       }
       rec.calls.set(callId, { name, status: 'confirming' });
-      const text = this.opts.describeConfirm?.(call, plan) ?? (plan ? { title: plan.title, ...(plan.detail ? { detail: plan.detail } : {}) } : defaultConfirmText(call));
+      const described = this.opts.describeConfirm?.(call, plan) ?? (plan ? { title: plan.title, ...(plan.detail ? { detail: plan.detail } : {}) } : defaultConfirmText(call));
+      // G40: the card says who may answer it, under its own text (the library's detail lines).
+      const mode = confirmModeOf(call);
+      const text = { ...described, hint: CARD_HINT[mode], confirmBy: mode };
       this.pending = { callId, delegationId, call, plan, startedAt, heard: { text: '', lastEndMs: null, quiet: null, done: false },
+        mode, line: confirmLine(call, mode), shownAt: this.now(),
         view: { callId, requestId: ++this.requestSeq, tool: name, ...text, ...(plan?.fields ? { fields: plan.fields } : {}) } };
       this.attachTool(name, 'running', text.title);
-      this.emit({ kind: 'confirm-shown', tool: name, data: { requestId: this.pending.view.requestId, callId, ...(plan?.fields ? { fields: true } : {}) } });
+      this.emit({ kind: 'confirm-shown', tool: name, data: { requestId: this.pending.view.requestId, callId, by: mode, ...(plan?.fields ? { fields: true } : {}) } });
       this.dispatch({ type: 'confirm-shown', callId });
       this.cardOpened(client);
       return;
@@ -920,7 +940,18 @@ export class VoiceController {
     h.done = true;
     if (h.quiet != null) { this.clearTimer(h.quiet); h.quiet = null; }
     const decision = confirmDecision(h.text, true);
+    // G40: a click-only card (computer, decide, an access request) is never confirmed by voice: the voice says to click, once.
+    if (decision === 'confirm' && p.mode === 'click') { this.tellToClick(p); return; }
     if (decision) this.resolvePending(decision === 'confirm', 'voice');
+  }
+
+  private tellToClick(p: Pending): void {
+    this.emit({ kind: 'client', data: { event: 'click-required', requestId: p.view.requestId, tool: p.call.spec.name, phrase: confirmPhrase(p.heard.text) } });
+    if (p.toldToClick || !this.client) return;
+    p.toldToClick = true;
+    this.context.note(p.line.length + 40);
+    this.client.appendCommentary(`Tell the user, in these words: ${p.line}`);
+    this.addLine('assistant', p.line);
   }
 
   private resolvePending(confirmed: boolean, by: 'voice' | 'click', answer?: CardAnswer): void {
@@ -930,7 +961,11 @@ export class VoiceController {
     if (p.heard.quiet != null) { this.clearTimer(p.heard.quiet); p.heard.quiet = null; }
     this.pending = null;
     this.clearCardLine();
-    this.emit({ kind: confirmed ? 'confirmed' : 'cancelled', tool: p.call.spec.name, data: { requestId: p.view.requestId, by, callId: p.callId } });
+    // G40: the matched word of a spoken answer (the closed vocabulary, never the utterance) and how long the card waited.
+    const phrase = by === 'voice' ? confirmPhrase(p.heard.text) : null;
+    this.emit({ kind: confirmed ? 'confirmed' : 'cancelled', tool: p.call.spec.name, data: {
+      requestId: p.view.requestId, by, callId: p.callId, afterMs: Math.max(0, Math.round(this.now() - p.shownAt)), ...(phrase ? { phrase } : {}),
+    } });
     this.dispatch({ type: 'confirm-resolved', callId: p.callId });
     if (confirmed) {
       void this.execute(client, p.delegationId, p.callId, p.call, p.startedAt, this.toolContext(), by, p.plan, answer);
@@ -1068,21 +1103,22 @@ export class VoiceController {
     this.pulseTimer = this.setTimer(() => { this.pulseTimer = null; this.pulsing = false; this.publish(); }, PULSE_MS);
   }
 
-  /** A confirm card opened: pulse, ask the voice for CARD_LINE, and say it ourselves if it has not within CARD_LINE_WAIT_MS. */
+  /** A confirm card opened: pulse, ask the voice for its line, and say it ourselves if it has not within CARD_LINE_WAIT_MS. */
   private cardOpened(client: VoiceClient): void {
     this.disarmIdle();
     this.pulseOnce('card');
     this.saidSinceCard = '';
-    this.noteContext(CARD_NOTE);
-    this.clearCardLine();
     const p = this.pending;
+    if (!p) return;
+    this.noteContext(cardNote(p.line));
+    this.clearCardLine();
     this.cardLineTimer = this.setTimer(() => {
       this.cardLineTimer = null;
-      if (!p || this.pending !== p || client !== this.client || this.machine.base !== 'live') return;
+      if (this.pending !== p || client !== this.client || this.machine.base !== 'live') return;
       if (CARD_SAID.test(this.saidSinceCard)) return;
-      this.context.note(CARD_LINE.length + 40);
-      client.appendCommentary(`Tell the user, in these words: ${CARD_LINE}`);
-      this.addLine('assistant', CARD_LINE);
+      this.context.note(p.line.length + 40);
+      client.appendCommentary(`Tell the user, in these words: ${p.line}`);
+      this.addLine('assistant', p.line);
       this.emit({ kind: 'client', data: { event: 'card-line', requestId: p.view.requestId } });
     }, CARD_LINE_WAIT_MS);
   }

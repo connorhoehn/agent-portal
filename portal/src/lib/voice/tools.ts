@@ -1747,6 +1747,18 @@ export function socialGrantRefusal(ctx: Pick<ToolContext, 'tenant' | 'socialRequ
 }
 
 /** Whether this call shows the Confirm card: a confirm tool, unless its arguments name a no-card value (computer's open-shell). */
+/** Who may answer this call's card (G40): the catalogue's policy, click-only for the argument values `clickFor` names. */
+export function confirmModeOf(call: PreparedCall): 'voice' | 'click' {
+  if (call.spec.confirmBy === 'click') return 'click';
+  return Object.entries(call.spec.clickFor ?? {}).some(([arg, values]) => values.includes(String(call.args[arg]))) ? 'click' : 'voice';
+}
+
+/** The line the voice asks with when the card opens (G40): "Say confirm to send.", or for a click-only card, "Click confirm on the card to go ahead." */
+export function confirmLine(call: PreparedCall, mode = confirmModeOf(call)): string {
+  const verb = call.spec.sayToConfirm ?? 'go ahead';
+  return mode === 'voice' ? `Say confirm to ${verb}.` : `Click confirm on the card to ${verb}.`;
+}
+
 export function needsConfirm(call: PreparedCall): boolean {
   if (!call.spec.confirm) return false;
   return !Object.entries(call.spec.noConfirm ?? {}).some(([arg, values]) => values.includes(String(call.args[arg])));

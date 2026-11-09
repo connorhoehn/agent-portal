@@ -749,7 +749,7 @@
    ],
    "mapsTo": "useNavigate() to the palette entry's path, the kept row's href, or the kind's href built from a typed ref; a name through the kind's list read (list's routes)",
    "routes": [],
-   "line": 641
+   "line": 649
   },
   {
    "name": "search",
@@ -803,7 +803,7 @@
      "path": "/api/access/search/answer"
     }
    ],
-   "line": 661
+   "line": 669
   },
   {
    "name": "list",
@@ -1041,7 +1041,7 @@
      "path": "/api/access/audit"
     }
    ],
-   "line": 679
+   "line": 687
   },
   {
    "name": "get",
@@ -1279,7 +1279,7 @@
      "path": "/api/access/reviews/:id"
     }
    ],
-   "line": 700
+   "line": 708
   },
   {
    "name": "computer",
@@ -1338,7 +1338,7 @@
      "path": "/api/local-compute/nodes/:nodeId/work"
     }
    ],
-   "line": 713
+   "line": 721
   },
   {
    "name": "summary",
@@ -1436,7 +1436,7 @@
      "path": "/api/access/summary"
     }
    ],
-   "line": 736
+   "line": 744
   },
   {
    "name": "budget",
@@ -1486,7 +1486,7 @@
      "path": "/api/observability/cost/summary"
     }
    ],
-   "line": 749
+   "line": 757
   },
   {
    "name": "activity",
@@ -1515,7 +1515,7 @@
      "path": "/api/search"
     }
    ],
-   "line": 763
+   "line": 771
   },
   {
    "name": "message",
@@ -1546,7 +1546,7 @@
      "path": "/api/social/plane/work-sharing"
     }
    ],
-   "line": 776
+   "line": 784
   },
   {
    "name": "call",
@@ -1577,7 +1577,7 @@
      "path": "/api/social/plane/search"
     }
    ],
-   "line": 792
+   "line": 800
   },
   {
    "name": "set_status",
@@ -1593,7 +1593,7 @@
    ],
    "mapsTo": "usePresence('<tenant>:lobby') (the shell's tenant lobby, manifest presenceLobby) then usePresence('social:lobby') with a Social grant: setStatus(status) and updateMetadata({ statusMessage })",
    "routes": [],
-   "line": 807
+   "line": 815
   },
   {
    "name": "queue_work",
@@ -1810,7 +1810,7 @@
      "path": "/api/pipelines/runs/:id/events"
     }
    ],
-   "line": 819
+   "line": 827
   },
   {
    "name": "decide",
@@ -1919,7 +1919,7 @@
      "path": "/api/assessment/drafts/:runId/discard"
     }
    ],
-   "line": 840
+   "line": 848
   },
   {
    "name": "create",
@@ -1991,7 +1991,7 @@
      "path": "/api/access/delegations"
     }
    ],
-   "line": 855
+   "line": 863
   },
   {
    "name": "update",
@@ -2133,7 +2133,7 @@
      "path": "/api/access/delegations/:id/end"
     }
    ],
-   "line": 888
+   "line": 896
   },
   {
    "name": "access_request_status",
@@ -2163,7 +2163,7 @@
      "path": "/api/access/approvals"
     }
    ],
-   "line": 910
+   "line": 918
   }
  ],
  "navigatePages": [

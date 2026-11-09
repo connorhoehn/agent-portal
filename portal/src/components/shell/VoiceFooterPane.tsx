@@ -467,7 +467,8 @@ function VoiceFooterPane() {
   const pending: VoicePending | null = snap.pending ? {
     title: snap.pending.title,
     requestId: snap.pending.requestId,
-    ...(snap.pending.detail ? { detail: snap.pending.detail } : {}),
+    // G40: the card's own hint ("Say confirm, or cancel.") is its last detail line, under the text.
+    ...(snap.pending.detail || snap.pending.hint ? { detail: [...(snap.pending.detail == null ? [] : Array.isArray(snap.pending.detail) ? snap.pending.detail : [snap.pending.detail]), ...(snap.pending.hint ? [snap.pending.hint] : [])] } : {}),
     // decide's card (2.510.5 `fields`): the approve / reject toggle and a note; Confirm hands back { decision, note }.
     ...(snap.pending.fields ? { fields: snap.pending.fields } : {}),
     onConfirm: (result) => controller.confirm('click', result),

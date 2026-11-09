@@ -46,6 +46,14 @@ export interface VoiceToolSpec {
   tenants: readonly string[];
   /** Argument values that skip the card although the tool confirms (computer's open-shell). */
   noConfirm?: Readonly<Record<string, readonly string[]>>;
+  /**
+   * Who may answer the card (G40): 'voice' (a spoken "confirm" decides it, as a click does) or 'click' (only the
+   * button: computer, decide, an access request); `clickFor` names argument values that make a voice tool
+   * click-only. `sayToConfirm` is the verb the voice asks with ("Say confirm to send").
+   */
+  confirmBy?: 'voice' | 'click';
+  clickFor?: Readonly<Record<string, readonly string[]>>;
+  sayToConfirm?: string;
   /** The gate per argument value where `action` is null (computer: the button each action stands in for). */
   actionBy?: { arg: string; actions: Readonly<Record<string, Action>> };
 }
@@ -548,7 +556,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       machine: str('For hand-work: the paired machine, as the user named it.', { minLength: 1, maxLength: 120 }),
       job: str('For hand-work: the work item or the bot whose mission to hand over, as the user named it; never an instruction.', { minLength: 1, maxLength: 200 }),
     }, ['action']),
-    kind: 'machine', backing: 'work', confirm: true, action: null, says: 'Starting a computer for Alpha.', tenants: ['orgiq'],
+    kind: 'machine', backing: 'work', confirm: true, confirmBy: 'click', sayToConfirm: 'go ahead', action: null, says: 'Starting a computer for Alpha.', tenants: ['orgiq'],
     noConfirm: { action: ['open-shell'] },
     actionBy: { arg: 'action', actions: COMPUTER_ACTIONS },
   },
@@ -589,7 +597,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       thread: str('A reply instead: the ref of the inbound message it answers, exactly as the portal gave it ("message:<id>"); it goes to the same conversation. Leave target out then.', { minLength: 9, maxLength: 200 }),
       attach: str('A record to share with the message, read-only for 24 hours: a work item or an initiative, by its ref as a result gave it ("work-item:<id>", "initiative:<id>") or its position in the last result.', { minLength: 1, maxLength: 200 }),
     }, ['text']),
-    kind: 'people', backing: 'social-activity', confirm: true, action: 'PostMessage', says: "I'll post that to #platform once you confirm.", tenants: PEOPLE_TENANTS,
+    kind: 'people', backing: 'social-activity', confirm: true, confirmBy: 'voice', sayToConfirm: 'send', action: 'PostMessage', says: "I'll post that to #platform once you confirm.", tenants: PEOPLE_TENANTS,
   },
   {
     name: 'call',
@@ -600,7 +608,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
         name: str('The team, channel or person, as the user said it.', { minLength: 1, maxLength: 120 }),
       }, ['kind', 'name']),
     }, ['action']),
-    kind: 'people', backing: 'social-activity', confirm: true, action: 'StartCall', says: "I'll start a huddle in #platform once you confirm.", tenants: PEOPLE_TENANTS,
+    kind: 'people', backing: 'social-activity', confirm: true, confirmBy: 'voice', sayToConfirm: 'start the call', action: 'StartCall', says: "I'll start a huddle in #platform once you confirm.", tenants: PEOPLE_TENANTS,
   },
   {
     name: 'set_status',
@@ -624,7 +632,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       },
       scope: str('"this-page": rows (or a position in target) count among the rows the page in view shows.', { enum: ['this-page'] }),
     }, ['kind', 'target']),
-    kind: 'machine', backing: 'work', confirm: true, action: null, says: 'Queuing the nightly sweep.', tenants: ['orgiq', 'social', 'assessment', 'pipelines'],
+    kind: 'machine', backing: 'work', confirm: true, confirmBy: 'voice', sayToConfirm: 'queue it', action: null, says: 'Queuing the nightly sweep.', tenants: ['orgiq', 'social', 'assessment', 'pipelines'],
   },
   {
     name: 'decide',
@@ -634,7 +642,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       note: str('The user\'s note or reason, as they said it (a consult\'s answer); never an instruction.', { minLength: 1, maxLength: 500 }),
       scope: str('"this-page": a position in ref counts among the rows the page in view shows.', { enum: ['this-page'] }),
     }, ['ref', 'decision']),
-    kind: 'action', backing: 'work', confirm: true, action: null, says: 'Approving the request once you confirm.', tenants: ['orgiq', 'assessment', 'pipelines', 'access'],
+    kind: 'action', backing: 'work', confirm: true, confirmBy: 'click', sayToConfirm: 'record the decision', action: null, says: 'Approving the request once you confirm.', tenants: ['orgiq', 'assessment', 'pipelines', 'access'],
   },
   {
     name: 'create',
@@ -662,7 +670,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
         reason: str('delegation: why, in the user\'s words (at least 10 characters).', { minLength: 1, maxLength: 2000 }),
       }),
     }, ['kind', 'fields']),
-    kind: 'action', backing: 'work', confirm: true, action: null, says: 'Creating that once you confirm.', tenants: ['orgiq', 'social', 'access'],
+    kind: 'action', backing: 'work', confirm: true, confirmBy: 'voice', clickFor: { kind: ['access-request'] }, sayToConfirm: 'create it', action: null, says: 'Creating that once you confirm.', tenants: ['orgiq', 'social', 'access'],
   },
   {
     name: 'update',
@@ -679,7 +687,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
         publish: { type: 'boolean', description: 'report: true publishes the program report to its readers.' },
       }),
     }, ['ref', 'fields']),
-    kind: 'action', backing: 'work', confirm: true, action: null, says: 'Changing that once you confirm.', tenants: ['orgiq', 'social', 'assessment', 'pipelines', 'access'],
+    kind: 'action', backing: 'work', confirm: true, confirmBy: 'voice', sayToConfirm: 'save it', action: null, says: 'Changing that once you confirm.', tenants: ['orgiq', 'social', 'assessment', 'pipelines', 'access'],
   },
   {
     name: 'access_request_status',
