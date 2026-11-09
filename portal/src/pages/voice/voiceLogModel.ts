@@ -160,6 +160,37 @@ export function voiceRows(sessions: readonly VoiceSessionListItem[]): LogRow[] {
 }
 
 /**
+ * G53: the delegated model's input tokens per response, from the sideband's cumulative `usage` rows (one at most
+ * every 30 s): each row's input and response counts less the previous row's. Keyed by the row's seq; "11,661 per
+ * response (7)". The delegation re-reads the whole conversation each response, so this figure climbs through a session.
+ */
+export function tokensPerResponse(events: VoiceSessionDetail['events']): Map<number, { perResponse: number; responses: number }> {
+  const out = new Map<number, { perResponse: number; responses: number }>();
+  let prev = { input: 0, responses: 0 };
+  for (const e of events) {
+    if (e.kind !== 'usage' || e.data?.['source'] !== 'sideband') continue;
+    const input = e.data['inputTokens'];
+    const responses = e.data['responses'];
+    if (typeof input !== 'number' || typeof responses !== 'number') continue;
+    const dr = responses - prev.responses;
+    if (dr > 0 && input >= prev.input) out.set(e.seq, { perResponse: Math.round((input - prev.input) / dr), responses: dr });
+    prev = { input, responses };
+  }
+  return out;
+}
+
+const thousands = (n: number) => n.toLocaleString('en-US');
+
+/** The record's fact: the first and the last interval's input per response, and the session's responses. Null when none. */
+export function tokensFact(events: VoiceSessionDetail['events']): string | null {
+  const per = [...tokensPerResponse(events).values()];
+  if (!per.length) return null;
+  const total = per.reduce((n, p) => n + p.responses, 0);
+  const first = per[0]!.perResponse, last = per[per.length - 1]!.perResponse;
+  return per.length === 1 ? `${thousands(first)} per response (${total} responses)` : `${thousands(first)} → ${thousands(last)} per response (${total} responses)`;
+}
+
+/**
  * G47: a call's Detail: who confirmed it, and for a failed call (or a route's brake) why, from its `tool-result`
  * event's summary: the code (`http-409`, `receipt-timeout`…) and the gate (`gate:run-budget`), or the refusal's code.
  */
@@ -179,12 +210,17 @@ export function callDetail(call: { id: string; outcome: string; confirmedBy: str
 }
 
 export function voiceRecord(d: VoiceSessionDetail): LogRecord {
+  const perResponse = tokensPerResponse(d.events);
+  const fact = tokensFact(d.events);
   return {
     source: 'voice', kind: 'session', id: d.session.id, label: `Session ${when(d.session.startedAt)}`,
-    facts: sessionFacts(d),
+    facts: fact ? [...sessionFacts(d), { label: 'Input per response', value: fact }] : sessionFacts(d),
     callsTitle: 'Tool calls',
     calls: d.toolCalls.map((c) => ({ id: c.id, at: c.at, name: c.tool, outcome: c.outcome, detail: callDetail(c, d.events), tookMs: c.durationMs })),
-    events: d.events.map((e) => ({ seq: e.seq, at: e.at, kind: e.kind, data: eventData(e.data) })),
+    events: d.events.map((e) => {
+      const t = perResponse.get(e.seq);
+      return { seq: e.seq, at: e.at, kind: e.kind, data: eventData(e.data), ...(t ? { tokens: `${thousands(t.perResponse)} (${t.responses})` } : {}) };
+    }),
     raw: d,
   };
 }

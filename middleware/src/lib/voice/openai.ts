@@ -114,6 +114,11 @@ export function strictSchema(schema: Record<string, unknown>, nullable = false):
   return out;
 }
 
+// G53 (docs/voice-navigator-spec.md §1, "Delegation context growth"): the delegated model re-reads the whole
+// conversation each response (9.9 k → 23.7 k input tokens per response over vs_d69bbb23). No documented
+// `delegation.responses` setting bounds input (no truncation, previous_response_id or input cap), and
+// `compaction_trigger`'s effect inside a delegation is undocumented, so nothing here bounds it.
+
 /** One catalogue function as a delegation tool: `{ type: 'function', name, description, parameters, strict: true }`. */
 export function liveFunctionTool(t: ResponsesFunctionTool): Record<string, unknown> {
   return {

@@ -168,7 +168,8 @@ export function dayGroupsBy<T>(rows: readonly T[], at: (r: T) => string, now: Da
 export interface LogFact { label: string; value: string; mono?: boolean }
 /** A tool call or a step. */
 export interface LogCall { id: string; at: string | null; name: string; outcome: string; detail: string; tookMs: number | null }
-export interface LogEvent { seq: number; at: string | null; kind: string; data: string }
+/** `tokens` (voice G53): the delegated model's input tokens per response over the interval a usage row closes, when known. */
+export interface LogEvent { seq: number; at: string | null; kind: string; data: string; tokens?: string }
 
 export interface LogRecord {
   source: LogSource;

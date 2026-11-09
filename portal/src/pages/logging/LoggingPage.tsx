@@ -40,7 +40,7 @@ import {
 } from '../voice/voiceLogModel';
 import {
   LOG_SOURCES, dayGroupsBy, inRange, loggingBase, loggingHref, offeredSources, parseLoggingPath, pipelineRunsBase, readOutcome, rowKey,
-  sourceInTenant, sourceMeta, sourceOptions, took, when, type LogRecord, type LogRow, type LogSource,
+  sourceInTenant, sourceMeta, sourceOptions, took, when, type LogEvent, type LogRecord, type LogRow, type LogSource,
 } from './loggingModel';
 import {
   BOTS_API, BOT_RUN, INVOCATION, INVOCATIONS_API, agentRows, botRunRecord, botRunsApi, invocationApi, invocationRecord,
@@ -149,6 +149,8 @@ export function LoggingView(p: LoggingViewProps) {
           { key: 'seq', header: '#', numeric: true },
           { key: 'at', header: 'At', render: (e) => when(e.at) },
           { key: 'kind', header: 'Kind' },
+          // G53: the delegated model's input tokens per response, on the voice log's usage rows (the count of responses in brackets).
+          ...(r.events.some((e) => e.tokens) ? [{ key: 'tokens' as const, header: 'Input / response', numeric: true, render: (e: LogEvent) => e.tokens ?? '' }] : []),
           { key: 'data', header: 'Data', className: 'whitespace-normal min-w-0', render: (e) => <T size="xs" tone="secondary" className="font-mono break-all">{e.data}</T> },
         ]} />
     </DetailSection>

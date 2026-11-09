@@ -5,7 +5,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dayGroups, eventData, logJson, parseRange, sessionFacts, sessionHref, sessionSubline, sessionsApi, sinceFor, voiceRecord, voiceRows, callDetail, type VoiceSessionDetail, type VoiceSessionListItem } from '../voiceLogModel.ts';
+import { dayGroups, eventData, logJson, parseRange, sessionFacts, sessionHref, sessionSubline, sessionsApi, sinceFor, voiceRecord, voiceRows, callDetail, tokensPerResponse, tokensFact, type VoiceSessionDetail, type VoiceSessionListItem } from '../voiceLogModel.ts';
 import { renderLogging } from '../../logging/__tests__/renderLogging.ts';
 
 const ID = 'vs_00000000-0000-0000-0000-0000000000dd';
@@ -107,4 +107,27 @@ test('G47: the record\'s call Detail shows a failed call\'s code and gate from i
   assert.equal(callDetail({ id: 'c2', outcome: 'failed', confirmedBy: 'click' }, events), 'confirmed by click · code: receipt-timeout');
   assert.equal(callDetail({ id: 'c3', outcome: 'refused', confirmedBy: null }, events), 'refused: not-found');
   assert.equal(callDetail({ id: 'c9', outcome: 'done', confirmedBy: null }, events), '');
+});
+
+/** The sideband usage rows of the 01:36 session (vs_d69bbb23), cumulative, as logged. */
+const USAGE_0136 = [
+  [0, 0, null], [49344, 5, '01:36:54'], [130969, 12, '01:37:28'], [183463, 16, '01:37:59'], [990144, 59, '01:42:09'], [990144, 59, '01:42:39'],
+].map(([input, responses], i) => ({ seq: 100 + i, at: '2026-11-09T01:40:00Z', kind: 'usage', data: { source: 'sideband', inputTokens: i === 0 ? null : input, responses } }));
+
+test('G53: input tokens per response from the cumulative sideband rows: a fact on the record and a column on its events table', async () => {
+  const per = tokensPerResponse(USAGE_0136);
+  assert.deepEqual([...per.entries()], [
+    [101, { perResponse: 9869, responses: 5 }], [102, { perResponse: 11661, responses: 7 }], [103, { perResponse: 13124, responses: 4 }], [104, { perResponse: 18760, responses: 43 }],
+  ], 'a row with no new responses (the last) adds nothing');
+  assert.equal(tokensFact(USAGE_0136), '9,869 → 18,760 per response (59 responses)');
+  assert.equal(tokensFact(DETAIL.events), null);
+  const detail = { ...DETAIL, events: [...DETAIL.events, ...USAGE_0136] };
+  const record = voiceRecord(detail);
+  assert.deepEqual(record.facts.at(-1), { label: 'Input per response', value: '9,869 → 18,760 per response (59 responses)' });
+  assert.equal(record.events.find((e) => e.seq === 102)!.tokens, '11,661 (7)');
+  const html = await renderView({ sessions: [ITEM], selectedId: ID, detail, keep: false, transcript: null });
+  assert.match(html, /Input \/ response/);
+  assert.match(html, /11,661 \(7\)/);
+  // A record without usage rows has no such column.
+  assert.doesNotMatch(await renderView({ sessions: [ITEM], selectedId: ID, detail: DETAIL, keep: false, transcript: null }), /Input \/ response/);
 });
