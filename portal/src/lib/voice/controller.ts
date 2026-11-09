@@ -105,8 +105,9 @@
 // outputs are never continued never resolves, and the Live API keeps the
 // voice silent for the rest of the session (vs_d69bbb23, vs_5144e356). The
 // continuation says the stop's line; a call it makes anyway is refused before
-// it runs; after MAX_STOPPED_CONTINUATIONS the dock lets it go
-// (`delegation-stuck`). G60 watches every delegation and continuation for
+// it runs; after MAX_STOPPED_CONTINUATIONS the dock logs `delegation-stuck`
+// and still continues every output (G64); a model still calling after
+// MAX_RUNAWAY_CONTINUATIONS gets the session restarted. G60 watches every delegation and continuation for
 // DELEGATION_EMPTY_MS: no call and no word from the voice after it completed
 // sends DELEGATION_EMPTY_NOTE (silent) and logs `delegation-empty`. G61 counts
 // the user's utterances the voice let pass (no word, no delegation; words
@@ -157,9 +158,11 @@ export const TOO_MANY_LINE = 'Say what you want in one sentence.';
 /**
  * G59: the continuations a stopped round still gets. A stopped round's outputs are always continued (the Live API keeps
  * the voice silent while a delegation's call has no continuation); a call the continuation makes anyway is refused
- * before it runs, and after this many the delegation is left (`delegation-stuck`) for G60 and G61 to catch.
+ * before it runs, and after this many the dock logs `delegation-stuck` (G64: and still continues every output).
  */
 export const MAX_STOPPED_CONTINUATIONS = 2;
+/** G64: a stopped delegation still calling after this many continuations restarts the session (resuming it). */
+export const MAX_RUNAWAY_CONTINUATIONS = 8;
 /** G60: a delegation (or a continuation) that called nothing and left the voice silent this long gets the note. */
 export const DELEGATION_EMPTY_MS = 6000;
 /** G60: a response that completed this recently may still be on its way to the voice: wait this long more. */
@@ -593,11 +596,12 @@ export class VoiceController {
   /**
    * G61: end this session and start one that resumes it (the server links the rows, the voice is told it continues).
    * The restart card's Confirm; the close is the user's own (they clicked it), the resume is kept here, not by cause.
+   * G64: also the dock's own way out of a delegation whose model will not stop calling (`runaway`).
    */
-  async restart(): Promise<void> {
+  async restart(cause: 'unanswered' | 'runaway' = 'unanswered'): Promise<void> {
     const client = this.client;
     if (!client || this.machine.base !== 'live') return;
-    this.emit({ kind: 'client', data: { event: 'restart', cause: 'unanswered' } });
+    this.emit({ kind: 'client', data: { event: 'restart', cause } });
     this.clearStalled();
     const id = client.mint?.sessionId;
     if (this.opts.resume) this.keepResumable(client);
@@ -1114,10 +1118,15 @@ export class VoiceController {
       // Without the response.create the delegation never resolves and the Live API keeps the voice silent for the rest
       // of the session (vs_d69bbb23 01:41:41, vs_5144e356 13:29:44). Its output told the delegation to stop and say one
       // line; a call it makes anyway is refused before it runs; after MAX_STOPPED_CONTINUATIONS the dock gives up on it.
+      // G64: the dock never lets a delegation go without its continuation (that was G59's hang again: vs_d69bbb23 seq
+      // 193, vs_f86d7b03 59, vs_9b06806f 50 in the replay suite). Past MAX_STOPPED_CONTINUATIONS it logs
+      // `delegation-stuck` once and keeps continuing; past MAX_RUNAWAY_CONTINUATIONS a model that will not stop gets
+      // the session restarted (resuming it), which ends the delegation on the server.
       if (rec.stopped) {
-        if (rec.closing >= MAX_STOPPED_CONTINUATIONS) {
-          this.emit({ kind: 'client', data: { event: 'delegation-stuck', delegationId } });
+        if (rec.closing === MAX_STOPPED_CONTINUATIONS) this.emit({ kind: 'client', data: { event: 'delegation-stuck', delegationId } });
+        if (rec.closing >= MAX_RUNAWAY_CONTINUATIONS) {
           this.closeDelegation(delegationId);
+          void this.restart('runaway');
           return;
         }
         rec.closing += 1;

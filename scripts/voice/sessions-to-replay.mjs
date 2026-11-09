@@ -8,7 +8,8 @@
 //
 //   node scripts/voice/sessions-to-replay.mjs              regenerate the fixture
 //   node scripts/voice/sessions-to-replay.mjs --check      exit 1 when the fixture on disk differs
-//   node scripts/voice/sessions-to-replay.mjs --log <dir>  read another log folder
+//   node scripts/voice/sessions-to-replay.mjs --log <dir>  read another log folder (default: middleware/.voice-log,
+//                                                         from a worktree the main checkout's)
 //
 // What is kept, per session: the tenant, the minted tool list, and the ordered
 // delegations, each with whether the user spoke before it (the dock listening
@@ -33,13 +34,28 @@
 // refuses to write if anything else made it through (assertNoWords).
 
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const argv = process.argv.slice(2);
 const logArg = argv.indexOf('--log');
-const LOG_DIR = logArg >= 0 ? resolve(argv[logArg + 1]) : join(ROOT, 'middleware/.voice-log');
+/**
+ * The logs are the running middleware's, in the main checkout. Run from a worktree, the default is the main
+ * checkout's folder (the parent of `git rev-parse --git-common-dir`), never the worktree's own: that one holds only
+ * what a jest run there wrote.
+ */
+function defaultLogDir() {
+  const here = join(ROOT, 'middleware/.voice-log');
+  try {
+    const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: ROOT, encoding: 'utf8' }).trim();
+    const main = join(dirname(common), 'middleware/.voice-log');
+    if (resolve(dirname(common)) !== ROOT && existsSync(main)) return main;
+  } catch { /* not a git checkout: the folder here */ }
+  return here;
+}
+const LOG_DIR = logArg >= 0 ? resolve(argv[logArg + 1]) : defaultLogDir();
 const OUT = join(ROOT, 'portal/src/lib/voice/__tests__/fixtures/real-sessions.json');
 const CHECK = argv.includes('--check');
 

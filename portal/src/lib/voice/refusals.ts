@@ -167,6 +167,12 @@ export function refusalNext(tool: string, output: Record<string, unknown>, ctx: 
     case 'repeat-failed':
       fix = 'That call already failed: tell the user why in one sentence; call it again only when they ask in a new request, at most once.';
       break;
+    case 'not-dispatchable':
+      fix = 'That work item cannot be dispatched now: tell the user why in one sentence (the reason names it, such as sizing it first or it already being under way) and offer to open it.';
+      break;
+    case 'not-on-initiative':
+      fix = 'That row is not work of the initiative in view: open the initiative it belongs to, or list its work items and use one of those rows.';
+      break;
     case 'too-many-calls':
       fix = 'This request used its calls: stop, and answer the user in one sentence with what you have, or ask them to say what they want in one sentence.';
       break;

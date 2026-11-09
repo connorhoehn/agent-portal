@@ -435,9 +435,10 @@ async function planDispatch(ctx: ToolContext, rows: ReadonlyArray<Pick<PageRow, 
   const items: Array<DispatchItem & { model: string; points: number; agentProjectId: string | null }> = [];
   for (const [i, id] of ids.entries()) {
     const item = all.find((w) => w.id === id);
-    if (!item) return { result: refused(`"${rows[i]!.title}" is not work of ${initiative} you can dispatch.`) };
+    // G64: both say why with a code, never the catch-all (vs_d69bbb23 seq 157 logged `other`).
+    if (!item) return { result: refused(`"${rows[i]!.title}" is not work of ${initiative} you can dispatch.`, { code: 'not-on-initiative' }) };
     const blocked = dispatchBlockedReason(item, canDispatch);
-    if (blocked) return { result: refused(`"${item.title}" cannot be dispatched: ${blocked.toLowerCase()}.`) };
+    if (blocked) return { result: refused(`"${item.title}" cannot be dispatched: ${blocked.toLowerCase()}.`, { code: 'not-dispatchable', blocked }) };
     const job = deriveJob({ item, codebases: repos, linkedRepo: detail.body.repoFullName ?? null });
     if (named) job.model = named.id;
     if (!items.some((x) => x.id === item.id)) items.push({ id: item.id, title: item.title, body: dispatchBody(item.id, job, {}), model: job.model, points: item.storyPoints!, agentProjectId: job.agentProjectId });

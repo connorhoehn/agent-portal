@@ -32,7 +32,7 @@ import { readFileSync } from 'node:fs';
 import { BUDGET_CARD, STALLED_CARD, VoiceController } from '../controller.ts';
 import { VoiceClient, type MockFrame } from '../client.ts';
 import { VOICE_PLANNERS, VOICE_RUNNERS } from '../actions.ts';
-import { NAVIGATED_STOP, ResultMemory, ambiguous, done, failed, needsConfirm, refused, type ToolContext, type ToolResult, type VoiceToolPlanner, type VoiceToolRunner } from '../tools.ts';
+import { NAVIGATED_STOP, ResultMemory, ambiguous, done, failed, needsConfirm, planPreparedCall, prepareToolCall, refused, runVoiceTool, type ToolContext, type ToolResult, type VoiceToolPlanner, type VoiceToolRunner } from '../tools.ts';
 import { activityScopes, budgetScopes, createKinds, listKinds, queueWorkKinds, summaryKinds, voiceToolSpec } from '../catalogue.ts';
 import { FAILURE_CODES, REFUSAL_CODES, refusalCode } from '../sessionEvents.ts';
 import { callKey } from '../refusals.ts';
@@ -261,12 +261,7 @@ const CONVERSATIONS = new Set(['channel', 'team', 'dm', 'room']);
 const opensConversation = (call: LoggedCall) => call.tool === 'open' && call.outcome === 'done'
   && (CONVERSATIONS.has(String(call.shape['kind'])) || CONVERSATIONS.has(String(call.shape['refKind'])));
 
-/**
- * `obedient`: the model makes no further call in a delegation once two of its outputs said stop (the log's calls
- * after that are dropped). The verbatim replay keeps every logged call; this variant keeps the rest of a session
- * replayable past the delegation-stuck bug (KNOWN_BUGS) so the other invariants still see it.
- */
-async function replay(session: Session, opts: { obedient?: boolean } = {}): Promise<Replay> {
+async function replay(session: Session): Promise<Replay> {
   const SESSION = session.id;
   const clock = new FakeClock();
   const { fetch, log } = fakeFetch([
@@ -296,7 +291,6 @@ async function replay(session: Session, opts: { obedient?: boolean } = {}): Prom
       return { call, args };
     });
   });
-  const stopsIn = new Map<string, number>();
   const probeArgs: Args = { kind: listKinds(session.tenant)[0] };
 
   let turn = 0;
@@ -354,14 +348,13 @@ async function replay(session: Session, opts: { obedient?: boolean } = {}): Prom
       r.sent.push({ type: 'output', callId });
       const out = JSON.parse(output) as Record<string, unknown>;
       r.outputs.set(callId, out);
-      if (out['stop'] === true && active) stopsIn.set(active.id, (stopsIn.get(active.id) ?? 0) + 1);
     },
     onCreate: () => {
       lastProgress = clock.t;
       r.sent.push({ type: 'create' });
       const a = active;
       if (!a) return;
-      if (a.next < a.calls.length && !(opts.obedient && (stopsIn.get(a.id) ?? 0) >= 2)) {
+      if (a.next < a.calls.length) {
         // The continuation makes the delegation's next logged call, after the logged pause (bounded).
         const i = a.next++;
         const prev = a.calls[i - 1]!.call, cur = a.calls[i]!.call;
@@ -456,10 +449,9 @@ async function replay(session: Session, opts: { obedient?: boolean } = {}): Prom
 }
 
 const cache = new Map<string, Promise<Replay>>();
-const replayOf = (s: Session, obedient = false) => {
-  const key = `${s.id}:${obedient}`;
-  let p = cache.get(key);
-  if (!p) { p = replay(s, { obedient }); cache.set(key, p); }
+const replayOf = (s: Session) => {
+  let p = cache.get(s.id);
+  if (!p) { p = replay(s); cache.set(s.id, p); }
   return p;
 };
 
@@ -505,7 +497,8 @@ export function violations(r: Replay): Map<string, string> {
     const create = r.sent.findIndex((x, j) => j > i && x.type === 'create');
     if (create < 0 || (nextOutput >= 0 && create > nextOutput)) add(`a:${seqOf(r, s.callId)}`, `the output of ${r.metas.get(s.callId)?.logged?.tool ?? 'the call'} was never continued (no response.create)`);
   });
-  for (const e of r.events) if ((e['data'] as Record<string, unknown> | undefined)?.['event'] === 'delegation-stuck') add('a:stuck', 'the dock let a delegation go without a continuation (delegation-stuck)');
+  // G64: past MAX_STOPPED_CONTINUATIONS the dock still continues (delegation-stuck is only logged); a runaway restart is a break.
+  for (const e of r.events) if ((e['data'] as Record<string, unknown> | undefined)?.['cause'] === 'runaway') add('a:runaway', 'the dock restarted the session on a runaway delegation');
 
   // (b) never deaf: every logged delegation with a call was played, and the probe request was answered.
   const withCalls = r.session.delegations.filter((d) => d.calls.length).length;
@@ -597,20 +590,6 @@ export function violations(r: Replay): Map<string, string> {
   return v;
 }
 
-// ── product bugs the replays exposed (not fixed here: controller.ts belongs to another lane) ──
-//
-// Each names the session, the violation keys it shows today and the evidence. The session's own test skips exactly
-// these keys; the todo test below asserts them away, so it passes (still marked todo) the day the bug is fixed.
-interface KnownBug { bug: string; session: string; keys: string[]; evidence: string }
-const STUCK = 'B1 delegation-stuck goes deaf: after MAX_STOPPED_CONTINUATIONS the dock closes the delegation without a response.create (controller.ts maybeContinue), the G59 hang';
-const KNOWN_BUGS: KnownBug[] = [
-  { bug: STUCK, session: 'd69bbb23', keys: ['a:193', 'a:stuck', 'b:193', 'b:probe'], evidence: 'seq 187 open designs navigated; 189, 191 refused navigated and continued; 193 refused navigated, delegation-stuck, no continuation: the three delegations after it never reach the dock' },
-  { bug: STUCK, session: 'f86d7b03', keys: ['a:59', 'a:stuck', 'b:59', 'b:probe'], evidence: 'seq 53 open message navigated; 55, 57 refused navigated; 59 refused, delegation-stuck: the six delegations after it never reach the dock' },
-  { bug: STUCK, session: '9b06806f', keys: ['a:50', 'a:stuck', 'b:50', 'b:probe'], evidence: 'seq 46, 48 refused too-many-calls; 50 refused, delegation-stuck: the last two delegations never reach the dock' },
-  { bug: STUCK, session: 'a215e96c', keys: ['a:14', 'a:stuck', 'b:14', 'b:probe'], evidence: 'rows-only session, delegations inferred: seq 12, 13 refused too-many-calls; 14 refused, delegation-stuck: 19 of 22 delegations never reach the dock' },
-  { bug: 'B2 open with a page and a tab is refused as `other`: tools.ts open "A tab goes with scope this-page…" carries no code (G42/G47)', session: '9b2868a7', keys: ['e:7'], evidence: 'seq 7 open { page: communication, tab: channels }: the real runner today still answers that sentence with no code, logged as reason other' },
-];
-const knownKeys = (prefix: string) => new Set(KNOWN_BUGS.filter((b) => b.session === prefix).flatMap((b) => b.keys));
 
 // ── the tests ─────────────────────────────────────────────────────────────
 
@@ -632,42 +611,102 @@ test('the fixture holds the owner\'s sessions, no words, every call with a tool 
 for (const session of SESSIONS) {
   test(`replay ${short(session.id)} (${session.tenant}, ${session.date}, ${session.counts['delegations']} delegations, ${session.counts['calls']} calls): invariants a to g`, async () => {
     const r = await replayOf(session);
-    const known = knownKeys(short(session.id));
-    const found = [...violations(r)].filter(([k]) => !known.has(k));
-    assert.deepEqual(found.map(([k, why]) => `${k} ${why}`), [], `${short(session.id)} replay breaks an invariant`);
-    if (known.has('a:stuck')) {
-      // Deaf at the stuck delegation (B1): the rest of the session, with a model that stops after two stop answers, holds every invariant.
-      const rest = await replayOf(session, true);
-      assert.deepEqual([...violations(rest)].map(([k, why]) => `${k} ${why}`), [], `${short(session.id)} (obedient) replay breaks an invariant`);
-      assert.equal(rest.delegationsPlayed, session.delegations.filter((d) => d.calls.length).length);
-    } else {
-      // Every logged call was made again.
-      assert.equal([...r.metas.values()].filter((m) => m.logged).length, session.counts['calls']);
-    }
+    assert.deepEqual([...violations(r)].map(([k, why]) => `${k} ${why}`), [], `${short(session.id)} replay breaks an invariant`);
+    // Every logged call was made again, and every delegation with a call reached the dock.
+    assert.equal([...r.metas.values()].filter((m) => m.logged).length, session.counts['calls']);
+    assert.equal(r.delegationsPlayed, session.delegations.filter((d) => d.calls.length).length);
   });
 }
 
-for (const b of KNOWN_BUGS) {
-  test.todo(`${b.bug} (${b.session}: ${b.evidence})`, async () => {
-    const r = await replayOf(sessionNamed(b.session));
-    const v = violations(r);
-    assert.deepEqual(b.keys.filter((k) => v.has(k)), []);
-  });
-}
+// ── G64: the bugs the first replays exposed, fixed ───────────────────────
+
+test('G64 B1: the four sessions a stuck delegation made deaf now continue every output and answer to the end', async () => {
+  // The call after two stop answers whose output the dock used to leave without a continuation (delegation-stuck).
+  for (const [prefix, seq] of [['d69bbb23', 193], ['f86d7b03', 59], ['9b06806f', 50], ['a215e96c', 14]] as const) {
+    const r = await replayOf(sessionNamed(prefix));
+    const m = [...r.metas.values()].find((x) => x.logged?.seq === seq);
+    assert.ok(m, `${prefix} seq ${seq} was replayed`);
+    assert.equal(r.outputs.get(m.callId)?.['kind'], 'refused', `${prefix} seq ${seq} is still refused before it runs`);
+    const i = r.sent.findIndex((s) => s.type === 'output' && s.callId === m.callId);
+    assert.equal(r.sent[i + 1]?.type, 'create', `${prefix} seq ${seq}: its output is continued`);
+    const events = r.events.map((e) => (e['data'] as Record<string, unknown> | undefined)?.['event']);
+    assert.ok(events.includes('delegation-stuck'), `${prefix}: the stuck delegation is still logged`);
+    assert.ok(!events.includes('restart'), `${prefix}: no runaway restart`);
+    assert.equal(r.delegationsPlayed, sessionNamed(prefix).delegations.filter((d) => d.calls.length).length, `${prefix}: every later delegation reached the dock`);
+    assert.ok(r.probeAnswered, `${prefix}: and one more request is answered`);
+  }
+});
+
+test('G64 B2 (vs_9b2868a7 seq 7): open { page, tab } on a page with no known tabs is refused `invalid-arguments` with the forms that work', async () => {
+  const r = await replayOf(sessionNamed('9b2868a7'));
+  const m = [...r.metas.values()].find((x) => x.logged?.seq === 7)!;
+  assert.deepEqual(m.args, { page: 'communication', tab: 'channels' });
+  const out = r.outputs.get(m.callId)!;
+  assert.equal(out['code'], 'invalid-arguments');
+  assert.match(String(out['next']), /scope "this-page" and tab/);
+  assert.match(String(out['next']), /ref with tab/);
+});
+
+test('G64 B2: open { page, tab } opens the page on its tab when the page declares tabs or is the one in view', async () => {
+  const palette = toolContext().palette;
+  const page = palette.pages.find((p) => p.pageId === 'communication' && p.tenant === 'orgiq')!;
+  // Declared by the palette row.
+  const declared = toolContext({ palette: { ...palette, pages: palette.pages.map((p) => (p === page ? { ...p, tabs: ['channels', 'dms'] } : p)) } });
+  const res = await runVoiceTool('open', { page: 'communication', tab: 'channels' }, declared);
+  assert.equal(res.outcome, 'done');
+  assert.equal(res.output['stop'], true, 'a page is a navigation (G51)');
+  assert.deepEqual(declared.navigations, [`${page.path}?tab=channels`]);
+  const missing = await runVoiceTool('open', { page: 'communication', tab: 'calls' }, declared);
+  assert.equal(missing.output['code'], 'not-on-this-page');
+  assert.deepEqual(missing.output['tabs'], ['channels', 'dms']);
+  // Published by the page in view (usePublishPageTabs).
+  const inView = toolContext({ tabs: () => ({ path: page.path, tabs: ['history', 'channels'], tab: 'history' }) });
+  const viewed = await runVoiceTool('open', { page: 'communication', tab: 'channels' }, inView);
+  assert.equal(viewed.outcome, 'done');
+  assert.deepEqual(inView.navigations, [`${page.path}?tab=channels`]);
+});
+
+test('G64 B3 (vs_d69bbb23 seq 157): the dispatch planner says `not-dispatchable` (with why) and `not-on-initiative`, never `other`', async () => {
+  // The retry after the first dispatch landed (G48's reading of 01:39:34): the item is in progress now.
+  const plan = async (status: string, rowRef: string) => {
+    const { fetch } = fakeFetch([
+      route('GET', '/api/graph/projects/p-1/work', 200, [{ id: 'e-1', type: 'epic', title: 'Epic', children: [{ id: 'w-1', type: 'story', title: 'Rotate the keys', status, storyPoints: 3, children: [] }] }]),
+      route('GET', '/api/graph/projects/p-1', 200, { name: 'Alpha' }),
+      route('GET', '/api/agent-projects', 200, { projects: [] }),
+    ]);
+    const ctx = toolContext({ fetch, tenant: 'orgiq', role: 'admin', results: new ResultMemory(), jobs: { track: () => {} },
+      page: () => ({ path: '/iq/projects/p-1', record: { ref: 'initiative:p-1', title: 'Alpha' }, rows: [{ ref: rowRef, title: 'Rotate the keys', href: '/iq/projects/p-1?item=w-1' }] }) });
+    const prepared = prepareToolCall('queue_work', { kind: 'dispatch', target: 'the first one', scope: 'this-page', rows: [1] }, ctx);
+    assert.ok(prepared.ok);
+    const out = await planPreparedCall(prepared.call, ctx, VOICE_PLANNERS);
+    assert.ok(out && 'result' in out && out.result.outcome === 'refused', 'the planner refuses it');
+    return out.result.output;
+  };
+  const busy = await plan('in_progress', 'work-item:w-1');
+  assert.equal(refusalCode(busy), 'not-dispatchable');
+  assert.match(String(busy['blocked']), /up next/);
+  assert.match(String(busy['next']), /cannot be dispatched now/);
+  const elsewhere = await plan('open', 'work-item:w-9');
+  assert.equal(refusalCode(elsewhere), 'not-on-initiative');
+  assert.match(String(elsewhere['next']), /not work of the initiative in view/);
+});
 
 // ── regressions the gaps doc established, on the sessions that showed them ──
 
-test('G51 (vs_d69bbb23 01:40:22, four pages in one request): designs opens, runbooks is refused `navigated` and the round is continued', async () => {
-  const r = await replayOf(sessionNamed('d69bbb23'), true);
+test('G51 (vs_d69bbb23 01:40:22, four pages in one request): designs opens, the other three are refused `navigated` and every round is continued', async () => {
+  const r = await replayOf(sessionNamed('d69bbb23'));
   const bySeq = new Map([...r.metas.values()].filter((m) => m.logged).map((m) => [m.logged!.seq, m]));
-  const designs = bySeq.get(187)!, runbooks = bySeq.get(189)!;
+  const designs = bySeq.get(187)!;
   assert.equal(designs.args['page'], 'designs');
   assert.ok(r.ran.has(designs.callId));
   assert.equal(r.outputs.get(designs.callId)?.['stop'], true, 'the navigation ends the request');
-  assert.equal(r.outputs.get(runbooks.callId)?.['code'], 'navigated');
-  assert.ok(!r.ran.has(runbooks.callId), 'refused before it runs');
-  const i = r.sent.findIndex((s) => s.type === 'output' && s.callId === runbooks.callId);
-  assert.equal(r.sent[i + 1]?.type, 'create', 'G59: the stopped round is continued');
+  for (const seq of [189, 191, 193]) {
+    const m = bySeq.get(seq)!;
+    assert.equal(r.outputs.get(m.callId)?.['code'], 'navigated', `seq ${seq}`);
+    assert.ok(!r.ran.has(m.callId), 'refused before it runs');
+    const i = r.sent.findIndex((s) => s.type === 'output' && s.callId === m.callId);
+    assert.equal(r.sent[i + 1]?.type, 'create', `G59/G64: seq ${seq}'s round is continued`);
+  }
 });
 
 test('G51 follow-up (vs_5144e356 13:29:44): the read of the record just opened runs today, where the log refused it `navigated` and went silent', async () => {
@@ -680,7 +719,7 @@ test('G51 follow-up (vs_5144e356 13:29:44): the read of the record just opened r
 });
 
 test('G43 + G59 (vs_d69bbb23 01:41:41): the fifth call is refused `too-many-calls`, the round is continued, and the session answers again', async () => {
-  const r = await replayOf(sessionNamed('d69bbb23'), true);
+  const r = await replayOf(sessionNamed('d69bbb23'));
   const fifth = [...r.metas.values()].find((m) => m.logged?.seq === 243)!;
   const out = r.outputs.get(fifth.callId)!;
   assert.equal(out['code'], 'too-many-calls');
@@ -703,7 +742,7 @@ test('G48 + G41 (vs_900938ca, four posts that failed): two tries with their card
 });
 
 test('G42 (vs_f86d7b03 00:42:55): `get message:<id>` is refused `invalid-ref`, no longer the catch-all `other`', async () => {
-  const r = await replayOf(sessionNamed('f86d7b03'), true);
+  const r = await replayOf(sessionNamed('f86d7b03'));
   const get = [...r.metas.values()].find((m) => m.logged?.seq === 50)!;
   assert.equal(get.logged!.reason, 'other');
   assert.equal(r.outputs.get(get.callId)?.['code'], 'invalid-ref');
@@ -721,54 +760,40 @@ test('G62: an ambiguous answer with one candidate shows no choice card (vs_7c98f
 
 /**
  * The calls the model made in a real session that today's controller refuses before they run (G43 too-many-calls,
- * G48 repeat-failed, G51 navigated), by logged seq; obedient replays, so the deaf sessions are read to the end.
- * A change here is a change of policy: read the session in docs/voice-navigator-gaps.md before updating it.
+ * G48 repeat-failed, G51 navigated), by logged seq. A change here is a change of policy: read the session in
+ * docs/voice-navigator-gaps.md before updating it.
  */
 const UP_FRONT: Record<string, Record<string, string>> = {
-  c8af088e: { 23: 'navigated' },
-  a215e96c: { 12: 'too-many-calls', 13: 'too-many-calls', 29: 'navigated' },
-  f420d509: { 19: 'navigated' },
+  c8af088e: { 23: 'navigated', 25: 'navigated' },
+  a215e96c: { 12: 'too-many-calls', 13: 'too-many-calls', 14: 'too-many-calls', 15: 'too-many-calls', 29: 'navigated', 30: 'navigated' },
+  f420d509: { 19: 'navigated', 21: 'navigated' },
   '8bb50a16': { 39: 'navigated' },
-  f86d7b03: { 55: 'navigated' },
-  d69bbb23: { 113: 'too-many-calls', 189: 'navigated', 227: 'navigated', 243: 'too-many-calls' },
+  f86d7b03: { 55: 'navigated', 57: 'navigated', 59: 'navigated' },
+  d69bbb23: { 113: 'too-many-calls', 189: 'navigated', 191: 'navigated', 193: 'navigated', 227: 'navigated', 243: 'too-many-calls' },
   '900938ca': { 39: 'repeat-failed', 49: 'repeat-failed' },
-  '9b06806f': { 46: 'too-many-calls', 48: 'too-many-calls' },
+  '9b06806f': { 46: 'too-many-calls', 48: 'too-many-calls', 50: 'too-many-calls', 52: 'too-many-calls', 54: 'too-many-calls' },
   '282864af': { 62: 'navigated' },
-  '71839299': { 42: 'navigated' },
+  '71839299': { 42: 'navigated', 45: 'navigated' },
 };
 
 test('the calls today\'s controller refuses up front, per session, are the ones the gaps doc expects', async () => {
   for (const s of SESSIONS) {
-    const r = await replayOf(s, true);
+    const r = await replayOf(s);
     assert.deepEqual(upFront(r), UP_FRONT[short(s.id)] ?? {}, short(s.id));
   }
-});
-
-test('B3 (vs_d69bbb23 seq 157): the dispatch planner refuses an item that is no longer up next without a code, logged as `other`', { todo: 'work.ts planDispatch: "cannot be dispatched" and "is not work of" carry no code (G42/G47)' }, async () => {
-  // The retry after the first dispatch landed (G48's reading of 01:39:34): the item is in progress now.
-  const { fetch } = fakeFetch([
-    route('GET', '/api/graph/projects/p-1/work', 200, [{ id: 'e-1', type: 'epic', title: 'Epic', children: [{ id: 'w-1', type: 'story', title: 'Rotate the keys', status: 'in_progress', storyPoints: 3, children: [] }] }]),
-    route('GET', '/api/graph/projects/p-1', 200, { name: 'Alpha' }),
-    route('GET', '/api/agent-projects', 200, { projects: [] }),
-  ]);
-  const ctx = toolContext({ fetch, tenant: 'orgiq', role: 'admin', results: new ResultMemory(), jobs: { track: () => {} },
-    page: () => ({ path: '/iq/projects/p-1', record: { ref: 'initiative:p-1', title: 'Alpha' }, rows: [{ ref: 'work-item:w-1', title: 'Rotate the keys', href: '/iq/projects/p-1?item=w-1' }] }) });
-  const out = await VOICE_PLANNERS['queue_work']!({ kind: 'dispatch', target: 'the first one', scope: 'this-page', rows: [1] }, ctx);
-  assert.ok(out && 'result' in out && out.result.outcome === 'refused', 'the planner refuses it');
-  assert.notEqual(refusalCode(out.result.output), 'other');
 });
 
 // REPLAY_DEBUG=all (or a comma list of session prefixes) prints every replayed call, the log's ending and today's.
 if (process.env['REPLAY_DEBUG']) {
   test('debug: the replayed calls of the named sessions', async () => {
+    const table: Record<string, Record<string, string>> = {};
     for (const s of SESSIONS.filter((x) => process.env['REPLAY_DEBUG'] === 'all' || process.env['REPLAY_DEBUG']!.split(',').includes(short(x.id)))) {
-      for (const obedient of [false, true]) {
-        const r = await replayOf(s, obedient);
-        console.log(`== ${short(s.id)}${obedient ? ' (obedient)' : ''}: ${r.virtualMs} ms of virtual time`);
-        for (const line of describe(r)) console.log(line);
-        for (const [k, why] of violations(r)) console.log(`  violation ${k}: ${why}`);
-        if (obedient) console.log(`  up front: ${JSON.stringify(upFront(r))}`);
-      }
+      const r = await replayOf(s);
+      console.log(`== ${short(s.id)}: ${r.virtualMs} ms of virtual time`);
+      for (const line of describe(r)) console.log(line);
+      for (const [k, why] of violations(r)) console.log(`  violation ${k}: ${why}`);
+      if (Object.keys(upFront(r)).length) table[short(s.id)] = upFront(r);
     }
+    console.log(`up front: ${JSON.stringify(table)}`);
   });
 }

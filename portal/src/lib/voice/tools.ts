@@ -50,6 +50,8 @@ export interface PalettePage {
   tenant: string;
   roles?: string[];
   pageId?: string;
+  /** The page's tabs (`?tab=`), when it declares them: `open { page, tab }` opens it there (G64). */
+  tabs?: readonly string[];
 }
 
 /**
@@ -1172,6 +1174,23 @@ function openTab(tab: string, ctx: ToolContext): ToolResult {
   return done('navigated', { tab, path: href, tabs: [...t.tabs] }, `Showing ${tab}`);
 }
 
+/** The next step for a page and a tab the dock cannot pair (G64): the two forms `open` takes a tab in. */
+export const PAGE_TAB_NEXT = 'Open the page first, then ask for the tab with scope "this-page" and tab; or open a record by its ref with tab. Do not repeat this call with the same arguments.';
+
+/** G64: `open { page, tab }`: the page on that tab when its tabs are known, else refused with the forms that work. */
+function openPageTab(pageId: string, tab: string, args: Args, ctx: ToolContext): ToolResult {
+  const target = openablePage(pageId, ctx);
+  if ('refusal' in target) return target.refusal;
+  const path = pagePath(target.page, (args['params'] as Args | undefined) ?? {});
+  const inView = ctx.tabs?.() ?? null;
+  const tabs = target.page.tabs ?? (inView && inView.path === path.split('?')[0] ? inView.tabs : null);
+  if (!tabs?.length) return refused(`${target.page.label} has no tabs I can open from here.`, { code: 'invalid-arguments', next: PAGE_TAB_NEXT });
+  if (!tabs.includes(tab)) return refused(`${target.page.label} has no "${tab}" tab; its tabs are ${tabs.join(', ')}.`, { code: NOT_ON_PAGE, tabs: [...tabs] });
+  const href = withTab(path, tab);
+  ctx.navigate(href);
+  return done('navigated', { page: target.page.pageId, label: target.page.label, tab, path: href, say: `Opened ${target.page.label} on ${tab}.`, ...NAVIGATED_STOP }, `Opened ${target.page.label} on ${tab}`);
+}
+
 const open: Runner = async (args, ctx) => {
   const page = typeof args['page'] === 'string' ? args['page'] : undefined;
   const ref = typeof args['ref'] === 'string' ? args['ref'].trim() : undefined;
@@ -1180,11 +1199,13 @@ const open: Runner = async (args, ctx) => {
   const tab = typeof args['tab'] === 'string' ? args['tab'].trim().toLowerCase() : undefined;
   // G49: a tab of the page in view ("open decisions" on an initiative).
   if (tab && args['scope'] === 'this-page' && !ref && !name && !page) return openTab(tab, ctx);
-  if (tab && page) return refused('A tab goes with scope "this-page" (the page in view) or a record\'s ref, not a page.');
+  // G64: a page with a tab opens that page on the tab when the page's tabs are known (declared, or published by the
+  // page in view); otherwise it is refused as `invalid-arguments` with the forms that work (vs_9b2868a7 logged `other`).
+  if (tab && page) return openPageTab(page, tab, args, ctx);
   // G21: a row the page in view shows, by its position, ref or name (a kind, when given, must match it).
   if (args['scope'] === 'this-page') {
     const said = ref ?? name;
-    if (!said || page || (ref && name)) return refused('With scope "this-page", name one row of the page: its position, its ref, or its name.');
+    if (!said || page || (ref && name)) return refused('With scope "this-page", name one row of the page: its position, its ref, or its name.', { code: 'invalid-arguments' });
     const hit = pageRowNamed(ctx, said);
     if ('result' in hit) return hit.result;
     if (kind && !hit.row.ref.startsWith(`${kind}:`)) return refused(`That row of the page is not a ${kind}.`, { code: NOT_ON_PAGE });
@@ -1192,7 +1213,7 @@ const open: Runner = async (args, ctx) => {
     return opened(hit.row.ref, hit.row.title, tab ? withTab(hit.row.href, tab) : hit.row.href, ctx, true);
   }
   const given = [page, ref, kind || name].filter(Boolean).length;
-  if (given !== 1 || (!!kind !== !!name)) return refused('Name exactly one thing to open: a page, a row\'s ref or position, or a kind with a name.');
+  if (given !== 1 || (!!kind !== !!name)) return refused('Name exactly one thing to open: a page, a row\'s ref or position, or a kind with a name.', { code: 'invalid-arguments' });
 
   if (page) {
     const target = openablePage(page, ctx);

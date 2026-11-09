@@ -5,7 +5,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_STOPPED_CONTINUATIONS, VoiceController } from '../controller.ts';
+import { MAX_RUNAWAY_CONTINUATIONS, MAX_STOPPED_CONTINUATIONS, VoiceController } from '../controller.ts';
 import { VoiceClient } from '../client.ts';
 import { runVoiceTool } from '../tools.ts';
 import { FAILED_TWICE_NEXT, FailureGuard, NO_REPEAT, RETRY_NEXT, STOP_NEXT, RefusalGuard, callKey, refusalNext } from '../refusals.ts';
@@ -14,6 +14,8 @@ import { listKinds } from '../catalogue.ts';
 import { FakeClock, fakeFetch, isToolRow, loggedEvents, route, toolContext } from './voiceHarness.ts';
 
 const SESSION = 'vs_00000000-0000-0000-0000-0000000000ab';
+/** How many continuations a scripted model keeps calling in (past MAX_STOPPED_CONTINUATIONS), before it lets the round end. */
+const REPEATS = 2 + MAX_STOPPED_CONTINUATIONS;
 
 test('refusalNext: every refusal code names a change and ends with the no-repeat rule', () => {
   const reasons: Record<string, Record<string, unknown>> = {
@@ -38,6 +40,8 @@ test('refusalNext: every refusal code names a change and ends with the no-repeat
     'too-many-calls': { reason: 'Too many calls for one request.', code: 'too-many-calls' },
     'repeat-failed': { reason: 'That just failed. Tell the user why; try again only when they ask.', code: 'repeat-failed' },
     navigated: { reason: 'This request already opened a page, so nothing more runs for it.', code: 'navigated' },
+    'not-dispatchable': { reason: '"Rotate keys" cannot be dispatched: size this item first.', code: 'not-dispatchable' },
+    'not-on-initiative': { reason: '"Rotate keys" is not work of Alpha you can dispatch.', code: 'not-on-initiative' },
     other: { reason: 'Something odd.' },
   };
   assert.deepEqual(Object.keys(reasons).sort(), [...REFUSAL_CODES].sort(), 'one case per code');
@@ -81,8 +85,11 @@ test('RefusalGuard: the second identical refused call is terminal and speaks onc
   assert.equal(g.refused('message', { text: 'hi' }, card).terminal, false);
 });
 
-/** A scripted session whose delegation asks for `get` again after every continuation: the retry loop of 23:03. */
-function retryScript(args: Record<string, unknown>) {
+/**
+ * A scripted session whose delegation asks for `get` again after every continuation: the retry loop of 23:03.
+ * `repeats`: after that many continuations the model stops calling and the continuation only completes (G64).
+ */
+function retryScript(args: Record<string, unknown>, repeats = Infinity) {
   const d = 'item_mock_delegation_1';
   const env = (event: Record<string, unknown>) => ({ type: 'response.event', delegation_id: d, event });
   const call = (n: number) => env({ type: 'response.output_item.done', item: { id: `fc_${n}`, type: 'function_call', status: 'completed', arguments: JSON.stringify(args), call_id: `call_${n}`, name: 'get' }, output_index: 0 });
@@ -95,10 +102,16 @@ function retryScript(args: Record<string, unknown>) {
       { atMs: 1050, event: env({ type: 'response.completed', response: { id: 'resp_1', status: 'completed', output: [], usage: { input_tokens: 1000, output_tokens: 20 } } }) },
     ],
     // Every continuation retries the identical call (a fresh call id each time it plays would not change the args).
-    onResponseCreate: [
+    onResponseCreate: Number.isFinite(repeats) ? [
+      { atMs: 200, event: env({ type: 'response.completed', response: { id: 'resp_end', status: 'completed', output: [], usage: { input_tokens: 1100, output_tokens: 20 } } }) },
+    ] : [
       { atMs: 150, event: call(2) },
       { atMs: 200, event: env({ type: 'response.completed', response: { id: 'resp_2', status: 'completed', output: [], usage: { input_tokens: 1100, output_tokens: 20 } } }) },
     ],
+    ...(Number.isFinite(repeats) ? { onResponseCreateSeq: Array.from({ length: repeats }, (_, i) => [
+      { atMs: 150, event: call(2 + i) },
+      { atMs: 200, event: env({ type: 'response.completed', response: { id: `resp_${2 + i}`, status: 'completed', output: [], usage: { input_tokens: 1100, output_tokens: 20 } } }) },
+    ]) } : {}),
     onClose: [{ atMs: 100, event: { type: 'session.closed', reason: 'close_requested', usage: { seconds: 12 } } }],
   };
 }
@@ -117,7 +130,8 @@ test('G29 + G59 acceptance: a scripted session that refuses get twice with the s
     const mintBody = {
       sessionId: SESSION, voiceSessionId: SESSION, holdId: 'h1', maxSeconds: 1800, expiresAt: '2026-11-08T13:00:00Z', sdp: 'v=0', mock: true,
       model: 'gpt-live-1', voice: null, toolsEnabled: true, tools: ['get'], budget: { holdUsd: 0.5, usdPerMinute: 0.05 },
-      mockScript: retryScript({ ref: 'initiative:nope', part: null }),
+      // The model asks again four times (two past MAX_STOPPED_CONTINUATIONS), then lets the round end.
+      mockScript: retryScript({ ref: 'initiative:nope', part: null }, 2 + MAX_STOPPED_CONTINUATIONS),
     };
     const { fetch, log } = fakeFetch([
       route('POST', `/api/voice/sessions/${SESSION}/events`, 201, { id: 'row' }),
@@ -135,10 +149,10 @@ test('G29 + G59 acceptance: a scripted session that refuses get twice with the s
     assert.equal(outputs[0]!['stop'], undefined);
     assert.equal(outputs[1]!['stop'], true);
     assert.equal(outputs[1]!['next'], STOP_NEXT);
-    // G59: the stopped round is continued; this script's delegation calls again every time, and each later call is
-    // refused before it runs (stop), until the dock gives up after MAX_STOPPED_CONTINUATIONS.
-    assert.equal(continuations, 1 + MAX_STOPPED_CONTINUATIONS, 'the first refusal, then the stopped round, continued');
-    assert.equal(outputs.length, 2 + MAX_STOPPED_CONTINUATIONS);
+    // G59 + G64: the stopped round is continued; each later call is refused before it runs (stop), and every output
+    // is continued, past MAX_STOPPED_CONTINUATIONS too (G64: the dock never lets a delegation go uncontinued).
+    assert.equal(outputs.length, 3 + MAX_STOPPED_CONTINUATIONS);
+    assert.equal(continuations, outputs.length, 'one continuation per output, none skipped');
     assert.ok(outputs.slice(2).every((o) => o['kind'] === 'refused' && o['stop'] === true), JSON.stringify(outputs.slice(2)));
     assert.equal(log.filter((r) => r.url.startsWith('/api/graph/projects/nope')).length, 2, 'no third call runs');
     assert.equal(commentary.length, 0, 'the continuation says the refusal; the dock adds nothing');
@@ -151,6 +165,40 @@ test('G29 + G59 acceptance: a scripted session that refuses get twice with the s
     c.dispose();
   } finally {
     proto.sendToolOutput = orig.out; proto.appendCommentary = orig.com; proto.requestResponse = orig.resp;
+  }
+});
+
+test('G64: a model that never stops calling is continued every time, then the session restarts (`runaway`) rather than going deaf', async () => {
+  let continuations = 0, outputs = 0;
+  const restarts: Array<{ cause: string; outputs: number }> = [];
+  const proto = VoiceClient.prototype;
+  const orig = { out: proto.sendToolOutput, resp: proto.requestResponse, restart: VoiceController.prototype.restart };
+  proto.sendToolOutput = function (id: string, o: string) { outputs += 1; return orig.out.call(this, id, o); };
+  proto.requestResponse = function () { continuations += 1; return orig.resp.call(this); };
+  // The restart itself is G61's (tested in silence.test.ts); here only when it is asked for.
+  VoiceController.prototype.restart = async function (cause?: 'unanswered' | 'runaway') { restarts.push({ cause: cause ?? 'unanswered', outputs }); };
+  try {
+    const clock = new FakeClock();
+    const { fetch } = fakeFetch([
+      route('POST', `/api/voice/sessions/${SESSION}/events`, 201, { id: 'row' }),
+      route('POST', `/api/voice/sessions/${SESSION}/close`, 200, {}),
+      route('POST', '/api/voice/sessions', 201, {
+        sessionId: SESSION, voiceSessionId: SESSION, holdId: 'h1', maxSeconds: 1800, expiresAt: '2026-11-08T13:00:00Z', sdp: 'v=0', mock: true,
+        model: 'gpt-live-1', voice: null, toolsEnabled: true, tools: ['get'], budget: { holdUsd: 0.5, usdPerMinute: 0.05 },
+        mockScript: retryScript({ ref: 'initiative:nope' }),
+      }),
+      route('GET', '/api/graph/projects/nope', 404, { error: 'not found' }),
+    ]);
+    const ctx = toolContext({ fetch });
+    const c = new VoiceController({ fetch, media: null, toolContext: () => ctx, now: clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer });
+    await c.start();
+    await clock.advance(6000);
+    // Outputs: the first refusal, the terminal repeat, then one per stopped continuation up to the cap.
+    assert.deepEqual(restarts, [{ cause: 'runaway', outputs: 2 + MAX_RUNAWAY_CONTINUATIONS }]);
+    assert.equal(continuations, 1 + MAX_RUNAWAY_CONTINUATIONS, 'every output before the cap was continued');
+    c.dispose();
+  } finally {
+    proto.sendToolOutput = orig.out; proto.requestResponse = orig.resp; VoiceController.prototype.restart = orig.restart;
   }
 });
 
@@ -184,11 +232,15 @@ function failScript(args: Record<string, unknown>, userAsks: boolean) {
       { atMs: 1000, event: first },
       { atMs: 1050, event: env({ type: 'response.completed', response: { id: 'resp_1', status: 'completed', output: [], usage: { input_tokens: 1000, output_tokens: 20 } } }) },
     ],
+    // The model asks again on each of the first REPEATS continuations, then lets the round end (G64: it must end).
     onResponseCreate: [
+      { atMs: 200, event: env({ type: 'response.completed', response: { id: 'resp_end', status: 'completed', output: [], usage: { input_tokens: 1100, output_tokens: 20 } } }) },
+    ],
+    onResponseCreateSeq: Array.from({ length: REPEATS }, () => [
       ...(userAsks ? [{ atMs: 50, event: { type: 'session.input_transcript.delta', delta: 'Try again.', start_ms: 3000, end_ms: 3600 } }] : []),
       { atMs: 150, event: again },
       { atMs: 200, event: env({ type: 'response.completed', response: { id: 'resp_2', status: 'completed', output: [], usage: { input_tokens: 1100, output_tokens: 20 } } }) },
-    ],
+    ]),
     onClose: [{ atMs: 100, event: { type: 'session.closed', reason: 'close_requested', usage: { seconds: 12 } } }],
   };
 }
@@ -257,9 +309,12 @@ function twoCallScript(first: { name: string; args: Record<string, unknown> }, s
       { atMs: 1050, event: env({ type: 'response.completed', response: { id: 'resp_1', status: 'completed', output: [], usage: { input_tokens: 1000, output_tokens: 20 } } }) },
     ],
     onResponseCreate: [
+      { atMs: 200, event: env({ type: 'response.completed', response: { id: 'resp_end', status: 'completed', output: [], usage: { input_tokens: 1100, output_tokens: 20 } } }) },
+    ],
+    onResponseCreateSeq: Array.from({ length: REPEATS }, () => [
       { atMs: 150, event: call(2, second) },
       { atMs: 200, event: env({ type: 'response.completed', response: { id: 'resp_2', status: 'completed', output: [], usage: { input_tokens: 1100, output_tokens: 20 } } }) },
-    ],
+    ]),
     onClose: [{ atMs: 100, event: { type: 'session.closed', reason: 'close_requested', usage: { seconds: 12 } } }],
   };
 }
