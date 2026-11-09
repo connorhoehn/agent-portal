@@ -2,9 +2,8 @@
  "about": "The owner's real voice sessions (middleware/.voice-log), summarized for realSessions.test.ts by scripts/voice/sessions-to-replay.mjs. No words: shapes, outcomes, codes, timings (ms from start, 100 ms).",
  "sessions": [
   {
-   "id": "vs_30d12ab0-3ec7-46b2-8720-56a927d91aff",
+   "id": "s01",
    "tenant": "orgiq",
-   "date": "2026-11-08T22:59",
    "tools": [
     "open",
     "search",
@@ -46,7 +45,7 @@
        "atMs": 10400,
        "tool": "open",
        "shape": {},
-       "argsKey": "4ca465bf116e",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 15,
@@ -62,9 +61,8 @@
    }
   },
   {
-   "id": "vs_d682196b-c28e-42bc-a44f-81d044dcd427",
+   "id": "s02",
    "tenant": "orgiq",
-   "date": "2026-11-08T22:59",
    "tools": [
     "open",
     "search",
@@ -106,7 +104,7 @@
        "atMs": 8000,
        "tool": "search",
        "shape": {},
-       "argsKey": "b82fcc2eca52",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "search_results",
        "rows": 5,
@@ -118,7 +116,7 @@
        "atMs": 10100,
        "tool": "open",
        "shape": {},
-       "argsKey": "31bfeba02f27",
+       "argsKey": "a2",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 12,
@@ -136,7 +134,7 @@
        "atMs": 24200,
        "tool": "queue_work",
        "shape": {},
-       "argsKey": "d456ad6cbe8f",
+       "argsKey": "a3",
        "outcome": "refused",
        "result": "refused",
        "resultSeq": 29,
@@ -147,7 +145,7 @@
        "atMs": 26000,
        "tool": "queue_work",
        "shape": {},
-       "argsKey": "74f028be4a36",
+       "argsKey": "a4",
        "outcome": "refused",
        "result": "refused",
        "resultSeq": 32,
@@ -158,7 +156,7 @@
        "atMs": 27700,
        "tool": "list",
        "shape": {},
-       "argsKey": "f7e7cf0cb110",
+       "argsKey": "a5",
        "outcome": "done",
        "result": "list",
        "count": 0,
@@ -172,7 +170,7 @@
        "atMs": 29600,
        "tool": "get",
        "shape": {},
-       "argsKey": "fc9cbb4d0364",
+       "argsKey": "a6",
        "outcome": "done",
        "result": "record_part",
        "count": 3,
@@ -190,9 +188,8 @@
    }
   },
   {
-   "id": "vs_c8af088e-cdcd-492a-b7f8-ee655d69ae9b",
+   "id": "s03",
    "tenant": "orgiq",
-   "date": "2026-11-08T23:00",
    "tools": [
     "open",
     "search",
@@ -234,7 +231,7 @@
        "atMs": 10600,
        "tool": "list",
        "shape": {},
-       "argsKey": "7461ec16179d",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "list",
        "count": 0,
@@ -248,7 +245,7 @@
        "atMs": 13800,
        "tool": "list",
        "shape": {},
-       "argsKey": "d4b45bb06d0e",
+       "argsKey": "a2",
        "outcome": "done",
        "result": "list",
        "count": 8,
@@ -262,7 +259,7 @@
        "atMs": 16100,
        "tool": "summary",
        "shape": {},
-       "argsKey": "5369f4e10e77",
+       "argsKey": "a3",
        "outcome": "done",
        "result": "summary",
        "of": "machines",
@@ -274,7 +271,7 @@
        "atMs": 18400,
        "tool": "open",
        "shape": {},
-       "argsKey": "be941f529d8a",
+       "argsKey": "a4",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 22,
@@ -285,7 +282,7 @@
        "atMs": 21100,
        "tool": "search",
        "shape": {},
-       "argsKey": "751cb3133c9e",
+       "argsKey": "a5",
        "outcome": "done",
        "result": "search_results",
        "rows": 0,
@@ -297,7 +294,7 @@
        "atMs": 23200,
        "tool": "open",
        "shape": {},
-       "argsKey": "7034bdb6da62",
+       "argsKey": "a6",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 26,
@@ -315,7 +312,7 @@
        "atMs": 45200,
        "tool": "search",
        "shape": {},
-       "argsKey": "f9c81c0fb167",
+       "argsKey": "a7",
        "outcome": "done",
        "result": "search_results",
        "rows": 5,
@@ -327,7 +324,7 @@
        "atMs": 48500,
        "tool": "open",
        "shape": {},
-       "argsKey": "5c12132c1b27",
+       "argsKey": "a8",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 48,
@@ -343,9 +340,8 @@
    }
   },
   {
-   "id": "vs_b5b201d8-c218-4631-9e17-ecba698e882d",
+   "id": "s04",
    "tenant": "orgiq",
-   "date": "2026-11-08T23:01",
    "tools": [
     "open",
     "search",
@@ -388,7 +384,7 @@
        "atMs": 9300,
        "tool": "search",
        "shape": {},
-       "argsKey": "1734b968990d",
+       "argsKey": "a1",
        "outcome": "done",
        "resultSeq": 3,
        "durationMs": 0
@@ -398,7 +394,7 @@
        "atMs": 11200,
        "tool": "activity",
        "shape": {},
-       "argsKey": "a36583836fb5",
+       "argsKey": "a2",
        "outcome": "done",
        "resultSeq": 5,
        "durationMs": 0
@@ -416,7 +412,7 @@
        "atMs": 14900,
        "tool": "search",
        "shape": {},
-       "argsKey": "87db52f25936",
+       "argsKey": "a3",
        "outcome": "done",
        "resultSeq": 6,
        "durationMs": 0
@@ -434,7 +430,7 @@
        "atMs": 65900,
        "tool": "message",
        "shape": {},
-       "argsKey": "e5e4e63d03ca",
+       "argsKey": "a4",
        "outcome": "refused",
        "resultSeq": 8,
        "durationMs": 0
@@ -449,9 +445,8 @@
    }
   },
   {
-   "id": "vs_a215e96c-d792-4753-95fd-8b071271253b",
+   "id": "s05",
    "tenant": "orgiq",
-   "date": "2026-11-08T23:03",
    "tools": [
     "open",
     "search",
@@ -494,7 +489,7 @@
        "atMs": 8200,
        "tool": "activity",
        "shape": {},
-       "argsKey": "a36583836fb5",
+       "argsKey": "a1",
        "outcome": "done",
        "resultSeq": 3,
        "durationMs": 0
@@ -512,7 +507,7 @@
        "atMs": 40700,
        "tool": "search",
        "shape": {},
-       "argsKey": "e853d7474647",
+       "argsKey": "a2",
        "outcome": "done",
        "resultSeq": 5,
        "durationMs": 0
@@ -530,7 +525,7 @@
        "atMs": 84700,
        "tool": "message",
        "shape": {},
-       "argsKey": "40865b81fc01",
+       "argsKey": "a3",
        "outcome": "refused",
        "resultSeq": 8,
        "durationMs": 0
@@ -540,7 +535,7 @@
        "atMs": 87500,
        "tool": "message",
        "shape": {},
-       "argsKey": "a7bbee52e589",
+       "argsKey": "a4",
        "outcome": "refused",
        "resultSeq": 9,
        "durationMs": 0
@@ -550,7 +545,7 @@
        "atMs": 89800,
        "tool": "search",
        "shape": {},
-       "argsKey": "af85a0d36517",
+       "argsKey": "a5",
        "outcome": "done",
        "resultSeq": 10,
        "durationMs": 0
@@ -560,7 +555,7 @@
        "atMs": 92300,
        "tool": "list",
        "shape": {},
-       "argsKey": "568210466d6e",
+       "argsKey": "a6",
        "outcome": "refused",
        "resultSeq": 11,
        "durationMs": 0
@@ -570,7 +565,7 @@
        "atMs": 94400,
        "tool": "list",
        "shape": {},
-       "argsKey": "967a3ccd07a7",
+       "argsKey": "a7",
        "outcome": "done",
        "resultSeq": 12,
        "durationMs": 0
@@ -580,7 +575,7 @@
        "atMs": 96300,
        "tool": "list",
        "shape": {},
-       "argsKey": "8a95a6e5c77d",
+       "argsKey": "a8",
        "outcome": "done",
        "resultSeq": 13,
        "durationMs": 0
@@ -590,7 +585,7 @@
        "atMs": 98600,
        "tool": "open",
        "shape": {},
-       "argsKey": "267c536b8ba5",
+       "argsKey": "a9",
        "outcome": "done",
        "resultSeq": 14,
        "durationMs": 0
@@ -600,7 +595,7 @@
        "atMs": 101400,
        "tool": "message",
        "shape": {},
-       "argsKey": "168e2168c895",
+       "argsKey": "a10",
        "outcome": "refused",
        "resultSeq": 15,
        "durationMs": 0
@@ -618,7 +613,7 @@
        "atMs": 121000,
        "tool": "activity",
        "shape": {},
-       "argsKey": "a36583836fb5",
+       "argsKey": "a1",
        "outcome": "done",
        "resultSeq": 17,
        "durationMs": 0
@@ -636,7 +631,7 @@
        "atMs": 130900,
        "tool": "list",
        "shape": {},
-       "argsKey": "674f4fbd15a4",
+       "argsKey": "a11",
        "outcome": "done",
        "resultSeq": 18,
        "durationMs": 0
@@ -654,7 +649,7 @@
        "atMs": 135200,
        "tool": "list",
        "shape": {},
-       "argsKey": "7f295cb1a630",
+       "argsKey": "a12",
        "outcome": "done",
        "resultSeq": 20,
        "durationMs": 0
@@ -672,7 +667,7 @@
        "atMs": 159400,
        "tool": "message",
        "shape": {},
-       "argsKey": "5a459350829a",
+       "argsKey": "a13",
        "outcome": "done",
        "resultSeq": 22,
        "durationMs": 24300,
@@ -698,7 +693,7 @@
        "atMs": 223000,
        "tool": "activity",
        "shape": {},
-       "argsKey": "ed2d8c77d6b1",
+       "argsKey": "a14",
        "outcome": "done",
        "resultSeq": 24,
        "durationMs": 0
@@ -716,7 +711,7 @@
        "atMs": 242700,
        "tool": "message",
        "shape": {},
-       "argsKey": "cb94215afe36",
+       "argsKey": "a15",
        "outcome": "done",
        "resultSeq": 26,
        "durationMs": 2700,
@@ -742,7 +737,7 @@
        "atMs": 267000,
        "tool": "open",
        "shape": {},
-       "argsKey": "7034bdb6da62",
+       "argsKey": "a16",
        "outcome": "done",
        "resultSeq": 27,
        "durationMs": 0
@@ -752,7 +747,7 @@
        "atMs": 270000,
        "tool": "list",
        "shape": {},
-       "argsKey": "bb636569ac2e",
+       "argsKey": "a17",
        "outcome": "refused",
        "resultSeq": 29,
        "durationMs": 0
@@ -762,7 +757,7 @@
        "atMs": 272100,
        "tool": "list",
        "shape": {},
-       "argsKey": "f4f8f69f1964",
+       "argsKey": "a18",
        "outcome": "done",
        "resultSeq": 30,
        "durationMs": 0
@@ -780,7 +775,7 @@
        "atMs": 310800,
        "tool": "computer",
        "shape": {},
-       "argsKey": "b57b4754364e",
+       "argsKey": "a19",
        "outcome": "done",
        "resultSeq": 32,
        "durationMs": 0
@@ -790,7 +785,7 @@
        "atMs": 312400,
        "tool": "computer",
        "shape": {},
-       "argsKey": "81493254a6ab",
+       "argsKey": "a20",
        "outcome": "done",
        "resultSeq": 33,
        "durationMs": 0
@@ -800,7 +795,7 @@
        "atMs": 314500,
        "tool": "computer",
        "shape": {},
-       "argsKey": "869475015fab",
+       "argsKey": "a21",
        "outcome": "done",
        "resultSeq": 34,
        "durationMs": 0
@@ -810,7 +805,7 @@
        "atMs": 316000,
        "tool": "computer",
        "shape": {},
-       "argsKey": "e8356e7b0839",
+       "argsKey": "a22",
        "outcome": "done",
        "resultSeq": 35,
        "durationMs": 0
@@ -828,7 +823,7 @@
        "atMs": 324400,
        "tool": "computer",
        "shape": {},
-       "argsKey": "a677483ffca3",
+       "argsKey": "a23",
        "outcome": "done",
        "resultSeq": 36,
        "durationMs": 2800,
@@ -854,7 +849,7 @@
        "atMs": 332400,
        "tool": "computer",
        "shape": {},
-       "argsKey": "7733cbcc6805",
+       "argsKey": "a24",
        "outcome": "done",
        "resultSeq": 38,
        "durationMs": 3500,
@@ -872,7 +867,7 @@
        "atMs": 337600,
        "tool": "computer",
        "shape": {},
-       "argsKey": "98cb51cb0653",
+       "argsKey": "a25",
        "outcome": "cancelled",
        "resultSeq": 39,
        "durationMs": 1000,
@@ -890,7 +885,7 @@
        "atMs": 341100,
        "tool": "computer",
        "shape": {},
-       "argsKey": "872609efe26d",
+       "argsKey": "a26",
        "outcome": "done",
        "resultSeq": 40,
        "durationMs": 1600,
@@ -916,7 +911,7 @@
        "atMs": 407100,
        "tool": "open",
        "shape": {},
-       "argsKey": "9989901ce60c",
+       "argsKey": "a27",
        "outcome": "done",
        "resultSeq": 43,
        "durationMs": 0
@@ -934,7 +929,7 @@
        "atMs": 414500,
        "tool": "list",
        "shape": {},
-       "argsKey": "cfcc97c96350",
+       "argsKey": "a28",
        "outcome": "done",
        "resultSeq": 44,
        "durationMs": 100
@@ -944,7 +939,7 @@
        "atMs": 416300,
        "tool": "open",
        "shape": {},
-       "argsKey": "991b7ca3adf4",
+       "argsKey": "a29",
        "outcome": "done",
        "resultSeq": 45,
        "durationMs": 0
@@ -962,7 +957,7 @@
        "atMs": 423800,
        "tool": "get",
        "shape": {},
-       "argsKey": "991b7ca3adf4",
+       "argsKey": "a29",
        "outcome": "done",
        "resultSeq": 46,
        "durationMs": 0
@@ -980,7 +975,7 @@
        "atMs": 428400,
        "tool": "get",
        "shape": {},
-       "argsKey": "48ad2c89feff",
+       "argsKey": "a30",
        "outcome": "refused",
        "resultSeq": 47,
        "durationMs": 0
@@ -990,7 +985,7 @@
        "atMs": 430400,
        "tool": "get",
        "shape": {},
-       "argsKey": "58723e01fad9",
+       "argsKey": "a31",
        "outcome": "refused",
        "resultSeq": 48,
        "durationMs": 0
@@ -1000,7 +995,7 @@
        "atMs": 432700,
        "tool": "get",
        "shape": {},
-       "argsKey": "cb38f699a38e",
+       "argsKey": "a32",
        "outcome": "refused",
        "resultSeq": 49,
        "durationMs": 0
@@ -1010,7 +1005,7 @@
        "atMs": 434500,
        "tool": "search",
        "shape": {},
-       "argsKey": "1cd853d3196e",
+       "argsKey": "a33",
        "outcome": "done",
        "resultSeq": 50,
        "durationMs": 0
@@ -1028,7 +1023,7 @@
        "atMs": 440100,
        "tool": "search",
        "shape": {},
-       "argsKey": "4d7dc93ef42f",
+       "argsKey": "a34",
        "outcome": "done",
        "resultSeq": 52,
        "durationMs": 0
@@ -1038,7 +1033,7 @@
        "atMs": 442500,
        "tool": "get",
        "shape": {},
-       "argsKey": "103973e7fb62",
+       "argsKey": "a35",
        "outcome": "refused",
        "resultSeq": 53,
        "durationMs": 0
@@ -1056,7 +1051,7 @@
        "atMs": 446600,
        "tool": "search",
        "shape": {},
-       "argsKey": "273cf77350d2",
+       "argsKey": "a36",
        "outcome": "done",
        "resultSeq": 54,
        "durationMs": 0
@@ -1074,7 +1069,7 @@
        "atMs": 478700,
        "tool": "activity",
        "shape": {},
-       "argsKey": "d01b07930663",
+       "argsKey": "a37",
        "outcome": "done",
        "resultSeq": 56,
        "durationMs": 0
@@ -1092,7 +1087,7 @@
        "atMs": 499300,
        "tool": "activity",
        "shape": {},
-       "argsKey": "27d4cd85328c",
+       "argsKey": "a38",
        "outcome": "done",
        "resultSeq": 58,
        "durationMs": 0
@@ -1110,7 +1105,7 @@
        "atMs": 513200,
        "tool": "message",
        "shape": {},
-       "argsKey": "c1d8a2852b05",
+       "argsKey": "a39",
        "outcome": "done",
        "resultSeq": 59,
        "durationMs": 1800,
@@ -1133,9 +1128,8 @@
    }
   },
   {
-   "id": "vs_95e5a6c7-6e5d-45d4-bb6d-c8e47df8f05a",
+   "id": "s06",
    "tenant": "orgiq",
-   "date": "2026-11-08T23:52",
    "tools": [
     "open",
     "search",
@@ -1180,7 +1174,7 @@
         "scope": "this-page",
         "refKind": "position"
        },
-       "argsKey": "9bb80a7e82a3",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 15,
@@ -1201,7 +1195,7 @@
         "kind": "work-item",
         "scope": "this-page"
        },
-       "argsKey": "5e0f64f6913f",
+       "argsKey": "a2",
        "outcome": "done",
        "result": "list",
        "count": 11,
@@ -1224,7 +1218,7 @@
        "shape": {
         "refKind": "work-item"
        },
-       "argsKey": "b75a695d3e20",
+       "argsKey": "a3",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 36,
@@ -1244,7 +1238,7 @@
        "shape": {
         "scope": "envelopes"
        },
-       "argsKey": "bdfa63ad5b2c",
+       "argsKey": "a4",
        "outcome": "done",
        "result": "budget",
        "count": 1,
@@ -1280,7 +1274,7 @@
         "part": "documents",
         "refKind": "work-item"
        },
-       "argsKey": "149308d9ab9d",
+       "argsKey": "a5",
        "outcome": "done",
        "result": "record_part",
        "count": 0,
@@ -1302,7 +1296,7 @@
        "shape": {
         "kind": "doc"
        },
-       "argsKey": "48d1fc8806ba",
+       "argsKey": "a6",
        "outcome": "done",
        "result": "work_queued",
        "resultSeq": 101,
@@ -1324,9 +1318,8 @@
    }
   },
   {
-   "id": "vs_f420d509-bdcc-42a3-a1c1-69a876c96ea8",
+   "id": "s07",
    "tenant": "access",
-   "date": "2026-11-09T00:20",
    "tools": [
     "open",
     "search",
@@ -1366,7 +1359,7 @@
         "filterScope": "all",
         "filteredBy": "since"
        },
-       "argsKey": "0b371b9bbea4",
+       "argsKey": "a1",
        "outcome": "refused",
        "reason": "no-grant",
        "result": "refused",
@@ -1381,7 +1374,7 @@
         "kind": "request",
         "filteredBy": "status,since"
        },
-       "argsKey": "1f2281eee6eb",
+       "argsKey": "a2",
        "outcome": "done",
        "result": "list",
        "count": 0,
@@ -1399,7 +1392,7 @@
         "scope": "this-page",
         "filteredBy": "since"
        },
-       "argsKey": "3a6ddbac23ec",
+       "argsKey": "a3",
        "outcome": "refused",
        "reason": "not-on-this-page",
        "result": "refused",
@@ -1413,7 +1406,7 @@
        "shape": {
         "page": "open-requests"
        },
-       "argsKey": "37c9ad0810fb",
+       "argsKey": "a4",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 18,
@@ -1428,7 +1421,7 @@
         "sort": "recent",
         "answer": false
        },
-       "argsKey": "79d39a0952d9",
+       "argsKey": "a5",
        "outcome": "done",
        "result": "search_results",
        "rows": 1,
@@ -1444,7 +1437,7 @@
         "sort": "recent",
         "answer": false
        },
-       "argsKey": "f6900b59439d",
+       "argsKey": "a6",
        "outcome": "done",
        "result": "search_results",
        "rows": 1,
@@ -1461,9 +1454,8 @@
    }
   },
   {
-   "id": "vs_8bb50a16-8419-4d21-b08e-4a0dbc347660",
+   "id": "s08",
    "tenant": "orgiq",
-   "date": "2026-11-09T00:21",
    "tools": [
     "open",
     "search",
@@ -1507,7 +1499,7 @@
        "shape": {
         "page": "codebases"
        },
-       "argsKey": "78a15bec7b4b",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 16,
@@ -1527,7 +1519,7 @@
        "shape": {
         "page": "computer-lab"
        },
-       "argsKey": "7034bdb6da62",
+       "argsKey": "a2",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 23,
@@ -1547,7 +1539,7 @@
        "shape": {
         "page": "agent-library"
        },
-       "argsKey": "86645c8b2c6a",
+       "argsKey": "a3",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 38,
@@ -1560,7 +1552,7 @@
        "shape": {
         "kind": "library"
        },
-       "argsKey": "b21cb6fbd03a",
+       "argsKey": "a4",
        "outcome": "done",
        "result": "list",
        "count": 12,
@@ -1583,7 +1575,7 @@
        "shape": {
         "page": "budgets"
        },
-       "argsKey": "0c2880feafe7",
+       "argsKey": "a5",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 46,
@@ -1603,7 +1595,7 @@
        "shape": {
         "page": "search"
        },
-       "argsKey": "791a210b5e00",
+       "argsKey": "a6",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 64,
@@ -1624,7 +1616,7 @@
         "type": "person",
         "sort": "relevance"
        },
-       "argsKey": "b76f47b4bd33",
+       "argsKey": "a7",
        "outcome": "done",
        "result": "search_results",
        "rows": 5,
@@ -1645,7 +1637,7 @@
        "shape": {
         "scope": "online"
        },
-       "argsKey": "a36583836fb5",
+       "argsKey": "a8",
        "outcome": "done",
        "result": "activity",
        "count": 0,
@@ -1685,7 +1677,7 @@
        "shape": {
         "targetKind": "dm"
        },
-       "argsKey": "db98bcba95ea",
+       "argsKey": "a9",
        "outcome": "refused",
        "reason": "not-found",
        "result": "refused",
@@ -1708,7 +1700,7 @@
         "filterScope": "all",
         "filteredBy": "q"
        },
-       "argsKey": "24ad7e6a4e65",
+       "argsKey": "a10",
        "outcome": "refused",
        "reason": "other",
        "result": "refused",
@@ -1723,7 +1715,7 @@
         "kind": "dm",
         "filteredBy": "q"
        },
-       "argsKey": "5bb81a77f6f6",
+       "argsKey": "a11",
        "outcome": "done",
        "result": "list",
        "count": 0,
@@ -1740,7 +1732,7 @@
         "kind": "dm",
         "filteredBy": "q"
        },
-       "argsKey": "26521a0e2b15",
+       "argsKey": "a12",
        "outcome": "done",
        "result": "list",
        "count": 0,
@@ -1759,9 +1751,8 @@
    }
   },
   {
-   "id": "vs_16ca8e51-aa73-4599-ac93-8f2f8c8da82d",
+   "id": "s09",
    "tenant": "assessment",
-   "date": "2026-11-09T00:40",
    "tools": [
     "open",
     "search",
@@ -1803,7 +1794,7 @@
         "sort": "relevance",
         "answer": true
        },
-       "argsKey": "cfc931ed9596",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "search_results",
        "rows": 0,
@@ -1817,7 +1808,7 @@
        "shape": {
         "kind": "team"
        },
-       "argsKey": "e51ed66b1f1d",
+       "argsKey": "a2",
        "outcome": "done",
        "result": "list",
        "count": 7,
@@ -1834,7 +1825,7 @@
         "kind": "team",
         "filteredBy": "status"
        },
-       "argsKey": "997a456f9843",
+       "argsKey": "a3",
        "outcome": "done",
        "result": "list",
        "count": 1,
@@ -1857,7 +1848,7 @@
        "shape": {
         "refKind": "team"
        },
-       "argsKey": "9c66d82b22bb",
+       "argsKey": "a4",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 25,
@@ -1877,7 +1868,7 @@
        "shape": {
         "refKind": "team"
        },
-       "argsKey": "9c66d82b22bb",
+       "argsKey": "a4",
        "outcome": "done",
        "result": "record",
        "resultSeq": 33,
@@ -1892,7 +1883,7 @@
         "sort": "relevance",
         "answer": true
        },
-       "argsKey": "a5b2f5d12efb",
+       "argsKey": "a5",
        "outcome": "done",
        "result": "search_results",
        "rows": 1,
@@ -1907,7 +1898,7 @@
         "sort": "relevance",
         "answer": true
        },
-       "argsKey": "719c24d1b9ea",
+       "argsKey": "a6",
        "outcome": "done",
        "result": "search_results",
        "rows": 5,
@@ -1921,7 +1912,7 @@
        "shape": {
         "refKind": "run"
        },
-       "argsKey": "b022479296da",
+       "argsKey": "a7",
        "outcome": "done",
        "result": "record",
        "resultSeq": 40,
@@ -1937,9 +1928,8 @@
    }
   },
   {
-   "id": "vs_f86d7b03-7e6c-4005-9ef1-883b0f10dc31",
+   "id": "s10",
    "tenant": "social",
-   "date": "2026-11-09T00:42",
    "tools": [
     "open",
     "search",
@@ -1982,7 +1972,7 @@
         "kind": "channel",
         "byName": true
        },
-       "argsKey": "f1f6a714d0c6",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 13,
@@ -2002,7 +1992,7 @@
        "shape": {
         "kind": "summarize"
        },
-       "argsKey": "07f6bb3eec7f",
+       "argsKey": "a2",
        "outcome": "done",
        "result": "work_queued",
        "resultSeq": 34,
@@ -2029,7 +2019,7 @@
         "part": "recent",
         "refKind": "channel"
        },
-       "argsKey": "68bb024f7a5f",
+       "argsKey": "a3",
        "outcome": "done",
        "result": "record_part",
        "count": 17,
@@ -2046,7 +2036,7 @@
         "sort": "recent",
         "answer": false
        },
-       "argsKey": "0106db8511cc",
+       "argsKey": "a4",
        "outcome": "done",
        "result": "search_results",
        "rows": 10,
@@ -2060,7 +2050,7 @@
        "shape": {
         "refKind": "message"
        },
-       "argsKey": "ae5e02364076",
+       "argsKey": "a5",
        "outcome": "refused",
        "reason": "other",
        "result": "refused",
@@ -2074,7 +2064,7 @@
        "shape": {
         "refKind": "message"
        },
-       "argsKey": "ae5e02364076",
+       "argsKey": "a5",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 54,
@@ -2089,7 +2079,7 @@
         "sort": "recent",
         "answer": false
        },
-       "argsKey": "8b6fdc8fc1de",
+       "argsKey": "a6",
        "outcome": "done",
        "result": "search_results",
        "rows": 10,
@@ -2105,7 +2095,7 @@
         "sort": "recent",
         "answer": false
        },
-       "argsKey": "ad6279fe9c95",
+       "argsKey": "a7",
        "outcome": "done",
        "result": "search_results",
        "rows": 2,
@@ -2121,7 +2111,7 @@
         "sort": "recent",
         "answer": false
        },
-       "argsKey": "7294c3205729",
+       "argsKey": "a8",
        "outcome": "done",
        "result": "search_results",
        "rows": 10,
@@ -2142,7 +2132,7 @@
        "shape": {
         "targetKind": "channel"
        },
-       "argsKey": "8f8db2ed2e70",
+       "argsKey": "a9",
        "outcome": "done",
        "result": "posted",
        "resultSeq": 74,
@@ -2169,7 +2159,7 @@
         "kind": "channel",
         "byName": true
        },
-       "argsKey": "d4992cb19a6a",
+       "argsKey": "a10",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 82,
@@ -2189,7 +2179,7 @@
        "shape": {
         "targetKind": "channel"
        },
-       "argsKey": "7625eb8b1fa2",
+       "argsKey": "a11",
        "outcome": "done",
        "result": "posted",
        "resultSeq": 100,
@@ -2215,7 +2205,7 @@
        "shape": {
         "page": "hangouts"
        },
-       "argsKey": "fb474e142473",
+       "argsKey": "a12",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 114,
@@ -2236,7 +2226,7 @@
         "kind": "room",
         "byName": true
        },
-       "argsKey": "c1d4a261a714",
+       "argsKey": "a13",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 127,
@@ -2256,7 +2246,7 @@
        "shape": {
         "refKind": "room"
        },
-       "argsKey": "88a2c0b56bc1",
+       "argsKey": "a14",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 137,
@@ -2269,9 +2259,8 @@
    "close": null
   },
   {
-   "id": "vs_89440153-7ecf-47fb-b219-bb79ae36f63a",
+   "id": "s11",
    "tenant": "orgiq",
-   "date": "2026-11-09T01:33",
    "tools": [
     "open",
     "search",
@@ -2315,7 +2304,7 @@
        "shape": {
         "page": "initiatives"
        },
-       "argsKey": "078bdb29f97d",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 19,
@@ -2331,9 +2320,8 @@
    }
   },
   {
-   "id": "vs_df89af16-3c79-4a64-80bc-3436463c12f6",
+   "id": "s12",
    "tenant": "orgiq",
-   "date": "2026-11-09T01:34",
    "tools": [
     "open",
     "search",
@@ -2377,7 +2365,7 @@
        "shape": {
         "page": "initiatives"
        },
-       "argsKey": "078bdb29f97d",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 11,
@@ -2399,9 +2387,8 @@
    }
   },
   {
-   "id": "vs_36de5050-1141-4b22-bae9-650983ec8c33",
+   "id": "s13",
    "tenant": "orgiq",
-   "date": "2026-11-09T01:35",
    "tools": [
     "open",
     "search",
@@ -2445,7 +2432,7 @@
        "shape": {
         "page": "initiatives"
        },
-       "argsKey": "078bdb29f97d",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 11,
@@ -2466,7 +2453,7 @@
         "scope": "this-page",
         "refKind": "position"
        },
-       "argsKey": "9bb80a7e82a3",
+       "argsKey": "a2",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 19,
@@ -2479,9 +2466,8 @@
    "close": null
   },
   {
-   "id": "vs_d69bbb23-e17a-488e-8a70-8c327ccf3e74",
+   "id": "s14",
    "tenant": "orgiq",
-   "date": "2026-11-09T01:36",
    "tools": [
     "open",
     "search",
@@ -2525,7 +2511,7 @@
        "shape": {
         "refKind": "initiative"
        },
-       "argsKey": "5dcb5ee3460e",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 14,
@@ -2539,7 +2525,7 @@
         "part": "decisions",
         "refKind": "initiative"
        },
-       "argsKey": "d892de9277ef",
+       "argsKey": "a2",
        "outcome": "done",
        "result": "record_part",
        "count": 2,
@@ -2561,7 +2547,7 @@
        "shape": {
         "refKind": "decision"
        },
-       "argsKey": "03c862177d9d",
+       "argsKey": "a3",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 26,
@@ -2582,7 +2568,7 @@
         "sort": "relevance",
         "answer": false
        },
-       "argsKey": "47a38fbe643c",
+       "argsKey": "a4",
        "outcome": "done",
        "result": "search_results",
        "rows": 5,
@@ -2598,7 +2584,7 @@
         "sort": "relevance",
         "answer": false
        },
-       "argsKey": "ff7cd852bf5c",
+       "argsKey": "a5",
        "outcome": "done",
        "result": "search_results",
        "rows": 0,
@@ -2619,7 +2605,7 @@
        "shape": {
         "refKind": "decision"
        },
-       "argsKey": "03c862177d9d",
+       "argsKey": "a3",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 47,
@@ -2645,7 +2631,7 @@
        "shape": {
         "refKind": "decision"
        },
-       "argsKey": "b8f3950cf441",
+       "argsKey": "a6",
        "outcome": "done",
        "result": "record",
        "resultSeq": 65,
@@ -2665,7 +2651,7 @@
        "shape": {
         "refKind": "initiative"
        },
-       "argsKey": "3436724d0eee",
+       "argsKey": "a7",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 72,
@@ -2686,7 +2672,7 @@
         "part": "decisions",
         "refKind": "initiative"
        },
-       "argsKey": "64487d6ade79",
+       "argsKey": "a8",
        "outcome": "done",
        "result": "record_part",
        "count": 1,
@@ -2701,7 +2687,7 @@
        "shape": {
         "refKind": "decision"
        },
-       "argsKey": "275b02438a46",
+       "argsKey": "a9",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 81,
@@ -2721,7 +2707,7 @@
        "shape": {
         "refKind": "initiative"
        },
-       "argsKey": "3436724d0eee",
+       "argsKey": "a7",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 95,
@@ -2744,7 +2730,7 @@
         "sort": "relevance",
         "answer": false
        },
-       "argsKey": "bcdf9361bb6d",
+       "argsKey": "a10",
        "outcome": "done",
        "result": "search_results",
        "rows": 0,
@@ -2760,7 +2746,7 @@
         "sort": "relevance",
         "answer": false
        },
-       "argsKey": "e6ae9e6b45a4",
+       "argsKey": "a11",
        "outcome": "done",
        "result": "search_results",
        "rows": 0,
@@ -2776,7 +2762,7 @@
         "filterScope": "all",
         "filteredBy": "q"
        },
-       "argsKey": "746de5fd58ad",
+       "argsKey": "a12",
        "outcome": "refused",
        "reason": "invalid-arguments",
        "result": "refused",
@@ -2791,7 +2777,7 @@
         "kind": "work-item",
         "filteredBy": "q"
        },
-       "argsKey": "fe334c91b9b6",
+       "argsKey": "a13",
        "outcome": "done",
        "result": "list",
        "count": 0,
@@ -2809,7 +2795,7 @@
         "sort": "relevance",
         "answer": false
        },
-       "argsKey": "bb1c71b327cb",
+       "argsKey": "a14",
        "outcome": "done",
        "result": "search_results",
        "rows": 0,
@@ -2831,7 +2817,7 @@
         "kind": "work-item",
         "byName": true
        },
-       "argsKey": "9c38c482cdd7",
+       "argsKey": "a15",
        "outcome": "refused",
        "reason": "not-found",
        "result": "refused",
@@ -2852,7 +2838,7 @@
        "shape": {
         "refKind": "initiative"
        },
-       "argsKey": "3436724d0eee",
+       "argsKey": "a7",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 126,
@@ -2873,7 +2859,7 @@
         "scope": "this-page",
         "refKind": "position"
        },
-       "argsKey": "9bb80a7e82a3",
+       "argsKey": "a16",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 135,
@@ -2894,7 +2880,7 @@
         "kind": "dispatch",
         "targetKind": "work-item"
        },
-       "argsKey": "863b1f3c5b0a",
+       "argsKey": "a17",
        "outcome": "refused",
        "reason": "not-found",
        "result": "refused",
@@ -2909,7 +2895,7 @@
         "kind": "work-item",
         "scope": "this-page"
        },
-       "argsKey": "57a35b10380c",
+       "argsKey": "a18",
        "outcome": "done",
        "result": "list",
        "count": 3,
@@ -2927,7 +2913,7 @@
         "scope": "this-page",
         "rowCount": 1
        },
-       "argsKey": "f8a422ca5177",
+       "argsKey": "a19",
        "outcome": "failed",
        "result": "failed",
        "resultSeq": 153,
@@ -2957,7 +2943,7 @@
         "scope": "this-page",
         "rowCount": 1
        },
-       "argsKey": "f8a422ca5177",
+       "argsKey": "a19",
        "outcome": "refused",
        "reason": "other",
        "result": "refused",
@@ -2978,7 +2964,7 @@
        "shape": {
         "page": "computer-lab"
        },
-       "argsKey": "7034bdb6da62",
+       "argsKey": "a20",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 165,
@@ -3010,7 +2996,7 @@
        "shape": {
         "refKind": "initiative"
        },
-       "argsKey": "3e5a23868e67",
+       "argsKey": "a21",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 181,
@@ -3030,7 +3016,7 @@
        "shape": {
         "page": "designs"
        },
-       "argsKey": "2e235c4508f9",
+       "argsKey": "a22",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 188,
@@ -3043,7 +3029,7 @@
        "shape": {
         "page": "runbooks"
        },
-       "argsKey": "99bde94fde39",
+       "argsKey": "a23",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 190,
@@ -3056,7 +3042,7 @@
        "shape": {
         "page": "agent-library"
        },
-       "argsKey": "86645c8b2c6a",
+       "argsKey": "a24",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 192,
@@ -3069,7 +3055,7 @@
        "shape": {
         "page": "runbooks"
        },
-       "argsKey": "99bde94fde39",
+       "argsKey": "a23",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 194,
@@ -3089,7 +3075,7 @@
        "shape": {
         "refKind": "initiative"
        },
-       "argsKey": "3e5a23868e67",
+       "argsKey": "a21",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 210,
@@ -3109,7 +3095,7 @@
        "shape": {
         "page": "communication"
        },
-       "argsKey": "b2b62094a136",
+       "argsKey": "a25",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 226,
@@ -3122,7 +3108,7 @@
        "shape": {
         "scope": "online"
        },
-       "argsKey": "a36583836fb5",
+       "argsKey": "a26",
        "outcome": "done",
        "result": "activity",
        "count": 0,
@@ -3145,7 +3131,7 @@
         "kind": "channel",
         "byName": true
        },
-       "argsKey": "a08bd10436c1",
+       "argsKey": "a27",
        "outcome": "refused",
        "reason": "not-found",
        "result": "refused",
@@ -3160,7 +3146,7 @@
         "kind": "channel",
         "filteredBy": "q"
        },
-       "argsKey": "302d5c8df797",
+       "argsKey": "a28",
        "outcome": "done",
        "result": "list",
        "count": 0,
@@ -3177,7 +3163,7 @@
         "kind": "team",
         "filteredBy": "q"
        },
-       "argsKey": "61c355549919",
+       "argsKey": "a29",
        "outcome": "done",
        "result": "list",
        "count": 0,
@@ -3194,7 +3180,7 @@
         "kind": "channel",
         "filteredBy": "q"
        },
-       "argsKey": "88b50dbf5672",
+       "argsKey": "a30",
        "outcome": "done",
        "result": "list",
        "count": 0,
@@ -3210,7 +3196,7 @@
        "shape": {
         "kind": "channel"
        },
-       "argsKey": "aa6960c311f6",
+       "argsKey": "a31",
        "outcome": "refused",
        "reason": "too-many-calls",
        "result": "refused",
@@ -3234,9 +3220,8 @@
    }
   },
   {
-   "id": "vs_900938ca-cd43-419d-a03f-f5eaeac595d4",
+   "id": "s15",
    "tenant": "orgiq",
-   "date": "2026-11-09T01:42",
    "tools": [
     "open",
     "search",
@@ -3280,7 +3265,7 @@
        "shape": {
         "targetKind": "channel"
        },
-       "argsKey": "2a3458731f72",
+       "argsKey": "a1",
        "outcome": "failed",
        "result": "failed",
        "resultSeq": 15,
@@ -3308,7 +3293,7 @@
        "shape": {
         "targetKind": "channel"
        },
-       "argsKey": "2a3458731f72",
+       "argsKey": "a1",
        "outcome": "failed",
        "result": "failed",
        "resultSeq": 25,
@@ -3337,7 +3322,7 @@
         "kind": "channel",
         "filteredBy": "q"
        },
-       "argsKey": "004c1511e54c",
+       "argsKey": "a2",
        "outcome": "done",
        "result": "list",
        "count": 1,
@@ -3354,7 +3339,7 @@
         "refKind": "channel",
         "fields": "member"
        },
-       "argsKey": "b79c36187703",
+       "argsKey": "a3",
        "outcome": "done",
        "result": "updated",
        "resultSeq": 38,
@@ -3375,7 +3360,7 @@
        "shape": {
         "targetKind": "channel"
        },
-       "argsKey": "2a3458731f72",
+       "argsKey": "a1",
        "outcome": "failed",
        "result": "failed",
        "resultSeq": 45,
@@ -3402,7 +3387,7 @@
        "shape": {
         "targetKind": "channel"
        },
-       "argsKey": "2a3458731f72",
+       "argsKey": "a1",
        "outcome": "failed",
        "result": "failed",
        "resultSeq": 56,
@@ -3425,9 +3410,8 @@
    }
   },
   {
-   "id": "vs_d3cd28ad-67c5-42ec-983e-63bbf880770c",
+   "id": "s16",
    "tenant": "orgiq",
-   "date": "2026-11-09T13:28",
    "tools": [
     "open",
     "search",
@@ -3473,7 +3457,7 @@
         "sort": "relevance",
         "answer": false
        },
-       "argsKey": "ca4f4cc25ba4",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "search_results",
        "rows": 5,
@@ -3487,7 +3471,7 @@
        "shape": {
         "scope": "online"
        },
-       "argsKey": "a36583836fb5",
+       "argsKey": "a2",
        "outcome": "done",
        "result": "activity",
        "count": 0,
@@ -3511,7 +3495,7 @@
         "sort": "relevance",
         "answer": false
        },
-       "argsKey": "5cb4028d52ac",
+       "argsKey": "a3",
        "outcome": "done",
        "result": "search_results",
        "rows": 1,
@@ -3525,7 +3509,7 @@
        "shape": {
         "scope": "online"
        },
-       "argsKey": "dff6aaf89793",
+       "argsKey": "a4",
        "outcome": "done",
        "result": "activity",
        "count": 0,
@@ -3543,9 +3527,8 @@
    }
   },
   {
-   "id": "vs_5144e356-5dd5-4990-acec-1b9641cf69bd",
+   "id": "s17",
    "tenant": "orgiq",
-   "date": "2026-11-09T13:29",
    "tools": [
     "open",
     "search",
@@ -3589,7 +3572,7 @@
        "shape": {
         "scope": "online"
        },
-       "argsKey": "a36583836fb5",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "activity",
        "count": 0,
@@ -3612,7 +3595,7 @@
         "kind": "initiative",
         "byName": true
        },
-       "argsKey": "59a576819e46",
+       "argsKey": "a2",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 20,
@@ -3626,7 +3609,7 @@
         "part": "decisions",
         "refKind": "initiative"
        },
-       "argsKey": "ba9fb91a5767",
+       "argsKey": "a3",
        "outcome": "refused",
        "reason": "navigated",
        "result": "refused",
@@ -3650,9 +3633,8 @@
    }
   },
   {
-   "id": "vs_8ec235e3-ca86-4cfe-8c20-053e83633707",
+   "id": "s18",
    "tenant": "orgiq",
-   "date": "2026-11-09T13:30",
    "tools": [
     "open",
     "search",
@@ -3698,7 +3680,7 @@
         "scope": "this-page",
         "refKind": "position"
        },
-       "argsKey": "ed47073482ef",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 14,
@@ -3719,7 +3701,7 @@
         "kind": "access-request",
         "fields": "item"
        },
-       "argsKey": "37953f1836c7",
+       "argsKey": "a2",
        "outcome": "refused",
        "reason": "no-grant",
        "result": "refused",
@@ -3740,7 +3722,7 @@
        "shape": {
         "scope": "online"
        },
-       "argsKey": "a36583836fb5",
+       "argsKey": "a3",
        "outcome": "done",
        "result": "activity",
        "count": 0,
@@ -3758,9 +3740,8 @@
    }
   },
   {
-   "id": "vs_7c98fdc7-21fb-43f4-a6b3-3314cc9e20d2",
+   "id": "s19",
    "tenant": "orgiq",
-   "date": "2026-11-09T13:31",
    "tools": [
     "open",
     "search",
@@ -3805,7 +3786,7 @@
         "kind": "initiative",
         "byName": true
        },
-       "argsKey": "cb726a8f618f",
+       "argsKey": "a1",
        "outcome": "refused",
        "reason": "ambiguous",
        "result": "ambiguous",
@@ -3827,7 +3808,7 @@
        "shape": {
         "refKind": "initiative"
        },
-       "argsKey": "0e8ba79a35df",
+       "argsKey": "a2",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 29,
@@ -3841,7 +3822,7 @@
         "kind": "work-item",
         "scope": "this-page"
        },
-       "argsKey": "61531668d51b",
+       "argsKey": "a3",
        "outcome": "done",
        "result": "list",
        "count": 11,
@@ -3860,9 +3841,8 @@
    }
   },
   {
-   "id": "vs_9b06806f-a6c5-42a2-b786-d40db26e2bf9",
+   "id": "s20",
    "tenant": "orgiq",
-   "date": "2026-11-09T13:32",
    "tools": [
     "open",
     "search",
@@ -3906,7 +3886,7 @@
        "shape": {
         "page": "initiatives"
        },
-       "argsKey": "078bdb29f97d",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 11,
@@ -3927,7 +3907,7 @@
         "kind": "initiative",
         "byName": true
        },
-       "argsKey": "59a576819e46",
+       "argsKey": "a2",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 19,
@@ -3942,7 +3922,7 @@
         "scope": "this-page",
         "filterScope": "all"
        },
-       "argsKey": "866b5bab63a9",
+       "argsKey": "a3",
        "outcome": "done",
        "result": "list",
        "count": 11,
@@ -3961,7 +3941,7 @@
         "filterScope": "all",
         "filteredBy": "status"
        },
-       "argsKey": "8473d1a2185d",
+       "argsKey": "a4",
        "outcome": "done",
        "result": "list",
        "count": 1,
@@ -3986,7 +3966,7 @@
         "scope": "this-page",
         "refKind": "position"
        },
-       "argsKey": "dec741d13b01",
+       "argsKey": "a5",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 28,
@@ -4007,7 +3987,7 @@
         "scope": "this-page",
         "tab": "decisions"
        },
-       "argsKey": "dff157d39878",
+       "argsKey": "a6",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 37,
@@ -4022,7 +4002,7 @@
         "scope": "this-page",
         "filterScope": "all"
        },
-       "argsKey": "26304581d4ed",
+       "argsKey": "a7",
        "outcome": "refused",
        "reason": "not-on-this-page",
        "result": "refused",
@@ -4037,7 +4017,7 @@
         "kind": "decision",
         "filterScope": "all"
        },
-       "argsKey": "1d7627b34d91",
+       "argsKey": "a8",
        "outcome": "done",
        "result": "list",
        "count": 12,
@@ -4054,7 +4034,7 @@
         "kind": "decision",
         "filterScope": "mine"
        },
-       "argsKey": "cabe71e013db",
+       "argsKey": "a9",
        "outcome": "refused",
        "reason": "invalid-arguments",
        "result": "refused",
@@ -4068,7 +4048,7 @@
        "shape": {
         "refKind": "decision"
        },
-       "argsKey": "991b7ca3adf4",
+       "argsKey": "a10",
        "outcome": "done",
        "result": "record",
        "resultSeq": 47,
@@ -4081,7 +4061,7 @@
        "shape": {
         "refKind": "decision"
        },
-       "argsKey": "63ace98289be",
+       "argsKey": "a11",
        "outcome": "done",
        "result": "record",
        "resultSeq": 49,
@@ -4094,7 +4074,7 @@
        "shape": {
         "refKind": "decision"
        },
-       "argsKey": "27b9defa5bee",
+       "argsKey": "a12",
        "outcome": "done",
        "result": "record",
        "resultSeq": 51,
@@ -4107,7 +4087,7 @@
        "shape": {
         "kind": "decision"
        },
-       "argsKey": "38700e361461",
+       "argsKey": "a13",
        "outcome": "done",
        "result": "list",
        "count": 12,
@@ -4124,7 +4104,7 @@
         "kind": "decision",
         "filteredBy": "status"
        },
-       "argsKey": "09b40a14848c",
+       "argsKey": "a14",
        "outcome": "done",
        "result": "list",
        "count": 2,
@@ -4149,7 +4129,7 @@
         "sort": "relevance",
         "answer": false
        },
-       "argsKey": "9bd5853ff11e",
+       "argsKey": "a15",
        "outcome": "done",
        "result": "search_results",
        "rows": 3,
@@ -4163,7 +4143,7 @@
        "shape": {
         "page": "computer-lab"
        },
-       "argsKey": "7034bdb6da62",
+       "argsKey": "a16",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 63,
@@ -4184,7 +4164,7 @@
         "kind": "computer",
         "filterScope": "all"
        },
-       "argsKey": "6cace96dbc76",
+       "argsKey": "a17",
        "outcome": "done",
        "result": "list",
        "count": 4,
@@ -4201,7 +4181,7 @@
         "kind": "computer",
         "filterScope": "all"
        },
-       "argsKey": "5df5f83ae3f6",
+       "argsKey": "a18",
        "outcome": "done",
        "result": "list",
        "count": 4,
@@ -4217,7 +4197,7 @@
        "shape": {
         "action": "open-shell"
        },
-       "argsKey": "e8356e7b0839",
+       "argsKey": "a19",
        "outcome": "done",
        "result": "shell_opened",
        "resultSeq": 75,
@@ -4231,7 +4211,7 @@
         "action": "run",
         "phrase": "list-files"
        },
-       "argsKey": "98cb51cb0653",
+       "argsKey": "a20",
        "outcome": "cancelled",
        "result": "cancelled",
        "resultSeq": 83,
@@ -4254,9 +4234,8 @@
    }
   },
   {
-   "id": "vs_f00c7f2b-45a4-45fb-9e68-758460bc361e",
+   "id": "s21",
    "tenant": "orgiq",
-   "date": "2026-11-09T13:35",
    "tools": [
     "open",
     "search",
@@ -4300,7 +4279,7 @@
        "shape": {
         "kind": "machines"
        },
-       "argsKey": "5369f4e10e77",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "summary",
        "of": "machines",
@@ -4315,7 +4294,7 @@
         "kind": "work-item",
         "filterScope": "all"
        },
-       "argsKey": "dae6ccccdf9e",
+       "argsKey": "a2",
        "outcome": "done",
        "result": "list",
        "count": 50,
@@ -4339,7 +4318,7 @@
         "kind": "initiative",
         "filterScope": "mine"
        },
-       "argsKey": "a584949efd9c",
+       "argsKey": "a3",
        "outcome": "done",
        "result": "list",
        "count": 2,
@@ -4363,7 +4342,7 @@
         "action": "start",
         "targets": 2
        },
-       "argsKey": "c3e3194e5ff5",
+       "argsKey": "a4",
        "outcome": "refused",
        "reason": "ambiguous",
        "result": "ambiguous",
@@ -4379,7 +4358,7 @@
         "action": "start",
         "targets": 2
        },
-       "argsKey": "093931faf2ab",
+       "argsKey": "a5",
        "outcome": "done",
        "result": "computers",
        "count": 2,
@@ -4416,7 +4395,7 @@
         "kind": "computer",
         "filterScope": "mine"
        },
-       "argsKey": "a554984e68ff",
+       "argsKey": "a6",
        "outcome": "refused",
        "reason": "invalid-arguments",
        "result": "refused",
@@ -4430,7 +4409,7 @@
        "shape": {
         "kind": "computer"
        },
-       "argsKey": "bf2ea422cc63",
+       "argsKey": "a7",
        "outcome": "done",
        "result": "list",
        "count": 6,
@@ -4446,7 +4425,7 @@
        "shape": {
         "kind": "computer"
        },
-       "argsKey": "7e82789d960c",
+       "argsKey": "a8",
        "outcome": "done",
        "result": "list",
        "count": 6,
@@ -4475,9 +4454,8 @@
    }
   },
   {
-   "id": "vs_5ab9f3cb-c805-48a3-91fc-052f02ab922f",
+   "id": "s22",
    "tenant": "orgiq",
-   "date": "2026-11-09T13:38",
    "tools": [
     "open",
     "search",
@@ -4523,7 +4501,7 @@
         "filterScope": "all",
         "filteredBy": "status"
        },
-       "argsKey": "7b4eae6a95b9",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "list",
        "count": 0,
@@ -4541,7 +4519,7 @@
         "filterScope": "all",
         "filteredBy": "status"
        },
-       "argsKey": "3f73aa451024",
+       "argsKey": "a2",
        "outcome": "done",
        "result": "list",
        "count": 1,
@@ -4564,7 +4542,7 @@
        "shape": {
         "refKind": "hitl-approval"
        },
-       "argsKey": "073d27f8f894",
+       "argsKey": "a3",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 23,
@@ -4584,7 +4562,7 @@
        "shape": {
         "scope": "online"
        },
-       "argsKey": "a36583836fb5",
+       "argsKey": "a4",
        "outcome": "done",
        "result": "activity",
        "count": 0,
@@ -4608,7 +4586,7 @@
         "filterScope": "all",
         "filteredBy": "q"
        },
-       "argsKey": "d499149069dd",
+       "argsKey": "a5",
        "outcome": "done",
        "result": "list",
        "count": 1,
@@ -4624,7 +4602,7 @@
        "shape": {
         "targetKind": "channel"
        },
-       "argsKey": "d0ea9deac095",
+       "argsKey": "a6",
        "outcome": "done",
        "result": "posted",
        "resultSeq": 50,
@@ -4659,7 +4637,7 @@
         "scope": "this-page",
         "tab": "docs"
        },
-       "argsKey": "6399db481f3d",
+       "argsKey": "a7",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 67,
@@ -4680,7 +4658,7 @@
         "kind": "whiteboard",
         "fields": "initiative,title"
        },
-       "argsKey": "3c82a25706b6",
+       "argsKey": "a8",
        "outcome": "done",
        "result": "whiteboard",
        "resultSeq": 83,
@@ -4710,9 +4688,8 @@
    }
   },
   {
-   "id": "vs_3fc44f95-1ba5-46d3-b242-06a7d691c47c",
+   "id": "s23",
    "tenant": "orgiq",
-   "date": "2026-11-09T13:41",
    "tools": [
     "open",
     "search",
@@ -4756,7 +4733,7 @@
        "shape": {
         "targetKind": "channel"
        },
-       "argsKey": "bd150ffc100f",
+       "argsKey": "a1",
        "outcome": "cancelled",
        "result": "cancelled",
        "resultSeq": 15,
@@ -4779,9 +4756,8 @@
    }
   },
   {
-   "id": "vs_262a5b9d-0cba-4593-a7e5-48ceaa012c9e",
+   "id": "s24",
    "tenant": "orgiq",
-   "date": "2026-11-09T13:42",
    "tools": [
     "open",
     "search",
@@ -4825,7 +4801,7 @@
        "shape": {
         "targetKind": "channel"
        },
-       "argsKey": "9bc1e0cac297",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "posted",
        "resultSeq": 18,
@@ -4861,9 +4837,8 @@
    }
   },
   {
-   "id": "vs_9b2868a7-d428-4fd9-a05c-756b4133ac56",
+   "id": "s25",
    "tenant": "orgiq",
-   "date": "2026-11-09T13:43",
    "tools": [
     "open",
     "search",
@@ -4908,7 +4883,7 @@
         "page": "communication",
         "tab": "channels"
        },
-       "argsKey": "2db2630e01a3",
+       "argsKey": "a1",
        "outcome": "refused",
        "reason": "other",
        "result": "refused",
@@ -4922,7 +4897,7 @@
        "shape": {
         "page": "communication"
        },
-       "argsKey": "b2b62094a136",
+       "argsKey": "a2",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 12,
@@ -4942,7 +4917,7 @@
        "shape": {
         "targetKind": "channel"
        },
-       "argsKey": "6d0c3f1e09e1",
+       "argsKey": "a3",
        "outcome": "cancelled",
        "result": "cancelled",
        "resultSeq": 35,
@@ -4982,9 +4957,8 @@
    }
   },
   {
-   "id": "vs_017bcb19-26cd-4c31-9cdb-7056d09a6149",
+   "id": "s26",
    "tenant": "orgiq",
-   "date": "2026-11-09T13:44",
    "tools": [
     "open",
     "search",
@@ -5028,7 +5002,7 @@
        "shape": {
         "refKind": "initiative"
        },
-       "argsKey": "3a2e387bc96b",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 16,
@@ -5050,169 +5024,8 @@
    }
   },
   {
-   "id": "vs_282864af-2438-4a90-a070-3cd4c6cba31a",
+   "id": "s27",
    "tenant": "orgiq",
-   "date": "2026-11-09T13:45",
-   "tools": [
-    "open",
-    "search",
-    "list",
-    "get",
-    "computer",
-    "summary",
-    "budget",
-    "activity",
-    "message",
-    "call",
-    "set_status",
-    "queue_work",
-    "decide",
-    "create",
-    "update",
-    "access_request_status"
-   ],
-   "format": "delegations",
-   "durationMs": 86500,
-   "counts": {
-    "delegations": 6,
-    "calls": 5,
-    "done": 5,
-    "refused": 0,
-    "failed": 0,
-    "cancelled": 0,
-    "unfinished": 0,
-    "cards": 1
-   },
-   "delegations": [
-    {
-     "atMs": 6400,
-     "seq": 9,
-     "heardBefore": true,
-     "calls": [
-      {
-       "seq": 11,
-       "atMs": 8800,
-       "tool": "open",
-       "shape": {
-        "refKind": "initiative"
-       },
-       "argsKey": "3a2e387bc96b",
-       "outcome": "done",
-       "result": "navigated",
-       "resultSeq": 12,
-       "durationMs": 0
-      }
-     ]
-    },
-    {
-     "atMs": 20900,
-     "seq": 23,
-     "heardBefore": true,
-     "calls": [
-      {
-       "seq": 25,
-       "atMs": 22800,
-       "tool": "open",
-       "shape": {
-        "scope": "this-page",
-        "tab": "docs"
-       },
-       "argsKey": "6399db481f3d",
-       "outcome": "done",
-       "result": "navigated",
-       "resultSeq": 26,
-       "durationMs": 0
-      }
-     ]
-    },
-    {
-     "atMs": 33600,
-     "seq": 30,
-     "heardBefore": true,
-     "calls": []
-    },
-    {
-     "atMs": 43600,
-     "seq": 37,
-     "heardBefore": true,
-     "calls": [
-      {
-       "seq": 40,
-       "atMs": 45100,
-       "tool": "create",
-       "shape": {
-        "kind": "whiteboard",
-        "fields": "initiative,title"
-       },
-       "argsKey": "3466044d0808",
-       "outcome": "done",
-       "result": "whiteboard",
-       "resultSeq": 46,
-       "durationMs": 5200,
-       "card": {
-        "shownMs": 45600,
-        "mode": "voice",
-        "decision": "confirmed",
-        "by": "voice",
-        "afterMs": 5200,
-        "phrase": "confirm"
-       }
-      }
-     ]
-    },
-    {
-     "atMs": 51900,
-     "seq": 48,
-     "heardBefore": false,
-     "calls": []
-    },
-    {
-     "atMs": 65200,
-     "seq": 57,
-     "heardBefore": true,
-     "calls": [
-      {
-       "seq": 59,
-       "atMs": 70500,
-       "tool": "open",
-       "shape": {
-        "kind": "channel",
-        "byName": true
-       },
-       "argsKey": "45600befbd31",
-       "outcome": "done",
-       "result": "navigated",
-       "resultSeq": 60,
-       "durationMs": 0
-      },
-      {
-       "seq": 62,
-       "atMs": 74900,
-       "tool": "activity",
-       "shape": {
-        "scope": "online"
-       },
-       "argsKey": "a36583836fb5",
-       "outcome": "done",
-       "result": "activity",
-       "count": 0,
-       "rows": 0,
-       "resultSeq": 63,
-       "durationMs": 0
-      }
-     ]
-    }
-   ],
-   "stops": [],
-   "close": {
-    "stopReason": "closed",
-    "reason": "user"
-   }
-  },
-  {
-   "id": "vs_65d8c19c-a96e-4f97-a69d-715bfab0679d",
-   "tenant": "orgiq",
-   "date": "2026-11-09T13:45",
    "tools": [
     "open",
     "search",
@@ -5256,7 +5069,7 @@
        "shape": {
         "refKind": "initiative"
        },
-       "argsKey": "3a2e387bc96b",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 14,
@@ -5272,9 +5085,167 @@
    }
   },
   {
-   "id": "vs_71839299-ef01-4ab2-a071-49cb07201092",
+   "id": "s28",
    "tenant": "orgiq",
-   "date": "2026-11-09T13:47",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 86500,
+   "counts": {
+    "delegations": 6,
+    "calls": 5,
+    "done": 5,
+    "refused": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 1
+   },
+   "delegations": [
+    {
+     "atMs": 6400,
+     "seq": 9,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 11,
+       "atMs": 8800,
+       "tool": "open",
+       "shape": {
+        "refKind": "initiative"
+       },
+       "argsKey": "a1",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 12,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 20900,
+     "seq": 23,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 25,
+       "atMs": 22800,
+       "tool": "open",
+       "shape": {
+        "scope": "this-page",
+        "tab": "docs"
+       },
+       "argsKey": "a2",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 26,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 33600,
+     "seq": 30,
+     "heardBefore": true,
+     "calls": []
+    },
+    {
+     "atMs": 43600,
+     "seq": 37,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 40,
+       "atMs": 45100,
+       "tool": "create",
+       "shape": {
+        "kind": "whiteboard",
+        "fields": "initiative,title"
+       },
+       "argsKey": "a3",
+       "outcome": "done",
+       "result": "whiteboard",
+       "resultSeq": 46,
+       "durationMs": 5200,
+       "card": {
+        "shownMs": 45600,
+        "mode": "voice",
+        "decision": "confirmed",
+        "by": "voice",
+        "afterMs": 5200,
+        "phrase": "confirm"
+       }
+      }
+     ]
+    },
+    {
+     "atMs": 51900,
+     "seq": 48,
+     "heardBefore": false,
+     "calls": []
+    },
+    {
+     "atMs": 65200,
+     "seq": 57,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 59,
+       "atMs": 70500,
+       "tool": "open",
+       "shape": {
+        "kind": "channel",
+        "byName": true
+       },
+       "argsKey": "a4",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 60,
+       "durationMs": 0
+      },
+      {
+       "seq": 62,
+       "atMs": 74900,
+       "tool": "activity",
+       "shape": {
+        "scope": "online"
+       },
+       "argsKey": "a5",
+       "outcome": "done",
+       "result": "activity",
+       "count": 0,
+       "rows": 0,
+       "resultSeq": 63,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "closed",
+    "reason": "user"
+   }
+  },
+  {
+   "id": "s29",
+   "tenant": "orgiq",
    "tools": [
     "open",
     "search",
@@ -5319,7 +5290,7 @@
         "scope": "this-page",
         "refKind": "initiative"
        },
-       "argsKey": "f6c8c1605155",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 9,
@@ -5340,7 +5311,7 @@
         "scope": "this-page",
         "tab": "docs"
        },
-       "argsKey": "6399db481f3d",
+       "argsKey": "a2",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 15,
@@ -5361,7 +5332,7 @@
         "kind": "whiteboard",
         "fields": "initiative,title"
        },
-       "argsKey": "7860f0194322",
+       "argsKey": "a3",
        "outcome": "done",
        "result": "whiteboard",
        "resultSeq": 28,
@@ -5389,7 +5360,7 @@
        "shape": {
         "page": "communication"
        },
-       "argsKey": "b2b62094a136",
+       "argsKey": "a4",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 38,
@@ -5404,7 +5375,7 @@
         "scope": "this-page",
         "filterScope": "mine"
        },
-       "argsKey": "6370f4a7619f",
+       "argsKey": "a5",
        "outcome": "refused",
        "reason": "not-on-this-page",
        "result": "refused",
@@ -5419,7 +5390,7 @@
         "kind": "channel",
         "filterScope": "mine"
        },
-       "argsKey": "0a2bea6f2557",
+       "argsKey": "a6",
        "outcome": "refused",
        "reason": "invalid-arguments",
        "result": "refused",
@@ -5433,7 +5404,7 @@
        "shape": {
         "kind": "channel"
        },
-       "argsKey": "14bc7c296f03",
+       "argsKey": "a7",
        "outcome": "done",
        "result": "list",
        "count": 6,
@@ -5456,7 +5427,7 @@
        "shape": {
         "targetKind": "channel"
        },
-       "argsKey": "3f2e1c0a2a06",
+       "argsKey": "a8",
        "outcome": "done",
        "result": "posted",
        "resultSeq": 60,
@@ -5477,7 +5448,7 @@
        "shape": {
         "scope": "online"
        },
-       "argsKey": "a36583836fb5",
+       "argsKey": "a9",
        "outcome": "done",
        "result": "activity",
        "count": 0,
@@ -5508,7 +5479,7 @@
         "sort": "relevance",
         "answer": false
        },
-       "argsKey": "2b888eb10308",
+       "argsKey": "a10",
        "outcome": "done",
        "result": "search_results",
        "rows": 4,
@@ -5532,7 +5503,7 @@
         "sort": "relevance",
         "answer": false
        },
-       "argsKey": "6f97d61d33ff",
+       "argsKey": "a11",
        "outcome": "done",
        "result": "search_results",
        "rows": 0,
@@ -5555,72 +5526,8 @@
    }
   },
   {
-   "id": "vs_9e107da2-a2ba-45d2-9d3c-2c11b559ba37",
+   "id": "s30",
    "tenant": "orgiq",
-   "date": "2026-11-09T13:51",
-   "tools": [
-    "open",
-    "search",
-    "list",
-    "get",
-    "computer",
-    "summary",
-    "budget",
-    "activity",
-    "message",
-    "call",
-    "set_status",
-    "queue_work",
-    "decide",
-    "create",
-    "update",
-    "access_request_status"
-   ],
-   "format": "delegations",
-   "durationMs": 18500,
-   "counts": {
-    "delegations": 1,
-    "calls": 1,
-    "done": 1,
-    "refused": 0,
-    "failed": 0,
-    "cancelled": 0,
-    "unfinished": 0,
-    "cards": 0
-   },
-   "delegations": [
-    {
-     "atMs": 7300,
-     "seq": 8,
-     "heardBefore": true,
-     "calls": [
-      {
-       "seq": 10,
-       "atMs": 12500,
-       "tool": "open",
-       "shape": {
-        "kind": "initiative",
-        "byName": true
-       },
-       "argsKey": "f80f2d188092",
-       "outcome": "done",
-       "result": "navigated",
-       "resultSeq": 12,
-       "durationMs": 0
-      }
-     ]
-    }
-   ],
-   "stops": [],
-   "close": {
-    "stopReason": "closed",
-    "reason": "user"
-   }
-  },
-  {
-   "id": "vs_bcb4e2d8-5629-49b2-ae81-51886339833a",
-   "tenant": "orgiq",
-   "date": "2026-11-09T13:51",
    "tools": [
     "open",
     "search",
@@ -5665,7 +5572,7 @@
         "scope": "this-page",
         "refKind": "initiative"
        },
-       "argsKey": "f6c8c1605155",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 9,
@@ -5687,9 +5594,70 @@
    }
   },
   {
-   "id": "vs_0d1c427b-c158-40ba-8ff7-1447ac500cd9",
+   "id": "s31",
    "tenant": "orgiq",
-   "date": "2026-11-09T13:52",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 18500,
+   "counts": {
+    "delegations": 1,
+    "calls": 1,
+    "done": 1,
+    "refused": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 0
+   },
+   "delegations": [
+    {
+     "atMs": 7300,
+     "seq": 8,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 10,
+       "atMs": 12500,
+       "tool": "open",
+       "shape": {
+        "kind": "initiative",
+        "byName": true
+       },
+       "argsKey": "a1",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 12,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [],
+   "close": {
+    "stopReason": "closed",
+    "reason": "user"
+   }
+  },
+  {
+   "id": "s32",
+   "tenant": "orgiq",
    "tools": [
     "open",
     "search",
@@ -5734,7 +5702,7 @@
         "scope": "this-page",
         "refKind": "position"
        },
-       "argsKey": "d1566015db8b",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 10,
@@ -5755,7 +5723,7 @@
         "scope": "this-page",
         "tab": "docs"
        },
-       "argsKey": "6399db481f3d",
+       "argsKey": "a2",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 17,
@@ -5776,7 +5744,7 @@
         "kind": "whiteboard",
         "fields": "initiative,title"
        },
-       "argsKey": "503eed49fc1f",
+       "argsKey": "a3",
        "outcome": "done",
        "result": "whiteboard",
        "resultSeq": 32,
@@ -5806,9 +5774,8 @@
    }
   },
   {
-   "id": "vs_89fba6d6-a5e6-41f7-a825-e0cff5b99e45",
+   "id": "s33",
    "tenant": "orgiq",
-   "date": "2026-11-09T13:53",
    "tools": [
     "open",
     "search",
@@ -5853,7 +5820,7 @@
         "kind": "initiative",
         "byName": true
        },
-       "argsKey": "efa9303a333b",
+       "argsKey": "a1",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 14,
@@ -5874,7 +5841,7 @@
         "scope": "this-page",
         "tab": "docs"
        },
-       "argsKey": "6399db481f3d",
+       "argsKey": "a2",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 20,
@@ -5895,7 +5862,7 @@
         "kind": "whiteboard",
         "fields": "initiative,title"
        },
-       "argsKey": "866598468f0a",
+       "argsKey": "a3",
        "outcome": "done",
        "result": "whiteboard",
        "resultSeq": 32,
@@ -5929,7 +5896,7 @@
        "shape": {
         "page": "communication"
        },
-       "argsKey": "b2b62094a136",
+       "argsKey": "a4",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 50,
@@ -5949,7 +5916,7 @@
        "shape": {
         "targetKind": "channel"
        },
-       "argsKey": "d09b152be99b",
+       "argsKey": "a5",
        "outcome": "done",
        "result": "posted",
        "resultSeq": 61,
@@ -5986,7 +5953,7 @@
         "sort": "relevance",
         "answer": false
        },
-       "argsKey": "a76dac346014",
+       "argsKey": "a6",
        "outcome": "done",
        "result": "search_results",
        "rows": 5,
@@ -6009,7 +5976,7 @@
         "sort": "relevance",
         "answer": false
        },
-       "argsKey": "6c3ded0fa2cd",
+       "argsKey": "a7",
        "outcome": "done",
        "result": "search_results",
        "rows": 5,
@@ -6031,7 +5998,7 @@
         "kind": "initiative",
         "byName": true
        },
-       "argsKey": "fc59ff60a49f",
+       "argsKey": "a8",
        "outcome": "refused",
        "reason": "ambiguous",
        "result": "ambiguous",
@@ -6053,7 +6020,7 @@
        "shape": {
         "refKind": "initiative"
        },
-       "argsKey": "0e8ba79a35df",
+       "argsKey": "a9",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 115,
@@ -6074,7 +6041,7 @@
         "scope": "this-page",
         "refKind": "position"
        },
-       "argsKey": "bde709256f26",
+       "argsKey": "a10",
        "outcome": "done",
        "result": "navigated",
        "resultSeq": 123,

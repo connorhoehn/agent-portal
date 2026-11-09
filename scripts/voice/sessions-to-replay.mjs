@@ -8,6 +8,7 @@
 //
 //   node scripts/voice/sessions-to-replay.mjs              regenerate the fixture
 //   node scripts/voice/sessions-to-replay.mjs --check      exit 1 when the fixture on disk differs
+//   node scripts/voice/sessions-to-replay.mjs --map        also print the private s01 -> session id table to stdout
 //   node scripts/voice/sessions-to-replay.mjs --log <dir>  read another log folder (default: middleware/.voice-log,
 //                                                         from a worktree the main checkout's)
 //
@@ -15,12 +16,13 @@
 // delegations, each with whether the user spoke before it (the dock listening
 // or thinking since the last delegation) and its tool calls: the tool, the summarized
 // argument shape (the enum values, a ref's kind, counts: argShape in
-// portal/src/lib/voice/sessionEvents.ts), a 12-hex prefix of the argument hash
-// (equal prefixes are equal arguments, nothing else), the outcome with its
+// portal/src/lib/voice/sessionEvents.ts), an ordinal (a1, a2..) per distinct
+// argument hash within the session (equal ordinals are equal arguments, nothing else; the hash is never written), the outcome with its
 // refusal reason or failure code, and the card (shown, by voice or click,
 // confirmed / cancelled / never answered). Also the stops (G29, G43, G48, G51
 // refusals and the dock's stop diagnostics) and how the session closed.
-// Timings are milliseconds from the session's start, rounded to 100 ms.
+// Sessions are named s01.. in log order and carry no date: timings are milliseconds from the session's start,
+// rounded to 100 ms. `--map` prints the s01 -> real session id table to stdout (keep it out of the repo).
 //
 // Which logs count as real sessions: a row of kind `sideband` (a Live API
 // connection the middleware watched; the middleware's own tests and the mock
@@ -140,7 +142,7 @@ function readSession(file) {
       atMs: callRow ? at(callRow) : round(Date.parse(result.at) - t0 - (d.durationMs ?? 0)),
       tool: token((callRow ?? result).data?.tool),
       shape: shapeOf(callRow ? callRow.data : d.summary),
-      argsKey: typeof d.argsSha256 === 'string' && /^[0-9a-f]{64}$/.test(d.argsSha256) ? d.argsSha256.slice(0, 12) : null,
+      argsKey: typeof d.argsSha256 === 'string' && /^[0-9a-f]{64}$/.test(d.argsSha256) ? d.argsSha256 : null,
       outcome: result ? token(d.outcome) : 'unfinished',
       ...resultOf(d.summary),
     };
@@ -200,9 +202,9 @@ function readSession(file) {
   const closed = rows.filter((r) => r.kind === 'closed').at(-1);
   const calls = delegations.flatMap((d) => d.calls);
   return {
-    id: token(minted.sessionId),
+    realId: minted.sessionId,
+    sortKey: minted.at,
     tenant: token(minted.tenant),
-    date: token(minted.at.slice(0, 16)),
     tools: (minted.data?.tools ?? []).map(token).filter(Boolean),
     format: kinds.has('delegation') ? 'delegations' : 'rows-only',
     durationMs: round(Date.parse(rows.at(-1).at) - t0),
@@ -238,12 +240,33 @@ function assertNoWords(v, path = '$') {
 
 const files = existsSync(LOG_DIR) ? readdirSync(LOG_DIR).filter((f) => /^vs_[0-9a-f-]{36}\.jsonl$/.test(f)).sort() : [];
 if (!files.length) { console.error(`no session logs in ${LOG_DIR}`); process.exit(1); }
-const sessions = files.map((f) => readSession(join(LOG_DIR, f))).filter(Boolean).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.id < b.id ? -1 : 1));
+const raw = files.map((f) => readSession(join(LOG_DIR, f))).filter(Boolean)
+  .sort((a, b) => (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : a.realId < b.realId ? -1 : 1));
+const idMap = [];
+/** Sessions are s01.. in log order; within a session equal argument hashes share an ordinal (a1, a2..), the hash itself is dropped. */
+const sessions = raw.map(({ realId, sortKey, ...s }, i) => {
+  const id = `s${String(i + 1).padStart(2, '0')}`;
+  idMap.push([id, realId]);
+  const ordinals = new Map();
+  for (const d of s.delegations) for (const c of d.calls) {
+    if (c.argsKey == null) continue;
+    if (!ordinals.has(c.argsKey)) ordinals.set(c.argsKey, `a${ordinals.size + 1}`);
+    c.argsKey = ordinals.get(c.argsKey);
+  }
+  return { id, ...s };
+});
 const fixture = {
   about: 'The owner\'s real voice sessions (middleware/.voice-log), summarized for realSessions.test.ts by scripts/voice/sessions-to-replay.mjs. No words: shapes, outcomes, codes, timings (ms from start, 100 ms).',
   sessions,
 };
 assertNoWords(fixture.sessions);
+/** Nothing that identifies a real session, a provider call or a moment may survive: hex runs, ids, ISO timestamps. */
+function assertNoIdentifiers(text) {
+  const bad = [[/[0-9a-f]{8,}/i, 'a hex run of 8 or more'], [/vs_/, 'a vs_ session id'], [/(call|item)_/, 'a call_/item_ provider id'], [/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/, 'an ISO timestamp']];
+  for (const [re, what] of bad) if (re.test(text)) throw new Error(`the fixture holds ${what}: refusing to write it`);
+}
+assertNoIdentifiers(JSON.stringify(fixture));
+if (argv.includes('--map')) for (const [id, real] of idMap) console.log(`${id}\t${real}`);
 const text = `${JSON.stringify(fixture, null, 1)}\n`;
 const total = sessions.reduce((n, s) => n + s.counts.calls, 0);
 if (CHECK) {

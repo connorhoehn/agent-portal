@@ -225,6 +225,16 @@ test('recordings are a search source only with a Social grant and a configured p
   expect(recordingsAreASource(social)).toBe(true);
   // A bare policy principal is left to the read, which refuses it.
   expect(recordingsAreASource({ sub: 'u-nora', role: 'member', tenant: 'orgiq' })).toBe(true);
+  // Sweep 8: no platform URL. Local dev and mock skip recordings; anywhere else a Social grant keeps the source, so Search says "Recordings unavailable".
   delete process.env['PLATFORM_API_URL'];
   expect(recordingsAreASource(social)).toBe(false);
+  const devMode = process.env['INSECURE_DEV_MODE'];
+  process.env['INSECURE_DEV_MODE'] = 'false';
+  try {
+    expect(recordingsAreASource(social)).toBe(true);
+    expect(recordingsAreASource(session)).toBe(false);
+  } finally {
+    if (devMode === undefined) delete process.env['INSECURE_DEV_MODE']; else process.env['INSECURE_DEV_MODE'] = devMode;
+    process.env['PLATFORM_API_URL'] = 'http://native.invalid';
+  }
 });

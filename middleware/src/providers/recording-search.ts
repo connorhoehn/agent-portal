@@ -6,6 +6,7 @@ import { admitLobbyRead } from '../lib/gateway/authority.js';
 import { currentLiveSession, sessionGatewayContext } from '../lib/live-principal.js';
 import { realtimeClaims, realtimeSigningSecret, signRealtimeToken } from '../lib/realtime-token.js';
 import type { Session } from '../lib/session.js';
+import { insecureDevMode } from '../lib/insecure-dev-mode.js';
 import { speechSegments } from '../lib/recording-transcript.js';
 import { getProject } from './projects.js';
 import type { SearchRecord } from './search.js';
@@ -35,16 +36,19 @@ function sessionOf(principal: PrincipalRef, tenant: 'orgiq' | 'assessment' = 'or
 /**
  * Whether recordings are one of this reader's orgiq search sources at all.
  * Recordings live on the Social platform: a reader with no Social grant has
- * none to search, and a deployment with no recording platform configured has
- * no recordings source. Neither is an incomplete read, so neither may surface
- * as "Recordings unavailable" or turn every count into a floor (walk,
- * 9 November). A bare policy principal (no grants recorded) is left to the
- * read itself, which refuses it as before. A configured platform that fails
- * to answer is still a partial source.
+ * none to search, so that is not an incomplete read and must not surface as
+ * "Recordings unavailable" or turn every count into a floor (walk, 9 November).
+ * A reader who holds the grant on a deployment that lost its recording
+ * platform URL is different (sweep 8): the read fails and the note says so,
+ * so a misconfiguration never reads as "no recordings". Only local dev and
+ * mock (`insecureDevMode()`), which run without the platform, skip it. A bare
+ * policy principal (no grants recorded) is left to the read itself, which
+ * refuses it as before. A configured platform that fails to answer is a
+ * partial source.
  */
 export function recordingsAreASource(principal: PrincipalRef): boolean {
-  if (!recordingPlatformUrl()) return false;
   const grants = (principal as Partial<Session>).grants;
+  if (!recordingPlatformUrl() && (insecureDevMode() || grants === undefined)) return false;
   return grants === undefined || (grants['social']?.length ?? 0) > 0;
 }
 export function recordingPlatformUrl(): string | null {

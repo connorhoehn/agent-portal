@@ -5,7 +5,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_RUNAWAY_CONTINUATIONS, MAX_STOPPED_CONTINUATIONS, VoiceController } from '../controller.ts';
+import { MAX_RUNAWAY_CONTINUATIONS, MAX_RUNAWAY_RESTARTS, MAX_STOPPED_CONTINUATIONS, RUNAWAY_STOPPED_LINE, VoiceController } from '../controller.ts';
 import { VoiceClient } from '../client.ts';
 import { runVoiceTool } from '../tools.ts';
 import { FAILED_TWICE_NEXT, FailureGuard, NO_REPEAT, RETRY_NEXT, STOP_NEXT, RefusalGuard, callKey, refusalNext } from '../refusals.ts';
@@ -200,6 +200,37 @@ test('G64: a model that never stops calling is continued every time, then the se
   } finally {
     proto.sendToolOutput = orig.out; proto.requestResponse = orig.resp; VoiceController.prototype.restart = orig.restart;
   }
+});
+
+test('Sweep 8: one automatic runaway restart per resume chain; the second ends the session unavailable and only a click starts it again', async () => {
+  const clock = new FakeClock();
+  const { fetch, log } = fakeFetch([
+    route('POST', `/api/voice/sessions/${SESSION}/events`, 201, { id: 'row' }),
+    route('POST', `/api/voice/sessions/${SESSION}/close`, 200, {}),
+    route('POST', '/api/voice/sessions', 201, {
+      sessionId: SESSION, voiceSessionId: SESSION, holdId: 'h1', maxSeconds: 1800, expiresAt: '2026-11-08T13:00:00Z', sdp: 'v=0', mock: true,
+      model: 'gpt-live-1', voice: null, toolsEnabled: true, tools: ['get'], budget: { holdUsd: 0.5, usdPerMinute: 0.05 },
+      mockScript: retryScript({ ref: 'initiative:nope' }),
+    }),
+    route('GET', '/api/graph/projects/nope', 404, { error: 'not found' }),
+  ]);
+  const ctx = toolContext({ fetch });
+  const c = new VoiceController({ fetch, media: null, toolContext: () => ctx, now: clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer });
+  const mints = () => log.filter((r) => r.method === 'POST' && r.url === '/api/voice/sessions').length;
+  await c.start();
+  await clock.advance(30_000);
+  assert.equal(MAX_RUNAWAY_RESTARTS, 1);
+  assert.equal(mints(), 1 + MAX_RUNAWAY_RESTARTS, 'one automatic restart, then no more mints');
+  assert.equal(c.getSnapshot().phase, 'unavailable');
+  assert.equal(c.getSnapshot().reason, RUNAWAY_STOPPED_LINE);
+  await clock.advance(30_000);
+  assert.equal(mints(), 1 + MAX_RUNAWAY_RESTARTS, 'nothing restarts by itself');
+  // A click is a new chain: it may be restarted once again.
+  await c.start();
+  await clock.advance(30_000);
+  assert.equal(mints(), 2 + 2 * MAX_RUNAWAY_RESTARTS, 'the click starts a session and its chain gets one restart');
+  assert.equal(c.getSnapshot().phase, 'unavailable');
+  c.dispose();
 });
 
 test('G48 FailureGuard: a failure may be retried once in a later turn; never in the same turn, never a third time', () => {

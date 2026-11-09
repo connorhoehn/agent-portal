@@ -46,11 +46,11 @@ interface LoggedCall {
   outcome: 'done' | 'refused' | 'failed' | 'cancelled' | 'unfinished'; reason?: string; code?: string; result?: string; candidates?: number; rows?: number; count?: number; card?: Card;
 }
 interface Delegation { atMs: number; seq: number; heardBefore: boolean; inferred?: boolean; calls: LoggedCall[] }
-interface Session { id: string; tenant: string; date: string; tools: string[]; format: string; delegations: Delegation[]; counts: Record<string, number> }
+interface Session { id: string; tenant: string; tools: string[]; format: string; delegations: Delegation[]; counts: Record<string, number> }
 
 const FIXTURE = JSON.parse(readFileSync(new URL('./fixtures/real-sessions.json', import.meta.url), 'utf8')) as { sessions: Session[] };
 const SESSIONS = FIXTURE.sessions;
-const short = (id: string) => id.slice(3, 11);
+const short = (id: string) => id;
 const sessionNamed = (prefix: string): Session => {
   const s = SESSIONS.find((x) => short(x.id) === prefix);
   assert.ok(s, `the fixture holds ${prefix}`);
@@ -85,7 +85,7 @@ export function synthArgs(tenant: string, call: LoggedCall, opened: Opened | nul
   const key = call.argsKey ?? `s${call.seq}`;
   const known = Object.keys(s).length > 0;
   const words = `${CANARY} ${key}`;
-  // A ref of the kind just opened is that record (vs_5144e356: "open Alpha, what are its decisions").
+  // A ref of the kind just opened is that record (s17: "open Alpha, what are its decisions").
   const refOf = (k: unknown): string => (k === 'position' ? '1' : k === 'other' || typeof k !== 'string' ? words : opened?.kind === k ? opened.ref : `${k}:${key}`);
   const a: Args = {};
   const copy = (...keys: string[]) => { for (const k of keys) if (s[k] !== undefined) a[k] = s[k]; };
@@ -596,7 +596,7 @@ export function violations(r: Replay): Map<string, string> {
 test('the fixture holds the owner\'s sessions, no words, every call with a tool and an outcome', () => {
   assert.ok(SESSIONS.length >= 25, `${SESSIONS.length} sessions`);
   for (const s of SESSIONS) {
-    assert.match(s.id, /^vs_[0-9a-f-]{36}$/);
+    assert.match(s.id, /^s\d{2}$/);
     for (const d of s.delegations) for (const c of d.calls) {
       assert.ok(voiceToolSpec(c.tool), `${short(s.id)} seq ${c.seq}: ${c.tool} is a catalogue tool`);
       assert.match(c.outcome, /^(done|refused|failed|cancelled|unfinished)$/);
@@ -609,7 +609,7 @@ test('the fixture holds the owner\'s sessions, no words, every call with a tool 
 });
 
 for (const session of SESSIONS) {
-  test(`replay ${short(session.id)} (${session.tenant}, ${session.date}, ${session.counts['delegations']} delegations, ${session.counts['calls']} calls): invariants a to g`, async () => {
+  test(`replay ${short(session.id)} (${session.tenant}, ${session.counts['delegations']} delegations, ${session.counts['calls']} calls): invariants a to g`, async () => {
     const r = await replayOf(session);
     assert.deepEqual([...violations(r)].map(([k, why]) => `${k} ${why}`), [], `${short(session.id)} replay breaks an invariant`);
     // Every logged call was made again, and every delegation with a call reached the dock.
@@ -622,7 +622,7 @@ for (const session of SESSIONS) {
 
 test('G64 B1: the four sessions a stuck delegation made deaf now continue every output and answer to the end', async () => {
   // The call after two stop answers whose output the dock used to leave without a continuation (delegation-stuck).
-  for (const [prefix, seq] of [['d69bbb23', 193], ['f86d7b03', 59], ['9b06806f', 50], ['a215e96c', 14]] as const) {
+  for (const [prefix, seq] of [['s14', 193], ['s10', 59], ['s20', 50], ['s05', 14]] as const) {
     const r = await replayOf(sessionNamed(prefix));
     const m = [...r.metas.values()].find((x) => x.logged?.seq === seq);
     assert.ok(m, `${prefix} seq ${seq} was replayed`);
@@ -637,8 +637,8 @@ test('G64 B1: the four sessions a stuck delegation made deaf now continue every 
   }
 });
 
-test('G64 B2 (vs_9b2868a7 seq 7): open { page, tab } on a page with no known tabs is refused `invalid-arguments` with the forms that work', async () => {
-  const r = await replayOf(sessionNamed('9b2868a7'));
+test('G64 B2 (s25 seq 7): open { page, tab } on a page with no known tabs is refused `invalid-arguments` with the forms that work', async () => {
+  const r = await replayOf(sessionNamed('s25'));
   const m = [...r.metas.values()].find((x) => x.logged?.seq === 7)!;
   assert.deepEqual(m.args, { page: 'communication', tab: 'channels' });
   const out = r.outputs.get(m.callId)!;
@@ -666,8 +666,8 @@ test('G64 B2: open { page, tab } opens the page on its tab when the page declare
   assert.deepEqual(inView.navigations, [`${page.path}?tab=channels`]);
 });
 
-test('G64 B3 (vs_d69bbb23 seq 157): the dispatch planner says `not-dispatchable` (with why) and `not-on-initiative`, never `other`', async () => {
-  // The retry after the first dispatch landed (G48's reading of 01:39:34): the item is in progress now.
+test('G64 B3 (s14 seq 157): the dispatch planner says `not-dispatchable` (with why) and `not-on-initiative`, never `other`', async () => {
+  // The retry after the first dispatch landed (G48's reading of): the item is in progress now.
   const plan = async (status: string, rowRef: string) => {
     const { fetch } = fakeFetch([
       route('GET', '/api/graph/projects/p-1/work', 200, [{ id: 'e-1', type: 'epic', title: 'Epic', children: [{ id: 'w-1', type: 'story', title: 'Rotate the keys', status, storyPoints: 3, children: [] }] }]),
@@ -693,8 +693,8 @@ test('G64 B3 (vs_d69bbb23 seq 157): the dispatch planner says `not-dispatchable`
 
 // ── regressions the gaps doc established, on the sessions that showed them ──
 
-test('G51 (vs_d69bbb23 01:40:22, four pages in one request): designs opens, the other three are refused `navigated` and every round is continued', async () => {
-  const r = await replayOf(sessionNamed('d69bbb23'));
+test('G51 (s14, four pages in one request): designs opens, the other three are refused `navigated` and every round is continued', async () => {
+  const r = await replayOf(sessionNamed('s14'));
   const bySeq = new Map([...r.metas.values()].filter((m) => m.logged).map((m) => [m.logged!.seq, m]));
   const designs = bySeq.get(187)!;
   assert.equal(designs.args['page'], 'designs');
@@ -709,8 +709,8 @@ test('G51 (vs_d69bbb23 01:40:22, four pages in one request): designs opens, the 
   }
 });
 
-test('G51 follow-up (vs_5144e356 13:29:44): the read of the record just opened runs today, where the log refused it `navigated` and went silent', async () => {
-  const r = await replayOf(sessionNamed('5144e356'));
+test('G51 follow-up (s17): the read of the record just opened runs today, where the log refused it `navigated` and went silent', async () => {
+  const r = await replayOf(sessionNamed('s17'));
   const get = [...r.metas.values()].find((m) => m.logged?.seq === 21)!;
   assert.equal(get.logged!.reason, 'navigated');
   assert.ok(r.ran.has(get.callId));
@@ -718,8 +718,8 @@ test('G51 follow-up (vs_5144e356 13:29:44): the read of the record just opened r
   assert.ok(r.probeAnswered, 'and the next request is answered (the log: silent for the remaining 30 s)');
 });
 
-test('G43 + G59 (vs_d69bbb23 01:41:41): the fifth call is refused `too-many-calls`, the round is continued, and the session answers again', async () => {
-  const r = await replayOf(sessionNamed('d69bbb23'));
+test('G43 + G59 (s14): the fifth call is refused `too-many-calls`, the round is continued, and the session answers again', async () => {
+  const r = await replayOf(sessionNamed('s14'));
   const fifth = [...r.metas.values()].find((m) => m.logged?.seq === 243)!;
   const out = r.outputs.get(fifth.callId)!;
   assert.equal(out['code'], 'too-many-calls');
@@ -729,8 +729,8 @@ test('G43 + G59 (vs_d69bbb23 01:41:41): the fifth call is refused `too-many-call
   assert.ok(r.probeAnswered, 'the log: one 1.9 s line, then nothing for 67 s');
 });
 
-test('G48 + G41 (vs_900938ca, four posts that failed): two tries with their cards, then `repeat-failed` before any card', async () => {
-  const r = await replayOf(sessionNamed('900938ca'));
+test('G48 + G41 (s15, four posts that failed): two tries with their cards, then `repeat-failed` before any card', async () => {
+  const r = await replayOf(sessionNamed('s15'));
   const posts = [...r.metas.values()].filter((m) => m.logged?.tool === 'message');
   assert.deepEqual(posts.map((m) => m.logged!.seq), [8, 19, 39, 49]);
   assert.deepEqual(posts.map((m) => { const o = r.outputs.get(m.callId)!; return o['kind'] === 'refused' ? `refused ${String(o['code'])}` : String(o['kind']); }),
@@ -741,15 +741,15 @@ test('G48 + G41 (vs_900938ca, four posts that failed): two tries with their card
   for (const p of posts.slice(0, 2)) assert.match(String(r.outputs.get(p.callId)?.['code']), /^(not-connected|not-a-member|receipt-timeout|timeout|rejected|http-\d{3})$/, 'G47: the failure says why');
 });
 
-test('G42 (vs_f86d7b03 00:42:55): `get message:<id>` is refused `invalid-ref`, no longer the catch-all `other`', async () => {
-  const r = await replayOf(sessionNamed('f86d7b03'));
+test('G42 (s10): `get message:<id>` is refused `invalid-ref`, no longer the catch-all `other`', async () => {
+  const r = await replayOf(sessionNamed('s10'));
   const get = [...r.metas.values()].find((m) => m.logged?.seq === 50)!;
   assert.equal(get.logged!.reason, 'other');
   assert.equal(r.outputs.get(get.callId)?.['code'], 'invalid-ref');
 });
 
-test('G62: an ambiguous answer with one candidate shows no choice card (vs_7c98fdc7, vs_89fba6d6); two candidates show one (vs_f00c7f2b)', async () => {
-  for (const [prefix, cards] of [['7c98fdc7', 0], ['89fba6d6', 0], ['f00c7f2b', 1]] as const) {
+test('G62: an ambiguous answer with one candidate shows no choice card (s19, s33); two candidates show one (s21)', async () => {
+  for (const [prefix, cards] of [['s19', 0], ['s33', 0], ['s21', 1]] as const) {
     const s = sessionNamed(prefix);
     assert.ok(s.delegations.some((d) => d.calls.some((c) => c.reason === 'ambiguous' && c.candidates === (cards ? 2 : 1))), prefix);
     const r = await replayOf(s);
@@ -764,16 +764,16 @@ test('G62: an ambiguous answer with one candidate shows no choice card (vs_7c98f
  * docs/voice-navigator-gaps.md before updating it.
  */
 const UP_FRONT: Record<string, Record<string, string>> = {
-  c8af088e: { 23: 'navigated', 25: 'navigated' },
-  a215e96c: { 12: 'too-many-calls', 13: 'too-many-calls', 14: 'too-many-calls', 15: 'too-many-calls', 29: 'navigated', 30: 'navigated' },
-  f420d509: { 19: 'navigated', 21: 'navigated' },
-  '8bb50a16': { 39: 'navigated' },
-  f86d7b03: { 55: 'navigated', 57: 'navigated', 59: 'navigated' },
-  d69bbb23: { 113: 'too-many-calls', 189: 'navigated', 191: 'navigated', 193: 'navigated', 227: 'navigated', 243: 'too-many-calls' },
-  '900938ca': { 39: 'repeat-failed', 49: 'repeat-failed' },
-  '9b06806f': { 46: 'too-many-calls', 48: 'too-many-calls', 50: 'too-many-calls', 52: 'too-many-calls', 54: 'too-many-calls' },
-  '282864af': { 62: 'navigated' },
-  '71839299': { 42: 'navigated', 45: 'navigated' },
+  s03: { 23: 'navigated', 25: 'navigated' },
+  s05: { 12: 'too-many-calls', 13: 'too-many-calls', 14: 'too-many-calls', 15: 'too-many-calls', 29: 'navigated', 30: 'navigated' },
+  s07: { 19: 'navigated', 21: 'navigated' },
+  's08': { 39: 'navigated' },
+  s10: { 55: 'navigated', 57: 'navigated', 59: 'navigated' },
+  s14: { 113: 'too-many-calls', 189: 'navigated', 191: 'navigated', 193: 'navigated', 227: 'navigated', 243: 'too-many-calls' },
+  's15': { 39: 'repeat-failed', 49: 'repeat-failed' },
+  's20': { 46: 'too-many-calls', 48: 'too-many-calls', 50: 'too-many-calls', 52: 'too-many-calls', 54: 'too-many-calls' },
+  's28': { 62: 'navigated' },
+  's29': { 42: 'navigated', 45: 'navigated' },
 };
 
 test('the calls today\'s controller refuses up front, per session, are the ones the gaps doc expects', async () => {

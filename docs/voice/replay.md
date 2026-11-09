@@ -9,7 +9,7 @@ node scripts/voice/sessions-to-replay.mjs           # reads middleware/.voice-lo
 node scripts/voice/sessions-to-replay.mjs --check   # exit 1 when the fixture is stale
 node scripts/voice/sessions-to-replay.mjs --log <dir>   # another log folder (from a worktree the default is the main checkout's)
 cd portal && node --test src/lib/voice/__tests__/realSessions.test.ts
-REPLAY_DEBUG=all node --test src/lib/voice/__tests__/realSessions.test.ts   # or a comma list of session prefixes
+REPLAY_DEBUG=all node --test src/lib/voice/__tests__/realSessions.test.ts   # or a comma list of session names, e.g. s05,s14
 ```
 
 `REPLAY_DEBUG` prints every replayed call: its log seq, the user turn, how the log says it ended and how the replay ended, plus each invariant break and the calls refused before they run.
@@ -21,16 +21,16 @@ A session counts as real when its log has a `sideband` row (a Live API connectio
 For each session: its tenant, the minted tool list and the ordered delegations. Each delegation records whether the user had the floor before it, and each call records:
 
 - the tool and its argument shape (`argShape`: enum values, a ref's kind, counts)
-- a 12-hex prefix of the argument hash
+- an argument ordinal (`a1`, `a2`, ...), numbered per session: equal ordinals are equal arguments, and the hash itself is never written
 - the outcome, with the refusal reason or failure code and the result counts
 - the card: who it was for, and whether it was confirmed by voice or click, cancelled or never answered
 
-The fixture also lists the stops and how the session closed. Timings are milliseconds from the session start, rounded to 100 ms. It holds no words: the script copies only whitelisted keys, and `assertNoWords` refuses to write any string that isn't a closed-vocabulary token. Sessions from before the dock logged delegations (8 November, before 23:30) only have tool-result rows. For those, calls less than 3 s apart are grouped into one delegation, marked `inferred`.
+The fixture also lists the stops and how the session closed. Sessions are named `s01`, `s02`, ... in log order and carry no id, hash or date (the script refuses to write a hex run of 8 or more, a `vs_` id, a `call_`/`item_` provider id or an ISO timestamp). Timings are milliseconds from the session start, rounded to 100 ms. The `s01` to real-id table is private: `node scripts/voice/sessions-to-replay.mjs --map` prints it to stdout, and it stays out of the repo. The `vs_xxxxxxxx` short forms in the prose below are the real sessions' names in the gaps doc; the tests use the `sNN` names. It holds no words: the script copies only whitelisted keys, and `assertNoWords` refuses to write any string that isn't a closed-vocabulary token. Sessions from before the dock logged delegations (8 November, before 23:30) only have tool-result rows. For those, calls less than 3 s apart are grouped into one delegation, marked `inferred`.
 
 ## How a session is replayed
 
 - **The model** makes the logged calls in order on the scripted mint. The first call arrives with the delegation and each later one in the continuation that follows a `response.create`. When the user had the floor, an input transcript plays before the delegation (a new user turn, as in the controller).
-- **Arguments** are rebuilt from the shape. Enum values are used as logged, a ref becomes `<kind>:<hash prefix>`, and free text becomes "Replay words <hash prefix>". Equal logged arguments therefore stay equal, and any word that reaches the event log is caught. A read of the kind just opened reuses that record's ref (vs_5144e356). A message goes to the conversation the session last opened.
+- **Arguments** are rebuilt from the shape. Enum values are used as logged, a ref becomes `<kind>:<ordinal>`, and free text becomes "Replay words <ordinal>". Equal logged arguments therefore stay equal, and any word that reaches the event log is caught. A read of the kind just opened reuses that record's ref (vs_5144e356). A message goes to the conversation the session last opened.
 - **Runners and planners** answer as the log says: done, refused with the logged reason, failed with the logged code, or an ambiguous list with the logged candidate count. A refusal the log gives without a reason, or as `other`, goes to the real runner or planner on the rebuilt arguments, so invariant (e) tests today's code. A call the old dock refused by its own gate (navigated, too-many-calls) runs if today's controller lets it through.
 - **Cards** are answered as the user answered them, by voice ("Confirm.", "Cancel that.") or by click, after the logged wait capped at 1.5 s.
 - **The probe:** after the last delegation, one more request (a `list`) must be answered.

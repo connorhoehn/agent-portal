@@ -204,6 +204,9 @@ export const RESUME_NOTE = 'This session continues one that dropped a moment ago
 const RESUMABLE: ReadonlySet<CloseCause> = new Set<CloseCause>(['pagehide', 'beforeunload', 'visibilitychange', 'ice-failed', 'ice-disconnected', 'peer-closed', 'channel-closed']);
 
 /** Where the dock keeps a dropped session's id for RESUME_MS (sessionStorage in the browser: it survives a reload of the tab). */
+/** Sweep 8: automatic runaway restarts per resume chain. */
+export const MAX_RUNAWAY_RESTARTS = 1;
+export const RUNAWAY_STOPPED_LINE = 'Voice stopped: it kept calling tools on its own. Start it again when you are ready.';
 export interface ResumeRecord { sessionId: string; at: number; /** The workspace it was minted in (G44): never resumed from another. */ tenant?: string }
 export interface ResumeStore {
   load(): ResumeRecord | null;
@@ -453,6 +456,8 @@ export class VoiceController {
   /** G35: the dropped session a start resumes, and the timer that retires it after RESUME_MS. */
   private resumeRecord: ResumeRecord | null = null;
   private resumeTimer: Timer | null = null;
+  /** Sweep 8: automatic runaway restarts made in this resume chain; a click (any start that is not a restart) begins a new chain. */
+  private runawayRestarts = 0;
   /** The session being minted resumes one (the started note says so). */
   private resuming: string | null = null;
   /** The workspace the session minted last was minted in (G44). */
@@ -521,8 +526,9 @@ export class VoiceController {
   // ── commands ─────────────────────────────────────────────────────────────
 
   /** `resume`: mint as the continuation of the dropped session the snapshot names (G35); otherwise any kept one is forgotten. */
-  async start(opts: { confirmOverUserBudget?: boolean; resume?: boolean } = {}): Promise<void> {
+  async start(opts: { confirmOverUserBudget?: boolean; resume?: boolean; chain?: boolean } = {}): Promise<void> {
     if (sessionOpen(this.machine)) return;
+    if (!opts.chain) this.runawayRestarts = 0;
     const resumeOf = opts.resume ? this.currentResumable() : null;
     this.forgetResume();
     this.reset();
@@ -607,7 +613,23 @@ export class VoiceController {
     if (this.opts.resume) this.keepResumable(client);
     else if (id) this.resumeRecord = { sessionId: id, at: this.now(), ...(this.mintTenant ? { tenant: this.mintTenant } : {}) };
     await this.stop('closed', 'user');
-    await this.start({ resume: true });
+    await this.start({ resume: true, chain: true });
+  }
+
+  /**
+   * Sweep 8: the dock restarts a runaway session by itself once per resume chain. A model that runs away again after
+   * the resume ends the session as unavailable with a line, and only a click starts another (which begins a new chain).
+   */
+  private async runawayRestart(): Promise<void> {
+    if (this.runawayRestarts >= MAX_RUNAWAY_RESTARTS) {
+      this.emit({ kind: 'client', data: { event: 'restart', cause: 'runaway-capped' } });
+      await this.stop('closed', 'user');
+      this.runawayRestarts = 0;
+      this.dispatch({ type: 'unavailable', reason: RUNAWAY_STOPPED_LINE });
+      return;
+    }
+    this.runawayRestarts += 1;
+    await this.restart('runaway');
   }
 
   /**
@@ -1126,7 +1148,7 @@ export class VoiceController {
         if (rec.closing === MAX_STOPPED_CONTINUATIONS) this.emit({ kind: 'client', data: { event: 'delegation-stuck', delegationId } });
         if (rec.closing >= MAX_RUNAWAY_CONTINUATIONS) {
           this.closeDelegation(delegationId);
-          void this.restart('runaway');
+          void this.runawayRestart();
           return;
         }
         rec.closing += 1;

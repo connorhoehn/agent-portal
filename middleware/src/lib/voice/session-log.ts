@@ -243,11 +243,11 @@ export const DIAGNOSTIC_EVENTS: readonly string[] = Object.keys(DIAGNOSTIC_SCHEM
 export function checkDiagnostic(data: Record<string, unknown>): string | null {
   const name = String(data['event']);
   const schema = DIAGNOSTIC_SCHEMAS[name];
-  if (!schema) return `event ${name} is not a diagnostic event`;
+  if (!schema) return 'event is not a diagnostic event';
   for (const [k, v] of Object.entries(data)) {
     if (k === 'event') continue;
     const check = schema[k];
-    if (!check) return `${name}: ${k} is not a field of this event`;
+    if (!check) return `${name}: unknown field`;
     if (!check(v)) return `${name}: ${k} is not an allowed value`;
   }
   return null;

@@ -428,6 +428,10 @@ describe('G63 diagnostics without words', () => {
     expect(parseClientEvent({ kind: 'client', note: 'the user said hi', data: SPOKE }, deps)).toEqual({ error: expect.stringContaining('note is not allowed') });
     expect(parseClientEvent({ kind: 'client', args: { q: 'x' }, data: SPOKE }, deps)).toEqual({ error: expect.stringContaining('args is not allowed') });
     expect(checkDiagnostic({ event: 'phase', phase: 'listening' })).toMatch(/not a diagnostic event/);
+    // Sweep 8: a caller's own event or key name is never echoed back.
+    expect(checkDiagnostic({ event: 'phase<script>', x: 1 })).not.toContain('phase<script>');
+    const unknownKey = checkDiagnostic({ ...HEARD, 'secret-key-name': 1 });
+    expect(unknownKey).toBe('heard: unknown field');
     // The other client events are untouched: their fields still pass the sanitizer alone.
     expect(parseClientEvent({ kind: 'client', data: { event: 'phase', phase: 'listening', from: 'speaking' } }, deps)).toEqual({ kind: 'client', data: { event: 'phase', phase: 'listening', from: 'speaking' } });
     // Over the route: one bad diagnostic refuses its whole batch, and nothing of it is written.
