@@ -51,7 +51,7 @@ export interface DockEvent {
 /** The refusal codes a `refused` event carries as `data.reason` (never the spoken sentence, which can repeat the user's words). */
 export const REFUSAL_CODES = [
   'ambiguous', 'not-found', 'role', 'no-grant', 'budget', 'allowlist', 'not-on-this-page', 'other-workspace',
-  'card-open', 'unavailable', 'not-connected', 'not-a-member', 'invalid-arguments', 'unknown-tool', 'not-in-workspace', 'read-failed', 'invalid-ref', 'not-read-yet', 'too-many-calls', 'repeat-failed', 'other',
+  'card-open', 'unavailable', 'not-connected', 'not-a-member', 'invalid-arguments', 'unknown-tool', 'not-in-workspace', 'read-failed', 'invalid-ref', 'not-read-yet', 'too-many-calls', 'repeat-failed', 'navigated', 'other',
 ] as const;
 export type RefusalCode = typeof REFUSAL_CODES[number];
 

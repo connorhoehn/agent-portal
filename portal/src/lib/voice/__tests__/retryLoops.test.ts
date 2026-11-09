@@ -36,6 +36,7 @@ test('refusalNext: every refusal code names a change and ends with the no-repeat
     'not-read-yet': { reason: 'There is no row 4 in the last result. List or search first.' },
     'too-many-calls': { reason: 'Too many calls for one request.', code: 'too-many-calls' },
     'repeat-failed': { reason: 'That just failed. Tell the user why; try again only when they ask.', code: 'repeat-failed' },
+    navigated: { reason: 'This request already opened a page, so nothing more runs for it.', code: 'navigated' },
     other: { reason: 'Something odd.' },
   };
   assert.deepEqual(Object.keys(reasons).sort(), [...REFUSAL_CODES].sort(), 'one case per code');
@@ -236,4 +237,76 @@ test('G48 acceptance: failed then the same call runs once the user asked; on its
   // A refusal (404) repeated is still the G29 repeat, user turn or not.
   const refusedTwice = await failSession(true, 404);
   assert.deepEqual(refusedTwice.outputs.map((o) => [o['kind'], o['stop'] ?? null]), [['refused', null], ['refused', true]]);
+});
+
+/** A scripted turn: the first call, then each continuation asks the second (the 01:40 turn that opened four pages). */
+function twoCallScript(first: { name: string; args: Record<string, unknown> }, second: { name: string; args: Record<string, unknown> }) {
+  const d = 'item_mock_delegation_1';
+  const env = (event: Record<string, unknown>) => ({ type: 'response.event', delegation_id: d, event });
+  const call = (n: number, c: { name: string; args: Record<string, unknown> }) => env({ type: 'response.output_item.done', item: { id: `fc_${n}`, type: 'function_call', status: 'completed', arguments: JSON.stringify(c.args), call_id: `call_${n}`, name: c.name }, output_index: 0 });
+  return {
+    onStart: [
+      { atMs: 0, event: { type: 'session.started', session: { id: 'live_mock', model: 'gpt-live-1', status: 'active' } } },
+      { atMs: 400, event: { type: 'session.input_transcript.delta', delta: 'Open designs and runbooks.', start_ms: 0, end_ms: 1800 } },
+      { atMs: 500, event: { type: 'session.delegation.created', delegation: { id: d, type: 'delegation', response_id: 'resp_1', target: 'responses' } } },
+      { atMs: 1000, event: call(1, first) },
+      { atMs: 1050, event: env({ type: 'response.completed', response: { id: 'resp_1', status: 'completed', output: [], usage: { input_tokens: 1000, output_tokens: 20 } } }) },
+    ],
+    onResponseCreate: [
+      { atMs: 150, event: call(2, second) },
+      { atMs: 200, event: env({ type: 'response.completed', response: { id: 'resp_2', status: 'completed', output: [], usage: { input_tokens: 1100, output_tokens: 20 } } }) },
+    ],
+    onClose: [{ atMs: 100, event: { type: 'session.closed', reason: 'close_requested', usage: { seconds: 12 } } }],
+  };
+}
+
+async function twoCalls(first: { name: string; args: Record<string, unknown> }, second: { name: string; args: Record<string, unknown> }, over: Parameters<typeof toolContext>[0] = {}) {
+  const outputs: Array<Record<string, unknown>> = [];
+  const commentary: string[] = [];
+  const proto = VoiceClient.prototype;
+  const orig = { out: proto.sendToolOutput, com: proto.appendCommentary };
+  proto.sendToolOutput = function (id: string, o: string) { outputs.push(JSON.parse(o) as Record<string, unknown>); return orig.out.call(this, id, o); };
+  proto.appendCommentary = function (c: string) { commentary.push(c); return orig.com.call(this, c); };
+  try {
+    const clock = new FakeClock();
+    const mintBody = {
+      sessionId: SESSION, voiceSessionId: SESSION, holdId: 'h1', maxSeconds: 1800, expiresAt: '2026-11-08T13:00:00Z', sdp: 'v=0', mock: true,
+      model: 'gpt-live-1', voice: null, toolsEnabled: true, tools: ['open', 'list'], budget: { holdUsd: 0.5, usdPerMinute: 0.05 },
+      mockScript: twoCallScript(first, second),
+    };
+    const { fetch } = fakeFetch([
+      route('POST', `/api/voice/sessions/${SESSION}/events`, 201, { id: 'row' }),
+      route('POST', `/api/voice/sessions/${SESSION}/close`, 200, {}),
+      route('POST', '/api/voice/sessions', 201, mintBody),
+    ]);
+    const ctx = toolContext({ fetch, role: 'org-leader', ...over });
+    const c = new VoiceController({ fetch, media: null, toolContext: () => ctx, now: clock.now, setTimer: clock.setTimer, clearTimer: clock.clearTimer });
+    await c.start();
+    await clock.advance(6000);
+    c.dispose();
+    return { outputs, commentary, navigations: ctx.navigations };
+  } finally {
+    proto.sendToolOutput = orig.out; proto.appendCommentary = orig.com;
+  }
+}
+
+test('G51 acceptance: a turn asking for two pages opens the first and stops; the dock says its line once', async () => {
+  const r = await twoCalls({ name: 'open', args: { page: 'designs' } }, { name: 'open', args: { page: 'runbooks' } });
+  assert.equal(r.outputs[0]!['kind'], 'navigated');
+  assert.equal(r.outputs[0]!['stop'], true);
+  assert.match(String(r.outputs[0]!['say']), /^Opened /);
+  assert.equal(r.outputs[1]!['kind'], 'refused');
+  assert.equal(r.outputs[1]!['code'], 'navigated');
+  assert.equal(r.navigations.length, 1, 'the second page never opens');
+  assert.equal(r.commentary.filter((c) => /Opened /.test(c)).length, 1, 'the dock speaks the page line once');
+});
+
+test('G51: a read of the page just opened may follow; a row or tab of the page in view does not end the turn', async () => {
+  const page = { path: '/iq/projects/p1', record: { ref: 'initiative:p1', title: 'Alpha' }, rowsLabel: 'work items', rows: [{ ref: 'work-item:w1', title: 'Rotate keys', href: '/iq/projects/p1?item=w1' }] };
+  const read = await twoCalls({ name: 'open', args: { ref: 'initiative:p1' } }, { name: 'list', args: { kind: 'work-item', scope: 'this-page' } }, { page: () => page });
+  assert.equal(read.outputs[0]!['stop'], true);
+  assert.equal(read.outputs[1]!['kind'], 'list', 'the this-page read runs');
+  const onPage = await twoCalls({ name: 'open', args: { scope: 'this-page', ref: '1' } }, { name: 'open', args: { page: 'runbooks' } }, { page: () => page });
+  assert.equal(onPage.outputs[0]!['stop'], undefined, 'a row of the page in view does not end the request');
+  assert.equal(onPage.outputs[1]!['kind'], 'navigated');
 });

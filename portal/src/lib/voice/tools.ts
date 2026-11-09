@@ -1078,11 +1078,18 @@ export function openableHref(href: string, ctx: Pick<ToolContext, 'palette' | 't
 
 const FOREIGN = 'That page is in another workspace; switching to it ends this voice session.';
 
-function opened(ref: string, title: string, href: string, ctx: ToolContext): ToolResult {
+/**
+ * G51: a navigation ends the request. The user asked for one page; the voice says the one line and calls nothing
+ * more (the controller refuses any further call in the same turn). A row or tab of the page in view does not end it
+ * (scope "this-page": the read that follows answers about what it shows).
+ */
+export const NAVIGATED_STOP = { stop: true, next: 'The page is open: say the one line and call nothing more for this request, except a read of the page just opened (list with scope "this-page") when the user asked about what it shows.' } as const;
+
+function opened(ref: string, title: string, href: string, ctx: ToolContext, onPage = false): ToolResult {
   if (!localHref(href)) return refused('That has no page in this portal.');
   if (!openableHref(href, ctx)) return refused(FOREIGN, { offer: { tool: 'open', page: 'workspaces' } });
   ctx.navigate(href);
-  return done('navigated', { ref, title, path: href }, `Opened ${title}`);
+  return done('navigated', { ref, title, path: href, say: `Opened ${title}.`, ...(onPage ? {} : NAVIGATED_STOP) }, `Opened ${title}`);
 }
 
 /** The palette page whose path is the longest prefix of a kind's href: where "I found no Alpha" points. */
@@ -1176,7 +1183,7 @@ const open: Runner = async (args, ctx) => {
     if ('result' in hit) return hit.result;
     if (kind && !hit.row.ref.startsWith(`${kind}:`)) return refused(`That row of the page is not a ${kind}.`, { code: NOT_ON_PAGE });
     if (!hit.row.href) return refused('That row has no page of its own; get reads it.');
-    return opened(hit.row.ref, hit.row.title, tab ? withTab(hit.row.href, tab) : hit.row.href, ctx);
+    return opened(hit.row.ref, hit.row.title, tab ? withTab(hit.row.href, tab) : hit.row.href, ctx, true);
   }
   const given = [page, ref, kind || name].filter(Boolean).length;
   if (given !== 1 || (!!kind !== !!name)) return refused('Name exactly one thing to open: a page, a row\'s ref or position, or a kind with a name.');
@@ -1187,7 +1194,7 @@ const open: Runner = async (args, ctx) => {
     const path = pagePath(target.page, (args['params'] as Args | undefined) ?? {});
     ctx.navigate(path);
     return done('navigated', {
-      page: target.page.pageId, label: target.page.label, path,
+      page: target.page.pageId, label: target.page.label, path, say: `Opened ${target.page.label}.`, ...NAVIGATED_STOP,
       ...(target.page.pageId === 'workspaces' ? { warning: 'Switching workspace ends this voice session.' } : {}),
     }, `Opened ${target.page.label}`);
   }

@@ -161,6 +161,9 @@ export function refusalNext(tool: string, output: Record<string, unknown>, ctx: 
     case 'not-in-workspace':
       fix = 'That is not offered in this workspace: say so, and offer the nearest page.';
       break;
+    case 'navigated':
+      fix = 'This request already opened a page: say the one line about it and stop; the user asks for the next page themselves.';
+      break;
     case 'repeat-failed':
       fix = 'That call already failed: tell the user why in one sentence; call it again only when they ask in a new request, at most once.';
       break;

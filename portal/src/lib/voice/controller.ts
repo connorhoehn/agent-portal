@@ -395,7 +395,8 @@ export class VoiceController {
   /** The workspace the session minted last was minted in (G44). */
   private mintTenant: string | null = null;
   /** G43: the calls this user turn used (weighted), its searches' shapes without the query, and whether it was stopped. */
-  private turn: { used: number; searches: Set<string>; stopped: boolean; spoke: boolean } = { used: 0, searches: new Set(), stopped: false, spoke: false };
+  /** `navigated` (G51): this user turn opened a page or a record; it is done, and any further call is refused. */
+  private turn: { used: number; searches: Set<string>; stopped: boolean; spoke: boolean; navigated?: string } = { used: 0, searches: new Set(), stopped: false, spoke: false };
   /** G41: the conversations a message card was confirmed for this session, and the call that confirmed each. */
   private coveredTargets = new Map<string, string>();
   /** G36: the phase shown and logged, since when, and the timer that re-reads the machine when a dwell ends. */
@@ -775,6 +776,21 @@ export class VoiceController {
     const ctx = this.toolContext();
     // G43: a delegation that has used its calls is told to stop; the round ends here and the dock speaks.
     const turn = this.turn;
+    // G51: a navigation ended this request; another page (or anything else) waits for the user's next words. Only a
+    // read of the page just opened ("open this initiative, what should I work on") may follow.
+    if (turn.navigated !== undefined && !readsThisPage(name, rawArgs)) {
+      rec.stopped = true;
+      await this.answer(client, delegationId, callId, name, withNext(refused('This request already opened a page, so nothing more runs for it. Say the one line about that page.', { code: 'navigated', stop: true }), name, ctx), startedAt, rawArgs);
+      // The round ends without a continuation, so the dock says the page's line itself, once.
+      if (!turn.spoke && turn.navigated) {
+        turn.spoke = true;
+        const said = `Tell the user, in one sentence, and do not call anything: ${turn.navigated}`;
+        this.context.note(said.length);
+        client.appendCommentary(said);
+        this.addLine('assistant', turn.navigated);
+      }
+      return;
+    }
     const weight = callWeight(turn, name, rawArgs);
     if (turn.stopped || rec.stopped || turn.used + weight > MAX_CALLS_PER_DELEGATION) {
       rec.stopped = true;
@@ -887,6 +903,8 @@ export class VoiceController {
       const { last } = this.failures.failed(name, args, this.turn);
       res = { ...res, output: { ...res.output, next: last ? FAILED_TWICE_NEXT : RETRY_NEXT, ...(last ? { stop: true } : {}) } };
     } else if (res.outcome === 'done') this.failures.succeeded(name, args);
+    // G51: a navigation that ends the request (open's stop) closes the turn to further calls.
+    if (name === 'open' && res.outcome === 'done' && res.output['stop'] === true) this.turn.navigated = typeof res.output['say'] === 'string' ? res.output['say'] : '';
     // G29: the second identical refused call of the session is terminal. Its output says stop, the round asks for no
     // continuation (so the delegation cannot try a third time), and the dock speaks the refusal line itself, once.
     const verdict = res.outcome === 'refused' ? this.refusals.refused(name, args, res.output) : null;
@@ -1375,6 +1393,12 @@ export class VoiceController {
 const round = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 20) / 20;
 
 /** G43: one call's weight against the delegation's budget: a search that only changes its query counts double. */
+/** G51: the one call a navigation lets follow in its turn: list or get of the page in view (scope "this-page"). */
+function readsThisPage(name: string, raw: string): boolean {
+  if (name !== 'list' && name !== 'get') return false;
+  try { return (JSON.parse(raw) as Record<string, unknown>)['scope'] === 'this-page'; } catch { return false; }
+}
+
 function callWeight(rec: { searches: Set<string> }, name: string, raw: string): number {
   if (name !== 'search') return 1;
   let args: Record<string, unknown> = {};

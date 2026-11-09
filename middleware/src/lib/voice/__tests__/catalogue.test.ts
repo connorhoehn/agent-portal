@@ -545,6 +545,10 @@ describe('the rendered session', () => {
     expect(backend).toMatch(/get with its ref \("message:<id>", or "message:latest"\) reads it whole, and message with thread set to that ref/);
   });
 
+  it('G51: one page per request: an open that navigated ends it, but for a read of that page', () => {
+    expect(delegationInstructions('orgiq')).toMatch(/One page per request: once open has opened a page or a record \(its result says stop\), say its one line and call nothing more, except a list with scope "this-page"/);
+  });
+
   it('G49: open takes a tab; on a record page a tab is opened with scope this-page, never searched', () => {
     const open = voiceTool('open')!;
     expect(Object.keys(open.parameters.properties)).toEqual(['page', 'ref', 'kind', 'name', 'scope', 'tab', 'params']);
