@@ -1487,6 +1487,13 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     build: async (ctx) => ({ outcome: 'rejected', rationale: ctx.label() }),
   },
   {
+    route: 'PUT /api/voice/settings',
+    persona: 'orgiq/admin',
+    safe: 'Mutates the caller\'s row in the registered `voice-settings` fixture (G38); reset restores it. No provider call: the settings are read again at the next mint only.',
+    bodyFrom: "routes/voice.ts + lib/voice/voices.ts: `voice` a lowercase preset name or null, `style` ∈ {'plain','north-london','rp','warm','brisk'}, `pace` ∈ {'brisk','normal','relaxed'}; any field may be omitted.",
+    build: ok({ voice: 'marin', style: 'plain', pace: 'normal' }),
+  },
+  {
     route: 'POST /api/connections',
     persona: 'orgiq/admin',
     safe: 'Under MOCK_AGENTCORE the key is dropped on the floor and a row is appended to the registered `connected-sources` fixture; no AgentCore credential provider is created and api.github.com is never called.',
