@@ -240,11 +240,11 @@
     {
       "subjectId": "p-043",
       "userId": null,
-      "name": "Bria Petrov",
+      "name": "Bria Okonkwo",
       "portraitUrl": "/avatars/photos/p-043.jpg",
       "focus": "Staff ML Engineer",
       "biography": "Staff ML Engineer · ML / AI",
-      "prompt": "Bria Petrov, a fictional woman around 57, medium tan skin, shoulder-length braids in sandy brown, wearing a muted burgundy knit top. This fictional colleague works as Staff ML Engineer in ML / AI.",
+      "prompt": "Bria Okonkwo, a fictional woman around 57, medium tan skin, shoulder-length braids in sandy brown, wearing a muted burgundy knit top. This fictional colleague works as Staff ML Engineer in ML / AI.",
       "generation": {
         "batch": "2026-11-01-grid",
         "row": 1,
@@ -408,11 +408,11 @@
     {
       "subjectId": "p-017",
       "userId": null,
-      "name": "Daniel Chang",
+      "name": "Daniel Novak",
       "portraitUrl": "/avatars/photos/p-017.jpg",
       "focus": "Staff Data Engineer",
       "biography": "Staff Data Engineer · Data Platform",
-      "prompt": "Daniel Chang, a fictional man around 32, light olive skin, a shaved head in sandy brown, a neatly trimmed short beard, wearing a plain forest-green blouse or collared shirt. This fictional colleague works as Staff Data Engineer in Data Platform.",
+      "prompt": "Daniel Novak, a fictional man around 32, light olive skin, a shaved head in sandy brown, a neatly trimmed short beard, wearing a plain forest-green blouse or collared shirt. This fictional colleague works as Staff Data Engineer in Data Platform.",
       "generation": {
         "batch": "2026-11-01-grid",
         "row": 2,
@@ -422,11 +422,11 @@
     {
       "subjectId": "p-018",
       "userId": null,
-      "name": "Yusuf Ahmed",
+      "name": "Yusuf Karim",
       "portraitUrl": "/avatars/photos/p-018.jpg",
       "focus": "Data Engineer",
       "biography": "Data Engineer · Data Platform",
-      "prompt": "Yusuf Ahmed, a fictional man around 39, medium tan skin, short wavy hair in dark brown, wearing a muted burgundy knit top. This fictional colleague works as Data Engineer in Data Platform.",
+      "prompt": "Yusuf Karim, a fictional man around 39, medium tan skin, short wavy hair in dark brown, wearing a muted burgundy knit top. This fictional colleague works as Data Engineer in Data Platform.",
       "generation": {
         "batch": "2026-11-01-grid",
         "row": 3,
@@ -464,11 +464,11 @@
     {
       "subjectId": "p-021",
       "userId": null,
-      "name": "James Thompson",
+      "name": "James Whitaker",
       "portraitUrl": "/avatars/photos/p-021.jpg",
       "focus": "Data Engineer",
       "biography": "Data Engineer · Data Platform",
-      "prompt": "James Thompson, a fictional man around 30, warm medium-brown skin, closely cropped hair in salt-and-pepper, wearing a simple rust-colored top. This fictional colleague works as Data Engineer in Data Platform.",
+      "prompt": "James Whitaker, a fictional man around 30, warm medium-brown skin, closely cropped hair in salt-and-pepper, wearing a simple rust-colored top. This fictional colleague works as Data Engineer in Data Platform.",
       "generation": {
         "batch": "2026-11-01-grid",
         "row": 3,
@@ -534,11 +534,11 @@
     {
       "subjectId": "p-026",
       "userId": null,
-      "name": "Mateo Green",
+      "name": "Mateo Ruiz",
       "portraitUrl": "/avatars/photos/p-026.jpg",
       "focus": "Senior UX Researcher",
       "biography": "Senior UX Researcher · Product",
-      "prompt": "Mateo Green, a fictional man around 35, fair skin with light freckles, short loosely curled hair in salt-and-pepper, a neatly trimmed short beard, wearing a muted burgundy knit top. This fictional colleague works as Senior UX Researcher in Product.",
+      "prompt": "Mateo Ruiz, a fictional man around 35, fair skin with light freckles, short loosely curled hair in salt-and-pepper, a neatly trimmed short beard, wearing a muted burgundy knit top. This fictional colleague works as Senior UX Researcher in Product.",
       "generation": {
         "batch": "2026-11-01-grid",
         "row": 4,
@@ -870,11 +870,11 @@
     {
       "subjectId": "p-054",
       "userId": null,
-      "name": "Kevin Garcia",
+      "name": "Kevin Adeyemi",
       "portraitUrl": "/avatars/photos/p-054.jpg",
       "focus": "Senior Engineer",
       "biography": "Senior Engineer · Security",
-      "prompt": "Kevin Garcia, a fictional man around 44, light olive skin, a shaved head in dark brown, a neatly trimmed short beard, wearing a simple rust-colored top. This fictional colleague works as Senior Engineer in Security.",
+      "prompt": "Kevin Adeyemi, a fictional man around 44, light olive skin, a shaved head in dark brown, a neatly trimmed short beard, wearing a simple rust-colored top. This fictional colleague works as Senior Engineer in Security.",
       "generation": {
         "batch": "2026-11-01-grid",
         "row": 7,

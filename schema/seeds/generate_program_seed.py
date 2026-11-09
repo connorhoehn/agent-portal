@@ -29,12 +29,12 @@ RNG = random.Random(20260821)
 # Rhea (Security) contributes to Auth Migration, and keeping her out of the draw keeps every item's assignee stable.
 ROSTER_ONLY_SMES = {'p-rhea'}
 
-# Who created each maintenance bot (obs-nightly-maintenance is u-tomas, the pipelines author who also holds Social:
-# the Communication plane's "My pipelines" walker). middleware/src/mock/bots.ts mirrors this; bots not listed are u-rachel's.
+# Who created each maintenance bot: someone who works on the initiative it maintains (Layla runs
+# Observability's SRE work and Cost Optimization, Caleb the LLM and inference fleets, Mia her own Mobile
+# initiative). middleware/src/mock/bots.ts mirrors this; bots not listed are u-rachel's, the program operator's.
 BOT_CREATORS = {
-    'obs-nightly-maintenance': 'u-tomas', 'auth-dep-watch': 'u-nora', 'llm-evals-nightly': 'u-layla',
-    'inference-canary-nightly': 'u-eli', 'finops-daily-sweep': 'u-mia', 'stream-lag-watch': 'u-caleb',
-    'feature-drift-nightly': 'u-theo', 'mobile-e2e-nightly': 'u-caleb', 'a11y-audit-weekly': 'u-layla',
+    'obs-nightly-maintenance': 'u-layla', 'auth-dep-watch': 'u-nora', 'llm-evals-nightly': 'u-caleb',
+    'inference-canary-nightly': 'u-caleb', 'finops-daily-sweep': 'u-layla', 'mobile-e2e-nightly': 'u-mia',
     'api-contract-watch': 'u-theo',
 }
 
@@ -82,8 +82,44 @@ def run_note(prefix: str, seq: int) -> dict:
 GH = 'https://github.com/connorhoehn'
 
 # Whose name is on an initiative's monthly allocation when it is not the release
-# manager's: Mia Singh (u-mia, program-owner) holds Auth Migration's money.
-ALLOCATED_BY = {'p-auth-migration': 'u-mia'}
+# manager's: an owner who holds ManageBudgets sets their own — Vera Green
+# (org-leader) for Auth Migration, Mia Singh (program-owner) for Mobile.
+ALLOCATED_BY = {'p-auth-migration': 'u-vera', 'p-mobile-redesign': 'u-mia'}
+
+# Who granted an initiative's sprint envelopes (budget_grants.granted_by), by
+# initiative slug: the owner where the owner holds ManageBudgets (Vera on Auth,
+# Mia on Mobile), the release manager on Observability and Cost Optimization
+# (their owners hold the sme role, which cannot grant), and the program
+# operator, Rachel Kowalski, everywhere else. middleware/src/mock/budgets.ts
+# mirrors this.
+GRANTED_BY = {'obs': 'u-release', 'auth': 'u-vera', 'cost': 'u-release', 'mob': 'u-mia'}
+
+# Decisions whose decided date is fixed by the story rather than drawn: the
+# collectors were chosen before the sprint that rolled them out, and the table
+# format the day after its evaluation finished. The RNG draw still happens, so
+# nothing drawn after it moves.
+DECISION_DECIDED_DAYS = {'d-otel-vendor': 40, 'd-iceberg': 3}
+
+# Items whose state is fixed by the story rather than drawn (no RNG call, so
+# the stream every other row is drawn from is unchanged):
+#   DONE_WITHOUT_DRAW   item id -> days ago it completed (no pull request: the
+#                       Iceberg evaluation's output is the ADR, not code).
+#   PR_WITHOUT_DRAW     item id -> (pull request number, status) on an item
+#                       whose status draws none: the refresh-loop fix has its
+#                       pull request open while it is still in progress.
+DONE_WITHOUT_DRAW = {'wi-lake-e1-s1': 4}
+PR_WITHOUT_DRAW = {'wi-auth-e1-b4': (51, 'open')}
+
+
+def prompt_excerpt(text: str, limit: int = 120) -> str:
+    """The job payload's prompt, cut at a word boundary with an ellipsis when
+    it is longer than `limit` characters (never mid-word)."""
+    if len(text) <= limit:
+        return text
+    cut = text[:limit - 1].rstrip()
+    if ' ' in cut:
+        cut = cut[:cut.rfind(' ')].rstrip(' ,;:')
+    return cut + '…'
 
 # The credential every initiative repo is linked through. All fourteen
 # orgiq-* repos are PRIVATE (flipped 2026-09-29; CLAUDE.md requires it), and
@@ -130,7 +166,7 @@ INITIATIVES = [
              'Every tier-1 service has an SLO, a burn-rate alert, and an owner.',
              [
                 ('story', 'SLO definitions in the service catalog with owners', 'done', 'high', 5, ['slo'], 's2'),
-                ('story', 'Multi-window burn-rate alerts', 'in_review', 'high', 5, ['slo', 'alerting'], 's2'),
+                ('story', 'Multi-window burn-rate alerts', 'in_review', 'high', 5, ['slo', 'alerting'], 's3'),
                 ('story', 'Error-budget dashboard per team', 'open', 'medium', 3, ['slo', 'dashboards'], 's3'),
                 ('bug', 'Stop duplicate alerts during a dependency outage', 'open', 'high', 2, ['alerting', 'blocked'], 's3'),
              ]),
@@ -142,14 +178,14 @@ INITIATIVES = [
              ]),
         ],
         sprints=[
-            ('s1', 'Sprint 9 — Ingest hardening', 'p-008', -42, -28, 'done',
+            ('s1', 'Sprint 9 — Ingest hardening', 'p-008', -37, -24, 'done',
              'Collector fleet stable at 2x peak ingest.'),
-            ('s2', 'Sprint 10 — Burn-rate alerts', 'p-011', -28, -14, 'done',
+            ('s2', 'Sprint 10 — Burn-rate alerts', 'p-011', -23, -10, 'done',
              'Tier-1 services alert on error-budget burn, not raw error rate.'),
-            ('s3', 'Sprint 11 — Span metrics + decom', 'p-008', -14, 0, 'active',
+            ('s3', 'Sprint 11 — Span metrics + decom', 'p-008', -9, 5, 'active',
              'RED dashboards from span metrics; two services off StatsD.'),
         ],
-        grants=[('s1', 'p-008', 25), ('s2', 'p-011', 20), ('s3', 'p-008', 30)],
+        grants=[('s1', 'p-008', 25), ('s2', 'p-011', 20), ('s3', 'p-008', 35)],
         budget=40,
         bot=dict(name='obs-nightly-maintenance', template='bug', cron='0 6 * * *',
                  mission='Nightly maintenance for the observability stack: bump collector and '
@@ -187,9 +223,9 @@ INITIATIVES = [
              ]),
         ],
         sprints=[
-            ('s1', 'Sprint 9 — OIDC core', 'p-051', -35, -21, 'done',
+            ('s1', 'Sprint 9 — OIDC core', 'p-051', -23, -10, 'done',
              'Code+PKCE flow live; JWKS rotation survives a key roll.'),
-            ('s2', 'Sprint 10 — Session hygiene', 'p-051', -14, 0, 'active',
+            ('s2', 'Sprint 10 — Session hygiene', 'p-051', -9, 5, 'active',
              'Sessions expire server-side; revoked grants bite within a minute.'),
         ],
         # p-004 (Nora DaSilva, u-nora — the seeded sme login) is an SME here
@@ -211,7 +247,7 @@ INITIATIVES = [
                   'cutover runbook. Smallest first keeps the blast radius low while the team learns the runbook. '
                   'Riskiest first moves the two tenants with custom SAML attribute mappings while the shim is '
                   'still warm and rollback is a route flip, but a failure there is loud and customer-visible. '
-                  'The order decides who is warned and when, so it is a release call.', 'escalated', 'org-leader', 'e2',
+                  'The order decides who is warned and when, so it is a release call.', 'escalated', 'org-leader', 'e2-s2',
                   # Escalated BY the owner (Vera) TO the release manager: Sienna
                   # Garcia (p-005, u-release) decides it, not the person who
                   # raised it (docs/demo-content-audit.md, Work story-breaker 4).
@@ -245,9 +281,9 @@ INITIATIVES = [
              ]),
         ],
         sprints=[
-            ('s1', 'Sprint 8 — Prompt registry', 'p-042', -30, -16, 'done',
+            ('s1', 'Sprint 8 — Prompt registry', 'p-042', -23, -10, 'done',
              'Prompt edits reach the fleet without a redeploy.'),
-            ('s2', 'Sprint 9 — Judge + evals', 'p-013', -14, 0, 'active',
+            ('s2', 'Sprint 9 — Judge + evals', 'p-013', -9, 5, 'active',
              'Canary judge scores every ask; golden sets gate merges.'),
         ],
         grants=[('s1', 'p-042', 30), ('s2', 'p-013', 35)],
@@ -260,9 +296,9 @@ INITIATIVES = [
         decision=('d-eval-judge-model', 'Judge model for canary evaluation',
                   'The canary judge scores every sampled answer, so its model sets both the evaluation bill and '
                   'how far the scores can be trusted. On the 120-question pilot set Nova Pro agrees with human '
-                  'labels 82 percent of the time and Nova Lite 71 percent, at about six times the cost per judged '
+                  'labels 82 percent of the time and Nova Lite 71 percent, at about a sixth of the cost per judged '
                   'answer. Halving the sample rate from 20 to 10 percent would fund Nova Pro at the current spend. '
-                  'Open until the final rubric weights have run on both.', 'open', None, 'e1'),
+                  'Open until the final rubric weights have run on both.', 'open', None, 'e1-s2'),
     ),
     dict(
         id='p-cost-opt', slug='cost', repo='orgiq-finops', tier='flagship',
@@ -286,12 +322,12 @@ INITIATIVES = [
              ]),
         ],
         sprints=[
-            ('s1', 'Sprint 9 — Floors and orphans', 'p-011', -28, -14, 'done',
+            ('s1', 'Sprint 9 — Floors and orphans', 'p-011', -23, -10, 'done',
              'Idle floors documented; orphan sweep automated.'),
-            ('s2', 'Sprint 10 — Attribution', 'p-017', -14, 0, 'active',
+            ('s2', 'Sprint 10 — Attribution', 'p-017', -9, 5, 'active',
              'Every running resource carries an initiative tag.'),
         ],
-        grants=[('s1', 'p-011', 15), ('s2', 'p-017', 20)],
+        grants=[('s1', 'p-011', 15), ('s2', 'p-017', 25)],
         budget=30,
         bot=dict(name='finops-daily-sweep', template='bug', cron='0 7 * * *',
                  mission='Daily spend sweep: diff yesterday\'s cost by service against the '
@@ -316,9 +352,9 @@ INITIATIVES = [
                 ('story', 'Self-serve backfill tooling with replay budgets', 'open', 'medium', 5, ['backfill'], None),
              ]),
         ],
-        sprints=[('s1', 'Sprint 9 — Checkpoint + schema', 'p-019', -14, 0, 'active',
+        sprints=[('s1', 'Sprint 9 — Checkpoint + schema', 'p-019', -9, 5, 'active',
                   'Recovery under 60s; producers on registry contracts.')],
-        grants=[('s1', 'p-019', 15)],
+        grants=[('s1', 'p-019', 22)],
         budget=20,
         bot=dict(name='stream-lag-watch', template='bug', cron='15 */6 * * *',
                  mission='Watch consumer lag and checkpoint duration; when lag trends past '
@@ -335,7 +371,7 @@ INITIATIVES = [
         epics=[
             ('e1', 'Lakehouse foundation', 'medium', 'in_progress', None,
              [
-                ('story', 'Iceberg table format evaluation against Delta', 'in_progress', 'medium', 5, ['iceberg', 'eval'], 's1'),
+                ('story', 'Iceberg table format evaluation against Delta', 'done', 'medium', 5, ['iceberg', 'eval'], 's1'),
                 ('story', 'Ingest contract spec for producer teams', 'open', 'medium', 3, ['contracts'], 's1'),
                 ('story', 'Bronze/silver/gold access zone design', 'open', 'medium', 5, ['governance'], None),
              ]),
@@ -344,7 +380,7 @@ INITIATIVES = [
                   'Table format chosen with a written ADR.')],
         grants=[('s1', 'p-017', 10)],
         budget=10,
-        bot=None,  # planning-stage initiative: no repo activity to maintain yet
+        bot=None,  # early-stage initiative: no repo activity to maintain yet
         decision=('d-iceberg', 'Iceberg over Delta for the lakehouse table format',
                   'The lakehouse is read by Spark, Trino and Flink, so the table format had to work well in all '
                   'three. Iceberg\'s engine-neutral catalog, hidden partitioning and snapshot isolation fit that '
@@ -365,9 +401,9 @@ INITIATIVES = [
                 ('bug', 'TTL eviction races leave stale features served', 'open', 'high', 3, ['online-store'], 's1'),
              ]),
         ],
-        sprints=[('s1', 'Sprint 8 — Freshness', 'p-019', -14, 0, 'active',
+        sprints=[('s1', 'Sprint 8 — Freshness', 'p-019', -9, 5, 'active',
                   'Every online feature group has a freshness SLA and an owner.')],
-        grants=[('s1', 'p-019', 12)],
+        grants=[('s1', 'p-019', 18)],
         budget=18,
         bot=dict(name='feature-drift-nightly', template='story', cron='45 3 * * *',
                  mission='Nightly drift check across production feature groups; summarize '
@@ -389,10 +425,10 @@ INITIATIVES = [
                 ('bug', 'Android back gesture conflicts with drawer swipe', 'open', 'medium', 2, ['android', 'gestures'], 's1'),
              ]),
         ],
-        sprints=[('s1', 'Sprint 9 — Routing', 'p-035', -14, 0, 'active',
+        sprints=[('s1', 'Sprint 9 — Routing', 'p-035', -9, 5, 'active',
                   'Every marketing link deep-links to a real screen.')],
-        grants=[('s1', 'p-035', 12)],
-        budget=15,
+        grants=[('s1', 'p-035', 15)],
+        budget=25,
         bot=dict(name='mobile-e2e-nightly', template='bug', cron='0 2 * * *',
                  mission='Run the end-to-end suite on both platforms nightly; quarantine flaky '
                          'specs with a linked issue and keep the suite under 20 minutes.',
@@ -413,10 +449,10 @@ INITIATIVES = [
                 ('bug', 'Dark-mode contrast regression on disabled states', 'open', 'medium', 2, ['a11y'], 's1'),
              ]),
         ],
-        sprints=[('s1', 'Sprint 8 — Token sync', 'p-038', -14, 0, 'active',
+        sprints=[('s1', 'Sprint 8 — Token sync', 'p-038', -9, 5, 'active',
                   'A token edit in Figma lands as a PR the same day.')],
-        grants=[('s1', 'p-038', 10)],
-        budget=15,
+        grants=[('s1', 'p-038', 20)],
+        budget=30,
         bot=dict(name='a11y-audit-weekly', template='bug', cron='0 8 * * 1',
                  mission='Weekly accessibility audit of the component library: contrast, '
                          'focus order, ARIA completeness; file one bug per component regression.',
@@ -443,7 +479,7 @@ INITIATIVES = [
         bot=dict(name='rag-index-health', template='bug', cron='0 9 * * *',
                  mission='Verify index freshness and citation link integrity; re-embed '
                          'documents whose sources changed.',
-                 per_run=0.20, per_day=0.60, runs=5, paused='initiative completed — bot parked'),
+                 per_run=0.20, per_day=0.60, runs=5),
         decision=None,
     ),
     dict(
@@ -460,9 +496,9 @@ INITIATIVES = [
                 ('bug', 'Quarterly access reviews stale for two service accounts', 'open', 'high', 3, ['access'], 's1'),
              ]),
         ],
-        sprints=[('s1', 'Sprint 9 — Collectors', 'p-055', -14, 0, 'active',
+        sprints=[('s1', 'Sprint 9 — Collectors', 'p-055', -9, 5, 'active',
                   'Change-management evidence collected without manual export.')],
-        grants=[('s1', 'p-055', 12)],
+        grants=[('s1', 'p-055', 18)],
         budget=18,
         bot=dict(name='compliance-evidence-cron', template='story', cron='0 6 * * 1-5',
                  mission='Weekday evidence sweep: snapshot IAM diffs, change-management '
@@ -484,10 +520,10 @@ INITIATIVES = [
                 ('bug', 'Breaking prop rename slipped past the semver gate', 'open', 'high', 3, ['semver'], 's1'),
              ]),
         ],
-        sprints=[('s1', 'Sprint 7 — Contracts', 'p-035', -14, 0, 'active',
+        sprints=[('s1', 'Sprint 7 — Contracts', 'p-035', -9, 5, 'active',
                   'Consumers upgrade via codemod, not by reading a changelog.')],
-        grants=[('s1', 'p-035', 10)],
-        budget=12,
+        grants=[('s1', 'p-035', 20)],
+        budget=30,
         bot=dict(name='api-contract-watch', template='bug', cron='30 7 * * 1-5',
                  mission='Weekday contract check: diff the published component API against '
                          'consumers, flag breaking drift, and verify codemods still apply.',
@@ -508,7 +544,7 @@ INITIATIVES = [
                 ('bug', 'Cold-start p99 breaches SLA after scale-to-zero', 'open', 'critical', 3, ['latency'], 's1'),
              ]),
         ],
-        sprints=[('s1', 'Sprint 9 — Queue-depth scaling', 'p-013', -14, 0, 'active',
+        sprints=[('s1', 'Sprint 9 — Queue-depth scaling', 'p-013', -9, 5, 'active',
                   'Scaling reacts to demand, not to a proxy metric.')],
         grants=[('s1', 'p-013', 15)],
         budget=20,
@@ -524,7 +560,7 @@ INITIATIVES = [
              'cold start against a 2.5-second p99 SLO. A warm floor of one replica per tier-1 model removes the '
              'cold start at about $380 a month per model. Baking weights into the image cuts the load to about '
              '20 seconds at no standing cost, but still breaches the SLO. Open until the teams that own the SLO '
-             'agree what a breach costs them.', 'open', None, 'e1'),
+             'agree what a breach costs them.', 'open', None, 'e1-b3'),
         ],
     ),
     dict(
@@ -543,9 +579,9 @@ INITIATIVES = [
         ],
         sprints=[('s1', 'Sprint 5 — Inventory', 'p-052', -7, 7, 'active',
                   'Every service maps to an identity or a documented exception.')],
-        grants=[('s1', 'p-052', 8)],
-        budget=10,
-        bot=None,  # planning-stage initiative
+        grants=[('s1', 'p-052', 12)],
+        budget=20,
+        bot=None,  # early-stage initiative: no repo activity to maintain yet
         decision=None,
     ),
 ]
@@ -1061,8 +1097,8 @@ def main() -> None:
         for gi, (skey, grantee, usd) in enumerate(ini['grants'], start=1):
             emit(
                 "INSERT INTO budget_grants (id, org_project_id, sprint_id, grantee_person_id, allocated_usd, granted_by, note) "
-                f"VALUES ('bg-{slug}-{gi}', '{pid}', '{sprint_ids[skey]}', '{grantee}', {usd}, 'u-release', "
-                f"'Sprint envelope granted by the release manager') ON CONFLICT (id) DO NOTHING"
+                f"VALUES ('bg-{slug}-{gi}', '{pid}', '{sprint_ids[skey]}', '{grantee}', {usd}, '{GRANTED_BY.get(slug, 'u-rachel')}', "
+                f"'Sprint envelope for the sprint steward') ON CONFLICT (id) DO NOTHING"
             )
 
         # Monthly allocation for the program-manager ledger.
@@ -1104,7 +1140,12 @@ def main() -> None:
                 sprint_sql = f"'{sprint_ids[skey]}'" if skey and skey in sprint_ids else 'NULL'
                 est = cost_for(pts)
                 created = RNG.randint(20, item_age)
-                if cstatus == 'done':
+                if cid in DONE_WITHOUT_DRAW:
+                    assert cstatus == 'done', cid
+                    completed = days(DONE_WITHOUT_DRAW[cid])
+                    created = max(created, DONE_WITHOUT_DRAW[cid] + 3)
+                    pr_sql = 'NULL, NULL'
+                elif cstatus == 'done':
                     drawn = RNG.randint(3, 18)  # always drawn, so the RNG stream is unchanged
                     # A done item finished inside its sprint's window: the draw is mapped
                     # into [window start, min(window end, yesterday)] rather than trusted.
@@ -1121,6 +1162,10 @@ def main() -> None:
                     completed = 'NULL'
                     pr_counter += RNG.randint(1, 7)
                     pr_sql = f"'{GH}/{ini['repo']}/pull/{pr_counter}', 'open'"
+                elif cid in PR_WITHOUT_DRAW:
+                    completed = 'NULL'
+                    number, pr_status = PR_WITHOUT_DRAW[cid]
+                    pr_sql = f"'{GH}/{ini['repo']}/pull/{number}', '{pr_status}'"
                 else:
                     completed = 'NULL'
                     pr_sql = 'NULL, NULL'
@@ -1153,6 +1198,8 @@ def main() -> None:
             # it is then a contributor, never the decider of their own escalation.
             decider = rest[0] if rest else ini['owner']
             resolved = days(RNG.randint(5, 20)) if status == 'resolved' else 'NULL'
+            if status == 'resolved' and did in DECISION_DECIDED_DAYS:
+                resolved = days(DECISION_DECIDED_DAYS[did])
             escalated = days(RNG.randint(1, 5)) if status == 'escalated' else 'NULL'
             # A decision has a decided_at exactly when it has been decided. The
             # graph's decision list orders on it, so leaving it NULL on a
@@ -1253,7 +1300,7 @@ def main() -> None:
                 emit(
                     "INSERT INTO agent_jobs (id, kind, title, payload, status, priority, attempts, max_attempts, result, error, created_by, created_at, finished_at, bot_id) "
                     f"VALUES ('{jid}', 'devbox:task', '{q(bot['name'])}', "
-                    f"'{{\"prompt\": \"{q(bot['mission'])[:120]}\", \"requiresReview\": true, \"botId\": \"{bid}\", \"model\": \"us.amazon.nova-lite-v1:0\"}}'::jsonb, "
+                    f"'{{\"prompt\": \"{q(prompt_excerpt(bot['mission']))}\", \"requiresReview\": true, \"botId\": \"{bid}\", \"model\": \"us.amazon.nova-lite-v1:0\"}}'::jsonb, "
                     f"'{job_status}', 100, 1, 1, {result}, {job_error}, "
                     f"'scheduler', {days(age)}, {end}, '{bid}') "
                     "ON CONFLICT (id) DO NOTHING"

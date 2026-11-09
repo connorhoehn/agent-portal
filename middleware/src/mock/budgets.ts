@@ -35,22 +35,22 @@ import type { MockBudget, MockGrantSeed } from '../providers/budgets.js';
 
 function seededAllocations(): MockBudget[] {
   return [
-    { id: 'p-observability',     name: 'Observability Platform',   allocated: 95 },
+    { id: 'p-observability',     name: 'Observability Platform',   allocated: 100 },
     { id: 'p-llm-platform',      name: 'LLM Application Platform', allocated: 85 },
     // Covers Nora DaSilva's (p-004) envelope on spr-auth-s2 alongside p-051's —
     // sme.md defect #1.
-    // Mia Singh (u-mia, program-owner) holds the money for this initiative: her
-    // name is the one on its allocation, which is what the budget story shows.
-    { id: 'p-auth-migration',    name: 'Auth Migration',           allocated: 75, updatedBy: 'u-mia' },
-    { id: 'p-cost-opt',          name: 'Cost Optimization',        allocated: 45 },
+    // Vera Green (u-vera, org-leader) owns this initiative and set its
+    // allocation herself, so hers is the name on it.
+    { id: 'p-auth-migration',    name: 'Auth Migration',           allocated: 75, updatedBy: 'u-vera' },
+    { id: 'p-cost-opt',          name: 'Cost Optimization',        allocated: 50 },
     // p-soc2 / p-feature-store / p-mobile-redesign used to derive $0: they hold
     // an allocation, but the mock fleet mirrored only 5 of the seed's 12 bots, so
     // there were no rows to sum. Honest, and useless — an allocation judged
     // against an empty maintenance floor tells a reader nothing. All twelve
     // seeded bots and their run histories are in mock/bots.ts now, so these
     // three derive the seed's own numbers.
-    { id: 'p-soc2',              name: 'SOC2 Compliance',          allocated: 18 },
-    { id: 'p-feature-store',     name: 'ML Feature Store',         allocated: 18 },
+    { id: 'p-soc2',              name: 'SOC2 Compliance',          allocated: 25 },
+    { id: 'p-feature-store',     name: 'ML Feature Store',         allocated: 25 },
     // DELIBERATE DIVERGENCE. schema/seed_program.sql allocates $20/month here;
     // this row carries null so that an initiative SPENDING WITH NO ALLOCATION —
     // the program-manager's blind spot, and the whole reason the ledger unions
@@ -62,17 +62,18 @@ function seededAllocations(): MockBudget[] {
     { id: 'p-inference-platform', name: 'Inference Platform',      allocated: null },
     // Mia Singh's (p-030, program-owner) own initiative — program-owner.md
     // defect #1. Every dollar here is cron maintenance (the bot is parked
-    // awaiting repo provisioning), so it is the floor, not feature spend.
-    { id: 'p-mobile-redesign',   name: 'Mobile App Redesign',      allocated: 15 },
+    // awaiting repo provisioning), so it is the floor, not feature spend. Mia
+    // set this allocation herself (program-owner holds ManageBudgets).
+    { id: 'p-mobile-redesign',   name: 'Mobile App Redesign',      allocated: 25, updatedBy: 'u-mia' },
     // The four initiatives that came with the rest of the seed's bot fleet.
     // They are here because they now derive spend, and a ledger that shows an
     // initiative's money must show the allocation that money is judged against:
     // Aurora's `ids` CTE is the UNION of "has an allocation" and "has spend this
     // period", so an initiative spending here and missing from this list would
     // appear on the real ledger and not the mock one.
-    { id: 'p-realtime-analytics', name: 'Real-time Analytics Pipeline', allocated: 20 },
-    { id: 'p-design-v3',         name: 'Design System v3',         allocated: 15 },
-    { id: 'p-design-system-api', name: 'Design System API',        allocated: 15 },
+    { id: 'p-realtime-analytics', name: 'Real-time Analytics Pipeline', allocated: 30 },
+    { id: 'p-design-v3',         name: 'Design System v3',         allocated: 30 },
+    { id: 'p-design-system-api', name: 'Design System API',        allocated: 30 },
     // A COMPLETED initiative that still costs ~$0.10/run to keep indexed — the
     // clearest case docs/program-operating-model.md makes: maintenance is the
     // floor of owning something, not of building it.
@@ -89,7 +90,7 @@ function seededAllocations(): MockBudget[] {
     // exactly what the real query returns for them. p-zero-trust is the sharper
     // case: the mock sprint calendar carries spr-zt-s1, so it was an initiative
     // with a live sprint on /iq/sprints and no row on the ledger at all.
-    { id: 'p-zero-trust',        name: 'Zero Trust Network',       allocated: 10 },
+    { id: 'p-zero-trust',        name: 'Zero Trust Network',       allocated: 20 },
     { id: 'p-data-lake',         name: 'Data Lake Migration',      allocated: 15 },
   ];
 }
@@ -116,17 +117,26 @@ export const initiativeBudgets = defineFixture<MockBudget>({
 
 // ─── Sprint envelopes (budget_grants) ────────────────────────────────────────
 
+// Who granted each initiative's envelopes — schema/seeds/generate_program_seed.py's
+// GRANTED_BY: the owner where the owner holds ManageBudgets (Vera on Auth, Mia on
+// Mobile), the release manager on Observability and Cost Optimization (their
+// owners hold the sme role, which cannot grant), the program operator elsewhere.
+const GRANTED_BY: Record<string, string> = {
+  'p-observability': 'u-release', 'p-auth-migration': 'u-vera', 'p-cost-opt': 'u-release', 'p-mobile-redesign': 'u-mia',
+};
+
 function seededGrants(): MockGrantSeed[] {
   const grant = (
     id: string, orgProjectId: string, granteePersonId: string, granteeName: string,
     sprintId: string, sprintName: string, sprintStatus: 'active' | 'done', allocatedUsd: number,
   ): MockGrantSeed => ({
-    id, orgProjectId, granteePersonId, granteeName, sprintId, sprintName, sprintStatus, allocatedUsd, grantedBy: 'u-release',
+    id, orgProjectId, granteePersonId, granteeName, sprintId, sprintName, sprintStatus, allocatedUsd,
+    grantedBy: GRANTED_BY[orgProjectId] ?? 'u-rachel',
   });
   return [
     grant('bg-obs-1', 'p-observability', 'p-008', 'Layla Hassan', 'spr-obs-s1', 'Sprint 9 — Ingest hardening', 'done', 25),
     grant('bg-obs-2', 'p-observability', 'p-011', 'Eli Garcia', 'spr-obs-s2', 'Sprint 10 — Burn-rate alerts', 'done', 20),
-    grant('bg-obs-3', 'p-observability', 'p-008', 'Layla Hassan', 'spr-obs-s3', 'Sprint 11 — Span metrics + decom', 'active', 30),
+    grant('bg-obs-3', 'p-observability', 'p-008', 'Layla Hassan', 'spr-obs-s3', 'Sprint 11 — Span metrics + decom', 'active', 35),
     grant('bg-llm-1', 'p-llm-platform', 'p-042', 'Katya Petrov', 'spr-llm-s1', 'Sprint 8 — Prompt registry', 'done', 30),
     grant('bg-llm-2', 'p-llm-platform', 'p-013', 'Caleb Turner', 'spr-llm-s2', 'Sprint 9 — Judge + evals', 'active', 35),
     grant('bg-auth-1', 'p-auth-migration', 'p-051', 'Simone Chang', 'spr-auth-s1', 'Sprint 9 — OIDC core', 'done', 25),
@@ -138,17 +148,19 @@ function seededGrants(): MockGrantSeed[] {
     // uniqueness constraint) and mirrors bg-auth-3 in the seed exactly.
     grant('bg-auth-3', 'p-auth-migration', 'p-004', 'Nora DaSilva', 'spr-auth-s2', 'Sprint 10 — Session hygiene', 'active', 15),
     grant('bg-cost-1', 'p-cost-opt', 'p-011', 'Eli Garcia', 'spr-cost-s1', 'Sprint 9 — Floors and orphans', 'done', 15),
-    grant('bg-cost-2', 'p-cost-opt', 'p-017', 'Daniel Chang', 'spr-cost-s2', 'Sprint 10 — Attribution', 'active', 20),
-    grant('bg-rta-1', 'p-realtime-analytics', 'p-019', 'Camille Dubois', 'spr-rta-s1', 'Sprint 9 — Checkpoint + schema', 'active', 15),
-    grant('bg-lake-1', 'p-data-lake', 'p-017', 'Daniel Chang', 'spr-lake-s1', 'Sprint 6 — Format decision', 'active', 10),
-    grant('bg-fs-1', 'p-feature-store', 'p-019', 'Camille Dubois', 'spr-fs-s1', 'Sprint 8 — Freshness', 'active', 12),
+    grant('bg-cost-2', 'p-cost-opt', 'p-017', 'Daniel Novak', 'spr-cost-s2', 'Sprint 10 — Attribution', 'active', 25),
+    grant('bg-rta-1', 'p-realtime-analytics', 'p-019', 'Camille Dubois', 'spr-rta-s1', 'Sprint 9 — Checkpoint + schema', 'active', 22),
+    grant('bg-lake-1', 'p-data-lake', 'p-017', 'Daniel Novak', 'spr-lake-s1', 'Sprint 6 — Format decision', 'active', 10),
+    grant('bg-fs-1', 'p-feature-store', 'p-019', 'Camille Dubois', 'spr-fs-s1', 'Sprint 8 — Freshness', 'active', 18),
     // bg-mob-1 — the sprint envelope on Mia Singh's own initiative.
-    grant('bg-mob-1', 'p-mobile-redesign', 'p-035', 'Ben Okafor', 'spr-mob-s1', 'Sprint 9 — Routing', 'active', 12),
-    grant('bg-ds-1', 'p-design-v3', 'p-038', 'Isabel Vasquez', 'spr-ds-s1', 'Sprint 8 — Token sync', 'active', 10),
-    grant('bg-soc2-1', 'p-soc2', 'p-055', 'Joy Chen', 'spr-soc2-s1', 'Sprint 9 — Collectors', 'active', 12),
-    grant('bg-dsapi-1', 'p-design-system-api', 'p-035', 'Ben Okafor', 'spr-dsapi-s1', 'Sprint 7 — Contracts', 'active', 10),
+    grant('bg-mob-1', 'p-mobile-redesign', 'p-035', 'Ben Okafor', 'spr-mob-s1', 'Sprint 9 — Routing', 'active', 15),
+    grant('bg-ds-1', 'p-design-v3', 'p-038', 'Isabel Vasquez', 'spr-ds-s1', 'Sprint 8 — Token sync', 'active', 20),
+    grant('bg-soc2-1', 'p-soc2', 'p-055', 'Joy Chen', 'spr-soc2-s1', 'Sprint 9 — Collectors', 'active', 18),
+    grant('bg-dsapi-1', 'p-design-system-api', 'p-035', 'Ben Okafor', 'spr-dsapi-s1', 'Sprint 7 — Contracts', 'active', 20),
+    // Deliberately over: the sprint's planned work ($16.34) is more than this
+    // envelope, on the initiative that is also spending with no allocation.
     grant('bg-inf-1', 'p-inference-platform', 'p-013', 'Caleb Turner', 'spr-inf-s1', 'Sprint 9 — Queue-depth scaling', 'active', 15),
-    grant('bg-zt-1', 'p-zero-trust', 'p-052', 'Diego Ortiz', 'spr-zt-s1', 'Sprint 5 — Inventory', 'active', 8),
+    grant('bg-zt-1', 'p-zero-trust', 'p-052', 'Diego Ortiz', 'spr-zt-s1', 'Sprint 5 — Inventory', 'active', 12),
   ];
 }
 

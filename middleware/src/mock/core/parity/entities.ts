@@ -206,18 +206,18 @@ const contributionCollisions = (column: string): Record<string, string> => {
 };
 
 /**
- * The eleven bots dev:mock turns on. schema/seed_program.sql parks all twelve
+ * The twelve bots dev:mock turns on. schema/seed_program.sql parks all twelve
  * (initBotScheduler registers every enabled cron bot at boot, and the seeded
  * repositories do not exist on a real cluster). Offline there is no cron, and
  * a roster reading "0 enabled" above runs that finished this morning cannot be
- * demoed, so mock/bots.ts enables every bot whose initiative is alive. Only
- * rag-index-health (its initiative shipped) stays parked, as the seed has it.
+ * demoed, so mock/bots.ts enables every bot — rag-index-health too, whose
+ * shipped initiative it keeps maintained.
  */
 const LIVE_MOCK_BOTS = [
   '32970d0a-e28e-5100-8fb0-a5cbb87dac99', '697c6a52-72e2-57f7-8e44-062ab9935336', 'affd22b0-b348-5436-9eff-2b8d5206d601',
   '1edd9a68-e432-5dc2-b89d-93867bd090da', '4448041c-0350-5d7f-930e-7dbcd87a149f', '15a4eb8e-743b-57f8-835b-3a7aac701702',
   '88d1fd78-0618-5431-865e-027db71adb27', '5168695c-fa7e-5ca0-9218-ffa4453947a9', 'a0a4b025-3e67-5004-8b8a-05a3d4f2028d',
-  '28006587-cf6f-5a60-a68c-6a574ba7cb5d', '402eb3d6-0cf2-55a4-b5b5-deb9be35b01f',
+  '28006587-cf6f-5a60-a68c-6a574ba7cb5d', '402eb3d6-0cf2-55a4-b5b5-deb9be35b01f', 'f595b10b-5f52-50d0-81a0-9117e9334fb4',
 ];
 const LIVE_MOCK_BOTS_DRIFT = (column: string): Record<string, string> =>
   Object.fromEntries(LIVE_MOCK_BOTS.map((id) => [id,
@@ -727,11 +727,7 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
       {
         seed: 'paused_reason',
         mock: (b: { pausedReason: string | null }) => b.pausedReason,
-        knownDrift: {
-          ...LIVE_MOCK_BOTS_DRIFT('paused_reason'),
-          'f595b10b-5f52-50d0-81a0-9117e9334fb4':
-            'DEFECT: rag-index-health. schema/seed_program.sql:326 parks it with \'initiative completed — bot parked\' (p-rag-search is done); providers/bots.ts overwrites that with the fleet-wide \'awaiting repo provisioning — un-pause once the repository exists\'. The blanket reason is right for the bots the mock parks itself and wrong for the one the seed had already parked, for a different reason. Fix belongs in providers/bots.ts.',
-        },
+        knownDrift: LIVE_MOCK_BOTS_DRIFT('paused_reason'),
       },
     ],
   },

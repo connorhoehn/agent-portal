@@ -59,19 +59,19 @@ INSERT INTO projects (id, name, status) VALUES ('p-auth-migration', 'Auth Migrat
 INSERT INTO projects (id, name, status) VALUES ('p-observability', 'Observability Platform', 'in_progress');
 INSERT INTO projects (id, name, status) VALUES ('p-cost-opt', 'Cost Optimization', 'in_progress');
 INSERT INTO projects (id, name, status) VALUES ('p-realtime-analytics', 'Real-time Analytics Pipeline', 'in_progress');
-INSERT INTO projects (id, name, status) VALUES ('p-data-lake', 'Data Lake Migration', 'planning');
+INSERT INTO projects (id, name, status) VALUES ('p-data-lake', 'Data Lake Migration', 'in_progress');
 INSERT INTO projects (id, name, status) VALUES ('p-feature-store', 'ML Feature Store', 'in_progress');
 INSERT INTO projects (id, name, status) VALUES ('p-mobile-redesign', 'Mobile App Redesign', 'in_progress');
 INSERT INTO projects (id, name, status) VALUES ('p-design-v3', 'Design System v3', 'in_progress');
 INSERT INTO projects (id, name, status) VALUES ('p-llm-platform', 'LLM Application Platform', 'in_progress');
 INSERT INTO projects (id, name, status) VALUES ('p-rag-search', 'RAG Knowledge Search', 'completed');
 INSERT INTO projects (id, name, status) VALUES ('p-soc2', 'SOC2 Compliance', 'in_progress');
-INSERT INTO projects (id, name, status) VALUES ('p-zero-trust', 'Zero Trust Network', 'planning');
+INSERT INTO projects (id, name, status) VALUES ('p-zero-trust', 'Zero Trust Network', 'in_progress');
 -- Decisions. ONE concept, one column set — see the comment on the table in
 -- schema/orgiq_schema.sql. These seven are the org graph's settled calls: all
 -- `resolved`, all carrying the date they were decided, and each linked to the
 -- initiative it was raised against when there is one. `project_id NULL` is not
--- "unknown", it is org-wide: d-aurora and d-k8s are platform standards that no
+-- "unknown", it is org-wide: d-k8s is a platform standard that no
 -- single initiative owns, and the Decisions surface must be able to say so.
 --
 -- The column list here is deliberately identical to the one
@@ -92,13 +92,13 @@ INSERT INTO projects (id, name, status) VALUES ('p-zero-trust', 'Zero Trust Netw
 -- silently lost — the Data Lake initiative's one decision was dead SQL, and
 -- its Decisions tab was empty against Aurora while the mock showed it. It now
 -- lives once, in the program seed, next to the epic it blocks.)
-INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id, resolution, decided_by, options) VALUES ('d-aurora', 'Adopt Aurora over Neptune', 'The org graph needs graph-shaped questions (who worked with whom, paths across teams) joined to projects and decisions. Neptune Analytics answered the graph questions well but meant a second database, a second query language and a separate backup story. Aurora PostgreSQL with relational edge tables and recursive CTEs answered every query we had under 200 ms p95 on the full graph. We gave up native graph algorithms, so centrality scores run as a nightly batch job instead of a query.', 'resolved', NULL, NULL, (NOW() - INTERVAL '147 days')::date, NULL, NOW() - INTERVAL '147 days', NULL, 'Aurora PostgreSQL with relational edge tables and recursive CTEs, not Neptune, with centrality scores as a nightly batch job.', 'p-046', NULL);
+INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id, resolution, decided_by, options) VALUES ('d-aurora', 'Service dependency map in Postgres, not a graph database', 'Grouping duplicate alerts by the failing dependency needs a map of which services call which. A graph database answered the path questions well but meant a second datastore, a second query language and a separate backup story for one feature. The map lives in Postgres as an edge table beside the service catalog, and a recursive query lists everything downstream of a failing dependency in under 50 ms for the 212 edges seen in traces. Edges for batch jobs and queues that emit no spans are declared by their owners in the same table.', 'resolved', 'p-observability', NULL, (NOW() - INTERVAL '20 days')::date, NULL, NOW() - INTERVAL '20 days', NULL, 'The service dependency map lives in Postgres as an edge table beside the service catalog, queried recursively, not in a graph database.', 'p-004', NULL);
 INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id, resolution, decided_by, options) VALUES ('d-k8s', 'Migrate to Kubernetes from ECS', 'Twelve teams ran services on ECS through three different deployment pipelines, and the autoscalers, operators and mesh they wanted were Kubernetes-native. We standardised on EKS with one golden-path Helm chart and Karpenter for node provisioning. The cost is a cluster to operate: a version upgrade every quarter and a platform rotation on call for it. Batch jobs that need no mesh stay on ECS.', 'resolved', NULL, NULL, (NOW() - INTERVAL '183 days')::date, NULL, NOW() - INTERVAL '183 days', NULL, 'Standardise on EKS with one golden-path Helm chart and Karpenter for node provisioning.', 'p-013', NULL);
-INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id, resolution, decided_by, options) VALUES ('d-nova', 'Standardize on Nova Pro', 'Each agent team had picked its own model, so guardrails, evaluation and cost reporting differed per team. We made Nova Pro the default for every agent, with Nova Lite allowed for routing and classification steps that pass the same golden set. One default means some tasks overpay, so the model stays a per-agent override reviewed against the golden set, not a hard rule.', 'resolved', 'p-llm-platform', NULL, (NOW() - INTERVAL '107 days')::date, NULL, NOW() - INTERVAL '107 days', NULL, 'Nova Pro is the default for every agent, with Nova Lite allowed for routing and classification steps that pass the same golden set.', 'p-043', NULL);
-INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id, resolution, decided_by, options) VALUES ('d-legacy-auth', 'Sunset legacy auth service', 'The v1 auth gateway kept sessions in memory, could not rotate its signing key without signing everyone out, and failed its last penetration test on session fixation. We decided to move every service to Cognito with the BFF holding tokens server-side. The SAML shim is deleted once the last tenant has cut over, not kept as a fallback, because a fallback means patching two login paths indefinitely.', 'resolved', 'p-auth-migration', NULL, (NOW() - INTERVAL '188 days')::date, NULL, NOW() - INTERVAL '188 days', NULL, 'Move every service to Cognito with the BFF holding tokens server-side, and delete the SAML shim once the last tenant has cut over.', 'p-054', NULL);
-INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id, resolution, decided_by, options) VALUES ('d-otel', 'Adopt OpenTelemetry', 'Services traced with three different libraries, and no trace crossed a service boundary intact. We adopted OpenTelemetry SDKs with W3C trace context everywhere, using the AWS distribution where the runtime expects it, and export OTLP to X-Ray and the metrics backend. The cost is a migration per service and a collector fleet to run. The payoff is one trace from the browser to the database.', 'resolved', 'p-observability', NULL, (NOW() - INTERVAL '134 days')::date, NULL, NOW() - INTERVAL '134 days', NULL, 'Adopt OpenTelemetry SDKs with W3C trace context everywhere, exporting OTLP to X-Ray and the metrics backend.', 'p-013', NULL);
-INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id, resolution, decided_by, options) VALUES ('d-react-19', 'React 19 upgrade timeline', 'React 19 removes legacy context and string refs, and nine design-system components still used them. The design system upgrades first and publishes on its next channel, then each app moves once its test suite passes against it. Apps stay on React 18 with the previous design-system major until then, so two majors are supported for one quarter.', 'resolved', 'p-design-v3', NULL, (NOW() - INTERVAL '126 days')::date, NULL, NOW() - INTERVAL '126 days', NULL, 'The design system upgrades to React 19 first, then each app moves once its test suite passes against it.', 'p-031', NULL);
-INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id, resolution, decided_by, options) VALUES ('d-vectordb', 'Vector DB vendor selection', 'Retrieval needs about 2 million 1,024-dimension embeddings filtered by team and document type. A standalone vector database was faster at 50 million vectors but meant another service, another copy of access control and a sync job. pgvector with an HNSW index inside Aurora returns the top 10 in about 30 ms at our size and keeps embeddings in the same transaction as their documents. We revisit above 20 million vectors.', 'resolved', 'p-rag-search', NULL, (NOW() - INTERVAL '141 days')::date, NULL, NOW() - INTERVAL '141 days', NULL, 'pgvector with an HNSW index inside Aurora, revisited above 20 million vectors.', 'p-010', NULL);
+INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id, resolution, decided_by, options) VALUES ('d-nova', 'Standardize on Nova Pro', 'Each agent team had picked its own model, so guardrails, evaluation and cost reporting differed per team. We made Nova Pro the default for every agent, with Nova Lite allowed for routing and classification steps that pass the same golden set. One default means some tasks overpay, so the model stays a per-agent override reviewed against the golden set, not a hard rule.', 'resolved', 'p-llm-platform', NULL, (NOW() - INTERVAL '107 days')::date, NULL, NOW() - INTERVAL '107 days', NULL, 'Nova Pro is the default for every agent, with Nova Lite allowed for routing and classification steps that pass the same golden set.', 'p-047', NULL);
+INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id, resolution, decided_by, options) VALUES ('d-legacy-auth', 'Sunset legacy auth service', 'The v1 auth gateway kept sessions in memory, could not rotate its signing key without signing everyone out, and failed its last penetration test on session fixation. We decided to move every service to Cognito with the BFF holding tokens server-side. The SAML shim is deleted once the last tenant has cut over, not kept as a fallback, because a fallback means patching two login paths indefinitely.', 'resolved', 'p-auth-migration', NULL, (NOW() - INTERVAL '188 days')::date, NULL, NOW() - INTERVAL '188 days', NULL, 'Move every service to Cognito with the BFF holding tokens server-side, and delete the SAML shim once the last tenant has cut over.', 'p-002', NULL);
+INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id, resolution, decided_by, options) VALUES ('d-otel', 'Adopt OpenTelemetry', 'Services traced with three different libraries, and no trace crossed a service boundary intact. We adopted OpenTelemetry SDKs with W3C trace context everywhere, using the AWS distribution where the runtime expects it, and export OTLP to X-Ray and the metrics backend. The cost is a migration per service and a collector fleet to run. The payoff is one trace from the browser to the database.', 'resolved', 'p-observability', NULL, (NOW() - INTERVAL '134 days')::date, NULL, NOW() - INTERVAL '134 days', NULL, 'Adopt OpenTelemetry SDKs with W3C trace context everywhere, exporting OTLP to X-Ray and the metrics backend.', 'p-004', NULL);
+INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id, resolution, decided_by, options) VALUES ('d-react-19', 'React 19 upgrade timeline', 'React 19 removes legacy context and string refs, and nine design-system components still used them. The design system upgrades first and publishes on its next channel, then each app moves once its test suite passes against it. Apps stay on React 18 with the previous design-system major until then, so two majors are supported for one quarter.', 'resolved', 'p-design-v3', NULL, (NOW() - INTERVAL '126 days')::date, NULL, NOW() - INTERVAL '126 days', NULL, 'The design system upgrades to React 19 first, then each app moves once its test suite passes against it.', 'p-035', NULL);
+INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id, resolution, decided_by, options) VALUES ('d-vectordb', 'Vector DB vendor selection', 'Retrieval needs about 2 million 1,024-dimension embeddings filtered by team and document type. A standalone vector database was faster at 50 million vectors but meant another service, another copy of access control and a sync job. pgvector with an HNSW index inside Aurora returns the top 10 in about 30 ms at our size and keeps embeddings in the same transaction as their documents. We revisit above 20 million vectors.', 'resolved', 'p-rag-search', NULL, (NOW() - INTERVAL '141 days')::date, NULL, NOW() - INTERVAL '141 days', NULL, 'pgvector with an HNSW index inside Aurora, revisited above 20 million vectors.', 'p-048', NULL);
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-001', 'Theo Chang', 'theo.chang@orgiq.example', 'Engineer', 'Platform Engineering', 64.46, 91.55, 79.36, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-002', 'Vera Green', 'vera.green@orgiq.example', 'Principal Engineer', 'Platform Engineering', 93.4, 97.8, 95.82, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-003', 'Owen Brooks', 'owen.brooks@orgiq.example', 'Senior Engineer', 'Platform Engineering', 47.79, 77.32, 64.03, NOW());
@@ -115,16 +115,16 @@ INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_scor
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-014', 'Grace Singh', 'grace.singh@orgiq.example', 'Senior Engineer', 'Platform Engineering', 24.7, 71.69, 50.54, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-015', 'Raj Mehta', 'raj.mehta@orgiq.example', 'Data Engineer', 'Data Platform', 80.72, 49.64, 63.63, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-016', 'Tara Wright', 'tara.wright@orgiq.example', 'Data Analyst', 'Data Platform', 60.44, 62.03, 61.31, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-017', 'Daniel Chang', 'daniel.chang@orgiq.example', 'Staff Data Engineer', 'Data Platform', 100.0, 78.91, 88.4, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-018', 'Yusuf Ahmed', 'yusuf.ahmed@orgiq.example', 'Data Engineer', 'Data Platform', 52.81, 72.12, 63.43, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-017', 'Daniel Novak', 'daniel.novak@orgiq.example', 'Staff Data Engineer', 'Data Platform', 100.0, 78.91, 88.4, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-018', 'Yusuf Karim', 'yusuf.karim@orgiq.example', 'Data Engineer', 'Data Platform', 52.81, 72.12, 63.43, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-019', 'Camille Dubois', 'camille.dubois@orgiq.example', 'Senior Data Engineer', 'Data Platform', 89.76, 89.79, 89.78, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-020', 'Henry Hassan', 'henry.hassan@orgiq.example', 'Senior Engineer', 'Data Platform', 93.37, 63.85, 77.13, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-021', 'James Thompson', 'james.thompson@orgiq.example', 'Data Engineer', 'Data Platform', 39.96, 55.28, 48.39, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-021', 'James Whitaker', 'james.whitaker@orgiq.example', 'Data Engineer', 'Data Platform', 39.96, 55.28, 48.39, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-022', 'Sarah Thompson', 'sarah.thompson@orgiq.example', 'Senior Engineer', 'Data Platform', 66.3, 74.1, 70.59, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-023', 'Hiro Green', 'hiro.green@orgiq.example', 'Data Analyst', 'Data Platform', 33.53, 57.99, 46.98, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-024', 'Andre Williams', 'andre.williams@orgiq.example', 'Staff Engineer', 'Data Platform', 84.94, 82.6, 83.65, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-025', 'Anika Mehta', 'anika.mehta@orgiq.example', 'Principal Engineer', 'Data Platform', 27.71, 55.8, 43.16, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-026', 'Mateo Green', 'mateo.green@orgiq.example', 'Senior UX Researcher', 'Product', 99.4, 54.26, 74.57, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-026', 'Mateo Ruiz', 'mateo.ruiz@orgiq.example', 'Senior UX Researcher', 'Product', 99.4, 54.26, 74.57, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-027', 'Sasha Kim', 'sasha.kim@orgiq.example', 'UX Researcher', 'Product', 54.62, 59.0, 57.03, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-028', 'Felix Rivera', 'felix.rivera@orgiq.example', 'UX Researcher', 'Product', 71.2, 66.4, 68.56, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-029', 'Ezra Park', 'ezra.park@orgiq.example', 'Senior PM', 'Product', 52.21, 42.6, 46.92, NOW());
@@ -141,7 +141,7 @@ INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_scor
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-040', 'Jordan O''Brien', 'jordan.obrien@orgiq.example', 'Senior Designer', 'Design Systems', 50.8, 37.84, 43.67, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-041', 'Rosa Ahmed', 'rosa.ahmed@orgiq.example', 'ML Engineer', 'ML / AI', 61.04, 77.32, 69.99, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-042', 'Katya Petrov', 'katya.petrov@orgiq.example', 'Staff ML Engineer', 'ML / AI', 82.33, 70.06, 75.58, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-043', 'Bria Petrov', 'bria.petrov@orgiq.example', 'Staff ML Engineer', 'ML / AI', 60.44, 89.04, 76.17, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-043', 'Bria Okonkwo', 'bria.okonkwo@orgiq.example', 'Staff ML Engineer', 'ML / AI', 60.44, 89.04, 76.17, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-044', 'Zoe Thompson', 'zoe.thompson@orgiq.example', 'Staff Engineer', 'ML / AI', 36.95, 51.92, 45.18, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-045', 'Noah Vasquez', 'noah.vasquez@orgiq.example', 'Senior Engineer', 'ML / AI', 72.89, 77.55, 75.45, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-046', 'Vikram Patel', 'vikram.patel@orgiq.example', 'Senior Engineer', 'ML / AI', 60.44, 58.4, 59.32, NOW());
@@ -152,7 +152,7 @@ INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_scor
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-051', 'Simone Chang', 'simone.chang@orgiq.example', 'Senior Security Engineer', 'Security', 94.18, 88.5, 91.06, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-052', 'Diego Ortiz', 'diego.ortiz@orgiq.example', 'Security Lead', 'Security', 60.24, 81.04, 71.68, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-053', 'Ingrid Larsen', 'ingrid.larsen@orgiq.example', 'Engineer', 'Security', 51.2, 40.71, 45.43, NOW());
-INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-054', 'Kevin Garcia', 'kevin.garcia@orgiq.example', 'Senior Engineer', 'Security', 75.3, 85.78, 81.06, NOW());
+INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-054', 'Kevin Adeyemi', 'kevin.adeyemi@orgiq.example', 'Senior Engineer', 'Security', 75.3, 85.78, 81.06, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-055', 'Joy Chen', 'joy.chen@orgiq.example', 'Senior Security Engineer', 'Security', 70.08, 51.84, 60.05, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-056', 'Hugo Lee', 'hugo.lee@orgiq.example', 'Security Engineer', 'Security', 55.42, 35.2, 44.3, NOW());
 INSERT INTO team_memberships (person_id, team_id, role) VALUES ('p-001', 't-platform', 'Engineer');
@@ -215,18 +215,19 @@ INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-001',
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-001', 'sk-docker', 0.58, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-001', 'sk-aws', 0.98, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-001', 'sk-data-modeling', 0.96, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-002', 'sk-zero-trust', 0.62, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-002', 'sk-typescript', 0.62, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-002', 'sk-data-modeling', 0.78, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-002', 'sk-iam', 0.95, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-002', 'sk-aws-security', 0.9, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-002', 'sk-zero-trust', 0.85, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-002', 'sk-typescript', 0.8, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-002', 'sk-go', 0.75, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-003', 'sk-zero-trust', 0.83, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-003', 'sk-go', 0.97, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-003', 'sk-iam', 0.58, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-004', 'sk-aws-security', 0.61, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-004', 'sk-iam', 0.67, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-004', 'sk-linux-internals', 0.79, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-004', 'sk-rag', 0.62, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-004', 'sk-react', 0.61, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-004', 'sk-rust', 0.54, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-004', 'sk-observability', 0.95, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-004', 'sk-iam', 0.9, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-004', 'sk-go', 0.85, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-004', 'sk-kubernetes', 0.8, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-004', 'sk-aws', 0.75, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-005', 'sk-terraform', 0.83, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-005', 'sk-go', 0.61, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-005', 'sk-aws', 0.57, 'seed');
@@ -241,11 +242,11 @@ INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-007',
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-007', 'sk-ci-cd', 0.7, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-007', 'sk-aws', 0.53, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-007', 'sk-kubernetes', 0.69, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-008', 'sk-penetration-testing', 0.53, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-008', 'sk-docker', 0.74, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-008', 'sk-terraform', 0.96, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-008', 'sk-zero-trust', 0.77, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-008', 'sk-python', 0.53, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-008', 'sk-observability', 0.95, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-008', 'sk-terraform', 0.9, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-008', 'sk-kubernetes', 0.85, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-008', 'sk-aws', 0.8, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-008', 'sk-python', 0.75, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-009', 'sk-aws', 0.79, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-009', 'sk-linux-internals', 0.52, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-010', 'sk-aws-security', 0.62, 'seed');
@@ -260,11 +261,11 @@ INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-012',
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-012', 'sk-observability', 0.64, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-012', 'sk-aws-security', 0.61, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-012', 'sk-python', 0.67, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-013', 'sk-service-mesh', 0.82, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-013', 'sk-docker', 0.63, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-013', 'sk-go', 0.87, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-013', 'sk-iam', 0.78, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-013', 'sk-aws', 0.71, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-013', 'sk-go', 0.95, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-013', 'sk-kubernetes', 0.9, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-013', 'sk-observability', 0.85, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-013', 'sk-llms', 0.8, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-013', 'sk-aws', 0.75, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-014', 'sk-typescript', 0.71, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-014', 'sk-aws', 0.52, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-015', 'sk-airflow', 0.99, 'seed');
@@ -317,12 +318,9 @@ INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-024',
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-024', 'sk-ci-cd', 0.67, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-025', 'sk-aws', 0.71, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-025', 'sk-linux-internals', 0.67, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-026', 'sk-accessibility', 0.97, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-026', 'sk-react', 0.65, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-026', 'sk-terraform', 0.69, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-026', 'sk-embeddings', 0.95, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-026', 'sk-zero-trust', 0.92, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-026', 'sk-aws-security', 0.77, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-026', 'sk-user-research', 0.95, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-026', 'sk-figma', 0.9, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-026', 'sk-accessibility', 0.85, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-027', 'sk-react', 0.96, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-027', 'sk-user-research', 0.99, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-027', 'sk-storybook', 0.77, 'seed');
@@ -335,9 +333,10 @@ INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-028',
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-029', 'sk-llms', 0.89, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-029', 'sk-docker', 0.83, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-029', 'sk-figma', 0.88, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-030', 'sk-react', 0.73, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-030', 'sk-accessibility', 0.63, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-030', 'sk-figma', 0.68, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-030', 'sk-roadmapping', 0.95, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-030', 'sk-product-strategy', 0.9, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-030', 'sk-user-research', 0.85, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-030', 'sk-figma', 0.8, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-031', 'sk-observability', 0.79, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-031', 'sk-java', 0.95, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-031', 'sk-storybook', 0.69, 'seed');
@@ -355,11 +354,11 @@ INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-034',
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-034', 'sk-user-research', 0.66, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-034', 'sk-ci-cd', 0.74, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-034', 'sk-storybook', 0.68, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-035', 'sk-roadmapping', 0.85, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-035', 'sk-accessibility', 0.82, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-035', 'sk-figma', 0.95, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-035', 'sk-design-tokens', 0.9, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-035', 'sk-accessibility', 0.85, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-035', 'sk-storybook', 0.8, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-035', 'sk-user-research', 0.75, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-035', 'sk-ci-cd', 0.9, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-035', 'sk-storybook', 0.55, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-036', 'sk-product-strategy', 0.67, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-036', 'sk-accessibility', 0.85, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-036', 'sk-roadmapping', 0.64, 'seed');
@@ -367,10 +366,10 @@ INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-037',
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-037', 'sk-typescript', 0.99, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-037', 'sk-accessibility', 0.92, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-037', 'sk-analytics', 0.65, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-038', 'sk-react', 0.55, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-038', 'sk-analytics', 0.51, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-038', 'sk-go', 0.64, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-038', 'sk-design-tokens', 0.74, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-038', 'sk-design-tokens', 0.95, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-038', 'sk-react', 0.9, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-038', 'sk-typescript', 0.85, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-038', 'sk-storybook', 0.8, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-039', 'sk-react', 0.58, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-039', 'sk-analytics', 0.91, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-039', 'sk-figma', 0.97, 'seed');
@@ -382,11 +381,10 @@ INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-041',
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-041', 'sk-typescript', 0.59, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-041', 'sk-python', 0.54, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-041', 'sk-design-tokens', 0.5, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-042', 'sk-airflow', 0.83, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-042', 'sk-dbt', 0.97, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-042', 'sk-rag', 0.71, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-042', 'sk-aws-security', 0.77, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-042', 'sk-storybook', 0.82, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-042', 'sk-llms', 0.95, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-042', 'sk-rag', 0.9, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-042', 'sk-python', 0.85, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-042', 'sk-airflow', 0.8, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-043', 'sk-airflow', 0.97, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-043', 'sk-llms', 0.75, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-043', 'sk-pytorch', 0.75, 'seed');
@@ -402,31 +400,32 @@ INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-046',
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-046', 'sk-rag', 0.66, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-046', 'sk-java', 0.99, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-046', 'sk-pytorch', 0.7, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-047', 'sk-llms', 0.81, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-047', 'sk-kafka', 0.88, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-047', 'sk-rag', 0.6, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-048', 'sk-user-research', 0.78, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-048', 'sk-accessibility', 0.78, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-048', 'sk-data-modeling', 0.55, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-048', 'sk-dbt', 1.0, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-049', 'sk-airflow', 0.75, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-049', 'sk-typescript', 0.64, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-049', 'sk-rust', 0.92, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-047', 'sk-llms', 0.95, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-047', 'sk-rag', 0.9, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-047', 'sk-embeddings', 0.85, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-047', 'sk-python', 0.8, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-048', 'sk-rag', 0.95, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-048', 'sk-embeddings', 0.9, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-048', 'sk-llms', 0.85, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-048', 'sk-python', 0.8, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-049', 'sk-mlops', 0.95, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-049', 'sk-kubernetes', 0.9, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-049', 'sk-pytorch', 0.85, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-049', 'sk-python', 0.8, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-050', 'sk-airflow', 0.63, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-050', 'sk-go', 0.5, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-050', 'sk-figma', 0.86, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-050', 'sk-embeddings', 0.92, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-050', 'sk-rust', 0.79, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-051', 'sk-accessibility', 0.93, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-051', 'sk-dbt', 0.71, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-051', 'sk-linux-internals', 0.66, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-051', 'sk-typescript', 0.74, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-051', 'sk-rust', 0.96, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-051', 'sk-java', 0.69, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-052', 'sk-accessibility', 0.51, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-052', 'sk-terraform', 0.57, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-052', 'sk-java', 0.94, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-052', 'sk-penetration-testing', 0.98, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-051', 'sk-iam', 0.95, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-051', 'sk-aws-security', 0.9, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-051', 'sk-zero-trust', 0.85, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-051', 'sk-penetration-testing', 0.8, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-051', 'sk-go', 0.75, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-052', 'sk-aws-security', 0.95, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-052', 'sk-penetration-testing', 0.9, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-052', 'sk-iam', 0.85, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-052', 'sk-terraform', 0.8, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-053', 'sk-rust', 0.93, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-053', 'sk-java', 0.93, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-053', 'sk-go', 0.69, 'seed');
@@ -435,11 +434,9 @@ INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-054',
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-054', 'sk-ci-cd', 0.82, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-054', 'sk-zero-trust', 0.94, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-054', 'sk-python', 0.72, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-055', 'sk-service-mesh', 0.58, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-055', 'sk-linux-internals', 0.54, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-055', 'sk-terraform', 0.94, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-055', 'sk-typescript', 0.81, 'seed');
-INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-055', 'sk-ci-cd', 0.62, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-055', 'sk-aws-security', 0.95, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-055', 'sk-iam', 0.9, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-055', 'sk-python', 0.85, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-056', 'sk-iam', 0.58, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-056', 'sk-storybook', 0.72, 'seed');
 INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-056', 'sk-go', 0.67, 'seed');
@@ -742,69 +739,40 @@ INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES (
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-055', 'p-auth-migration', 'lead', 0.97);
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-055', 'p-zero-trust', 'contributor', 0.61);
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-056', 'p-auth-migration', 'lead', 0.76);
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-046', 'd-aurora', 'decider');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-002', 'd-aurora', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-028', 'd-aurora', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-042', 'd-aurora', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-004', 'd-aurora', 'decider');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-008', 'd-aurora', 'contributor');
 INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-011', 'd-aurora', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-039', 'd-aurora', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-054', 'd-aurora', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-052', 'd-aurora', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-004', 'd-aurora', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-007', 'd-aurora', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-022', 'd-aurora', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-009', 'd-aurora', 'contributor');
 INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-013', 'd-k8s', 'decider');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-027', 'd-k8s', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-045', 'd-k8s', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-036', 'd-k8s', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-047', 'd-k8s', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-052', 'd-k8s', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-035', 'd-k8s', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-043', 'd-nova', 'decider');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-019', 'd-nova', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-020', 'd-nova', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-016', 'd-nova', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-007', 'd-nova', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-004', 'd-nova', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-026', 'd-nova', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-037', 'd-nova', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-054', 'd-legacy-auth', 'decider');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-032', 'd-legacy-auth', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-010', 'd-legacy-auth', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-014', 'd-k8s', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-007', 'd-k8s', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-009', 'd-k8s', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-002', 'd-k8s', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-012', 'd-k8s', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-047', 'd-nova', 'decider');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-042', 'd-nova', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-043', 'd-nova', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-013', 'd-nova', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-049', 'd-nova', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-002', 'd-legacy-auth', 'decider');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-051', 'd-legacy-auth', 'contributor');
 INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-004', 'd-legacy-auth', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-024', 'd-legacy-auth', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-001', 'd-legacy-auth', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-028', 'd-legacy-auth', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-006', 'd-legacy-auth', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-019', 'd-legacy-auth', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-043', 'd-legacy-auth', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-041', 'd-legacy-auth', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-039', 'd-legacy-auth', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-013', 'd-otel', 'decider');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-007', 'd-otel', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-002', 'd-otel', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-014', 'd-otel', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-011', 'd-otel', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-041', 'd-otel', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-019', 'd-otel', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-006', 'd-otel', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-031', 'd-otel', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-052', 'd-legacy-auth', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-054', 'd-legacy-auth', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-004', 'd-otel', 'decider');
 INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-008', 'd-otel', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-020', 'd-otel', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-031', 'd-react-19', 'decider');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-032', 'd-react-19', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-043', 'd-react-19', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-017', 'd-react-19', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-006', 'd-react-19', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-042', 'd-react-19', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-035', 'd-react-19', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-025', 'd-react-19', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-012', 'd-react-19', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-024', 'd-react-19', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-010', 'd-vectordb', 'decider');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-049', 'd-vectordb', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-011', 'd-otel', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-013', 'd-otel', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-009', 'd-otel', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-035', 'd-react-19', 'decider');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-038', 'd-react-19', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-037', 'd-react-19', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-034', 'd-react-19', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-036', 'd-react-19', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-048', 'd-vectordb', 'decider');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-047', 'd-vectordb', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-042', 'd-vectordb', 'contributor');
 INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-045', 'd-vectordb', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-043', 'd-vectordb', 'contributor');
 
 -- ── Cross-functional projects ──────────────────────────────────────────────
 -- Bridges Platform ↔ ML/AI (fixes Theo Chang ↔ Zoe Thompson search gap)
@@ -855,13 +823,13 @@ INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES (
 -- Maria Johnson: second + third projects (Platform Principal Engineer)
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-006', 'p-llm-platform', 'contributor', 0.73);
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-006', 'p-zero-trust', 'reviewer', 0.52);
--- Kevin Garcia (Security): bridges to Data via real-time analytics security review
+-- Kevin Adeyemi (Security): bridges to Data via real-time analytics security review
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-054', 'p-realtime-analytics', 'reviewer', 0.44);
 -- Diego Ortiz (Security): bridges to Product via mobile security review
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-052', 'p-mobile-redesign', 'reviewer', 0.48);
 -- Theo Chang: add to observability (many Platform colleagues there)
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-001', 'p-observability', 'contributor', 0.61);
--- Bria Petrov (ML/AI): add to rag-search
+-- Bria Okonkwo (ML/AI): add to rag-search
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-043', 'p-rag-search', 'contributor', 0.67);
 -- Katya Petrov (ML/AI): add to llm-platform
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-042', 'p-llm-platform', 'contributor', 0.58);
@@ -869,7 +837,7 @@ INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES (
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-029', 'p-mobile-redesign', 'contributor', 0.55);
 -- Iris Patel (Product): add to realtime-analytics
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-033', 'p-realtime-analytics', 'contributor', 0.49);
--- Mateo Green (Product): add to llm-platform (UX for AI features)
+-- Mateo Ruiz (Product): add to llm-platform (UX for AI features)
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-026', 'p-llm-platform', 'reviewer', 0.41);
 -- Sasha Kim (Product): add to rag-search
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-027', 'p-rag-search', 'contributor', 0.46);
@@ -877,10 +845,6 @@ INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES (
 INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-024', 'p-llm-platform', 'reviewer', 0.52);
 
 -- ── Decision participants enrichment ──────────────────────────────────────
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-006', 'd-k8s', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-044', 'd-nova', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-001', 'd-vectordb', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-044', 'd-vectordb', 'contributor');
 
 -- ── The access cast (docs/access-tenant-goal.md §Cast) ──────────────────────
 -- Rhea, Omar and Priya are people in the org graph, not only sign-in names:

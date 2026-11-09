@@ -10,6 +10,11 @@ plus a TRUNCATE for idempotent re-seeding. Run with no args:
   python3 schema/seed.py --scale 2      # double the org size
 
 Deterministic — uses random.seed(42).
+
+schema/seed.sql started as this script's output and has since been edited by
+hand (decision status and outcomes, the access cast, curated contributions), so
+it is NOT regenerated from here. A change to the story's cast, skills or
+decision panels goes into both: the fixed lists below and seed.sql's rows.
 """
 from __future__ import annotations
 
@@ -82,18 +87,18 @@ PROJECTS = [
     ("p-observability",      "Observability Platform",      "in_progress"),
     ("p-cost-opt",           "Cost Optimization",           "in_progress"),
     ("p-realtime-analytics", "Real-time Analytics Pipeline","in_progress"),
-    ("p-data-lake",          "Data Lake Migration",         "planning"),
+    ("p-data-lake",          "Data Lake Migration",         "in_progress"),
     ("p-feature-store",      "ML Feature Store",            "in_progress"),
     ("p-mobile-redesign",    "Mobile App Redesign",         "in_progress"),
     ("p-design-v3",          "Design System v3",            "in_progress"),
     ("p-llm-platform",       "LLM Application Platform",    "in_progress"),
     ("p-rag-search",         "RAG Knowledge Search",        "completed"),
     ("p-soc2",               "SOC2 Compliance",             "in_progress"),
-    ("p-zero-trust",         "Zero Trust Network",          "planning"),
+    ("p-zero-trust",         "Zero Trust Network",          "in_progress"),
 ]
 
 DECISIONS = [
-    ("d-aurora",        "Adopt Aurora over Neptune",       "The org graph needs graph-shaped questions (who worked with whom, paths across teams) joined to projects and decisions. Neptune Analytics answered the graph questions well but meant a second database, a second query language and a separate backup story. Aurora PostgreSQL with relational edge tables and recursive CTEs answered every query we had under 200 ms p95 on the full graph. We gave up native graph algorithms, so centrality scores run as a nightly batch job instead of a query.",                 147),
+    ("d-aurora",        "Service dependency map in Postgres, not a graph database", "Grouping duplicate alerts by the failing dependency needs a map of which services call which. A graph database answered the path questions well but meant a second datastore, a second query language and a separate backup story for one feature. The map lives in Postgres as an edge table beside the service catalog, and a recursive query lists everything downstream of a failing dependency in under 50 ms for the 212 edges seen in traces. Edges for batch jobs and queues that emit no spans are declared by their owners in the same table.", 20),
     ("d-k8s",           "Migrate to Kubernetes from ECS",  "Twelve teams ran services on ECS through three different deployment pipelines, and the autoscalers, operators and mesh they wanted were Kubernetes-native. We standardised on EKS with one golden-path Helm chart and Karpenter for node provisioning. The cost is a cluster to operate: a version upgrade every quarter and a platform rotation on call for it. Batch jobs that need no mesh stay on ECS.",                                                183),
     ("d-nova",          "Standardize on Nova Pro",         "Each agent team had picked its own model, so guardrails, evaluation and cost reporting differed per team. We made Nova Pro the default for every agent, with Nova Lite allowed for routing and classification steps that pass the same golden set. One default means some tasks overpay, so the model stays a per-agent override reviewed against the golden set, not a hard rule.",                                           107),
     ("d-legacy-auth",   "Sunset legacy auth service",      "The v1 auth gateway kept sessions in memory, could not rotate its signing key without signing everyone out, and failed its last penetration test on session fixation. We decided to move every service to Cognito with the BFF holding tokens server-side. The SAML shim is deleted once the last tenant has cut over, not kept as a fallback, because a fallback means patching two login paths indefinitely.", 188),
@@ -154,7 +159,7 @@ NAME_OVERRIDES: dict[str, tuple[str, str | None]] = {
     "p-009": ("Arjun Shah", None),  # was Marcus Shah
     "p-010": ("Kenji Chen", None),  # was Tara Chen
     "p-014": ("Grace Singh", None),  # was Sarah Singh
-    "p-018": ("Yusuf Ahmed", None),  # was Sarah Ahmed
+    "p-018": ("Yusuf Karim", None),  # was Sarah Ahmed (then Yusuf Ahmed: a third Ahmed)
     "p-019": ("Camille Dubois", None),  # was Lena Dubois
     "p-024": ("Andre Williams", None),  # was Theo Williams
     "p-025": ("Anika Mehta", None),  # was Aisha Mehta
@@ -174,6 +179,49 @@ NAME_OVERRIDES: dict[str, tuple[str, str | None]] = {
     "p-053": ("Ingrid Larsen", None),  # was Rachel Turner
     "p-055": ("Joy Chen", None),  # was Mia Chen
     "p-005": ("Sienna Garcia", "Release Manager"),
+    # No surname more than twice (docs/demo-script.md, the content audit): the
+    # draw left three Changs, Garcias, Thompsons, Greens and Ahmeds, and two
+    # Petrovs with the same title.
+    "p-017": ("Daniel Novak", None),  # was Daniel Chang
+    "p-021": ("James Whitaker", None),  # was James Thompson
+    "p-026": ("Mateo Ruiz", None),  # was Mateo Green
+    "p-043": ("Bria Okonkwo", None),  # was Bria Petrov
+    "p-054": ("Kevin Adeyemi", None),  # was Kevin Garcia
+}
+
+# Skills for the people the story leans on, replacing their random draw (taxonomy
+# names only, strongest first). "Who knows identity and access?" has to answer
+# with the security people, and an initiative's owner has to know its subject.
+SKILL_OVERRIDES: dict[str, list[str]] = {
+    "p-002": ["IAM", "AWS Security", "Zero Trust", "TypeScript", "Go"],
+    "p-004": ["Observability", "IAM", "Go", "Kubernetes", "AWS"],
+    "p-008": ["Observability", "Terraform", "Kubernetes", "AWS", "Python"],
+    "p-013": ["Go", "Kubernetes", "Observability", "LLMs", "AWS"],
+    "p-026": ["User Research", "Figma", "Accessibility"],
+    "p-030": ["Roadmapping", "Product Strategy", "User Research", "Figma"],
+    "p-035": ["Figma", "Design Tokens", "Accessibility", "Storybook", "User Research"],
+    "p-038": ["Design Tokens", "React", "TypeScript", "Storybook"],
+    "p-042": ["LLMs", "RAG", "Python", "Airflow"],
+    "p-047": ["LLMs", "RAG", "Embeddings", "Python"],
+    "p-048": ["RAG", "Embeddings", "LLMs", "Python"],
+    "p-049": ["MLOps", "Kubernetes", "PyTorch", "Python"],
+    "p-051": ["IAM", "AWS Security", "Zero Trust", "Penetration Testing", "Go"],
+    "p-052": ["AWS Security", "Penetration Testing", "IAM", "Terraform"],
+    "p-055": ["AWS Security", "IAM", "Python"],
+}
+SKILL_OVERRIDE_WEIGHTS = [0.95, 0.9, 0.85, 0.8, 0.75]
+
+# Who was in the room for each org-graph decision: its decider first, then
+# contributors — people on the initiative it belongs to, not a random sample.
+DECISION_PANELS: dict[str, list[str]] = {
+    "d-aurora": ["p-004", "p-008", "p-011", "p-009"],
+    "d-k8s": ["p-013", "p-014", "p-007", "p-009", "p-002", "p-012"],
+    "d-nova": ["p-047", "p-042", "p-043", "p-013", "p-049"],
+    "d-legacy-auth": ["p-002", "p-051", "p-004", "p-052", "p-054"],
+    "d-otel": ["p-004", "p-008", "p-011", "p-013", "p-009"],
+    "d-react-19": ["p-035", "p-038", "p-037", "p-034", "p-036"],
+    "d-iceberg": ["p-025", "p-017", "p-015"],
+    "d-vectordb": ["p-048", "p-047", "p-042", "p-045"],
 }
 
 
@@ -238,8 +286,12 @@ def gen_person_skills(people: list[Person]) -> list[tuple[str, str, float]]:
             else:
                 skill_name = random.choice(all_skills_flat)[0]
             chosen.add(skill_name)
-        for skill_name in chosen:
-            weight = round(random.uniform(0.5, 1.0), 2)
+        drawn = [(skill_name, round(random.uniform(0.5, 1.0), 2)) for skill_name in chosen]
+        fixed = SKILL_OVERRIDES.get(person.id)
+        if fixed:
+            # Drawn above anyway, so every later random value is unchanged.
+            drawn = list(zip(fixed, SKILL_OVERRIDE_WEIGHTS))
+        for skill_name, weight in drawn:
             out.append((person.id, skill_id_by_name[skill_name], weight))
     return out
 
@@ -303,15 +355,14 @@ def gen_project_contributions(people: list[Person]) -> list[tuple[str, str, str,
 
 
 def gen_decision_participants(people: list[Person]) -> list[tuple[str, str, str]]:
-    """Some people participate in some decisions."""
+    """Who decided each decision and who contributed (DECISION_PANELS)."""
     out = []
+    known = {p.id for p in people}
     for d_id, _topic, _summary, _date in DECISIONS:
-        # 4-12 participants per decision
-        n = random.randint(4, 12)
-        participants = random.sample(people, n)
-        for i, p in enumerate(participants):
-            role = "decider" if i == 0 else "contributor"
-            out.append((p.id, d_id, role))
+        for i, pid in enumerate(DECISION_PANELS[d_id]):
+            if pid not in known:
+                continue  # a --scale below 1 drops the tail of the cast
+            out.append((pid, d_id, "decider" if i == 0 else "contributor"))
     return out
 
 

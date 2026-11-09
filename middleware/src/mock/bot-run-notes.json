@@ -105,7 +105,7 @@
       "seconds": 489
     },
     {
-      "reason": "all golden cases pass; latency up 8 percent on the graph-builder",
+      "reason": "all golden cases pass; latency up 8 percent on the support-answer agent",
       "seconds": 517
     },
     {

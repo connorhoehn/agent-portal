@@ -145,7 +145,7 @@ const INITIATIVES: ReadonlyArray<{ name: string; owner: string }> = [
   { name: 'Auth Migration', owner: 'Vera Green' },
   { name: 'LLM Application Platform', owner: 'Nina Rivera' },
   { name: 'Cost Optimization', owner: 'Layla Hassan' },
-  { name: 'Real-time Analytics Pipeline', owner: 'Daniel Chang' },
+  { name: 'Real-time Analytics Pipeline', owner: 'Daniel Novak' },
   { name: 'Data Lake Migration', owner: 'Anika Mehta' },
   { name: 'ML Feature Store', owner: 'Katya Petrov' },
   { name: 'Mobile App Redesign', owner: 'Mia Singh' },
@@ -159,9 +159,9 @@ const INITIATIVES: ReadonlyArray<{ name: string; owner: string }> = [
 
 const PEOPLE = [
   'Theo Chang', 'Owen Brooks', 'Maria Johnson', 'Marcus Müller', 'Arjun Shah', 'Kenji Chen', 'Eli Garcia', 'Rachel Kowalski',
-  'Caleb Turner', 'Grace Singh', 'Raj Mehta', 'Camille Dubois', 'Henry Hassan', 'Andre Williams', 'Mateo Green', 'Ezra Park',
+  'Caleb Turner', 'Grace Singh', 'Raj Mehta', 'Camille Dubois', 'Henry Hassan', 'Andre Williams', 'Mateo Ruiz', 'Ezra Park',
   'Fatima Ahmed', 'Miles Wright', 'David Tanaka', 'Rosa Ahmed', 'Zoe Thompson', 'Noah Vasquez', 'Vikram Patel', 'Ingrid Larsen',
-  'Kevin Garcia', 'Joy Chen', 'Hugo Lee', 'Sasha Kim',
+  'Kevin Adeyemi', 'Joy Chen', 'Hugo Lee', 'Sasha Kim',
 ];
 
 const DECISIONS = [

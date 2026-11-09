@@ -217,10 +217,17 @@ function seededRunsByBot(): Record<string, BotRun[]> {
     // finops-daily-sweep — the "ran recently, nothing today" case: it last fired
     // ~26h ago (so "1d ago" on the roster) with 0 runs today, which is what the
     // list and the detail page's run list must BOTH say (org-leader.md #20 was
-    // "1d ago" beside "this bot has never fired"). Seed: job-cost-maint-1..11.
+    // "1d ago" beside "this bot has never fired"). Seven firings, one per run
+    // note (the fourth skipped: the cost export had not landed). Seed:
+    // job-cost-maint-1..11.
     '4448041c-0350-5d7f-930e-7dbcd87a149f': [
       genRun('4448041c-0350-5d7f-930e-7dbcd87a149f', 1, clock.hoursAgo(26), 0.18, 'cost-maint'),
       genRun('4448041c-0350-5d7f-930e-7dbcd87a149f', 2, daysBack(3), 0.22, 'cost-maint'),
+      genRun('4448041c-0350-5d7f-930e-7dbcd87a149f', 3, daysBack(6), 0.12, 'cost-maint'),
+      genRun('4448041c-0350-5d7f-930e-7dbcd87a149f', 4, daysBack(10), 0, 'cost-maint'),
+      genRun('4448041c-0350-5d7f-930e-7dbcd87a149f', 5, daysBack(14), 0.17, 'cost-maint'),
+      genRun('4448041c-0350-5d7f-930e-7dbcd87a149f', 6, daysBack(19), 0.11, 'cost-maint'),
+      genRun('4448041c-0350-5d7f-930e-7dbcd87a149f', 7, daysBack(24), 0.14, 'cost-maint'),
     ],
 
     // ── The seven bots the roster used to omit ────────────────────────────────
@@ -426,10 +433,10 @@ function finishedMarketplaceRuns(): BotRun[] {
     run('run-mkt-auth-e2-b3', 'wi-auth-e2-b3', 3, 6, 0.96, 'u-vera', 'traced the logout path that leaves the legacy shim cookie alive'),
     // Observability Platform — Layla Hassan's envelope on Sprint 11.
     run('run-mkt-obs-e2-s2', 'wi-obs-e2-s2', 8, 12, 2.41, 'u-layla', 'finished the multi-window burn-rate rules and their alert tests'),
-    run('run-mkt-obs-e1-s4', 'wi-obs-e1-s4', 5, 9, 1.65, 'u-layla', 'listed the 14 services still emitting to the StatsD bridge'),
+    run('run-mkt-obs-e1-s4', 'wi-obs-e1-s4', 5, 9, 1.65, 'u-layla', 'listed the 9 services still emitting to the StatsD bridge'),
     // LLM Application Platform — Caleb Turner's envelope on Sprint 9.
     run('run-mkt-llm-e1-s2', 'wi-llm-e1-s2', 7, 16, 3.12, 'u-caleb', 'scored the canary rubric against 40 labelled answers and tuned the weights'),
-    run('run-mkt-llm-e2-s1', 'wi-llm-e2-s1', 3, 10, 1.88, 'u-caleb', 'added golden sets for the graph-builder and ingestion agents'),
+    run('run-mkt-llm-e2-s1', 'wi-llm-e2-s1', 3, 10, 1.88, 'u-caleb', 'added golden sets for the support-answer and ingestion agents'),
     // Cost Optimization and Inference Platform.
     run('run-mkt-cost-tagging', 'wi-cost-e2-s1', 5, 7, 1.27, 'u-release', 'drafted the deploy-time tagging check and ran it against the last 20 deploys'),
     run('run-mkt-inf-queue', 'wi-inf-e1-s1', 6, 13, 2.34, 'u-caleb', 'wired queue depth into the autoscaler and ran a load test'),
@@ -539,7 +546,7 @@ function mockBot(over: BotSeed): Bot {
     model: 'us.amazon.nova-lite-v1:0', trigger: 'cron', cronExpr: '0 6 * * *',
     // Live by default: these bots have run history, and a roster that reads
     // "0 enabled" over runs that finished this morning contradicts itself. An
-    // entry that wants to be parked says so and owns why (rag-index-health).
+    // entry that wants to be parked says so and owns why.
     enabled: true, budgetPerRunUsd: 0.5, budgetPerDayUsd: 2, maxRunsPerDay: 4,
     requiresReview: true, enforceAllocation: false, createdBy: 'u-rachel',
     createdAt: clock.daysAgo(45),
@@ -559,14 +566,14 @@ function mockBot(over: BotSeed): Bot {
 // cluster. Offline there is no cron at all (initBotScheduler returns early under
 // MOCK_AURORA), so nothing can fire against a missing repo, and a roster that
 // says "0 enabled · 12 paused" above runs that finished this morning cannot be
-// demoed. Here the bots that have a live initiative are enabled; only
-// rag-index-health stays parked, for the seed's own reason (its initiative
-// shipped). The parity entity names the drift per bot.
+// demoed. Here every bot is enabled, rag-index-health included: its initiative
+// shipped and the bot is what keeps it maintained. The parity entity names the
+// drift per bot.
 function seededBots(): Bot[] {
   return [
     mockBot({ id: '32970d0a-e28e-5100-8fb0-a5cbb87dac99', name: 'obs-nightly-maintenance', template: 'bug',
       prompt: 'Nightly maintenance for the observability stack: bump collector and SDK dependencies, triage flaky pipeline tests, lint dashboards for broken panels.',
-      orgProjectId: 'p-observability', orgProjectName: 'Observability Platform', createdBy: 'u-tomas' }),
+      orgProjectId: 'p-observability', orgProjectName: 'Observability Platform', createdBy: 'u-layla' }),
     // 0.4/1.5, not 0.5/2 — these are the exact numbers decideRunBudget and the
     // daily brake compare against, so a fixture that rounds them up demonstrates
     // a money gate the seeded bot does not have.
@@ -577,7 +584,7 @@ function seededBots(): Bot[] {
     mockBot({ id: 'affd22b0-b348-5436-9eff-2b8d5206d601', name: 'llm-evals-nightly', template: 'story',
       prompt: 'Re-run the golden-set eval suite against the live prompt versions; summarize score drift per agent.',
       orgProjectId: 'p-llm-platform', orgProjectName: 'LLM Application Platform', cronExpr: '30 4 * * *',
-      budgetPerRunUsd: 0.8, budgetPerDayUsd: 3, createdBy: 'u-layla' }),
+      budgetPerRunUsd: 0.8, budgetPerDayUsd: 3, createdBy: 'u-caleb' }),
     // These last two used to be `pr-review-analyst` (p-inference-platform) and
     // `cost-anomaly-sweep` (p-cost-opt) — invented bots on real initiatives that
     // already have their own seeded maintenance mission. Mirrored to the seed's
@@ -585,11 +592,11 @@ function seededBots(): Bot[] {
     mockBot({ id: '1edd9a68-e432-5dc2-b89d-93867bd090da', name: 'inference-canary-nightly', template: 'bug',
       prompt: 'Nightly canary of every served model version: latency and error deltas against the previous build, rollback recommendation on breach.',
       orgProjectId: 'p-inference-platform', orgProjectName: 'Inference Platform', cronExpr: '15 3 * * *',
-      budgetPerRunUsd: 0.4, budgetPerDayUsd: 1.5, createdBy: 'u-eli' }),
+      budgetPerRunUsd: 0.4, budgetPerDayUsd: 1.5, createdBy: 'u-caleb' }),
     mockBot({ id: '4448041c-0350-5d7f-930e-7dbcd87a149f', name: 'finops-daily-sweep', template: 'bug',
       prompt: "Daily spend sweep: diff yesterday's cost by service against the 7-day baseline, flag anomalies over 20%, and list untagged resources created in the last day.",
       orgProjectId: 'p-cost-opt', orgProjectName: 'Cost Optimization', cronExpr: '0 7 * * *',
-      budgetPerRunUsd: 0.3, budgetPerDayUsd: 1, createdBy: 'u-mia' }),
+      budgetPerRunUsd: 0.3, budgetPerDayUsd: 1, createdBy: 'u-layla' }),
 
     // The remaining seven of schema/seed_program.sql's twelve maintenance bots.
     // Ids, names, missions, cron expressions and per-run/per-day budgets are the
@@ -600,26 +607,25 @@ function seededBots(): Bot[] {
     mockBot({ id: '15a4eb8e-743b-57f8-835b-3a7aac701702', name: 'stream-lag-watch', template: 'bug',
       prompt: 'Watch consumer lag and checkpoint duration; when lag trends past threshold, profile the hot operator and file a bug with the trace.',
       orgProjectId: 'p-realtime-analytics', orgProjectName: 'Real-time Analytics Pipeline', cronExpr: '15 */6 * * *',
-      budgetPerRunUsd: 0.25, budgetPerDayUsd: 1.2, createdBy: 'u-caleb' }),
+      budgetPerRunUsd: 0.25, budgetPerDayUsd: 1.2 }),
     mockBot({ id: '88d1fd78-0618-5431-865e-027db71adb27', name: 'feature-drift-nightly', template: 'story',
       prompt: 'Nightly drift check across production feature groups; summarize distribution shifts and file a story when retraining is warranted.',
       orgProjectId: 'p-feature-store', orgProjectName: 'ML Feature Store', cronExpr: '45 3 * * *',
-      budgetPerRunUsd: 0.35, budgetPerDayUsd: 1.2, createdBy: 'u-theo' }),
+      budgetPerRunUsd: 0.35, budgetPerDayUsd: 1.2 }),
     mockBot({ id: '5168695c-fa7e-5ca0-9218-ffa4453947a9', name: 'mobile-e2e-nightly', template: 'bug',
       prompt: 'Run the end-to-end suite on both platforms nightly; quarantine flaky specs with a linked issue and keep the suite under 20 minutes.',
       orgProjectId: 'p-mobile-redesign', orgProjectName: 'Mobile App Redesign', cronExpr: '0 2 * * *',
-      budgetPerRunUsd: 0.3, budgetPerDayUsd: 1, createdBy: 'u-caleb' }),
+      budgetPerRunUsd: 0.3, budgetPerDayUsd: 1, createdBy: 'u-mia' }),
     mockBot({ id: 'a0a4b025-3e67-5004-8b8a-05a3d4f2028d', name: 'a11y-audit-weekly', template: 'bug',
       prompt: 'Weekly accessibility audit of the component library: contrast, focus order, ARIA completeness; file one bug per component regression.',
       orgProjectId: 'p-design-v3', orgProjectName: 'Design System v3', cronExpr: '0 8 * * 1',
-      budgetPerRunUsd: 0.45, budgetPerDayUsd: 1, createdBy: 'u-layla' }),
+      budgetPerRunUsd: 0.45, budgetPerDayUsd: 1 }),
     mockBot({ id: 'f595b10b-5f52-50d0-81a0-9117e9334fb4', name: 'rag-index-health', template: 'bug',
       prompt: 'Verify index freshness and citation link integrity; re-embed documents whose sources changed.',
       orgProjectId: 'p-rag-search', orgProjectName: 'RAG Knowledge Search', cronExpr: '0 9 * * *',
-      // The seed gives this one its OWN park reason — its initiative is
-      // finished, which is a different remedy from "provision the repo". The
-      // blanket default overwrote it, so an operator read the wrong fix.
-      enabled: false, pausedReason: 'initiative completed — bot parked',
+      // Live like the rest: RAG Knowledge Search shipped and is in maintenance,
+      // and keeping its index healthy is the maintenance floor the budget story
+      // tells (mock/budgets.ts). A parked bot that "ran yesterday" contradicted it.
       budgetPerRunUsd: 0.2, budgetPerDayUsd: 0.6 }),
     mockBot({ id: '28006587-cf6f-5a60-a68c-6a574ba7cb5d', name: 'compliance-evidence-cron', template: 'story',
       prompt: 'Weekday evidence sweep: snapshot IAM diffs, change-management records, and backup verifications into the evidence store.',

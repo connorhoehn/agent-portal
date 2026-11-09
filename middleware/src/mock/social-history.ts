@@ -173,7 +173,7 @@ export const HISTORY: readonly HistoryLine[] = [
   ['e05', 'events', 'u-mira', 158, '@Jonas Lindqvist booked for next Wednesday.'],
   ['e06', 'events', 'u-sana', 120, 'Can I run a lightning talk on onboarding feedback? I have 12 responses and some patterns.'],
   ['e07', 'events', 'u-mira', 119, 'Yes please, five minutes. @Sana Iqbal you are in after Asha.'],
-  ['e10', 'events', 'u-mira', 96, 'Tech talk next Thursday after the call: Daniel Chang on cutting Flink checkpoint recovery from four minutes to under one, with incremental RocksDB checkpoints and unaligned barriers.'],
+  ['e10', 'events', 'u-mira', 96, 'Tech talk next Thursday after the call: Daniel Novak on cutting Flink checkpoint recovery from four minutes to under one, with incremental RocksDB checkpoints and unaligned barriers.'],
   ['e11', 'events', 'u-lena', 94, 'And the week after, Nora DaSilva on how the auth team rehearses a tenant cutover: the gate, the rollback, and the step the second rehearsal taught them.'],
   ['e08', 'events', 'u-farah', 70, 'I volunteered for call notes. Will post a template in this channel by Wednesday.'],
   ['e09b', 'events', 'u-jonas', 69, 'Please include a decisions section, it is the part people actually look for later.'],
