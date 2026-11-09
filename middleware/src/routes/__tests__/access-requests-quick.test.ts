@@ -51,7 +51,7 @@ import { getUser } from '../../providers/identity.js';
 import { setNotificationSink, type NotificationInputLike } from '../../lib/social-notify.js';
 import { sessionRouter } from '../session.js';
 import { accessRouter } from '../access.js';
-import { accessQuickRouter } from '../access-requests-quick.js';
+import { accessQuickRouter, NO_ACCOUNT_REASON } from '../access-requests-quick.js';
 import { projectsRouter } from '../projects.js';
 import { accessCatalogFixture } from '../../mock/access-catalog.js';
 import { accessPoliciesFixture } from '../../mock/access-policies.js';
@@ -232,5 +232,17 @@ describe('quick request refusals', () => {
     // No cookie: either the session floor (401) or the cookie-less demo persona, which has no account (403).
     expect([401, 403]).toContain(anon.status);
     expect(accessRequestsFixture.rows().filter((r) => r.itemId === BUDGET_READ_ITEM_ID)).toEqual([]);
+  });
+
+  it('answers a session with no directory account "none filed, not requestable" rather than a 403 (UX walk, 9 November)', async () => {
+    const anon = await request(app).get(`/api/access-requests/mine?itemId=${encodeURIComponent(BUDGET_READ_ITEM_ID)}`);
+    // No cookie: the session floor (401), or the cookie-less demo persona, which has filed nothing.
+    expect([200, 401]).toContain(anon.status);
+    if (anon.status === 200) expect(anon.body).toEqual({ items: [], requestable: false, reason: NO_ACCOUNT_REASON });
+    // A directory user still gets the plain list, with no `requestable` key.
+    const theo = await signIn('u-theo');
+    const mine = await request(app).get(`/api/access-requests/mine?itemId=${encodeURIComponent(BUDGET_READ_ITEM_ID)}`).set('Cookie', theo);
+    expect(mine.status).toBe(200);
+    expect(Object.keys(mine.body)).toEqual(['items']);
   });
 });

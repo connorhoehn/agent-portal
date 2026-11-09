@@ -20,7 +20,7 @@
 // "N+" when the capped page came back full (then no header count at all), and
 // a failed read shows the failure, never "Nothing linked yet".
 
-import { landingScope } from './initiativeNavigation';
+import { defaultInitiativeScope, landingScope } from './initiativeNavigation';
 import { useMemo, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
@@ -54,7 +54,7 @@ import {
   visibleStatusOptions,
   type ProjectSortKey,
 } from './projectFormat';
-import type { ProjectSummary } from './types';
+import type { ProjectSummary, SessionPerson } from './types';
 import type { Sprint, SprintsResponse } from '../sprints/types';
 import { initiativeHref, initiativeListHref } from './initiativeNavigation';
 
@@ -141,11 +141,20 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
   const lens: InitiativeLens = opts.sprints && searchParams.get('lens') === 'sprints' ? 'sprints' : 'initiatives';
 
   const isLeader = LEADER_ROLES.has(session?.role ?? '');
+  // Who a non-leader is on the org graph decides their default scope (defaultInitiativeScope): only asked when
+  // the URL names no scope. Shared with the page's own "why is Mine empty" read.
+  const rawScope = searchParams.get('scope');
+  const needsLink = rawScope !== 'all' && rawScope !== 'mine' && !opts.defaultScope && !landingScope(searchParams) && !isLeader;
+  const person = useFetch<SessionPerson>(needsLink ? '/api/session/person' : null, undefined, { share: true });
+  // A failed read of the link keeps the old default (Mine explains a failure itself).
+  const linked = person.data ? person.data.linked : person.error || person.degraded ? true : null;
+  const fallbackScope = opts.defaultScope ?? landingScope(searchParams) ?? defaultInitiativeScope({ isLeader, linked });
   const [scope] = useUrlState<InitiativeScope>(
     'scope',
-    (raw) => (raw === 'all' || raw === 'mine' ? raw : (opts.defaultScope ?? landingScope(searchParams) ?? (isLeader ? 'all' : 'mine'))),
+    (raw) => (raw === 'all' || raw === 'mine' ? raw : (fallbackScope ?? 'mine')),
     (v) => v,
   );
+  const scopeSettled = rawScope === 'all' || rawScope === 'mine' || fallbackScope != null;
   const [statusFilter, setStatusFilter] = useUrlState<string>('status', (raw) => raw ?? 'all', (v) => (v === 'all' ? null : v));
   const [query, setQuery] = useUrlState<string>('q', (raw) => raw ?? '', (v) => (v ? v : null));
   const [sort, setSort] = useUrlState<ProjectSortKey>(
@@ -157,7 +166,7 @@ export function useInitiativeListRail(opts: InitiativeListRailOptions = {}): Ini
 
   const { data, isLoading, error, degraded, refresh } = useFetch<ProjectSummary[]>(
     // Not read while the Sprints lens has the column.
-    lens === 'initiatives' ? `/api/graph/projects?limit=${INITIATIVE_LIST_LIMIT}&scope=${scope}` : null,
+    lens === 'initiatives' && scopeSettled ? `/api/graph/projects?limit=${INITIATIVE_LIST_LIMIT}&scope=${scope}` : null,
     POLL_MS,
     { share: true },
   );

@@ -79,7 +79,7 @@ function ProjectsPage() {
 
   // Mine's "why is it empty" — asked only when Mine came back empty.
   const mineEmpty = lens === 'initiatives' && scope === 'mine' && rows != null && rows.length === 0;
-  const person = useFetch<SessionPerson>(mineEmpty ? '/api/session/person' : null);
+  const person = useFetch<SessionPerson>(mineEmpty ? '/api/session/person' : null, undefined, { share: true });
   const linkedId = person.data?.linked ? person.data.personId : null;
   const personDetail = useFetch<PersonDetail>(
     mineEmpty && linkedId ? `/api/graph/people/${encodeURIComponent(linkedId)}` : null,

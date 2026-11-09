@@ -58,7 +58,7 @@ async function itemInTenant(req: Request, res: Response, itemId: string, opts: {
 async function requesterContext(res: Response, req: Request): Promise<Ctx | null> {
   const ctx = await context(req);
   if (!ctx.self) {
-    res.status(403).json({ error: 'Sign in as a directory user to request access; this session has no account to grant it to' });
+    res.status(403).json({ error: NO_ACCOUNT_REASON });
     return null;
   }
   return ctx;
@@ -105,13 +105,21 @@ accessQuickRouter.post('/envelope', asyncHandler(async (req, res) => {
 
 // GET /api/access-requests/mine?itemId=  → { items: AccessRequest[] }, newest first
 accessQuickRouter.get('/mine', asyncHandler(async (req, res) => {
+  // A session with no directory row (the cookie-less demo persona) has filed nothing, so it is answered
+  // `{ items: [], requestable: false, reason }` rather than a 403: the read is "your requests for this item",
+  // and every caller (the Initiatives budget header, a page this role cannot open, voice access_request_status)
+  // reads an empty list as "none filed" and `requestable: false` as "do not offer the form" (UX walk,
+  // 9 November 2026). Filing (POST /quick) still refuses such a session with the same reason.
   const unknown = Object.keys(req.query).filter((k) => k !== 'itemId');
   if (unknown.length) { res.status(400).json({ error: `Unknown parameter${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}` }); return; }
   const itemId = typeof req.query['itemId'] === 'string' ? req.query['itemId'].trim() : '';
   if (!itemId) { res.status(400).json({ error: 'itemId is required' }); return; }
   if (!await itemInTenant(req, res, itemId, { planeItem: true })) return;
-  const ctx = await requesterContext(res, req);
-  if (!ctx) return;
+  const ctx = await context(req);
   res.setHeader('Cache-Control', 'no-store');
+  if (!ctx.self) { res.json({ items: [], requestable: false, reason: NO_ACCOUNT_REASON }); return; }
   res.json({ items: ownRequestsFor(ctx, itemId) });
 }));
+
+/** Why a session with no directory row cannot file a request (POST refuses it; GET /mine says so). */
+export const NO_ACCOUNT_REASON = 'Sign in as a directory user to request access; this session has no account to grant it to';

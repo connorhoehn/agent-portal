@@ -61,6 +61,19 @@ export function initiativeBreadcrumbs({ search, scope, sprints = false, project,
   return base;
 }
 
+/**
+ * The list's scope when `?scope=` is absent (UX walk, 9 November 2026): leaders land on everyone; a viewer
+ * whose account is linked to a team profile lands on their own slice; one with no linked person (the demo
+ * persona, an unlinked account) lands on everyone, because "mine" can only ever be empty for them. While the
+ * link is still being read (`linked` null) there is no default yet: the list waits rather than flashing an
+ * empty "mine". An explicit `?scope=mine` is kept, with Mine's own "check your profile" empty state.
+ */
+export function defaultInitiativeScope({ isLeader, linked }: { isLeader: boolean; linked: boolean | null }): 'all' | 'mine' | null {
+  if (isLeader) return 'all';
+  if (linked == null) return null;
+  return linked ? 'mine' : 'all';
+}
+
 /** The Initiatives section landing (`?nav=section`) opens its first child,
  *  All initiatives, whoever is looking; any other URL has no landing default. */
 export function landingScope(search: URLSearchParams): 'all' | null {

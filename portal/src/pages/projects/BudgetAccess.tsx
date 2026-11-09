@@ -14,6 +14,7 @@ import {
 } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
+import { roleSwitchOffer } from '../../lib/roleSwitchOffer';
 import { writeJson } from '../../lib/writeJson';
 import { toastSuccess } from '../../lib/toastStore';
 import { DURATION_LABELS, type AccessDuration, type AccessRequest } from '../../lib/accessRequests';
@@ -59,8 +60,10 @@ export function BudgetAccessRequest({ lock, autoOpen = false, onClosed }: {
   onClosed?: () => void;
 }) {
   const navigate = useNavigate();
-  const { session } = useSession();
-  const mine = useFetch<{ items: AccessRequest[] }>(mineUrl(lock.requestItemId));
+  const { session, setRole } = useSession();
+  // `requestable: false`: a session with no directory account (the demo persona) has filed nothing and cannot file
+  // (routes/access-requests-quick.ts); it is offered the role switch that shows budgets when it holds one.
+  const mine = useFetch<{ items: AccessRequest[]; requestable?: false; reason?: string }>(mineUrl(lock.requestItemId));
   const state = quickRequestState(mine.data?.items);
   const [open, setOpen] = useState(false);
 
@@ -72,16 +75,33 @@ export function BudgetAccessRequest({ lock, autoOpen = false, onClosed }: {
 
   if (mine.data == null) return null;
 
+  if (mine.data.requestable === false) {
+    const offer = roleSwitchOffer(session, 'see budgets');
+    return offer ? (
+      <Button size="sm" variant="secondary" onClick={() => { void setRole(offer.role); }} title={mine.data.reason} data-testid="budget-access-switch">
+        {offer.label}
+      </Button>
+    ) : (
+      <Inline gap="xs" align="center" data-testid="budget-access-unavailable">
+        <LockIcon size={12} aria-hidden />
+        <T size="xs" tone="tertiary">{mine.data.reason}</T>
+      </Inline>
+    );
+  }
+
   if (state.kind === 'none') {
     return (
       <>
         <Button size="sm" variant="secondary" onClick={() => setOpen(true)} data-testid="budget-access-request">
           Request budget access
         </Button>
-        <BudgetAccessForm
+        <QuickAccessForm
           open={open}
           itemId={lock.requestItemId}
-          reason={lock.reason}
+          title="Request budget access"
+          doneTitle="Budget access requested"
+          intro={`${lock.reason} Your manager, then the budget owner, decide it in Access; once it is granted the figures appear here without signing out.`}
+          testId="budget-access"
           onClose={close}
           onFiled={() => { mine.refresh(); close(); }}
         />
@@ -106,10 +126,19 @@ export function BudgetAccessRequest({ lock, autoOpen = false, onClosed }: {
   );
 }
 
-function BudgetAccessForm({ open, itemId, reason, onClose, onFiled }: {
+/**
+ * The in-tenant quick request form (POST /api/access-requests/quick): why and for how long, for one catalog item.
+ * The budgets tier files `capability:orgiq:budgets-read` through it; a page the role cannot open files the role
+ * item that opens it (components/NoAccessPage.tsx).
+ */
+export function QuickAccessForm({ open, itemId, title, doneTitle, intro, testId, onClose, onFiled }: {
   open: boolean;
   itemId: string;
-  reason: string;
+  title: string;
+  /** The toast once it is filed: "Budget access requested". */
+  doneTitle: string;
+  intro: string;
+  testId: string;
   onClose: () => void;
   onFiled: () => void;
 }) {
@@ -128,7 +157,7 @@ function BudgetAccessForm({ open, itemId, reason, onClose, onFiled }: {
     setBusy(false);
     // A 409 naming an open request is the same outcome: there is a request to wait on.
     if (res.ok || (res.status === 409 && res.data?.requestId)) {
-      toastSuccess(null, 'Budget access requested', 'Your approvers have been notified.');
+      toastSuccess(null, doneTitle, 'Your approvers have been notified.');
       setJustification('');
       onFiled();
       return;
@@ -138,14 +167,12 @@ function BudgetAccessForm({ open, itemId, reason, onClose, onFiled }: {
 
   const n = justification.trim().length;
   return (
-    <Modal open={open} onClose={onClose} title="Request budget access" maxWidth={520}>
+    <Modal open={open} onClose={onClose} title={title} maxWidth={520}>
       <Stack gap="md">
-        <T as="p" size="sm" tone="secondary">
-          {reason} Your manager, then the budget owner, decide it in Access; once it is granted the figures appear here without signing out.
-        </T>
+        <T as="p" size="sm" tone="secondary">{intro}</T>
         <FormWizard
-          aria-label="Request budget access"
-          data-testid="budget-access"
+          aria-label={title}
+          data-testid={testId}
           onSubmit={submit}
           submitLabel="Send request"
           submittingLabel="Requesting…"
@@ -160,7 +187,7 @@ function BudgetAccessForm({ open, itemId, reason, onClose, onFiled }: {
                 <FormField label="Justification" hint={`${n} of at least ${JUSTIFICATION_MIN} characters`} required>
                   {(wiring) => (
                     <Textarea {...wiring} rows={4} value={justification} onChange={(e) => setJustification(e.target.value)}
-                      data-testid="budget-access-justification" />
+                      data-testid={`${testId}-justification`} />
                   )}
                 </FormField>
               ),
@@ -168,7 +195,7 @@ function BudgetAccessForm({ open, itemId, reason, onClose, onFiled }: {
             {
               key: 'how-long', title: 'For how long?', description: 'Access ends on its own when the time is up.',
               content: (
-                <RadioGroup<AccessDuration> name="budget-access-duration" aria-label="Duration" value={duration} onChange={setDuration} orientation="horizontal"
+                <RadioGroup<AccessDuration> name={`${testId}-duration`} aria-label="Duration" value={duration} onChange={setDuration} orientation="horizontal"
                   options={QUICK_DURATIONS.map((d) => ({ value: d, label: DURATION_LABELS[d] }))} />
               ),
             },
