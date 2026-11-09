@@ -382,3 +382,57 @@ describe('initiative status deck — agent revise', () => {
     expect((await revise(as('sme'), made.deckId, { instruction: 'Shorter', baseRevisionId: made.revisionId })).status).toBe(404);
   });
 });
+
+describe('initiative status deck — a brief and its sprint window (G55)', () => {
+  const sprintsOf = () => listSprints({ orgProjectId: PID, limit: 200 });
+
+  it('"progress this past sprint" picks the last ended sprint; the words reach the notes, the facts stay the record', async () => {
+    const plain = await build(as('sme'));
+    const res = await request(as('sme')).post(`${BASE}/projects/${PID}`).send({ narrative: true, brief: '  progress   this past sprint ' });
+    expect(res.status).toBe(201);
+    const ended = (await sprintsOf()).filter((s) => s.status === 'done').sort((a, b) => String(b.endsOn).localeCompare(String(a.endsOn)))[0]!;
+    expect(ended.id).toBe('spr-auth-s1');
+    expect(res.body.brief).toEqual({ words: 'progress this past sprint', window: { sprintId: ended.id, name: ended.name, startsOn: ended.startsOn!.slice(0, 10), endsOn: ended.endsOn!.slice(0, 10), status: 'done', which: 'last-ended' } });
+    const spec: DeckSpec = (await request(as('sme')).get(`${BASE}/${res.body.deckId}/revisions/${res.body.revisionId}/spec`)).body;
+    expect(spec.subtitle).toContain(`focus: ${ended.name} (${ended.startsOn!.slice(0, 10)} to ${ended.endsOn!.slice(0, 10)})`);
+    expect(spec.slides.find((s) => s.id === 'title')!.notes).toContain('Focus, in the requester\'s words: “progress this past sprint”.');
+    // Every fact line is the record's, exactly as a deck without a brief states it.
+    for (const id of ['summary', 'work-status', 'work-type', 'sprints', 'decisions']) {
+      const fixed = (s: DeckSpec) => (s.slides.find((x) => x.id === id)?.bullets ?? []).filter((b) => /\d/.test(b) && !b.startsWith('Evidence on file'));
+      expect(fixed(spec)).toEqual(fixed(plain.spec));
+    }
+  });
+
+  it('hands the drafter the words as quoted data with the window, and the window sprint\'s own numbers as summary facts', async () => {
+    const calls: Array<{ structuredInput: { brief?: unknown; slides: Array<{ slideId: string; facts: Record<string, unknown> }> } }> = [];
+    (config.mock as { agentcore: boolean }).agentcore = false;
+    const spy = jest.spyOn(agentcore, 'invokeAgent').mockImplementation((async (_agentId: string, opts: { structuredInput: never }) => {
+      calls.push({ structuredInput: opts.structuredInput }); return { text: ' ' };
+    }) as never);
+    try {
+      const res = await request(as('program-owner')).post(`${BASE}/projects/${PID}`).send({ narrative: true, brief: 'progress this past sprint' });
+      expect(res.status).toBe(201);
+    } finally { spy.mockRestore(); (config.mock as { agentcore: boolean }).agentcore = true; }
+    expect(calls).toHaveLength(1);
+    const input = calls[0]!.structuredInput;
+    expect(input.brief).toMatchObject({ words: 'progress this past sprint', window: { sprintId: 'spr-auth-s1', which: 'last-ended' } });
+    const row = (await sprintsOf()).find((s) => s.id === 'spr-auth-s1')!;
+    expect(input.slides.find((s) => s.slideId === 'summary')!.facts).toMatchObject({
+      focusSprint: row.name, focusItemsDone: row.doneItemCount, focusItems: row.itemCount, focusPointsDone: row.pointsDone, focusPointsTotal: row.pointsTotal,
+    });
+  });
+
+  it('"this sprint" is the active one, words naming no sprint have no window, and a bad brief is 400', async () => {
+    const current = await request(as('sme')).post(`${BASE}/projects/${PID}`).send({ brief: 'what this sprint is doing' });
+    expect(current.body.brief.window).toMatchObject({ sprintId: 'spr-auth-s2', which: 'current' });
+    const theme = await request(as('sme')).post(`${BASE}/projects/${PID}`).send({ brief: 'risks for the steering group' });
+    expect(theme.body.brief).toEqual({ words: 'risks for the steering group', window: null });
+    expect((await request(as('sme')).post(`${BASE}/projects/${PID}`).send({})).body.brief).toBeNull();
+    expect((await request(as('sme')).post(`${BASE}/projects/${PID}`).send({ brief: 'x'.repeat(201) })).status).toBe(400);
+    expect((await request(as('sme')).post(`${BASE}/projects/${PID}`).send({ brief: { words: 'x' } })).status).toBe(400);
+  });
+
+  it('a brief changes nothing about who may build: a role without DispatchAgentRun is refused', async () => {
+    expect((await request(as('member')).post(`${BASE}/projects/${PID}`).send({ narrative: true, brief: 'progress this past sprint' })).status).toBe(403);
+  });
+});

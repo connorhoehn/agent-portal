@@ -5,6 +5,7 @@ import { ACTIVITY_SCOPES, COMPUTER_ACTIONS, DECIDE_ACTIONS, GET_PARTS, LIST_KIND
 import { voicePage, hashToolArgs } from '../tools.ts';
 import { commandAllowedBy, composeCommand } from '../actions.ts';
 import { PALETTE, middlewareVoice } from './voiceHarness.ts';
+import { CREATE_ACTIONS, CREATE_FIELDS } from '../catalogue.ts';
 
 interface MwTool { name: string; parameters: unknown; kind: string; backing: string; confirm: boolean; action: string | null; says: string; tenants: readonly string[]; noConfirm?: unknown; actionBy?: unknown; confirmBy?: unknown; clickFor?: unknown; sayToConfirm?: unknown }
 interface MwCatalogue {
@@ -138,4 +139,15 @@ test('an action tool reaches only routes the inventory decides confirm (or open,
     }
   }
   assert.ok(writes >= 5, `${writes} write routes checked`);
+});
+
+test('G55: create kinds, their dock actions and field sets match the middleware; Work offers document, whiteboard and deck, and queue_work takes the deck focus', async () => {
+  const mw = await middlewareVoice<{ CREATE_ACTIONS: unknown; CREATE_FIELDS: unknown; toolsForTenant(t: string): Array<{ name: string; description: string; parameters: { properties: Record<string, unknown> } }> }>('catalogue.ts');
+  assert.deepEqual(CREATE_ACTIONS, mw.CREATE_ACTIONS);
+  assert.deepEqual(CREATE_FIELDS, mw.CREATE_FIELDS);
+  const orgiq = mw.toolsForTenant('orgiq');
+  assert.match(orgiq.find((t) => t.name === 'create')!.description, /document \(initiative\?, title\?\); whiteboard \(initiative\?, title\?\); deck \(initiative\?, focus\?\)/);
+  const work = orgiq.find((t) => t.name === 'queue_work')!;
+  assert.ok(work.parameters.properties['focus'], 'queue_work takes focus');
+  assert.match(work.description, /scope "this-page" builds it for the initiative in view, and focus carries what it should cover/);
 });

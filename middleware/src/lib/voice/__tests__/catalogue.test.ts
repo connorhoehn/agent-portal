@@ -298,7 +298,7 @@ describe('tenant scoping (§6)', () => {
     const t = voiceTool('queue_work')!;
     expect([...t.tenants]).toEqual(['orgiq', 'social', 'assessment', 'pipelines']);
     expect(t).toMatchObject({ confirm: true, action: null, kind: 'machine', backing: 'work', spend: 'dispatch' });
-    expect(Object.keys(t.parameters.properties)).toEqual(['kind', 'target', 'note', 'model', 'rows', 'scope']);
+    expect(Object.keys(t.parameters.properties)).toEqual(['kind', 'target', 'note', 'model', 'rows', 'scope', 'focus']);
     expect(t.parameters.required).toEqual(['kind', 'target']);
     const kinds = (tenant: string) => (toolsForTenant(tenant).find((x) => x.name === 'queue_work')?.parameters.properties['kind'] as { enum: string[] } | undefined)?.enum;
     expect(kinds('orgiq')).toEqual(['sweep', 'bot-run', 'job', 'dispatch', 'finding-promote', 'finding-analyze', 'change-rereview', 'change-address', 'deck', 'summarize', 'diagram', 'doc']);
@@ -355,7 +355,7 @@ describe('tenant scoping (§6)', () => {
   it('create and update (V2-11) ask first, take one field set per kind, and gate each on its form\'s or button\'s action', () => {
     expect(voiceTool('create')).toMatchObject({ confirm: true, action: null, kind: 'action', backing: 'work', tenants: ['orgiq', 'social', 'access'] });
     expect(voiceTool('update')).toMatchObject({ confirm: true, action: null, kind: 'action', backing: 'work', tenants: ['orgiq', 'social', 'assessment', 'pipelines', 'access'] });
-    expect(createKinds('orgiq')).toEqual(['work-item', 'comment', 'saved-search', 'sprint', 'meeting', 'access-request']);
+    expect(createKinds('orgiq')).toEqual(['work-item', 'comment', 'saved-search', 'sprint', 'meeting', 'access-request', 'document', 'whiteboard', 'deck']);
     expect(createKinds('social')).toEqual(['channel', 'team', 'room']);
     expect(createKinds('access')).toEqual(['access-request', 'delegation']);
     for (const t of ['assessment', 'pipelines']) expect(toolsForTenant(t).some((x) => x.name === 'create')).toBe(false);

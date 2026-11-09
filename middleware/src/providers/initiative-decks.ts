@@ -39,6 +39,7 @@ import { str, maybe, iso, summaryOf, type DeckPreviewOut, type DeckRevisionSumma
 import { clip } from '../lib/deck-shared/plan.js';
 import { buildInitiativeDeckFacts, buildInitiativeDraftInput, type InitiativeDeckSource } from '../lib/initiative-deck/facts.js';
 import { canReadBudgets } from '../lib/budget-read-tier.js';
+import { briefLine, readBrief, resolveBrief, type DeckBrief } from '../lib/initiative-deck/brief.js';
 
 /** The agent that drafts this tenant's narrative slides. */
 const DRAFTER_AGENT_ID = 'orgiq-assessment-drafter';
@@ -181,24 +182,36 @@ export const getRevisionSpec = (deckId: string, revisionId: string, viewer: Deck
 
 // ─── Generation ──────────────────────────────────────────────────────────────
 
+/**
+ * `brief` (G55, ≤ 200 characters) is the requester's words ("progress this past
+ * sprint"): resolved against the initiative's own sprints into a window
+ * (lib/initiative-deck/brief.ts), handed to the drafter as quoted data, quoted
+ * in the title slide's notes and the revision summary, and answered back as
+ * `brief: { words, window }`. The facts stay the record's.
+ */
 export async function createDeck(
-  projectId: string, body: { title?: unknown; narrative?: unknown; includeBudget?: unknown }, viewer: DeckViewer, sub: string | null,
-): Promise<Result<{ deckId: string; revisionId: string; includesBudget: boolean; narrative: NarrativeOutcome }>> {
+  projectId: string, body: { title?: unknown; narrative?: unknown; includeBudget?: unknown; brief?: unknown }, viewer: DeckViewer, sub: string | null,
+): Promise<Result<{ deckId: string; revisionId: string; includesBudget: boolean; narrative: NarrativeOutcome; brief: DeckBrief | null }>> {
   if (body.title !== undefined && (typeof body.title !== 'string' || body.title.length > 120)) {
     return { ok: false, status: 400, reason: 'title must be a string of at most 120 characters' };
   }
   if (body.narrative !== undefined && typeof body.narrative !== 'boolean') return { ok: false, status: 400, reason: 'narrative must be a boolean' };
   if (body.includeBudget !== undefined && typeof body.includeBudget !== 'boolean') return { ok: false, status: 400, reason: 'includeBudget must be a boolean' };
+  const said = readBrief(body.brief);
+  if (!said.ok) return { ok: false, status: 400, reason: said.reason };
   // Money is read only for a budget-tier caller who did not opt out; never from the body alone.
   const includeBudget = viewer.canReadBudgets && body.includeBudget !== false;
   const source = await loadInitiativeDeckSource(projectId, includeBudget);
   if (!source) return { ok: false, status: 404, reason: `initiative ${projectId} not found` };
-  const facts = buildInitiativeDeckFacts(source, typeof body.title === 'string' && body.title.trim() ? { title: body.title.trim() } : {});
+  const brief = resolveBrief(said.words, source.sprints, source.asOf);
+  const facts = buildInitiativeDeckFacts(source, { ...(typeof body.title === 'string' && body.title.trim() ? { title: body.title.trim() } : {}), brief });
 
   const requested = body.narrative === true;
-  const { spec, outcome, summary } = await shared.applyNarrative(
-    facts, buildInitiativeDraftInput(facts), requested, sub, { tenant: 'orgiq', mode: INITIATIVE_STATUS_DECK_MODE, message: 'Execute initiative status command initiative-status-deck', agentId: DRAFTER_AGENT_ID }, 'Status deck built from the initiative record.',
+  const drafted = await shared.applyNarrative(
+    facts, buildInitiativeDraftInput(facts, brief), requested, sub, { tenant: 'orgiq', mode: INITIATIVE_STATUS_DECK_MODE, message: 'Execute initiative status command initiative-status-deck', agentId: DRAFTER_AGENT_ID }, 'Status deck built from the initiative record.',
   );
+  const { spec, outcome } = drafted;
+  const summary = brief ? `${drafted.summary} ${briefLine(brief)}` : drafted.summary;
   const valid = validateDeckSpec(spec);
   if (!valid.ok) return { ok: false, status: 400, reason: 'the generated deck is not valid', details: { errors: valid.errors } };
 
@@ -221,7 +234,7 @@ export async function createDeck(
       });
     } catch (error) { removeNewMockOrphan(); throw error; }
     if (!appended.ok) { removeNewMockOrphan(); return { ok: false, status: 409, reason: 'the deck changed while it was generated' }; }
-    return { ok: true, value: { deckId, revisionId: appended.revision.id, includesBudget: includeBudget, narrative: outcome } };
+    return { ok: true, value: { deckId, revisionId: appended.revision.id, includesBudget: includeBudget, narrative: outcome, brief } };
   } finally { finishCreation(); }
 }
 

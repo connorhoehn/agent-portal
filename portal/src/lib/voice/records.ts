@@ -27,9 +27,9 @@
 import { CREATE_ACTIONS, CREATE_FIELDS, DECIDE_ACTIONS, UPDATE_ACTIONS } from './catalogue.ts';
 import { parseRef, type Rec } from './kinds.ts';
 import { DELEGATION_REASON_MIN, DELEGATION_WINDOWS, JUSTIFICATION_MIN, delegationBody } from '../accessRequests.ts';
-import { matchByName } from './work.ts';
+import { WORK_PLANNERS, WORK_RUNNERS, matchByName } from './work.ts';
 import {
-  ambiguous, deliveryIdFor, done, failed, findByName, once, pageRowNamed, qs, readFailure, readJson, refused, socialGrantRefusal,
+  ambiguous, deliveryIdFor, done, failed, findByName, localHref, once, pageRowNamed, qs, readFailure, readJson, refused, socialGrantRefusal,
   type CardAnswer, type ConfirmPlan, type ToolContext, type ToolResult, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 
@@ -385,6 +385,25 @@ interface ActPlan {
   idAt?: string;
   /** A meeting (G25) sends no request of its own: the time and the room go back to the thread it answers. */
   meeting?: MeetingPlan;
+  /** Where the route's answer names the page of what it made (a document's `document.href`): opened on success (G55). */
+  openAt?: string;
+}
+
+/** "this-page", "this initiative", "here", or nothing: the initiative whose page is open (G55). */
+const THIS_PAGE = /^(?:this[- ]page|this(?: initiative| one)?|here|the one in view|current)$/i;
+
+/** The initiative a document, whiteboard or deck goes in: the one named, or the one in view. */
+async function initiativeOf(ctx: ToolContext, said: unknown): Promise<{ id: string; title: string } | { result: ToolResult }> {
+  const name = str(said);
+  if (!name || THIS_PAGE.test(name)) {
+    const record = ctx.page?.()?.record ?? null;
+    const id = record ? /^initiative:(.+)$/.exec(record.ref)?.[1] : undefined;
+    if (!record || !id) return { result: refused('Name the initiative, or open its page and ask again.', { code: 'not-on-this-page' }) };
+    return { id, title: record.title };
+  }
+  const found = await findByName(ctx, 'initiative', name);
+  if ('result' in found) return found;
+  return { id: found.row.id, title: found.row.title };
 }
 
 /** G25: the initiative's huddle room (the meeting-rooms lobby) and a time; there is no calendar object to create. */
@@ -447,6 +466,31 @@ async function planCreateKind(kind: string, f: Rec, ctx: ToolContext): Promise<{
       const body = { initiativeId: found.row.id, name: String(f['name']).trim(), startsOn, endsOn };
       return card(`Start the sprint "${body.name}" on ${found.row.title}`, [`${startsOn} to ${endsOn}; it starts planned.`],
         { key: `POST /api/sprints ${JSON.stringify(body)}`, send: { method: 'POST', url: '/api/sprints', body }, done: `Created the sprint "${body.name}"`, result: { kind: 'sprint', name: body.name }, href: '/iq/projects?lens=sprints' });
+    }
+    case 'document':
+    case 'whiteboard': {
+      // G55/G56: the Docs tab's New › Document / Whiteboard. Its own read answers whether this caller writes pages here
+      // (the initiative's owner, a contributor or an org-wide role); the route holds them to it again.
+      const where = await initiativeOf(ctx, f['initiative']);
+      if ('result' in where) return where;
+      const url = `/api/graph/projects/${enc(where.id)}/workspace-documents`;
+      const read = await readJson<{ canWrite?: unknown }>(ctx, url);
+      if (!read.ok) return { result: readFailure(`the documents of ${where.title}`, read.status) };
+      if (read.body.canWrite !== true) return { result: refused(`Only the people on ${where.title} (its owner and contributors) write pages there.`, { code: 'not-on-initiative' }) };
+      const board = kind === 'whiteboard';
+      const noun = board ? 'whiteboard' : 'page';
+      const title = (str(f['title']) ?? (board ? 'Untitled whiteboard' : 'Untitled page')).slice(0, 200);
+      const body = { title, kind: board ? 'whiteboard' : 'page' };
+      return card(`Create the ${noun} "${title}" in ${where.title}`, [board ? 'A blank canvas; it opens so you can sketch on it.' : 'A blank page; it opens so you can write it.', 'Everyone who reads the initiative can read it.'],
+        { key: `POST ${url} ${JSON.stringify(body)}`, send: { method: 'POST', url, body }, done: `Created the ${noun} "${title}"`, result: { kind, title, initiative: where.title }, href: `/iq/projects/${enc(where.id)}?tab=docs`, openAt: 'document.href' });
+    }
+    case 'deck': {
+      // create { kind: 'deck' } is queue_work's deck by another name (G55): the same planner, card, route and runner.
+      const initiative = str(f['initiative']);
+      const here = !initiative || THIS_PAGE.test(initiative);
+      const focus = str(f['focus']);
+      const planned = await WORK_PLANNERS['queue_work']!({ kind: 'deck', target: here ? 'this initiative' : initiative!, ...(here ? { scope: 'this-page' } : {}), ...(focus ? { focus } : {}) }, ctx);
+      return planned ?? { result: refused('Nothing was planned for that deck.') };
     }
     case 'channel':
     case 'team':
@@ -562,12 +606,20 @@ async function act(ctx: ToolContext, plan: ActPlan, verb: string): Promise<ToolR
       return failed(`Not ${verb} (HTTP ${res.status})${error ? `: ${error}` : ''}.`);
     }
     const id = plan.idAt ? str(dig(body, plan.idAt)) : undefined;
+    // G55: a page or a whiteboard opens in its editor once made (the route's own link, only inside the portal).
+    const opened = plan.openAt ? str(dig(body, plan.openAt)) : undefined;
+    if (opened && localHref(opened)) {
+      ctx.navigate(opened);
+      return done('created', { ...plan.result, href: opened, opened: true, stop: true, say: `${plan.done}; it is open.` }, `${plan.done}; opened`);
+    }
     return done(verb === 'created' ? 'created' : 'updated', { ...plan.result, ...(plan.href ? { href: plan.href } : {}), ...(id ? { id, say: `${plan.done}: request ${id}. I'll tell you when it is decided.` } : {}) },
       id ? `${plan.done} (${id})` : plan.done);
   }, () => done(verb === 'created' ? 'created' : 'updated', { ...plan.result, already: true }, `${plan.done} already; nothing was sent again`));
 }
 
 const runCreate: VoiceToolRunner = async (_args, ctx, planned) => {
+  // create { kind: 'deck' } planned through queue_work's planner: its runner sends it and follows it (G55).
+  if (planned && typeof planned === 'object' && 'post' in planned && (planned as { kind?: unknown }).kind === 'deck') return WORK_RUNNERS['queue_work']!(_args, ctx, planned);
   const plan = planned as ActPlan | undefined;
   if (!plan?.send) return refused('Nothing is created until the user confirms its card.');
   if (plan.meeting) return runMeeting(ctx, plan, plan.meeting);

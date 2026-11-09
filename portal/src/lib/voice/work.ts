@@ -228,6 +228,23 @@ async function dimensionOf(ctx: ToolContext, target: string): Promise<{ teamId: 
   return { teamId: team.row.id, team: team.row.title, dimId: hits[0]!.id, dimension: hits[0]!.title };
 }
 
+/** G55: the deck's focus as the user said it, one line, at most 200 characters; undefined when none. */
+function deckFocus(args: VoiceToolArgs): string | undefined {
+  const raw = args['focus'];
+  if (typeof raw !== 'string') return undefined;
+  const words = raw.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+  return words || undefined;
+}
+
+/** The finished deck's one line: the sprint window its brief selected (the route's answer), or the words. */
+function deckFocusDetail(body: Record<string, unknown>): string | undefined {
+  const brief = body['brief'] && typeof body['brief'] === 'object' ? body['brief'] as Record<string, unknown> : null;
+  if (!brief) return undefined;
+  const w = brief['window'] && typeof brief['window'] === 'object' ? brief['window'] as Record<string, unknown> : null;
+  if (w && typeof w['name'] === 'string') return `focus: ${w['name']} (${String(w['startsOn'] ?? '?')} to ${String(w['endsOn'] ?? '?')})`;
+  return typeof brief['words'] === 'string' ? `focus: "${brief['words']}"` : undefined;
+}
+
 /** The V2-9 kinds: each resolves its target by the page's own read and fixes the page button's request. */
 async function planKind(kind: QueueWorkKind, target: string, args: VoiceToolArgs, ctx: ToolContext, note: string | undefined): Promise<{ plan: ConfirmPlan } | { result: ToolResult }> {
   const data = (title: string, post: PostSpec): WorkPlan => ({ kind, title, post, ...(note ? { note } : {}) });
@@ -300,13 +317,22 @@ async function planKind(kind: QueueWorkKind, target: string, args: VoiceToolArgs
           doneDetail: (b) => (typeof b['verdict'] === 'string' ? `Verdict: ${b['verdict']}` : undefined) }));
     }
     case 'deck': {
+      // G55: `focus` is the user's words ("progress this past sprint"). Only an initiative's deck takes them: sent as the
+      // route's `brief` (with the narrative, which is what they steer), they pick the sprint window and the prose's theme;
+      // the slides' figures stay the initiative's record (lib/initiative-deck/brief.ts).
+      const focus = deckFocus(args);
       if (ctx.tenant === 'orgiq') {
         const found = await findByName(ctx, 'initiative', target);
         if ('result' in found) return found;
-        return planOf(`Build a status deck for ${found.row.title}`, withNote(SPEND.deck!, note), data(`The ${found.row.title} deck`, {
-          url: `/api/initiative-decks/projects/${enc(found.row.id)}`, body: {}, idAt: null, href: '/iq/decks/:deckId',
+        return planOf(`Build a status deck for ${found.row.title}`, [
+          ...(focus ? [`Focus, in your words: "${focus}". The figures stay the initiative's record; the focus picks the period and theme the summary covers.`] : []),
+          withNote(SPEND.deck!, note),
+        ], data(`The ${found.row.title} deck`, {
+          url: `/api/initiative-decks/projects/${enc(found.row.id)}`, body: focus ? { narrative: true, brief: focus } : {}, idAt: null, href: '/iq/decks/:deckId',
+          ...(focus ? { doneDetail: deckFocusDetail } : {}),
         }));
       }
+      if (focus) return { result: refused('Only an initiative\'s status deck takes a focus; ask again without one, and the deck covers the whole record.', { code: 'focus-not-taken' }) };
       if (ctx.tenant === 'assessment') {
         const found = await findByName(ctx, 'team', target);
         if ('result' in found) return found;
@@ -443,7 +469,14 @@ const planQueueWork: VoiceToolPlanner = async (args, ctx) => {
 
   // G21: the rows of the page in view, by position ("the second one", or `rows`), or a row named among them.
   const rows = Array.isArray(args['rows']) ? (args['rows'] as number[]) : null;
-  if (rows || args['scope'] === 'this-page') {
+  if (kind === 'deck' && !rows && args['scope'] === 'this-page') {
+    // G55: a deck "of this initiative" is the record in view, not one of its rows.
+    const record = ctx.page?.()?.record ?? null;
+    if (!record || (ctx.tenant === 'orgiq' && !record.ref.startsWith('initiative:'))) {
+      return { result: refused('This page shows no initiative to build a deck for; open the initiative, or name it.', { code: 'not-on-this-page' }) };
+    }
+    target = record.ref;
+  } else if (rows || args['scope'] === 'this-page') {
     const picks = rows ?? (/^\d{1,2}$/.test(target) ? [Number(target)] : null);
     const found: PageRow[] = [];
     for (const n of picks ?? []) {

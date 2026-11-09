@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
-import { newFileChoices, readCanWrite } from './initiativeFilesModel';
+import { useLocation, useNavigate } from 'react-router';
+import { usePublishPageOffers } from '../../lib/voice/pageContext';
+import { newFileChoices, newFileOffers, readCanWrite } from './initiativeFilesModel';
 import { Button, ChevronIcon, DocumentIcon, DropdownMenu, Inline, InlineAlert, LoadingState, PlusIcon, SearchInput, Select, Stack, T, type DropdownMenuSection } from '@connorhoehn/ui-components/shared';
 import { FileCards, type FileView } from '../../components/files/FileCards';
 import { FileToolbar } from '../../components/files/FileToolbar';
@@ -30,6 +31,7 @@ export function InitiativeFiles(props: { projectId: string; projectName: string;
 }
 function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording }: Parameters<typeof InitiativeFiles>[0]) {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   // New › Document / Whiteboard / Presentation (the user, 2026-11-02: create a
   // doc here the way a meeting chat does). G56: a page or a whiteboard is the
   // initiative's own people's to write (owner, contributor or an org-wide role;
@@ -60,6 +62,8 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
     ...(choices.includes('whiteboard') ? [{ label: 'Whiteboard', description: 'A canvas drawn in this initiative; opens so you can sketch it', onSelect: () => void newDocument('whiteboard') }] : []),
     ...(mayDeck ? [{ label: 'Presentation', description: 'A status deck built from this initiative', onSelect: () => setNewDeck(true) }] : []),
   ] }];
+  // G55: the voice is told the choices this persona sees, and the call that makes each, for the initiative in view.
+  usePublishPageOffers(choices.length ? { path: pathname, what: 'New file', offers: newFileOffers(choices) } : null);
   const [olderBusy, setOlderBusy] = useState(false);
   const [olderError, setOlderError] = useState<string | null>(null);
   const client = useMemo(() => createInitiativeRecordingsClient(), []);

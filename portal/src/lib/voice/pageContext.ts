@@ -103,10 +103,12 @@ export function pageIdFor(pages: ReadonlyArray<{ path: string; tenant: string; p
  * The silent context for the voice: where the user is and what the page
  * shows, compact and framed. Without a published page it is the path alone.
  */
-export function pageContextNote(o: { tenant: string; pathname: string; pageId?: string | null; page: PublishedPage | null }): string {
+export function pageContextNote(o: { tenant: string; pathname: string; pageId?: string | null; page: PublishedPage | null; offers?: PublishedOffers | null }): string {
   const head = `Page context (${PAGE_NOTE_FRAME}): workspace ${field(o.tenant)}; page ${o.pageId ? `${field(o.pageId)} ` : ''}${field(o.pathname)}.`;
   const p = o.page;
-  if (!p) return `${head} The page has not shown any rows yet.`;
+  // G55: what the page in view offers to make (the Docs tab's New menu), whether or not it has rows yet.
+  const offers = offersLine(o.offers !== undefined ? o.offers : pageOffersFor(o.pathname));
+  if (!p) return `${head} The page has not shown any rows yet.${offers ? `\n${offers}` : ''}`;
   const lines = [head];
   if (p.record) lines.push(`In view: ${field(p.record.ref)} "${field(p.record.title)}".`);
   const rows = p.rows.slice(0, PAGE_ROWS_MAX);
@@ -120,5 +122,68 @@ export function pageContextNote(o: { tenant: string; pathname: string; pageId?: 
     });
     lines.push('To answer about these rows or act on them, use list or open with scope "this-page", and their positions above; do not search again for them.');
   }
+  if (offers) lines.push(offers);
   return lines.join('\n');
+}
+
+// ── what the page offers to make (G55) ──────────────────────────────────────
+//
+// A part of a page with a New menu (the initiative's Docs tab: New › Document,
+// Whiteboard, Presentation) publishes the choices it SHOWS this persona, each
+// with the voice call that does the same, so "make a whiteboard called Flow"
+// or "a PowerPoint of this initiative's progress this past sprint" is offered
+// from what is on screen. Its own registry beside the page's (the tab is a part
+// of the page, which keeps publishing its record and rows); the same rule: one
+// entry, the newest publisher wins, an unmount clears only its own, a reader on
+// another path gets nothing.
+
+export interface PageOffer {
+  /** The choice as the page labels it ("Whiteboard"). */
+  label: string;
+  /** The voice call that makes the same thing: create { kind } or queue_work { kind }. */
+  tool: 'create' | 'queue_work';
+  kind: string;
+}
+
+export interface PublishedOffers {
+  path: string;
+  /** What the choices are, as the page names its menu ("New file"). */
+  what: string;
+  offers: readonly PageOffer[];
+}
+
+let offered: PublishedOffers | null = null;
+
+/** Publish what the page offers to make; returns the unpublish, which clears only this entry. */
+export function publishPageOffers(entry: PublishedOffers): () => void {
+  const mine: PublishedOffers = { ...entry, offers: entry.offers.slice(0, 8) };
+  offered = mine;
+  emit();
+  return () => { if (offered === mine) { offered = null; emit(); } };
+}
+
+export function pageOffersFor(pathname: string): PublishedOffers | null {
+  return offered && offered.path === pathname && offered.offers.length ? offered : null;
+}
+
+/** Test hook. */
+export function resetPageOffers(): void { offered = null; emit(); }
+
+/** Publish while mounted; null (or no choices) publishes nothing. */
+export function usePublishPageOffers(entry: PublishedOffers | null): void {
+  const key = entry && entry.offers.length ? JSON.stringify(entry) : '';
+  useEffect(() => {
+    if (!entry || !entry.offers.length) return undefined;
+    return publishPageOffers(entry);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is the entry's content
+  }, [key]);
+}
+
+/** The note's line: each choice and the call that makes it, for the record in view. */
+function offersLine(o: PublishedOffers | null): string | null {
+  if (!o || !o.offers.length) return null;
+  const call = (x: PageOffer) => (x.tool === 'queue_work'
+    ? `queue_work kind ${field(x.kind)} with scope "this-page", focus what it should cover in the user's words`
+    : `create kind ${field(x.kind)}, initiative "this-page", title as the user said it`);
+  return `It offers ${field(o.what)}: ${o.offers.map((x) => `${field(x.label)} (${call(x)})`).join('; ')}. These make it for the record in view; use them when the user asks to create, make or start one here.`;
 }

@@ -24,6 +24,7 @@ import {
 } from '@connorhoehn/realtime-modules/deck';
 import { clip, makePlan, type DeckEvidence, type DeckFacts, type FactValue, type SlidePlan } from '../deck-shared/plan.js';
 import type { DraftDeckInput } from '../deck-shared/narrative.js';
+import { briefLine, windowLabel, type DeckBrief } from './brief.js';
 import type { WorkItem, ProjectDecision } from '../../providers/work-items.js';
 import type { SprintRow } from '../../providers/sprints.js';
 import type { GrantRow } from '../../providers/budgets.js';
@@ -87,8 +88,17 @@ export const isOpenItem = (i: Pick<WorkItem, 'status'>): boolean => i.status !==
 const projectSource = (p: InitiativeDeckSource['project']): DeckSource => ({ documentId: `initiative:${p.id}`, title: clip(`Initiative ${p.name}`, 160) });
 const boardSource = (p: InitiativeDeckSource['project']): DeckSource => ({ documentId: `initiative:${p.id}:work-items`, title: clip(`${p.name} — work items`, 160) });
 
-export function buildInitiativeDeckFacts(src: InitiativeDeckSource, options: { title?: string } = {}): DeckFacts {
+/**
+ * `options.brief` (G55) is the requester's words and the sprint window they
+ * selected (brief.ts): it adds the window sprint's own numbers to the summary
+ * slide's facts (so the prose may cite them), names the window in the subtitle
+ * and quotes the words in the title slide's notes. Every other slide, and every
+ * number, is the record's as before.
+ */
+export function buildInitiativeDeckFacts(src: InitiativeDeckSource, options: { title?: string; brief?: DeckBrief | null } = {}): DeckFacts {
   const { project, workItems, sprints, decisions, budget, grants } = src;
+  const brief = options.brief ?? null;
+  const focus = brief?.window ? sprints.find((s) => s.id === brief.window!.sprintId) ?? null : null;
   const initSrc = projectSource(project);
   const boardSrc = boardSource(project);
   const slides: SlidePlan[] = [];
@@ -116,7 +126,7 @@ export function buildInitiativeDeckFacts(src: InitiativeDeckSource, options: { t
       ...(project.repoFullName ? [`Repository: ${project.repoFullName}`] : []),
       `As of: ${src.asOf}`,
     ],
-    templateProse: [], templateNotes: `Status deck for ${project.name}, prepared from the initiative's work items, sprints and decisions.`,
+    templateProse: [], templateNotes: `Status deck for ${project.name}, prepared from the initiative's work items, sprints and decisions.${brief ? ` ${briefLine(brief)}` : ''}`,
   }, { id: 'title', layout: 'title', title: clip(project.name, MAX_TITLE_CHARS), eyebrow: 'Initiative status', sources: [initSrc] }));
 
   // 2. Summary
@@ -125,6 +135,11 @@ export function buildInitiativeDeckFacts(src: InitiativeDeckSource, options: { t
       workItems: items.length, open: open.length, done: byStatus('done').length,
       pointsDone, pointsTotal, openEstimateUsd: money(openEstimate),
       sprints: sprints.length, openDecisions: openDecisions.length,
+      // The window the brief selected: that sprint's own row, nothing computed from the words.
+      ...(focus ? {
+        focusSprint: focus.name, focusStartsOn: day(focus.startsOn), focusEndsOn: day(focus.endsOn), focusStatus: statusLabel(focus.status, 'no status'),
+        focusItemsDone: focus.doneItemCount, focusItems: focus.itemCount, focusPointsDone: focus.pointsDone, focusPointsTotal: focus.pointsTotal,
+      } : {}),
     };
     const factBullets = [
       `Work items: ${items.length} total · ${open.length} open · ${byStatus('done').length} done`,
@@ -240,14 +255,21 @@ export function buildInitiativeDeckFacts(src: InitiativeDeckSource, options: { t
   }
 
   const title = clip(options.title?.trim() || `${project.name} — status`, MAX_TITLE_CHARS);
-  const subtitle = clip(`${statusLabel(project.status, 'Status not set')} · as of ${src.asOf}`, 200);
+  const subtitle = clip(`${statusLabel(project.status, 'Status not set')} · as of ${src.asOf}${brief?.window ? ` · focus: ${windowLabel(brief.window)}` : ''}`, 200);
   return { teamId: project.id, slides, spec: { title, subtitle, theme: 'plain', slides: slides.map((s) => s.base) } };
 }
 
-/** The drafter's input for `initiative-status-deck`: `teamId` carries the initiative id. */
-export function buildInitiativeDraftInput(facts: DeckFacts): DraftDeckInput {
+/**
+ * The drafter's input for `initiative-status-deck`: `teamId` carries the
+ * initiative id. A brief (G55) goes in as `brief: { words, window }`: the
+ * requester's words quoted as data, with the sprint window they selected; the
+ * prompt (agents/assessment-drafter/deck_narrative.py) lets it choose the period
+ * and theme the prose covers and nothing else.
+ */
+export function buildInitiativeDraftInput(facts: DeckFacts, brief: DeckBrief | null = null): DraftDeckInput {
   return {
     teamId: facts.teamId,
+    ...(brief ? { brief: { words: brief.words, window: brief.window } } : {}),
     slides: facts.slides.filter((s) => INITIATIVE_NARRATIVE_KINDS.has(s.kind)).map((s) => ({
       slideId: s.slideId, kind: s.kind, facts: s.facts, evidence: s.evidence,
     })),

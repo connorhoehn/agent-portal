@@ -468,6 +468,8 @@ Portal on ui-components 2.514.1, one release line (the Studio line merged onto m
 
 G37 (8 November): System › Voice log became **Logging** at `/iq/logging` (page id `system-logging`), one list rail with four read-only sources (Voice, Agents, Pipelines, Jobs and sweeps), each read through its own page's route and gate; `/iq/voice-log` redirects (docs/voice-navigator-gaps.md G37).
 
+G55 (9 November): "a PowerPoint of this initiative's progress this past sprint" is one `queue_work` deck with scope `this-page` and the words as `focus`; the deck route takes them as `brief`, picks the last ended sprint as the window and hands both to the drafter as quoted data, the figures staying the record's; `create` makes documents and whiteboards (and decks) from the Docs tab, whose New menu is in the page context (docs/voice-navigator-gaps.md G55).
+
 G56 (9 November): the Docs tab's Document and Whiteboard follow the initiative's own people (owner, contributor or org-wide role, with ViewWorkItems; the route's `canWrite`), not DispatchAgentRun; Presentation keeps DispatchAgentRun because a deck spends (docs/voice-navigator-gaps.md G56).
 
 ### Gaps (8 November 2026)

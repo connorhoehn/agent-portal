@@ -518,7 +518,8 @@ export const V2_RULES = [
   [/^PATCH \/api\/graph\/work-items\/:[^/]+$/, 'not-yet', 'update', 'status, assignee, sprint'],
   [/^POST \/api\/graph\/(work-items\/:[^/]+|projects\/:[^/]+\/discussion)\/comments$/, 'not-yet', 'create', 'a comment (ViewWorkItems)'],
   [/^(POST|PUT|PATCH|DELETE) \/api\/graph\/work-items\/:[^/]+\/(criteria|decisions|documents)/, 'never', null, 'acceptance criteria, decisions and document links are edited on the item'],
-  [/^(POST|PUT|PATCH|DELETE) \/api\/graph\/(projects\/:[^/]+\/workspace-documents|documents)/, 'never', null, 'document content'],
+  // G55: creating a blank page or whiteboard (a title, no content) is `create`; what is written in it stays in the editor.
+  [/^(PUT|PATCH|DELETE) \/api\/graph\/projects\/:[^/]+\/workspace-documents|^(POST|PUT|PATCH|DELETE) \/api\/graph\/documents/, 'never', null, 'document content'],
   [/^PATCH \/api\/graph\/projects\/:[^/]+(\/contributors\/:[^/]+)?$/, 'never', null, 'initiative governance edits'],
   [/^POST \/api\/sprints$/, 'not-yet', 'create', 'sprint (ManageSprints)'],
   [/^(PATCH|DELETE) \/api\/sprints\/:[^/]+\/items/, 'not-yet', 'update', 'move work between sprints (ManageSprints)'],

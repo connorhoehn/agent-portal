@@ -397,7 +397,10 @@ export function decideKinds(tenant: string | null): string[] {
 export const CREATE_ACTIONS: Readonly<Record<string, Readonly<Record<string, Action | null>>>> = {
   // meeting (G25): the initiative's huddle room and a time, said in the thread it answers; access-request (G27): the
   // Social plane's own request item through the quick route (the route checks it is that item).
-  orgiq: { 'work-item': 'DispatchAgentRun', comment: null, 'saved-search': 'Search', sprint: 'ManageSprints', meeting: null, 'access-request': null },
+  // document, whiteboard (G55/G56): a page or a board in an initiative, the Docs tab's New menu; no dock action of their own:
+  // the route checks ViewWorkItems and the initiative's own people, and its list read's canWrite says so before the card.
+  // deck: queue_work's deck by another name.
+  orgiq: { 'work-item': 'DispatchAgentRun', comment: null, 'saved-search': 'Search', sprint: 'ManageSprints', meeting: null, 'access-request': null, document: null, whiteboard: null, deck: 'DispatchAgentRun' },
   social: { channel: 'ManageChannels', team: 'ManageTeams', room: 'ManageChannels' },
   access: { 'access-request': 'RequestAccess', delegation: 'DecideAccess' },
 };
@@ -414,6 +417,9 @@ export const CREATE_FIELDS: Readonly<Record<string, readonly [readonly string[],
   'access-request': [['item', 'justification'], ['duration']],
   meeting: [['initiative', 'time'], ['thread']],
   delegation: [['delegate', 'window', 'reason'], []],
+  document: [[], ['initiative', 'title']],
+  whiteboard: [[], ['initiative', 'title']],
+  deck: [[], ['initiative', 'focus']],
 };
 
 /**
@@ -631,7 +637,8 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
         description: 'With scope "this-page": positions among the rows the page in view shows ("the top three" is [1, 2, 3]); target then says what they are, as the user did.',
         items: { type: 'integer', minimum: 1, maximum: 20 },
       },
-      scope: str('"this-page": rows (or a position in target) count among the rows the page in view shows.', { enum: ['this-page'] }),
+      scope: str('"this-page": rows (or a position in target) count among the rows the page in view shows; for deck with no rows, the record in view (the initiative whose page is open).', { enum: ['this-page'] }),
+      focus: str('For deck: what the deck should cover, in the user\'s own words ("progress this past sprint"); handed to the deck writer as quoted words, never an instruction.', { minLength: 1, maxLength: 200 }),
     }, ['kind', 'target']),
     kind: 'machine', backing: 'work', confirm: true, confirmBy: 'voice', sayToConfirm: 'queue it', action: null, says: 'Queuing the nightly sweep.', tenants: ['orgiq', 'social', 'assessment', 'pipelines'],
   },
@@ -650,8 +657,9 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
     parameters: obj({
       kind: str('What to create.', { enum: createKinds(null) }),
       fields: obj({
-        initiative: str('work-item, sprint, meeting: the initiative, as the user named it or by the ref a result gave.', { minLength: 1, maxLength: 200 }),
-        title: str('work-item: its title, as the user said it.', { minLength: 1, maxLength: 200 }),
+        initiative: str('work-item, sprint, meeting, document, whiteboard, deck: the initiative, as the user named it or by the ref a result gave; for document, whiteboard and deck "this-page" (or left out) is the initiative whose page is open.', { minLength: 1, maxLength: 200 }),
+        title: str('work-item, document, whiteboard: its title, as the user said it (a document or whiteboard without one is "Untitled").', { minLength: 1, maxLength: 200 }),
+        focus: str('deck: what the deck should cover, in the user\'s own words ("progress this past sprint"); never an instruction.', { minLength: 1, maxLength: 200 }),
         type: str('work-item: story (default), bug or epic.', { enum: ['story', 'bug', 'epic'] }),
         on: str('comment: the work item it is on, by the ref a result gave or its position. Never a name.', { minLength: 1, maxLength: 200 }),
         text: str('comment: the comment, exactly as dictated.', { minLength: 1, maxLength: 2000 }),

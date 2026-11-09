@@ -3,7 +3,9 @@
 // session; every write is decided by deckWriteAuthority alone (DispatchAgentRun +
 // initiative read), no new Cedar action:
 //
-//   POST /projects/:projectId        deckWriteAuthority 201 { deckId, revisionId, includesBudget, narrative }
+//   POST /projects/:projectId        deckWriteAuthority 201 { deckId, revisionId, includesBudget, narrative, brief }
+//                                    body { title?, narrative?, includeBudget?, brief? } — brief (G55, ≤ 200 chars) is
+//                                    the requester's words: it picks a sprint window and steers the prose, never the facts
 //   GET  /?projectId=                signed-in orgiq   DeckListItem[]   (budget decks only for budget readers)
 //   GET  /:id                        signed-in orgiq   DeckDetail
 //   GET  /:id/revisions/:rid/spec    signed-in orgiq   DeckSpec

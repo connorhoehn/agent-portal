@@ -33,6 +33,12 @@ export interface DeckNarrative { slideId: string; bullets: string[]; notes?: str
 
 export interface DraftDeckInput {
   teamId: string;
+  /**
+   * An initiative deck's brief (G55, lib/initiative-deck/brief.ts): the
+   * requester's words, quoted as data, and the sprint window they selected.
+   * It steers which period and theme the prose covers; it is never a fact.
+   */
+  brief?: { words: string; window: { sprintId: string; name: string; startsOn: string | null; endsOn: string | null; status: string; which: string } | null };
   slides: Array<{ slideId: string; kind: string; dimensionId?: string; facts: Record<string, FactValue>; evidence: DeckEvidence[] }>;
 }
 
