@@ -11,14 +11,14 @@
 // SSE stream for the events.
 
 import {
-  Chip, DataTable, DetailHeader, Inline, KeyValue, MetaLine, Stack, T, WorkflowStepper,
+  Chip, CopyIdButton, DataTable, DetailHeader, Inline, KeyValue, MetaLine, Stack, T, WorkflowStepper,
   type DataTableColumn,
 } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
 import { usd } from '../../lib/format';
 import {
-  artifactKindLabel, artifactPlace, artifactStepLabel, attemptItems, kindLabel, runHref, runStatusChip, sourceLabel, sourceStatusNote, stepperSteps, stepStatusChip,
+  artifactKindLabel, artifactPlace, artifactStepLabel, attemptItems, definitionLabel, kindLabel, runHref, runStatusChip, sourceLabel, sourceStatusNote, stepperSteps, stepStatusChip,
   type PipelineArtifact, type PipelineRun, type PipelineStep,
 } from '../../lib/pipelineRuns';
 import { RunTimeline } from './RunTimeline';
@@ -44,8 +44,8 @@ export function PipelineRunStatusChip({ status, title }: { status: string; title
   return <Chip tone={c.tone} size="xs" dot={status === 'running' ? 'pulse' : undefined} {...(title ? { title } : {})}>{c.label}</Chip>;
 }
 
-/** The run's header and its context — tenant, kind, the source rows it folds. */
-export function PipelineRunSummary({ run }: { run: PipelineRun }) {
+/** The run's header and its context — tenant, kind, the source rows it folds. `definitionName`: what the caller knows the definition as (the bot's name). */
+export function PipelineRunSummary({ run, definitionName }: { run: PipelineRun; definitionName?: string | null }) {
   const note = sourceStatusNote(run);
   return (
     <Stack gap="sm">
@@ -66,7 +66,13 @@ export function PipelineRunSummary({ run }: { run: PipelineRun }) {
         items={[
           // The title says which run this is; the id is one hover away for an operator who needs to quote it.
           { label: 'Run', value: run.context.title, title: run.id },
-          { label: 'Definition', value: run.definitionId, mono: true, title: run.definitionId },
+          // What ran, by name; its id is behind the copy control, never the text.
+          { label: 'Definition', value: (
+            <Inline gap="xs" wrap={false}>
+              <T size="sm">{definitionLabel(run.definitionId, definitionName)}</T>
+              {run.definitionId && <CopyIdButton value={run.definitionId} label="Copy the definition's id" />}
+            </Inline>
+          ) },
           { label: 'Workspace', value: run.context.tenant },
           { label: 'Source', value: sourceLabel(run.context.table), title: run.context.id },
           { label: 'Source status', value: run.context.sourceStatus.replace(/_/g, ' ') },

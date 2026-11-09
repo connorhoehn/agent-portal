@@ -560,7 +560,7 @@ export default function BotDetailPage() {
                 data-testid="pipeline-run"
               >
                 {pipelineRun.run
-                  ? <PipelineRunSummary run={pipelineRun.run} />
+                  ? <PipelineRunSummary run={pipelineRun.run} definitionName={bot.name} />
                   : <MetaLine size="sm" tone="tertiary" items={[pipelineRun.error ? `Could not load this run: ${pipelineRun.error}` : 'Loading run…']} />}
               </DetailSection>
               <DetailSection title="Steps" hint={`${pipelineRun.steps.length}`} data-testid="pipeline-steps">

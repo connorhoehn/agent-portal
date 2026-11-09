@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { artifactPlace, artifactStepLabel } from '../pipelineRuns.ts';
+import { artifactPlace, artifactStepLabel, definitionLabel } from '../pipelineRuns.ts';
 
 test('a trace says where it is read, with the invocation id only in the title', () => {
   assert.deepEqual(artifactPlace({ kind: 'trace', uri: 'mock-inv-0' }), { label: 'Observability · invocation trace', title: 'mock-inv-0' });
@@ -18,4 +18,13 @@ test('an artifact names the step it came from', () => {
   assert.equal(artifactStepLabel({ stepId: 'synthesize-2' }, steps), 'synthesize');
   assert.equal(artifactStepLabel({ stepId: 'gone-9' }, steps), 'gone-9');
   assert.equal(artifactStepLabel({ stepId: null }, steps), '—');
+});
+
+test('a run names what ran: the name the caller knows, an agent by its role, else its kind', () => {
+  assert.equal(definitionLabel('bot:32970d0a-e28e-5100-8fb0-a5cbb87dac99', 'obs-nightly-maintenance'), 'obs-nightly-maintenance');
+  assert.equal(definitionLabel('bot:32970d0a-e28e-5100-8fb0-a5cbb87dac99'), 'A bot');
+  assert.equal(definitionLabel('agent:orgiq-supervisor'), 'Supervisor agent');
+  assert.equal(definitionLabel('agent:graph-builder'), 'Graph builder agent');
+  assert.equal(definitionLabel('mystery'), 'Not recorded');
+  assert.equal(definitionLabel(null), 'Not recorded');
 });

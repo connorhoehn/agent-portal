@@ -177,6 +177,22 @@ export function kindLabel(kind: string): string {
   return KIND_LABEL[kind as DefinitionKind] ?? kind;
 }
 
+/**
+ * What ran, in words. `definitionId` is `<kind>:<id>` (`bot:32970d0a-…`,
+ * `agent:orgiq-supervisor`): a caller that knows the definition's name passes
+ * it; an agent reads by its role ("Supervisor agent"); anything else by its
+ * kind ("A bot"). The id itself goes behind a copy control (walk, 9 November).
+ */
+export function definitionLabel(definitionId: string | null | undefined, name?: string | null): string {
+  if (name?.trim()) return name.trim();
+  const id = definitionId ?? '';
+  const agent = /^agent:(?:orgiq-|assessment-)?(.+)$/.exec(id);
+  if (agent) { const role = agent[1]!.replace(/[-_]/g, ' '); return `${role.charAt(0).toUpperCase()}${role.slice(1)} agent`; }
+  const kind = id.slice(0, id.indexOf(':'));
+  const label = KIND_LABEL[kind as DefinitionKind];
+  return label ? `A ${label.toLowerCase()}` : 'Not recorded';
+}
+
 const TABLE_LABEL: Record<string, string> = {
   agent_jobs: 'queue job', bot_runs: 'bot firing', agent_project_runs: 'governed run',
   assessment_runs: 'assessment run',
