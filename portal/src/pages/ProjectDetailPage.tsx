@@ -49,7 +49,7 @@ import {
 } from '@connorhoehn/ui-components/shared';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
-import { usePublishPageContext } from '../lib/voice/pageContext';
+import { usePublishPageContext, usePublishPageTabs } from '../lib/voice/pageContext';
 import { ConversationOwner, ConversationThread } from '../components/chat/ConversationThread';
 import type { EstimateProvenance } from '../components/marketplace/EstimateDrawer';
 import { OwnerEditor } from '../components/marketplace/GovernanceEditor';
@@ -331,6 +331,8 @@ function ProjectDetailPage() {
     path: pathname, record: { ref: `initiative:${id}`, title: project.name }, rowsLabel: 'work items', total: allRows.length,
     rows: visibleRows.map((r) => ({ ref: `work-item:${r.id}`, title: r.title, status: r.status ?? null, priority: r.priority ?? null, href: `/iq/projects/${encodeURIComponent(id)}?item=${encodeURIComponent(r.id)}` })),
   } : null);
+  // G49: the initiative's tabs, so "open decisions" is this page's tab, never a search.
+  usePublishPageTabs(project && id ? { path: pathname, tabs: TABS, tab } : null);
   const current = tab === 'work' && wantedItem ? allRows.find((row) => row.id === wantedItem) ?? null : null;
   const thread = useWorkItemThread(current?.id ?? null);
   // "Add a note" posts to the same thread.

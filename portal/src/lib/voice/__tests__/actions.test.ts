@@ -752,7 +752,8 @@ test('G39: with nothing kept, one person search finds them; two matches are a ch
 
 test('G39: list dm with a scope it does not take says what to change', async () => {
   const { fetch } = fakeFetch([]);
-  const prepared = prepareToolCall('list', { kind: 'dm', filter: { scope: 'all', q: 'Priya' } }, toolContext({ fetch, social: fakeSocial() }));
+  // G49: "all" is every kind's widest read now, so the scope it does not take is "mine".
+  const prepared = prepareToolCall('list', { kind: 'dm', filter: { scope: 'mine', q: 'Priya' } }, toolContext({ fetch, social: fakeSocial() }));
   const r = prepared.ok ? await runPreparedCall(prepared.call, toolContext({ fetch, social: fakeSocial() }), VOICE_RUNNERS) : prepared.result;
   assert.equal(r.outcome, 'refused');
   assert.match(String(r.output['reason']), /take no scope; leave filter\.scope out|use ".*", or leave filter\.scope out/);

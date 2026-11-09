@@ -3,7 +3,7 @@
 exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
 [
   {
-    "description": "Open, in the current workspace, a page, a row of the last result (by its ref or position: "the second one" is "2"), or a record by kind and name ("open the payments initiative" is kind initiative, name payments). Several matches come back as a numbered choice the user picks by saying its number or clicking it. Never a path.",
+    "description": "Open, in the current workspace, a page, a row of the last result (by its ref or position: "the second one" is "2"), a record by kind and name ("open the payments initiative" is kind initiative, name payments), or a tab of the page in view (scope "this-page" and tab: "open decisions" on an initiative). Several matches come back as a numbered choice the user picks by saying its number or clicking it. Never a path.",
     "name": "open",
     "parameters": {
       "additionalProperties": false,
@@ -170,11 +170,18 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
           ],
         },
         "scope": {
-          "description": ""this-page": the ref (a position, "2" for the second row) or the name is one of the rows the page in view shows, as the page context lists them; kind is then optional.",
+          "description": ""this-page": the ref (a position, "2" for the second row) or the name is one of the rows the page in view shows, as the page context lists them; kind is then optional. With tab and nothing else: a tab of the page in view.",
           "enum": [
             "this-page",
             null,
           ],
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "tab": {
+          "description": "A tab to show, as the page context lists them ("decisions", "work", "docs"): with scope "this-page" the page in view's tab; with a ref, that record's tab.",
           "type": [
             "string",
             "null",
@@ -187,6 +194,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
         "kind",
         "name",
         "scope",
+        "tab",
         "params",
       ],
       "type": "object",
@@ -301,7 +309,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
               ],
             },
             "scope": {
-              "description": ""mine" (the user's own), "all", or "reports" (the user's reports' access requests), where the kind takes one.",
+              "description": ""mine" (the user's own, where the kind takes it), "all" (everything the user can read: any kind), or "reports" (the user's reports' access requests).",
               "enum": [
                 "mine",
                 "all",

@@ -11,8 +11,9 @@ import { VoiceClient } from '../client.ts';
 import { ResultMemory, runPreparedCall, prepareToolCall, planPreparedCall } from '../tools.ts';
 import { VOICE_PLANNERS, VOICE_RUNNERS } from '../actions.ts';
 import {
-  PAGE_FIELD_MAX, PAGE_ROWS_MAX, pageContextFor, pageContextNote, pageIdFor, publishPageContext, resetPageContext, type PublishedPage,
+  PAGE_FIELD_MAX, PAGE_ROWS_MAX, pageContextFor, pageContextNote, pageIdFor, pageTabsFor, publishPageContext, publishPageTabs, resetPageContext, type PublishedPage,
 } from '../pageContext.ts';
+import { runVoiceTool } from '../tools.ts';
 import { FakeClock, PALETTE, fakeFetch, middlewareVoice, route, toolContext } from './voiceHarness.ts';
 
 const SESSION = 'vs_00000000-0000-0000-0000-0000000000f1';
@@ -139,4 +140,54 @@ test('decide takes a page position with scope "this-page"; queue_work refuses a 
   assert.match(String(decided.res.output['reason']), /work item is not decided by voice/);
   const past = await call('queue_work', { kind: 'finding-promote', target: 'the ninth', rows: [9] });
   assert.equal(past.res.output['code'], 'not-on-this-page');
+});
+
+const TABS = ['overview', 'work', 'docs', 'decisions', 'agents', 'contributors', 'activity'];
+
+test('G49: the page publishes its tabs; the note lists them and says a tab is opened, never searched', () => {
+  resetPageContext();
+  const off = publishPageTabs({ path: '/iq/projects/p-auth', tabs: TABS, tab: 'overview' });
+  assert.deepEqual(pageTabsFor('/iq/projects/p-auth')?.tabs, TABS);
+  assert.equal(pageTabsFor('/iq/projects/other'), null, 'another path gets nothing');
+  const note = pageContextNote({ tenant: 'orgiq', pathname: '/iq/projects/p-auth', pageId: 'initiatives', page: INITIATIVE, tabs: pageTabsFor('/iq/projects/p-auth') });
+  assert.match(note, /Tabs on this page: overview, work, docs, decisions, agents, contributors, activity \(in view: overview\)\./);
+  assert.match(note, /open with scope "this-page" and tab; never search for it/);
+  // A page with tabs and no rows yet still names its tabs.
+  assert.match(pageContextNote({ tenant: 'orgiq', pathname: '/iq/projects/p-auth', page: null, tabs: pageTabsFor('/iq/projects/p-auth') }), /has not shown any rows yet\.\nTabs on this page/);
+  off();
+  assert.equal(pageTabsFor('/iq/projects/p-auth'), null);
+});
+
+test('G49 acceptance: "open decisions" on an initiative is open tab:decisions: the URL carries ?tab=decisions and nothing is read or searched', async () => {
+  let reads = 0;
+  const ctx = toolContext({ fetch: async () => { reads++; throw new Error('no read'); }, page: () => INITIATIVE, tabs: () => ({ path: '/iq/projects/p-auth', tabs: TABS, tab: 'overview' }) });
+  const r = await runVoiceTool('open', { scope: 'this-page', tab: 'decisions' }, ctx);
+  assert.equal(r.outcome, 'done');
+  assert.deepEqual(ctx.navigations, ['/iq/projects/p-auth?tab=decisions']);
+  assert.equal(reads, 0);
+  // A tab the page does not have names the ones it has.
+  const bad = await runVoiceTool('open', { scope: 'this-page', tab: 'recordings' }, ctx);
+  assert.equal(bad.outcome, 'refused');
+  assert.match(String(bad.output['reason']), /no "recordings" tab; its tabs are overview, work, docs/);
+  // Work keeps an open item; another tab drops it.
+  const onItem = toolContext({ page: () => ({ ...INITIATIVE }), tabs: () => ({ path: '/iq/projects/p-auth', tabs: TABS, tab: 'work' }) });
+  await runVoiceTool('open', { scope: 'this-page', tab: 'docs' }, onItem);
+  assert.deepEqual(onItem.navigations, ['/iq/projects/p-auth?tab=docs']);
+  // A page without tabs refuses, so the voice never falls back to a search.
+  const none = await runVoiceTool('open', { scope: 'this-page', tab: 'decisions' }, toolContext({ page: () => INITIATIVE }));
+  assert.equal(none.outcome, 'refused');
+  // With a row's ref, that record's tab.
+  const row = await runVoiceTool('open', { scope: 'this-page', ref: '2', tab: 'decisions' }, ctx);
+  assert.equal(row.outcome, 'done');
+  assert.equal(ctx.navigations.at(-1), '/iq/projects/p-auth?tab=decisions');
+});
+
+test('G49: list work-item with filter scope all is not refused (all is every kind\'s widest read)', async () => {
+  const { fetch, log } = fakeFetch([route('GET', '/api/graph/work', 200, [{ id: 'w-1', title: 'Rotate the signing keys', projectId: 'p-auth' }])]);
+  const r = await runVoiceTool('list', { kind: 'work-item', filter: { scope: 'all' } }, toolContext({ fetch, results: new ResultMemory() }));
+  assert.equal(r.outcome, 'done');
+  assert.equal(log[0]!.url, '/api/graph/work');
+  // A scope the kind does not take is still refused with the ones it takes.
+  const mine = await runVoiceTool('list', { kind: 'work-item', filter: { scope: 'reports' } }, toolContext({ fetch, results: new ResultMemory() }));
+  assert.equal(mine.outcome, 'refused');
 });

@@ -76,7 +76,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { browserMedia } from '../../lib/voice/client';
 import { keepTranscripts, setKeepTranscripts, subscribeKeepTranscripts, transcriptStore } from '../../lib/voice/transcriptKeep';
 import { VOICE_LOG_PATH, sessionHref } from '../../pages/voice/voiceLogModel';
-import { pageContextFor, pageContextNote, pageIdFor, subscribePageContext } from '../../lib/voice/pageContext';
+import { pageContextFor, pageContextNote, pageIdFor, pageTabsFor, subscribePageContext } from '../../lib/voice/pageContext';
 import { voiceVerbosity } from '../../lib/voice/contextWindow';
 import { VoiceController, type ResumeRecord, type ResumeStore } from '../../lib/voice/controller';
 import { TENANT_SWITCH_EVENT } from '../../lib/voice/tenantSwitch';
@@ -386,11 +386,13 @@ function VoiceFooterPane() {
       jobs,
       // G21: the rows the page in view rendered for this persona (pageContext.ts), never a second read.
       page: () => pageContextFor(window.location.pathname),
+      // G49: the tabs the page in view published, for open { scope: 'this-page', tab }.
+      tabs: () => pageTabsFor(window.location.pathname),
     }),
     // The page context note the voice gets on start, on navigation and after every tool result (G21).
     pageContext: () => {
       const path = window.location.pathname;
-      return pageContextNote({ tenant: live.current.tenant, pathname: path, pageId: pageIdFor(PAGES, live.current.tenant, path), page: pageContextFor(path) });
+      return pageContextNote({ tenant: live.current.tenant, pathname: path, pageId: pageIdFor(PAGES, live.current.tenant, path), page: pageContextFor(path), tabs: pageTabsFor(path) });
     },
     // G33: this device's spoken length (Logging's "Short answers" switch on its Voice source), read at each session start.
     verbosity: voiceVerbosity,

@@ -808,7 +808,7 @@
      "path": "/api/access/search/answer"
     }
    ],
-   "line": 679
+   "line": 680
   },
   {
    "name": "list",
@@ -1046,7 +1046,7 @@
      "path": "/api/access/audit"
     }
    ],
-   "line": 697
+   "line": 698
   },
   {
    "name": "get",
@@ -1284,7 +1284,7 @@
      "path": "/api/access/reviews/:id"
     }
    ],
-   "line": 718
+   "line": 719
   },
   {
    "name": "computer",
@@ -1343,7 +1343,7 @@
      "path": "/api/local-compute/nodes/:nodeId/work"
     }
    ],
-   "line": 731
+   "line": 732
   },
   {
    "name": "summary",
@@ -1441,7 +1441,7 @@
      "path": "/api/access/summary"
     }
    ],
-   "line": 754
+   "line": 755
   },
   {
    "name": "budget",
@@ -1491,7 +1491,7 @@
      "path": "/api/observability/cost/summary"
     }
    ],
-   "line": 767
+   "line": 768
   },
   {
    "name": "activity",
@@ -1520,7 +1520,7 @@
      "path": "/api/search"
     }
    ],
-   "line": 781
+   "line": 782
   },
   {
    "name": "message",
@@ -1551,7 +1551,7 @@
      "path": "/api/social/plane/work-sharing"
     }
    ],
-   "line": 794
+   "line": 795
   },
   {
    "name": "call",
@@ -1582,7 +1582,7 @@
      "path": "/api/social/plane/search"
     }
    ],
-   "line": 810
+   "line": 811
   },
   {
    "name": "set_status",
@@ -1598,7 +1598,7 @@
    ],
    "mapsTo": "usePresence('<tenant>:lobby') (the shell's tenant lobby, manifest presenceLobby) then usePresence('social:lobby') with a Social grant: setStatus(status) and updateMetadata({ statusMessage })",
    "routes": [],
-   "line": 825
+   "line": 826
   },
   {
    "name": "queue_work",
@@ -1815,7 +1815,7 @@
      "path": "/api/pipelines/runs/:id/events"
     }
    ],
-   "line": 837
+   "line": 838
   },
   {
    "name": "decide",
@@ -1932,7 +1932,7 @@
      "path": "/api/assessment/drafts/:runId/discard"
     }
    ],
-   "line": 859
+   "line": 860
   },
   {
    "name": "create",
@@ -2016,7 +2016,7 @@
      "path": "/api/access/delegations"
     }
    ],
-   "line": 874
+   "line": 875
   },
   {
    "name": "update",
@@ -2158,7 +2158,7 @@
      "path": "/api/access/delegations/:id/end"
     }
    ],
-   "line": 908
+   "line": 909
   },
   {
    "name": "access_request_status",
@@ -2188,7 +2188,7 @@
      "path": "/api/access/approvals"
     }
    ],
-   "line": 930
+   "line": 931
   }
  ],
  "navigatePages": [

@@ -76,8 +76,45 @@ export function pageContextFor(pathname: string): PublishedPage | null {
   return current && current.path === pathname ? current : null;
 }
 
+/**
+ * G49: the tabs of the page in view (an initiative's overview, work, docs, decisions…), published apart from its
+ * rows so a record page that shows no rows still names its tabs; `open { scope: 'this-page', tab }` sets `?tab=`.
+ */
+export interface PageTabs {
+  path: string;
+  /** The page's tab ids, as its `?tab=` takes them, in the page's order. */
+  tabs: readonly string[];
+  /** The tab in view. */
+  tab: string | null;
+}
+
+let currentTabs: PageTabs | null = null;
+
+/** Publish the page's tabs; returns the unpublish, which clears the entry only while it is still this one. */
+export function publishPageTabs(t: PageTabs): () => void {
+  const entry: PageTabs = { path: t.path, tabs: t.tabs.slice(0, 12), tab: t.tab };
+  currentTabs = entry;
+  emit();
+  return () => { if (currentTabs === entry) { currentTabs = null; emit(); } };
+}
+
+/** The published tabs for `pathname`, or null. */
+export function pageTabsFor(pathname: string): PageTabs | null {
+  return currentTabs && currentTabs.path === pathname ? currentTabs : null;
+}
+
+/** Publish the page's tabs while mounted (null publishes nothing). */
+export function usePublishPageTabs(t: PageTabs | null): void {
+  const key = t ? JSON.stringify(t) : '';
+  useEffect(() => {
+    if (!t) return undefined;
+    return publishPageTabs(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is the content
+  }, [key]);
+}
+
 /** Test hook. */
-export function resetPageContext(): void { current = null; emit(); }
+export function resetPageContext(): void { current = null; currentTabs = null; emit(); }
 
 /**
  * Publish while mounted. `page` null publishes nothing (still loading, or a
@@ -110,13 +147,17 @@ export function pageIdFor(pages: ReadonlyArray<{ path: string; tenant: string; p
  * The silent context for the voice: where the user is and what the page
  * shows, compact and framed. Without a published page it is the path alone.
  */
-export function pageContextNote(o: { tenant: string; pathname: string; pageId?: string | null; page: PublishedPage | null; offers?: PublishedOffers | null }): string {
+export function pageContextNote(o: { tenant: string; pathname: string; pageId?: string | null; page: PublishedPage | null; offers?: PublishedOffers | null; tabs?: PageTabs | null }): string {
   const head = `Page context (${PAGE_NOTE_FRAME}): workspace ${field(o.tenant)}; page ${o.pageId ? `${field(o.pageId)} ` : ''}${field(o.pathname)}.`;
+  // G49: the page's tabs, and how to show one: a tab, never a search or a record open.
+  const t = o.tabs && o.tabs.tabs.length ? o.tabs : null;
+  const tabsLine = t ? `Tabs on this page: ${t.tabs.map(field).join(', ')}${t.tab ? ` (in view: ${field(t.tab)})` : ''}. "Open", "show" or "go to" one of them is open with scope "this-page" and tab; never search for it.` : null;
   const p = o.page;
   // G55: what the page in view offers to make (the Docs tab's New menu), whether or not it has rows yet.
   const offers = offersLine(o.offers !== undefined ? o.offers : pageOffersFor(o.pathname));
-  if (!p) return `${head} The page has not shown any rows yet.${offers ? `\n${offers}` : ''}`;
+  if (!p) return [`${head} The page has not shown any rows yet.`, ...(tabsLine ? [tabsLine] : []), ...(offers ? [offers] : [])].join('\n');
   const lines = [head];
+  if (tabsLine) lines.push(tabsLine);
   if (p.record) lines.push(`In view: ${field(p.record.ref)} "${field(p.record.title)}".`);
   if (p.offer) {
     const offer = String(p.offer).replace(/[\r\n\t]+/g, ' ').replace(/["“”]/g, "'").replace(/\s+/g, ' ').trim();

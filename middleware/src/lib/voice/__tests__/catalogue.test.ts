@@ -236,7 +236,7 @@ describe('tenant scoping (§6)', () => {
 
   it('open takes a page id, a ref or position, or a kind with a name, never a path or a free-form target (V2-4)', () => {
     const t = voiceTool('open')!;
-    expect(Object.keys(t.parameters.properties)).toEqual(['page', 'ref', 'kind', 'name', 'scope', 'params']);
+    expect(Object.keys(t.parameters.properties)).toEqual(['page', 'ref', 'kind', 'name', 'scope', 'tab', 'params']);
     const v = new Ajv({ strict: true }).compile(t.parameters);
     expect(v({ ref: 'person:p1' })).toBe(true);
     expect(v({ ref: '1', href: '/admin/identity' })).toBe(false);
@@ -543,6 +543,18 @@ describe('the rendered session', () => {
     expect(backend).toMatch(/Never repeat a refused call with the same arguments/);
     // G23: the inbound note's ref, read with get and answered with message's thread.
     expect(backend).toMatch(/get with its ref \("message:<id>", or "message:latest"\) reads it whole, and message with thread set to that ref/);
+  });
+
+  it('G49: open takes a tab; on a record page a tab is opened with scope this-page, never searched', () => {
+    const open = voiceTool('open')!;
+    expect(Object.keys(open.parameters.properties)).toEqual(['page', 'ref', 'kind', 'name', 'scope', 'tab', 'params']);
+    expect(open.description).toMatch(/a tab of the page in view \(scope "this-page" and tab: "open decisions" on an initiative\)/);
+    const backend = delegationInstructions('orgiq');
+    expect(backend).toMatch(/"open", "show" or "go to" one of those tabs .* is open with scope "this-page" and tab: never a search and never a record open/);
+    expect(backend).toMatch(/Never use search for what the page in view shows/);
+    const list = voiceTool('list')!;
+    const filter = list.parameters.properties['filter'] as { properties: Record<string, { description: string }> };
+    expect(filter.properties['scope']!.description).toMatch(/"all" \(everything the user can read: any kind\)/);
   });
 
   it('list, search and get take detail (G33), a boolean the model sets only for every row', () => {

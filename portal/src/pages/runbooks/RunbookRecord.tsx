@@ -3,7 +3,8 @@
 // run's outcome, and every run that was given it) and Suggest an edit. Drifting and retired runbooks
 // say so above the text.
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { useLocation, useSearchParams } from 'react-router';
+import { usePublishPageTabs } from '../../lib/voice/pageContext';
 import { ProcedureSteps, SourceList } from '@connorhoehn/ui-components';
 import { EditorShell } from '@connorhoehn/ui-components/doc-editor';
 import {
@@ -43,6 +44,9 @@ export function RunbookRecord({ id, summary, onOpen, onChanged }: {
   const names = useRunbookNames();
   const title = record.data?.runbook.title ?? summary?.title;
   useCrumbLabel(id, title ? runbookDisplayTitle(title) : undefined);
+  // G49: the record's tabs for the voice ("open history" is this page's tab), once it has a version to show.
+  const { pathname } = useLocation();
+  usePublishPageTabs(record.data?.current ? { path: pathname, tabs: RECORD_TABS.filter((t) => t !== 'suggest' || record.data?.runbook.status !== 'retired'), tab } : null);
 
   if (record.error && !record.data) {
     return (

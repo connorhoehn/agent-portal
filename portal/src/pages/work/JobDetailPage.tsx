@@ -13,7 +13,8 @@
 // hold a run you review an hour later. The transcript can.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams, useNavigate, useSearchParams } from 'react-router';
+import { Link, useLocation, useParams, useNavigate, useSearchParams } from 'react-router';
+import { usePublishPageTabs } from '../../lib/voice/pageContext';
 import {
   Button, Chip, ConfirmDialog, EmptyState, ErrorState, Inline, LoadingState, PageSection,
   Stack, PageHeader, StatStrip, Tabs, WorkflowStepper,
@@ -127,6 +128,9 @@ function JobDetailContent() {
   const [params, setParams] = useSearchParams();
   const tab = ['summary', 'activity', 'outputs', 'changes'].includes(params.get('tab') ?? '') ? params.get('tab')! : 'summary';
   const changeTab = (value: string) => { const next = new URLSearchParams(params); next.set('tab', value); setParams(next); };
+  // G49: the job's tabs for the voice ("open outputs" is this page's tab).
+  const { pathname } = useLocation();
+  usePublishPageTabs({ path: pathname, tabs: ['summary', 'activity', 'outputs', 'changes'], tab });
   // Cancel/review ride /api/work (ManageDevbox).
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageDevbox');

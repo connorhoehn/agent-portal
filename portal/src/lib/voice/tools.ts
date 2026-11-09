@@ -28,7 +28,7 @@
 // No React and only `.ts` imports, so `node --test` runs it.
 
 import type { Action } from '../capabilities';
-import { PAGE_ROWS_MAX, type PageRow, type PublishedPage } from './pageContext.ts';
+import { PAGE_ROWS_MAX, type PageRow, type PageTabs, type PublishedPage } from './pageContext.ts';
 import { INBOUND_TEXT_MAX, inboundRef, type InboundMemory } from './inbound.ts';
 import { waitingOn } from '../../pages/projects/budgetAccessModel.ts';
 import type { AccessRequest } from '../accessRequests';
@@ -231,6 +231,8 @@ export interface ToolContext {
   jobs?: JobTracking | null;
   /** The page in view (G21, pageContext.ts): what it rendered for this persona, or null when it has published nothing. */
   page?: () => PublishedPage | null;
+  /** G49: the tabs the page in view published (pageContext.ts pageTabsFor), or null. */
+  tabs?: () => PageTabs | null;
   /** What reached the user during the dock's life (G23, inbound.ts): `get message:<id>` reads it, `message { thread }` answers it. */
   inbox?: InboundMemory | null;
 }
@@ -784,7 +786,9 @@ const list: Runner = async (args, ctx) => {
   const filter = (args['filter'] as Args | undefined) ?? {};
   const q = typeof filter['q'] === 'string' ? filter['q'].trim() : '';
   const status = typeof filter['status'] === 'string' ? filter['status'].trim() : '';
-  const scope = typeof filter['scope'] === 'string' ? filter['scope'] : spec.list.scopes?.[0];
+  const given = typeof filter['scope'] === 'string' ? filter['scope'] : undefined;
+  // G49: "all" is every kind's widest read: a kind without scopes already lists everything the user can read.
+  const scope = given === 'all' && !spec.list.scopes?.length ? undefined : given ?? spec.list.scopes?.[0];
   if (scope && !spec.list.scopes?.includes(scope)) {
     // G39: say what to change (G29), never only that it was wrong.
     const Label = `${spec.label[0]!.toUpperCase()}${spec.label.slice(1)}`;
@@ -1061,11 +1065,35 @@ async function openByName(kind: string, name: string, ctx: ToolContext): Promise
   return refused(`I found no ${spec.one ?? spec.label.replace(/s$/, '')} called "${name}".`, page ? { nearest: { page: page.pageId, label: page.label } } : {});
 }
 
+/** `href` with `?tab=` set (G49), keeping its other parameters except an open item, which belongs to the Work tab. */
+export function withTab(href: string, tab: string): string {
+  const [path, query = ''] = href.split('?') as [string, string?];
+  const p = new URLSearchParams(query);
+  if (tab !== 'work') { p.delete('item'); p.delete('view'); p.delete('wq'); }
+  p.set('tab', tab);
+  return `${path}?${p.toString()}`;
+}
+
+/** G49: a tab of the page in view, through the router; refused (with the page's tabs) when the page has no such tab. */
+function openTab(tab: string, ctx: ToolContext): ToolResult {
+  const path = ctx.page?.()?.path ?? null;
+  const t = ctx.tabs?.() ?? null;
+  if (!t || (path && t.path !== path)) return refused('The page in view has no tabs. Open a page or a record instead.', { code: NOT_ON_PAGE });
+  if (!t.tabs.includes(tab)) return refused(`This page has no "${tab}" tab; its tabs are ${t.tabs.join(', ')}.`, { code: NOT_ON_PAGE, tabs: [...t.tabs] });
+  const href = withTab(t.path, tab);
+  ctx.navigate(href);
+  return done('navigated', { tab, path: href, tabs: [...t.tabs] }, `Showing ${tab}`);
+}
+
 const open: Runner = async (args, ctx) => {
   const page = typeof args['page'] === 'string' ? args['page'] : undefined;
   const ref = typeof args['ref'] === 'string' ? args['ref'].trim() : undefined;
   const kind = typeof args['kind'] === 'string' ? args['kind'] : undefined;
   const name = typeof args['name'] === 'string' ? args['name'].trim() : undefined;
+  const tab = typeof args['tab'] === 'string' ? args['tab'].trim().toLowerCase() : undefined;
+  // G49: a tab of the page in view ("open decisions" on an initiative).
+  if (tab && args['scope'] === 'this-page' && !ref && !name && !page) return openTab(tab, ctx);
+  if (tab && page) return refused('A tab goes with scope "this-page" (the page in view) or a record\'s ref, not a page.');
   // G21: a row the page in view shows, by its position, ref or name (a kind, when given, must match it).
   if (args['scope'] === 'this-page') {
     const said = ref ?? name;
@@ -1074,7 +1102,7 @@ const open: Runner = async (args, ctx) => {
     if ('result' in hit) return hit.result;
     if (kind && !hit.row.ref.startsWith(`${kind}:`)) return refused(`That row of the page is not a ${kind}.`, { code: NOT_ON_PAGE });
     if (!hit.row.href) return refused('That row has no page of its own; get reads it.');
-    return opened(hit.row.ref, hit.row.title, hit.row.href, ctx);
+    return opened(hit.row.ref, hit.row.title, tab ? withTab(hit.row.href, tab) : hit.row.href, ctx);
   }
   const given = [page, ref, kind || name].filter(Boolean).length;
   if (given !== 1 || (!!kind !== !!name)) return refused('Name exactly one thing to open: a page, a row\'s ref or position, or a kind with a name.');
@@ -1094,7 +1122,7 @@ const open: Runner = async (args, ctx) => {
 
   // A row: a position in the newest kept set, a ref any kept set holds, else a typed ref through the kind's own href.
   const kept = ctx.results?.find(ref!) ?? null;
-  if (kept) return kept.href ? opened(kept.ref, kept.title, kept.href, ctx) : refused('That row has no page in this portal; get reads it.');
+  if (kept) return kept.href ? opened(kept.ref, kept.title, tab ? withTab(kept.href, tab) : kept.href, ctx) : refused('That row has no page in this portal; get reads it.');
   if (/^\d{1,2}$/.test(ref!)) return refused(ctx.results && !ctx.results.empty ? `There is no row ${ref} in the last result.` : 'There is no result to open yet. Search or list first, then open a row by its position.');
   const parsed = parseRef(ref!);
   const spec = parsed ? kindSpec(ctx.tenant, parsed.kind) : undefined;
@@ -1103,7 +1131,7 @@ const open: Runner = async (args, ctx) => {
   if (gate) return gate;
   const href = spec.href(parsed.id, {});
   if (!href) return refused(`A ${parsed.kind} opens from a list: list them, then open one by its position.`);
-  return opened(ref!, ref!, href, ctx);
+  return opened(ref!, ref!, tab ? withTab(href, tab) : href, ctx);
 };
 
 // ── sweeps and bots ─────────────────────────────────────────────────────────

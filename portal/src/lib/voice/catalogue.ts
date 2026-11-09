@@ -504,7 +504,8 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       ref: str('A row to open: its ref exactly as a result gave it (e.g. "initiative:p-12"), or its position in the last result ("2" for the second row). Never a name or a path.', { minLength: 1, maxLength: 200 }),
       kind: str('With name: the kind of record the user named.', { enum: openKinds(null) }),
       name: str('With kind: the record\'s name as the user said it; several matches come back as a numbered choice.', { minLength: 1, maxLength: 120 }),
-      scope: str('"this-page": the ref (a position, "2" for the second row) or the name is one of the rows the page in view shows, as the page context lists them; kind is then optional.', { enum: ['this-page'] }),
+      scope: str('"this-page": the ref (a position, "2" for the second row) or the name is one of the rows the page in view shows, as the page context lists them; kind is then optional. With tab and nothing else: a tab of the page in view.', { enum: ['this-page'] }),
+      tab: str('A tab to show, as the page context lists them ("decisions", "work", "docs"): with scope "this-page" the page in view\'s tab; with a ref, that record\'s tab.', { minLength: 1, maxLength: 40 }),
       params: obj({
         q: str('Search text for the page, when it takes one.'),
         type: str('A result type filter, when the page takes one.'),
@@ -533,7 +534,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       filter: obj({
         q: str('Words the record\'s name should contain, as the user said them.', { minLength: 1, maxLength: 120 }),
         status: str('A status, as the page shows it (open, failed, active, pending…).', { minLength: 1, maxLength: 40 }),
-        scope: str('"mine" (the user\'s own), "all", or "reports" (the user\'s reports\' access requests), where the kind takes one.', { enum: ['mine', 'all', 'reports'] }),
+        scope: str('"mine" (the user\'s own, where the kind takes it), "all" (everything the user can read: any kind), or "reports" (the user\'s reports\' access requests).', { enum: ['mine', 'all', 'reports'] }),
         since: str(`Only records since: ${SINCE_WORDS}.`, { minLength: 1, maxLength: 40 }),
       }),
       scope: str('"this-page": the rows the page in view already shows (an initiative\'s work, in the page\'s order) instead of reading again; filter and limit still apply.', { enum: ['this-page'] }),
