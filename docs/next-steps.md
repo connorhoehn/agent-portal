@@ -532,3 +532,21 @@ Not done, and why:
 - The disabled "Answer" on the Automate inbox, the composer's Apply and Send, and the work graph's ‹ › / Following now / Earlier work are drawn inside ui-components (`rich-composer`, the work-graph timeline) with no prop for a disabled reason, and the composer's hint row is hidden at the compact density these hosts use. They need a library release: a `submitDisabledReason` (title and `aria-describedby`) on the composer and the prompt deck, and reasons on the timeline's interval controls.
 - "Run evals" on a library skill record is drawn by `portal/src/pages/library/AssetEvals.tsx`, not a shared component; left for the library page's owner.
 - The remaining Anthropic model ids in the mocks (`DEMO_MODEL` in `demo-director.ts`, `devbox-fleet.ts`, `devbox-tail.ts`, `model-prices.ts`, `session-bundle.ts`, the devbox profiles) all belong to the Claude Code runtime in the microVMs: `DEMO_MODEL` is checked against the devbox profile's model allowlist (`resolveTaskModel`), whose real defaults are in `lib/devbox-profile.ts` and `schema/devbox_profiles_schema.sql`, and the prices are keyed by those ids. Renaming them to Nova would make the demo's dispatch fail with `MODEL_NOT_ALLOWED`. `sdlc.ts` was already on Nova Pro. Left as real provider configuration.
+
+### Lane B
+
+On branch `worktree-agent-af5e61d8dc5c963be`; library ui-components 2.515.5 (`c3469b45`, tag `v2.515.5`).
+
+- Budgets: the ledger fits beside two rails at 1440 (remove rides the Budget cell, burn is the Left figure's tone, Held only when something is held); at 390 the page is the initiative list, then the record under "‹ All initiatives" (library `SectionLayout narrow`).
+- Decisions: the table fits at 1440.
+- Scores: "59 people scored"; the updated stat reads "never" when no score carries a time (mock scores have none).
+- Run detail: the crumb names the run, artifacts say where they live and which step made them, the Definition row names the agent with its id behind a copy control (library `CopyIdButton`); mock routing steps are named after the specialist they route to. `check-story` now fails on `mock-` ids in display fields and on a trace that repeats a step name.
+- Bot detail: named crumb, the whole failed outcome on two lines, run choices by time and status.
+- Runbooks: proposal diffs arrive collapsed; briefs are titled by their work item and date, the hash secondary in mono (middleware sends `task_title`).
+- Initiative record at 390: tabs fold into "More ▾" (`PageHeader tabsOverflowBelow`); the composer rests on one 42px line and its To: row returns with the caret (`ConversationComposer foldRecipients`).
+- Duplicate React keys on Calibration and What is deployed; one h1 on the agent library record.
+- Search: recordings are not a source without a Social grant; "+" marks only counts that are true lower bounds (`lowerBoundCounts`).
+- Counts go through one plural helper (`portal/src/lib/plural.ts`), about 60 files swept ("1 error").
+- Footer: wrapped lines drop their left rule at 390; `audit-ui-dom.cjs` falls back to the installed Chromium revision and says so.
+
+Left: u- ids still appear inside the collapsed byte-exact file diffs of a proposal (they are the snapshot's data); 390 tables on Scores, Run, Bot and Calibration scroll inside their box rather than reflowing; the agent-library record at 390 shows no h1 while the drawer is open.
