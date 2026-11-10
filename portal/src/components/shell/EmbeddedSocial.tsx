@@ -304,17 +304,18 @@ function SocialEntryRow({ social }: { social: EmbeddedSocialContextValue }) {
     <Inline gap="none" align="center" wrap={false}>
       <Button variant="ghost" size="sm" onClick={openSocial} title="Social — Alt-click for the quick message panel"
         aria-pressed={messagesOn} data-testid="shell-social-open">
-        <Inline gap="xs" align="center" wrap={false}><ChatIcon size={16} />Social</Inline>
+        {/* Below 40rem the footer is one row: the label gives way to the icon (the button keeps its name). */}
+        <Inline gap="xs" align="center" wrap={false}><ChatIcon size={16} /><span className="max-sm:sr-only">Social</span></Inline>
       </Button>
       {socialRole && showSocialTenantDoor(session?.tenant, true) && <IconButton variant="ghost" size="sm" aria-label="Open the Social tenant" title="Open the Social tenant (reloads the app)"
         icon={<ExternalLinkIcon size={14} />} onClick={() => void enterContext('social', socialRole, '/social/channels')}
-        data-testid="shell-social-workspace" />}
+        className="max-sm:hidden" data-testid="shell-social-workspace" />}
     </Inline>
-    <Inline gap="xs" align="center" wrap={false} className="border-l border-border pl-3">
+    <Inline gap="xs" align="center" wrap={false} className="border-l border-border pl-3 max-sm:pl-2">
       {social.presencePeople.length > 0 && <PresenceRow people={social.presencePeople} />}
       <PresenceDot state={social.onlineCount > 0 ? 'online' : 'offline'} pulse={false} size="sm" />
       {/* Tabular digits: a live count changing (7 → 8 online) must not shift the footer controls after it. */}
-      <T size="xs" tone="secondary" tabular className="whitespace-nowrap" data-testid="shell-social-online">{social.onlineCount} online</T>
+      <T size="xs" tone="secondary" tabular className="whitespace-nowrap" data-testid="shell-social-online">{social.onlineCount}<span className="ml-1 max-sm:sr-only">online</span></T>
     </Inline>
     <Inline gap="none" align="center" className="border-l border-border pl-2">
       <WrappedNotificationBell notifications={activity} placement="bottom-start" size="sm" label="Social activity"

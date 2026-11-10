@@ -177,7 +177,7 @@ function FooterIdle() {
     chatLabel="Message"
     {...(messageReason ? { chatDisabledReason: messageReason } : {})}
     extras={<DeviceSettings onClick={() => host?.checkDevices()} disabled={!host} />}
-    className="shell-collaboration-bar shrink-0 grow basis-[14rem] border-l border-border"
+    className="shell-collaboration-bar shrink-0 grow basis-[14rem] max-sm:grow-0 max-sm:basis-[7.5rem] border-l border-border"
     data-testid="shell-footer-context"
   />;
 }

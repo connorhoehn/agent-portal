@@ -336,6 +336,7 @@ function ProjectDetailPage() {
   // The list is sorted and searched; the open item is chosen from the whole
   // backlog, so typing a search never swaps the item you are reading.
   const allRows = useMemo(() => workRows(workTree, sort, ''), [workTree, sort]);
+  const workItemKeys = useMemo(() => new Map(allRows.flatMap((r): [string, string][] => (r.key ? [[r.id, r.key]] : []))), [allRows]);
   const visibleRows = useMemo(() => workRows(workTree, sort, query, filters), [workTree, sort, query, filters]);
   // The voice's page context (G21): the initiative in view and the work rows exactly as the list shows them
   // (its sort, search and filters), from this page's own reads. Nothing while the work read is loading or failed.
@@ -953,7 +954,7 @@ function ProjectDetailPage() {
         {onWork && (wantedItem ? workPane : workTable)}
         {!onWork && tab !== 'overview' && tab !== 'activity' && (
           <Stack gap="md" className="px-6 pb-6 pt-4">
-            {tab === 'decisions' && <DecisionQueue decisions={decisions ?? []} onOpen={(decisionId) => paneControl.open('decision', decisionId)} />}
+            {tab === 'decisions' && <DecisionQueue decisions={decisions ?? []} workItemKeys={workItemKeys} onOpen={(decisionId) => paneControl.open('decision', decisionId)} />}
             {tab === 'docs' && <>
               {searchParams.has('recording') ? <InitiativeRecordings projectId={project.id} projectName={project.name} onOpen={openRecording} />
                 : <InitiativeFiles projectId={project.id} projectName={project.name} itemIds={treeRead && !workFailure ? [...new Set([...workTree.map(epic => epic.id), ...allRows.map(row => row.id)])] : null} workspaceHref={workspaceHref} onOpenRecording={openRecording} />}

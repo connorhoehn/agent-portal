@@ -76,8 +76,23 @@ export default {
     await shot(page, '2a2-composer-1440');
     const ed = page.locator('[data-testid=initiative-central-composer] .ProseMirror, [data-testid=rich-chat-composer] .ProseMirror').first();
     await ed.click();
-    await page.keyboard.type(`/comment ${TEXT}`, { delay: 15 });
-    await sleep(400);
+    // The command token first, then a pause for its menu to settle; then the note at a pace the composer's draft
+    // sync can follow. The library's RichChatComposer re-applies a draft one keystroke old when a render commits
+    // between two keystrokes (a stale `setContent`, seen as a lost space at 15 ms a key; docs in the 10 November
+    // report), so the typed text is read back and retyped when it is not exactly what was sent.
+    const typed = async () => (await ed.evaluate((e) => e.innerText.replace(/\s+/g, ' ').trim())).replace(/^\/comment /, '');
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await ed.click();
+      await page.keyboard.press(process.platform === 'darwin' ? 'Meta+a' : 'Control+a');
+      await page.keyboard.press('Backspace');
+      await sleep(300);
+      await page.keyboard.type('/comment ', { delay: 60 });
+      await sleep(500);
+      await page.keyboard.type(TEXT, { delay: 45 * attempt });
+      await sleep(400);
+      if ((await typed()).endsWith(TEXT)) break;
+      console.log(`2 typing attempt ${attempt}: composer holds "${(await typed()).slice(-70)}"`);
+    }
     await shot(page, '2b-typed-1440');
     await page.getByTestId('rich-chat-composer-send').click();
     await sleep(3000);
