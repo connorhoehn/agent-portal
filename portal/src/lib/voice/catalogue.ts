@@ -48,7 +48,7 @@ export interface VoiceToolSpec {
   noConfirm?: Readonly<Record<string, readonly string[]>>;
   /**
    * Who may answer the card (G40): 'voice' (a spoken "confirm" decides it, as a click does) or 'click' (only the
-   * button: computer, decide, an access request); `clickFor` names argument values that make a voice tool
+   * button: computer, decide (an answer to an agent's question too), an access request); `clickFor` names argument values that make a voice tool
    * click-only. `sayToConfirm` is the verb the voice asks with ("Say confirm to send").
    */
   confirmBy?: 'voice' | 'click';
@@ -372,7 +372,7 @@ export const DECIDE_SAYS: Readonly<Record<string, string>> = {
   change: 'an agent change (approve, reject, or deliver once approved)',
   'runbook-proposal': 'a runbook proposal (accept or reject; a rejection needs a note)',
   proposal: 'a graph change proposal (approve or reject)',
-  consult: 'an agent\'s question (approve, the user\'s spoken answer as the note)',
+  consult: 'an agent\'s question (approve, the user\'s answer as the note; only a click sends it)',
   design: 'a design thread (approve or reject the sign-off)',
   decision: 'a waiting decision (resolve with an option, or the outcome and why as note; or reject)',
   draft: 'a finished assessment draft (accept or discard)',

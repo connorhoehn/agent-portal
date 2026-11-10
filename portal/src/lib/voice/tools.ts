@@ -371,8 +371,12 @@ type Runner = (args: Args, ctx: ToolContext, plan?: unknown, answer?: CardAnswer
 /** What a confirm card shows, and what the runner will act on once confirmed. */
 export interface ConfirmPlan {
   title: string;
-  /** Coverage (10 November): "voice" lets a spoken confirm answer this card although the tool is click-only (a consult's answer, shown word for word). */
-  confirmBy?: 'voice';
+  /**
+   * The line the voice says while this card is open, instead of the tool's ("Click confirm on the card to …").
+   * Sweep 11 (M2): a consult's answer says the answer is on the card to check; no plan lets a spoken confirm
+   * answer a card its tool keeps click-only.
+   */
+  line?: string;
   /** One line, or a list of lines (the forecast, the fields a create will set). */
   detail?: string | string[];
   /** A decision: the card shows the approve / reject toggle (starting at `decision`) and a one-line note. */

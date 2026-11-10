@@ -1,12 +1,13 @@
 // Coverage (10 November), capability 6: what needs the user's review. One summary of the Needs-review strip's reads
 // (agent questions, jobs awaiting review, pending proposals) and the bell's unread entries; the agent's question read
-// out; and decide answering it with the user's spoken words, on a card a spoken confirm may send.
+// out; and decide answering it with the user's spoken words, on a card only a click sends (sweep 11, M2).
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { VOICE_PLANNERS, VOICE_RUNNERS } from '../actions.ts';
 import { InboundMemory } from '../inbound.ts';
-import { planPreparedCall, prepareToolCall, ResultMemory, runPreparedCall, runVoiceTool, type BellNotification, type ToolContext } from '../tools.ts';
+import { confirmModeOf, planPreparedCall, prepareToolCall, ResultMemory, runPreparedCall, runVoiceTool, type BellNotification, type ToolContext } from '../tools.ts';
+import { ANSWER_ON_CARD } from '../records.ts';
 import { fakeFetch, route, toolContext, type Route } from './voiceHarness.ts';
 
 const QUESTION = 'Which customer tenant goes first after the rehearsals, the smallest or the riskiest? The cutover sequence cannot be written until that is decided.';
@@ -54,19 +55,40 @@ test('get consult: the agent\'s question, whole in the output and begun in the s
   assert.match(String(r.output['answerWith']), /decide/);
 });
 
-test('decide consult with a spoken answer: the card shows it and a voice may confirm; the answer route gets the words', async () => {
+test('decide consult with a spoken answer: the card shows it whole, only a click sends it, and a typed correction wins', async () => {
   const { ctx, log } = ctxFor();
   const p = prepareToolCall('decide', { ref: 'consult:con-1', decision: 'approve', note: 'Riskiest two first, while the shim is warm.' }, ctx);
   assert.ok(p.ok, JSON.stringify(p));
   const planned = await planPreparedCall(p.call, ctx, VOICE_PLANNERS);
   assert.ok(planned && 'plan' in planned, JSON.stringify(planned));
-  assert.equal(planned.plan.confirmBy, 'voice');
+  // Sweep 11 (M2): click-only like every decide; the voice says the answer is on the card to check.
+  assert.equal(confirmModeOf(p.call), 'click');
+  assert.equal((planned.plan as { confirmBy?: unknown }).confirmBy, undefined);
+  assert.equal(planned.plan.line, ANSWER_ON_CARD);
   assert.match(planned.plan.title, /^Answer the consult "Which customer tenant/);
   assert.deepEqual(planned.plan.detail, ['Answer: Riskiest two first, while the shim is warm.']);
-  const done = await runPreparedCall(p.call, ctx, VOICE_RUNNERS, planned.plan.data);
+  assert.ok(planned.plan.fields, 'the card has a note field for a corrected answer');
+  // A click with the note left empty sends the answer shown.
+  const done = await runPreparedCall(p.call, ctx, VOICE_RUNNERS, planned.plan.data, { decision: 'approve', note: '' });
   assert.equal(done.outcome, 'done');
   assert.equal(done.output['say'], 'Answered the agent: "Riskiest two first, while the shim is warm."');
   assert.deepEqual(log.filter((l) => l.method === 'POST').map((l) => [l.url, l.body]), [['/api/lab/consults/con-1/answer', { answer: 'Riskiest two first, while the shim is warm.' }]]);
+  // A mis-heard word corrected on the card: the corrected text is what the agent gets.
+  const { ctx: c2, log: l2 } = ctxFor();
+  const p2 = prepareToolCall('decide', { ref: 'consult:con-1', decision: 'approve', note: 'Riskiest too first.' }, c2);
+  assert.ok(p2.ok);
+  const planned2 = await planPreparedCall(p2.call, c2, VOICE_PLANNERS);
+  assert.ok(planned2 && 'plan' in planned2);
+  await runPreparedCall(p2.call, c2, VOICE_RUNNERS, planned2.plan.data, { decision: 'approve', note: 'Riskiest two first.' });
+  assert.deepEqual(l2.filter((l) => l.method === 'POST').map((l) => l.body), [{ answer: 'Riskiest two first.' }]);
+  // The toggle flipped to reject sends nothing: an agent's question has no reject.
+  const { ctx: c3, log: l3 } = ctxFor();
+  const p3 = prepareToolCall('decide', { ref: 'consult:con-1', decision: 'approve', note: 'Riskiest two first.' }, c3);
+  assert.ok(p3.ok);
+  const planned3 = await planPreparedCall(p3.call, c3, VOICE_PLANNERS);
+  assert.ok(planned3 && 'plan' in planned3);
+  assert.equal((await runPreparedCall(p3.call, c3, VOICE_RUNNERS, planned3.plan.data, { decision: 'reject', note: '' })).outcome, 'refused');
+  assert.deepEqual(l3.filter((l) => l.method === 'POST'), []);
   // With no answer said there is nothing to show, so nothing to confirm.
   const bare = prepareToolCall('decide', { ref: 'consult:con-1', decision: 'approve' }, ctx);
   assert.ok(bare.ok);

@@ -79,11 +79,19 @@ interface Resolved {
   noteOnCard?: boolean;
   /** G57: the numbered rows a decision's dialogue offers (its options, Something else…, Reject); `option` names one. */
   choices?: DialogueRow[];
-  /** Coverage (10 November): the note is the answer itself (a consult): the card says "Answer", and a voice may confirm it. */
+  /**
+   * The note is the answer itself (a consult): the card says "Answer". Sweep 11 (M2): the answer steers a running
+   * agent, so it is click-only like every decide; the card shows it whole and its note field takes a correction.
+   */
   answer?: boolean;
 }
 
 type Resolver = (id: string, ctx: ToolContext) => Promise<Resolved | { result: ToolResult }>;
+
+/** Sweep 11 (M2): what the voice says while an answer to an agent waits on the card. */
+export const ANSWER_ON_CARD = "I've put your answer on the card; check it and click Confirm.";
+/** The card's note field on an answer: a corrected answer, or nothing to send the one shown. */
+export const ANSWER_CORRECTION = 'Type a corrected answer, or leave empty to send the one shown';
 
 const notWaiting = (what: string) => ({ result: refused(`That ${what} is not waiting on your decision, or you cannot read it.`) });
 
@@ -403,8 +411,10 @@ const planDecide: VoiceToolPlanner = async (args, ctx) => {
     title: `${chosen.word ?? VERB_WORD[verb]} ${row.title}`,
     // The chosen option first (G57), then what the user said as its why.
     detail: [...row.detail, ...(option ? [`Option ${option.n}: ${option.label}`] : []), ...(note ? [`${option ? 'Why' : row.answer ? 'Answer' : 'Note'}: ${note}`] : [])],
-    // The answer is on the card word for word, so the spoken "confirm" may send it (decide is otherwise click-only).
-    ...(row.answer && note ? { confirmBy: 'voice' as const } : {}),
+    // Sweep 11 (M2): an answer to an agent is what the model heard, and it directs a running agent. It stays click-only
+    // like every decide: the card shows the answer whole, its note field takes a corrected answer (left empty, the one
+    // shown is sent), and the voice says to check it and click.
+    ...(row.answer && note ? { fields: { decision: 'approve' as const, notePlaceholder: ANSWER_CORRECTION }, line: ANSWER_ON_CARD } : {}),
     // Both ways open: the library's toggle and note, starting where the user said; Confirm answers { decision, note }.
     ...(both ? { fields: { decision: verb === 'reject' ? 'reject' : 'approve', notePlaceholder: option ? 'Why (optional)' : row.notePlaceholder ?? (row.sends.reject?.needsNote ? 'Reason (needed to reject)' : 'Note (optional)') } } : {}),
     data: plan,
@@ -431,6 +441,7 @@ const runDecide: VoiceToolRunner = async (_args, ctx, planned, answer?: CardAnsw
   const verb: Verb = answer && plan.verb !== 'deliver' ? answer.decision : plan.verb;
   const note = answer ? (answer.note.trim() || plan.note) : plan.note;
   const chosen = plan.sends[verb];
+  if (!chosen && plan.kind === 'consult') return refused('An agent\'s question is answered, not rejected; nothing was sent.');
   if (!chosen) return refused(`${plan.title} cannot be ${verb === 'reject' ? 'rejected' : 'approved'} by voice.`);
   const action = DECIDE_ACTIONS[ctx.tenant]?.[plan.kind]?.[verb];
   if (action && !ctx.can(action)) return refused(`I can't ${verb} that with your role.`);

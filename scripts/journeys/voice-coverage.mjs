@@ -398,21 +398,27 @@ const C5 = {
   },
 };
 
-/** C6: what needs review, the agent's question, and a spoken answer (Nora, who may answer an agent). */
+/**
+ * C6: what needs review, the agent's question, and a spoken answer (Nora, who may answer an agent). Sweep 11 (M2):
+ * the answer is click-only like every decide. The spoken "Confirm." sends nothing; the card shows the answer whole,
+ * a mis-heard word is corrected in its note field, and the click sends the corrected answer.
+ */
 const C6 = {
-  title: 'Review queue and an agent question answered by voice', persona: 'nora',
+  title: 'Review queue and an agent question answered on its card', persona: 'nora',
   async run(s, page) {
-    await s('voice: "What needs my review?", "Read the agent\'s question.", "Answer: riskiest two first." then "Confirm."', async () => {
+    await s('voice: "What needs my review?", "Read the agent\'s question.", "Answer: riskiest too first." then "Confirm." (nothing sent); correct and click', async () => {
       await go(page, '/iq/work');
       await waitText(page, 'body', /Which customer tenant goes first/);
       const consults = (await json(page, '/api/lab/consults?status=pending')).consults;
       const proposals = (await json(page, '/api/work/proposals?status=pending')).proposals;
       const id = consults[0].id;
-      const sent = page.waitForResponse((r) => r.url().includes(`/api/lab/consults/${id}/answer`) && r.request().method() === 'POST', { timeout: 30000 });
+      const answers = [];
+      page.on('request', (r) => { if (r.url().includes(`/api/lab/consults/${id}/answer`) && r.method() === 'POST') answers.push(r.postDataJSON()); });
       await startVoice(page, [
         { said: 'What needs my review?', call: { name: 'summary', arguments: { kind: 'review', since: null } } },
         { said: "Read me the agent's question.", call: { name: 'get', arguments: { ...GET, ref: `consult:${id}` } } },
-        { said: 'Tell it: riskiest two first, while the shim is warm.', call: { name: 'decide', arguments: { ref: `consult:${id}`, decision: 'approve', note: 'Riskiest two first, while the shim is warm.', option: null } } },
+        // The model heard "too" for "two": the card is where the user catches it.
+        { said: 'Tell it: riskiest too first, while the shim is warm.', call: { name: 'decide', arguments: { ref: `consult:${id}`, decision: 'approve', note: 'Riskiest too first, while the shim is warm.', option: null } } },
         { said: 'Confirm.', on: 'card' },
       ]);
       const review = await nthOutput(page, 1);
@@ -420,9 +426,25 @@ const C6 = {
       const b = terseSay(await nthOutput(page, 2), 'agent question', `The agent asks: ${consults[0].question.match(/^.+?[.?!](?=\s|$)/)[0]}`);
       await page.getByTestId('voice-confirm-card').waitFor({ timeout: 15000 });
       const card = await text(page, '[data-testid=voice-confirm-card]');
-      check(/Answer: Riskiest two first, while the shim is warm\./.test(card), `the card does not show the answer: ${card.slice(0, 200)}`);
-      const r = await sent.catch(() => { throw new StepFailure('the spoken confirm sent no answer (is the card still click-only?)'); });
+      check(/Answer: Riskiest too first, while the shim is warm\./.test(card), `the card does not show the answer whole: ${card.slice(0, 200)}`);
+      check(/click confirm/i.test(card), `the card does not ask for a click: ${card.slice(0, 200)}`);
+      // The spoken "Confirm." is heard and sends nothing: the card stays open.
+      const heard = Date.now() + 8000;
+      while (Date.now() < heard) {
+        const frames = await page.evaluate(() => window.__voiceFrames ?? []);
+        if (frames.some((f) => f.dir === 'in' && f.event?.type === 'session.input_transcript.delta' && f.event.delta === 'Confirm.')) break;
+        await sleep(200);
+      }
+      await sleep(1000);
+      check(await page.getByTestId('voice-confirm-card').count() === 1, 'the card closed on the spoken confirm');
+      check(answers.length === 0, 'the spoken confirm sent an answer to the agent');
+      // The user corrects the mis-heard word on the card, then clicks.
+      await page.getByTestId('voice-confirm-card-note').fill('Riskiest two first, while the shim is warm.');
+      const sent = page.waitForResponse((r) => r.url().includes(`/api/lab/consults/${id}/answer`) && r.request().method() === 'POST', { timeout: 15000 });
+      await page.getByTestId('voice-confirm-card-confirm').click();
+      const r = await sent;
       check(r.status() < 300, `POST /api/lab/consults/${id}/answer answered ${r.status()}`);
+      check(answers.length === 1 && answers[0].answer === 'Riskiest two first, while the shim is warm.', `the agent got ${JSON.stringify(answers)}`);
       const c = terseSay(await nthOutput(page, 3, 20000), 'answer', 'Answered the agent: "Riskiest two first, while the shim is warm."');
       const after = (await json(page, '/api/lab/consults?status=pending')).consults;
       check(!after.some((x) => x.id === id), 'the consult is still pending');
@@ -431,8 +453,6 @@ const C6 = {
     });
   },
 };
-
-const SEARCH = { query: null, type: null, scope: null, sort: null, limit: null, answer: null, detail: null };
 
 /** C7: knowledge (Nora): a runbook found and its steps read, an ADR found and opened. */
 const C7 = {
