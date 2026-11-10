@@ -32,7 +32,7 @@ test('a kept array calls the latest render\'s run and search, never the first on
   let latest = first;
   const kept = forwardToLatest(first, () => latest);
   latest = build(['search', 'scoring'], false, seen);
-  kept[0]!.run!(undefined as never);
+  kept[0]!.run!();
   assert.deepEqual(seen, ['search,scoring']);
   assert.deepEqual(kept[0]!.argument!.search('scor'), ['scoring']);
   assert.equal(kept[1]!.run, undefined);
