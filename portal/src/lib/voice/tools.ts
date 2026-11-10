@@ -160,7 +160,7 @@ export interface ToastSink {
  * conversation commands, Social decks); change: GET /api/sdlc/changes/:id
  * `change.status`.
  */
-export interface JobFollow { url: string; reader: 'work-job' | 'assessment-run' | 'flow' | 'change' }
+export interface JobFollow { url: string; reader: 'work-job' | 'assessment-run' | 'flow' | 'change' | 'marketplace-run' }
 
 /** Work queue_work queued (G19, V2-9): the server's own id and the page it opens, never anything the model said. */
 export interface QueuedJob {
@@ -273,6 +273,8 @@ export function pageRowAt(ctx: ToolContext, n: number): { row: PageRow } | { res
 }
 
 /** The row of the page in view a position ("2"), a ref or a name names; one row, or the refusal (several names are ambiguous). */
+const ROW_KIND_WORDS = new Set(['the', 'a', 'an', 'one', 'bug', 'story', 'task', 'item', 'ticket', 'issue']);
+
 export function pageRowNamed(ctx: ToolContext, said: string): { row: PageRow } | { result: ToolResult } {
   const t = said.trim();
   if (/^\d{1,2}$/.test(t)) return pageRowAt(ctx, Number(t));
@@ -280,7 +282,8 @@ export function pageRowNamed(ctx: ToolContext, said: string): { row: PageRow } |
   if ('result' in read) return read;
   const byRef = read.rows.find((r) => r.ref === t);
   if (byRef) return { row: byRef };
-  const needles = t.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  // Words that say what kind of row, not which ("the logout cookie bug" names "Logout leaves the legacy shim cookie alive").
+  const needles = (t.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => !ROW_KIND_WORDS.has(w));
   const exact = read.rows.filter((r) => r.title.toLowerCase() === t.toLowerCase());
   const hits = exact.length ? exact : needles.length ? read.rows.filter((r) => needles.every((w) => r.title.toLowerCase().includes(w))) : [];
   if (hits.length === 1) return { row: hits[0]! };
@@ -1190,7 +1193,8 @@ function openTab(tab: string, ctx: ToolContext): ToolResult {
   if (!t.tabs.includes(tab)) return refused(`This page has no "${tab}" tab; its tabs are ${t.tabs.join(', ')}.`, { code: NOT_ON_PAGE, tabs: [...t.tabs] });
   const href = withTab(t.path, tab);
   ctx.navigate(href);
-  return done('navigated', { tab, path: href, tabs: [...t.tabs] }, `Showing ${tab}`);
+  // The one line to say, as every other navigation carries (the demo journey heard nothing after "open decisions").
+  return done('navigated', { tab, path: href, tabs: [...t.tabs], say: `Showing ${tab}.` }, `Showing ${tab}`);
 }
 
 /** The next step for a page and a tab the dock cannot pair (G64): the two forms `open` takes a tab in. */

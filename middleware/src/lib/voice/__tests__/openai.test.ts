@@ -4,7 +4,8 @@
 
 import AjvImport from 'ajv';
 import {
-  liveSessionBody, liveFunctionTool, strictSchema, mockLiveScript, ALLOWED_CLIENT_EVENTS, createLiveSession, _setVoiceFetch,
+  liveSessionBody, liveFunctionTool, strictSchema, mockLiveScript, mockLiveTurns, parseMockTurns, ALLOWED_CLIENT_EVENTS, createLiveSession, _setVoiceFetch,
+  MAX_MOCK_TURNS, MOCK_CARD_CUE,
 } from '../openai.js';
 import { responsesFunctionTools, toolsForTenant, voiceTool, delegationInstructions } from '../catalogue.js';
 
@@ -116,5 +117,39 @@ describe('the MOCK_VOICE script', () => {
     expect(script.onClose[0]!.event).toMatchObject({ type: 'session.closed', reason: 'close_requested', usage: { seconds: 15 } });
     const times = script.onStart.map((f) => f.atMs);
     expect([...times].sort((a, b) => a - b)).toEqual(times);
+  });
+});
+
+describe('the MOCK_VOICE turns (PUT /api/voice/mock-script)', () => {
+  const isTool = (n: string) => !!voiceTool(n);
+  const open = { said: 'Open Auth Migration.', call: { name: 'open', arguments: { kind: 'initiative', name: 'Auth Migration' } } };
+  const post = { said: 'Tell #auth-migration it is decided.', call: { name: 'message', arguments: { target: { kind: 'channel', name: 'auth-migration' }, text: 'Decided.' } } };
+
+  it('checks the turns: a catalogue tool per request, a card answer only after a request, the first a request, at most MAX_MOCK_TURNS', () => {
+    expect(parseMockTurns([open, { said: 'confirm', on: 'card' }], isTool)).toEqual([open, { said: 'confirm', on: 'card' }]);
+    expect(parseMockTurns([{ said: 'confirm', on: 'card' }, open], isTool)).toBeNull();
+    expect(parseMockTurns([{ said: 'x', call: { name: 'rm_rf', arguments: {} } }], isTool)).toBeNull();
+    expect(parseMockTurns([{ said: '', call: open.call }], isTool)).toBeNull();
+    expect(parseMockTurns([{ said: 'x', call: { name: 'open', arguments: [] } }], isTool)).toBeNull();
+    expect(parseMockTurns([], isTool)).toBeNull();
+    expect(parseMockTurns('open', isTool)).toBeNull();
+    expect(parseMockTurns(Array.from({ length: MAX_MOCK_TURNS + 1 }, () => open), isTool)).toBeNull();
+  });
+
+  it('a later request plays after the one before it is continued, under its own delegation; a card answer is cued on that request\'s card', () => {
+    const s = mockLiveTurns('vs_00000000-0000-4000-8000-000000000002', [open, post, { said: 'confirm', on: 'card' }]);
+    expect(s.onResponseCreateSeq).toHaveLength(2);
+    const second = s.onResponseCreateSeq![0]!;
+    // The first request's continuation, then the second request.
+    expect(second[0]!.event['delegation_id']).toBe('item_mock_delegation_1');
+    const done = second.find((f) => (f.event['event'] as { type?: string } | undefined)?.type === 'response.output_item.done')!;
+    expect(done.event['delegation_id']).toBe('item_mock_delegation_2');
+    expect((done.event['event'] as { item: { name: string; call_id: string } }).item).toMatchObject({ name: 'message', call_id: 'call_mock_2' });
+    const times = second.map((f) => f.atMs);
+    expect([...times].sort((a, b) => a - b)).toEqual(times);
+    expect(s.onSent).toEqual([{ type: 'session.thinking.append', contains: MOCK_CARD_CUE, minResponses: 1, frames: [expect.objectContaining({ event: expect.objectContaining({ delta: 'confirm' }) })] }]);
+    // An unplanned response.create continues whichever delegation the dock continued.
+    expect(s.onResponseCreate[0]!.event['delegation_id']).toBe('$continued');
+    expect(s.onClose[0]!.event).toMatchObject({ type: 'session.closed', usage: { seconds: 25 } });
   });
 });

@@ -12,7 +12,7 @@
 //         model, voice (the caller's choice, else VOICE_VOICE, else null), style (G38),
 //         toolsEnabled, tools: [names], budget: { holdUsd, usdPerMinute },
 //         toastSeconds (VOICE_TOAST_SECONDS: how long a queued job's toast stays once it ends, G19),
-//         mockScript?: { onStart, onResponseCreate, onClose } }   (MOCK_VOICE only; lib/voice/openai.ts)
+//         mockScript?: { onStart, onResponseCreate, onClose, onResponseCreateSeq?, onSent? } }   (MOCK_VOICE only; lib/voice/openai.ts; PUT /mock-script, below)
 //     sessionId is opaque: the provider's live_… id stays server-side (§6), so a
 //     hang-up goes through POST /:id/close, never from the browser to OpenAI.
 //     503 { error: 'voice-unavailable', reason: 'no-key' | 'provider' }; 429
@@ -109,8 +109,8 @@ import {
   delegationInstructions, hashToolArgs, responsesFunctionTools, toolsForTenant, voiceInstructions, voiceTool, mockCallFor,
 } from '../lib/voice/catalogue.js';
 import {
-  attachSideband, createLiveSession, detachSideband, hangupLiveSession, mockLiveScript, sidebandViewRow, voiceProviderConfigured, waitForSidebandUsage,
-  MOCK_SDP_ANSWER, VoiceProviderError, type ProviderUsage,
+  attachSideband, createLiveSession, detachSideband, hangupLiveSession, mockLiveScript, mockLiveTurns, parseMockTurns, sidebandViewRow,
+  voiceProviderConfigured, waitForSidebandUsage, MOCK_SDP_ANSWER, VoiceProviderError, type MockTurn, type ProviderUsage,
 } from '../lib/voice/openai.js';
 import {
   canonicalVoice, isVoicePace, isVoiceStyle, resolveVoice, voiceCatalogueConfig, voiceSettingsView, withVoiceSettings,
@@ -409,7 +409,7 @@ voiceRouter.post('/sessions', rateLimit('voice-mint', 10, 60_000, bySub), asyncH
     toastSeconds: cfg.toastSeconds,
     ...(resumeOf ? { resumeOf } : {}),
     ...(dailyMinutesLeft != null ? { dailyMinutesLeft } : {}),
-    ...(cfg.mock ? { mockScript: mockLiveScript(id, devMockCall() ?? mockCallFor(session.tenant, session.role)) } : {}),
+    ...(cfg.mock ? { mockScript: scriptedTurns(session.sub, id) ?? mockLiveScript(id, devMockCall() ?? mockCallFor(session.tenant, session.role)) } : {}),
   });
 }));
 
@@ -596,3 +596,43 @@ voiceRouter.post('/sessions/:id/close', asyncHandler(async (req, res) => {
 function closeBody(row: VoiceSessionRow, alreadyClosed: boolean) {
   return { sessionId: row.id, seconds: row.seconds, costUsd: row.cost_usd, costBasis: row.cost_basis, stopReason: row.stop_reason, alreadyClosed };
 }
+
+/**
+ * MOCK_VOICE only (404 otherwise, and always under NODE_ENV=production): the turns the caller's NEXT scripted
+ * session plays instead of the persona's one call, so a headless journey can say several things in one session
+ * ("open Auth Migration", then "open decisions"; a request, then "confirm" once its card opens). Consumed by that
+ * mint; one script per person; a real session never reads it.
+ *   PUT    /api/voice/mock-script { turns: [{ said, call: { name, arguments } } | { said, on: 'card' }] }   204
+ *   DELETE /api/voice/mock-script                                                                        204
+ * 400 when a turn is malformed, names no catalogue tool, or the first turn is not a request (openai.ts parseMockTurns).
+ */
+const mockTurnsBySub = new Map<string, MockTurn[]>();
+const mockScriptOpen = (): boolean => voiceConfig().mock && process.env['NODE_ENV'] !== 'production';
+
+function scriptedTurns(sub: string, sessionId: string) {
+  const turns = mockTurnsBySub.get(sub);
+  if (!turns) return null;
+  mockTurnsBySub.delete(sub);
+  return mockLiveTurns(sessionId, turns);
+}
+
+voiceRouter.put('/mock-script', rateLimit('voice-mock-script', 60, 60_000, bySub), (req, res) => {
+  if (!mockScriptOpen()) { res.status(404).json({ error: 'not found' }); return; }
+  const session = resolveSession(req) as Session;
+  const turns = parseMockTurns((req.body as { turns?: unknown } | undefined)?.turns, (n) => !!voiceTool(n));
+  if (!turns) {
+    res.status(400).json({ error: 'turns: 1-12 of { said, call: { name (a catalogue tool), arguments } } or { said, on: "card" }; the first is a request' });
+    return;
+  }
+  mockTurnsBySub.set(session.sub, turns);
+  res.status(204).end();
+});
+
+voiceRouter.delete('/mock-script', (req, res) => {
+  if (!mockScriptOpen()) { res.status(404).json({ error: 'not found' }); return; }
+  mockTurnsBySub.delete((resolveSession(req) as Session).sub);
+  res.status(204).end();
+});
+
+/** Tests: forget every scripted turn. */
+export function _resetMockTurns(): void { mockTurnsBySub.clear(); }

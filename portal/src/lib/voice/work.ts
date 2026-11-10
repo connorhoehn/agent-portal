@@ -116,7 +116,7 @@ export function matchByName<T>(rows: readonly T[], name: (r: T) => string, said:
 
 interface WorkPlan { kind: QueueWorkKind; title: string; sweep?: SweepName | null; botId?: string; definitionId?: string; note?: string; post?: PostSpec; dispatch?: DispatchItem[] }
 /** One work item of a dispatch (G22): its title and the drawer's exact body, fixed by the planner. */
-interface DispatchItem { id: string; title: string; body: Record<string, unknown> }
+interface DispatchItem { id: string; title: string; body: Record<string, unknown>; projectId?: string }
 interface BotRow { id: string; name: string; enabled?: boolean; pausedReason?: string | null }
 interface RunbookRow { id: string; title: string; enabled?: boolean }
 
@@ -138,6 +138,12 @@ interface PostSpec {
   doneDetail?: (body: Record<string, unknown>) => string | undefined;
   /** A 409 that names a job already doing this (a promoted finding): follow that one instead. */
   existingAt?: string;
+  /**
+   * When the answer names no id at `idAt`: where else it names one, and how that is followed. A dispatch the
+   * computer runner took answers `{ run: { id, jobId: null } }` (no work job): the run is followed through the
+   * initiative's runs, as the page's own card follows it (the demo journey, M5).
+   */
+  orElse?: { idAt: string; follow: { url: string; reader: JobFollow['reader'] }; href: string };
 }
 
 const KIND_WORDS: Record<string, string> = {
@@ -462,7 +468,7 @@ async function planDispatch(ctx: ToolContext, rows: ReadonlyArray<Pick<PageRow, 
     known ? `Forecast ${usd(lo)} to ${usd(hi)}${one ? '' : ' in all'}.` : 'The forecast is not known yet.',
     withNote(`${one ? 'An agent runs it on a computer and spends' : 'Agents run them on computers and spend'} against ${initiative}.`, note),
   ];
-  const data: WorkPlan = { kind: 'dispatch', title: one ? `"${items[0]!.title}"` : `${items.length} dispatches`, dispatch: items.map(({ id, title: t, body }) => ({ id, title: t, body })), ...(note ? { note } : {}) };
+  const data: WorkPlan = { kind: 'dispatch', title: one ? `"${items[0]!.title}"` : `${items.length} dispatches`, dispatch: items.map(({ id, title: t, body }) => ({ id, title: t, body, projectId })), ...(note ? { note } : {}) };
   return { plan: { title, detail: detailLines, data } };
 }
 
@@ -622,9 +628,16 @@ async function runKind(plan: WorkPlan, ctx: ToolContext, jobs: JobTracking): Pro
       return done('work_done', { workKind: plan.kind, title: plan.title, state: 'done', href: job.href, ...(detail ? { detail } : {}),
         next: 'Say it is done, in one short sentence.' }, `${plan.title}: done${detail ? ` (${detail})` : ''}`);
     }
-    const id = idAt(posted.body, spec.idAt);
-    if (!id || !spec.follow) return failed(`${plan.title} was accepted but the server named no job to follow; check its page.`, { page: href(null), code: 'rejected', workKind: plan.kind });
-    const job: QueuedJob = { jobId: id, kind: plan.kind, title: plan.title, href: href(id), follow: { url: fillId(spec.follow.url, id), reader: spec.follow.reader }, ...(plan.note ? { note: plan.note } : {}) };
+    let id = idAt(posted.body, spec.idAt);
+    let follow = spec.follow;
+    let page = id ? href(id) : null;
+    if (!id && spec.orElse) {
+      id = idAt(posted.body, spec.orElse.idAt);
+      follow = spec.orElse.follow;
+      page = spec.orElse.href;
+    }
+    if (!id || !follow) return failed(`${plan.title} was accepted but the server named no job to follow; check its page.`, { page: href(null), code: 'rejected', workKind: plan.kind });
+    const job: QueuedJob = { jobId: id, kind: plan.kind, title: plan.title, href: page ?? href(id), follow: { url: fillId(follow.url, id), reader: follow.reader }, ...(plan.note ? { note: plan.note } : {}) };
     jobs.track(job);
     return done('work_queued', { jobId: id, workKind: plan.kind, title: plan.title, state: 'queued', href: job.href,
       next: 'Say it is queued and that you will say when it is done. The portal shows its progress.' }, `${plan.title}: queued`);
@@ -640,7 +653,12 @@ async function runDispatch(plan: WorkPlan, items: readonly DispatchItem[], ctx: 
   const queued: Array<{ jobId: string; title: string; href: string }> = [];
   for (const it of items) {
     const itemPlan: WorkPlan = { kind: 'dispatch', title: `"${it.title}"`, ...(plan.note ? { note: plan.note } : {}),
-      post: { url: '/api/bots/dispatch-work', body: it.body, idAt: 'run.jobId', follow: { url: '/api/work/jobs/:id', reader: 'work-job' }, href: '/iq/work/:id' } };
+      post: { url: '/api/bots/dispatch-work', body: it.body, idAt: 'run.jobId', follow: { url: '/api/work/jobs/:id', reader: 'work-job' }, href: '/iq/work/:id',
+        ...(it.projectId ? { orElse: {
+          idAt: 'run.id',
+          follow: { url: `/api/bots/marketplace-runs?orgProjectId=${enc(it.projectId)}&run=:id`, reader: 'marketplace-run' as const },
+          href: `/iq/projects/${enc(it.projectId)}?tab=work&item=${enc(it.id)}`,
+        } } : {}) } };
     const res = await runKind(itemPlan, ctx, jobs);
     if (res.outcome !== 'done') {
       if (!queued.length) return res;
@@ -801,6 +819,28 @@ function followedState(reader: JobFollow['reader'], body: Record<string, unknown
   return state ? { state, ...(state === 'done' ? { detail: `Now ${String(change['status']).replace(/_/g, ' ')}` } : {}) } : null;
 }
 
+/**
+ * A dispatched run the computer runner took (no work job): the initiative's runs, the read the work item's own card
+ * polls (GET /api/bots/marketplace-runs?orgProjectId=), and in it the run the answer named (`run` on the follow URL,
+ * never sent). Its cost is the finished line.
+ */
+async function marketplaceRunState(get: <T>(url: string) => Promise<{ status: number; body: T | null }>, followUrl: string): Promise<{ state: JobState; detail?: string } | null> {
+  const [path, query = ''] = followUrl.split('?') as [string, string?];
+  const q = new URLSearchParams(query);
+  const runId = q.get('run');
+  q.delete('run');
+  if (!runId) return null;
+  const r = await get<{ runs?: Array<{ id: string; status: string; costUsd?: number | null; outcome?: Record<string, unknown> | null }> }>(`${path}?${q.toString()}`);
+  const run = r.body?.runs?.find((x) => x.id === runId);
+  if (!run) return null;
+  if (run.status === 'done') return { state: 'done', ...(typeof run.costUsd === 'number' ? { detail: `Cost ${usd(run.costUsd)}` } : {}) };
+  if (run.status === 'failed' || run.status === 'skipped' || run.status === 'cancelled') {
+    const reason = typeof run.outcome?.['reason'] === 'string' ? run.outcome['reason'] as string : typeof run.outcome?.['error'] === 'string' ? run.outcome['error'] as string : undefined;
+    return { state: 'failed', detail: reason ?? `The run ${run.status === 'skipped' ? 'was skipped' : run.status}` };
+  }
+  return { state: run.status === 'queued' ? 'queued' : 'running' };
+}
+
 /** The job's state from the read its page uses, or null when this read says nothing new. */
 async function readState(o: JobTrackerOptions, job: QueuedJob): Promise<{ state: JobState; detail?: string } | null> {
   const get = async <T>(url: string): Promise<{ status: number; body: T | null }> => {
@@ -812,6 +852,7 @@ async function readState(o: JobTrackerOptions, job: QueuedJob): Promise<{ state:
   if (job.follow) {
     // Only a URL the planner built from the route's own id, inside the portal's API.
     if (!job.follow.url.startsWith('/api/') || !localHref(job.follow.url)) return null;
+    if (job.follow.reader === 'marketplace-run') return marketplaceRunState(get, job.follow.url);
     const r = await get<Record<string, unknown>>(job.follow.url);
     if (r.status === 404) return { state: 'failed', detail: 'The server no longer has this; its page shows what ran.' };
     return r.body ? followedState(job.follow.reader, r.body) : null;

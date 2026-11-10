@@ -593,36 +593,118 @@ export interface MockLiveFrame { atMs: number; event: Record<string, unknown> }
  * response.create that continues it holds every later delegation, as the
  * real API did (scripts/voice/probe-realtime.mjs live-unresolved).
  */
-export function mockLiveScript(sessionId: string, call: { name: string; arguments: Record<string, unknown>; said: string }): {
+export function mockLiveScript(sessionId: string, call: { name: string; arguments: Record<string, unknown>; said: string }): MockLiveScript {
+  return mockLiveTurns(sessionId, [{ said: call.said, call: { name: call.name, arguments: call.arguments } }]);
+}
+
+/**
+ * One thing the user says in a scripted session (MOCK_VOICE only). A turn with a `call` is a request: the voice
+ * delegates it and the backend calls that tool; the first turn is spoken at the start, every later one once the
+ * previous request's continuation has played (the dock's nth response.create). A turn with `on: 'card'` and no call is
+ * the user's answer to a confirm card ("confirm", "cancel"): spoken once the card of the request before it opens.
+ */
+export interface MockTurn { said: string; call?: { name: string; arguments: Record<string, unknown> }; on?: 'card' }
+
+/**
+ * A cue on what the dock sends: the first time it sends an event of `type` (whose JSON contains `contains`, when
+ * given) after at least `minResponses` response.creates, the scripted session plays `frames` (portal client.ts).
+ */
+export interface MockLiveCue { type: string; contains?: string; minResponses: number; frames: MockLiveFrame[] }
+
+export interface MockLiveScript {
   onStart: MockLiveFrame[]; onResponseCreate: MockLiveFrame[]; onClose: MockLiveFrame[];
-} {
+  /** The nth response.create plays the nth list (several requests in one session). */
+  onResponseCreateSeq?: MockLiveFrame[][];
+  onSent?: MockLiveCue[];
+}
+
+/** What the dock sends when a confirm card opens (portal controller.ts cardNote, a session.thinking.append). */
+export const MOCK_CARD_CUE = 'A confirm card is open';
+/** The most turns one scripted session takes. */
+export const MAX_MOCK_TURNS = 12;
+
+/** Turns as a route or the environment gave them, checked: null when any turn is malformed or names no catalogue tool. */
+export function parseMockTurns(raw: unknown, isTool: (name: string) => boolean): MockTurn[] | null {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_MOCK_TURNS) return null;
+  const turns: MockTurn[] = [];
+  for (const t of raw as unknown[]) {
+    if (!t || typeof t !== 'object') return null;
+    const o = t as { said?: unknown; call?: unknown; on?: unknown };
+    if (typeof o.said !== 'string' || !o.said.trim() || o.said.length > 500) return null;
+    if (o.call != null) {
+      const c = o.call as { name?: unknown; arguments?: unknown };
+      if (typeof c.name !== 'string' || !isTool(c.name) || !c.arguments || typeof c.arguments !== 'object' || Array.isArray(c.arguments)) return null;
+      turns.push({ said: o.said, call: { name: c.name, arguments: c.arguments as Record<string, unknown> } });
+    } else if (o.on === 'card') {
+      // An answer needs a request before it.
+      if (!turns.some((x) => x.call)) return null;
+      turns.push({ said: o.said, on: 'card' });
+    } else return null;
+  }
+  return turns[0]!.call ? turns : null;
+}
+
+/**
+ * The scripted session for a sequence of turns (see MockTurn). One turn with a call is exactly the single-call
+ * script mockLiveScript has always returned; more add the later requests to `onResponseCreateSeq` (each after the
+ * previous request's continuation) and each card answer to `onSent`, cued on that request's card note.
+ */
+export function mockLiveTurns(sessionId: string, turns: MockTurn[]): MockLiveScript {
   const live = `live_mock_${sessionId.replace(/[^0-9a-f]/g, '').slice(0, 24)}`;
-  const delegationId = 'item_mock_delegation_1';
-  const resp1 = 'resp_mock_1', resp2 = 'resp_mock_2', fc = 'fc_mock_1', callId = 'call_mock_1';
-  const args = JSON.stringify(call.arguments);
-  const env = (event: Record<string, unknown>) => ({ type: 'response.event', delegation_id: delegationId, event });
-  return {
-    onStart: [
-      { atMs: 0, event: { type: 'session.started', session: { id: live, model: 'gpt-live-1', status: 'active' } } },
-      { atMs: 400, event: { type: 'session.input_transcript.delta', delta: call.said, start_ms: 0, end_ms: 1800 } },
-      { atMs: 500, event: { type: 'session.delegation.created', offset_ms: 1900, delegation: { id: delegationId, type: 'delegation', response_id: resp1, target: 'responses' } } },
-      { atMs: 510, event: env({ type: 'response.created', response: { id: resp1, status: 'in_progress', output: [] } }) },
-      { atMs: 900, event: env({ type: 'response.output_item.added', item: { id: fc, type: 'function_call', status: 'in_progress', arguments: '', call_id: callId, name: call.name }, output_index: 0, sequence_number: 2 }) },
-      { atMs: 1000, event: env({ type: 'response.function_call_arguments.done', arguments: args, item_id: fc, output_index: 0, sequence_number: 3 }) },
-      { atMs: 1010, event: env({ type: 'response.output_item.done', item: { id: fc, type: 'function_call', status: 'completed', arguments: args, call_id: callId, name: call.name }, output_index: 0, sequence_number: 4 }) },
-      { atMs: 1050, event: env({ type: 'response.completed', response: { id: resp1, status: 'completed', output: [], usage: { input_tokens: 1060, output_tokens: 20 } } }) },
-      { atMs: 1200, event: { type: 'session.usage.updated', usage: { seconds: 5 } } },
-    ],
-    onResponseCreate: [
-      { atMs: 150, event: env({ type: 'response.created', response: { id: resp2, status: 'in_progress', output: [] } }) },
-      { atMs: 400, event: env({ type: 'response.completed', response: { id: resp2, status: 'completed', output: [], usage: { input_tokens: 1194, output_tokens: 28 } } }) },
-      { atMs: 900, event: { type: 'session.output_transcript.delta', delta: 'Here is what I found.', start_ms: 3000, end_ms: 4200 } },
-      { atMs: 1000, event: { type: 'session.usage.updated', usage: { seconds: 9 } } },
-    ],
-    onClose: [
-      { atMs: 100, event: { type: 'session.closed', reason: 'close_requested', session: { id: live }, usage: { seconds: 15 } } },
-    ],
+  const say = (atMs: number, said: string) => ({ atMs, event: { type: 'session.input_transcript.delta', delta: said, start_ms: 0, end_ms: 1800 } });
+  /** Request k (1-based): its delegation from `at`, spoken first. */
+  const request = (k: number, at: number, said: string, call: { name: string; arguments: Record<string, unknown> }): MockLiveFrame[] => {
+    const delegationId = `item_mock_delegation_${k}`;
+    const resp = `resp_mock_${2 * k - 1}`, fc = `fc_mock_${k}`, callId = `call_mock_${k}`;
+    const args = JSON.stringify(call.arguments);
+    const env = (event: Record<string, unknown>) => ({ type: 'response.event', delegation_id: delegationId, event });
+    return [
+      say(at + 400, said),
+      { atMs: at + 500, event: { type: 'session.delegation.created', offset_ms: 1900, delegation: { id: delegationId, type: 'delegation', response_id: resp, target: 'responses' } } },
+      { atMs: at + 510, event: env({ type: 'response.created', response: { id: resp, status: 'in_progress', output: [] } }) },
+      { atMs: at + 900, event: env({ type: 'response.output_item.added', item: { id: fc, type: 'function_call', status: 'in_progress', arguments: '', call_id: callId, name: call.name }, output_index: 0, sequence_number: 2 }) },
+      { atMs: at + 1000, event: env({ type: 'response.function_call_arguments.done', arguments: args, item_id: fc, output_index: 0, sequence_number: 3 }) },
+      { atMs: at + 1010, event: env({ type: 'response.output_item.done', item: { id: fc, type: 'function_call', status: 'completed', arguments: args, call_id: callId, name: call.name }, output_index: 0, sequence_number: 4 }) },
+      { atMs: at + 1050, event: env({ type: 'response.completed', response: { id: resp, status: 'completed', output: [], usage: { input_tokens: 1060, output_tokens: 20 } } }) },
+      { atMs: at + 1200, event: { type: 'session.usage.updated', usage: { seconds: 5 * k } } },
+    ];
   };
+  /** Request k's continuation, played on the dock's response.create. */
+  const continuation = (k: number, delegationId: string): MockLiveFrame[] => {
+    const resp = `resp_mock_${2 * k}`;
+    const env = (event: Record<string, unknown>) => ({ type: 'response.event', delegation_id: delegationId, event });
+    return [
+      { atMs: 150, event: env({ type: 'response.created', response: { id: resp, status: 'in_progress', output: [] } }) },
+      { atMs: 400, event: env({ type: 'response.completed', response: { id: resp, status: 'completed', output: [], usage: { input_tokens: 1194, output_tokens: 28 } } }) },
+      { atMs: 900, event: { type: 'session.output_transcript.delta', delta: 'Here is what I found.', start_ms: 3000, end_ms: 4200 } },
+      { atMs: 1000, event: { type: 'session.usage.updated', usage: { seconds: 5 * k + 4 } } },
+    ];
+  };
+  const requests = turns.filter((t): t is MockTurn & { call: NonNullable<MockTurn['call']> } => !!t.call);
+  const first = requests[0]!;
+  const onStart: MockLiveFrame[] = [
+    { atMs: 0, event: { type: 'session.started', session: { id: live, model: 'gpt-live-1', status: 'active' } } },
+    ...request(1, 0, first.said, first.call),
+  ];
+  // The next request is spoken this long after its predecessor's continuation starts (the voice has said its line).
+  const NEXT_AFTER_MS = 1500;
+  const onResponseCreateSeq: MockLiveFrame[][] = [];
+  const onSent: MockLiveCue[] = [];
+  let k = 0;
+  for (const t of turns) {
+    if (t.call) {
+      k += 1;
+      if (k > 1) onResponseCreateSeq[k - 2]!.push(...request(k, NEXT_AFTER_MS, t.said, t.call));
+      onResponseCreateSeq.push(continuation(k, `item_mock_delegation_${k}`));
+    } else {
+      // The answer to request k's card: k-1 continuations have been asked for by then.
+      onSent.push({ type: 'session.thinking.append', contains: MOCK_CARD_CUE, minResponses: k - 1, frames: [say(600, t.said)] });
+    }
+  }
+  const onClose = [{ atMs: 100, event: { type: 'session.closed', reason: 'close_requested', session: { id: live }, usage: { seconds: 15 + 10 * (k - 1) } } }];
+  if (turns.length === 1) return { onStart, onResponseCreate: onResponseCreateSeq[0]!, onClose };
+  // Any further response.create (one the script did not plan) continues whichever delegation the dock continued.
+  return { onStart, onResponseCreate: continuation(k + 1, '$continued'), onResponseCreateSeq, onSent, onClose };
 }
 
 /** The answer a MOCK_VOICE mint returns: a syntactically valid SDP the scripted dock never applies. */

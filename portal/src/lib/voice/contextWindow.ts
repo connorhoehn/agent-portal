@@ -179,7 +179,7 @@ function labelOf(output: Record<string, unknown>, n: number): string {
 
 /**
  * G65: a search's line is the count and the top hit, and "read them" for the rest ("12 decisions, top: Adopt
- * OpenTelemetry. Say "read them" for more."). Three names read out a 29-word, 9-second answer in the owner's session
+ * OpenTelemetry; say "read them" for more."). Three names read out a 29-word, 9-second answer in the owner's session
  * (10 November 2026); a search answers "where is X", so the first hit is the answer. A one-fact answer is its own line.
  */
 /** Search types whose spoken word is not the type plus "s". */
@@ -193,7 +193,8 @@ function searchSay(output: Record<string, unknown>, total: number, top: string):
   const type = typeof output['type'] === 'string' && output['type'] !== 'all' ? output['type'] : null;
   const named = type ? SEARCH_TYPE_WORDS[type] : undefined;
   const label = named ? named[total === 1 ? 0 : 1] : type ? labelOf({ of: type }, total) : total === 1 ? 'result' : 'results';
-  return total > 1 ? `${total} ${label}, top: ${top}. Say "read them" for more.` : `1 ${label}: ${top}.`;
+  // One sentence (the terse rule the demo journey asserts): the count, the top hit, and how to hear the rest.
+  return total > 1 ? `${total} ${label}, top: ${top}; say "read them" for more.` : `1 ${label}: ${top}.`;
 }
 
 /**
@@ -220,6 +221,24 @@ export function briefOutput(tool: string, args: unknown, output: Record<string, 
     ? searchSay(output, total, names[0]!)
     : `${total} ${labelOf(output, total)}${high ? `, ${high} high priority` : ''}: ${list}${more ? `, and ${more} more` : ''}.`;
   return { ...output, rows: top, count: total, more, say, detail: 'Pass detail true to get every row; only when the user asks for all of them.' };
+}
+
+/** The most words a ready `say` line carries (one sentence; the demo journey asserts it). */
+export const SAY_MAX_WORDS = 25;
+
+/**
+ * A done result with no `say` of its own gets one from the dock's summary (the strip's words): one sentence, at
+ * most SAY_MAX_WORDS words, ending in a full stop. Decide, message and queue_work answered with no ready line, so
+ * the voice made one up (the demo journey, M2 to M5). A refusal or failure keeps its reason and next step instead;
+ * list, search and get make their own line in briefOutput (G33), and none at all when the user asked for every row.
+ */
+export function withSay(tool: string, outcome: string, output: Record<string, unknown>, summary: string): Record<string, unknown> {
+  if (BRIEF_TOOLS.has(tool) || outcome !== 'done' || (typeof output['say'] === 'string' && output['say'].trim())) return output;
+  const first = summary.replace(/\s+/g, ' ').trim().split(/(?<=[.!?])\s+(?=["“A-Z0-9])/)[0] ?? '';
+  if (!first) return output;
+  const words = first.split(' ');
+  const line = words.length > SAY_MAX_WORDS ? `${words.slice(0, SAY_MAX_WORDS).join(' ').replace(/[,;:—–-]+$/, '')}…` : first;
+  return { ...output, say: /[.!?…]$/.test(line) ? line : `${line}.` };
 }
 
 /** The spoken length the user chose on this device (G33): terse by default. */

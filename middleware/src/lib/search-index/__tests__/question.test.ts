@@ -27,6 +27,9 @@ test.each(['Kubernetes', 'Observability', 'Aurora cold start', 'how do I warm th
 
 test('synonyms and scaffolding: k8s searches Kubernetes, not "someone"', () => {
   expect(parseQuestion('find someone who can help with k8s', vocab).terms).toEqual(['kubernetes']);
+  // "identity and access" is the IAM skill (the demo's closing question).
+  const iam = parseQuestion('Who knows identity and access?', { ...vocab, skills: [...vocab.skills, 'IAM'] });
+  expect(iam.intents[0]).toEqual({ kind: 'experts', skills: ['IAM'] });
   expect(parseQuestion('which decisions are still open', vocab).terms).toEqual([]);
   expect(parseQuestion('escalated decisions', vocab).intents[0]).toEqual({ kind: 'decisions', statuses: ['escalated'] });
 });

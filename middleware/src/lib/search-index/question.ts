@@ -47,6 +47,8 @@ const MINE_WORDS = new Set('assigned working tasks task items item stories story
 /** Phrase synonyms, applied before tokenizing. Each maps to the canonical term (a skill name where there is one). */
 const PHRASES: Array<[RegExp, string]> = [
   [/\bk8s\b/gi, 'kubernetes'],
+  // The skill is named IAM; people ask for it in words ("who knows identity and access?", docs/demo-script.md).
+  [/\bidentity (?:and|&) access(?: management)?\b/gi, 'iam'],
   [/\bretrieval[- ]augmented[- ]generation\b/gi, 'rag'],
   [/\bopen[- ]?telemetry\b/gi, 'opentelemetry otel'],
   [/\botel\b/gi, 'otel opentelemetry'],

@@ -3901,6 +3901,16 @@
       "source": "src/routes/user-budgets.ts:77"
     },
     {
+      "method": "DELETE",
+      "path": "/api/voice/mock-script",
+      "source": "src/routes/voice.ts:631"
+    },
+    {
+      "method": "PUT",
+      "path": "/api/voice/mock-script",
+      "source": "src/routes/voice.ts:619"
+    },
+    {
       "method": "GET",
       "path": "/api/voice/sessions",
       "source": "src/routes/voice-log.ts:91"

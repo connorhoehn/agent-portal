@@ -165,6 +165,7 @@ test('G49 acceptance: "open decisions" on an initiative is open tab:decisions: t
   assert.equal(r.outcome, 'done');
   assert.deepEqual(ctx.navigations, ['/iq/projects/p-auth?tab=decisions']);
   assert.equal(reads, 0);
+  assert.equal(r.output['say'], 'Showing decisions.');
   // A tab the page does not have names the ones it has.
   const bad = await runVoiceTool('open', { scope: 'this-page', tab: 'recordings' }, ctx);
   assert.equal(bad.outcome, 'refused');
@@ -190,4 +191,14 @@ test('G49: list work-item with filter scope all is not refused (all is every kin
   // A scope the kind does not take is still refused with the ones it takes.
   const mine = await runVoiceTool('list', { kind: 'work-item', filter: { scope: 'reports' } }, toolContext({ fetch, results: new ResultMemory() }));
   assert.equal(mine.outcome, 'refused');
+});
+
+test('a row named by what it is and some of its words: "the legacy cookie bug" is "Delete the legacy cookie" (the demo\'s "the logout cookie bug")', async () => {
+  const ctx = toolContext({ page: () => INITIATIVE });
+  const r = await runVoiceTool('open', { scope: 'this-page', name: 'the legacy cookie bug' }, ctx);
+  assert.equal(r.outcome, 'done');
+  assert.deepEqual(ctx.navigations, ['/iq/projects/p-auth?item=w-3']);
+  // A kind word alone names nothing.
+  const none = await runVoiceTool('open', { scope: 'this-page', name: 'the bug' }, toolContext({ page: () => INITIATIVE }));
+  assert.equal(none.outcome, 'refused');
 });

@@ -60,7 +60,27 @@ export interface MockFrame { atMs: number; event: Record<string, unknown> }
  * `onResponseCreateSeq` (tests, G59): the nth response.create plays the nth list instead of `onResponseCreate`, so a
  * scripted session can hold several delegations, each with its own continuation.
  */
-export interface MockScript { onStart: MockFrame[]; onResponseCreate: MockFrame[]; onClose: MockFrame[]; onResponseCreateSeq?: MockFrame[][] }
+export interface MockScript { onStart: MockFrame[]; onResponseCreate: MockFrame[]; onClose: MockFrame[]; onResponseCreateSeq?: MockFrame[][]; onSent?: MockCue[] }
+/**
+ * A scripted turn cued on what the dock sends (middleware openai.ts mockLiveTurns): the first event of `type` whose
+ * JSON contains `contains` (when given), sent once at least `minResponses` response.creates have gone, plays `frames`.
+ * The user's "confirm" is cued on the card note the dock sends when a confirm card opens.
+ */
+export interface MockCue { type: string; contains?: string; minResponses: number; frames: MockFrame[] }
+
+/**
+ * The window event a scripted session (and only a scripted one) raises for every frame in and out, so a headless
+ * journey reads what the backend handed the voice (a result's `say` line) without a microphone. Never raised for a
+ * real session: its frames carry what the user said.
+ */
+export const MOCK_FRAME_EVENT = 'voice-mock-frame';
+
+/** Raise MOCK_FRAME_EVENT (a scripted session's frame) where there is a window to raise it on. */
+function announceMockFrame(dir: 'in' | 'out', event: Record<string, unknown>): void {
+  const target = globalThis as unknown as { dispatchEvent?: (e: Event) => boolean };
+  if (typeof target.dispatchEvent !== 'function' || typeof CustomEvent !== 'function') return;
+  try { target.dispatchEvent(new CustomEvent(MOCK_FRAME_EVENT, { detail: { dir, event } })); } catch { /* a listener's failure is not the session's */ }
+}
 
 /** The mint's 201 body (middleware/src/routes/voice.ts). */
 export interface VoiceMint {
@@ -584,14 +604,17 @@ export class VoiceClient {
     this.debugLog?.('out', ev);
     if (this.mocked) {
       this.mockSent(ev);
+      announceMockFrame('out', ev);
       if (ev.type === 'response.create') {
         const script = this.mint?.mockScript;
         const nth = script?.onResponseCreateSeq?.[this.mockResponses++];
         const continued = this.mockContinued;
         // `$continued` in a scripted continuation names the delegation this response.create continued.
         this.play((nth ?? script?.onResponseCreate ?? []).map((f) => (f.event['delegation_id'] === '$continued' && continued ? { ...f, event: { ...f.event, delegation_id: continued } } : f)));
+        this.mockCreates += 1;
       }
       if (ev.type === 'session.close') this.play(this.mint?.mockScript?.onClose ?? []);
+      this.mockCue(ev);
       return id;
     }
     return this.media?.send(JSON.stringify(ev)) ? id : null;
@@ -736,6 +759,7 @@ export class VoiceClient {
       calls.add(inner.item.call_id);
       this.mockCalls.set(d, calls);
     }
+    announceMockFrame('in', event);
     this.deliver(JSON.stringify(event));
   }
 
@@ -751,6 +775,25 @@ export class VoiceClient {
     this.mockHeld = [];
     for (const e of held) this.mockDeliver(e);
   }
+
+  /** A scripted turn cued on this sent event (MockCue): the first unplayed cue it matches plays, once. */
+  private mockCue(ev: Record<string, unknown>): void {
+    const cues = this.mint?.mockScript?.onSent;
+    if (!cues?.length) return;
+    let json: string | null = null;
+    const i = cues.findIndex((c, n) => {
+      if (this.mockCuesPlayed.has(n) || c.type !== ev['type'] || this.mockCreates < c.minResponses) return false;
+      if (c.contains == null) return true;
+      json ??= JSON.stringify(ev);
+      return json.includes(c.contains);
+    });
+    if (i < 0) return;
+    this.mockCuesPlayed.add(i);
+    this.play(cues[i]!.frames);
+  }
+
+  private mockCreates = 0;
+  private mockCuesPlayed = new Set<number>();
 
   /** The scripted session's open calls per delegation, the delegations answered but not continued, and the frames held. */
   private mockCalls = new Map<string, Set<string>>();

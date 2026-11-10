@@ -81,7 +81,7 @@ test('briefOutput leaves other tools and short or empty lists alone, and reads d
   assert.deepEqual(briefOutput('summary', {}, { rows }), { rows });
   assert.equal((briefOutput('search', '{"query":"x","detail":true}', { rows, total: 5 })['rows'] as unknown[]).length, 5);
   const b = briefOutput('search', '{"query":"x","detail":null}', { rows, total: 40 });
-  assert.deepEqual([(b['rows'] as unknown[]).length, b['more'], b['say']], [3, 37, '40 results, top: Team 0. Say "read them" for more.']);
+  assert.deepEqual([(b['rows'] as unknown[]).length, b['more'], b['say']], [3, 37, '40 results, top: Team 0; say "read them" for more.']);
   assert.equal(briefOutput('list', {}, { of: 'team', rows, count: 40 })['say'], '40 teams: Team 0, Team 1 and Team 2, and 37 more.');
   assert.deepEqual(briefOutput('list', {}, { of: 'team', rows: [], count: 0 }), { of: 'team', rows: [], count: 0 });
 });
@@ -111,7 +111,7 @@ test('G65: a search with rows says the count and the top hit in one short line, 
   assert.equal(out['count'], 12, JSON.stringify(out));
   assert.equal((out['rows'] as unknown[]).length, 3);
   const say = String(out['say']);
-  assert.equal(say, '12 work items, top: Rotate the signing keys. Say "read them" for more.');
+  assert.equal(say, '12 work items, top: Rotate the signing keys; say "read them" for more.');
   assert.ok(say.split(/\s+/).length <= 15, say);
   assert.doesNotMatch(say, /Move session store/, 'one name, not three');
   assert.equal(r.ctx.results!.find('2')!.ref, 'work-item:w-2', 'open the second still works');

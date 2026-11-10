@@ -134,3 +134,38 @@ test('G47: a dispatch the run-budget gate refuses logs code http-409 and gate ru
   const calls = down.after.turns.flatMap((t) => t.toolCalls ?? []);
   assert.equal(calls[0]!.status, 'failed');
 });
+
+// The demo journey (M5): under the computer runner the dispatch answers { run: { id, jobId: null } }: no work job.
+// The voice said "accepted but the server named no job to follow" although the run had started; it now follows the
+// run by its id through the initiative's runs, as the work item's own card does, and opens on the work item.
+test('a dispatch the computer runner took (no jobId) is followed by its run id through the initiative\'s runs', async () => {
+  let n = 0;
+  const r = await run({ dispatch: (req) => (req.method === 'POST' && req.url === '/api/bots/dispatch-work' ? { status: 202, body: { run: { id: `run-${++n}`, jobId: null } } } : undefined) });
+  assert.deepEqual(r.tracked, ['run-1', 'run-2', 'run-3']);
+  const row = r.log.find(isToolRow)!.body as Record<string, unknown>;
+  assert.equal(row['outcome'], 'done');
+});
+
+test('the marketplace-run follow reads the initiative\'s runs, finds its run, and ends with the cost', async () => {
+  const { VoiceJobTracker } = await import('../work.ts');
+  const clock = new FakeClock();
+  let reads = 0;
+  const { fetch, log } = fakeFetch([(req) => {
+    if (!req.url.startsWith('/api/bots/marketplace-runs?')) return undefined;
+    reads += 1;
+    return { status: 200, body: { runs: [{ id: 'run-old', status: 'done', costUsd: 1 }, { id: 'run-9', status: reads < 2 ? 'running' : 'done', costUsd: reads < 2 ? null : 0.07 }] } };
+  }]);
+  const states: string[] = [];
+  let detail: string | undefined;
+  const jobs = new VoiceJobTracker({
+    fetch, notify: () => {}, speak: () => {}, toastSeconds: () => 8, pollMs: 1000, setTimer: clock.setTimer, clearTimer: clock.clearTimer,
+    toast: { toastJob: (t) => { states.push(t.state); detail = t.detail ?? detail; }, dismissJobToast: () => {} },
+  });
+  jobs.track({ jobId: 'run-9', kind: 'dispatch', title: '"Logout"', href: '/iq/projects/p-auth?tab=work&item=w-3',
+    follow: { url: '/api/bots/marketplace-runs?orgProjectId=p-auth&run=run-9', reader: 'marketplace-run' } });
+  await clock.advance(3500);
+  assert.equal(states.at(-1), 'done');
+  assert.equal(detail, 'Cost $0.07');
+  assert.ok(log.every((l) => l.url === '/api/bots/marketplace-runs?orgProjectId=p-auth'), 'the run id is never sent');
+  jobs.dispose();
+});

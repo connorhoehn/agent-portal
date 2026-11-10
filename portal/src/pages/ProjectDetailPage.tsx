@@ -330,7 +330,13 @@ function ProjectDetailPage() {
   // The voice's page context (G21): the initiative in view and the work rows exactly as the list shows them
   // (its sort, search and filters), from this page's own reads. Nothing while the work read is loading or failed.
   const { pathname } = useLocation();
-  usePublishPageContext(project && id && treeRead && !workFailure ? {
+  // On the Decisions tab the rows in view are the decisions, in the table's order, so "decide the first one" (scope
+  // this-page) names the decision the user sees, never a work item (the demo journey's M2 decided a work item).
+  const decisionRows = tab === 'decisions' && decisions && !decisionsError ? decisions : null;
+  usePublishPageContext(project && id && decisionRows ? {
+    path: pathname, record: { ref: `initiative:${id}`, title: project.name }, rowsLabel: 'decisions', total: decisionRows.length,
+    rows: decisionRows.map((d) => ({ ref: `decision:${d.id}`, title: d.topic, status: d.status, href: `/iq/decisions/${encodeURIComponent(d.id)}` })),
+  } : project && id && treeRead && !workFailure ? {
     path: pathname, record: { ref: `initiative:${id}`, title: project.name }, rowsLabel: 'work items', total: allRows.length,
     rows: visibleRows.map((r) => ({ ref: `work-item:${r.id}`, title: r.title, status: r.status ?? null, priority: r.priority ?? null, href: `/iq/projects/${encodeURIComponent(id)}?item=${encodeURIComponent(r.id)}` })),
   } : null);

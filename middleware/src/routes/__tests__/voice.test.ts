@@ -31,7 +31,7 @@ jest.mock('../../lib/authz.js', () => {
 
 import express from 'express';
 import request from '../../test-support/http.js';
-import { voiceRouter } from '../voice.js';
+import { voiceRouter, _resetMockTurns } from '../voice.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { _setVoiceFetch, _setVoiceWebSocket, _resetSidebands } from '../../lib/voice/openai.js';
 import { SilentSideband } from '../../test-support/fake-sideband.js';
@@ -341,6 +341,38 @@ describe('POST /api/voice/sessions — the mint', () => {
     expect(done.event.event.item).toMatchObject({ type: 'function_call', name: 'search' });
     expect(calls).toHaveLength(0);
     expect(voiceSessions.rows()).toEqual([expect.objectContaining({ mock: true })]);
+  });
+
+  it('PUT /mock-script (MOCK_VOICE only) scripts the caller\'s next session with several turns, once; 404 without the mock, 400 for a bad turn', async () => {
+    _resetMockTurns();
+    const turns = [
+      { said: 'Open Auth Migration.', call: { name: 'open', arguments: { kind: 'initiative', name: 'Auth Migration' } } },
+      { said: 'Open decisions.', call: { name: 'open', arguments: { scope: 'this-page', tab: 'decisions' } } },
+    ];
+    expect((await request(app).put('/api/voice/mock-script').send({ turns })).status).toBe(404);
+    delete process.env['OPENAI_API_KEY'];
+    process.env['MOCK_VOICE'] = '1';
+    expect((await request(app).put('/api/voice/mock-script').send({ turns: [{ said: 'x', call: { name: 'nope', arguments: {} } }] })).status).toBe(400);
+    expect((await request(app).put('/api/voice/mock-script').send({ turns })).status).toBe(204);
+    const named = (script: { onStart: Array<{ event: { event?: { type: string; item?: { name: string } } } }>; onResponseCreateSeq?: unknown[][] }) =>
+      [script.onStart, ...(script.onResponseCreateSeq ?? [])].flat().map((f) => (f as { event: { event?: { type: string; item?: { name: string } } } }).event.event)
+        .filter((e) => e?.type === 'response.output_item.done').map((e) => e!.item!.name);
+    const first = await mint({});
+    expect(first.status).toBe(201);
+    expect(named(first.body.mockScript)).toEqual(['open', 'open']);
+    await request(app).post(`/api/voice/sessions/${first.body.sessionId}/close`).send({ seconds: 15 });
+    // Consumed: the next session is the persona's own one call again.
+    const second = await mint({});
+    expect(named(second.body.mockScript)).toEqual(['search']);
+    // DELETE drops a script before it plays.
+    await request(app).put('/api/voice/mock-script').send({ turns });
+    expect((await request(app).delete('/api/voice/mock-script')).status).toBe(204);
+    await request(app).post(`/api/voice/sessions/${second.body.sessionId}/close`).send({ seconds: 15 });
+    expect(named((await mint({})).body.mockScript)).toEqual(['search']);
+    process.env['NODE_ENV_SAVED'] = process.env['NODE_ENV'] ?? '';
+    process.env['NODE_ENV'] = 'production';
+    try { expect((await request(app).put('/api/voice/mock-script').send({ turns })).status).toBe(404); }
+    finally { process.env['NODE_ENV'] = process.env['NODE_ENV_SAVED']; delete process.env['NODE_ENV_SAVED']; }
   });
 
   it('defaults the delegation model to gpt-6-luna', async () => {
