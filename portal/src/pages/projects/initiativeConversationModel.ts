@@ -15,7 +15,7 @@ export function initiativeConversationMessages<T extends { metadata?: Record<str
 //
 // A bound initiative's pane is its Social channel. Its messages are people's
 // messages, the one-line references a `/comment` posts there ("Comment on
-// <work item>: …", metadata `workComment` and the item's `pageReference`; the
+// <work item>", metadata `workComment` and the item's `pageReference`; the
 // note itself is a record on the work item), and what agents post (a run's
 // card, a /summarize summary, a /diagram or /doc artifact, a deck). The view
 // filters those by their metadata; it never changes storage.
@@ -49,16 +49,27 @@ export function parseChannelFilter(raw: string | null | undefined): ChannelConve
 
 // ─── The channel reference a /comment posts on a bound initiative ───────────
 
-export const WORK_NOTE_REFERENCE_MAX = 120;
-
-/** "Comment on <work item>: <first 120 characters of the note>", one line. */
-export function workNoteReferenceText(item: string, body: string): string {
-  const flat = body.replace(/\s+/g, ' ').trim();
-  const cut = flat.length > WORK_NOTE_REFERENCE_MAX ? `${flat.slice(0, WORK_NOTE_REFERENCE_MAX).trimEnd()}…` : flat;
-  return `Comment on ${item}: ${cut}`;
+/**
+ * "Comment on <work item title>", one line, and nothing of the note (sweep 12,
+ * L3). The channel's readers may hold no orgiq grant, so the note itself stays
+ * a record on the work item, read under the item's own access; the reference
+ * only names the item, whose title the page read from the server, and links
+ * it through the page reference below.
+ */
+export function workNoteReferenceText(item: string): string {
+  return `Comment on ${item.replace(/\s+/g, ' ').trim()}`;
 }
 
-/** The metadata that marks the reference (the pane's Work notes view) and links it to the item. */
+/**
+ * The metadata that marks the reference (the pane's Work notes view) and links
+ * it to the item. `workComment` is set by the posting client, and any client
+ * can set it on any channel message, so it ONLY drives the pane's filter
+ * (channelMessageKind, initiativeConversationMessages). It is never evidence
+ * that a note exists on the item: what a work item's notes are is the
+ * server's comment feed (GET …/work-items/:id/comments), and the message's
+ * reference chip names the item without claiming a comment
+ * (workConversationContext.tsx).
+ */
 export function workNoteReferenceMetadata(workItemId: string): Record<string, unknown> {
   return { workComment: true, pageReference: { kind: 'work-item', id: workItemId } };
 }

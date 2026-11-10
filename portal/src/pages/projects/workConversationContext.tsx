@@ -2,13 +2,18 @@ import type { WrappedChatPanelProps } from '@connorhoehn/ui-components/integrati
 import { Button, Chip, Inline, T } from '@connorhoehn/ui-components/shared';
 import type { WorkItem } from '../project-detail/types';
 
-/** References name a record only; its key/title are resolved under this viewer's access. */
-function WorkContext({ item, loading, onOpen, comment }: { item: WorkItem | undefined; loading: boolean; onOpen: (id: string) => void; comment: boolean }) {
+/**
+ * References name a record only; its key/title are resolved under this viewer's
+ * access. The chip never says "comment": a message's `workComment` marker is
+ * client-set and only drives the pane filter (initiativeConversationModel.ts),
+ * so it is no evidence that a note exists (sweep 12, L3).
+ */
+function WorkContext({ item, loading, onOpen }: { item: WorkItem | undefined; loading: boolean; onOpen: (id: string) => void }) {
   if (!item) return <T size="xs" tone="secondary">{loading ? 'Loading work context…' : 'Work context unavailable'}</T>;
   return <Button variant="link" size="sm" className="max-w-full !px-0" onClick={() => onOpen(item.id)} title={item.title}>
     <Inline gap="xs" align="center" wrap={false} className="min-w-0">
       <Chip size="xs" tone="neutral" mono>{item.key ?? item.id}</Chip>
-      <T size="xs" tone="secondary" className="truncate">{comment ? 'Comment · ' : ''}{item.title}</T>
+      <T size="xs" tone="secondary" className="truncate">{item.title}</T>
     </Inline>
   </Button>;
 }
@@ -20,6 +25,6 @@ export function workConversationReferences(projectId: string, onOpen: (id: strin
   return message => {
     const page = message.metadata?.pageReference as { kind?: string; id?: string } | undefined;
     if (page?.kind !== 'work-item' || typeof page.id !== 'string' || !/^[a-zA-Z0-9:_-]{1,256}$/.test(page.id)) return null;
-    return <WorkContext item={byId.get(page.id)} loading={items === null} onOpen={onOpen} comment={message.metadata?.workComment === true} />;
+    return <WorkContext item={byId.get(page.id)} loading={items === null} onOpen={onOpen} />;
   };
 }

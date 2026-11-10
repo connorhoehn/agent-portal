@@ -326,7 +326,7 @@ function DockedComposer({
           if (canPost) {
             try {
               const sent = await discussionDelivery.send({ scopeKey, channel: conversation!.channel, userId: conversation!.userId,
-                text: workNoteReferenceText(item, body), metadata: workNoteReferenceMetadata(subject.item.id),
+                text: workNoteReferenceText(item), metadata: workNoteReferenceMetadata(subject.item.id),
                 signal: abort.current.signal, current: () => latestScope.current === captured,
                 listen: gateway!.onMessage, sendMessage: conversation!.chat.sendMessage, newId: () => crypto.randomUUID() });
               if (sent) notice = `Comment saved on ${item} and mentioned in ${label}.`;
