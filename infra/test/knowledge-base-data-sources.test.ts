@@ -9,14 +9,14 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as os from 'node:os';
 import { Template } from 'aws-cdk-lib/assertions';
-import { KB_PREFIXES_FILE, declaredKbPrefixes, parseKbPrefixes } from '../lib/kb-prefixes';
+import { KB_PREFIXES_FILE, declaredKbPrefixes, literalCopies, parseKbPrefixes } from '../lib/kb-prefixes';
 import { knowledgeBaseStack } from './helpers/stacks';
 
 const template = Template.fromStack(knowledgeBaseStack());
 const declared = declaredKbPrefixes();
 const sources = Object.values(template.findResources('AWS::Bedrock::DataSource')) as any[];
-const ROOT = path.join(__dirname, '..', '..');
 
 describe('knowledge-base data sources', () => {
   test('one data source per declared prefix, and no other', () => {
@@ -57,15 +57,37 @@ describe('knowledge-base data sources', () => {
 
   test('the middleware and agent copies say the same as the file', () => {
     const file = JSON.parse(fs.readFileSync(KB_PREFIXES_FILE, 'utf8')).tenants as Record<string, string[]>;
-    const ts = fs.readFileSync(path.join(ROOT, 'middleware/src/lib/kb-prefixes.ts'), 'utf8');
-    const tsBlock = /DECLARED_KB_PREFIXES[^=]*= \{([\s\S]*?)\n\};/.exec(ts)![1]!;
-    const py = fs.readFileSync(path.join(ROOT, 'agents/_shared/kb_resolver.py'), 'utf8');
-    const pyBlock = /DECLARED_PREFIXES = \{([\s\S]*?)\n\}/.exec(py)![1]!;
-    const parse = (block: string, quote: string) => Object.fromEntries(
-      [...block.matchAll(new RegExp(`${quote === "'" ? '(\\w+)' : '"(\\w+)"'}: [\\[(]([^\\])]*)[\\])]`, 'g'))]
-        .map((m) => [m[1], [...m[2]!.matchAll(new RegExp(`${quote}([^${quote}]+)${quote}`, 'g'))].map((x) => x[1])]),
-    );
-    assert.deepEqual(parse(tsBlock, "'"), file);
-    assert.deepEqual(parse(pyBlock, '"'), file);
+    const { middleware, agents } = literalCopies();
+    assert.deepEqual(middleware, file);
+    assert.deepEqual(agents, file);
+  });
+
+  test('synth fails loudly when the file is absent, unreadable or not JSON', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-prefixes-'));
+    try {
+      assert.throws(() => declaredKbPrefixes(path.join(dir, 'kb-prefixes.json')), /tenants\/kb-prefixes\.json is missing or unreadable .*ENOENT.*synth refuses/);
+      fs.writeFileSync(path.join(dir, 'bad.json'), '{ not json');
+      assert.throws(() => declaredKbPrefixes(path.join(dir, 'bad.json')), /not valid JSON/);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('synth fails loudly when a tenant is missing from the file or from a copy, or is unknown', () => {
+    const file = JSON.parse(fs.readFileSync(KB_PREFIXES_FILE, 'utf8'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-prefixes-'));
+    try {
+      const write = (body: unknown) => { const f = path.join(dir, `f${Math.random()}.json`); fs.writeFileSync(f, JSON.stringify(body)); return f; };
+      // A tenant dropped from the file while the copies still name it.
+      const { assessment: _dropped, ...rest } = file.tenants;
+      assert.throws(() => declaredKbPrefixes(write({ ...file, tenants: rest })), /assessment is missing from the file/);
+      // A tenant the copies do not know.
+      const copies = literalCopies();
+      assert.throws(() => declaredKbPrefixes(KB_PREFIXES_FILE, { copies: { ...copies, agents: { orgiq: copies.agents['orgiq']! } } }),
+        /kb_resolver\.py: assessment is missing from the copy/);
+      // A tenant the manifest does not know.
+      assert.throws(() => declaredKbPrefixes(write({ ...file, tenants: { ...file.tenants, nobody: ['nobody/'] } }), { copies: null }),
+        /"nobody" is not a tenant in tenants\/manifest\.json/);
+      // The real file passes.
+      assert.ok(declaredKbPrefixes().length >= 2);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   });
 });
