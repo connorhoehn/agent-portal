@@ -6,6 +6,9 @@
     "directory": "portal"
   },
   "version": "0.1.0",
+  "engines": {
+    "node": ">=20.19"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",

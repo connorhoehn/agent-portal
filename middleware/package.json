@@ -1,6 +1,9 @@
 {
   "name": "@orgiq/middleware",
   "version": "0.3.0",
+  "engines": {
+    "node": ">=20.19"
+  },
   "type": "module",
   "scripts": {
     "dev": "INSECURE_DEV_MODE=true tsx watch src/index.ts",
