@@ -1147,14 +1147,12 @@ const PROMPT_SLUGS: Record<string, string> = {
   'compare': 'Compare the two people with the strongest platform expertise, side by side.',
 };
 
-// Per-agent quick-prompt suggestions. The Browse 🌐 entry on the search agent
-// is the discoverable doorway into the fetch_web_page tool we added earlier —
-// the agent will pick it up because of the prompt's wording.
+// Per-agent quick-prompt suggestions. The search agent has no web access (it
+// holds the graph and the KB, so a fetch tool beside them would be an
+// exfiltration path; agents/search/main.py), so it offers no browse prompts.
 function quickPromptsFor(agentId: string): QuickPrompt[] {
   if (agentId.endsWith('search')) {
     return [
-      { label: 'Browse a webpage', badge: '🌐', badgeColor: 'var(--color-info)', prompt: 'Use the fetch_web_page tool to load https://example.com and tell me the page title and the first 200 characters of body text.' },
-      { label: 'Live news scrape', badge: '🌐', badgeColor: 'var(--color-info)', prompt: 'Browse https://news.ycombinator.com and summarize the top 3 stories with their points and titles.' },
       { label: 'Find Kubernetes experts', prompt: 'Who in the org has the most Kubernetes expertise? Use query_graph to find people with that skill.' },
       { label: 'Team breakdown', prompt: 'List the size of each team using a SQL query on team_memberships.' },
     ];

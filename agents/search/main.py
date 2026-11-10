@@ -9,14 +9,8 @@ from pathlib import Path
 
 import boto3
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
-from bedrock_agentcore.tools.browser_client import BrowserClient
 from strands import Agent, tool
 from strands.models.bedrock import BedrockModel
-
-try:
-    import websocket as ws_client  # the `websocket-client` library
-except ImportError:
-    ws_client = None
 
 # Shared instrumentation — pull TraceContext + decorator from agents/_shared.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -77,7 +71,6 @@ DB_NAME = os.environ.get("PROJECT_PREFIX", "orgiq")
 MODEL_ROLE = "search"
 _MODEL_DEFAULTS = {"default_model_id": "amazon.nova-pro-v1:0", "default_temperature": 0.1, "default_max_tokens": 4096}
 MODEL_ID = resolve_model(MODEL_ROLE, **_MODEL_DEFAULTS).model_id
-BROWSER_ID = os.environ.get("BROWSER_ID", "")
 
 _bedrock = boto3.client("bedrock-agent-runtime", region_name=REGION)
 _rds = boto3.client("rds-data", region_name=REGION)
@@ -207,135 +200,11 @@ def query_graph(sql: str) -> str:
     return json.dumps(_records_to_dicts(response), ensure_ascii=False, default=str)
 
 
-# ── Browser tool (AgentCore Browser sandbox via SigV4-signed CDP) ─────────────
-
-def _cdp_call(ws, method: str, params: dict | None = None, timeout_s: float = 10.0) -> dict:
-    """Send a single CDP JSON-RPC command, wait for the response with matching id."""
-    msg_id = int(time.time() * 1000) % 1_000_000
-    ws.send(json.dumps({"id": msg_id, "method": method, "params": params or {}}))
-    deadline = time.time() + timeout_s
-    while time.time() < deadline:
-        ws.settimeout(max(0.1, deadline - time.time()))
-        raw = ws.recv()
-        msg = json.loads(raw)
-        if msg.get("id") == msg_id:
-            if "error" in msg:
-                raise RuntimeError(f"CDP {method}: {msg['error']}")
-            return msg.get("result", {})
-    raise TimeoutError(f"CDP {method} timed out")
-
-
-@tool
-@instrumented_tool(_current_ctx.get)
-def fetch_web_page(url: str) -> str:
-    """Open a URL in an AgentCore Browser sandbox and return the page title and
-    text content. Use this when you need to ground answers in fresh web content
-    (e.g. competitor research, public profile lookups, doc pages).
-
-    The sandbox is short-lived — each call spins up a fresh session, navigates,
-    extracts the page, and closes the session. ~5-10s overhead per call.
-
-    Args:
-        url: The full URL to fetch (https://...)
-    Returns:
-        JSON: {"sessionId", "url", "title", "text"} (text truncated to 5000 chars)
-        or {"error": "..."}
-    """
-    if not BROWSER_ID:
-        return json.dumps({"error": "BROWSER_ID env var missing — browser sandbox unavailable"})
-    if ws_client is None:
-        return json.dumps({"error": "websocket-client package missing"})
-
-    client = BrowserClient(region=REGION)
-    started = False
-    ws = None
-    try:
-        session_id = client.start(identifier=BROWSER_ID, name=f"search-{int(time.time())}")
-        started = True
-
-        ws_url, headers = client.generate_ws_headers()
-        # websocket-client takes headers as a list of "Key: value" strings and
-        # lets us suppress the auto-added ones, giving us tight control over
-        # the SigV4-signed handshake.
-        header_list = [f"{k}: {v}" for k, v in headers.items()
-                       if k.lower() not in {"upgrade", "connection",
-                                            "sec-websocket-version",
-                                            "sec-websocket-key"}]
-
-        ws = ws_client.create_connection(
-            ws_url,
-            header=header_list,
-            suppress_origin=True,
-            timeout=15,
-        )
-
-        # AgentCore Browser CDP requires attaching to a page target first
-        # (multi-target flow). Discover and attach to the first 'page' target.
-        targets = _cdp_call(ws, "Target.getTargets")
-        page_target = next(
-            (t for t in targets.get("targetInfos", []) if t.get("type") == "page"),
-            None,
-        )
-        if not page_target:
-            raise RuntimeError("No page target available in browser session")
-        attach = _cdp_call(ws, "Target.attachToTarget", {
-            "targetId": page_target["targetId"],
-            "flatten": True,
-        })
-        cdp_session_id = attach.get("sessionId")
-
-        def _cdp_target(method: str, params: dict | None = None, timeout_s: float = 15.0) -> dict:
-            msg_id = int(time.time() * 1000) % 1_000_000
-            ws.send(json.dumps({
-                "sessionId": cdp_session_id,
-                "id": msg_id,
-                "method": method,
-                "params": params or {},
-            }))
-            deadline = time.time() + timeout_s
-            while time.time() < deadline:
-                ws.settimeout(max(0.1, deadline - time.time()))
-                msg = json.loads(ws.recv())
-                if msg.get("id") == msg_id and msg.get("sessionId") == cdp_session_id:
-                    if "error" in msg:
-                        raise RuntimeError(f"CDP {method}: {msg['error']}")
-                    return msg.get("result", {})
-            raise TimeoutError(f"CDP {method} timed out")
-
-        _cdp_target("Page.navigate", {"url": url}, timeout_s=20.0)
-        time.sleep(2.5)
-
-        title_res = _cdp_target("Runtime.evaluate", {
-            "expression": "document.title",
-            "returnByValue": True,
-        })
-        text_res = _cdp_target("Runtime.evaluate", {
-            "expression": "(document.body && document.body.innerText || '').slice(0, 5000)",
-            "returnByValue": True,
-        })
-
-        title = (title_res.get("result") or {}).get("value", "") or ""
-        text = (text_res.get("result") or {}).get("value", "") or ""
-
-        return json.dumps({
-            "sessionId": session_id,
-            "url": url,
-            "title": title,
-            "text": text,
-        })
-    except Exception as e:
-        return json.dumps({"error": f"browser error: {e}"})
-    finally:
-        if ws is not None:
-            try:
-                ws.close()
-            except Exception:
-                pass
-        if started:
-            try:
-                client.stop()
-            except Exception:
-                pass
+# ── No web fetch here ─────────────────────────────────────────────────────────
+# This agent holds the org graph and the knowledge base. A web-fetch tool
+# beside them lets a planted document steer the model into sending graph or
+# KB content to an arbitrary URL, so the search agent has none. Live web
+# content belongs to an agent that holds no org data.
 
 
 def _model_kwargs(model_id: str | None = None) -> dict:
@@ -359,7 +228,7 @@ SYSTEM_PROMPT = (
     "Tools:\n"
     "- query_knowledge_base: document/semantic search (use for 'tell me about', summaries, document content)\n"
     "- query_graph(sql): relational traversal via SQL (use for specific lookups, counts, rankings, relationships)\n"
-    "- fetch_web_page(url): live external web content (only for genuinely external info)\n\n"
+    "You have no web access: answer from the knowledge base and the graph only.\n\n"
     # Keep this block in step with `query_graph`'s docstring above and with
     # schema/orgiq_schema.sql. It drifted once — advertising `department`,
     # `skills.category`, `person_skills.proficiency`,
@@ -441,7 +310,7 @@ _agent = RegistryAgent(
     agent_name="search",
     build=lambda system_prompt, model_id: Agent(
         model=BedrockModel(**_model_kwargs(model_id)),
-        tools=[query_knowledge_base, query_graph, fetch_web_page],
+        tools=[query_knowledge_base, query_graph],
         system_prompt=system_prompt,
     ),
 )
