@@ -64,7 +64,10 @@ jobs:
         run: node ../scripts/content/check-story.mjs
       - name: Doc links
         if: matrix.shard == 1
-        run: node ../scripts/docs/check-links.mjs
+        # No flags: the removed-docs list is held to its ceiling here.
+        run: |
+          node ../scripts/docs/check-links.mjs --self-check
+          node ../scripts/docs/check-links.mjs
       - name: Test
         env:
           # 25% of a hosted runner is one worker and the suite overran 45 minutes.
