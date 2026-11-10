@@ -115,20 +115,34 @@ async function voiceOutputs(page) {
     .map((f) => { try { return JSON.parse(f.event.item.output); } catch { return { raw: String(f.event.item.output) }; } });
 }
 
-async function nthOutput(page, n, ms = 20000) {
+/**
+ * The n-th voice result, waited for on the session's own progress rather than a fixed window: it returns as soon as
+ * the result is there and fails at once, with the reason, when the session can no longer produce it (the page
+ * reloaded under it, or the session closed). The ceiling is only a backstop for a session that hangs while live; it
+ * sits above the dock's own delegation watchdog (controller.ts DELEGATION_EMPTY_MS) many times over.
+ */
+async function nthOutput(page, n, ms = 90000) {
   const end = Date.now() + ms;
   while (Date.now() < end) {
-    const outs = await voiceOutputs(page);
+    const state = await page.evaluate(() => ({
+      started: window.__voiceStarted === true,
+      closed: (window.__voiceFrames ?? []).some((f) => f.dir === 'in' && f.event?.type === 'session.closed'),
+    })).catch(() => ({ started: false, closed: false }));
+    const outs = await voiceOutputs(page).catch(() => []);
     if (outs.length >= n) return outs[n - 1];
+    if (!state.started) throw new StepFailure(`the page reloaded under the voice session before result ${n} (${outs.length} came back)`);
+    if (state.closed) throw new StepFailure(`the voice session closed before result ${n} (${outs.length} came back)`);
     await sleep(200);
   }
-  throw new StepFailure(`the voice result ${n} never came back in ${ms} ms`);
+  throw new StepFailure(`the voice result ${n} never came back in ${ms} ms while the session stayed open`);
 }
 
 async function startVoice(page, turns) {
   const r = await page.context().request.put(`${PORTAL}/api/voice/mock-script`, { data: { turns } });
   check(r.status() === 204, `PUT /api/voice/mock-script answered ${r.status()} (is the middleware running with MOCK_VOICE=1?)`);
-  await page.evaluate(() => { window.__voiceFrames = []; });
+  // A reload clears __voiceStarted (the init script sets only __voiceFrames), which is how nthOutput knows the
+  // session it waits on has gone.
+  await page.evaluate(() => { window.__voiceFrames = []; window.__voiceStarted = true; });
   await page.getByTestId('shell-voice-dock-start').click();
 }
 
@@ -175,7 +189,7 @@ async function confirmed(page, n, urlPart, method, label, expected) {
   await page.getByTestId('voice-confirm-card').waitFor({ timeout: 15000 });
   const r = await sent.catch(() => { throw new StepFailure(`${label}: no ${method} ${urlPart} after the spoken confirm`); });
   check(r.status() < 300, `${label}: ${method} ${urlPart} answered ${r.status()}`);
-  return terseSay(await nthOutput(page, n, 20000), label, expected);
+  return terseSay(await nthOutput(page, n), label, expected);
 }
 
 // ── the capabilities ─────────────────────────────────────────────────────────

@@ -84,7 +84,8 @@ const portalLog = path.join(work, 'portal.log');
 start('middleware', process.execPath, [path.join(ROOT, 'middleware', 'node_modules', '.bin', 'tsx'), 'src/index.ts'], path.join(ROOT, 'middleware'), {
   ...devMockEnv(), PORT: String(MW_PORT), MOCK_VOICE: '1', VOICE_LOG_DIR: path.join(work, 'voice-log'), MOCK_PERSIST_PAIRINGS: '0',
 }, mwLog);
-start('portal', process.execPath, [path.join(ROOT, 'portal', 'node_modules', '.bin', 'vite'), '--port', String(PORTAL_PORT), '--strictPort'], path.join(ROOT, 'portal'), {
+// The portal without its HMR socket and with its own dependency cache (journey-vite.mjs says why).
+start('portal', process.execPath, [path.join(ROOT, 'scripts', 'journeys', 'journey-vite.mjs'), '--port', String(PORTAL_PORT)], path.join(ROOT, 'portal'), {
   VITE_GATEWAY_URL: `http://localhost:${MW_PORT}`, API_PROXY_TARGET: `http://127.0.0.1:${MW_PORT}`,
 }, portalLog);
 
