@@ -59,7 +59,7 @@ export async function decisionActor(session: Session): Promise<{ id: string; per
   }
 }
 
-interface NamedBy { id: string; name: string }
+export interface NamedBy { id: string; name: string }
 
 /**
  * The names a record shows for who decided (walk, 9 November: "Decided by
@@ -97,6 +97,48 @@ export async function nameDeciders<T extends { decidedBy: NamedBy | null; histor
   };
 }
 
+/** A participant role that names a decider (`decision_participants.role`, any case). */
+export function isDeciderRole(role: string | null | undefined): boolean {
+  return (role ?? '').toLowerCase() === 'decider';
+}
+
+/**
+ * Who a waiting decision waits on, by the rule `mayDecideDecision` applies:
+ * its assigned decider (the first by weight, then name, as the record lists
+ * participants), else the owner of the initiative it was raised against, else
+ * the org-leader override, named as a role with no person.
+ */
+export type DeciderRole = 'decider' | 'initiative-owner' | 'org-leader';
+export interface WaitingOn { deciderRole: DeciderRole; decider: NamedBy | null }
+
+export function waitingOn(deciders: ReadonlyArray<NamedBy>, owner: NamedBy | null): WaitingOn {
+  if (deciders[0]) return { deciderRole: 'decider', decider: deciders[0] };
+  if (owner) return { deciderRole: 'initiative-owner', decider: owner };
+  return { deciderRole: 'org-leader', decider: null };
+}
+
+/**
+ * The initiative owners `waitingOn` falls back to, one `getProject` per
+ * initiative (the lookup `mayDecideDecision` makes). A failed lookup is no
+ * owner, so the row waits on the org-leader rather than on a guess.
+ */
+export async function initiativeOwners(projectIds: Iterable<string>): Promise<Map<string, NamedBy | null>> {
+  const out = new Map<string, NamedBy | null>();
+  const ids = [...new Set(projectIds)];
+  if (ids.length === 0) return out;
+  const { getProject } = await providers();
+  await Promise.all(ids.map(async (id) => {
+    try {
+      const p = await getProject(id);
+      out.set(id, p?.ownerId ? { id: p.ownerId, name: p.ownerName?.trim() || p.ownerId } : null);
+    } catch (err) {
+      console.warn('[decision-authority] could not resolve the initiative owner:', (err as Error).message);
+      out.set(id, null);
+    }
+  }));
+  return out;
+}
+
 export async function mayDecideDecision(session: Session, decision: DecidableDecision): Promise<DecideVerdict> {
   let personId: string | null = null;
   let ownerId: string | null = null;
@@ -107,7 +149,7 @@ export async function mayDecideDecision(session: Session, decision: DecidableDec
   } catch (err) {
     console.warn('[decision-authority] could not resolve the caller or the initiative owner:', (err as Error).message);
   }
-  const isDecider = !!personId && decision.participants.some((p) => p.personId === personId && (p.role ?? '').toLowerCase() === 'decider');
+  const isDecider = !!personId && decision.participants.some((p) => p.personId === personId && isDeciderRole(p.role));
   const isOwner = !!personId && !!ownerId && ownerId === personId;
   const decidesThis = isDecider || isOwner;
   if (isDecider) return { ok: true, via: 'decider', decidesThis };

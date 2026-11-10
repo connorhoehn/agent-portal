@@ -77,6 +77,18 @@ describe('decision records in dev:mock', () => {
     for (const d of recent) expect((d.decidedAt ?? '9999-12-31') >= '2026-04-01').toBe(true);
   });
 
+  it('names a settled row\'s decider and the person a waiting row waits on', async () => {
+    const rows = await listDecisions({ limit: 200 });
+    // seed.sql writes decided_by = the decider participant for every ADR.
+    expect(rows.find((d) => d.id === 'd-aurora')).toMatchObject({ decidedBy: { id: 'p-004' }, deciderRole: null, decider: null });
+    // seed_program.sql: the escalated cutover waits on its decider participant (p-005).
+    expect(rows.find((d) => d.id === 'd-cognito-cutover')).toMatchObject({ decidedBy: null, deciderRole: 'decider', decider: { id: 'p-005' } });
+    for (const d of rows) {
+      if (d.decidedBy) expect(d.decidedBy.name).not.toBe(d.decidedBy.id);
+      if (d.decider) expect(d.decider.name).not.toBe(d.decider.id);
+    }
+  });
+
   it('has an empty world an auditor can ask for', async () => {
     fixtureRegistry.resetAll('empty');
     expect(await listDecisions()).toEqual([]);

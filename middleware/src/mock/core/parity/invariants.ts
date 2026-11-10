@@ -186,6 +186,18 @@ export const SURFACE_INVARIANTS: SurfaceInvariant[] = [
         if (detail.status !== d.status || detail.projectId !== d.projectId) {
           out.push(`${d.id}: the list and the detail disagree about status/projectId`);
         }
+        // The list's Decider column: a settled row names the record's decider;
+        // a waiting row names who it waits on, and when that is a decider it
+        // is one of the record's decider participants.
+        if (settled && (d.decidedBy?.id ?? null) !== (detail.decidedBy?.id ?? null)) {
+          out.push(`${d.id}: the list says decided by ${d.decidedBy?.id ?? 'nobody'}, the record by ${detail.decidedBy?.id ?? 'nobody'}`);
+        }
+        if (!settled && (d.decidedBy !== null || d.deciderRole === null)) {
+          out.push(`${d.id} is '${d.status}' but the list names no one it waits on, or names who decided it`);
+        }
+        if (d.deciderRole === 'decider' && !detail.participants.some((p) => p.personId === d.decider?.id && (p.role ?? '').toLowerCase() === 'decider')) {
+          out.push(`${d.id}: the list waits on ${d.decider?.id ?? 'nobody'}, who is not a decider on the record`);
+        }
       }
 
       // 4. A work-item link is a LEFT JOIN, not a caption. The hand-typed

@@ -10,7 +10,7 @@ import { useMemo, useState } from 'react';
 import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { useNavigate, useParams } from 'react-router';
 import {
-  Chip, CollectionToolbar, DataTable, EmptyState, LoadingState, Stack, T,
+  ActionRowPerson, Chip, CollectionToolbar, DataTable, EmptyState, LoadingState, Stack, T,
   type DataTableColumn,
 } from '@connorhoehn/ui-components/shared';
 import { StackedCatalogLayout } from '../../components/shell/StackedCatalogLayout';
@@ -20,7 +20,7 @@ import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useUrlState } from '../../lib/useUrlState';
 import { DECISION_GRAMMAR } from './decisionCommands';
-import { DECISIONS_SOURCE, decidedShort, filterDecisions, matchesDecision, outcomeFirstLine, sortDecisions, statusLabel, STATUS_TONE } from './decisionFormat';
+import { DECISIONS_SOURCE, decidedShort, deciderCell, filterDecisions, matchesDecision, outcomeFirstLine, sortDecisions, statusLabel, STATUS_TONE } from './decisionFormat';
 import DecisionRecordPage from './DecisionRecordPage';
 import { RecordLink } from './RecordLink';
 import type { DecisionSummary, InitiativeName } from './types';
@@ -95,9 +95,21 @@ export default function DecisionsPage() {
       },
     },
     {
+      // Who decided a settled row, or the person (else the role) a waiting row waits on. Priority 1: the
+      // table never hides it, so it stays beside the decision at 1280 while the secondary columns give way.
+      key: 'decider', header: 'Decider', sortable: true, priority: 1,
+      compare: (a, b) => (deciderCell(a)?.name ?? '').localeCompare(deciderCell(b)?.name ?? ''),
+      render: (d) => {
+        const who = deciderCell(d);
+        if (!who) return <T size="xs" tone="tertiary">—</T>;
+        return who.person ? <ActionRowPerson name={who.name} size={24} />
+          : <T size="xs" tone="secondary" className="whitespace-nowrap">{who.name}</T>;
+      },
+    },
+    {
       key: 'decidedAt', header: 'Decided', align: 'right', sortable: true, priority: 2,
       compare: (a, b) => (a.decidedAt ?? '').localeCompare(b.decidedAt ?? ''),
-      render: (d) => <T size="xs" tone="tertiary" className="whitespace-nowrap">{d.decidedAt ? decidedShort(d.decidedAt) : '—'}</T>,
+      render: (d) => <T size="xs" tone="tertiary" className="whitespace-nowrap">{d.status === 'open' || d.status === 'escalated' ? 'Waiting' : d.decidedAt ? decidedShort(d.decidedAt) : '—'}</T>,
     },
   ];
 

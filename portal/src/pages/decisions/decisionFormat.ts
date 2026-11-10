@@ -247,6 +247,29 @@ export function decidedLine(
   return [when, who].filter(Boolean).join(' ') || null;
 }
 
+/** The list's name for a role a waiting decision waits on when no person is named. */
+export const DECIDER_ROLE_LABEL: Record<string, string> = {
+  decider: 'Decider', 'initiative-owner': 'Initiative owner', 'org-leader': 'An org-leader',
+};
+
+/**
+ * The list's Decider cell: who decided a settled row, or the person (else the
+ * role) a waiting row waits on. `person` false means a role with no person,
+ * drawn as text rather than an avatar. Null when the server names nobody
+ * (a settled row with no `decided_by`, or an older server).
+ */
+export function deciderCell(d: Pick<DecisionSummary, 'status' | 'decidedBy' | 'deciderRole' | 'decider'>): { name: string; person: boolean } | null {
+  if (!isWaiting(d.status)) return d.decidedBy?.name ? { name: d.decidedBy.name, person: true } : null;
+  if (d.decider?.name) return { name: d.decider.name, person: true };
+  return d.deciderRole ? { name: DECIDER_ROLE_LABEL[d.deciderRole] ?? d.deciderRole, person: false } : null;
+}
+
+/** The list's Decided cell: when it was decided, "Waiting" while it waits, "—" when a settled row has no date. */
+export function decidedCell(d: Pick<DecisionSummary, 'status' | 'decidedAt'>, relative: (iso: string) => string): string {
+  if (isWaiting(d.status)) return 'Waiting';
+  return d.decidedAt ? decidedWhen(d.decidedAt, relative) : '—';
+}
+
 /** A settled row's outcome, first line only, for the list; null while it waits. */
 export function outcomeFirstLine(d: Pick<DecisionSummary, 'status' | 'outcome'>): string | null {
   if (isWaiting(d.status) || !d.outcome) return null;

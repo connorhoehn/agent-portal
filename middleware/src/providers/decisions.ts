@@ -18,6 +18,7 @@ import { decisionRows, decisionParticipantRows, decisionEventRows, type Decision
 
 export type { DecisionOption } from '../mock/decisions.js';
 import { mockPeople } from '../mock/people.js';
+import { initiativeOwners, isDeciderRole, waitingOn, type DeciderRole, type NamedBy } from '../lib/decision-authority.js';
 import { getWorkHeldBy, mockSettleWorkBlockedOn, txSettleWorkBlockedOn, type HeldWork, type SettledWork } from './work-items.js';
 
 export type { HeldWork, SettledWork } from './work-items.js';
@@ -47,6 +48,18 @@ export interface DecisionSummary {
   /** What was decided, one sentence or a short paragraph (the `resolution` column); null while it waits. */
   outcome: string | null;
   participantCount: number;
+  /**
+   * Who made the call, once settled: `decided_by` named as the record names it
+   * (getDecision); null while it waits, or for a settled row that records none.
+   */
+  decidedBy: { id: string; name: string } | null;
+  /**
+   * Who a waiting decision waits on (lib/decision-authority.ts `waitingOn`, the
+   * rule the decide route applies): its decider, else its initiative's owner,
+   * else the org-leader override (`decider` null). Both null once settled.
+   */
+  deciderRole: DeciderRole | null;
+  decider: { id: string; name: string } | null;
 }
 
 /**
@@ -116,9 +129,49 @@ export interface DecisionDetail {
 const SEEDED_AT = new Date().toISOString().slice(0, 10);
 const activityDate = (d: { decidedAt: string | null }): string => d.decidedAt ?? SEEDED_AT;
 
-function mockListDecisions(limit: number, since?: string): DecisionSummary[] {
+/** LEFT JOIN people on decided_by, falling back to the name the event recorded (an unlinked account). */
+function mockDecidedBy(head: { id: string; decidedBy?: string | null }, byId: Map<string, { name: string }>): NamedBy | null {
+  const by = head.decidedBy ?? null;
+  if (!by) return null;
+  const recorded = decisionEventRows.rows().filter((e) => e.decisionId === head.id && e.actorId === by)
+    .sort((a, b) => b.at.localeCompare(a.at))[0]?.actorName;
+  return { id: by, name: byId.get(by)?.name ?? recorded ?? by };
+}
+
+/** The decider participants of each decision, joined to people, heaviest first then by name (the record's order). */
+function mockDeciders(byId: Map<string, { name: string }>): Map<string, NamedBy[]> {
+  const out = new Map<string, Array<NamedBy & { weight: number }>>();
+  for (const p of decisionParticipantRows.rows()) {
+    const person = byId.get(p.personId);
+    if (!person || !isDeciderRole(p.role)) continue;
+    out.set(p.decisionId, [...(out.get(p.decisionId) ?? []), { id: p.personId, name: person.name, weight: p.weight }]);
+  }
+  for (const list of out.values()) list.sort((a, b) => b.weight - a.weight || a.name.localeCompare(b.name));
+  return new Map([...out].map(([k, v]) => [k, v.map(({ id, name }) => ({ id, name }))]));
+}
+
+/**
+ * The decider fields of a list row, shared by both branches: who decided a
+ * settled row, who a waiting row waits on (the owner lookup is the one
+ * `mayDecideDecision` makes, so it runs only for waiting rows with no decider).
+ */
+async function withDeciders(
+  rows: Array<Omit<DecisionSummary, 'decidedBy' | 'deciderRole' | 'decider'> & { decidedByRaw: NamedBy | null; deciders: NamedBy[] }>,
+): Promise<DecisionSummary[]> {
+  const waiting = (status: string) => WAITING_STATUSES.includes(status);
+  const owners = await initiativeOwners(rows.filter((r) => waiting(r.status) && r.deciders.length === 0 && r.projectId).map((r) => r.projectId!));
+  return rows.map(({ decidedByRaw, deciders, ...r }) => {
+    if (!waiting(r.status)) return { ...r, decidedBy: decidedByRaw, deciderRole: null, decider: null };
+    const on = waitingOn(deciders, r.projectId ? owners.get(r.projectId) ?? null : null);
+    return { ...r, decidedBy: null, ...on };
+  });
+}
+
+function mockListDecisions(limit: number, since?: string): Promise<DecisionSummary[]> {
   const counts = countBy(decisionParticipantRows.rows(), 'decisionId');
-  return decisionRows
+  const byId = new Map(mockPeople.map((p) => [p.id, p]));
+  const deciders = mockDeciders(byId);
+  return withDeciders(decisionRows
     .rows()
     // WHERE d.decided_at >= :since OR (d.decided_at IS NULL AND d.created_at >= :since)
     .filter((d) => !since || activityDate(d) >= since)
@@ -135,7 +188,9 @@ function mockListDecisions(limit: number, since?: string): DecisionSummary[] {
       decidedAt: d.decidedAt,
       outcome: d.resolution ?? null,
       participantCount: counts.get(d.id) ?? 0,
-    }));
+      decidedByRaw: mockDecidedBy(d, byId),
+      deciders: deciders.get(d.id) ?? [],
+    })));
 }
 
 function mockGetDecision(id: string): Omit<DecisionDetail, 'heldWork'> | null {
@@ -147,7 +202,6 @@ function mockGetDecision(id: string): Omit<DecisionDetail, 'heldWork'> | null {
     .map((e) => ({ id: e.id, kind: e.kind, at: e.at, by: { id: e.actorId, name: e.actorName }, rationale: e.rationale }))
     // ORDER BY at DESC
     .sort((a, b) => b.at.localeCompare(a.at));
-  const by = head.decidedBy ?? null;
   return {
     id: head.id,
     topic: head.topic,
@@ -155,8 +209,7 @@ function mockGetDecision(id: string): Omit<DecisionDetail, 'heldWork'> | null {
     status: head.status,
     projectId: head.projectId,
     decidedAt: head.decidedAt,
-    // LEFT JOIN people on decided_by, falling back to the name the event recorded (an unlinked account).
-    decidedBy: by ? { id: by, name: byId.get(by)?.name ?? history.find((e) => e.by.id === by)?.by.name ?? by } : null,
+    decidedBy: mockDecidedBy(head, byId),
     outcome: head.resolution ?? null,
     history,
     options: (head.options ?? []).map((o) => ({ ...o })),
@@ -207,18 +260,32 @@ export async function listDecisions(
       d.project_id,
       ${DECIDED_INSTANT} AS decided_at,
       d.resolution,
+      d.decided_by,
+      COALESCE(pdb.name, d.decided_by) AS decided_by_name,
+      dec.person_id AS decider_id,
+      dec.name AS decider_name,
       COUNT(dp.person_id)::int AS participant_count
     FROM decisions d
     LEFT JOIN decision_participants dp ON dp.decision_id = d.id
+    LEFT JOIN people pdb ON pdb.id = d.decided_by
+    -- The decider a waiting row waits on: the record's first decider participant.
+    LEFT JOIN LATERAL (
+      SELECT dd.person_id, pp.name
+        FROM decision_participants dd JOIN people pp ON pp.id = dd.person_id
+       WHERE dd.decision_id = d.id AND lower(dd.role) = 'decider'
+       ORDER BY dd.weight DESC NULLS LAST, pp.name
+       LIMIT 1
+    ) dec ON TRUE
     WHERE 1=1
     ${sinceClause}
-    GROUP BY d.id, d.topic, d.summary, d.status, d.project_id, d.decided_at, d.resolved_at, d.resolution
+    GROUP BY d.id, d.topic, d.summary, d.status, d.project_id, d.decided_at, d.resolved_at, d.resolution,
+             d.decided_by, pdb.name, dec.person_id, dec.name
     ORDER BY COALESCE(d.decided_at, d.created_at) DESC NULLS LAST
     LIMIT :lim
   `;
 
   const rows = await exec(sql, params);
-  return rows.map((r) => ({
+  return withDeciders(rows.map((r) => ({
     id: String(r['id']),
     topic: String(r['topic'] ?? ''),
     summary: r['summary'] != null ? String(r['summary']) : null,
@@ -227,7 +294,11 @@ export async function listDecisions(
     decidedAt: r['decided_at'] != null ? String(r['decided_at']) : null,
     outcome: r['resolution'] != null ? String(r['resolution']) : null,
     participantCount: typeof r['participant_count'] === 'number' ? r['participant_count'] : 0,
-  }));
+    decidedByRaw: r['decided_by'] != null
+      ? { id: String(r['decided_by']), name: String(r['decided_by_name'] ?? r['decided_by']) }
+      : null,
+    deciders: r['decider_id'] != null ? [{ id: String(r['decider_id']), name: String(r['decider_name'] ?? r['decider_id']) }] : [],
+  })));
 }
 
 export async function getDecision(id: string): Promise<DecisionDetail | null> {

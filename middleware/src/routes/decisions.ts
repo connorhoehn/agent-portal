@@ -55,8 +55,17 @@ decisionsRouter.get(
     const limit = Number.isNaN(rawLimit) ? 50 : Math.min(Math.max(rawLimit, 1), 200);
     const since = req.query['since'] as string | undefined;
 
+    // Each row names who decided it (settled) or who it waits on (waiting):
+    // the provider applies lib/decision-authority.ts, and a bare id is named
+    // here as the record route names it (nameDeciders), so the list never
+    // shows more than the record page already does.
     const decisions = await listDecisions({ limit, since });
-    res.json(decisions);
+    const session = resolveSession(req);
+    res.json(await Promise.all(decisions.map(async (d) => {
+      if (!d.decidedBy) return d;
+      const { decidedBy } = await nameDeciders(session, { decidedBy: d.decidedBy, history: [] });
+      return { ...d, decidedBy };
+    })));
   }),
 );
 

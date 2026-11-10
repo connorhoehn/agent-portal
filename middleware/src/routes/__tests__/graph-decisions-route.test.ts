@@ -60,7 +60,7 @@ describe('GET /api/graph/decisions', () => {
 
     for (const d of res.body) {
       expect(Object.keys(d).sort()).toEqual(
-        ['decidedAt', 'id', 'outcome', 'participantCount', 'projectId', 'status', 'summary', 'topic'],
+        ['decidedAt', 'decidedBy', 'decider', 'deciderRole', 'id', 'outcome', 'participantCount', 'projectId', 'status', 'summary', 'topic'],
       );
       expect(typeof d.participantCount).toBe('number');
       expect(['open', 'escalated', 'resolved', 'rejected']).toContain(d.status);
@@ -79,6 +79,38 @@ describe('GET /api/graph/decisions', () => {
     expect(res.body.some((d: { projectId: string | null }) => d.projectId === null)).toBe(true);
     expect(res.body.some((d: { projectId: string | null }) => d.projectId !== null)).toBe(true);
     expect(res.body.some((d: { status: string }) => d.status !== 'resolved')).toBe(true);
+  });
+
+  it('names who decided a settled row and who a waiting row waits on, as the record does', async () => {
+    const app = buildApp();
+    const list = (await request(app).get('/api/graph/decisions?limit=200')).body as Array<{
+      id: string; status: string; projectId: string | null;
+      decidedBy: { id: string; name: string } | null; deciderRole: string | null; decider: { id: string; name: string } | null;
+    }>;
+    const { getProject } = await import('../../providers/projects.js');
+    let waiting = 0;
+    for (const d of list) {
+      const record = (await request(app).get(`/api/graph/decisions/${d.id}`)).body;
+      if (d.status === 'resolved' || d.status === 'rejected') {
+        // The record's Decided line, the same person and the same name.
+        expect(d.decidedBy).toEqual(record.decidedBy ?? null);
+        expect([d.deciderRole, d.decider]).toEqual([null, null]);
+        continue;
+      }
+      waiting += 1;
+      expect(d.decidedBy).toBeNull();
+      // lib/decision-authority.ts: the decider participant, else the initiative owner, else the org-leader.
+      const decider = record.participants.find((p: { role: string | null }) => (p.role ?? '').toLowerCase() === 'decider');
+      if (decider) {
+        expect(d).toMatchObject({ deciderRole: 'decider', decider: { id: decider.personId, name: decider.name } });
+      } else {
+        const owner = d.projectId ? await getProject(d.projectId) : null;
+        if (owner?.ownerId) expect(d).toMatchObject({ deciderRole: 'initiative-owner', decider: { id: owner.ownerId } });
+        else expect(d).toMatchObject({ deciderRole: 'org-leader', decider: null });
+      }
+    }
+    expect(waiting).toBeGreaterThan(0);
+    expect(list.some((d) => d.decidedBy !== null)).toBe(true);
   });
 
   it('clamps `limit` to 1..200 instead of trusting it', async () => {

@@ -1181,6 +1181,8 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
       // A relative expression (`(NOW() - INTERVAL '147 days')::date`) like the program
       // decisions' — there is no instant to compare, only whether it is set.
       { seed: 'decided_at', mock: (d: { decidedAt: string | null }) => d.decidedAt, equals: setExactlyWhenTheSeedSetsIt },
+      // Who decided it: the list's Decider column for a settled row.
+      { seed: 'decided_by', mock: (d: { decidedBy: { id: string } | null }) => d.decidedBy?.id ?? null },
     ],
   },
   {
@@ -1211,6 +1213,7 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
         mock: (d: { decidedAt: string | null }) => d.decidedAt,
         equals: setExactlyWhenTheSeedSetsIt,
       },
+      { seed: 'decided_by', mock: (d: { decidedBy: { id: string } | null }) => d.decidedBy?.id ?? null },
       // escalated_at / resolved_at / work_item_id are not on the decision-list
       // row at all, so they are outside "columns both sources carry".
     ],

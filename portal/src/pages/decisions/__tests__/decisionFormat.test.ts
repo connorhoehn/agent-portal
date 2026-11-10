@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { collectionCommandAdapter } from '../../../components/collections/collectionCommands.ts';
 import { DECISION_GRAMMAR } from '../decisionCommands.ts';
-import { asInstant, decidedShort, decidedWhen, filterDecisions, heldWorkRows, historyOf, matchesDecision, sortDecisions, standingLine } from '../decisionFormat.ts';
+import { asInstant, decidedCell, decidedShort, decidedWhen, deciderCell, filterDecisions, heldWorkRows, historyOf, matchesDecision, sortDecisions, standingLine } from '../decisionFormat.ts';
 import type { DecisionDetail } from '../types';
 
 const person = (personId: string, name: string, role: string) => ({ personId, name, title: null, role, weight: 1 });
@@ -97,4 +97,23 @@ test('decidedShort: the table date is today, Nov 7, or Jun 22, 25 for another ye
   assert.equal(decidedShort('2026-11-07', now), 'Nov 7');
   assert.equal(decidedShort('2025-06-22', now), 'Jun 22, 25');
   assert.equal(decidedShort('not a date', now), 'not a date');
+});
+
+test('the list names who decided a settled row and who a waiting row waits on', () => {
+  const by = { id: 'p-4', name: 'Kai Ito' };
+  assert.deepEqual(deciderCell({ status: 'resolved', decidedBy: by, deciderRole: null, decider: null }), { name: 'Kai Ito', person: true });
+  assert.equal(deciderCell({ status: 'resolved', decidedBy: null, deciderRole: null, decider: null }), null);
+  assert.deepEqual(deciderCell({ status: 'open', decidedBy: null, deciderRole: 'decider', decider: { id: 'p-5', name: 'Sienna Garcia' } }), { name: 'Sienna Garcia', person: true });
+  assert.deepEqual(deciderCell({ status: 'escalated', decidedBy: null, deciderRole: 'initiative-owner', decider: { id: 'p-1', name: 'Nina' } }), { name: 'Nina', person: true });
+  assert.deepEqual(deciderCell({ status: 'open', decidedBy: null, deciderRole: 'org-leader', decider: null }), { name: 'An org-leader', person: false });
+  // An older server sends none of the three.
+  assert.equal(deciderCell({ status: 'open' }), null);
+});
+
+test('the Decided cell says Waiting for an open row, never a dash', () => {
+  const rel = () => '3 days ago';
+  assert.equal(decidedCell({ status: 'open', decidedAt: null }, rel), 'Waiting');
+  assert.equal(decidedCell({ status: 'escalated', decidedAt: null }, rel), 'Waiting');
+  assert.equal(decidedCell({ status: 'resolved', decidedAt: null }, rel), '—');
+  assert.notEqual(decidedCell({ status: 'resolved', decidedAt: '2026-03-12' }, rel), '—');
 });

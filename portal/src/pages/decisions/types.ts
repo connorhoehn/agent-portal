@@ -17,6 +17,15 @@ export interface DecisionSummary {
   /** What was decided, once settled (G54); null while it waits. */
   outcome?: string | null;
   participantCount: number;
+  /** Who made the call, once settled; null while it waits. Older servers send nothing. */
+  decidedBy?: { id: string; name: string } | null;
+  /**
+   * Who a waiting decision waits on, by the rule the decide route applies:
+   * its decider, else its initiative's owner, else the org-leader override
+   * (`decider` null). Both null once settled.
+   */
+  deciderRole?: 'decider' | 'initiative-owner' | 'org-leader' | null;
+  decider?: { id: string; name: string } | null;
 }
 
 export interface DecisionParticipant {
