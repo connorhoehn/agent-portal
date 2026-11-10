@@ -10,8 +10,9 @@
 //                      so its report is that run's; the bot_run row is accounting only.
 //
 // What it does, in order: read what the server already knows (the frozen
-// brief, the job row, the change request), take the worker's part (given, or
-// staged earlier by the run itself), parse and cap it, store the report
+// brief, the job row, the change request), take the worker's part (the local
+// worker's completion body, or a devbox runner's own stream: its final message
+// and the skills it loaded), parse and cap it, store the report
 // write-once, then write one application row per runbook the run was given
 // and observed loading, so lib/runbooks/health.ts moves.
 //
@@ -48,7 +49,7 @@ export interface RunEndInput {
   changeRequestId?: string | null;
   /** Files the executor already knows changed, when there is no change request. */
   changedFiles?: RunReportChangedFile[];
-  /** The worker's own account (untrusted). Omitted → whatever the run staged earlier, if anything. */
+  /** The worker's own account (untrusted). null/omitted: the run said nothing (selfReport 'missing'). */
   worker?: WorkerReportPart | null;
 }
 
@@ -235,8 +236,7 @@ export async function recordRunEnd(input: RunEndInput, deps: RecordDeps = {}): P
 
     const brief = await runbooks.getBrief(input.runRef).catch(() => null);
     const facts = await serverFacts(input);
-    const staged = input.worker === undefined ? (await reports.getWorkerPart(input.runRef))?.part ?? null : input.worker;
-    const worker = normalizeWorkerPart(staged);
+    const worker = normalizeWorkerPart(input.worker ?? null);
     const self = parseLabReport(worker.block);
 
     const observed: RunReportUse[] = worker.skillsLoaded

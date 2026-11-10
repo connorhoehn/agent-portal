@@ -198,6 +198,8 @@ export async function dispatchGovernedRun(input: {
     console.warn(`[sdlc] run ${run.id} runs unmetered: ${(err as Error).message}`);
     return null;
   });
+  // The capture runs alongside the run's end; the report waits for it so it can name the change.
+  let capture: Promise<string | null> = Promise.resolve(null);
   void executeProjectRun({
     ...(meter ? {
       meter,
@@ -218,15 +220,26 @@ export async function dispatchGovernedRun(input: {
     onEvent: (ev) => appendEvent(box.id, ev),
     ...(lab ? { lab } : {}),
     onChanged: () => {
-      void captureAndGate({
+      capture = captureAndGate({
         client: devboxDataClient(), runtimeArn: arn, sessionId: input.sessionId,
         checkout, projectId: input.project.id, runId: run.id,
         prompt: input.prompt, model,
         ...(input.workItemId ? { workItemId: input.workItemId } : {}),
         requestedBy,
-      }).catch((err) => console.warn('[sdlc] capture failed:', (err as Error).message));
+      }).catch((err) => { console.warn('[sdlc] capture failed:', (err as Error).message); return null; });
     },
-  }).finally(() => {
+  }).then(async (end) => {
+    // The run report (docs/learning-loop-design.md §1), keyed by the run id like its brief.
+    const changeRequestId = await capture;
+    const { recordRunEnd, failureCodeOf } = await import('./run-reports/record.js');
+    await recordRunEnd({
+      runRef: run.id, executor: 'governed', outcome: end.ok ? (changeRequestId ? 'needs-review' : 'done') : 'failed',
+      failureCode: end.ok ? null : end.cutoff ? 'budget' : failureCodeOf(end.error),
+      workItemId: input.workItemId ?? null, initiativeId: input.project.orgProjectId ?? null,
+      model: end.model ?? model, billedUsd: end.costUsd, changeRequestId,
+      worker: { block: end.finalMessage, skillsLoaded: end.skillsLoaded },
+    });
+  }).catch((err: unknown) => console.warn(`[sdlc] run ${run.id} report:`, (err as Error).message)).finally(() => {
     releaseBox(box.id, holder);
     // The run is over: its concurrency slot frees now (DE-37).
     if (runHold) void import('../providers/run-limits.js').then((m) => m.releaseRunSlots(runHold)).catch(() => undefined);

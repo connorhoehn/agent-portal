@@ -4,7 +4,7 @@
 export * from './types.js';
 export { LAB_REPORT_ASK, parseLabReport, extractLabReportBlock, cleanText, type ParsedSelfReport } from './self-report.js';
 export { skillsLoadedByEvent, skillsLoadedFrom, SKILL_NAME_RE } from './use-detection.js';
-export type { RunReportStore, ListRunReportsQuery, StagedWorkerPart } from './store.js';
+export type { RunReportStore, ListRunReportsQuery } from './store.js';
 export { RowsRunReportStore, privateRunReportSources, type RunReportRowSources } from './store-rows.js';
 export { DynamoRunReportStore } from './store-dynamo.js';
 export {

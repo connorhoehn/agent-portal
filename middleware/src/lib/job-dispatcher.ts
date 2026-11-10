@@ -29,6 +29,7 @@ import { replicaFleet, replicaId } from './replica-fleet.js';
 import { runDevboxTask, wipeDevboxWorkspace } from '../routes/devbox.js';
 import type { DevboxRunOutcome } from './devbox-runner.js';
 import { freezeJobBrief } from './run-brief.js';
+import { failureCodeOf, outcomeOfJobStatus, recordRunEnd } from './run-reports/record.js';
 import { maintainJobAttempt, type JobAttempt } from './job-attempt.js';
 import { recordSpend } from '../providers/spend-ledger.js';
 import { reserveSpend, forecastP75ForModel, meterForHold, HOLD_GRACE_MS } from './spend-holds.js';
@@ -194,7 +195,9 @@ export function jobOccupant(job: Pick<AgentJob, 'createdBy' | 'botId'>): string 
 async function runJob(job: ClaimedAgentJob, policy: LifetimePolicy = lifetimePolicy()): Promise<void> {
   const { boxId, sessionId, claimToken } = job;
   if (!boxId || !sessionId) {
-    await completeJob(job.id, { claimToken, status: 'failed', error: 'claimed without a box assignment' });
+    if (await completeJob(job.id, { claimToken, status: 'failed', error: 'claimed without a box assignment' })) {
+      await recordRunEnd({ runRef: job.id, executor: 'fleet', outcome: 'failed', failureCode: 'no_box', billedUsd: 0, worker: null });
+    }
     return;
   }
   running.add(boxId);
@@ -284,6 +287,14 @@ async function runJob(job: ClaimedAgentJob, policy: LifetimePolicy = lifetimePol
     });
     if (committed) {
       await recordJobSpend(job, outcome);
+      // The run report (docs/learning-loop-design.md §1): the runner's own stream carried the
+      // final message (its lab-report block) and every skill load, so the server reads both here.
+      await recordRunEnd({
+        runRef: job.id, executor: 'fleet', outcome: outcomeOfJobStatus(status),
+        failureCode: outcome.ok ? null : outcome.cutoff ? 'budget' : failureCodeOf(outcome.error),
+        model: outcome.model, billedUsd: outcome.costUsd,
+        worker: { block: outcome.summary, skillsLoaded: outcome.skillsLoaded ?? [] },
+      });
       appendEvent(boxId, { type: 'job_finished', jobId: job.id, ok: outcome.ok, ts: new Date().toISOString() });
       emit(status, job, { boxId });
     }
@@ -297,6 +308,7 @@ async function runJob(job: ClaimedAgentJob, policy: LifetimePolicy = lifetimePol
       // A failure BEFORE the invoke spent nothing, so that hold is released.
       if (invoked) await recordJobSpend(job, { costUsd: null, costBasis: 'unknown', estimatedCostUsd: null });
       else await releaseHold(holdId);
+      await recordRunEnd({ runRef: job.id, executor: 'fleet', outcome: 'failed', failureCode: failureCodeOf((err as Error).message), billedUsd: invoked ? null : 0, worker: null });
       emit('failed', job, { boxId });
     }
   } finally {

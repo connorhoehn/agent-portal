@@ -8,11 +8,9 @@
 // What the interface guarantees:
 //  * A report is write-once per runRef and idempotent: a second put returns the
 //    report that is already there, unchanged, with `created: false`.
-//  * A worker's staged part (the devbox `lab report` that arrives before the
-//    run's own end) is write-once too; the first one stands.
 //  * Reads return copies.
 //  * Lists are newest `endedAt` first, then runRef.
-import type { RunReport, WorkerReportPart } from './types.js';
+import type { RunReport } from './types.js';
 import { InvalidWriteError, paginate, type Page } from '../runbooks/store.js';
 
 export interface ListRunReportsQuery {
@@ -22,21 +20,12 @@ export interface ListRunReportsQuery {
   limit?: number;
 }
 
-export interface StagedWorkerPart {
-  runRef: string;
-  part: WorkerReportPart;
-  at: string;
-}
-
 export interface RunReportStore {
   readonly kind: 'rows' | 'dynamo';
   /** Store once per runRef. The second and later puts change nothing and return the stored report. */
   putReport(r: RunReport): Promise<{ report: RunReport; created: boolean }>;
   getReport(runRef: string): Promise<RunReport | null>;
   listReports(q?: ListRunReportsQuery): Promise<Page<RunReport>>;
-  /** Stage what a worker said before its run ended. false when a part (or the report itself) is already there. */
-  stageWorkerPart(s: StagedWorkerPart): Promise<boolean>;
-  getWorkerPart(runRef: string): Promise<StagedWorkerPart | null>;
 }
 
 export const byEndedDesc = (a: RunReport, b: RunReport): number =>

@@ -52,6 +52,8 @@ import {
 import { lifetimePolicy } from './devbox-lifetime.js';
 import { loadMicrovmParameters, microvmConfig, type MicrovmConfig, type ParameterReader } from './microvm-config.js';
 import { microvmBoxId, microvmBranch, microvmSessionId, transcriptKey } from './microvm-ids.js';
+import { skillsLoadedByEvent } from './run-reports/use-detection.js';
+import { failureCodeOf, outcomeOfJobStatus } from './run-reports/record.js';
 import {
   invokeMicrovmJson, invokeMicrovmStream, PRESIGN_EXPIRES_S, type AgentCoreSend, type PresignInput,
 } from './microvm-invoke.js';
@@ -72,6 +74,8 @@ export interface MicrovmDeps {
   stampPlacement: (id: string, claimToken: string, boxId: string, sessionId: string) => Promise<boolean>;
   markRunning: (id: string, claimToken: string) => Promise<boolean>;
   completeJob: (id: string, opts: { claimToken: string; status: 'awaiting_review' | 'done' | 'failed'; result?: Record<string, unknown>; error?: string }) => Promise<boolean>;
+  /** The run report (lib/run-reports/record.ts recordRunEnd). Optional so a test's deps may leave it out. */
+  recordRunEnd?: (input: import('./run-reports/record.js').RunEndInput) => Promise<unknown>;
   getJobFacts: (id: string) => Promise<AgentJob | null>;
   maintainAttempt: (id: string, claimToken: string, staleMs: number) => Promise<JobAttempt>;
 
@@ -516,6 +520,7 @@ export async function runMicrovmAttempt(job: ClaimedAgentJob, plan: Plan, deps: 
   let toolCalls = 0;
   let turns = 0;
   let summary = '';
+  const skillsLoaded: string[] = [];
   const transcript: ActivityEntry[] = [];
   const record = (e: ActivityEntry): void => { if (transcript.length < TRANSCRIPT_MAX_ENTRIES) transcript.push(e); };
   let slotHolder: string | null = holdId;
@@ -635,6 +640,7 @@ export async function runMicrovmAttempt(job: ClaimedAgentJob, plan: Plan, deps: 
           refusal = ev['error'];
           record({ t: 'error', detail: clip(refusal), ts });
         } else if (type === 'assistant') {
+          for (const name of skillsLoadedByEvent(ev)) if (!skillsLoaded.includes(name) && skillsLoaded.length < 50) skillsLoaded.push(name);
           const content = ((ev['message'] as { content?: unknown[] })?.content ?? []) as Record<string, unknown>[];
           for (const block of content) {
             if (block['type'] === 'tool_use') {
@@ -808,6 +814,12 @@ export async function runMicrovmAttempt(job: ClaimedAgentJob, plan: Plan, deps: 
       }).catch(() => false);
       heldBackSaid.delete(job.id);
       if (committed) {
+        await deps.recordRunEnd?.({
+          runRef: job.id, executor: 'microvm', outcome: outcomeOfJobStatus(status),
+          failureCode: error ? (cutoff ? 'budget' : failureCodeOf(error)) : null,
+          model: plan.model, billedUsd: totalUsd,
+          worker: invoked ? { block: summary, skillsLoaded } : null,
+        }).catch(() => undefined);
         deps.appendEvent(boxId, { type: 'job_finished', jobId: job.id, ok: !error, ts: iso(deps.now()) });
         deps.emitJob(status, job.id, { boxId, runner: 'microvm' });
       }
@@ -933,6 +945,7 @@ export async function defaultMicrovmDeps(): Promise<MicrovmDeps> {
     stampPlacement: (id, t, b, s) => jobs.stampJobPlacement(id, t, b, s),
     markRunning: (id, t) => jobs.markRunning(id, t),
     completeJob: (id, o) => jobs.completeJob(id, o),
+    recordRunEnd: async (input) => (await import('./run-reports/record.js')).recordRunEnd(input),
     getJobFacts: (id) => jobs.getMicrovmJobFacts(id),
     maintainAttempt: (id, t, ms) => attempt.maintainJobAttempt(id, t, ms),
     getUser: async (sub) => {

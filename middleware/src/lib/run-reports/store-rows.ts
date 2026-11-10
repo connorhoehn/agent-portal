@@ -1,22 +1,21 @@
-// RowsRunReportStore: the mock-floor RunReportStore. Reads and writes two
-// registered fixtures (mock/run-reports.ts) through accessors, so
+// RowsRunReportStore: the mock-floor RunReportStore. Reads and writes a
+// registered fixture (mock/run-reports.ts) through accessors, so
 // `POST /api/__mock/reset` takes back every report and scenarios apply. Every
 // method is synchronous inside, so the write-once check is atomic.
 import { clone, type Page } from '../runbooks/store.js';
 import type { RunReport } from './types.js';
 import {
   checkReport, filterReports, pageReports,
-  type ListRunReportsQuery, type RunReportStore, type StagedWorkerPart,
+  type ListRunReportsQuery, type RunReportStore,
 } from './store.js';
 
 export interface RunReportRowSources {
   reports(): RunReport[];
-  staged(): StagedWorkerPart[];
 }
 
 export function privateRunReportSources(): RunReportRowSources {
-  const r: RunReport[] = [], s: StagedWorkerPart[] = [];
-  return { reports: () => r, staged: () => s };
+  const r: RunReport[] = [];
+  return { reports: () => r };
 }
 
 export class RowsRunReportStore implements RunReportStore {
@@ -39,17 +38,5 @@ export class RowsRunReportStore implements RunReportStore {
   async listReports(q?: ListRunReportsQuery): Promise<Page<RunReport>> {
     const page = pageReports(filterReports(this.src.reports(), q), q);
     return { items: clone(page.items), next: page.next };
-  }
-
-  async stageWorkerPart(s: StagedWorkerPart): Promise<boolean> {
-    if (this.src.staged().some((x) => x.runRef === s.runRef)) return false;
-    if (this.src.reports().some((x) => x.runRef === s.runRef)) return false;
-    this.src.staged().push(clone(s));
-    return true;
-  }
-
-  async getWorkerPart(runRef: string): Promise<StagedWorkerPart | null> {
-    const s = this.src.staged().find((x) => x.runRef === runRef);
-    return s ? clone(s) : null;
   }
 }

@@ -18,6 +18,7 @@ import { estimateUsageCost } from './model-prices.js';
 import type { TokenUsage } from './pricing.js';
 import { clampTaskTimeout } from './devbox-lifetime.js';
 import { RunCutoffError, anySignal, cutoffGraceMs, cutoffMessage, type RunCutoff, type RunMeter } from './run-meter.js';
+import { skillsLoadedByEvent } from './run-reports/use-detection.js';
 
 /**
  * One line of what the worker actually did.
@@ -96,6 +97,12 @@ export interface DevboxRunOutcome {
   transcript: ActivityEntry[];
   /** DE-35: set when the run was stopped at its spend ceiling. */
   cutoff?: RunCutoff;
+  /**
+   * Skills the session was seen loading (a `Skill` tool call, or a read of a skill's
+   * SKILL.md), from the runner's own stream-json events — the run report's observed
+   * use (lib/run-reports/use-detection.ts). Distinct, in first-load order.
+   */
+  skillsLoaded?: string[];
 }
 
 export interface DevboxRunOptions {
@@ -187,7 +194,7 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
   const outcome: DevboxRunOutcome = {
     ok: false, summary: '', turns: 0, durationMs: 0, costUsd: null, costBasis: 'unknown', estimatedCostUsd: null,
     model: opts.model ?? null, usage: null, toolCalls: 0, exitCode: null,
-    transcript: [],
+    transcript: [], skillsLoaded: [],
   };
 
   const record = (entry: ActivityEntry): void => {
@@ -264,6 +271,9 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
           // cloud), ahead of whatever the caller asked for.
           if (typeof ev['model'] === 'string' && ev['model']) outcome.model = ev['model'];
         } else if (type === 'assistant') {
+          for (const name of skillsLoadedByEvent(ev)) {
+            if (!outcome.skillsLoaded!.includes(name) && outcome.skillsLoaded!.length < 50) outcome.skillsLoaded!.push(name);
+          }
           const content = ((ev['message'] as { content?: unknown[] })?.content ?? []) as Record<string, unknown>[];
           for (const block of content) {
             if (block['type'] === 'tool_use') {

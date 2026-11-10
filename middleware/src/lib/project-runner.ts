@@ -173,7 +173,20 @@ export interface ProjectRunRequest {
  * row at `running` because the failure path threw would recreate exactly the
  * problem this exists to fix.
  */
-export async function executeProjectRun(req: ProjectRunRequest): Promise<void> {
+/** How a governed run ended, for its run report (lib/run-reports/record.ts). */
+export interface ProjectRunEnd {
+  ok: boolean;
+  error: string | null;
+  cutoff: boolean;
+  costUsd: number | null;
+  model: string | null;
+  filesChanged: number;
+  /** The run's final message (its lab-report block) and the skills it was seen loading. */
+  finalMessage: string;
+  skillsLoaded: string[];
+}
+
+export async function executeProjectRun(req: ProjectRunRequest): Promise<ProjectRunEnd> {
   try {
     const before = await snapshotWorkingTree(req.client, req.runtimeArn, req.sessionId, req.checkout);
 
@@ -230,6 +243,11 @@ export async function executeProjectRun(req: ProjectRunRequest): Promise<void> {
     if (diff.filesChanged > 0) {
       try { req.onChanged?.(diff.filesChanged); } catch { /* governance failures are the callback's to record, not the run's */ }
     }
+    return {
+      ok: outcome.ok, error: outcome.ok ? null : (outcome.error ?? 'the agent reported a failure'), cutoff: !!outcome.cutoff,
+      costUsd: outcome.costUsd, model: outcome.model, filesChanged: diff.filesChanged,
+      finalMessage: outcome.summary, skillsLoaded: outcome.skillsLoaded ?? [],
+    };
   } catch (err) {
     await finishRun(req.runId, {
       status: 'failed',
@@ -237,5 +255,9 @@ export async function executeProjectRun(req: ProjectRunRequest): Promise<void> {
       diffSummary: null,
       error: (err as Error).message,
     }).catch(() => { /* the run is lost either way; do not mask the original */ });
+    return {
+      ok: false, error: (err as Error).message, cutoff: false, costUsd: null, model: req.model ?? null, filesChanged: 0,
+      finalMessage: '', skillsLoaded: [],
+    };
   }
 }

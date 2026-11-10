@@ -75,15 +75,6 @@ describe.each(backends)('$name (RunReportStore contract)', ({ open }) => {
     expect(page.next).not.toBeNull();
   });
 
-  it('stages a worker part once, and not after the report exists', async () => {
-    expect(await store.stageWorkerPart({ runRef: 'r1', part: { block: '{}', skillsLoaded: ['rb-a'] }, at: 't' })).toBe(true);
-    expect(await store.stageWorkerPart({ runRef: 'r1', part: { block: 'other' }, at: 't' })).toBe(false);
-    expect((await store.getWorkerPart('r1'))!.part.skillsLoaded).toEqual(['rb-a']);
-    await store.putReport(report('r2'));
-    expect(await store.stageWorkerPart({ runRef: 'r2', part: {}, at: 't' })).toBe(false);
-    expect(await store.getWorkerPart('missing')).toBeNull();
-  });
-
   it('refuses a report without a runRef', async () => {
     await expect(store.putReport(report(''))).rejects.toThrow(/runRef/);
   });

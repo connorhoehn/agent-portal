@@ -4,7 +4,6 @@
 //   PK           SK       item (entity under `data`)
 //   RPT#<ref>    META     RunReport   GSI1PK RPTWI#<workItemId>  GSI1SK <endedAt>#<ref>
 //                                    GSI2PK RPTINI#<initiative> GSI2SK <endedAt>#<ref>
-//   RPT#<ref>    WORKER   StagedWorkerPart
 //
 // The index prefixes never meet the runbook rows' (SCOPE#…, PROPSTATUS#…).
 // Write-once is a ConditionExpression; a lost race reads the winner back.
@@ -14,13 +13,12 @@ import type { Page } from '../runbooks/store.js';
 import type { RunReport } from './types.js';
 import {
   checkReport, filterReports, pageReports,
-  type ListRunReportsQuery, type RunReportStore, type StagedWorkerPart,
+  type ListRunReportsQuery, type RunReportStore,
 } from './store.js';
 
 type Item = Record<string, unknown>;
 const errName = (e: unknown): string => (e as { name?: string })?.name ?? '';
 const reportKey = (ref: string) => ({ PK: `RPT#${ref}`, SK: 'META' });
-const stagedKey = (ref: string) => ({ PK: `RPT#${ref}`, SK: 'WORKER' });
 
 function reportItem(r: RunReport): Item {
   const sk = `${r.endedAt}#${r.runRef}`;
@@ -67,19 +65,6 @@ export class DynamoRunReportStore implements RunReportStore {
     const rows = filterReports(items.map((i) => i['data'] as RunReport), q);
     return pageReports(rows, q);
   }
-
-  async stageWorkerPart(s: StagedWorkerPart): Promise<boolean> {
-    if (await this.getReport(s.runRef)) return false;
-    try {
-      await this.doc.send(new PutCommand({ TableName: this.table, Item: { ...stagedKey(s.runRef), data: s }, ConditionExpression: 'attribute_not_exists(PK)' }));
-      return true;
-    } catch (e) {
-      if (errName(e) === 'ConditionalCheckFailedException') return false;
-      throw e;
-    }
-  }
-
-  getWorkerPart(runRef: string): Promise<StagedWorkerPart | null> { return this.get<StagedWorkerPart>(stagedKey(runRef)); }
 
   private async query(index: string, attr: string, pk: string): Promise<Item[]> {
     const items: Item[] = [];
