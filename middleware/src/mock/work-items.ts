@@ -570,7 +570,27 @@ function onClock(iso: string): string;
 function onClock(iso: string | null): string | null;
 function onClock(iso: string | null): string | null {
   if (iso === null) return null;
-  return new Date(clock.now().getTime() - (MOCK_EPOCH.getTime() - Date.parse(iso))).toISOString();
+  return new Date(buildNowMs() - (MOCK_EPOCH.getTime() - Date.parse(iso))).toISOString();
+}
+
+/**
+ * ONE clock read per fixture build. Every stamp of a build is offset from the
+ * same instant, so two seeds `D(n)` days old stay exactly equal. Reading the
+ * clock per stamp let a millisecond tick land partway through the seed list:
+ * the rows after it came out 1 ms newer, ties on `updatedAt` broke on where
+ * the tick fell, and the board's first row and its 50-row cut changed from
+ * one boot (or reset) to the next — which the wire capture recorded as drift.
+ */
+let buildClockMs: number | null = null;
+function buildNowMs(): number {
+  return buildClockMs ?? clock.now().getTime();
+}
+function onOneClock<T>(build: () => T): () => T {
+  return () => {
+    const outer = buildClockMs;
+    buildClockMs = clock.now().getTime();
+    try { return build(); } finally { buildClockMs = outer; }
+  };
 }
 
 /**
@@ -588,7 +608,7 @@ function completedInSprint(item: { id: string; status: string; sprintId: string 
   if (item.status !== 'done' || !item.sprintId || !item.completedAt) return;
   const window = mockSprintDates(item.sprintId);
   if (!window) return;
-  const now = clock.now().getTime();
+  const now = buildNowMs();
   const start = Date.parse(`${window.startsOn}T12:00:00.000Z`);
   const end = Math.min(Date.parse(`${window.endsOn}T12:00:00.000Z`), now - 3_600_000);
   let completed = Date.parse(item.completedAt);
@@ -734,10 +754,10 @@ function demoWorkItems(): WorkItem[] {
 export const workItems = defineFixture<WorkItem>({
   key: 'work-items',
   scenarios: {
-    default: () => deriveChildCounts(MOCK_WORK_ITEM_SEEDS.map((seed) => normalizeSeed(seed))),
+    default: onOneClock(() => deriveChildCounts(MOCK_WORK_ITEM_SEEDS.map((seed) => normalizeSeed(seed)))),
     empty: () => [],
-    large: () => deriveChildCounts(largeWorkItems()),
-    demo: () => deriveChildCounts(demoWorkItems()),
+    large: onOneClock(() => deriveChildCounts(largeWorkItems())),
+    demo: onOneClock(() => deriveChildCounts(demoWorkItems())),
     // An initiative with no work and an initiative whose work could not be
     // read look identical without this — and the second is the one where the
     // progress and spend figures above the table are computed from nothing.

@@ -451,7 +451,7 @@ async function dbSearchWorkItems(opts: SearchWorkItemsOpts): Promise<WorkItem[]>
     SELECT ${ITEM_COLUMNS}${nameColumns(withNames)}${briefColumns(withBrief)}
     ${ITEM_FROM}${nameJoins(withNames)}
     ${where}
-    ORDER BY wi.updated_at DESC
+    ORDER BY wi.updated_at DESC, wi.id COLLATE "C" ASC
     LIMIT :lim
   `;
   const rows = await safeExec(sql, params);
@@ -490,7 +490,7 @@ async function dbGetPersonWorkItems(personId: string, opts: { status?: string; l
     SELECT ${ITEM_COLUMNS}${nameColumns(withNames)}${briefColumns(withBrief)}
     ${ITEM_FROM}${nameJoins(withNames)}
     WHERE wi.assignee_id = :pid ${extra}
-    ORDER BY wi.updated_at DESC
+    ORDER BY wi.updated_at DESC, wi.id COLLATE "C" ASC
     LIMIT :lim
   `;
   const rows = await safeExec(sql, params);
@@ -969,6 +969,18 @@ function mockProjectDecisions(projectId: string): ProjectDecision[] {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+/**
+ * Newest first, then id in byte order — the same order as the SQL's
+ * `ORDER BY wi.updated_at DESC, wi.id COLLATE "C" ASC`. Without the id, rows
+ * with equal stamps (common: the seed dates items in whole days) came back in
+ * whatever order the store held them, so the first row and a LIMIT's cut were
+ * not the same between the mock and Aurora, or between two boots of the mock.
+ */
+export function byRecentThenId(a: Pick<WorkItem, 'updatedAt' | 'id'>, b: Pick<WorkItem, 'updatedAt' | 'id'>): number {
+  if (a.updatedAt !== b.updatedAt) return a.updatedAt < b.updatedAt ? 1 : -1;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
 export async function searchWorkItems(opts: SearchWorkItemsOpts): Promise<WorkItem[]> {
   if (!config.mock.aurora) {
     return dbSearchWorkItems(opts);
@@ -1002,7 +1014,7 @@ export async function searchWorkItems(opts: SearchWorkItemsOpts): Promise<WorkIt
     const cutoff = clock.now().getTime() - 7 * 24 * 60 * 60 * 1000;
     items = items.filter((i) => Date.parse(i.updatedAt) >= cutoff);
   }
-  items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  items.sort(byRecentThenId);
   return items.slice(0, Math.min(opts.limit ?? 50, 200));
 }
 
@@ -1024,7 +1036,7 @@ export async function getPersonWorkItems(personId: string, opts: { status?: stri
   }
   let items = mockWorkItems().filter((i) => i.assigneeId === personId);
   if (opts.status) items = items.filter((i) => i.status === opts.status);
-  items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  items.sort(byRecentThenId);
   return items.slice(0, opts.limit ?? 30);
 }
 

@@ -25,6 +25,7 @@ import {
   getProjectDecisions,
   isBlockedOn,
   txSettleWorkBlockedOn,
+  byRecentThenId,
   type WorkItemStatus,
 } from '../work-items.js';
 
@@ -169,6 +170,25 @@ describe('searchWorkItems filters', () => {
     // between the last JOIN and ORDER BY is under test.
     const outer = sqlOf().split('LEFT JOIN people a ON a.id = wi.assignee_id')[1]!;
     expect(outer).not.toContain('WHERE');
+  });
+
+  it('orders newest first, then id in byte order — the order the mock path uses (byRecentThenId)', async () => {
+    await searchWorkItems({});
+    expect(sqlOf()).toContain('ORDER BY wi.updated_at DESC, wi.id COLLATE "C" ASC LIMIT :lim');
+    // Byte order, not a locale's: a locale collation may skip '-', so
+    // `wi-llm-e1-s1` vs `wi-llm-e1s` would sort differently in the two paths.
+    const ids = ['wi-llm-e1-s1', 'wi-llm-e1', 'wi-a', 'wi-llm-e10', 'wi-B'];
+    const rows = ids.map((id) => ({ id, updatedAt: '2026-11-06T00:00:00.000Z' }));
+    const byteOrder = [...ids].sort((x, y) => Buffer.compare(Buffer.from(x), Buffer.from(y)));
+    expect([...rows].sort(byRecentThenId).map((r) => r.id)).toEqual(byteOrder);
+    expect([{ id: 'wi-z', updatedAt: '2026-11-07T00:00:00.000Z' }, { id: 'wi-a', updatedAt: '2026-11-06T00:00:00.000Z' }]
+      .sort(byRecentThenId).map((r) => r.id)).toEqual(['wi-z', 'wi-a']);
+  });
+
+  it('a person\'s work takes the same tie-breaker', async () => {
+    const { getPersonWorkItems } = await import('../work-items.js');
+    await getPersonWorkItems('p-008');
+    expect(sqlOf()).toContain('ORDER BY wi.updated_at DESC, wi.id COLLATE "C" ASC');
   });
 
   it('combines every filter with AND', async () => {
