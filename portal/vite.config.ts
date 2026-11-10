@@ -6,6 +6,7 @@ import { existsSync } from 'fs';
 import type { Plugin } from 'vite';
 // The production module graph must not reach Node-only code (scripts/node-free-graph.mjs).
 import { nodeFreeGraph } from './scripts/node-free-graph.mjs';
+import { devServerOptions } from './scripts/dev-server.mjs';
 
 // realtime-modules ships its canvas client and TipTap adapters as CommonJS, so
 // a production build resolves their `require`s through the packages' `require`
@@ -102,8 +103,8 @@ export default defineConfig(async () => ({
     ],
   },
   server: {
-    port: 5183,
-    host: '0.0.0.0',
+    // 5183 on loopback unless PORTAL_PORT / BIND_HOST say otherwise (scripts/dev-server.mjs).
+    ...devServerOptions(),
     // macOS bind mounts don't deliver inotify events to Linux containers, so
     // chokidar never sees host file changes. Polling is the standard workaround.
     watch: {
@@ -114,8 +115,8 @@ export default defineConfig(async () => ({
       '/api': {
         target: await apiTarget(),
         changeOrigin: true,
-        // Record the real client in X-Forwarded-For. This server listens on
-        // every interface and reaches the middleware from loopback, so without
+        // Record the real client in X-Forwarded-For. With BIND_HOST widened this
+        // server listens beyond loopback and reaches the middleware from loopback, so without
         // it a request from anywhere on the network would look local to the
         // middleware's loopback-only /health diagnostics (lib/health-handler.ts).
         xfwd: true,

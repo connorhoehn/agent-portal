@@ -150,6 +150,8 @@ jobs:
       # bundle and every page rendered blank; the built assets must stay Node-free.
       - name: Production bundle has no Node-only code
         run: node scripts/check-bundle-node-free.mjs
+      - name: Dev server listens on loopback by default
+        run: node scripts/check-dev-server.mjs
   agents:
     runs-on: ubuntu-latest
     timeout-minutes: 20
