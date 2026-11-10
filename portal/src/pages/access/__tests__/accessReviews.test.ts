@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseCollectionCommand } from '../../../components/collections/collectionCommands.ts';
 import {
-  auditScopeNotice, campaignProblem, configurationPatch, filterReviewItems, filterReviews, overrideProblem,
+  auditScopeNotice, campaignProblem, configurationPatch, filterReviewItems, filterReviews, overrideProblem, ownReviewStanding,
   reviewDecisionProblem, reviewDeadlineLabel, reviewHref, reviewItemTitle, reviewProgressLabel, roleLabel, statusWord,
   type AccessConfiguration, type AccessReview, type AccessReviewItem,
 } from '../../../lib/accessRequests.ts';
@@ -15,6 +15,17 @@ import { ACCESS_GRAMMARS, accessCollectionAdapter } from '../accessCollectionCom
 import { ACCESS_SURFACES } from '../accessSurfaces.ts';
 
 const person = (id: string, displayName: string) => ({ id, displayName });
+
+test('a requester reads their own standing in a campaign, never the reviewers\' progress (UX walk D)', () => {
+  const none = ownReviewStanding([]);
+  assert.equal(none.title, 'Nothing of yours is under review');
+  assert.doesNotMatch(none.description, /of \d+ decided/);
+  const mine = ownReviewStanding([{ role: 'sme', tenant: 'orgiq', decision: null }]);
+  assert.equal(mine.title, 'One of your grants is under review');
+  assert.match(mine.description, /in Work: waiting for a reviewer/);
+  assert.doesNotMatch(mine.description, /orgiq/);
+  assert.equal(ownReviewStanding([{ role: 'sme', tenant: 'orgiq', decision: 'keep' }]).title, 'Your grants in this review are decided');
+});
 const review = (over: Partial<AccessReview> = {}): AccessReview => ({
   id: 'rev-0001', tenant: 'orgiq', title: 'Q4 SME certification — Work', status: 'open', owner: person('u-priya', 'Priya Venkataraman'),
   openedAt: '2026-10-08T10:00:00.000Z', closedAt: null, progress: { total: 4, decided: 2, kept: 2, revoked: 0 }, can: { decide: true }, ...over,

@@ -36,7 +36,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { SidePane, ViewportFillRegion } from '@connorhoehn/ui-components';
-import { ConversationRail, RAIL_SECTION_CONTENT_INSET, buildRailSection, type ConversationRailSection } from '@connorhoehn/ui-components/social';
+import { ConversationRail, buildRailSection, type ConversationRailSection } from '@connorhoehn/ui-components/social';
 import { Button, EmptyState, ExternalLinkIcon, IconButton, Inline, InlineAlert, PhoneIcon, Stack, T } from '@connorhoehn/ui-components/shared';
 import { useShellBreadcrumbItems } from '../../components/shell/Breadcrumbs';
 import { SectionContent } from '../../components/shell/SectionContent';
@@ -296,14 +296,11 @@ export default function CommunicationPlane({ route }: { route: SocialChatRoute }
   return (
     <Stack gap="none" className="min-h-0 min-w-0 bg-surface" data-shell-flush data-testid="communication-page" data-access={access}>
       <ViewportFillRegion className="flex min-w-0" data-testid="communication-plane">
-        {/* The note is a 12px meta line (the rail's own emptyLabel draws 13px, docs/ui-components-queue.md). */}
-        <ConversationRail title="Chat" shelfLayout="bar" shelf={[{ id: 'calls', label: 'Calls', icon: <PhoneIcon size={15} />, count: pageMissed, urgent: true }]}
+        {/* One explanation, in the content (UX walk D): the rail holds only Calls, as a labelled row — the bar
+            layout drew it as a bare phone icon over a second "needs a Social grant" note. */}
+        <ConversationRail title="Chat" shelf={[{ id: 'calls', label: 'Calls', icon: <PhoneIcon size={15} />, count: pageMissed, urgent: true }]}
           conversations={[]} selected={onCalls ? { kind: 'shelf', id: 'calls' } : null} onSelect={() => navigate(`${base}/calls`)}
-          emptyLabel="" beforeList={(
-            <T as="p" size="xs" tone="secondary" wrap className={RAIL_SECTION_CONTENT_INSET} data-testid="communication-rail-note">
-              {disabled ? 'Social is turned off here.' : 'Social conversations need a Social grant.'}
-            </T>
-          )}
+          emptyLabel=""
           data-testid="social-chat-rail" />
         <SectionContent breadcrumbs={crumbs} title="Communication" body="fill" data-testid="communication-content">
           {onCalls ? pageCalls : (

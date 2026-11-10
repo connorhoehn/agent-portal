@@ -220,17 +220,17 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
   }
 
   if (root === 'assessment') {
-    if (a === 'workspace') return [{ label: 'Workspace' }];
     if (a === 'decks') return [
       { label: 'Workspace', path: '/assessment/workspace?view=library' },
       { label: 'Presentations', path: '/assessment/workspace?view=presentations' },
       ...(b ? [{ label: 'Presentation', id: b }] : []),
     ];
-    // Assess is the tenant's root context, already named by the shell.
-    // Keep its trails to the collection and record; a page can add a third level.
+    // Every page names its rail group first, as the other tenants' trails do ("Request › Catalog",
+    // "Talk › Channels"): a one-crumb trail drew nothing (UX walk D: Dashboard, Submissions,
+    // Communication and Workspace had no breadcrumb). A page can add a third level.
     const page = a ?? 'teams';
     const group = ASSESSMENT_GROUPS[page] ?? 'Assessment';
-    const trail: Crumb[] = group === 'Assess' ? [] : [{ label: group }];
+    const trail: Crumb[] = [{ label: group }];
     const pageLabel = ASSESSMENT_LABELS[page] ?? page;
     if (page === 'teams' && b) {
       return [...trail, { label: pageLabel, path: '/assessment/teams' }, { label: b, id: b }];

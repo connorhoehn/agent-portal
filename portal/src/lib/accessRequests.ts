@@ -448,6 +448,23 @@ export function reviewProgressLabel(p: AccessReview['progress']): string {
   return `${p.decided} of ${p.total} decided`;
 }
 
+/**
+ * A requester's own standing in a review campaign (UX walk D): the campaign's progress is the reviewers'
+ * view, so someone who cannot decide reads only their own grants' state, or that nothing of theirs is in it.
+ */
+export function ownReviewStanding(items: readonly Pick<AccessReviewItem, 'role' | 'tenant' | 'decision'>[]): { title: string; description: string } {
+  if (items.length === 0) {
+    return { title: 'Nothing of yours is under review', description: 'None of your standing grants is in this campaign, so there is nothing here for you to follow.' };
+  }
+  const state = (d: AccessReviewItem['decision']) => (d === 'keep' ? 'kept' : d === 'revoke' ? 'revoked' : 'waiting for a reviewer');
+  const lines = items.map((i) => `${roleLabel(i.role)} in ${TENANT_LABELS[i.tenant] ?? 'another workspace'}: ${state(i.decision)}`);
+  const waiting = items.filter((i) => i.decision === null).length;
+  return {
+    title: waiting ? `${waiting === 1 ? 'One of your grants is' : `${waiting} of your grants are`} under review` : 'Your grants in this review are decided',
+    description: `${lines.join('; ')}. The campaign's owner or an access admin decides; a revoke reaches you as a revocation request.`,
+  };
+}
+
 /** A review item's title for the table and `open <title>`: who holds what. */
 export function reviewItemTitle(i: AccessReviewItem): string {
   return `${i.user.displayName} · ${roleLabel(i.role)}`;

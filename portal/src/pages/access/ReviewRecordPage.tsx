@@ -41,6 +41,7 @@ import { CollectionCommandPage } from '../../components/collections/CollectionCo
 import { isNotFoundError, UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
+import { useCapabilities } from '../../lib/capabilities';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { relativeTime } from '../../lib/relativeTime';
 import { writeJson } from '../../lib/writeJson';
@@ -48,6 +49,7 @@ import {
   ACCESS_API,
   TENANT_LABELS,
   filterReviewItems,
+  ownReviewStanding,
   reviewDeadlineLabel,
   roleLabel,
   requestHref,
@@ -78,6 +80,10 @@ export default function ReviewRecordPage() {
 
 function ReviewRecord({ id }: { id: string }) {
   const navigate = useNavigate();
+  // Who reads every item (DecideAccess: approver, access admin) sees the campaign's progress and its items;
+  // a requester reads only their own standing (UX walk D: "2 of 4 decided" over an empty table).
+  const { can, ready } = useCapabilities();
+  const reviewer = ready && can('DecideAccess');
   const { data, error, isLoading, refresh } = useFetch<ReviewRecord>(id ? `${ACCESS_API}/reviews/${encodeURIComponent(id)}` : null);
   const [query, setQuery] = useState('');
   const [decision, setDecision] = useState('');
@@ -161,11 +167,12 @@ function ReviewRecord({ id }: { id: string }) {
       description={`${TENANT_LABELS[review.tenant] ?? review.tenant} · opened ${relativeTime(review.openedAt)}${review.owner ? ` by ${review.owner.displayName}` : ''}${review.closedAt ? ` · closed ${relativeTime(review.closedAt)}` : reviewDeadlineLabel(review) ? ` · ${reviewDeadlineLabel(review)}` : ''}`}>
       <Stack gap="none" className="min-h-0 min-w-0 flex-1">
         <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)]">
-          <ProgressBar size="sm" value={review.progress.decided} max={Math.max(review.progress.total, 1)} completeTone="success"
+          {!reviewer && <EmptyState align="start" testId="access-review-own-standing" {...ownReviewStanding(all)} />}
+          {reviewer && <ProgressBar size="sm" value={review.progress.decided} max={Math.max(review.progress.total, 1)} completeTone="success"
             label={<T size="sm">{review.status === 'closed' ? 'Closed: every item decided' : `Progress${reviewDeadlineLabel(review) ? ` · ${reviewDeadlineLabel(review)}` : ''}`}</T>}
             valueLabel={`${reviewProgressLabel(review.progress)} · ${review.progress.kept} kept · ${review.progress.revoked} revoked`}
-            data-testid="access-review-progress" aria-label={reviewProgressLabel(review.progress)} />
-          <CollectionToolbar {...{
+            data-testid="access-review-progress" aria-label={reviewProgressLabel(review.progress)} />}
+          {reviewer && <CollectionToolbar {...{
             label: 'Review item filters',
             search: { value: query, onChange: setQuery, placeholder: 'Search items', 'aria-label': 'Search review items' },
             filters: [{ id: 'decision', label: 'Decision', value: decision, onChange: setDecision, options: DECISION_OPTIONS }],
@@ -174,9 +181,9 @@ function ReviewRecord({ id }: { id: string }) {
               ? 'Keep or revoke each grant. A revoke removes it at once through a pre-approved revocation request; nobody decides their own grant.'
               : `${page.description} Only the campaign’s owner or an access admin decides; you see ${all.length ? 'the items you may see' : 'no item of yours here'}.`],
             onRefresh: refresh, refreshing: isLoading,
-          }} />
+          }} />}
           {notice && <InlineAlert tone={notice.tone} onDismiss={() => setNotice(null)} data-testid="access-review-notice">{notice.text}</InlineAlert>}
-          <DataTable
+          {(reviewer || all.length > 0) && <DataTable narrow
             data-testid="access-review-items"
             data={rows}
             columns={columns}
@@ -192,8 +199,8 @@ function ReviewRecord({ id }: { id: string }) {
                 </Inline>
               ) : null),
             } : {})}
-            emptyMessage={query.trim() || decision ? 'No item matches this search and decision.' : 'No standing grant of yours is in this campaign.'}
-          />
+            emptyMessage={query.trim() || decision ? 'No item matches this search and decision.' : 'No standing grant is in this campaign.'}
+          />}
         </Stack>
         <CollectionCommandHost adapter={adapter} disabled={busy} />
       </Stack>

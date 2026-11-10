@@ -29,8 +29,8 @@ test('every rail path resolves to a named location', () => {
   }
 });
 
-test('Assessment Workspace and legacy presentation links use the files location without Informatics', () => {
-  assert.deepEqual(resolveBreadcrumbs('/assessment/workspace'), [{ label: 'Workspace' }]);
+test('Assessment Workspace sits under Informatics; legacy presentation links use the files location', () => {
+  assert.deepEqual(resolveBreadcrumbs('/assessment/workspace'), [{ label: 'Informatics' }, { label: 'Workspace' }]);
   assert.deepEqual(resolveBreadcrumbs('/assessment/decks/deck-existing').map(crumb => crumb.label), ['Workspace', 'Presentations', 'Presentation']);
   const deck = resolveBreadcrumbs('/assessment/decks/deck-existing');
   assert.equal(deck[0]?.path, '/assessment/workspace?view=library');
@@ -38,12 +38,20 @@ test('Assessment Workspace and legacy presentation links use the files location 
   assert.equal(deck[2]?.id, 'deck-existing');
 });
 
-test('Assessment root groups do not repeat the tenant context in page trails', () => {
+test('every Assessment page trail names its rail group, so a list page draws a breadcrumb (UX walk D)', () => {
   assert.deepEqual(resolveBreadcrumbs('/assessment/teams/TEAM-005'), [
-    { label: 'Dashboard', path: '/assessment/teams' }, { label: 'TEAM-005', id: 'TEAM-005' },
+    { label: 'Assess' }, { label: 'Dashboard', path: '/assessment/teams' }, { label: 'TEAM-005', id: 'TEAM-005' },
   ]);
-  assert.deepEqual(resolveBreadcrumbs('/assessment/teams'), [{ label: 'Dashboard' }]);
-  assert.deepEqual(resolveBreadcrumbs('/assessment/submissions/sub-1').map(crumb => crumb.label), ['Submissions', 'sub-1']);
+  for (const [path, labels] of [
+    ['/assessment/teams', ['Assess', 'Dashboard']],
+    ['/assessment/submissions', ['Assess', 'Submissions']],
+    ['/assessment/communication', ['Assess', 'Communication']],
+    ['/assessment/workspace', ['Informatics', 'Workspace']],
+  ] as const) {
+    // The shell's Breadcrumbs draw a trail of two or more (minItems 2).
+    assert.deepEqual(resolveBreadcrumbs(path).map(crumb => crumb.label), labels, path);
+  }
+  assert.deepEqual(resolveBreadcrumbs('/assessment/submissions/sub-1').map(crumb => crumb.label), ['Assess', 'Submissions', 'sub-1']);
 });
 
 test('a Work presentation trail names its files location and resolved entity without Plan', () => {
