@@ -6,7 +6,7 @@ import { Button, ChevronIcon, DocumentIcon, DropdownMenu, Inline, InlineAlert, L
 import { FileCards, type FileView } from '../../components/files/FileCards';
 import { FileToolbar } from '../../components/files/FileToolbar';
 import { useSession } from '../../lib/auth';
-import { roleSwitchOffer } from '../../lib/roleSwitchOffer';
+import { usePageSwitchOffer } from '../../lib/usePageSwitchOffer';
 import { createWorkspaceDocument, documentRecordHref, readWorkDocuments, readWorkspaceDocuments } from '../../lib/workDocuments';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError } from '../../lib/toastStore';
@@ -60,8 +60,9 @@ function Files({ projectId, projectName, itemIds, workspaceHref, onOpenRecording
   const choices = newFileChoices({ capabilitiesReady, canWritePages: read.canWritePages, canDispatch: can('DispatchAgentRun') });
   const mayDeck = choices.includes('presentation');
   // G58: the pages read answered "not yours to write" for the role this session acts as, but it holds a
-  // higher grant here (org-leader, admin) it is not acting as: offer the switch rather than a silent lock.
-  const switchTo = !read.pending && !read.canWritePages && !read.failures.includes('Pages') ? roleSwitchOffer(session, 'add files') : null;
+  // higher grant here (org-leader, admin) it is not acting as: offer the switch rather than a silent lock
+  // (once per page for the demo identity, whose every role is switchable: lib/usePageSwitchOffer.ts).
+  const switchTo = usePageSwitchOffer(session, 'add files', !read.pending && !read.canWritePages && !read.failures.includes('Pages'));
   const newMenu: DropdownMenuSection[] = [{ items: [
     ...(choices.includes('document') ? [{ label: 'Document', description: 'A page written in this initiative; opens so you can write it', onSelect: () => void newDocument('page') }] : []),
     ...(choices.includes('whiteboard') ? [{ label: 'Whiteboard', description: 'A canvas drawn in this initiative; opens so you can sketch it', onSelect: () => void newDocument('whiteboard') }] : []),

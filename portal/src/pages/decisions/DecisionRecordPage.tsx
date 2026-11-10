@@ -24,7 +24,7 @@ import { useSession } from '../../lib/auth';
 import { useCapabilities } from '../../lib/capabilities';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { absoluteTime, relativeTime } from '../../lib/relativeTime';
-import { roleSwitchOffer } from '../../lib/roleSwitchOffer';
+import { usePageSwitchOffer } from '../../lib/usePageSwitchOffer';
 import { toastError } from '../../lib/toastStore';
 import { usePublishPageContext } from '../../lib/voice/pageContext';
 import { writeJson } from '../../lib/writeJson';
@@ -68,6 +68,9 @@ export default function DecisionRecordPage({ onDecided, onPrompt }: {
   [decision?.id, decision?.topic, decision?.status, optionsKey, mayDecide]);
   useEffect(() => { onPrompt?.(prompt); }, [prompt, onPrompt]);
   useEffect(() => () => onPrompt?.(null), [onPrompt]);
+  // G58: waiting on someone else, but the viewer holds org-leader or admin here without acting as it
+  // (once per page for the demo identity: lib/usePageSwitchOffer.ts).
+  const switchTo = usePageSwitchOffer(session, 'decide', !!decision && isWaiting(decision.status) && decision.viewerMayDecide === false);
 
   if (error && isNotFoundError(error)) {
     return <RecordNotFound heading="Decision" size="md" title="Decision not found" body="No decision has this id." backLabel="All decisions" onBack={() => navigate('/iq/decisions')} />;
@@ -88,8 +91,6 @@ export default function DecisionRecordPage({ onDecided, onPrompt }: {
   const decided = decidedLine(decision, relativeTime);
   const history = historyOf(decision, row, projectName);
   const projectHref = decision.projectId ? `/iq/projects/${encodeURIComponent(decision.projectId)}` : null;
-  // G58: waiting on someone else, but the viewer holds org-leader or admin here without acting as it.
-  const switchTo = isWaiting(decision.status) && decision.viewerMayDecide === false ? roleSwitchOffer(session, 'decide') : null;
 
   const rail = (
     <>

@@ -14,7 +14,7 @@ import {
 } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
-import { roleSwitchOffer } from '../../lib/roleSwitchOffer';
+import { usePageSwitchOffer } from '../../lib/usePageSwitchOffer';
 import { writeJson } from '../../lib/writeJson';
 import { toastSuccess } from '../../lib/toastStore';
 import { DURATION_LABELS, type AccessDuration, type AccessRequest } from '../../lib/accessRequests';
@@ -66,6 +66,8 @@ export function BudgetAccessRequest({ lock, autoOpen = false, onClosed }: {
   const mine = useFetch<{ items: AccessRequest[]; requestable?: false; reason?: string }>(mineUrl(lock.requestItemId));
   const state = quickRequestState(mine.data?.items);
   const [open, setOpen] = useState(false);
+  // Once per page for the demo identity (lib/usePageSwitchOffer.ts); otherwise the plain reason below.
+  const offer = usePageSwitchOffer(session, 'see budgets', mine.data?.requestable === false);
 
   useEffect(() => {
     if (autoOpen && mine.data && state.kind === 'none') setOpen(true);
@@ -76,7 +78,6 @@ export function BudgetAccessRequest({ lock, autoOpen = false, onClosed }: {
   if (mine.data == null) return null;
 
   if (mine.data.requestable === false) {
-    const offer = roleSwitchOffer(session, 'see budgets');
     return offer ? (
       <Button size="sm" variant="secondary" onClick={() => { void setRole(offer.role); }} title={mine.data.reason} data-testid="budget-access-switch">
         {offer.label}
