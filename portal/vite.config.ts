@@ -6,7 +6,7 @@ import { existsSync } from 'fs';
 import type { Plugin } from 'vite';
 // The production module graph must not reach Node-only code (scripts/node-free-graph.mjs).
 import { nodeFreeGraph } from './scripts/node-free-graph.mjs';
-import { devServerOptions } from './scripts/dev-server.mjs';
+import { devServerOptions, proxyTargetWarning } from './scripts/dev-server.mjs';
 
 // realtime-modules ships its canvas client and TipTap adapters as CommonJS, so
 // a production build resolves their `require`s through the packages' `require`
@@ -52,95 +52,101 @@ async function apiTarget(): Promise<string> {
   return candidates[0]!;
 }
 
-export default defineConfig(async () => ({
-  // Parallel local stacks need independent optimized dependencies. Keep this
-  // under portal/node_modules so external peer imports still resolve there.
-  cacheDir: process.env.VITE_CACHE_DIR ?? 'node_modules/.vite',
-  define: {
-    global: 'globalThis',
-  },
-  plugins: [editorStackAsEsm(), react(), tailwindcss(), nodeFreeGraph({ root: __dirname }) as Plugin],
-  resolve: {
-    alias: {
-      '@': resolve(__dirname, './src'),
+export default defineConfig(async ({ command }) => {
+  const target = await apiTarget();
+  // The proxy forwards session cookies; say so once when they leave this machine.
+  const warning = command === 'serve' ? proxyTargetWarning(target) : null;
+  if (warning) console.warn(warning);
+  return {
+    // Parallel local stacks need independent optimized dependencies. Keep this
+    // under portal/node_modules so external peer imports still resolve there.
+    cacheDir: process.env.VITE_CACHE_DIR ?? 'node_modules/.vite',
+    define: {
+      global: 'globalThis',
     },
-    preserveSymlinks: true,
-    dedupe: ['react', 'react-dom', 'yjs', 'y-protocols', 'lib0'],
-  },
-  // TipTap and the shared canvas must use the same ProseMirror module instances.
-  // Keep the CommonJS runtime optimized, while PM enters through native ESM.
-  optimizeDeps: {
-    include: [
-      '@connorhoehn/realtime-modules/client',
-      // The /iq shell mounts the call host, so every /iq page imports it; left
-      // to discovery, the first load re-optimizes mid-session and renders the
-      // page against a second React copy ("Invalid hook call" in LVSProvider).
-      '@connorhoehn/realtime-modules/client/video',
-      '@connorhoehn/realtime-modules/adapters/tiptap',
-      'yjs', 'y-protocols/awareness', 'lib0/observable', '@tiptap/core', '@tiptap/react',
-      'react', 'react-dom', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime',
-      // The excluded UI package hides these CJS-containing graphs from scanning.
-      'react-markdown', 'remark-gfm', 'recharts', 'es-toolkit', 'es-toolkit/compat',
-      'buffer', 'amazon-cognito-identity-js', 'ajv',
-      'y-protocols/sync',
-      'lib0/buffer', 'lib0/mutex', 'lib0/math', 'lib0/object', 'lib0/set',
-      'lib0/diff', 'lib0/error', 'lib0/random', 'lib0/environment',
-      'lib0/dom', 'lib0/eventloop', 'lib0/map', 'lib0/hash/sha256',
-      // The whiteboard page's lazy chunk imports Excalidraw (ui-components /diagram peer)
-      // and the realtime Excalidraw adapter; discovered mid-session, the adapter's
-      // re-optimisation served a module without its hooks.
-      '@excalidraw/excalidraw', '@connorhoehn/realtime-modules/adapters/excalidraw',
-      '@tiptap/starter-kit', '@tiptap/extension-task-list', '@tiptap/extension-task-item',
-      '@tiptap/extension-placeholder', '@tiptap/extension-collaboration',
-    ],
-    exclude: [
-      '@connorhoehn/ui-components',
-      '@tiptap/pm/model', '@tiptap/pm/state', '@tiptap/pm/transform', '@tiptap/pm/view',
-      'prosemirror-state', 'prosemirror-model', 'prosemirror-transform', 'prosemirror-view',
-      'prosemirror-gapcursor', 'prosemirror-dropcursor', 'prosemirror-history',
-      'prosemirror-keymap', 'prosemirror-commands', 'prosemirror-schema-list',
-      'prosemirror-tables', 'prosemirror-changeset', '@tiptap/y-tiptap',
-    ],
-  },
-  server: {
-    // 5183 on loopback unless PORTAL_PORT / BIND_HOST say otherwise (scripts/dev-server.mjs).
-    ...devServerOptions(),
-    // macOS bind mounts don't deliver inotify events to Linux containers, so
-    // chokidar never sees host file changes. Polling is the standard workaround.
-    watch: {
-      usePolling: true,
-      interval: 300,
+    plugins: [editorStackAsEsm(), react(), tailwindcss(), nodeFreeGraph({ root: __dirname }) as Plugin],
+    resolve: {
+      alias: {
+        '@': resolve(__dirname, './src'),
+      },
+      preserveSymlinks: true,
+      dedupe: ['react', 'react-dom', 'yjs', 'y-protocols', 'lib0'],
     },
-    proxy: {
-      '/api': {
-        target: await apiTarget(),
-        changeOrigin: true,
-        // Record the real client in X-Forwarded-For. With BIND_HOST widened this
-        // server listens beyond loopback and reaches the middleware from loopback, so without
-        // it a request from anywhere on the network would look local to the
-        // middleware's loopback-only /health diagnostics (lib/health-handler.ts).
-        xfwd: true,
-        // SSE: do not buffer, and do not let the proxy negotiate a compressed
-        // upstream response. EventSource fires `onopen` on the response head,
-        // so a proxy that holds the head back leaves every live surface in the
-        // app reading "connecting…" until the first body byte — 25 seconds on
-        // a quiet stream, which is most of them most of the time. Measured:
-        // with the middleware flushing headers, :3001 answered instantly and
-        // the same request through :5183 returned nothing for four seconds.
-        headers: { 'Accept-Encoding': 'identity' },
-        configure: (proxy) => {
-          proxy.on('proxyRes', (proxyRes, req, res) => {
-            if (String(proxyRes.headers['content-type'] ?? '').includes('text/event-stream')) {
-              // Copy the head through immediately, then pipe. Without this the
-              // response head waits for http-proxy's own flush.
-              res.writeHead(proxyRes.statusCode ?? 200, proxyRes.headers);
-              if (typeof (res as { flushHeaders?: () => void }).flushHeaders === 'function') {
-                (res as { flushHeaders: () => void }).flushHeaders();
+    // TipTap and the shared canvas must use the same ProseMirror module instances.
+    // Keep the CommonJS runtime optimized, while PM enters through native ESM.
+    optimizeDeps: {
+      include: [
+        '@connorhoehn/realtime-modules/client',
+        // The /iq shell mounts the call host, so every /iq page imports it; left
+        // to discovery, the first load re-optimizes mid-session and renders the
+        // page against a second React copy ("Invalid hook call" in LVSProvider).
+        '@connorhoehn/realtime-modules/client/video',
+        '@connorhoehn/realtime-modules/adapters/tiptap',
+        'yjs', 'y-protocols/awareness', 'lib0/observable', '@tiptap/core', '@tiptap/react',
+        'react', 'react-dom', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime',
+        // The excluded UI package hides these CJS-containing graphs from scanning.
+        'react-markdown', 'remark-gfm', 'recharts', 'es-toolkit', 'es-toolkit/compat',
+        'buffer', 'amazon-cognito-identity-js', 'ajv',
+        'y-protocols/sync',
+        'lib0/buffer', 'lib0/mutex', 'lib0/math', 'lib0/object', 'lib0/set',
+        'lib0/diff', 'lib0/error', 'lib0/random', 'lib0/environment',
+        'lib0/dom', 'lib0/eventloop', 'lib0/map', 'lib0/hash/sha256',
+        // The whiteboard page's lazy chunk imports Excalidraw (ui-components /diagram peer)
+        // and the realtime Excalidraw adapter; discovered mid-session, the adapter's
+        // re-optimisation served a module without its hooks.
+        '@excalidraw/excalidraw', '@connorhoehn/realtime-modules/adapters/excalidraw',
+        '@tiptap/starter-kit', '@tiptap/extension-task-list', '@tiptap/extension-task-item',
+        '@tiptap/extension-placeholder', '@tiptap/extension-collaboration',
+      ],
+      exclude: [
+        '@connorhoehn/ui-components',
+        '@tiptap/pm/model', '@tiptap/pm/state', '@tiptap/pm/transform', '@tiptap/pm/view',
+        'prosemirror-state', 'prosemirror-model', 'prosemirror-transform', 'prosemirror-view',
+        'prosemirror-gapcursor', 'prosemirror-dropcursor', 'prosemirror-history',
+        'prosemirror-keymap', 'prosemirror-commands', 'prosemirror-schema-list',
+        'prosemirror-tables', 'prosemirror-changeset', '@tiptap/y-tiptap',
+      ],
+    },
+    server: {
+      // 5183 on loopback unless PORTAL_PORT / BIND_HOST say otherwise (scripts/dev-server.mjs).
+      ...devServerOptions(),
+      // macOS bind mounts don't deliver inotify events to Linux containers, so
+      // chokidar never sees host file changes. Polling is the standard workaround.
+      watch: {
+        usePolling: true,
+        interval: 300,
+      },
+      proxy: {
+        '/api': {
+          target,
+          changeOrigin: true,
+          // Record the real client in X-Forwarded-For. With BIND_HOST widened this
+          // server listens beyond loopback and reaches the middleware from loopback, so without
+          // it a request from anywhere on the network would look local to the
+          // middleware's loopback-only /health diagnostics (lib/health-handler.ts).
+          xfwd: true,
+          // SSE: do not buffer, and do not let the proxy negotiate a compressed
+          // upstream response. EventSource fires `onopen` on the response head,
+          // so a proxy that holds the head back leaves every live surface in the
+          // app reading "connecting…" until the first body byte — 25 seconds on
+          // a quiet stream, which is most of them most of the time. Measured:
+          // with the middleware flushing headers, :3001 answered instantly and
+          // the same request through :5183 returned nothing for four seconds.
+          headers: { 'Accept-Encoding': 'identity' },
+          configure: (proxy) => {
+            proxy.on('proxyRes', (proxyRes, req, res) => {
+              if (String(proxyRes.headers['content-type'] ?? '').includes('text/event-stream')) {
+                // Copy the head through immediately, then pipe. Without this the
+                // response head waits for http-proxy's own flush.
+                res.writeHead(proxyRes.statusCode ?? 200, proxyRes.headers);
+                if (typeof (res as { flushHeaders?: () => void }).flushHeaders === 'function') {
+                  (res as { flushHeaders: () => void }).flushHeaders();
+                }
               }
-            }
-          });
+            });
+          },
         },
       },
     },
-  },
-}));
+  };
+});
