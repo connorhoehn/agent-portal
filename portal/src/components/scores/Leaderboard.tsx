@@ -20,6 +20,7 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
     {
       key: 'rank',
       header: '#',
+      label: 'Rank',
       className: 'text-text-tertiary',
       // Rank reflects display order, not a sortable value — the table is
       // never sorted or filtered here, so `rowIndex` is exactly `entries`'
@@ -37,6 +38,7 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
     {
       key: 'compare',
       header: '',
+      label: 'Compare',
       width: '32px',
       render: (s) => {
         const inComparison = comparisonIds.has(s.personId);
@@ -121,7 +123,10 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
           />
         )}
       </Inline>
+      {/* `narrow`: at phone width each person is a stacked card (rank, name, scores) instead of a
+          table scrolling inside its box (UX leftovers, 10 November). Desktop is unchanged. */}
       <DataTable<ScoreEntry>
+        narrow
         data={entries}
         columns={columns}
         keyField={(s) => s.personId}

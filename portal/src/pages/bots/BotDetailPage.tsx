@@ -13,6 +13,7 @@ import {
   Checkbox,
   Chip,
   ConfirmDialog,
+  DataTable,
   DetailSection,
   FormField,
   Inline,
@@ -24,13 +25,12 @@ import {
   Stack,
   Table,
   TableBody,
-  TableHead,
   TableRow,
   TableTd,
-  TableTh,
   Tabs,
   Textarea,
   T,
+  type DataTableColumn,
 } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
@@ -154,6 +154,82 @@ export default function BotDetailPage() {
   const [pickedRunId, setPickedRunId] = useState<string | null>(null);
   const pipelineRunId = pickedRunId ?? pipelineRuns[0]?.id ?? null;
   const pipelineRun = usePipelineRun('/api/runs', pipelineRunId);
+
+  // The firing history's columns. The outcome wraps (two lines at most, the whole text in the
+  // title) and its links keep their width: a one-line truncate cut the sentence mid-word and
+  // pushed "job →" past the edge (walk, 9 November).
+  const runColumns: DataTableColumn<BotRun>[] = [
+    { key: 'trigger', header: 'Trigger', className: 'text-text-secondary', render: (r) => r.trigger },
+    {
+      key: 'status', header: 'Status',
+      render: (r) => (
+        <Chip tone={runStateChip(r.status).tone} size="xs" dot={r.status === 'running' ? 'pulse' : undefined}>
+          {runStateChip(r.status).label}
+        </Chip>
+      ),
+    },
+    { key: 'cost', header: 'Cost', className: 'whitespace-nowrap', render: (r) => <CostVsEstimate costUsd={r.costUsd} estimate={runEstimate(r)} /> },
+    {
+      key: 'duration', header: 'Duration', className: 'text-text-secondary whitespace-nowrap',
+      render: (r) => { const dur = runDuration(r); return <T as="span" size="sm" tone="inherit" title={dur.title}>{dur.text}</T>; },
+    },
+    {
+      key: 'started', header: 'Started', className: 'text-text-tertiary whitespace-nowrap',
+      render: (r) => <T as="span" size="sm" tone="inherit" title={new Date(r.startedAt).toLocaleString()}>{relativeTime(r.startedAt)}</T>,
+    },
+    {
+      key: 'outcome', header: 'Outcome', className: 'max-w-[26rem]',
+      render: (r) => {
+        // What this run left behind. The reason is rendered for every status, not just skipped:
+        // a `done` run whose only record is "scheduled maintenance" has an outcome.
+        const o = r.outcome ?? {};
+        const projectId = bot?.agentProjectId ?? null;
+        const canLinkRun = r.runId != null && projectId != null;
+        const hasOutcome = Boolean(o.reason || o.changeId || o.prUrl || o.filesChanged != null || r.jobId || canLinkRun);
+        return (
+          <Inline gap="sm" wrap={false} align="start" className="min-w-0" title={o.summary ?? o.reason}>
+            {o.reason && (
+              <T as="span" size="sm" tone={r.status === 'failed' ? 'danger' : 'inherit'} wrap className="min-w-0 flex-1 line-clamp-2">{o.reason}</T>
+            )}
+            {o.changeId && (
+              <Link to="/admin/changes" title="Open the change this firing recorded" className="shrink-0 whitespace-nowrap text-primary no-underline hover:underline">
+                change →
+              </Link>
+            )}
+            {o.prUrl && (
+              <ExternalLink external href={o.prUrl} className="text-primary no-underline hover:underline">
+                PR ↗
+              </ExternalLink>
+            )}
+            {/* The run row carries no summary — that lives on the job this firing enqueued. When
+                there is no devbox run to open, the job is the only place the detail exists. */}
+            {canLinkRun && (
+              <Link
+                to={`/admin/projects?project=${projectId}&run=${r.runId}`}
+                title="Open the devbox run this firing produced"
+                className="shrink-0 whitespace-nowrap text-xs text-text-secondary no-underline hover:text-primary hover:underline"
+              >
+                run →
+              </Link>
+            )}
+            {!canLinkRun && r.jobId && (
+              <Link
+                to={`/iq/work/${encodeURIComponent(r.jobId)}`}
+                title="Open the queued job this firing produced"
+                className="shrink-0 whitespace-nowrap text-xs text-text-secondary no-underline hover:text-primary hover:underline"
+              >
+                job →
+              </Link>
+            )}
+            {o.filesChanged != null && (
+              <MetaLine size="xs" tone="tertiary" items={[`${o.filesChanged} ${o.filesChanged === 1 ? 'file' : 'files'}`]} />
+            )}
+            {!hasOutcome && <MetaLine size="xs" tone="tertiary" items={['—']} />}
+          </Inline>
+        );
+      },
+    },
+  ];
 
   const newest = runs[0] ?? null;
   const liveBoxId = newest?.status === 'running' && newest.outcome?.boxId ? newest.outcome.boxId : null;
@@ -422,104 +498,16 @@ export default function BotDetailPage() {
           ) : runs.length === 0 ? (
             <MetaLine size="sm" tone="tertiary" items={['This bot has never fired. Use ▶ Run now, or wait for its trigger.']} />
           ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableTh>Trigger</TableTh>
-                  <TableTh>Status</TableTh>
-                  <TableTh>Cost</TableTh>
-                  <TableTh>Duration</TableTh>
-                  <TableTh>Started</TableTh>
-                  <TableTh>Outcome</TableTh>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {visibleRuns.map((r) => {
-                  const dur = runDuration(r);
-                  // What this run left behind. The reason is rendered for every
-                  // status, not just skipped: a `done` run whose only record is
-                  // "scheduled maintenance" has an outcome, and gating on
-                  // status === 'skipped' hid it — the whole column rendered
-                  // blank for a bot with a full history of completed runs.
-                  const o = r.outcome ?? {};
-                  const canLinkRun = r.runId != null && bot.agentProjectId != null;
-                  const hasOutcome = Boolean(
-                    o.reason || o.changeId || o.prUrl || o.filesChanged != null || r.jobId || canLinkRun,
-                  );
-                  return (
-                  <TableRow key={r.id}>
-                    <TableTd className="text-text-secondary">{r.trigger}</TableTd>
-                    <TableTd>
-                      <Chip tone={runStateChip(r.status).tone} size="xs" dot={r.status === 'running' ? 'pulse' : undefined}>
-                        {runStateChip(r.status).label}
-                      </Chip>
-                    </TableTd>
-                    <TableTd className="whitespace-nowrap">
-                      <CostVsEstimate costUsd={r.costUsd} estimate={runEstimate(r)} />
-                    </TableTd>
-                    <TableTd
-                      className="text-text-secondary whitespace-nowrap"
-                      title={dur.title}
-                    >
-                      {dur.text}
-                    </TableTd>
-                    <TableTd className="text-text-tertiary whitespace-nowrap" title={new Date(r.startedAt).toLocaleString()}>
-                      {relativeTime(r.startedAt)}
-                    </TableTd>
-                    <TableTd className="max-w-[26rem]">
-                      {/* The outcome wraps (two lines at most, the whole text in the
-                          title) and its links keep their width: a one-line truncate
-                          cut the sentence mid-word and pushed "job →" past the edge
-                          (walk, 9 November). */}
-                      <Inline gap="sm" wrap={false} align="start" title={o.summary ?? o.reason}>
-                        {o.reason && (
-                          <T as="span" size="sm" tone={r.status === 'failed' ? 'danger' : 'inherit'} wrap className="min-w-0 flex-1 line-clamp-2">{o.reason}</T>
-                        )}
-                        {o.changeId && (
-                          <Link to="/admin/changes" title="Open the change this firing recorded" className="shrink-0 whitespace-nowrap text-primary no-underline hover:underline">
-                            change →
-                          </Link>
-                        )}
-                        {o.prUrl && (
-                          <ExternalLink external href={o.prUrl} className="text-primary no-underline hover:underline">
-                            PR ↗
-                          </ExternalLink>
-                        )}
-                        {/* The run row carries no summary — that lives on the job
-                            this firing enqueued. When there is no devbox run to
-                            open, the job is the only place the detail exists, so
-                            link it rather than leaving the cell a dead end. */}
-                        {canLinkRun && (
-                          <Link
-                            to={`/admin/projects?project=${bot.agentProjectId}&run=${r.runId}`}
-                            title="Open the devbox run this firing produced"
-                            className="shrink-0 whitespace-nowrap text-xs text-text-secondary no-underline hover:text-primary hover:underline"
-                          >
-                            run →
-                          </Link>
-                        )}
-                        {!canLinkRun && r.jobId && (
-                          <Link
-                            to={`/iq/work/${encodeURIComponent(r.jobId)}`}
-                            title="Open the queued job this firing produced"
-                            className="shrink-0 whitespace-nowrap text-xs text-text-secondary no-underline hover:text-primary hover:underline"
-                          >
-                            job →
-                          </Link>
-                        )}
-                        {o.filesChanged != null && (
-                          <MetaLine size="xs" tone="tertiary" items={[`${o.filesChanged} ${o.filesChanged === 1 ? 'file' : 'files'}`]} />
-                        )}
-                        {!hasOutcome && (
-                          <MetaLine size="xs" tone="tertiary" items={['—']} />
-                        )}
-                      </Inline>
-                    </TableTd>
-                  </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            // DataTable `narrow`: at phone width each firing is a stacked card (trigger, status, cost,
+            // duration, started, outcome) instead of a table scrolling inside its box (UX leftovers,
+            // 10 November). Desktop keeps the same six columns.
+            <DataTable<BotRun>
+              narrow
+              aria-label="Firings"
+              data={visibleRuns}
+              keyField={(r) => r.id}
+              columns={runColumns}
+            />
           )}
           {hasMoreRuns && (
             <Inline justify="center" className="mt-3">

@@ -22,16 +22,11 @@
 //   PATCH  /api/observability/calibration/cases/:id
 //   DELETE /api/observability/calibration/cases/:id
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Card,
   CardHeader,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableTh,
-  TableTd,
+  DataTable,
   Chip,
   CodeBlock,
   EditIcon,
@@ -234,6 +229,7 @@ function CalibrationPage() {
       .sort((a, b) => (b.absError ?? 0) - (a.absError ?? 0))
       .slice(0, 10);
   }, [latestRun]);
+  const expandedCase = worstResults.find((r) => r.calibrationId === expandedResult) ?? null;
 
   async function handleRunCalibration() {
     setRunDialog({ open: true, busy: true, err: null });
@@ -478,73 +474,55 @@ function CalibrationPage() {
         {worstResults.length === 0 ? (
           <RowEmpty text="No disagreements yet — run a calibration first." degraded={calibrationDegraded} />
         ) : (
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableTh>Agent</TableTh>
-                <TableTh>Prompt</TableTh>
-                <TableTh numeric>Human</TableTh>
-                <TableTh numeric>Judge</TableTh>
-                <TableTh numeric>|Δ|</TableTh>
-                <TableTh>Rationale</TableTh>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {worstResults.map((r) => {
-                const isOpen = expandedResult === r.calibrationId;
-                return (
-                  // The row and its detail row are one keyed child of the body.
-                  <Fragment key={r.calibrationId}>
-                    <TableRow
-                      onClick={() =>
-                        setExpandedResult((cur) => (cur === r.calibrationId ? null : r.calibrationId))
-                      }
-                      className="cursor-pointer"
-                    >
-                      <TableTd className="whitespace-nowrap">{r.agentId ?? '—'}</TableTd>
-                      <TableTd className="max-w-[320px] truncate" title={r.prompt}>
-                        {snip(r.prompt, 80) || '(empty)'}
-                      </TableTd>
-                      <TableTd numeric>{fmt2(r.humanScore)}</TableTd>
-                      <TableTd numeric>{fmt2(r.judgeScore)}</TableTd>
-                      <TableTd>
-                        <Chip tone={maeTone(r.absError)} size="xs">{fmt(r.absError)}</Chip>
-                      </TableTd>
-                      <TableTd className="max-w-[320px] truncate" title={r.judgeRationale ?? ''}>
-                        {snip(r.judgeRationale, 60) || '—'}
-                      </TableTd>
-                    </TableRow>
-                    {isOpen && (
-                      <TableRow key={`${r.calibrationId}-detail`}>
-                        <TableTd colSpan={6} className="p-3 bg-bg">
-                          <Inline gap="md" align="start">
-                            <Stack gap="xs" className="flex-1 min-w-0">
-                              <T as="div" size="xs" weight="semibold" tone="tertiary">
-                                PROMPT · agent={r.agentId ?? '—'}
-                              </T>
-                              <CodeBlock code={r.prompt ?? '(no prompt)'} language="text" />
-                              <T as="div" size="xs" weight="semibold" tone="tertiary" className="mt-3">RESPONSE</T>
-                              <CodeBlock code={r.response ?? '(no response)'} language="text" />
-                            </Stack>
-                            <Stack gap="xs" className="flex-1 min-w-0">
-                              <T as="div" size="xs" weight="semibold" tone="tertiary">
-                                HUMAN <T size="xs" className="font-mono">{fmt2(r.humanScore)}</T>
-                              </T>
-                              <CodeBlock code={r.humanRationale ?? '(no rationale recorded)'} language="text" />
-                              <T as="div" size="xs" weight="semibold" tone="tertiary" className="mt-3">
-                                JUDGE <T size="xs" className="font-mono">{fmt2(r.judgeScore)}</T>
-                              </T>
-                              <CodeBlock code={r.judgeRationale ?? '(no rationale returned)'} language="text" />
-                            </Stack>
-                          </Inline>
-                        </TableTd>
-                      </TableRow>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </TableBody>
-          </Table>
+          // DataTable `narrow` (UX leftovers, 10 November): at phone width a case is a stacked card
+          // instead of a table scrolling inside its box. A row click opens the case's prompt,
+          // response and both rationales under the table (the selected row stays marked).
+          <Stack gap="sm">
+            <DataTable<CalibrationResult>
+              narrow
+              aria-label="Worst disagreements"
+              data={worstResults}
+              keyField={(r) => r.calibrationId}
+              selectedKey={expandedResult}
+              onRowClick={(r) => setExpandedResult((cur) => (cur === r.calibrationId ? null : r.calibrationId))}
+              columns={[
+                { key: 'agent', header: 'Agent', className: 'whitespace-nowrap', render: (r) => r.agentId ?? '—' },
+                {
+                  key: 'prompt', header: 'Prompt', className: 'max-w-[320px] truncate',
+                  render: (r) => <T as="span" size="sm" tone="inherit" title={r.prompt ?? undefined}>{snip(r.prompt, 80) || '(empty)'}</T>,
+                },
+                { key: 'human', header: 'Human', numeric: true, render: (r) => fmt2(r.humanScore) },
+                { key: 'judge', header: 'Judge', numeric: true, render: (r) => fmt2(r.judgeScore) },
+                { key: 'delta', header: '|Δ|', label: 'Difference', render: (r) => <Chip tone={maeTone(r.absError)} size="xs">{fmt(r.absError)}</Chip> },
+                {
+                  key: 'rationale', header: 'Rationale', className: 'max-w-[320px] truncate',
+                  render: (r) => <T as="span" size="sm" tone="inherit" title={r.judgeRationale ?? ''}>{snip(r.judgeRationale, 60) || '—'}</T>,
+                },
+              ]}
+            />
+            {expandedCase && (
+              <Inline gap="md" align="start" wrap className="rounded-md border border-border bg-bg p-3" data-testid="calibration-case-detail">
+                <Stack gap="xs" className="min-w-[16rem] flex-1">
+                  <T as="div" size="xs" weight="semibold" tone="tertiary">
+                    PROMPT · agent={expandedCase.agentId ?? '—'}
+                  </T>
+                  <CodeBlock code={expandedCase.prompt ?? '(no prompt)'} language="text" />
+                  <T as="div" size="xs" weight="semibold" tone="tertiary" className="mt-3">RESPONSE</T>
+                  <CodeBlock code={expandedCase.response ?? '(no response)'} language="text" />
+                </Stack>
+                <Stack gap="xs" className="min-w-[16rem] flex-1">
+                  <T as="div" size="xs" weight="semibold" tone="tertiary">
+                    HUMAN <T size="xs" className="font-mono">{fmt2(expandedCase.humanScore)}</T>
+                  </T>
+                  <CodeBlock code={expandedCase.humanRationale ?? '(no rationale recorded)'} language="text" />
+                  <T as="div" size="xs" weight="semibold" tone="tertiary" className="mt-3">
+                    JUDGE <T size="xs" className="font-mono">{fmt2(expandedCase.judgeScore)}</T>
+                  </T>
+                  <CodeBlock code={expandedCase.judgeRationale ?? '(no rationale returned)'} language="text" />
+                </Stack>
+              </Inline>
+            )}
+          </Stack>
         )}
       </Card>
 
@@ -568,28 +546,26 @@ function CalibrationPage() {
             degraded={calibrationDegraded}
           />
         ) : (
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableTh>Agent</TableTh>
-                <TableTh>Prompt</TableTh>
-                <TableTh numeric>Human</TableTh>
-                <TableTh>Updated</TableTh>
-                <TableTh></TableTh>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {cases.map((c) => (
-                <TableRow key={c.calibrationId}>
-                  <TableTd className="whitespace-nowrap">{c.agentId}</TableTd>
-                  <TableTd className="max-w-[320px] truncate" title={c.prompt}>{snip(c.prompt, 100)}</TableTd>
-                  <TableTd numeric>{fmt2(c.humanScore)}</TableTd>
-                  <TableTd className="whitespace-nowrap">
-                    {c.updatedAt
-                      ? (parsePgTimestamp(c.updatedAt)?.toLocaleDateString() ?? c.updatedAt)
-                      : '—'}
-                  </TableTd>
-                  <TableTd className="whitespace-nowrap text-right">
+          <DataTable<CalibrationCase>
+            narrow
+            aria-label="Calibration cases"
+            data={cases}
+            keyField={(c) => c.calibrationId}
+            columns={[
+              { key: 'agent', header: 'Agent', className: 'whitespace-nowrap', render: (c) => c.agentId },
+              {
+                key: 'prompt', header: 'Prompt', className: 'max-w-[320px] truncate',
+                render: (c) => <T as="span" size="sm" tone="inherit" title={c.prompt}>{snip(c.prompt, 100)}</T>,
+              },
+              { key: 'human', header: 'Human', numeric: true, render: (c) => fmt2(c.humanScore) },
+              {
+                key: 'updated', header: 'Updated', className: 'whitespace-nowrap',
+                render: (c) => (c.updatedAt ? (parsePgTimestamp(c.updatedAt)?.toLocaleDateString() ?? c.updatedAt) : '—'),
+              },
+              {
+                key: 'actions', header: '', label: 'Actions', className: 'whitespace-nowrap text-right',
+                render: (c) => (
+                  <Inline gap="none" justify="end" wrap={false}>
                     <IconButton
                       variant="ghost"
                       size="sm"
@@ -608,11 +584,11 @@ function CalibrationPage() {
                       title="Archive"
                       onClick={() => setArchiveTarget(c)}
                     />
-                  </TableTd>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                  </Inline>
+                ),
+              },
+            ]}
+          />
         )}
       </Card>
 
