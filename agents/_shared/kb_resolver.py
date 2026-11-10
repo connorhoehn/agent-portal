@@ -262,9 +262,22 @@ HOME_PREFIXES = DECLARED_PREFIXES[HOME_TENANT]
 TENANT_METADATA_KEY = "tenant"
 
 
+class MissingTenantError(ValueError):
+    """A retrieve was asked for without a tenant. There is no unfiltered
+    retrieve: the caller gets nothing rather than every tenant's documents."""
+
+
+def _required_tenant(tenant) -> str:
+    if not isinstance(tenant, str) or not tenant.strip():
+        raise MissingTenantError("a knowledge-base retrieve needs the caller's tenant; refusing an unfiltered one")
+    return tenant
+
+
 def tenant_metadata_filter(tenant: str) -> dict:
-    """The Bedrock retrieval filter for one tenant's documents."""
-    return {"equals": {"key": TENANT_METADATA_KEY, "value": tenant}}
+    """The Bedrock retrieval filter for one tenant's documents. A missing or
+    blank tenant raises ``MissingTenantError``: never a filter that matches
+    everything, and never no filter."""
+    return {"equals": {"key": TENANT_METADATA_KEY, "value": _required_tenant(tenant)}}
 
 
 def tenant_vector_search_config(num_results: int, tenant: str) -> dict:
@@ -356,6 +369,9 @@ def filter_for_tenant(results: list, tenant: str, *, prefixes=None, home: str = 
     ``results`` are dicts with a ``source`` S3 URI (the shape both read agents
     return). ``prefixes`` defaults to the live registry.
     """
+    if not isinstance(tenant, str) or not tenant.strip():
+        # No tenant owns nothing: an unowned key (owner None) must not match it.
+        return []
     rows = tenant_prefixes() if prefixes is None else prefixes
     if rows is None:
         return []

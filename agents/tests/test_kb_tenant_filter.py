@@ -109,6 +109,17 @@ class Ownership(unittest.TestCase):
         self.assertEqual(cfg["numberOfResults"], 5)
         self.assertIn("overrideSearchType", cfg)
 
+    def test_a_missing_tenant_gets_nothing_never_everything(self):
+        for missing in (None, "", "   ", 0):
+            with self.assertRaises(kb.MissingTenantError):
+                kb.tenant_metadata_filter(missing)
+            with self.assertRaises(kb.MissingTenantError):
+                kb.tenant_vector_search_config(5, missing)
+            # A key no prefix matches has no owner (None): it must not match a missing tenant.
+            unowned = [{"source": BUCKET + "elsewhere/a.md"}, {"source": BUCKET + "synth/a.md"}]
+            self.assertEqual(kb.filter_for_tenant(unowned, missing, prefixes=PREFIXES), [])
+            self.assertEqual(kb.filter_for_tenant(unowned, missing, prefixes=[]), [])
+
     def test_an_unreadable_registry_returns_nothing(self):
         with mock.patch.object(kb, "tenant_prefixes", return_value=None):
             self.assertEqual(kb.filter_for_tenant([{"source": BUCKET + "a.md"}], "orgiq"), [])
