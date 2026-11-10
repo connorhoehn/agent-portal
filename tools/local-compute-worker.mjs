@@ -4,7 +4,8 @@
 // The laptop half of the governed work loop: a paired machine registers its
 // capabilities (models, kinds, concurrency), claims jobs from the queue, clones
 // or updates the target repo, runs `claude -p` against it, and posts a fenced
-// completion with token counts.
+// completion with token counts and the run report (local-compute-report.mjs: the final
+// message's lab-report block, the skills the session loaded, the checkout's kept folders).
 //
 // Two inference modes, chosen by whether ANTHROPIC_BASE_URL is set:
 //
@@ -89,6 +90,7 @@
 import { readFileSync, writeFileSync, appendFileSync, statSync, mkdirSync, existsSync, createWriteStream } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import { syncProjectSkills, describeSync, skillsNote, BODY_MAX } from './local-compute-skills.mjs';
+import { buildReport } from './local-compute-report.mjs';
 import { allowedToolsFrom, toolsForRun, allowedRepoHosts, normaliseRepoUrl, TEST_TOOLS } from './local-compute-policy.mjs';
 import { join, basename, dirname } from 'node:path';
 import { homedir, hostname, platform, arch, loadavg, cpus, totalmem, freemem, uptime } from 'node:os';
@@ -911,11 +913,23 @@ function runTask(config, jobId, cwd, prompt, systemNote = null, clonePath = null
       }
       logFile.write(`\n[worker] exit ${exitCode} after ${(durationMs / 1000).toFixed(1)}s\n`);
       logFile.end();
+      // The run report's worker half (local-compute-report.mjs): the final message (its
+      // lab-report block), the skills the stream showed it loading, and the checkout's kept folders.
+      let report = null;
+      try {
+        report = buildReport({
+          finalMessage: typeof result.result === 'string' ? result.result : '',
+          stdout, workdir: clonePath, runRef: jobId, sessionId: held.get(jobId)?.sessionId ?? '',
+        });
+      } catch (err) {
+        logFile.write?.(`[worker] could not read the run report: ${err.message}\n`);
+      }
       resolve({
         ok: exitCode === 0 && result.subtype === 'success' && result.is_error !== true,
         result,
         exitCode,
         durationMs,
+        report,
       });
     };
 
@@ -992,6 +1006,7 @@ async function complete(config, jobId, status, outcome) {
     ...(outcome.result.input_tokens ? { tokensIn: outcome.result.input_tokens } : {}),
     ...(outcome.result.output_tokens ? { tokensOut: outcome.result.output_tokens } : {}),
     ...(outcome.ok ? {} : { error: outcome.result.error ?? `exit code ${outcome.exitCode}` }),
+    ...(outcome.report ? { report: outcome.report } : {}),
   };
 
   const res = await post(config, `/api/local-compute/jobs/${jobId}/complete`, body, authHeaders(config));
@@ -1004,6 +1019,9 @@ async function complete(config, jobId, status, outcome) {
 
   const reply = await res.json();
   log.ok(`recorded ${reply.status} · $${reply.costUsd} (${reply.provider})`, 1);
+  if (reply.report) {
+    log.info(`report: self-report ${reply.report.selfReport} · ${reply.report.runbooksUsed} runbook(s) used · ${reply.report.kept} kept`, 1);
+  }
   return true;
 }
 
