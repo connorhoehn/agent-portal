@@ -596,7 +596,7 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
       }}
       emptyLabel={conversationRailEmptyLabel([...(showDms ? [dmsFetch] : []), ...(showChannels ? [channelsFetch] : [])], query)}
       // The narrow explorer gives the list the whole width; the rail keeps its 300px beside a pane.
-      {...(narrow && !embedding ? { className: 'w-full border-r-0' } : {})}
+      {...(narrow ? { className: 'w-full border-r-0' } : {})}
       data-testid="social-chat-rail"
     />
   );
@@ -834,8 +834,12 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
   // At phone width the rail and the pane cannot sit side by side (UX walk D: /social/dms at 390 cut the
   // conversation off): the library's narrow explorer shows one at a time — the list, or what is open
   // under a back control. Calls, recordings and hangouts are pages of their own, so they open as the pane.
+  // Embedded (Work, Assessment and Pipelines Communication), the host's own view (a group, a team, a
+  // person) is open too: it is the pane, and the list is one back control away (regression walk,
+  // 9 November night: /iq/communication at 390 squeezed the conversation to one character wide).
   const paneOpen = !!shelf || picking || route === 'calls' || route === 'recordings' || route === 'rooms'
-    || (route === 'dms' && !!lobby) || (route === 'channels' && !!slug) || (route === 'teams' && (!!teamChannel || !!managing));
+    || (route === 'dms' && !!lobby) || (route === 'channels' && !!slug) || (route === 'teams' && (!!teamChannel || !!managing))
+    || !!embedding?.pane;
   const [narrowList, setNarrowList] = useState(false);
   useEffect(() => { setNarrowList(false); }, [location.key]);
   const narrowBack = () => {
@@ -845,44 +849,42 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
     setNarrowList(true);
   };
 
+  const paneNode = embedding ? (
+    // One header per page (docs/layout-cascade.md): an open conversation IS the page — the plane's
+    // title folds into the trail's last crumb, its actions join the conversation's header row
+    // (graphPropsFor), and that header (avatar, name, view tabs) takes the title slot. Its header, history and composer share
+    // the trail's edge: the conversation gutter is the page gutter here. Anything else (the landing, the
+    // activity and mentions shelves, rooms, calls) is page content under the title at the page gutter.
+    <SectionContent breadcrumbs={embedding.breadcrumbs} title={embedding.title} body="fill"
+      inset={conversationOpen ? 'conversation' : 'page'}
+      {...(conversationOpen
+        ? { density: headerDensity.density, collapsed: true }
+        : { ...headerDensity.headerProps, ...(embedding.actions ? { actions: embedding.actions } : {}) })}
+      data-testid="communication-content">
+      <Stack as="section" aria-label={PAGE_TITLE[route]} gap="sm" ref={headerDensity.contentRef} data-testid="social-chat-pane"
+        className={`min-h-0 min-w-0 flex-1 overflow-hidden${conversationOpen ? ' [--ui-content-gutter:var(--ui-page-gutter,1.5rem)]' : ''}`}>
+        {alerts()}
+        {conversationPane()}
+      </Stack>
+    </SectionContent>
+  ) : (
+    <Stack as="section" aria-label={PAGE_TITLE[route]} gap="sm" className="min-h-0 min-w-0 flex-1 overflow-hidden" data-testid="social-chat-pane">
+      {alerts()}
+      {conversationPane()}
+    </Stack>
+  );
+
   return (
     <Stack gap="none" className="min-h-0 min-w-0 bg-surface" data-shell-flush data-testid={PAGE_TESTID[route]}>
       {!embedding && !paneHasHeading && <VisuallyHidden as="h1">{PAGE_TITLE[route]}</VisuallyHidden>}
       <ViewportFillRegion className="flex min-w-0" data-testid="social-chat-workspace">
-        {!embedding && narrow ? (
+        {narrow ? (
           <ExplorerLayout rail={railNode} railLabel="conversations" className="min-h-0 min-w-0 flex-1"
             narrow={{ showing: paneOpen && !narrowList ? 'record' : 'list', onBack: narrowBack, backLabel: 'All conversations' }}
             data-testid="social-chat-narrow">
-            <Stack as="section" aria-label={PAGE_TITLE[route]} gap="sm" className="min-h-0 min-w-0 flex-1 overflow-hidden" data-testid="social-chat-pane">
-              {alerts()}
-              {conversationPane()}
-            </Stack>
+            {paneNode}
           </ExplorerLayout>
-        ) : railNode}
-        {embedding ? (
-          // One header per page (docs/layout-cascade.md): an open conversation IS the page — the plane's
-          // title folds into the trail's last crumb, its actions join the conversation's header row
-          // (graphPropsFor), and that header (avatar, name, view tabs) takes the title slot. Its header, history and composer share
-          // the trail's edge: the conversation gutter is the page gutter here. Anything else (the landing, the
-          // activity and mentions shelves, rooms, calls) is page content under the title at the page gutter.
-          <SectionContent breadcrumbs={embedding.breadcrumbs} title={embedding.title} body="fill"
-            inset={conversationOpen ? 'conversation' : 'page'}
-            {...(conversationOpen
-              ? { density: headerDensity.density, collapsed: true }
-              : { ...headerDensity.headerProps, ...(embedding.actions ? { actions: embedding.actions } : {}) })}
-            data-testid="communication-content">
-            <Stack as="section" aria-label={PAGE_TITLE[route]} gap="sm" ref={headerDensity.contentRef} data-testid="social-chat-pane"
-              className={`min-h-0 min-w-0 flex-1 overflow-hidden${conversationOpen ? ' [--ui-content-gutter:var(--ui-page-gutter,1.5rem)]' : ''}`}>
-              {alerts()}
-              {conversationPane()}
-            </Stack>
-          </SectionContent>
-        ) : narrow ? null : (
-          <Stack as="section" aria-label={PAGE_TITLE[route]} gap="sm" className="min-h-0 min-w-0 flex-1 overflow-hidden" data-testid="social-chat-pane">
-            {alerts()}
-            {conversationPane()}
-          </Stack>
-        )}
+        ) : <>{railNode}{paneNode}</>}
       </ViewportFillRegion>
       {/* Always anchored to the control that opened them: centred, the
           library's PopoverForm has no Escape (docs/ui-components-queue.md). */}
