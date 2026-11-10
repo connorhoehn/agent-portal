@@ -218,7 +218,8 @@ def insecure_dev_mode(env=None) -> bool:
     """INSECURE_DEV_MODE=true and not production (service-runtime's rule, plus APP_ENV)."""
     env = os.environ if env is None else env
     flag = (env.get("INSECURE_DEV_MODE") or "").strip().lower() == "true"
-    production = env.get("NODE_ENV") == "production" or env.get("APP_ENV") == "production"
+    # Any case, padded, or the short `prod` (middleware lib/insecure-dev-mode.ts).
+    production = any((env.get(k) or "").strip().lower() in ("production", "prod") for k in ("NODE_ENV", "APP_ENV"))
     return flag and not production
 
 

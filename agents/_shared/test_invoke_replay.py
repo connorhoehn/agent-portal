@@ -44,6 +44,14 @@ class ReplayCacheTests(unittest.TestCase):
         self.assertTrue(cache.seen_or_add("n", now=ia.TTL_SEC + ia.SKEW_SEC - 1))
 
 
+class DevModeVeto(unittest.TestCase):
+    def test_any_spelling_of_production_vetoes_the_flag(self):
+        for k in ("NODE_ENV", "APP_ENV"):
+            for v in ("production", "Production", " PRODUCTION ", "prod", "Prod"):
+                self.assertFalse(ia.insecure_dev_mode({"INSECURE_DEV_MODE": "true", k: v}), (k, v))
+        self.assertTrue(ia.insecure_dev_mode({"INSECURE_DEV_MODE": "true", "NODE_ENV": "development"}))
+
+
 class SignAndVerify(unittest.TestCase):
     def setUp(self):
         env = mock.patch.dict("os.environ", {"AGENT_INVOKE_SECRET": SECRET, "AGENT_INVOKE_SECRET_ID": "",
