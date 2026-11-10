@@ -22,6 +22,7 @@ import { extname, basename } from 'node:path';
 import { config } from '../config.js';
 import type { StorageBreakdown } from '../lib/crawler-types.js';
 import { ownerOfKey, tenantMetadataSidecar } from '../lib/kb-prefixes.js';
+import { listKbs } from './kb-registry.js';
 import { exec } from './aurora.js';
 import { clock, groupBy, sumBy } from '../mock/core/index.js';
 import {
@@ -741,8 +742,9 @@ export async function uploadDocument(
   body: Buffer,
   contentType: string,
   prefix = 'uploads',
-  /** The tenant that owns `prefix` (lib/kb-prefixes.ts `ownerOfKey`); written as
-   * the document's `tenant` metadata, which retrieval filters on. */
+  /** The tenant that owns `prefix`; by default resolved here from the registry
+   * and the declared prefixes (lib/kb-prefixes.ts `ownerOfKey`). Written as the
+   * document's `tenant` metadata, which retrieval filters on. */
   tenant?: string | null,
 ): Promise<UploadResult> {
   const bucket = mockAws() ? mockBucket() : config.foundation.documentsBucket;
@@ -764,7 +766,8 @@ export async function uploadDocument(
     ContentType: contentType,
     Metadata: { 'uploaded-at': new Date().toISOString(), 'original-name': filename.slice(0, 512) },
   }));
-  const owner = tenant ?? ownerOfKey(key);
+  // The prefix's owner, registered or declared (the agents' longest-prefix rule).
+  const owner = tenant ?? ownerOfKey(key, await listKbs().catch(() => []));
   if (owner) {
     const sidecar = tenantMetadataSidecar(key, owner);
     await s3.send(new PutObjectCommand({

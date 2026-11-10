@@ -20,7 +20,6 @@ import {
   getStorageBreakdown,
 } from '../providers/knowledge-base.js';
 import { getKbBySlug, listKbs } from '../providers/kb-registry.js';
-import { ownerOfKey } from '../lib/kb-prefixes.js';
 import {
   listSchedules,
   addSchedule,
@@ -369,9 +368,7 @@ ingestRouter.post(
       res.status(400).json({ error: 'Empty body' });
       return;
     }
-    // The owner of the prefix (registered or declared) is the document's tenant metadata.
-    const owner = ownerOfKey(`${prefix}/`, await listKbs());
-    const result = await uploadDocument(filename, body, contentType, prefix, owner);
+    const result = await uploadDocument(filename, body, contentType, prefix);
     res.status(201).json({ ok: true, ...result });
   }),
 );
