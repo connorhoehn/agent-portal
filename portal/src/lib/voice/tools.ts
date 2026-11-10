@@ -29,7 +29,7 @@
 
 import type { Action } from '../capabilities';
 import { PAGE_ROWS_MAX, type PageRow, type PageTabs, type PublishedPage } from './pageContext.ts';
-import { INBOUND_TEXT_MAX, inboundRef, type InboundMemory } from './inbound.ts';
+import { INBOUND_TEXT_MAX, inboundRef, safeLabel, type InboundMemory } from './inbound.ts';
 import { waitingOn } from '../../pages/projects/budgetAccessModel.ts';
 import type { AccessRequest } from '../accessRequests';
 import { activityScopes, budgetScopes, createKinds, getParts, listKinds, navigatePageIds, openKinds, summaryKinds, searchRecordTypes, voiceToolSpec, SEARCH_ACTIONS, type JsonSchema, type VoiceToolSpec } from './catalogue.ts';
@@ -1839,7 +1839,8 @@ const activity: Runner = async (args, ctx) => {
     const needle = who.toLowerCase();
     const people = ctx.presence.roster().filter((p) => p.status !== 'offline' && (!needle || p.name.toLowerCase().includes(needle)));
     const rows = people.slice(0, MAX_ROWS).map((p) => ({
-      name: p.name, status: p.status, ...(p.message ? { message: p.message } : {}),
+      // Another person's name and status line are data they typed: one line, no quotes or control characters, bounded.
+      name: safeLabel(p.name), status: p.status, ...(p.message && safeLabel(p.message, 120) ? { message: safeLabel(p.message, 120) } : {}),
       // A person opens on their Social contact page, where the workspace has one.
       ...(ctx.tenant === 'social' ? { ref: `contact:${p.userId}` } : {}),
     }));

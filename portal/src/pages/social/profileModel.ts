@@ -15,7 +15,8 @@ export const PROFILE_STATUS_OPTIONS: ReadonlyArray<{ value: ProfileStatus; label
   { value: 'busy', label: 'Do not disturb', description: 'People see you as busy and your status line.' },
 ];
 
-/** The longest status line the presence roster keeps (knowledgeFormat.presenceAvatarUsers trims to 120). */
+/** The longest status line the presence roster keeps: the gateway enforces it on every presence `set`
+ *  (middleware lib/gateway-presence.ts); knowledgeFormat.presenceAvatarUsers trims to 120 as well. */
 export const STATUS_MESSAGE_MAX = 120;
 
 /** Why status cannot be set right now, or null when it can. */

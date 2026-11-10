@@ -54,6 +54,7 @@
 import type { Server } from 'node:http';
 import { hostname } from 'node:os';
 import { RedisPresenceStore } from '@connorhoehn/realtime-modules/presence';
+import { boundedPresence } from './gateway-presence.js';
 import { attachRealtime, createBoundedRedis, type BoundedRedis, type RealtimeLeaseGroup, chat, presence, notifications, reactions, fileUploads, workGraph, baseChannel, LocalRealtimeRouter, RedisRealtimeRouter, withAuthorityCache, withPrincipalRevalidation, type AuthorityVerdictCache, type RealtimeHandle, type RedisRealtimeRouterOptions, type ChannelAuthorize, type ClientMessageFilter, type PrincipalRevalidation } from '@connorhoehn/realtime-modules/server';
 import { RedisCallStateStore, InMemoryCallStateStore } from '@connorhoehn/realtime-modules/call';
 import { MeetingService } from '@connorhoehn/realtime-modules/meeting';
@@ -361,8 +362,9 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
         // (realtime-modules 0.115 / 0.118; lib/page-thread-unread.ts).
         ...pageCursorChatOptions(router) }))),
         () => chatRuntime),
-      presence(clusterRouter && redis ? { store: new RedisPresenceStore({ command: (...args) => redis.command(...args) },
-        process.env['REALTIME_GATEWAY_NAMESPACE'] || 'orgiq-gateway') } : {}),
+      // The status line is bounded where it is written (lib/gateway-presence.ts).
+      boundedPresence(presence(clusterRouter && redis ? { store: new RedisPresenceStore({ command: (...args) => redis.command(...args) },
+        process.env['REALTIME_GATEWAY_NAMESPACE'] || 'orgiq-gateway') } : {})),
       // Pointer positions on a page canvas (lib/gateway-cursor.ts): the router's
       // channel authority decides, the wrapper rebuilds the frame's content.
       tenantCursor(),
