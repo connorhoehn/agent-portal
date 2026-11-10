@@ -223,7 +223,7 @@ function withFacts(d: Definition, facts: ReturnType<typeof runFacts>, defaultRol
   return { ...d, runCount: f.runCount, lastRun: f.lastRun, effectiveApproverRoles: approvers.roles, approversDefaulted: approvers.defaulted };
 }
 
-/** A runbook's rung on the ladder and what its dry-run says about promotion. */
+/** A runbook definition's candidate status and what its dry-runs say. */
 function runbookState(d: Definition, records: readonly PipelineRunRecord[]) {
   const mine = records.filter((r) => r.definitionId === d.id).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   const lastDryRun = mine[0] ?? null;

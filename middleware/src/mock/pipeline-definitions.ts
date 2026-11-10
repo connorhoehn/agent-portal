@@ -51,7 +51,7 @@ export const pipelineDefinitionRows = defineFixture<StoredDefinition>({
         title: humanizeSlug(name), owner: 'u-ines', version: 1, approverRoles: ['operator'],
         sourceTable: 'assessment_commands', sourceId: name, updatedBy: 'u-ines', updatedAt: clock.daysAgo(30 + i * 4),
       })),
-      // The three runbooks on the ladder are Ines's too: she wrote the procedures the fleet learned.
+      // The three runbook definitions are Ines's too.
       ...SEEDED_RUNBOOKS.map(([candidate, title], i): StoredDefinition => ({
         id: `runbook:${candidate}`, contextTenant: 'orgiq', kind: 'runbook', title, owner: 'u-ines', version: 1, approverRoles: ['operator'],
         sourceTable: 'promotion_candidates', sourceId: candidate, updatedBy: 'u-ines', updatedAt: clock.daysAgo(14 + i * 6),
@@ -65,8 +65,8 @@ export const pipelineDefinitionRows = defineFixture<StoredDefinition>({
 export const pipelineRunRecords = defineFixture<PipelineRunRecord>({
   key: 'pipelines.runs',
   scenarios: {
-    // One completed dry-run: Ines's rehearsal of the quarantine runbook, the one the
-    // ladder already shows promoted to a skill ("dry-run verified"). It has no job
+    // One completed dry-run: Ines's rehearsal of the quarantine runbook, the
+    // candidate seeded as `promoted`. It has no job
     // behind it (a terminal record is never reconciled against one), and the
     // candidate's own stored `dryRunRunId` stays null, as that file explains.
     default: () => [{

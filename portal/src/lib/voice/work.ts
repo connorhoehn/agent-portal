@@ -559,7 +559,7 @@ const planQueueWork: VoiceToolPlanner = async (args, ctx) => {
   if (found.length === 0) return { result: refused(`No runbook matches "${target}".`, { runbooks: runbooks.slice(0, 10).map((r) => r.title) }) };
   if (found.length > 1) return { result: ambiguous(`Several runbooks match "${target}": ${listOf(found.map((r) => r.title))}. Which one?`, found.map((r) => ({ title: r.title }))) };
   const rb = found[0]!;
-  if (rb.enabled === false) return { result: refused(`"${rb.title}" was dismissed from the ladder; reopen it on its page first.`) };
+  if (rb.enabled === false) return { result: refused(`"${rb.title}" is dismissed, so it cannot be dry-run.`) };
   return { plan: { title: `Dry-run "${rb.title}"`, detail: withNote(SPEND.pipeline!, note), data: { kind, title: `The "${rb.title}" dry-run`, definitionId: rb.id, ...(note ? { note } : {}) } satisfies WorkPlan } };
 };
 

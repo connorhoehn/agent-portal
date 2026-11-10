@@ -4,7 +4,7 @@
 //
 // SOURCES. Bots through providers/bots.ts, the nine assessment commands
 // through providers/assessment.ts's `AGENT_COMMANDS`, runbook candidates
-// through providers/promotions.ts (mock-first everywhere, like the ladder),
+// through providers/promotions.ts (seeded fixtures in every environment),
 // agents through the AgentCore provider's runtime listing, and the recorded
 // versions from `pipeline_definitions` (the `pipelines.definitions` fixture
 // under dev:mock). A source that cannot be read is named in `unavailable` —
@@ -441,7 +441,7 @@ async function startDryRunRow(input: {
   if (def.kind !== 'runbook') {
     return { ok: false, status: 409, body: { error: `A dry-run belongs to a runbook; ${def.id} is a ${def.kind} definition and runs through its own surface.` } };
   }
-  if (!def.enabled) return { ok: false, status: 409, body: { error: `${def.title} was dismissed from the ladder — reopen it before a dry-run.` } };
+  if (!def.enabled) return { ok: false, status: 409, body: { error: `${def.title} is dismissed, so it cannot be dry-run.` } };
   const inFlight = (await listRunRecords({ definitionId: def.id })).find((r) => !isTerminalRunStatus(r.status));
   if (inFlight) return { ok: false, status: 409, body: { error: `A dry-run of this runbook is already ${inFlight.status} (${inFlight.id}).`, runId: inFlight.id } };
 

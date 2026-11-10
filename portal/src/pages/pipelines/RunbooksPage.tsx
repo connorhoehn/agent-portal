@@ -1,4 +1,4 @@
-// /pipelines/runbooks — the runbooks on the promotion ladder, each with its
+// /pipelines/runbooks — the seeded runbook definitions, each with its
 // last dry-run and what rule 1 says about making it a skill
 // (docs/social-tenant-design.md §5.2: a RUNBOOK becomes a SKILL only on a
 // completed run of its own definition). Read from GET /api/pipelines/runbooks;
@@ -93,7 +93,7 @@ export default function RunbooksPage() {
         </Banner>
       )}
       {error ? (
-        <UnavailableNotice error={error} what="runbooks" source="Runbooks are the promotion ladder's RUNBOOK rung" onRetry={refresh} />
+        <UnavailableNotice error={error} what="runbooks" source="Runbooks are the seeded promotion candidates (mock/promotions.ts)" onRetry={refresh} />
       ) : (
         <DataTable narrow
           data-testid="pipelines-runbooks-table"
@@ -114,7 +114,7 @@ export default function RunbooksPage() {
               data-testid="pipelines-runbook-dry-run"
             />
           ) : null) : undefined}
-          emptyMessage={query || filter ? 'No runbooks match these filters.' : 'No runbooks — nothing on the promotion ladder has reached the runbook rung.'}
+          emptyMessage={query || filter ? 'No runbooks match these filters.' : 'No runbooks.'}
         />
       )}
       <ConfirmDialog
