@@ -345,6 +345,14 @@ describe('POST /api/ingest/upload', () => {
     expect(uploadDocument).not.toHaveBeenCalled();
   });
 
+  it('refuses a name that would land on a metadata sidecar key, before the provider', async () => {
+    const res = await request(buildApp()).post('/api/ingest/upload')
+      .set('X-Filename', 'report.pdf.metadata.json').set('Content-Type', 'application/json').send('{}');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/reserved for document metadata/);
+    expect(uploadDocument).not.toHaveBeenCalled();
+  });
+
   it('uploads the raw bytes with the declared type, defaulting the prefix to uploads/', async () => {
     m(uploadDocument).mockResolvedValue({ key: 'uploads/a.md', bucket: 'orgiq-documents-test' });
     const res = await request(buildApp()).post('/api/ingest/upload')

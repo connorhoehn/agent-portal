@@ -18,10 +18,11 @@ import {
   StartIngestionJobCommand,
 } from '@aws-sdk/client-bedrock-agent';
 import { S3Client, ListObjectsV2Command, PutObjectCommand } from '@aws-sdk/client-s3';
-import { extname, basename } from 'node:path';
+import { extname } from 'node:path';
 import { config } from '../config.js';
 import type { StorageBreakdown } from '../lib/crawler-types.js';
-import { ownerOfKey, tenantMetadataSidecar } from '../lib/kb-prefixes.js';
+import { ownerOfKey, reservedUploadName, safeUploadName, tenantMetadataSidecar } from '../lib/kb-prefixes.js';
+import { ValidationError } from '../lib/async-handler.js';
 import { listKbs } from './kb-registry.js';
 import { exec } from './aurora.js';
 import { clock, groupBy, sumBy } from '../mock/core/index.js';
@@ -747,10 +748,14 @@ export async function uploadDocument(
    * document's `tenant` metadata, which retrieval filters on. */
   tenant?: string | null,
 ): Promise<UploadResult> {
+  // A name ending `.metadata.json` would land on another object's metadata
+  // sidecar key; refused here as well as at the route.
+  const reserved = reservedUploadName(filename);
+  if (reserved) throw new ValidationError(reserved);
   const bucket = mockAws() ? mockBucket() : config.foundation.documentsBucket;
   if (!bucket) throw new Error('DOCUMENTS_BUCKET not configured');
   const date = new Date().toISOString().slice(0, 10);
-  const safe = basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
+  const safe = safeUploadName(filename);
   const key = `${prefix}/${date}/${safe}`;
   if (mockAws()) {
     // The object joins the live rows, so the upload shows up in the storage

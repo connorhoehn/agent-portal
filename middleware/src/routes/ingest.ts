@@ -3,6 +3,7 @@ import express from 'express';
 import type { Readable } from 'node:stream';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
+import { reservedUploadName } from '../lib/kb-prefixes.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import { config } from '../config.js';
 import { MOCK_SCREENSHOT_PNG } from '../mock/ingest-crawls.js';
@@ -355,6 +356,11 @@ ingestRouter.post(
     const filename = (req.headers['x-filename'] as string | undefined)?.trim();
     if (!filename) {
       res.status(400).json({ error: 'X-Filename header required' });
+      return;
+    }
+    const reserved = reservedUploadName(filename);
+    if (reserved) {
+      res.status(400).json({ error: reserved });
       return;
     }
     const contentType = (req.headers['content-type'] as string) || 'application/octet-stream';

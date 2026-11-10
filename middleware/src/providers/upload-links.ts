@@ -10,6 +10,7 @@
 import { randomBytes, createHash, randomUUID } from 'node:crypto';
 import { exec } from './aurora.js';
 import { uploadToLandingZone } from './landing-zones.js';
+import { reservedUploadName } from '../lib/kb-prefixes.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 import { config } from '../config.js';
 import { userNameFor } from '../lib/user-names.js';
@@ -309,7 +310,7 @@ export async function describeLinkForRecipient(token: string): Promise<PublicLin
 
 export type UploadRefusal =
   | 'unknown-link' | 'revoked' | 'expired' | 'exhausted'
-  | 'too-large' | 'bad-type' | 'empty';
+  | 'too-large' | 'bad-type' | 'empty' | 'reserved-name';
 
 /**
  * Accept one file through a link.
@@ -348,6 +349,12 @@ export async function uploadViaLink(
       detail: `That file is ${Math.round(body.length / 1024 / 1024)} MB; this link allows ${Math.round(link.maxBytes / 1024 / 1024)} MB per file.`,
     };
   }
+
+  // Before the slot claim: a name that would land on a metadata sidecar key
+  // is refused without spending the link's quota (landing-zones.ts refuses
+  // it again).
+  const reserved = reservedUploadName(filename);
+  if (reserved) return { ok: false, refusal: 'reserved-name', detail: reserved };
 
   const dot = filename.lastIndexOf('.');
   const ext = dot >= 0 ? filename.slice(dot).toLowerCase() : '';

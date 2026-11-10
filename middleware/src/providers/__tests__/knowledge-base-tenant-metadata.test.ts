@@ -60,6 +60,28 @@ it('a link upload names its own KB\'s tenant even when the registry read fails',
   expect(JSON.parse(String(puts()[1]!.Body))).toEqual({ metadataAttributes: { tenant: 'orgiq' } });
 });
 
+describe('a name that would land on a metadata sidecar key', () => {
+  it.each(['notes.md.metadata.json', 'Notes.MD.Metadata.Json', 'dir/x.pdf.metadata.json', 'x.metadata.json'])(
+    'is refused by both providers before any write: %s',
+    async (name) => {
+      await expect(uploadDocument(name, Buffer.from('{}'), 'application/json')).rejects.toMatchObject({
+        status: 400, message: expect.stringMatching(/reserved for document metadata/),
+      });
+      await expect(uploadToLandingZone('orgiq-uploads', name, Buffer.from('{}'), 'application/json')).rejects.toMatchObject({
+        status: 400, message: expect.stringMatching(/reserved for document metadata/),
+      });
+      expect(mockS3Send).not.toHaveBeenCalled();
+    },
+  );
+
+  it('an ordinary .json document still uploads', async () => {
+    await uploadDocument('export.json', Buffer.from('{}'), 'application/json');
+    await uploadToLandingZone('orgiq-uploads', 'metadata.json', Buffer.from('{}'), 'application/json');
+    expect(puts().filter((p) => !p.Key.endsWith('.metadata.json')).map((p) => p.Key))
+      .toEqual([expect.stringMatching(/\/export\.json$/), expect.stringMatching(/\/metadata\.json$/)]);
+  });
+});
+
 describe('parity: a file upload and a link upload of the same document', () => {
   it.each([
     ['assessment', 'assessment/evidence', 'assessment-evidence'],

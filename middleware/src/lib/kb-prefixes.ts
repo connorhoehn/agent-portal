@@ -12,6 +12,8 @@
 // matches, and kb-admin refuses a prefix that overlaps another tenant's or
 // already holds objects that are not the registering tenant's.
 
+import { basename } from 'node:path';
+
 export const HOME_KB_TENANT = 'orgiq';
 
 /**
@@ -71,13 +73,38 @@ export function ownerOfKey(key: string, registered: readonly TenantPrefix[] = []
   return owner;
 }
 
+/** The suffix Bedrock reads a document's metadata from (`<key>.metadata.json`). */
+export const METADATA_SIDECAR_SUFFIX = '.metadata.json';
+
+/** An uploaded file's name as it lands in a key: its basename, with anything
+ * outside `[a-zA-Z0-9._-]` replaced by `_`. Shared by the file upload and the
+ * landing-zone upload so both refuse and store the same name. */
+export function safeUploadName(filename: string): string {
+  return basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+/** The plain reason an upload is refused for a reserved name. */
+export const RESERVED_UPLOAD_NAME_REASON =
+  'File names ending in .metadata.json are reserved for document metadata. Rename the file and upload it again.';
+
+/**
+ * Why an upload's name is refused, or null. A sanitised name ending in
+ * `.metadata.json` (any case) would land on the metadata sidecar key of the
+ * object named by the rest of it, and could relabel that document's tenant.
+ */
+export function reservedUploadName(filename: string): string | null {
+  return safeUploadName(filename).toLowerCase().endsWith(METADATA_SIDECAR_SUFFIX)
+    ? RESERVED_UPLOAD_NAME_REASON
+    : null;
+}
+
 /**
  * The Bedrock metadata sidecar for a document: `<key>.metadata.json` naming
  * its owning tenant, which retrieval filters on (beside the key-prefix check).
  */
 export function tenantMetadataSidecar(key: string, tenant: string): { key: string; body: string } {
   return {
-    key: `${key}.metadata.json`,
+    key: `${key}${METADATA_SIDECAR_SUFFIX}`,
     body: JSON.stringify({ metadataAttributes: { [TENANT_METADATA_KEY]: tenant } }),
   };
 }

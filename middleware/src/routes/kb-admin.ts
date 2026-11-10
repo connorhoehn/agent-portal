@@ -41,7 +41,7 @@ import { config } from '../config.js';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { reconcileKnowledgeBases, adoptKnowledgeBase, syncState } from '../providers/kb-reconcile.js';
 import { startIngestionJob, listIngestionJobs, listObjectKeysUnder } from '../providers/knowledge-base.js';
-import { normPrefix, prefixesOverlap, withHomePrefixes, keyUnder } from '../lib/kb-prefixes.js';
+import { normPrefix, prefixesOverlap, withHomePrefixes, keyUnder, reservedUploadName } from '../lib/kb-prefixes.js';
 import express from 'express';
 import {
   createUploadLink, listUploadLinks, revokeUploadLink, listLinkFiles,
@@ -445,6 +445,8 @@ kbAdminRouter.post(
 
     const filename = String(req.query['filename'] ?? '').trim();
     if (!filename) throw new ValidationError('filename query parameter is required');
+    const reserved = reservedUploadName(filename);
+    if (reserved) throw new ValidationError(reserved);
 
     const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
     if (body.length === 0) throw new ValidationError('Empty file');

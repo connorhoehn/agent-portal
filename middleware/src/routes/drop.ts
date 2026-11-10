@@ -15,6 +15,7 @@ import { Router } from 'express';
 import express from 'express';
 import { asyncHandler } from '../lib/async-handler.js';
 import { describeLinkForRecipient, uploadViaLink } from '../providers/upload-links.js';
+import { reservedUploadName } from '../lib/kb-prefixes.js';
 
 export const dropRouter: Router = Router();
 
@@ -81,6 +82,7 @@ const STATUS_FOR_REFUSAL: Record<string, number> = {
   'too-large': 413,
   'bad-type': 415,
   empty: 400,
+  'reserved-name': 400,
 };
 
 // ─── GET /:token — what this link is for ──────────────────────────────────────
@@ -109,6 +111,11 @@ dropRouter.post(
     const filename = String(req.query['filename'] ?? '').trim();
     if (!filename) {
       res.status(400).json({ error: 'filename query parameter is required' });
+      return;
+    }
+    const reserved = reservedUploadName(filename);
+    if (reserved) {
+      res.status(400).json({ error: reserved, refusal: 'reserved-name' });
       return;
     }
 

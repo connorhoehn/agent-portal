@@ -108,6 +108,15 @@ describe('POST /api/drop/:token/upload', () => {
     expect(uploadViaLink).not.toHaveBeenCalled();
   });
 
+  it('refuses a name that would land on a metadata sidecar key, before the provider', async () => {
+    const res = await request(buildApp()).post('/api/drop/tok-1/upload?filename=a.md.metadata.json')
+      .set('x-forwarded-for', nextIp())
+      .set('Content-Type', 'application/json').send('{}');
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: expect.stringMatching(/reserved for document metadata/), refusal: 'reserved-name' });
+    expect(uploadViaLink).not.toHaveBeenCalled();
+  });
+
   it('passes the raw bytes and the declared type to the provider, trimming the name', async () => {
     m(uploadViaLink).mockResolvedValue({ ok: true, key: 'orgiq-onboarding/a.md', bytes: 4 });
     const res = await request(buildApp())

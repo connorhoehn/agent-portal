@@ -245,6 +245,17 @@ describe('upload links offline', () => {
     expect(uploadLinks.rows().find((l) => l.id === link.id)?.filesUsed).toBe(0);
   });
 
+  it('refuses a name that would land on a metadata sidecar key without touching the quota', async () => {
+    const { link, token } = await createUploadLink({
+      kbSlug: 'orgiq-onboarding', label: 'Sidecar names',
+    });
+    const before = landingZoneObjects.rows().length;
+    const out = await uploadViaLink(token, 'notes.md.metadata.json', Buffer.from('{}'), 'application/json');
+    expect(out).toMatchObject({ ok: false, refusal: 'reserved-name' });
+    expect(uploadLinks.rows().find((l) => l.id === link.id)?.filesUsed).toBe(0);
+    expect(landingZoneObjects.rows()).toHaveLength(before);
+  });
+
   it('the seeded live link answers to its declared token', async () => {
     const view = await describeLinkForRecipient(MOCK_LIVE_DROP_TOKEN);
     expect(view?.status).toBe('live');

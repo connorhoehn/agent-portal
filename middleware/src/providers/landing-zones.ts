@@ -11,10 +11,10 @@
 //   deleteFromLandingZone — delete a specific object (with prefix-guard)
 
 import { S3Client, ListObjectsV2Command, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
-import { basename } from 'node:path';
 import { config } from '../config.js';
 import { getKbBySlug, listKbs } from './kb-registry.js';
-import { ownerOfKey, tenantMetadataSidecar } from '../lib/kb-prefixes.js';
+import { ownerOfKey, reservedUploadName, safeUploadName, tenantMetadataSidecar } from '../lib/kb-prefixes.js';
+import { ValidationError } from '../lib/async-handler.js';
 import { clock } from '../mock/core/clock.js';
 import {
   MOCK_DOCUMENTS_BUCKET,
@@ -265,6 +265,11 @@ export async function uploadToLandingZone(
   body: Buffer,
   contentType: string,
 ): Promise<LandingZoneUploadResult> {
+  // A name ending `.metadata.json` would land on another object's metadata
+  // sidecar key; refused here as well as at each route that calls this.
+  const reserved = reservedUploadName(filename);
+  if (reserved) throw new ValidationError(reserved);
+
   const entry = await getKbBySlug(kbSlug);
   if (!entry) throw new Error(`KB not found: ${kbSlug}`);
 
@@ -278,7 +283,7 @@ export async function uploadToLandingZone(
   // widened to catch.
   const now = clock.nowIso();
   const date = now.slice(0, 10);
-  const safeFilename = basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
+  const safeFilename = safeUploadName(filename);
   const key = `${prefix}${date}/${safeFilename}`;
 
   if (config.mock.aurora) {

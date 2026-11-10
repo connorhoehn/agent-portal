@@ -485,6 +485,18 @@ describe('landing zone', () => {
     expect(uploadToLandingZone).not.toHaveBeenCalled();
   });
 
+  it('refuses a name that would land on a metadata sidecar key, before the provider', async () => {
+    m(getKb).mockResolvedValue(KB);
+    for (const name of ['a.md.metadata.json', 'notes.METADATA.JSON', 'dir%2Fx.pdf.metadata.json']) {
+      const res = await request(buildApp())
+        .post(`/api/admin/kb-registry/kb-row-1/landing-zone/upload?filename=${name}`)
+        .set('Content-Type', 'application/json').send('{}');
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/reserved for document metadata/);
+    }
+    expect(uploadToLandingZone).not.toHaveBeenCalled();
+  });
+
   it('uploads under the KB SLUG and echoes the stored key', async () => {
     m(getKb).mockResolvedValue(KB);
     m(uploadToLandingZone).mockResolvedValue({ key: 'orgiq/a.md', size: 7 });
