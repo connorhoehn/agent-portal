@@ -2,9 +2,10 @@
 //
 // invocation_traces carries every user's prompt and response snippets in every
 // tenant, and the mount's gate (ViewObservability) is held by every orgiq
-// member. So the routes scope themselves: a fleet-wide role (org-leader,
-// hr-admin, admin) reads the whole table; anyone else reads only their own
-// traces in their own tenant, and no query parameter widens that.
+// member. So the routes scope themselves (lib/trace-scope.ts): the cross-tenant
+// admin reads the whole table; a fleet-wide role (org-leader, hr-admin) reads
+// every user in its own tenant; anyone else reads only their own traces in
+// their own tenant, and no query parameter widens that.
 //
 // Two halves: the live path (the SQL the route sends, with `exec` mocked) and
 // the offline corpus (the rows the route actually answers with).
@@ -43,6 +44,7 @@ function buildApp(session: Record<string, unknown> | null) {
 
 const member = { sub: 'u-member', role: 'member', tenant: 'orgiq' };
 const operator = { sub: 'u-lead', role: 'org-leader', tenant: 'orgiq' };
+const admin = { sub: 'u-admin', role: 'admin', tenant: 'orgiq' };
 
 type Param = { name: string; value: { stringValue?: string } };
 function paramsOf(call: unknown[]): Record<string, string | undefined> {
@@ -75,16 +77,35 @@ describe('live path — the SQL carries the scope', () => {
     expect(paramsOf(execMock.mock.calls[0])['uid']).toBe('u-member');
   });
 
-  it('a fleet-wide role searches everyone, and may filter by any user', async () => {
+  it('a fleet-wide role searches every user in its own tenant only, and may filter by any user', async () => {
     execMock.mockResolvedValue([]);
     await request(buildApp(operator)).get('/api/observability/invocations/search').expect(200);
     const [sql] = execMock.mock.calls[0] as [string];
     expect(sql).not.toContain(':uid');
-    expect(sql).not.toContain('scope_tenant');
+    expect(sql).toContain('t.tenant = :scope_tenant');
+    expect(paramsOf(execMock.mock.calls[0])['scope_tenant']).toBe('orgiq');
 
     execMock.mockClear();
     await request(buildApp(operator)).get('/api/observability/invocations/search?userId=u-x').expect(200);
     expect(paramsOf(execMock.mock.calls[0])['uid']).toBe('u-x');
+    expect(paramsOf(execMock.mock.calls[0])['scope_tenant']).toBe('orgiq');
+  });
+
+  it('a fleet-wide role cannot open another tenant\'s trace; the cross-tenant admin can', async () => {
+    execMock.mockResolvedValue([]);
+    await request(buildApp(operator)).get(`/api/observability/invocations/${UUID}`).expect(404);
+    const [sql] = execMock.mock.calls[0] as [string];
+    expect(sql).not.toContain('user_id = :scope_user');
+    expect(sql).toContain('tenant = :scope_tenant');
+
+    execMock.mockReset();
+    execMock.mockResolvedValueOnce([{ invocation_id: UUID, agent_id: 'a', user_id: 'u-x', tenant: 'assessment' }]);
+    await request(buildApp(operator)).get(`/api/observability/invocations/${UUID}`).expect(404);
+
+    execMock.mockReset();
+    execMock.mockResolvedValue([]);
+    await request(buildApp(admin)).get('/api/observability/invocations/search').expect(200);
+    expect(String(execMock.mock.calls[0]![0])).not.toContain('scope_tenant');
   });
 
   it('scopes the detail lookup and 404s a trace that is not the caller’s', async () => {

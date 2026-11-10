@@ -5,8 +5,10 @@
 // the routes. `ViewObservability` (every orgiq member holds it) answers "may
 // you open the observability pages", not "may you read everyone's prompts".
 //
-//   * a fleet-wide role (FLEET_WIDE_ROLES: org-leader, hr-admin, admin — the
-//     same roles that see every computer) reads every row;
+//   * the cross-tenant admin role (CROSS_TENANT_ROLES) reads every row;
+//   * a fleet-wide role (FLEET_WIDE_ROLES: org-leader, hr-admin) reads every
+//     user's rows in the session's own tenant: fleet-wide means the tenant's
+//     fleet, never another tenant's prompts;
 //   * everyone else reads only their own rows in their own tenant.
 //
 // Every route that returns snippet text (or anything else derived from a
@@ -18,16 +20,19 @@
 import type { Request, Response } from 'express';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { FLEET_WIDE_ROLES } from './devbox-visibility.js';
+import { CROSS_TENANT_ROLES } from './tenants.generated.js';
 
 /** `userId: null` = every user in `tenant`. A `null` scope = every row (cross-tenant admin). */
 export interface TraceScope { tenant: string; userId: string | null }
 
-/** The caller's scope from the session alone, or null for a fleet-wide role. */
+/** The caller's scope from the session alone, or null for the cross-tenant admin. */
 export function scopeForSession(session: { sub?: string; tenant?: unknown; role?: string } | undefined): TraceScope | null | 'none' {
   if (!session?.sub) return 'none';
   const role = session.role ?? '';
-  if ((FLEET_WIDE_ROLES as readonly string[]).includes(role)) return null;
-  return { tenant: String(session.tenant ?? ''), userId: session.sub };
+  if ((CROSS_TENANT_ROLES as readonly string[]).includes(role)) return null;
+  const tenant = String(session.tenant ?? '');
+  if ((FLEET_WIDE_ROLES as readonly string[]).includes(role)) return { tenant, userId: null };
+  return { tenant, userId: session.sub };
 }
 
 /** The request's scope; answers 401 and returns 'refused' when there is no session. */

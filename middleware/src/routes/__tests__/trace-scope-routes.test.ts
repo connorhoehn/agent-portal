@@ -42,7 +42,7 @@ import { agentDetailRouter } from '../agent-detail.js';
 import { harnessRouter } from '../harness.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { exec } from '../../providers/aurora.js';
-import { scopeSql, joinScopeSql, rowInScope } from '../../lib/trace-scope.js';
+import { scopeSql, joinScopeSql, rowInScope, scopeForSession } from '../../lib/trace-scope.js';
 
 const execMock = exec as unknown as jest.Mock;
 const UUID = '11111111-2222-3333-4444-555555555555';
@@ -132,6 +132,14 @@ it('the quality chart keeps every point but returns the rationale only for the c
   expect(res.body.points.map((p: { judgeRationale: string | null }) => p.judgeRationale)).toEqual(['mine', null]);
 });
 
+it('a fleet-wide role reads every user in its own tenant, never another tenant', async () => {
+  await request(app('/d', driftRouter, { sub: 'u-lead', role: 'org-leader', tenant: 'orgiq' })).get('/d/outliers').expect(200);
+  const call = snippetCall()!;
+  expect(String(call[0])).not.toContain(':scope_user');
+  expect(String(call[0])).toContain('w.tenant = :scope_tenant');
+  expect(paramsOf(call)['scope_tenant']).toBe('orgiq');
+});
+
 it('the cross-tenant admin reads every row (no clause)', async () => {
   await request(app('/d', driftRouter, admin)).get('/d/outliers').expect(200);
   expect(String(snippetCall()![0])).not.toContain(':scope_user');
@@ -151,6 +159,14 @@ describe('the helper', () => {
     expect(scopeSql({ tenant: 'orgiq', userId: 'u' }, 't.').clause).toBe(' AND t.user_id = :scope_user AND t.tenant = :scope_tenant');
     expect(scopeSql(null).clause).toBe('');
     expect(joinScopeSql('none', 't.').clause).toBe(' AND t.user_id IS NULL');
+    expect(scopeSql({ tenant: 'orgiq', userId: null }).clause).toBe(' AND tenant = :scope_tenant');
+  });
+  it('scopeForSession: admin everything, fleet-wide its tenant, member itself', () => {
+    expect(scopeForSession({ sub: 'a', role: 'admin', tenant: 'orgiq' })).toBeNull();
+    expect(scopeForSession({ sub: 'l', role: 'org-leader', tenant: 'orgiq' })).toEqual({ tenant: 'orgiq', userId: null });
+    expect(scopeForSession({ sub: 'h', role: 'hr-admin', tenant: 'orgiq' })).toEqual({ tenant: 'orgiq', userId: null });
+    expect(scopeForSession({ sub: 'm', role: 'member', tenant: 'orgiq' })).toEqual({ tenant: 'orgiq', userId: 'm' });
+    expect(scopeForSession(undefined)).toBe('none');
   });
   it('rowInScope matches the SQL for the offline corpus', () => {
     const scope = { tenant: 'orgiq', userId: 'u' };
