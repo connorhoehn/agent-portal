@@ -10,6 +10,22 @@ import { loadModelRegistry, primaryModelFor } from './model-registry';
 
 const AGENT_NAMES = ['supervisor', 'search', 'scoring', 'advisor', 'ingestion', 'graph-builder'] as const;
 
+/**
+ * `-c xrayIndexingPercent=<n>`: the share of spans X-Ray Transaction Search
+ * indexes (what GetTraceSummaries, and so the traces list, can see). Unset:
+ * the stack leaves the account setting alone (null). Anything but a number
+ * from 1 to 100 fails the synth rather than deploying a surprise.
+ */
+export function xrayIndexingPercent(scope: Construct): number | null {
+  const v = scope.node.tryGetContext('xrayIndexingPercent');
+  if (v === undefined || v === null || v === '') return null;
+  const n = typeof v === 'number' ? v : Number(String(v));
+  if (!Number.isFinite(n) || n < 1 || n > 100) {
+    throw new Error(`--context xrayIndexingPercent must be a number from 1 to 100, got ${JSON.stringify(v)}`);
+  }
+  return n;
+}
+
 export interface AgentCoreTelemetryStackProps extends cdk.StackProps {
   readonly prefix?: string;
   readonly modelId?: string;
@@ -137,6 +153,48 @@ export class AgentCoreTelemetryStack extends cdk.Stack {
         }],
       }),
     });
+
+    // -------------------------------------------------------------------
+    // X-Ray Transaction Search indexing (sweep 12, U3)
+    // -------------------------------------------------------------------
+    //
+    // GET /api/observability/traces lists through GetTraceSummaries, which sees
+    // only INDEXED spans, and Transaction Search indexes 1% by default, so a
+    // member saw about one trace in a hundred of their own. The indexing
+    // percentage is an account-and-Region setting (AWS::XRay::
+    // TransactionSearchConfig, which also turns Transaction Search on). It is
+    // a singleton, so the stack manages it only when asked:
+    // `-c xrayIndexingPercent=<1-100>`. An account that already enabled
+    // Transaction Search outside CloudFormation sets the percentage with the
+    // one CLI call in infra/SECURITY-NOTES.md instead.
+    const indexingPercent = xrayIndexingPercent(this);
+    if (indexingPercent !== null) {
+      // X-Ray writes the spans into CloudWatch Logs; Transaction Search needs this before it is enabled.
+      const spansPolicy = new logs.CfnResourcePolicy(this, 'XRayTransactionSearchLogPolicy', {
+        policyName: `${prefix}-xray-transaction-search`,
+        policyDocument: JSON.stringify({
+          Version: '2012-10-17',
+          Statement: [{
+            Sid: 'TransactionSearchXRayAccess',
+            Effect: 'Allow',
+            Principal: { Service: 'xray.amazonaws.com' },
+            Action: 'logs:PutLogEvents',
+            Resource: [
+              `arn:${this.partition}:logs:${this.region}:${this.account}:log-group:aws/spans:*`,
+              `arn:${this.partition}:logs:${this.region}:${this.account}:log-group:/aws/application-signals/data:*`,
+            ],
+            Condition: {
+              ArnLike: { 'aws:SourceArn': `arn:${this.partition}:xray:${this.region}:${this.account}:*` },
+              StringEquals: { 'aws:SourceAccount': this.account },
+            },
+          }],
+        }),
+      });
+      const search = new xray.CfnTransactionSearchConfig(this, 'XRayTransactionSearch', {
+        indexingPercentage: indexingPercent,
+      });
+      search.addDependency(spansPolicy);
+    }
 
     // -------------------------------------------------------------------
     // CloudWatch Log Group retention — pre-create groups so OnlineEvalConfig

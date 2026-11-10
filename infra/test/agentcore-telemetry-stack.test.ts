@@ -101,3 +101,31 @@ describe('X-Ray transaction search', () => {
     assert.match(doc, /aws:SourceAccount/, 'the resource policy must be account-scoped');
   });
 });
+
+describe('X-Ray Transaction Search indexing (sweep 12, U3)', () => {
+  const SEARCH = 'AWS::XRay::TransactionSearchConfig';
+
+  test('unset, the stack leaves the account-wide setting alone', () => {
+    off.resourceCountIs(SEARCH, 0);
+  });
+
+  test('xrayIndexingPercent sets the indexing share, after the log policy X-Ray writes spans under', () => {
+    const t = Template.fromStack(telemetryStack({ xrayIndexingPercent: '100' }));
+    t.resourceCountIs(SEARCH, 1);
+    const search = Object.values<any>(t.findResources(SEARCH))[0];
+    assert.equal(search.Properties.IndexingPercentage, 100);
+    const policies = t.findResources('AWS::Logs::ResourcePolicy');
+    const policyIds = Object.keys(policies).filter((k) => JSON.stringify(policies[k].Properties.PolicyDocument).includes('xray.amazonaws.com'));
+    assert.equal(policyIds.length, 1);
+    assert.ok((search.DependsOn ?? []).includes(policyIds[0]), 'Transaction Search is enabled only after X-Ray may write aws/spans');
+    const doc = JSON.stringify(policies[policyIds[0]!].Properties.PolicyDocument);
+    assert.match(doc, /aws\/spans/);
+    assert.match(doc, /aws:SourceAccount/, 'the log policy must be account-scoped');
+  });
+
+  test('a value outside 1 to 100 fails the synth', () => {
+    for (const bad of ['0', '101', 'all', '-5']) {
+      assert.throws(() => telemetryStack({ xrayIndexingPercent: bad }), /xrayIndexingPercent/);
+    }
+  });
+});
