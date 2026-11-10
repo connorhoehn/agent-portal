@@ -30,6 +30,11 @@ Configuration (read by ``replay_cache_from_env``):
     AWS_REGION                              the table's region
 
 The table needs a string partition key ``nonce_hash`` and TTL on ``expires_at``.
+
+Bounded: the client is built with the middleware's limits (2 s to connect,
+5 s to read, at most two attempts), so a stalled or unreachable table refuses
+the invoke within that bound instead of holding it open on the SDK's default
+60 s reads and retries.
 """
 
 from __future__ import annotations
@@ -48,6 +53,24 @@ log = logging.getLogger(__name__)
 
 TABLE_ENV = "AGENT_INVOKE_REPLAY_TABLE"
 ENDPOINT_ENV = "AGENT_INVOKE_REPLAY_DYNAMODB_ENDPOINT"
+
+#: The client's limits; the same as the middleware's replay client
+#: (middleware/src/lib/service-nonce-store.ts): 2 s connect, 5 s read.
+CONNECT_TIMEOUT_SEC = 2.0
+READ_TIMEOUT_SEC = 5.0
+#: Total attempts per put, the first included.
+MAX_ATTEMPTS = 2
+
+
+def client_config():
+    """The botocore ``Config`` the replay client is built with."""
+    from botocore.config import Config  # noqa: PLC0415 — only when a table is configured
+
+    return Config(
+        connect_timeout=CONNECT_TIMEOUT_SEC,
+        read_timeout=READ_TIMEOUT_SEC,
+        retries={"total_max_attempts": MAX_ATTEMPTS, "mode": "standard"},
+    )
 
 
 class ReplayStoreUnavailable(ReplayCacheFull):
@@ -139,10 +162,11 @@ def replay_cache_from_env(env=None, client_factory=None):
             import boto3  # noqa: PLC0415 — only when a table is configured
 
             client_factory = boto3.client
-        client = client_factory("dynamodb", region_name=region, endpoint_url=endpoint)
+        client = client_factory("dynamodb", region_name=region, endpoint_url=endpoint, config=client_config())
         shared = DynamoReplayStore(table, client)
     except Exception as exc:  # noqa: BLE001
         log.error("invoke-auth: the replay table %s is configured but its client failed (%s); signed invokes are refused", table, type(exc).__name__)
         shared = _UnavailableStore(f"the replay store client could not be built ({type(exc).__name__})")
-    log.info("invoke-auth: replay cache shared through table %s", table)
+    else:
+        log.info("invoke-auth: replay cache shared through table %s", table)
     return LayeredReplayCache(ReplayCache(), shared)

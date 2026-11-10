@@ -120,7 +120,24 @@ class FromEnvTests(unittest.TestCase):
             rs.TABLE_ENV: "agent-replay", rs.ENDPOINT_ENV: "http://127.0.0.1:8000", "AWS_REGION": "us-west-2",
         }, client_factory=factory)
         self.assertIsInstance(cache, rs.LayeredReplayCache)
+        config = seen.pop("config")
         self.assertEqual(seen, {"service": "dynamodb", "region_name": "us-west-2", "endpoint_url": "http://127.0.0.1:8000"})
+        self.assertEqual(config.connect_timeout, 2.0)
+        self.assertEqual(config.read_timeout, 5.0)
+        self.assertEqual(config.retries, {"total_max_attempts": 2, "mode": "standard"})
+
+    def test_the_shared_line_is_logged_only_when_the_client_was_built(self):
+        with self.assertLogs(rs.log, level="INFO") as built:
+            rs.replay_cache_from_env({rs.TABLE_ENV: "agent-replay"}, client_factory=lambda *_a, **_k: FakeTable(Clock()))
+        self.assertTrue(any("shared through table" in line for line in built.output))
+
+        def broken(*_a, **_k):
+            raise RuntimeError("no credentials")
+
+        with self.assertLogs(rs.log, level="INFO") as failed:
+            rs.replay_cache_from_env({rs.TABLE_ENV: "agent-replay"}, client_factory=broken)
+        self.assertFalse(any("shared through table" in line for line in failed.output))
+        self.assertTrue(any("signed invokes are refused" in line for line in failed.output))
 
     def test_a_client_that_cannot_be_built_refuses_every_signed_invoke(self):
         def factory(*_a, **_k):
@@ -129,6 +146,70 @@ class FromEnvTests(unittest.TestCase):
         cache = rs.replay_cache_from_env({rs.TABLE_ENV: "agent-replay"}, client_factory=factory)
         with self.assertRaises(ia.ReplayCacheFull):
             cache.seen_or_add("nonce-0000000000000008")
+
+
+class _StalledTable:
+    """A loopback socket that accepts every connection and never answers: a
+    table endpoint that has stalled."""
+
+    def __init__(self):
+        import socket
+        import threading
+
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._sock.bind(("127.0.0.1", 0))
+        self._sock.listen(8)
+        self._held = []
+        self._stop = threading.Event()
+        self.port = self._sock.getsockname()[1]
+        self._thread = threading.Thread(target=self._serve, daemon=True)
+        self._thread.start()
+
+    def _serve(self):
+        self._sock.settimeout(0.05)
+        while not self._stop.is_set():
+            try:
+                conn, _ = self._sock.accept()
+            except OSError:
+                continue
+            self._held.append(conn)  # read nothing, answer nothing
+
+    def close(self):
+        self._stop.set()
+        self._thread.join(timeout=1)
+        for conn in self._held:
+            conn.close()
+        self._sock.close()
+
+
+@unittest.skipUnless(__import__("importlib").util.find_spec("boto3"), "boto3 not installed")
+class StallTests(unittest.TestCase):
+    """A stalled table refuses the invoke within the client's bound."""
+
+    def test_a_stalled_table_refuses_within_the_bound(self):
+        import boto3
+
+        table = _StalledTable()
+        self.addCleanup(table.close)
+        read = 0.3
+        # Explicit throwaway credentials: never sign with a real profile, even to loopback.
+        factory = lambda svc, **kw: boto3.client(  # noqa: E731
+            svc, aws_access_key_id="test", aws_secret_access_key="test", **kw)
+        with mock.patch.object(rs, "READ_TIMEOUT_SEC", read), mock.patch.object(rs, "CONNECT_TIMEOUT_SEC", read):
+            cache = rs.replay_cache_from_env({
+                rs.TABLE_ENV: "agent-replay", rs.ENDPOINT_ENV: f"http://127.0.0.1:{table.port}",
+            }, client_factory=factory)
+        started = time.monotonic()
+        with self.assertRaises(ia.ReplayCacheFull):
+            cache.seen_or_add("nonce-0000000000000099")
+        elapsed = time.monotonic() - started
+        # Two attempts of one read timeout each, plus standard-mode backoff
+        # (under 2 s for the first retry). The SDK default would be 60 s reads
+        # and three attempts.
+        self.assertGreaterEqual(elapsed, read)
+        self.assertLess(elapsed, rs.MAX_ATTEMPTS * read + 2.5)
+        # Exactly the bounded number of attempts reached the table.
+        self.assertEqual(len(table._held), rs.MAX_ATTEMPTS)
 
 
 class VerifierTests(unittest.TestCase):

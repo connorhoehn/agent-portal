@@ -495,6 +495,19 @@ describe('signed-invoke nonces are shared across replicas (AGENT_INVOKE_REPLAY_T
       }, agent);
     }
   });
+
+  test('every runtime that names the table reaches DynamoDB over public egress (no VPC to give an endpoint)', () => {
+    // replay_store.py fails closed: a runtime that cannot reach the table
+    // refuses every signed invoke. These runtimes run in PUBLIC network mode,
+    // like every other AWS call they make; one moved into a VPC needs a
+    // DynamoDB gateway endpoint there first (infra/SECURITY-NOTES.md).
+    for (const agent of VERIFIERS) {
+      const safe = `orgiq_${agent.replace(/-/g, '_')}`;
+      const props = runtimeNamed(phaseTwo, safe).Properties;
+      assert.ok(props.EnvironmentVariables?.AGENT_INVOKE_REPLAY_TABLE, agent);
+      assert.deepEqual(props.NetworkConfiguration, { NetworkMode: 'PUBLIC' }, agent);
+    }
+  });
 });
 
 describe('model policy', () => {
