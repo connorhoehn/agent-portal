@@ -631,14 +631,27 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
           ],
         },
         "initiative": {
-          "description": "One initiative, as the user named it or by its id, for me, initiative and allocations.",
+          "description": "One initiative as the user named it, or "this-page", for me, initiative, allocations and envelopes.",
+          "type": [
+            "string",
+            "null",
+          ],
+        },
+        "period": {
+          "description": "For initiative and org: month (the default), 7d (this week) or 30d.",
+          "enum": [
+            "month",
+            "7d",
+            "30d",
+            null,
+          ],
           "type": [
             "string",
             "null",
           ],
         },
         "scope": {
-          "description": "Whose money: "me" (what the user spent), "initiative" (one initiative's spend, by person), "org" (every initiative's), "allocations" (each initiative's budget), "users" (people's budgets), "switches" (whether the fleet is paused), "envelopes" (the user's sprint envelopes), "cost" (agent cost in the last day).",
+          "description": "Whose money: "me" (what the user spent), "initiative" (one initiative's spend, by person), "org" (every initiative's), "allocations" (each initiative's budget), "users" (people's budgets), "switches" (whether the fleet is paused), "envelopes" (sprint envelopes: the user's, or on an initiative), "cost" (agent cost in the last day).",
           "enum": [
             "me",
             "initiative",
@@ -651,11 +664,20 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
           ],
           "type": "string",
         },
+        "sprint": {
+          "description": "For envelopes: "this", "last" or a sprint name.",
+          "type": [
+            "string",
+            "null",
+          ],
+        },
       },
       "required": [
         "scope",
         "initiative",
         "groupBy",
+        "period",
+        "sprint",
       ],
       "type": "object",
     },

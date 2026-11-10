@@ -131,7 +131,7 @@ export function refusalCode(output: Record<string, unknown>): RefusalCode {
 const SHAPE_KEYS: Readonly<Record<string, readonly string[]>> = {
   computer: ['action', 'phrase'],
   list: ['kind', 'scope', 'detail'], get: ['part', 'detail'], create: ['kind'], update: [], queue_work: ['kind', 'scope'], decide: ['decision', 'scope'],
-  search: ['type', 'scope', 'sort', 'answer', 'detail'], budget: ['scope', 'groupBy'], summary: ['kind'], activity: ['scope'],
+  search: ['type', 'scope', 'sort', 'answer', 'detail'], budget: ['scope', 'groupBy', 'period'], summary: ['kind'], activity: ['scope'],
   open: ['page', 'kind', 'scope', 'tab'], call: ['action'], set_status: ['status'], access_request_status: ['scope'],
 };
 const REF_KIND = /^([a-z][a-z-]{0,39}):./;

@@ -771,14 +771,16 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     // toolsForTenant names the tenant's own scopes in the description it renders.
     description: 'Read money: what the user spent this month, an initiative\'s or the org\'s spend and pace, allocations, people\'s budgets, whether the fleet is paused, sprint envelopes or agent cost. Figures beyond the user\'s own need the budgets read tier; below it the result offers the access request instead.',
     parameters: obj({
-      scope: str('Whose money: "me" (what the user spent), "initiative" (one initiative\'s spend, by person), "org" (every initiative\'s), "allocations" (each initiative\'s budget), "users" (people\'s budgets), "switches" (whether the fleet is paused), "envelopes" (the user\'s sprint envelopes), "cost" (agent cost in the last day).', { enum: budgetScopes(null) }),
-      initiative: str('One initiative, as the user named it or by its id, for me, initiative and allocations.', { minLength: 1, maxLength: 200 }),
+      scope: str('Whose money: "me" (what the user spent), "initiative" (one initiative\'s spend, by person), "org" (every initiative\'s), "allocations" (each initiative\'s budget), "users" (people\'s budgets), "switches" (whether the fleet is paused), "envelopes" (sprint envelopes: the user\'s, or on an initiative), "cost" (agent cost in the last day).', { enum: budgetScopes(null) }),
+      initiative: str('One initiative as the user named it, or "this-page", for me, initiative, allocations and envelopes.', { minLength: 1, maxLength: 200 }),
       groupBy: str('For org: by initiative (the default) or by person.', { enum: ['initiative', 'person'] }),
+      period: str('For initiative and org: month (the default), 7d (this week) or 30d.', { enum: ['month', '7d', '30d'] }),
+      sprint: str('For envelopes: "this", "last" or a sprint name.', { maxLength: 200 }),
     }, ['scope']),
     kind: 'read', backing: 'search', confirm: false, action: null,
     gate: 'me: a session floor, the caller\'s own figures; the rest the budgets read tier (org-leader, hr-admin, program-owner, ManageBudgets or the budgets-reader grant): the routes withhold or refuse below it and the dock offers the quick access request (G10); cost also ViewObservability', spend: 'none', idempotent: true,
     says: 'Checking your spend this month.', tenants: VOICE_TENANTS,
-    mapsTo: 'GET /api/me/spend, GET /api/spend/report?initiativeId=&groupBy=, GET /api/graph/projects, GET /api/budgets, GET /api/user-budgets, GET /api/ops/switches, GET /api/sprints/envelopes, GET /api/observability/cost/summary',
+    mapsTo: 'GET /api/me/spend, GET /api/spend/report?initiativeId=&groupBy=&period=, GET /api/sprints?initiative=, GET /api/graph/projects, GET /api/budgets, GET /api/user-budgets, GET /api/ops/switches, GET /api/sprints/envelopes, GET /api/observability/cost/summary',
   },
   {
     name: 'activity',

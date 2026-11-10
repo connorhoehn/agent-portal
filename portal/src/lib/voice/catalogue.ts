@@ -582,9 +582,11 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
   {
     name: 'budget',
     parameters: obj({
-      scope: str('Whose money: "me" (what the user spent), "initiative" (one initiative\'s spend, by person), "org" (every initiative\'s), "allocations" (each initiative\'s budget), "users" (people\'s budgets), "switches" (whether the fleet is paused), "envelopes" (the user\'s sprint envelopes), "cost" (agent cost in the last day).', { enum: budgetScopes(null) }),
-      initiative: str('One initiative, as the user named it or by its id, for me, initiative and allocations.', { minLength: 1, maxLength: 200 }),
+      scope: str('Whose money: "me" (what the user spent), "initiative" (one initiative\'s spend, by person), "org" (every initiative\'s), "allocations" (each initiative\'s budget), "users" (people\'s budgets), "switches" (whether the fleet is paused), "envelopes" (sprint envelopes: the user\'s, or on an initiative), "cost" (agent cost in the last day).', { enum: budgetScopes(null) }),
+      initiative: str('One initiative as the user named it, or "this-page", for me, initiative, allocations and envelopes.', { minLength: 1, maxLength: 200 }),
       groupBy: str('For org: by initiative (the default) or by person.', { enum: ['initiative', 'person'] }),
+      period: str('For initiative and org: month (the default), 7d (this week) or 30d.', { enum: ['month', '7d', '30d'] }),
+      sprint: str('For envelopes: "this", "last" or a sprint name.', { maxLength: 200 }),
     }, ['scope']),
     kind: 'read', backing: 'search', confirm: false, action: null, says: 'Checking your spend this month.', tenants: VOICE_TENANTS,
   },

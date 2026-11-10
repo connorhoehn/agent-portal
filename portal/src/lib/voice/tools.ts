@@ -1732,6 +1732,7 @@ const CATALOG_ITEM_RE = /^[a-z0-9][a-z0-9:_.-]{0,99}$/i;
 export function budgetTierRefusal(item?: unknown): ToolResult {
   const id = typeof item === 'string' && CATALOG_ITEM_RE.test(item) ? item : BUDGET_READ_ITEM_ID;
   return refused(BUDGET_TIER_REASON, {
+    code: 'role', requestItemId: id,
     hint: { label: 'Request budget visibility', href: accessRequestHref(id), item: id, note: 'The request is filed in the Access workspace; switching to it ends this voice session.' },
     offer: { tool: 'open', page: 'workspaces' },
   });
@@ -1765,7 +1766,14 @@ async function namedInitiative(ctx: ToolContext, name: string): Promise<{ id: st
 const budget: Runner = async (args, ctx) => {
   const scope = String(args['scope']) as BudgetScope;
   if (!budgetScopes(ctx.tenant).includes(scope)) return refused(scope === 'me' ? 'There is no spend to read in this workspace.' : 'Budgets beyond your own spend are read in the Work workspace.');
-  const initiativeArg = typeof args['initiative'] === 'string' ? args['initiative'].trim() : '';
+  const named = typeof args['initiative'] === 'string' ? args['initiative'].trim() : '';
+  const here = pageInitiative(ctx);
+  // "this-page" (or nothing, for initiative and envelopes on an initiative's page): the initiative in view.
+  const thisPage = /^(this[- ]page|this( initiative)?|here)$/i.test(named);
+  if (thisPage && !here) return refused('No initiative is open on this page; name one.', { code: 'not-on-this-page' });
+  const initiativeArg = thisPage ? here!.id : named;
+  const period: 'month' | '7d' | '30d' = args['period'] === '7d' || args['period'] === '30d' ? args['period'] : 'month';
+  const sprintArg = typeof args['sprint'] === 'string' ? args['sprint'].trim() : '';
   const groupBy = args['groupBy'] === 'person' ? 'actor' : 'initiative';
   const tierRole = BUDGET_TIER_ROLES.includes(ctx.role) || ctx.can('ManageBudgets');
 
@@ -1790,8 +1798,9 @@ const budget: Runner = async (args, ctx) => {
         more = { reason: 'Initiative and org spend are visible to the budgets read tier.', hint: o['hint'], offer: o['offer'] };
       }
     }
-    const period = b.period === 'month' || !b.period ? 'this month' : `in the last ${b.period}`;
-    const line = spent != null ? `You spent ${usd(spent)} ${period}${initiativeArg ? ` on ${initiativeArg}` : ''}` : `No spend of yours ${period}${initiativeArg ? ` on ${initiativeArg}` : ''}`;
+    const spentWhen = b.period === 'month' || !b.period ? 'this month' : `in the last ${b.period}`;
+    const on = initiativeArg ? ` on ${thisPage ? here!.title : (rows[0]?.initiative ?? initiativeArg)}` : '';
+    const line = spent != null ? `You spent ${usd(spent)} ${spentWhen}${on}` : `No spend of yours ${spentWhen}${on}`;
     return done('budget', {
       of: 'me', period: b.period ?? 'month', ...(spent != null ? { spentUsd: spent } : {}), unknownEntries: num(b.unknownCount),
       rows: rows.map(({ initiative, spentUsd }) => ({ title: initiative, ...(spentUsd != null ? { spentUsd } : {}) })),
@@ -1803,12 +1812,15 @@ const budget: Runner = async (args, ctx) => {
   if (scope === 'initiative' || scope === 'org') {
     let target: { id: string; name: string } | undefined;
     if (scope === 'initiative') {
-      if (!initiativeArg) return refused('Name the initiative.');
-      const found = await namedInitiative(ctx, initiativeArg);
-      if ('result' in found) return found.result;
-      target = found;
+      if (!initiativeArg && !here) return refused('Name the initiative.');
+      if (!initiativeArg || initiativeArg === here?.id) target = { id: here!.id, name: here!.title };
+      else {
+        const found = await namedInitiative(ctx, initiativeArg);
+        if ('result' in found) return found.result;
+        target = found;
+      }
     }
-    const read = await readJson<{ totals?: Rec; groups?: Rec[] }>(ctx, `/api/spend/report?${qs({ groupBy: scope === 'initiative' ? 'actor' : groupBy, initiativeId: target?.id })}`);
+    const read = await readJson<{ totals?: Rec; groups?: Rec[]; initiative?: Rec }>(ctx, `/api/spend/report?${qs({ groupBy: scope === 'initiative' ? 'actor' : groupBy, initiativeId: target?.id, period: period === 'month' ? undefined : period })}`);
     if (!read.ok) return read.status === 403 ? budgetTierRefusal() : readFailure('the spend report', read.status);
     const lock = locked(read.body);
     if (lock) return budgetTierRefusal(lock.requestItemId);
@@ -1819,11 +1831,24 @@ const budget: Runner = async (args, ctx) => {
     const spent = money(t['knownUsd']);
     if (spent == null) return failed('The spend report answered without its figures.');
     const projected = money(t['projectedPeriodEndUsd']);
-    return done('budget', {
-      of: scope, ...(target ? { initiative: target.name } : {}), groupBy: scope === 'initiative' || groupBy === 'actor' ? 'person' : 'initiative',
+    // The initiative's month, as its Budget report shows it: the allocation and the discretionary money left.
+    const alloc = (read.body.initiative?.['allocation'] ?? null) as Rec | null;
+    const allocatedUsd = money(alloc?.['effectiveAllocatedUsd'] ?? alloc?.['allocatedUsd']);
+    const leftUsd = money(((read.body.initiative?.['reserve'] ?? null) as Rec | null)?.['discretionaryRemainingUsd']);
+    const when = period === 'month' ? 'this month' : `in the last ${period === '7d' ? '7' : '30'} days`;
+    const left = leftUsd != null && allocatedUsd != null ? `; ${usd(leftUsd)} discretionary left of ${usd(allocatedUsd)} this month` : '';
+    const res = done('budget', {
+      of: scope, ...(target ? { initiative: target.name } : {}), period, groupBy: scope === 'initiative' || groupBy === 'actor' ? 'person' : 'initiative',
       spentUsd: spent, burnPerDayUsd: money(t['burnPerDay7d']), projectedUsd: projected, heldUsd: money(t['heldUsd']),
+      ...(allocatedUsd != null ? { allocatedUsd, allocationSpentUsd: money(alloc?.['spentUsd']) } : {}), ...(leftUsd != null ? { discretionaryLeftUsd: leftUsd } : {}),
       rows: groups.slice(0, MAX_ROWS),
-    }, `${target?.name ?? 'The org'} spent ${usd(spent)} this month${projected != null ? `; on pace for ${usd(projected)}` : ''}${groups[0] ? `; most: ${groups[0].title} at ${usd(groups[0].spentUsd!)}` : ''}`);
+    }, `${target?.name ?? 'The org'} spent ${usd(spent)} ${when}${projected != null && !left ? `; on pace for ${usd(projected)}` : ''}${groups[0] && !left ? `; most: ${groups[0].title} at ${usd(groups[0].spentUsd!)}` : ''}`);
+    // The month against the allocation is the allocation's own spend (the Budget tab's figure); a week is the report's.
+    const allocSpent = money(alloc?.['spentUsd']);
+    if (period === 'month' && allocSpent != null && allocatedUsd != null && leftUsd != null) {
+      return spoken(res, `${target!.name} spent ${usd(allocSpent)} of its ${usd(allocatedUsd)} allocation this month; ${usd(leftUsd)} discretionary left.`);
+    }
+    return spoken(res, `${target?.name ?? 'The org'} spent ${usd(spent)} ${when}${left || (projected != null ? `; on pace for ${usd(projected)} this month` : '')}.`);
   }
 
   if (scope === 'cost') {
@@ -1846,6 +1871,8 @@ const budget: Runner = async (args, ctx) => {
     return done('budget', { of: 'cost', windowHours: hours, ...(cost != null ? { costUsd: cost } : {}), invocations: num(total['invocations']), rows: byAgent.slice(0, MAX_ROWS) },
       cost != null ? `Agent runs cost ${usd(cost)} in the last ${plural(hours, 'hour')}${byAgent[0] ? `; most: ${byAgent[0].title} at ${usd(byAgent[0].costUsd!)}` : ''}` : `No agent cost in the last ${plural(hours, 'hour')}`);
   }
+
+  if (scope === 'envelopes' && (initiativeArg || sprintArg || here)) return initiativeEnvelopes(ctx, initiativeArg || here?.id || '', sprintArg, here);
 
   // The tier routes: 403 below it is the offer, never a figure.
   const ROUTES: Record<'allocations' | 'users' | 'switches' | 'envelopes', string> = {
@@ -1878,11 +1905,50 @@ const budget: Runner = async (args, ctx) => {
   }
   // envelopes: the caller's own sprint envelopes.
   const env = ((b['envelopes'] as Rec[] | undefined) ?? []).map((r) => ({
-    title: String(r['sprintName'] ?? r['orgProjectName'] ?? r['sprintId'] ?? 'an envelope'), grantedUsd: money(r['grantedUsd'] ?? r['amountUsd']), spentUsd: money(r['spentUsd']), remainingUsd: money(r['remainingUsd']),
+    title: String(r['sprintName'] ?? r['orgProjectName'] ?? r['sprintId'] ?? 'an envelope'), initiative: r['orgProjectName'] as string | undefined,
+    grantedUsd: money(r['allocatedUsd'] ?? r['grantedUsd'] ?? r['amountUsd']), spentUsd: money(r['spentUsd']), remainingUsd: money(r['remainingUsd']),
   }));
-  return done('budget', { of: 'envelopes', count: env.length, rows: env.slice(0, MAX_ROWS) },
-    env[0] ? `${plural(env.length, 'envelope')}; ${env[0].title}${env[0].remainingUsd != null ? `: ${usd(env[0].remainingUsd)} left` : ''}` : 'You hold no sprint envelopes');
+  const first = env[0];
+  const res = done('budget', { of: 'envelopes', count: env.length, rows: env.slice(0, MAX_ROWS) },
+    first ? `${plural(env.length, 'envelope')}; ${first.title}${first.remainingUsd != null ? `: ${usd(first.remainingUsd)} left` : ''}` : 'You hold no sprint envelopes');
+  return first ? spoken(res, `${plural(env.length, 'envelope')}: ${first.initiative ? `${first.initiative}, ` : ''}${first.title}${first.remainingUsd != null ? `, ${usd(first.remainingUsd)} left${first.grantedUsd != null ? ` of ${usd(first.grantedUsd)}` : ''}` : ''}.`) : res;
 };
+
+/**
+ * Sprint envelopes on one initiative (optionally one sprint), from the initiative's own spend report: the tier
+ * sees every grantee's, anyone else only their own (routes/spend-report.ts shapeBelowTier), so no figure is
+ * read here that the Budget tab would not show this session.
+ */
+async function initiativeEnvelopes(ctx: ToolContext, named: string, sprintSaid: string, here: { id: string; title: string } | null): Promise<ToolResult> {
+  let target: { id: string; name: string };
+  if (!named) return refused('Name the initiative.');
+  if (named === here?.id) target = { id: here.id, name: here.title };
+  else {
+    const found = await namedInitiative(ctx, named);
+    if ('result' in found) return found.result;
+    target = found;
+  }
+  let sprint: SprintRef | null = null;
+  if (sprintSaid) {
+    const s = await resolveSprint(ctx, target.id, sprintSaid);
+    if ('result' in s) return s.result;
+    sprint = s.sprint;
+  }
+  const read = await readJson<{ initiative?: Rec }>(ctx, `/api/spend/report?${qs({ groupBy: 'actor', initiativeId: target.id })}`);
+  if (!read.ok) return read.status === 403 ? budgetTierRefusal() : readFailure('the spend report', read.status);
+  const rows = ((read.body.initiative?.['envelopes'] as Rec[] | undefined) ?? [])
+    .filter((e) => (sprint ? e['sprintId'] === sprint.id : e['sprintStatus'] !== 'done' && e['sprintStatus'] !== 'closed'))
+    .map((e) => ({ title: String(e['granteeName'] ?? 'someone'), sprint: String(e['sprintName'] ?? ''), grantedUsd: money(e['allocatedUsd']), spentUsd: money(e['spentUsd']), remainingUsd: money(e['remainingUsd']) }));
+  const sum = (k: 'grantedUsd' | 'remainingUsd') => (rows.length && rows.every((r) => r[k] != null) ? Math.round(rows.reduce((a, r) => a + r[k]!, 0) * 100) / 100 : undefined);
+  const granted = sum('grantedUsd');
+  const left = sum('remainingUsd');
+  const where = `${target.name}${sprint ? `, ${sprint.name}` : ''}`;
+  const tierShown = !locked(read.body.initiative) && !locked(read.body);
+  const res = done('budget', { of: 'envelopes', initiative: target.name, ...(sprint ? { sprint: sprint.name } : {}), count: rows.length, ...(left != null ? { remainingUsd: left } : {}), ...(granted != null ? { grantedUsd: granted } : {}), rows: rows.slice(0, MAX_ROWS) },
+    rows.length ? `${plural(rows.length, 'envelope')} on ${where}` : `No sprint envelopes on ${where}`);
+  if (!rows.length) return spoken(res, `No sprint envelopes${tierShown ? '' : ' of yours'} on ${where}.`);
+  return spoken(res, `${plural(rows.length, 'envelope')}${tierShown ? '' : ' of yours'} on ${where}: ${left != null ? usd(left) : 'nothing'} left${granted != null ? ` of ${usd(granted)}` : ''}.`);
+}
 
 // ── access requests: the caller's own (mine), their approvals, their reports' ──
 

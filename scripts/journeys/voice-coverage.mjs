@@ -240,7 +240,61 @@ const C1 = {
   },
 };
 
-const CAPABILITIES = { C1 };
+const BUDGET = { scope: null, initiative: null, groupBy: null, period: null, sprint: null };
+const usd = (v) => `$${Number(v).toFixed(2)}`;
+
+/** C2: budgets and spend on Auth Migration, at the tier (Vera, the org leader who owns it). */
+const C2 = {
+  title: 'Budgets and spend at the tier', persona: 'vera',
+  async run(s, page) {
+    await s('voice: "How much is left on this initiative?" then "What did the agents spend this week?" then "And this sprint?"', async () => {
+      await go(page, INITIATIVE);
+      await waitText(page, '[data-testid=initiative-header]', /Auth Migration/);
+      await startVoice(page, [
+        { said: 'How much is left on this initiative?', call: { name: 'budget', arguments: { ...BUDGET, scope: 'initiative', initiative: 'this-page' } } },
+        { said: 'What did the agents spend this week on Auth Migration?', call: { name: 'budget', arguments: { ...BUDGET, scope: 'initiative', initiative: 'Auth Migration', period: '7d' } } },
+        { said: 'And how much is left in this sprint?', call: { name: 'budget', arguments: { ...BUDGET, scope: 'envelopes', initiative: 'this-page', sprint: 'this' } } },
+      ]);
+      const month = await json(page, `/api/spend/report?groupBy=actor&initiativeId=${P}`);
+      const week = await json(page, `/api/spend/report?groupBy=actor&initiativeId=${P}&period=7d`);
+      const allocated = month.initiative.allocation.effectiveAllocatedUsd;
+      const left = month.initiative.reserve.discretionaryRemainingUsd;
+      const a = terseSay(await nthOutput(page, 1), 'initiative left',
+        `Auth Migration spent ${usd(month.initiative.allocation.spentUsd)} of its ${usd(allocated)} allocation this month; ${usd(left)} discretionary left.`);
+      const b = terseSay(await nthOutput(page, 2), 'agents this week', new RegExp(`^Auth Migration spent \\${usd(week.totals.knownUsd)} in the last 7 days;`));
+      const sprintEnv = month.initiative.envelopes.filter((e) => e.sprintId === 'spr-auth-s2');
+      const sum = sprintEnv.reduce((x, e) => x + e.remainingUsd, 0);
+      const c = terseSay(await nthOutput(page, 3), 'sprint envelopes', new RegExp(`^${sprintEnv.length} envelopes on Auth Migration, Sprint 10 — Session hygiene: \\${usd(sum)} left`));
+      await stopVoice(page);
+      return { say: [a, b, c] };
+    });
+  },
+};
+
+/** C2B: the same questions below the tier (Nora, an SME): refused with the access request, her own envelope said. */
+const C2B = {
+  title: 'Budgets below the tier', persona: 'nora',
+  async run(s, page) {
+    await s('voice: "How much is left on this initiative?" is refused with the access request; "my envelope" is said', async () => {
+      await go(page, INITIATIVE);
+      await waitText(page, '[data-testid=initiative-header]', /Auth Migration/);
+      await startVoice(page, [
+        { said: 'How much is left on this initiative?', call: { name: 'budget', arguments: { ...BUDGET, scope: 'initiative', initiative: 'this-page' } } },
+        { said: "What's left on my envelope this sprint?", call: { name: 'budget', arguments: { ...BUDGET, scope: 'envelopes', initiative: 'this-page', sprint: 'this' } } },
+      ]);
+      const no = await nthOutput(page, 1);
+      const reason = refusal(no, 'below the tier', 'role');
+      check(no.code === 'role', `the refusal's code is ${no.code}, not role`);
+      check(/access/i.test(no.next ?? ''), `the next step names no access request: ${no.next}`);
+      check(!/\$\d/.test(JSON.stringify(no)), 'a figure leaked into the refusal');
+      const mine = terseSay(await nthOutput(page, 2), 'own envelope', '1 envelope of yours on Auth Migration, Sprint 10 — Session hygiene: $15.00 left of $15.00.');
+      await stopVoice(page);
+      return { say: [reason, mine] };
+    });
+  },
+};
+
+const CAPABILITIES = { C1, C2, C2B };
 
 // ── the run ──────────────────────────────────────────────────────────────────
 
@@ -328,7 +382,7 @@ const browser = await chromium.launch({
 });
 const runs = [];
 try {
-  for (const id of Object.keys(CAPABILITIES).filter((k) => ONLY.has(k))) {
+  for (const id of Object.keys(CAPABILITIES).filter((k) => ONLY.has(k.replace(/(?<=\d)[A-Z]$/, '')))) {
     console.log(`${id}: ${CAPABILITIES[id].title}`);
     runs.push(await runOne(browser, id));
   }

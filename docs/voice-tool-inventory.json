@@ -1456,7 +1456,7 @@
     "pipelines",
     "access"
    ],
-   "mapsTo": "GET /api/me/spend, GET /api/spend/report?initiativeId=&groupBy=, GET /api/graph/projects, GET /api/budgets, GET /api/user-budgets, GET /api/ops/switches, GET /api/sprints/envelopes, GET /api/observability/cost/summary",
+   "mapsTo": "GET /api/me/spend, GET /api/spend/report?initiativeId=&groupBy=&period=, GET /api/sprints?initiative=, GET /api/graph/projects, GET /api/budgets, GET /api/user-budgets, GET /api/ops/switches, GET /api/sprints/envelopes, GET /api/observability/cost/summary",
    "routes": [
     {
      "method": "GET",
@@ -1465,6 +1465,10 @@
     {
      "method": "GET",
      "path": "/api/spend/report"
+    },
+    {
+     "method": "GET",
+     "path": "/api/sprints"
     },
     {
      "method": "GET",
@@ -1520,7 +1524,7 @@
      "path": "/api/search"
     }
    ],
-   "line": 783
+   "line": 785
   },
   {
    "name": "message",
@@ -1551,7 +1555,7 @@
      "path": "/api/social/plane/work-sharing"
     }
    ],
-   "line": 796
+   "line": 798
   },
   {
    "name": "call",
@@ -1582,7 +1586,7 @@
      "path": "/api/social/plane/search"
     }
    ],
-   "line": 812
+   "line": 814
   },
   {
    "name": "set_status",
@@ -1598,7 +1602,7 @@
    ],
    "mapsTo": "usePresence('<tenant>:lobby') (the shell's tenant lobby, manifest presenceLobby) then usePresence('social:lobby') with a Social grant: setStatus(status) and updateMetadata({ statusMessage })",
    "routes": [],
-   "line": 827
+   "line": 829
   },
   {
    "name": "queue_work",
@@ -1815,7 +1819,7 @@
      "path": "/api/pipelines/runs/:id/events"
     }
    ],
-   "line": 839
+   "line": 841
   },
   {
    "name": "decide",
@@ -1932,7 +1936,7 @@
      "path": "/api/assessment/drafts/:runId/discard"
     }
    ],
-   "line": 861
+   "line": 863
   },
   {
    "name": "create",
@@ -2016,7 +2020,7 @@
      "path": "/api/access/delegations"
     }
    ],
-   "line": 877
+   "line": 879
   },
   {
    "name": "update",
@@ -2174,7 +2178,7 @@
      "path": "/api/access/delegations/:id/end"
     }
    ],
-   "line": 911
+   "line": 913
   },
   {
    "name": "access_request_status",
@@ -2204,7 +2208,7 @@
      "path": "/api/access/approvals"
     }
    ],
-   "line": 935
+   "line": 937
   }
  ],
  "navigatePages": [
@@ -4635,7 +4639,7 @@
   {"method":"GET","path":"/api/social/work-graph/conversations/:id/graph","source":"src/routes/social-work-graph.ts:30","declaredAt":"src/routes/social-work-graph.ts:30","stale":false,"snapshot":true,"tenants":["social"],"kind":"read","family":"social.chat","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"GET","path":"/api/social/work-graph/workspace/graph","source":"src/routes/social-work-graph.ts:38","declaredAt":"src/routes/social-work-graph.ts:38","stale":false,"snapshot":true,"tenants":["social"],"kind":"read","family":"social.chat","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
   {"method":"GET","path":"/api/spend/report","source":"src/routes/spend-report.ts:72","declaredAt":"src/routes/spend-report.ts:72","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"budgets","cedarAction":null,"actions":[],"floor":["ViewSpendReport"],"writePolicy":null,"pageId":null,"coveredBy":["budget"],"v2":{"decision":"read","tool":"budget","note":"mapsTo"}},
-  {"method":"GET","path":"/api/sprints","source":"src/routes/sprints.ts:95","declaredAt":"src/routes/sprints.ts:95","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"floor":["ViewSprints"],"writePolicy":null,"pageId":null,"coveredBy":["list","update"],"v2":{"decision":"read","tool":"list","note":"mapsTo"}},
+  {"method":"GET","path":"/api/sprints","source":"src/routes/sprints.ts:95","declaredAt":"src/routes/sprints.ts:95","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"floor":["ViewSprints"],"writePolicy":null,"pageId":null,"coveredBy":["list","budget","update"],"v2":{"decision":"read","tool":"list","note":"mapsTo"}},
   {"method":"POST","path":"/api/sprints","source":"src/routes/sprints.ts:259","declaredAt":"src/routes/sprints.ts:259","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageSprints","actions":["ManageSprints"],"floor":["ViewSprints"],"holders":["orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":["create"],"v2":{"decision":"confirm","tool":"create","note":"mapsTo"}},
   {"method":"PATCH","path":"/api/sprints/:sprintId/items","source":"src/routes/sprints.ts:319","declaredAt":"src/routes/sprints.ts:319","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageSprints","actions":["ManageSprints"],"floor":["ViewSprints"],"holders":["orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":["update"],"v2":{"decision":"confirm","tool":"update","note":"mapsTo"}},
   {"method":"DELETE","path":"/api/sprints/:sprintId/items/:itemId","source":"src/routes/sprints.ts:345","declaredAt":"src/routes/sprints.ts:345","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"ManageSprints","actions":["ManageSprints"],"floor":["ViewSprints"],"holders":["orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"refused:destructive","pageId":null,"coveredBy":["update"],"v2":{"decision":"confirm","tool":"update","note":"mapsTo"}},
