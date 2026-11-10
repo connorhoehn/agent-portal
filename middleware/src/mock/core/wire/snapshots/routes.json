@@ -3101,21 +3101,6 @@
       "source": "src/routes/realtime-lobby-access.ts:68"
     },
     {
-      "method": "POST",
-      "path": "/api/rediscovery/check",
-      "source": "src/routes/rediscovery.ts:17"
-    },
-    {
-      "method": "POST",
-      "path": "/api/rediscovery/outcome",
-      "source": "src/routes/rediscovery.ts:34"
-    },
-    {
-      "method": "GET",
-      "path": "/api/rediscovery/stats",
-      "source": "src/routes/rediscovery.ts:54"
-    },
-    {
       "method": "GET",
       "path": "/api/roster",
       "source": "src/routes/roster.ts:51"

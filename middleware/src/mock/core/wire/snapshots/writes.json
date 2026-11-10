@@ -3496,33 +3496,6 @@
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
     },
-    "POST /api/rediscovery/check": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "estimateAvoidedMinutes": "null",
-        "estimateAvoidedUsd": "null",
-        "matches": "array"
-      },
-      "values": {},
-      "sent": [
-        "problem"
-      ]
-    },
-    "POST /api/rediscovery/outcome": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "ok": "boolean"
-      },
-      "values": {},
-      "sent": [
-        "action",
-        "experienceId"
-      ]
-    },
     "POST /api/runbooks/:id/applications": {
       "skipped": "no body: the route authenticates with an HMAC envelope over the raw body plus a run token bound to the run_ref, neither of which this harness can mint; routes/__tests__/runbooks*.test.ts and lib/__tests__/lab-cli-brief.test.ts cover the write."
     },

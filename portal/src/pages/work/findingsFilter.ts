@@ -1,5 +1,5 @@
 // Pure status filter for the Findings page. No React — testable under
-// node:test like queueMath/rediscoveryFormat.
+// node:test like queueMath.
 //
 // The list already asks the server to filter by `status` (the query param on
 // GET /api/work/findings), but that leaves the rendered list at the mercy of

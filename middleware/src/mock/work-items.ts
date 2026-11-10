@@ -210,8 +210,7 @@ const MOCK_WORK_ITEM_SEEDS: MockSeed[] = [
   // wi-obs-e1-* / wi-obs-e3-* joined wi-obs-e2-* when the fabricated families
   // came out: the fixture carried only the e2 epic, so spr-obs-s1 was a sprint
   // no work item pointed at, and two other fixtures referenced items the board
-  // denied existed (the decisions fixture's d-otel-vendor -> wi-obs-e1, and
-  // providers/rediscovery.ts -> wi-obs-e1-s3).
+  // denied existed (the decisions fixture's d-otel-vendor -> wi-obs-e1).
   //
   // The six open / in-review items carry the titles and briefs the Initiatives
   // redesign shows (docs/design/initiative-*-mockup.png), copied from the

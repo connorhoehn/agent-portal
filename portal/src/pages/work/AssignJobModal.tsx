@@ -13,7 +13,6 @@ import { KeyValue } from '../../components/KeyValue';
 import { sendJson } from '../../lib/writeJson';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { usd } from '../../lib/format';
-import { RediscoveryPanel } from './RediscoveryPanel';
 import {
   SUGGESTION_LABEL, SUGGESTION_TONE, T, serves,
   type Job, type WorkSuggestion,
@@ -83,14 +82,6 @@ export function AssignJobModal({ suggestion, onClose, onQueued }: {
             value="the first idle computer (a microVM with workspace + git), within ~10s"
           />
           <Divider spacing="sm" />
-          {/* Prior art belongs right next to the number, not on a page nobody
-              visits before confirming — this is the one instant a human is
-              already paying attention to what this job costs. */}
-          <RediscoveryPanel
-            problem={`${s.title}\n\n${s.prompt}`}
-            initiativeId={s.initiativeId}
-            workItemId={s.workItemId}
-          />
           {/* The mission is what the agent actually receives — showing it here
               is the difference between confirming an action and confirming a
               title. */}

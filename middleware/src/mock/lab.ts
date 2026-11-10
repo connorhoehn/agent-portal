@@ -16,9 +16,6 @@
 //      mock/org-findings.ts made for `find-mock-N`.
 //   3. THE STORE WAS EMPTY, so `GET /api/lab/experiences` returned `[]` and an
 //      unbuilt feature and an unseeded one looked identical (contract.ts #5).
-//      The write sweep could not even synthesise a body for
-//      `POST /api/rediscovery/outcomes`, because it picks an `experienceId`
-//      off that list and the list had nothing in it.
 //
 // AGE IS THE CLAIM FOR AN EXPERIENCE, NOT THE DAY — fleet memory is ranked by
 // relevance and rendered as prose ("19 days ago"), nothing buckets it by

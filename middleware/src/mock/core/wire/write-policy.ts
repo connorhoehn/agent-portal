@@ -1499,7 +1499,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     build: async (ctx) => ({ kind: 'github', label: ctx.label(), apiKey: ctx.label() }),
   },
 
-  // ── lab, rediscovery, library ─────────────────────────────────────────────
+  // ── lab, library ──────────────────────────────────────────────────────────
   {
     route: 'POST /api/lab/signals',
     persona: 'orgiq/admin',
@@ -1527,24 +1527,6 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     safe: 'Answers the seeded pending consult and leaves it `answered`. The old reason here — "MOCK_CONSULTS ships empty, so there is no seeded consult to flip" — stopped being true when mock/lab.ts gave the fixture two seeded rows; what makes the flip replayable now is that `lab-consults` is REGISTERED, so reset puts the pending consult back.',
     bodyFrom: 'routes/lab.ts: `answer` non-blank (free text, not a wire value); the consult must still be pending, which the seeded `con-mock-1` is.',
     build: async (ctx) => ({ answer: ctx.label() }),
-  },
-  {
-    route: 'POST /api/rediscovery/check',
-    persona: 'orgiq/admin',
-    safe: 'A pure ranking over the in-memory experience corpus. It writes nothing and calls no embedding model.',
-    bodyFrom: 'routes/rediscovery.ts: `problem` non-blank.',
-    build: async (ctx) => ({ problem: ctx.label() }),
-  },
-  {
-    route: 'POST /api/rediscovery/outcome',
-    persona: 'orgiq/admin',
-    safe: 'Appends to the in-memory OUTCOMES array. Nothing seeded moves.',
-    bodyFrom: "routes/rediscovery.ts: `experienceId` off GET /api/lab/experiences, `action` ∈ {'used','dismissed'}.",
-    build: async (ctx) => {
-      const experienceId = await ctx.pick('/api/lab/experiences', 'id');
-      if (experienceId === null) return unsynthesisable('GET /api/lab/experiences listed no experience to record an outcome against');
-      return { experienceId, action: 'used' };
-    },
   },
   {
     route: 'POST /api/library/evals/:assetId/run',

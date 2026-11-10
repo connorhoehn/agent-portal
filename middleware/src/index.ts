@@ -32,7 +32,6 @@ import { voiceLogRouter } from './routes/voice-log.js';
 import { designsRouter } from './routes/designs.js';
 import { libraryRouter } from './routes/library.js';
 import { sessionBundleRouter } from './routes/session-bundle.js';
-import { rediscoveryRouter } from './routes/rediscovery.js';
 import { promptEvalsRouter } from './routes/prompt-evals.js';
 import { knowledgeBaseRouter } from './routes/knowledge-base.js';
 import { assessmentRouter } from './routes/assessment.js';
@@ -277,11 +276,6 @@ app.use('/api/library', requireTenant('orgiq'), requireSession('ViewLibrary'), l
 // What every Claude Code devbox session is configured with — hooks, bundled
 // skills, settings. Read-only.
 app.use('/api/session-bundle', requireTenant('orgiq'), requireSession('ViewSessionConfig'), sessionBundleRouter);
-// Look before you spend: prior experience matched on the PROBLEM's shape
-// rather than on the repo it was learned in, so knowledge from another project
-// is reachable. Open to any signed-in session — gating this would defeat it at
-// exactly the moment it matters.
-app.use('/api/rediscovery', requireTenant('orgiq'), requireSession('ViewRediscovery'), rediscoveryRouter);
 // Per-asset eval sets — the thing that produces the pass rate decideDeploy
 // gates on. Until this existed the gate judged a number nothing computed.
 app.use('/api/library/evals', requireTenant('orgiq'), requireSession('ViewLibrary'), promptEvalsRouter);

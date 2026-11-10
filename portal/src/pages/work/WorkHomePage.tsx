@@ -21,7 +21,6 @@ import { useCapabilities } from '../../lib/capabilities';
 import { durationLabel, relativeTime } from '../../lib/relativeTime';
 import { toastSuccess } from '../../lib/toastStore';
 import { sendJson } from '../../lib/writeJson';
-import { usd } from '../../lib/format';
 import { QueuePulse } from './QueuePulse';
 import { attentionCount, attentionPrompts } from './workAttentionPrompts';
 import { ACTIVE_RUNS_URL, dispatchedRunsNoun, type DispatchedRun } from './dispatchedRuns';
@@ -30,14 +29,6 @@ import {
   type Job, type LabConsult, type Proposal, type Summary,
 } from './workShared';
 
-/** GET /api/rediscovery/stats — the number that justifies the rest of the
- * infrastructure: what the agent didn't have to rediscover. `usdAvoidedSeries`
- * is one point per day across `windowDays`, oldest first — see
- * providers/rediscovery.ts::rediscoveryStats. */
-interface RediscoveryStats {
-  shortCircuits: number; dismissals: number; usdAvoided: number; minutesAvoided: number; windowDays: number;
-  usdAvoidedSeries: number[];
-}
 
 export default function WorkHomePage() {
   const navigate = useNavigate();
@@ -65,7 +56,6 @@ export default function WorkHomePage() {
   const { data: proposalsData, refresh: refreshProposals } = useFetch<{ proposals: Proposal[] }>('/api/work/proposals?status=pending', 20_000);
   // Slower cadence than the rest of the board — this number moves on the
   // scale of decisions made, not queue churn.
-  const { data: rediscovery } = useFetch<RediscoveryStats>('/api/rediscovery/stats', 60_000);
 
   const linkedConsult = linkedConsultData?.consult?.id === requestedConsult ? linkedConsultData.consult : null;
   const pendingConsults = (consultData?.consults ?? []).filter(consult => consult.id !== linkedConsult?.id || linkedConsult.status === 'pending');
@@ -179,7 +169,6 @@ export default function WorkHomePage() {
       <Link to="/iq/work/findings" className="text-sm text-primary hover:underline">{s && !summaryFailure ? `${s.findings.open} open findings` : 'View findings'} →</Link>
       <Disclosure summary="Queue operations" variant="plain" density="compact">
         <QueuePulse summary={s ? { jobs: s.jobs, busyBoxes: s.busyBoxes } : null} jobs={jobs} degraded={!!summaryFailure} />
-        {rediscovery && <T size="xs" className="mt-3 text-text-tertiary">Rediscovery avoided {usd(rediscovery.usdAvoided)} · {rediscovery.shortCircuits} short-circuits · {rediscovery.windowDays}d</T>}
       </Disclosure>
     </Stack>
   );

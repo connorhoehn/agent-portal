@@ -305,7 +305,7 @@ const FAMILY_BY_FILE = {
   'assessment-document-proposals.ts': 'documents', 'assessment-canvas.ts': 'documents', 'internal-document-grants.ts': 'documents',
   'social-deck.ts': 'documents', 'initiative-decks.ts': 'documents', 'pipeline-decks.ts': 'documents', 'assessment-decks.ts': 'documents',
   'knowledge-base.ts': 'knowledge', 'kb-admin.ts': 'knowledge', 'ingest.ts': 'knowledge', 'connections.ts': 'knowledge', 'drop.ts': 'knowledge',
-  'library.ts': 'knowledge', 'rediscovery.ts': 'knowledge',
+  'library.ts': 'knowledge',
   'runbooks.ts': 'runbooks', 'session-briefs.ts': 'runbooks', 'session-bundle.ts': 'runbooks',
   'bots.ts': 'bots',
   'approvals.ts': 'approvals', 'sdlc.ts': 'approvals',
@@ -479,7 +479,6 @@ export const V2_RULES = [
   [/^(PUT|PATCH|POST|DELETE) \/api\/(observability\/(canary|calibration|memory|harness|evaluations|prompt-versions|approvals\/request)|iq\/prompts|capabilities|library\/evals|agents)/, 'never', null, 'canary, judges, pointers, guardrails, browser and interpreter sessions, agent invoke'],
   [/^POST \/api\/scores\/analysis$/, 'never', null, 'leadership analysis run'],
   [/^POST \/api\/observability\/(invocations\/:[^/]+\/replay|quality\/feedback)$/, 'never', null, 'a replay spends; labelling is the page\'s row control'],
-  [/^POST \/api\/rediscovery\//, 'never', null, 'agent-facing: a box asks before it spends'],
   // Knowledge, ingestion, connections: never (admin and spend)
   [/^(PUT|PATCH|POST|DELETE) \/api\/(admin\/kb-registry|ingest|connections|knowledge-base)/, 'never', null, 'ManageKB / ManageIngest, reaches S3, KB and crawlers'],
   // Compute: machine and code paths
@@ -596,7 +595,7 @@ export const V2_RULES = [
   [/^GET \/api\/(work\/summary|work\/findings\/stats|work\/sweeps\/runs|bots\/active-runs|pipelines\/summary|pipelines\/queues|assessment\/rollup|access\/summary|social\/(plane\/)?summary|social\/plane\/active|ingest\/(stats|jobs|queue)|admin\/kb-registry\/health|devbox\/status|local-compute\/nodes|local-compute\/runs|today|work\/suggestions|work\/ask-suggestions|discussions\/unread|observability\/summary|observability\/health)/, 'not-yet', 'summary', 'an aggregate'],
   [/^GET \/api\/observability\/approvals$/, 'not-yet', 'list', 'the HITL inbox: what waits on the caller (§2.10)'],
   [/^GET \/api\/library\/evals/, 'never', null, 'eval sets are the studio\'s'],
-  [/^GET \/api\/(observability|topology|iq\/prompts|capabilities|agents|agent-detail|sessions|rediscovery|session-bundle|admin\/kb-registry|ingest|connections|knowledge-base|identity|graph\/(entities|skills-graph|projects-graph|help)|scores)/, 'never', null, 'operator consoles, agent-facing reads and leadership data: the page, not the voice'],
+  [/^GET \/api\/(observability|topology|iq\/prompts|capabilities|agents|agent-detail|sessions|session-bundle|admin\/kb-registry|ingest|connections|knowledge-base|identity|graph\/(entities|skills-graph|projects-graph|help)|scores)/, 'never', null, 'operator consoles, agent-facing reads and leadership data: the page, not the voice'],
   [/^GET \/api\/[\w/-]+\/(stream|events|tail|log\/stream)$/, 'n/a', null, 'a stream'],
   [/^GET \/api\/[\w-]+(\/[\w-]+)*\/:[^/]+(\/[\w-]+)*$/, 'not-yet', 'get', 'one record'],
   [/^GET \/api\//, 'not-yet', 'list', 'a collection'],

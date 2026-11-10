@@ -7669,21 +7669,6 @@
         ]
       }
     },
-    "GET /api/rediscovery/stats": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "dismissals": "number",
-        "minutesAvoided": "number",
-        "shortCircuits": "number",
-        "usdAvoided": "number",
-        "usdAvoidedSeries": "array",
-        "usdAvoidedSeries[]": "number",
-        "windowDays": "number"
-      },
-      "values": {}
-    },
     "GET /api/roster": {
       "persona": "orgiq/admin",
       "status": 200,
