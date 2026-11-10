@@ -380,3 +380,30 @@ One agent per package, one repository each, provable without AWS (`npm run dev:m
 **Landed (8 November).** V2-13: the per-tenant sets are pinned in the middleware catalogue test (§3 less Social's `decide`, assessment and pipelines `create`, access `queue_work` and `activity`, each for the reason the catalogue states; `activity` added to assessment and pipelines through the plane), every scripted call is a v2 call, every tenant's instructions list each offered tool under the cap, and `access_request_status` stays (no list kind reaches `GET /api/access-requests/mine` outside Access). V2-14: the two-persona property runs for all five tenants, two roles each, pinned per tool and per `queue_work` kind (`portal/src/lib/voice/__tests__/visibilityTenants.test.ts`, `personaProperty.ts`). V2-15: §4 above; the spec's §4 has a row per tool and points here.
 
 Order: V2-L1 and V2-L2 in parallel with V2-1 now; V2-2 then V2-3 and V2-4 in one agent (they share `catalogue.ts` and `tools.ts`); V2-5, V2-6, V2-7 serially in a second agent once V2-4 is in; tier 3 after G19 lands, V2-8 and V2-9 in one Opus agent (both in `actions.ts`/`work.ts`), V2-10 and V2-11 in another, V2-12 and V2-13 last; V2-14 and V2-15 close. About 58 agent-hours, five of them in the library.
+
+## 6. Coverage (10 November)
+
+Seven capabilities were added without a new tool name: work items, budgets and spend, agent runs, sprint questions, decisions, the review queue, and runbooks and ADRs. `docs/voice-navigator-gaps.md` ("Coverage (10 November)") says what each one answers. The regenerated JSON:
+
+| | before | after |
+|---|---|---|
+| routes covered by `mapsTo` | 233 | 236 |
+| pages covered | 109 of 109 | 109 of 109 |
+| not yet | 174 | 171 |
+| never | 369 | 369 |
+| undecided | 0 | 0 |
+
+The route count moves little because most of the new answers read routes that were already listed (`GET /api/spend/report`, `GET /api/graph/work`, `GET /api/sprints`, `GET /api/lab/consults`, `GET /api/runbooks/:id`). The work is new kinds, parts, filters and page context on those routes. The newly covered routes are the work item owner and sprint writes (`PATCH /api/sprints/:sprintId/items`, `DELETE /api/sprints/:sprintId/items/:itemId`) and the Agents tab's `GET /api/bots/initiative-runs`.
+
+**The next ten "not yet", by value.** Each one fits an existing tool.
+
+1. `decide` on the conversation agent's waiting plans (`GET /api/conversations/agent/waiting`, `.../runs/:id/approve`, `/discard`, `/approval/approve`, `/approval/reject`): "what is the agent in this channel waiting on me for".
+2. `create` a comment on an initiative's discussion (`POST /api/graph/projects/:id/discussion/comments`): "tell the Auth Migration thread the rehearsal passed".
+3. `decide` on a design question (`POST /api/designs/:id/answer`): answer a design thread's question by voice, the same way a consult is answered.
+4. `budget` grants and run caps (`GET /api/grants?sprintId=`, `GET /api/budgets/:orgProjectId/limits`): who holds the envelopes on a sprint, and what the per-run cap is.
+5. `list` and `update` for chat pins (`GET`, `POST` and `DELETE /api/chat/pins`): "pin that" and "what's pinned here".
+6. `decide` to merge or withdraw a runbook proposal (`POST /api/runbooks/proposals/:pid/merge`, `/withdraw`).
+7. `decide` to promote or dismiss a promotion (`POST /api/promotions/:id/promote`, `/dismiss`).
+8. `budget` cost breakdowns (`GET /api/observability/cost/by-model`, `/top`, `/per-agent`): "which model cost the most this week".
+9. `list` of marketplace runs across initiatives (`GET /api/bots/marketplace-runs`): "what did the agents run today".
+10. `list` and `get` for call history (`GET /api/calls`, `GET /api/calls/:callId/chat`): "who called me" and "what was said in that call's chat".
