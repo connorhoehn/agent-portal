@@ -298,7 +298,7 @@
     {
       "method": "GET",
       "path": "/api/agent-detail/:agentId",
-      "source": "src/routes/agent-detail.ts:248"
+      "source": "src/routes/agent-detail.ts:272"
     },
     {
       "method": "GET",
@@ -1103,117 +1103,117 @@
     {
       "method": "GET",
       "path": "/api/capabilities/browser-sessions",
-      "source": "src/routes/capabilities.ts:152"
+      "source": "src/routes/capabilities.ts:160"
     },
     {
       "method": "POST",
       "path": "/api/capabilities/browser-sessions",
-      "source": "src/routes/capabilities.ts:157"
+      "source": "src/routes/capabilities.ts:165"
     },
     {
       "method": "DELETE",
       "path": "/api/capabilities/browser-sessions/:sessionId",
-      "source": "src/routes/capabilities.ts:192"
+      "source": "src/routes/capabilities.ts:201"
     },
     {
       "method": "DELETE",
       "path": "/api/capabilities/browser-sessions/:sessionId/journey",
-      "source": "src/routes/capabilities.ts:255"
+      "source": "src/routes/capabilities.ts:278"
     },
     {
       "method": "GET",
       "path": "/api/capabilities/browser-sessions/:sessionId/journey",
-      "source": "src/routes/capabilities.ts:250"
+      "source": "src/routes/capabilities.ts:261"
     },
     {
       "method": "POST",
       "path": "/api/capabilities/browser-sessions/:sessionId/navigate",
-      "source": "src/routes/capabilities.ts:209"
+      "source": "src/routes/capabilities.ts:219"
     },
     {
       "method": "POST",
       "path": "/api/capabilities/browser-sessions/:sessionId/screenshot",
-      "source": "src/routes/capabilities.ts:362"
+      "source": "src/routes/capabilities.ts:387"
     },
     {
       "method": "GET",
       "path": "/api/capabilities/browser/crawl",
-      "source": "src/routes/capabilities.ts:399"
+      "source": "src/routes/capabilities.ts:425"
     },
     {
       "method": "POST",
       "path": "/api/capabilities/browser/crawl",
-      "source": "src/routes/capabilities.ts:382"
+      "source": "src/routes/capabilities.ts:408"
     },
     {
       "method": "GET",
       "path": "/api/capabilities/browser/crawl/:crawlId",
-      "source": "src/routes/capabilities.ts:403"
+      "source": "src/routes/capabilities.ts:429"
     },
     {
       "method": "POST",
       "path": "/api/capabilities/browser/crawl/:crawlId/cancel",
-      "source": "src/routes/capabilities.ts:409"
+      "source": "src/routes/capabilities.ts:435"
     },
     {
       "method": "GET",
       "path": "/api/capabilities/browser/crawl/:crawlId/stream",
-      "source": "src/routes/capabilities.ts:415"
+      "source": "src/routes/capabilities.ts:441"
     },
     {
       "method": "POST",
       "path": "/api/capabilities/browser/web-qa",
-      "source": "src/routes/capabilities.ts:263"
+      "source": "src/routes/capabilities.ts:286"
     },
     {
       "method": "POST",
       "path": "/api/capabilities/code-interpreter/execute",
-      "source": "src/routes/capabilities.ts:121"
+      "source": "src/routes/capabilities.ts:128"
     },
     {
       "method": "GET",
       "path": "/api/capabilities/code-sessions",
-      "source": "src/routes/capabilities.ts:110"
+      "source": "src/routes/capabilities.ts:117"
     },
     {
       "method": "DELETE",
       "path": "/api/capabilities/code-sessions/:sessionId",
-      "source": "src/routes/capabilities.ts:115"
+      "source": "src/routes/capabilities.ts:122"
     },
     {
       "method": "GET",
       "path": "/api/capabilities/guardrail",
-      "source": "src/routes/capabilities.ts:52"
+      "source": "src/routes/capabilities.ts:59"
     },
     {
       "method": "GET",
       "path": "/api/capabilities/guardrail/metrics",
-      "source": "src/routes/capabilities.ts:57"
+      "source": "src/routes/capabilities.ts:64"
     },
     {
       "method": "PATCH",
       "path": "/api/capabilities/guardrail/pii",
-      "source": "src/routes/capabilities.ts:63"
+      "source": "src/routes/capabilities.ts:70"
     },
     {
       "method": "POST",
       "path": "/api/capabilities/guardrail/topics",
-      "source": "src/routes/capabilities.ts:77"
+      "source": "src/routes/capabilities.ts:84"
     },
     {
       "method": "DELETE",
       "path": "/api/capabilities/guardrail/topics/:name",
-      "source": "src/routes/capabilities.ts:84"
+      "source": "src/routes/capabilities.ts:91"
     },
     {
       "method": "PATCH",
       "path": "/api/capabilities/guardrail/topics/:name",
-      "source": "src/routes/capabilities.ts:70"
+      "source": "src/routes/capabilities.ts:77"
     },
     {
       "method": "GET",
       "path": "/api/capabilities/reconcile",
-      "source": "src/routes/capabilities.ts:446"
+      "source": "src/routes/capabilities.ts:472"
     },
     {
       "method": "POST",
@@ -2448,17 +2448,17 @@
     {
       "method": "GET",
       "path": "/api/observability/authz",
-      "source": "src/routes/observability.ts:61"
+      "source": "src/routes/observability.ts:65"
     },
     {
       "method": "GET",
       "path": "/api/observability/authz/stream",
-      "source": "src/routes/observability.ts:77"
+      "source": "src/routes/observability.ts:81"
     },
     {
       "method": "GET",
       "path": "/api/observability/bedrock-invocations",
-      "source": "src/routes/observability.ts:98"
+      "source": "src/routes/observability.ts:133"
     },
     {
       "method": "GET",
@@ -2503,17 +2503,17 @@
     {
       "method": "POST",
       "path": "/api/observability/canary/ask",
-      "source": "src/routes/canary.ts:74"
+      "source": "src/routes/canary.ts:81"
     },
     {
       "method": "GET",
       "path": "/api/observability/canary/events",
-      "source": "src/routes/canary.ts:212"
+      "source": "src/routes/canary.ts:221"
     },
     {
       "method": "POST",
       "path": "/api/observability/canary/halt",
-      "source": "src/routes/canary.ts:341"
+      "source": "src/routes/canary.ts:360"
     },
     {
       "method": "GET",
@@ -2558,32 +2558,32 @@
     {
       "method": "GET",
       "path": "/api/observability/canary/prompts",
-      "source": "src/routes/canary.ts:268"
+      "source": "src/routes/canary.ts:287"
     },
     {
       "method": "POST",
       "path": "/api/observability/canary/reset",
-      "source": "src/routes/canary.ts:402"
+      "source": "src/routes/canary.ts:421"
     },
     {
       "method": "POST",
       "path": "/api/observability/canary/start",
-      "source": "src/routes/canary.ts:367"
+      "source": "src/routes/canary.ts:386"
     },
     {
       "method": "GET",
       "path": "/api/observability/canary/weight",
-      "source": "src/routes/canary.ts:300"
+      "source": "src/routes/canary.ts:319"
     },
     {
       "method": "PUT",
       "path": "/api/observability/canary/weight",
-      "source": "src/routes/canary.ts:313"
+      "source": "src/routes/canary.ts:332"
     },
     {
       "method": "GET",
       "path": "/api/observability/capability-events",
-      "source": "src/routes/observability.ts:92"
+      "source": "src/routes/observability.ts:114"
     },
     {
       "method": "GET",
@@ -2673,17 +2673,17 @@
     {
       "method": "GET",
       "path": "/api/observability/guardrails-detail/by-actor",
-      "source": "src/routes/guardrails-detail.ts:170"
+      "source": "src/routes/guardrails-detail.ts:172"
     },
     {
       "method": "GET",
       "path": "/api/observability/guardrails-detail/by-rule",
-      "source": "src/routes/guardrails-detail.ts:94"
+      "source": "src/routes/guardrails-detail.ts:96"
     },
     {
       "method": "GET",
       "path": "/api/observability/guardrails-detail/interventions",
-      "source": "src/routes/guardrails-detail.ts:238"
+      "source": "src/routes/guardrails-detail.ts:240"
     },
     {
       "method": "GET",
@@ -2793,17 +2793,17 @@
     {
       "method": "GET",
       "path": "/api/observability/memory/events",
-      "source": "src/routes/memory.ts:122"
+      "source": "src/routes/memory.ts:123"
     },
     {
       "method": "POST",
       "path": "/api/observability/memory/events",
-      "source": "src/routes/memory.ts:276"
+      "source": "src/routes/memory.ts:285"
     },
     {
       "method": "GET",
       "path": "/api/observability/memory/stats",
-      "source": "src/routes/memory.ts:198"
+      "source": "src/routes/memory.ts:207"
     },
     {
       "method": "GET",
@@ -2828,7 +2828,7 @@
     {
       "method": "GET",
       "path": "/api/observability/pr-watch-health",
-      "source": "src/routes/observability.ts:51"
+      "source": "src/routes/observability.ts:55"
     },
     {
       "method": "GET",
@@ -2858,12 +2858,12 @@
     {
       "method": "GET",
       "path": "/api/observability/recent-invocations",
-      "source": "src/routes/observability.ts:87"
+      "source": "src/routes/observability.ts:96"
     },
     {
       "method": "GET",
       "path": "/api/observability/summary",
-      "source": "src/routes/observability.ts:108"
+      "source": "src/routes/observability.ts:149"
     },
     {
       "method": "POST",
@@ -2878,27 +2878,27 @@
     {
       "method": "GET",
       "path": "/api/observability/tools/errors",
-      "source": "src/routes/tool-calls.ts:211"
+      "source": "src/routes/tool-calls.ts:213"
     },
     {
       "method": "GET",
       "path": "/api/observability/tools/latency",
-      "source": "src/routes/tool-calls.ts:78"
+      "source": "src/routes/tool-calls.ts:80"
     },
     {
       "method": "GET",
       "path": "/api/observability/tools/timeseries",
-      "source": "src/routes/tool-calls.ts:149"
+      "source": "src/routes/tool-calls.ts:151"
     },
     {
       "method": "GET",
       "path": "/api/observability/traces",
-      "source": "src/routes/observability.ts:116"
+      "source": "src/routes/observability.ts:177"
     },
     {
       "method": "GET",
       "path": "/api/observability/traces/:traceId",
-      "source": "src/routes/observability.ts:125"
+      "source": "src/routes/observability.ts:188"
     },
     {
       "method": "GET",
