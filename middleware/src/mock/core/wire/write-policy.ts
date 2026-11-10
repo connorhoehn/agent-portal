@@ -2245,7 +2245,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
   {
     route: 'POST /api/local-compute/claim',
     persona: 'anonymous',
-    safe: "Claims (or, honestly, tries to) against the registered `agent-jobs` fixture — status, box/session id and attempts all land on a row reset restores. `node-operator-thinkpad` is the one seeded machine with `acceptJobs` on and a registered kind (`local:distill`/`local:consolidate`; mock/local-compute.ts), so it is the only node whose token is worth presenting. Under the seeded `default` world there is nothing queued for it — every job seedAgentJobs() mints is `devbox:task` and already terminal — so this always answers 204 with no body, the SAME empty-queue answer a real idle worker gets, not a policy refusal.",
+    safe: "Claims (or, honestly, tries to) against the registered `agent-jobs` fixture — status, box/session id and attempts all land on a row reset restores. `node-operator-thinkpad` is the one seeded machine with `acceptJobs` on and a registered kind (`local:distill`; mock/local-compute.ts), so it is the only node whose token is worth presenting. Under the seeded `default` world there is nothing queued for it — every job seedAgentJobs() mints is `devbox:task` and already terminal — so this always answers 204 with no body, the SAME empty-queue answer a real idle worker gets, not a policy refusal.",
     bodyFrom: 'routes/local-compute.ts: no body; the node is identified entirely by its bearer token.',
     intercepts: ['aurora'],
     headers: { authorization: `Bearer ${MOCK_NODE_TOKENS['node-operator-thinkpad']}` },

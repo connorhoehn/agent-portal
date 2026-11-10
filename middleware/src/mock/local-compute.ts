@@ -216,7 +216,7 @@ function seededNodes(): ComputeNodeRow[] {
       // The one machine that has actually registered a worker, so the claim
       // path has a node it can legitimately hand work to. Two slots, matching
       // the reference workstation's llama-server (2 slots, kv_unified).
-      jobKinds: ['local:distill', 'local:consolidate'],
+      jobKinds: ['local:distill'],
       maxConcurrency: 2,
       // Paired earlier today — this one IS a day claim, so it takes the clamp
       // that keeps it inside today at 00:05 UTC.

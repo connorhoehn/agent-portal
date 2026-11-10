@@ -134,7 +134,6 @@ const MOCK_TOOL_CYCLE: Record<string, readonly string[]> = {
   'devbox:task': ['read_file', 'edit_file', 'run_tests', 'git_commit'],
   'local:task': ['read_file', 'edit_file', 'run_tests', 'git_commit'],
   'local:distill': ['read_file', 'grep', 'write_file'],
-  'local:consolidate': ['read_file', 'grep', 'edit_file'],
 };
 const DEFAULT_MOCK_TOOL_CYCLE: readonly string[] = ['read_file', 'edit_file', 'run_tests'];
 
@@ -819,9 +818,7 @@ export function _resetPullSideProbe(): void { _resetColumnProbes(); }
  *
  *   1. **Filtered by kind.** `claimNextJob` selects the head of the queue with
  *      no predicate. That is right for the dispatcher, which can run anything
- *      it is handed, and wrong for a laptop: `docs/local-compute-presence.md`
- *      describes local work as nightly distillation and consolidation, and a
- *      node taking an interactive `devbox:task` would strand a person waiting
+ *      it is handed, and wrong for a laptop: a node taking an interactive `devbox:task` would strand a person waiting
  *      on a stream that never arrives. An empty `kinds` claims nothing rather
  *      than everything — a worker that advertised no capability has none.
  *
