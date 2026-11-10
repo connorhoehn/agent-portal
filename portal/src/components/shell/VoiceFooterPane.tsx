@@ -187,7 +187,8 @@ function VoiceFooterPane() {
   const { session } = useSession();
   const { can } = useCapabilities();
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  // G67: the path and the query (a tab, a search query), never the hash: a change in either ends a card's spoken confirm.
+  const { pathname, search } = useLocation();
   const compute = useComputeOptional();
   const social = useEmbeddedSocial();
   const gateway = useGatewayOptional();
@@ -422,7 +423,7 @@ function VoiceFooterPane() {
 
   // Moving by hand, or the page showing its rows: the voice learns where the user is and what is on screen, silently (G21).
   // G66: a card left open on another page stops taking a spoken confirm.
-  useEffect(() => { controller.pathChanged(pathname); controller.notePage(); }, [controller, pathname]);
+  useEffect(() => { controller.pathChanged(`${pathname}${search}`); controller.notePage(); }, [controller, pathname, search]);
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const off = subscribePageContext(() => {
