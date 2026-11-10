@@ -27,17 +27,29 @@ export default {
       const ctx = await ctxFor(browser, 'vera', w, w === 390 ? 844 : 900);
       const page = await ctx.newPage(); watch(page, `1-vera-${w}`);
       await go(page, INIT);
-      // The header stats: one line at width, one cluster per line when narrow; never a "•" that ends or starts a wrapped line.
+      // The header stats: one strip at every width (ui-components 2.518.0 drops separators at line ends); never a
+      // visible "•" that starts or ends a wrapped line, and the points bar is drawn.
       const stats = await page.evaluate(() => {
         const vis = (e) => !!e && e.getBoundingClientRect().width > 0 && getComputedStyle(e).display !== 'none';
         const strip = document.querySelector('[data-testid=overview-stats]');
-        const stacked = document.querySelector('[data-testid=overview-stats-stacked]');
+        const box = (e) => e.getBoundingClientRect();
+        const frame = strip ? box(strip) : null;
+        const clusters = strip ? [...strip.querySelectorAll('[data-testid=stat-strip-cluster]')].map(box) : [];
+        const lines = new Set(clusters.map((c) => Math.round(c.top))).size;
+        const badSeps = strip ? [...strip.querySelectorAll('[data-testid=stat-strip-separator]')].map(box).filter((s) => s.right > frame.left + 1)
+          .filter((s) => { const same = (c) => c.top < s.bottom && c.bottom > s.top; return !(clusters.some((c) => same(c) && c.right <= s.left + 1) && clusters.some((c) => same(c) && c.left >= s.right - 1)); }).length : -1;
+        const bar = strip?.querySelector('[data-testid=stat-strip-progress]');
         const rows = [...document.querySelectorAll('[data-testid=overview-decision-row]')];
         const clipped = rows.flatMap((r) => [...r.querySelectorAll('*')].filter((c) => c.scrollWidth > c.clientWidth + 1 && getComputedStyle(c).overflow !== 'visible').map((c) => c.innerText.slice(0, 30)));
         const rowText = rows.map((r) => r.innerText.replace(/\s+/g, ' '));
-        return { stripShown: vis(strip), stackedShown: vis(stacked), stackedLines: stacked ? [...stacked.children].filter(vis).length : 0, clipped, rowText, hscroll: document.documentElement.scrollWidth - window.innerWidth };
+        const header = document.querySelector('header.shell-header');
+        const kids = header ? [...header.querySelectorAll('button, a')].filter(vis).map(box) : [];
+        const headerRows = new Set(kids.map((k) => Math.round((k.top + k.bottom) / 2 / 8))).size;
+        return { stripShown: vis(strip), lines, badSeps, barShown: vis(bar), clipped, rowText, hscroll: document.documentElement.scrollWidth - window.innerWidth,
+          headerH: header ? Math.round(box(header).height) : -1, headerRows, headerMarker: header?.getAttribute('data-header-rows') ?? null };
       });
-      note(`1d stats line @${w}`, w === 390 ? (!stats.stripShown && stats.stackedShown && stats.stackedLines >= 2) : (stats.stripShown && !stats.stackedShown), stats);
+      if (w === 390) note('1f shell header is one row @390', stats.headerMarker === 'one' && stats.headerRows === 1 && stats.headerH <= 56, { headerH: stats.headerH, headerRows: stats.headerRows });
+      note(`1d stats line @${w}`, stats.stripShown && stats.badSeps === 0 && stats.barShown && (w === 390 ? stats.lines >= 2 : true), stats);
       note(`1e waiting row wraps, never clips @${w}`, stats.rowText.length > 0 && stats.clipped.length === 0 && stats.hscroll <= 0, stats);
       if (w === 390) { await shot(page, '1-vera-390'); await page.getByTestId('shell-footer-context-chat').click().catch(() => undefined); await sleep(1500); }
       await shot(page, `1b-social-${w}`);
@@ -124,11 +136,19 @@ export default {
         await sleep(500);
         const step = await body(page, '[data-testid=work-item-next-step]').catch(() => 'ABSENT');
         await shot(page, `3-${name}-${w}`);
-        // At 390 the compact composer is one idle row (Agent, the input, Send) until it is focused, and then keeps its
-        // toolbar (and so Workflow) behind the "Aa" toggle: focus the input, open the toolbar, pick Workflow.
-        if (w === 390) { await page.locator('[data-testid=rich-chat-composer] .ProseMirror').first().click().catch(() => undefined); await sleep(500); }
-        if (w === 390 && !(await page.getByRole('button', { name: /Workflow/ }).first().isVisible().catch(() => false))) { await page.getByTestId('rich-chat-composer-format-toggle').click().catch(() => undefined); await sleep(300); }
-        await page.getByRole('button', { name: /Workflow/ }).first().click().catch(() => undefined);
+        // At 390 the composer's strip is folded, and Workflow rides the row's overflow (ui-components 2.518.0): the idle
+        // row's own "Workflow" ⋯, or the open card's "Workflow and keyboard hints" ⋯. One tap, no focus, no "Aa".
+        if (w === 390) {
+          const folded = page.locator('[data-folded-menu]').first();
+          const oneTap = await folded.isVisible().catch(() => false);
+          const label = oneTap ? await folded.getAttribute('aria-label') : null;
+          note(`3 ${name} Workflow one tap @390`, oneTap && /^Workflow/.test(label ?? ''), { label });
+          await folded.click().catch(() => undefined);
+          await sleep(300);
+          await shot(page, `3-${name}-workflow-menu-${w}`);
+        } else {
+          await page.getByRole('button', { name: /Workflow/ }).first().click().catch(() => undefined);
+        }
         await sleep(400);
         // A blocked item offers "Unblock this item"; one that only waits on a pending decision, "What does this wait on?" (walk fixes).
         await page.getByText(/^(Unblock this item|What does this wait on\?)$/).first().click().catch(() => undefined);
@@ -216,7 +236,9 @@ export default {
     const pages = [
       ['decisions', 'vera', '/iq/decisions', 'table', { 1440: ['Decision', 'Status', 'Decided'], 1280: ['Decision', 'Status', 'Decided'], 1024: ['Decision', 'Status', 'Decided'] }, 'Judge model for canary evaluation'],
       ['budgets', 'vera', '/admin/budgets', 'table', { 1440: ['Initiative', 'Budget'], 1280: ['Initiative', 'Budget'], 1024: ['Initiative', 'Budget'], 768: ['Initiative', 'Budget'], 390: ['Initiative', 'Budget'] }, null],
-      ['assessment-teams', 'asha', '/assessment/teams', '[data-testid=assessment-teams] table, table', { 1440: ['Team', 'Certification'], 1280: ['Team', 'Certification'], 1024: ['Team', 'Certification'] }, 'Motion Assessment Factory'],
+      // Narrow batch: Step is "3/6", Motion an icon chip and Lead outlasts Contributors and Updated, so Lead shows at
+      // 1280 (Step, Motion and Contributors still fold into "+3" there; everything shows at 1440).
+      ['assessment-teams', 'asha', '/assessment/teams', '[data-testid=assessment-teams] table, table', { 1440: ['Team', 'Lead', 'Motion', 'Step', 'Certification'], 1280: ['Team', 'Lead', 'Certification'], 1024: ['Team', 'Certification'] }, 'Kubernetes Operator'],
     ];
     const measure = (page, tableSel) => page.evaluate((sel) => {
       const tables = [...document.querySelectorAll(sel)].filter((t) => t.getBoundingClientRect().width > 0);

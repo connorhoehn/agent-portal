@@ -26,7 +26,8 @@ import { useLocalNodes } from './LocalComputeBadge';
 import { GatewayStatusBadge } from './GatewayStatusBadge';
 
 
-export function FleetIndicator() {
+/** `compact`: the one-row phone header's status dot — green while an agent runs; the counts are in its menu and label. */
+export function FleetIndicator({ compact = false }: { compact?: boolean } = {}) {
   const navigate = useNavigate();
   const { can, ready } = useCapabilities();
   const { session } = useSession();
@@ -76,9 +77,12 @@ export function FleetIndicator() {
     items: [{ label: 'Realtime gateway', icon: <GatewayStatusBadge />, description: 'HTTP and WebSocket status' }],
   });
 
+  const busy = runsReadable && runs.length > 0;
   return (
     <DropdownMenu
-      trigger={(
+      trigger={compact ? (
+        <StatusDot size="sm" color={busy ? 'var(--color-success)' : 'var(--color-text-tertiary)'} />
+      ) : (
         <Inline as="span" gap="sm" wrap={false} className="inline-flex items-center tabular-nums">
           {runsReadable && (
             <Inline as="span" gap="xs" wrap={false} className="inline-flex items-center">
@@ -99,7 +103,7 @@ export function FleetIndicator() {
           <ChevronIcon dir="down" size={12} aria-hidden="true" />
         </Inline>
       )}
-      triggerClassName="px-2.5 py-1 text-sm leading-5 font-medium text-text-secondary"
+      triggerClassName={compact ? 'grid h-7 w-7 place-items-center border-0 p-0' : 'px-2.5 py-1 text-sm leading-5 font-medium text-text-secondary'}
       triggerLabel={`Fleet: ${labels.join(', ')}`}
       triggerTitle={labels.join(' · ')}
       align="end"

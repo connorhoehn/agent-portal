@@ -84,19 +84,9 @@ export function InitiativeOverview({
           Overview reads like the tabs above it and the Distillation,
           Initiatives and scorecard surfaces — e2e/initiative-overview-type. */}
       <Inline gap="md" align="center" wrap>
-        {/* Wide: one line of clusters. Narrow (under 30rem of its own width): one cluster per line, because the
-            line variant's "•" separator can end or start a wrapped line. */}
-        <Stack gap="none" className="@container min-w-0 flex-1" data-testid="overview-stats-host">
-          <StatStrip variant="line" items={model.stats.map(statItem)} aria-label="Initiative progress" data-testid="overview-stats" className="hidden @[30rem]:flex" />
-          <Stack gap="xs" className="@[30rem]:hidden" role="list" aria-label="Initiative progress" data-testid="overview-stats-stacked">
-            {model.stats.map((s) => (
-              <Inline key={s.id} gap="xs" align="baseline" wrap role="listitem">
-                <T size="sm" weight="semibold" tone={s.muted ? 'secondary' : 'primary'}>{s.value}</T>
-                <T size="sm" tone="secondary">{s.label}</T>
-              </Inline>
-            ))}
-          </Stack>
-        </Stack>
+        {/* One line that wraps between clusters; the library drops a "•" that would start or end a wrapped line
+            (ui-components 2.518.0 `wrapSeparators="drop"`, the default), and the points bar wraps under its label. */}
+        <StatStrip variant="line" items={model.stats.map(statItem)} aria-label="Initiative progress" data-testid="overview-stats" className="min-w-0 flex-1" />
         {model.state === 'ready' && model.attention.length === 0 && (
           <T size="sm" tone="secondary" role="status" data-testid="overview-attention-clear">{ATTENTION_NONE}</T>
         )}

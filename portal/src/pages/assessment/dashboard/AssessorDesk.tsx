@@ -9,6 +9,7 @@ import type React from 'react';
 import { useMemo, useState } from 'react';
 import {
   Button,
+  ChecklistIcon,
   Chip,
   CollectionToolbar,
   DataTable,
@@ -17,7 +18,9 @@ import {
   Inline,
   LoadingState,
   MetaLine,
+  PersonIcon,
   PresenceAvatars,
+  RepeatIcon,
   Tooltip,
   Stack,
   StatStrip,
@@ -38,6 +41,13 @@ import {
 } from '../assessmentFormat';
 import { deskColumnPriority } from './deskColumns';
 import { MOTIONS, fmtDate, highestVerifiedLevel, motionFor, type Cohort, type TeamSummary } from '../types';
+
+/** The Motion column's icon per cohort (narrow batch): the chip is the icon, the name and tag its tooltip. */
+const MOTION_ICON: Record<Cohort, React.ReactNode> = {
+  white_glove: <PersonIcon size={12} aria-hidden="true" />,
+  self_service: <ChecklistIcon size={12} aria-hidden="true" />,
+  general: <RepeatIcon size={12} aria-hidden="true" />,
+};
 
 const ALL = 'all';
 
@@ -221,15 +231,27 @@ export function AssessorDesk({
           {
             key: 'lead',
             header: 'Lead',
+            truncate: true,
+            width: '8.5rem',
             priority: deskColumnPriority('lead'),
+            getFilterText: (t) => t.assessment_lead || 'no lead yet',
             render: (t) => <T size="sm" tone={t.assessment_lead ? 'primary' : 'tertiary'}>{t.assessment_lead || 'no lead yet'}</T>,
           },
           {
             key: 'cohort',
             header: 'Motion',
             sortable: true,
+            width: '4.5rem',
             priority: deskColumnPriority('cohort'),
-            render: (t) => <Chip size="xs" tone={motionFor(t.cohort).accent}>{motionFor(t.cohort).title}</Chip>,
+            // An icon chip: the motion's name and tag are its tooltip and accessible name (the toolbar filters by it too).
+            render: (t) => {
+              const m = motionFor(t.cohort);
+              return (
+                <Tooltip content={`${m.title} · ${m.tag.toLowerCase()}`}>
+                  <Chip size="xs" tone={m.accent} aria-label={`Motion: ${m.title}`} data-testid="desk-motion-chip">{MOTION_ICON[m.cohort] ?? MOTION_ICON.general}</Chip>
+                </Tooltip>
+              );
+            },
           },
           { key: 'certification', header: 'Certification', render: (t) => <CertificationCell team={t} /> },
           {
@@ -283,16 +305,19 @@ export function AssessorDesk({
             key: 'workflow_step',
             header: 'Step',
             sortable: true,
-            width: '130px',
+            width: '4.5rem',
             priority: deskColumnPriority('workflow_step'),
             render: (t) => {
               const ladder = t.workflow_steps && t.workflow_steps.length > 0
                 ? t.workflow_steps.map((w) => `${w.done ? '✓' : w.active ? '●' : '○'} ${w.step} · ${w.label}`).join('\n')
                 : `Step ${t.workflow_step} of 6`;
+              // Compact (narrow batch): "3/6"; the step's name and the ladder are the tooltip.
               return (
-                <Chip size="xs" tone="neutral" title={ladder}>
-                  {t.workflow_step}/6 · {t.workflow_step_label}
-                </Chip>
+                <Tooltip content={<T as="span" size="xs" wrap className="whitespace-pre-line">{`${t.workflow_step_label}\n${ladder}`}</T>}>
+                  <Chip size="xs" tone="neutral" aria-label={`Step ${t.workflow_step} of 6: ${t.workflow_step_label}`} data-testid="desk-step-chip">
+                    {t.workflow_step}/6
+                  </Chip>
+                </Tooltip>
               );
             },
           },

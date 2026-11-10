@@ -17,6 +17,7 @@ import {
   RAIL_CURRENT_FILL,
   ChevronIcon,
   IconButton,
+  MenuIcon,
   RAIL_FOLD_PRIMARY_BELOW,
   RAIL_FOLD_SECTION_BELOW,
   RailBandProvider,
@@ -345,6 +346,10 @@ function ShellLayout() {
   const depth = railDepth(location, { ...SHELL_RAIL_DEPTH, explored: sidePane.explored });
   const band = railBand(depth);
   const viewportWidth = useViewportWidth();
+  // A phone (under 40rem): the header is ONE row — the navigation menu as an icon, the brand, then the search
+  // icon, the fleet's status dot, the bell and the person's avatar. Before, the brand, the Navigation / Search /
+  // fleet row and the persona chip wrapped onto three rows (~220px above the content at 390).
+  const phoneHeader = viewportWidth < 640;
   const primaryRail = useRailFold({ storageKey: 'shell.primary-rail', band, defaultFolded: band === 'deep' || viewportWidth < RAIL_FOLD_PRIMARY_BELOW });
   const [huddleDialogueOpen, setHuddleDialogueOpen] = useState(false);
   const dialogueRail = useDialogueRailFold(sidePane.shown || huddleDialogueOpen, primaryRail, pathname);
@@ -495,6 +500,25 @@ function ShellLayout() {
   }, [tenantAttr]);
 
 
+  // The navigation drawer below md (the rails fold there): a word at tablet width, an icon on a phone.
+  const navigationMenu = (
+    <DropdownMenu
+      trigger={phoneHeader ? <MenuIcon size={16} aria-hidden="true" /> : 'Navigation'}
+      triggerLabel={`${tenantLabel} navigation`}
+      triggerTitle={phoneHeader ? 'Navigation' : undefined}
+      triggerClassName={phoneHeader ? 'md:hidden grid h-7 w-7 place-items-center border-0 p-0' : 'md:hidden text-xs'}
+      className="max-h-[70vh] overflow-y-auto"
+      sections={Array.from(new Set(subNavItems.map((item) => item.group))).map((group) => ({
+        label: group,
+        items: subNavItems.filter((item) => item.group === group).map((item) => ({
+          label: item.label,
+          active: pathname === item.path || pathname.startsWith(`${item.path}/`),
+          onSelect: () => navigate(item.path),
+        })),
+      }))}
+    />
+  );
+
   return (
     <ConversationInputProvider>
     <ShellCallHost onDialogueChange={setHuddleDialogueOpen}>
@@ -507,27 +531,15 @@ function ShellLayout() {
             rail and the nested rail first (WCAG 2.4.1, Bypass Blocks). */}
         <SkipLink targetId="main-content" />
         <AmbientVisitorTargets scope={shellRef} selector='[data-shell-nav] > div > aside:first-child nav > section:has(> button[aria-expanded="true"])' />
-        <Inline as="header" justify="between" align="center" wrap className="shell-header px-4 border-b border-border shrink-0">
-          <Inline gap="md" align="center" wrap={false} className="min-w-0 flex-1">
+        <Inline as="header" justify="between" align="center" wrap={!phoneHeader} className={phoneHeader ? 'shell-header px-3 border-b border-border shrink-0' : 'shell-header px-4 border-b border-border shrink-0'} data-header-rows={phoneHeader ? 'one' : undefined}>
+          <Inline gap={phoneHeader ? 'xs' : 'md'} align="center" wrap={false} className="min-w-0 flex-1">
+            {phoneHeader && navigationMenu}
             <TenantSwitcher label={tenantLabel} healthy={health?.status === 'ok' && !credsExpired && !dbDown && !checkingHealth} />
             <TodayStripSlot placement="header" />
           </Inline>
-            <Inline gap="md" wrap>
-              <DropdownMenu
-                trigger="Navigation"
-                triggerLabel={`${tenantLabel} navigation`}
-                triggerClassName="md:hidden text-xs"
-                className="max-h-[70vh] overflow-y-auto"
-                sections={Array.from(new Set(subNavItems.map((item) => item.group))).map((group) => ({
-                  label: group,
-                  items: subNavItems.filter((item) => item.group === group).map((item) => ({
-                    label: item.label,
-                    active: pathname === item.path || pathname.startsWith(`${item.path}/`),
-                    onSelect: () => navigate(item.path),
-                  })),
-                }))}
-              />
-              <CommandPaletteHint />
+            <Inline gap={phoneHeader ? 'xs' : 'md'} wrap={!phoneHeader} {...(phoneHeader ? { align: 'center' as const, className: 'shrink-0' } : {})}>
+              {!phoneHeader && navigationMenu}
+              <CommandPaletteHint {...(phoneHeader ? { variant: 'icon' as const } : {})} />
               {/* The user's own machine in the fleet — renders nothing until
                   a machine is paired, so most sessions never see it.
                   orgiq only, like DevboxQuickSwitch and ComputeDock below:
@@ -540,12 +552,12 @@ function ShellLayout() {
                   nothing runs. Its poll is orgiq-only (`/api/bots` is
                   requireTenant('orgiq')), so in the assessment shell it
                   never fetches and never renders. */}
-              <FleetIndicator />
+              <FleetIndicator compact={phoneHeader} />
               {/* Replies, mentions, DMs, missed calls, approvals — addressed
                   to this user, filtered to the tenants they hold a grant in
                   (docs/social-tenant-design.md §3). */}
               <ActivityBell />
-              <MasqueradeMenu />
+              <MasqueradeMenu compact={phoneHeader} />
             </Inline>
         </Inline>
         <Stack gap="none" className="flex-1 min-h-0" data-shell-nav

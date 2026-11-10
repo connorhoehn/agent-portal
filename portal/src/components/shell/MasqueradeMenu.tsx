@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import {
-  Button, ChoiceList, ChoiceRow, Inline, InlineAlert, InlinePopover, SectionLabel, Stack, StatusDot, T,
+  Avatar, Button, ChoiceList, ChoiceRow, Inline, InlineAlert, InlinePopover, SectionLabel, Stack, StatusDot, T,
 } from '@connorhoehn/ui-components/shared';
 import { useSession, type SessionRole } from '../../lib/auth';
 import { CHOOSER } from '../../lib/tenantHome';
@@ -62,7 +62,8 @@ function tenantLabel(t: string): string {
   return TENANT_LABELS[t] ?? t;
 }
 
-export function MasqueradeMenu() {
+/** `compact`: the one-row phone header's trigger — the person's avatar alone (name and role in its label). */
+export function MasqueradeMenu({ compact = false }: { compact?: boolean } = {}) {
   const { session, setRole, stopMasquerade, isLoading,
     ssoEnabled, signInWithSso, logout } = useSession();
   const [open, setOpen] = useState(false);
@@ -89,6 +90,23 @@ export function MasqueradeMenu() {
 
   return (
     <Stack gap="none" className="relative">
+      {compact ? (
+        <Button
+          ref={triggerRef}
+          variant="ghost"
+          size="sm"
+          onClick={() => setOpen(o => !o)}
+          disabled={busy}
+          aria-haspopup="true"
+          aria-expanded={open}
+          aria-label={`${session.name}, ${roleLabel(session.role)}${session.masquerading ? ', masquerade' : ''}: account and role`}
+          title={`${session.name} · ${roleLabel(session.role)}`}
+          className={session.masquerading ? 'h-7 w-7 justify-center rounded-full p-0 ring-2 ring-warning' : 'h-7 w-7 justify-center rounded-full p-0'}
+          data-testid="masquerade-menu-compact"
+        >
+          <Avatar name={session.name} size={24} showTitle={false} />
+        </Button>
+      ) : (
       <Button
         ref={triggerRef}
         variant="secondary"
@@ -110,6 +128,7 @@ export function MasqueradeMenu() {
           </Inline>
         </Inline>
       </Button>
+      )}
 
       {/* InlinePopover owns outside-click / Escape dismissal and focus
           capture-on-open + restore-on-close — the hand-rolled versions of

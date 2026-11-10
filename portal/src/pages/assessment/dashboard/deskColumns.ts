@@ -7,11 +7,15 @@
 // `responsiveColumns` with `columns[].priority` (the highest number hides
 // first, measured against the table's real content, so a column hides only
 // when the rest would otherwise scroll sideways); each row's "+N columns"
-// popover lists the hidden values. The order, first to hide:
+// popover lists the hidden values. Step is a compact "3/6" chip and Motion an
+// icon chip (narrow batch), so at a 1280 window every column fits. The order,
+// first to hide:
 //   Step          the record's stepper says it, and Next action says what moves it
 //   Motion        the toolbar filters by it
-//   Lead          the record's header names them
-//   Contributors, Updated, Assessed   only on a narrow tablet-sized table
+//   Contributors  the record lists them
+//   Updated       the record's activity has it
+//   Lead          the record's header names them (kept past the two above: it is who to ask)
+//   Assessed      only on a narrow tablet-sized table
 // Team, Certification with its open claims, Questions and Next action never
 // hide (priority 1). Under 40rem the row is DataTable's stacked card with
 // every field. These replace b603dc48's container-query classes.
@@ -21,7 +25,7 @@ export type DeskColumn = 'workflow_step' | 'cohort' | 'lead' | 'contributors' | 
 
 /** DataTable `priority` per giving-way column: the highest hides first. Every other column is 1 (never hides). */
 export const DESK_COLUMN_PRIORITY: Readonly<Record<DeskColumn, number>> = {
-  workflow_step: 7, cohort: 6, lead: 5, contributors: 4, updated_at: 3, dimensions_assessed: 2,
+  workflow_step: 7, cohort: 6, contributors: 5, updated_at: 4, lead: 3, dimensions_assessed: 2,
 };
 
 /** The column's DataTable priority. */
