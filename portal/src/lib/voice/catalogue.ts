@@ -252,7 +252,7 @@ export function getParts(tenant: string | null): string[] {
  * pipelines: what failed and the dead letters; access: its summary.
  */
 export const SUMMARY_KINDS: Readonly<Record<string, readonly string[]>> = {
-  orgiq: ['sweeps', 'work', 'fleet', 'machines', 'health', 'ingest', 'today', 'unread', 'live'],
+  orgiq: ['sweeps', 'sprint', 'work', 'fleet', 'machines', 'health', 'ingest', 'today', 'unread', 'live'],
   social: ['live', 'unread'],
   assessment: ['rollup', 'live', 'unread'],
   pipelines: ['pipelines', 'live', 'unread'],
@@ -574,7 +574,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
   {
     name: 'summary',
     parameters: obj({
-      kind: str('Which aggregate: "sweeps" (sweep and bot runs that failed, open findings), "work" (the work queue), "fleet" (the computers), "machines" (paired machines), "health" (agent runs in the last 24 hours), "ingest", "today", "unread" (discussions), "live" (who is online, in a call), "pipelines" (failed runs, dead letters), "rollup" (the assessment program), "access".', { enum: summaryKinds(null) }),
+      kind: str('Which aggregate: "sweeps" (sweep and bot runs that failed, open findings), "sprint" (the sprint in view or the user\'s: left, done, blocked on what), "work" (the work queue), "fleet" (the computers), "machines" (paired machines), "health" (agent runs in the last 24 hours), "ingest", "today", "unread" (discussions), "live" (who is online, in a call), "pipelines" (failed runs, dead letters), "rollup" (the assessment program), "access".', { enum: summaryKinds(null) }),
       since: str(`Since when, for sweeps, pipelines, machines and unread: ${SINCE_WORDS} (default yesterday for sweeps and pipelines).`, { minLength: 1, maxLength: 40 }),
     }, ['kind']),
     kind: 'read', backing: 'search', confirm: false, action: null, says: 'Checking the sweeps since yesterday.', tenants: VOICE_TENANTS,

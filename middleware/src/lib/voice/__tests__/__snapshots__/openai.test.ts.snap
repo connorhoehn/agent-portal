@@ -575,15 +575,16 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "Read one aggregate as a few figures: what failed since a time ("what failed last night"), the work queue, the fleet, paired machines, platform health, ingestion, what is on today, unread discussions, who is live, the program rollup or the access summary. The kinds here: sweeps, work, fleet, machines, health, ingest, today, unread, live.",
+    "description": "Read one aggregate as a few figures: what failed since a time ("what failed last night"), the work queue, the fleet, paired machines, platform health, ingestion, what is on today, unread discussions, who is live, the program rollup or the access summary. The kinds here: sweeps, sprint, work, fleet, machines, health, ingest, today, unread, live.",
     "name": "summary",
     "parameters": {
       "additionalProperties": false,
       "properties": {
         "kind": {
-          "description": "Which aggregate: "sweeps" (sweep and bot runs that failed, open findings), "work" (the work queue), "fleet" (the computers), "machines" (paired machines), "health" (agent runs in the last 24 hours), "ingest", "today", "unread" (discussions), "live" (who is online, in a call), "pipelines" (failed runs, dead letters), "rollup" (the assessment program), "access".",
+          "description": "Which aggregate: "sweeps" (sweep and bot runs that failed, open findings), "sprint" (the sprint in view or the user's: left, done, blocked on what), "work" (the work queue), "fleet" (the computers), "machines" (paired machines), "health" (agent runs in the last 24 hours), "ingest", "today", "unread" (discussions), "live" (who is online, in a call), "pipelines" (failed runs, dead letters), "rollup" (the assessment program), "access".",
           "enum": [
             "sweeps",
+            "sprint",
             "work",
             "fleet",
             "machines",

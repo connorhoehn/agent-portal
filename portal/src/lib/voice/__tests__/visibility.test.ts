@@ -91,7 +91,7 @@ const VARIANTS: Record<string, unknown[]> = {
     { action: 'hand-work', machine: 'nobody-laptop', job: 'x' }, { action: 'hand-work', machine: 'sana', job: 'nothing like it' }, { action: 'hand-work', machine: 'sana-laptop', job: 'sana' },
     { action: 'hand-work', machine: 'sana-parked-laptop', job: 'sana' }, { action: 'hand-work' }],
   budget: [{ scope: 'me' }, { scope: 'initiative', initiative: 'Nobody Initiative' }, { scope: 'initiative', initiative: 'Initiative' }, { scope: 'org' }, { scope: 'allocations' }, { scope: 'cost' }, { scope: 'initiative', initiative: 'this-page', period: '7d' }, { scope: 'envelopes', initiative: 'this-page', sprint: 'this' }, { scope: 'envelopes', initiative: 'Initiative', sprint: 'last' }],
-  summary: [{ kind: 'sweeps', since: 'whenever' }, { kind: 'sweeps', since: 'yesterday' }, { kind: 'fleet' }, { kind: 'live' }, { kind: 'ingest' }, { kind: 'rollup' }, { kind: 'today' }],
+  summary: [{ kind: 'sprint' }, { kind: 'sweeps', since: 'whenever' }, { kind: 'sweeps', since: 'yesterday' }, { kind: 'fleet' }, { kind: 'live' }, { kind: 'ingest' }, { kind: 'rollup' }, { kind: 'today' }],
   message: [{ target: { kind: 'dm', name: 'Ada' }, text: 'hello' }, { target: { kind: 'team', name: 'nobody' }, text: 'x' }],
   call: [{ action: 'start', target: { kind: 'dm', name: 'Ada' } }, { action: 'join' }, { action: 'join', target: { kind: 'channel', name: 'nowhere' } }, { action: 'start' }],
   set_status: [{ status: 'away', message: 'out' }],

@@ -1170,11 +1170,16 @@ async function listWork(spec: KindSpec, args: Args, ctx: ToolContext): Promise<T
   ctx.results?.keep(rows.map((r) => ({ ref: cap(`work-item:${r.id}`), title: r.title, href: href(r) })));
   const narrowed = [q && `matching "${q}"`, status && `with ${status}`, who && `owned by ${SELF.test(who) ? 'you' : who}`, sprint && `in ${sprint.name}`].filter(Boolean).join(', ');
   const where = initiative && !sprint ? ` on ${initiative.title}` : '';
-  return done('list', {
+  const res = done('list', {
     of: 'work-item', ...(narrowed ? { filter: narrowed } : {}), count: all.length,
     rows: rows.map((r) => ({ ref: `work-item:${r.id}`, title: r.title, status: r.status, priority: r.priority, subtitle: workSubtitle({ assignee: r.assigneeName ?? null, blockedOn: r.blockedOn }), href: href(r) || undefined })),
     ...(rows.length ? { open: OPEN_NOTE, read: 'get reads a row by its ref or position.' } : {}),
   }, rows.length ? `${plural(all.length, spec.one ?? 'work item', spec.label)}${where}${narrowed ? ` ${narrowed}` : ''}; first: ${rows[0]!.title}` : `No ${spec.label}${where}${narrowed ? ` ${narrowed}` : ''}`);
+  // "What is blocked, and on what": the count, then the first row and what it waits on.
+  if (/^blocked$/i.test(status) && rows[0]) {
+    return spoken(res, `${plural(all.length, 'blocked work item')}${where}: "${rows[0].title}" on "${rows[0].blockedOn}"${all.length > 1 ? `, and ${all.length - 1} more` : ''}`);
+  }
+  return res;
 }
 
 /**
@@ -1646,7 +1651,53 @@ const INGEST_READ_ROLES = ['org-leader', 'hr-admin', 'admin'];
 /** /api/today's budget item is money: budget answers it, at the tier, never summary. */
 const TODAY_MONEY = new Set(['budget', 'spend']);
 
-type SummaryKind = 'sweeps' | 'work' | 'fleet' | 'machines' | 'health' | 'ingest' | 'today' | 'unread' | 'live' | 'pipelines' | 'rollup' | 'access';
+type SummaryKind = 'sweeps' | 'sprint' | 'work' | 'fleet' | 'machines' | 'health' | 'ingest' | 'today' | 'unread' | 'live' | 'pipelines' | 'rollup' | 'access';
+
+/**
+ * `summary { kind: 'sprint' }` (coverage, 10 November): the sprint in view (the initiative's active one), else the one
+ * active sprint the user has work in, as its board reads it: what is left, what is done, and what is blocked on what.
+ */
+async function sprintSummary(ctx: ToolContext): Promise<ToolResult> {
+  const here = pageInitiative(ctx);
+  let sprint: SprintRef & { initiative?: string };
+  if (here) {
+    const found = await resolveSprint(ctx, here.id, 'this');
+    if ('result' in found) return found.result;
+    sprint = { ...found.sprint, initiative: here.title };
+  } else {
+    const read = await readJson<{ sprints?: Rec[] }>(ctx, '/api/sprints');
+    if (!read.ok) return readFailure('the sprints', read.status);
+    const mine = (read.body.sprints ?? []).filter((r) => r['status'] === 'active' && typeof r['id'] === 'string'
+      && ((num(r['myItemCount']) ?? 0) > 0 || r['isSteward'] === true || r['isGrantee'] === true));
+    if (!mine.length) return refused('You have no work in an active sprint; open an initiative to ask about its sprint.', { code: 'not-found' });
+    if (mine.length > 1) {
+      return ambiguous(`You are in ${mine.length} active sprints; open the initiative of the one you mean, or ask which.`,
+        mine.slice(0, MAX_ROWS).map((r) => ({ title: String(r['name']), subtitle: String(r['orgProjectName'] ?? ''), ...(typeof r['orgProjectId'] === 'string' ? { ref: `initiative:${r['orgProjectId']}` } : {}) })));
+    }
+    const r = mine[0]!;
+    sprint = { id: String(r['id']), name: String(r['name']), status: 'active', ...(typeof r['endsOn'] === 'string' ? { endsOn: r['endsOn'] } : {}), ...(typeof r['orgProjectName'] === 'string' ? { initiative: r['orgProjectName'] } : {}) };
+  }
+  const work = await readWork(ctx, { sprintId: sprint.id });
+  if ('result' in work) return work.result;
+  const isDone = (r: { status?: string }) => r.status === 'done';
+  const left = work.rows.filter((r) => !isDone(r) && r.status !== 'cancelled');
+  const doneCount = work.rows.filter(isDone).length;
+  const blocked = left.filter((r) => r.blockedOn);
+  const ordered = [...blocked, ...left.filter((r) => !r.blockedOn)].slice(0, MAX_ROWS);
+  const href = (r: WorkRow) => (r.projectId ? `/iq/projects/${encodeURIComponent(r.projectId)}?item=${encodeURIComponent(r.id)}` : '');
+  ctx.results?.keep(ordered.map((r) => ({ ref: cap(`work-item:${r.id}`), title: r.title, href: href(r) })));
+  const blockers = [...new Set(blocked.map((r) => r.blockedOn!))];
+  const res = done('summary', {
+    of: 'sprint', sprint: sprint.name, ...(sprint.initiative ? { initiative: sprint.initiative } : {}), ...(sprint.endsOn ? { endsOn: sprint.endsOn } : {}),
+    left: left.length, done: doneCount, blocked: blocked.length,
+    rows: ordered.map((r) => ({ ref: `work-item:${r.id}`, title: r.title, status: r.status, priority: r.priority, subtitle: workSubtitle({ assignee: r.assigneeName ?? null, blockedOn: r.blockedOn }) })),
+    read: 'get reads a row by its ref; list work-item with sprint "last" and status done answers the last sprint.',
+  }, `${sprint.name}: ${left.length} left, ${doneCount} done, ${blocked.length} blocked`);
+  const blockLine = blocked.length
+    ? `; ${blocked.length} blocked, on "${blockers[0]}"${blockers.length > 1 ? ` and ${blockers.length - 1} more` : ''}`
+    : '; nothing blocked';
+  return spoken(res, `${sprint.name}: ${left.length} left, ${doneCount ? `${doneCount} done` : 'none done'}${blockLine}.`);
+}
 
 const summary: Runner = async (args, ctx) => {
   const kind = String(args['kind']) as SummaryKind;
@@ -1658,6 +1709,7 @@ const summary: Runner = async (args, ctx) => {
 
   switch (kind) {
     case 'sweeps': return sweepsSummary(since!, ctx);
+    case 'sprint': return sprintSummary(ctx);
     case 'work': {
       const read = await readJson<{ jobs?: Counts; proposals?: Counts; consults?: Counts; findings?: Counts }>(ctx, '/api/work/summary');
       if (!read.ok) return readFailure('the work summary', read.status);

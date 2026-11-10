@@ -341,7 +341,36 @@ const C3 = {
   },
 };
 
-const CAPABILITIES = { C1, C2, C2B, C3 };
+/** C4: sprint questions on Auth Migration (Nora). */
+const C4 = {
+  title: 'Sprint questions', persona: 'nora',
+  async run(s, page) {
+    await s('voice: "What\'s left in this sprint, and what is blocked on what?", "What got done last sprint?", "What is blocked?"', async () => {
+      await go(page, `${INITIATIVE}?tab=work`);
+      await waitText(page, '[data-testid=explorer-layout-pane]', new RegExp(BUG));
+      await startVoice(page, [
+        { said: "What's left in this sprint, and what's blocked on what?", call: { name: 'summary', arguments: { kind: 'sprint', since: null } } },
+        { said: 'What got done last sprint?', call: { name: 'list', arguments: { ...LIST, kind: 'work-item', filter: { ...FILTER, sprint: 'last', status: 'done' } } } },
+        { said: 'What is blocked?', call: { name: 'list', arguments: { ...LIST, kind: 'work-item', filter: { ...FILTER, status: 'blocked' } } } },
+      ]);
+      const board = await json(page, '/api/graph/work?sprint=spr-auth-s2&limit=200');
+      const left = board.filter((w) => w.status !== 'done' && w.status !== 'cancelled' && w.type !== 'epic');
+      const a = terseSay(await nthOutput(page, 1), 'sprint summary',
+        `Sprint 10 — Session hygiene: ${left.length} left, none done; 1 blocked, on "Cutover order for legacy SSO tenants".`);
+      const lastBoard = (await json(page, '/api/graph/work?sprint=spr-auth-s1&limit=200')).filter((w) => w.status === 'done' && w.type !== 'epic');
+      const doneOut = await nthOutput(page, 2);
+      const b = terseSay(doneOut, 'last sprint done', new RegExp(`^${lastBoard.length} work items?\\b`));
+      check(doneOut.count === lastBoard.length, `last sprint: ${doneOut.count} done, the board says ${lastBoard.length}`);
+      const blockedOut = await nthOutput(page, 3);
+      const c = terseSay(blockedOut, 'blocked', '1 blocked work item on Auth Migration: "Tenant-by-tenant cutover runbook with rollback" on "Cutover order for legacy SSO tenants".');
+      check(/Cutover order for legacy SSO tenants/.test(blockedOut.rows?.[0]?.subtitle ?? ''), `the blocked row does not name its decision: ${JSON.stringify(blockedOut.rows?.[0])}`);
+      await stopVoice(page);
+      return { say: [a, b, c] };
+    });
+  },
+};
+
+const CAPABILITIES = { C1, C2, C2B, C3, C4 };
 
 // ── the run ──────────────────────────────────────────────────────────────────
 
