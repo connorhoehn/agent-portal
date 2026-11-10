@@ -28,10 +28,11 @@ the cache starts empty, a fresh process also refuses any signature issued
 before it started (less ``start_grace_sec()``: the clock skew plus the cold
 start a first invoke waits through), so a restart does not reopen the window
 for requests captured before it. The cache is in-process, which matches an
-AgentCore runtime session (one process serves a session). A runtime that runs several
-replicas behind one endpoint needs a shared store for the cache (a DynamoDB
-table with a conditional put on the nonce and a TTL attribute, or Redis
-``SET NX EX``); ``set_replay_cache`` takes any object with the same
+AgentCore runtime session (one process serves a session). A runtime that runs
+several replicas behind one endpoint sets ``AGENT_INVOKE_REPLAY_TABLE``: the
+cache is then layered over a conditional put into that DynamoDB-compatible
+table (replay_store.py, installed at import), and refuses every signed invoke
+when the table errors. ``set_replay_cache`` takes any object with the same
 ``seen_or_add`` method.
 The prompt is the one the agent will read (``input_text``, ``prompt`` and
 ``message`` must agree), the input is the ``input`` JSON text as sent, the
@@ -263,6 +264,20 @@ def set_replay_cache(cache) -> None:
         _verified_payloads.clear()
 
 
+def install_replay_store_from_env(env=None) -> bool:
+    """Layer the replay cache over the shared table when one is configured
+    (replay_store.py); True when it did. Called once at import."""
+    try:
+        from .replay_store import replay_cache_from_env
+    except ImportError:  # pragma: no cover — flat layout
+        from replay_store import replay_cache_from_env
+    cache = replay_cache_from_env(env)
+    if cache is None:
+        return False
+    set_replay_cache(cache)
+    return True
+
+
 def new_nonce() -> str:
     return secrets.token_urlsafe(18)
 
@@ -404,7 +419,8 @@ def _verify(payload: dict) -> InvokeIdentity | None:
         # The run id is inside the signed body, so only the signer chooses it.
         replayed = _replay_cache.seen_or_add(nonce, caller=f"{why}:{tenant}:{sub}", **({"run": run_id} if run_id else {}))
     except ReplayCacheFull as exc:
-        log.error("invoke-auth: refusing the signed invocation: %s. Nothing is evicted; it clears as entries expire", exc)
+        # A full cache clears as entries expire (nothing is evicted); a shared store that errors refuses until it answers.
+        log.error("invoke-auth: refusing the signed invocation: %s", exc)
         return None
     if replayed:
         log.warning("invoke-auth: nonce already used inside the signature window; treating the caller as least privileged")
@@ -474,3 +490,8 @@ def request_fields(payload) -> dict:
             return {}
     source = raw if isinstance(raw, dict) else payload
     return {k: v for k, v in source.items() if k not in IDENTITY_KEYS and k != "input"}
+
+
+# Last, so replay_store can import this module's names: a configured table
+# replaces the in-process cache for the life of the process.
+install_replay_store_from_env()
