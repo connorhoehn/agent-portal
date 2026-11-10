@@ -319,7 +319,8 @@ describe('no route quotes another user\'s prompt or answer to a member', () => {
       checked.push(`${status} GET ${r.path}`);
       if (body.includes(MARK)) leaks.push(`GET ${r.path} → ${body.slice(Math.max(0, body.indexOf(MARK) - 80), body.indexOf(MARK) + 60)}`);
     }
-    if (process.env['TRACE_GUARD_LIST'] === '1') console.warn(checked.join('\n'));
+    // stderr directly: the jest setup silences console.
+    if (process.env['TRACE_GUARD_LIST'] === '1') process.stderr.write(`${checked.join('\n')}\n`);
     expect(leaks).toEqual([]);
   }, 120_000);
 });
