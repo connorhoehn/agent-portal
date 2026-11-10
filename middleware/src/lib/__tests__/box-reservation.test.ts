@@ -11,7 +11,7 @@ jest.mock('../../config.js', () => ({
   config: { region: 'us-east-1', mock: { aurora: true, cloudwatch: true, guardrails: true, agentcore: true } },
 }));
 jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn(async () => []) }));
-jest.mock('../../routes/devbox.js', () => ({ runDevboxTask: jest.fn(async () => ({ ok: true })) }));
+jest.mock('../../routes/devbox.js', () => ({ runDevboxTask: jest.fn(async () => ({ ok: true })), wipeDevboxWorkspace: jest.fn(async () => ({ ok: true, removed: 0 })) }));
 
 import { fixtureRegistry } from '../../mock/core/index.js';
 import { enqueueJob, getJob } from '../../providers/agent-jobs.js';

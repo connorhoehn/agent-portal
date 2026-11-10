@@ -128,6 +128,40 @@ export interface FleetBox {
    * Set at `task_started`; kept after the task ends (only read while running).
    */
   taskStartedAt?: string;
+  /**
+   * Whose work the box's workspace and Claude Code session hold: the session
+   * sub of the last person to send it a task or queue its job, or
+   * `bot:<id>` / `fleet` for unattributed work. A box is reused across people (the
+   * dispatcher hands any idle box the next job), so this is what decides
+   * whether `resume` may continue the conversation (only the same occupant)
+   * and whether the workspace is wiped first (lib/devbox-fleet.ts
+   * changesHands). Absent on a box no task has reached yet.
+   */
+  lastOccupant?: string;
+}
+
+/**
+ * Whether handing `box` to `occupant` crosses from one person's work to
+ * another's. A box that never ran a task holds nobody's work; one whose last
+ * occupant is unknown (it ran before this field, or this process restarted
+ * without it) is treated as someone else's — the conservative reading.
+ */
+export function changesHands(box: FleetBox, occupant: string): boolean {
+  const used = Boolean(box.lastOccupant || box.currentTask || box.lastResult);
+  return used && box.lastOccupant !== occupant;
+}
+
+/** Record who now occupies the box (see FleetBox.lastOccupant). */
+export function setOccupant(id: string, occupant: string): void {
+  const s = boxes.get(id);
+  if (!s || s.box.lastOccupant === occupant) return;
+  s.box.lastOccupant = occupant;
+  structural(s);
+}
+
+/** A box the fleet made for itself: nobody's personal computer, on no initiative. */
+export function isFleetOwnedBox(box: FleetBox): boolean {
+  return !box.ownerId && !box.projectId;
 }
 
 export type FleetEvent = Record<string, unknown>;
@@ -901,6 +935,7 @@ export async function refreshFromShared(): Promise<void> {
       s.box.label = rec.box.label;
       if (rec.box.taskStartedAt) s.box.taskStartedAt = rec.box.taskStartedAt;
       if (rec.box.currentTask !== undefined) s.box.currentTask = rec.box.currentTask;
+      if (rec.box.lastOccupant !== undefined) s.box.lastOccupant = rec.box.lastOccupant;
       if (rec.box.profileId && !s.box.profileId) {
         s.box.profileId = rec.box.profileId;
         s.box.profileVersion = rec.box.profileVersion;

@@ -21,11 +21,12 @@ import {
 } from '../providers/agent-jobs.js';
 import {
   listBoxes, appendEvent, getBox, registerBox, isReserved, claimBox, releaseBox, refreshFromShared, allHolds,
+  changesHands, setOccupant,
 } from './devbox-fleet.js';
 import { isLocalBoxId } from './local-compute-fleet.js';
 import { isMicrovmBoxId } from './microvm-ids.js';
 import { replicaFleet, replicaId } from './replica-fleet.js';
-import { runDevboxTask } from '../routes/devbox.js';
+import { runDevboxTask, wipeDevboxWorkspace } from '../routes/devbox.js';
 import type { DevboxRunOutcome } from './devbox-runner.js';
 import { freezeJobBrief } from './run-brief.js';
 import { maintainJobAttempt, type JobAttempt } from './job-attempt.js';
@@ -182,6 +183,14 @@ async function jobMeter(job: ClaimedAgentJob, money: { holdId: string | null; am
   }
 }
 
+/** Whose work a queued job is, for FleetBox.lastOccupant: its creator (the same
+ *  session sub the task route records), else its bot, else the fleet's. */
+export function jobOccupant(job: Pick<AgentJob, 'createdBy' | 'botId'>): string {
+  if (job.createdBy) return job.createdBy;
+  if (job.botId) return `bot:${job.botId}`;
+  return 'fleet';
+}
+
 async function runJob(job: ClaimedAgentJob, policy: LifetimePolicy = lifetimePolicy()): Promise<void> {
   const { boxId, sessionId, claimToken } = job;
   if (!boxId || !sessionId) {
@@ -222,6 +231,23 @@ async function runJob(job: ClaimedAgentJob, policy: LifetimePolicy = lifetimePol
       type: 'brief_frozen', jobId: job.id, brief_id: frozen.brief.id, brief_sha: frozen.brief.sha256,
       tokens: frozen.brief.used_tokens, ts: new Date().toISOString(),
     });
+    // The box served whoever ran the last job on it. A job for someone else
+    // starts on an empty workspace and never resumes the previous occupant's
+    // conversation; a failed wipe fails the job rather than run it on their files.
+    const occupant = jobOccupant(job);
+    const box = getBox(boxId);
+    let resume = Boolean(job.payload['resume']);
+    if (box && changesHands(box, occupant)) {
+      if (resume) {
+        resume = false;
+        appendEvent(boxId, { type: 'resume_refused', jobId: job.id, ts: new Date().toISOString() });
+      }
+      const wiped = await attempt.run(() => wipeDevboxWorkspace(sessionId));
+      attempt.assertLive();
+      if (!wiped.ok) throw new Error(`workspace wipe before hand-over failed: ${wiped.error ?? 'unknown'}`);
+      appendEvent(boxId, { type: 'workspace_wiped', jobId: job.id, removed: wiped.removed ?? 0, ts: new Date().toISOString() });
+    }
+    setOccupant(boxId, occupant);
     const guard = attempt;
     const meter = await jobMeter(job, money);
     // A bot-owned job's slot is its bot run's hold (DE-37): freed when the job ends.
@@ -230,7 +256,7 @@ async function runJob(job: ClaimedAgentJob, policy: LifetimePolicy = lifetimePol
     const outcome = await attempt.run(() => runDevboxTask({
       sessionId, prompt, signal: guard.signal, meter, boxId,
       ...(frozen ? { lab: { ...frozen.run, session_id: sessionId, box_id: boxId } } : {}),
-      resume: Boolean(job.payload['resume']),
+      resume,
       // The box's profile default, stated rather than left to the image (DE-48).
       timeoutSeconds: policy.taskDefaultS,
       ...(typeof job.payload['model'] === 'string' ? { model: job.payload['model'] } : {}),

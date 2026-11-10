@@ -63,6 +63,9 @@ import {
   appendEvent,
   setBoxProfile,
   isReserved,
+  changesHands,
+  isFleetOwnedBox,
+  setOccupant,
   type FleetBox,
 } from '../lib/devbox-fleet.js';
 import { presignShellUrl, isValidShellId, MAX_FRAME_BYTES } from '../lib/devbox-shell.js';
@@ -908,6 +911,35 @@ devboxRouter.post('/:sessionId/task', requireBoxAction('RunDevboxTask'), asyncHa
   const governed = await applyTaskProfile(getBoxBySession(sessionId), body, res);
   if (!governed) return;
 
+  // A box is reused across people. `resume` continues the Claude Code
+  // conversation in the box, so only the person who left it may resume it;
+  // and a box the fleet made for itself (nobody's, on no initiative) is wiped
+  // before it serves someone new. A personal or initiative box keeps its
+  // workspace: whoever reaches it already passed requireBoxAccess, which is
+  // the rule that shares it. A box a governed run holds (isReserved) is left
+  // alone: a task sent there is a person answering that run's question, inside
+  // the run (runTaskAndForward below), and resuming it is the point.
+  const occupant = req.session?.sub ?? 'anonymous';
+  const box = getBoxBySession(sessionId);
+  if (box && !isReserved(box.id) && changesHands(box, occupant)) {
+    if (body.resume) {
+      res.status(409).json({
+        error: 'resume_refused',
+        message: 'This computer last ran someone else\'s task; start a new conversation instead of resuming theirs.',
+      });
+      return;
+    }
+    if (isFleetOwnedBox(box)) {
+      const wiped = await wipeDevboxWorkspace(sessionId);
+      if (!wiped.ok) {
+        res.status(502).json({ error: 'wipe_failed', message: `The computer could not be cleared for a new occupant: ${wiped.error ?? 'unknown'}` });
+        return;
+      }
+      appendEvent(box.id, { type: 'workspace_wiped', removed: wiped.removed ?? 0, ts: new Date().toISOString() });
+    }
+  }
+  if (box && !isReserved(box.id)) setOccupant(box.id, occupant);
+
   await runTaskAndForward({
     sessionId, prompt, resume: Boolean(body.resume), res, arn,
     spend: { source: 'box_task', actorId: req.session?.sub ?? null },
@@ -1292,4 +1324,34 @@ export async function runDevboxTask(opts: {
     runtimeArn: arn,
     client: dataClient(),
   });
+}
+
+/**
+ * Empty a box's workspace before it serves a different person (the devbox
+ * image's `{"op": "wipe"}`, agents/devbox/main.py): files, repos and the
+ * Claude Code session history the last occupant left behind. Offline there is
+ * no workspace to empty, so it answers as an empty one would. Never throws:
+ * the caller decides what a failed wipe means, and every caller refuses to
+ * hand the box over on one.
+ */
+export async function wipeDevboxWorkspace(sessionId: string): Promise<{ ok: boolean; removed?: number; error?: string }> {
+  if (mockAgentCore()) return { ok: true, removed: 0 };
+  const arn = await resolveDevboxArn();
+  if (!arn) return { ok: false, error: 'devbox runtime not deployed' };
+  try {
+    const resp = await dataClient().send(new InvokeRuntime({
+      agentRuntimeArn: arn,
+      qualifier: 'DEFAULT',
+      runtimeSessionId: sessionId,
+      payload: new TextEncoder().encode(JSON.stringify({ op: 'wipe' })),
+    }));
+    const body = resp.response as unknown as { transformToString?: () => Promise<string> } | undefined;
+    const text = body?.transformToString ? await body.transformToString() : '';
+    let parsed: { ok?: unknown; removed?: unknown; error?: unknown } = {};
+    try { parsed = JSON.parse(text.trim().split('\n').pop() || '{}') as typeof parsed; } catch { /* not JSON */ }
+    if (parsed.ok === true) return { ok: true, removed: typeof parsed.removed === 'number' ? parsed.removed : 0 };
+    return { ok: false, error: typeof parsed.error === 'string' ? parsed.error : 'wipe not confirmed' };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
 }

@@ -3,10 +3,13 @@ jest.mock('../../providers/agent-jobs.js', () => ({
   reapStaleJobs: jest.fn(async () => ({ requeued: 0, failed: 0 })), listJobs: jest.fn(async () => []),
 }));
 // The fleet as the dispatcher sees it; a test may age the box (DE-48 rule 3).
-const fleet = { createdAt: new Date().toISOString() };
+const fleet = { createdAt: new Date().toISOString(), occupancy: {} as Record<string, unknown> };
 jest.mock('../devbox-fleet.js', () => ({
   listBoxes: () => [{ id: 'box', sessionId: 'session', status: 'idle', createdAt: fleet.createdAt }],
-  appendEvent: jest.fn(), getBox: () => ({ id: 'box' }), registerBox: jest.fn(), isReserved: () => false,
+  appendEvent: jest.fn(), getBox: () => ({ id: 'box', ...fleet.occupancy }), registerBox: jest.fn(), isReserved: () => false,
+  // The real hand-over rule over the box above; a test sets fleet.occupancy.
+  changesHands: (...a: unknown[]) => jest.requireActual('../devbox-fleet.js').changesHands(...a),
+  setOccupant: jest.fn(),
   // The box claim (DE-47): this process's claim, released when the attempt ends.
   ...(() => {
     const held = new Set<string>();
@@ -21,7 +24,7 @@ jest.mock('../devbox-fleet.js', () => ({
 // Per-box profile policies (DE-40): none resolved → the deployment default.
 jest.mock('../devbox-profile.js', () => ({ lifetimePoliciesFor: jest.fn(async () => new Map()) }));
 jest.mock('../replica-fleet.js', () => ({ replicaFleet: jest.fn(), replicaId: () => 'r-test' }));
-jest.mock('../../routes/devbox.js', () => ({ runDevboxTask: jest.fn() }));
+jest.mock('../../routes/devbox.js', () => ({ runDevboxTask: jest.fn(), wipeDevboxWorkspace: jest.fn(async () => ({ ok: true, removed: 3 })) }));
 jest.mock('../run-brief.js', () => ({ freezeJobBrief: jest.fn(async () => null) }));
 jest.mock('../../providers/spend-ledger.js', () => ({
   recordSpend: jest.fn(async () => undefined),
@@ -48,8 +51,8 @@ import { recordSpend } from '../../providers/spend-ledger.js';
 import { claimNextJob, completeJob, heartbeatJob, markRunning, unclaimJob } from '../../providers/agent-jobs.js';
 import { reserveSpend } from '../spend-holds.js';
 import { releaseHold } from '../../providers/spend-holds.js';
-import { runDevboxTask } from '../../routes/devbox.js';
-import { appendEvent } from '../devbox-fleet.js';
+import { runDevboxTask, wipeDevboxWorkspace } from '../../routes/devbox.js';
+import { appendEvent, setOccupant } from '../devbox-fleet.js';
 import { dispatchOnce, dispatcherEvents, busyBoxes } from '../job-dispatcher.js';
 const outcome = { ok: true, summary: 'done', transcript: [] };
 const job = {
@@ -80,6 +83,43 @@ it('passes the winning token to every write and keeps it out of UI events', asyn
   expect(runDevboxTask).toHaveBeenCalledWith(expect.objectContaining({ signal: expect.any(AbortSignal) }));
   expect(JSON.stringify(events)).not.toContain('private-attempt');
   expect(events).toContainEqual(expect.objectContaining({ kind: 'done' }));
+});
+
+describe('a box changing hands', () => {
+  afterEach(() => { fleet.occupancy = {}; });
+
+  it('wipes the workspace and refuses resume when the last occupant was someone else', async () => {
+    fleet.occupancy = { lastOccupant: 'u-previous' };
+    (claimNextJob as jest.Mock).mockReset().mockResolvedValueOnce({ ...job, payload: { ...job.payload, resume: true } }).mockResolvedValue(null);
+    await dispatchOnce(); await untilIdle();
+    expect(wipeDevboxWorkspace).toHaveBeenCalledWith('session');
+    expect(runDevboxTask).toHaveBeenCalledWith(expect.objectContaining({ resume: false }));
+    expect(appendEvent).toHaveBeenCalledWith('box', expect.objectContaining({ type: 'resume_refused' }));
+    expect(appendEvent).toHaveBeenCalledWith('box', expect.objectContaining({ type: 'workspace_wiped', removed: 3 }));
+    expect(setOccupant).toHaveBeenCalledWith('box', 'u-sme');
+  });
+
+  it('treats a used box with no recorded occupant as someone else\'s', async () => {
+    fleet.occupancy = { currentTask: 'an earlier task' };
+    await dispatchOnce(); await untilIdle();
+    expect(wipeDevboxWorkspace).toHaveBeenCalledWith('session');
+  });
+
+  it('keeps the workspace and the resume for the same occupant', async () => {
+    fleet.occupancy = { lastOccupant: 'u-sme' };
+    (claimNextJob as jest.Mock).mockReset().mockResolvedValueOnce({ ...job, payload: { ...job.payload, resume: true } }).mockResolvedValue(null);
+    await dispatchOnce(); await untilIdle();
+    expect(wipeDevboxWorkspace).not.toHaveBeenCalled();
+    expect(runDevboxTask).toHaveBeenCalledWith(expect.objectContaining({ resume: true }));
+  });
+
+  it('fails the job rather than run it on the previous occupant\'s files when the wipe fails', async () => {
+    fleet.occupancy = { lastOccupant: 'u-previous' };
+    (wipeDevboxWorkspace as jest.Mock).mockResolvedValueOnce({ ok: false, error: 'runtime unreachable' });
+    await dispatchOnce(); await untilIdle();
+    expect(runDevboxTask).not.toHaveBeenCalled();
+    expect(completeJob).toHaveBeenCalledWith('job', expect.objectContaining({ status: 'failed', error: expect.stringContaining('wipe') }));
+  });
 });
 
 it('states the policy\'s default task timeout instead of leaving the image to pick (DE-48)', async () => {

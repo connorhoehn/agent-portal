@@ -14,7 +14,7 @@ const mockQueue = {
   reapStaleJobs: jest.fn(async () => ({ requeued: 0, failed: 0 })),
   listJobs: jest.fn(async () => []),
 };
-const mockRuntime = { runDevboxTask: jest.fn() };
+const mockRuntime = { runDevboxTask: jest.fn(), wipeDevboxWorkspace: jest.fn(async () => ({ ok: true, removed: 0 })) };
 let mockReplicaCounter = 0;
 
 jest.mock('../../providers/agent-jobs.js', () => mockQueue);

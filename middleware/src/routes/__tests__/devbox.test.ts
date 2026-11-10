@@ -28,7 +28,7 @@ import {
   commandAllowedBy, runCommandPhrases, toolsForTenant, RUN_COMMAND_PHRASES, RUN_COMMAND_PHRASE_COMMANDS,
 } from '../../lib/voice/catalogue.js';
 import { type Session } from '../../lib/session.js';
-import { registerBox, _resetFleet, getBoxBySession, getBox } from '../../lib/devbox-fleet.js';
+import { registerBox, _resetFleet, getBoxBySession, getBox, reserveBox, releaseBox } from '../../lib/devbox-fleet.js';
 import { decideReaping, MAX_LIFETIME_MS } from '../../lib/devbox-reaper.js';
 import { recordSpend } from '../../providers/spend-ledger.js';
 // The DE-42 box-action gate (lib/agent-actions.ts) asks Cedar through
@@ -359,6 +359,81 @@ describe('POST /api/devbox/:sessionId/task', () => {
     // Forwarded as a clean single-encoded object frame.
     expect(res.text).toContain('data: {"type":"devbox_start"');
     expect(res.text).not.toContain('\\"type\\"');
+  });
+});
+
+describe('POST /api/devbox/:sessionId/task — a box changing hands', () => {
+  const payloadsOf = (calls: SentCommand[]) =>
+    calls.map((c) => JSON.parse(new TextDecoder().decode((c.input as { payload: Uint8Array }).payload)) as Record<string, unknown>);
+  const done = () => ({ response: asyncIterOf([new TextEncoder().encode('data: {"type":"devbox_end","exit_code":0}\n')]) });
+
+  it('refuses resume when the box last ran someone else\'s task', async () => {
+    _resetFleet();
+    const box = registerBox({ sessionId: SESSION });
+    const { calls } = mockDataClient(async () => done());
+    await request(buildApp({ sub: 'u-first' })).post(`/api/devbox/${SESSION}/task`).send({ prompt: 'mine' }).expect(200);
+    expect(getBox(box.id)?.lastOccupant).toBe('u-first');
+    calls.length = 0;
+    const res = await request(buildApp({ sub: 'u-second' })).post(`/api/devbox/${SESSION}/task`).send({ prompt: 'continue', resume: true });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe('resume_refused');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('wipes a fleet box before it serves someone new, then runs the task fresh', async () => {
+    _resetFleet();
+    registerBox({ sessionId: SESSION });
+    const { calls } = mockDataClient(async (c) => (
+      JSON.parse(new TextDecoder().decode((c.input as { payload: Uint8Array }).payload)).op === 'wipe'
+        ? { response: { transformToString: async () => '{"ok": true, "removed": 4}' } }
+        : done()
+    ));
+    await request(buildApp({ sub: 'u-first' })).post(`/api/devbox/${SESSION}/task`).send({ prompt: 'mine' }).expect(200);
+    expect(payloadsOf(calls).some((p) => p['op'] === 'wipe')).toBe(false);
+    calls.length = 0;
+    await request(buildApp({ sub: 'u-second' })).post(`/api/devbox/${SESSION}/task`).send({ prompt: 'new work' }).expect(200);
+    const sent = payloadsOf(calls);
+    expect(sent[0]).toEqual({ op: 'wipe' });
+    expect(sent[1]).toMatchObject({ prompt: 'new work', resume: false });
+  });
+
+  it('does not run the task when the wipe is not confirmed', async () => {
+    _resetFleet();
+    registerBox({ sessionId: SESSION });
+    const { calls } = mockDataClient(async (c) => (
+      JSON.parse(new TextDecoder().decode((c.input as { payload: Uint8Array }).payload)).op === 'wipe'
+        ? { response: { transformToString: async () => '{"ok": false, "error": "wipe-failed"}' } }
+        : done()
+    ));
+    await request(buildApp({ sub: 'u-first' })).post(`/api/devbox/${SESSION}/task`).send({ prompt: 'mine' }).expect(200);
+    calls.length = 0;
+    const res = await request(buildApp({ sub: 'u-second' })).post(`/api/devbox/${SESSION}/task`).send({ prompt: 'new work' });
+    expect(res.status).toBe(502);
+    expect(payloadsOf(calls).map((p) => p['op'] ?? 'task')).toEqual(['wipe']);
+  });
+
+  it('lets a person answer a governed run\'s question in the box the run holds', async () => {
+    _resetFleet();
+    const box = registerBox({ sessionId: SESSION });
+    const { calls } = mockDataClient(async () => done());
+    await request(buildApp({ sub: 'u-first' })).post(`/api/devbox/${SESSION}/task`).send({ prompt: 'mine' }).expect(200);
+    reserveBox(box.id, 'run-governed');
+    try {
+      calls.length = 0;
+      await request(buildApp({ sub: 'u-answerer' })).post(`/api/devbox/${SESSION}/task`).send({ prompt: 'yes, proceed', resume: true }).expect(200);
+      expect(payloadsOf(calls)).toEqual([expect.objectContaining({ prompt: 'yes, proceed', resume: true })]);
+    } finally {
+      releaseBox(box.id, 'run-governed');
+    }
+  });
+
+  it('lets the same person resume their own conversation', async () => {
+    _resetFleet();
+    registerBox({ sessionId: SESSION });
+    const { calls } = mockDataClient(async () => done());
+    await request(buildApp({ sub: 'u-first' })).post(`/api/devbox/${SESSION}/task`).send({ prompt: 'mine' }).expect(200);
+    await request(buildApp({ sub: 'u-first' })).post(`/api/devbox/${SESSION}/task`).send({ prompt: 'more', resume: true }).expect(200);
+    expect(payloadsOf(calls).map((p) => p['resume'])).toEqual([false, true]);
   });
 });
 

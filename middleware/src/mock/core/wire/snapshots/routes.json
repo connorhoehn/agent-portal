@@ -1508,52 +1508,52 @@
     {
       "method": "DELETE",
       "path": "/api/devbox/:sessionId",
-      "source": "src/routes/devbox.ts:1173"
+      "source": "src/routes/devbox.ts:1205"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/command",
-      "source": "src/routes/devbox.ts:926"
+      "source": "src/routes/devbox.ts:958"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/shell-url",
-      "source": "src/routes/devbox.ts:1102"
+      "source": "src/routes/devbox.ts:1134"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/task",
-      "source": "src/routes/devbox.ts:892"
+      "source": "src/routes/devbox.ts:895"
     },
     {
       "method": "GET",
       "path": "/api/devbox/allowlist",
-      "source": "src/routes/devbox.ts:453"
+      "source": "src/routes/devbox.ts:456"
     },
     {
       "method": "GET",
       "path": "/api/devbox/boxes",
-      "source": "src/routes/devbox.ts:468"
+      "source": "src/routes/devbox.ts:471"
     },
     {
       "method": "POST",
       "path": "/api/devbox/boxes",
-      "source": "src/routes/devbox.ts:551"
+      "source": "src/routes/devbox.ts:554"
     },
     {
       "method": "DELETE",
       "path": "/api/devbox/boxes/:boxId",
-      "source": "src/routes/devbox.ts:597"
+      "source": "src/routes/devbox.ts:600"
     },
     {
       "method": "PATCH",
       "path": "/api/devbox/boxes/:boxId",
-      "source": "src/routes/devbox.ts:584"
+      "source": "src/routes/devbox.ts:587"
     },
     {
       "method": "GET",
       "path": "/api/devbox/boxes/:boxId/tail",
-      "source": "src/routes/devbox.ts:658"
+      "source": "src/routes/devbox.ts:661"
     },
     {
       "method": "GET",
@@ -1573,12 +1573,12 @@
     {
       "method": "POST",
       "path": "/api/devbox/sessions",
-      "source": "src/routes/devbox.ts:457"
+      "source": "src/routes/devbox.ts:460"
     },
     {
       "method": "GET",
       "path": "/api/devbox/status",
-      "source": "src/routes/devbox.ts:443"
+      "source": "src/routes/devbox.ts:446"
     },
     {
       "method": "GET",
