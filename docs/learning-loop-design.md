@@ -145,15 +145,28 @@ Where the distiller runs is unchanged: the paired local machine first, running C
 
 ## Pages
 
-The audit of the current pages decides what merges. The target is:
+Decided from a walk of every page in the loop on the mock. One name per thing on screen: run, runbook, bot, computer.
 
-- **Runbooks** (one area): Library, Proposals, Evidence. A runbook's record shows its text, versions, where it came from (the run), offers and uses, and health.
-- **Run detail**: Report (summary, changes, verification, obstacles), Runbooks (offered, used), Learned (the lesson and its proposal, or the skip reason).
-- **Work item**: the dispatch drawer and brief preview show "Runbooks this run will get" with reasons.
+Keep, as the spine:
+
+- **Work item**: the Prepare job card and brief preview, now showing "Runbooks this run will get" with reasons.
+- **Runs** (one list, under Operate): every run from every executor, with filters for queue, local and bot runs. The run record has Brief (what it was told), Report (summary, changes, verification, obstacles), Runbooks (offered, used) and Learned (the lesson and its proposal, or the skip reason).
+- **Runbooks**: Library, Proposals, Evidence. A runbook's record shows its text, versions, the run it came from, offers and uses, trial results and health. Accepting a proposal asks for confirmation and says which runs it will reach.
 - **Budgets**: threshold marks, the learning line, local runs as reported.
-- **Workflows**: the pipelines definitions under their new name.
 
-Pages that only show a retired store are removed. Every page starts from a library template and uses library composites.
+Merge:
+
+- Briefs into the run record. A brief is a property of a run, not a destination.
+- The Agent library's Skills and Insights into Runbooks.
+- Automate › Runs and Local compute › Runs into Runs, as filters. The initiative's Agents tab links to Runs filtered to the initiative.
+- Automations, Bots and the initiative's bot list into one page called Bots.
+- Local compute and the Computer Lab into one page called Computers, with paired machines and fleet boxes as two groups. An org leader can drive it.
+
+Remove: Local compute › Configuration (a mock-up), and Changes from Automate (it belongs to the org graph).
+
+Rename: the pipelines area's Runbooks and Definitions become Workflows.
+
+No internal words on screen: no hashes on rows, no "marketplace firing", "governed run (primary)", "session run", "box" or "devbox". Every page starts from a library template and uses library composites.
 
 ## What stays
 
