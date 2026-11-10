@@ -66,6 +66,9 @@ export function SpendGroupTable({ groups, groupBy, period, lock, query }: {
       key: 'entries',
       header: 'Entries',
       numeric: true,
+      // The secondary figures give way as the table narrows (ui-components 2.516.0): Entries, Burn,
+      // Held, then Projected; the group, its spend and Budget left never hide.
+      priority: 5,
       sortable: true,
       compare: (a, b) => a.entries - b.entries,
       render: (g) => <T tabular>{g.entries}</T>,
@@ -74,12 +77,14 @@ export function SpendGroupTable({ groups, groupBy, period, lock, query }: {
       key: 'burn',
       header: 'Burn / day',
       numeric: true,
+      priority: 4,
       render: (g) => <Money value={g.burnPerDay7d} lock={lock} />,
     },
     {
       key: 'projected',
       header: 'Projected month-end',
       numeric: true,
+      priority: 2,
       sortable: true,
       compare: (a, b) => (a.projectedPeriodEndUsd ?? 0) - (b.projectedPeriodEndUsd ?? 0),
       render: (g) => {
@@ -91,6 +96,7 @@ export function SpendGroupTable({ groups, groupBy, period, lock, query }: {
       key: 'held',
       header: 'Held',
       numeric: true,
+      priority: 3,
       render: (g: SpendGroup) => <Money value={g.heldUsd} lock={lock} />,
     }]),
     ...(withBudget ? [{
@@ -110,6 +116,7 @@ export function SpendGroupTable({ groups, groupBy, period, lock, query }: {
   return (
     <DataTable
       data-testid="spend-group-table"
+      responsiveColumns
       aria-label={`Spend by ${GROUP_HEADINGS[groupBy].toLowerCase()}`}
       data={shown}
       columns={columns}

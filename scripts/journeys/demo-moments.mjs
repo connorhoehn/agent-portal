@@ -298,7 +298,9 @@ const M2 = {
       await card.waitFor({ timeout: 15000 });
       const t = await text(page, '[data-testid=voice-confirm-card]');
       check(t.includes(OPTION), `the card does not name the option: "${t}"`);
-      check(/click confirm/i.test(t), `the card does not ask for a click: "${t}"`);
+      // ui-components 2.516.0: the button and the click line say the decision's verb.
+      check(/click Resolve/i.test(t), `the card does not ask for a click on Resolve: "${t}"`);
+      check((await text(page, '[data-testid=voice-confirm-card-confirm]')).trim() === 'Resolve', 'the card\'s button is not Resolve');
     });
     await s('the spoken "confirm" does not decide it; a click does', async () => {
       // A decision card is click-only (catalogue confirmBy: click): the spoken "Confirm." (cued on the card) is heard

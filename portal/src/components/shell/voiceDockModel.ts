@@ -58,12 +58,22 @@ export interface DockPendingView {
   detail?: string | string[];
   fields?: { decision: 'approve' | 'reject'; notePlaceholder?: string };
   hint?: string;
+  /** The library card's options (ui-components 2.516.0), passed through as VoicePending fields. */
+  card?: {
+    noteDefault?: string;
+    noteLabel?: string;
+    noteMaxLength?: number;
+    confirmLabel?: string;
+    hideDecisionToggle?: boolean;
+    clickOnly?: boolean;
+  };
 }
 
 /**
  * The dock's `pending` (the library's VoicePending): the card's text and lines as the controller wrote them;
  * G40's who-may-answer line ("Say confirm, or cancel.") is the card's own muted `hint` under Confirm / Cancel
- * (ui-components 2.514.1), never folded into the detail lines; decide's `fields` (2.510.5) as they are.
+ * (ui-components 2.514.1), never folded into the detail lines; decide's `fields` (2.510.5) as they are; the card's
+ * own options (2.516.0: the button's verb, a consult's dictated answer in the note field, no toggle, click-only).
  */
 export function dockPending<R>(view: DockPendingView, on: { confirm(result?: R): void; cancel(): void }) {
   return {
@@ -72,6 +82,7 @@ export function dockPending<R>(view: DockPendingView, on: { confirm(result?: R):
     ...(view.detail ? { detail: view.detail } : {}),
     ...(view.hint ? { hint: view.hint } : {}),
     ...(view.fields ? { fields: view.fields } : {}),
+    ...view.card,
     onConfirm: (result?: R) => on.confirm(result),
     onCancel: () => on.cancel(),
   };

@@ -381,7 +381,36 @@ export interface ConfirmPlan {
   detail?: string | string[];
   /** A decision: the card shows the approve / reject toggle (starting at `decision`) and a one-line note. */
   fields?: { decision: 'approve' | 'reject'; notePlaceholder?: string };
+  /** The library card's own options (ui-components 2.516.0): a pre-filled note, the button's verb, no toggle, click-only. */
+  card?: VoiceCardOptions;
   data: unknown;
+}
+
+/** The confirm card's options the dock passes to the library's VoicePending (ui-components 2.516.0). */
+export interface VoiceCardOptions {
+  /** The note field's starting text (a consult's dictated answer); the click sends the edited text. */
+  noteDefault?: string;
+  noteLabel?: string;
+  noteMaxLength?: number;
+  /** The primary button's verb ("Send", "Queue"); the spoken vocabulary stays "confirm". */
+  confirmLabel?: string;
+  hideDecisionToggle?: boolean;
+  /** The card shows "Check it, then click <confirmLabel>" as its hint, in place of the who-may-answer line. */
+  clickOnly?: boolean;
+}
+
+/**
+ * The confirm card's button verb, where the action has a better one than Confirm: a plan's own (decide's Resolve /
+ * Reject, a consult's Send), else per tool. Only the button and the click lines change; the user still says confirm.
+ */
+export function confirmLabelOf(call: PreparedCall, plan?: ConfirmPlan | null): string | undefined {
+  if (plan?.card?.confirmLabel) return plan.card.confirmLabel;
+  switch (call.spec.name) {
+    case 'message': return 'Send';
+    case 'queue_work': return 'Queue';
+    case 'create': return call.args['kind'] === 'access-request' ? 'Request' : 'Create';
+    default: return undefined;
+  }
 }
 
 /**
@@ -2535,10 +2564,13 @@ export function confirmModeOf(call: PreparedCall): 'voice' | 'click' {
   return Object.entries(call.spec.clickFor ?? {}).some(([arg, values]) => values.includes(String(at(arg)))) ? 'click' : 'voice';
 }
 
-/** The line the voice asks with when the card opens (G40): "Say confirm to send.", or for a click-only card, "Click confirm on the card to go ahead." */
-export function confirmLine(call: PreparedCall, mode = confirmModeOf(call)): string {
+/**
+ * The line the voice asks with when the card opens (G40): "Say confirm to send.", or for a click-only card, "Click
+ * confirm on the card to go ahead." — with the card's button verb when it has one ("Click Request on the card …").
+ */
+export function confirmLine(call: PreparedCall, mode = confirmModeOf(call), label?: string): string {
   const verb = call.spec.sayToConfirm ?? 'go ahead';
-  return mode === 'voice' ? `Say confirm to ${verb}.` : `Click confirm on the card to ${verb}.`;
+  return mode === 'voice' ? `Say confirm to ${verb}.` : `Click ${label ?? 'confirm'} on the card to ${verb}.`;
 }
 
 export function needsConfirm(call: PreparedCall): boolean {

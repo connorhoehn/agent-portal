@@ -134,8 +134,8 @@
 import { VoiceClient, type ClientEvent, type CloseCause, type CloseWhy, type MediaFactory, type StopReason, type TransportCause, type VoiceFrame, type VoiceMint } from './client.ts';
 import { MIC_QUIET_MS, SPEAKING_LEVEL, initialMachine, phaseAt, reduce, sessionOpen, type MachineEvent, type MachineState, type VoicePhase } from './machine.ts';
 import {
-  channelTag, cancelledResult, confirmLine, confirmModeOf, hashToolArgs, localHref, needsConfirm, type CardAnswer, openableHref, planPreparedCall, prepareToolCall, refused, runPreparedCall, spokenOrdinal, toolAvailable,
-  type ConfirmPlan, type PreparedCall, type ToolContext, type ToolResult, type VoiceToolPlanner, type VoiceToolRunner,
+  channelTag, cancelledResult, confirmLabelOf, confirmLine, confirmModeOf, hashToolArgs, localHref, needsConfirm, type CardAnswer, openableHref, planPreparedCall, prepareToolCall, refused, runPreparedCall, spokenOrdinal, toolAvailable,
+  type ConfirmPlan, type PreparedCall, type VoiceCardOptions, type ToolContext, type ToolResult, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 import { VOICE_PLANNERS, VOICE_RUNNERS } from './actions.ts';
 import { DEFAULT_TOAST_SECONDS } from './work.ts';
@@ -199,6 +199,10 @@ export const IDLE_PULSE_MS = 6000;
 export const CARD_LINE_WAIT_MS = 2500;
 /** G40: the hint the card shows under its text, per who may answer it. */
 export const CARD_HINT = { voice: 'Say confirm, or cancel.', click: 'Click Confirm on the card; say cancel to drop it.' } as const;
+/** The hint for a card whose button has its own verb: a click card names that verb; a spoken card still says confirm. */
+export function cardHint(mode: 'voice' | 'click', label?: string): string {
+  return mode === 'click' && label ? `Click ${label} on the card; say cancel to drop it.` : CARD_HINT[mode];
+}
 /** How long a session the page or the connection dropped can be resumed (G35). */
 export const RESUME_MS = 60_000;
 /** The note a resumed session starts with. */
@@ -252,9 +256,11 @@ export interface VoicePendingView {
   detail?: string | string[];
   /** A decision (decide): the library's approve / reject toggle and note; Confirm answers `{ decision, note }`. */
   fields?: { decision: 'approve' | 'reject'; notePlaceholder?: string };
-  /** G40: the line the card shows under its text (who may answer it), and that policy. Absent on the budget card. */
+  /** G40: the line the card shows under its text (who may answer it), and that policy. Absent on the budget card and a click-only card (the library says it). */
   hint?: string;
   confirmBy?: 'voice' | 'click';
+  /** The library card's options (ui-components 2.516.0): the button's verb, a pre-filled note, no toggle, click-only. */
+  card?: VoiceCardOptions;
 }
 
 /**
@@ -1006,10 +1012,14 @@ export class VoiceController {
       const described = this.opts.describeConfirm?.(call, plan) ?? (plan ? { title: plan.title, ...(plan.detail ? { detail: plan.detail } : {}) } : defaultConfirmText(call));
       // G40: the card says who may answer it, in its own hint line under Confirm / Cancel (ui-components 2.514.1).
       const mode = confirmModeOf(call);
-      const text = { ...described, hint: CARD_HINT[mode], confirmBy: mode };
+      // ui-components 2.516.0: the button says the action's verb ("Send", "Queue"); a click-only card's hint is the
+      // library's own "Check it, then click <verb>".
+      const label = confirmLabelOf(call, plan);
+      const card: VoiceCardOptions = { ...plan?.card, ...(label ? { confirmLabel: label } : {}) };
+      const text = { ...described, ...(card.clickOnly ? {} : { hint: cardHint(mode, label) }), confirmBy: mode };
       this.pending = { callId, delegationId, call, plan, startedAt, heard: { text: '', lastEndMs: null, quiet: null, done: false },
-        mode, line: plan?.line ?? confirmLine(call, mode), shownAt: this.now(),
-        view: { callId, requestId: ++this.requestSeq, tool: name, ...text, ...(plan?.fields ? { fields: plan.fields } : {}) } };
+        mode, line: plan?.line ?? confirmLine(call, mode, label), shownAt: this.now(),
+        view: { callId, requestId: ++this.requestSeq, tool: name, ...text, ...(plan?.fields ? { fields: plan.fields } : {}), ...(Object.keys(card).length ? { card } : {}) } };
       this.attachTool(name, 'running', text.title);
       this.emit({ kind: 'confirm-shown', tool: name, data: { requestId: this.pending.view.requestId, callId, by: mode, ...(plan?.fields ? { fields: true } : {}) } });
       this.dispatch({ type: 'confirm-shown', callId });

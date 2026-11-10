@@ -77,7 +77,9 @@ export default function DecisionsPage() {
       render: (d) => <RecordLink to={href(d.id, search)} className="block max-w-[11rem] truncate" title={d.topic}>{d.topic}</RecordLink>,
     },
     {
-      key: 'projectId', header: 'Initiative', sortable: true,
+      // The date and the secondary columns give way as the table narrows (DataTable `responsiveColumns`,
+      // ui-components 2.516.0): Decided, People, Outcome, then Initiative; the decision and its status never hide.
+      key: 'projectId', header: 'Initiative', sortable: true, priority: 2,
       compare: (a, b) => (nameOf(a.projectId) ?? '').localeCompare(nameOf(b.projectId) ?? ''),
       render: (d) => <T size="xs" tone="secondary" className="block max-w-40 truncate" title={nameOf(d.projectId) ?? 'Organisation-wide'}>{nameOf(d.projectId) ?? 'Organisation-wide'}</T>,
     },
@@ -87,18 +89,18 @@ export default function DecisionsPage() {
     },
     {
       // G54: what a settled decision decided, its first line; a waiting one has none yet.
-      key: 'outcome', header: 'Outcome',
+      key: 'outcome', header: 'Outcome', priority: 3,
       render: (d) => {
         const line = outcomeFirstLine(d);
         return <T size="xs" tone={line ? 'secondary' : 'tertiary'} className="block max-w-48 truncate" title={line ?? undefined}>{line ?? '—'}</T>;
       },
     },
     {
-      key: 'participantCount', header: 'People', align: 'right', numeric: true,
+      key: 'participantCount', header: 'People', align: 'right', numeric: true, priority: 4,
       render: (d) => <T size="xs" tone="tertiary">{d.participantCount}</T>,
     },
     {
-      key: 'decidedAt', header: 'Decided', align: 'right', sortable: true,
+      key: 'decidedAt', header: 'Decided', align: 'right', sortable: true, priority: 5,
       compare: (a, b) => (a.decidedAt ?? '').localeCompare(b.decidedAt ?? ''),
       render: (d) => <T size="xs" tone="tertiary" className="whitespace-nowrap">{d.decidedAt ? decidedWhen(d.decidedAt, relativeTime) : '—'}</T>,
     },
@@ -136,7 +138,7 @@ export default function DecisionsPage() {
               <EmptyState title="No decisions" description={query.trim() ? 'No loaded decision matches this search.' : 'Nothing is recorded in this view yet.'} />
             ) : (
               // Narrow: under 40rem of its width each decision is a card of label/value pairs.
-              <DataTable<DecisionSummary> narrow data={rows} columns={columns} keyField={(d) => d.id}
+              <DataTable<DecisionSummary> narrow responsiveColumns data={rows} columns={columns} keyField={(d) => d.id}
                 onRowClick={(d) => open(d.id)} pageSize={25} emptyMessage="No decisions" />
             )}
           <CollectionCommandHost adapter={adapter} />

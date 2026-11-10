@@ -5,10 +5,10 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CARD_HINT, VoiceController, cardNote, confirmPhrase } from '../controller.ts';
+import { CARD_HINT, VoiceController, cardHint, cardNote, confirmPhrase } from '../controller.ts';
 import { VoiceClient } from '../client.ts';
 import { VOICE_RUNNERS } from '../actions.ts';
-import type { VoiceToolRunner } from '../tools.ts';
+import { confirmLabelOf, confirmLine, type PreparedCall, type VoiceToolRunner } from '../tools.ts';
 import { confirmationsLine } from '../../../pages/voice/voiceLogModel.ts';
 import { FakeClock, fakeFetch, loggedEvents, middlewareVoice, route, toolContext } from './voiceHarness.ts';
 
@@ -48,6 +48,8 @@ test('G40: "confirm" after a message card sends it, logged by voice with the wor
     const card = h.c.getSnapshot().pending!;
     assert.equal(card.hint, CARD_HINT.voice);
     assert.equal(card.confirmBy, 'voice');
+    // ui-components 2.516.0: the button says Send; the spoken vocabulary stays "confirm".
+    assert.deepEqual(card.card, { confirmLabel: 'Send' });
     assert.ok(h.sent.some((s) => s.type === 'thinking' && s.text === cardNote('Say confirm to send.')));
     await h.clock.advance(2000);
     assert.deepEqual(h.ran, ['message']);
@@ -80,6 +82,7 @@ test('G40: a computer start card ignores a spoken "confirm"; the voice says to c
     await h.c.start();
     await h.clock.advance(1200);
     assert.equal(h.c.getSnapshot().pending!.hint, CARD_HINT.click);
+    assert.equal(h.c.getSnapshot().pending!.card, undefined, 'a computer start keeps Confirm');
     await h.clock.advance(2000);
     assert.deepEqual(h.ran, [], 'nothing started by voice');
     assert.ok(h.c.getSnapshot().pending, 'the card waits for the click');
@@ -100,4 +103,21 @@ test('G40: the logged word is the closed vocabulary, never the utterance', () =>
   assert.equal(confirmPhrase('yeah go'), 'yeah');
   assert.equal(confirmPhrase('no wait'), 'no');
   assert.equal(confirmPhrase('please do the thing'), null);
+});
+
+test('2.516.0: the card button says the action\'s verb; click lines name it, spoken lines still say confirm', () => {
+  const call = (name: string, args: Record<string, unknown> = {}, sayToConfirm = 'go ahead') =>
+    ({ spec: { name, sayToConfirm }, args }) as unknown as PreparedCall;
+  assert.equal(confirmLabelOf(call('message')), 'Send');
+  assert.equal(confirmLabelOf(call('queue_work')), 'Queue');
+  assert.equal(confirmLabelOf(call('create', { kind: 'sprint' })), 'Create');
+  assert.equal(confirmLabelOf(call('create', { kind: 'access-request' })), 'Request');
+  assert.equal(confirmLabelOf(call('computer', { action: 'start' })), undefined);
+  assert.equal(confirmLabelOf(call('decide'), { title: 't', data: null, card: { confirmLabel: 'Resolve' } }), 'Resolve');
+  assert.equal(confirmLine(call('message', {}, 'send'), 'voice', 'Send'), 'Say confirm to send.');
+  assert.equal(confirmLine(call('create', {}, 'create it'), 'click', 'Request'), 'Click Request on the card to create it.');
+  assert.equal(confirmLine(call('computer'), 'click'), 'Click confirm on the card to go ahead.');
+  assert.equal(cardHint('voice', 'Send'), CARD_HINT.voice);
+  assert.equal(cardHint('click', 'Reject'), 'Click Reject on the card; say cancel to drop it.');
+  assert.equal(cardHint('click'), CARD_HINT.click);
 });

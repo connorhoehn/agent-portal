@@ -47,6 +47,20 @@ test('G40: the card\'s who-may-answer line is the library\'s hint prop (2.514.1)
   assert.deepEqual(calls, [['confirm', { decision: 'reject', note: 'later' }], ['cancel']]);
 });
 
+test('2.516.0: the card options pass through to the library: the consult answer in the note field, Send, no toggle, click-only', () => {
+  const on = { confirm: () => undefined, cancel: () => undefined };
+  const card = { noteDefault: 'Riskiest two first.', noteLabel: 'Your answer', noteMaxLength: 500, confirmLabel: 'Send', hideDecisionToggle: true, clickOnly: true };
+  const answer = dockPending({ title: 'Answer the consult', requestId: 7, fields: { decision: 'approve' }, card }, on);
+  assert.equal(answer.noteDefault, 'Riskiest two first.');
+  assert.equal(answer.confirmLabel, 'Send');
+  assert.equal(answer.hideDecisionToggle, true);
+  assert.equal(answer.clickOnly, true);
+  assert.equal('hint' in answer, false, 'the library says "Check it, then click Send"');
+  const message = dockPending({ title: 'Post to #platform', requestId: 8, hint: CARD_HINT.voice, card: { confirmLabel: 'Send' } }, on);
+  assert.equal(message.confirmLabel, 'Send');
+  assert.equal('noteDefault' in message, false);
+});
+
 test('Ctrl+Shift+Space is the hotkey, nothing else', () => {
   const k = (o: Partial<KeyboardEvent>) => ({ ctrlKey: false, shiftKey: false, altKey: false, metaKey: false, code: 'Space', key: ' ', ...o });
   assert.equal(isVoiceHotkey(k({ ctrlKey: true, shiftKey: true })), true);

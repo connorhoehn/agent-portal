@@ -400,8 +400,8 @@ const C5 = {
 
 /**
  * C6: what needs review, the agent's question, and a spoken answer (Nora, who may answer an agent). Sweep 11 (M2):
- * the answer is click-only like every decide. The spoken "Confirm." sends nothing; the card shows the answer whole,
- * a mis-heard word is corrected in its note field, and the click sends the corrected answer.
+ * the answer is click-only like every decide. The spoken "Confirm." sends nothing; the card opens with the answer in
+ * its note field (ui-components 2.516.0), a mis-heard word is corrected there, and the click on Send sends the edit.
  */
 const C6 = {
   title: 'Review queue and an agent question answered on its card', persona: 'nora',
@@ -426,8 +426,12 @@ const C6 = {
       const b = terseSay(await nthOutput(page, 2), 'agent question', `The agent asks: ${consults[0].question.match(/^.+?[.?!](?=\s|$)/)[0]}`);
       await page.getByTestId('voice-confirm-card').waitFor({ timeout: 15000 });
       const card = await text(page, '[data-testid=voice-confirm-card]');
-      check(/Answer: Riskiest too first, while the shim is warm\./.test(card), `the card does not show the answer whole: ${card.slice(0, 200)}`);
-      check(/click confirm/i.test(card), `the card does not ask for a click: ${card.slice(0, 200)}`);
+      const opened = await page.getByTestId('voice-confirm-card-note').inputValue();
+      check(opened === 'Riskiest too first, while the shim is warm.', `the card's note does not open with the answer: ${JSON.stringify(opened)}`);
+      check(/Check it, then click Send/.test(card), `the card does not ask for a click on Send: ${card.slice(0, 200)}`);
+      check((await text(page, '[data-testid=voice-confirm-card-confirm]')).trim() === 'Send', 'the card\'s button is not Send');
+      check(await page.locator('[data-testid=voice-confirm-card][data-click-only]').count() === 1, 'the card is not marked click-only');
+      check(await page.getByTestId('voice-confirm-card-decision').count() === 0, 'the answer card shows an approve / reject toggle');
       // The spoken "Confirm." is heard and sends nothing: the card stays open.
       const heard = Date.now() + 8000;
       while (Date.now() < heard) {

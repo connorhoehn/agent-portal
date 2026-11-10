@@ -73,7 +73,7 @@ test('get consult: the agent\'s question, whole in the output and begun in the s
   assert.match(String(r.output['answerWith']), /decide/);
 });
 
-test('decide consult with a spoken answer: the card shows it whole, only a click sends it, and a typed correction wins', async () => {
+test('decide consult with a spoken answer: the card opens with it in the note field, only a click on Send sends it, and the edited text wins', async () => {
   const { ctx, log } = ctxFor();
   const p = prepareToolCall('decide', { ref: 'consult:con-1', decision: 'approve', note: 'Riskiest two first, while the shim is warm.' }, ctx);
   assert.ok(p.ok, JSON.stringify(p));
@@ -84,10 +84,13 @@ test('decide consult with a spoken answer: the card shows it whole, only a click
   assert.equal((planned.plan as { confirmBy?: unknown }).confirmBy, undefined);
   assert.equal(planned.plan.line, ANSWER_ON_CARD);
   assert.match(planned.plan.title, /^Answer the consult "Which customer tenant/);
-  assert.deepEqual(planned.plan.detail, ['Answer: Riskiest two first, while the shim is warm.']);
-  assert.ok(planned.plan.fields, 'the card has a note field for a corrected answer');
-  // A click with the note left empty sends the answer shown.
-  const done = await runPreparedCall(p.call, ctx, VOICE_RUNNERS, planned.plan.data, { decision: 'approve', note: '' });
+  // ui-components 2.516.0: the answer is the note field's text, not a detail line; Send, no toggle, click-only.
+  assert.deepEqual(planned.plan.detail, []);
+  assert.ok(planned.plan.fields, 'the card answers { decision, note }');
+  assert.deepEqual(planned.plan.card, { noteDefault: 'Riskiest two first, while the shim is warm.', noteLabel: 'Your answer', noteMaxLength: 500, confirmLabel: 'Send', hideDecisionToggle: true, clickOnly: true });
+  assert.equal(ANSWER_ON_CARD, "I've put your answer on the card; check it and click Send.");
+  // A click with the note as it opened sends the dictated answer.
+  const done = await runPreparedCall(p.call, ctx, VOICE_RUNNERS, planned.plan.data, { decision: 'approve', note: 'Riskiest two first, while the shim is warm.' });
   assert.equal(done.outcome, 'done');
   assert.equal(done.output['say'], 'Answered the agent: "Riskiest two first, while the shim is warm."');
   assert.deepEqual(log.filter((l) => l.method === 'POST').map((l) => [l.url, l.body]), [['/api/lab/consults/con-1/answer', { answer: 'Riskiest two first, while the shim is warm.' }]]);
@@ -107,6 +110,14 @@ test('decide consult with a spoken answer: the card shows it whole, only a click
   assert.ok(planned3 && 'plan' in planned3);
   assert.equal((await runPreparedCall(p3.call, c3, VOICE_RUNNERS, planned3.plan.data, { decision: 'reject', note: '' })).outcome, 'refused');
   assert.deepEqual(l3.filter((l) => l.method === 'POST'), []);
+  // The note emptied on the card sends nothing: the edited text is what is sent, never the dictated one behind it.
+  const { ctx: c4, log: l4 } = ctxFor();
+  const p4 = prepareToolCall('decide', { ref: 'consult:con-1', decision: 'approve', note: 'Riskiest two first.' }, c4);
+  assert.ok(p4.ok);
+  const planned4 = await planPreparedCall(p4.call, c4, VOICE_PLANNERS);
+  assert.ok(planned4 && 'plan' in planned4);
+  assert.equal((await runPreparedCall(p4.call, c4, VOICE_RUNNERS, planned4.plan.data, { decision: 'approve', note: '   ' })).outcome, 'refused');
+  assert.deepEqual(l4.filter((l) => l.method === 'POST'), []);
   // With no answer said there is nothing to show, so nothing to confirm.
   const bare = prepareToolCall('decide', { ref: 'consult:con-1', decision: 'approve' }, ctx);
   assert.ok(bare.ok);

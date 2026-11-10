@@ -318,7 +318,10 @@ export function InitiativesReport({
   // edge): short headers with the full name as the narrow card's label, Held
   // only when some row holds money or the figures are locked, and the last
   // agent activity in the initiative's tooltip. Under 40rem of its width the
-  // table is the library's card form (`narrow`).
+  // table is the library's card form (`narrow`). Between the two, the
+  // secondary figures give way as the table's own width narrows (DataTable
+  // `responsiveColumns`, ui-components 2.516.0): Floor first, then Held, then
+  // Projected; the initiative, Budget, Spent and Left never hide.
   const showHeld = !!lock || budgets.some((row) => (row.heldUsd ?? 0) > 0);
   const columns: DataTableColumn<InitiativeLedgerRow>[] = [
     {
@@ -357,6 +360,7 @@ export function InitiativesReport({
       key: 'floor',
       header: 'Floor',
       numeric: true,
+      priority: 4,
       render: (row) => {
         const f = floorFigure(row);
         return <T tabular tone={f.text === '—' ? 'tertiary' : 'secondary'} title={f.title}>{f.text}</T>;
@@ -399,6 +403,7 @@ export function InitiativesReport({
       key: 'held',
       header: 'Held',
       numeric: true,
+      priority: 3,
       render: (row: InitiativeLedgerRow) => row.heldUsd === undefined && lock
         ? <LockedFigure lock={lock} />
         : <T tabular tone={row.heldUsd ? undefined : 'tertiary'} title="Forecast p75 reserved by dispatches still in flight">{row.heldUsd ? usd(row.heldUsd) : '—'}</T>,
@@ -407,6 +412,7 @@ export function InitiativesReport({
       key: 'projected',
       header: 'Projected',
       numeric: true,
+      priority: 2,
       sortable: true,
       compare: (a, b) => (a.projectedPeriodEndUsd ?? 0) - (b.projectedPeriodEndUsd ?? 0),
       render: (row) => {
@@ -431,6 +437,7 @@ export function InitiativesReport({
       <DataTable
         data-testid="budgets-initiatives-table"
         narrow
+        responsiveColumns
         data={budgets.filter((row) => matchesBudget(row, query))}
         emptyMessage="No initiative matches this search."
         columns={columns}

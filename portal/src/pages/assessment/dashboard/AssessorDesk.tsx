@@ -36,7 +36,7 @@ import {
   deskSummary, filterAndSortTeams, formatTeamStatus, nextActionFor, statusOptions, teamsForCohort,
   type NextActionKind,
 } from '../assessmentFormat';
-import { deskColumnHide } from './deskColumns';
+import { deskColumnPriority } from './deskColumns';
 import { MOTIONS, fmtDate, highestVerifiedLevel, motionFor, type Cohort, type TeamSummary } from '../types';
 
 const ALL = 'all';
@@ -196,10 +196,12 @@ export function AssessorDesk({
 
           {/* Column priorities (UX leftovers, 10 November): every column shows when the table has room
               for them, and the ones whose fact is elsewhere too (Step, Motion, Lead) give way first as the
-              table narrows (deskColumns.ts), keyed on the table's own width. Under 40rem a row is a
-              stacked card with every field (`narrow`). */}
+              table narrows (deskColumns.ts; DataTable `responsiveColumns`, measured on the table's own width),
+              each row's "+N columns" listing what hid. Under 40rem a row is a stacked card with every field
+              (`narrow`). */}
           <DataTable<TeamSummary>
             narrow
+            responsiveColumns
             data={rows}
             keyField={(t) => t.id}
             onRowClick={(t) => onSelectTeam(t.id)}
@@ -219,14 +221,14 @@ export function AssessorDesk({
           {
             key: 'lead',
             header: 'Lead',
-            className: deskColumnHide('lead'),
+            priority: deskColumnPriority('lead'),
             render: (t) => <T size="sm" tone={t.assessment_lead ? 'primary' : 'tertiary'}>{t.assessment_lead || 'no lead yet'}</T>,
           },
           {
             key: 'cohort',
             header: 'Motion',
             sortable: true,
-            className: deskColumnHide('cohort'),
+            priority: deskColumnPriority('cohort'),
             render: (t) => <Chip size="xs" tone={motionFor(t.cohort).accent}>{motionFor(t.cohort).title}</Chip>,
           },
           { key: 'certification', header: 'Certification', render: (t) => <CertificationCell team={t} /> },
@@ -235,7 +237,7 @@ export function AssessorDesk({
             header: 'Assessed',
             sortable: true,
             numeric: true,
-            className: deskColumnHide('dimensions_assessed'),
+            priority: deskColumnPriority('dimensions_assessed'),
             render: (t) => (
               // DotMeter is a block; the Inline puts it flush right like the
               // column's other numbers.
@@ -282,7 +284,7 @@ export function AssessorDesk({
             header: 'Step',
             sortable: true,
             width: '130px',
-            className: deskColumnHide('workflow_step'),
+            priority: deskColumnPriority('workflow_step'),
             render: (t) => {
               const ladder = t.workflow_steps && t.workflow_steps.length > 0
                 ? t.workflow_steps.map((w) => `${w.done ? '✓' : w.active ? '●' : '○'} ${w.step} · ${w.label}`).join('\n')
@@ -297,7 +299,7 @@ export function AssessorDesk({
           {
             key: 'contributors',
             header: 'Contributors',
-            className: deskColumnHide('contributors'),
+            priority: deskColumnPriority('contributors'),
             render: (t) => {
               const avatars = contributorAvatars(t.contributors);
               return avatars.length > 0 ? (
@@ -331,7 +333,7 @@ export function AssessorDesk({
               );
             },
           },
-          { key: 'updated_at', header: 'Updated', sortable: true, numeric: true, className: deskColumnHide('updated_at'),
+          { key: 'updated_at', header: 'Updated', sortable: true, numeric: true, priority: deskColumnPriority('updated_at'),
             render: (t) => (
               <Tooltip content={fmtDate(t.updated_at)}>
                 <T as="span" size="sm" tone="inherit">{deskDate(t.updated_at)}</T>
