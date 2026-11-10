@@ -48,7 +48,7 @@ export interface RunDetailPageProps {
   cancelable?: boolean;
   /** Presence and the run discussion — pipelines tenant only: the gateway admits `pipelines:*` channels to its grant holders. */
   realtime?: boolean;
-  /** A Brief tab: the text the run was given at claim (the workspace Runs door; Runbooks, docs/distillation-runbooks-design.md §4). */
+  /** A Brief tab: the text the run was given at claim (the workspace Runs door). */
   briefTab?: boolean;
 }
 

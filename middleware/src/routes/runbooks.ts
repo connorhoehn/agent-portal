@@ -1,4 +1,4 @@
-// Runbooks API (docs/distillation-runbooks-design.md §2.4–§2.6; lane D / R3).
+// Runbooks API.
 //
 //   GET  /api/runbooks                         list (filters: scope_kind, scope_ref, status, health, q, cursor, limit)
 //   GET  /api/runbooks/proposals               proposals (status, runbook_id, kind, cursor, limit)

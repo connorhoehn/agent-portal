@@ -1,7 +1,7 @@
 // The pure half of the shell's breadcrumb trail: pathname → crumbs. Kept
 // free of React so `__tests__/breadcrumbResolve.test.ts` can assert every
 // rail path resolves to a trail — a route with no case here silently renders
-// no trail at all (Library and Promotions shipped that way).
+// no trail at all.
 /** 'p-design-system-api' → 'Design System Api' — readable without a fetch. */
 function initiativeName(id: string): string {
   return id.replace(/^p-/, '').split('-')

@@ -1501,7 +1501,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     build: async (ctx) => ({ kind: 'github', label: ctx.label(), apiKey: ctx.label() }),
   },
 
-  // ── lab, rediscovery, distillation, library ───────────────────────────────
+  // ── lab, rediscovery, library ─────────────────────────────────────────────
   {
     route: 'POST /api/lab/signals',
     persona: 'orgiq/admin',

@@ -12,7 +12,7 @@
 // landed somewhere different.
 export const UNDER_CRUMBS_BAND = 'pt-3';
 
-// Distillation hangs its repository select and the Agent library link in that
+// A module may hang a select or a link in that
 // band (app.css keeps the hang in flow inside the module), so the band ends
 // 12px under the crumb line instead of 4px, and the body under it starts 4px
 // lower to put its title at the same 16px.

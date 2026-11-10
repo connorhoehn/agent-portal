@@ -1,4 +1,4 @@
-// The run token: what binds a box to ITS run (docs/distillation-runbooks-design.md §3.4).
+// The run token: what binds a box to ITS run.
 //
 // The lab envelope (LAB_CALLBACK_SERVICE_AUTH, lib/service-auth.ts) proves a
 // caller is SOME box of the fleet: every devbox holds the same

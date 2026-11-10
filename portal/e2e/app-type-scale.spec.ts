@@ -5,7 +5,7 @@ import { loginAs } from './realSession';
 // ui-components 2.429.0 added `size="sm"` to StatStrip (line), PageSection,
 // DetailSection (heading) — 14px semibold headings/stat values, 14px labels —
 // the same body step as the 14px tab strips and rail rows. Every consumer
-// outside pages/projects/** and pages/distillation/** opts in; this spec pins
+// outside pages/projects/** opts in; this spec pins
 // each role's computed px/weight on the pages that render them.
 
 type Type = { size: string; weight: string };

@@ -610,22 +610,19 @@ export function App() {
           {/* The asset library — prompts, evaluators, skills, insights. Read
               open to the tenant; authoring and deploy stay gated. */}
           <Route path="library" element={<Page element={<LibraryPage />} />} />
-          {/* A per-asset URL: the distillation Artifacts page links to the
-              runbook/skill an artifact became, and "Distilled from" links
-              back. The page opens its drawer from the param. */}
+          {/* A per-asset URL: the page opens its drawer from the param. */}
           <Route path="library/:assetId" element={<Page element={<LibraryPage />} />} />
-          {/* The ladder's inbox — what the fleet learned, waiting to become
-              a reusable asset. */}
+          {/* Old Promotions URLs land on Runbooks › Proposals. */}
           <Route path="promotions" element={<Page element={<PromotionsLegacyRedirect />} />} />
           <Route path="promotions/:candidateId" element={<Page element={<PromotionsLegacyRedirect />} />} />
           {/* Release: what the Claude Code sessions themselves are shipped —
               hooks, bundled skills, config. */}
           <Route path="release" element={<Navigate to="/iq/local-compute/configuration" replace />} />
-          {/* Runbooks (docs/distillation-runbooks-design.md §4): the fleet's procedural
+          {/* Runbooks: the fleet's procedural
               memory. One module frame, three destinations — Library (a runbook
               opens as a page: /iq/runbooks/:id), Proposals (/iq/runbooks/proposals/:pid
               is the review page) and Briefs (/iq/runbooks/briefs/:ref is a run's frozen
-              brief). The retired Distillation tree redirects here. */}
+              brief). Old /iq/distillation URLs redirect here. */}
           <Route path="runbooks" element={<Page element={<RunbooksModule />} />}>
             <Route index element={<Page element={<RunbooksLibraryTab />} />} />
             <Route path="proposals" element={<Page element={<RunbooksProposalsTab />} />} />

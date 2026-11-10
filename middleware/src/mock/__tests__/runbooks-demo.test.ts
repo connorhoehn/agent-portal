@@ -6,7 +6,7 @@
 // header the test app turns into the person who signed in).
 //
 // The proof the goal asks for: the brief the demo's SECOND dispatch is handed
-// contains the version the demo's review accepted (docs/distillation-runbooks-goal.md).
+// contains the version the demo's review accepted.
 jest.mock('../../config.js', () => ({
   config: {
     region: 'us-east-1',

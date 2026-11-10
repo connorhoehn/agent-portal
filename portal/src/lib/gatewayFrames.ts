@@ -3,7 +3,7 @@
 // `gateway: { send, onMessage, connectionState?, sessionEpoch? }`).
 //
 // The socket is the one OptionalGatewayProvider already mounts — the same
-// GatewayContext the chat, presence and distillation hooks read — so a call
+// GatewayContext the chat and presence hooks read — so a call
 // rides the chat's connection rather than opening a second one.
 //
 // Why an adapter at all: with no VITE_GATEWAY_URL the provider mounts the

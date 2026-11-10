@@ -18,10 +18,6 @@
 //      BOOTED. A dev server up for a day showed a skill "updated 2h ago"
 //      that the corpus had aged 26 hours past.
 //
-// (A third problem, a stored "derived from N observations" banner that cited
-// ids no surface could open, went away with the distillation tier machinery
-// in R7: the Library no longer claims a provenance it cannot back.)
-//
 // AGE IS THE CLAIM, NOT THE DAY, so nothing below uses `keepWithinToday`:
 // both the table column and the drawer render `updatedAt` through
 // `relativeTime`, and no surface buckets an asset by calendar day. Same
@@ -163,10 +159,7 @@ function seedAssets(): LibraryAssetRow[] {
       ownerName: 'Eli Garcia', version: '2', lifecycleStatus: 'published', evalPassRate: 0.97,
       usedBy: ['devbox'], updatedAt: hoursAgo(26),
     }),
-    // The two procedures art-009 / art-011 were published as. They exist here
-    // because every library link must resolve to a real asset — a link to an
-    // id the catalog does not carry is a "Distilled from" section pointing at
-    // a 404.
+    // Two more skill assets, so the Skill filter lists more than one row.
     asset({
       id: 'skill-sso-origin-bringup', name: 'Bring SSO up on a new origin',
       description: 'Use when standing Cognito SSO up on a new origin. Keeps the picker working until an HTTPS front door exists, then sets the callback in the order Cognito accepts.',

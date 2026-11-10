@@ -1,6 +1,5 @@
-// Is a runbook version worth trusting? (design §2.1 "Derived on read".) The
-// proven / drifting / unproven rule of providers/distillation.ts
-// procedureHealth, counted from RunbookApplication rows that runs write
+// Is a runbook version worth trusting? Derived on read: proven / drifting /
+// unproven, counted from RunbookApplication rows that runs write
 // themselves, per version: a new version starts unproven even when its
 // predecessor was proven, because nobody has followed THESE steps yet.
 //

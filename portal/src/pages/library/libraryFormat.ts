@@ -98,7 +98,7 @@ export const TIER_ORDER: readonly AssetTier[] = ['sandbox', 'internal', 'endpoin
  * `'catalog-empty'` — no kind/tier facet and no search text were applied and
  * the catalog still came back empty: the library itself has no assets yet,
  * which is a different fact and points to where assets come from
- * (Distillation › Artifacts) rather than at filters that were never set.
+ * (Runbooks) rather than at filters that were never set.
  */
 export type LibraryEmptyKind = 'filtered' | 'catalog-empty';
 

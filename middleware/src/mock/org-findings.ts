@@ -152,16 +152,8 @@ function seedFindings(): Finding[] {
       firstSeenAt: clock.hoursAgo(20), lastSeenAt: clock.hoursAgo(20),
       fingerprint: 'lab:workspace-bloat:box-mock-0004',
     },
-    // A second lab signal, and the reason it is OPEN rather than another
-    // dismissed one.
-    //
-    // The distillation ProcessFlow has a "Lab signals" node feeding L0, and it
-    // counts findings the Work page returns by DEFAULT — which excludes
-    // dismissed. With `find-mock-7` the only lab row, that node read 0 in every
-    // demo and `breathing('lab-L0', …)` (distillationFormat.ts) only animates
-    // the edge when the count is above zero, so an entire path of the flagship
-    // diagram was permanently dead offline: a real feature that looked like it
-    // did nothing.
+    // A second lab signal, OPEN rather than another dismissed one, so the
+    // Work page's default list (which excludes dismissed) has a lab row.
     //
     // The comment at the top of this function already promises "every status
     // the Work page filters on is represented". That was true of the sweeps as

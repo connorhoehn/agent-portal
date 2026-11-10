@@ -34,7 +34,7 @@ const SHOTS = resolve(process.env.DEMO_PROBE_SHOTS ?? join(process.env.TMPDIR ??
 const ONLY = process.env.DEMO_PROBE_ONLY ?? '';
 const TEXT_CLIP = 5000;
 
-/** Distillation (and runbooks, its replacement) is being rebuilt separately (docs/distillation-runbooks-design.md): referenced, not walked. */
+/** Runbooks are being rebuilt separately (docs/learning-loop-design.md): referenced, not walked. */
 const SKIP = /^\/iq\/(distillation|runbooks)(\/|\?|$)/;
 
 interface Walker { tenant: Tenant; role: string; persona: string; switchTenant?: boolean; routes: 'all' | 'admin' | string[] }

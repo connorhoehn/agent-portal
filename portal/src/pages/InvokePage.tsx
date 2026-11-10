@@ -641,8 +641,7 @@ function InvokePage({ renderWorkspace, renderAnswerEvidence, contextRefs = [], a
   // sends, just without the names. Asked once per history entry, then both
   // params are stripped so a reload doesn't re-fire it: the effect re-runs
   // when `graph` lands, and the strip below is a router transition, so it can
-  // still see `prompt` after asking (the double send of distillation DEFECTS
-  // #23) — `claimDeepLinkPrompt` is what makes it once.
+  // still see `prompt` after asking (a double send) — `claimDeepLinkPrompt` is what makes it once.
   useEffect(() => {
     const p = searchParams.get('prompt');
     if (!p) return;

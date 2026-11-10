@@ -60,8 +60,7 @@ import { createMockScope, deleteMockScope, runInMockScope } from '../../mock/cor
 import { registerBox } from '../../lib/devbox-fleet.js';
 
 // Run the simulated dispatch's state progression synchronously — the seam
-// exists so a test never sleeps through it (providers/distillation.ts's
-// __setCompactRunMs, same shape). It also matters for ordering here: a
+// exists so a test never sleeps through it. It also matters for ordering here: a
 // dispatch that settles before the response returns hands the work item back,
 // so the next case re-claims it cleanly instead of 409ing on the last one.
 beforeAll(() => __setMockDispatchStepMs(0));

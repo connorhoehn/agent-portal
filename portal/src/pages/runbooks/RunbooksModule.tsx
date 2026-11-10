@@ -1,4 +1,4 @@
-// Build → Runbooks: one module frame over three destinations (docs/distillation-runbooks-design.md §4)
+// Build → Runbooks: one module frame over three destinations
 // — Library, Proposals (with the open count) and Briefs. The section rail is a SubNavLayout; each
 // destination draws ListRailLayout (a flush list rail beside it, then trail → title → record,
 // docs/layout-cascade.md). The Proposals count is polled (no gateway channel is needed to be correct).

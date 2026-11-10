@@ -9,7 +9,7 @@ function groupsOf(rows: Array<{ subline?: string }>, fallback: string) {
   return ids.map((id) => ({ id, title: id, count: rows.filter((row) => (row.subline ?? fallback) === id).length }));
 }
 
-/** The Design catalogs share the same hierarchy as Distillation:
+/** The Design catalogs' hierarchy:
  * section navigation, record list, then the selected record. */
 export function StackedCatalogLayout({
   title, group = 'Design', basePath, items, rows, selectedId, selectedTitle, listTitle,

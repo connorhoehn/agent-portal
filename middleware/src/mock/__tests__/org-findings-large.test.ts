@@ -48,19 +48,14 @@ describe('orgFindings large scenario', () => {
     expect(orgFindings.rows().length).toBeGreaterThan(300);
 
     fixtureRegistry.resetAll('default');
-    // 8, not 7, since 2026-09-17: the board gained a second `lab-signal` row.
-    // The first was `dismissed`, and the distillation ProcessFlow's "Lab
-    // signals" node counts what the Work page returns by DEFAULT — which
-    // excludes dismissed — so that node read 0 in every demo and its L0 edge
-    // never animated. An open one lights a real path that was dead offline.
+    // Two `lab-signal` rows: one dismissed, one open.
     expect(orgFindings.rows()).toHaveLength(8);
     expect(mockFindings).toHaveLength(8);
   });
 
   it('the lab sweep has an OPEN row, not only the dismissed one', () => {
-    // The regression this guards is subtle: deleting or dismissing the open
-    // lab signal leaves every count and every test green while quietly
-    // switching off one arm of the distillation diagram.
+    // The Work page's default list excludes dismissed rows, so without an
+    // open lab signal it shows none.
     fixtureRegistry.resetAll('default');
     const lab = orgFindings.rows().filter((f) => f.sweep === 'lab-signal');
     expect(lab.length).toBeGreaterThanOrEqual(2);

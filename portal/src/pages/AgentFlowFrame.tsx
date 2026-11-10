@@ -2,9 +2,8 @@
 // canvas gap noted in docs/ui-components-queue.md: no ui-components
 // composite wraps an `@xyflow/react` canvas or its overlay chrome, and the
 // custom node body needs connector `Handle`s that have no ui-components
-// equivalent. (Distillation's two xyflow frames were retired onto the
-// library's `TypedNodeCanvas` in 2.388.0; this canvas still needs connector
-// `Handle`s and live metrics, which that composite does not model) —
+// equivalent (the library's `TypedNodeCanvas` does not model connector
+// `Handle`s or live metrics) —
 // the node card is `Card`+`Chip`+`StatusDot` from `/shared` rather than raw
 // `<div>`s, and this file owns the palette + formatters the node renderer
 // needs (`STATUS_COLORS`, `CLUSTER_COLORS`, `fmtMs`, `fmtCount`) so
@@ -103,8 +102,7 @@ function AgentNodeComp({ id, data }: { id: string; data: unknown }) {
       // xyflow's own node wrapper is already tabbable (`tabIndex=0`,
       // `role="group"`) and handles Enter only as a select/unselect toggle,
       // not as "activate" — it never calls back into `onNodeClick`/our
-      // `onSelect`. A real Enter/Space handler here (as the retired
-      // distillation compaction frame's node had) is what actually opens
+      // `onSelect`. A real Enter/Space handler here is what actually opens
       // the metrics drawer from the keyboard (DEFECTS.md #6).
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(id); } }}
       role="button"

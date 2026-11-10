@@ -1,4 +1,4 @@
-// The ten procedural facts of docs/distillation-runbooks-design.md §1.4,
+// Ten procedural facts,
 // verbatim, each placed in the RunbookDoc a migration would have produced from
 // its artifact: the artifact's title and summary (captured by running the real
 // mock provider: one compactNow('L1') + compactNow('L2') on the default corpus

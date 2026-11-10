@@ -473,7 +473,7 @@ app.use('/api/observability/harness', harnessRouter);
 app.use('/api/lab', labRouter);
 // The footer's Today strip: selectors over the rows the pages read (routes/today.ts).
 app.use('/api/today', todayRouter);
-// Runbooks (docs/distillation-runbooks-design.md): reads need a signed-in orgiq
+// Runbooks: reads need a signed-in orgiq
 // user; proposals take a person OR a box's signed lab envelope; decisions are
 // ReviewRunbook + owner/initiative-SME scope. Per-route guards inside the router.
 app.use('/api/runbooks', runbooksRouter);

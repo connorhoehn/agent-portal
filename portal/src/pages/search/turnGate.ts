@@ -3,8 +3,8 @@
 // useAgentStream (realtime-modules) appends every TEXT_MESSAGE_CONTENT delta to
 // a single in-progress message and has no guard against a second sendMessage
 // while the first is still streaming, so two runs on one transcript interleave
-// word by word ("Here's anHere's an overview overview…", distillation DEFECTS
-// #23). `isStreaming` cannot be that guard: it is React state, and two sends
+// word by word ("Here's anHere's an overview overview…").
+// `isStreaming` cannot be that guard: it is React state, and two sends
 // issued in one tick — an effect re-run, a double click — both read `false`.
 
 export interface TurnGate {

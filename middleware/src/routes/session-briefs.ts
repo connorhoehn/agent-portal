@@ -1,4 +1,4 @@
-// The session brief over HTTP (docs/distillation-runbooks-design.md §3.4–§3.5; lane D / R3).
+// The session brief over HTTP.
 //
 //   GET /api/briefs                         frozen briefs, newest first, WITHOUT their markdown (the Briefs list)
 //   GET /api/runs/:ref/brief                the FROZEN brief a run was given

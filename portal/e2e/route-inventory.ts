@@ -122,7 +122,7 @@ export const PARAM_ROUTES: readonly ParamRoute[] = [
   { tenant: 'orgiq', pattern: '/iq/decks/:deckId', template: '/iq/decks/:id', id: 'deck-missing' },
   // One invocation's triage page (the DetailPage template since ui-components 2.504): the newest searchable invocation.
   { tenant: 'orgiq', pattern: '/admin/observability/invocations/:invocationId', template: '/admin/observability/invocations/:id', resolve: { url: '/api/observability/invocations/search?limit=1', pick: first('invocations', 'invocationId') }, fallback: 'invocation-missing' },
-  // Runbooks (docs/distillation-runbooks-design.md §4): a runbook, a proposal and a brief each open as a page beside their list rail.
+  // Runbooks: a runbook, a proposal and a brief each open as a page beside their list rail.
   { tenant: 'orgiq', pattern: '/iq/runbooks/:id', template: '/iq/runbooks/:id', id: 'rb-tenant-cutover' },
   { tenant: 'orgiq', pattern: '/iq/runbooks/proposals/:pid', template: '/iq/runbooks/proposals/:id', resolve: { url: '/api/runbooks/proposals', pick: first('proposals') }, fallback: 'proposal-missing' },
   { tenant: 'orgiq', pattern: '/iq/runbooks/briefs/:ref', template: '/iq/runbooks/briefs/:id', resolve: { url: '/api/briefs', pick: first('briefs', 'run_ref') }, fallback: 'brief-missing' },

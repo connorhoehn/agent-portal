@@ -1,6 +1,6 @@
 // local-compute-skills — the org's skill library, installed as PROJECT skills for one local run.
 //
-// R8 (docs/distillation-runbooks-goal.md): every published runbook is a Claude Code skill in one
+// Every published runbook is a Claude Code skill in one
 // org-wide, content-addressed library. A devbox syncs it into ~/.claude/skills (`lab skills`). A
 // local-compute worker runs on the operator's OWN machine, where ~/.claude/skills is their
 // personal skills folder, so it never writes there. It installs the library into the run's

@@ -1,4 +1,4 @@
-// The runbook model (docs/distillation-runbooks-design.md §2): the types every
+// The runbook model: the types every
 // later lane builds to — the stores (R1), the migration (R2), the API (R3),
 // injection (R4) and the portal (R5). Pure declarations; nothing here does I/O.
 //
@@ -140,7 +140,7 @@ export interface RunbookApplication {
   run_ref: string;
   /**
    * The frozen brief that handed the runbook to the run. null only for history
-   * that predates session briefs (applications migrated from distillation):
+   * that predates session briefs (the seeded applications):
    * nothing was frozen for those runs, so there is no brief to name. Every
    * application a run reports now is checked against its brief and names it.
    */

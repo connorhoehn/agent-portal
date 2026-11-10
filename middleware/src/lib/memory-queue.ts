@@ -13,7 +13,7 @@
 //
 // The message rows are not owned here. The caller hands in the live array
 // (`rows()`), which in this repo is a registered mock fixture
-// (mock/distillation-queue.ts), so `POST /api/__mock/reset` empties the queue
+// (mock/pipeline-queue.ts), so `POST /api/__mock/reset` empties the queue
 // with every other fixture instead of leaving leases behind a reset.
 // Time comes in through `now()` for the same reason every fixture reads the
 // mock clock: a test freezes it and advances past a lease deliberately.

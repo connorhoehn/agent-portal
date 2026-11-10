@@ -187,8 +187,8 @@ export default function QueuePage() {
   // job is this" and only then by "what state is it in" — leading with a
   // five-state chip put a column of near-identical pills where the
   // identifying text should be, and pushed the one thing that tells rows
-  // apart into second place. Measured against the other list surfaces: Bots,
-  // Library and Promotions all lead with their entity's name; this was the
+  // apart into second place. Measured against the other list surfaces: Bots
+  // and Library all lead with their entity's name; this was the
   // outlier.
   const jobColumns: DataTableColumn<Job>[] = [
     {

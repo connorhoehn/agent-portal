@@ -1,4 +1,4 @@
-// The runbook store (docs/distillation-runbooks-design.md §2.5): ONE interface,
+// The runbook store: ONE interface,
 // two implementations — RowsRunbookStore (store-rows.ts, registered mock
 // fixtures; the contract) and DynamoRunbookStore (store-dynamo.ts, single
 // table, conditional writes; the durable one). Everything in lib/runbooks,

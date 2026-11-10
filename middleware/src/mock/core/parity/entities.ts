@@ -835,8 +835,8 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
   // (providers/pipeline-runs.ts over the registered fixtures); the seed side is
   // the same crosswalk (`crosswalkStatus`, imported from the projection) over
   // the SQL seed. Of the five run-shaped tables only `agent_jobs` and
-  // `bot_runs` are seeded (agent_project_runs, assessment_runs and
-  // distillation_compactions have no INSERTs in schema/), so two rows pin it:
+  // `bot_runs` are seeded (agent_project_runs and assessment_runs have no
+  // INSERTs in schema/), so two rows pin it:
   // the Run keyed on its job, and the bot firing folded into it as trigger.
   {
     name: 'pipeline runs',

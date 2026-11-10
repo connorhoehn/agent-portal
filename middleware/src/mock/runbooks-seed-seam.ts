@@ -1,9 +1,7 @@
-// THE SEAM between the runbook fixtures (runbooks.ts, lane B) and the seed
-// content (runbooks.seed.ts, lane C: the nine hand-written rewrites of the
-// eleven seeded distillation artifacts, their open proposals and the
-// application history carried over from distillation).
+// THE SEAM between the runbook fixtures (runbooks.ts) and the seed content
+// (runbooks.seed.ts and its siblings: runbooks, open proposals, applications).
 //
-// `default` is lane C's world, exactly. A brief is frozen when a run is
+// `default` is the seeded world, exactly. A brief is frozen when a run is
 // dispatched or claimed (lib/run-brief.ts); most seeded runs predate briefs, and
 // the one that started after the runbooks existed (job-auth-maint-1) carries one. `large` is that world plus generated bulk to page through.
 import type { Runbook, RunbookApplication, RunbookProposal, RunbookVersion, SessionBrief } from '../lib/runbooks/types.js';

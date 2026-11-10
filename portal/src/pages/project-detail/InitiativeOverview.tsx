@@ -81,8 +81,8 @@ export function InitiativeOverview({
     <Stack gap="xl" className="px-6 pb-6 pt-4" data-testid="initiative-overview">
       {/* Every role here sits on the app's body step (ui-components 2.429.0
           `size="sm"`: 14px headings/titles/stats, 12px descriptions) so the
-          Overview reads like the tabs above it and the Distillation,
-          Initiatives and scorecard surfaces — e2e/initiative-overview-type. */}
+          Overview reads like the tabs above it and the Initiatives and
+          scorecard surfaces — e2e/initiative-overview-type. */}
       <Inline gap="md" align="center" wrap>
         {/* One line that wraps between clusters; the library drops a "•" that would start or end a wrapped line
             (ui-components 2.518.0 `wrapSeparators="drop"`, the default), and the points bar wraps under its label. */}

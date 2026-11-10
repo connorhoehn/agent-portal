@@ -6,8 +6,7 @@
 // own h1..h4, list, link, table, blockquote and code styling, none of it
 // reachable by the design system. The library ships `MarkdownView`, built on
 // the SAME react-markdown + remark-gfm stack, styling with design tokens; two
-// pages in this portal (`distillation/ArtifactsPage`, `assessment/knowledge/
-// DocPane`) were already using it directly, so the portal had a library
+// pages in this portal (`assessment/knowledge/DocPane` among them) were already using it directly, so the portal had a library
 // renderer and a private clone of it rendering the same kind of text
 // differently.
 //

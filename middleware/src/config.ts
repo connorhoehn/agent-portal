@@ -95,7 +95,7 @@ export const config = {
   },
 
   // The message-queue service (~/projects/message-queue) that carries the
-  // distillation compaction jobs. `url` is the bare origin (the /api/v1 prefix
+  // pipeline queues (lib/pipeline-queues.ts). `url` is the bare origin (the /api/v1 prefix
   // lives in lib/mq-client.ts). `mock` (MOCK_QUEUE=true, on under dev:mock)
   // swaps in the in-process queue with the same semantics; so does an unset
   // url, with a boot warning, so a laptop without the service still compacts.

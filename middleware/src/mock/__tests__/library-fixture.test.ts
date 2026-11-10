@@ -1,8 +1,5 @@
 // The library catalog's fixture: registered, with its scenarios declared, and
 // stamps that come from the clock rather than from import time.
-//
-// (Its distillation-lineage half, which walked library items back to L0
-// observations, went with the distillation tier machinery in R7.)
 
 import { fixtureRegistry, freezeClock } from '../core/index.js';
 import { libraryAssets, mockLibraryAssets } from '../prompt-library.js';

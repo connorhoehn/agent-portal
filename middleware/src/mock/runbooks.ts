@@ -1,4 +1,4 @@
-// The runbook mock floor (docs/distillation-runbooks-design.md §2.5): five
+// The runbook mock floor: five
 // registered fixtures that RowsRunbookStore (lib/runbooks/store-rows.ts) reads
 // and writes, so `POST /api/__mock/reset` undoes every write and the
 // default / empty / large scenarios work like the rest of the floor.

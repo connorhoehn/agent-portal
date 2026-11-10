@@ -150,7 +150,7 @@ export function tenantComposerPolicy(spec: TenantRouteSpec, view: TenantViewEvid
   const pathname = url.pathname;
   const record = spec.kind === 'record' || spec.kind === 'editor';
   if (spec.tenant === 'access') return accessComposerPolicy(pathname, view);
-  // Runbooks (docs/distillation-runbooks-design.md §4): the library, the proposals and the briefs are each a
+  // Runbooks: the library, the proposals and the briefs are each a
   // list rail whose shared command composer docks under the column — on the record pages too, so a missing
   // record keeps it. No evidence can exempt one.
   if (/^\/iq\/runbooks(?:\/(?:proposals|briefs))?(?:\/[^/]+)?$/.test(pathname)) return { mode: 'required' };

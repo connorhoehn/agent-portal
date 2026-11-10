@@ -1,5 +1,4 @@
-// Who may decide a runbook proposal (docs/distillation-runbooks-design.md,
-// "Decisions taken (user, 2026-10-14)" #1):
+// Who may decide a runbook proposal:
 //
 //   the runbook's OWNER, or an SME on the runbook's INITIATIVE, accepts;
 //   `org-leader` and `admin` override; a proposer never accepts their own.

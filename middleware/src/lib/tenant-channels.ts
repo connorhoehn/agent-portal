@@ -1,7 +1,7 @@
 // The realtime channel families each non-Social tenant actually uses, and the
 // REST authority each one mirrors. This is a default-deny allowlist: a name
 // under `orgiq:`, `assessment:` or `pipelines:` that matches no family here
-// (and is not a DM, distillation feed or reserved huddle) is refused, however
+// (and is not a DM or reserved huddle) is refused, however
 // many grants the caller holds. Until 2026-10-05 every grant holder in a
 // partition could subscribe/publish to ANY name under it (realtime-parity
 // gap #6/#8, work item A1).

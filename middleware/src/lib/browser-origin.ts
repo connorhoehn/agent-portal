@@ -16,8 +16,8 @@ function originOf(value: string): string | null {
  * Always allowed: the API's own origin and explicitly configured frontends.
  * Loopback origins (the Vite portal) only under INSECURE_DEV_MODE.
  */
-/** The allowlist decision on its own, so the realtime upgrade
- *  (lib/distillation-realtime.ts) — which never passes through Express —
+/** The allowlist decision on its own, so a realtime upgrade — which never
+ *  passes through Express —
  *  applies exactly the rule the HTTP side does. `selfOrigin` is the API's own
  *  `proto://host` as the request saw it. */
 export function isAllowedBrowserOrigin(origin: string, selfOrigin: string): boolean {

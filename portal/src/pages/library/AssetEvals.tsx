@@ -28,7 +28,7 @@ export function AssetEvals({ assetId, version }: { assetId: string; version: str
   // ManageBots — the same gate the server's run route enforces
   // (middleware/src/routes/prompt-evals.ts). Without this, a member saw a
   // live-looking "Run evals" button that always 403'd with no explanation
-  // (DEFECTS.md #11). Same pattern as the Promotions drawer (#3).
+  // (DEFECTS.md #11).
   const { can, ready } = useCapabilities();
   const canRun = ready && can('ManageBots');
 

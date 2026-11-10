@@ -1,5 +1,5 @@
 import { runbookDisplayTitle } from './runbookTitles.ts';
-// Pure model of the Runbooks destination (docs/distillation-runbooks-design.md §4):
+// Pure model of the Runbooks destination:
 // hrefs, list grouping, health, proposal rows, brief rows, the step markers
 // derived from applications, the honest messages for the API's refusals, the
 // markdown guard and the redirect from the retired /iq/distillation tree.
@@ -291,7 +291,7 @@ export function guardMarkdown(markdown: string): string {
 
 // ── The retired /iq/distillation tree ────────────────────────────────────────
 
-/** Source artifact → the runbook the migration made of it (docs/distillation-runbooks-design.md §5.1). */
+/** Source artifact → the runbook the migration made of it. */
 export const ARTIFACT_RUNBOOK: Readonly<Record<string, string>> = {
   'art-001': 'rb-flaky-test-rerun-diff', 'art-002': 'rb-aurora-cold-start-retry', 'art-003': 'rb-fargate-arm64-image',
   'art-004': 'rb-auth-pr-csrf-gate', 'art-005': 'rb-ingest-pii-scan', 'art-006': 'rb-statsd-decommission',

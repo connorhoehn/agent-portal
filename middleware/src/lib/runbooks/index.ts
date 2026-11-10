@@ -1,4 +1,4 @@
-// lib/runbooks — the runbook model (docs/distillation-runbooks-design.md §2–§3).
+// lib/runbooks — the runbook model.
 // Pure modules only; the stores (R1), routes (R3) and injection (R4) build on
 // these exports. repo-context.ts is the one file here that reads the disk.
 export type {

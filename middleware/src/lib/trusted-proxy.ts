@@ -51,7 +51,7 @@ interface UpgradeSource {
 /**
  * `viewerScheme` for a WebSocket UPGRADE, which never passes through Express —
  * so there is no `req.secure` and no `trust proxy` to lean on. The upgrade
- * paths (lib/realtime-gateway.ts, lib/distillation-realtime.ts) used to read
+ * path (lib/realtime-gateway.ts) used to read
  * the scheme off the socket alone, which behind the ALB is always plain TCP:
  * an `https://` page's socket then read as `http://<host>`, failed the
  * same-origin test, and survived only because PUBLIC_BASE_URL happened to

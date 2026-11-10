@@ -1,4 +1,4 @@
-// One runbook as a page (docs/distillation-runbooks-design.md §4): Read (the canonical markdown a box
+// One runbook as a page: Read (the canonical markdown a box
 // receives, readably), History (versions and the diff between any two), Runs (each step with the last
 // run's outcome, and every run that was given it) and Suggest an edit. Drifting and retired runbooks
 // say so above the text.
