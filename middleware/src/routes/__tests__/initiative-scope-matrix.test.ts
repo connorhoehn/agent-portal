@@ -138,6 +138,22 @@ describe('DE-44 initiative-scope matrix', () => {
     expect(conditional).toEqual([]);
   });
 
+  // Sweep 12, U2: a work-item or initiative write has no OPEN form at all. A
+  // new route there fails this whichever list it is added to, until its handler
+  // makes a direct check (requireInitiativeScope, or itemInScope over it) at
+  // its own top level; and a write form the route regex above would not see
+  // (`.all`, `.route`, `.use` with a handler) fails it too.
+  it('every write route on the work-item and initiative routers checks scope directly, with no OPEN escape', () => {
+    const top = [...routes.keys()].filter((r) => TOP_LEVEL_FILES.includes(r.split(' ')[0]!));
+    expect(top.filter((r) => r in OPEN)).toEqual([]);
+    expect(top.filter((r) => !SCOPED.includes(r))).toEqual([]);
+    expect(top.filter((r) => !DIRECT_CHECK.test(routes.get(r) ?? ''))).toEqual([]);
+    for (const file of TOP_LEVEL_FILES) {
+      const src = readFileSync(resolve(ROUTES, `${file}.ts`), 'utf8');
+      expect(src.match(/\b\w+Router\.(all|route|use)\(/g) ?? []).toEqual([]);
+    }
+  });
+
   it('every OPEN route says why', () => {
     expect(Object.entries(OPEN).filter(([, why]) => !why.trim())).toEqual([]);
   });
