@@ -173,47 +173,67 @@ class ReplayCache:
     signature carrying it could no longer verify (``TTL_SEC + SKEW_SEC``).
 
     In-process and thread-safe. Bounded by time, never by eviction: an entry
-    leaves only when it expires. Past ``max_entries`` overall, or
-    ``max_per_caller`` for one caller, ``seen_or_add`` raises
-    ``ReplayCacheFull`` and records nothing (fail closed). Both are sized well
-    above one runtime's request rate over the window.
+    leaves only when it expires. Three bounds, each refusing rather than
+    dropping a live nonce (``ReplayCacheFull``, fail closed):
+
+    * ``max_entries`` overall;
+    * ``max_per_caller`` for one bucket: a caller's invokes outside any run,
+      or one run's invokes (sweep 11, L4: a batch that signs every item under
+      the requester's identity, such as a scoring sweep, gets a bucket per
+      run instead of sharing the requester's one);
+    * ``max_per_identity`` across all of one caller's buckets, so many runs
+      still cannot fill the cache for everyone else.
+
+    All are sized well above one runtime's request rate over the window.
     """
 
     def __init__(self, ttl_sec: float = TTL_SEC + SKEW_SEC, max_entries: int = 100_000,
-                 max_per_caller: int = 2_000):
+                 max_per_caller: int = 2_000, max_per_identity: int = 20_000):
         self._ttl = ttl_sec
         self._max = max_entries
         self._max_per_caller = max_per_caller
+        self._max_per_identity = max(max_per_identity, max_per_caller)
         # Insertion order is expiry order: every entry gets the same ttl on a
         # monotonic clock.
-        self._seen: "OrderedDict[str, tuple[float, str]]" = OrderedDict()
+        self._seen: "OrderedDict[str, tuple[float, str, str]]" = OrderedDict()
         self._per_caller: dict[str, int] = {}
+        self._per_identity: dict[str, int] = {}
         self._lock = threading.Lock()
 
-    def seen_or_add(self, nonce: str, now: float | None = None, caller: str = "") -> bool:
+    @staticmethod
+    def _drop(counts: dict, key: str) -> None:
+        left = counts.get(key, 0) - 1
+        if left > 0:
+            counts[key] = left
+        else:
+            counts.pop(key, None)
+
+    def seen_or_add(self, nonce: str, now: float | None = None, caller: str = "", run: str = "") -> bool:
         """True when ``nonce`` was already accepted and has not expired;
         otherwise records it and returns False. Raises ``ReplayCacheFull``
-        when recording it would pass a bound."""
+        when recording it would pass a bound. ``run`` (the signed run id, when
+        the invoke belongs to one) gives the run a bucket of its own."""
         t = time.monotonic() if now is None else now
+        bucket = f"{caller}#run:{run}" if run else caller
         with self._lock:
             while self._seen:
-                _, (expiry, old_caller) = next(iter(self._seen.items()))
+                _, (expiry, old_bucket, old_caller) = next(iter(self._seen.items()))
                 if expiry > t:
                     break
                 self._seen.popitem(last=False)
-                left = self._per_caller.get(old_caller, 0) - 1
-                if left > 0:
-                    self._per_caller[old_caller] = left
-                else:
-                    self._per_caller.pop(old_caller, None)
+                self._drop(self._per_caller, old_bucket)
+                self._drop(self._per_identity, old_caller)
             if nonce in self._seen:
                 return True
             if len(self._seen) >= self._max:
                 raise ReplayCacheFull(f"the replay cache holds {len(self._seen)} unexpired nonces (limit {self._max})")
-            if self._per_caller.get(caller, 0) >= self._max_per_caller:
+            if self._per_caller.get(bucket, 0) >= self._max_per_caller:
                 raise ReplayCacheFull(f"one caller holds {self._max_per_caller} unexpired nonces (the per-caller limit)")
-            self._seen[nonce] = (t + self._ttl, caller)
-            self._per_caller[caller] = self._per_caller.get(caller, 0) + 1
+            if self._per_identity.get(caller, 0) >= self._max_per_identity:
+                raise ReplayCacheFull(f"one identity holds {self._max_per_identity} unexpired nonces across its runs (the per-identity limit)")
+            self._seen[nonce] = (t + self._ttl, bucket, caller)
+            self._per_caller[bucket] = self._per_caller.get(bucket, 0) + 1
+            self._per_identity[caller] = self._per_identity.get(caller, 0) + 1
             return False
 
     def __len__(self) -> int:
@@ -234,8 +254,9 @@ _VERIFIED_MAX = 1024
 
 def set_replay_cache(cache) -> None:
     """Swap the replay store: a shared one for a multi-replica runtime, or a
-    fresh one in tests. It needs ``seen_or_add(nonce, caller=...) -> bool``
-    and raises ``ReplayCacheFull`` rather than dropping an unexpired nonce."""
+    fresh one in tests. It needs ``seen_or_add(nonce, caller=..., run=...) -> bool``
+    (``run`` is passed only for an invoke that belongs to a run) and raises
+    ``ReplayCacheFull`` rather than dropping an unexpired nonce."""
     global _replay_cache
     _replay_cache = cache
     with _verified_lock:
@@ -378,8 +399,10 @@ def _verify(payload: dict) -> InvokeIdentity | None:
         return None
     tenant = auth.get("tenant") if isinstance(auth.get("tenant"), str) else ""
     sub = auth.get("sub") if isinstance(auth.get("sub"), str) else ""
+    run_id = payload.get("runId") if isinstance(payload.get("runId"), str) else ""
     try:
-        replayed = _replay_cache.seen_or_add(nonce, caller=f"{why}:{tenant}:{sub}")
+        # The run id is inside the signed body, so only the signer chooses it.
+        replayed = _replay_cache.seen_or_add(nonce, caller=f"{why}:{tenant}:{sub}", **({"run": run_id} if run_id else {}))
     except ReplayCacheFull as exc:
         log.error("invoke-auth: refusing the signed invocation: %s. Nothing is evicted; it clears as entries expire", exc)
         return None

@@ -55,6 +55,23 @@ class ReplayCacheTests(unittest.TestCase):
         # The per-caller count falls as that caller's entries expire.
         self.assertFalse(cache.seen_or_add("a3", now=101, caller="flood"))
 
+    def test_a_batch_gets_a_bucket_per_run_inside_the_identity_bound(self):
+        # Sweep 11 (L4): one requester's batch, each item in its own run, is not one shared bucket;
+        # the identity bound still stops many runs from filling the cache.
+        cache = ia.ReplayCache(max_entries=100, max_per_caller=2, max_per_identity=5)
+        cache.seen_or_add("a1", now=0, caller="svc:t:u")
+        cache.seen_or_add("a2", now=0, caller="svc:t:u")
+        with self.assertRaises(ia.ReplayCacheFull):
+            cache.seen_or_add("a3", now=0, caller="svc:t:u")
+        cache.seen_or_add("r1", now=0, caller="svc:t:u", run="run-1")
+        cache.seen_or_add("r2", now=0, caller="svc:t:u", run="run-2")
+        cache.seen_or_add("r3", now=0, caller="svc:t:u", run="run-3")
+        with self.assertRaises(ia.ReplayCacheFull):
+            cache.seen_or_add("r4", now=0, caller="svc:t:u", run="run-4")
+        self.assertFalse(cache.seen_or_add("o1", now=0, caller="svc:t:other"))
+        # Expiry frees both bounds.
+        self.assertFalse(cache.seen_or_add("later", now=10_000, caller="svc:t:u"))
+
     def test_the_default_window_covers_the_signature_ttl_and_skew(self):
         cache = ia.ReplayCache()
         cache.seen_or_add("n", now=0)
