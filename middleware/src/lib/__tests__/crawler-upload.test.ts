@@ -54,16 +54,14 @@ it('a failed sidecar put writes no document and leaves the page without that key
   expect(page.s3AnalysisKey).toBeTruthy();
 });
 
-it('a failed document put removes its new sidecar when nothing is at the key', async () => {
+it('a failed document put leaves its sidecar (it labels nothing) and the page without that key', async () => {
   const { crawl, page, vision } = fixtures();
   send.mockImplementation(async (cmd) => {
     const key = String(cmd.input.Key);
     if (cmd.constructor.name === 'PutObjectCommand' && key.endsWith('.md')) throw new Error('object put failed');
-    if (cmd.constructor.name === 'HeadObjectCommand') throw Object.assign(new Error('nf'), { name: 'NotFound' });
     return {};
   });
   await uploadArtifacts(crawl, page, Buffer.from('png'), vision, s3, 'docs-bucket');
-  const md = sent().find((c) => c.op === 'PutObjectCommand' && c.key.endsWith('.md'))!.key;
-  expect(sent()).toContainEqual({ op: 'DeleteObjectCommand', key: `${md}.metadata.json` });
+  expect(sent().some((c) => c.op === 'DeleteObjectCommand' || c.op === 'HeadObjectCommand')).toBe(false);
   expect(page.s3MarkdownKey).toBeUndefined();
 });

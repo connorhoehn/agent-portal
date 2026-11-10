@@ -102,8 +102,9 @@ describe('parity: a file upload and a link upload of the same document', () => {
     mockS3Send.mockClear();
     await uploadToLandingZone(slug, 'same.md', Buffer.from('x'), 'text/markdown');
     const byLink = puts();
-    expect(byLink).toHaveLength(2);
-    expect(byFile).toHaveLength(2);
+    expect(byLink).toHaveLength(3);
+    expect(byFile).toHaveLength(3);
+    expect(byLink[2]).toEqual(byFile[2]);
     expect(byLink[1]!.Key).toBe(byFile[1]!.Key);
     expect(byLink[0]).toEqual(byFile[0]);
   });
@@ -115,12 +116,13 @@ describe('the sidecar is written before the object, so no object is ever unlabel
     ['link upload', () => uploadToLandingZone('assessment-evidence', 'notes.md', Buffer.from('x'), 'text/markdown')],
   ];
 
-  it.each(uploads)('%s: sidecar first, then the object', async (_name, upload) => {
+  it.each(uploads)('%s: sidecar first, then the object, then the sidecar again', async (_name, upload) => {
     await upload();
     const ops = sent();
-    expect(ops.map((o) => o.op)).toEqual(['PutObjectCommand', 'PutObjectCommand']);
+    expect(ops.map((o) => o.op)).toEqual(['PutObjectCommand', 'PutObjectCommand', 'PutObjectCommand']);
     expect(ops[0]!.Key.endsWith('.metadata.json')).toBe(true);
     expect(ops[1]!.Key).toBe(ops[0]!.Key.slice(0, -'.metadata.json'.length));
+    expect(ops[2]).toEqual(ops[0]);
   });
 
   it.each(uploads)('%s: a failed sidecar put writes no object', async (_name, upload) => {
@@ -129,24 +131,14 @@ describe('the sidecar is written before the object, so no object is ever unlabel
     expect(sent()).toHaveLength(1);
   });
 
-  it.each(uploads)('%s: a failed object put removes the new sidecar when no object is at the key', async (_name, upload) => {
+  it.each(uploads)('%s: a failed object put leaves the sidecar and deletes nothing', async (_name, upload) => {
+    // Removing it could unlabel a concurrent upload of the same name
+    // (lib/__tests__/kb-document-put.test.ts interleaves two).
     mockS3Send
       .mockResolvedValueOnce({})                                         // sidecar
-      .mockRejectedValueOnce(new Error('object put failed'))              // object
-      .mockRejectedValueOnce(Object.assign(new Error('nf'), { name: 'NotFound' })); // head
+      .mockRejectedValueOnce(new Error('object put failed'));             // object
     await expect(upload()).rejects.toThrow('object put failed');
-    const ops = sent();
-    expect(ops.map((o) => o.op)).toEqual(['PutObjectCommand', 'PutObjectCommand', 'HeadObjectCommand', 'DeleteObjectCommand']);
-    expect(ops[3]!.Key).toBe(ops[0]!.Key);
-  });
-
-  it.each(uploads)('%s: a failed re-upload keeps the label of the version still there', async (_name, upload) => {
-    mockS3Send
-      .mockResolvedValueOnce({})
-      .mockRejectedValueOnce(new Error('object put failed'))
-      .mockResolvedValueOnce({ ContentLength: 1 });                       // head: an object exists
-    await expect(upload()).rejects.toThrow('object put failed');
-    expect(sent().map((o) => o.op)).toEqual(['PutObjectCommand', 'PutObjectCommand', 'HeadObjectCommand']);
+    expect(sent().map((o) => o.op)).toEqual(['PutObjectCommand', 'PutObjectCommand']);
   });
 });
 
@@ -155,7 +147,11 @@ describe('parity: the offline landing zone writes what S3 would', () => {
 
   it('the mock branch lands the same sidecar and object, sidecar first', async () => {
     await uploadToLandingZone('assessment-evidence', 'same.md', Buffer.from('hello'), 'text/markdown');
-    const real = puts().map((p) => ({ key: p.Key, contentType: p.ContentType }));
+    // The real branch re-puts the sidecar after the object (a concurrent
+    // writer could have removed it); the offline bucket has no concurrency,
+    // so it holds each key once, in first-write order.
+    const real = puts().map((p) => ({ key: p.Key, contentType: p.ContentType }))
+      .filter((p, i, all) => all.findIndex((q) => q.key === p.key) === i);
     mockS3Send.mockClear();
 
     mockFlag.aurora = true;

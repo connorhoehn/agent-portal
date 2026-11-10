@@ -4,20 +4,24 @@
 // Retrieval keeps a document only for the tenant its sidecar names (beside the
 // key-prefix check; lib/kb-prefixes.ts). Writing the object first meant a
 // failed sidecar put left an object in the bucket with no label at all. The
-// order here is the one that cannot do that:
+// order here is the one that cannot do that, even with two uploads (or an
+// upload and a delete) of the same key running at once:
 //
 //   1. the sidecar is put first; if that fails, nothing was written;
-//   2. then the document; if that fails, the sidecar is removed again, but
-//      only when no object exists at the key. A failed re-upload of a name
-//      that is already there must not strip the label off the version that
-//      is still being served.
+//   2. then the document; if that fails, the error is thrown and the sidecar
+//      stays. It labels nothing on its own, and removing it could strip the
+//      label from a concurrent upload of the same name whose document lands
+//      a moment later;
+//   3. after a successful document put the sidecar is put again (the same
+//      bytes, so idempotent). Whatever removed it between steps 1 and 2 (a
+//      delete of the same key, say), the document this call wrote ends up
+//      labelled. A failed re-assert throws, so the caller sees a failure.
 //
-// A sidecar whose cleanup fails is left behind with no document, which
-// labels nothing and is overwritten by the next upload of that name.
+// A sidecar left behind with no document is overwritten by the next upload of
+// that name and removed by a delete of it.
 
 import {
   DeleteObjectCommand,
-  HeadObjectCommand,
   PutObjectCommand,
   type PutObjectCommandInput,
   type S3Client,
@@ -26,14 +30,9 @@ import { METADATA_SIDECAR_SUFFIX, tenantMetadataSidecar } from './kb-prefixes.js
 
 type DocumentPut = PutObjectCommandInput & { Bucket: string; Key: string };
 
-function isNotFound(err: unknown): boolean {
-  const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
-  return e?.name === 'NotFound' || e?.name === 'NoSuchKey' || e?.$metadata?.httpStatusCode === 404;
-}
-
 /**
  * Put `doc` and, when `owner` is known, its `<key>.metadata.json` sidecar
- * naming that tenant, sidecar first (see the file header for why).
+ * naming that tenant: sidecar, document, sidecar again (see the file header).
  */
 export async function putDocumentWithSidecar(
   s3: Pick<S3Client, 'send'>,
@@ -45,23 +44,12 @@ export async function putDocumentWithSidecar(
     return;
   }
   const sidecar = tenantMetadataSidecar(doc.Key, owner);
-  await s3.send(new PutObjectCommand({
+  const putSidecar = () => s3.send(new PutObjectCommand({
     Bucket: doc.Bucket, Key: sidecar.key, Body: sidecar.body, ContentType: 'application/json',
   }));
-  try {
-    await s3.send(new PutObjectCommand(doc));
-  } catch (err) {
-    try {
-      await s3.send(new HeadObjectCommand({ Bucket: doc.Bucket, Key: doc.Key }));
-      // An earlier version is still there and keeps its label.
-    } catch (headErr) {
-      if (isNotFound(headErr)) {
-        await s3.send(new DeleteObjectCommand({ Bucket: doc.Bucket, Key: sidecar.key }))
-          .catch((delErr: Error) => console.warn('[kb] orphan metadata sidecar left behind:', delErr.message));
-      }
-    }
-    throw err;
-  }
+  await putSidecar();
+  await s3.send(new PutObjectCommand(doc));
+  await putSidecar();
 }
 
 /** The sidecar key a delete of `key` also removes, or null when `key` is
