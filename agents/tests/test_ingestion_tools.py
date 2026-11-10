@@ -44,6 +44,10 @@ class _Base(unittest.TestCase):
         patcher = mock.patch.object(ing, "_bedrock_agent", self.agent)
         patcher.start()
         self.addCleanup(patcher.stop)
+        # The run's parameters authorised these slugs (run_sync_from).
+        self.run = ing.RunSync(["default", "articles", "typo"])
+        token = ing._run_sync.set(self.run)
+        self.addCleanup(ing._run_sync.reset, token)
 
 
 class SyncDefaultKbTests(_Base):
@@ -113,7 +117,99 @@ class SyncNamedKbTests(_Base):
         self.agent.start_ingestion_job.assert_not_called()
 
 
+class SyncTargetComesFromTheRunTests(_Base):
+    """The model reads untrusted document text; it may only pick among the
+    sync targets the signed run parameters authorised."""
+
+    SECRET = "invoke-secret-for-tests-0123456789"
+
+    def _signed(self, fields: dict | None = None) -> dict:
+        from _shared import invoke_auth
+        from _shared.callbacks import sign_service_request
+
+        payload = {"input_text": "sync", "auth": {"tenant": "orgiq", "sub": "u-1"}, "sessionId": "c",
+                   "authNonce": invoke_auth.new_nonce()}
+        if fields is not None:
+            payload["input"] = json.dumps(fields)
+        payload["authSig"] = sign_service_request(
+            invoke_auth.METHOD, invoke_auth.TARGET, invoke_auth.canonical_for(payload),
+            secret=self.SECRET, service_id=invoke_auth.SERVICE_ID, audience=invoke_auth.AUDIENCE,
+        )
+        return payload
+
+    def _env(self, **extra):
+        env = {"AGENT_INVOKE_SECRET": self.SECRET, "AGENT_INVOKE_SECRET_ID": "", "INSECURE_DEV_MODE": "",
+               "APP_ENV": "production", **extra}
+        return mock.patch.dict("os.environ", env)
+
+    def test_a_slug_the_run_did_not_authorise_is_refused_before_any_aws_call(self):
+        self.run.slugs = frozenset({"default"})
+        with mock.patch.object(ing, "_resolve_kb_id_by_slug", return_value="OTHERKB") as resolve:
+            out = json.loads(ing.sync_knowledge_base(kb_slug="hr-private"))
+        self.assertIn("may not sync", out["error"])
+        resolve.assert_not_called()
+        self.agent.list_data_sources.assert_not_called()
+        self.agent.start_ingestion_job.assert_not_called()
+
+    def test_the_default_authority_syncs_nothing(self):
+        token = ing._run_sync.set(ing.RunSync())
+        try:
+            out = json.loads(ing.sync_knowledge_base())
+        finally:
+            ing._run_sync.reset(token)
+        self.assertIn("error", out)
+        self.agent.start_ingestion_job.assert_not_called()
+
+    def test_a_verified_run_without_parameters_may_sync_the_main_kb_only(self):
+        with self._env():
+            run = ing.run_sync_from(self._signed())
+        self.assertEqual(run.slugs, frozenset({"default"}))
+
+    def test_signed_parameters_name_the_slugs_and_data_source(self):
+        with self._env():
+            run = ing.run_sync_from(self._signed({"kbSlug": ["articles", "default"], "dataSourceId": "DS2"}))
+        self.assertEqual(run.slugs, frozenset({"articles", "default"}))
+        self.assertEqual(run.data_source_id, "DS2")
+
+    def test_an_unsigned_run_outside_dev_mode_syncs_nothing(self):
+        with self._env():
+            run = ing.run_sync_from({"input_text": "sync", "input": json.dumps({"kbSlug": "articles"})})
+        self.assertEqual(run.slugs, frozenset())
+
+    def test_dev_mode_without_a_secret_keeps_local_syncs_working(self):
+        with self._env(AGENT_INVOKE_SECRET="", APP_ENV="", NODE_ENV="", INSECURE_DEV_MODE="true"):
+            run = ing.run_sync_from({"input_text": "sync", "auth": {"tenant": "orgiq"}})
+        self.assertEqual(run.slugs, frozenset({"default"}))
+
+    def test_malformed_parameters_are_refused(self):
+        with self._env():
+            for bad in ({"kbSlug": "../x"}, {"kbSlug": 3}, {"kbSlug": ["a"] * 9}, {"dataSourceId": "a/b"}):
+                self.assertIsNone(ing.run_sync_from(self._signed(bad)), bad)
+
+    def test_the_run_data_source_is_used_and_must_belong_to_the_kb(self):
+        self.agent.list_data_sources.return_value = {
+            "dataSourceSummaries": [{"dataSourceId": "ds-1"}, {"dataSourceId": "DS2"}]
+        }
+        self.run.data_source_id = "DS2"
+        out = json.loads(ing.sync_knowledge_base())
+        self.assertEqual(out["data_source_id"], "DS2")
+        self.run.data_source_id = "DSX"
+        self.assertIn("error", json.loads(ing.sync_knowledge_base()))
+
+    def test_status_reads_only_jobs_this_run_started(self):
+        self.agent.get_ingestion_job.return_value = {"ingestionJob": {"status": "COMPLETE"}}
+        self.assertIn("not started by this run", json.loads(ing.check_ingestion_status("job-1"))["error"])
+        self.agent.get_ingestion_job.assert_not_called()
+        ing.sync_knowledge_base()
+        self.assertEqual(json.loads(ing.check_ingestion_status("job-1"))["status"], "COMPLETE")
+        self.assertEqual(self.agent.get_ingestion_job.call_args.kwargs["knowledgeBaseId"], "MAINKB0001")
+
+
 class CheckStatusTests(_Base):
+    def setUp(self):
+        super().setUp()
+        self.run.jobs.add(("job-1", "MAINKB0001", "ds-1"))
+
     def test_statistics_are_flattened_onto_stable_key_names(self):
         self.agent.get_ingestion_job.return_value = {
             "ingestionJob": {
