@@ -16,12 +16,21 @@ Two gates:
     nothing is written, and every element is counted as dropped for ``tenant``.
 *   **The shape.** Each entity is an object with a usable id and a name (bounded
     lengths), of one of the four kinds the extraction asks for, and its name
-    must appear in the document (case and spacing ignored). Optional text fields
+    must appear in the document (case and spacing ignored, whole words). Optional text fields
     (email, team, role, domain, status) are kept only when they appear in the
     document too, otherwise blanked. A relationship needs one of the types the
     graph stores for these kinds, with the label pair that type means, and both
     endpoints among the entities accepted from the same document. Each kind has
     a count bound; the rest are dropped for ``limit``.
+
+"Appears in the document" means a whole-word match of at least
+``MIN_MATCH_LEN`` characters: a name or field must not start or end inside a
+longer word, so a short value cannot ride in on a substring of an unrelated
+word.
+
+The merge_* writers in agents/graph-builder/main.py are not model tools; this
+module's ``check_extraction`` is the only path to them. ``check_node`` and
+``check_edge`` are the second line those writers keep.
 
 Stdlib only, so it is tested without the agent SDKs.
 """
@@ -65,6 +74,9 @@ MAX_NAME_LEN = 200
 MAX_FIELD_LEN = 200
 MAX_PER_KIND = 200
 MAX_RELATIONSHIPS = 500
+#: Shortest name or field value that may count as found in the document
+#: ("Go", "QA" and "ML" are real skills and teams; one letter is not).
+MIN_MATCH_LEN = 2
 
 
 def safe_id(value: str) -> str:
@@ -84,6 +96,16 @@ def caller_may_write(auth) -> bool:
 def _normalise(text: str) -> str:
     folded = unicodedata.normalize("NFKC", text).casefold()
     return " ".join(folded.split())
+
+
+def mentions(source: str, value: str) -> bool:
+    """True when ``value`` appears in the normalised ``source`` as whole words:
+    at least ``MIN_MATCH_LEN`` characters, not starting or ending inside a
+    longer word."""
+    needle = _normalise(value)
+    if len(needle) < MIN_MATCH_LEN:
+        return False
+    return re.search(r"(?<!\w)" + re.escape(needle) + r"(?!\w)", source) is not None
 
 
 @dataclass
@@ -155,7 +177,7 @@ def check_extraction(extracted, document_text: str, auth) -> Checked:
             if not name or len(name) > MAX_NAME_LEN or not slug.strip("_") or len(slug) > MAX_ID_LEN:
                 out.drop("schema")
                 continue
-            if _normalise(name) not in source:
+            if not mentions(source, name):
                 out.drop("not_in_source")
                 continue
             clean = {"id": slug, "name": name}
@@ -163,7 +185,7 @@ def check_extraction(extracted, document_text: str, auth) -> Checked:
                 value = item.get(opt)
                 if value in (None, ""):
                     continue
-                if isinstance(value, str) and len(value) <= MAX_FIELD_LEN and _normalise(value) in source:
+                if isinstance(value, str) and len(value) <= MAX_FIELD_LEN and mentions(source, value):
                     clean[opt] = value.strip()
                 else:
                     out.fields_cleared += 1

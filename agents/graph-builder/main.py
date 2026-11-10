@@ -19,6 +19,7 @@ from _shared.model_registry import RegistryAgent, invoke_with_fallback, resolve_
 from _shared.untrusted_text import Fence, with_data_rule  # noqa: E402
 from _shared.invoke_auth import verified_auth  # noqa: E402
 from _shared.graph_extraction import (  # noqa: E402
+    ENTITY_KINDS,
     caller_may_write,
     check_edge,
     check_extraction,
@@ -144,7 +145,17 @@ def _converse_text(resp: dict) -> str:
     return text or "{}"
 
 
-@tool
+# ── Internal write steps ─────────────────────────────────────────────────────
+# The merge_* functions and embed_and_store are NOT model tools. Their only
+# caller is extract_and_build, which runs every element through
+# check_extraction (_shared/graph_extraction.py) first: bounded fields, names
+# found in the document, label pairs, weights 0-1 and edges only between
+# accepted rows. Handing them to the model as tools would let document text
+# that steers the model write past those checks, so MODEL_TOOLS below lists
+# only extract_and_build and run_in_sandbox. The caller gate and shape checks
+# stay here as a second line.
+
+
 @instrumented_tool(_current_ctx.get)
 def merge_person(person_id: str, name: str, email: str = "", team: str = "", role: str = "") -> str:
     """Upsert a Person row.
@@ -182,7 +193,6 @@ def merge_person(person_id: str, name: str, email: str = "", team: str = "", rol
     return json.dumps({"merged": "Person", "id": safe})
 
 
-@tool
 @instrumented_tool(_current_ctx.get)
 def merge_skill(skill_id: str, name: str, domain: str = "") -> str:
     """Upsert a Skill row.
@@ -212,7 +222,6 @@ def merge_skill(skill_id: str, name: str, domain: str = "") -> str:
     return json.dumps({"merged": "Skill", "id": safe})
 
 
-@tool
 @instrumented_tool(_current_ctx.get)
 def merge_team(team_id: str, name: str) -> str:
     """Upsert a Team row."""
@@ -228,7 +237,6 @@ def merge_team(team_id: str, name: str) -> str:
     return json.dumps({"merged": "Team", "id": safe})
 
 
-@tool
 @instrumented_tool(_current_ctx.get)
 def merge_project(project_id: str, name: str, status: str = "") -> str:
     """Upsert a Project row."""
@@ -245,7 +253,6 @@ def merge_project(project_id: str, name: str, status: str = "") -> str:
     return json.dumps({"merged": "Project", "id": safe})
 
 
-@tool
 @instrumented_tool(_current_ctx.get)
 def merge_relationship(
     from_id: str,
@@ -313,7 +320,6 @@ def merge_relationship(
     return json.dumps({"merged": rel, "from": from_safe, "to": to_safe})
 
 
-@tool
 @instrumented_tool(_current_ctx.get)
 def embed_and_store(node_id: str, node_label: str, content: str) -> str:
     """Embed a node (Titan V2, 1024d) and upsert into node_embeddings.
@@ -325,6 +331,8 @@ def embed_and_store(node_id: str, node_label: str, content: str) -> str:
     """
     if not caller_may_write(_caller_auth.get()):
         return _refused("embedding", "tenant")
+    if node_label not in ENTITY_KINDS.values():
+        return _refused("embedding", "kind")
     response = _bedrock_runtime.invoke_model(
         modelId=EMBED_MODEL,
         body=json.dumps({"inputText": content, "dimensions": 1024, "normalize": True}),
@@ -362,7 +370,7 @@ def extract_and_build(document_text: str, source_key: str = "") -> str:
       2. The extraction is checked against the schema, the document and the
          verified caller (_shared/graph_extraction.py); what fails is dropped
          and counted in ``dropped``
-      3. Upserts each accepted entity via merge_* tools
+      3. Upserts each accepted entity via the internal merge_* steps
       4. Embeds people + skills into node_embeddings
 
     Args:
@@ -585,21 +593,25 @@ def _model_kwargs(model_id: str | None = None) -> dict:
 SYSTEM_PROMPT = (
     "You are the OrgIQ Graph-Builder agent. Build and maintain the organizational "
     "knowledge graph in Aurora PostgreSQL (relational tables) with pgvector embeddings.\n\n"
-    "Primary workflow: extract_and_build(document_text) handles the full pipeline.\n"
-    "For targeted edits: use merge_person, merge_skill, merge_team, merge_project, "
-    "merge_relationship directly.\n\n"
+    "Every graph write goes through extract_and_build(document_text): it extracts "
+    "people, skills, teams, projects and relationships from the text, checks each "
+    "one against that text, writes what passes and embeds people and skills. For a "
+    "targeted edit, pass the text that states the fact to extract_and_build.\n\n"
     "Use run_in_sandbox for any data transformation or parsing that's cleaner in "
-    "Python — e.g. deduplication logic, regex extraction, JSON reshaping before "
-    "feeding into merge_* tools. Embed input data as inline constants.\n\n"
+    "Python — e.g. deduplication logic, regex extraction or JSON reshaping. Embed "
+    "input data as inline constants.\n\n"
     "Critical rules:\n"
     "- All writes are idempotent (INSERT ... ON CONFLICT DO UPDATE)\n"
-    "- Use lowercase_underscore slugs for all node IDs\n"
-    "- Embed nodes after creation with embed_and_store\n"
+    "- Only facts stated in the document are written\n"
     "- Titan Embeddings V2 at 1024 dimensions — do not change this\n"
     "- Vector embeddings are stored in the node_embeddings table"
 )
 
 _SYSTEM_PROMPT_SHA = short_prompt_hash(SYSTEM_PROMPT)
+
+#: The tools the model may call. The merge_* writers and embed_and_store are
+#: internal steps of extract_and_build (see the note above merge_person).
+MODEL_TOOLS = (extract_and_build, run_in_sandbox)
 
 # System prompt is resolved from Bedrock Prompt Management at run time
 # (falls back to the SYSTEM_PROMPT literal above). Editing the managed
@@ -612,11 +624,7 @@ _agent = RegistryAgent(
     agent_name="graph-builder",
     build=lambda system_prompt, model_id: Agent(
         model=BedrockModel(**_model_kwargs(model_id)),
-        tools=[
-            merge_person, merge_skill, merge_team, merge_project,
-            merge_relationship, embed_and_store, extract_and_build,
-            run_in_sandbox,
-        ],
+        tools=list(MODEL_TOOLS),
         system_prompt=with_data_rule(system_prompt),
     ),
 )

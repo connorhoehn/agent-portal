@@ -83,6 +83,38 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(checked.dropped, {"not_in_source": 1})
         self.assertEqual([p["id"] for p in checked.entities["people"]], ["alice"])
 
+    def test_a_name_inside_a_longer_word_is_not_a_mention(self):
+        # "Ali" sits inside "Alice", "Form" inside "Platform", "Net" inside
+        # nothing: none of them is a whole-word mention.
+        ex = {
+            "people": [{"id": "ali", "name": "Ali"}],
+            "teams": [{"id": "form", "name": "Form"}],
+            "skills": [{"id": "rnetes", "name": "rnetes"}],
+        }
+        checked = ge.check_extraction(ex, DOC, ORGIQ)
+        self.assertEqual(checked.dropped, {"not_in_source": 3})
+
+    def test_a_name_shorter_than_the_minimum_is_not_a_mention(self):
+        ex = {"people": [{"id": "a", "name": "A"}]}
+        self.assertEqual(ge.check_extraction(ex, "A note from A.", ORGIQ).dropped, {"not_in_source": 1})
+        # Two letters is enough when the word stands alone.
+        ok = {"skills": [{"id": "go", "name": "Go"}]}
+        self.assertEqual(ge.check_extraction(ok, "She writes Go daily.", ORGIQ).dropped, {})
+
+    def test_optional_fields_need_a_whole_word_match_too(self):
+        ex = {"people": [{"id": "alice", "name": "Alice Smith", "team": "Plat", "role": "Data Engineer"}]}
+        checked = ge.check_extraction(ex, DOC, ORGIQ)
+        self.assertEqual(checked.entities["people"], [{"id": "alice", "name": "Alice Smith", "role": "Data Engineer"}])
+        self.assertEqual(checked.fields_cleared, 1)
+
+    def test_mentions(self):
+        source = ge._normalise(DOC)
+        self.assertTrue(ge.mentions(source, "alice@example.com"))
+        self.assertTrue(ge.mentions(source, "project   atlas"))
+        self.assertFalse(ge.mentions(source, "atla"))
+        self.assertFalse(ge.mentions(source, " "))
+        self.assertFalse(ge.mentions(source, "a"))
+
     def test_optional_fields_not_in_the_document_are_blanked(self):
         ex = {"people": [{"id": "alice", "name": "Alice Smith", "email": "boss@elsewhere.test", "role": "CEO"}]}
         checked = ge.check_extraction(ex, DOC, ORGIQ)

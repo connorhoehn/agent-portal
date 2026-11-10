@@ -506,6 +506,43 @@ class AdminCallerTests(_Base):
         self.assertEqual(out["merged"], "Person")
 
 
+class ModelToolListTests(unittest.TestCase):
+    """The model reaches the graph only through extract_and_build.
+
+    The merge_* writers and embed_and_store are internal steps behind
+    check_extraction; offered to the model as tools, a document that steers
+    the model could write past those checks.
+    """
+
+    WRITERS = ("merge_person", "merge_skill", "merge_team", "merge_project",
+               "merge_relationship", "embed_and_store")
+
+    def test_model_tools_are_extract_and_build_and_the_sandbox_only(self):
+        names = [t.__name__ for t in gb.MODEL_TOOLS]
+        self.assertEqual(names, ["extract_and_build", "run_in_sandbox"])
+
+    def test_the_built_agent_is_handed_only_the_model_tools(self):
+        built = gb._agent._build("system", gb.MODEL_ID)
+        names = {getattr(t, "__name__", "") for t in built.tools}
+        self.assertEqual(names, {"extract_and_build", "run_in_sandbox"})
+        for writer in self.WRITERS:
+            self.assertNotIn(writer, names)
+
+    def test_the_system_prompt_does_not_offer_the_writers(self):
+        for writer in self.WRITERS:
+            self.assertNotIn(writer, gb.SYSTEM_PROMPT)
+
+
+class EmbedLabelTests(_Base):
+    def test_an_unknown_label_is_refused_before_the_embedding_call(self):
+        bedrock = mock.Mock()
+        with mock.patch.object(gb, "_bedrock_runtime", bedrock):
+            out = json.loads(gb.embed_and_store(node_id="x", node_label="Secret", content="x"))
+        self.assertEqual(out, {"refused": "embedding", "reason": "kind"})
+        bedrock.invoke_model.assert_not_called()
+        self.assertEqual(self.rds.calls, [])
+
+
 class HandleSetsTheCallerTests(unittest.TestCase):
     def test_handle_reads_the_caller_from_the_verified_block_only(self):
         seen = []
