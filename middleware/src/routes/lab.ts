@@ -28,7 +28,7 @@ import {
 import { requireServiceAuth, LAB_CALLBACK_SERVICE_AUTH } from '../lib/service-auth.js';
 import { notifyPipelinesWorkGraphChanged } from '../lib/work-graph/live.js';
 import { runRefFromRequest, runTokenMatches } from '../lib/run-token.js';
-import { requireInitiativeScope } from '../lib/initiative-scope.js';
+import { orgWideSession, requireInitiativeScope } from '../lib/initiative-scope.js';
 
 export const labRouter = Router();
 
@@ -206,6 +206,13 @@ labRouter.post('/consults/:id/answer', orgiqOnly, requireAction('DispatchAgentRu
   const who = req.session?.sub ?? 'unknown';
   // An answer steers a running agent: only for someone on its initiative (DE-44 row 29).
   const pending = await getConsult(String(req.params['id']));
+  // A consult its run never attributed has no initiative to be on, and
+  // requireInitiativeScope passes a null initiative: only an org-wide role
+  // answers one (sweep 11, L1), never anyone who merely holds the action.
+  if (pending && !pending.initiativeId && !orgWideSession(req.session ?? null)) {
+    res.status(403).json({ error: 'this agent question belongs to no initiative, so only an org-wide role can answer it', code: 'UNATTRIBUTED_CONSULT' });
+    return;
+  }
   if (pending && !await requireInitiativeScope(req, res, pending.initiativeId ?? null, { action: 'answer consults' })) return;
   const consult = await answerConsult(String(req.params['id']), answer, who);
   if (!consult) { res.status(409).json({ error: 'consult is not pending (answered, expired, or unknown)' }); return; }

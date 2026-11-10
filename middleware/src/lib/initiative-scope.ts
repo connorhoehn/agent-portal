@@ -43,6 +43,17 @@ async function providers() {
 export const ORG_WIDE_INITIATIVE_ROLES = ['org-leader', 'hr-admin', 'admin'];
 
 /**
+ * Whether this session holds an org-wide role (or is the demo identity under
+ * INSECURE_DEV_MODE, which explores as one): the people who may act where there
+ * is no initiative to be on, such as a consult its run never attributed.
+ */
+export function orgWideSession(session: Session | null): boolean {
+  const role = session?.role;
+  if (role && ORG_WIDE_INITIATIVE_ROLES.includes(role)) return true;
+  return session?.sub === DEMO_SUB && insecureDevMode();
+}
+
+/**
  * Whether this caller owns or contributes to `initiativeId`.
  *
  * Org-wide roles pass unconditionally, before any lookup runs — so a failed

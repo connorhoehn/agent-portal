@@ -70,6 +70,7 @@ function appWith(session: { sub: string; role: string; tenant: string } | null) 
 
 const agent = () => appWith(null); // sessionless caller — the microVM
 const sme = () => appWith({ sub: 'u-nora', role: 'sme', tenant: 'orgiq' });
+const leader = () => appWith({ sub: 'u-vera', role: 'org-leader', tenant: 'orgiq' });
 const assessor = () => appWith({ sub: 'u-ana', role: 'assessor', tenant: 'assessment' });
 
 describe('the lab is an orgiq surface', () => {
@@ -148,12 +149,16 @@ describe('lab consults', () => {
     const pending = await request(agent()).get(`/api/lab/consults/${id}`);
     expect(pending.body.consult.status).toBe('pending');
 
-    // SME answers (DispatchAgentRun holder).
-    const answered = await request(sme()).post(`/api/lab/consults/${id}/answer`).send({
+    // This consult carries no initiative (no run token): an SME holding
+    // DispatchAgentRun is refused (sweep 11, L1); an org-wide role answers.
+    const smeTry = await request(sme()).post(`/api/lab/consults/${id}/answer`).send({ answer: 'yes' });
+    expect(smeTry.status).toBe(403);
+    expect(smeTry.body.code).toBe('UNATTRIBUTED_CONSULT');
+    const answered = await request(leader()).post(`/api/lab/consults/${id}/answer`).send({
       answer: 'Keep it behind a flag until the next release train.',
     });
     expect(answered.status).toBe(200);
-    expect(answered.body.consult.answeredBy).toBe('u-nora');
+    expect(answered.body.consult.answeredBy).toBe('u-vera');
 
     // The poller sees the answer.
     const polled = await request(agent()).get(`/api/lab/consults/${id}`);
@@ -161,7 +166,7 @@ describe('lab consults', () => {
     expect(polled.body.consult.answer).toContain('flag');
 
     // Answering twice conflicts.
-    const again = await request(sme()).post(`/api/lab/consults/${id}/answer`).send({ answer: 'no' });
+    const again = await request(leader()).post(`/api/lab/consults/${id}/answer`).send({ answer: 'no' });
     expect(again.status).toBe(409);
   });
 
