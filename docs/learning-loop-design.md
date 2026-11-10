@@ -112,6 +112,37 @@ Embeddings are a later improvement behind the same function. The first version i
 - Local compute: its claim path goes through the same run limits and kill switches as every other executor. Its money stays at zero billed; the worker's reported figure is stored and shown as "reported, not billed".
 - Learning line: a monthly organisation cap for server-side distillation, with a small default. At the cap the distiller skips and says so. Local distillation does not draw on it.
 
+## Built from Anthropic's own components
+
+The distiller, the runbook format and the evidence are built from the pieces Anthropic ships for the same job, not from home-grown equivalents. Names below are the documented ones.
+
+| Need | Component | How it is used here |
+|---|---|---|
+| The unit of reusable procedure | Agent Skills (`SKILL.md`, progressive disclosure) | A runbook is a skill folder. Frontmatter keeps to the portable keys only: `name` (at most 64 characters, lowercase, digits and hyphens), `description` (at most 1,024 characters, says what it does and when to use it), `license`, `compatibility`, `metadata`, `allowed-tools`. Body under 500 lines; supporting files one level deep under `scripts/` and `references/`. The lint enforces this. |
+| Writing a skill from experience | The `skill-creator` workflow (draft, test, grade, aggregate, improve) | The distiller is a headless Claude Code session that follows that workflow through a `distill-run` skill of our own. It drafts the runbook and at least three evaluation cases in `evals/evals.json`, taken from the run it is distilling. |
+| Proof that a skill helps | skill-creator's benchmark: `with_skill` beside `without_skill` (or `old_skill` for a revision), and its trigger check | A trial job runs the proposal's evaluation cases both ways and checks that the description makes a session load it. The reviewer sees "passes 3 of 3 with, 1 of 3 without; loaded on 9 of 10 matching prompts" on the proposal. |
+| Structured output from a headless run | `claude -p --json-schema` (result in `structured_output`) | The lesson is schema-checked output, never parsed prose. |
+| Bounding an automated session | `--allowedTools`, `--max-turns`, `--max-budget-usd`, `--model`, `--permission-mode dontAsk` | The distiller reads its workspace and writes only inside it. No network, no shell beyond the evaluation scripts. |
+| Seeing which skill a run loaded | The `Skill` tool call in `--output-format stream-json --verbose` | This is the observed Use. The transcript file is not parsed: its format is internal and changes. |
+| Capturing the end of a run | The `Stop` hook's `last_assistant_message`; `SessionEnd` only enqueues (it has about 1.5 seconds and cannot block) | The run report's self-report block is read from the final message by the runner or the `Stop` hook. |
+| Facts not yet worth a runbook | Claude Code's file memory: a `MEMORY.md` index of one-line pointers and one typed file per fact | The organisation's notes store uses this shape. The distiller reads the index, opens only what is relevant, and adds or corrects notes. A note that three runs lean on becomes a runbook proposal. This replaces lab "experiences". |
+| The same on the API | The memory tool (`memory_20250818`: view, create, str_replace, insert, delete, rename) with a handler that maps `/memories` to the notes store | Used by the server-side distiller. The handler canonicalises every path, refuses traversal, caps file size, and treats what it reads as untrusted text. |
+| Small context, fetched when needed | Just-in-time retrieval (Anthropic's context engineering guidance) | The distiller's inputs are files in a workspace (`report.json`, `diff.patch`, `brief.md`, `candidates/`), not one large prompt. |
+| Long sessions | Compaction and context editing, paired with memory | Only the server-side distiller needs them, and only for a diff too large for one pass. |
+| Cost | Prompt caching for the fixed instructions and schema; the Batch API for a backlog | A backlog of old runs is distilled in a batch at half price. |
+| Promotion | Anthropic's harness rule: mark a feature passing only after an end-to-end check | An accepted runbook starts unproven and becomes proven only when a later run uses it and succeeds. |
+
+Two things are deliberately not used because the official documentation does not describe them: a background "dream" consolidation pass, and hosted memory stores (the notes stay in this system's own storage).
+
+Where the distiller runs is unchanged: the paired local machine first, running Claude Code on the smaller models. The server-side fallback produces the same skill folder and lesson schema with the configured Bedrock text model. Whether that fallback may be a Claude model on Bedrock is the owner's decision; until then it is Nova.
+
+### What this changes above
+
+- **Distiller output.** A `new` or `revise` lesson is a skill folder with `evals/evals.json`, not just text.
+- **Trial.** After lint and before review, a trial job runs the evaluation cases with and without the skill on local compute. It is bounded (three cases, two arms, a turn limit) and skipped with a recorded reason when no machine is paired. A reviewer may accept without a trial; the proposal says it is untested.
+- **Notes.** The notes store is added beside the runbook library. It is the distiller's memory, not something a run is sent.
+- **Acceptance.** Item 2 also requires the proposal to carry its evaluation cases; a new item 11: on a test stack with a stub `claude`, a trial records a with and without result on the proposal.
+
 ## Pages
 
 The audit of the current pages decides what merges. The target is:
@@ -155,6 +186,7 @@ On the mock, with no model and no cloud:
 |---|---|---|
 | A | Run report: shape, store, routes, local worker and devbox return path, mock reports, use detection, application rows | none |
 | B | Budgets: thresholds and notifications, local compute through run limits, learning line | none |
-| C | Distiller: job, three executors, lessons, proposals with provenance, retire rule | A |
+| C | Distiller: the `distill-run` skill, job, three executors, schema-checked lessons, skill folders with evaluation cases, notes store, proposals with provenance, retire rule | A |
+| C2 | Trial: with and without runs of a proposal's evaluation cases, trigger check, results on the proposal | C |
 | D | Offer: selection at brief freeze, brief text and fence, brief preview, evidence figures | A |
 | E | Pages, vocabulary, removals, the journey and the validator | A to D and the page audit |
