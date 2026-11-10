@@ -132,10 +132,10 @@ describe('production demo-mode lockdown', () => {
     expect(demoSession().grants).toEqual({});
   });
 
-  it('honors AUTH_DEMO_MODE=true in production', () => {
+  it('ignores AUTH_DEMO_MODE=true in production (the boot gate refuses it outright)', () => {
     process.env['NODE_ENV'] = 'production';
     process.env['AUTH_DEMO_MODE'] = 'true';
-    expect(demoSession().grants).toEqual(permissiveGrants());
+    expect(demoSession().grants).toEqual({});
   });
 });
 
@@ -154,7 +154,7 @@ describe('demoFallbackAllowed', () => {
     // [cognito, env,          demoFlag,    expected]
     [false, 'test',       undefined, true],   // plain local dev
     [false, 'production', undefined, false],  // prod, no opt-in
-    [false, 'production', 'true',    true],   // prod, explicit demo opt-in
+    [false, 'production', 'true',    false],  // prod: the flag no longer opens it
     [true,  'test',       undefined, false],  // real IdP wins even in dev
     [true,  'production', undefined, false],
     [true,  'production', 'true',    false],  // even the opt-in can't bypass SSO

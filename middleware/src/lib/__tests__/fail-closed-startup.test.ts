@@ -42,7 +42,7 @@ import express from 'express';
 import request from 'supertest';
 import type { Request, Response } from 'express';
 import { resolveRuntimeProfile, validateRuntimeProfile } from '../runtime-profile.js';
-import { demoFallbackAllowed, demoModeEnabled, sessionMiddleware, signSession, type Session } from '../session.js';
+import { assertDemoModeAllowed, demoFallbackAllowed, demoModeEnabled, sessionMiddleware, signSession, type Session } from '../session.js';
 import { isAllowed } from '../authz.js';
 import {
   APPROVALS_SERVICE_AUTH, ASSESSMENT_RUN_COMPLETE_SERVICE_AUTH, HARNESS_TRACE_SERVICE_AUTH, LAB_CALLBACK_SERVICE_AUTH,
@@ -115,15 +115,31 @@ describe('session signing key (session.ts loadSigningKey)', () => {
 });
 
 describe('anonymous demo identity (session.ts demoModeEnabled / demoFallbackAllowed)', () => {
-  it('production: anonymous callers hold no demo identity unless AUTH_DEMO_MODE=true', () => {
+  it('production: anonymous callers hold no demo identity, AUTH_DEMO_MODE=true or not', () => {
     production();
     expect(demoModeEnabled()).toBe(false);
     expect(demoFallbackAllowed()).toBe(false);
     process.env['AUTH_DEMO_MODE'] = 'true';
+    expect(demoModeEnabled()).toBe(false);
+    expect(demoFallbackAllowed()).toBe(false);
+    process.env['INSECURE_DEV_MODE'] = 'true';
+    expect(demoModeEnabled()).toBe(false);
+  });
+  it('NODE_ENV unset: AUTH_DEMO_MODE alone does not turn demo mode on; only INSECURE_DEV_MODE does', () => {
+    expect(demoModeEnabled()).toBe(false);
+    process.env['AUTH_DEMO_MODE'] = 'true';
+    expect(demoModeEnabled()).toBe(false);
+    process.env['INSECURE_DEV_MODE'] = 'true';
     expect(demoModeEnabled()).toBe(true);
   });
-  it('NODE_ENV unset: demo mode is off until AUTH_DEMO_MODE (or INSECURE_DEV_MODE) says otherwise', () => {
-    expect(demoModeEnabled()).toBe(false);
+  it('boot gate: AUTH_DEMO_MODE=true without the dev flag, or in production, refuses to start', () => {
+    expect(() => assertDemoModeAllowed()).not.toThrow();
+    process.env['AUTH_DEMO_MODE'] = 'true';
+    expect(() => assertDemoModeAllowed()).toThrow(/AUTH_DEMO_MODE=true requires INSECURE_DEV_MODE=true/);
+    process.env['INSECURE_DEV_MODE'] = 'true';
+    expect(() => assertDemoModeAllowed()).not.toThrow();
+    production();
+    expect(() => assertDemoModeAllowed()).toThrow(/not allowed in production/);
   });
   it('NODE_ENV unset: a cookie-less request gets no session (call-access, live-principal and document-session inherit this)', async () => {
     const req = { cookies: {}, headers: {} } as unknown as Request;

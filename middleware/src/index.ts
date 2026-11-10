@@ -13,7 +13,7 @@ import { createUploadsRouter, gatewayUploadConfig } from './lib/gateway-attachme
 import { realtimeClaims, realtimeSigningSecret, signRealtimeToken } from './lib/realtime-token.js';
 import { config } from './config.js';
 import { errorHandler } from './lib/async-handler.js';
-import { sessionMiddleware, setGrantsResolver } from './lib/session.js';
+import { assertDemoModeAllowed, sessionMiddleware, setGrantsResolver } from './lib/session.js';
 import { getUser as getIdentityUser } from './providers/identity.js';
 import { agentsRouter } from './routes/agents.js';
 import { savedSearchesRouter } from './routes/saved-searches.js';
@@ -191,6 +191,16 @@ app.use(sessionMiddleware());
 // (not beside its first API mount) so the harness/prompt-versions mounts above
 // the /api/observability block can share it.
 const viewObs = [requireTenant('orgiq'), requireAction('ViewObservability')];
+
+// AUTH_DEMO_MODE hands every cookie-less visitor an admin-capable demo
+// identity, so it may only ride beside INSECURE_DEV_MODE outside production;
+// set alone it stops the process rather than being quietly ignored.
+try {
+  assertDemoModeAllowed();
+} catch (err) {
+  console.error(`[startup] ${(err as Error).message}`);
+  process.exit(2);
+}
 
 // Runtime profile (lib/runtime-profile.ts): validated before anything listens.
 const runtimeProfile = resolveRuntimeProfile({ profile: process.env['ORGIQ_RUNTIME_PROFILE'],

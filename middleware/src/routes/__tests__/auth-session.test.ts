@@ -274,11 +274,11 @@ describe('production picker boundary', () => {
     expect(listUsers).not.toHaveBeenCalled();
   });
 
-  it('keeps an explicitly enabled production demo usable', async () => {
+  it('keeps the picker closed in production even with AUTH_DEMO_MODE=true', async () => {
     process.env['AUTH_DEMO_MODE'] = 'true';
-    const res = await request(buildApp()).post('/api/session/login').send({ userId: 'u-alice' });
-    expect(res.status).toBe(200);
-    expect(res.body.sub).toBe('u-alice');
-    expect((await request(buildApp()).get('/api/session/users')).status).toBe(200);
+    const res = await request(buildApp()).post('/api/session/login').send({ userId: 'u-operator' });
+    expect(res.status).toBe(403);
+    expect(sessionCookies(res)).toHaveLength(0);
+    expect((await request(buildApp()).get('/api/session/users')).status).toBe(403);
   });
 });

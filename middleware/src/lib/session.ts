@@ -5,7 +5,7 @@
 // Authentication is still deliberately lightweight: login is a user picker
 // (POST /api/session/login) against the app_users table, and requests with no
 // cookie fall back to the permissive "demo-user" identity — but only in demo
-// mode (AUTH_DEMO_MODE=true or INSECURE_DEV_MODE) and only while no real
+// mode (INSECURE_DEV_MODE, never in production) and only while no real
 // authenticator is configured (see demoFallbackAllowed). mintSession() is
 // the single choke point that turns an identity + grants into a session, so a
 // real authenticator (e.g. the Cognito OIDC callback) slots in by resolving
@@ -23,7 +23,7 @@ import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-sec
 import { config } from '../config.js';
 import { viewerScheme } from './trusted-proxy.js';
 import { dbTenantScopeFor, runWithDbTenant } from '../providers/db-tenant.js';
-import { insecureDevMode } from './insecure-dev-mode.js';
+import { assertDevShortcutAllowed, insecureDevMode } from './insecure-dev-mode.js';
 
 // Tenants, their ordered roles and the Role union come from tenants/manifest.json
 // through the generated copy (DE-29; `node scripts/gen-tenants.mjs`).
@@ -440,12 +440,21 @@ declare module 'express-serve-static-core' {
 }
 
 /** True when cookie-less requests should get the fully-permissive demo
- * identity: AUTH_DEMO_MODE=true (an explicit opt-in, honoured in production for
- * a deliberate demo deployment) or INSECURE_DEV_MODE (never in production).
- * Nothing set means off, whatever NODE_ENV says: anonymous callers hold zero
- * grants and can neither switch tenants/roles nor pass any Cedar check. */
+ * identity and the passwordless picker: only under INSECURE_DEV_MODE, which
+ * NODE_ENV=production vetoes. AUTH_DEMO_MODE used to open this on its own,
+ * production included — a single variable that made every visitor an admin.
+ * It now counts only beside the dev flag, and assertDemoModeAllowed() refuses
+ * to boot a process that sets it without one. Nothing set means off: anonymous
+ * callers hold zero grants and can neither switch tenants/roles nor pass any
+ * Cedar check. */
 export function demoModeEnabled(): boolean {
-  return process.env['AUTH_DEMO_MODE'] === 'true' || insecureDevMode();
+  return insecureDevMode();
+}
+
+/** Boot gate (index.ts): AUTH_DEMO_MODE=true without INSECURE_DEV_MODE=true, or
+ * in production, stops the process instead of being silently ignored. */
+export function assertDemoModeAllowed(env: NodeJS.ProcessEnv = process.env): void {
+  assertDevShortcutAllowed('AUTH_DEMO_MODE', env);
 }
 
 /** Mirror of lib/oidc.ts cognitoEnabled(), duplicated here so session.ts does
