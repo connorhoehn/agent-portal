@@ -51,6 +51,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { usePublishPageContext, usePublishPageTabs } from '../lib/voice/pageContext';
 import { ConversationOwner, ConversationThread } from '../components/chat/ConversationThread';
+import { useEmbeddedSocial } from '../components/shell/EmbeddedSocial';
 import type { EstimateProvenance } from '../components/marketplace/EstimateDrawer';
 import { OwnerEditor } from '../components/marketplace/GovernanceEditor';
 import { useInitiativeAgentActivity } from '../components/marketplace/InitiativeAgentRail';
@@ -117,13 +118,13 @@ import { InitiativeComposer } from './projects/InitiativeComposer';
 import { initiativeConversationMessages, type InitiativeConversationFilter } from './projects/initiativeConversationModel';
 import { InitiativeDetailsTrigger, type InitiativeFactsInput } from './projects/InitiativeDetailsCard';
 import { useInitiativeSocialChannel } from './projects/InitiativeDiscussion';
+import { NOT_A_MEMBER_REASON, discussionAccess, initiativeDiscussionTarget } from './projects/initiativeDiscussionTarget';
 import { InitiativeFiles } from './projects/InitiativeFiles';
 import { useInitiativeListRail } from './projects/InitiativeListRail';
 import { initiativeBreadcrumbs, initiativeHref } from './projects/initiativeNavigation';
 import { InitiativeRecordings } from './projects/InitiativeRecordings.tsx';
 import { InitiativesExplorer } from './projects/InitiativesExplorer';
 import { InitiativeSidePane, useInitiativePane } from './projects/InitiativeSidePane';
-import { scopeDiscussionChannel } from './projects/scopeDiscussionModel';
 import { ScopePresence } from './projects/ScopePresence';
 import { scopePresenceChannel } from './projects/scopePresenceModel';
 import { workConversationReferences } from './projects/workConversationContext';
@@ -333,11 +334,22 @@ function ProjectDetailPage() {
   // On the Decisions tab the rows in view are the decisions, in the table's order, so "decide the first one" (scope
   // this-page) names the decision the user sees, never a work item (the demo journey's M2 decided a work item).
   const decisionRows = tab === 'decisions' && decisions && !decisionsError ? decisions : null;
+  // One conversation per initiative (projects/initiativeDiscussionTarget.ts): bound to a Social channel, the
+  // Discussion pane and the composer ARE that channel; unbound, the initiative's own thread.
+  const embeddedSocial = useEmbeddedSocial();
+  const discussion = initiativeDiscussionTarget({ projectId: project?.id ?? id ?? '', socialAvailable: !!embeddedSocial?.available, binding: embeddedSocial?.pageChannel ?? null });
+  // Posting to a channel is Social's question: the plane asks the actor's current Social grants (as the
+  // Communication page does embedded), never this tenant's `can()`.
+  const socialCaps = useFetch<{ actions: Record<string, boolean> }>(discussion.kind === 'channel' ? '/api/social/plane/capabilities' : null, 60_000);
+  const discussionNow = discussionAccess(discussion, { postMessage: !!socialCaps.data?.actions['PostMessage'], dispatch: canDispatch });
+  const discussionPending = discussion.kind === 'loading' || (discussion.kind === 'channel' && discussion.joined && !socialCaps.data && !socialCaps.error);
+  // A message said with no target goes to the bound channel (voice `message`).
+  const pageChannel = discussion.kind === 'channel' ? { slug: discussion.slug } : null;
   usePublishPageContext(project && id && decisionRows ? {
-    path: pathname, record: { ref: `initiative:${id}`, title: project.name }, rowsLabel: 'decisions', total: decisionRows.length,
+    path: pathname, record: { ref: `initiative:${id}`, title: project.name }, rowsLabel: 'decisions', total: decisionRows.length, channel: pageChannel,
     rows: decisionRows.map((d) => ({ ref: `decision:${d.id}`, title: d.topic, status: d.status, href: `/iq/decisions/${encodeURIComponent(d.id)}` })),
   } : project && id && treeRead && !workFailure ? {
-    path: pathname, record: { ref: `initiative:${id}`, title: project.name }, rowsLabel: 'work items', total: allRows.length,
+    path: pathname, record: { ref: `initiative:${id}`, title: project.name }, rowsLabel: 'work items', total: allRows.length, channel: pageChannel,
     rows: visibleRows.map((r) => ({ ref: `work-item:${r.id}`, title: r.title, status: r.status ?? null, priority: r.priority ?? null, href: `/iq/projects/${encodeURIComponent(id)}?item=${encodeURIComponent(r.id)}` })),
   } : null);
   // G49: the initiative's tabs, so "open decisions" is this page's tab, never a search.
@@ -721,12 +733,12 @@ function ProjectDetailPage() {
       expanded={!narrowWindow}
       dock={<Stack gap="none" className="max-h-64 overflow-y-auto">{initiativeCall.dock}</Stack>}
       setup={{ draft: '', draftKey: `initiative:${project.id}:discussion`, ...composerSetup }}
-      // Chat → This item's Discussion posts to the same gateway thread the pane shows (its writers only).
+      // Chat → the Discussion posts to the same conversation the pane shows: the bound channel, else the thread.
       conversation={initiativeThread}
+      discussionLabel={discussion.kind === 'loading' ? 'Initiative discussion' : discussion.label}
       onComment={() => { thread.refreshComments(); setDetailTab('history'); }}
-      chatUnavailableReason={!canDispatch ? 'You can read messages. Your current role cannot post to this discussion.'
-        : !initiativeThread ? 'The initiative discussion is still loading.' : undefined}
-      chatPending={!capsReady || (canDispatch && !initiativeThread)}
+      chatUnavailableReason={discussionNow.reason ?? (!initiativeThread ? 'The initiative discussion is still loading.' : undefined)}
+      chatPending={!capsReady || discussionPending || (discussionNow.maySend && !initiativeThread)}
     />
   );
 
@@ -942,7 +954,10 @@ function ProjectDetailPage() {
 
       {/* The fourth column: the initiative's conversation, Agent, Details and
           any record a page link opened (a run's Log, a Decision, a Person). */}
-      <ConversationOwner key={scopeDiscussionChannel(project.id)} channel={scopeDiscussionChannel(project.id)} maySend={canDispatch} onChange={setInitiativeThread} />
+      {/* The one conversation: the bound channel (a member only: the gateway admits no one else), else the thread. */}
+      {(discussion.kind === 'thread' || (discussion.kind === 'channel' && discussion.joined)) && (
+        <ConversationOwner key={discussion.channel} channel={discussion.channel} maySend={discussionNow.maySend} onChange={setInitiativeThread} />
+      )}
       <InitiativeSidePane
         control={paneControl}
         subtitle={project.name}
@@ -958,8 +973,9 @@ function ProjectDetailPage() {
         discussion={(
           <Stack gap="none" className="h-full min-h-0" data-testid="initiative-live-discussion">
             <Inline gap="sm" justify="between" align="center" className="border-b border-border px-4 py-2">
-              <T size="xs" tone="secondary">Initiative channel</T>
-              <DropdownMenu trigger={<T as="span" size="xs" weight="medium">View: {conversationFilter === 'all' ? 'All messages' : conversationFilter === 'initiative' ? 'Initiative only' : 'Dialogue'}</T>}
+              <T size="xs" tone="secondary" data-testid="initiative-discussion-label">{discussion.kind === 'channel' ? `${discussion.label} · the initiative's channel` : 'Initiative channel'}</T>
+              {/* Work-item notes (/comment) live on the initiative thread, so the views filter only that thread. */}
+              {discussion.kind === 'thread' && <DropdownMenu trigger={<T as="span" size="xs" weight="medium">View: {conversationFilter === 'all' ? 'All messages' : conversationFilter === 'initiative' ? 'Initiative only' : 'Dialogue'}</T>}
                 triggerLabel="Filter initiative conversation" triggerVariant="link" align="end"
                 triggerTitle="Filter the messages you can read. This does not change posting access."
                 triggerTestId="initiative-conversation-filter" data-testid="initiative-conversation-filter-menu"
@@ -968,21 +984,26 @@ function ProjectDetailPage() {
                   { label: 'Dialogue', checked: conversationFilter === 'dialogue', description: 'Conversation, excluding work-log notes', onSelect: () => setConversationFilter('dialogue') },
                   { label: 'All messages', checked: conversationFilter === 'all', description: 'Conversation and work-item comments', onSelect: () => setConversationFilter('all') },
                   { label: 'Initiative only', checked: conversationFilter === 'initiative', description: 'Messages without work-item context', onSelect: () => setConversationFilter('initiative') },
-                ] }]} />
+                ] }]} />}
             </Inline>
+            {discussion.kind === 'channel' && !discussion.joined && (
+              <EmptyState title={`Not a member of ${discussion.label}`} description={NOT_A_MEMBER_REASON} data-testid="initiative-discussion-not-member" />
+            )}
             {/* The thread only: its one input is the content column's composer. */}
-            {initiativeThread && <ConversationThread key={project.id} conversation={{ ...initiativeThread, chat: { ...initiativeThread.chat, messages: initiativeConversationMessages(initiativeThread.chat.messages, conversationFilter) } }} title="Initiative discussion" input="below" notices includeFiles={false}
+            {initiativeThread && <ConversationThread key={initiativeThread.channel} conversation={discussion.kind === 'channel' ? initiativeThread
+              : { ...initiativeThread, chat: { ...initiativeThread.chat, messages: initiativeConversationMessages(initiativeThread.chat.messages, conversationFilter) } }}
+              title={discussion.kind === 'channel' ? discussion.label : 'Initiative discussion'} input="below" notices includeFiles={false}
               renderMessageReferences={workConversationReferences(project.id, openItem, treeRead && !workFailure ? [...workTree, ...allRows] : null)}
               emptyState={<Stack gap="xs" className="px-4 py-4" data-testid="initiative-conversation-empty">
                 <T size="sm" weight="semibold">{initiativeThread.chat.messages.length ? 'No messages in this view' : 'No messages yet'}</T>
                 <T size="xs" tone="secondary" wrap>{initiativeThread.chat.messages.length
                   ? 'Other messages are available in All messages.'
-                  : canDispatch ? 'Write in the composer below. Use /comment for a work-item note.' : 'Messages will appear here when someone posts.'}</T>
+                  : discussionNow.maySend ? 'Write in the composer below. Use /comment for a work-item note.' : 'Messages will appear here when someone posts.'}</T>
                 {initiativeThread.chat.messages.length > 0 && <Button variant="link" size="sm" className="self-start" onClick={() => setConversationFilter('all')} data-testid="initiative-conversation-show-all">
                   <T as="span" size="xs">Show all messages</T>
                 </Button>}
               </Stack>}
-              pins={{ canPin: canDispatch }} attachments={canDispatch} reactions data-testid="scope-discussion-panel" />}
+              pins={{ canPin: discussionNow.maySend }} attachments={discussionNow.maySend} reactions data-testid="scope-discussion-panel" />}
           </Stack>
         )}
       />

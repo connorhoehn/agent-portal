@@ -63,6 +63,13 @@ export interface InitiativeComposerProps {
    * and its `/summarize` cards land in that thread.
    */
   conversation?: ConversationRuntime | null;
+  /**
+   * What the Discussion destination is called: "Initiative discussion", or the
+   * bound channel ("#auth-migration") when the initiative discusses in one
+   * (projects/initiativeDiscussionTarget.ts): then it is the one destination,
+   * never a second conversation beside it.
+   */
+  discussionLabel?: string;
   /** Why the Discussion cannot take a message (a reader). */
   chatUnavailableReason?: string;
   /** Whether this reader may post is not known yet (capabilities or the thread still loading): Chat stays off, quietly. */
@@ -91,7 +98,7 @@ export function InitiativeComposer(props: InitiativeComposerProps) {
 function destinationStorage(): Storage | null { try { return typeof window === 'undefined' ? null : window.localStorage; } catch { return null; } }
 
 function DockedComposer({
-  subject, setup, conversation, chatUnavailableReason, chatPending = false, dock, defaultMode = 'agent', expanded, onComment, onAsk, prompts, presentation = 'compact', 'data-testid': testId = 'initiative-composer',
+  subject, setup, conversation, discussionLabel = 'Initiative discussion', chatUnavailableReason, chatPending = false, dock, defaultMode = 'agent', expanded, onComment, onAsk, prompts, presentation = 'compact', 'data-testid': testId = 'initiative-composer',
 }: Omit<InitiativeComposerProps, 'setup'> & { setup: ComposerSetup }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -174,9 +181,9 @@ function DockedComposer({
   };
   const recipients: ConversationRecipient[] = [
     // Files go to the Discussion (its writers) and to a DM; the huddle's send is text-only.
-    { id: 'discussion', label: 'Initiative discussion', channel: conversation?.channel ?? null, placeholder: subject.kind === 'item' ? 'Discuss this work, or /comment to add a note…' : 'Add to the discussion…', attachments: true,
+    { id: 'discussion', label: discussionLabel, channel: conversation?.channel ?? null, placeholder: subject.kind === 'item' ? 'Discuss this work, or /comment to add a note…' : discussionLabel.startsWith('#') ? `Message ${discussionLabel}…` : 'Add to the discussion…', attachments: true,
       ...(!conversation?.maySend ? { disabled: true, unavailableReason: chatUnavailableReason ?? 'Posting to this discussion is not included in your current access.' } : {}),
-      send: out => deliver('Initiative discussion', async () => {
+      send: out => deliver(discussionLabel, async () => {
         const captured = latestScope.current;
         if (!conversation?.maySend || !conversation.connected || !gateway?.onMessage) throw new ComposerSendError('This discussion cannot receive a message right now. Your draft has been kept.');
         return discussionDelivery.send({ scopeKey, channel: conversation.channel, userId: conversation.userId, text: out.text, metadata: out.metadata,

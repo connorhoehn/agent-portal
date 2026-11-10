@@ -730,7 +730,10 @@ const planSendChat: VoiceToolPlanner = async (args, ctx) => {
   // G46: the socket is down, so no card: the voice says Social is not connected instead of a card whose post fails.
   if (social.unavailable) return { result: refused(social.unavailable, { code: 'not-connected' }) };
   if (typeof args['thread'] === 'string' && args['thread'].trim()) return planThreadReply(args, ctx, social);
-  const target = args['target'] as { kind: 'team' | 'channel' | 'dm'; name: string } | undefined;
+  // On a page whose discussion is a channel (an initiative bound to one), a message with no target goes there.
+  const pageChannel = ctx.page?.()?.channel?.slug ?? null;
+  const target = (args['target'] as { kind: 'team' | 'channel' | 'dm'; name: string } | null | undefined)
+    ?? (pageChannel ? { kind: 'channel' as const, name: pageChannel } : undefined);
   if (!target) return { result: refused('Say where it goes: a team, a channel or a person (target), or the inbound message it answers (thread).') };
   const text = String(args['text']);
   const resolved = await resolveTarget(ctx, social, target, { verb: 'post to', nothing: 'nothing was sent' });

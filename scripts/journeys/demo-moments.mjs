@@ -216,10 +216,12 @@ const M1 = {
       const t = await waitText(page, '[data-testid=explorer-layout-pane]', /Tenant cutover plan/);
       check(/Session hygiene/i.test(t), 'the session-hygiene whiteboard is not on the Docs tab');
     });
-    await s('the channel: the rehearsal thread in the Discussion pane', async () => {
+    await s('the Discussion pane is #auth-migration: the rehearsal thread and Sienna\'s promise', async () => {
+      // One conversation per initiative: the bound channel IS the Discussion pane (no separate initiative thread).
       await page.getByTestId('initiative-pane-tab-discussion').click();
-      const t = await waitText(page, '[data-testid=initiative-pane-discussion]', /Rehearsal two failed/);
-      check(/decide once both internal rehearsals/i.test(t), "Sienna's promise is not in the thread");
+      const t = await waitText(page, '[data-testid=initiative-pane-discussion]', /Second rehearsal failed at the flip/);
+      check(/#auth-migration/.test(t), `the Discussion pane does not name #auth-migration: "${t.slice(0, 200)}"`);
+      check(/Then I decide the order once the retry is clean/.test(t), "Sienna's promise is not in the Discussion pane");
     });
     await s('Agents tab', async () => {
       await page.getByTestId('initiative-header-tab-agents').click();
@@ -411,14 +413,15 @@ async function assertDeck(s, page) {
 const M4 = {
   title: 'Tell #auth-migration the cutover order is decided', persona: 'vera',
   async hand(s, page) {
-    await s("open #auth-migration from the initiative's Social bar", async () => {
+    await s("type the message in the initiative's own composer: its destination is #auth-migration", async () => {
+      // One conversation per initiative: the composer's Discussion destination IS the bound channel.
       await go(page, INITIATIVE);
-      await openBoundChannel(page);
-    });
-    await s('type the message in the channel composer and send it', async () => {
-      await page.getByTestId('social-chat-composer-input').click();
+      const to = await waitText(page, '[data-testid=initiative-composer-recipient]', /#auth-migration|Initiative discussion/);
+      check(/#auth-migration/.test(to), `the composer's destination is "${to}", not #auth-migration`);
+      await page.locator('[data-testid=initiative-composer] [contenteditable=true]').first().click();
       await page.keyboard.type(MESSAGE);
       await page.keyboard.press('Enter');
+      await waitText(page, '[data-testid=initiative-pane-discussion]', new RegExp(MESSAGE.replace(/[.;]/g, '.')), 15000);
     });
     await assertPosted(s, page);
   },

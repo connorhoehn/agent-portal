@@ -38,6 +38,15 @@ export interface EmbeddedSocialContextValue {
   pageChannel: ChannelBindingState; pageOpen: boolean; openPageChannel(): void; selectPage(on: boolean): void;
   /** Pages name their binding context here; the bar shows it while they are mounted. */
   setPageContext(context: string | null): void;
+  /**
+   * A page that draws its bound channel itself (the initiative's Discussion
+   * pane IS its channel) names its context here too, and the shell mounts no
+   * second conversation on that binding: `useChat` leaves the channel when it
+   * unmounts, so two on one channel drop each other's subscription. Named with
+   * the context, before the binding is read, so the shell never mounts one to
+   * drop it a render later.
+   */
+  setPageDrawsChannel(context: string | null): void;
   /** The shell's own presence entry (`usePresence(SOCIAL_PRESENCE_CHANNEL, { join: true })`), once the transport is ready. */
   presence: ShellPresenceControls | null;
 }
@@ -55,13 +64,17 @@ export const useEmbeddedSocial = (): EmbeddedSocialContextValue | null => useCon
  * tabs" — so an initiative names `initiative:<id>` here instead of drawing a
  * binding strip at its top. Cleared when the page unmounts.
  */
-export function usePageSocialChannel(context: string | null): void {
-  const set = useContext(EmbeddedSocialContext)?.setPageContext;
+export function usePageSocialChannel(context: string | null, opts: { drawsChannel?: boolean } = {}): void {
+  const social = useContext(EmbeddedSocialContext);
+  const set = social?.setPageContext;
+  const draws = social?.setPageDrawsChannel;
+  const drawsChannel = !!opts.drawsChannel;
   useEffect(() => {
     if (!set) return undefined;
     set(context);
-    return () => set(null);
-  }, [set, context]);
+    draws?.(drawsChannel ? context : null);
+    return () => { set(null); draws?.(null); };
+  }, [set, draws, context, drawsChannel]);
 }
 
 const PAGE_VIEWS: readonly ConversationFeature[] = ['chat', 'pins'];
@@ -119,6 +132,7 @@ export function EmbeddedSocialProvider({ children }: { children: ReactNode }) {
   const [tokenProblem, setTokenProblem] = useState<string | null>(null);
   const [tokenRetry, setTokenRetry] = useState(0);
   const [pageContext, setPageContext] = useState<string | null>(null);
+  const [drawnContext, setPageDrawsChannel] = useState<string | null>(null);
   const [pageView, setPageView] = useState(false);
   const [pageThreadView, setPageThreadView] = useState<ConversationFeature>('chat');
   const [pageLatest, setPageLatest] = useState<string | null>(null);
@@ -198,7 +212,7 @@ export function EmbeddedSocialProvider({ children }: { children: ReactNode }) {
     sendToPerson: (userId, text, page) => transportReady ? controller.sendToPerson(userId, text, page) : Promise.resolve(false),
     pageChannel, pageOpen: pageView && state.open,
     openPageChannel: () => { setPageView(true); controller.openMessage(); }, selectPage: setPageView,
-    setPageContext, presence: transportReady ? presenceControls : null,
+    setPageContext, setPageDrawsChannel, presence: transportReady ? presenceControls : null,
   }), [eligible, current, scope?.userId, snapshot, state, unavailableReason, online.size, presencePeople, controller, transportReady, pageChannel, pageView, presenceControls]);
   const bind = useCallback((runtime: EmbeddedSocialTransport) => authority && transportReady
     ? controller.bindTransport(authority, runtime) : undefined, [authority, transportReady, controller]);
@@ -216,7 +230,9 @@ export function EmbeddedSocialProvider({ children }: { children: ReactNode }) {
   // channel is shown (its surface renders nothing), and the reverse.
   const renderDm = (conversation?: ReactNode) => pageView ? null : panel(conversation);
   const pageStrip = <ChannelBinding state={pageChannel} latest={pageLatest} className="border-b border-border px-3 py-2" data-testid="embedded-social-page-binding" />;
-  const pageLive = current && tokenMatches && !!snapshot && !!pageBound && !!pageChannel.data?.joined;
+  // A page that draws its bound channel itself owns its one conversation (usePageSocialChannel drawsChannel).
+  const pageClaimed = !!pageContext && drawnContext === pageContext;
+  const pageLive = current && tokenMatches && !!snapshot && !!pageBound && !!pageChannel.data?.joined && !pageClaimed;
   const pagePane = (thread?: ReactNode) => <Stack gap="none" className="min-h-0 min-w-0 flex-1" data-testid="shell-social-page">
     {pageStrip}
     {thread ?? <EmptyState title={pageBound ? 'Not a member of this channel' : 'No channel bound'}
@@ -243,7 +259,8 @@ export function EmbeddedSocialProvider({ children }: { children: ReactNode }) {
         userId={snapshot.me.userId} displayName={snapshot.me.displayName} nameOf={namesFrom(snapshot.people)}
         placeholder={`Message ${pageChannel.label ?? pageBound.name}`} maySend={snapshot.canSend && state.authorityVerified && connected}
         onLatestMessage={setPageLatest} renderSurface={thread => pageView ? panel(pagePane(thread)) : null} />
-      : pageView ? panel(pagePane()) : null}
+      : pageView ? panel(pagePane(pageClaimed ? <EmptyState title={`${pageChannel.label ?? 'This channel'} is this page's discussion`}
+        description="Read and post in the Discussion pane beside the page." /> : undefined)) : null}
   </EmbeddedSocialContext.Provider>;
 }
 

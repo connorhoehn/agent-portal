@@ -14,7 +14,11 @@ export function initiativeBindingContext(initiativeId: string): string {
   return `initiative:${initiativeId}`;
 }
 
-/** Offer this initiative's bound Social channel in the bottom bar while the page is open. */
+/**
+ * Name this initiative's binding context to the shell while the page is open.
+ * The page draws its bound channel itself (its Discussion pane IS the channel,
+ * initiativeDiscussionTarget.ts), so the shell mounts no second conversation on it.
+ */
 export function useInitiativeSocialChannel(initiativeId: string | null): void {
-  usePageSocialChannel(initiativeId ? initiativeBindingContext(initiativeId) : null);
+  usePageSocialChannel(initiativeId ? initiativeBindingContext(initiativeId) : null, { drawsChannel: true });
 }

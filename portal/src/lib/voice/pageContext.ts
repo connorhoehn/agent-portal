@@ -59,6 +59,12 @@ export interface PublishedPage {
    * one. At most PAGE_CHOICES_MAX, each cut at PAGE_FIELD_MAX.
    */
   choices?: readonly string[];
+  /**
+   * The page's conversation when it is a Social channel (an initiative bound
+   * to one: its Discussion pane IS the channel). A `message` with no target
+   * goes there; the voice names it by this slug.
+   */
+  channel?: { slug: string } | null;
 }
 
 export const PAGE_CHOICES_MAX = 9;
@@ -168,6 +174,7 @@ export function pageContextNote(o: { tenant: string; pathname: string; pageId?: 
   const lines = [head];
   if (tabsLine) lines.push(tabsLine);
   if (p.record) lines.push(`In view: ${field(p.record.ref)} "${field(p.record.title)}".`);
+  if (p.channel?.slug) lines.push(`Its discussion is the channel #${field(p.channel.slug)}: a message about it goes there (message target kind channel, name ${field(p.channel.slug)}); there is no separate thread.`);
   if (p.offer) {
     const offer = String(p.offer).replace(/[\r\n\t]+/g, ' ').replace(/["“”]/g, "'").replace(/\s+/g, ' ').trim();
     lines.push(`Offered here: ${offer.length > PAGE_OFFER_MAX ? `${offer.slice(0, PAGE_OFFER_MAX - 1)}…` : offer}`);

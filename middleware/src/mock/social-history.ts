@@ -132,12 +132,13 @@ export const HISTORY: readonly HistoryLine[] = [
   ['a08', 'auth-migration', 'u-nora', 70, 'Riskiest first. The two tenants with custom SAML attribute mappings are where the unknowns are, and rollback is cheapest while the shim is still warm: it is one DNS flip back.'],
   ['a09', 'auth-migration', 'u-theo', 69, 'Smallest first. A loud failure on our biggest customer costs more than anything we would learn from it.'],
   ['a10', 'auth-migration', 'u-vera', 49, 'We are split, and the order is a release call more than an engineering one. I have escalated "Cutover order for legacy SSO tenants" to @Sienna Garcia. The cutover runbook story waits on it; the session work carries on.'],
-  ['a11', 'auth-migration', 'u-release', 47, 'Got it. I want both rehearsals through first, then I will decide the order.'],
+  ['a11', 'auth-migration', 'u-release', 47, 'Got it. I want both rehearsals through first, then I will decide the order. Keep the session hardening moving in the meantime.'],
   ['a11b', 'auth-migration', 'u-nora', 46, 'The agent run that moved the token verifier off the deprecated JWKS client failed on three tests. They still expected the signing key from before the last rotation, so the test keys were stale, not the verifier. I regenerated them and queued the rerun.'],
   ['a12', 'auth-migration', 'u-nora', 6, 'First rehearsal is through on the cutover runbook: zero forced logouts, login errors flat.'],
   ['a13', 'auth-migration', 'u-nora', 2.0, 'Second rehearsal failed at the flip: the hosted sign-in page still redirected to the old domain, because the tenant origin was missing from its Cognito callback list. Rolled back in two minutes and nobody was signed out.'],
   ['a14', 'auth-migration', 'u-vera', 1.8, '@Nora DaSilva good catch. Can the callback check go into the runbook before we retry?'],
   ['a15', 'auth-migration', 'u-nora', 1.6, 'Proposed as an edit to the cutover runbook: a new step that checks the callback and sign-out lists before the flip. It needs a review before the retry.'],
+  ['a15b', 'auth-migration', 'u-vera', 1.1, 'Thanks Nora. Simone, can you review the runbook edit before the retry? Sienna decides the order after that.'],
   ['a16', 'auth-migration', 'u-release', 0.8, 'Then I decide the order once the retry is clean. Expect it tomorrow.'],
   // ── #observability ──
   // Sprint 11 as the board has it: the collector OOM fix with an agent on it,
@@ -240,20 +241,14 @@ export const PINS: readonly (readonly [slug: string, key: string, by: string, ho
   ['incidents', 'i01', 'u-rachel', 165],
 ];
 
-/**
- * Auth Migration's initiative thread (`orgiq:initiative:p-auth-migration`, the
- * Discussion pane on the initiative page): [key, author, hours ago, text]. The
- * same timeline as #auth-migration above, said beside the board — the owner
- * escalates, the release manager answers, the SME reports the rehearsal.
- */
-export const INITIATIVE_THREAD: readonly (readonly [key: string, user: string, hoursAgo: number, text: string])[] = [
-  ['auth-01', 'u-vera', 48.5, 'I have escalated "Cutover order for legacy SSO tenants" to Sienna Garcia. "Tenant-by-tenant cutover runbook with rollback" is blocked until she decides; the rest of Sprint 10 carries on.'],
-  ['auth-02', 'u-release', 46.5, 'I will decide once both internal rehearsals are through. Keep the session hardening moving in the meantime.'],
-  ['auth-02b', 'u-nora', 45.5, 'The JWKS client migration run failed on stale test keys from before the last rotation, not on the verifier. Keys regenerated, rerun queued.'],
-  ['auth-03', 'u-nora', 5.5, 'Rehearsal one passed on the cutover runbook: zero forced logouts.'],
-  ['auth-04', 'u-nora', 1.9, 'Rehearsal two failed at the flip because the tenant origin was missing from its Cognito callback list. Rolled back cleanly. I proposed the missing step as an edit to the runbook; it is waiting for review.'],
-  ['auth-05', 'u-vera', 1.1, 'Thanks Nora. Simone, can you review the runbook edit before the retry? Sienna decides the order after that.'],
-];
+// Auth Migration has no initiative thread of its own any more: an initiative
+// bound to a channel discusses in that channel (the initiative page's
+// Discussion pane and composer ARE #auth-migration, portal
+// ProjectDetailPage.tsx), so the six messages its `orgiq:initiative:` thread
+// carried were folded into #auth-migration above. Five said again what the
+// channel already said (a10, a11, a11b, a12, a13 + a15); the two things only
+// the thread had are kept there: Sienna's "keep the session hardening moving"
+// (a11) and Vera's ask that Simone review the runbook edit (a15b).
 
 /**
  * Northstar Payments' team thread (`assessment:team:TEAM-001`, the Discussion

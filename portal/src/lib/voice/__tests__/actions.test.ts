@@ -606,6 +606,21 @@ test('message: a channel is named by its slug as the page shows it ("#auth-migra
   assert.equal(channelTag('Design Reviews!'), '#design-reviews');
 });
 
+test('message on an initiative page whose discussion is a channel: no target goes to that channel; elsewhere it is still asked for', async () => {
+  const resolved = { kind: 'channel', match: { id: 'auth-migration', name: 'Auth migration', channelId: 'auth-migration', channel: 'social:ch:auth-migration', joined: true }, candidates: [] };
+  const { fetch, log } = fakeFetch([route('GET', '/api/social/plane/resolve', 200, resolved)]);
+  const social = fakeSocial();
+  const page = () => ({ path: '/iq/projects/p-auth-migration', record: { ref: 'initiative:p-auth-migration', title: 'Auth Migration' }, rows: [], channel: { slug: 'auth-migration' } });
+  const r = await confirmAndRun('message', { target: null, text: 'Rehearsal Thursday.', thread: null, attach: null }, toolContext({ fetch, social, page }));
+  assert.equal(r.card!.title, 'Post to #auth-migration');
+  assert.equal(r.result.summary, 'Posted to #auth-migration');
+  assert.ok(log.some((l) => l.url.includes('kind=channel') && l.url.includes('name=auth-migration')), 'resolved as the page\'s channel');
+  assert.equal(social.sends[0]!.channel, 'social:ch:auth-migration');
+  const nowhere = await confirmAndRun('message', { target: null, text: 'hi', thread: null, attach: null }, toolContext({ fetch, social: fakeSocial(), page: () => ({ path: '/iq/projects/p-x', rows: [] }) }));
+  assert.equal(nowhere.result.outcome, 'refused');
+  assert.match(nowhere.result.summary, /Say where it goes/);
+});
+
 test('message (G46): a channel the user never joined, or a socket that is down, refuses before any card; a failed post names its code', async () => {
   const notJoined = { kind: 'channel', match: { id: 'general', name: 'General', channelId: 'general', channel: 'social:ch:general', joined: false }, candidates: [{ id: 'general', name: 'General' }] };
   const { fetch } = fakeFetch([route('GET', '/api/social/plane/resolve', 200, notJoined)]);

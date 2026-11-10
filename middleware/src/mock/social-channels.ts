@@ -33,7 +33,7 @@
 
 import type { ChatMember, ChatMessage, ChatReadReceipt, PinnedMessage } from '@connorhoehn/realtime-modules/chat';
 import { clock, defineFixture } from './core/index.js';
-import { CAST, EXTRA_CHANNELS, EXTRA_MEMBERS, HISTORY, INITIATIVE_THREAD, PINS, TEAM_THREAD } from './social-history.js';
+import { CAST, EXTRA_CHANNELS, EXTRA_MEMBERS, HISTORY, PINS, TEAM_THREAD } from './social-history.js';
 import { workItemComments, type WorkItemCommentRow } from './work-item-comments.js';
 import { legacyCommentMessage, type LegacyWorkComment } from '../lib/work-thread.js';
 import { seededPeople } from './people.js';
@@ -152,10 +152,8 @@ function seedMessages(): ChatMessage[] {
     // Rhea's open access request (req-0001, \`access:req:<id>\`): why she asked, and her manager's answer so far.
     msg('a-req1-1', 'access:req:req-0001', 'u-rhea', 'Rhea Castellanos', 'Vera wants me on the cutover sequencing once Sienna decides the tenant order. That work dispatches agents against the Sprint 10 envelope, which needs SME in Work.', clock.hoursAgo(2.9)),
     msg('a-req1-2', 'access:req:req-0001', 'u-omar', 'Omar Haddad', 'Makes sense. I will approve once Vera confirms there is room in the envelope.', clock.hoursAgo(1.6)),
-    // Auth Migration's own thread (`orgiq:initiative:p-auth-migration`, the
-    // initiative page's Discussion pane): the same blocker #auth-migration
-    // argues out, said where the board is.
-    ...INITIATIVE_THREAD.map(([key, user, hours, text]) => msg(`i-${key}`, 'orgiq:initiative:p-auth-migration', user, CAST[user] ?? user, text, clock.hoursAgo(hours))),
+    // Auth Migration's Discussion pane is #auth-migration (its binding), so it
+    // has no `orgiq:initiative:` thread here: see social-history.ts.
     // Northstar Payments' team thread (`assessment:team:TEAM-001`, the team page's Discussion pane).
     ...TEAM_THREAD.map(([key, user, hours, text]) => msg(`t-${key}`, 'assessment:team:TEAM-001', user, CAST[user] ?? user, text, clock.hoursAgo(hours))),
     // Ten days of history from the whole social cast (mock/social-history.ts).
