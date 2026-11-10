@@ -15,8 +15,9 @@ export const TRACE_OWNER_ANNOTATIONS = { user: 'user_id', tenant: 'tenant' } as 
 
 /**
  * An X-Ray trace (GET /api/observability/traces and /traces/:id) in the
- * caller's scope. Its owner is the root segment's `user_id` / `tenant`
- * annotations (the mock's own fields offline). Unlike the offline corpus a
+ * caller's scope. Its owner is the one `user_id` / `tenant` pair every
+ * annotated segment agrees on (providers/cloudwatch.ts agreedOwner; the
+ * mock's own fields offline). Unlike the offline corpus a
  * trace needs BOTH: an ownerless trace, or one with no tenant, is the
  * cross-tenant admin's alone, so nobody else learns that it exists, not even
  * its name or token counts.

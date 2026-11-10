@@ -6,7 +6,7 @@ jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', accountId: 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { TRACE_OWNER_ANNOTATIONS, traceInScope, xrayScopeFilter } from '../trace-owner.js';
-import { mockCloudWatch, ownerAnnotations } from '../../providers/cloudwatch.js';
+import { mapXRayTrace, mockCloudWatch, ownerAnnotations } from '../../providers/cloudwatch.js';
 
 describe('the owner annotation names', () => {
   it('are the agents\' (agents/_shared/trace_owner.py), so the filter matches what they tag', () => {
@@ -27,6 +27,36 @@ describe('the owner annotation names', () => {
     expect(ownerAnnotations({ annotations: {}, subsegments: [{ subsegments: [{ annotations: { user_id: 'u-2', tenant: 'assessment' } }] }] }))
       .toEqual({ userId: 'u-2', tenant: 'assessment' });
     expect(ownerAnnotations({ annotations: { user_id: 7 } })).toEqual({ userId: null, tenant: null });
+  });
+
+  it('user and tenant come from one claim: a segment tree naming two owners, or half of one, is nobody\'s', () => {
+    expect(ownerAnnotations({ annotations: { user_id: 'u-1' }, subsegments: [{ annotations: { tenant: 'orgiq' } }] }))
+      .toEqual({ userId: null, tenant: null });
+    expect(ownerAnnotations({ annotations: { user_id: 'u-1', tenant: 'orgiq' }, subsegments: [{ annotations: { user_id: 'u-2', tenant: 'orgiq' } }] }))
+      .toEqual({ userId: null, tenant: null });
+  });
+});
+
+describe('a mapped X-Ray trace\'s owner (sweep 12, L1)', () => {
+  const seg = (annotations: Record<string, string>, extra: Record<string, unknown> = {}) =>
+    ({ Id: 's', Document: JSON.stringify({ name: 'advisor', start_time: 1, annotations, ...extra }) });
+
+  it('two segments tagged with different owners leave the trace admin-only', () => {
+    const t = mapXRayTrace({ Id: 't-1', Segments: [seg({ user_id: 'u-a', tenant: 'orgiq' }), seg({ user_id: 'u-b', tenant: 'assessment' })] });
+    expect(t).toMatchObject({ userId: null, tenant: null });
+    expect(traceInScope({ tenant: 'orgiq', userId: null }, t!)).toBe(false);
+    expect(traceInScope({ tenant: 'assessment', userId: 'u-b' }, t!)).toBe(false);
+    expect(traceInScope(null, t!)).toBe(true);
+  });
+
+  it('a user from one segment and a tenant from another never combine', () => {
+    const t = mapXRayTrace({ Id: 't-2', Segments: [seg({ user_id: 'u-a' }), seg({ tenant: 'orgiq' })] });
+    expect(t).toMatchObject({ userId: null, tenant: null });
+  });
+
+  it('segments that agree (and untagged service segments) keep the owner', () => {
+    const t = mapXRayTrace({ Id: 't-3', Segments: [seg({}), seg({ user_id: 'u-a', tenant: 'orgiq' }), seg({ user_id: 'u-a', tenant: 'orgiq' })] });
+    expect(t).toMatchObject({ userId: 'u-a', tenant: 'orgiq' });
   });
 });
 

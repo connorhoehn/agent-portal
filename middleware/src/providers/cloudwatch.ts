@@ -216,29 +216,62 @@ function inferKind(name: string): TraceSpan['kind'] {
 
 interface SegmentDoc { annotations?: Record<string, unknown>; subsegments?: SegmentDoc[] }
 
+type Owner = { userId: string | null; tenant: string | null };
+
 /**
- * The owner annotations (TRACE_OWNER_ANNOTATIONS) of a segment document, from
- * the segment itself or the first of its subsegments that names them.
- * Exported for the tests.
+ * Every owner a segment document names: one entry per (sub)segment that
+ * carries either owner annotation (TRACE_OWNER_ANNOTATIONS), as the PAIR that
+ * node carries. A node naming neither is not an owner claim and is skipped
+ * (X-Ray's own service segments carry no annotations).
  */
-export function ownerAnnotations(doc: SegmentDoc, depth = 0): { userId: string | null; tenant: string | null } {
+export function segmentOwners(doc: SegmentDoc, depth = 0, out: Owner[] = []): Owner[] {
   const ann = doc.annotations ?? {};
   const str = (v: unknown) => (typeof v === 'string' && v ? v : null);
-  let userId = str(ann[TRACE_OWNER_ANNOTATIONS.user]);
-  let tenant = str(ann[TRACE_OWNER_ANNOTATIONS.tenant]);
-  if ((userId && tenant) || depth >= 8) return { userId, tenant };
-  for (const sub of doc.subsegments ?? []) {
-    const inner = ownerAnnotations(sub, depth + 1);
-    userId ??= inner.userId;
-    tenant ??= inner.tenant;
-    if (userId && tenant) break;
+  const userId = str(ann[TRACE_OWNER_ANNOTATIONS.user]);
+  const tenant = str(ann[TRACE_OWNER_ANNOTATIONS.tenant]);
+  if (userId || tenant) out.push({ userId, tenant });
+  if (depth < 8) for (const sub of doc.subsegments ?? []) segmentOwners(sub, depth + 1, out);
+  return out;
+}
+
+/**
+ * The one owner a set of owner claims agrees on, else nobody. User and tenant
+ * come from the SAME claim, never one from each (sweep 12, L1: filling them
+ * independently let a trace take its user from one segment and its tenant
+ * from another). A claim naming only one of the two, or two claims naming
+ * different owners, leaves the trace ownerless, which traceInScope keeps for
+ * the cross-tenant admin alone.
+ *
+ * Do the segments of one trace ever name different callers? Not by design.
+ * The supervisor's sub-agent hop (agents/supervisor/main.py _invoke_sub_agent)
+ * and the middleware's invokes put no trace header in the payload: any trace
+ * id the hop shares comes from the runtime's own instrumentation, and the hop
+ * re-signs the SAME verified caller (tenant and sub) for the sub-agent, so a
+ * shared trace carries one owner. A hop that drops the sub (a tenant-only
+ * block) tags nothing on the sub-agent's spans (trace_owner.py), which is
+ * neutral here. Consults (POST /api/lab/consults and its answer) are plain
+ * HTTP callbacks that open no agent invoke and carry no trace context. So
+ * disagreement means a mis-tagged span, and the safe reading of it is
+ * "nobody's".
+ */
+export function agreedOwner(claims: Owner[]): Owner {
+  const none = { userId: null, tenant: null };
+  const first = claims[0];
+  if (!first || !first.userId || !first.tenant) return none;
+  for (const c of claims) {
+    if (c.userId !== first.userId || c.tenant !== first.tenant) return none;
   }
-  return { userId, tenant };
+  return { userId: first.userId, tenant: first.tenant };
+}
+
+/** The owner one segment document agrees on (segment and subsegments). Exported for the tests. */
+export function ownerAnnotations(doc: SegmentDoc): Owner {
+  return agreedOwner(segmentOwners(doc));
 }
 
 // Map an X-Ray trace document to our simplified Trace shape.
 // TODO: implement full segment → span tree mapping once real traces arrive.
-function mapXRayTrace(xt: XRayTrace): Trace | null {
+export function mapXRayTrace(xt: XRayTrace): Trace | null {
   const traceId = xt.Id;
   if (!traceId) return null;
 
@@ -249,9 +282,8 @@ function mapXRayTrace(xt: XRayTrace): Trace | null {
   let status: Trace['status'] = 'ok';
   let tokensIn = 0;
   let tokensOut = 0;
-  // The owner, from the first segment that names one (`user_id` / `tenant` annotations).
-  let userId: string | null = null;
-  let tenant: string | null = null;
+  // Every owner claim across the trace's segments (`user_id` / `tenant` annotations).
+  const ownerClaims: Owner[] = [];
 
   for (const seg of xt.Segments ?? []) {
     if (!seg.Document) continue;
@@ -276,13 +308,14 @@ function mapXRayTrace(xt: XRayTrace): Trace | null {
       if (typeof to === 'number') tokensOut += to;
       // The agents tag every span (root and children alike); an OTel span
       // that X-Ray stores as a subsegment carries them one level down.
-      const owner = ownerAnnotations(doc);
-      if (userId === null && owner.userId) userId = owner.userId;
-      if (tenant === null && owner.tenant) tenant = owner.tenant;
+      segmentOwners(doc, 0, ownerClaims);
     } catch {
       // ignore malformed segment doc
     }
   }
+
+  // One owner the whole trace agrees on, or nobody (admin-only).
+  const { userId, tenant } = agreedOwner(ownerClaims);
 
   return {
     traceId,
