@@ -35,6 +35,7 @@ import { useMeetingBarItems } from './CallMeeting';
 import { ShellCallMedia } from './ShellCallHost';
 import { callScopeKey, hasJoinedCall, idleHuddleControls } from './callShellModel';
 import { VoiceFooterSlot } from './VoiceFooterPane';
+import { lineStarts } from './footerLines';
 import './socialFooter.css';
 
 const noop = () => {};
@@ -187,17 +188,16 @@ function FooterIdle() {
  * at a narrow width whole slots wrap, and a rule at the start of the second
  * or third line separated nothing (walk, 9 November, 390 px). Which slot
  * starts a line is a layout fact, so it is read after layout, not guessed
- * from a breakpoint.
+ * from a breakpoint. The first visible slot counts as a line start, and hidden
+ * slots are skipped (footerLines.ts `lineStarts`).
  */
 export function markLineStarts(row: HTMLElement): void {
-  let previousTop: number | null = null;
-  for (const child of Array.from(row.children) as HTMLElement[]) {
-    const top = child.offsetTop;
-    const starts = previousTop !== null && top > previousTop + 1;
-    if (starts) child.setAttribute('data-line-start', '');
+  const children = Array.from(row.children) as HTMLElement[];
+  const starts = lineStarts(children.map((child) => ({ visible: child.getClientRects().length > 0, top: child.offsetTop, bottom: child.offsetTop + child.offsetHeight })));
+  children.forEach((child, i) => {
+    if (starts[i]) child.setAttribute('data-line-start', '');
     else child.removeAttribute('data-line-start');
-    previousTop = top;
-  }
+  });
 }
 
 export function SocialFooter() {
@@ -219,9 +219,14 @@ export function SocialFooter() {
     };
     const observer = new ResizeObserver(measure);
     observer.observe(element); if (row.current) observer.observe(row.current);
-    window.addEventListener('resize', measure); measure();
+    // A slot that mounts, unmounts or changes size can move the line breaks without the row
+    // itself resizing (the voice slot arriving on a one-line row): watch the slots too.
+    const watchSlots = () => { for (const child of Array.from(row.current?.children ?? [])) observer.observe(child); measure(); };
+    const slots = new MutationObserver(watchSlots);
+    if (row.current) slots.observe(row.current, { childList: true });
+    window.addEventListener('resize', measure); watchSlots();
     return () => {
-      observer.disconnect(); window.removeEventListener('resize', measure);
+      observer.disconnect(); slots.disconnect(); window.removeEventListener('resize', measure);
       document.documentElement.style.removeProperty('--shell-collaboration-floor');
     };
   }, []);
