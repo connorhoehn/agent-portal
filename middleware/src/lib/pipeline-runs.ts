@@ -482,6 +482,23 @@ export function projectRunTitle(prompt: string): string {
   return line.replace(BRACKETED_ID, '').trim() || 'Agent run';
 }
 
+/**
+ * Who works a marketplace dispatch: the coding agent in a devbox (`dispatchWorkItem`
+ * in lib/bot-runner.ts), whatever model the dispatch picked. A bot_run row names
+ * no agent of its own, so this is the agent's one name.
+ */
+export const MARKETPLACE_AGENT_NAME = 'Coding agent';
+
+/**
+ * A marketplace dispatch's title when its work item's name cannot be found
+ * (deleted, or past the presenter's lookup): "Marketplace work · Coding agent".
+ * It read "marketplace work wi-obs-e1-s3" (UX leftovers, 10 November); the id is
+ * the run's `workItemId`, which the run page puts behind a copy control.
+ */
+export function marketplaceFallbackTitle(): string {
+  return `Marketplace work · ${MARKETPLACE_AGENT_NAME}`;
+}
+
 // ─── The projection ─────────────────────────────────────────────────────────
 
 export function projectRuns(src: RunSources): Projection {
@@ -628,7 +645,9 @@ export function projectRuns(src: RunSources): Projection {
         tenant: TENANT_OF.bot_runs, kind: b.botId ? 'bot' : 'agent', table: 'bot_runs', id: b.id,
         sourceStatus: b.status,
         sources: [{ table: 'bot_runs', id: b.id, status: b.status, role: 'primary' }],
-        title: b.botId ? `bot ${b.botId}` : `marketplace work ${b.workItemId ?? ''}`.trim(),
+        // The raw title when no name is found (lib/pipeline-run-titles.ts names the item or the bot when it can).
+        // Words, never the id: the work item's id is `workItemId` (behind a copy control on the run page).
+        title: b.botId ? `bot ${b.botId}` : marketplaceFallbackTitle(),
         botId: b.botId, workItemId: b.workItemId, trigger: b.trigger,
         error: typeof b.outcome?.['error'] === 'string' ? String(b.outcome['error']) : null,
       },

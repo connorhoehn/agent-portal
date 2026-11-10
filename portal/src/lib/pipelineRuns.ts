@@ -186,11 +186,28 @@ export function kindLabel(kind: string): string {
 export function definitionLabel(definitionId: string | null | undefined, name?: string | null): string {
   if (name?.trim()) return name.trim();
   const id = definitionId ?? '';
+  // A marketplace dispatch has no definition row: the coding agent in a devbox works the item
+  // (middleware MARKETPLACE_AGENT_NAME). It read "Not recorded" (UX leftovers, 10 November).
+  if (id === 'marketplace') return 'Coding agent';
   const agent = /^agent:(?:orgiq-|assessment-)?(.+)$/.exec(id);
   if (agent) { const role = agent[1]!.replace(/[-_]/g, ' '); return `${role.charAt(0).toUpperCase()}${role.slice(1)} agent`; }
   const kind = id.slice(0, id.indexOf(':'));
   const label = KIND_LABEL[kind as DefinitionKind];
   return label ? `A ${label.toLowerCase()}` : 'Not recorded';
+}
+
+/**
+ * The work item a run answers, by name, for the run page's "Work item" row (its id goes behind a
+ * copy control). A dispatch is titled "Dispatched: <item>" when the item was found and "Marketplace
+ * work · <agent>" when it was not; a governed run for an item is titled by the item. Null when the
+ * run answers no work item.
+ */
+export function workItemName(run: Pick<PipelineRun, 'context'>): string | null {
+  const c = run.context;
+  if (!c.workItemId) return null;
+  if (c.title.startsWith('Dispatched: ')) return c.title.slice('Dispatched: '.length);
+  if (c.table === 'bot_runs') return 'Name not found';
+  return c.title;
 }
 
 const TABLE_LABEL: Record<string, string> = {

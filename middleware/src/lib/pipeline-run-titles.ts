@@ -2,7 +2,7 @@
 //
 // The projection (lib/pipeline-runs.ts) titles a run from the one row it read:
 // an assessment run is "score-dimensions · TEAM-003", a marketplace firing is
-// "marketplace work wi-obs-e1-s3", a bot's job is the bot's slug. Those are
+// "Marketplace work · Coding agent", a bot's job is the bot's slug. Those are
 // ids a peer cannot read. This is the presenter: it replaces them with names
 // it is handed (the team, the work item, the bot, the initiative), and leaves
 // a title alone when no name is known — an id is better than a guess.

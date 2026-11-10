@@ -1,5 +1,5 @@
 import { humanizeSlug, presentRunTitles, type RunNames } from '../pipeline-run-titles.js';
-import type { Run } from '../pipeline-runs.js';
+import { marketplaceFallbackTitle, projectRuns, type Run } from '../pipeline-runs.js';
 
 const run = (table: Run['context']['table'], over: Partial<Run['context']> & { definitionId?: string } = {}): Run => {
   const { definitionId, ...context } = over;
@@ -30,7 +30,7 @@ describe('presentRunTitles', () => {
   it('names an assessment run by command and team, a dispatch by its work item, a bot job by the bot', () => {
     const runs = [
       run('assessment_runs', { title: 'score-dimensions · TEAM-003', definitionId: 'assessment:score-dimensions' }),
-      run('bot_runs', { title: 'marketplace work wi-1', workItemId: 'wi-1' }),
+      run('bot_runs', { title: 'Marketplace work · Coding agent', workItemId: 'wi-1' }),
       run('agent_jobs', { title: 'auth-dep-watch', definitionId: 'bot:b1' }),
       run('agent_project_runs', { title: 'Do a thing.', projectId: 'p1' }),
     ];
@@ -45,6 +45,18 @@ describe('presentRunTitles', () => {
     const r = run('agent_project_runs', { title: 'Work item AUTH-7 [wi-1] (bug, 2 pts)', workItemId: 'wi-1', projectId: 'p1' });
     presentRunTitles([r], names);
     expect(r.context.title).toBe('Logout leaves the shim cookie alive');
+  });
+
+  it('a marketplace dispatch whose work item cannot be found reads "Marketplace work · Coding agent", never its id', () => {
+    const [r] = projectRuns({
+      agentJobs: [], agentProjectRuns: [], assessmentRuns: [], invocations: [], liveAgentRuns: [], changes: [],
+      botRuns: [{ id: 'br-1', botId: null, trigger: 'marketplace', runId: null, jobId: null, workItemId: 'wi-gone', status: 'running', costUsd: null, startedAt: '2026-11-10T00:00:00Z', finishedAt: null, dispatchedBy: null }],
+    }).runs;
+    presentRunTitles([r!], names);
+    expect(r!.context.title).toBe(marketplaceFallbackTitle());
+    expect(r!.context.title).toBe('Marketplace work · Coding agent');
+    expect(r!.context.title).not.toMatch(/wi-/);
+    expect(r!.context.workItemId).toBe('wi-gone');
   });
 
   it('leaves a title alone when no name is known: an id beats a guess', () => {

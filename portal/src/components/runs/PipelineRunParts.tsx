@@ -18,7 +18,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
 import { usd } from '../../lib/format';
 import {
-  artifactKindLabel, artifactPlace, artifactStepLabel, attemptItems, contextTenantLabel, definitionLabel, kindLabel, runHref, runStatusChip, sourceLabel, sourceStatusNote, stepperSteps, stepStatusChip,
+  artifactKindLabel, artifactPlace, artifactStepLabel, attemptItems, contextTenantLabel, definitionLabel, kindLabel, runHref, runStatusChip, sourceLabel, sourceStatusNote, stepperSteps, stepStatusChip, workItemName,
   type PipelineArtifact, type PipelineRun, type PipelineStep,
 } from '../../lib/pipelineRuns';
 import { RunTimeline } from './RunTimeline';
@@ -73,6 +73,13 @@ export function PipelineRunSummary({ run, definitionName }: { run: PipelineRun; 
               {run.definitionId && <CopyIdButton value={run.definitionId} label="Copy the definition's id" />}
             </Inline>
           ) },
+          // The work item it answers, by name; its id behind the copy control, never the text (UX leftovers, 10 November).
+          ...(run.context.workItemId ? [{ label: 'Work item', value: (
+            <Inline gap="xs" wrap={false}>
+              <T size="sm" tone={workItemName(run) === 'Name not found' ? 'tertiary' : 'primary'}>{workItemName(run)}</T>
+              <CopyIdButton value={run.context.workItemId} label="Copy the work item's id" />
+            </Inline>
+          ) }] : []),
           { label: 'Acts for', value: contextTenantLabel(run.context.tenant) },
           { label: 'Source', value: sourceLabel(run.context.table), title: run.context.id },
           { label: 'Source status', value: run.context.sourceStatus.replace(/_/g, ' ') },
