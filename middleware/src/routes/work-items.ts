@@ -182,7 +182,7 @@ workItemsRouter.post('/projects/:id/discussion/comments', commentGate, asyncHand
   if (!await requireInitiativeScope(req, res, req.params['id'] as string, { action: 'comment' })) return;
   const message = await postInitiativeWorkComment({
     projectId: req.params['id'] as string, workItemId: body['workItemId'],
-    userId: user.id, displayName: user.displayName, personId: user.personId,
+    userId: user.id, displayName: user.displayName, personId: user.personId, sub: session.sub,
     body: (body['body'] as string).trim(), deliveryId: body['clientDeliveryId'],
   });
   res.status(201).json(message);

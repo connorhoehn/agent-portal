@@ -674,7 +674,7 @@ describe('POST /api/graph/projects/:id/discussion/comments', () => {
     expect(res.body).toEqual(message);
     expect(postCommentMock).toHaveBeenCalledWith({
       projectId: 'p-observability', workItemId: 'wi-obs-e1-s1',
-      userId: 'u-rachel', displayName: 'Rachel Kowalski', personId: 'p-008',
+      userId: 'u-rachel', displayName: 'Rachel Kowalski', personId: 'p-008', sub: 'u-rachel',
       body: 'Collector rollout looks good', deliveryId: 'del_1-a',
     });
   });

@@ -8,10 +8,20 @@
 //     a one-line reference in the channel through the route every channel
 //     message takes (the gateway, governed by the channel's posting rule);
 //     `discussion: 'channel'` in the answer tells it to.
+//
+// "Bound" here is the binding as THIS caller may know it (sweep 12, L2,
+// lib/initiative-discussion.ts visibleBoundChannel): a public channel, or a
+// private one they are a member of. A caller the binding read and the
+// discussion-home read both answer "unbound" sees the old initiative thread
+// in their pane, so their note goes there and the answer says
+// `discussion: 'thread'`, exactly as on an unbound initiative: the reply never
+// reveals a private binding, and the note lands where that caller's pane
+// shows it. The work item's feed reads both threads, so channel members still
+// find the note on the item.
 import { AppError } from './async-handler.js';
 import { getWorkItem } from '../providers/work-items.js';
 import { liveMessageId, workThreadChannel } from './work-thread.js';
-import { boundChannel } from './initiative-discussion.js';
+import { visibleBoundChannel } from './initiative-discussion.js';
 import { postThreadMessage, socialChat } from './social-chat.js';
 import { clock } from '../mock/core/index.js';
 import { config } from '../config.js';
@@ -21,10 +31,12 @@ const pending = new Map<string, Promise<unknown>>();
 export async function postInitiativeWorkComment(input: {
   projectId: string; workItemId: string; userId: string; displayName: string;
   personId?: string | null; body: string; deliveryId: string;
+  /** The caller's session subject, for channel membership (defaults to userId). */
+  sub?: string;
 }) {
   const item = await getWorkItem(input.workItemId);
   if (!item || item.projectId !== input.projectId) throw new AppError(404, 'Work item is not in this initiative');
-  const bound = await boundChannel(input.projectId);
+  const bound = await visibleBoundChannel(input.projectId, input.sub ?? input.userId);
   const channel = bound ? workThreadChannel(input.workItemId) : `orgiq:initiative:${input.projectId}`;
   const discussion = bound ? 'channel' as const : 'thread' as const;
   const write = async () => {

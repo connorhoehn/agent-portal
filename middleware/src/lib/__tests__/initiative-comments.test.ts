@@ -10,6 +10,8 @@ import { postInitiativeWorkComment } from '../initiative-comments.js';
 import { createMemorySocialChatBackend, setSocialChatBackend, socialChat } from '../social-chat.js';
 import { listWorkItemComments, workThreadSummary } from '../../providers/work-items.js';
 import { historyFloor } from '../../routes/chat-pins.js';
+import { socialBindingsFixture } from '../../mock/social-bindings.js';
+import { discussionHome } from '../initiative-discussion.js';
 
 // Inference Platform has no bound channel (mock/social-bindings.ts): its notes stay on the initiative thread.
 const input = {
@@ -23,7 +25,7 @@ beforeEach(() => {
   setSocialChatBackend(createMemorySocialChatBackend());
   (historyFloor as jest.Mock).mockResolvedValue(null);
 });
-afterEach(() => setSocialChatBackend(null));
+afterEach(() => { setSocialChatBackend(null); socialBindingsFixture.reset(); });
 
 it('stores once in the initiative conversation and projects the note only onto its work item', async () => {
   const before = await workThreadSummary(input.workItemId, input.userId);
@@ -60,4 +62,28 @@ it('applies the initiative history floor before projecting its messages into a w
   const message = await postInitiativeWorkComment(input);
   (historyFloor as jest.Mock).mockImplementation(async (channel: string) => channel === message.channel ? message.timestamp : null);
   expect((await listWorkItemComments(input.workItemId, 'reader')).comments.some(c => c.id === message.id)).toBe(false);
+});
+
+describe('a private binding the caller may not know of (sweep 12, L2)', () => {
+  // Bind Inference Platform to #moderators: private, Lena and Mira only (mock/social-channels.ts).
+  const bindPrivate = () => socialBindingsFixture.rows().push({ tenant: 'orgiq', contextKind: 'initiative', contextId: 'p-inference-platform', channel: 'social:ch:moderators', createdBy: 'u-lena', createdAt: '2026-11-01T00:00:00.000Z' });
+
+  it('a non-member is answered as on an unbound initiative, and the note lands on the thread their pane shows', async () => {
+    bindPrivate();
+    const message = await postInitiativeWorkComment({ ...input, deliveryId: 'sweep12-l2-a' });
+    // Neutral: the same answer the read route gives this caller (no channel).
+    expect(message.discussion).toBe('thread');
+    expect(message.channel).toBe('orgiq:initiative:p-inference-platform');
+    expect(await discussionHome('p-inference-platform')).toBeNull();
+    expect(JSON.stringify(message)).not.toContain('moderators');
+    // Still a record on the work item for everyone who reads its feed.
+    expect((await listWorkItemComments(input.workItemId, input.userId)).comments.some(c => c.id === message.id)).toBe(true);
+  });
+
+  it('a member of the private channel is told to post the reference there', async () => {
+    bindPrivate();
+    const message = await postInitiativeWorkComment({ ...input, userId: 'u-mira', displayName: 'Mira Okafor', personId: null, deliveryId: 'sweep12-l2-b' });
+    expect(message.discussion).toBe('channel');
+    expect(message.channel).toBe('orgiq:work:wi-inf-e1-b3');
+  });
 });

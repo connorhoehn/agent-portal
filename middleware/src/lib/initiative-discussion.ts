@@ -13,10 +13,14 @@
 //     admits; a private one reads as "bound, but not to you", as the binding
 //     read answers a non-member, routes/social.ts bindingView). Never a
 //     message, a member or a count.
+//   * visibleBoundChannel: the binding as ONE caller may know it (sweep 12,
+//     L2): a public channel, or a private one they are an active member of.
+//     Anything else reads as unbound, as both reads above answer that
+//     caller, so a write route never tells them more than a read would.
 
 import { getBinding } from '../providers/social-bindings.js';
 import { getChannel } from '../providers/social-channels.js';
-import { slugForChannel } from './social-chat.js';
+import { slugForChannel, socialChat } from './social-chat.js';
 
 export const initiativeBindingContext = (projectId: string) => ({ tenant: 'orgiq', kind: 'initiative', id: projectId });
 
@@ -33,4 +37,19 @@ export async function discussionHome(projectId: string): Promise<{ channel: stri
   if (!channel || !slug) return null;
   const dir = await getChannel(slug);
   return dir?.privacy === 'public' ? { channel, slug } : null;
+}
+
+/**
+ * The bound channel when `sub` may know of it (public, or a private channel
+ * they are an active member of), else null. A channel with no directory row
+ * counts as private here: the strict reading, since it leaks nothing.
+ */
+export async function visibleBoundChannel(projectId: string, sub: string): Promise<string | null> {
+  const channel = await boundChannel(projectId);
+  const slug = channel ? slugForChannel(channel) : null;
+  if (!channel || !slug) return null;
+  if ((await getChannel(slug))?.privacy === 'public') return channel;
+  const chat = socialChat(); await chat.ready;
+  await chat.membershipStore.hydrate(channel);
+  return chat.membershipStore.isActiveMember(channel, sub) ? channel : null;
 }

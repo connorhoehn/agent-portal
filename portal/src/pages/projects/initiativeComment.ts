@@ -5,7 +5,10 @@ export interface SavedInitiativeComment { id: string | null; discussion: 'thread
  * A /comment is acknowledged only after the chat store wrote it. On an
  * initiative bound to a channel the answer says `discussion: 'channel'`: the
  * note is a record on the work item, and the composer posts the one-line
- * reference in the channel itself (InitiativeComposer).
+ * reference in the channel itself (InitiativeComposer). A private channel the
+ * caller is not in reads as unbound (sweep 12, L2): `thread`, the note on the
+ * initiative thread their pane shows, and nothing in the answer names the
+ * channel, so the composer's wording stays the unbound one.
  */
 export async function postInitiativeComment(projectId: string, workItemId: string, body: string, deliveryId: string = crypto.randomUUID()): Promise<SavedInitiativeComment> {
   const response = await fetch(`/api/graph/projects/${encodeURIComponent(projectId)}/discussion/comments`, {
