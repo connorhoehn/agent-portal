@@ -301,6 +301,10 @@ class RunPrefixConfinement(unittest.TestCase):
             self.assertIsNone(ing.run_prefix_from({"s3Prefix": bad}), bad)
         self.assertEqual(ing.run_prefix_from({}), "uploads/")
 
+    def test_the_prefix_is_read_from_the_nested_input_the_middleware_sends(self):
+        payload = {"input_text": "sync", "input": json.dumps({"s3Prefix": "kb/hr-handbook"})}
+        self.assertEqual(ing.run_prefix_from(ing.request_fields(payload)), "kb/hr-handbook/")
+
     def test_the_entrypoint_refuses_a_bad_prefix(self):
         import asyncio
         out = asyncio.run(ing.handle({"input_text": "list", "s3Prefix": "../secrets"}))

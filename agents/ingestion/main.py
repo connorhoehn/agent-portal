@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.approval_tool import request_approval  # noqa: E402
+from _shared.invoke_auth import request_fields  # noqa: E402
 from _shared.kb_resolver import resolve_kb_id_by_slug as _resolve_kb_id_by_slug  # noqa: E402
 from _shared.model_registry import RegistryAgent, invoke_with_fallback, resolve_model
 from _shared.agui_stream import stream_agui, wants_stream  # noqa: E402
@@ -412,7 +413,8 @@ async def handle(payload: dict) -> AsyncIterator | dict:
     if not input_text:
         return {"agent": "ingestion", "error": "missing input_text/prompt/message"}
 
-    run_prefix = run_prefix_from(payload)
+    # The caller's structured fields arrive nested under `input` (invoke_auth.request_fields).
+    run_prefix = run_prefix_from(request_fields(payload))
     if run_prefix is None:
         return {"agent": "ingestion", "error": "s3Prefix must be a relative S3 prefix without '.' or '..' segments"}
 
