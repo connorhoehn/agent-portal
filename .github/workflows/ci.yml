@@ -62,6 +62,9 @@ jobs:
       - name: Work demo story
         if: matrix.shard == 1
         run: node ../scripts/content/check-story.mjs
+      - name: Doc links
+        if: matrix.shard == 1
+        run: node ../scripts/docs/check-links.mjs
       - name: Test
         env:
           # 25% of a hosted runner is one worker and the suite overran 45 minutes.
