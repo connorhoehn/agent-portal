@@ -13,7 +13,8 @@
 import { S3Client, ListObjectsV2Command, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { basename } from 'node:path';
 import { config } from '../config.js';
-import { getKbBySlug } from './kb-registry.js';
+import { getKbBySlug, listKbs } from './kb-registry.js';
+import { ownerOfKey, tenantMetadataSidecar } from '../lib/kb-prefixes.js';
 import { clock } from '../mock/core/clock.js';
 import {
   MOCK_DOCUMENTS_BUCKET,
@@ -250,6 +251,13 @@ export async function listLandingZoneFiles(
 /**
  * Upload a file into the landing zone for the given KB slug.
  * Resolves the s3Prefix from the registry and throws if the KB is not found.
+ *
+ * Writes the same tenant metadata sidecar as the file upload
+ * (knowledge-base.ts `uploadDocument`): retrieval filters on it beside the key
+ * prefix, so a document landed by an upload link without one would be
+ * invisible to its own tenant until a backfill. The owner is the key's
+ * longest registered or declared prefix (the agents' rule), with this KB's
+ * entry always among the registered ones.
  */
 export async function uploadToLandingZone(
   kbSlug: string,
@@ -295,6 +303,14 @@ export async function uploadToLandingZone(
       },
     }),
   );
+  const registered = await listKbs().catch(() => []);
+  const owner = ownerOfKey(key, [{ tenant: entry.tenant, s3Prefix: entry.s3Prefix }, ...registered]);
+  if (owner) {
+    const sidecar = tenantMetadataSidecar(key, owner);
+    await s3.send(new PutObjectCommand({
+      Bucket: bucket, Key: sidecar.key, Body: sidecar.body, ContentType: 'application/json',
+    }));
+  }
 
   return {
     key,
