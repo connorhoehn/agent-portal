@@ -25,7 +25,8 @@ import { agentcore } from '../providers/index.js';
 import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
-import { scopeForSession, scopeSql, readsOwnerlessText, type TraceScope } from '../lib/trace-scope.js';
+import { scopeForSession, scopeSql, rowInScope, readsOwnerlessText, type TraceScope } from '../lib/trace-scope.js';
+import { traceRows } from '../mock/observability.js';
 
 export const agentDetailRouter: Router = Router();
 
@@ -148,8 +149,31 @@ async function livePrompt(runtimeName: string): Promise<LivePrompt> {
 async function recentInvocations(runtimeName: string, scope: TraceScope | null): Promise<{
   rows: Array<Record<string, unknown>>; problem?: string;
 }> {
-  if (config.mock.aurora) return { rows: [] };
   const slug = agentSlug(runtimeName);
+  if (config.mock.aurora) {
+    // The offline corpus, under the same agent ids and the same scope. This
+    // branch used to answer an empty list unconditionally, so the table read
+    // "No invocations recorded" for every agent on the mock.
+    const ids = new Set([runtimeName, `orgiq-${slug}`, slug]);
+    const rows = traceRows()
+      .filter((r) => ids.has(r.agent_id) && rowInScope(scope, { user_id: r.user_id, ...(r.tenant ? { tenant: r.tenant } : {}) }))
+      .slice(0, 25);
+    return {
+      rows: rows.map((r) => ({
+        invocationId: r.invocation_id,
+        startedAt: r.ts,
+        durationMs: r.duration_ms ?? 0,
+        promptVersion: r.prompt_version,
+        promptSnippet: r.prompt_snippet || null,
+        totalTokens: (r.input_tokens ?? 0) + (r.output_tokens ?? 0),
+        costUsd: r.total_cost_usd,
+        judgeScore: r.judge_score,
+        guardrailAction: r.guardrail_action,
+        modelId: r.model_id,
+        sessionId: r.session_id,
+      })),
+    };
+  }
   // Each row quotes its prompt: only the caller's own (lib/trace-scope.ts).
   const scoped = scopeSql(scope);
   const params: SqlParameter[] = [
