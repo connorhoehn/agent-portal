@@ -20,14 +20,23 @@ export function createHealthHandler(options: {
   insecureDevMode?: boolean;
 }) {
   const profile = options.profile ?? 'local-ephemeral';
-  return (_req: Request, res: Response): void => {
+  return (req: Request, res: Response): void => {
+    // /health answers before any auth (the load balancer's check). Its
+    // diagnostics (profile, mocks, region, probe errors) go only to a loopback
+    // caller or a signed-in session; anyone else gets the verdict alone, with
+    // the same status code.
+    const detailed = healthDetailAllowed(req);
+    const send = (code: number, body: Record<string, unknown>) => {
+      res.set('Cache-Control', 'no-store');
+      res.status(code).json(detailed ? body : { status: body['status'], service: 'orgiq-middleware' });
+    };
     const realtime = options.readRealtime();
     const base = { service: 'orgiq-middleware', profile, mocks: options.mocks, region: options.region, realtime,
       ...(options.insecureDevMode ? { insecureDevMode: true } : {}) };
     // A lost router lease is an immediate readiness failure, irrespective of
     // cached database/credential diagnostics or an outstanding refresh.
     if (realtime.ready === false) {
-      res.status(503).json({ status: 'degraded', ...base });
+      send(503, { status: 'degraded', ...base });
       return;
     }
     const awsCredentials = options.readAws(), datastore = options.readDatastore();
@@ -49,9 +58,23 @@ export function createHealthHandler(options: {
     const healthy = durable ? !unavailable && Object.values(capabilities).every(c => c.ok)
       : awsCredentials.ok && !awsCredentials.stale && datastore.ok && !datastore.stale
         && Object.values(capabilities).every(c => c.ok);
-    res.status(unavailable ? 503 : 200).json({ status: healthy ? 'ok' : 'degraded',
+    send(unavailable ? 503 : 200, { status: healthy ? 'ok' : 'degraded',
       ...base, awsCredentials, datastore, capabilities });
   };
+}
+
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+
+/** The socket peer is this host (never a forwarding header). */
+export function isLoopbackRequest(req: Request): boolean {
+  return LOOPBACK.has(req.socket?.remoteAddress ?? '');
+}
+
+/** Health diagnostics: a loopback caller, or a signed-in session. */
+export function healthDetailAllowed(req: Request): boolean {
+  if (isLoopbackRequest(req)) return true;
+  const session = (req as Request & { session?: { sub?: string } }).session;
+  return typeof session?.sub === 'string' && session.sub.length > 0;
 }
 
 /** Process liveness only: no dependency, lease or probe is consulted. */
