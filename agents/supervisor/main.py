@@ -151,6 +151,12 @@ def _invoke_sub_agent(runtime_arn: str, input_text: str) -> str:
     Sub-agents not yet instrumented just ignore the extra field.
     """
     payload_obj: dict = {"input_text": input_text}
+    # The verified caller's tenant: the read agents filter retrieval to it
+    # (kb_resolver.filter_for_tenant). Absent when the caller is unverified,
+    # which the sub-agent reads as the home tenant.
+    ident = _invoke_identity.get()
+    if ident and ident[0]:
+        payload_obj["tenant"] = ident[0]
     parent_ctx = _current_ctx.get()
     if parent_ctx is not None and parent_ctx.invocation_id:
         payload_obj["parentInvocationId"] = parent_ctx.invocation_id

@@ -216,3 +216,111 @@ def invalidate_cache() -> None:
     """Clear all cached KB ID lookups. Useful for testing."""
     with _cache_lock:
         _cache.clear()
+
+
+# ---------------------------------------------------------------------------
+# Tenant filter at retrieval time.
+# ---------------------------------------------------------------------------
+#
+# One Bedrock knowledge base indexes the whole documents bucket, so a
+# retrieve returns any tenant's chunks. Documents carry no tenant metadata
+# attribute today (the S3 data source writes no sidecars), so a Bedrock
+# metadata filter would drop every document; ownership comes from the
+# registry instead. A document belongs to the tenant whose registered
+# knowledge-base prefix is the LONGEST one its key starts with, and to the
+# knowledge base's home tenant (orgiq, whose corpus predates the registry)
+# when no prefix matches. The middleware refuses a prefix that overlaps
+# another tenant's (routes/kb-admin.ts), so ownership is unambiguous.
+#
+# Every retrieve keeps only the caller's tenant's documents. A registry that
+# cannot be READ (configured but failing) fails closed: nothing is returned.
+# One that is not configured at all (a local agent with no Aurora) has no
+# other tenants to know about, so every document is the home tenant's.
+
+HOME_TENANT = "orgiq"
+_PREFIX_TTL_S = 60.0
+_prefix_cache: dict = {}
+
+
+def tenant_prefixes() -> Optional[list]:
+    """[(prefix, tenant)] from the registry; [] when no registry is configured;
+    None when it is configured but could not be read."""
+    import time as _time
+
+    secret_arn = read_only_secret_arn() or admin_secret_arn() or _SECRET_ARN
+    if not (_CLUSTER_ARN and secret_arn):
+        return []
+    now = _time.monotonic()
+    with _cache_lock:
+        hit = _prefix_cache.get("rows")
+        if hit and now - hit[0] < _PREFIX_TTL_S:
+            return hit[1]
+    try:
+        import boto3
+
+        rds = boto3.client("rds-data", region_name=_REGION)
+        resp = rds.execute_statement(
+            resourceArn=_CLUSTER_ARN,
+            secretArn=secret_arn,
+            database=_DATABASE,
+            sql="SELECT s3_prefix, tenant FROM knowledge_bases WHERE s3_prefix IS NOT NULL AND s3_prefix <> ''",
+        )
+        rows = [
+            (r[0].get("stringValue", ""), r[1].get("stringValue", ""))
+            for r in resp.get("records", [])
+            if len(r) >= 2 and r[0].get("stringValue") and r[1].get("stringValue")
+        ]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("kb_resolver: tenant prefixes unreadable, retrieval fails closed: %s", exc)
+        return None
+    with _cache_lock:
+        _prefix_cache["rows"] = (now, rows)
+    return rows
+
+
+def _norm(prefix: str) -> str:
+    return prefix.strip().lstrip("/").rstrip("/") + "/"
+
+
+def document_owner(source_uri: str, prefixes: list, home: str = HOME_TENANT) -> str:
+    """The tenant a retrieved document belongs to (longest registered prefix wins)."""
+    key = source_uri
+    if key.startswith("s3://"):
+        rest = key[len("s3://"):]
+        key = rest.split("/", 1)[1] if "/" in rest else ""
+    best, owner = -1, home
+    for prefix, tenant in prefixes:
+        p = _norm(prefix)
+        if key.startswith(p) and len(p) > best:
+            best, owner = len(p), tenant
+    return owner
+
+
+def filter_for_tenant(results: list, tenant: str, *, prefixes=None, home: str = HOME_TENANT) -> list:
+    """Keep only the retrieved results that belong to ``tenant``.
+
+    ``results`` are dicts with a ``source`` S3 URI (the shape both read agents
+    return). ``prefixes`` defaults to the live registry.
+    """
+    rows = tenant_prefixes() if prefixes is None else prefixes
+    if rows is None:
+        return []
+    return [r for r in results if document_owner(str(r.get("source") or ""), rows, home) == tenant]
+
+
+def caller_tenant(payload) -> str:
+    """The tenant a read agent retrieves for: the supervisor's verified `tenant`,
+    else the middleware's `auth.tenant`, else the home tenant."""
+    if isinstance(payload, dict):
+        t = payload.get("tenant")
+        if isinstance(t, str) and t:
+            return t
+        auth = payload.get("auth")
+        if isinstance(auth, dict) and isinstance(auth.get("tenant"), str) and auth["tenant"]:
+            return auth["tenant"]
+    return HOME_TENANT
+
+
+def invalidate_prefix_cache() -> None:
+    with _cache_lock:
+        _prefix_cache.clear()

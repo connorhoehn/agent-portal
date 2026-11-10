@@ -1,0 +1,113 @@
+"""One knowledge base holds every tenant's documents; a retrieve returns only the caller's.
+
+Ownership is the registry's: the longest registered knowledge-base prefix a
+document's key starts with names its tenant, and an unregistered key belongs to
+the home tenant (orgiq). Both read agents (search, advisor) filter every
+retrieve to the tenant they were invoked for, and a registry that cannot be
+read returns nothing rather than everything.
+
+Run:  cd agents/tests && python -m unittest test_kb_tenant_filter
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+import unittest
+from pathlib import Path
+from unittest import mock
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from agent_harness import load_agent  # noqa: E402
+from _shared import kb_resolver as kb  # noqa: E402
+
+PREFIXES = [("assessment/evidence/", "assessment"), ("orgiq/uploads/", "orgiq"), ("social/", "social")]
+BUCKET = "s3://orgiq-documents-111111111111-us-east-1/"
+
+
+def hit(key: str) -> dict:
+    return {"content": {"text": key}, "score": 0.5, "location": {"s3Location": {"uri": BUCKET + key}}}
+
+
+HITS = [hit("synth/internal/adr/adr-d-aurora.md"), hit("assessment/evidence/acme/report.md"),
+        hit("orgiq/uploads/2026-11-01/notes.md"), hit("social/threads/t1.md")]
+
+
+class Ownership(unittest.TestCase):
+    def test_longest_prefix_wins_and_unregistered_keys_are_home(self):
+        self.assertEqual(kb.document_owner(BUCKET + "assessment/evidence/a.md", PREFIXES), "assessment")
+        self.assertEqual(kb.document_owner(BUCKET + "synth/internal/x.md", PREFIXES), "orgiq")
+        nested = PREFIXES + [("social/private/", "orgiq")]
+        self.assertEqual(kb.document_owner(BUCKET + "social/private/x.md", nested), "orgiq")
+        self.assertEqual(kb.document_owner(BUCKET + "social/x.md", nested), "social")
+
+    def test_filter_keeps_only_the_callers_documents(self):
+        results = [{"source": BUCKET + k} for k in ("a.md", "assessment/evidence/b.md", "social/c.md")]
+        self.assertEqual([r["source"] for r in kb.filter_for_tenant(results, "assessment", prefixes=PREFIXES)],
+                         [BUCKET + "assessment/evidence/b.md"])
+        self.assertEqual([r["source"] for r in kb.filter_for_tenant(results, "orgiq", prefixes=PREFIXES)],
+                         [BUCKET + "a.md"])
+
+    def test_an_unreadable_registry_returns_nothing(self):
+        with mock.patch.object(kb, "tenant_prefixes", return_value=None):
+            self.assertEqual(kb.filter_for_tenant([{"source": BUCKET + "a.md"}], "orgiq"), [])
+
+    def test_no_registry_configured_means_everything_is_home(self):
+        with mock.patch.object(kb, "_CLUSTER_ARN", ""):
+            self.assertEqual(kb.tenant_prefixes(), [])
+
+    def test_caller_tenant(self):
+        self.assertEqual(kb.caller_tenant({"tenant": "assessment"}), "assessment")
+        self.assertEqual(kb.caller_tenant({"auth": {"tenant": "social"}}), "social")
+        self.assertEqual(kb.caller_tenant({}), "orgiq")
+
+
+class FakeBedrock:
+    def __init__(self, results):
+        self.results = results
+
+    def retrieve(self, **kwargs):
+        return {"retrievalResults": self.results}
+
+
+class ReadAgentsFilter(unittest.TestCase):
+    def _sources(self, agent_dir, tool, tenant):
+        mod = load_agent(agent_dir)
+        mod._bedrock = FakeBedrock(HITS)
+        token = mod._caller_tenant.set(tenant)
+        try:
+            with mock.patch.object(kb, "tenant_prefixes", return_value=PREFIXES):
+                out = json.loads(getattr(mod, tool)(query="anything"))
+        finally:
+            mod._caller_tenant.reset(token)
+        return [r["source"].replace(BUCKET, "") for r in out]
+
+    def test_both_read_agents_return_only_the_callers_documents(self):
+        for agent_dir, tool in (("search", "query_knowledge_base"), ("advisor", "retrieve_context")):
+            with self.subTest(agent=agent_dir):
+                self.assertEqual(self._sources(agent_dir, tool, "orgiq"),
+                                 ["synth/internal/adr/adr-d-aurora.md", "orgiq/uploads/2026-11-01/notes.md"])
+                self.assertEqual(self._sources(agent_dir, tool, "assessment"),
+                                 ["assessment/evidence/acme/report.md"])
+                self.assertEqual(self._sources(agent_dir, tool, "nobody"), [])
+
+
+class SupervisorThreadsTheTenant(unittest.TestCase):
+    def test_the_verified_tenant_rides_to_the_sub_agent(self):
+        from agui_harness import supervisor, FakeAgentCoreRuntime
+
+        sup = supervisor()
+        runtime = FakeAgentCoreRuntime()
+        sup._agentcore_runtime = runtime
+        token = sup._invoke_identity.set(("assessment", "u-1", "conv-1"))
+        try:
+            sup._invoke_sub_agent("arn:aws:bedrock-agentcore:us-east-1:1:runtime/orgiq_search", "q")
+        finally:
+            sup._invoke_identity.reset(token)
+        self.assertEqual(runtime.last_payload["tenant"], "assessment")
+
+
+if __name__ == "__main__":
+    unittest.main()

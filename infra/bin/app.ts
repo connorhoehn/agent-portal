@@ -259,9 +259,10 @@ const agentCoreRuntime = new AgentCoreRuntimeStack(app, stackId(environment, 'Ag
   env,
   prefix,
   ...(orgiqMemory && { memoryIdParameter: memoryIdParameterName(prefix, 'orgiq') }),
-  // Sub-agents no longer get a guardrail — enforcement lives only on the
-  // supervisor edge, which selects from the three role-keyed IDs below.
+  // Every runtime runs under the member guardrail; the supervisor also
+  // selects from the three role-keyed IDs below. All pin the published version.
   guardrailIdMember: cdk.Fn.importValue(`${prefix}-guardrail-id-member`),
+  guardrailVersion: cdk.Fn.importValue(`${prefix}-guardrail-version`),
   guardrailIdOrgLeader: cdk.Fn.importValue(`${prefix}-guardrail-id-org-leader`),
   guardrailIdHrAdmin: cdk.Fn.importValue(`${prefix}-guardrail-id-hr-admin`),
   auroraClusterArn: cdk.Fn.importValue(`${prefix}-aurora-cluster-arn`),

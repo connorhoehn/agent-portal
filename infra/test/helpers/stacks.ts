@@ -178,6 +178,8 @@ export function runtimeStack(
     harnessTraceSecret: string;
     assessmentRunCompleteSecret: string;
     auroraReadOnlySecretArn: string;
+    /** null leaves the published guardrail version unset. */
+    guardrailVersion: string | null;
   }> = {},
 ): RuntimeStackBuild {
   const app = newApp(context);
@@ -188,6 +190,7 @@ export function runtimeStack(
     guardrailIdMember: 'gr-member',
     guardrailIdOrgLeader: 'gr-orgleader',
     guardrailIdHrAdmin: 'gr-hradmin',
+    ...(overrides.guardrailVersion !== null && { guardrailVersion: overrides.guardrailVersion ?? '1' }),
     auroraClusterArn: CLUSTER_ARN,
     auroraCredentialsSecretArn: SECRET_ARN,
     auroraReadOnlySecretArn: overrides.auroraReadOnlySecretArn ?? READONLY_SECRET_ARN,

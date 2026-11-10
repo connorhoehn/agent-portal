@@ -51,6 +51,14 @@ export interface AgentCoreRuntimeStackProps extends cdk.StackProps {
   readonly guardrailIdMember?: string;
   readonly guardrailIdOrgLeader?: string;
   readonly guardrailIdHrAdmin?: string;
+  /**
+   * The published guardrail version every runtime pins (GuardrailsStack's
+   * `<prefix>-guardrail-version` export; all three role guardrails publish
+   * their V1 together). `--context guardrailVersion=<n>` overrides it. With
+   * runtimes deployed and a guardrail wired, synth refuses to run without one:
+   * DRAFT is the console's working copy, not a reviewed policy.
+   */
+  readonly guardrailVersion?: string;
   readonly auroraClusterArn: string;
   readonly auroraCredentialsSecretArn: string;
   /**
@@ -251,6 +259,14 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
     // runtime in ALL_AGENT_NAMES is created (which requires every one of
     // those images to exist).
     const deployRuntimes = this.node.tryGetContext('deployRuntimes') === 'true';
+    // Every runtime runs under a guardrail (sub-agents the member one, the
+    // supervisor its role-keyed set), pinned to a published version.
+    const guardrailVersion = (this.node.tryGetContext('guardrailVersion') as string | undefined) ?? props.guardrailVersion;
+    if (deployRuntimes && props.guardrailIdMember && !guardrailVersion) {
+      throw new Error('AgentCoreRuntime: runtimes would deploy with a guardrail but no published version. '
+        + 'Pass guardrailVersion (the GuardrailsStack `<prefix>-guardrail-version` export) or --context guardrailVersion=<n>; '
+        + 'DRAFT is not a reviewed policy.');
+    }
     const onlyAgentsCtx = this.node.tryGetContext('onlyAgents') as string | undefined;
     const onlyAgents = onlyAgentsCtx
       ? new Set(onlyAgentsCtx.split(',').map(s => s.trim()).filter(Boolean))
@@ -594,12 +610,14 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
           ...(systemPromptVersion && { SYSTEM_PROMPT_VERSION: systemPromptVersion }),
           PROMPT_REFRESH_S: '60',
           MEMORY_ID: memoryId,
-          // Sub-agents run without a guardrail — the supervisor enforces at the
-          // edge based on the caller's role. Supervisor still gets per-role IDs
-          // via GUARDRAIL_ID_MEMBER/ORG_LEADER/HR_ADMIN below.
-          // DRAFT means agents always see the latest portal edits without rebuild.
-          // Switch to a numbered version (e.g. "2") for audited rollouts.
-          GUARDRAIL_VERSION: 'DRAFT',
+          // Every runtime carries a guardrail. Sub-agents used to run without
+          // one on the theory that the supervisor enforces at the edge, but the
+          // middleware also invokes them directly and they read untrusted KB
+          // and graph text. GUARDRAIL_ID is the member (strictest) guardrail;
+          // the supervisor still picks its role-keyed IDs below. The version is
+          // a published one, never DRAFT (see `guardrailVersion`).
+          ...(props.guardrailIdMember && { GUARDRAIL_ID: props.guardrailIdMember }),
+          ...(guardrailVersion && { GUARDRAIL_VERSION: guardrailVersion }),
           MODEL_ID: props.modelId ?? primaryModelFor(modelRegistry, agentName, modelId),
           MODEL_REGISTRY_PARAM: modelRegistryParamName,
           ...(modelRegistryVersion && { MODEL_REGISTRY_VERSION: String(modelRegistryVersion) }),

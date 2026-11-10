@@ -45,6 +45,11 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 # Per-invocation trace buffer (see supervisor/main.py for the design note).
+# The tenant this invocation retrieves for (kb_resolver.caller_tenant): one
+# knowledge base holds every tenant's documents, so every retrieve is filtered
+# to the caller's (kb_resolver.filter_for_tenant).
+_caller_tenant: ContextVar[str] = ContextVar("advisor_caller_tenant", default="orgiq")
+
 _current_ctx: ContextVar[TraceContext | None] = ContextVar(
     "advisor_trace_ctx", default=None
 )
@@ -54,6 +59,7 @@ app = BedrockAgentCoreApp()
 REGION = os.environ.get("AWS_REGION", "us-east-1")
 from _shared.kb_resolver import resolve_kb_id as _resolve_kb_id
 from _shared.kb_resolver import vector_search_config as _vector_search_config
+from _shared.kb_resolver import caller_tenant as _caller_tenant_of, filter_for_tenant as _filter_for_tenant  # noqa: E402
 KB_ID: str = _resolve_kb_id("orgiq", "default") or ""
 AURORA_CLUSTER_ARN = os.environ.get("AURORA_CLUSTER_ARN", "")
 AURORA_SECRET_ARN = os.environ.get("AURORA_SECRET_ARN", "")
@@ -207,6 +213,7 @@ def retrieve_context(query: str, max_results: int = 5) -> str:
             }
             for r in response.get("retrievalResults", [])
         ]
+        results = _filter_for_tenant(results, _caller_tenant.get())
         record_retrieval_documents(r_span, results)
         return json.dumps(results, ensure_ascii=False)
 
@@ -261,6 +268,16 @@ _agent = RegistryAgent(
 )
 
 
+async def _for_tenant(tenant: str, events):
+    """Run a streamed turn with the caller's tenant set where retrieval reads it."""
+    token = _caller_tenant.set(tenant)
+    try:
+        async for event in events:
+            yield event
+    finally:
+        _caller_tenant.reset(token)
+
+
 @app.entrypoint
 async def handle(payload: dict) -> AsyncIterator | dict:
     if isinstance(payload, dict):
@@ -280,8 +297,9 @@ async def handle(payload: dict) -> AsyncIterator | dict:
     # sets "stream": true for user-facing invocations. A2A sub-agent calls
     # from the supervisor do not, and keep the synchronous dict path below,
     # which is what they expect to receive.
+    tenant = _caller_tenant_of(payload)
     if wants_stream(payload):
-        return stream_agui(
+        return _for_tenant(tenant, stream_agui(
             payload=payload,
             input_text=input_text,
             live_agent=_agent,
@@ -289,13 +307,14 @@ async def handle(payload: dict) -> AsyncIterator | dict:
             agent_name="Advisor",
             model_id=_agent.model_id,
             ctx_var=_current_ctx,
-        )
+        ))
 
     # ── Sprint 2 instrumentation ─────────────────────────────────────────────
     # Picks up ``parentInvocationId`` when the supervisor invoked us via A2A.
     ctx = TraceContext.from_request_payload(payload if isinstance(payload, dict) else {})
     token = _current_ctx.set(ctx)
     shared_token = set_active_ctx(ctx)
+    tenant_token = _caller_tenant.set(tenant)
 
     log.info(
         "Advisor handling (invocation=%s, parent=%s): %s",
@@ -316,6 +335,7 @@ async def handle(payload: dict) -> AsyncIterator | dict:
     finally:
         _current_ctx.reset(token)
         reset_active_ctx(shared_token)
+        _caller_tenant.reset(tenant_token)
     duration_ms = int((time.monotonic() - t0) * 1000)
 
     response_text = str(result)

@@ -321,6 +321,28 @@ describe('the read-only graph role is mandatory and an EXCLUSIVE credential swap
   });
 });
 
+describe('every runtime runs under a published guardrail', () => {
+  test('each runtime carries the member guardrail at the published version, never DRAFT', () => {
+    for (const agent of ALL_AGENTS) {
+      const env = envOf(phaseTwo, agent);
+      assert.equal(env.GUARDRAIL_ID, 'gr-member', `${agent} has no guardrail`);
+      assert.equal(env.GUARDRAIL_VERSION, '1', `${agent} guardrail version`);
+    }
+  });
+
+  test('a deploy with a guardrail but no published version refuses to synth', () => {
+    assert.throws(
+      () => runtimeStack({ deployRuntimes: 'true' }, { guardrailVersion: null }),
+      /no published version/,
+    );
+  });
+
+  test('--context guardrailVersion overrides the stack prop', () => {
+    const t = Template.fromStack(runtimeStack({ deployRuntimes: 'true', guardrailVersion: '3' }).runtime);
+    assert.equal(envOf(t, 'search').GUARDRAIL_VERSION, '3');
+  });
+});
+
 describe('guardrail enforcement lives on the supervisor edge only', () => {
   test('supervisor gets all three role-keyed guardrail IDs', () => {
     const env = envOf(phaseTwo, 'supervisor');
