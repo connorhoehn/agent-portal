@@ -20,6 +20,13 @@ runtime, secret_resolver.py).
 Without a secret the block is trusted only under ``INSECURE_DEV_MODE=true`` and
 outside production (local runs keep working); otherwise an unverified block
 counts as no block — the least-privileged caller.
+
+Every agent that reads the caller's tenant, role or sub reads it here and only
+here (the supervisor, the read agents' retrieval tenant in kb_resolver, the
+assessment agents' tenant floor in tenant_guard), never from the payload's top
+level or the caller's structured ``input`` (``request_fields``). The
+supervisor re-signs its verified caller for the sub-agents it invokes, as
+``orgiq-supervisor``.
 """
 
 from __future__ import annotations
@@ -30,10 +37,10 @@ import os
 from dataclasses import dataclass
 
 try:  # package import (agents._shared) or flat import (image: /app/_shared on sys.path)
-    from .callbacks import verify_service_request
+    from .callbacks import sign_service_request, verify_service_request
     from .secret_resolver import SecretResolutionError, resolve_secret
 except ImportError:  # pragma: no cover — flat layout
-    from callbacks import verify_service_request
+    from callbacks import sign_service_request, verify_service_request
     from secret_resolver import SecretResolutionError, resolve_secret
 
 log = logging.getLogger(__name__)
@@ -41,6 +48,9 @@ log = logging.getLogger(__name__)
 SECRET_ENV = "AGENT_INVOKE_SECRET"
 AUDIENCE = "orgiq-agent/invoke-auth"
 SERVICE_ID = "orgiq-middleware"
+#: The supervisor re-signs the verified caller for the sub-agents it invokes.
+SUPERVISOR_SERVICE_ID = "orgiq-supervisor"
+ALLOWED_SERVICES = (SERVICE_ID, SUPERVISOR_SERVICE_ID)
 METHOD = "POST"
 TARGET = "/invocations"
 #: A streamed run can sit in the runtime's queue before the handler reads it.
@@ -92,9 +102,66 @@ def verified_identity(payload: dict) -> InvokeIdentity | None:
     sig = payload.get("authSig")
     ok, why = verify_service_request(
         sig if isinstance(sig, str) else "", METHOD, TARGET, canonical_body(auth, conversation_id),
-        secret=secret, allowed_services=[SERVICE_ID], audience=AUDIENCE, ttl_sec=TTL_SEC,
+        secret=secret, allowed_services=list(ALLOWED_SERVICES), audience=AUDIENCE, ttl_sec=TTL_SEC,
     )
     if not ok:
         log.warning("invoke-auth: auth block refused (%s); treating the caller as least privileged", why)
         return None
     return InvokeIdentity(auth=auth, conversation_id=conversation_id, signed=True)
+
+
+def verified_auth(payload) -> dict | None:
+    """The verified ``auth`` block, or ``None``. The only place an agent reads
+    tenant, role or sub from: never the payload's top level, never ``input``."""
+    ident = verified_identity(payload) if isinstance(payload, dict) else None
+    return ident.auth if ident else None
+
+
+def sign_identity(auth: dict, conversation_id: str, *, service_id: str = SUPERVISOR_SERVICE_ID) -> str | None:
+    """``authSig`` for a block this agent hands down (the supervisor to a
+    sub-agent), or ``None`` when no secret is configured (dev mode: the
+    sub-agent then trusts the block only under its own dev flag)."""
+    try:
+        secret = resolve_secret(SECRET_ENV)
+    except SecretResolutionError as exc:
+        log.error("invoke-auth: %s", exc)
+        return None
+    if not secret:
+        return None
+    return sign_service_request(
+        METHOD, TARGET, canonical_body(auth, conversation_id),
+        secret=secret, service_id=service_id, audience=AUDIENCE,
+    )
+
+
+#: Top-level keys only the middleware's body builder (or the supervisor) sets:
+#: identity and the trace join. Mirrors INVOKE_IDENTITY_KEYS in
+#: middleware/src/lib/agent-invoke-auth.ts.
+IDENTITY_KEYS = frozenset({
+    "auth", "authSig", "tenant", "sub", "role", "actor",
+    "userId", "user_id", "sessionId", "session_id", "runtimeSessionId",
+    "runId", "run_id", "invocationId", "parentInvocationId", "parent_invocation_id",
+    "threadId", "thread_id",
+})
+
+
+def request_fields(payload) -> dict:
+    """The caller's structured fields (``mode``, ``document``, ...).
+
+    The middleware nests them under ``input`` (a JSON object, or the JSON text
+    of one); a payload without ``input`` (a direct or test invoke) uses its own
+    top level. Identity keys are removed either way, so a structured field can
+    never stand in for the verified caller.
+    """
+    if not isinstance(payload, dict):
+        return {}
+    raw = payload.get("input")
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (TypeError, ValueError):
+            raw = None
+        if not isinstance(raw, dict):
+            return {}
+    source = raw if isinstance(raw, dict) else payload
+    return {k: v for k, v in source.items() if k not in IDENTITY_KEYS and k != "input"}

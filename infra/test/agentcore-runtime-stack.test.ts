@@ -433,11 +433,14 @@ describe('machine-callback secrets', () => {
 
   test('each runtime gets the NAMES of the callback secrets it signs with, and may read only those', () => {
     const want: Record<string, string[]> = {
-      // AGENT_INVOKE_SECRET verifies the signed invoke auth block (agents/_shared/invoke_auth.py).
+      // AGENT_INVOKE_SECRET verifies the signed invoke auth block (agents/_shared/invoke_auth.py)
+      // wherever an agent reads the caller's tenant or role.
       supervisor: ['APPROVALS_REQUEST_SECRET', 'HARNESS_TRACE_SECRET', 'AGENT_INVOKE_SECRET'],
+      search: ['HARNESS_TRACE_SECRET', 'AGENT_INVOKE_SECRET'],
+      advisor: ['HARNESS_TRACE_SECRET', 'AGENT_INVOKE_SECRET'],
       ingestion: ['APPROVALS_REQUEST_SECRET', 'HARNESS_TRACE_SECRET'],
-      'assessment-scorer': ['HARNESS_TRACE_SECRET', 'ASSESSMENT_RUN_COMPLETE_SECRET'],
-      'assessment-drafter': ['HARNESS_TRACE_SECRET', 'ASSESSMENT_RUN_COMPLETE_SECRET'],
+      'assessment-scorer': ['HARNESS_TRACE_SECRET', 'ASSESSMENT_RUN_COMPLETE_SECRET', 'AGENT_INVOKE_SECRET'],
+      'assessment-drafter': ['HARNESS_TRACE_SECRET', 'ASSESSMENT_RUN_COMPLETE_SECRET', 'AGENT_INVOKE_SECRET'],
     };
     const slug: Record<string, string> = {
       APPROVALS_REQUEST_SECRET: 'approvals-request', HARNESS_TRACE_SECRET: 'harness-trace',

@@ -52,7 +52,7 @@ import type {
   BrowserSession,
 } from './types.js';
 
-import { signedAuthFields } from '../lib/agent-invoke-auth.js';
+import { buildInvokeBody } from '../lib/agent-invoke-auth.js';
 import { attempt, reached, unreachable, type Upstream } from '../lib/upstream.js';
 
 import { mockAgents } from '../mock/agent-statuses.js';
@@ -699,17 +699,8 @@ export const realAgentCore: AgentCoreProvider = {
       throw new Error(`Agent runtime not found for "${agentId}"`);
     }
 
-    const body = JSON.stringify({
-      ...payload.structuredInput,
-      message: payload.message,
-      prompt: payload.message,
-      input_text: payload.message,
-      ...(payload.sessionId ? { sessionId: payload.sessionId } : {}),
-      ...(payload.userId ? { userId: payload.userId } : {}),
-      // The caller identity, signed for the agent to verify (lib/agent-invoke-auth.ts).
-      ...signedAuthFields(payload),
-      ...(payload.history?.length ? { history: payload.history } : {}),
-    });
+    // Structured input nested under `input`, identity set last (lib/agent-invoke-auth.ts).
+    const body = JSON.stringify(buildInvokeBody(payload));
 
     const resp = await dataClient().send(
       new InvokeAgentRuntimeCommand({
@@ -754,19 +745,8 @@ export const realAgentCore: AgentCoreProvider = {
       throw new Error(`Agent runtime not found for "${agentId}"`);
     }
 
-    const body = JSON.stringify({
-      ...payload.structuredInput,
-      message: payload.message,
-      prompt: payload.message,
-      input_text: payload.message,
-      stream: true,
-      ...(payload.sessionId ? { sessionId: payload.sessionId } : {}),
-      ...(payload.runId ? { runId: payload.runId } : {}),
-      ...(payload.userId ? { userId: payload.userId } : {}),
-      // The caller identity, signed for the agent to verify (lib/agent-invoke-auth.ts).
-      ...signedAuthFields(payload),
-      ...(payload.history?.length ? { history: payload.history } : {}),
-    });
+    // Structured input nested under `input`, identity set last (lib/agent-invoke-auth.ts).
+    const body = JSON.stringify(buildInvokeBody(payload, { stream: true }));
 
     const resp = await dataClient().send(
       new InvokeAgentRuntimeCommand({

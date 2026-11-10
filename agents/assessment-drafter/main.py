@@ -27,6 +27,7 @@ from _shared.agui_stream import (  # noqa: E402
     wants_stream,
 )
 from _shared.tenant_guard import reject_wrong_mode_tenant  # noqa: E402
+from _shared.invoke_auth import request_fields  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
     attach_usage,
     TraceContext,
@@ -361,18 +362,21 @@ async def _handle_sync(payload: dict) -> dict:
         log.warning("assessment-drafter: %s", rejection["detail"])
         return rejection
 
-    error = _validate_payload(payload)
+    # The structured fields (mode, document, ...) arrive nested under `input`;
+    # identity is read only from the verified auth block (the guard above).
+    fields = request_fields(payload)
+    error = _validate_payload(fields)
     if error is not None:
         return {"agent": "assessment-drafter", "error": error}
 
-    mode = payload["mode"]
-    team_id = payload.get("team_id") or ""
+    mode = fields["mode"]
+    team_id = fields.get("team_id") or ""
 
     ctx = TraceContext.from_request_payload(payload)
     token = _current_ctx.set(ctx)
     shared_token = set_active_ctx(ctx)
 
-    input_text = (DOCUMENT_PROMPT + "\n" if mode in DOCUMENT_MODES else DECK_PROMPT + "\n" if mode in DECK_MODES else EVIDENCE_PROMPT + "\n" if mode in EVIDENCE_MODES else AGENT_PLAN_PROMPT + "\n" if mode in AGENT_PLAN_MODES else DECK_NARRATIVE_PROMPT + "\n" if mode in DECK_NARRATIVE_MODES else "") + json.dumps(payload, ensure_ascii=False, default=str)
+    input_text = (DOCUMENT_PROMPT + "\n" if mode in DOCUMENT_MODES else DECK_PROMPT + "\n" if mode in DECK_MODES else EVIDENCE_PROMPT + "\n" if mode in EVIDENCE_MODES else AGENT_PLAN_PROMPT + "\n" if mode in AGENT_PLAN_MODES else DECK_NARRATIVE_PROMPT + "\n" if mode in DECK_NARRATIVE_MODES else "") + json.dumps(fields, ensure_ascii=False, default=str)
 
     log.info(
         "AssessmentDrafter handling (invocation=%s, parent=%s, team=%s, mode=%s)",
@@ -400,20 +404,20 @@ async def _handle_sync(payload: dict) -> dict:
             )
             response_text = scrubbed
     elif mode in EVIDENCE_MODES:
-        response_text = validate_evidence_output(mode, response_text, payload)
+        response_text = validate_evidence_output(mode, response_text, fields)
     elif mode in DECK_NARRATIVE_MODES:
-        response_text = validate_deck_narrative_output(mode, response_text, payload)
+        response_text = validate_deck_narrative_output(mode, response_text, fields)
     elif mode in AGENT_PLAN_MODES:
-        response_text = validate_agent_plan(mode, response_text, payload)
+        response_text = validate_agent_plan(mode, response_text, fields)
     elif mode in DECK_MODES:
-        response_text = validate_deck_output(mode, response_text, payload)
+        response_text = validate_deck_output(mode, response_text, fields)
     elif mode in DOCUMENT_MODES:
         try:
-            response_text = validate_document_output(mode, response_text, payload["document"]["text"])
+            response_text = validate_document_output(mode, response_text, fields["document"]["text"])
         except (ValueError, TypeError, KeyError) as exc:
             return {"agent": "assessment-drafter", "error": f"Invalid document draft: {exc}"}
     else:  # context
-        document_text = (payload.get("document") or {}).get("text", "")
+        document_text = (fields.get("document") or {}).get("text", "")
         try:
             parsed = json.loads(response_text)
         except (json.JSONDecodeError, TypeError, ValueError) as exc:

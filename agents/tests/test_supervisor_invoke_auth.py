@@ -153,5 +153,25 @@ class PromptsAreNotLogged(SupervisorTestCase):
         self.assertIn("sha256=", text)
 
 
+class RequestFields(unittest.TestCase):
+    """Structured fields come from the nested `input`, never identity keys."""
+
+    def test_nested_input_is_read_and_identity_keys_are_dropped(self):
+        from _shared.invoke_auth import request_fields
+
+        payload = {"auth": {"tenant": "orgiq"}, "mode": "top-level-ignored",
+                   "input": {"mode": "story", "tenant": "assessment", "auth": {"tenant": "x"}, "authSig": "v1"}}
+        self.assertEqual(request_fields(payload), {"mode": "story"})
+        self.assertEqual(request_fields({"input": json.dumps({"mode": "story"})}), {"mode": "story"})
+        self.assertEqual(request_fields({"input": "not json"}), {})
+
+    def test_a_payload_without_input_uses_its_top_level_minus_identity(self):
+        from _shared.invoke_auth import request_fields
+
+        self.assertEqual(request_fields({"mode": "story", "tenant": "assessment", "auth": {}, "sessionId": "s"}),
+                         {"mode": "story"})
+        self.assertEqual(request_fields(None), {})
+
+
 if __name__ == "__main__":
     unittest.main()

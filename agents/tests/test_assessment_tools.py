@@ -77,6 +77,22 @@ def _stub_agent(module):
     return agent
 
 
+# The entrypoints read the tenant only from a verified auth block
+# (_shared/invoke_auth.py). These cases test the agents' behaviour, not the
+# signature, so they run on the explicit dev-mode trust path: no secret,
+# INSECURE_DEV_MODE=true, not production.
+_DEV_MODE = mock.patch.dict("os.environ", {"AGENT_INVOKE_SECRET": "", "AGENT_INVOKE_SECRET_ID": "",
+                                           "INSECURE_DEV_MODE": "true", "NODE_ENV": "", "APP_ENV": ""})
+
+
+def setUpModule():
+    _DEV_MODE.start()
+
+
+def tearDownModule():
+    _DEV_MODE.stop()
+
+
 class _EntrypointBase(unittest.TestCase):
     """Silences trace emission and gives each test a scripted model."""
 

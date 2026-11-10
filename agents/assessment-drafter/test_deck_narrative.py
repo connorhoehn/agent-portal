@@ -2,6 +2,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.tenant_guard import reject_wrong_mode_tenant
@@ -21,6 +22,22 @@ def verdict(mode, tenant):
     payload = {'mode': mode} if tenant is None else {'mode': mode, 'auth': {'tenant': tenant}}
     return reject_wrong_mode_tenant(
         payload, mode_tenants=dict(DECK_NARRATIVE_TENANTS), default_tenant='assessment', agent_id='a')
+
+
+# The entrypoints read the tenant only from a verified auth block
+# (_shared/invoke_auth.py). These cases test the agents' behaviour, not the
+# signature, so they run on the explicit dev-mode trust path: no secret,
+# INSECURE_DEV_MODE=true, not production.
+_DEV_MODE = mock.patch.dict("os.environ", {"AGENT_INVOKE_SECRET": "", "AGENT_INVOKE_SECRET_ID": "",
+                                           "INSECURE_DEV_MODE": "true", "NODE_ENV": "", "APP_ENV": ""})
+
+
+def setUpModule():
+    _DEV_MODE.start()
+
+
+def tearDownModule():
+    _DEV_MODE.stop()
 
 
 class ModeTenantTable(unittest.TestCase):

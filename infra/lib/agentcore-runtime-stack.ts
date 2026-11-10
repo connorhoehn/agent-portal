@@ -149,9 +149,12 @@ const CALLBACKS = [
   { env: 'APPROVALS_REQUEST_SECRET', slug: 'approvals-request', agents: ['supervisor', 'ingestion'] },
   { env: 'HARNESS_TRACE_SECRET', slug: 'harness-trace', agents: null },
   { env: 'ASSESSMENT_RUN_COMPLETE_SECRET', slug: 'assessment-run-complete', agents: ['assessment-scorer', 'assessment-drafter'] },
-  // Not a callback: the key the supervisor verifies the invoke `auth` block
-  // with (agents/_shared/invoke_auth.py). Same by-name delivery, read-only.
-  { env: 'AGENT_INVOKE_SECRET', slug: 'agent-invoke', agents: ['supervisor'] },
+  // Not a callback: the key every agent that reads the caller's identity
+  // verifies the invoke `auth` block with (agents/_shared/invoke_auth.py): the
+  // supervisor (guardrail, and it re-signs the caller for its sub-agents), the
+  // read agents (retrieval tenant) and the assessment agents (tenant floor).
+  // Same by-name delivery, read-only.
+  { env: 'AGENT_INVOKE_SECRET', slug: 'agent-invoke', agents: ['supervisor', 'search', 'advisor', 'assessment-scorer', 'assessment-drafter'] },
 ] as const;
 
 const READ_AGENTS = new Set<(typeof ALL_AGENT_NAMES)[number]>(['search', 'advisor']);

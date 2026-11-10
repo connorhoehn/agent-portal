@@ -20,7 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.approval_tool import request_approval  # noqa: E402
 from _shared.prompt_source import resolve_system_prompt
-from _shared.invoke_auth import verified_identity  # noqa: E402
+from _shared.invoke_auth import sign_identity, verified_identity  # noqa: E402
 from _shared.model_registry import invoke_with_fallback, resolve_model  # noqa: E402
 from _shared.agui_stream import with_usage  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
@@ -151,12 +151,7 @@ def _invoke_sub_agent(runtime_arn: str, input_text: str) -> str:
     Sub-agents not yet instrumented just ignore the extra field.
     """
     payload_obj: dict = {"input_text": input_text}
-    # The verified caller's tenant: the read agents filter retrieval to it
-    # (kb_resolver.filter_for_tenant). Absent when the caller is unverified,
-    # which the sub-agent reads as the home tenant.
     ident = _invoke_identity.get()
-    if ident and ident[0]:
-        payload_obj["tenant"] = ident[0]
     parent_ctx = _current_ctx.get()
     if parent_ctx is not None and parent_ctx.invocation_id:
         payload_obj["parentInvocationId"] = parent_ctx.invocation_id
@@ -167,6 +162,18 @@ def _invoke_sub_agent(runtime_arn: str, input_text: str) -> str:
             payload_obj["userId"] = parent_ctx.user_id
         if parent_ctx.session_id:
             payload_obj["sessionId"] = parent_ctx.session_id
+    # The verified caller, re-signed for the sub-agent: the read agents filter
+    # retrieval to its tenant (kb_resolver.caller_tenant reads only a verified
+    # block). Set last, after every other field. Absent when the caller is
+    # unverified, which the sub-agent reads as the least-privileged home tenant.
+    if ident and ident[0]:
+        handed: dict = {"tenant": ident[0]}
+        if ident[1]:
+            handed["sub"] = ident[1]
+        payload_obj["auth"] = handed
+        sig = sign_identity(handed, payload_obj.get("sessionId") or "")
+        if sig:
+            payload_obj["authSig"] = sig
     kwargs: dict = {
         "agentRuntimeArn": runtime_arn,
         "qualifier": "DEFAULT",

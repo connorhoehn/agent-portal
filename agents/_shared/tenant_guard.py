@@ -13,13 +13,23 @@ the supervisor's `_resolve_identity`, which defaults an unrecognized/missing
 tenant to `orgiq` rather than refusing — these two agents have no legitimate
 cross-tenant caller, so there is nothing to default to.
 
-Dependency-free (stdlib only) so it can be unit tested without
+The tenant comes ONLY from the verified auth block (_shared/invoke_auth.py):
+signed by the middleware, or trusted unsigned under INSECURE_DEV_MODE outside
+production. An unsigned block on a runtime that holds the secret is refused.
+The mode comes from the caller's structured fields (``request_fields``).
+
+Stdlib only (plus invoke_auth, also stdlib) so it can be unit tested without
 strands/bedrock_agentcore/boto3 installed.
 """
 
 from __future__ import annotations
 
 from typing import Any
+
+try:  # package import (agents._shared) or flat import
+    from .invoke_auth import request_fields, verified_auth
+except ImportError:  # pragma: no cover — flat layout
+    from invoke_auth import request_fields, verified_auth
 
 
 def reject_wrong_tenant(payload: Any, *, expected_tenant: str, agent_id: str) -> dict | None:
@@ -31,7 +41,7 @@ def reject_wrong_tenant(payload: Any, *, expected_tenant: str, agent_id: str) ->
         expected_tenant: The only tenant this agent serves, e.g. "assessment".
         agent_id: This agent's id, for the error detail (e.g. "orgiq-assessment-scorer").
     """
-    auth = payload.get("auth") if isinstance(payload, dict) else None
+    auth = verified_auth(payload) if isinstance(payload, dict) else None
     tenant = auth.get("tenant") if isinstance(auth, dict) else None
     if tenant != expected_tenant:
         return {
@@ -54,7 +64,7 @@ def reject_wrong_mode_tenant(
     stance as :func:`reject_wrong_tenant` — a missing ``auth`` block is
     refused, never defaulted.
     """
-    mode = payload.get("mode") if isinstance(payload, dict) else None
+    mode = request_fields(payload).get("mode")
     expected = mode_tenants.get(mode, default_tenant) if isinstance(mode, str) else default_tenant
     rejection = reject_wrong_tenant(payload, expected_tenant=expected, agent_id=agent_id)
     if rejection is not None and isinstance(mode, str):

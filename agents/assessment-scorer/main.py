@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.model_registry import RegistryAgent, invoke_with_fallback, resolve_model  # noqa: E402
 from _shared.agui_stream import stream_agui, wants_stream  # noqa: E402
 from _shared.tenant_guard import reject_wrong_tenant  # noqa: E402
+from _shared.invoke_auth import request_fields  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
     attach_usage,
     TraceContext,
@@ -285,12 +286,15 @@ async def handle(payload: dict) -> AsyncIterator | dict:
         log.warning("assessment-scorer: %s", rejection["detail"])
         return rejection
 
-    evidence = payload.get("evidence") or []
+    # Structured fields arrive nested under `input`; identity only from the
+    # verified auth block (the guard above).
+    fields = request_fields(payload)
+    evidence = fields.get("evidence") or []
     if not evidence:
         return {"agent": "assessment-scorer", "error": "missing evidence[]"}
 
-    team_id = payload.get("team_id") or ""
-    mode = payload.get("mode") or "transcript"
+    team_id = fields.get("team_id") or ""
+    mode = fields.get("mode") or "transcript"
 
     # Built before the trace context on purpose: the streaming branch below
     # returns a generator that establishes its OWN context, so setting one here
@@ -300,8 +304,8 @@ async def handle(payload: dict) -> AsyncIterator | dict:
             "team_id": team_id,
             "mode": mode,
             "evidence": evidence,
-            "relevant_dimension_ids": payload.get("relevant_dimension_ids"),
-            "rubric": payload.get("rubric") or {},
+            "relevant_dimension_ids": fields.get("relevant_dimension_ids"),
+            "rubric": fields.get("rubric") or {},
         },
         ensure_ascii=False,
         default=str,

@@ -21,6 +21,7 @@ import { parseAnswerScope, parseAnswerStance, scopeContextLine, type AnswerScope
 import type { LocalAnswer } from '../lib/local-answers/intents.js';
 import { rateLimit } from '../lib/rate-limit.js';
 import type { Session } from '../lib/session.js';
+import { INVOKE_BODY_KEYS } from '../lib/agent-invoke-auth.js';
 
 export const agentsRouter = Router();
 
@@ -733,7 +734,11 @@ async function streamLocalAnswer(stream: AgentStream, local: StreamedAnswer, ctx
   stream.runFinished();
 }
 
-const RESERVED_INVOKE_KEYS = new Set(['message', 'prompt', 'input_text', 'sessionId', 'userId', 'auth', 'history', 'presentationQuestion', 'presentationContext', 'scope', 'stance']);
+// Every key the invoke body builder owns (identity, trace join, prompt, history,
+// the nested `input`) plus the ones this route derives server-side. Caller
+// input never carries any of them: a `tenant` or `auth` posted here used to
+// reach the agents beside the signed block.
+const RESERVED_INVOKE_KEYS: ReadonlySet<string> = new Set([...INVOKE_BODY_KEYS, 'presentationQuestion', 'presentationContext', 'scope', 'stance']);
 const MAX_STRUCTURED_INPUT_BYTES = 64 * 1024;
 /**
  * The invoke body's optional `payload` as the runtime's structured input: a

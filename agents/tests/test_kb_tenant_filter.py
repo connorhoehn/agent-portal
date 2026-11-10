@@ -23,6 +23,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from agent_harness import load_agent  # noqa: E402
 from _shared import kb_resolver as kb  # noqa: E402
 
+SECRET = "invoke-secret-for-tests-0123456789"
+
+
+def signed(auth: dict, conversation: str, service_id: str | None = None) -> dict:
+    from _shared import invoke_auth
+    from _shared.callbacks import sign_service_request
+
+    sig = sign_service_request(
+        invoke_auth.METHOD, invoke_auth.TARGET, invoke_auth.canonical_body(auth, conversation),
+        secret=SECRET, service_id=service_id or invoke_auth.SERVICE_ID, audience=invoke_auth.AUDIENCE,
+    )
+    return {"input_text": "q", "auth": auth, "sessionId": conversation, "authSig": sig}
+
+
 PREFIXES = [("assessment/evidence/", "assessment"), ("orgiq/uploads/", "orgiq"), ("social/", "social")]
 BUCKET = "s3://orgiq-documents-111111111111-us-east-1/"
 
@@ -58,10 +72,28 @@ class Ownership(unittest.TestCase):
         with mock.patch.object(kb, "_CLUSTER_ARN", ""):
             self.assertEqual(kb.tenant_prefixes(), [])
 
-    def test_caller_tenant(self):
-        self.assertEqual(kb.caller_tenant({"tenant": "assessment"}), "assessment")
-        self.assertEqual(kb.caller_tenant({"auth": {"tenant": "social"}}), "social")
-        self.assertEqual(kb.caller_tenant({}), "orgiq")
+    def test_caller_tenant_in_dev_mode_reads_only_the_auth_block(self):
+        env = {"AGENT_INVOKE_SECRET": "", "AGENT_INVOKE_SECRET_ID": "", "INSECURE_DEV_MODE": "true",
+               "NODE_ENV": "", "APP_ENV": ""}
+        with mock.patch.dict("os.environ", env):
+            self.assertEqual(kb.caller_tenant({"auth": {"tenant": "social"}}), "social")
+            self.assertEqual(kb.caller_tenant({"tenant": "assessment"}), "orgiq")
+            self.assertEqual(kb.caller_tenant({"auth": {"tenant": "orgiq"}, "tenant": "assessment"}), "orgiq")
+            self.assertEqual(kb.caller_tenant({}), "orgiq")
+
+    def test_caller_tenant_ignores_an_unsigned_tenant(self):
+        """A member's payload naming another tenant, at the top level, under
+        `input` or in an unsigned block, never changes the retrieval scope."""
+        with mock.patch.dict("os.environ", {"AGENT_INVOKE_SECRET": SECRET, "INSECURE_DEV_MODE": ""}):
+            member = signed({"sub": "u-1", "role": "member", "tenant": "orgiq"}, "conv-1")
+            self.assertEqual(kb.caller_tenant(member), "orgiq")
+            self.assertEqual(kb.caller_tenant({**member, "tenant": "assessment",
+                                               "input": {"tenant": "assessment"}}), "orgiq")
+            self.assertEqual(kb.caller_tenant({"auth": {"tenant": "assessment"}}), "orgiq")
+            self.assertEqual(kb.caller_tenant({"tenant": "assessment"}), "orgiq")
+            forged = {**member, "auth": {**member["auth"], "tenant": "assessment"}}
+            self.assertEqual(kb.caller_tenant(forged), "orgiq")
+            self.assertEqual(kb.caller_tenant(signed({"sub": "u-2", "tenant": "assessment"}, "conv-2")), "assessment")
 
 
 class FakeBedrock:
@@ -95,18 +127,24 @@ class ReadAgentsFilter(unittest.TestCase):
 
 
 class SupervisorThreadsTheTenant(unittest.TestCase):
-    def test_the_verified_tenant_rides_to_the_sub_agent(self):
+    def test_the_verified_tenant_rides_to_the_sub_agent_signed(self):
         from agui_harness import supervisor, FakeAgentCoreRuntime
 
         sup = supervisor()
         runtime = FakeAgentCoreRuntime()
         sup._agentcore_runtime = runtime
-        token = sup._invoke_identity.set(("assessment", "u-1", "conv-1"))
-        try:
-            sup._invoke_sub_agent("arn:aws:bedrock-agentcore:us-east-1:1:runtime/orgiq_search", "q")
-        finally:
-            sup._invoke_identity.reset(token)
-        self.assertEqual(runtime.last_payload["tenant"], "assessment")
+        with mock.patch.dict("os.environ", {"AGENT_INVOKE_SECRET": SECRET, "INSECURE_DEV_MODE": ""}):
+            token = sup._invoke_identity.set(("assessment", "u-1", "conv-1"))
+            try:
+                sup._invoke_sub_agent("arn:aws:bedrock-agentcore:us-east-1:1:runtime/orgiq_search", "q")
+            finally:
+                sup._invoke_identity.reset(token)
+            sent = runtime.last_payload
+            self.assertNotIn("tenant", sent)
+            self.assertEqual(sent["auth"], {"tenant": "assessment", "sub": "u-1"})
+            self.assertTrue(sent["authSig"].startswith("v1.orgiq-supervisor."))
+            # The sub-agent's own reading of that payload.
+            self.assertEqual(kb.caller_tenant(sent), "assessment")
 
 
 if __name__ == "__main__":

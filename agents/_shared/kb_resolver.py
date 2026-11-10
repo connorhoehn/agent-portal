@@ -309,15 +309,19 @@ def filter_for_tenant(results: list, tenant: str, *, prefixes=None, home: str = 
 
 
 def caller_tenant(payload) -> str:
-    """The tenant a read agent retrieves for: the supervisor's verified `tenant`,
-    else the middleware's `auth.tenant`, else the home tenant."""
-    if isinstance(payload, dict):
-        t = payload.get("tenant")
-        if isinstance(t, str) and t:
-            return t
-        auth = payload.get("auth")
-        if isinstance(auth, dict) and isinstance(auth.get("tenant"), str) and auth["tenant"]:
-            return auth["tenant"]
+    """The tenant a read agent retrieves for: the VERIFIED auth block's
+    (_shared/invoke_auth.py: signed by the middleware, or by the supervisor
+    handing its verified caller down; trusted unsigned only in dev mode).
+    Never the payload's top level or its ``input``: a caller-supplied
+    ``tenant`` there used to beat the session's. An unverified payload is the
+    least-privileged home-tenant reader, as in the supervisor."""
+    try:
+        from _shared.invoke_auth import verified_auth
+    except ImportError:  # pragma: no cover — flat layout
+        from invoke_auth import verified_auth
+    auth = verified_auth(payload)
+    if isinstance(auth, dict) and isinstance(auth.get("tenant"), str) and auth["tenant"]:
+        return auth["tenant"]
     return HOME_TENANT
 
 

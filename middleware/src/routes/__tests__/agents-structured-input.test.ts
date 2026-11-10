@@ -12,6 +12,13 @@ describe('agentStructuredInput', () => {
   it('drops the keys the route owns', () => {
     expect(agentStructuredInput({ mode: 'x', message: 'no', sessionId: 'no', auth: {}, history: [], userId: 'no' })).toEqual({ mode: 'x' });
   });
+  it('drops every identity key the agents read, so a caller cannot name a tenant, a role or a signature', () => {
+    expect(agentStructuredInput({
+      mode: 'x', tenant: 'assessment', authSig: 'v1.x', sub: 'u-2', role: 'admin', actor: 'a', session_id: 's',
+      runId: 'r', run_id: 'r', invocationId: 'i', parentInvocationId: 'p', user_id: 'u', runtimeSessionId: 'rs',
+      input: { tenant: 'assessment' }, stream: true, prompt: 'p', input_text: 'p',
+    })).toEqual({ mode: 'x' });
+  });
   it('ignores anything that is not a plain object, and an empty one', () => {
     expect(agentStructuredInput('str')).toBeUndefined();
     expect(agentStructuredInput(['a'])).toBeUndefined();
