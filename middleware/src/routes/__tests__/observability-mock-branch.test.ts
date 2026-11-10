@@ -49,6 +49,12 @@ const AT = '2026-09-08T15:20:00.000Z';
 function buildApp() {
   const app = express();
   app.use(express.json());
+  // A fleet-wide role: the invocation routes scope a member to their own
+  // traces (invocations-scope.test.ts); this file reads the whole corpus.
+  app.use((req, _res, next) => {
+    (req as unknown as { session: unknown }).session = { sub: 'u-operator', role: 'org-leader', tenant: 'orgiq', grants: {}, iat: 0 };
+    next();
+  });
   app.use('/traffic', trafficRouter);
   app.use('/drift', driftRouter);
   app.use('/tools', toolCallsRouter);

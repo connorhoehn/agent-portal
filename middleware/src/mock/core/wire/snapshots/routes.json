@@ -2778,17 +2778,17 @@
     {
       "method": "GET",
       "path": "/api/observability/invocations/:invocationId",
-      "source": "src/routes/invocations.ts:371"
+      "source": "src/routes/invocations.ts:429"
     },
     {
       "method": "POST",
       "path": "/api/observability/invocations/:invocationId/replay",
-      "source": "src/routes/invocations.ts:755"
+      "source": "src/routes/invocations.ts:819"
     },
     {
       "method": "GET",
       "path": "/api/observability/invocations/search",
-      "source": "src/routes/invocations.ts:127"
+      "source": "src/routes/invocations.ts:176"
     },
     {
       "method": "GET",

@@ -656,7 +656,7 @@ export function mockInvocationToolCalls(invocationId: string, scenario?: Scenari
 export function mockInvocationSummaryRow(invocationId: string, scenario?: ScenarioName): Row[] {
   const r = traceRows(scenario).find((x) => x.invocation_id === invocationId);
   if (!r) return [];
-  return [{ invocation_id: r.invocation_id, agent_id: r.agent_id, agent_name: r.agent_name, ts: r.ts }];
+  return [{ invocation_id: r.invocation_id, agent_id: r.agent_id, agent_name: r.agent_name, ts: r.ts, user_id: r.user_id }];
 }
 
 /** The children lookup (`WHERE parent_invocation_id IN (...)`), oldest first. */
@@ -672,6 +672,7 @@ export function mockInvocationChildren(parentIds: readonly string[], scenario?: 
       judge_score: r.judge_score,
       duration_ms: r.duration_ms,
       parent_invocation_id: r.parent_invocation_id,
+      user_id: r.user_id,
       ts: r.ts,
     }));
 }

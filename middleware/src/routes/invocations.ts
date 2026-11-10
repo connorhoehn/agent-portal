@@ -21,8 +21,9 @@
 // search view is the live-traffic surface, but we do NOT filter them in the
 // detail view — clicking into a test row should still work.
 
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { requireAction } from '../lib/authz.js';
+import { FLEET_WIDE_ROLES } from '../lib/devbox-visibility.js';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import {
   BedrockAgentCoreClient,
@@ -66,6 +67,54 @@ function degraded<T extends object>(body: T, err: unknown): T & { degraded: true
 export const invocationsRouter = Router();
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Whose traces this caller may read.
+ *
+ * invocation_traces holds every user's prompt and response snippets, in every
+ * tenant, and the RLS script exempts it on purpose — so the scope is enforced
+ * here. `ViewObservability` (every orgiq member holds it) answers "may you open
+ * the observability pages", not "may you read everyone's prompts". A fleet-wide
+ * role (lib/devbox-visibility.ts FLEET_WIDE_ROLES: org-leader, hr-admin, admin
+ * — the same roles that see every computer) reads the whole table; everyone
+ * else reads only their own traces in their own tenant, whatever the query
+ * string says. `null` means fleet-wide.
+ */
+interface TraceScope { tenant: string; userId: string }
+
+function traceScope(req: Request, res: Response): TraceScope | null | 'refused' {
+  const session = req.session;
+  if (!session?.sub) {
+    res.status(401).json({ error: 'session required' });
+    return 'refused';
+  }
+  if (session.role && FLEET_WIDE_ROLES.includes(session.role)) return null;
+  return { tenant: String(session.tenant), userId: session.sub };
+}
+
+/** SQL clause + parameters for a scope, or nothing for a fleet-wide caller. */
+function scopeSql(scope: TraceScope | null): { clause: string; params: SqlParameter[] } {
+  if (!scope) return { clause: '', params: [] };
+  return {
+    clause: ' AND user_id = :scope_user AND tenant = :scope_tenant',
+    params: [
+      { name: 'scope_user', value: { stringValue: scope.userId } },
+      { name: 'scope_tenant', value: { stringValue: scope.tenant } },
+    ],
+  };
+}
+
+/**
+ * The same rule over a returned row — the offline corpus is answered by
+ * functions that do not read the SQL. It has no tenant column (it is orgiq's
+ * own corpus), so an absent tenant checks the user alone.
+ */
+function rowInScope(scope: TraceScope | null, row: Record<string, unknown> | undefined): boolean {
+  if (!scope || !row) return true;
+  if (row['user_id'] !== scope.userId) return false;
+  const tenant = row['tenant'];
+  return tenant === undefined || tenant === scope.tenant;
+}
 
 function clampLimit(raw: string | undefined, def = 50, max = 500): number {
   const n = parseInt(raw ?? String(def), 10);
@@ -146,9 +195,13 @@ invocationsRouter.get('/search', asyncHandler(async (req, res) => {
   const promptVersion = typeof req.query['promptVersion'] === 'string'
     ? req.query['promptVersion'].trim()
     : '';
-  const userId = typeof req.query['userId'] === 'string'
-    ? req.query['userId'].trim()
-    : '';
+  const scope = traceScope(req, res);
+  if (scope === 'refused') return;
+  // `?userId=` is a filter only a fleet-wide role may choose; everyone else is
+  // pinned to their own id and their own tenant whatever the query says.
+  const userId = scope
+    ? scope.userId
+    : typeof req.query['userId'] === 'string' ? req.query['userId'].trim() : '';
   const limit = clampLimit(req.query['limit'] as string | undefined, 50, 500);
 
   // Build WHERE clauses incrementally. We never inline user-supplied strings;
@@ -192,6 +245,10 @@ invocationsRouter.get('/search', asyncHandler(async (req, res) => {
     whereClauses.push(`t.user_id = :uid`);
     params.push({ name: 'uid', value: { stringValue: userId } });
   }
+  if (scope) {
+    whereClauses.push(`t.tenant = :scope_tenant`);
+    params.push({ name: 'scope_tenant', value: { stringValue: scope.tenant } });
+  }
 
   // Mode filter is a soft join — invocation_traces doesn't carry mode itself,
   // but test_results -> test_runs does. We use a sub-EXISTS so the join can't
@@ -234,6 +291,7 @@ invocationsRouter.get('/search', asyncHandler(async (req, res) => {
   try {
     const rows = config.mock.aurora
       ? mockInvocationSearch({ q, agentId, minScore, maxScore, since, until, promptVersion, userId, limit })
+        .filter((r) => rowInScope(scope, r))
       : await exec(sql, params);
     const invocations: InvocationSearchRow[] = rows.map((r) => ({
       invocationId: String(r['invocation_id'] ?? ''),
@@ -371,6 +429,9 @@ interface ParentSummary {
 invocationsRouter.get('/:invocationId', asyncHandler(async (req, res) => {
   const id = String(req.params['invocationId'] ?? '').trim();
   const useMock = config.mock.aurora;
+  const scope = traceScope(req, res);
+  if (scope === 'refused') return;
+  const scoped = scopeSql(scope);
   if (!useMock && !isUuid(id)) {
     res.status(404).json({ error: 'invocation not found' });
     return;
@@ -395,10 +456,12 @@ invocationsRouter.get('/:invocationId', asyncHandler(async (req, res) => {
               human_label, human_note,
               ts::text                             AS ts
          FROM observability.invocation_traces
-        WHERE invocation_id = :id::uuid`,
-      [{ name: 'id', value: { stringValue: id } }],
+        WHERE invocation_id = :id::uuid${scoped.clause}`,
+      [{ name: 'id', value: { stringValue: id } }, ...scoped.params],
     );
-    if (rows.length === 0) {
+    // Out of scope answers exactly like a missing id: the caller learns
+    // nothing about a trace that is not theirs, not even that it exists.
+    if (rows.length === 0 || !rowInScope(scope, rows[0])) {
       res.status(404).json({ error: 'invocation not found' });
       return;
     }
@@ -487,10 +550,10 @@ invocationsRouter.get('/:invocationId', asyncHandler(async (req, res) => {
           `SELECT invocation_id::text AS invocation_id,
                   agent_id, agent_name, ts::text AS ts
              FROM observability.invocation_traces
-            WHERE invocation_id = :pid::uuid`,
-          [{ name: 'pid', value: { stringValue: invocation.parentInvocationId } }],
+            WHERE invocation_id = :pid::uuid${scoped.clause}`,
+          [{ name: 'pid', value: { stringValue: invocation.parentInvocationId } }, ...scoped.params],
         );
-      if (rows.length > 0) {
+      if (rows.length > 0 && rowInScope(scope, rows[0])) {
         const r = rows[0]!;
         parent = {
           invocationId: String(r['invocation_id'] ?? ''),
@@ -529,11 +592,11 @@ invocationsRouter.get('/:invocationId', asyncHandler(async (req, res) => {
               judge_score, duration_ms,
               ts::text AS ts
          FROM observability.invocation_traces
-        WHERE parent_invocation_id = :id::uuid
+        WHERE parent_invocation_id = :id::uuid${scoped.clause}
         ORDER BY ts ASC`,
-      [{ name: 'id', value: { stringValue: id } }],
+      [{ name: 'id', value: { stringValue: id } }, ...scoped.params],
     );
-    children = directRows.map<ChildSummary>((r) => ({
+    children = directRows.filter((r) => rowInScope(scope, r)).map<ChildSummary>((r) => ({
       invocationId: String(r['invocation_id'] ?? ''),
       agentId: String(r['agent_id'] ?? ''),
       agentName: String(r['agent_name'] ?? ''),
@@ -560,12 +623,13 @@ invocationsRouter.get('/:invocationId', asyncHandler(async (req, res) => {
                 parent_invocation_id::text AS parent_invocation_id,
                 ts::text AS ts
            FROM observability.invocation_traces
-          WHERE parent_invocation_id IN (${placeholders})
+          WHERE parent_invocation_id IN (${placeholders})${scoped.clause}
           ORDER BY ts ASC`,
-        params,
+        [...params, ...scoped.params],
       );
       const byParent = new Map<string, ChildSummary[]>();
       for (const r of grandRows) {
+        if (!rowInScope(scope, r)) continue;
         const pid = r['parent_invocation_id'] == null
           ? ''
           : String(r['parent_invocation_id']);
@@ -755,6 +819,9 @@ function parseAgentResponse(text: string): string {
 invocationsRouter.post('/:invocationId/replay', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const id = String(req.params['invocationId'] ?? '').trim();
   const useMock = config.mock.aurora;
+  const scope = traceScope(req, res);
+  if (scope === 'refused') return;
+  const scoped = scopeSql(scope);
   // The id shape check is the live path's, for the same reason it is on
   // `GET /:invocationId`: `:id::uuid` requires a UUID, while the offline
   // corpus is keyed on the invocation tail's ids (`mock-inv-33`). An id
@@ -791,10 +858,10 @@ invocationsRouter.post('/:invocationId/replay', requireAction('ManageCanary'), a
               user_id,
               session_id
          FROM observability.invocation_traces
-        WHERE invocation_id = :id::uuid`,
-      [{ name: 'id', value: { stringValue: id } }],
+        WHERE invocation_id = :id::uuid${scoped.clause}`,
+      [{ name: 'id', value: { stringValue: id } }, ...scoped.params],
     );
-    if (rows.length === 0) {
+    if (rows.length === 0 || !rowInScope(scope, rows[0])) {
       res.status(404).json({ error: 'invocation_not_found', invocationId: id });
       return;
     }

@@ -40,6 +40,12 @@ const execMock = exec as unknown as jest.Mock;
 function buildApp() {
   const app = express();
   app.use(express.json());
+  // A fleet-wide role: this file is about degraded answers, not trace scope
+  // (invocations-scope.test.ts owns who may read which trace).
+  app.use((req, _res, next) => {
+    (req as unknown as { session: unknown }).session = { sub: 'u-operator', role: 'org-leader', tenant: 'orgiq', grants: {}, iat: 0 };
+    next();
+  });
   app.use('/api/observability/invocations', invocationsRouter);
   app.use(errorHandler);
   return app;
