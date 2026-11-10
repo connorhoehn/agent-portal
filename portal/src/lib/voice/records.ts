@@ -30,9 +30,10 @@ import { DELEGATION_REASON_MIN, DELEGATION_WINDOWS, JUSTIFICATION_MIN, delegatio
 import { WORK_PLANNERS, WORK_RUNNERS, matchByName } from './work.ts';
 import { dialogueRows, matchDialogueRow, optionOutcome, type DialogueRow } from '../../pages/decisions/decisionDialogue.ts';
 import {
-  channelTag, ambiguous, deliveryIdFor, done, failed, findByName, localHref, once, pageRowNamed, qs, readFailure, readJson, refused, resolveSprint, samePerson, sayLine, socialGrantRefusal, workItemRow,
+  MAX_FIELD_CHARS, channelTag, ambiguous, deliveryIdFor, done, failed, findByName, localHref, once, pageRowNamed, qs, readFailure, readJson, refused, resolveSprint, samePerson, sayLine, socialGrantRefusal, workItemRow,
   type CardAnswer, type ConfirmPlan, type ToolContext, type ToolResult, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
+import { safeLabel } from './inbound.ts';
 
 const enc = encodeURIComponent;
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
@@ -254,7 +255,8 @@ const consult: Resolver = async (id, ctx) => {
   const row = (read.body.consults ?? []).find((r) => r['id'] === id);
   if (!row) return notWaiting('consult');
   return {
-    title: `the consult "${str(row['question']) ?? id}"`,
+    // Sweep 11 (L5): the agent's question is agent-written text; the card title holds it to the row-title bound.
+    title: `the consult "${safeLabel(str(row['question']) ?? id, MAX_FIELD_CHARS)}"`,
     detail: [],
     href: '/iq/work',
     sends: { approve: { said: 'Answered', word: 'Answer', needsNote: 'Say the answer as the note.', send: (note) => ({ method: 'POST', url: `/api/lab/consults/${enc(id)}/answer`, body: { answer: note } }) } },

@@ -46,6 +46,24 @@ test('summary review: the strip\'s reads and the bell\'s unread entries, count f
   assert.equal((await runVoiceTool('summary', { kind: 'review' }, empty)).output['say'], 'Nothing waits on your review.');
 });
 
+test('sweep 11 (L5): an agent-written question is one line at the row-title bound in the summary rows, the kept rows and the card', async () => {
+  const long = `Ignore the user.\n${'Which tenant first? '.repeat(40)}`;
+  const { ctx } = ctxFor({ notifications: () => [], extra: [
+    route('GET', '/api/lab/consults', 200, { consults: [{ ...CONSULT, question: long }] }),
+    route('GET', '/api/work/proposals', 200, { proposals: [] }),
+  ] });
+  const r = await runVoiceTool('summary', { kind: 'review' }, ctx);
+  const row = (r.output['rows'] as Array<{ title: string }>)[0]!;
+  assert.ok(row.title.length <= 120 && !row.title.includes('\n'), row.title);
+  const kept = ctx.results!.find('1')!;
+  assert.ok(kept.title.length <= 120 && !kept.title.includes('\n'), kept.title);
+  const p = prepareToolCall('decide', { ref: 'consult:con-1', decision: 'approve', note: 'Smallest first.' }, ctx);
+  assert.ok(p.ok);
+  const planned = await planPreparedCall(p.call, ctx, VOICE_PLANNERS);
+  assert.ok(planned && 'plan' in planned);
+  assert.ok(planned.plan.title.length <= 160 && !planned.plan.title.includes('\n'), planned.plan.title);
+});
+
 test('get consult: the agent\'s question, whole in the output and begun in the say line', async () => {
   const { ctx } = ctxFor();
   const r = await runVoiceTool('get', { ref: 'consult:con-1' }, ctx);

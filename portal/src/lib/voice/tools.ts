@@ -1847,10 +1847,13 @@ async function reviewSummary(ctx: ToolContext): Promise<ToolResult> {
   const unread = (ctx.notifications?.() ?? []).filter((n) => n && !n.read && typeof n.id === 'string').map((n) => notificationItem(n, ctx.now().getTime()));
   for (const n of unread) ctx.inbox?.add(n);
   type Row = { ref: string; title: string; subtitle: string; href: string };
+  // Sweep 11 (L5): a question, a job title and a rationale are written by agents (which read repository text), so a
+  // row title is one line at the row-title bound like every other reader's, here and in the rows this read keeps.
+  const rowTitle = (v: unknown): string => safeLabel(String(v), MAX_FIELD_CHARS);
   const rows: Row[] = [
-    ...q.map((r) => ({ ref: `consult:${String(r['id'])}`, title: String(r['question']), subtitle: 'an agent\'s question', href: '/iq/work' })),
-    ...j.map((r) => ({ ref: `job:${String(r['id'])}`, title: String(r['title'] ?? r['id']), subtitle: 'a job awaiting review', href: `/iq/work/${encodeURIComponent(String(r['id']))}` })),
-    ...pr.map((r) => ({ ref: `proposal:${String(r['id'])}`, title: String(r['rationale'] ?? r['kind'] ?? 'a proposal'), subtitle: 'a proposal', href: '/iq/work/changes' })),
+    ...q.map((r) => ({ ref: `consult:${String(r['id'])}`, title: rowTitle(r['question']), subtitle: 'an agent\'s question', href: '/iq/work' })),
+    ...j.map((r) => ({ ref: `job:${String(r['id'])}`, title: rowTitle(r['title'] ?? r['id']), subtitle: 'a job awaiting review', href: `/iq/work/${encodeURIComponent(String(r['id']))}` })),
+    ...pr.map((r) => ({ ref: `proposal:${String(r['id'])}`, title: rowTitle(r['rationale'] ?? r['kind'] ?? 'a proposal'), subtitle: 'a proposal', href: '/iq/work/changes' })),
     ...unread.map((n) => ({ ref: inboundRef(n), title: n.text, subtitle: n.sender ? `a notification from ${n.sender}` : 'a notification', href: '' })),
   ];
   const top = rows.slice(0, MAX_ROWS);
