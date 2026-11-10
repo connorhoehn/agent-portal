@@ -23,7 +23,11 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** Entries removed-docs.txt may hold (its count on 10 November 2026). */
+/**
+ * Entries removed-docs.txt may hold (its count on 10 November 2026). It counts entries, not lines: blank lines and
+ * `#` comments are dropped before counting (REMOVED_LIST below), so the file's 105 lines (one header comment and 104
+ * paths) are at the ceiling, not over it.
+ */
 const MAX_REMOVED = 104;
 
 function ceilingError(size, max = MAX_REMOVED) {
