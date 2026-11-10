@@ -206,6 +206,8 @@ export interface ToolContext {
   switchable?: readonly string[] | null;
   /** The session's own user id (`sub`): what "the caller's own" is checked against (a computer to stop). */
   userId?: string | null;
+  /** The session's display name: "me" as an owner or an assignee is the row that names it (coverage, 10 November). */
+  userName?: string | null;
   /** The voice session the call belongs to (the controller fills it): per-session memory, such as the shell tabs opened (G30). */
   sessionId?: string | null;
   /** The dock's action ledger (`once`), held for the dock's lifetime; absent = a module-wide one. */
@@ -293,6 +295,64 @@ export function pageRowNamed(ctx: ToolContext, said: string): { row: PageRow } |
 
 /** The kept-row shape of a page row, for open and get by position afterwards. */
 const keptOf = (r: PageRow): KeptRow => ({ ref: r.ref, title: r.title, href: r.href && localHref(r.href) ? r.href : '' });
+
+// ── coverage (10 November): the initiative in view, its sprints, "me" ──────────
+
+/** The initiative whose page is in view (its record), or null. */
+export function pageInitiative(ctx: Pick<ToolContext, 'page'>): { id: string; title: string } | null {
+  const record = ctx.page?.()?.record ?? null;
+  const id = record ? /^initiative:(.+)$/.exec(record.ref)?.[1] : undefined;
+  return record && id ? { id, title: record.title } : null;
+}
+
+const SELF = /^(me|myself|mine|my|i|yourself)$/i;
+
+/** Whether a person's name is the one the user said: "me" is the session's own name, else every word starts a part of the name. */
+export function samePerson(name: string | null | undefined, said: string, ctx: Pick<ToolContext, 'userName'>): boolean {
+  if (!name) return false;
+  const s = said.trim();
+  if (SELF.test(s)) return !!ctx.userName && name.trim().toLowerCase() === ctx.userName.trim().toLowerCase();
+  const words = s.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  const parts = name.toLowerCase().split(/[^\p{L}\p{N}]+/u);
+  return words.length > 0 && words.every((w) => parts.some((part) => part.startsWith(w)));
+}
+
+export interface SprintRef { id: string; name: string; status: string; startsOn?: string; endsOn?: string }
+
+/**
+ * The sprint the user named on one initiative, through the sprints list its page reads (GET /api/sprints?initiative=):
+ * "this" (or current) is the active one, "last" the most recent finished one, "next" the soonest planned one, else by name.
+ */
+export async function resolveSprint(ctx: ToolContext, initiativeId: string, said: string): Promise<{ sprint: SprintRef } | { result: ToolResult }> {
+  const read = await readJson<{ sprints?: Rec[] }>(ctx, `/api/sprints?${qs({ initiative: initiativeId })}`);
+  if (!read.ok) return { result: readFailure('the sprints', read.status) };
+  const all: SprintRef[] = (read.body.sprints ?? []).flatMap((r) => (typeof r['id'] === 'string' && typeof r['name'] === 'string'
+    ? [{ id: r['id'], name: r['name'], status: String(r['status'] ?? ''), ...(typeof r['startsOn'] === 'string' ? { startsOn: r['startsOn'] } : {}), ...(typeof r['endsOn'] === 'string' ? { endsOn: r['endsOn'] } : {}) }] : []));
+  const s = said.trim().toLowerCase().replace(/\bsprint\b/g, '').replace(/\s+/g, ' ').trim();
+  const by = (pick: SprintRef | undefined, what: string) => (pick ? { sprint: pick } : { result: refused(`There is no ${what} sprint on this initiative.`, { code: 'not-found' }) });
+  if (/^(this|current|the current|active|now|this one|)$/.test(s)) return by(all.find((x) => x.status === 'active'), 'active');
+  if (/^(last|previous|the last|past|the past|last one)$/.test(s)) {
+    return by(all.filter((x) => x.status === 'done' || x.status === 'closed').sort((a, b) => (b.endsOn ?? '').localeCompare(a.endsOn ?? ''))[0], 'finished');
+  }
+  if (/^(next|the next|upcoming|next one)$/.test(s)) return by(all.filter((x) => x.status === 'planned').sort((a, b) => (a.startsOn ?? '').localeCompare(b.startsOn ?? ''))[0], 'planned');
+  const hits = nearMatches(all, (x) => x.name, said, new Set(['sprint']));
+  if (hits.length && (hits.length === 1 || hits[0]!.score > hits[1]!.score)) return { sprint: hits[0]!.row };
+  if (hits.length) return { result: ambiguous(`Several sprints match "${said}". Ask which.`, hits.slice(0, MAX_ROWS).map((h) => ({ title: h.row.name, status: h.row.status }))) };
+  return { result: refused(`There is no sprint called "${said}" on this initiative; say this, last or next, or its name.`, { code: 'not-found' }) };
+}
+
+/** A work row's status filter: "blocked" (a row that waits on something), "left" (not done), else the status or priority words. */
+function statusMatches(row: { status?: string | null; priority?: string | null; blockedOn?: string | null }, status: string): boolean {
+  const s = status.trim().toLowerCase().replace(/_/g, ' ');
+  if (s === 'blocked') return !!row.blockedOn;
+  if (/^(left|not done|remaining|open work|to do)$/.test(s)) return !['done', 'cancelled'].includes(String(row.status ?? ''));
+  return [row.status, row.priority].some((v) => (v ?? '').toLowerCase().replace(/_/g, ' ').includes(s));
+}
+
+/** A work item's line for the model: who owns it and what it waits on, from the row. */
+function workSubtitle(row: { assignee?: string | null; blockedOn?: string | null }): string | undefined {
+  return [row.assignee, row.blockedOn ? `blocked on "${row.blockedOn}"` : null].filter(Boolean).join(' · ') || undefined;
+}
 
 /** What a card with `fields` answered (ui-components VoiceConfirmCard 2.510.5): the toggle and the note, trimmed. */
 export interface CardAnswer { decision: 'approve' | 'reject'; note: string }
@@ -846,25 +906,36 @@ function keepShaped(ctx: ToolContext, kind: string, rows: readonly ShapedRow[]):
  * (a status matches the row's status or its priority). No request: the page
  * already read them, behind its own gates, for this persona.
  */
-function listThisPage(kind: string, spec: KindSpec, args: Args, ctx: ToolContext): ToolResult {
+async function listThisPage(kind: string, spec: KindSpec, args: Args, ctx: ToolContext): Promise<ToolResult> {
   const read = pageRows(ctx);
   if ('result' in read) return read.result;
   const filter = (args['filter'] as Args | undefined) ?? {};
   const q = typeof filter['q'] === 'string' ? filter['q'].trim() : '';
   const status = typeof filter['status'] === 'string' ? filter['status'].trim().toLowerCase() : '';
+  const who = typeof filter['who'] === 'string' ? filter['who'].trim() : '';
+  const sprintSaid = typeof filter['sprint'] === 'string' ? filter['sprint'].trim() : '';
   const ofKind = read.rows.map((r, i) => ({ r, position: i + 1 })).filter(({ r }) => r.ref.startsWith(`${kind}:`));
   if (!ofKind.length) return refused(`This page shows no ${spec.label}.`, { code: NOT_ON_PAGE });
+  // Coverage (10 November): "this sprint" on the initiative in view is its active sprint, read through its sprints list.
+  let sprint: SprintRef | null = null;
+  if (sprintSaid) {
+    const initiative = pageInitiative(ctx);
+    if (!initiative) return refused('This page shows no initiative whose sprints I can read; open the initiative first.', { code: NOT_ON_PAGE });
+    const found = await resolveSprint(ctx, initiative.id, sprintSaid);
+    if ('result' in found) return found.result;
+    sprint = found.sprint;
+  }
   const needles = wordsOf(q);
   const all = ofKind.filter(({ r }) => (!needles.length || needles.every((w) => r.title.toLowerCase().includes(w)))
-    && (!status || [r.status, r.priority].some((v) => (v ?? '').toLowerCase().includes(status))));
+    && (!status || statusMatches(r, status)) && (!who || samePerson(r.assignee, who, ctx)) && (!sprint || r.sprint === sprint.id));
   const limit = Math.min(typeof args['limit'] === 'number' ? args['limit'] : MAX_ROWS, MAX_ROWS);
   const rows = all.slice(0, limit);
   ctx.results?.keep(rows.map(({ r }) => keptOf(r)));
-  const narrowed = [q && `matching "${q}"`, status && `with ${status}`].filter(Boolean).join(', ');
+  const narrowed = [q && `matching "${q}"`, status && `with ${status}`, who && `owned by ${SELF.test(who) ? 'you' : who}`, sprint && `in ${sprint.name}`].filter(Boolean).join(', ');
   const where = read.page.record ? ` on ${read.page.record.title}` : ' on this page';
   return done('list', {
     of: kind, scope: 'this-page', ...(narrowed ? { filter: narrowed } : {}), count: all.length,
-    rows: rows.map(({ r, position }) => ({ ref: r.ref, title: r.title, status: r.status ?? undefined, priority: r.priority ?? undefined, position, href: r.href ?? undefined })),
+    rows: rows.map(({ r, position }) => ({ ref: r.ref, title: r.title, status: r.status ?? undefined, priority: r.priority ?? undefined, subtitle: workSubtitle(r), position, href: r.href ?? undefined })),
     open: 'open { ref: <position>, scope: "this-page" } opens a row; queue_work and decide take these positions with scope "this-page".',
   }, rows.length ? `${plural(all.length, spec.one ?? spec.label.replace(/s$/, ''), spec.label)}${where}${narrowed ? ` ${narrowed}` : ''}; first: ${rows[0]!.r.title}` : `No ${spec.label}${where}${narrowed ? ` ${narrowed}` : ''}`);
 }
@@ -879,6 +950,8 @@ const list: Runner = async (args, ctx) => {
   const filter = (args['filter'] as Args | undefined) ?? {};
   const q = typeof filter['q'] === 'string' ? filter['q'].trim() : '';
   const status = typeof filter['status'] === 'string' ? filter['status'].trim() : '';
+  if (kind === 'work-item' && (filter['who'] != null || filter['sprint'] != null || /^(blocked|left|not done|remaining)$/i.test(status))) return listWork(spec, args, ctx);
+  if ((filter['who'] != null || filter['sprint'] != null) && kind !== 'work-item') return refused('Only work items take who or sprint; leave them out.', { code: 'invalid-arguments' });
   const given = typeof filter['scope'] === 'string' ? filter['scope'] : undefined;
   // G49: "all" is every kind's widest read: a kind without scopes already lists everything the user can read.
   const scope = given === 'all' && !spec.list.scopes?.length ? undefined : given ?? spec.list.scopes?.[0];
@@ -922,6 +995,119 @@ const list: Runner = async (args, ctx) => {
   }, summary);
 };
 
+/** A work item as the board answers it (GET /api/graph/work, the initiative's tree flattened). */
+interface WorkRow { id: string; title: string; type?: string; status?: string; priority?: string; projectId?: string; assigneeName?: string | null; sprintId?: string | null; labels?: string[]; blockedReason?: string | null; blockedByDecisionId?: string | null; summary?: string | null; nextStep?: string | null; children?: WorkRow[] }
+
+function flatWork(rows: readonly WorkRow[], out: WorkRow[] = []): WorkRow[] {
+  for (const r of rows) {
+    // Epics group the work; the board's rows are the stories, bugs and tasks under them (flattenWorkItems).
+    if (r && typeof r.id === 'string' && typeof r.title === 'string' && r.type !== 'epic') out.push(r);
+    if (Array.isArray(r?.children)) flatWork(r.children, out);
+  }
+  return out;
+}
+
+/**
+ * The work items the board shows, for a status, an owner or a sprint (coverage, 10 November): a sprint's items through
+ * the sprint board's read (GET /api/graph/work?sprint=), the initiative in view's through its own tree, else the
+ * cross-initiative board. A blocked row names the decision it waits on (the initiative's decisions read), else its reason.
+ */
+export async function readWork(ctx: ToolContext, opts: { sprintId?: string; initiativeId?: string }): Promise<{ rows: Array<WorkRow & { blockedOn: string | null }> } | { result: ToolResult }> {
+  const url = opts.sprintId ? `/api/graph/work?${qs({ sprint: opts.sprintId, limit: 200 })}`
+    : opts.initiativeId ? `/api/graph/projects/${encodeURIComponent(opts.initiativeId)}/work` : `/api/graph/work?${qs({ limit: 200 })}`;
+  const read = await readJson<WorkRow[]>(ctx, url);
+  if (!read.ok) return { result: readFailure('the work items', read.status) };
+  const rows = flatWork(Array.isArray(read.body) ? read.body : []).filter((r) => opts.sprintId || !opts.initiativeId || !r.projectId || r.projectId === opts.initiativeId);
+  const blocked = rows.filter((r) => Array.isArray(r.labels) && r.labels.includes('blocked'));
+  const topics = new Map<string, string>();
+  for (const pid of [...new Set(blocked.filter((r) => r.blockedByDecisionId && r.projectId).map((r) => r.projectId!))].slice(0, 3)) {
+    const d = await readJson<Array<{ id: string; topic: string }>>(ctx, `/api/graph/projects/${encodeURIComponent(pid)}/decisions`);
+    if (d.ok && Array.isArray(d.body)) for (const x of d.body) if (x && typeof x.id === 'string' && typeof x.topic === 'string') topics.set(x.id, x.topic);
+  }
+  return { rows: rows.map((r) => ({ ...r, blockedOn: blocked.includes(r) ? (r.blockedByDecisionId && topics.get(r.blockedByDecisionId)) || r.blockedReason || 'not given' : null })) };
+}
+
+/** The terse contract (G33, the demo journey's check): one sentence, at most SAY_WORDS words, ending in a stop. */
+export const SAY_WORDS = 25;
+export function sayLine(text: string): string {
+  const one = text.replace(/\s+/g, ' ').trim().replace(/([.!?])\s+(?=["“A-Z0-9])/g, (_m, p: string) => (p === '.' ? '; ' : `${p.replace(/[!?]/, ',')} `));
+  const words = one.split(' ');
+  const cut = words.length > SAY_WORDS ? `${words.slice(0, SAY_WORDS).join(' ').replace(/[,;:—–-]+$/, '')}…` : one;
+  return /[.!?…]$/.test(cut) ? cut : `${cut}.`;
+}
+
+/** A result with its ready line: set after shaping, so the line is whole (shapeOutput cuts every string at 120). */
+export function spoken(res: ToolResult, text: string): ToolResult {
+  return { ...res, output: { ...res.output, say: sayLine(text) } };
+}
+
+/** A status as said: "in review", never "in_review". */
+const said = (s: string | null | undefined) => String(s ?? 'unknown').replace(/_/g, ' ');
+
+/** The work item a ref names, through the board read its page makes (the initiative's tree, else the board). */
+export async function workItemRow(ctx: ToolContext, id: string): Promise<{ row: WorkRow & { blockedOn: string | null } } | { result: ToolResult }> {
+  const kept = ctx.results?.find(`work-item:${id}`) ?? ctx.page?.()?.rows.find((r) => r.ref === `work-item:${id}`) ?? null;
+  const fromHref = /\/iq\/projects\/([^?/#]+)/.exec(kept?.href ?? '')?.[1];
+  const initiativeId = fromHref ? decodeURIComponent(fromHref) : pageInitiative(ctx)?.id;
+  for (const where of initiativeId ? [{ initiativeId }, {}] : [{}]) {
+    const read = await readWork(ctx, where);
+    if ('result' in read) return read;
+    const row = read.rows.find((r) => r.id === id);
+    if (row) return { row };
+  }
+  return { result: refused(`I found no work item with that ref that you can read.`, { code: 'not-found' }) };
+}
+
+/** `get work-item:<id>` (and its `brief` part): the item's Brief tab as one line, and its facts. */
+async function getWorkItem(id: string, ctx: ToolContext): Promise<ToolResult> {
+  const found = await workItemRow(ctx, id);
+  if ('result' in found) return found.result;
+  const w = found.row;
+  const next = typeof w.nextStep === 'string' && w.nextStep.trim() ? w.nextStep.trim() : null;
+  const summary = typeof w.summary === 'string' && w.summary.trim() ? w.summary.trim() : null;
+  const owner = w.assigneeName ? `, owned by ${w.assigneeName}` : ', unassigned';
+  const line = `"${w.title}" is ${said(w.status)}${owner}${w.blockedOn ? `; blocked on "${w.blockedOn}"` : next ? `; next: ${next}` : ''}`;
+  return spoken(done('record', {
+    ref: `work-item:${w.id}`, title: w.title, status: w.status, priority: w.priority, owner: w.assigneeName ?? undefined,
+    ...(summary ? { why: summary } : {}), ...(next ? { next } : {}), ...(w.blockedOn ? { blockedOn: w.blockedOn } : {}),
+    ...(w.projectId ? { href: `/iq/projects/${encodeURIComponent(w.projectId)}?item=${encodeURIComponent(w.id)}` } : {}),
+    parts: ['criteria', 'history', 'runs', 'comments', 'documents'],
+  }, `${w.title}: ${said(w.status)}`), line);
+}
+
+/** `list { kind: 'work-item', filter: { who | sprint | status blocked } }` away from the page's own rows. */
+async function listWork(spec: KindSpec, args: Args, ctx: ToolContext): Promise<ToolResult> {
+  const filter = (args['filter'] as Args | undefined) ?? {};
+  const q = typeof filter['q'] === 'string' ? filter['q'].trim() : '';
+  const status = typeof filter['status'] === 'string' ? filter['status'].trim() : '';
+  const who = typeof filter['who'] === 'string' ? filter['who'].trim() : '';
+  const sprintSaid = typeof filter['sprint'] === 'string' ? filter['sprint'].trim() : '';
+  const initiative = pageInitiative(ctx);
+  let sprint: SprintRef | null = null;
+  if (sprintSaid) {
+    if (!initiative) return refused('A sprint belongs to one initiative: open the initiative, then ask again.', { code: NOT_ON_PAGE });
+    const found = await resolveSprint(ctx, initiative.id, sprintSaid);
+    if ('result' in found) return found.result;
+    sprint = found.sprint;
+  }
+  const read = await readWork(ctx, { ...(sprint ? { sprintId: sprint.id } : {}), ...(initiative ? { initiativeId: initiative.id } : {}) });
+  if ('result' in read) return read.result;
+  const needles = wordsOf(q);
+  const all = read.rows.filter((r) => (!needles.length || needles.every((w) => r.title.toLowerCase().includes(w)))
+    && (!status || statusMatches(r, status)) && (!who || samePerson(r.assigneeName, who, ctx)));
+  const limit = Math.min(typeof args['limit'] === 'number' ? args['limit'] : DEFAULT_LIMIT, MAX_ROWS);
+  const rows = all.slice(0, limit);
+  const href = (r: WorkRow) => (r.projectId ? `/iq/projects/${encodeURIComponent(r.projectId)}?item=${encodeURIComponent(r.id)}` : '');
+  ctx.results?.keep(rows.map((r) => ({ ref: cap(`work-item:${r.id}`), title: r.title, href: href(r) })));
+  const narrowed = [q && `matching "${q}"`, status && `with ${status}`, who && `owned by ${SELF.test(who) ? 'you' : who}`, sprint && `in ${sprint.name}`].filter(Boolean).join(', ');
+  const where = initiative && !sprint ? ` on ${initiative.title}` : '';
+  return done('list', {
+    of: 'work-item', ...(narrowed ? { filter: narrowed } : {}), count: all.length,
+    rows: rows.map((r) => ({ ref: `work-item:${r.id}`, title: r.title, status: r.status, priority: r.priority, subtitle: workSubtitle({ assignee: r.assigneeName ?? null, blockedOn: r.blockedOn }), href: href(r) || undefined })),
+    ...(rows.length ? { open: OPEN_NOTE, read: 'get reads a row by its ref or position.' } : {}),
+  }, rows.length ? `${plural(all.length, spec.one ?? 'work item', spec.label)}${where}${narrowed ? ` ${narrowed}` : ''}; first: ${rows[0]!.title}` : `No ${spec.label}${where}${narrowed ? ` ${narrowed}` : ''}`);
+}
+
 /**
  * `get message:<id>` (or `message:latest`): an inbound message or notification that reached this user's own socket
  * (G23), or a message this session's reads returned (G42: search type message, a channel's recent rows).
@@ -961,6 +1147,8 @@ const get: Runner = async (args, ctx) => {
   if (!spec || (!spec.get && !spec.parts)) return refused(`"${parsed.kind}" records are not read here.`);
   const gate = kindGate(spec, ctx, spec.getAction ?? spec.action);
   if (gate) return gate;
+  // Coverage (10 November): a work item's Brief tab (its summary, next step and what blocks it) is the item itself.
+  if (parsed.kind === 'work-item' && (args['part'] == null || args['part'] === 'brief')) return getWorkItem(parsed.id, ctx);
   const partName = typeof args['part'] === 'string' ? args['part'] : spec.get ? undefined : Object.keys(spec.parts ?? {})[0];
   if (partName && !getParts(ctx.tenant).includes(partName)) return refused(`There is no "${partName}" part here.`);
   const part = partName ? spec.parts?.[partName] : undefined;
@@ -969,7 +1157,7 @@ const get: Runner = async (args, ctx) => {
   if (!path) return refused(`A ${parsed.kind} has no "${partName}" part here.`);
   const read = await readJson<unknown>(ctx, fill(path, parsed.id));
   if (!read.ok) {
-    if (read.status === 404) return refused(`I found no ${parsed.kind} "${parsed.id}" that you can read.`);
+    if (read.status === 404) return refused(`I found no ${parsed.kind} with that ref that you can read.`);
     return readFailure(`that ${parsed.kind}`, read.status);
   }
   if (part) {
@@ -980,6 +1168,10 @@ const get: Runner = async (args, ctx) => {
       const r = shapeRow(sub ?? part, raw);
       return r ? [r] : [];
     });
+    if (part.newestFirst) {
+      const at = (r: ShapedRow) => String(r.raw[part.newestFirst!] ?? '');
+      shaped.sort((a, b) => at(b).localeCompare(at(a)));
+    }
     const rows = shaped.slice(0, MAX_ROWS);
     if (sub) keepShaped(ctx, sub.kind, rows);
     // G42: rows of no kind of their own that `get` can still read back by ref (a channel's recent messages).

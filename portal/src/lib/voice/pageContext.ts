@@ -31,6 +31,12 @@ export interface PageRow {
   title: string;
   status?: string | null;
   priority?: string | null;
+  /** Coverage (10 November): who owns the row (a work item's assignee), as the page shows the name. */
+  assignee?: string | null;
+  /** The sprint the row is in (its id), so "this sprint" filters the rows the page shows; never in the note. */
+  sprint?: string | null;
+  /** Why the row cannot move, when it is blocked: the decision it waits on ("Cutover order…"), else the reason. */
+  blockedOn?: string | null;
   /** The row's own page in the portal, when it has one (open goes there). */
   href?: string | null;
 }
@@ -189,7 +195,8 @@ export function pageContextNote(o: { tenant: string; pathname: string; pageId?: 
     const of = p.total != null && p.total > rows.length ? ` (${rows.length} of ${p.total})` : '';
     lines.push(`It shows these ${field(p.rowsLabel ?? 'rows')}${of}, in the page's order:`);
     rows.forEach((r, i) => {
-      const facts = [r.status ? `status ${field(r.status)}` : null, r.priority ? `priority ${field(r.priority)}` : null].filter(Boolean).join(', ');
+      const facts = [r.status ? `status ${field(r.status)}` : null, r.priority ? `priority ${field(r.priority)}` : null,
+        r.assignee ? `owner ${field(r.assignee)}` : null, r.blockedOn ? `blocked on '${field(r.blockedOn)}'` : null].filter(Boolean).join(', ');
       lines.push(`${i + 1}. ${field(r.ref)} "${field(r.title)}"${facts ? ` (${facts})` : ''}`);
     });
     lines.push('To answer about these rows or act on them, use list or open with scope "this-page", and their positions above; do not search again for them.');

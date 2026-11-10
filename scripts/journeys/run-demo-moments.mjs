@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The demo-moments journey in one command (docs/journeys.md, "The journeys job"):
+// The demo-moments journey (or `--journey voice-coverage`) in one command (docs/journeys.md, "The journeys job"):
 // starts its own mock middleware (dev:mock's environment, MOCK_VOICE=1, its own
 // port and voice log) and its own portal, waits for both, runs
 // scripts/journeys/demo-moments.mjs against them, stops what it started, and
@@ -96,9 +96,18 @@ if (!up) {
   process.exit(2);
 }
 
-const args = process.argv.slice(2);
+// `--journey voice-coverage` runs scripts/journeys/voice-coverage.mjs on the same stack (default: demo-moments).
+const argv = process.argv.slice(2);
+const at = argv.indexOf('--journey');
+const name = at >= 0 ? argv[at + 1] : 'demo-moments';
+const args = at >= 0 ? [...argv.slice(0, at), ...argv.slice(at + 2)] : argv;
+if (!/^[a-z-]+$/.test(name ?? '') || !fs.existsSync(path.join(ROOT, 'scripts', 'journeys', `${name}.mjs`))) {
+  console.error(`no journey "${name}" in scripts/journeys`);
+  stopAll();
+  process.exit(2);
+}
 const out = args.includes('--out') ? [] : ['--out', path.join(work, 'results')];
-const journey = spawn(process.execPath, [path.join(ROOT, 'scripts', 'journeys', 'demo-moments.mjs'), ...out, ...args], {
+const journey = spawn(process.execPath, [path.join(ROOT, 'scripts', 'journeys', `${name}.mjs`), ...out, ...args], {
   stdio: 'inherit', env: { ...process.env, PORTAL_URL: `http://localhost:${PORTAL_PORT}`, MIDDLEWARE_URL: `http://127.0.0.1:${MW_PORT}` },
 });
 const code = await new Promise((resolve) => journey.on('exit', (c) => resolve(c ?? 1)));

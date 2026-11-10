@@ -224,7 +224,7 @@ export const LIST_KINDS: Readonly<Record<string, readonly string[]>> = {
 
 /** The parts `get` may read of a record, per tenant (the union of that tenant's kinds' parts). */
 export const GET_PARTS: Readonly<Record<string, readonly string[]>> = {
-  orgiq: ['work', 'decisions', 'activity', 'documents', 'comments', 'criteria', 'runs', 'steps', 'versions', 'applications', 'evaluations', 'evidence', 'members', 'transcript'],
+  orgiq: ['work', 'decisions', 'activity', 'documents', 'brief', 'comments', 'criteria', 'history', 'runs', 'steps', 'versions', 'applications', 'evaluations', 'evidence', 'members', 'transcript'],
   social: ['members', 'recent', 'activity', 'transcript'],
   assessment: ['evidence', 'exceptions', 'recommendations', 'stories', 'members', 'activity', 'transcript'],
   pipelines: ['steps', 'members', 'activity', 'transcript'],
@@ -408,7 +408,7 @@ export const CREATE_ACTIONS: Readonly<Record<string, Readonly<Record<string, Act
 
 /** Each create kind's field set: [required, optional]. */
 export const CREATE_FIELDS: Readonly<Record<string, readonly [readonly string[], readonly string[]]>> = {
-  'work-item': [['initiative', 'title'], ['type']],
+  'work-item': [['title'], ['initiative', 'type']],
   comment: [['on', 'text'], []],
   'saved-search': [['name', 'query'], []],
   sprint: [['initiative', 'name', 'startsOn', 'endsOn'], []],
@@ -437,7 +437,7 @@ export const CREATE_FIELDS: Readonly<Record<string, readonly [readonly string[],
  */
 export const UPDATE_ACTIONS: Readonly<Record<string, Readonly<Record<string, Readonly<Record<string, Action | null>>>>>> = {
   orgiq: {
-    'work-item': { status: 'DispatchAgentRun' }, bot: { paused: 'ManageBots' }, finding: { status: 'ManageDevbox' },
+    'work-item': { status: 'DispatchAgentRun', assignee: 'DispatchAgentRun', sprint: 'ManageSprints' }, bot: { paused: 'ManageBots' }, finding: { status: 'ManageDevbox' },
     job: { reviewed: 'ManageDevbox', requeued: 'ManageDevbox' }, channel: { member: 'PostMessage' }, dm: { read: null },
   },
   social: { channel: { member: 'PostMessage' }, dm: { read: 'ViewSocial' } },
@@ -531,7 +531,9 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       kind: str('Which kind of record.', { enum: listKinds(null) }),
       filter: obj({
         q: str('Words the name should contain.', { minLength: 1, maxLength: 120 }),
-        status: str('A status, as the page shows it.', { minLength: 1, maxLength: 40 }),
+        status: str('A status, as the page shows it ("blocked" for work items).', { minLength: 1, maxLength: 40 }),
+        who: str('work-item: the assignee\'s name ("me" for the user).', { minLength: 1, maxLength: 120 }),
+        sprint: str('work-item: "this", "last", "next" or a sprint name.', { minLength: 1, maxLength: 80 }),
         scope: str('"mine" (the user\'s own, where the kind takes it), "all" (everything the user can read: any kind), or "reports" (the user\'s reports\' access requests).', { enum: ['mine', 'all', 'reports'] }),
         since: str(`Only records since: ${SINCE_WORDS}.`, { minLength: 1, maxLength: 40 }),
       }),
@@ -660,7 +662,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
     parameters: obj({
       kind: str('What to create.', { enum: createKinds(null) }),
       fields: obj({
-        initiative: str('work-item, sprint, meeting, document, whiteboard, deck: the initiative, by name or ref; for document, whiteboard and deck "this-page" (or left out) is the one in view.', { minLength: 1, maxLength: 200 }),
+        initiative: str('work-item, sprint, meeting, document, whiteboard, deck: the initiative, by name or ref; for work-item, document, whiteboard and deck "this-page" (or left out) is the one in view.', { minLength: 1, maxLength: 200 }),
         title: str('work-item, document, whiteboard: its title (without one a document or whiteboard is "Untitled").', { minLength: 1, maxLength: 200 }),
         focus: str('deck: what it should cover, in the user\'s words.', { minLength: 1, maxLength: 200 }),
         type: str('work-item: story (default), bug or epic.', { enum: ['story', 'bug', 'epic'] }),
@@ -687,9 +689,11 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
   {
     name: 'update',
     parameters: obj({
-      ref: str('The row to change: a ref, a position in the last result, or "report:program" for the assessment program report.', { minLength: 1, maxLength: 200 }),
+      ref: str('The row to change: a ref, a position in the last result, a row the page in view shows (by name), or "report:program" for the assessment program report.', { minLength: 1, maxLength: 200 }),
       fields: obj({
         status: str('work-item: open, in_progress, in_review, done or cancelled; finding: dismissed; run: stopped (Assessment) or cancelled (Pipelines); feedback: resolved or dismissed; request: withdrawn; delegation: ended.', { enum: ['open', 'in_progress', 'in_review', 'done', 'cancelled', 'dismissed', 'stopped', 'resolved', 'withdrawn', 'ended'] }),
+        assignee: str('work-item: who owns it, by name ("me" for the user).', { minLength: 1, maxLength: 120 }),
+        sprint: str('work-item: "this", "next", "none" or a sprint name.', { minLength: 1, maxLength: 80 }),
         response: str('feedback resolved: the response.', { minLength: 1, maxLength: 2000 }),
         paused: { type: 'boolean', description: 'bot: true pauses it, false resumes it.' },
         reviewed: str('job: accept or reject its result.', { enum: ['accept', 'reject'] }),

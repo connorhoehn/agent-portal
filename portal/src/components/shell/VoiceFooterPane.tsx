@@ -321,8 +321,8 @@ function VoiceFooterPane() {
   const planeActions = planeCaps.data?.actions ?? {};
   const socialRequestItemId = onPlane && planeCaps.data?.actions && !planeCaps.data.actions['PostMessage'] ? planeCaps.data.requestItemId ?? null : null;
   const userId = session?.sub ?? null;
-  const live = useRef({ tenant, role: session?.role ?? 'member', switchable: session?.switchable?.[tenant] ?? null, userId, ledger, can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, socialRequestItemId, results, inbox });
-  live.current = { tenant, role: session?.role ?? 'member', switchable: session?.switchable?.[tenant] ?? null, userId, ledger, can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, socialRequestItemId, results, inbox };
+  const live = useRef({ tenant, role: session?.role ?? 'member', switchable: session?.switchable?.[tenant] ?? null, userId, userName: session?.name ?? null, ledger, can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, socialRequestItemId, results, inbox });
+  live.current = { tenant, role: session?.role ?? 'member', switchable: session?.switchable?.[tenant] ?? null, userId, userName: session?.name ?? null, ledger, can, navigate, compute: computeAccess, social: socialAccess, calls: callAccess, presence: presenceAccess, planeActions, socialRequestItemId, results, inbox };
 
   // ── queue_work (G19): one keyed toast per job, the notification center's entry, the spoken outcome ──
   const toaster = useToastOptional();
@@ -364,6 +364,7 @@ function VoiceFooterPane() {
       role: live.current.role,
       switchable: live.current.switchable,
       userId: live.current.userId,
+      userName: live.current.userName,
       ledger: live.current.ledger,
       palette: { pages: PAGES, visible: isPageVisible },
       // Outside Social, posting and calling are the plane's grants (GET /api/social/plane/capabilities), not the session tenant's.

@@ -35,8 +35,11 @@ export interface PartSpec {
   title?: Field;
   subtitle?: Field;
   status?: Field;
+  at?: Field;
   /** G42: rows of no kind of their own, kept by this ref kind with their text (a channel's recent messages: `message:<id>`). */
   keepAs?: string;
+  /** Coverage (10 November): rows ordered newest first by this field (a work item's history). */
+  newestFirst?: string;
 }
 
 export interface KindSpec {
@@ -261,7 +264,13 @@ const ORGIQ: readonly KindSpec[] = [
   {
     kind: 'work-item', label: 'work items',
     list: { path: '/api/graph/work' },
-    parts: { comments: { path: '/api/graph/work-items/:id/comments' }, criteria: { path: '/api/graph/work-items/:id/criteria' }, documents: { path: '/api/graph/work-items/:id/documents', kind: 'document' } },
+    // Coverage (10 November): its Activity tab (`history`: the thread and the status changes, newest first); its Brief
+    // tab and its agent runs are read in tools.ts (getWorkItem, the initiative's runs), not through a part route here.
+    parts: {
+      brief: {}, comments: { path: '/api/graph/work-items/:id/comments' }, criteria: { path: '/api/graph/work-items/:id/criteria', title: 'text', status: (r) => (r['done'] === true ? 'done' : 'open') },
+      history: { path: '/api/graph/work-items/:id/comments', key: 'comments', title: 'body', subtitle: (r) => (r['isSystem'] === true ? 'the board' : r['authorName']), at: 'createdAt', newestFirst: 'createdAt' },
+      documents: { path: '/api/graph/work-items/:id/documents', kind: 'document' },
+    },
     subtitle: (r) => [r['key'], r['assigneeName']].filter(Boolean).join(' · ') || undefined,
     href: (_id, r) => (typeof r['projectId'] === 'string' ? `/iq/projects/${enc(r['projectId'])}` : undefined),
   },

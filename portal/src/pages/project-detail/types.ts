@@ -47,6 +47,8 @@ export interface WorkItem {
   blockedReason?: string | null;
   /** The decision it waits (or waited) on; deciding that decision clears the block (resolved) or rewrites the reason (rejected). */
   blockedByDecisionId?: string | null;
+  /** The sprint it is planned into (the board's sprint), or null. */
+  sprintId?: string | null;
   /** The next concrete action, e.g. "Confirm the dependency map with Eli Garcia." */
   nextStep?: string | null;
   /** Why that step comes first. */

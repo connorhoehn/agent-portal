@@ -359,7 +359,7 @@ export const LIST_KINDS: Readonly<Record<string, readonly string[]>> = {
 
 /** The parts `get` may read of a record, per tenant (the union of that tenant's kinds' parts). */
 export const GET_PARTS: Readonly<Record<string, readonly string[]>> = {
-  orgiq: ['work', 'decisions', 'activity', 'documents', 'comments', 'criteria', 'runs', 'steps', 'versions', 'applications', 'evaluations', 'evidence', 'members', 'transcript'],
+  orgiq: ['work', 'decisions', 'activity', 'documents', 'brief', 'comments', 'criteria', 'history', 'runs', 'steps', 'versions', 'applications', 'evaluations', 'evidence', 'members', 'transcript'],
   social: ['members', 'recent', 'activity', 'transcript'],
   assessment: ['evidence', 'exceptions', 'recommendations', 'stories', 'members', 'activity', 'transcript'],
   pipelines: ['steps', 'members', 'activity', 'transcript'],
@@ -580,7 +580,7 @@ export const CREATE_ACTIONS: Readonly<Record<string, Readonly<Record<string, Cap
 
 /** Each create kind's field set: [required, optional]. */
 export const CREATE_FIELDS: Readonly<Record<string, readonly [readonly string[], readonly string[]]>> = {
-  'work-item': [['initiative', 'title'], ['type']],
+  'work-item': [['title'], ['initiative', 'type']],
   comment: [['on', 'text'], []],
   'saved-search': [['name', 'query'], []],
   sprint: [['initiative', 'name', 'startsOn', 'endsOn'], []],
@@ -609,7 +609,8 @@ export const CREATE_FIELDS: Readonly<Record<string, readonly [readonly string[],
  */
 export const UPDATE_ACTIONS: Readonly<Record<string, Readonly<Record<string, Readonly<Record<string, CapabilityAction | null>>>>>> = {
   orgiq: {
-    'work-item': { status: 'DispatchAgentRun' }, bot: { paused: 'ManageBots' }, finding: { status: 'ManageDevbox' },
+    // Coverage (10 November): the item drawer's owner picker (PATCH assigneeId) and the sprint board's move (ManageSprints).
+    'work-item': { status: 'DispatchAgentRun', assignee: 'DispatchAgentRun', sprint: 'ManageSprints' }, bot: { paused: 'ManageBots' }, finding: { status: 'ManageDevbox' },
     job: { reviewed: 'ManageDevbox', requeued: 'ManageDevbox' }, channel: { member: 'PostMessage' }, dm: { read: null },
   },
   social: { channel: { member: 'PostMessage' }, dm: { read: 'ViewSocial' } },
@@ -701,7 +702,9 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
       kind: str('Which kind of record.', { enum: listKinds(null) }),
       filter: obj({
         q: str('Words the name should contain.', { minLength: 1, maxLength: 120 }),
-        status: str('A status, as the page shows it.', { minLength: 1, maxLength: 40 }),
+        status: str('A status, as the page shows it ("blocked" for work items).', { minLength: 1, maxLength: 40 }),
+        who: str('work-item: the assignee\'s name ("me" for the user).', { minLength: 1, maxLength: 120 }),
+        sprint: str('work-item: "this", "last", "next" or a sprint name.', { minLength: 1, maxLength: 80 }),
         scope: str('"mine" (the user\'s own, where the kind takes it), "all" (everything the user can read: any kind), or "reports" (the user\'s reports\' access requests).', { enum: ['mine', 'all', 'reports'] }),
         since: str(`Only records since: ${SINCE_WORDS}.`, { minLength: 1, maxLength: 40 }),
       }),
@@ -878,7 +881,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     parameters: obj({
       kind: str('What to create.', { enum: createKinds(null) }),
       fields: obj({
-        initiative: str('work-item, sprint, meeting, document, whiteboard, deck: the initiative, by name or ref; for document, whiteboard and deck "this-page" (or left out) is the one in view.', { minLength: 1, maxLength: 200 }),
+        initiative: str('work-item, sprint, meeting, document, whiteboard, deck: the initiative, by name or ref; for work-item, document, whiteboard and deck "this-page" (or left out) is the one in view.', { minLength: 1, maxLength: 200 }),
         title: str('work-item, document, whiteboard: its title (without one a document or whiteboard is "Untitled").', { minLength: 1, maxLength: 200 }),
         focus: str('deck: what it should cover, in the user\'s words.', { minLength: 1, maxLength: 200 }),
         type: str('work-item: story (default), bug or epic.', { enum: ['story', 'bug', 'epic'] }),
@@ -903,16 +906,18 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     kind: 'action', backing: 'work', confirm: true, confirmBy: 'voice', clickFor: { kind: ['access-request'] }, sayToConfirm: 'create it', action: null,
     gate: "per tenant and kind, the form's submit action (CREATE_ACTIONS): DispatchAgentRun for a work item and a deck, ViewWorkItems + the initiative's own people (owner, contributor, org-wide role; the route) for a document or a whiteboard, the initiative's own conversation for a comment (the route checks ViewWorkItems and the initiative), Search for a saved search, ManageSprints + stewardship for a sprint, ManageChannels / ManageTeams in Social, RequestAccess for an access request, DecideAccess for a delegation",
     spend: 'none', idempotent: false, says: 'Creating that once you confirm.', tenants: ['orgiq', 'social', 'access'],
-    mapsTo: "work-item: GET /api/graph/projects, POST /api/graph/work-items { projectId, type, title, priority }; document and whiteboard: GET /api/graph/projects/:projectId/workspace-documents (canWrite), POST /api/graph/projects/:projectId/workspace-documents { title, kind: page | whiteboard }, then the editor opens; deck: as queue_work's deck, POST /api/initiative-decks/projects/:projectId { narrative, brief }; comment: GET /api/graph/work, POST /api/graph/work-items/:id/comments { body }; saved-search: POST /api/saved-searches { name, query, scope }; sprint: POST /api/sprints { initiativeId, name, startsOn, endsOn }; channel, team, room: POST /api/social/channels, POST /api/social/teams, POST /api/social/rooms; access-request: GET /api/access/catalog, POST /api/access/requests/preview, POST /api/access/requests { itemId, justification, duration }; delegation: GET /api/access/delegates, POST /api/access/delegations { delegateId, startsAt, endsAt, reason }",
+    mapsTo: "work-item: GET /api/graph/projects (or the initiative in view), POST /api/graph/work-items { projectId, type, title, priority }; document and whiteboard: GET /api/graph/projects/:projectId/workspace-documents (canWrite), POST /api/graph/projects/:projectId/workspace-documents { title, kind: page | whiteboard }, then the editor opens; deck: as queue_work's deck, POST /api/initiative-decks/projects/:projectId { narrative, brief }; comment: GET /api/graph/work, POST /api/graph/work-items/:id/comments { body }; saved-search: POST /api/saved-searches { name, query, scope }; sprint: POST /api/sprints { initiativeId, name, startsOn, endsOn }; channel, team, room: POST /api/social/channels, POST /api/social/teams, POST /api/social/rooms; access-request: GET /api/access/catalog, POST /api/access/requests/preview, POST /api/access/requests { itemId, justification, duration }; delegation: GET /api/access/delegates, POST /api/access/delegations { delegateId, startsAt, endsAt, reason }",
   },
   {
     name: 'update',
     // toolsForTenant lists the tenant's own ref kinds and the field each takes in the description it renders.
     description: 'Change one thing on a record a result named (by its ref or position): one field per kind, through the button its page uses. The user confirms on a card that shows the change.',
     parameters: obj({
-      ref: str('The row to change: a ref, a position in the last result, or "report:program" for the assessment program report.', { minLength: 1, maxLength: 200 }),
+      ref: str('The row to change: a ref, a position in the last result, a row the page in view shows (by name), or "report:program" for the assessment program report.', { minLength: 1, maxLength: 200 }),
       fields: obj({
         status: str('work-item: open, in_progress, in_review, done or cancelled; finding: dismissed; run: stopped (Assessment) or cancelled (Pipelines); feedback: resolved or dismissed; request: withdrawn; delegation: ended.', { enum: ['open', 'in_progress', 'in_review', 'done', 'cancelled', 'dismissed', 'stopped', 'resolved', 'withdrawn', 'ended'] }),
+        assignee: str('work-item: who owns it, by name ("me" for the user).', { minLength: 1, maxLength: 120 }),
+        sprint: str('work-item: "this", "next", "none" or a sprint name.', { minLength: 1, maxLength: 80 }),
         response: str('feedback resolved: the response.', { minLength: 1, maxLength: 2000 }),
         paused: { type: 'boolean', description: 'bot: true pauses it, false resumes it.' },
         reviewed: str('job: accept or reject its result.', { enum: ['accept', 'reject'] }),
@@ -923,9 +928,9 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
       }),
     }, ['ref', 'fields']),
     kind: 'action', backing: 'work', confirm: true, confirmBy: 'voice', sayToConfirm: 'save it', action: null,
-    gate: "per tenant, ref kind and field, the page button's action (UPDATE_ACTIONS): DispatchAgentRun for a work item's status, ManageBots to pause a bot, ManageDevbox for findings and jobs, PostMessage to join a channel (ViewSocial to leave), ViewSocial to mark a DM read, RunAssessmentAgent to stop a run, ScoreAssessment for follow-ups, PublishReport, CancelRun, the request's own withdraw and the delegation's own end",
+    gate: "per tenant, ref kind and field, the page button's action (UPDATE_ACTIONS): DispatchAgentRun for a work item's status and owner, ManageSprints + stewardship to move it between sprints, ManageBots to pause a bot, ManageDevbox for findings and jobs, PostMessage to join a channel (ViewSocial to leave), ViewSocial to mark a DM read, RunAssessmentAgent to stop a run, ScoreAssessment for follow-ups, PublishReport, CancelRun, the request's own withdraw and the delegation's own end",
     spend: 'none', idempotent: false, says: 'Changing that once you confirm.', tenants: ['orgiq', 'social', 'assessment', 'pipelines', 'access'],
-    mapsTo: "work-item: GET /api/graph/work, PATCH /api/graph/work-items/:id { status }; bot: GET /api/bots, POST /api/bots/:id/pause, POST /api/bots/:id/resume; finding: GET /api/work/findings, POST /api/work/findings/:id/dismiss; job: GET /api/work/jobs, POST /api/work/jobs/:id/review { decision }, POST /api/work/jobs/:id/requeue; channel: GET /api/social/channels, POST /api/social/channels/:slug/join, POST /api/social/channels/:slug/leave, GET /api/social/plane/channels, POST /api/social/plane/channels/:slug/join, POST /api/social/plane/channels/:slug/leave; dm: GET /api/social/dms, GET /api/social/plane/dms, POST /api/social/dms/read { channel }; run: GET /api/assessment/runs, POST /api/assessment/runs/:runId/stop, GET /api/pipelines/runs, POST /api/pipelines/runs/:id/cancel; feedback: GET /api/assessment/feedback, POST /api/assessment/feedback/:taskId/resolve { response }, POST /api/assessment/feedback/:taskId/dismiss; report: POST /api/assessment/reports/publish; request: GET /api/access/requests, POST /api/access/requests/:id/withdraw; delegation: GET /api/access/delegations, POST /api/access/delegations/:id/end",
+    mapsTo: "work-item: GET /api/graph/work, PATCH /api/graph/work-items/:id { status | assigneeId } (the owner from GET /api/graph/projects/:id contributors), GET /api/sprints, PATCH /api/sprints/:sprintId/items { workItemId }, DELETE /api/sprints/:sprintId/items/:itemId; bot: GET /api/bots, POST /api/bots/:id/pause, POST /api/bots/:id/resume; finding: GET /api/work/findings, POST /api/work/findings/:id/dismiss; job: GET /api/work/jobs, POST /api/work/jobs/:id/review { decision }, POST /api/work/jobs/:id/requeue; channel: GET /api/social/channels, POST /api/social/channels/:slug/join, POST /api/social/channels/:slug/leave, GET /api/social/plane/channels, POST /api/social/plane/channels/:slug/join, POST /api/social/plane/channels/:slug/leave; dm: GET /api/social/dms, GET /api/social/plane/dms, POST /api/social/dms/read { channel }; run: GET /api/assessment/runs, POST /api/assessment/runs/:runId/stop, GET /api/pipelines/runs, POST /api/pipelines/runs/:id/cancel; feedback: GET /api/assessment/feedback, POST /api/assessment/feedback/:taskId/resolve { response }, POST /api/assessment/feedback/:taskId/dismiss; report: POST /api/assessment/reports/publish; request: GET /api/access/requests, POST /api/access/requests/:id/withdraw; delegation: GET /api/access/delegations, POST /api/access/delegations/:id/end",
   },
   {
     name: 'access_request_status',

@@ -335,7 +335,7 @@ test('get reads a kept row by ordinal or a typed ref: its summary with withheld 
   assert.equal(results.find('1')!.ref, 'work-item:w1', 'the part\'s rows are the newest set');
   const missing = await runVoiceTool('get', { ref: 'initiative:nope' }, c);
   assert.equal(missing.outcome, 'refused');
-  assert.match(String(missing.output['reason']), /found no initiative "nope"/);
+  assert.match(String(missing.output['reason']), /found no initiative with that ref/);
   // A kind from another tenant is not read here.
   assert.equal((await runVoiceTool('get', { ref: 'request:r1' }, c)).outcome, 'refused');
 });

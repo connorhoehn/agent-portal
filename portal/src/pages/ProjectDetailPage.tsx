@@ -97,6 +97,7 @@ import {
   activeFilterCount,
   NO_FILTERS,
   ownerOptions,
+  isBlocked,
   toWorkListItem,
   WORK_GROUPS,
   WORK_SORT_OPTIONS,
@@ -350,7 +351,13 @@ function ProjectDetailPage() {
     rows: decisionRows.map((d) => ({ ref: `decision:${d.id}`, title: d.topic, status: d.status, href: `/iq/decisions/${encodeURIComponent(d.id)}` })),
   } : project && id && treeRead && !workFailure ? {
     path: pathname, record: { ref: `initiative:${id}`, title: project.name }, rowsLabel: 'work items', total: allRows.length, channel: pageChannel,
-    rows: visibleRows.map((r) => ({ ref: `work-item:${r.id}`, title: r.title, status: r.status ?? null, priority: r.priority ?? null, href: `/iq/projects/${encodeURIComponent(id)}?item=${encodeURIComponent(r.id)}` })),
+    // Coverage (10 November): the owner, the sprint and what a blocked row waits on, so "the logout bug", "Vera's work",
+    // "this sprint" and "what is blocked and on what" are answered from the rows on screen.
+    rows: visibleRows.map((r) => ({
+      ref: `work-item:${r.id}`, title: r.title, status: r.status ?? null, priority: r.priority ?? null, assignee: r.assigneeName ?? null, sprint: r.sprintId ?? null,
+      blockedOn: isBlocked(r) ? (decisions?.find((d) => d.id === r.blockedByDecisionId)?.topic ?? r.blockedReason ?? 'not given') : null,
+      href: `/iq/projects/${encodeURIComponent(id)}?item=${encodeURIComponent(r.id)}`,
+    })),
   } : null);
   // G49: the initiative's tabs, so "open decisions" is this page's tab, never a search.
   usePublishPageTabs(project && id ? { path: pathname, tabs: TABS, tab } : null);

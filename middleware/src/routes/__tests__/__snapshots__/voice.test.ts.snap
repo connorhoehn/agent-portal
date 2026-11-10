@@ -283,8 +283,22 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
                 "null",
               ],
             },
+            "sprint": {
+              "description": "work-item: "this", "last", "next" or a sprint name.",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
             "status": {
-              "description": "A status, as the page shows it.",
+              "description": "A status, as the page shows it ("blocked" for work items).",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "who": {
+              "description": "work-item: the assignee's name ("me" for the user).",
               "type": [
                 "string",
                 "null",
@@ -294,6 +308,8 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           "required": [
             "q",
             "status",
+            "who",
+            "sprint",
             "scope",
             "since",
           ],
@@ -388,8 +404,10 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
             "decisions",
             "activity",
             "documents",
+            "brief",
             "comments",
             "criteria",
+            "history",
             "runs",
             "steps",
             "versions",
@@ -931,7 +949,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Create a record of one kind through the form its page uses, with the fields that kind takes. The user confirms on a card that shows exactly what will be created (an access request's approvers and conflicts first). The kinds here and their fields: work-item (initiative, title, type?); comment (on, text); saved-search (name, query); sprint (initiative, name, startsOn, endsOn); meeting (initiative, time, thread?); access-request (item, justification, duration?); document (initiative?, title?); whiteboard (initiative?, title?); deck (initiative?, focus?).",
+    "description": "Create a record of one kind through the form its page uses, with the fields that kind takes. The user confirms on a card that shows exactly what will be created (an access request's approvers and conflicts first). The kinds here and their fields: work-item (title, initiative?, type?); comment (on, text); saved-search (name, query); sprint (initiative, name, startsOn, endsOn); meeting (initiative, time, thread?); access-request (item, justification, duration?); document (initiative?, title?); whiteboard (initiative?, title?); deck (initiative?, focus?).",
     "name": "create",
     "parameters": {
       "additionalProperties": false,
@@ -982,7 +1000,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
               ],
             },
             "initiative": {
-              "description": "work-item, sprint, meeting, document, whiteboard, deck: the initiative, by name or ref; for document, whiteboard and deck "this-page" (or left out) is the one in view.",
+              "description": "work-item, sprint, meeting, document, whiteboard, deck: the initiative, by name or ref; for work-item, document, whiteboard and deck "this-page" (or left out) is the one in view.",
               "type": [
                 "string",
                 "null",
@@ -1155,7 +1173,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Change one thing on a record a result named (by its ref or position): one field per kind, through the button its page uses. The user confirms on a card that shows the change. The ref kinds here and their field: work-item (status); bot (paused); finding (status); job (reviewed or requeued); channel (member); dm (read).",
+    "description": "Change one thing on a record a result named (by its ref or position): one field per kind, through the button its page uses. The user confirms on a card that shows the change. The ref kinds here and their field: work-item (status or assignee or sprint); bot (paused); finding (status); job (reviewed or requeued); channel (member); dm (read).",
     "name": "update",
     "parameters": {
       "additionalProperties": false,
@@ -1163,6 +1181,13 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
         "fields": {
           "additionalProperties": false,
           "properties": {
+            "assignee": {
+              "description": "work-item: who owns it, by name ("me" for the user).",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
             "member": {
               "description": "channel: true joins it, false leaves it.",
               "type": [
@@ -1217,6 +1242,13 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
                 "null",
               ],
             },
+            "sprint": {
+              "description": "work-item: "this", "next", "none" or a sprint name.",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
             "status": {
               "description": "work-item: open, in_progress, in_review, done or cancelled; finding: dismissed; run: stopped (Assessment) or cancelled (Pipelines); feedback: resolved or dismissed; request: withdrawn; delegation: ended.",
               "enum": [
@@ -1240,6 +1272,8 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           },
           "required": [
             "status",
+            "assignee",
+            "sprint",
             "response",
             "paused",
             "reviewed",
@@ -1251,7 +1285,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
           "type": "object",
         },
         "ref": {
-          "description": "The row to change: a ref, a position in the last result, or "report:program" for the assessment program report.",
+          "description": "The row to change: a ref, a position in the last result, a row the page in view shows (by name), or "report:program" for the assessment program report.",
           "type": "string",
         },
       },

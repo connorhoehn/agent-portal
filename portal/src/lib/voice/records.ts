@@ -30,7 +30,7 @@ import { DELEGATION_REASON_MIN, DELEGATION_WINDOWS, JUSTIFICATION_MIN, delegatio
 import { WORK_PLANNERS, WORK_RUNNERS, matchByName } from './work.ts';
 import { dialogueRows, matchDialogueRow, optionOutcome, type DialogueRow } from '../../pages/decisions/decisionDialogue.ts';
 import {
-  channelTag, ambiguous, deliveryIdFor, done, failed, findByName, localHref, once, pageRowNamed, qs, readFailure, readJson, refused, socialGrantRefusal,
+  channelTag, ambiguous, deliveryIdFor, done, failed, findByName, localHref, once, pageRowNamed, qs, readFailure, readJson, refused, resolveSprint, samePerson, socialGrantRefusal, workItemRow,
   type CardAnswer, type ConfirmPlan, type ToolContext, type ToolResult, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 
@@ -47,7 +47,7 @@ function verbOf(decision: string): Verb {
 }
 
 /** One decision's request: the page button's route and body, with what the card says it does. */
-interface Send { method: 'POST' | 'PATCH'; url: string; body: Record<string, unknown> }
+interface Send { method: 'POST' | 'PATCH' | 'DELETE'; url: string; body: Record<string, unknown> }
 
 /** What the planner fixed from the row the persona's own read returned. */
 interface DecidePlan {
@@ -523,12 +523,13 @@ async function planCreateKind(kind: string, f: Rec, ctx: ToolContext): Promise<{
   const card = (title: string, detail: string[], act: ActPlan) => ({ plan: { title, detail, data: act } satisfies ConfirmPlan });
   switch (kind) {
     case 'work-item': {
-      const found = await findByName(ctx, 'initiative', String(f['initiative']));
-      if ('result' in found) return found;
+      // Coverage (10 November): on an initiative's page "add a bug: …" files it on the initiative in view.
+      const where = await initiativeOf(ctx, f['initiative']);
+      if ('result' in where) return where;
       const type = String(f['type'] ?? 'story');
-      const body = { projectId: found.row.id, type, title: String(f['title']).trim(), priority: 'medium' };
-      return card(`Create a ${type} on ${found.row.title}`, [`"${body.title}"`, 'Priority medium; it starts open.'],
-        { key: `POST /api/graph/work-items ${JSON.stringify(body)}`, send: { method: 'POST', url: '/api/graph/work-items', body }, done: `Created "${body.title}"`, result: { kind: 'work-item', title: body.title }, href: `/iq/projects/${enc(found.row.id)}` });
+      const body = { projectId: where.id, type, title: String(f['title']).trim(), priority: 'medium' };
+      return card(`Create a ${type} on ${where.title}`, [`"${body.title}"`, 'Priority medium; it starts open.'],
+        { key: `POST /api/graph/work-items ${JSON.stringify(body)}`, send: { method: 'POST', url: '/api/graph/work-items', body }, done: `Created the ${type} "${body.title}" on ${where.title}`, result: { kind: 'work-item', title: body.title }, href: `/iq/projects/${enc(where.id)}` });
     }
     case 'comment': {
       const on = String(f['on']).trim();
@@ -770,6 +771,7 @@ async function planUpdateKind(kind: string, field: string, value: unknown, field
     return card('Publish the program report', ['Readers of the assessment see the scores as they stand now.'],
       { key: 'POST /api/assessment/reports/publish', send: { method: 'POST', url: '/api/assessment/reports/publish', body: {} }, done: 'Published the program report', result: { ref }, href: '/assessment/reports' });
   }
+  if (kind === 'work-item') return planWorkItemUpdate(field, value, ref, ctx);
   const found = await findByName(ctx, kind, ref);
   if ('result' in found) return found;
   const row = found.row;
@@ -779,12 +781,6 @@ async function planUpdateKind(kind: string, field: string, value: unknown, field
     card(title, detail, { key: `${method} ${url} ${JSON.stringify(body)}`, send: { method, url, body }, done: doneLine, result: { ref: `${kind}:${row.id}`, [field]: value }, ...(row.href ? { href: row.href } : {}) });
   const statusNow = String(row.status ?? '');
   switch (`${kind}.${field}`) {
-    case 'work-item.status': {
-      const to = String(value);
-      if (statusNow === to) return { result: refused(`${named} is already ${words(to)}.`) };
-      if (statusNow && !(WORK_MOVES[statusNow] ?? []).includes(to)) return { result: refused(`${named} is ${words(statusNow)}; from there it moves to ${(WORK_MOVES[statusNow] ?? []).map(words).join(' or ') || 'nothing'}.`) };
-      return mk(`Move ${named} to ${words(to)}`, [`It is ${words(statusNow) || 'unknown'} now.`], 'PATCH', `/api/graph/work-items/${id}`, { status: to }, `${row.title}: ${words(to)}`);
-    }
     case 'bot.paused':
       return value === true
         ? mk(`Pause the ${row.title} bot`, ['Its schedule stops until it is resumed.'], 'POST', `/api/bots/${id}/pause`, {}, `Paused ${row.title}`)
@@ -839,12 +835,70 @@ async function planUpdateKind(kind: string, field: string, value: unknown, field
   }
 }
 
+/**
+ * Coverage (10 November): a work item's status, owner or sprint, through the button its drawer and the sprint board
+ * use. The row is read again through the board read its page makes (tools.ts workItemRow), never the model's words.
+ */
+async function planWorkItemUpdate(field: string, value: unknown, ref: string, ctx: ToolContext): Promise<{ plan: ConfirmPlan } | { result: ToolResult }> {
+  const id = parseRef(ref)!.id;
+  const found = await workItemRow(ctx, id);
+  if ('result' in found) return found;
+  const w = found.row;
+  const named = `"${w.title}"`;
+  const key = (method: string, url: string, body: unknown) => `${method} ${url} ${JSON.stringify(body)}`;
+  const href = w.projectId ? `/iq/projects/${enc(w.projectId)}?item=${enc(w.id)}` : undefined;
+  const plan = (title: string, detail: string[], send: Send, doneLine: string, result: Record<string, unknown>) =>
+    ({ plan: { title, detail, data: { key: key(send.method, send.url, send.body), send, done: doneLine, result: { ref: `work-item:${w.id}`, ...result }, ...(href ? { href } : {}) } satisfies ActPlan } satisfies ConfirmPlan });
+  const statusNow = String(w.status ?? '');
+  if (field === 'status') {
+    const to = String(value);
+    if (statusNow === to) return { result: refused(`${named} is already ${words(to)}.`) };
+    if (statusNow && !(WORK_MOVES[statusNow] ?? []).includes(to)) return { result: refused(`${named} is ${words(statusNow)}; from there it moves to ${(WORK_MOVES[statusNow] ?? []).map(words).join(' or ') || 'nothing'}.`) };
+    const url = `/api/graph/work-items/${enc(w.id)}`;
+    return plan(`Move ${named} to ${words(to)}`, [`It is ${words(statusNow) || 'unknown'} now.`], { method: 'PATCH', url, body: { status: to } }, `${w.title}: ${words(to)}`, { status: to });
+  }
+  if (!w.projectId) return { result: refused(`${named} belongs to no initiative I can read.`, { code: 'not-on-initiative' }) };
+  if (field === 'assignee') {
+    // The drawer's owner picker offers the initiative's contributors (GET /api/graph/projects/:id), and so does this.
+    const read = await readJson<{ contributors?: Array<{ personId?: string; name?: string }> }>(ctx, `/api/graph/projects/${enc(w.projectId)}`);
+    if (!read.ok) return { result: readFailure('the initiative\'s people', read.status) };
+    const people = (read.body.contributors ?? []).filter((p): p is { personId: string; name: string } => typeof p.personId === 'string' && typeof p.name === 'string');
+    const said = String(value).trim();
+    const hits = people.filter((p) => samePerson(p.name, said, ctx));
+    if (!hits.length) return { result: refused(/^(me|myself|i)$/i.test(said) ? `You are not on this initiative's people, so ${named} cannot be yours.` : `No one called "${said}" works on this initiative; its people own its work.`, { code: 'not-found' }) };
+    if (hits.length > 1) return { result: ambiguous(`Several people on this initiative match "${said}". Ask which.`, hits.map((p) => ({ name: p.name }))) };
+    const who = hits[0]!;
+    if (w.assigneeName === who.name) return { result: refused(`${named} is already ${who.name}'s.`) };
+    const url = `/api/graph/work-items/${enc(w.id)}`;
+    return plan(`Give ${named} to ${who.name}`, [`It is ${w.assigneeName ? `${w.assigneeName}'s` : 'unassigned'} now; ${who.name} is told.`], { method: 'PATCH', url, body: { assigneeId: who.personId } },
+      `${w.title}: assigned to ${who.name}`, { assignee: who.name });
+  }
+  // sprint: the sprint board's own move in (PATCH) or out (DELETE), on the item's own initiative.
+  const said = String(value).trim();
+  if (/^(none|no sprint|backlog|out|remove)$/i.test(said)) {
+    if (!w.sprintId) return { result: refused(`${named} is in no sprint.`) };
+    const url = `/api/sprints/${enc(w.sprintId)}/items/${enc(w.id)}`;
+    return plan(`Take ${named} out of its sprint`, ['It goes back to the backlog.'], { method: 'DELETE', url, body: {} }, `${w.title}: out of the sprint`, { sprint: null });
+  }
+  const sprint = await resolveSprint(ctx, w.projectId, said);
+  if ('result' in sprint) return sprint;
+  if (w.sprintId === sprint.sprint.id) return { result: refused(`${named} is already in ${sprint.sprint.name}.`) };
+  const url = `/api/sprints/${enc(sprint.sprint.id)}/items`;
+  return plan(`Put ${named} in ${sprint.sprint.name}`, [`${sprint.sprint.status === 'active' ? 'The active sprint' : `A ${sprint.sprint.status} sprint`}; its envelope covers dispatches of it.`], { method: 'PATCH', url, body: { workItemId: w.id } },
+    `${w.title}: in ${sprint.sprint.name}`, { sprint: sprint.sprint.name });
+}
+
 const planUpdate: VoiceToolPlanner = async (args, ctx) => {
   let ref = String(args['ref']).trim();
   if (/^\d{1,2}$/.test(ref)) {
     const kept = ctx.results?.find(ref);
     if (!kept) return { result: refused(`There is no row ${ref} in the last result. List them first.`) };
     ref = kept.ref;
+  } else if (!parseRef(ref) && ctx.page?.()?.rows.length) {
+    // Coverage (10 November): "move the logout bug to in review" names a row the page in view shows.
+    const hit = pageRowNamed(ctx, ref);
+    if ('result' in hit) return hit;
+    ref = hit.row.ref;
   }
   const parsed = parseRef(ref);
   if (!parsed) return { result: refused('Name the row by the ref a result gave, such as "work-item:<id>", or its position.') };

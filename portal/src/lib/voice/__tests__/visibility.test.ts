@@ -80,8 +80,11 @@ const VARIANTS: Record<string, unknown[]> = {
     { ref: '9', scope: 'this-page' }, { name: 'fix', scope: 'this-page' }, { name: 'Nothing Like It', scope: 'this-page' }, { ref: '1', kind: 'decision', scope: 'this-page' }],
   search: [{ query: 'kubernetes', type: 'person' }, { query: 'alpha', type: 'initiative' }, { query: 'x', type: 'not-a-type' }, { query: 'who decided it', answer: true }],
   list: [{ kind: 'initiative', filter: { q: 'nothing like it' } }, { kind: 'bot' }, { kind: 'channel' }, { kind: 'not-a-kind' }, { kind: 'finding', filter: { since: 'soon' } },
-    { kind: 'work-item', scope: 'this-page' }, { kind: 'decision', scope: 'this-page' }],
-  get: [{ ref: '1' }, { ref: 'initiative:p-unknown' }, { ref: 'bot:b-x', part: 'runs' }, { ref: 'person:p-sana-x' }, { ref: 'Sana Alpha Initiative' }],
+    { kind: 'work-item', scope: 'this-page' }, { kind: 'decision', scope: 'this-page' },
+    // Coverage (10 November): work items by owner, sprint and blocked, on the page and through the board.
+    { kind: 'work-item', scope: 'this-page', filter: { who: 'Nobody Here' } }, { kind: 'work-item', scope: 'this-page', filter: { sprint: 'last' } }, { kind: 'work-item', filter: { sprint: 'Sprint Zero' } }, { kind: 'work-item', filter: { status: 'blocked' } }],
+  get: [{ ref: '1' }, { ref: 'initiative:p-unknown' }, { ref: 'bot:b-x', part: 'runs' }, { ref: 'person:p-sana-x' }, { ref: 'Sana Alpha Initiative' },
+    { ref: 'work-item:w-sana-1' }, { ref: 'work-item:w-not-theirs', part: 'brief' }, { ref: 'work-item:w-sana-1', part: 'history' }],
   computer: [{ action: 'start', initiatives: ['Unknown Initiative'] }, { action: 'open-shell', computer: 'unknown-box' },
     { action: 'run', computer: 'unknown-box', phrase: 'status' }, { action: 'run', computer: 'unknown-box', phrase: 'commits-since', since: 'soon' },
     { action: 'run', computer: 'unknown-box' }, { action: 'stop', computer: 'unknown-box' }, { action: 'stop', computer: 'sana-alpha-box' }, { action: 'stop', computer: 'sana-other-box' },
@@ -112,7 +115,8 @@ const VARIANTS: Record<string, unknown[]> = {
     { kind: 'channel', fields: { name: 'x' } }, { kind: 'delegation', fields: { delegate: 'x', window: '1d', reason: 'short' } }],
   update: [{ ref: 'work-item:w-sana-1', fields: { status: 'done' } }, { ref: 'bot:b-sana-3', fields: { paused: false, member: true } }, { ref: 'bot:b-not-theirs', fields: { paused: true } },
     { ref: 'finding:f-x', fields: { status: 'dismissed' } }, { ref: 'channel:general', fields: { member: true } }, { ref: '2', fields: { status: 'done' } }, { ref: 'nonsense', fields: { status: 'done' } },
-    { ref: 'report:program', fields: { publish: true } }],
+    { ref: 'report:program', fields: { publish: true } },
+    { ref: 'the logout', fields: { assignee: 'Nobody Here' } }, { ref: 'work-item:w-sana-1', fields: { sprint: 'this' } }, { ref: 'Nothing Like It', fields: { status: 'done' } }, { ref: 'work-item:w-sana-2', fields: { sprint: 'none' } }],
   activity: [{ scope: 'missed-calls' }, { scope: 'online', who: 'nobody' }, { scope: 'recent', since: 'tomorrow' }, { scope: 'work', who: 'Someone' }],
 };
 
