@@ -3,6 +3,8 @@
 // Both ways a document reaches the bucket are held to it: the file upload
 // (knowledge-base.ts `uploadDocument`) and the upload link's landing-zone
 // write (landing-zones.ts `uploadToLandingZone`), which used to write none.
+// A landing-zone delete (`deleteFromLandingZone`) removes the sidecar with the
+// object, object first, offline and against S3 alike.
 const mockS3Send = jest.fn();
 jest.mock('@aws-sdk/client-s3', () => ({
   ...jest.requireActual('@aws-sdk/client-s3'),
@@ -27,7 +29,7 @@ jest.mock('../kb-registry.js', () => ({
   listKbs: jest.fn(async () => mockKbs.filter((k) => k.slug !== 'loose')),
 }));
 import { uploadDocument } from '../knowledge-base.js';
-import { uploadToLandingZone } from '../landing-zones.js';
+import { deleteFromLandingZone, uploadToLandingZone } from '../landing-zones.js';
 import { landingZoneObjects } from '../../mock/landing-zone.js';
 
 beforeEach(() => { mockFlag.aurora = false; mockS3Send.mockReset(); mockS3Send.mockResolvedValue({}); });
@@ -171,5 +173,61 @@ describe('parity: the offline landing zone writes what S3 would', () => {
     await uploadToLandingZone('loose', 'a.md', Buffer.from('x'), 'text/markdown');
     // `loose` is in no registry listing, but its own entry names a tenant.
     expect(landingZoneObjects.rows().slice(before).map((o) => o.key.endsWith('.metadata.json'))).toEqual([true, false]);
+  });
+});
+
+const deletes = () => sent().filter((c) => c.op === 'DeleteObjectCommand').map((c) => c.Key);
+
+describe('a delete takes the sidecar with the object, object first', () => {
+  it('deletes the object, then its sidecar', async () => {
+    await deleteFromLandingZone('assessment/evidence', 'assessment/evidence/notes.md');
+    expect(sent().map((c) => c.op)).toEqual(['DeleteObjectCommand', 'DeleteObjectCommand']);
+    expect(deletes()).toEqual(['assessment/evidence/notes.md', 'assessment/evidence/notes.md.metadata.json']);
+  });
+
+  it('a failed object delete leaves the sidecar, so the object is never unlabelled', async () => {
+    mockS3Send.mockRejectedValueOnce(new Error('object delete failed'));
+    await expect(deleteFromLandingZone('assessment/evidence', 'assessment/evidence/notes.md')).rejects.toThrow('object delete failed');
+    expect(deletes()).toEqual(['assessment/evidence/notes.md']);
+  });
+
+  it('a failed sidecar delete still reports the object deleted', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    mockS3Send.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('sidecar delete failed'));
+    await expect(deleteFromLandingZone('assessment/evidence', 'assessment/evidence/notes.md')).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith('[kb] orphan metadata sidecar left behind:', 'sidecar delete failed');
+    warn.mockRestore();
+  });
+
+  it('deleting a sidecar key itself sends one delete', async () => {
+    await deleteFromLandingZone('assessment/evidence', 'assessment/evidence/notes.md.metadata.json');
+    expect(deletes()).toEqual(['assessment/evidence/notes.md.metadata.json']);
+  });
+
+  it('still refuses a key outside the prefix before any delete', async () => {
+    await expect(deleteFromLandingZone('assessment/evidence', 'orgiq/x.md')).rejects.toThrow(/deletion refused/);
+    expect(mockS3Send).not.toHaveBeenCalled();
+  });
+});
+
+describe('parity: the offline landing zone deletes what S3 would', () => {
+  beforeEach(() => landingZoneObjects.reset());
+
+  it('an upload then a delete leaves neither the object nor its sidecar, on both branches', async () => {
+    const out = await uploadToLandingZone('assessment-evidence', 'gone.md', Buffer.from('x'), 'text/markdown');
+    mockS3Send.mockClear();
+    await deleteFromLandingZone('assessment/evidence', out.key);
+    const real = deletes();
+    mockS3Send.mockClear();
+
+    mockFlag.aurora = true;
+    const before = landingZoneObjects.rows().map((o) => o.key);
+    const landed = await uploadToLandingZone('assessment-evidence', 'gone.md', Buffer.from('x'), 'text/markdown');
+    const written = landingZoneObjects.rows().map((o) => o.key).filter((k) => !before.includes(k));
+    await deleteFromLandingZone('assessment/evidence', landed.key);
+    expect(mockS3Send).not.toHaveBeenCalled();
+    const after = landingZoneObjects.rows().map((o) => o.key);
+    expect(after).toEqual(before);
+    expect([...written].sort()).toEqual([...real].sort());
   });
 });

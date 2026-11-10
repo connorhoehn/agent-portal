@@ -8,14 +8,14 @@
 //   listLandingZoneFiles — paginated file list for a prefix
 //   uploadToLandingZone  — upload a file under the KB's prefix
 //   initLandingZone      — create a .keep marker so the prefix exists in S3
-//   deleteFromLandingZone — delete a specific object (with prefix-guard)
+//   deleteFromLandingZone — delete a specific object and its metadata sidecar (with prefix-guard)
 
-import { S3Client, ListObjectsV2Command, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, ListObjectsV2Command, PutObjectCommand } from '@aws-sdk/client-s3';
 import { config } from '../config.js';
 import { getKbBySlug, listKbs } from './kb-registry.js';
 import { ownerOfKey, reservedUploadName, safeUploadName, tenantMetadataSidecar } from '../lib/kb-prefixes.js';
 import { ValidationError } from '../lib/async-handler.js';
-import { putDocumentWithSidecar } from '../lib/kb-document-put.js';
+import { deleteDocumentWithSidecar, putDocumentWithSidecar, sidecarKeyFor } from '../lib/kb-document-put.js';
 import { clock } from '../mock/core/clock.js';
 import {
   MOCK_DOCUMENTS_BUCKET,
@@ -366,7 +366,8 @@ export async function initLandingZone(prefix: string): Promise<void> {
 // ─── deleteFromLandingZone ────────────────────────────────────────────────────
 
 /**
- * Delete a specific object from the landing zone.
+ * Delete a specific object from the landing zone, and its tenant metadata
+ * sidecar after it.
  * Throws if the key does not start with the expected prefix (security guard).
  */
 export async function deleteFromLandingZone(prefix: string, key: string): Promise<void> {
@@ -380,13 +381,13 @@ export async function deleteFromLandingZone(prefix: string, key: string): Promis
   const bucket = documentsBucket();
   if (!bucket) throw new Error('DOCUMENTS_BUCKET not configured');
 
-  if (config.mock.aurora) { deleteObject(key); return; }
+  // The sidecar goes with the object, object first (lib/kb-document-put.ts).
+  if (config.mock.aurora) {
+    deleteObject(key);
+    const sidecar = sidecarKeyFor(key);
+    if (sidecar) deleteObject(sidecar);
+    return;
+  }
 
-  const s3 = s3Client();
-  await s3.send(
-    new DeleteObjectCommand({
-      Bucket: bucket,
-      Key: key,
-    }),
-  );
+  await deleteDocumentWithSidecar(s3Client(), bucket, key);
 }
