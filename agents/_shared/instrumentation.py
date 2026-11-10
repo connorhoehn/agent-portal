@@ -59,8 +59,10 @@ import urllib.request
 
 try:  # normal path: imported as `_shared.instrumentation`
     from . import callbacks
+    from .trace_owner import tag_span, trace_owner, owner_attributes
 except ImportError:  # loaded as a bare top-level module (scripts, notebooks)
     import callbacks  # type: ignore[no-redef]
+    from trace_owner import tag_span, trace_owner, owner_attributes  # type: ignore[no-redef]
 
 log = logging.getLogger(__name__)
 _oi_logger = logging.getLogger(__name__)
@@ -129,6 +131,14 @@ def _bootstrap_openinference() -> None:
     except Exception as e:
         _oi_logger.warning("Strands OI processor wiring failed: %s", e)
 
+    # Every span the agent opens during an invocation carries its verified
+    # owner (trace_owner.py), so X-Ray's filter finds the trace whichever
+    # segment it indexes.
+    try:
+        telemetry.tracer_provider.add_span_processor(OwnerSpanProcessor())
+    except Exception as e:
+        _oi_logger.warning("Owner span processor wiring failed: %s", e)
+
     def _formatter(span) -> str:
         try:
             return "ORGIQ_OI_SPAN:" + span.to_json(indent=None) + "\n"
@@ -159,6 +169,26 @@ def _bootstrap_openinference() -> None:
         "OpenInference bootstrap complete via StrandsTelemetry (attempt %d).",
         attempts + 1,
     )
+
+class OwnerSpanProcessor:
+    """Tags each span that starts inside an invocation with the invocation's
+    verified owner (the active TraceContext's ``owner``). A duck-typed OTel
+    SpanProcessor: only ``on_start`` does anything."""
+
+    def on_start(self, span: Any, parent_context: Any = None) -> None:
+        ctx = get_active_ctx()
+        if ctx is not None and ctx.owner:
+            tag_span(span, ctx.owner)
+
+    def on_end(self, span: Any) -> None:
+        return None
+
+    def shutdown(self) -> None:
+        return None
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        return True
+
 
 # Middleware URL — defaults to the docker-compose service name so the agents
 # can reach the middleware over the compose network. Override with
@@ -292,6 +322,10 @@ class TraceContext:
     parent_invocation_id: str | None = None
     user_id: str | None = None
     session_id: str | None = None
+    #: ``(user_id, tenant)`` from the VERIFIED auth block (trace_owner.py), the
+    #: X-Ray annotations the middleware's trace read filters on. ``user_id``
+    #: above is the payload's own claim and never tags a trace.
+    owner: tuple[str, str] | None = None
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     # Bedrock Converse usage accumulators. Populated by the boto3 monkey-patch
     # installed via `install_bedrock_usage_capture()` — Strands manages its own
@@ -325,7 +359,7 @@ class TraceContext:
         call with non-dict payloads — they yield a fully-default context.
         """
         if not isinstance(payload, dict):
-            return cls()
+            return cls(owner=trace_owner(payload))
         # camelCase is the wire contract; allow snake_case fallback for tolerance.
         parent = (
             payload.get("parentInvocationId")
@@ -350,6 +384,7 @@ class TraceContext:
             session_id=session_id if isinstance(session_id, str) else None,
             run_id=run_id if isinstance(run_id, str) and run_id else None,
             thread_id=thread_id if isinstance(thread_id, str) and thread_id else None,
+            owner=trace_owner(payload),
         )
 
     # ── AG-UI run / step recording ──
@@ -1017,6 +1052,9 @@ def with_orgiq_root(
       - Sets ``orgiq.prompt_version``, ``orgiq.template_id``, ``orgiq.runtime_image_digest`` when supplied
       - Sets ``orgiq.prompt_version_number`` / ``orgiq.prompt_arm`` (DE-4) when supplied
       - Sets ``orgiq.model_id`` / ``orgiq.model_registry_version`` (DE-3) when supplied
+      - Sets the verified owner's ``user_id`` / ``tenant`` X-Ray annotations
+        (trace_owner.py) on this span and on the span it opens under (the
+        runtime's server span), so the middleware's scoped trace read finds it
       - Wraps the body in OI ``using_session(...)`` and ``using_user(...)`` so all child spans inherit
         these via OTel context propagation
       - Sets ``input.value`` to ctx.user_prompt if the field exists on ctx; otherwise omits
@@ -1063,6 +1101,13 @@ def with_orgiq_root(
         attrs["orgiq.model_id"] = model_id
     if model_registry_version:
         attrs["orgiq.model_registry_version"] = model_registry_version
+    attrs.update(owner_attributes(ctx.owner))
+    # The span this root opens under (the runtime's own server span, when the
+    # distro made one) is the trace's segment: tag it too.
+    try:
+        tag_span(trace.get_current_span(), ctx.owner)
+    except Exception:  # noqa: BLE001
+        pass
 
     # Stack the OI session + user context managers if values are present.
     session_cm = using_session(session_id=ctx.session_id) if ctx.session_id else contextlib.nullcontext()

@@ -6,6 +6,14 @@
 import type { TraceScope } from './trace-scope.js';
 
 /**
+ * The X-Ray annotations that name a trace's owner. The agents tag every span
+ * with them from the verified auth block (agents/_shared/trace_owner.py,
+ * USER_ANNOTATION / TENANT_ANNOTATION); __tests__/trace-owner.test.ts keeps
+ * the two sides equal.
+ */
+export const TRACE_OWNER_ANNOTATIONS = { user: 'user_id', tenant: 'tenant' } as const;
+
+/**
  * An X-Ray trace (GET /api/observability/traces and /traces/:id) in the
  * caller's scope. Its owner is the root segment's `user_id` / `tenant`
  * annotations (the mock's own fields offline). Unlike the offline corpus a
@@ -31,6 +39,6 @@ const XRAY_VALUE = /^[A-Za-z0-9_.@:-]{1,128}$/;
 export function xrayScopeFilter(scope: TraceScope | null): string | undefined | null {
   if (!scope) return undefined;
   if (!XRAY_VALUE.test(scope.tenant) || (scope.userId !== null && !XRAY_VALUE.test(scope.userId))) return null;
-  const tenant = `annotation.tenant = "${scope.tenant}"`;
-  return scope.userId === null ? tenant : `annotation.user_id = "${scope.userId}" AND ${tenant}`;
+  const tenant = `annotation.${TRACE_OWNER_ANNOTATIONS.tenant} = "${scope.tenant}"`;
+  return scope.userId === null ? tenant : `annotation.${TRACE_OWNER_ANNOTATIONS.user} = "${scope.userId}" AND ${tenant}`;
 }

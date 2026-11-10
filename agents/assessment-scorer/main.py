@@ -27,6 +27,7 @@ from _shared.instrumentation import (  # noqa: E402
     post_trace,
     reset_active_ctx,
     set_active_ctx,
+    with_orgiq_root,
 )
 
 # Deterministic scoring logic — dependency-free, unit tested on its own in
@@ -345,7 +346,9 @@ async def handle(payload: dict) -> AsyncIterator | dict:
 
     t0 = time.monotonic()
     try:
-        result = _agent(input_text)
+        # The root span carries the verified caller's X-Ray owner annotations.
+        with with_orgiq_root(ctx, agent_id="orgiq-assessment-scorer", agent_name="AssessmentScorer", model_id=_agent.model_id):
+            result = _agent(input_text)
     finally:
         _current_ctx.reset(token)
         reset_active_ctx(shared_token)

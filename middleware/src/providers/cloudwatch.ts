@@ -36,7 +36,7 @@ import { config } from '../config.js';
 import { realAgentCore } from './agentcore.js';
 import type { AgentRuntimeSummary } from './types.js';
 import { mockTraces } from '../mock/traces.js';
-import { traceInScope, xrayScopeFilter } from '../lib/trace-owner.js';
+import { TRACE_OWNER_ANNOTATIONS, traceInScope, xrayScopeFilter } from '../lib/trace-owner.js';
 import type { TraceScope } from '../lib/trace-scope.js';
 import { mockAgents } from '../mock/agent-statuses.js';
 import type {
@@ -214,6 +214,28 @@ function inferKind(name: string): TraceSpan['kind'] {
   return 'agent';
 }
 
+interface SegmentDoc { annotations?: Record<string, unknown>; subsegments?: SegmentDoc[] }
+
+/**
+ * The owner annotations (TRACE_OWNER_ANNOTATIONS) of a segment document, from
+ * the segment itself or the first of its subsegments that names them.
+ * Exported for the tests.
+ */
+export function ownerAnnotations(doc: SegmentDoc, depth = 0): { userId: string | null; tenant: string | null } {
+  const ann = doc.annotations ?? {};
+  const str = (v: unknown) => (typeof v === 'string' && v ? v : null);
+  let userId = str(ann[TRACE_OWNER_ANNOTATIONS.user]);
+  let tenant = str(ann[TRACE_OWNER_ANNOTATIONS.tenant]);
+  if ((userId && tenant) || depth >= 8) return { userId, tenant };
+  for (const sub of doc.subsegments ?? []) {
+    const inner = ownerAnnotations(sub, depth + 1);
+    userId ??= inner.userId;
+    tenant ??= inner.tenant;
+    if (userId && tenant) break;
+  }
+  return { userId, tenant };
+}
+
 // Map an X-Ray trace document to our simplified Trace shape.
 // TODO: implement full segment → span tree mapping once real traces arrive.
 function mapXRayTrace(xt: XRayTrace): Trace | null {
@@ -240,6 +262,7 @@ function mapXRayTrace(xt: XRayTrace): Trace | null {
         error?: boolean;
         fault?: boolean;
         annotations?: Record<string, string | number>;
+        subsegments?: SegmentDoc[];
       };
       if (agentName === 'unknown' && doc.name) agentName = doc.name;
       if (startTimeMs === 0 && doc.start_time) {
@@ -251,8 +274,11 @@ function mapXRayTrace(xt: XRayTrace): Trace | null {
       const to = ann['tokens.out'];
       if (typeof ti === 'number') tokensIn += ti;
       if (typeof to === 'number') tokensOut += to;
-      if (userId === null && typeof ann['user_id'] === 'string' && ann['user_id']) userId = ann['user_id'];
-      if (tenant === null && typeof ann['tenant'] === 'string' && ann['tenant']) tenant = ann['tenant'];
+      // The agents tag every span (root and children alike); an OTel span
+      // that X-Ray stores as a subsegment carries them one level down.
+      const owner = ownerAnnotations(doc);
+      if (userId === null && owner.userId) userId = owner.userId;
+      if (tenant === null && owner.tenant) tenant = owner.tenant;
     } catch {
       // ignore malformed segment doc
     }

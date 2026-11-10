@@ -3,8 +3,32 @@
 // samples to a plain member and the org leader).
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', accountId: '' } }));
 
-import { traceInScope, xrayScopeFilter } from '../trace-owner.js';
-import { mockCloudWatch } from '../../providers/cloudwatch.js';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { TRACE_OWNER_ANNOTATIONS, traceInScope, xrayScopeFilter } from '../trace-owner.js';
+import { mockCloudWatch, ownerAnnotations } from '../../providers/cloudwatch.js';
+
+describe('the owner annotation names', () => {
+  it('are the agents\' (agents/_shared/trace_owner.py), so the filter matches what they tag', () => {
+    const py = readFileSync(join(__dirname, '..', '..', '..', '..', 'agents', '_shared', 'trace_owner.py'), 'utf8');
+    const named = (name: string) => py.match(new RegExp(`^${name} = "([^"]+)"$`, 'm'))?.[1];
+    expect(named('USER_ANNOTATION')).toBe(TRACE_OWNER_ANNOTATIONS.user);
+    expect(named('TENANT_ANNOTATION')).toBe(TRACE_OWNER_ANNOTATIONS.tenant);
+  });
+
+  it('the filter uses exactly those keys', () => {
+    expect(xrayScopeFilter({ tenant: 'orgiq', userId: 'u-1' })).toBe(
+      `annotation.${TRACE_OWNER_ANNOTATIONS.user} = "u-1" AND annotation.${TRACE_OWNER_ANNOTATIONS.tenant} = "orgiq"`,
+    );
+  });
+
+  it('a trace\'s owner is read from the segment or, for an OTel child span, its subsegments', () => {
+    expect(ownerAnnotations({ annotations: { user_id: 'u-1', tenant: 'orgiq' } })).toEqual({ userId: 'u-1', tenant: 'orgiq' });
+    expect(ownerAnnotations({ annotations: {}, subsegments: [{ subsegments: [{ annotations: { user_id: 'u-2', tenant: 'assessment' } }] }] }))
+      .toEqual({ userId: 'u-2', tenant: 'assessment' });
+    expect(ownerAnnotations({ annotations: { user_id: 7 } })).toEqual({ userId: null, tenant: null });
+  });
+});
 
 describe('traceInScope', () => {
   const mine = { userId: 'u-a', tenant: 'orgiq' };

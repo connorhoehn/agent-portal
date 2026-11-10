@@ -37,6 +37,7 @@ from _shared.instrumentation import (  # noqa: E402
     post_trace,
     reset_active_ctx,
     set_active_ctx,
+    with_orgiq_root,
 )
 
 # Deterministic guardrails — dependency-free, unit tested on their own in
@@ -402,7 +403,9 @@ async def _handle_sync(payload: dict) -> dict:
 
     t0 = time.monotonic()
     try:
-        result = _agent(input_text)
+        # The root span carries the verified caller's X-Ray owner annotations.
+        with with_orgiq_root(ctx, agent_id="orgiq-assessment-drafter", agent_name="AssessmentDrafter", model_id=_agent.model_id):
+            result = _agent(input_text)
     finally:
         _current_ctx.reset(token)
         reset_active_ctx(shared_token)
