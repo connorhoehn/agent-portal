@@ -2,7 +2,7 @@
 // diff of the canonical markdown), the linter's findings, what it looks like, and — for a reviewer who
 // owns the scope — Accept, Reject (a note is required) and Merge into another runbook. Everyone else
 // reads it with an AccessNotice. A refused write says why in a sentence, never a bare status.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AccessNotice, ChangeReviewCard, SourceList } from '@connorhoehn/ui-components';
 import { DocumentOutline, EditorShell } from '@connorhoehn/ui-components/doc-editor';
 import {
@@ -17,11 +17,34 @@ import { runbookDisplayTitle } from './runbookTitles';
 import { RunbookDocView } from './RunbookDocView';
 import { RunbookFiles } from './RunbookFiles';
 import { useRunbookNames } from './useRunbookNames';
+import { diffWithNames, type Names } from './runbookNames';
 import {
   KIND_LABEL, PROPOSAL_STATUS_LABEL, PROPOSAL_STATUS_TONE, filesDiffSummary, lintCounts, proposalAuthor, proposalTitle, refusalMessage, runPageHref, runbookHref,
   viewerDiff,
 } from './runbooksModel';
 import type { FilesDiff, LintFinding, Proposal, RunbookFile, RunbookRow, ScopeKind } from './types';
+
+/**
+ * A diff with its account ids read as names (`diffWithNames`: the directory, else the name the diff
+ * itself pairs with the id). Presentational only: the stored text is unchanged, and "Show raw ids"
+ * brings back the literal diff for whoever needs to quote it (UX leftovers, 10 November).
+ */
+function NamedDiff({ diff, names, defaultCollapsed = false, testId }: { diff: string; names: Names; defaultCollapsed?: boolean; testId: string }) {
+  const [raw, setRaw] = useState(false);
+  const named = useMemo(() => diffWithNames(diff, (id) => names.user(id)), [diff, names]);
+  return (
+    <Stack gap="xs">
+      {named.replaced > 0 && (
+        <Inline justify="end">
+          <Button variant="link" size="sm" aria-pressed={raw} onClick={() => setRaw((v) => !v)} data-testid={`${testId}-raw-toggle`}>
+            {raw ? 'Show names' : 'Show raw ids'}
+          </Button>
+        </Inline>
+      )}
+      <DiffViewer diff={raw ? diff : named.text} defaultCollapsed={defaultCollapsed} data-testid={testId} />
+    </Stack>
+  );
+}
 
 interface ProposalResponse {
   proposal: Proposal;
@@ -258,7 +281,7 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
         {p.kind !== 'retire' && (
           <DetailSection as="h2" variant="heading" first title={sectionTitle('changes')} data-testid="proposal-section-changes" hint={data.diff ? `+${data.diff.added} −${data.diff.removed}` : undefined}>
             {data.diff?.text
-              ? <DiffViewer diff={viewerDiff(data.diff.text, `${title}.md`)} data-testid="proposal-diff" />
+              ? <NamedDiff diff={viewerDiff(data.diff.text, `${title}.md`)} names={names} testId="proposal-diff" />
               : <T size="sm" tone="secondary">The proposal has no textual change.</T>}
           </DetailSection>
         )}
@@ -269,7 +292,7 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
               {/* The bundle's files are code and recorded data (a presence snapshot keyed by user id):
                   each file's diff opens on demand under its path and line counts, exact as written,
                   so the record reads as its summary first (walk, 9 November). */}
-              {data.files_diff?.text && <DiffViewer diff={data.files_diff.text} defaultCollapsed data-testid="proposal-files-diff" />}
+              {data.files_diff?.text && <NamedDiff diff={data.files_diff.text} names={names} defaultCollapsed testId="proposal-files-diff" />}
               {data.proposed_files && data.proposed_files.length > 0 && <RunbookFiles files={data.proposed_files} testId="proposal-files-list" />}
             </Stack>
           </DetailSection>
