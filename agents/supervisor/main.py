@@ -171,9 +171,8 @@ def _invoke_sub_agent(runtime_arn: str, input_text: str) -> str:
         if ident[1]:
             handed["sub"] = ident[1]
         payload_obj["auth"] = handed
-        sig = sign_identity(handed, payload_obj.get("sessionId") or "", prompt=input_text)
-        if sig:
-            payload_obj["authSig"] = sig
+        # authSig and a fresh authNonce (the sub-agent refuses a reused one).
+        payload_obj.update(sign_identity(handed, payload_obj.get("sessionId") or "", prompt=input_text))
     kwargs: dict = {
         "agentRuntimeArn": runtime_arn,
         "qualifier": "DEFAULT",

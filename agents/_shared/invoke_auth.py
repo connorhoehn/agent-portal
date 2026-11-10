@@ -14,8 +14,19 @@ agents' callbacks use — callbacks.py) and the supervisor verifies it here:
 The signature also binds what is asked, so a captured block cannot be replayed
 with another prompt inside its window: the canonical body is
 ``{"auth": {...string fields...}, "conversationId": ..., "historySha256": ...,
-"inputSha256": ..., "promptSha256": ..., "runId": ...}`` with sorted keys and
-no spaces, built identically by ``middleware/src/lib/agent-invoke-auth.ts``.
+"inputSha256": ..., "nonce": ..., "promptSha256": ..., "runId": ...}`` with
+sorted keys and no spaces, built identically by
+``middleware/src/lib/agent-invoke-auth.ts``.
+
+Every signed invoke carries a fresh random ``authNonce`` (bound into the
+signature), and the verifier remembers each nonce it accepted until the
+signature window has passed (``ReplayCache``): an identical request sent a
+second time is refused. The cache is in-process, which matches an AgentCore
+runtime session (one process serves a session). A runtime that runs several
+replicas behind one endpoint needs a shared store for the cache (a DynamoDB
+table with a conditional put on the nonce and a TTL attribute, or Redis
+``SET NX EX``); ``set_replay_cache`` takes any object with the same
+``seen_or_add`` method.
 The prompt is the one the agent will read (``input_text``, ``prompt`` and
 ``message`` must agree), the input is the ``input`` JSON text as sent, the
 history is its ``[role, content]`` pairs, and the run id is ``runId``. The secret is
@@ -40,6 +51,10 @@ import hashlib
 import json
 import logging
 import os
+import secrets
+import threading
+import time
+from collections import OrderedDict
 from dataclasses import dataclass
 
 try:  # package import (agents._shared) or flat import (image: /app/_shared on sys.path)
@@ -71,13 +86,80 @@ class InvokeIdentity:
     signed: bool
 
 
+#: The verifier's future-skew tolerance (callbacks.verify_service_request).
+SKEW_SEC = 10
+#: Nonce length bounds the verifier accepts (the signers send 24 url-safe chars).
+MIN_NONCE_LEN = 16
+MAX_NONCE_LEN = 128
+
+
+class ReplayCache:
+    """Nonces accepted inside the signature window, each kept until a
+    signature carrying it could no longer verify (``TTL_SEC + SKEW_SEC``).
+
+    In-process, thread-safe, bounded: past ``max_entries`` the oldest entry is
+    dropped (sized well above one runtime's request rate over the window).
+    """
+
+    def __init__(self, ttl_sec: float = TTL_SEC + SKEW_SEC, max_entries: int = 100_000):
+        self._ttl = ttl_sec
+        self._max = max_entries
+        self._seen: "OrderedDict[str, float]" = OrderedDict()
+        self._lock = threading.Lock()
+
+    def seen_or_add(self, nonce: str, now: float | None = None) -> bool:
+        """True when ``nonce`` was already accepted and has not expired;
+        otherwise records it and returns False."""
+        t = time.monotonic() if now is None else now
+        with self._lock:
+            while self._seen:
+                _, expiry = next(iter(self._seen.items()))
+                if expiry > t:
+                    break
+                self._seen.popitem(last=False)
+            if nonce in self._seen:
+                return True
+            self._seen[nonce] = t + self._ttl
+            while len(self._seen) > self._max:
+                self._seen.popitem(last=False)
+            return False
+
+    def __len__(self) -> int:
+        return len(self._seen)
+
+
+_replay_cache = ReplayCache()
+
+# The agents read the verified caller more than once per invocation (the
+# handler, the retrieval filter, the tenant floor) from the same payload
+# object. A nonce is consumed by the first read; later reads of the same
+# object reuse that answer. Keyed by object identity and holding the object,
+# so a fresh payload (a replay parsed from a new request) never matches.
+_verified_payloads: "OrderedDict[int, tuple[dict, tuple, InvokeIdentity]]" = OrderedDict()
+_verified_lock = threading.Lock()
+_VERIFIED_MAX = 1024
+
+
+def set_replay_cache(cache) -> None:
+    """Swap the replay store: a shared one for a multi-replica runtime, or a
+    fresh one in tests. It needs ``seen_or_add(nonce) -> bool``."""
+    global _replay_cache
+    _replay_cache = cache
+    with _verified_lock:
+        _verified_payloads.clear()
+
+
+def new_nonce() -> str:
+    return secrets.token_urlsafe(18)
+
+
 def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8", errors="surrogatepass")).hexdigest()
 
 
 def canonical_body(
     auth: dict, conversation_id: str, *, prompt: str = "", input_raw: str = "",
-    history: list | None = None, run_id: str = "",
+    history: list | None = None, run_id: str = "", nonce: str = "",
 ) -> str:
     fields = {k: v for k, v in sorted(auth.items()) if isinstance(k, str) and isinstance(v, str)}
     history_sha = ""
@@ -90,6 +172,7 @@ def canonical_body(
             "conversationId": conversation_id or "",
             "historySha256": history_sha,
             "inputSha256": _sha256(input_raw) if input_raw else "",
+            "nonce": nonce or "",
             "promptSha256": _sha256(prompt or ""),
             "runId": run_id or "",
         },
@@ -113,8 +196,11 @@ def request_binding(payload: dict) -> dict | None:
     run_id = payload.get("runId")
     if run_id is not None and not isinstance(run_id, str):
         return None
+    nonce = payload.get("authNonce")
+    if nonce is not None and not isinstance(nonce, str):
+        return None
     return {"prompt": prompts[0] if prompts else "", "input_raw": raw_input or "",
-            "history": history or None, "run_id": run_id or ""}
+            "history": history or None, "run_id": run_id or "", "nonce": nonce or ""}
 
 
 def canonical_for(payload: dict) -> str | None:
@@ -137,9 +223,30 @@ def insecure_dev_mode(env=None) -> bool:
 
 
 def verified_identity(payload: dict) -> InvokeIdentity | None:
-    """The payload's identity when it may be trusted, else ``None``."""
+    """The payload's identity when it may be trusted, else ``None``.
+
+    A signed payload is accepted once: its nonce is recorded, and another
+    payload with the same nonce inside the window is refused as a replay.
+    Reading the same payload object again returns the first answer."""
     if not isinstance(payload, dict):
         return None
+    key = id(payload)
+    stamp = (payload.get("authSig"), canonical_for(payload))
+    with _verified_lock:
+        hit = _verified_payloads.get(key)
+        if hit is not None and hit[0] is payload and hit[1] == stamp:
+            return hit[2]
+    ident = _verify(payload)
+    if ident is not None and ident.signed:
+        with _verified_lock:
+            _verified_payloads[key] = (payload, stamp, ident)
+            _verified_payloads.move_to_end(key)
+            while len(_verified_payloads) > _VERIFIED_MAX:
+                _verified_payloads.popitem(last=False)
+    return ident
+
+
+def _verify(payload: dict) -> InvokeIdentity | None:
     auth = payload.get("auth")
     if not isinstance(auth, dict):
         return None
@@ -166,6 +273,13 @@ def verified_identity(payload: dict) -> InvokeIdentity | None:
     if not ok:
         log.warning("invoke-auth: auth block refused (%s); treating the caller as least privileged", why)
         return None
+    nonce = payload.get("authNonce")
+    if not isinstance(nonce, str) or not (MIN_NONCE_LEN <= len(nonce) <= MAX_NONCE_LEN):
+        log.warning("invoke-auth: the signed block carries no usable nonce; treating the caller as least privileged")
+        return None
+    if _replay_cache.seen_or_add(nonce):
+        log.warning("invoke-auth: nonce already used inside the signature window; treating the caller as least privileged")
+        return None
     return InvokeIdentity(auth=auth, conversation_id=conversation_id, signed=True)
 
 
@@ -179,29 +293,32 @@ def verified_auth(payload) -> dict | None:
 def sign_identity(
     auth: dict, conversation_id: str, *, prompt: str = "", run_id: str = "",
     service_id: str = SUPERVISOR_SERVICE_ID,
-) -> str | None:
-    """``authSig`` for a block this agent hands down (the supervisor to a
-    sub-agent), bound to the prompt it sends, or ``None`` when no secret is
-    configured (dev mode: the sub-agent then trusts the block only under its
-    own dev flag)."""
+) -> dict:
+    """``{"authSig", "authNonce"}`` for a block this agent hands down (the
+    supervisor to a sub-agent), bound to the prompt it sends and a fresh
+    nonce, or ``{}`` when no secret is configured (dev mode: the sub-agent
+    then trusts the block only under its own dev flag). Spread it into the
+    payload."""
     try:
         secret = resolve_secret(SECRET_ENV)
     except SecretResolutionError as exc:
         log.error("invoke-auth: %s", exc)
-        return None
+        return {}
     if not secret:
-        return None
-    return sign_service_request(
-        METHOD, TARGET, canonical_body(auth, conversation_id, prompt=prompt, run_id=run_id),
+        return {}
+    nonce = new_nonce()
+    sig = sign_service_request(
+        METHOD, TARGET, canonical_body(auth, conversation_id, prompt=prompt, run_id=run_id, nonce=nonce),
         secret=secret, service_id=service_id, audience=AUDIENCE,
     )
+    return {"authSig": sig, "authNonce": nonce}
 
 
 #: Top-level keys only the middleware's body builder (or the supervisor) sets:
 #: identity and the trace join. Mirrors INVOKE_IDENTITY_KEYS in
 #: middleware/src/lib/agent-invoke-auth.ts.
 IDENTITY_KEYS = frozenset({
-    "auth", "authSig", "tenant", "sub", "role", "actor",
+    "auth", "authSig", "authNonce", "tenant", "sub", "role", "actor",
     "userId", "user_id", "sessionId", "session_id", "runtimeSessionId",
     "runId", "run_id", "invocationId", "parentInvocationId", "parent_invocation_id",
     "threadId", "thread_id",

@@ -84,7 +84,7 @@ class SignedOnly(unittest.TestCase):
         from _shared import invoke_auth
         from _shared.callbacks import sign_service_request
 
-        payload = {"auth": auth, "sessionId": conversation}
+        payload = {"auth": auth, "sessionId": conversation, "authNonce": invoke_auth.new_nonce()}
         payload["authSig"] = sign_service_request(
             invoke_auth.METHOD, invoke_auth.TARGET, invoke_auth.canonical_for(payload),
             secret=self.SECRET, service_id=invoke_auth.SERVICE_ID, audience=invoke_auth.AUDIENCE,

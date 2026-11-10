@@ -32,7 +32,8 @@ def signed(auth: dict, conversation: str, secret: str = SECRET, **over) -> dict:
     from _shared import invoke_auth
     from _shared.callbacks import sign_service_request
 
-    payload = {"input_text": "q", "auth": auth, "sessionId": conversation, **over}
+    payload = {"input_text": "q", "auth": auth, "sessionId": conversation,
+               "authNonce": invoke_auth.new_nonce(), **over}
     payload["authSig"] = sign_service_request(
         invoke_auth.METHOD, invoke_auth.TARGET, invoke_auth.canonical_for(payload),
         secret=secret, service_id=invoke_auth.SERVICE_ID, audience=invoke_auth.AUDIENCE,
@@ -48,10 +49,12 @@ class CanonicalForm(unittest.TestCase):
         self.assertEqual(
             canonical_body({"tenant": "orgiq", "sub": "u-lead", "role": "org-leader", "ignored": 42}, "conv-1",
                            prompt="what is the plan", input_raw='{"mode":"x"}',
-                           history=[{"role": "user", "content": "hi"}], run_id="run-1"),
+                           history=[{"role": "user", "content": "hi"}], run_id="run-1",
+                           nonce="n-0123456789abcdef"),
             '{"auth":{"role":"org-leader","sub":"u-lead","tenant":"orgiq"},"conversationId":"conv-1",'
             '"historySha256":"897be8e1f0370e7f41788b5b5337627e27486af82d28479ccfbe509c847683b9",'
             '"inputSha256":"afb9161ad4b37bf3f4f0159b060c8140072dcbcf103c3d7b0eea3926028cf587",'
+            '"nonce":"n-0123456789abcdef",'
             '"promptSha256":"75dbbc2af0d38560f0046d20c179a261220761a09d3733baaf7d6acf87302319",'
             '"runId":"run-1"}',
         )
@@ -100,6 +103,29 @@ class SignedAuthBlock(SupervisorTestCase):
     def test_a_block_moved_to_another_conversation_is_refused(self):
         payload = signed({"sub": "u-1", "role": "org-leader", "tenant": "orgiq"}, "conv-1")
         payload["sessionId"] = "conv-2"
+        self.assertEqual(self.sup._resolve_identity(payload), ("orgiq", "member"))
+
+    def test_an_identical_request_sent_twice_is_refused_the_second_time(self):
+        payload = signed({"sub": "u-1", "role": "org-leader", "tenant": "orgiq"}, "conv-1")
+        wire = json.dumps(payload)
+        self.assertEqual(self.sup._resolve_identity(json.loads(wire)), ("orgiq", "org-leader"))
+        self.assertEqual(self.sup._resolve_identity(json.loads(wire)), ("orgiq", "member"))
+
+    def test_the_same_payload_read_twice_in_one_invocation_still_verifies(self):
+        from _shared.invoke_auth import verified_auth
+
+        payload = signed({"sub": "u-1", "role": "org-leader", "tenant": "orgiq"}, "conv-1")
+        self.assertEqual(self.sup._resolve_identity(payload), ("orgiq", "org-leader"))
+        self.assertEqual(verified_auth(payload)["role"], "org-leader")
+
+    def test_a_signed_block_without_a_nonce_is_refused(self):
+        payload = signed({"sub": "u-1", "role": "org-leader", "tenant": "orgiq"}, "conv-1", authNonce=None)
+        payload.pop("authNonce")
+        self.assertEqual(self.sup._resolve_identity(payload), ("orgiq", "member"))
+
+    def test_a_changed_nonce_breaks_the_signature(self):
+        payload = signed({"sub": "u-1", "role": "org-leader", "tenant": "orgiq"}, "conv-1")
+        payload["authNonce"] = "another-nonce-0123456789"
         self.assertEqual(self.sup._resolve_identity(payload), ("orgiq", "member"))
 
     def test_a_block_signed_with_another_secret_is_refused(self):

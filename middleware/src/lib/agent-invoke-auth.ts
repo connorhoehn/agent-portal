@@ -15,15 +15,21 @@
 // same bytes), of the history (as [role, content] pairs), and the run id. The
 // canonical body is built identically on both sides, sorted keys, no spaces:
 // `{"auth":{...string fields...},"conversationId":"...","historySha256":"...",
-// "inputSha256":"...","promptSha256":"...","runId":"..."}` (an absent input
-// or history hashes as "", an absent run id is "").
+// "inputSha256":"...","nonce":"...","promptSha256":"...","runId":"..."}` (an
+// absent input or history hashes as "", an absent run id is "").
+//
+// Every signed body also carries a fresh random `authNonce`, bound into the
+// signature, and the agents accept each nonce once inside the window
+// (invoke_auth.py `ReplayCache`), so the identical request sent twice is
+// refused the second time. The agent-side cache is in-process; a runtime with
+// several replicas behind one endpoint needs a shared store for it.
 //
 // The secret is AGENT_INVOKE_SECRET (infra mints `<prefix>-agent-invoke-secret`
 // and gives it to this task and the supervisor runtime). Unset, nothing is
 // signed: a dev process talking to a dev agent keeps working through the
 // agent's INSECURE_DEV_MODE path, and a deployed agent refuses the block.
 
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { signServiceRequest } from '@connorhoehn/service-runtime';
 
 export const AGENT_INVOKE_SECRET_ENV = 'AGENT_INVOKE_SECRET';
@@ -39,7 +45,12 @@ export interface InvokeBinding {
   input?: string;
   history?: ReadonlyArray<{ role: string; content: string }>;
   runId?: string;
+  /** One-use value the agent's replay cache keys on (sent as `authNonce`). */
+  nonce?: string;
 }
+
+/** A fresh nonce for one invoke: 18 random bytes, 24 url-safe characters. */
+export const newInvokeNonce = (): string => randomBytes(18).toString('base64url');
 
 const sha256 = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
 
@@ -56,6 +67,7 @@ export function canonicalInvokeAuth(auth: Record<string, unknown>, conversationI
     conversationId: conversationId ?? '',
     historySha256: history,
     inputSha256: binding.input ? sha256(binding.input) : '',
+    nonce: binding.nonce ?? '',
     promptSha256: sha256(binding.prompt ?? ''),
     runId: binding.runId ?? '',
   });
@@ -83,7 +95,7 @@ export function signInvokeAuth(
  * carries them, and the structured input never reaches the top level.
  */
 export const INVOKE_IDENTITY_KEYS: ReadonlySet<string> = new Set([
-  'auth', 'authSig', 'tenant', 'sub', 'role', 'actor',
+  'auth', 'authSig', 'authNonce', 'tenant', 'sub', 'role', 'actor',
   'userId', 'user_id', 'sessionId', 'session_id', 'runtimeSessionId',
   'runId', 'run_id', 'invocationId', 'parentInvocationId', 'parent_invocation_id',
   'threadId', 'thread_id',
@@ -148,11 +160,12 @@ export function buildInvokeBody(payload: InvokeBodyPayload, opts: { stream?: boo
 export function signedAuthFields(
   payload: { auth?: Record<string, unknown>; structuredInput?: Record<string, unknown>; sessionId?: string },
   binding: InvokeBinding = { prompt: '' },
-): { auth?: Record<string, unknown>; authSig?: string } {
+): { auth?: Record<string, unknown>; authSig?: string; authNonce?: string } {
   const fromStructured = payload.structuredInput?.['auth'];
   const auth = payload.auth
     ?? (fromStructured && typeof fromStructured === 'object' ? fromStructured as Record<string, unknown> : undefined);
   if (!auth) return {};
-  const sig = signInvokeAuth(auth, payload.sessionId, binding);
-  return sig ? { auth, authSig: sig } : { auth };
+  const nonce = binding.nonce ?? newInvokeNonce();
+  const sig = signInvokeAuth(auth, payload.sessionId, { ...binding, nonce });
+  return sig ? { auth, authSig: sig, authNonce: nonce } : { auth };
 }

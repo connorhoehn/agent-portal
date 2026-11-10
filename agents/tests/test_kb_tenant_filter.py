@@ -30,7 +30,7 @@ def signed(auth: dict, conversation: str, service_id: str | None = None) -> dict
     from _shared import invoke_auth
     from _shared.callbacks import sign_service_request
 
-    payload = {"input_text": "q", "auth": auth, "sessionId": conversation}
+    payload = {"input_text": "q", "auth": auth, "sessionId": conversation, "authNonce": invoke_auth.new_nonce()}
     payload["authSig"] = sign_service_request(
         invoke_auth.METHOD, invoke_auth.TARGET, invoke_auth.canonical_for(payload),
         secret=SECRET, service_id=service_id or invoke_auth.SERVICE_ID, audience=invoke_auth.AUDIENCE,
