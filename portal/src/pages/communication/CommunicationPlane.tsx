@@ -37,7 +37,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { SidePane, ViewportFillRegion } from '@connorhoehn/ui-components';
 import { ConversationRail, buildRailSection, type ConversationRailSection } from '@connorhoehn/ui-components/social';
-import { Button, EmptyState, ExternalLinkIcon, IconButton, Inline, InlineAlert, PhoneIcon, Stack, T } from '@connorhoehn/ui-components/shared';
+import { Button, EmptyState, ExplorerLayout, ExternalLinkIcon, IconButton, Inline, InlineAlert, PhoneIcon, Stack, T, useViewportWidth } from '@connorhoehn/ui-components/shared';
 import { useShellBreadcrumbItems } from '../../components/shell/Breadcrumbs';
 import { SectionContent } from '../../components/shell/SectionContent';
 import { useTenantCalls } from '../../hooks/usePageCalls';
@@ -288,33 +288,66 @@ export default function CommunicationPlane({ route }: { route: SocialChatRoute }
     );
   }
 
-  // No Social grant (or Social is off): no Social request at all. At the app's body step, like the Initiatives list
-  // (/iq/projects): a 14/600 heading, one 14/400 line, a 12/400 meta line and a small "Open Calls" button.
+  return <NoSocialPlane route={route} access={access} base={base} crumbs={crumbs} pageCalls={pageCalls} pageMissed={pageMissed} />;
+}
+
+/** Under this window width the rail and the content show one at a time (the workspace's own NARROW_PX). */
+const NARROW_PX = 640;
+
+/**
+ * No Social grant (or Social is off): no Social request at all. At the app's body step, like the Initiatives list
+ * (/iq/projects): a 14/600 heading, one 14/400 line, a 12/400 meta line and a small "Open Calls" button.
+ *
+ * At phone width the Calls rail and the explanation cannot sit side by side (UX leftovers, 10 November: Pipelines
+ * Communication at 390 squeezed the explanation to one word a line): the library's narrow explorer shows the
+ * content first, the rail one "All conversations" back control away, like the workspace with a grant.
+ */
+function NoSocialPlane({ route, access, base, crumbs, pageCalls, pageMissed }: {
+  route: SocialChatRoute; access: ReturnType<typeof communicationAccess>; base: string;
+  crumbs: ReturnType<typeof useShellBreadcrumbItems>; pageCalls: ReactNode; pageMissed: number;
+}) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const narrow = useViewportWidth() < NARROW_PX;
+  const [narrowList, setNarrowList] = useState(false);
+  useEffect(() => { setNarrowList(false); }, [location.key]);
   const onCalls = route === 'calls';
   const disabled = access === 'social-disabled';
   const openCalls = <Button variant="primary" size="sm" onClick={() => navigate(`${base}/calls`)} data-testid="communication-open-calls">Open Calls</Button>;
+  // One explanation, in the content (UX walk D): the rail holds only Calls, as a labelled row — the bar
+  // layout drew it as a bare phone icon over a second "needs a Social grant" note.
+  const rail = (
+    <ConversationRail title="Chat" shelf={[{ id: 'calls', label: 'Calls', icon: <PhoneIcon size={15} />, count: pageMissed, urgent: true }]}
+      conversations={[]} selected={onCalls ? { kind: 'shelf', id: 'calls' } : null} onSelect={() => navigate(`${base}/calls`)}
+      emptyLabel=""
+      {...(narrow ? { className: 'w-full border-r-0' } : {})}
+      data-testid="social-chat-rail" />
+  );
+  const content = (
+    <SectionContent breadcrumbs={crumbs} title="Communication" body="fill" data-testid="communication-content">
+      {onCalls ? pageCalls : (
+        <EmptyState align="start" testId="communication-no-social"
+          title={disabled ? 'Social is turned off' : 'Ask an admin for Social access'}
+          description={(
+            <Stack gap="xs">
+              <T>{disabled ? 'Social is not enabled in this deployment.' : 'Your account holds no Social grant, so there are no channels or messages to show.'}</T>
+              <T size="xs" tone="tertiary">The huddles on this workspace’s pages are under Calls.</T>
+            </Stack>
+          )}
+          action={openCalls} />
+      )}
+    </SectionContent>
+  );
   return (
     <Stack gap="none" className="min-h-0 min-w-0 bg-surface" data-shell-flush data-testid="communication-page" data-access={access}>
       <ViewportFillRegion className="flex min-w-0" data-testid="communication-plane">
-        {/* One explanation, in the content (UX walk D): the rail holds only Calls, as a labelled row — the bar
-            layout drew it as a bare phone icon over a second "needs a Social grant" note. */}
-        <ConversationRail title="Chat" shelf={[{ id: 'calls', label: 'Calls', icon: <PhoneIcon size={15} />, count: pageMissed, urgent: true }]}
-          conversations={[]} selected={onCalls ? { kind: 'shelf', id: 'calls' } : null} onSelect={() => navigate(`${base}/calls`)}
-          emptyLabel=""
-          data-testid="social-chat-rail" />
-        <SectionContent breadcrumbs={crumbs} title="Communication" body="fill" data-testid="communication-content">
-          {onCalls ? pageCalls : (
-            <EmptyState align="start" testId="communication-no-social"
-              title={disabled ? 'Social is turned off' : 'Ask an admin for Social access'}
-              description={(
-                <Stack gap="xs">
-                  <T>{disabled ? 'Social is not enabled in this deployment.' : 'Your account holds no Social grant, so there are no channels or messages to show.'}</T>
-                  <T size="xs" tone="tertiary">The huddles on this workspace’s pages are under Calls.</T>
-                </Stack>
-              )}
-              action={openCalls} />
-          )}
-        </SectionContent>
+        {narrow ? (
+          <ExplorerLayout rail={rail} railLabel="conversations" className="min-h-0 min-w-0 flex-1"
+            narrow={{ showing: narrowList ? 'list' : 'record', onBack: () => setNarrowList(true), backLabel: 'All conversations' }}
+            data-testid="communication-narrow">
+            {content}
+          </ExplorerLayout>
+        ) : <>{rail}{content}</>}
       </ViewportFillRegion>
     </Stack>
   );
