@@ -30,7 +30,6 @@ import { type Role, type Session, type Tenant } from '../../lib/session.js';
 import { fixtureRegistry } from '../../mock/core/index.js';
 import { mockJobs } from '../../mock/agent-jobs.js';
 import { claimJob, completeJob } from '../../providers/agent-jobs.js';
-import { promoteCandidate } from '../../providers/promotions.js';
 import { pipelineRunRecords } from '../../mock/pipeline-definitions.js';
 import { setNotificationSink, type NotificationInputLike } from '../../lib/social-notify.js';
 
@@ -165,10 +164,6 @@ describe('POST /api/pipelines/definitions/:id/dry-run — RunPipeline, the exist
     const mine = (rb.body.runbooks as Array<{ id: string; runbook: { lastDryRun: { id: string }; promotionToSkill: { ok: boolean } } }>).find((r) => r.id === RUNBOOK)!;
     expect(mine.runbook.lastDryRun.id).toBe(`job:${job.id}`);
     expect(mine.runbook.promotionToSkill.ok).toBe(true);
-
-    // And rule 1 now lets the ladder promote it, citing that run.
-    const promoted = await promoteCandidate('promo-aurora-cold-start', { approvedBy: 'Dara Whitfield' });
-    expect(promoted && 'candidate' in promoted && promoted.candidate?.dryRunRunId).toBe(`job:${job.id}`);
   });
 
   it('applies the per-run budget brake with its own confirm flag', async () => {

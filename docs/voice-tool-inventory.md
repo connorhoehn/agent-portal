@@ -207,7 +207,7 @@ Reads under `/api/graph`, `/api/work` and `/api/work-graph` are tenant-open to o
 | "re-review it", "address the comments" | `POST /api/sdlc/changes/:id/rereview`, `/address` (`:300, 335`) | `RunDevboxTask` | orgiq | confirm; money (an agent run) | `queue_work { kind: 'change-rereview'|'change-address' }` |
 | "the SDLC policies", "approve the policy proposal" | `GET /api/sdlc/policies`, `/policy-sets/:scope`, `/policy-proposals`; the writes | reads `ManageDevbox`; writes `ManageSdlcPolicies` | orgiq | read; never | `list`; never |
 
-### 2.11 Runbooks, briefs and the promotion ladder
+### 2.11 Runbooks and briefs
 
 | a person says | route(s) | Cedar | tenant | kind, involves | v2 |
 |---|---|---|---|---|---|
@@ -217,7 +217,6 @@ Reads under `/api/graph`, `/api/work` and `/api/work-graph` are tenant-open to o
 | "propose a runbook", "retire it" | `POST /api/runbooks/proposals` (`:378`, a person or a box's lab envelope), `POST /:id/retire` (`:744`) | floor; `ReviewRunbook` | orgiq | never: a proposal is a diff; retiring removes a procedure from the fleet | never |
 | "run the deploy runbook" (pipelines) | `GET /api/pipelines/runbooks` (`pipelines.ts:325`), `POST /api/pipelines/definitions/:id/dry-run` (`:287`) | `ViewPipelines`; `RunPipeline` | pipelines | confirm; money | `queue_work { kind: 'pipeline' }` (G19) |
 | "what brief did run X get", "the skill library", "preview the brief for this work item" | `GET /api/runs/:ref/brief`, `/skills`, `/runbooks/:id` (`session-briefs.ts:106-161`, a person needs `ViewSessionBrief`, a box signs an envelope), `GET /api/briefs` (`:92`), `/skill-library` (`:177`), `/work-items/:id/brief-preview` (`:186`) | `ViewSessionBrief` (every orgiq role) | orgiq | read | `list { kind: 'brief'|'skill' }`, `get` |
-| "the promotion candidates", "promote it", "dismiss it" | `GET /api/promotions`, `/:id` (`promotions.ts:20, 26`), `POST /:id/promote`, `/dismiss` (`:40, 59`) | floor `ViewPromotions`; `ManageBots` | orgiq | read (a page, never by voice); confirm | `decide { ref: 'promotion:id' }` on a row the page surfaced; the list stays on the page (**decision**: the candidates are clusters a person reads, not a thing to ask for) |
 | "publish the session bundle" | `POST /api/session-bundle/:id/publish` (`session-bundle.ts:60`) | `ManageDevbox` | orgiq | never: "the widest-blast-radius action in the product" (`index.ts:267-271`) | never |
 
 ### 2.12 Budgets and spend
@@ -395,7 +394,7 @@ Seven capabilities were added without a new tool name: work items, budgets and s
 
 The route count moves little because most of the new answers read routes that were already listed (`GET /api/spend/report`, `GET /api/graph/work`, `GET /api/sprints`, `GET /api/lab/consults`, `GET /api/runbooks/:id`). The work is new kinds, parts, filters and page context on those routes. The newly covered routes are the work item owner and sprint writes (`PATCH /api/sprints/:sprintId/items`, `DELETE /api/sprints/:sprintId/items/:itemId`) and the Agents tab's `GET /api/bots/initiative-runs`.
 
-**The next ten "not yet", by value.** Each one fits an existing tool.
+**The next nine "not yet", by value.** Each one fits an existing tool.
 
 1. `decide` on the conversation agent's waiting plans (`GET /api/conversations/agent/waiting`, `.../runs/:id/approve`, `/discard`, `/approval/approve`, `/approval/reject`): "what is the agent in this channel waiting on me for".
 2. `create` a comment on an initiative's discussion (`POST /api/graph/projects/:id/discussion/comments`): "tell the Auth Migration thread the rehearsal passed".
@@ -403,7 +402,6 @@ The route count moves little because most of the new answers read routes that we
 4. `budget` grants and run caps (`GET /api/grants?sprintId=`, `GET /api/budgets/:orgProjectId/limits`): who holds the envelopes on a sprint, and what the per-run cap is.
 5. `list` and `update` for chat pins (`GET`, `POST` and `DELETE /api/chat/pins`): "pin that" and "what's pinned here".
 6. `decide` to merge or withdraw a runbook proposal (`POST /api/runbooks/proposals/:pid/merge`, `/withdraw`).
-7. `decide` to promote or dismiss a promotion (`POST /api/promotions/:id/promote`, `/dismiss`).
-8. `budget` cost breakdowns (`GET /api/observability/cost/by-model`, `/top`, `/per-agent`): "which model cost the most this week".
-9. `list` of marketplace runs across initiatives (`GET /api/bots/marketplace-runs`): "what did the agents run today".
-10. `list` and `get` for call history (`GET /api/calls`, `GET /api/calls/:callId/chat`): "who called me" and "what was said in that call's chat".
+7. `budget` cost breakdowns (`GET /api/observability/cost/by-model`, `/top`, `/per-agent`): "which model cost the most this week".
+8. `list` of marketplace runs across initiatives (`GET /api/bots/marketplace-runs`): "what did the agents run today".
+9. `list` and `get` for call history (`GET /api/calls`, `GET /api/calls/:callId/chat`): "who called me" and "what was said in that call's chat".

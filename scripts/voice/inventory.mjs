@@ -306,7 +306,7 @@ const FAMILY_BY_FILE = {
   'social-deck.ts': 'documents', 'initiative-decks.ts': 'documents', 'pipeline-decks.ts': 'documents', 'assessment-decks.ts': 'documents',
   'knowledge-base.ts': 'knowledge', 'kb-admin.ts': 'knowledge', 'ingest.ts': 'knowledge', 'connections.ts': 'knowledge', 'drop.ts': 'knowledge',
   'library.ts': 'knowledge', 'rediscovery.ts': 'knowledge',
-  'runbooks.ts': 'runbooks', 'session-briefs.ts': 'runbooks', 'session-bundle.ts': 'runbooks', 'promotions.ts': 'runbooks',
+  'runbooks.ts': 'runbooks', 'session-briefs.ts': 'runbooks', 'session-bundle.ts': 'runbooks',
   'bots.ts': 'bots',
   'approvals.ts': 'approvals', 'sdlc.ts': 'approvals',
   'assessment.ts': 'assessment', 'assessment-drafts.ts': 'assessment', 'assessment-work-graph.ts': 'assessment',
@@ -526,13 +526,12 @@ export const V2_RULES = [
   [/^POST \/api\/designs\/:[^/]+\/(answer|signoff)$/, 'not-yet', 'decide', 'a design question or sign-off (DispatchAgentRun)'],
   [/^POST \/api\/lab\/consults\/:[^/]+\/answer$/, 'not-yet', 'decide', 'answer a computer-lab consult'],
   [/^POST \/api\/lab\//, 'n/a', null, 'lab envelope machine routes'],
-  // Runbooks and the promotion ladder
+  // Runbooks
   [/^POST \/api\/runbooks\/proposals\/:[^/]+\/(accept|reject|merge)$/, 'not-yet', 'decide', 'ReviewRunbook'],
   [/^POST \/api\/runbooks\/proposals\/:[^/]+\/withdraw$/, 'not-yet', 'update', 'own proposal'],
   [/^POST \/api\/runbooks\/proposals$/, 'never', null, 'a proposal is a diff, authored on the page or by a box'],
   [/^POST \/api\/runbooks\/:[^/]+\/retire$/, 'never', null, 'destructive for the fleet'],
   [/^POST \/api\/runbooks\/:[^/]+\/applications$/, 'n/a', null, 'lab envelope'],
-  [/^POST \/api\/promotions\/:[^/]+\/(promote|dismiss)$/, 'not-yet', 'decide', 'ManageBots'],
   [/^POST \/api\/session-bundle\/:[^/]+\/publish$/, 'never', null, 'the widest-blast-radius action in the product'],
   // Approvals (HITL)
   [/^POST \/api\/observability\/approvals\/:[^/]+\/decision$/, 'not-yet', 'decide', 'ApproveTransaction with the amount'],
@@ -598,7 +597,7 @@ export const V2_RULES = [
   [/^GET \/api\/(work\/summary|work\/findings\/stats|work\/sweeps\/runs|bots\/active-runs|pipelines\/summary|pipelines\/queues|assessment\/rollup|access\/summary|social\/(plane\/)?summary|social\/plane\/active|ingest\/(stats|jobs|queue)|admin\/kb-registry\/health|devbox\/status|local-compute\/nodes|local-compute\/runs|today|work\/suggestions|work\/ask-suggestions|discussions\/unread|observability\/summary|observability\/health)/, 'not-yet', 'summary', 'an aggregate'],
   [/^GET \/api\/observability\/approvals$/, 'not-yet', 'list', 'the HITL inbox: what waits on the caller (§2.10)'],
   [/^GET \/api\/library\/evals/, 'never', null, 'eval sets are the studio\'s'],
-  [/^GET \/api\/(observability|topology|iq\/prompts|capabilities|agents|agent-detail|sessions|rediscovery|promotions|session-bundle|admin\/kb-registry|ingest|connections|knowledge-base|identity|graph\/(entities|skills-graph|projects-graph|help)|scores)/, 'never', null, 'operator consoles, agent-facing reads and leadership data: the page, not the voice'],
+  [/^GET \/api\/(observability|topology|iq\/prompts|capabilities|agents|agent-detail|sessions|rediscovery|session-bundle|admin\/kb-registry|ingest|connections|knowledge-base|identity|graph\/(entities|skills-graph|projects-graph|help)|scores)/, 'never', null, 'operator consoles, agent-facing reads and leadership data: the page, not the voice'],
   [/^GET \/api\/[\w/-]+\/(stream|events|tail|log\/stream)$/, 'n/a', null, 'a stream'],
   [/^GET \/api\/[\w-]+(\/[\w-]+)*\/:[^/]+(\/[\w-]+)*$/, 'not-yet', 'get', 'one record'],
   [/^GET \/api\//, 'not-yet', 'list', 'a collection'],

@@ -3091,26 +3091,6 @@
       "source": "src/routes/pipelines-work-graph.ts:39"
     },
     {
-      "method": "GET",
-      "path": "/api/promotions",
-      "source": "src/routes/promotions.ts:20"
-    },
-    {
-      "method": "GET",
-      "path": "/api/promotions/:id",
-      "source": "src/routes/promotions.ts:26"
-    },
-    {
-      "method": "POST",
-      "path": "/api/promotions/:id/dismiss",
-      "source": "src/routes/promotions.ts:59"
-    },
-    {
-      "method": "POST",
-      "path": "/api/promotions/:id/promote",
-      "source": "src/routes/promotions.ts:40"
-    },
-    {
       "method": "POST",
       "path": "/api/realtime/call-seat",
       "source": "src/routes/realtime-lobby-access.ts:42"

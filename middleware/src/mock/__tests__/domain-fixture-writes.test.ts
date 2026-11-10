@@ -2,9 +2,9 @@
 // work-items, promotions, session-bundle, lab and prompt-evals.
 //
 // A bare array is not merely untidy — it is the reason the wire capture's
-// write policy could not replay these routes honestly. Two of them
-// (`POST /api/promotions/:id/promote`, `POST /api/session-bundle/:id/publish`)
-// were refused outright as `unresettable`, and `PATCH /api/graph/work-items/
+// write policy could not replay these routes honestly.
+// `POST /api/session-bundle/:id/publish` was refused outright as
+// `unresettable`, and `PATCH /api/graph/work-items/
 // :id` was replayed only as an *echo-back*: it wrote the item's own current
 // priority straight back so the row ended byte-identical, which pins a
 // response shape and proves nothing about the write.
@@ -33,14 +33,12 @@ jest.mock('../../config.js', () => ({
 
 import { freezeClock, fixtureRegistry } from '../core/index.js';
 import { workItems } from '../work-items.js';
-import { promotionCandidates } from '../promotions.js';
-import { pipelineRunRecords } from '../pipeline-definitions.js';
 import { sessionBundles } from '../session-bundle.js';
 import { labConsults, labExperiences } from '../lab.js';
 import { promptEvalCases, promptEvalRuns } from '../prompt-evals.js';
 
 import { createWorkItem, getWorkItem, updateWorkItem, searchWorkItems } from '../../providers/work-items.js';
-import { dismissCandidate, getCandidate, listCandidates, promoteCandidate } from '../../providers/promotions.js';
+import { listCandidates } from '../../providers/promotions.js';
 import { getBundle, getLiveBundle, listBundles, publishBundle } from '../../providers/session-bundle.js';
 import {
   answerConsult, getConsult, listConsults, listExperiences, openConsult, recordExperience,
@@ -137,49 +135,10 @@ describe('the board (work-items)', () => {
 
 // ─── promotions ──────────────────────────────────────────────────────────────
 
-describe('the promotions inbox', () => {
-  it('promotes a candidate, and the reset takes the promotion back', async () => {
-    expect((await getCandidate('promo-aurora-cold-start'))!.status).toBe('candidate');
-
-    // Rule 1: a skill promotes on a recorded, completed dry-run of its own runbook.
-    pipelineRunRecords.rows().push({
-      id: 'job:probe', definitionId: 'runbook:promo-aurora-cold-start', contextTenant: 'orgiq', runKind: 'runbook:dry-run',
-      status: 'completed', jobId: null, triggeredBy: 'u-ines', model: null, estimateUsd: null, costUsd: null,
-      error: null, startedAt: '2026-09-30T10:00:00.000Z', finishedAt: '2026-09-30T10:01:00.000Z',
-    });
-    const result = await promoteCandidate('promo-aurora-cold-start', { approvedBy: 'Platform Operator' });
-    expect(result).toMatchObject({ candidate: { status: 'promoted', dryRunRunId: 'job:probe', dryRunPassed: true } });
-
-    promotionCandidates.reset('default');
-    pipelineRunRecords.reset('default');
-
-    expect(await getCandidate('promo-aurora-cold-start')).toMatchObject({
-      status: 'candidate', dryRunRunId: null, dryRunPassed: null,
-    });
-  });
-
-  it('un-appends a dismissal reason — the write that was not idempotent', async () => {
-    const before = (await getCandidate('promo-adot-configurator'))!.rationale;
-    expect(before.endsWith('not a runbook to execute.')).toBe(true);
-
-    await dismissCandidate('promo-adot-configurator', 'round-trip probe');
-    const after = (await getCandidate('promo-adot-configurator'))!;
-    expect(after.status).toBe('dismissed');
-    expect(after.rationale).toBe(`${before} — dismissed: round-trip probe`);
-
-    // Dismiss twice and the reasons stack — which is exactly why this write
-    // needed a reset behind it rather than a "just dismiss it back" undo.
-    await dismissCandidate('promo-adot-configurator', 'and again');
-    expect((await getCandidate('promo-adot-configurator'))!.rationale)
-      .toBe(`${before} — dismissed: round-trip probe — dismissed: and again`);
-
-    promotionCandidates.reset('default');
-    expect((await getCandidate('promo-adot-configurator'))!.rationale).toBe(before);
-  });
-
+describe('the promotions fixture', () => {
   it('ages its observations off the clock, so a freeze pins them', async () => {
     freeze('2026-09-06T00:00:00.000Z');
-    const c = (await getCandidate('promo-aurora-cold-start'))!;
+    const c = (await listCandidates()).find((x) => x.id === 'promo-aurora-cold-start')!;
     // obs-aurora-1 is nineteen days before the read.
     const first = c.observations.find((o) => o.id === 'obs-aurora-1')!;
     expect(first.createdAt).toBe('2026-08-18T00:00:00.000Z');

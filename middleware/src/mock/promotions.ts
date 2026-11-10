@@ -1,42 +1,8 @@
-// The promotions inbox — the ladder's candidate clusters, offline.
-//
-// These four candidates and their twelve observations were a
-// `MOCK_CANDIDATES: PromotionCandidate[]` inside providers/promotions.ts.
-// Both floor problems applied at once:
-//
-//   1. THE WRITES WERE UNDOABLE. `promoteCandidate` and `dismissCandidate`
-//      mutate a candidate's `status` — and `dismissCandidate` additionally
-//      APPENDS to its `rationale`, so a dismissal is not even idempotent: two
-//      dismissals leave two reasons glued to one sentence. Against a bare
-//      array those edits outlived every reset, which is exactly the state
-//      middleware/src/mock/core/contract.ts quotes an auditor warning the next auditor about
-//      ("`promo-aurora-cold-start` is now Promoted until the middleware
-//      restarts"). Both writes were refused outright by the wire capture's
-//      write policy for that reason.
-//   2. THE STAMPS WERE MINTED OFF THE WALL CLOCK. `ago(days)` was
-//      `new Date(Date.now() - days * 86_400_000)`, so freezeClock could not
-//      pin an observation's age and a test could not assert one.
-//
-// AGE IS THE CLAIM HERE, NOT THE DAY, so nothing below uses `keepWithinToday`:
-// the inbox ranks by support count and renders each observation's age as
-// prose ("19 days ago"), and no surface buckets an observation by calendar
-// day. A cluster whose first sighting was 58 days ago is meant to read as
-// two months old whatever the wall clock says.
-//
-// IDS ARE PART OF THE CONTRACT. `promo-*` and `obs-*` are addressed by name
-// from providers/__tests__/promotions.test.ts and quoted in
-// middleware/src/mock/core/contract.ts, so they are written out rather than generated.
-//
-// `supportCount` AND `sessionCount` ARE NOT STORED HERE, and that is rule 1:
-// both were literals sitting beside the very observations they claimed to
-// count, and one of them had already drifted —
-// `promo-custodian-sg-drift` carried `sessionCount: 3` over three
-// observations from two distinct sessions (sess-410 twice, then sess-1201).
-// The prose in that candidate's rationale is about a third session whose
-// observations the cluster never held. providers/promotions.ts derives both
-// numbers off `observations` on every read now, so the pair cannot disagree
-// with the rows again; the row type is `SeededCandidate`, which is
-// `PromotionCandidate` minus exactly those two fields.
+// The seeded promotion candidates the pipelines tenant lists as runbook
+// definitions. Ids are written out because tests and the pipelines fixtures
+// address them by name. Observation stamps are clock-relative (`clock.daysAgo`)
+// so a frozen clock pins their age; `supportCount` and `sessionCount` are not
+// stored here, providers/promotions.ts derives them from `observations`.
 
 import { clock, defineFixture } from './core/index.js';
 // Type-only, so it is erased at compile: providers/promotions.ts imports the
@@ -55,16 +21,10 @@ function obs(over: Pick<Observation, 'id' | 'kind' | 'title' | 'body' | 'session
   };
 }
 
-/**
- * What the lab loop has clustered out of `lab_experiences` and not yet
- * ratified. All four rungs of the ladder are represented on purpose — a
- * `candidate` skill, a `promoted` one, an `insight`, and a `runbook` that
- * drift detection demoted from a skill — because a status tab with no rows is
- * indistinguishable from a broken filter.
- */
+/** One candidate per status, so each filter on the pipelines page has a row. */
 function seedCandidates(): SeededCandidate[] {
   return [
-  // The ladder's stories are the org's DATA pipelines (ingestion, transforms,
+  // These stories are the org's DATA pipelines (ingestion, transforms,
   // backfills): they are what the pipelines tenant's Runbooks page shows, and
   // mock/lab.ts's fleet memory holds the same incidents. The first two carry
   // no initiative (null, "no initiative context": the platform's shared
@@ -196,28 +156,14 @@ function seedCandidates(): SeededCandidate[] {
   ];
 }
 
-/**
- * The promotions inbox.
- *
- * `empty` — the lab has run and clustered nothing worth promoting. Declared
- *           explicitly: an undeclared scenario falls back to `default`, and
- *           "nothing to review" is the state the inbox's empty copy is written
- *           for — the one state a four-candidate seed can never show.
- * `error` — the inbox cannot be read. Also declared explicitly, and for the
- *           same reason `empty` is: without it `{"scenario":"error"}` left
- *           `/api/promotions` byte-identical to `default`, so the queue's
- *           failed-load state was unreachable over HTTP. `lab_experiences`
- *           is the one real relation underneath this ladder (the clustering
- *           and candidate tables do not exist yet — see providers/
- *           promotions.ts), so that is what the message names.
- */
+/** `empty` lists nothing; `error` makes the read fail. */
 export const promotionCandidates = defineFixture<SeededCandidate>({
   key: 'promotion-candidates',
   scenarios: {
     default: seedCandidates,
     empty: () => [],
     error: (): never => {
-      throw new Error('promotion inbox unavailable: lab_experiences read failed');
+      throw new Error('promotion candidates unavailable');
     },
   },
 });

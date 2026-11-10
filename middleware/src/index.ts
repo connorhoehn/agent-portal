@@ -31,7 +31,6 @@ import { voiceRouter } from './routes/voice.js';
 import { voiceLogRouter } from './routes/voice-log.js';
 import { designsRouter } from './routes/designs.js';
 import { libraryRouter } from './routes/library.js';
-import { promotionsRouter } from './routes/promotions.js';
 import { sessionBundleRouter } from './routes/session-bundle.js';
 import { rediscoveryRouter } from './routes/rediscovery.js';
 import { promptEvalsRouter } from './routes/prompt-evals.js';
@@ -275,9 +274,6 @@ app.use('/api/designs', requireTenant('orgiq'), requireSession('ViewDesigns'), d
 // The asset library — prompts, evaluators, skills and insights in one
 // catalog. Read-open to the tenant; authoring/deploy stay gated elsewhere.
 app.use('/api/library', requireTenant('orgiq'), requireSession('ViewLibrary'), libraryRouter);
-// The promotion ladder's inbox: session observations clustered into patterns,
-// and the candidates a human turns into insights, runbooks and skills.
-app.use('/api/promotions', requireTenant('orgiq'), requireSession('ViewPromotions'), promotionsRouter);
 // What every Claude Code devbox session is configured with — hooks, bundled
 // skills, settings. A release target in its own right: the SessionStart hook
 // runs on every session, so publishing one is the widest-blast-radius action

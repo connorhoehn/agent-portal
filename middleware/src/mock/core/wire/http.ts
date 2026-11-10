@@ -211,12 +211,6 @@ export const PARAM_SOURCES: Record<string, string> = {
   'id@/api/work/findings': '/api/work/findings?sweep=stale_docs#id',
   'id@/api/work/jobs': '/api/work/jobs?status=awaiting_review#id',
   'id@/api/work/proposals': '/api/work/proposals#id',
-  // The status filter is the point: promote and dismiss both refuse a terminal
-  // candidate, so an unfiltered read that happened to list the seeded
-  // `promoted` one first would capture a 409 instead of the write. The server
-  // does the filtering — `GET /api/promotions?status=` — so this is still a
-  // real id off a real response, not a hand-picked one.
-  'id@/api/promotions': '/api/promotions?status=candidate#id',
   'id@/api/graph/work-items': '/api/graph/work#id',
   // Key paths, not fuzzy searches — see the note above on why each of these
   // two resolves to the wrong string without one.

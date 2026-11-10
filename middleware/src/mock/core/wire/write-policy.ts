@@ -626,8 +626,6 @@ const UNRESETTABLE: Family[] = [
   // named here has since been put behind `defineFixture`, which is the fix
   // the rule always pointed at:
   //
-  //   * promotions      -> `promotion-candidates` (mock/promotions.ts). Promote
-  //                        and dismiss are replayed by the allowlist below.
   //   * session bundles -> `session-bundles` (mock/session-bundle.ts). Publish
   //                        is replayed, predecessor supersession included.
   //   * local compute (presence half) -> `compute-nodes`,
@@ -1566,25 +1564,10 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     build: ok({}),
   },
 
-  // ── promotions, session bundles ───────────────────────────────────────────
+  // ── session bundles ───────────────────────────────────────────────────────
   //
-  // All three were refused as `unresettable` until the rows they flip moved
-  // behind registered fixtures. They are the reason that rule's list shrank.
-  {
-    route: 'POST /api/promotions/:id/promote',
-    persona: 'orgiq/admin',
-    safe: 'Promotes a seeded candidate — a real ladder step, `candidate` -> `approved`/`promoted`, not an append. Replayable because `promotion-candidates` (mock/promotions.ts) and `pipelines.runs` (mock/pipeline-definitions.ts) are registered fixtures: reset puts the status and the `dryRunRunId` back. No AWS, no model, no timer; the ladder is pure in-process bookkeeping.',
-    bodyFrom: "routes/promotions.ts: `dryRunRunId` is optional (a run id string); `dryRunPassed` is ignored since pipelines P2 — a client can no longer assert that a dry run passed. The candidate resolved for `:id` is the first `status=candidate` one; when that is a `skill`, rule 1 (providers/promotions.ts `decideDryRunGate`) refuses it with 409 until a completed dry-run of its runbook definition is recorded, and that refusal is the shape captured — hence 409 is accepted.",
-    build: ok({}),
-    alsoAccept: [409],
-  },
-  {
-    route: 'POST /api/promotions/:id/dismiss',
-    persona: 'orgiq/admin',
-    safe: 'Dismisses a seeded candidate and appends the reason to its rationale — deliberately not idempotent, which is exactly why it needed a fixture. `promotion-candidates` is registered, so reset restores both the status and the un-appended rationale.',
-    bodyFrom: 'routes/promotions.ts: `reason` must be a non-blank string. It is free text appended to `rationale`, not a wire-shaped value, so `ctx.label()` invents nothing any fixture is measured against.',
-    build: async (ctx) => ({ reason: ctx.label() }),
-  },
+  // Refused as `unresettable` until the rows it flips moved behind a
+  // registered fixture.
   {
     route: 'POST /api/session-bundle/:id/publish',
     persona: 'orgiq/admin',

@@ -343,8 +343,8 @@ export const QUEUE_WORK_KINDS: Readonly<Record<string, readonly string[]>> = Obj
  * waiting row (GET /api/access/approvals); a review item is a review's
  * `items` part. Left out, with the reason in the inventory document: an
  * assessment exception (no read hands out its ref), the conversation agent's
- * plans (their waiting list needs the conversation), a document proposal
- * (accepting it is an editor act) and promotions (no page calls them now).
+ * plans (their waiting list needs the conversation) and a document proposal
+ * (accepting it is an editor act).
  */
 export const DECIDE_ACTIONS: Readonly<Record<string, Readonly<Record<string, Readonly<Partial<Record<'approve' | 'reject' | 'deliver', Action>>>>>>> = {
   orgiq: {
