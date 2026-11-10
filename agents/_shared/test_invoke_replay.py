@@ -7,6 +7,7 @@ Run:  cd agents/_shared && python -m unittest test_invoke_replay
 from __future__ import annotations
 
 import json
+import time
 import sys
 import unittest
 from pathlib import Path
@@ -32,11 +33,27 @@ class ReplayCacheTests(unittest.TestCase):
         self.assertFalse(cache.seen_or_add("n1", now=10.5))
         self.assertEqual(len(cache), 1)
 
-    def test_the_cache_is_bounded(self):
+    def test_a_full_cache_refuses_rather_than_evicting_a_live_nonce(self):
         cache = ia.ReplayCache(ttl_sec=100, max_entries=3)
-        for i in range(5):
-            cache.seen_or_add(f"n{i}", now=i)
+        for i in range(3):
+            self.assertFalse(cache.seen_or_add(f"n{i}", now=i, caller=f"c{i}"))
+        with self.assertRaises(ia.ReplayCacheFull):
+            cache.seen_or_add("n3", now=3, caller="c3")
         self.assertEqual(len(cache), 3)
+        # The oldest is still remembered: replaying it is still caught.
+        self.assertTrue(cache.seen_or_add("n0", now=4))
+        # Once entries expire, new nonces are accepted again.
+        self.assertFalse(cache.seen_or_add("n3", now=100.5, caller="c3"))
+
+    def test_one_caller_cannot_fill_the_cache(self):
+        cache = ia.ReplayCache(ttl_sec=100, max_entries=100, max_per_caller=2)
+        cache.seen_or_add("a1", now=0, caller="flood")
+        cache.seen_or_add("a2", now=0, caller="flood")
+        with self.assertRaises(ia.ReplayCacheFull):
+            cache.seen_or_add("a3", now=0, caller="flood")
+        self.assertFalse(cache.seen_or_add("b1", now=0, caller="someone-else"))
+        # The per-caller count falls as that caller's entries expire.
+        self.assertFalse(cache.seen_or_add("a3", now=101, caller="flood"))
 
     def test_the_default_window_covers_the_signature_ttl_and_skew(self):
         cache = ia.ReplayCache()
@@ -84,14 +101,40 @@ class SignAndVerify(unittest.TestCase):
         calls = []
 
         class Shared:
-            def seen_or_add(self, nonce):
-                calls.append(nonce)
+            def seen_or_add(self, nonce, caller=""):
+                calls.append((nonce, caller))
                 return False
 
         ia.set_replay_cache(Shared())
         payload = self._handed()
         self.assertIsNotNone(ia.verified_auth(payload))
-        self.assertEqual(calls, [payload["authNonce"]])
+        self.assertEqual(calls, [(payload["authNonce"], "orgiq-supervisor:assessment:u-1")])
+
+    def test_a_full_cache_refuses_the_invocation(self):
+        ia.set_replay_cache(ia.ReplayCache(max_entries=1))
+        self.assertIsNotNone(ia.verified_auth(self._handed()))
+        with self.assertLogs(ia.log, level="ERROR") as logs:
+            self.assertIsNone(ia.verified_auth(self._handed()))
+        self.assertIn("unexpired nonces", "\n".join(logs.output))
+
+    def test_a_signature_issued_before_the_process_started_is_refused(self):
+        # A restart empties the cache, so anything signed before the process
+        # started (less the grace) may already have been used.
+        with mock.patch.object(ia, "PROCESS_STARTED_AT", time.time() + 120):
+            self.assertIsNone(ia.verified_auth(self._handed()))
+        # Inside the grace (a cold start), it verifies.
+        with mock.patch.object(ia, "PROCESS_STARTED_AT", time.time() + 5):
+            self.assertIsNotNone(ia.verified_auth(self._handed()))
+
+    def test_the_start_grace_is_bounded(self):
+        self.assertEqual(ia.start_grace_sec({}), ia.DEFAULT_START_GRACE_SEC)
+        self.assertEqual(ia.start_grace_sec({"AGENT_INVOKE_START_GRACE_SEC": "5"}), 5)
+        self.assertEqual(ia.start_grace_sec({"AGENT_INVOKE_START_GRACE_SEC": "-3"}), 0)
+        self.assertEqual(ia.start_grace_sec({"AGENT_INVOKE_START_GRACE_SEC": "99999"}), ia.TTL_SEC)
+        self.assertEqual(ia.start_grace_sec({"AGENT_INVOKE_START_GRACE_SEC": "soon"}), ia.DEFAULT_START_GRACE_SEC)
+        self.assertTrue(ia.issued_before_start("garbage", started_at=0, grace=0))
+        self.assertTrue(ia.issued_before_start("v1.s.99.mac", started_at=100, grace=0))
+        self.assertFalse(ia.issued_before_start("v1.s.99.mac", started_at=100, grace=1))
 
     def test_no_secret_signs_nothing(self):
         with mock.patch.dict("os.environ", {"AGENT_INVOKE_SECRET": ""}):

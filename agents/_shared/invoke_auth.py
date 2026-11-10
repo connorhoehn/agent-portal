@@ -21,8 +21,14 @@ sorted keys and no spaces, built identically by
 Every signed invoke carries a fresh random ``authNonce`` (bound into the
 signature), and the verifier remembers each nonce it accepted until the
 signature window has passed (``ReplayCache``): an identical request sent a
-second time is refused. The cache is in-process, which matches an AgentCore
-runtime session (one process serves a session). A runtime that runs several
+second time is refused. The cache never drops a nonce whose signature could
+still verify: when it is full (overall, or for one caller) new signed
+invocations are refused until entries expire, instead of evicting. Because
+the cache starts empty, a fresh process also refuses any signature issued
+before it started (less ``start_grace_sec()``: the clock skew plus the cold
+start a first invoke waits through), so a restart does not reopen the window
+for requests captured before it. The cache is in-process, which matches an
+AgentCore runtime session (one process serves a session). A runtime that runs several
 replicas behind one endpoint needs a shared store for the cache (a DynamoDB
 table with a conditional put on the nonce and a TTL attribute, or Redis
 ``SET NX EX``); ``set_replay_cache`` takes any object with the same
@@ -91,37 +97,86 @@ SKEW_SEC = 10
 #: Nonce length bounds the verifier accepts (the signers send 24 url-safe chars).
 MIN_NONCE_LEN = 16
 MAX_NONCE_LEN = 128
+#: How long before this process started a signature may have been issued and
+#: still be accepted: the clock skew plus the cold start the first invoke of a
+#: new runtime session waits through. Tunable (``AGENT_INVOKE_START_GRACE_SEC``),
+#: clamped to [0, TTL_SEC].
+DEFAULT_START_GRACE_SEC = SKEW_SEC + 20
+#: Wall-clock time this process started (module import).
+PROCESS_STARTED_AT = time.time()
+
+
+def start_grace_sec(env=None) -> int:
+    env = os.environ if env is None else env
+    raw = (env.get("AGENT_INVOKE_START_GRACE_SEC") or "").strip()
+    try:
+        value = int(raw) if raw else DEFAULT_START_GRACE_SEC
+    except ValueError:
+        value = DEFAULT_START_GRACE_SEC
+    return max(0, min(TTL_SEC, value))
+
+
+def issued_before_start(sig: str, *, started_at: float | None = None, grace: int | None = None) -> bool:
+    """True when the envelope's timestamp is earlier than this process's start
+    less the grace: a cache that started empty cannot know whether it was used."""
+    parts = (sig or "").split(".")
+    if len(parts) != 4 or not parts[2].isdigit():
+        return True
+    floor = (PROCESS_STARTED_AT if started_at is None else started_at) - (start_grace_sec() if grace is None else grace)
+    return int(parts[2]) < floor
+
+
+class ReplayCacheFull(Exception):
+    """The cache cannot record another nonce without dropping one that is
+    still inside its signature window; the invocation is refused instead."""
 
 
 class ReplayCache:
     """Nonces accepted inside the signature window, each kept until a
     signature carrying it could no longer verify (``TTL_SEC + SKEW_SEC``).
 
-    In-process, thread-safe, bounded: past ``max_entries`` the oldest entry is
-    dropped (sized well above one runtime's request rate over the window).
+    In-process and thread-safe. Bounded by time, never by eviction: an entry
+    leaves only when it expires. Past ``max_entries`` overall, or
+    ``max_per_caller`` for one caller, ``seen_or_add`` raises
+    ``ReplayCacheFull`` and records nothing (fail closed). Both are sized well
+    above one runtime's request rate over the window.
     """
 
-    def __init__(self, ttl_sec: float = TTL_SEC + SKEW_SEC, max_entries: int = 100_000):
+    def __init__(self, ttl_sec: float = TTL_SEC + SKEW_SEC, max_entries: int = 100_000,
+                 max_per_caller: int = 2_000):
         self._ttl = ttl_sec
         self._max = max_entries
-        self._seen: "OrderedDict[str, float]" = OrderedDict()
+        self._max_per_caller = max_per_caller
+        # Insertion order is expiry order: every entry gets the same ttl on a
+        # monotonic clock.
+        self._seen: "OrderedDict[str, tuple[float, str]]" = OrderedDict()
+        self._per_caller: dict[str, int] = {}
         self._lock = threading.Lock()
 
-    def seen_or_add(self, nonce: str, now: float | None = None) -> bool:
+    def seen_or_add(self, nonce: str, now: float | None = None, caller: str = "") -> bool:
         """True when ``nonce`` was already accepted and has not expired;
-        otherwise records it and returns False."""
+        otherwise records it and returns False. Raises ``ReplayCacheFull``
+        when recording it would pass a bound."""
         t = time.monotonic() if now is None else now
         with self._lock:
             while self._seen:
-                _, expiry = next(iter(self._seen.items()))
+                _, (expiry, old_caller) = next(iter(self._seen.items()))
                 if expiry > t:
                     break
                 self._seen.popitem(last=False)
+                left = self._per_caller.get(old_caller, 0) - 1
+                if left > 0:
+                    self._per_caller[old_caller] = left
+                else:
+                    self._per_caller.pop(old_caller, None)
             if nonce in self._seen:
                 return True
-            self._seen[nonce] = t + self._ttl
-            while len(self._seen) > self._max:
-                self._seen.popitem(last=False)
+            if len(self._seen) >= self._max:
+                raise ReplayCacheFull(f"the replay cache holds {len(self._seen)} unexpired nonces (limit {self._max})")
+            if self._per_caller.get(caller, 0) >= self._max_per_caller:
+                raise ReplayCacheFull(f"one caller holds {self._max_per_caller} unexpired nonces (the per-caller limit)")
+            self._seen[nonce] = (t + self._ttl, caller)
+            self._per_caller[caller] = self._per_caller.get(caller, 0) + 1
             return False
 
     def __len__(self) -> int:
@@ -142,7 +197,8 @@ _VERIFIED_MAX = 1024
 
 def set_replay_cache(cache) -> None:
     """Swap the replay store: a shared one for a multi-replica runtime, or a
-    fresh one in tests. It needs ``seen_or_add(nonce) -> bool``."""
+    fresh one in tests. It needs ``seen_or_add(nonce, caller=...) -> bool``
+    and raises ``ReplayCacheFull`` rather than dropping an unexpired nonce."""
     global _replay_cache
     _replay_cache = cache
     with _verified_lock:
@@ -278,7 +334,19 @@ def _verify(payload: dict) -> InvokeIdentity | None:
     if not isinstance(nonce, str) or not (MIN_NONCE_LEN <= len(nonce) <= MAX_NONCE_LEN):
         log.warning("invoke-auth: the signed block carries no usable nonce; treating the caller as least privileged")
         return None
-    if _replay_cache.seen_or_add(nonce):
+    if issued_before_start(sig):
+        # The cache started empty with this process, so it cannot tell whether
+        # this nonce was used before a restart.
+        log.warning("invoke-auth: the signature was issued before this process started; treating the caller as least privileged")
+        return None
+    tenant = auth.get("tenant") if isinstance(auth.get("tenant"), str) else ""
+    sub = auth.get("sub") if isinstance(auth.get("sub"), str) else ""
+    try:
+        replayed = _replay_cache.seen_or_add(nonce, caller=f"{why}:{tenant}:{sub}")
+    except ReplayCacheFull as exc:
+        log.error("invoke-auth: refusing the signed invocation: %s. Nothing is evicted; it clears as entries expire", exc)
+        return None
+    if replayed:
         log.warning("invoke-auth: nonce already used inside the signature window; treating the caller as least privileged")
         return None
     return InvokeIdentity(auth=auth, conversation_id=conversation_id, signed=True)
