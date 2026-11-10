@@ -179,7 +179,7 @@ test('G59 regression, vs_d69bbb23 01:41:41: a fifth call (too-many-calls, stop) 
 
 test('G59: the scripted session holds the voice while a call has no continuation (the rule the replays above stand on)', async () => {
   const h = await session([mintBody(SESSION, { onStart: [
-    said(300, 'Create a whiteboard.'), ...delegate(600, 'd1', { id: 'c1', name: 'create', args: { kind: 'whiteboard', fields: { title: 'Retro' } } }),
+    said(300, 'What should I work on?'), ...delegate(600, 'd1', { id: 'c1', name: 'create', args: { kind: 'whiteboard', fields: { title: 'Retro' } } }),
     said(3000, 'And open designs.'), ...delegate(3300, 'd2', { id: 'c2', name: 'open', args: { page: 'designs' } }),
   ] })]);
   try {
@@ -241,7 +241,7 @@ test('G60: no note when the voice answers after the delegation, or when the dele
   } finally { hung.restore(); }
 });
 
-test('G60: a continuation that completes silently (a stopped round whose backend said nothing) gets the note too', async () => {
+test('G65: a delegation that called and completed is never empty, even when its last continuation completes silently', async () => {
   const h = await session([mintBody(SESSION, {
     onStart: [said(300, 'Open designs, then runbooks.'), ...delegate(600, 'd1', { id: 'c1', name: 'open', args: { page: 'designs' } })],
     onResponseCreateSeq: [callAgain({ id: 'c2', name: 'open', args: { page: 'runbooks' } }), [{ atMs: 100, event: completed('$continued') }]],
@@ -249,9 +249,87 @@ test('G60: a continuation that completes silently (a stopped round whose backend
   try {
     await h.c.start();
     await h.clock.advance(12_000);
+    assert.equal(h.clientEvents('delegation-empty').length, 0, JSON.stringify(h.events().map((e) => e['data'])));
+    assert.equal(h.notes.filter((n) => n === DELEGATION_EMPTY_NOTE).length, 0);
+    h.c.dispose();
+  } finally { h.restore(); }
+});
+
+// ── G65: the watchdog measures from the delegation's last activity (real session, 10 November 2026) ──
+
+const progress = (atMs: number): Frame => ({ atMs, event: env('$continued', { type: 'response.output_item.added', item: { type: 'reasoning' } }) });
+const searchCall = (id: string, q: string): Call => ({ id, name: 'list', args: { kind: 'work-item', scope: 'workspace', query: q } });
+
+test('G65 regression: a search, then 7 s of the model working before its next call, then the answer: no delegation-empty', async () => {
+  const h = await session([mintBody(SESSION, {
+    onStart: [said(300, 'Find the key rotation work.'), ...delegate(600, 'd1', searchCall('c1', 'key rotation'))],
+    onResponseCreateSeq: [
+      // As recorded: the continuation's response streams progress for 7 s, then the second search.
+      [...[1000, 2000, 3000, 4000, 5000, 6000].map(progress), { atMs: 7000, event: fc('$continued', searchCall('c2', 'rotate keys')) }, { atMs: 7020, event: completed('$continued') }],
+      answer('Two work items, Rotate keys first.'),
+    ],
+  })]);
+  try {
+    await h.c.start();
+    await h.clock.advance(25_000);
+    assert.deepEqual(h.outputs.map((o) => o.callId), ['c1', 'c2']);
+    assert.equal(h.continuations(), 2);
+    assert.equal(h.clientEvents('delegation-empty').length, 0, 'the voice is not nudged mid-work');
+    assert.equal(h.notes.filter((n) => n === DELEGATION_EMPTY_NOTE).length, 0);
+    h.c.dispose();
+  } finally { h.restore(); }
+});
+
+test('G65: the next call within 6 s of a tool result is not empty, with no progress frame in between', async () => {
+  const h = await session([mintBody(SESSION, {
+    onStart: [said(300, 'Find the key rotation work.'), ...delegate(600, 'd1', searchCall('c1', 'key rotation'))],
+    onResponseCreateSeq: [callAgain(searchCall('c2', 'rotate keys')).map((f) => ({ ...f, atMs: f.atMs + 5600 })), answer('Two found.')],
+  })]);
+  try {
+    await h.c.start();
+    await h.clock.advance(20_000);
+    assert.deepEqual(h.outputs.map((o) => o.callId), ['c1', 'c2']);
+    assert.equal(h.clientEvents('delegation-empty').length, 0);
+    h.c.dispose();
+  } finally { h.restore(); }
+});
+
+test('G65: never while a call is running, however long it runs', async () => {
+  const gate: { release?: () => void } = {};
+  const slow: VoiceToolRunner = () => new Promise((resolve) => { gate.release = () => resolve({ outcome: 'done', output: { kind: 'created' }, summary: 'Done' }); });
+  const h = await session([mintBody(SESSION, { onStart: [said(300, 'What should I work on?'), ...delegate(600, 'd1', { id: 'c1', name: 'list', args: { kind: 'work-item', scope: 'this-page' } })] })], { list: slow });
+  try {
+    await h.c.start();
+    await h.clock.advance(15_000);
+    assert.equal(h.clientEvents('delegation-empty').length, 0, 'the call is still running at 15 s');
+    assert.ok(gate.release, 'the call started');
+    gate.release();
+    await h.clock.advance(10_000);
+    assert.equal(h.outputs.length, 1);
+    assert.equal(h.clientEvents('delegation-empty').length, 0, 'the result was continued and the voice answered');
+    h.c.dispose();
+  } finally { h.restore(); }
+});
+
+test('G65: a continuation that stalls is nudged once; a later stall of the same delegation is not nudged again', async () => {
+  const h = await session([mintBody(SESSION, {
+    onStart: [said(300, 'Find the key rotation work.'), ...delegate(600, 'd1', searchCall('c1', 'key rotation'))],
+    onResponseCreateSeq: [
+      // Nothing for 8 s, then a second call: the first stall gets the note.
+      [{ atMs: 8000, event: fc('$continued', searchCall('c2', 'rotate keys')) }, { atMs: 8020, event: completed('$continued') }],
+      // The second continuation never answers: no second note for the same delegation.
+      [],
+    ],
+  })]);
+  try {
+    await h.c.start();
+    await h.clock.advance(600 + 100 + DELEGATION_EMPTY_MS - 300);
+    assert.equal(h.clientEvents('delegation-empty').length, 0, 'not before 6 s of quiet');
+    await h.clock.advance(30_000);
     const ev = h.clientEvents('delegation-empty');
-    assert.equal(ev.length, 1, JSON.stringify(h.events().map((e) => e['data'])));
-    assert.equal((ev[0]!['data'] as Record<string, unknown>)['continuation'], true);
+    assert.equal(ev.length, 1, JSON.stringify(ev.map((e) => e['data'])));
+    assert.deepEqual(ev[0]!['data'], { event: 'delegation-empty', delegationId: 'd1', completed: false, continuation: true });
+    assert.equal(h.notes.filter((n) => n === DELEGATION_EMPTY_NOTE).length, 1);
     h.c.dispose();
   } finally { h.restore(); }
 });
@@ -320,7 +398,7 @@ test('G61: an answer between utterances keeps the card away; a card already up c
 
 test('G61: words for a confirm card are not requests to the voice', async () => {
   const h = await session([mintBody(SESSION, { onStart: [
-    said(300, 'Create a whiteboard.'), ...delegate(600, 'd1', { id: 'c1', name: 'create', args: { kind: 'whiteboard', fields: { title: 'Retro' } } }),
+    said(300, 'What should I work on?'), ...delegate(600, 'd1', { id: 'c1', name: 'create', args: { kind: 'whiteboard', fields: { title: 'Retro' } } }),
     said(3000, 'Hmm, let me read it.'), said(6000, 'Looks fine, I think.'), said(9000, 'Is that the title?'),
   ] })]);
   try {

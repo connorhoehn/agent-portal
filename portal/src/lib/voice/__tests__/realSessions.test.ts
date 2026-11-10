@@ -29,7 +29,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { BUDGET_CARD, STALLED_CARD, VoiceController } from '../controller.ts';
+import { BUDGET_CARD, DELEGATION_EMPTY_MS, STALLED_CARD, VoiceController } from '../controller.ts';
 import { VoiceClient, type MockFrame } from '../client.ts';
 import { VOICE_PLANNERS, VOICE_RUNNERS } from '../actions.ts';
 import { NAVIGATED_STOP, ResultMemory, ambiguous, done, failed, needsConfirm, planPreparedCall, prepareToolCall, refused, runVoiceTool, type ToolContext, type ToolResult, type VoiceToolPlanner, type VoiceToolRunner } from '../tools.ts';
@@ -756,6 +756,18 @@ test('G62: an ambiguous answer with one candidate shows no choice card (s19, s33
     const shown = r.events.filter((e) => (e['data'] as Record<string, unknown> | undefined)?.['event'] === 'choice-shown');
     assert.equal(shown.length, cards, prefix);
   }
+});
+
+test('G65 (s34): the search delegation the watchdog nudged twice mid-work replays with no delegation-empty', async () => {
+  const s = sessionNamed('s34');
+  const d = s.delegations.find((x) => x.calls.filter((c) => c.tool === 'search').length === 2)!;
+  assert.ok(d, 's34 has the delegation with two searches');
+  // As logged: the model took longer than the watchdog's 6 s to issue the second search, and the log has both nudges.
+  assert.ok(d.calls[1]!.atMs - d.calls[0]!.atMs > DELEGATION_EMPTY_MS, 'the logged gap between the searches');
+  assert.equal((s as unknown as { stops: Array<{ kind: string }> }).stops.filter((x) => x.kind === 'delegation-empty').length, 2);
+  const r = await replayOf(s);
+  const empty = r.events.filter((e) => (e['data'] as Record<string, unknown> | undefined)?.['event'] === 'delegation-empty');
+  assert.equal(empty.length, 0, 'today the delegation that called and completed is never empty');
 });
 
 /**

@@ -107,9 +107,12 @@
 // continuation says the stop's line; a call it makes anyway is refused before
 // it runs; after MAX_STOPPED_CONTINUATIONS the dock logs `delegation-stuck`
 // and still continues every output (G64); a model still calling after
-// MAX_RUNAWAY_CONTINUATIONS gets the session restarted. G60 watches every delegation and continuation for
+// MAX_RUNAWAY_CONTINUATIONS gets the session restarted. G60 watches every delegation for
 // DELEGATION_EMPTY_MS: no call and no word from the voice after it completed
-// sends DELEGATION_EMPTY_NOTE (silent) and logs `delegation-empty`. G61 counts
+// sends DELEGATION_EMPTY_NOTE (silent) and logs `delegation-empty`. G65: the
+// count runs from the delegation's last activity (a call, a result, the
+// continuation, a progress frame), never while a call runs, once per
+// delegation, and a delegation that called and completed is never empty. G61 counts
 // the user's utterances the voice let pass (no word, no delegation; words
 // for a card or a running call do not count): UNANSWERED_UTTERANCES of them
 // log `unanswered` and raise the restart card ("Not answering: restart
@@ -339,8 +342,14 @@ interface DelegationRecord {
 }
 /** One user turn (G43, G51): the calls it used, its searches' shapes, whether it was stopped, and the page it opened. */
 interface Turn { used: number; searches: Set<string>; stopped: boolean; navigated?: string; navigatedRef?: string }
-/** G60: one delegation (or continuation) watched for an empty answer: since when, whether it called, when it completed. */
-interface EmptyWatch { timer: Timer | null; since: number; called: boolean; completedAt: number | null; continuation: boolean }
+/**
+ * G60/G65: one delegation watched for an empty answer, for its whole life: its last activity (a call issued, a tool
+ * result sent, a continuation sent, a response-progress frame), whether it ever called, when its current response
+ * completed, whether that response is a continuation, and whether the watch is done (it fired, or it was answered).
+ */
+interface EmptyWatch {
+  timer: Timer | null; lastActivity: number; called: boolean; completedAt: number | null; continuation: boolean; done: boolean;
+}
 /** What the card has heard: the first utterance after it, and whether that utterance has ended. */
 interface Heard { text: string; lastEndMs: number | null; quiet: Timer | null; done: boolean }
 interface Pending {
@@ -858,7 +867,7 @@ export class VoiceController {
           this.emit({ kind: 'delegation', data: { delegationId: f.delegationId } });
           this.diag.delegated();
           this.context.newTurn();
-          this.watchEmpty(f.delegationId, false);
+          this.watchEmpty(f.delegationId);
         }
         // The voice took the request (G61): it is answering.
         this.answeredByVoice();
@@ -897,6 +906,8 @@ export class VoiceController {
       case 'audio':
       case 'ack':
       case 'response-progress':
+        // G65: the backend is still producing this delegation's response: it is not idle.
+        if (f.kind === 'response-progress' && f.delegationId) this.watchActivity(f.delegationId);
         this.publish();
     }
   }
@@ -917,8 +928,8 @@ export class VoiceController {
     if (rec.calls.has(callId)) return;
     if (!this.machine.openDelegations.includes(delegationId)) this.dispatch({ type: 'delegation', id: delegationId });
     rec.calls.set(callId, { name, status: 'running' });
-    // G60: a call is something to say; the delegation is not empty.
-    this.watchCalled(delegationId);
+    // G60: a call is something to say. G65: and it is activity; the watch waits while it runs.
+    this.watchActivity(delegationId, { called: true });
     // The call's shape (its enum arguments, a ref's kind), never its words: four open-shells read apart from four starts.
     this.emit({ kind: 'tool-call', tool: name, data: { callId, ...argShape(name, rawArgs) } });
     const startedAt = this.now();
@@ -1080,6 +1091,8 @@ export class VoiceController {
     const rec = this.delegation(delegationId);
     rec.calls.set(callId, { name, status: 'answered' });
     rec.unanswered += 1;
+    // G65: a tool result sent is activity; the next call may take the model a while to issue.
+    this.watchActivity(delegationId);
     this.attachTool(name, res.outcome === 'done' ? 'done' : res.outcome === 'failed' ? 'failed' : 'refused', res.summary);
     this.dispatch({ type: 'call-done', callId });
     // The refusal's code (no-grant, budget, ambiguous, not-on-this-page…), never its sentence.
@@ -1158,8 +1171,8 @@ export class VoiceController {
       rec.completed = false;
       rec.calls.clear();
       client.requestResponse();
-      // G60: the continuation is watched like the delegation was: a call or the voice's words, or the note.
-      this.watchEmpty(delegationId, true);
+      // G60/G65: the continuation is the same delegation's: its one watch goes on from now (never a fresh one).
+      this.watchActivity(delegationId, { continuation: true });
       return;
     }
     // The continuation (or a delegation that called nothing) completed: it is done.
@@ -1183,44 +1196,70 @@ export class VoiceController {
 
   // ── G60: a delegation that ends with nothing to say ─────────────────────
 
-  /** Watch a delegation (or its continuation): DELEGATION_EMPTY_MS for a call, or for the voice's words after it completes. */
-  private watchEmpty(id: string, continuation: boolean): void {
-    const old = this.watches.get(id);
-    if (old?.timer != null) this.clearTimer(old.timer);
-    const w: EmptyWatch = { timer: null, since: this.now(), called: false, completedAt: null, continuation };
-    w.timer = this.setTimer(() => this.checkEmpty(id, w), DELEGATION_EMPTY_MS);
+  /**
+   * Watch a delegation from its creation, for its whole life (G65: one watch, so it fires at most once): no activity
+   * and no running call for DELEGATION_EMPTY_MS, or no word from the voice after a delegation that never called
+   * completed, is empty.
+   */
+  private watchEmpty(id: string): void {
+    if (this.watches.has(id)) return;
+    const w: EmptyWatch = { timer: null, lastActivity: this.now(), called: false, completedAt: null, continuation: false, done: false };
     this.watches.set(id, w);
+    this.scheduleEmpty(id, w, DELEGATION_EMPTY_MS);
   }
 
-  private watchCalled(id: string): void {
-    const w = this.watches.get(id);
-    if (!w) return;
-    w.called = true;
+  private scheduleEmpty(id: string, w: EmptyWatch, ms: number): void {
     if (w.timer != null) this.clearTimer(w.timer);
-    this.watches.delete(id);
+    w.timer = this.setTimer(() => this.checkEmpty(id, w), Math.max(0, ms));
+  }
+
+  /**
+   * G65: the delegation did something (a call issued, a tool result sent, a continuation sent, a response-progress
+   * frame): the DELEGATION_EMPTY_MS count starts again. A continuation is a new response that has not completed yet.
+   */
+  private watchActivity(id: string, opts: { called?: boolean; continuation?: boolean } = {}): void {
+    const w = this.watches.get(id);
+    if (!w || w.done) return;
+    w.lastActivity = this.now();
+    if (opts.called) w.called = true;
+    if (opts.continuation) { w.continuation = true; w.completedAt = null; }
+    this.scheduleEmpty(id, w, DELEGATION_EMPTY_MS);
   }
 
   private watchCompleted(id: string): void {
     const w = this.watches.get(id);
-    if (w && w.completedAt == null) w.completedAt = this.now();
+    if (w && !w.done && w.completedAt == null) w.completedAt = this.now();
+  }
+
+  /** A call of this delegation is still running (or waiting on its card): the delegation is working, not empty. */
+  private callRunning(id: string): boolean {
+    const rec = this.delegations.get(id);
+    return !!rec && [...rec.calls.values()].some((c) => c.status !== 'answered');
   }
 
   /**
-   * The watch is due: a call, or the voice's words after the response completed, answered it; a response that
-   * completed a moment ago gets DELEGATION_ANSWER_GRACE_MS more. Otherwise the voice is told, silently, to answer or
-   * to say it could not, and the log says `delegation-empty` (vs_71839299 13:49:41, vs_0d1c427b 13:53:04).
+   * The watch is due. Never while a call runs (its result re-arms the watch), never within DELEGATION_EMPTY_MS of the
+   * delegation's last activity (G65: a search finished and the model took 7 s to issue the next one; the old watch,
+   * re-armed fresh at the continuation, nudged the voice mid-work twice). A delegation that called and completed is
+   * never empty; one that called nothing and completed a moment ago gets DELEGATION_ANSWER_GRACE_MS more, and the
+   * voice's words after it completed answer it. Otherwise the voice is told, silently, to answer or to say it could
+   * not, and the log says `delegation-empty` (vs_71839299 13:49:41, vs_0d1c427b 13:53:04): once per delegation.
    */
   private checkEmpty(id: string, w: EmptyWatch): void {
     w.timer = null;
-    if (this.watches.get(id) !== w) return;
-    if (w.called || this.machine.base !== 'live') { this.watches.delete(id); return; }
+    if (this.watches.get(id) !== w || w.done) return;
+    if (this.machine.base !== 'live') { w.done = true; return; }
+    if (this.callRunning(id)) return;
     const now = this.now();
-    if (w.completedAt != null && now - w.completedAt < DELEGATION_ANSWER_GRACE_MS) {
-      w.timer = this.setTimer(() => this.checkEmpty(id, w), DELEGATION_ANSWER_GRACE_MS - (now - w.completedAt));
-      return;
+    const quiet = now - w.lastActivity;
+    if (quiet < DELEGATION_EMPTY_MS) { this.scheduleEmpty(id, w, DELEGATION_EMPTY_MS - quiet); return; }
+    if (w.completedAt != null) {
+      if (w.called) { w.done = true; return; }
+      const since = now - w.completedAt;
+      if (since < DELEGATION_ANSWER_GRACE_MS) { this.scheduleEmpty(id, w, DELEGATION_ANSWER_GRACE_MS - since); return; }
+      if (this.lastVoiceAt != null && this.lastVoiceAt >= w.completedAt) { w.done = true; return; }
     }
-    this.watches.delete(id);
-    if (w.completedAt != null && this.lastVoiceAt != null && this.lastVoiceAt >= w.completedAt) return;
+    w.done = true;
     this.emit({ kind: 'client', data: { event: 'delegation-empty', delegationId: id, completed: w.completedAt != null, continuation: w.continuation } });
     this.noteContext(DELEGATION_EMPTY_NOTE);
   }

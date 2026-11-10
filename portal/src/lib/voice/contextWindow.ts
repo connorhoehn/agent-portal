@@ -178,6 +178,25 @@ function labelOf(output: Record<string, unknown>, n: number): string {
 }
 
 /**
+ * G65: a search's line is the count and the top hit, and "read them" for the rest ("12 decisions, top: Adopt
+ * OpenTelemetry. Say "read them" for more."). Three names read out a 29-word, 9-second answer in the owner's session
+ * (10 November 2026); a search answers "where is X", so the first hit is the answer. A one-fact answer is its own line.
+ */
+/** Search types whose spoken word is not the type plus "s". */
+const SEARCH_TYPE_WORDS: Readonly<Record<string, readonly [string, string]>> = {
+  person: ['person', 'people'], work: ['work item', 'work items'], knowledge: ['document', 'documents'],
+  calllog: ['call', 'calls'], dm: ['direct message', 'direct messages'],
+};
+
+function searchSay(output: Record<string, unknown>, total: number, top: string): string {
+  if (typeof output['answer'] === 'string' && output['answer'].trim()) return output['answer'].trim();
+  const type = typeof output['type'] === 'string' && output['type'] !== 'all' ? output['type'] : null;
+  const named = type ? SEARCH_TYPE_WORDS[type] : undefined;
+  const label = named ? named[total === 1 ? 0 : 1] : type ? labelOf({ of: type }, total) : total === 1 ? 'result' : 'results';
+  return total > 1 ? `${total} ${label}, top: ${top}. Say "read them" for more.` : `1 ${label}: ${top}.`;
+}
+
+/**
  * What list, search and get hand the model by default (G33): the count, the
  * first BRIEF_ROWS rows, `more` (how many the model was not given) and `say`,
  * a ready line of the count and the top names ("11 work items, 3 high
@@ -197,7 +216,9 @@ export function briefOutput(tool: string, args: unknown, output: Record<string, 
   const high = rows.filter((r) => /^(high|urgent|critical|p0|p1)$/i.test(String(r['priority'] ?? ''))).length;
   const names = top.map((r) => shortName(r['title'] ?? r['ref']));
   const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0];
-  const say = `${total} ${labelOf(output, total)}${high ? `, ${high} high priority` : ''}: ${list}${more ? `, and ${more} more` : ''}.`;
+  const say = tool === 'search'
+    ? searchSay(output, total, names[0]!)
+    : `${total} ${labelOf(output, total)}${high ? `, ${high} high priority` : ''}: ${list}${more ? `, and ${more} more` : ''}.`;
   return { ...output, rows: top, count: total, more, say, detail: 'Pass detail true to get every row; only when the user asks for all of them.' };
 }
 

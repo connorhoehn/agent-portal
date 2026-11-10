@@ -6055,6 +6055,119 @@
     "stopReason": "closed",
     "reason": "user"
    }
+  },
+  {
+   "id": "s34",
+   "tenant": "orgiq",
+   "tools": [
+    "open",
+    "search",
+    "list",
+    "get",
+    "computer",
+    "summary",
+    "budget",
+    "activity",
+    "message",
+    "call",
+    "set_status",
+    "queue_work",
+    "decide",
+    "create",
+    "update",
+    "access_request_status"
+   ],
+   "format": "delegations",
+   "durationMs": 39800,
+   "counts": {
+    "delegations": 2,
+    "calls": 3,
+    "done": 3,
+    "refused": 0,
+    "failed": 0,
+    "cancelled": 0,
+    "unfinished": 0,
+    "cards": 0
+   },
+   "delegations": [
+    {
+     "atMs": 10000,
+     "seq": 11,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 13,
+       "atMs": 10900,
+       "tool": "open",
+       "shape": {
+        "scope": "this-page",
+        "refKind": "position"
+       },
+       "argsKey": "a1",
+       "outcome": "done",
+       "result": "navigated",
+       "resultSeq": 15,
+       "durationMs": 0
+      }
+     ]
+    },
+    {
+     "atMs": 23100,
+     "seq": 23,
+     "heardBefore": true,
+     "calls": [
+      {
+       "seq": 26,
+       "atMs": 25700,
+       "tool": "search",
+       "shape": {
+        "scope": "workspace",
+        "sort": "relevance",
+        "answer": false
+       },
+       "argsKey": "a2",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 5,
+       "resultSeq": 27,
+       "durationMs": 0
+      },
+      {
+       "seq": 31,
+       "atMs": 33100,
+       "tool": "search",
+       "shape": {
+        "type": "work",
+        "scope": "workspace",
+        "sort": "relevance",
+        "answer": false
+       },
+       "argsKey": "a3",
+       "outcome": "done",
+       "result": "search_results",
+       "rows": 0,
+       "resultSeq": 32,
+       "durationMs": 0
+      }
+     ]
+    }
+   ],
+   "stops": [
+    {
+     "seq": 30,
+     "atMs": 31900,
+     "kind": "delegation-empty"
+    },
+    {
+     "seq": 34,
+     "atMs": 39300,
+     "kind": "delegation-empty"
+    }
+   ],
+   "close": {
+    "stopReason": "dropped",
+    "reason": "beforeunload"
+   }
   }
  ]
 }

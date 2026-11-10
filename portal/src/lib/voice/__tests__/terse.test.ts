@@ -22,12 +22,13 @@ const PAGE: PublishedPage = {
 
 type Call = { name: string; arguments: Record<string, unknown>; said: string };
 
-async function run(call: Call, verbosity?: 'terse' | 'normal') {
+async function run(call: Call, verbosity?: 'terse' | 'normal', extra: ReturnType<typeof route>[] = []) {
   const { mockLiveScript } = await middlewareVoice<{ mockLiveScript: (id: string, c: Call) => { onStart: unknown[]; onResponseCreate: unknown[]; onClose: unknown[] } }>('openai.ts');
   const clock = new FakeClock();
   const { fetch } = fakeFetch([
     route('POST', `/api/voice/sessions/${SESSION}/events`, 201, {}),
     route('POST', `/api/voice/sessions/${SESSION}/close`, 200, {}),
+    ...extra,
     route('POST', '/api/voice/sessions', 201, {
       sessionId: SESSION, voiceSessionId: SESSION, holdId: 'h1', maxSeconds: 1800, expiresAt: '2026-11-08T13:00:00Z', sdp: 'v=0', mock: true,
       model: 'gpt-live-1', voice: null, toolsEnabled: true, tools: [call.name], budget: { holdUsd: 0.5, usdPerMinute: 0.05 }, mockScript: mockLiveScript(SESSION, call),
@@ -80,7 +81,8 @@ test('briefOutput leaves other tools and short or empty lists alone, and reads d
   assert.deepEqual(briefOutput('summary', {}, { rows }), { rows });
   assert.equal((briefOutput('search', '{"query":"x","detail":true}', { rows, total: 5 })['rows'] as unknown[]).length, 5);
   const b = briefOutput('search', '{"query":"x","detail":null}', { rows, total: 40 });
-  assert.deepEqual([(b['rows'] as unknown[]).length, b['more'], b['say']], [3, 37, '40 results: Team 0, Team 1 and Team 2, and 37 more.']);
+  assert.deepEqual([(b['rows'] as unknown[]).length, b['more'], b['say']], [3, 37, '40 results, top: Team 0. Say "read them" for more.']);
+  assert.equal(briefOutput('list', {}, { of: 'team', rows, count: 40 })['say'], '40 teams: Team 0, Team 1 and Team 2, and 37 more.');
   assert.deepEqual(briefOutput('list', {}, { of: 'team', rows: [], count: 0 }), { of: 'team', rows: [], count: 0 });
 });
 
@@ -93,4 +95,34 @@ test('the device preference: terse unless set to normal', () => {
     assert.equal(store.get(VERBOSITY_KEY), 'normal');
     assert.equal(voiceVerbosity(), 'normal');
   } finally { delete (globalThis as { localStorage?: unknown }).localStorage; }
+});
+
+// G65 (real session, 10 November 2026): after a search the voice spoke 29 words for 9 seconds. A search's `say` is the
+// count and the top hit, with "read them" for the rest; the model still gets three rows, so "open the second" works.
+const HITS = Array.from({ length: 12 }, (_, i) => ({
+  type: 'work-item', id: `w-${i + 1}`, title: TITLES[i % TITLES.length], subtitle: 'Auth migration · open', description: 'Rotate every signing key before the cutover and document the steps for on-call.',
+  matchReason: 'title', href: `/iq/projects/p-auth?tab=work&item=w-${i + 1}`,
+}));
+const SEARCH: Call = { name: 'search', arguments: { query: 'key rotation', type: 'work', scope: null, sort: null, limit: null, answer: null, detail: null }, said: 'Find the key rotation work.' };
+
+test('G65: a search with rows says the count and the top hit in one short line, and "read them" for more', async () => {
+  const r = await run(SEARCH, undefined, [route('GET', '/api/search', 200, { results: HITS, total: 12 })]);
+  const out = r.outputs[0]!;
+  assert.equal(out['count'], 12, JSON.stringify(out));
+  assert.equal((out['rows'] as unknown[]).length, 3);
+  const say = String(out['say']);
+  assert.equal(say, '12 work items, top: Rotate the signing keys. Say "read them" for more.');
+  assert.ok(say.split(/\s+/).length <= 15, say);
+  assert.doesNotMatch(say, /Move session store/, 'one name, not three');
+  assert.equal(r.ctx.results!.find('2')!.ref, 'work-item:w-2', 'open the second still works');
+});
+
+test('G65: one hit is the hit; a one-fact answer is its own line; "read them" (detail true) hands every row and no line', () => {
+  const one = briefOutput('search', { query: 'x' }, { type: 'decision', query: 'x', total: 1, rows: [{ ref: 'decision:d-1', title: 'Adopt OpenTelemetry' }] });
+  assert.equal(one['say'], '1 decision: Adopt OpenTelemetry.');
+  const fact = briefOutput('search', { query: 'who decided' }, { type: 'all', total: 4, answer: 'Decided by: Nora DaSilva', rows: HITS.slice(0, 4).map((h) => ({ ref: `work-item:${h.id}`, title: h.title })) });
+  assert.equal(fact['say'], 'Decided by: Nora DaSilva');
+  const all = briefOutput('search', { query: 'x', detail: true }, { type: 'all', total: 12, rows: HITS.map((h) => ({ ref: `work-item:${h.id}`, title: h.title })) });
+  assert.equal(all['say'], undefined);
+  assert.equal((all['rows'] as unknown[]).length, 12);
 });
