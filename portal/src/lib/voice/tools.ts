@@ -843,7 +843,10 @@ async function adrRows(ctx: ToolContext, query: string): Promise<SearchRow[]> {
   const out: SearchRow[] = [];
   for (const d of (read.body.results ?? []).filter((r) => typeof r.id === 'string').slice(0, 3)) {
     const doc = await readJson<{ id?: string; title?: string; href?: string; source?: string }>(ctx, `/api/graph/documents/${encodeURIComponent(`adr-${d.id}`)}`);
-    if (!doc.ok || typeof doc.body.id !== 'string') continue;
+    // Sweep 11 (L6): the id is a naming convention, and the route answers a workspace page before a corpus record of
+    // the same id. Only the corpus's own ADR record (source adr) counts; a page or any other record that happens to
+    // carry the id is not this decision's ADR.
+    if (!doc.ok || typeof doc.body.id !== 'string' || doc.body.source !== 'adr') continue;
     out.push({ id: doc.body.id, type: 'document', title: doc.body.title ?? `ADR: ${d.title ?? ''}`, subtitle: 'ADR', description: d.title, matchReason: 'Decision record', href: `/iq/documents/${encodeURIComponent(doc.body.id)}` });
   }
   return out;

@@ -53,6 +53,14 @@ test('search knowledge "the ADR about the dependency map": the decision\'s recor
   assert.ok(!log.slice(before).some((l) => l.url.startsWith('/api/graph/documents/')));
 });
 
+test('sweep 11 (L6): a workspace page that answers the ADR id is not taken for the decision\'s ADR', async () => {
+  const page = { id: 'adr-d-aurora', source: 'workspace', title: 'ADR: Service dependency map in Postgres, not a graph database', href: '/iq/documents/adr-d-aurora' };
+  const { ctx } = ctxFor({ extra: [route('GET', '/api/graph/documents/adr-d-aurora', 200, page)] });
+  const r = await runVoiceTool('search', { query: 'the ADR about the dependency map', type: 'knowledge' }, ctx);
+  const rows = (r.output['rows'] as Array<Record<string, unknown>> | undefined) ?? [];
+  assert.ok(!rows.some((row) => row['ref'] === 'document:adr-d-aurora' && row['subtitle'] === 'ADR'), JSON.stringify(rows));
+});
+
 test('get runbook part steps: the count and step one in the line; every step numbered in the rows; the health warning kept', async () => {
   const { ctx } = ctxFor();
   const r = await runVoiceTool('get', { ref: 'runbook:rb-tenant-cutover', part: 'steps' }, ctx);
