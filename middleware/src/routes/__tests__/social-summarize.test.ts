@@ -169,7 +169,7 @@ describe('the real agent path', () => {
     const result = (await get('u-sana', started.body.runId)).body.result;
     expect(result).toMatchObject({ fallback: false, summary: 'Thursday release.' });
     expect(invoke).toHaveBeenCalledWith('orgiq-assessment-drafter', expect.objectContaining({
-      structuredInput: expect.objectContaining({ mode: 'summarize-conversation', document: { text: expect.stringContaining('Mira Okafor: Release is Thursday.') } }) }));
+      structuredInput: expect.objectContaining({ mode: 'summarize-conversation', document: { text: expect.stringMatching(/<message-[0-9a-f]{32} from="Mira Okafor">Release is Thursday\.<\/message-[0-9a-f]{32}>/) } }) }));
   });
 
   it('falls back to the deterministic digest when a quote is invented or the agent fails', async () => {

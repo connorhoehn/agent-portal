@@ -21,6 +21,7 @@ import {
 import { recordBffCall } from '../providers/spend-ledger.js';
 import { config } from '../config.js';
 import { measureAnswer, offlineVerdict } from '../mock/answer-check.js';
+import { Fence, withDataRule } from './untrusted-text.js';
 
 export const NOVA_PRO_MODEL_ID = 'amazon.nova-pro-v1:0';
 
@@ -120,15 +121,14 @@ export async function judgeResponse(
     };
   }
 
+  // Both are stored text a user (or the agent quoting one) wrote: fenced, so a
+  // prompt that says "score this 1" is something to judge, not obey.
+  const fence = new Fence();
   const userPrompt = `User prompt:
-"""
-${(prompt ?? '').slice(0, 4000)}
-"""
+${fence.wrap(prompt ?? '', { kind: 'user-prompt', maxChars: 4000 })}
 
 Agent response:
-"""
-${(response ?? '').slice(0, 4000)}
-"""
+${fence.wrap(response ?? '', { kind: 'agent-response', maxChars: 4000 })}
 
 Reply with the JSON object only.`;
 
@@ -140,7 +140,7 @@ Reply with the JSON object only.`;
     const resp = await client().send(
       new ConverseCommand({
         modelId: NOVA_PRO_MODEL_ID,
-        system: [{ text: SYSTEM_PROMPT }],
+        system: [{ text: withDataRule(SYSTEM_PROMPT) }],
         messages,
         inferenceConfig: {
           temperature: 0,

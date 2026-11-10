@@ -26,6 +26,7 @@ import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedroc
 import { exec } from './aurora.js';
 import { recordBffCall } from './spend-ledger.js';
 import { config } from '../config.js';
+import { Fence, withDataRule } from '../lib/untrusted-text.js';
 import { proposeGraphChange, type GraphProposal } from './graph-proposals.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 
@@ -138,6 +139,7 @@ export async function loadCandidates(): Promise<Candidate[]> {
 // ── Extraction ───────────────────────────────────────────────────────────────
 
 function buildPrompt(doc: DocRow, text: string, candidates: Candidate[]): string {
+  const fence = new Fence();
   const vocabulary = candidates
     .map((c) => `${c.entityId}\t${c.entityType}\t${c.name}`)
     .join('\n');
@@ -160,10 +162,13 @@ function buildPrompt(doc: DocRow, text: string, candidates: Candidate[]): string
     '{"links":[{"entityId":"...","entityType":"...","quote":"...","confidence":0.0}]}',
     '',
     '--- KNOWN ENTITIES ---',
-    vocabulary,
+    fence.wrap(vocabulary, { kind: 'entity-list', maxChars: Math.max(vocabulary.length, 1) }),
     '',
-    `--- DOCUMENT: ${doc.title} ---`,
-    text,
+    // The document is ingested text anyone could have written: fenced as data,
+    // its title with it. Quotes are still checked verbatim against `text`.
+    '--- DOCUMENT ---',
+    fence.wrap(doc.title, { kind: 'document-title', maxChars: 300 }),
+    fence.wrap(text, { kind: 'document', maxChars: Math.max(text.length, 1) }),
   ].join('\n');
 }
 
@@ -269,6 +274,7 @@ export async function analyzeDocumentLinks(
       contentType: 'application/json',
       accept: 'application/json',
       body: JSON.stringify({
+        system: [{ text: withDataRule('You link documents to a closed list of known entities and reply with JSON only.') }],
         messages: [{ role: 'user', content: [{ text: buildPrompt(doc, text, candidates) }] }],
         inferenceConfig: { maxTokens: 1500, temperature: 0 },
       }),

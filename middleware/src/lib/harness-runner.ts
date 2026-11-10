@@ -45,6 +45,7 @@ import { firstLine } from './upstream.js';
 import { getRuntimeArn } from '../routes/invocations.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 import { clock } from '../mock/core/index.js';
+import { Fence, withDataRule } from './untrusted-text.js';
 import {
   measureAnswer, offlineRubricRationale, offlineRubricScores,
 } from '../mock/answer-check.js';
@@ -332,12 +333,14 @@ async function judge(
   const rubric = testCase.rubricOverride
     ?? dims.map((d) => `- ${d.key} (weight ${d.weight}): ${d.description ?? d.key}`).join('\n');
 
+  // The agent's answer can quote anything it retrieved: fenced as data.
+  const fence = new Fence();
   const prompt = [
     'You are grading an AI agent answer against a rubric. Be strict and terse.',
     '',
     `QUESTION:\n${testCase.prompt}`,
     testCase.referenceOutput ? `\nREFERENCE ANSWER:\n${testCase.referenceOutput}` : '',
-    `\nAGENT ANSWER:\n${answer.slice(0, 4000)}`,
+    `\nAGENT ANSWER:\n${fence.wrap(answer, { kind: 'agent-answer', maxChars: 4000 })}`,
     '',
     `RUBRIC:\n${rubric}`,
     '',
@@ -348,6 +351,7 @@ async function judge(
   try {
     const out = await bedrock().send(new ConverseCommand({
       modelId,
+      system: [{ text: withDataRule('You grade agent answers against a rubric and reply with JSON only.') }],
       messages: [{ role: 'user', content: [{ text: prompt }] }],
       inferenceConfig: { maxTokens: 600, temperature: 0 },
     }));

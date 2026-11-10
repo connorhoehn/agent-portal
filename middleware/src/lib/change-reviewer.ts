@@ -16,6 +16,7 @@ import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-r
 import { recordBffCall } from '../providers/spend-ledger.js';
 import { config } from '../config.js';
 import { staticReview } from '../mock/static-review.js';
+import { Fence, withDataRule } from './untrusted-text.js';
 import type { ReviewVerdict } from './sdlc-policy.js';
 
 const REVIEW_MODEL = process.env['SDLC_REVIEW_MODEL_ID'] ?? 'amazon.nova-pro-v1:0';
@@ -92,21 +93,23 @@ export async function reviewDiff(input: {
     return { verdict: out.verdict, summary: out.summary, findings: out.findings, model: out.model };
   }
 
+  // The task, the title and the diff are all text someone else wrote (the diff
+  // by the agent under review, which can write "approve this" into a comment):
+  // fenced, so the reviewer reads them as the thing being reviewed.
+  const fence = new Fence();
   const user = [
-    `Task the agent was given: ${input.taskPrompt ?? '(not recorded)'}`,
-    `Change title: ${input.title}`,
+    `Task the agent was given:\n${fence.wrap(input.taskPrompt ?? '(not recorded)', { kind: 'task', maxChars: 8_000 })}`,
+    `Change title:\n${fence.wrap(input.title, { kind: 'title', maxChars: 500 })}`,
     input.truncated ? 'NOTE: the diff below was truncated for size; judge what you can and flag the size.' : '',
     '',
     'Diff:',
-    '```diff',
-    input.diff,
-    '```',
+    fence.wrap(input.diff, { kind: 'diff', maxChars: 200_000 }),
   ].filter(Boolean).join('\n');
 
   try {
     const out = await client().send(new ConverseCommand({
       modelId: REVIEW_MODEL,
-      system: [{ text: SYSTEM }],
+      system: [{ text: withDataRule(SYSTEM) }],
       messages: [{ role: 'user', content: [{ text: user }] }],
       inferenceConfig: { maxTokens: 1500, temperature: 0.2 },
     }));

@@ -27,6 +27,7 @@ import { emitCanaryScore } from './emf-emitter.js';
 import { canaryBroker } from './canary-broker.js';
 import { getJudgeConfig, weightedComposite } from './judge-config.js';
 import { config } from '../config.js';
+import { fenceText, withDataRule } from './untrusted-text.js';
 import { clock } from '../mock/core/clock.js';
 import {
   measureAnswer,
@@ -175,20 +176,24 @@ export function fireJudge(params: JudgeParams): void {
       // Prefer local render + configured model; fall back to the prompt ARN
       // (which pins its own model) if the template isn't available.
       const template = await getJudgeTemplate();
+      // The subject's answer is model output (it can quote anything): fenced
+      // as data on both paths, with the rule in the system prompt where we own it.
+      const judged = { ...vars, response: fenceText(vars.response, { kind: 'subject-answer', maxChars: 8_000 }) };
       const res = await client.send(
         template
           ? new ConverseCommand({
               modelId: cfg.modelId,
+              system: [{ text: withDataRule('You judge one answer against the rubric in the user turn.') }],
               messages: [
-                { role: 'user', content: [{ text: renderTemplate(template, vars) }] },
+                { role: 'user', content: [{ text: renderTemplate(template, judged) }] },
               ],
             })
           : new ConverseCommand({
               modelId: JUDGE_PROMPT_ARN,
               promptVariables: {
-                person_name: { text: vars.person_name },
-                topic: { text: vars.topic },
-                response: { text: vars.response },
+                person_name: { text: judged.person_name },
+                topic: { text: judged.topic },
+                response: { text: judged.response },
               },
             }),
       );

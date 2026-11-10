@@ -34,6 +34,7 @@ import { config } from '../config.js';
 import { agentcore } from '../providers/index.js';
 import { flowRunStore, kickFlowRun, registerFlowExecutor, type FlowExecutionContext, type FlowRunRow, type FlowRunStep } from './flow-runs/index.js';
 import { SpendRefusedError } from './async-handler.js';
+import { Fence, MESSAGE_TAG } from './untrusted-text.js';
 import {
   holdAgentInvoke, bindAgentInvokeHold, releaseAgentInvokeHold, recordAgentInvoke, usageFromEvent,
 } from './agent-invoke-spend.js';
@@ -79,8 +80,20 @@ export function transcriptLines(
   return lines.slice(-HISTORY_LIMIT);
 }
 
-export function transcriptText(lines: readonly TranscriptLine[]): string {
-  let out = lines.map(l => `${l.author}: ${l.text}`).join('\n');
+/** One message's text in the transcript an agent reads. */
+export const MAX_MESSAGE_CHARS = 4_000;
+
+/**
+ * The transcript an agent reads: one fenced line per message, oldest first,
+ * `<message-TOKEN from="Name">text</message-TOKEN>`. Both the author's display
+ * name and the text are other people's input, so both sit inside the fence:
+ * the name as a sanitised attribute, the text neutralised and bounded
+ * (lib/untrusted-text.ts). The token is fresh per call. The tag is not
+ * `untrusted` because the drafter fences its whole input again under that
+ * name and neutralises every `untrusted` tag inside it.
+ */
+export function transcriptText(lines: readonly TranscriptLine[], fence: Fence = new Fence({ tag: MESSAGE_TAG })): string {
+  let out = lines.map(l => fence.wrap(l.text, { inline: true, attrs: { from: l.author }, maxChars: MAX_MESSAGE_CHARS })).join('\n');
   if (out.length > MAX_TRANSCRIPT_CHARS) out = out.slice(out.length - MAX_TRANSCRIPT_CHARS).replace(/^[^\n]*\n/, '');
   return out;
 }

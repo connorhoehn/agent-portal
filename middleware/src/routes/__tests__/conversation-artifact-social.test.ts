@@ -197,7 +197,7 @@ describe('the real agent path', () => {
     const result = (await get('diagram', 'u-sana', started.body.runId)).body.result;
     expect(result).toMatchObject({ fallback: false, format: 'drawio', nodes: [{ id: 'a', label: 'Release Thursday' }, { id: 'b', label: 'Runbook' }], edges: [{ from: 'a', to: 'b' }] });
     expect(invoke).toHaveBeenCalledWith('orgiq-assessment-drafter', expect.objectContaining({
-      structuredInput: expect.objectContaining({ mode: 'draw-diagram', document: { text: expect.stringContaining('Mira Okafor: Release is Thursday.') } }) }));
+      structuredInput: expect.objectContaining({ mode: 'draw-diagram', document: { text: expect.stringMatching(/<message-[0-9a-f]{32} from="Mira Okafor">Release is Thursday\.<\/message-[0-9a-f]{32}>/) } }) }));
   });
 
   it('/doc asks draft-confluence-page', async () => {

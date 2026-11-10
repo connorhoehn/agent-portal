@@ -26,6 +26,7 @@ import {
 } from '@aws-sdk/client-bedrock-runtime';
 import { recordBffCall } from '../providers/spend-ledger.js';
 import { config } from '../config.js';
+import { fenceText, withDataRule } from './untrusted-text.js';
 
 // Bounded so neither map/set grows without limit on a long-lived process (one
 // entry per session, never otherwise evicted). Maps/Sets keep insertion order,
@@ -139,16 +140,17 @@ export function generateTitleReserved(sessionId: string, firstUserMessage: strin
 }
 
 async function generateTitle(sessionId: string, firstUserMessage: string): Promise<void> {
-  const truncated = firstUserMessage.slice(0, 500);
+  // The message is titled, not answered: fenced as data.
+  const fenced = fenceText(firstUserMessage, { kind: 'user-message', maxChars: 500 });
   const resp = await client().send(
     new ConverseCommand({
       modelId: TITLE_MODEL,
       system: [{
-        text: 'You produce 3-5 word session titles. Output ONLY the title — no quotes, no punctuation, no preamble. Match the language and tone of the user message. Examples:\n- User: "Who knows kubernetes?" → Kubernetes Experts\n- User: "Show me the data platform team" → Data Platform Roster\n- User: "What is everyone\'s influence?" → Org Influence Snapshot',
+        text: withDataRule('You produce 3-5 word session titles for the user message in the data block. Output ONLY the title — no quotes, no punctuation, no preamble. Match the language and tone of the user message. Examples:\n- User: "Who knows kubernetes?" → Kubernetes Experts\n- User: "Show me the data platform team" → Data Platform Roster\n- User: "What is everyone\'s influence?" → Org Influence Snapshot'),
       }],
       messages: [{
         role: 'user',
-        content: [{ text: truncated }],
+        content: [{ text: fenced }],
       }],
       inferenceConfig: { maxTokens: 24, temperature: 0.2 },
     }),
