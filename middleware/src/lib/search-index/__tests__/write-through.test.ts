@@ -3,7 +3,7 @@
 // written to — a mock scope's write never reaches the shared world's index.
 jest.mock('../../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true, agentcore: true, guardrails: true, cloudwatch: true } } }));
 jest.mock('../../authz.js', () => ({ isAllowed: jest.fn(async () => true) }));
-jest.mock('../../../providers/recording-search.js', () => ({ listRecordingSearchRecords: jest.fn(async () => ({ records: [], partial: [] })), resolveRecordingSearchRecord: jest.fn() }));
+jest.mock('../../../providers/recording-search.js', () => ({ listRecordingSearchRecords: jest.fn(async () => ({ records: [], partial: [] })), resolveRecordingSearchRecord: jest.fn(), recordingsAreASource: jest.fn(() => true) }));
 import { searchRecords } from '../../../providers/search.js';
 import { createWorkItem, updateWorkItem } from '../../../providers/work-items.js';
 import { fixtureRegistry, createMockScope, runInMockScope } from '../../../mock/core/index.js';
