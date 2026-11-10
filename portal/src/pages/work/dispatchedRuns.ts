@@ -33,10 +33,14 @@ export const ACTIVE_RUNS_URL = '/api/bots/active-runs';
 /** Where the dispatched runs are listed in full, for every orgiq role. */
 export const DISPATCHED_RUNS_PATH = '/iq/work/queue';
 
-/** What the operator recognises a run by: the work item they dispatched, then
- *  its id, then the trigger for a run with no item behind it (a bot firing). */
+/** What the operator recognises a run by: the work item they dispatched, else
+ *  "Marketplace work" for an item whose name was not found (its id goes behind a
+ *  copy control, never the text: UX leftovers, 10 November), else the trigger
+ *  for a run with no item behind it (a bot firing). */
 export function dispatchedRunLabel(run: DispatchedRun): string {
-  return run.workItemTitle ?? run.workItemId ?? run.trigger;
+  if (run.workItemTitle) return run.workItemTitle;
+  if (run.workItemId) return 'Marketplace work';
+  return run.trigger;
 }
 
 /**

@@ -234,6 +234,11 @@ export function artifactKindLabel(kind: string): string {
  */
 export function artifactPlace(a: Pick<PipelineArtifact, 'kind' | 'uri'>): { label: string; title?: string } {
   if (a.kind === 'trace') return { label: 'Observability · invocation trace', title: a.uri };
+  // A store key is a row id, not a place a reader can use (UX leftovers, 10 November: the job run's
+  // Where read "agent_jobs/job-inf-maint-1#result"). The key stays in the title.
+  if (/^agent_jobs\/[^#]+#result$/.test(a.uri)) return { label: 'Work queue · the job\'s result', title: a.uri };
+  if (/^agent_change_requests\//.test(a.uri)) return { label: 'Changes · change request', title: a.uri };
+  if (/^[0-9a-f]{40}$/.test(a.uri)) return { label: `Commit ${a.uri.slice(0, 7)}`, title: a.uri };
   return { label: a.uri };
 }
 

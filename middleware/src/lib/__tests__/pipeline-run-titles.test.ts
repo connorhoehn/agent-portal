@@ -59,6 +59,16 @@ describe('presentRunTitles', () => {
     expect(r!.context.workItemId).toBe('wi-gone');
   });
 
+  it('a bot firing whose bot cannot be named reads "Bot firing", never "bot <uuid>"', () => {
+    const [r] = projectRuns({
+      agentJobs: [], agentProjectRuns: [], assessmentRuns: [], invocations: [], liveAgentRuns: [], changes: [],
+      botRuns: [{ id: 'br-2', botId: '32970d0a-e28e-5100-8fb0-a5cbb87dac99', trigger: 'cron', runId: null, jobId: null, workItemId: null, status: 'done', costUsd: 0.1, startedAt: '2026-11-10T00:00:00Z', finishedAt: '2026-11-10T00:01:00Z', dispatchedBy: null }],
+    }).runs;
+    presentRunTitles([r!], names);
+    expect(r!.context.title).toBe('Bot firing');
+    expect(r!.definitionId).toBe('bot:32970d0a-e28e-5100-8fb0-a5cbb87dac99');
+  });
+
   it('leaves a title alone when no name is known: an id beats a guess', () => {
     const r = run('assessment_runs', { title: 'score-dimensions · TEAM-999', definitionId: 'assessment:score-dimensions' });
     presentRunTitles([r], names);

@@ -13,6 +13,13 @@ test('a trace says where it is read, with the invocation id only in the title', 
   assert.deepEqual(artifactPlace({ kind: 'document', uri: 's3://halyard-docs/auth/cutover.md' }), { label: 's3://halyard-docs/auth/cutover.md' });
 });
 
+test('a store key or a commit hash is named in words, the key or hash in the title (UX leftovers, 10 November)', () => {
+  assert.deepEqual(artifactPlace({ kind: 'transcript', uri: 'agent_jobs/job-inf-maint-1#result' }), { label: "Work queue · the job's result", title: 'agent_jobs/job-inf-maint-1#result' });
+  assert.deepEqual(artifactPlace({ kind: 'change', uri: 'agent_change_requests/cr-9' }), { label: 'Changes · change request', title: 'agent_change_requests/cr-9' });
+  const sha = 'a'.repeat(7) + 'b'.repeat(33);
+  assert.deepEqual(artifactPlace({ kind: 'change', uri: sha }), { label: 'Commit aaaaaaa', title: sha });
+});
+
 test('an artifact names the step it came from', () => {
   const steps = [{ stepId: 'search-1', label: 'search' }, { stepId: 'synthesize-2', label: 'synthesize' }];
   assert.equal(artifactStepLabel({ stepId: 'synthesize-2' }, steps), 'synthesize');

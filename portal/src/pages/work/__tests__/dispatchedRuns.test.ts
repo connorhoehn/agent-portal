@@ -36,7 +36,8 @@ test('a run with neither a box nor a work item falls back to the list', () => {
 
 test('label and noun', () => {
   assert.equal(dispatchedRunLabel(run()), 'Cutover runbook');
-  assert.equal(dispatchedRunLabel(run({ workItemTitle: null })), 'wi-auth-e2-s2');
+  // A work item whose name was not found reads in words; its id is behind the row's copy control (UX leftovers, 10 November).
+  assert.equal(dispatchedRunLabel(run({ workItemTitle: null })), 'Marketplace work');
   assert.equal(dispatchedRunLabel(run({ workItemTitle: null, workItemId: null })), 'marketplace');
   assert.equal(dispatchedRunsNoun(1), '1 dispatched run');
   assert.equal(dispatchedRunsNoun(3), '3 dispatched runs');

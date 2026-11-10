@@ -9,6 +9,7 @@ import {
   Button,
   Card,
   Chip,
+  CopyIdButton,
   DataTable,
   EmptyState,
   FilterChip,
@@ -249,7 +250,7 @@ export default function QueuePage() {
       key: 'workItemTitle', header: 'Work item',
       render: (r) => {
         const dest = dispatchedRunDestination(r, canManage);
-        return (
+        const link = (
           <Link
             to={dest.path}
             onClick={(e: React.MouseEvent) => e.stopPropagation()}
@@ -258,6 +259,13 @@ export default function QueuePage() {
           >
             {dispatchedRunLabel(r)}
           </Link>
+        );
+        // A work item whose name was not found reads "Marketplace work"; its id is one copy away.
+        return r.workItemTitle || !r.workItemId ? link : (
+          <Inline gap="xs" wrap={false} align="center">
+            {link}
+            <CopyIdButton value={r.workItemId} label="Copy the work item's id" />
+          </Inline>
         );
       },
     },

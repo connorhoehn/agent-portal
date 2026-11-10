@@ -647,7 +647,9 @@ export function projectRuns(src: RunSources): Projection {
         sources: [{ table: 'bot_runs', id: b.id, status: b.status, role: 'primary' }],
         // The raw title when no name is found (lib/pipeline-run-titles.ts names the item or the bot when it can).
         // Words, never the id: the work item's id is `workItemId` (behind a copy control on the run page).
-        title: b.botId ? `bot ${b.botId}` : marketplaceFallbackTitle(),
+        // A bot the presenter cannot name reads "Bot firing", never "bot <uuid>"; its id is the run's
+        // definition (`bot:<id>`), behind a copy control on the run page.
+        title: b.botId ? 'Bot firing' : marketplaceFallbackTitle(),
         botId: b.botId, workItemId: b.workItemId, trigger: b.trigger,
         error: typeof b.outcome?.['error'] === 'string' ? String(b.outcome['error']) : null,
       },
