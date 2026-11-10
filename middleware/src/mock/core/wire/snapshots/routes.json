@@ -208,27 +208,27 @@
     {
       "method": "DELETE",
       "path": "/api/admin/kb-registry/:id",
-      "source": "src/routes/kb-admin.ts:513"
+      "source": "src/routes/kb-admin.ts:515"
     },
     {
       "method": "GET",
       "path": "/api/admin/kb-registry/:id",
-      "source": "src/routes/kb-admin.ts:459"
+      "source": "src/routes/kb-admin.ts:461"
     },
     {
       "method": "PATCH",
       "path": "/api/admin/kb-registry/:id",
-      "source": "src/routes/kb-admin.ts:487"
+      "source": "src/routes/kb-admin.ts:489"
     },
     {
       "method": "GET",
       "path": "/api/admin/kb-registry/:id/docs",
-      "source": "src/routes/kb-admin.ts:769"
+      "source": "src/routes/kb-admin.ts:771"
     },
     {
       "method": "GET",
       "path": "/api/admin/kb-registry/:id/jobs",
-      "source": "src/routes/kb-admin.ts:684"
+      "source": "src/routes/kb-admin.ts:686"
     },
     {
       "method": "GET",
@@ -243,17 +243,17 @@
     {
       "method": "POST",
       "path": "/api/admin/kb-registry/:id/provision",
-      "source": "src/routes/kb-admin.ts:531"
+      "source": "src/routes/kb-admin.ts:533"
     },
     {
       "method": "GET",
       "path": "/api/admin/kb-registry/:id/status",
-      "source": "src/routes/kb-admin.ts:552"
+      "source": "src/routes/kb-admin.ts:554"
     },
     {
       "method": "POST",
       "path": "/api/admin/kb-registry/:id/sync",
-      "source": "src/routes/kb-admin.ts:628"
+      "source": "src/routes/kb-admin.ts:630"
     },
     {
       "method": "GET",
@@ -1588,12 +1588,12 @@
     {
       "method": "GET",
       "path": "/api/drop/:token",
-      "source": "src/routes/drop.ts:88"
+      "source": "src/routes/drop.ts:90"
     },
     {
       "method": "POST",
       "path": "/api/drop/:token/upload",
-      "source": "src/routes/drop.ts:100"
+      "source": "src/routes/drop.ts:102"
     },
     {
       "method": "GET",
@@ -1958,162 +1958,162 @@
     {
       "method": "POST",
       "path": "/api/ingest/crawl",
-      "source": "src/routes/ingest.ts:383"
+      "source": "src/routes/ingest.ts:389"
     },
     {
       "method": "GET",
       "path": "/api/ingest/crawl-targets",
-      "source": "src/routes/ingest.ts:572"
+      "source": "src/routes/ingest.ts:578"
     },
     {
       "method": "POST",
       "path": "/api/ingest/crawl-targets",
-      "source": "src/routes/ingest.ts:576"
+      "source": "src/routes/ingest.ts:582"
     },
     {
       "method": "DELETE",
       "path": "/api/ingest/crawl-targets/:id",
-      "source": "src/routes/ingest.ts:629"
+      "source": "src/routes/ingest.ts:635"
     },
     {
       "method": "PATCH",
       "path": "/api/ingest/crawl-targets/:id",
-      "source": "src/routes/ingest.ts:607"
+      "source": "src/routes/ingest.ts:613"
     },
     {
       "method": "POST",
       "path": "/api/ingest/crawl-targets/:id/run",
-      "source": "src/routes/ingest.ts:635"
+      "source": "src/routes/ingest.ts:641"
     },
     {
       "method": "DELETE",
+      "path": "/api/ingest/crawl/:id",
+      "source": "src/routes/ingest.ts:420"
+    },
+    {
+      "method": "GET",
       "path": "/api/ingest/crawl/:id",
       "source": "src/routes/ingest.ts:414"
     },
     {
       "method": "GET",
-      "path": "/api/ingest/crawl/:id",
-      "source": "src/routes/ingest.ts:408"
-    },
-    {
-      "method": "GET",
       "path": "/api/ingest/crawl/:id/manifest",
-      "source": "src/routes/ingest.ts:529"
+      "source": "src/routes/ingest.ts:535"
     },
     {
       "method": "GET",
       "path": "/api/ingest/crawl/:id/page/:idx",
-      "source": "src/routes/ingest.ts:465"
+      "source": "src/routes/ingest.ts:471"
     },
     {
       "method": "GET",
       "path": "/api/ingest/crawl/:id/page/:idx/screenshot",
-      "source": "src/routes/ingest.ts:490"
+      "source": "src/routes/ingest.ts:496"
     },
     {
       "method": "GET",
       "path": "/api/ingest/crawl/:id/stream",
-      "source": "src/routes/ingest.ts:420"
+      "source": "src/routes/ingest.ts:426"
     },
     {
       "method": "POST",
       "path": "/api/ingest/crawl/:id/sync",
-      "source": "src/routes/ingest.ts:558"
+      "source": "src/routes/ingest.ts:564"
     },
     {
       "method": "GET",
       "path": "/api/ingest/crawls",
-      "source": "src/routes/ingest.ts:404"
+      "source": "src/routes/ingest.ts:410"
     },
     {
       "method": "GET",
       "path": "/api/ingest/data-sources",
-      "source": "src/routes/ingest.ts:71"
+      "source": "src/routes/ingest.ts:72"
     },
     {
       "method": "GET",
       "path": "/api/ingest/job/:jobId",
-      "source": "src/routes/ingest.ts:101"
+      "source": "src/routes/ingest.ts:102"
     },
     {
       "method": "GET",
       "path": "/api/ingest/jobs",
-      "source": "src/routes/ingest.ts:86"
+      "source": "src/routes/ingest.ts:87"
     },
     {
       "method": "GET",
       "path": "/api/ingest/kb",
-      "source": "src/routes/ingest.ts:64"
+      "source": "src/routes/ingest.ts:65"
     },
     {
       "method": "GET",
       "path": "/api/ingest/queue",
-      "source": "src/routes/ingest.ts:165"
+      "source": "src/routes/ingest.ts:166"
     },
     {
       "method": "GET",
       "path": "/api/ingest/schedules",
-      "source": "src/routes/ingest.ts:193"
+      "source": "src/routes/ingest.ts:194"
     },
     {
       "method": "POST",
       "path": "/api/ingest/schedules",
-      "source": "src/routes/ingest.ts:197"
+      "source": "src/routes/ingest.ts:198"
     },
     {
       "method": "DELETE",
       "path": "/api/ingest/schedules/:id",
-      "source": "src/routes/ingest.ts:223"
+      "source": "src/routes/ingest.ts:224"
     },
     {
       "method": "PATCH",
       "path": "/api/ingest/schedules/:id/toggle",
-      "source": "src/routes/ingest.ts:232"
+      "source": "src/routes/ingest.ts:233"
     },
     {
       "method": "POST",
       "path": "/api/ingest/start",
-      "source": "src/routes/ingest.ts:246"
+      "source": "src/routes/ingest.ts:247"
     },
     {
       "method": "GET",
       "path": "/api/ingest/stats",
-      "source": "src/routes/ingest.ts:321"
+      "source": "src/routes/ingest.ts:322"
     },
     {
       "method": "GET",
       "path": "/api/ingest/storage",
-      "source": "src/routes/ingest.ts:654"
+      "source": "src/routes/ingest.ts:660"
     },
     {
       "method": "GET",
       "path": "/api/ingest/stream",
-      "source": "src/routes/ingest.ts:117"
+      "source": "src/routes/ingest.ts:118"
     },
     {
       "method": "POST",
       "path": "/api/ingest/survey",
-      "source": "src/routes/ingest.ts:683"
+      "source": "src/routes/ingest.ts:689"
     },
     {
       "method": "GET",
       "path": "/api/ingest/survey/:id",
-      "source": "src/routes/ingest.ts:700"
+      "source": "src/routes/ingest.ts:706"
     },
     {
       "method": "POST",
       "path": "/api/ingest/survey/:id/target",
-      "source": "src/routes/ingest.ts:712"
+      "source": "src/routes/ingest.ts:718"
     },
     {
       "method": "GET",
       "path": "/api/ingest/surveys",
-      "source": "src/routes/ingest.ts:696"
+      "source": "src/routes/ingest.ts:702"
     },
     {
       "method": "POST",
       "path": "/api/ingest/upload",
-      "source": "src/routes/ingest.ts:351"
+      "source": "src/routes/ingest.ts:352"
     },
     {
       "method": "GET",
