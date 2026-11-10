@@ -11,6 +11,7 @@ import {
   Stack,
   Banner,
   Chip,
+  CopyIdButton,
   DataTable,
   T,
   type DataTableColumn,
@@ -59,7 +60,8 @@ const PAGES: Record<SourcePageId, { title: string; description: string; noun: st
     empty: 'No agents in the fleet registry.',
     columns: [
       { key: 'title', header: 'Agent', sortable: true, compare: (a, b) => a.title.localeCompare(b.title), render: (d) => <RecordLink to={definitionHref(d.id)}>{d.title}</RecordLink> },
-      { key: 'id', header: 'Runtime', render: (d) => <T size="xs" tone="tertiary">{d.source.id}</T> },
+      // The deployment's runtime name carries another product's id (`orgiq-…`): one copy control away, never the text (UX walk D).
+      { key: 'id', header: 'Runtime', render: (d) => <CopyIdButton value={d.source.id} label={`Copy ${d.title}'s runtime name`} /> },
       { key: 'workspace', header: 'Acts for', render: (d) => <Chip tone="neutral" size="xs">{contextTenantLabel(d.contextTenant)}</Chip> },
       { key: 'model', header: 'Model', render: (d) => str(d.meta['model']) },
       { key: 'tools', header: 'Tools', numeric: true, render: (d) => (Array.isArray(d.meta['tools']) ? (d.meta['tools'] as unknown[]).length : 0) },
@@ -143,7 +145,7 @@ function SourcesWorkspace({ source }: { source: SourcePageId }) {
       {error ? (
         <UnavailableNotice error={error} what={page.noun} source="Listed from the definition registry" onRetry={refresh} />
       ) : (
-        <DataTable
+        <DataTable narrow
           data-testid={`pipelines-source-${source}-table`}
           data={rows}
           columns={page.columns}

@@ -132,7 +132,7 @@ export default function DefinitionsPage() {
       {error ? (
         <UnavailableNotice error={error} what="the definition catalog" source="Definitions are derived from bots, commands, runbooks and agents" onRetry={refresh} />
       ) : (
-        <DataTable
+        <DataTable narrow
           data-testid="pipelines-definitions-table"
           data={rows}
           columns={COLUMNS}

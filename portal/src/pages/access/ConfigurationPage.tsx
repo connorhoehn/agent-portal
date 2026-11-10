@@ -121,7 +121,7 @@ export default function ConfigurationPage() {
           )}
           <PageSection size="sm" title="Catalog items"
             description={mayEdit ? 'Each item’s default duration and whether it is sensitive (adds an access-admin step). Saved changes apply to requests submitted afterwards.' : 'Each item’s default duration and whether it is sensitive. Only an access admin changes them.'}>
-            <DataTable data-testid="access-config-items" data={items} columns={columns} keyField={(i) => i.id} emptyMessage="The catalog offers no items."
+            <DataTable narrow data-testid="access-config-items" data={items} columns={columns} keyField={(i) => i.id} emptyMessage="The catalog offers no items."
               staticRows="Each item's settings are edited in its row and saved together below; an item has no page of its own." />
           </PageSection>
           {mayEdit && patch.items.length > 0 && (

@@ -95,7 +95,7 @@ export default function RunbooksPage() {
       {error ? (
         <UnavailableNotice error={error} what="runbooks" source="Runbooks are the promotion ladder's RUNBOOK rung" onRetry={refresh} />
       ) : (
-        <DataTable
+        <DataTable narrow
           data-testid="pipelines-runbooks-table"
           data={rows}
           columns={BASE_COLUMNS}

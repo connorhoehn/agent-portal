@@ -60,7 +60,7 @@ export default function QueuesPage() {
       ]} />
       {incomplete.length > 0 && <T size="xs" tone="secondary" wrap>Some attributes are unavailable. A dash means unknown, not zero. Select a queue for its read status.</T>}
     </>}
-    {!error && <DataTable data-testid="pipeline-queues-table" columns={columns} data={filtered}
+    {!error && <DataTable narrow data-testid="pipeline-queues-table" columns={columns} data={filtered}
       keyField={row => row.name} loading={isLoading && !data} pageSize={25} onRowClick={row => setSelected(row.name)} emptyMessage={query || filter ? 'No queues match these filters.' : 'No queues registered.'} />}
     {row && !error && <PageSection title={row.name} description={row.purpose}>
       <Stack gap="sm" data-testid="pipeline-queue-details">

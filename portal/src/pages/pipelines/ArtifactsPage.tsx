@@ -76,7 +76,7 @@ export default function ArtifactsPage() {
       {error ? (
         <UnavailableNotice error={error} what="artifacts" source="Artifacts are projected from each run's source rows" onRetry={refresh} />
       ) : (
-        <DataTable
+        <DataTable narrow
           data-testid="pipelines-artifacts-table"
           data={rows}
           columns={COLUMNS}

@@ -82,7 +82,7 @@ function ApprovalsWorkspace() {
           {error ? (
             <UnavailableNotice error={error} what="your approvals" source="Approvals are the current steps of open requests that you may decide" onRetry={refresh} />
           ) : (
-            <DataTable
+            <DataTable narrow
               data-testid="access-approvals-table"
               data={rows}
               columns={COLUMNS}

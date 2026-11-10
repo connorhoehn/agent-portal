@@ -60,7 +60,7 @@ export default function AuditPage() {
           {error ? (
             <UnavailableNotice error={error} what="the access audit trail" source="Events are read from access_events, which is append-only" onRetry={refresh} />
           ) : (
-            <DataTable
+            <DataTable narrow
               data-testid="access-audit-table"
               data={rows}
               columns={EVENT_COLUMNS}

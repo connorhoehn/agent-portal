@@ -158,7 +158,7 @@ export function RunsLedger({ actions, endpoint, detailBase, showWorkspace = fals
       {error ? (
         <UnavailableNotice error={error} what="the run ledger" source="Runs are projected from the jobs, bot runs and commands tables" onRetry={refresh} />
       ) : (
-        <DataTable
+        <DataTable narrow
           data-testid={testId}
           data={runs}
           columns={columns(showWorkspace, session?.tenant === 'orgiq', detailBase)}

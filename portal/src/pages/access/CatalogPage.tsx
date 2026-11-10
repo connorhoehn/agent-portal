@@ -111,7 +111,7 @@ export default function CatalogPage() {
           {error ? (
             <UnavailableNotice error={error} what="the access catalog" source="The catalog is read from access_catalog_items" onRetry={refresh} />
           ) : (
-            <DataTable
+            <DataTable narrow
               data-testid="access-catalog-table"
               data={rows}
               columns={columns(mayRequest)}

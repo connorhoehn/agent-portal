@@ -196,7 +196,7 @@ export default function PoliciesPage() {
           {error ? (
             <UnavailableNotice error={error} what="separation-of-duties policies" source="Policies are read from access_policies" onRetry={refresh} />
           ) : (
-            <DataTable
+            <DataTable narrow
               data-testid="access-policies-table"
               data={rows}
               columns={COLUMNS}

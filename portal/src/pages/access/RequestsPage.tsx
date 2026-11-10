@@ -106,7 +106,7 @@ function RequestsWorkspace() {
           {error ? (
             <UnavailableNotice error={error} what="access requests" source="Requests are read from access_requests and their steps" onRetry={refresh} />
           ) : (
-            <DataTable
+            <DataTable narrow
               data-testid="access-requests-table"
               data={rows}
               columns={REQUEST_COLUMNS}

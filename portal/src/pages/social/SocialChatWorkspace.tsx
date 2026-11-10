@@ -47,7 +47,7 @@ import {
 } from '@connorhoehn/ui-components/social';
 import {
   ActivityIcon, AtIcon, Button, ChannelHeader, EmptyState, ErrorState, IconButton, Inline, InlineAlert, LoadingState,
-  PhoneIcon, PlayCircleIcon, PlusIcon, Spinner, Stack, T, VisuallyHidden,
+  ExplorerLayout, PhoneIcon, PlayCircleIcon, PlusIcon, Spinner, Stack, T, VisuallyHidden, useViewportWidth,
 } from '@connorhoehn/ui-components/shared';
 import { WrappedNotificationCenter } from '@connorhoehn/ui-components/integrations/realtime';
 import { useSharedNotifications } from '../../components/shell/SharedNotifications';
@@ -109,6 +109,8 @@ interface RecordingsResponse { recordings: SocialRecording[] }
  * Channels open.
  */
 const RAIL_MEMORY_KEY = 'social.chatRail';
+/** Under this window width the rail and the pane show one at a time (ExplorerLayout narrow). */
+const NARROW_PX = 640;
 /** A conversation page's non-surface states share the conversation header's inset (see conversationPane). */
 const CONVERSATION_STATE_INSET = 'min-h-0 min-w-0 flex-1 px-[var(--ui-content-gutter,1rem)]';
 const DEFAULT_FOLDED: Readonly<Record<string, boolean>> = { Teams: true, Rooms: true };
@@ -474,6 +476,8 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
     requestAnimationFrame(() => (dmTrigger.current?.isConnected ? dmTrigger.current : newDmButton.current)?.focus());
   };
 
+  // At phone width the rail and the pane show one at a time (see the narrow explorer below).
+  const narrow = useViewportWidth() < NARROW_PX;
   // ── The rail ──────────────────────────────────────────────────────────
   const activeTiles = embedding?.activePeople ? embedding.activePeople(people) : people;
   const railContext: WorkspaceRailContext = { query, online, here };
@@ -591,6 +595,8 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
         } : {}),
       }}
       emptyLabel={conversationRailEmptyLabel([...(showDms ? [dmsFetch] : []), ...(showChannels ? [channelsFetch] : [])], query)}
+      // The narrow explorer gives the list the whole width; the rail keeps its 300px beside a pane.
+      {...(narrow && !embedding ? { className: 'w-full border-r-0' } : {})}
       data-testid="social-chat-rail"
     />
   );
@@ -822,14 +828,37 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
   }
 
   // These panes render their own visible h1; shelf and picker states still need the workspace heading.
-  const paneHasHeading = !shelf && !picking && (route === 'calls'
+  const paneHasHeading = !shelf && !picking && (route === 'calls' || route === 'recordings'
     || (route === 'rooms' && !!roomsFetch.data && (!roomSlug || rooms.some(room => room.slug === roomSlug))));
+
+  // At phone width the rail and the pane cannot sit side by side (UX walk D: /social/dms at 390 cut the
+  // conversation off): the library's narrow explorer shows one at a time — the list, or what is open
+  // under a back control. Calls, recordings and hangouts are pages of their own, so they open as the pane.
+  const paneOpen = !!shelf || picking || route === 'calls' || route === 'recordings' || route === 'rooms'
+    || (route === 'dms' && !!lobby) || (route === 'channels' && !!slug) || (route === 'teams' && (!!teamChannel || !!managing));
+  const [narrowList, setNarrowList] = useState(false);
+  useEffect(() => { setNarrowList(false); }, [location.key]);
+  const narrowBack = () => {
+    if (shelf) { setShelf(null); return; }
+    if (picking) { closeNewDm(); return; }
+    if ((route === 'dms' && lobby) || (route === 'channels' && slug) || (route === 'teams' && (teamChannel || managing))) { navigate(`${base}/${route}`); return; }
+    setNarrowList(true);
+  };
 
   return (
     <Stack gap="none" className="min-h-0 min-w-0 bg-surface" data-shell-flush data-testid={PAGE_TESTID[route]}>
       {!embedding && !paneHasHeading && <VisuallyHidden as="h1">{PAGE_TITLE[route]}</VisuallyHidden>}
       <ViewportFillRegion className="flex min-w-0" data-testid="social-chat-workspace">
-        {railNode}
+        {!embedding && narrow ? (
+          <ExplorerLayout rail={railNode} railLabel="conversations" className="min-h-0 min-w-0 flex-1"
+            narrow={{ showing: paneOpen && !narrowList ? 'record' : 'list', onBack: narrowBack, backLabel: 'All conversations' }}
+            data-testid="social-chat-narrow">
+            <Stack as="section" aria-label={PAGE_TITLE[route]} gap="sm" className="min-h-0 min-w-0 flex-1 overflow-hidden" data-testid="social-chat-pane">
+              {alerts()}
+              {conversationPane()}
+            </Stack>
+          </ExplorerLayout>
+        ) : railNode}
         {embedding ? (
           // One header per page (docs/layout-cascade.md): an open conversation IS the page — the plane's
           // title folds into the trail's last crumb, its actions join the conversation's header row
@@ -848,7 +877,7 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
               {conversationPane()}
             </Stack>
           </SectionContent>
-        ) : (
+        ) : narrow ? null : (
           <Stack as="section" aria-label={PAGE_TITLE[route]} gap="sm" className="min-h-0 min-w-0 flex-1 overflow-hidden" data-testid="social-chat-pane">
             {alerts()}
             {conversationPane()}

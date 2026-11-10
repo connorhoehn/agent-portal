@@ -124,7 +124,8 @@ export default function RecordingsPane({ me, nameOf, rooms, mayManage, postTarge
               description={selectedId ? 'It does not exist, or you were not on the call.' : 'Choose a recording on the left to play it.'} />
           ) : (
             <Stack gap="md" className="min-w-0 flex-1" data-testid="social-recording-detail">
-              <PageHeader title={lobbyLabel(selected.lobbyName, me, nameOf, rooms)} description={new Date(selected.startedAt).toLocaleString()}
+              {/* One h1 per page (UX walk D): the open recording sits under the Recordings title. */}
+              <PageHeader as="h2" title={lobbyLabel(selected.lobbyName, me, nameOf, rooms)} description={new Date(selected.startedAt).toLocaleString()}
                 actions={(
                   <Button variant="secondary" size="sm" disabled={!summaryChannel(selected) || selected.stage !== 'ready'} onClick={() => void summarize(selected)}
                     data-testid="social-recording-summarize"

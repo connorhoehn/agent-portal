@@ -137,7 +137,7 @@ export default function ReviewsPage() {
           {error ? (
             <UnavailableNotice error={error} what="access reviews" source="Review campaigns are read from access_reviews and their items" onRetry={refresh} />
           ) : (
-            <DataTable
+            <DataTable narrow
               data-testid="access-reviews-table"
               data={rows}
               columns={COLUMNS}

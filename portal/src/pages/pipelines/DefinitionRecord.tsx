@@ -160,7 +160,7 @@ export function DefinitionRecord({ id, onChanged }: { id: string; onChanged: () 
             </DetailSection>
           )}
           <DetailSection title="Steps" hint={`${def.steps.length}`}>
-            <DataTable
+            <DataTable narrow
               frameless
               data={def.steps.map((s, i) => ({ ...s, n: i + 1 }))}
               columns={STEP_COLUMNS}
@@ -171,7 +171,7 @@ export function DefinitionRecord({ id, onChanged }: { id: string; onChanged: () 
           </DetailSection>
           {data?.runbook && (
             <DetailSection title="Dry-runs" hint={`${data.dryRuns.length}`} data-testid="pipelines-dry-runs">
-              <DataTable
+              <DataTable narrow
                 frameless
                 data={data.dryRuns}
                 columns={DRY_RUN_COLUMNS}
@@ -182,7 +182,7 @@ export function DefinitionRecord({ id, onChanged }: { id: string; onChanged: () 
             </DetailSection>
           )}
           <DetailSection title="Recent runs" hint={`${data?.runs.length ?? 0}`}>
-            <DataTable
+            <DataTable narrow
               frameless
               data={data?.runs ?? []}
               columns={RUN_COLUMNS}

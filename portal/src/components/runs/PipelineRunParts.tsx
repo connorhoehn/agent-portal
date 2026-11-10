@@ -122,7 +122,7 @@ export function PipelineRunSteps({ steps }: { steps: PipelineStep[] }) {
   return (
     <Stack gap="sm">
       <WorkflowStepper steps={stepperSteps(steps)} data-testid="pipeline-stepper" />
-      <DataTable data={steps} columns={STEP_COLUMNS} keyField={(s) => s.stepId}
+      <DataTable narrow data={steps} columns={STEP_COLUMNS} keyField={(s) => s.stepId}
         staticRows="Steps are this run's timeline, read in place; the run itself is the record." />
     </Stack>
   );
@@ -139,7 +139,7 @@ const artifactColumns = (steps: readonly PipelineStep[]): DataTableColumn<Pipeli
 
 export function PipelineRunArtifacts({ artifacts, steps = [] }: { artifacts: PipelineArtifact[]; steps?: readonly PipelineStep[] }) {
   return (
-    <DataTable
+    <DataTable narrow
       data={artifacts}
       columns={artifactColumns(steps)}
       keyField={(a) => a.id}

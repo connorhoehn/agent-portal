@@ -207,7 +207,7 @@ function ApprovalsWorkspace() {
       {error ? (
         <UnavailableNotice error={error} what="approvals" source="Approvals are read off the job review, change gate and consult queues" onRetry={refresh} />
       ) : (
-        <DataTable
+        <DataTable narrow
           data-testid="pipelines-approvals-table"
           data={rows}
           columns={COLUMNS}

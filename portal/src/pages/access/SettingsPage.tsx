@@ -140,7 +140,7 @@ function DelegationSettings() {
           {list.error ? (
             <UnavailableNotice error={list.error} what="delegations" source="Delegations are read from access_delegations" onRetry={list.refresh} />
           ) : !list.data ? <LoadingState label="Loading delegations…" /> : (
-            <DataTable data-testid="access-delegations" data={rows} columns={columns} keyField={(d) => d.id} rowActions={rowActions}
+            <DataTable narrow data-testid="access-delegations" data={rows} columns={columns} keyField={(d) => d.id} rowActions={rowActions}
               emptyMessage="No delegations yet." staticRows="Each delegation is read in place and ended from its row; it has no page of its own." />
           )}
         </PageSection>
