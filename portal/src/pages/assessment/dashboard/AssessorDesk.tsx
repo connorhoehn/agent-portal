@@ -64,11 +64,23 @@ interface AssessorDeskProps {
 }
 
 /** "L3 verified · 12/17" on the verified track, with the claim gap beside it. */
+/**
+ * The desk's "Updated" date: the year only when it is not this year. The ten
+ * columns fit 1440 with no horizontal scroll (regression walk, 9 November
+ * night: "Next action" sat past the table's edge); the full date is the title.
+ */
+function deskDate(iso: string | undefined | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return fmtDate(iso);
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString(undefined, sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 function CertificationCell({ team }: { team: TeamSummary }) {
   const cert = team.certification;
   if (!cert || !cert.assessed) return <MetaLine size="xs" tone="tertiary" items={['Not yet assessed']} />;
   const verified = highestVerifiedLevel(cert);
-  const claims = cert.claims_open ?? 0;
   return (
     <Inline gap="xs" align="center" wrap={false}>
       <Chip
@@ -79,11 +91,6 @@ function CertificationCell({ team }: { team: TeamSummary }) {
         {verified === null ? 'unverified' : `L${verified} verified`}
       </Chip>
       <MetaLine size="xs" tone="secondary" items={[`${cert.at_or_above_target}/${cert.applicable} at L${cert.target_level}`]} />
-      {claims > 0 && (
-        <Chip size="xs" tone="warning" title={`${claims} claim${claims === 1 ? '' : 's'} open — dimensions whose claim sits above what verification reached`}>
-          {claims} open
-        </Chip>
-      )}
     </Inline>
   );
 }
@@ -216,7 +223,7 @@ export function AssessorDesk({
               <Inline justify="end" wrap={false}>
                 <DotMeter
                   value={t.dimensions_total > 0 ? t.dimensions_assessed / t.dimensions_total : 0}
-                  segments={10}
+                  segments={6}
                   showPercent={false}
                   note={`${t.dimensions_assessed}/${t.dimensions_total}`}
                   tone="surface"
@@ -269,11 +276,12 @@ export function AssessorDesk({
           },
           {
             key: 'contributors',
-            header: 'Contributors',
+            header: 'People',
+            label: 'Contributors',
             render: (t) => {
               const avatars = contributorAvatars(t.contributors);
               return avatars.length > 0 ? (
-                <PresenceAvatars users={avatars} maxVisible={4} size={22} />
+                <PresenceAvatars users={avatars} maxVisible={3} size={22} />
               ) : (
                 <MetaLine size="xs" tone="tertiary" items={['—']} />
               );
@@ -295,10 +303,16 @@ export function AssessorDesk({
             header: 'Next action',
             render: (t) => {
               const next = nextActionFor(t);
-              return <Chip size="xs" tone={ACTION_TONE[next.kind]} dot="static">{next.label}</Chip>;
+              return (
+                <Chip size="xs" tone={ACTION_TONE[next.kind]} dot="static"
+                  title={next.kind === 'close_claims' ? 'Dimensions whose claim sits above what verification reached' : undefined}>
+                  {next.label}
+                </Chip>
+              );
             },
           },
-          { key: 'updated_at', header: 'Updated', sortable: true, numeric: true, render: (t) => fmtDate(t.updated_at) },
+          { key: 'updated_at', header: 'Updated', sortable: true, numeric: true,
+            render: (t) => <span title={fmtDate(t.updated_at)}>{deskDate(t.updated_at)}</span> },
             ]}
           />
         </>
