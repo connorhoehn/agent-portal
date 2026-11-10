@@ -104,7 +104,12 @@ def history_turns(raw_history) -> list[tuple[str, str]]:
     written (bounded); an assistant turn can quote what was retrieved for it
     (documents, other agents' answers), so it is replayed as a fenced data
     block (_shared/untrusted_text.py), never as instructions. Malformed turns
-    are dropped."""
+    are dropped.
+
+    The model API takes a conversation that starts with the user (sweep 11,
+    L9): an odd or non-alternating history sliced at its newest turns can
+    start on an assistant turn, so leading non-user turns are dropped after
+    the slice."""
     fence = Fence()
     out: list[tuple[str, str]] = []
     for turn in raw_history if isinstance(raw_history, list) else []:
@@ -114,7 +119,10 @@ def history_turns(raw_history) -> list[tuple[str, str]]:
             out.append(("user", turn["content"][:HISTORY_TURN_MAX_CHARS]))
         else:
             out.append(("assistant", fence.wrap(turn["content"], kind="earlier-answer", max_chars=HISTORY_TURN_MAX_CHARS)))
-    return out[-MAX_HISTORY_TURNS:]
+    window = out[-MAX_HISTORY_TURNS:]
+    while window and window[0][0] != "user":
+        window.pop(0)
+    return window
 _MODEL_DEFAULTS = {"default_model_id": "amazon.nova-pro-v1:0", "default_temperature": 0.0, "default_max_tokens": 4096}
 MODEL_ID = resolve_model(MODEL_ROLE, **_MODEL_DEFAULTS).model_id
 PREFIX = os.environ.get("PROJECT_PREFIX", "orgiq")
