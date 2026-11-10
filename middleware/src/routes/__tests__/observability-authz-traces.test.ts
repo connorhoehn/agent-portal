@@ -28,6 +28,8 @@ jest.mock('../../lib/role-registry.js', () => ({
   roleRegistry: () => [
     { id: 'admin', tenant: null, label: 'Admin', summary: '', capabilities: ['*'] },
     { id: 'member', tenant: 'orgiq', label: 'Member', summary: '', capabilities: ['ViewObservability'] },
+    // A fleet-wide role (lib/devbox-visibility FLEET_WIDE_ROLES): every user's traces in its own tenant.
+    { id: 'org-leader', tenant: 'orgiq', label: 'Org leader', summary: '', capabilities: ['ViewObservability'] },
     { id: 'no-obs', tenant: 'orgiq', label: 'No obs', summary: '', capabilities: [] },
     { id: 'assessor', tenant: 'assessment', label: 'Assessor', summary: '', capabilities: ['ViewObservability'] },
   ],
@@ -220,14 +222,28 @@ describe('GET /api/observability/summary and /traces', () => {
     expect(res.body).toEqual({ invocations24h: 12, errorRate: 0.25 });
   });
 
-  it('traces lists with the requested limit (default 10) under `traces`', async () => {
+  it('traces lists with the requested limit (default 10) under `traces`, reading the caller\'s scope', async () => {
     listTracesMock.mockResolvedValue([{ traceId: '1-a' }, { traceId: '1-b' }]);
     const res = await request(buildApp(admin())).get('/api/observability/traces?limit=2');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ traces: [{ traceId: '1-a' }, { traceId: '1-b' }] });
-    expect(listTracesMock).toHaveBeenLastCalledWith(2);
+    expect(listTracesMock).toHaveBeenLastCalledWith(2, null);
     await request(buildApp(member())).get('/api/observability/traces');
-    expect(listTracesMock).toHaveBeenLastCalledWith(10);
+    expect(listTracesMock).toHaveBeenLastCalledWith(10, { tenant: 'orgiq', userId: 'u-member' });
+  });
+
+  it('a member lists only their own traces in their own tenant; the org leader every user\'s in the tenant (second regression walk)', async () => {
+    const rows = [
+      { traceId: 'mine', userId: 'u-member', tenant: 'orgiq' },
+      { traceId: 'theirs', userId: 'u-other', tenant: 'orgiq', agentName: 'Supervisor' },
+      { traceId: 'elsewhere', userId: 'u-member', tenant: 'assessment' },
+      { traceId: 'ownerless' },
+    ];
+    listTracesMock.mockResolvedValue(rows);
+    const ids = async (s: FakeSession) => ((await request(buildApp(s)).get('/api/observability/traces')).body.traces as Array<{ traceId: string }>).map((t) => t.traceId);
+    expect(await ids(member())).toEqual(['mine']);
+    expect(await ids({ ...sessionFor('org-leader', 'orgiq'), sub: 'u-lead' })).toEqual(['mine', 'theirs']);
+    expect(await ids(admin())).toEqual(['mine', 'theirs', 'elsewhere', 'ownerless']);
   });
 
   it('a provider failure on either is a 5xx', async () => {
@@ -297,7 +313,7 @@ describe('GET /api/observability/traces/:traceId', () => {
   });
 
   it('returns the provider trace for the requested id', async () => {
-    const trace = { traceId: '1-abc', durationMs: 412, spans: [{ name: 'AGENT', durationMs: 400 }] };
+    const trace = { traceId: '1-abc', durationMs: 412, spans: [{ name: 'AGENT', durationMs: 400 }], userId: 'u-x', tenant: 'orgiq' };
     getTraceMock.mockResolvedValue(trace);
     const res = await request(buildApp(admin())).get('/api/observability/traces/1-abc');
     expect(res.status).toBe(200);
@@ -305,10 +321,23 @@ describe('GET /api/observability/traces/:traceId', () => {
     expect(getTraceMock).toHaveBeenCalledWith('1-abc');
   });
 
-  it('drops span attributes that quote what someone asked, for anyone but the cross-tenant admin', async () => {
-    getTraceMock.mockResolvedValue({ traceId: '1-abc', spans: [{ name: 'AGENT', attributes: { 'agent.id': 'orgiq-supervisor', 'user.query': 'my question', 'query.type': 'sql', 'tokens.in': 4 } }] });
+  it('another user\'s trace, and an ownerless one, answer 404 to anyone but the cross-tenant admin', async () => {
+    const spans = [{ name: 'AGENT', attributes: { 'agent.id': 'orgiq-supervisor', 'user.query': 'their question', 'query.type': 'sql', 'tokens.in': 4 } }];
+    for (const owner of [{ userId: 'u-other', tenant: 'orgiq' }, { userId: 'u-member', tenant: 'assessment' }, {}]) {
+      getTraceMock.mockResolvedValue({ traceId: '1-abc', spans, ...owner });
+      const res = await request(buildApp(member())).get('/api/observability/traces/1-abc');
+      expect([owner, res.status, res.body]).toEqual([owner, 404, { error: 'Trace not found' }]);
+    }
+    // The admin reads it whole, text included.
+    getTraceMock.mockResolvedValue({ traceId: '1-abc', spans });
+    expect((await request(buildApp(admin())).get('/api/observability/traces/1-abc')).body.spans[0].attributes['user.query']).toBe('their question');
+  });
+
+  it('a member opens their own trace, text included (like their own rows of invocation_traces)', async () => {
+    getTraceMock.mockResolvedValue({ traceId: '1-abc', userId: 'u-member', tenant: 'orgiq', spans: [{ name: 'AGENT', attributes: { 'user.query': 'my question' } }] });
     const res = await request(buildApp(member())).get('/api/observability/traces/1-abc');
-    expect(res.body.spans[0].attributes).toEqual({ 'agent.id': 'orgiq-supervisor', 'query.type': 'sql', 'tokens.in': 4 });
+    expect(res.status).toBe(200);
+    expect(res.body.spans[0].attributes).toEqual({ 'user.query': 'my question' });
   });
 
   it('404s a trace the provider does not know, rather than answering an empty 200', async () => {

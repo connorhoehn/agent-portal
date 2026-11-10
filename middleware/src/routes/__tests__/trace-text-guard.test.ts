@@ -204,12 +204,17 @@ function plant(): void {
   openAgentRun({ runId: 'run-guard-live', threadId: null, agentId: 'orgiq-supervisor', agentName: 'Supervisor',
     userId: OTHER.sub, tenant: OTHER.tenant, prompt: `${MARK} live run prompt` });
 
-  // X-Ray and Bedrock's invocation log name no caller; offline they are empty, so plant one each.
+  // Bedrock's invocation log names no caller; offline it is empty, so plant one. The X-Ray trace is another
+  // user's, and its NAMES carry the mark too (agent, root span, span name, metadata): a member must not learn
+  // that it exists at all, not just miss its text (second regression walk: the three samples were listed,
+  // names and token counts, to everyone). The provider is stubbed to return it unscoped, so the route's own
+  // filter is what is checked.
   const trace = {
-    traceId: 'trace-guard', rootSpan: 'span-guard', agentId: 'orgiq-supervisor', agentName: 'Supervisor',
+    traceId: 'trace-guard', rootSpan: `${MARK}-span-root`, agentId: `${MARK}-agent`, agentName: `${MARK} Supervisor`,
     startTime: NOW, totalDurationMs: 100, spanCount: 1, status: 'ok' as const, tokensIn: 1, tokensOut: 1,
-    spans: [{ traceId: 'trace-guard', spanId: 'span-guard', parentSpanId: null, name: 'supervisor.invoke', kind: 'agent' as const,
-      startTimeMs: 0, durationMs: 100, status: 'ok' as const, attributes: { 'agent.id': 'orgiq-supervisor', 'user.query': `${MARK} span query` } }],
+    userId: OTHER.sub, tenant: OTHER.tenant,
+    spans: [{ traceId: 'trace-guard', spanId: `${MARK}-span-root`, parentSpanId: null, name: `${MARK}.invoke`, kind: 'agent' as const,
+      startTimeMs: 0, durationMs: 100, status: 'ok' as const, attributes: { 'agent.id': `${MARK}-agent`, 'model.id': `${MARK}-model`, 'user.query': `${MARK} span query` } }],
   };
   jest.spyOn(cloudwatch, 'listTraces').mockResolvedValue([trace]);
   jest.spyOn(cloudwatch, 'getTrace').mockResolvedValue(trace);

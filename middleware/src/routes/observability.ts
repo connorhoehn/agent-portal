@@ -9,7 +9,7 @@ import { driftRouter } from './drift.js';
 import { qualityRouter } from './quality.js';
 import { prWatchHealth } from '../lib/pr-watch-poller.js';
 import { userNameFor } from '../lib/user-names.js';
-import { traceScope, rowInScope, readsOwnerlessText, type TraceScope } from '../lib/trace-scope.js';
+import { traceScope, rowInScope, readsOwnerlessText, traceInScope, type TraceScope } from '../lib/trace-scope.js';
 import { config } from '../config.js';
 import { mockTraceOwners } from '../mock/observability.js';
 import type { Trace } from '../providers/types.js';
@@ -162,7 +162,7 @@ observabilityRouter.get(
 const SPAN_TEXT_KEY = /(^user\.|query$|prompt|response|question|answer|input$|output$|message|text|content|summary)/i;
 
 function withoutSpanText(trace: Trace, scope: TraceScope | null): Trace {
-  if (readsOwnerlessText(scope)) return trace;
+  if (readsOwnerlessText(scope) || traceInScope(scope, trace)) return trace; // an owner in scope reads it, like their invocation_traces rows
   if (!Array.isArray(trace.spans)) return trace;
   return {
     ...trace,
@@ -180,8 +180,8 @@ observabilityRouter.get(
     const scope = traceScope(req, res);
     if (scope === 'refused') return;
     const limit = parseInt((req.query['limit'] as string) ?? '10', 10);
-    const traces = await cloudwatch.listTraces(limit);
-    res.json({ traces: traces.map((t) => withoutSpanText(t, scope)) });
+    const traces = await cloudwatch.listTraces(limit, scope); // the caller's (lib/trace-owner.ts); the filter drops anything else, so no other user's trace is named
+    res.json({ traces: traces.filter((t) => traceInScope(scope, t)).map((t) => withoutSpanText(t, scope)) });
   }),
 );
 
@@ -192,7 +192,7 @@ observabilityRouter.get(
     if (scope === 'refused') return;
     const traceId = req.params['traceId'] as string;
     const trace = await cloudwatch.getTrace(traceId);
-    if (!trace) {
+    if (!trace || !traceInScope(scope, trace)) { // another user's (or, but for the admin, an ownerless) trace is the same 404
       res.status(404).json({ error: 'Trace not found' });
       return;
     }

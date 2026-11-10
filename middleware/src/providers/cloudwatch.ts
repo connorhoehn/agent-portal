@@ -4,7 +4,8 @@
 //   - getSummary(): aggregates Invocations / Errors / Latency / Tokens from CloudWatch
 //     metrics (AWS/BedrockAgentCore + custom OrgIQ namespace) over last 24h. Returns
 //     a zero-state summary when no metrics exist yet (pre-runtime-deployment).
-//   - listTraces(limit): GetTraceSummaries → BatchGetTraces against X-Ray.
+//   - listTraces(limit, scope): GetTraceSummaries (filtered to the caller's
+//     `user_id` / `tenant` annotations, lib/trace-owner.ts) → BatchGetTraces.
 //   - getTrace(id): BatchGetTraces for a single trace ID.
 //
 // X-Ray → internal Trace mapping is SIMPLIFIED: we return traceId, agentId,
@@ -35,6 +36,8 @@ import { config } from '../config.js';
 import { realAgentCore } from './agentcore.js';
 import type { AgentRuntimeSummary } from './types.js';
 import { mockTraces } from '../mock/traces.js';
+import { traceInScope, xrayScopeFilter } from '../lib/trace-owner.js';
+import type { TraceScope } from '../lib/trace-scope.js';
 import { mockAgents } from '../mock/agent-statuses.js';
 import type {
   BedrockInvocationEntry,
@@ -82,8 +85,8 @@ export const mockCloudWatch: CloudWatchProvider = {
     };
   },
 
-  async listTraces(limit: number): Promise<Trace[]> {
-    return mockTraces.slice(0, limit);
+  async listTraces(limit: number, scope: TraceScope | null = null): Promise<Trace[]> {
+    return mockTraces.filter((t) => traceInScope(scope, t)).slice(0, limit);
   },
 
   async getTrace(traceId: string): Promise<Trace | null> {
@@ -224,6 +227,9 @@ function mapXRayTrace(xt: XRayTrace): Trace | null {
   let status: Trace['status'] = 'ok';
   let tokensIn = 0;
   let tokensOut = 0;
+  // The owner, from the first segment that names one (`user_id` / `tenant` annotations).
+  let userId: string | null = null;
+  let tenant: string | null = null;
 
   for (const seg of xt.Segments ?? []) {
     if (!seg.Document) continue;
@@ -245,6 +251,8 @@ function mapXRayTrace(xt: XRayTrace): Trace | null {
       const to = ann['tokens.out'];
       if (typeof ti === 'number') tokensIn += ti;
       if (typeof to === 'number') tokensOut += to;
+      if (userId === null && typeof ann['user_id'] === 'string' && ann['user_id']) userId = ann['user_id'];
+      if (tenant === null && typeof ann['tenant'] === 'string' && ann['tenant']) tenant = ann['tenant'];
     } catch {
       // ignore malformed segment doc
     }
@@ -262,6 +270,8 @@ function mapXRayTrace(xt: XRayTrace): Trace | null {
     tokensIn,
     tokensOut,
     spans: [], // TODO: flatten segments + subsegments into TraceSpan[]
+    userId,
+    tenant,
   };
 }
 
@@ -297,7 +307,8 @@ const SUMMARY_TTL_MS = (() => {
 })();
 
 let summaryCache: { value: ObservabilitySummary; fetchedAt: number } | null = null;
-const tracesCache = new Map<number, { value: Trace[]; fetchedAt: number }>();
+/** Keyed by limit and scope: one caller's cached list is never another's answer. */
+const tracesCache = new Map<string, { value: Trace[]; fetchedAt: number }>();
 
 /** Test hook: drop the cached summary + traces so a fresh call re-hits the API. */
 export function __resetObservabilityCache(): void {
@@ -388,12 +399,15 @@ async function computeSummary(): Promise<ObservabilitySummary> {
     }
 }
 
-async function computeListTraces(limit: number): Promise<Trace[]> {
+async function computeListTraces(limit: number, scope: TraceScope | null): Promise<Trace[]> {
+    // The caller's traces only (the route filters again): a scope the filter language cannot quote reads nothing.
+    const filter = xrayScopeFilter(scope);
+    if (filter === null) return [];
     try {
       const end = new Date();
       const start = new Date(end.getTime() - ONE_DAY_MS);
       const summaries = await xray.send(
-        new GetTraceSummariesCommand({ StartTime: start, EndTime: end }),
+        new GetTraceSummariesCommand({ StartTime: start, EndTime: end, ...(filter ? { FilterExpression: filter } : {}) }),
       );
       const ids = ((summaries.TraceSummaries ?? []) as TraceSummary[])
         .map((s) => s.Id)
@@ -433,13 +447,14 @@ export const realCloudWatch: CloudWatchProvider = {
     return value;
   },
 
-  async listTraces(limit: number): Promise<Trace[]> {
+  async listTraces(limit: number, scope: TraceScope | null = null): Promise<Trace[]> {
     const now = Date.now();
-    const hit = tracesCache.get(limit);
+    const key = `${limit}|${scope ? `${scope.tenant}|${scope.userId ?? '*'}` : 'all'}`;
+    const hit = tracesCache.get(key);
     if (hit && now - hit.fetchedAt < SUMMARY_TTL_MS) return hit.value;
-    const value = await computeListTraces(limit);
+    const value = await computeListTraces(limit, scope);
     // An empty list is also what an X-Ray outage returns — cache only a real hit.
-    if (value.length > 0) tracesCache.set(limit, { value, fetchedAt: now });
+    if (value.length > 0) tracesCache.set(key, { value, fetchedAt: now });
     return value;
   },
 

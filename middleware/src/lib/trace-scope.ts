@@ -21,6 +21,7 @@ import type { Request, Response } from 'express';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { FLEET_WIDE_ROLES } from './devbox-visibility.js';
 import { CROSS_TENANT_ROLES } from './tenants.generated.js';
+export { traceInScope } from './trace-owner.js';
 
 /** `userId: null` = every user in `tenant`. A `null` scope = every row (cross-tenant admin). */
 export interface TraceScope { tenant: string; userId: string | null }

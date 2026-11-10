@@ -4,6 +4,7 @@
 //
 // Shapes deliberately mirror the existing mock types so route swaps are minimal-diff.
 
+import type { TraceScope } from '../lib/trace-scope.js';
 import type { Upstream } from '../lib/upstream.js';
 
 // ── Aurora (graph + scores) ───────────────────────────────────────────────────
@@ -470,6 +471,13 @@ export interface Trace {
   tokensIn: number;
   tokensOut: number;
   spans: TraceSpan[];
+  /**
+   * Who ran it and in which tenant (X-Ray annotations `user_id` / `tenant` on the
+   * root segment; the mock's own). Absent: an ownerless trace, which only the
+   * cross-tenant admin may list or open (lib/trace-scope.ts, routes/observability.ts).
+   */
+  userId?: string | null;
+  tenant?: string | null;
 }
 
 export interface ObservabilitySummary {
@@ -516,7 +524,12 @@ export interface BedrockInvocationEntry {
 
 export interface CloudWatchProvider {
   getSummary(): Promise<ObservabilitySummary>;
-  listTraces(limit: number): Promise<Trace[]>;
+  /**
+   * The newest traces, at most `limit`. `scope` (lib/trace-scope.ts) narrows the
+   * read to the caller's traces: null = every trace (the cross-tenant admin), a
+   * `userId` of null = every user's in `tenant`. The route filters again.
+   */
+  listTraces(limit: number, scope?: TraceScope | null): Promise<Trace[]>;
   getTrace(traceId: string): Promise<Trace | null>;
   getGuardrailMetrics(guardrailId: string, hours: number): Promise<GuardrailMetricsSummary>;
   listBedrockInvocations(opts: { limit: number; sinceMs?: number }): Promise<BedrockInvocationEntry[]>;

@@ -11,6 +11,11 @@
 //
 // `traceCount` on Health's summary is `mockTraces.length` — counted, not typed,
 // which is why switching this fixture to `empty` empties that tile too.
+//
+// Every trace has an owner and a tenant (second regression walk, 10 November:
+// the three ownerless samples were listed, names and token counts, to a plain
+// member and the org leader alike). A member lists their own; the org leader
+// every user's in Work; the cross-tenant admin all of them.
 
 import { clock, defineFixture } from './core/index.js';
 import { liveRows } from './live.js';
@@ -39,6 +44,9 @@ export interface Trace {
   tokensIn: number;
   tokensOut: number;
   spans: TraceSpan[];
+  /** Who ran it, in which tenant: the trace list and detail show a trace only to its scope (lib/trace-scope.ts). */
+  userId?: string | null;
+  tenant?: string | null;
 }
 
 /** Minutes are the natural unit for a trace list; the clock speaks hours. */
@@ -68,6 +76,9 @@ function seedTraces(): Trace[] {
       rootSpan: 'span-001-root',
       agentId: 'orgiq-supervisor',
       agentName: 'Supervisor',
+      // Theo asked the supervisor who knows Kubernetes (his own question, in the root span).
+      userId: 'u-theo',
+      tenant: 'orgiq',
       startTime: minutesAgo(2),
       tokensIn: 1240,
       tokensOut: 856,
@@ -85,6 +96,8 @@ function seedTraces(): Trace[] {
       rootSpan: 'span-002-root',
       agentId: 'orgiq-scoring',
       agentName: 'Scoring',
+      userId: 'u-nora',
+      tenant: 'orgiq',
       startTime: minutesAgo(5),
       tokensIn: 580,
       tokensOut: 320,
@@ -100,6 +113,8 @@ function seedTraces(): Trace[] {
       rootSpan: 'span-003-root',
       agentId: 'orgiq-ingestion',
       agentName: 'Ingestion',
+      userId: 'u-vera',
+      tenant: 'orgiq',
       startTime: minutesAgo(10),
       tokensIn: 2100,
       tokensOut: 890,
