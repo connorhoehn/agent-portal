@@ -432,7 +432,41 @@ const C6 = {
   },
 };
 
-const CAPABILITIES = { C1, C2, C2B, C3, C4, C5, C6 };
+const SEARCH = { query: null, type: null, scope: null, sort: null, limit: null, answer: null, detail: null };
+
+/** C7: knowledge (Nora): a runbook found and its steps read, an ADR found and opened. */
+const C7 = {
+  title: 'Runbooks and ADRs', persona: 'nora',
+  async run(s, page) {
+    await s('voice: "Find the runbook for the tenant cutover.", "What are its steps?", "Open the ADR about the dependency map."', async () => {
+      await go(page, INITIATIVE);
+      await waitText(page, '[data-testid=initiative-header]', /Auth Migration/);
+      await startVoice(page, [
+        { said: 'Find the runbook for the tenant cutover.', call: { name: 'search', arguments: { ...SEARCH, query: 'tenant cutover', type: 'knowledge' } } },
+        { said: 'What are its steps?', call: { name: 'get', arguments: { ...GET, ref: 'runbook:rb-tenant-cutover', part: 'steps' } } },
+        { said: 'Find the ADR about the dependency map.', call: { name: 'search', arguments: { ...SEARCH, query: 'the ADR about the dependency map', type: 'knowledge' } } },
+        { said: 'Open it.', call: { name: 'open', arguments: { ref: 'document:adr-d-aurora', page: null, kind: null, scope: null, tab: null } } },
+      ]);
+      const found = await nthOutput(page, 1);
+      const a = terseSay(found, 'search runbook');
+      check((found.rows ?? []).some((r) => r.ref === 'runbook:rb-tenant-cutover'), `the cutover runbook is not a runbook row: ${JSON.stringify((found.rows ?? []).map((r) => r.ref))}`);
+      const rb = await json(page, '/api/runbooks/rb-tenant-cutover');
+      const steps = rb.current.doc.steps;
+      const b = terseSay(await nthOutput(page, 2), 'runbook steps', new RegExp(`^${steps.length} steps in "${rb.current.doc.title}"; 1: ${steps[0].do.split(' ').slice(0, 4).join(' ')}`));
+      const adr = await nthOutput(page, 3);
+      const c = terseSay(adr, 'search ADR');
+      check(adr.rows?.[0]?.ref === 'document:adr-d-aurora', `the ADR is not the first row: ${JSON.stringify((adr.rows ?? []).map((r) => r.ref))}`);
+      const opened = await nthOutput(page, 4);
+      check(opened.kind !== 'refused', `open refused: ${opened.reason}`);
+      await page.waitForURL(/\/iq\/documents\/adr-d-aurora/, { timeout: 15000 });
+      await waitText(page, 'body', /Service dependency map in Postgres/);
+      await stopVoice(page);
+      return { say: [a, b, c] };
+    });
+  },
+};
+
+const CAPABILITIES = { C1, C2, C2B, C3, C4, C5, C6, C7 };
 
 // ── the run ──────────────────────────────────────────────────────────────────
 

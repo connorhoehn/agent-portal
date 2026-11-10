@@ -253,7 +253,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
           ],
         },
         "type": {
-          "description": "Which kind of record.",
+          "description": "Which kind of record (knowledge: runbooks and ADRs).",
           "enum": [
             "person",
             "team",

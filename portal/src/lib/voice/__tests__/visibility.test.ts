@@ -78,12 +78,12 @@ const VARIANTS: Record<string, unknown[]> = {
     { kind: 'initiative', name: 'Initiative' }, { kind: 'initiative', name: 'Nothing Like It' }, { kind: 'bot', name: 'sana' }, { kind: 'channel', name: 'x' }, { page: 'search', ref: '1' },
     // G21: rows of the page in view, by position (one past the page), by a name two rows share, by a name none has.
     { ref: '9', scope: 'this-page' }, { name: 'fix', scope: 'this-page' }, { name: 'Nothing Like It', scope: 'this-page' }, { ref: '1', kind: 'decision', scope: 'this-page' }],
-  search: [{ query: 'kubernetes', type: 'person' }, { query: 'alpha', type: 'initiative' }, { query: 'x', type: 'not-a-type' }, { query: 'who decided it', answer: true }],
+  search: [{ query: 'the ADR about Sana', type: 'knowledge' }, { query: 'runbook for cutover', type: 'knowledge' }, { query: 'kubernetes', type: 'person' }, { query: 'alpha', type: 'initiative' }, { query: 'x', type: 'not-a-type' }, { query: 'who decided it', answer: true }],
   list: [{ kind: 'decision', filter: { who: 'me' } }, { kind: 'decision', filter: { status: 'waiting' } }, { kind: 'decision', filter: { q: 'Sana', status: 'decided' } }, { kind: 'initiative', filter: { q: 'nothing like it' } }, { kind: 'bot' }, { kind: 'channel' }, { kind: 'not-a-kind' }, { kind: 'finding', filter: { since: 'soon' } },
     { kind: 'work-item', scope: 'this-page' }, { kind: 'decision', scope: 'this-page' },
     // Coverage (10 November): work items by owner, sprint and blocked, on the page and through the board.
     { kind: 'work-item', scope: 'this-page', filter: { who: 'Nobody Here' } }, { kind: 'work-item', scope: 'this-page', filter: { sprint: 'last' } }, { kind: 'work-item', filter: { sprint: 'Sprint Zero' } }, { kind: 'work-item', filter: { status: 'blocked' } }],
-  get: [{ ref: '1' }, { ref: 'consult:c-sana-1' }, { ref: 'decision:d-sana-1' }, { ref: 'initiative:p-unknown', part: 'runs' }, { ref: 'work-item:w-sana-1', part: 'runs' }, { ref: 'agent-run:r-sana-1' }, { ref: 'initiative:p-unknown' }, { ref: 'bot:b-x', part: 'runs' }, { ref: 'person:p-sana-x' }, { ref: 'Sana Alpha Initiative' },
+  get: [{ ref: '1' }, { ref: 'runbook:rb-sana-1', part: 'steps' }, { ref: 'consult:c-sana-1' }, { ref: 'decision:d-sana-1' }, { ref: 'initiative:p-unknown', part: 'runs' }, { ref: 'work-item:w-sana-1', part: 'runs' }, { ref: 'agent-run:r-sana-1' }, { ref: 'initiative:p-unknown' }, { ref: 'bot:b-x', part: 'runs' }, { ref: 'person:p-sana-x' }, { ref: 'Sana Alpha Initiative' },
     { ref: 'work-item:w-sana-1' }, { ref: 'work-item:w-not-theirs', part: 'brief' }, { ref: 'work-item:w-sana-1', part: 'history' }],
   computer: [{ action: 'start', initiatives: ['Unknown Initiative'] }, { action: 'open-shell', computer: 'unknown-box' },
     { action: 'run', computer: 'unknown-box', phrase: 'status' }, { action: 'run', computer: 'unknown-box', phrase: 'commits-since', since: 'soon' },

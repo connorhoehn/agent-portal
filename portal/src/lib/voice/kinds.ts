@@ -355,7 +355,8 @@ const ORGIQ: readonly KindSpec[] = [
   {
     kind: 'runbook', label: 'runbooks',
     list: { path: '/api/runbooks', key: 'runbooks' }, get: { path: '/api/runbooks/:id', record: 'runbook' },
-    parts: { versions: { path: '/api/runbooks/:id/versions' }, applications: { path: '/api/runbooks/:id/applications' } },
+    // Coverage (10 November): `steps` is the current version's steps, read in tools.ts (getRunbookSteps).
+    parts: { steps: {}, versions: { path: '/api/runbooks/:id/versions' }, applications: { path: '/api/runbooks/:id/applications' } },
     subtitle: 'summary', href: (id) => `/iq/runbooks/${enc(id)}`,
   },
   {

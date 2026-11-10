@@ -768,6 +768,8 @@ const search: Runner = async (args, ctx) => {
   const scope = typeof args['scope'] === 'string' && args['scope'] !== 'workspace' ? args['scope'] : undefined;
   const wantsAnswer = args['answer'] === true;
   const refOf = (type: string | undefined, id: string | undefined) => (id ? `${type ?? recordType ?? 'record'}:${id}` : undefined);
+  // Coverage (10 November): a knowledge hit that is a runbook is a runbook ref, so get reads its steps.
+  const rowRef = (r: SearchRow) => (r.type === 'knowledge' && r.id && r.href?.startsWith('/iq/runbooks/') ? `runbook:${r.id}` : refOf(r.type, r.id));
 
   let noFact = false;
   if (wantsAnswer && !orgiq) {
@@ -793,10 +795,13 @@ const search: Runner = async (args, ctx) => {
   }
   const read = await readJson<SearchBody>(ctx, url);
   if (!read.ok) return readFailure('search', read.status);
-  const found = (read.body.results ?? []).slice(0, Math.min(limit, MAX_ROWS));
+  let found = (read.body.results ?? []).slice(0, Math.min(limit, MAX_ROWS));
+  // Coverage (10 November): an ADR is a decision's record. "The ADR about X" finds the decision, then its record
+  // document (the corpus names it adr-<decision id>, GET /api/graph/documents/:id answers it); first in the rows.
+  if (orgiq && recordType === 'knowledge' && ADR_WORDS.test(query)) found = [...await adrRows(ctx, query), ...found].slice(0, Math.min(limit, MAX_ROWS));
   // The ref is the row's own `<type>:<id>`: what open takes back, so the model never opens by name alone.
   const rows = found.map((r) => ({
-    ref: refOf(r.type, r.id), title: r.title ?? '', type: r.type,
+    ref: rowRef(r), title: r.title ?? '', type: r.type,
     subtitle: r.subtitle, detail: r.description, matched: r.matchReason, status: orgiq ? undefined : r.status, href: r.href,
     ...(sort === 'recent' && r.updatedAt ? { updatedAt: r.updatedAt } : {}),
   }));
@@ -821,6 +826,47 @@ const search: Runner = async (args, ctx) => {
     ...(rows.some((r) => r.ref && r.href) ? { open: OPEN_NOTE } : {}),
   }, summary);
 };
+
+/** A query that asks for an architecture decision record. */
+const ADR_WORDS = /\b(adrs?|decision records?|architecture decisions?)\b/i;
+
+/** The ADR documents of the decisions a query names (at most three), as search rows of type document. */
+async function adrRows(ctx: ToolContext, query: string): Promise<SearchRow[]> {
+  const q = query.replace(ADR_WORDS, ' ').replace(/\b(the|about|on|for|of)\b/gi, ' ').replace(/\s+/g, ' ').trim();
+  if (!q) return [];
+  const read = await readJson<SearchBody>(ctx, `/api/search?${qs({ q, type: 'decision', limit: 3 })}`);
+  if (!read.ok) return [];
+  const out: SearchRow[] = [];
+  for (const d of (read.body.results ?? []).filter((r) => typeof r.id === 'string').slice(0, 3)) {
+    const doc = await readJson<{ id?: string; title?: string; href?: string; source?: string }>(ctx, `/api/graph/documents/${encodeURIComponent(`adr-${d.id}`)}`);
+    if (!doc.ok || typeof doc.body.id !== 'string') continue;
+    out.push({ id: doc.body.id, type: 'document', title: doc.body.title ?? `ADR: ${d.title ?? ''}`, subtitle: 'ADR', description: d.title, matchReason: 'Decision record', href: `/iq/documents/${encodeURIComponent(doc.body.id)}` });
+  }
+  return out;
+}
+
+// ── runbooks (coverage, 10 November): a runbook's steps, count first ─────────────────────────────────────────────
+
+/** `get runbook:<id>, part steps`: the current version's steps, numbered; the line is the count and step one. */
+async function getRunbookSteps(id: string, ctx: ToolContext): Promise<ToolResult> {
+  const read = await readJson<{ runbook?: Rec; current?: { version?: number; doc?: { title?: string; steps?: Rec[] } } }>(ctx, `/api/runbooks/${encodeURIComponent(id)}`);
+  if (!read.ok) return read.status === 404 ? refused('I found no runbook with that ref that you can read.', { code: 'not-found' }) : readFailure('that runbook', read.status);
+  const title = String(read.body.current?.doc?.title ?? read.body.runbook?.['title'] ?? 'The runbook');
+  const steps = (read.body.current?.doc?.steps ?? []).filter((x) => x && typeof x['do'] === 'string');
+  const health = read.body.runbook?.['health'] as Rec | undefined;
+  const warning = typeof health?.['warning'] === 'string' ? health['warning'] : null;
+  const rows = steps.map((x, i) => ({
+    position: i + 1, title: `${i + 1}. ${String(x['do'])}`,
+    ...(typeof x['expect'] === 'string' ? { subtitle: `Expect ${x['expect']}` } : {}),
+    ...((x['command'] as Rec | undefined)?.['text'] ? { command: 'yes (on the page)' } : {}),
+  }));
+  const res = done('record_part', {
+    ref: `runbook:${id}`, part: 'steps', title, count: steps.length, version: read.body.current?.version,
+    ...(warning ? { warning } : {}), rows,
+    ...(steps.length > 1 ? { read: 'Read the next step when the user asks ("next", "step 3"); commands stay on the page.' } : {}),
+  }, steps.length ? `${plural(steps.length, 'step')} in ${title}` : `${title} has no steps`);
+  return spoken(res, steps.length ? `${plural(steps.length, 'step')} in "${title}"; 1: ${String(steps[0]!['do'])}` : `"${title}" has no steps.`);
+}
 
 // ── initiatives ─────────────────────────────────────────────────────────────
 
@@ -1304,6 +1350,7 @@ const get: Runner = async (args, ctx) => {
   if (parsed.kind === 'agent-run') return getRun(parsed.id, ctx);
   if (parsed.kind === 'decision' && args['part'] == null) return getDecision(parsed.id, ctx);
   if (parsed.kind === 'consult') return getConsult(parsed.id, ctx);
+  if (parsed.kind === 'runbook' && args['part'] === 'steps' && ctx.tenant === 'orgiq') return getRunbookSteps(parsed.id, ctx);
   const partName = typeof args['part'] === 'string' ? args['part'] : spec.get ? undefined : Object.keys(spec.parts ?? {})[0];
   if (partName && !getParts(ctx.tenant).includes(partName)) return refused(`There is no "${partName}" part here.`);
   const part = partName ? spec.parts?.[partName] : undefined;

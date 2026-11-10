@@ -516,7 +516,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
     name: 'search',
     parameters: obj({
       query: str('What to search for, in the user\'s words.', { minLength: 1, maxLength: 200 }),
-      type: str('Which kind of record.', { enum: searchRecordTypes(null) }),
+      type: str('Which kind of record (knowledge: runbooks and ADRs).', { enum: searchRecordTypes(null) }),
       scope: searchScope,
       sort: str('relevance (default) or recent.', { enum: ['relevance', 'recent'] }),
       limit,
