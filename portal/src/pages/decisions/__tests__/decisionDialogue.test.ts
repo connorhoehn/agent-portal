@@ -11,6 +11,7 @@ import { test } from 'node:test';
 import { deckKeyAction, pageKeypadTarget, type ComposerPrompt, type ComposerPromptAnswer } from '@connorhoehn/ui-components/social/rich-composer';
 import { REJECT, SOMETHING_ELSE, decisionDialogue, dialogueRows, matchDialogueRow, optionBody, optionOutcome } from '../decisionDialogue.ts';
 import { decisionPageContext } from '../decisionFormat.ts';
+import { CARRY_MS, createKeyCarry } from '../keyCarry.ts';
 import { PAGE_OFFER_MAX, pageContextNote } from '../../../lib/voice/pageContext.ts';
 import type { DecideBody, DecisionDetail } from '../types';
 
@@ -82,6 +83,57 @@ test('keypad: 2 picks "Riskiest two tenants first"; its why is optional, and Ent
   assert.deepEqual(press(why, 'Enter', { inDeck: false }), { type: 'default', optionId: 'decide-now' });
   assert.deepEqual(await answer(why, { kind: 'option', optionId: 'decide-now' }), { receipt: 'Decided: Riskiest two tenants first' });
   assert.deepEqual(r.sent, [{ optionId: 'riskiest-first', outcome: 'resolved' }]);
+});
+
+test('keys typed in the same tick as the pick, before the reason field has the focus, are not lost (journey M2)', async () => {
+  // Enter alone: held by the page, pressed in the field once it has the focus, where the empty line decides.
+  const r = recorder();
+  const carry = createKeyCarry();
+  const prompt = decisionDialogue(CUTOVER, true, r.send, carry)!;
+  const picked = answer(prompt, { kind: 'choice', optionId: 'riskiest-first' });
+  assert.equal(carry.key({ key: 'Enter' }), 'held', 'the Enter fired with the pick is held, not dropped');
+  const why = await picked;
+  assert.ok(why && 'next' in why);
+  const landed = carry.land();
+  assert.deepEqual(landed, { text: '', submit: true });
+  assert.equal(carry.armed, false, 'landing ends the carry');
+  // In the field: Enter on the empty line takes the default, "Decide without a reason".
+  assert.deepEqual(press(why.next, 'Enter', { inDeck: false, inputEmpty: landed!.text === '' }), { type: 'default', optionId: 'decide-now' });
+  await answer(why.next, { kind: 'option', optionId: 'decide-now' });
+  assert.deepEqual(r.sent, [{ optionId: 'riskiest-first', outcome: 'resolved' }]);
+
+  // Digits and letters typed in the gap are the reason (a digit there is text, never another pick), then Enter sends it.
+  const r2 = recorder();
+  const carry2 = createKeyCarry();
+  const prompt2 = decisionDialogue(CUTOVER, true, r2.send, carry2)!;
+  const picked2 = answer(prompt2, { kind: 'choice', optionId: 'smallest-first' });
+  for (const k of [...'2 teams firsx', 'Backspace', 't', 'Enter']) assert.equal(carry2.key({ key: k }), 'held', `key ${k}`);
+  assert.equal(carry2.key({ key: 'x' }), 'pass', 'a key after the held Enter is not part of the answer');
+  const why2 = await picked2;
+  assert.ok(why2 && 'next' in why2);
+  const landed2 = carry2.land()!;
+  assert.deepEqual(landed2, { text: '2 teams first', submit: true });
+  await answer(why2.next, { kind: 'text', text: landed2.text });
+  assert.deepEqual(r2.sent, [{ optionId: 'smallest-first', outcome: 'resolved', rationale: '2 teams first' }]);
+});
+
+test('the key carry: idle until a pick, Escape and shortcuts end it, and an unlanded carry expires', () => {
+  const carry = createKeyCarry();
+  assert.equal(carry.key({ key: 'Enter' }), 'pass', 'idle: the page keeps its keys');
+  assert.equal(carry.land(), null);
+  carry.arm(1000);
+  assert.equal(carry.key({ key: 'Tab' }), 'pass', 'Tab is not the reason\'s');
+  assert.equal(carry.key({ key: 'a' }), 'held');
+  assert.equal(carry.key({ key: 'k', metaKey: true }), 'pass', 'a shortcut ends it');
+  assert.equal(carry.armed, false);
+  carry.arm(1000);
+  assert.equal(carry.key({ key: 'Escape' }), 'pass');
+  assert.equal(carry.armed, false, 'Escape ends it (the dialogue hides)');
+  carry.arm(1000);
+  assert.equal(carry.expired(1000 + CARRY_MS), false);
+  assert.equal(carry.expired(1001 + CARRY_MS), true);
+  carry.drop();
+  assert.equal(carry.armed, false);
 });
 
 test('a why typed on the chosen row rides along as the rationale; a refusal stays on the card', async () => {

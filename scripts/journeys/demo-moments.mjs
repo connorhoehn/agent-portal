@@ -260,14 +260,17 @@ const M2 = {
       await page.waitForURL(new RegExp(`/iq/decisions/${DECISION}`), { timeout: 15000 });
       await waitText(page, '[data-testid=collection-command-composer-prompts]', /Riskiest two tenants first/);
     });
-    await s('keypad 2 then Enter in the docked composer', async () => {
-      await page.keyboard.press('2');
-      await waitText(page, '[data-testid=collection-command-composer-prompts]', /2\. Riskiest two tenants first/);
-      // "Why? One line, optional. Enter decides.": Enter belongs to the reason field, once it has the focus.
-      await page.waitForFunction(() => !!document.activeElement?.closest('[data-testid=collection-command-composer-prompts]'), null, { timeout: 5000 })
-        .catch(() => { throw new StepFailure('the reason field never took the focus after 2'); });
-      await page.keyboard.press('Enter');
-      await page.waitForResponse((r) => r.url().includes(`/api/graph/decisions/${DECISION}/decide`) && r.status() === 200, { timeout: 15000 });
+    await s('keypad 2 then Enter at once in the docked composer', async () => {
+      // "Why? One line, optional. Enter decides.": the Enter comes in the same tick as the 2, before the reason field
+      // can have the focus (a real keyboard.press waits a round trip, which hides the gap); the page carries it there
+      // (portal pages/decisions/keyCarry.ts) and it decides.
+      const decided = page.waitForResponse((r) => r.url().includes(`/api/graph/decisions/${DECISION}/decide`), { timeout: 15000 });
+      await page.evaluate(() => {
+        for (const key of ['2', 'Enter']) (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      });
+      const r = await decided.catch(() => { throw new StepFailure('the Enter pressed right after 2 decided nothing'); });
+      check(r.status() === 200, `POST /decide answered ${r.status()}`);
+      check((await r.json()).outcome === OPTION, 'the decision was not recorded as the option alone');
     });
     await assertDecided(s, page);
   },

@@ -33,6 +33,8 @@ import {
   heldWorkRows, historyOf, isWaiting, outcomeLine, showDecideControl, standingLine, statusLabel, waitingNotice,
 } from './decisionFormat';
 import { decisionDialogue } from './decisionDialogue';
+import { createKeyCarry } from './keyCarry';
+import { useKeyCarry } from './useKeyCarry';
 import { RecordLink } from './RecordLink';
 import type { DecideBody, DecisionDetail, DecisionInitiativeRow, InitiativeName } from './types';
 
@@ -56,6 +58,9 @@ export default function DecisionRecordPage({ onDecided, onPrompt }: {
   const mayDecide = !!decision && ready && showDecideControl(decision, can);
   usePublishPageContext(decision ? decisionPageContext(ready ? decision : { id: decision.id, topic: decision.topic, status: decision.status }, pathname, mayDecide) : null);
 
+  // Keys typed between a keypad pick and the reason field's focus reach the field (keyCarry.ts).
+  const carry = useMemo(() => createKeyCarry(), []);
+  useKeyCarry(carry);
   // G57: the dialogue the composer draws while this decision waits on the viewer.
   const optionsKey = JSON.stringify(decision?.options ?? []);
   const prompt = useMemo(() => (decision ? decisionDialogue(decision, mayDecide, async (body: DecideBody) => {
@@ -63,7 +68,7 @@ export default function DecisionRecordPage({ onDecided, onPrompt }: {
     if (!res.ok) return res.error ?? 'unknown error';
     refresh(); onDecided?.();
     return null;
-  }) : null),
+  }, carry) : null),
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the prompt is the decision's id, topic, status and options
   [decision?.id, decision?.topic, decision?.status, optionsKey, mayDecide]);
   useEffect(() => { onPrompt?.(prompt); }, [prompt, onPrompt]);

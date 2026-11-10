@@ -28,12 +28,19 @@
 // itself. Hidden (after Esc) the dialogue takes no digits until Show reopens
 // it. The follow-up's why is typed, so there a digit is text, never a pick.
 //
+// Keys typed before the reason field has the focus (journey M2: "2" then
+// Enter at once) are not lost: the pick arms a key carry (keyCarry.ts), the
+// page holds an Enter, digits and letters typed in the gap, and the field
+// that takes the focus receives them (useKeyCarry.ts): the characters go in,
+// and an Enter answers the follow-up there (empty: decide without a reason).
+//
 // The rows' numbering is the voice's too (`decide { option: 2 }`), so it lives
 // here, once: `dialogueRows` and `matchDialogueRow`. No React and only type
 // imports from the library, so node:test runs it.
 
 import type { ComposerPrompt, ComposerPromptResult } from '@connorhoehn/ui-components/social/rich-composer';
 import { RATIONALE_MAX } from './decisionFormat.ts';
+import type { KeyCarry } from './keyCarry.ts';
 import type { DecideBody, DecisionDetail, DecisionOption } from './types';
 
 export const SOMETHING_ELSE = 'something-else';
@@ -169,6 +176,8 @@ export function followUpFor(d: Pick<DecisionDetail, 'id' | 'topic'>, row: Dialog
  */
 export function decisionDialogue(
   d: Pick<DecisionDetail, 'id' | 'topic' | 'status' | 'options'>, mayDecide: boolean, send: DecisionSend,
+  /** Armed on every pick, so keys typed before the follow-up's field has the focus reach it. */
+  carry?: KeyCarry | null,
 ): ComposerPrompt | null {
   if (!mayDecide || (d.status !== 'open' && d.status !== 'escalated')) return null;
   const rows = dialogueRows(d.options);
@@ -179,7 +188,9 @@ export function decisionDialogue(
     options: rows.map((r) => ({ id: r.id, label: r.label, ...(r.detail ? { hint: r.detail } : {}), ...(r.kind === 'reject' ? { emphasis: 'danger' as const } : {}) })),
     onAnswer: (a) => {
       const row = 'optionId' in a ? rows.find((r) => r.id === a.optionId) : undefined;
-      return row ? { next: followUpFor(d, row, send) } : { error: 'Choose one of the rows.' };
+      if (!row) return { error: 'Choose one of the rows.' };
+      carry?.arm();
+      return { next: followUpFor(d, row, send) };
     },
   };
 }
