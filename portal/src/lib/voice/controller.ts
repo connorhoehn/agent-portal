@@ -90,7 +90,12 @@
 // later message to the same one in this session (no attachment, a tool the
 // user may confirm by voice) runs without a card; its confirmed event says
 // `by: 'session'` and `coveredBy` the first card's call. A new target, an
-// attachment or a click-only tool always shows a card.
+// attachment or a click-only tool always shows a card. G67 bounds it like G66:
+// the cover lasts MESSAGE_COVER_MS since the last confirmed or covered post to
+// that target, ends when the page (path or query) changes or the voice itself
+// navigates, and never carries a message the voice composed in a turn with no
+// user utterance (after an inbound note, say). A lapsed cover shows the card
+// again and logs `coverage-expired` (its cause, never the target or words).
 //
 // Bounded requests (G43, sweep 6): one user turn (from one `input` frame to the
 // next) runs at most MAX_CALLS_PER_DELEGATION tool calls across however many
@@ -215,6 +220,21 @@ export type VoiceWindowEnd = 'timeout' | 'navigation' | 'delegation';
 /** G66: the silent note the voice gets, once, when a card stops taking a spoken confirm. */
 export const voiceWindowNote = (line: string): string =>
   `The open confirm card no longer takes a spoken yes; it now needs a click. If the user says yes or ok to it, say exactly: "${line}" A spoken cancel still drops it.`;
+/**
+ * G67: how long a confirmed message covers later messages to the same conversation (G41), from the last confirmed or
+ * covered post to it. A page change (path or query), the voice's own navigation, or a turn without a user utterance
+ * also ends or skips the cover; a lapsed cover shows the card again.
+ */
+export const MESSAGE_COVER_MS = 120_000;
+/** G67: why a conversation's cover ended (the closed vocabulary `coverage-expired` carries). */
+export type CoverEnd = 'timeout' | 'navigation' | 'open';
+/** G66/G67: a location as the dock compares it: path and query, never the hash. */
+export function locationKey(href: string): string {
+  try {
+    const u = new URL(href, 'http://portal.invalid');
+    return `${u.pathname}${u.search === '?' ? '' : u.search}`;
+  } catch { return href.split('#')[0]!; }
+}
 /** How long a session the page or the connection dropped can be resumed (G35). */
 export const RESUME_MS = 60_000;
 /** The note a resumed session starts with. */
@@ -359,7 +379,13 @@ interface DelegationRecord {
   calls: Map<string, CallRecord>; completed: boolean; unanswered: number; grace: Timer | null; stopped: boolean; closing: number;
 }
 /** One user turn (G43, G51): the calls it used, its searches' shapes, whether it was stopped, and the page it opened. */
-interface Turn { used: number; searches: Set<string>; stopped: boolean; navigated?: string; navigatedRef?: string }
+interface Turn {
+  used: number; searches: Set<string>; stopped: boolean; navigated?: string; navigatedRef?: string;
+  /** G67: the user spoke in this turn (an input frame opened it, and no inbound note prompted the voice since). */
+  heard?: boolean;
+}
+/** G41/G67: the call that confirmed a conversation and when its last confirmed or covered post ran. */
+interface Cover { callId: string; at: number }
 /**
  * G60/G65: one delegation watched for an empty answer, for its whole life: its last activity (a call issued, a tool
  * result sent, a continuation sent, a response-progress frame), whether it ever called, when its current response
@@ -449,7 +475,7 @@ export class VoiceController {
   private sessionTurnFrom = 1;
   /** The last page context the voice was given, so the same page is not appended twice. */
   private lastPageNote: string | null = null;
-  /** G66: the route in view (pathChanged), so a card knows the page it opened on. */
+  /** G66: the route in view (pathChanged: path and query, G67), so a card knows the page it opened on. */
   private path: string | undefined;
   private levels = { input: 0, output: 0 };
   private muted = false;
@@ -506,8 +532,8 @@ export class VoiceController {
   private lastHeardAt: number | null = null;
   private unheardTimer: Timer | null = null;
   private stalledCard: VoicePendingView | null = null;
-  /** G41: the conversations a message card was confirmed for this session, and the call that confirmed each. */
-  private coveredTargets = new Map<string, string>();
+  /** G41: the conversations a message card was confirmed for, the call that confirmed each, and (G67) its last post. */
+  private coveredTargets = new Map<string, Cover>();
   /** G36: the phase shown and logged, since when, and the timer that re-reads the machine when a dwell ends. */
   private shownPhase: VoicePhase = 'off';
   private shownAt = Number.NEGATIVE_INFINITY;
@@ -682,6 +708,8 @@ export class VoiceController {
   noteInbound(item: InboundItem): void {
     const client = this.client;
     if (this.machine.base !== 'live' || !client) return;
+    // G67: what the voice does about this note is its own initiative, not the user's words: no message cover for it.
+    this.turn.heard = false;
     this.noteContext(inboundNote(item));
     const started = this.now();
     const sayWhenQuiet = () => {
@@ -743,13 +771,32 @@ export class VoiceController {
   }
 
   /**
-   * G66: the route in view changed (the shell calls this on every pathname, the first one included). A card that
-   * opened on another page stops taking a spoken confirm: the user has moved on, and their next "ok" is not its answer.
+   * G66: the route in view changed (the shell calls this on every location, the first one included, with the path and
+   * the query: G67, a new tab or search query counts). A card that opened on another location stops taking a spoken
+   * confirm: the user has moved on, and their next "ok" is not its answer. G67: a change ends every message cover too.
+   * The voice's own navigation was taken when its tool ran (moved), so the card it opened after it is not expired here.
    */
   pathChanged(path: string): void {
-    this.path = path;
+    this.moved(locationKey(path), 'navigation');
+  }
+
+  /** G66/G67: the location is `key` now; `cause` is who moved it (the user or the shell, or the voice's own `open`). */
+  private moved(key: string, cause: 'navigation' | 'open'): void {
+    const changed = this.path !== undefined && this.path !== key;
+    this.path = key;
     const p = this.pending;
-    if (p && p.openedOn !== path) this.endVoiceWindow(p, 'navigation');
+    if (p && p.openedOn !== key) this.endVoiceWindow(p, 'navigation');
+    if (changed) this.endCovers(cause);
+  }
+
+  /** G67: every conversation's cover ends (a navigation); logged once per cover, without the target. */
+  private endCovers(cause: CoverEnd): void {
+    for (const cover of this.coveredTargets.values()) this.coverExpired(cover, cause);
+    this.coveredTargets.clear();
+  }
+
+  private coverExpired(cover: Cover, cause: CoverEnd): void {
+    this.emit({ kind: 'client', data: { event: 'coverage-expired', tool: 'message', coveredBy: cover.callId, cause } });
   }
 
   /** The page in view, for the voice (G21): appended when it differs from the last one it was given. */
@@ -876,7 +923,7 @@ export class VoiceController {
         this.context.speech(f.text.length);
         // The user answered: the idle watch after a result stands down (G33 item 4), and a new turn has its own calls (G43).
         this.disarmIdle();
-        this.turn = { used: 0, searches: new Set(), stopped: false };
+        this.turn = { used: 0, searches: new Set(), stopped: false, heard: true };
         this.heard(at);
         this.diag.userWords(f.text, f.startMs, f.endMs);
         this.appendTurn('you', f.text, at);
@@ -1030,7 +1077,7 @@ export class VoiceController {
       }
       // G41: a message to a conversation the user already confirmed this session needs no second card.
       // A retry of a failed message is never covered: the card shows again so the text is confirmed afresh.
-      const covered = this.failures.has(name, call.args) ? null : this.coveredBy(name, call, plan);
+      const covered = this.failures.has(name, call.args) ? null : this.coveredBy(name, call, plan, turn);
       if (covered) {
         this.emit({ kind: 'confirmed', tool: name, data: { callId, by: 'session', coveredBy: covered, afterMs: 0 } });
         await this.execute(client, delegationId, callId, call, startedAt, ctx, undefined, plan, undefined, covered);
@@ -1061,12 +1108,23 @@ export class VoiceController {
     await this.execute(client, delegationId, callId, call, startedAt, ctx);
   }
 
-  /** G41: the call that confirmed this message's conversation earlier in the session, when it covers this one; else null. */
-  private coveredBy(name: string, call: PreparedCall, plan: ConfirmPlan | null): string | null {
+  /**
+   * G41: the call that confirmed this message's conversation earlier, when it covers this one; else null. G67: only
+   * within MESSAGE_COVER_MS of the last post to it (a lapsed cover is dropped and logged), and only in a turn the user
+   * spoke in.
+   */
+  private coveredBy(name: string, call: PreparedCall, plan: ConfirmPlan | null, turn: Turn): string | null {
     if (name !== 'message' || confirmModeOf(call) !== 'voice' || !plan?.data || typeof plan.data !== 'object') return null;
     const d = plan.data as { channel?: unknown; attachment?: unknown };
     if (typeof d.channel !== 'string' || d.attachment) return null;
-    return this.coveredTargets.get(d.channel) ?? null;
+    const cover = this.coveredTargets.get(d.channel);
+    if (!cover) return null;
+    if (this.now() - cover.at > MESSAGE_COVER_MS) {
+      this.coveredTargets.delete(d.channel);
+      this.coverExpired(cover, 'timeout');
+      return null;
+    }
+    return turn.heard ? cover.callId : null;
   }
 
   private async execute(client: VoiceClient, delegationId: string, callId: string, call: PreparedCall, startedAt: number, ctx: ToolContext, confirmedBy?: 'voice' | 'click', plan?: ConfirmPlan | null, answer?: CardAnswer, coveredBy?: string): Promise<void> {
@@ -1077,10 +1135,13 @@ export class VoiceController {
     let res = await runPreparedCall(call, ctx, this.runners, plan?.data, given);
     if (confirmedBy) res = { ...res, output: { ...res.output, confirmed: true, by: confirmedBy, ...(given ? { decision: given.decision } : {}) } };
     if (coveredBy) res = { ...res, output: { ...res.output, confirmed: true, by: 'session', covered: 'confirmed for this conversation earlier in the session' } };
-    // G41: a confirmed message covers its conversation for the rest of the session (no attachment).
-    if (confirmedBy && call.spec.name === 'message' && res.outcome === 'done' && plan?.data && typeof plan.data === 'object') {
+    // G41: a confirmed message covers its conversation (no attachment); G67: for MESSAGE_COVER_MS from its last post.
+    if ((confirmedBy || coveredBy) && call.spec.name === 'message' && res.outcome === 'done' && plan?.data && typeof plan.data === 'object') {
       const d = plan.data as { channel?: unknown; attachment?: unknown };
-      if (typeof d.channel === 'string' && !d.attachment && !this.coveredTargets.has(d.channel)) this.coveredTargets.set(d.channel, callId);
+      if (typeof d.channel === 'string' && !d.attachment) {
+        const held = this.coveredTargets.get(d.channel);
+        this.coveredTargets.set(d.channel, { callId: confirmedBy ? held?.callId ?? callId : coveredBy!, at: this.now() });
+      }
     }
     // A post that failed no longer stands as confirmed: the conversation needs its card again.
     if (call.spec.name === 'message' && res.outcome === 'failed' && plan?.data && typeof plan.data === 'object') {
@@ -1671,7 +1732,10 @@ export class VoiceController {
   /** The page's tool context, with the session this dock minted last (per-session memory: G30's shell tabs). */
   private toolContext(): ToolContext {
     const ctx = this.opts.toolContext();
-    return { ...ctx, sessionId: this.mint?.sessionId ?? null };
+    // G67: a navigation the voice makes (open, a tab, a search) is taken at once, before any card a later call of the
+    // same delegation opens: that card opens on the new location, so the shell's pathChanged for it does not expire it.
+    const navigate = (href: string) => { this.moved(locationKey(href), 'open'); ctx.navigate(href); };
+    return { ...ctx, navigate, sessionId: this.mint?.sessionId ?? null };
   }
 
   private reset(): void {

@@ -22,12 +22,14 @@ function turn(at: number, n: number, args: Record<string, unknown>) {
 
 test('G41: the second message to #platform needs no card; #general does; an attachment always asks', async () => {
   const msg = (name: string, extra: Record<string, unknown> = {}) => ({ target: { kind: 'channel', name }, text: `hello ${name}`, ...extra });
+  // G67: a cover carries only a message the user asked for in that turn, so each request is heard first.
+  const heard = (at: number) => ({ atMs: at, event: { type: 'session.input_transcript.delta', delta: 'Post it.', start_ms: at, end_ms: at + 50 } });
   const onStart = [
     { atMs: 0, event: { type: 'session.started', session: { id: 'live_x' } } },
-    ...turn(500, 1, msg('platform')),
-    ...turn(3000, 2, msg('platform')),
-    ...turn(5000, 3, msg('general')),
-    ...turn(8000, 4, msg('platform', { attach: '1' })),
+    heard(400), ...turn(500, 1, msg('platform')),
+    heard(2900), ...turn(3000, 2, msg('platform')),
+    heard(4900), ...turn(5000, 3, msg('general')),
+    heard(7900), ...turn(8000, 4, msg('platform', { attach: '1' })),
   ];
   const clock = new FakeClock();
   const { fetch, log } = fakeFetch([
