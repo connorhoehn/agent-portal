@@ -8,8 +8,14 @@ jest.mock('@aws-sdk/client-s3', () => ({
   ...jest.requireActual('@aws-sdk/client-s3'),
   S3Client: jest.fn(() => ({ send: mockS3Send })),
 }));
+const mockFlag = { aurora: false };
 jest.mock('../../config.js', () => ({
-  config: { region: 'us-east-1', mock: { agentcore: false, aurora: false }, foundation: { documentsBucket: 'docs-bucket' }, aurora: {} },
+  config: {
+    region: 'us-east-1',
+    get mock() { return { agentcore: false, aurora: mockFlag.aurora }; },
+    foundation: { documentsBucket: 'docs-bucket' },
+    aurora: {},
+  },
 }));
 const mockKbs = [
   { slug: 'assessment-evidence', tenant: 'assessment', s3Prefix: 'assessment/evidence' },
@@ -22,14 +28,16 @@ jest.mock('../kb-registry.js', () => ({
 }));
 import { uploadDocument } from '../knowledge-base.js';
 import { uploadToLandingZone } from '../landing-zones.js';
+import { landingZoneObjects } from '../../mock/landing-zone.js';
 
-beforeEach(() => { mockS3Send.mockReset(); mockS3Send.mockResolvedValue({}); });
+beforeEach(() => { mockFlag.aurora = false; mockS3Send.mockReset(); mockS3Send.mockResolvedValue({}); });
 
-const puts = () => mockS3Send.mock.calls.map(([cmd]) => cmd.input as { Key: string; Body: unknown; ContentType?: string });
+const sent = () => mockS3Send.mock.calls.map(([cmd]) => ({ op: cmd.constructor.name as string, ...(cmd.input as { Key: string; Body: unknown; ContentType?: string }) }));
+const puts = () => sent().filter((c) => c.op === 'PutObjectCommand');
 
 it('writes the tenant the route resolved as the document metadata', async () => {
   const out = await uploadDocument('notes.md', Buffer.from('hello'), 'text/markdown', 'assessment/evidence', 'assessment');
-  const [doc, sidecar] = puts();
+  const [sidecar, doc] = puts();
   expect(doc!.Key).toBe(out.key);
   expect(sidecar!.Key).toBe(`${out.key}.metadata.json`);
   expect(JSON.parse(String(sidecar!.Body))).toEqual({ metadataAttributes: { tenant: 'assessment' } });
@@ -37,7 +45,7 @@ it('writes the tenant the route resolved as the document metadata', async () => 
 
 it('falls back to the declared owner of the prefix', async () => {
   await uploadDocument('a.md', Buffer.from('x'), 'text/markdown');
-  expect(JSON.parse(String(puts()[1]!.Body))).toEqual({ metadataAttributes: { tenant: 'orgiq' } });
+  expect(JSON.parse(String(puts()[0]!.Body))).toEqual({ metadataAttributes: { tenant: 'orgiq' } });
 });
 
 it('writes no sidecar for a key no tenant owns', async () => {
@@ -47,7 +55,7 @@ it('writes no sidecar for a key no tenant owns', async () => {
 
 it('a link upload writes the landing zone\'s tenant as the document metadata', async () => {
   const out = await uploadToLandingZone('assessment-evidence', 'notes.md', Buffer.from('hello'), 'text/markdown');
-  const [doc, sidecar] = puts();
+  const [sidecar, doc] = puts();
   expect(doc!.Key).toBe(out.key);
   expect(sidecar!.Key).toBe(`${out.key}.metadata.json`);
   expect(JSON.parse(String(sidecar!.Body))).toEqual({ metadataAttributes: { tenant: 'assessment' } });
@@ -57,7 +65,7 @@ it('a link upload names its own KB\'s tenant even when the registry read fails',
   const { listKbs } = jest.requireMock('../kb-registry.js') as { listKbs: jest.Mock };
   listKbs.mockRejectedValueOnce(new Error('aurora down'));
   await uploadToLandingZone('loose', 'a.md', Buffer.from('x'), 'text/markdown');
-  expect(JSON.parse(String(puts()[1]!.Body))).toEqual({ metadataAttributes: { tenant: 'orgiq' } });
+  expect(JSON.parse(String(puts()[0]!.Body))).toEqual({ metadataAttributes: { tenant: 'orgiq' } });
 });
 
 describe('a name that would land on a metadata sidecar key', () => {
@@ -94,7 +102,74 @@ describe('parity: a file upload and a link upload of the same document', () => {
     const byLink = puts();
     expect(byLink).toHaveLength(2);
     expect(byFile).toHaveLength(2);
-    expect(byLink[0]!.Key).toBe(byFile[0]!.Key);
-    expect(byLink[1]).toEqual(byFile[1]);
+    expect(byLink[1]!.Key).toBe(byFile[1]!.Key);
+    expect(byLink[0]).toEqual(byFile[0]);
+  });
+});
+
+describe('the sidecar is written before the object, so no object is ever unlabelled', () => {
+  const uploads: Array<[string, () => Promise<unknown>]> = [
+    ['file upload', () => uploadDocument('notes.md', Buffer.from('x'), 'text/markdown', 'assessment/evidence')],
+    ['link upload', () => uploadToLandingZone('assessment-evidence', 'notes.md', Buffer.from('x'), 'text/markdown')],
+  ];
+
+  it.each(uploads)('%s: sidecar first, then the object', async (_name, upload) => {
+    await upload();
+    const ops = sent();
+    expect(ops.map((o) => o.op)).toEqual(['PutObjectCommand', 'PutObjectCommand']);
+    expect(ops[0]!.Key.endsWith('.metadata.json')).toBe(true);
+    expect(ops[1]!.Key).toBe(ops[0]!.Key.slice(0, -'.metadata.json'.length));
+  });
+
+  it.each(uploads)('%s: a failed sidecar put writes no object', async (_name, upload) => {
+    mockS3Send.mockRejectedValueOnce(new Error('sidecar put failed'));
+    await expect(upload()).rejects.toThrow('sidecar put failed');
+    expect(sent()).toHaveLength(1);
+  });
+
+  it.each(uploads)('%s: a failed object put removes the new sidecar when no object is at the key', async (_name, upload) => {
+    mockS3Send
+      .mockResolvedValueOnce({})                                         // sidecar
+      .mockRejectedValueOnce(new Error('object put failed'))              // object
+      .mockRejectedValueOnce(Object.assign(new Error('nf'), { name: 'NotFound' })); // head
+    await expect(upload()).rejects.toThrow('object put failed');
+    const ops = sent();
+    expect(ops.map((o) => o.op)).toEqual(['PutObjectCommand', 'PutObjectCommand', 'HeadObjectCommand', 'DeleteObjectCommand']);
+    expect(ops[3]!.Key).toBe(ops[0]!.Key);
+  });
+
+  it.each(uploads)('%s: a failed re-upload keeps the label of the version still there', async (_name, upload) => {
+    mockS3Send
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(new Error('object put failed'))
+      .mockResolvedValueOnce({ ContentLength: 1 });                       // head: an object exists
+    await expect(upload()).rejects.toThrow('object put failed');
+    expect(sent().map((o) => o.op)).toEqual(['PutObjectCommand', 'PutObjectCommand', 'HeadObjectCommand']);
+  });
+});
+
+describe('parity: the offline landing zone writes what S3 would', () => {
+  beforeEach(() => landingZoneObjects.reset());
+
+  it('the mock branch lands the same sidecar and object, sidecar first', async () => {
+    await uploadToLandingZone('assessment-evidence', 'same.md', Buffer.from('hello'), 'text/markdown');
+    const real = puts().map((p) => ({ key: p.Key, contentType: p.ContentType }));
+    mockS3Send.mockClear();
+
+    mockFlag.aurora = true;
+    const before = landingZoneObjects.rows().length;
+    const out = await uploadToLandingZone('assessment-evidence', 'same.md', Buffer.from('hello'), 'text/markdown');
+    expect(mockS3Send).not.toHaveBeenCalled();
+    const landed = landingZoneObjects.rows().slice(before).map((o) => ({ key: o.key, contentType: o.contentType }));
+    expect(landed).toEqual(real);
+    expect(landed[1]!.key).toBe(out.key);
+  });
+
+  it('the mock branch labels a key only its own KB entry owns, as the real branch does', async () => {
+    mockFlag.aurora = true;
+    const before = landingZoneObjects.rows().length;
+    await uploadToLandingZone('loose', 'a.md', Buffer.from('x'), 'text/markdown');
+    // `loose` is in no registry listing, but its own entry names a tenant.
+    expect(landingZoneObjects.rows().slice(before).map((o) => o.key.endsWith('.metadata.json'))).toEqual([true, false]);
   });
 });

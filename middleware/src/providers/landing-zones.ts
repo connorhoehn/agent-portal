@@ -15,6 +15,7 @@ import { config } from '../config.js';
 import { getKbBySlug, listKbs } from './kb-registry.js';
 import { ownerOfKey, reservedUploadName, safeUploadName, tenantMetadataSidecar } from '../lib/kb-prefixes.js';
 import { ValidationError } from '../lib/async-handler.js';
+import { putDocumentWithSidecar } from '../lib/kb-document-put.js';
 import { clock } from '../mock/core/clock.js';
 import {
   MOCK_DOCUMENTS_BUCKET,
@@ -286,36 +287,35 @@ export async function uploadToLandingZone(
   const safeFilename = safeUploadName(filename);
   const key = `${prefix}${date}/${safeFilename}`;
 
+  const registered = await listKbs().catch(() => []);
+  const owner = ownerOfKey(key, [{ tenant: entry.tenant, s3Prefix: entry.s3Prefix }, ...registered]);
+
   if (config.mock.aurora) {
     // The object really lands — in the fixture bucket, where the file browser
     // that reads it offline will list it and `POST /api/__mock/reset` will
-    // take it away again.
+    // take it away again. Its sidecar lands first, as on the real path
+    // (lib/kb-document-put.ts), so the offline bucket holds what S3 would.
+    if (owner) {
+      const sidecar = tenantMetadataSidecar(key, owner);
+      putObject({ key: sidecar.key, size: Buffer.byteLength(sidecar.body), lastModified: now, contentType: 'application/json' });
+    }
     putObject({ key, size: body.length, lastModified: now, contentType });
     return { key, bucket, size: body.length, contentType, s3Uri: `s3://${bucket}/${key}` };
   }
 
-  const s3 = s3Client();
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: body,
-      ContentType: contentType,
-      Metadata: {
-        'kb-slug': kbSlug,
-        'uploaded-at': now,
-        'original-name': filename.slice(0, 512),
-      },
-    }),
-  );
-  const registered = await listKbs().catch(() => []);
-  const owner = ownerOfKey(key, [{ tenant: entry.tenant, s3Prefix: entry.s3Prefix }, ...registered]);
-  if (owner) {
-    const sidecar = tenantMetadataSidecar(key, owner);
-    await s3.send(new PutObjectCommand({
-      Bucket: bucket, Key: sidecar.key, Body: sidecar.body, ContentType: 'application/json',
-    }));
-  }
+  // Sidecar first, then the object: never an object readable without its
+  // tenant label (lib/kb-document-put.ts).
+  await putDocumentWithSidecar(s3Client(), {
+    Bucket: bucket,
+    Key: key,
+    Body: body,
+    ContentType: contentType,
+    Metadata: {
+      'kb-slug': kbSlug,
+      'uploaded-at': now,
+      'original-name': filename.slice(0, 512),
+    },
+  }, owner);
 
   return {
     key,

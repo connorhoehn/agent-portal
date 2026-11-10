@@ -17,12 +17,13 @@ import {
   GetIngestionJobCommand,
   StartIngestionJobCommand,
 } from '@aws-sdk/client-bedrock-agent';
-import { S3Client, ListObjectsV2Command, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { extname } from 'node:path';
 import { config } from '../config.js';
 import type { StorageBreakdown } from '../lib/crawler-types.js';
-import { ownerOfKey, reservedUploadName, safeUploadName, tenantMetadataSidecar } from '../lib/kb-prefixes.js';
+import { ownerOfKey, reservedUploadName, safeUploadName } from '../lib/kb-prefixes.js';
 import { ValidationError } from '../lib/async-handler.js';
+import { putDocumentWithSidecar } from '../lib/kb-document-put.js';
 import { listKbs } from './kb-registry.js';
 import { exec } from './aurora.js';
 import { clock, groupBy, sumBy } from '../mock/core/index.js';
@@ -763,22 +764,17 @@ export async function uploadDocument(
     kbObjectRows.rows().push({ key, sizeBytes: body.length, lastModified: clock.nowIso() });
     return { key, bucket, size: body.length, contentType, url: `s3://${bucket}/${key}` };
   }
-  const s3 = new S3Client({ region: config.region });
-  await s3.send(new PutObjectCommand({
+  // The prefix's owner, registered or declared (the agents' longest-prefix rule).
+  const owner = tenant ?? ownerOfKey(key, await listKbs().catch(() => []));
+  // Sidecar first, then the object: never an object readable without its
+  // tenant label (lib/kb-document-put.ts).
+  await putDocumentWithSidecar(new S3Client({ region: config.region }), {
     Bucket: bucket,
     Key: key,
     Body: body,
     ContentType: contentType,
     Metadata: { 'uploaded-at': new Date().toISOString(), 'original-name': filename.slice(0, 512) },
-  }));
-  // The prefix's owner, registered or declared (the agents' longest-prefix rule).
-  const owner = tenant ?? ownerOfKey(key, await listKbs().catch(() => []));
-  if (owner) {
-    const sidecar = tenantMetadataSidecar(key, owner);
-    await s3.send(new PutObjectCommand({
-      Bucket: bucket, Key: sidecar.key, Body: sidecar.body, ContentType: 'application/json',
-    }));
-  }
+  }, owner);
   return { key, bucket, size: body.length, contentType, url: `s3://${bucket}/${key}` };
 }
 
