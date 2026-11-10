@@ -422,7 +422,9 @@ const planDecide: VoiceToolPlanner = async (args, ctx) => {
       fields: { decision: 'approve' as const },
       line: ANSWER_ON_CARD,
       card: { noteDefault: note, noteLabel: ANSWER_LABEL, noteMaxLength: ANSWER_MAX, confirmLabel: 'Send', hideDecisionToggle: true, clickOnly: true },
-    } : chosen.word ? { card: { confirmLabel: chosen.word } } : {}),
+      // A button named for one way (Resolve / Reject) never sits beside a toggle that could send the other: the
+      // toggle is hidden and the note stays; to go the other way the user cancels and says it.
+    } : chosen.word ? { card: { confirmLabel: chosen.word, ...(both ? { hideDecisionToggle: true } : {}) } } : {}),
     // Both ways open: the library's toggle and note, starting where the user said; Confirm answers { decision, note }.
     ...(both ? { fields: { decision: verb === 'reject' ? 'reject' : 'approve', notePlaceholder: option ? 'Why (optional)' : row.notePlaceholder ?? (row.sends.reject?.needsNote ? 'Reason (needed to reject)' : 'Note (optional)') } } : {}),
     data: plan,
