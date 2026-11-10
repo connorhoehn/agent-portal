@@ -135,6 +135,19 @@ test('decide takes an option: "decide 2" resolves with the second option, shown 
   assert.equal(r.result.output['option'], 'Nova Lite at the current 20% sample rate');
 });
 
+test('deciding names the one story it unblocked in the same sentence; several (or none) are left to the record', async () => {
+  const story = (id: string, title: string, blocked = false) => ({ id, title, projectId: 'p-llm-platform', blocked });
+  const run = (heldWork: unknown[]) => decide({ ref: 'decision:d-eval-judge-model', decision: 'resolve', option: '1', scope: 'this-page' }, {
+    routes: [readWith(), route('POST', POST, 200, { ...WITH_OPTIONS, status: 'resolved', heldWork })], answer: { decision: 'approve', note: '' },
+  });
+  const one = await run([story('wi-1', 'LLM-as-judge canary rubric')]);
+  assert.equal(one.result.output['say'], 'Resolved: "Judge model for canary evaluation" (Nova Pro, sample rate halved to 10%); "LLM-as-judge canary rubric" is unblocked.');
+  const two = await run([story('wi-1', 'A'), story('wi-2', 'B')]);
+  assert.equal(two.result.summary, 'Resolved: "Judge model for canary evaluation" (Nova Pro, sample rate halved to 10%)');
+  const stillBlocked = await run([story('wi-1', 'A', true)]);
+  assert.equal(stillBlocked.result.summary, 'Resolved: "Judge model for canary evaluation" (Nova Pro, sample rate halved to 10%)');
+});
+
 test('an option by its words, with the why said as the note', async () => {
   const r = await decide({ ref: 'decision:d-eval-judge-model', decision: 'resolve', option: 'go with Nova Pro', note: 'it agrees with human labels' }, {
     routes: [readWith(), route('POST', POST, 200, {})], answer: { decision: 'approve', note: '' },

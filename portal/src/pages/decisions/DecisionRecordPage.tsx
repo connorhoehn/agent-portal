@@ -30,7 +30,7 @@ import { usePublishPageContext } from '../../lib/voice/pageContext';
 import { writeJson } from '../../lib/writeJson';
 import {
   DECISIONS_SOURCE, STATUS_TONE, asInstant, contributors, decidedLine, decidedWhen, decider, decisionPageContext,
-  historyOf, isWaiting, outcomeLine, showDecideControl, standingLine, statusLabel, waitingNotice,
+  heldWorkRows, historyOf, isWaiting, outcomeLine, showDecideControl, standingLine, statusLabel, waitingNotice,
 } from './decisionFormat';
 import { decisionDialogue } from './decisionDialogue';
 import { RecordLink } from './RecordLink';
@@ -90,6 +90,7 @@ export default function DecisionRecordPage({ onDecided, onPrompt }: {
   const outcome = outcomeLine(decision);
   const decided = decidedLine(decision, relativeTime);
   const history = historyOf(decision, row, projectName);
+  const held = heldWorkRows(decision, row);
   const projectHref = decision.projectId ? `/iq/projects/${encodeURIComponent(decision.projectId)}` : null;
 
   const rail = (
@@ -98,12 +99,12 @@ export default function DecisionRecordPage({ onDecided, onPrompt }: {
         {projectHref && projectName
           ? <RecordLink to={projectHref}>{projectName}</RecordLink>
           : <T tone="tertiary">Organisation-wide — no single initiative owns it</T>}
-        {row?.workItemId && row.workItemTitle && projectHref && (
-          <Stack gap="none">
-            <SectionLabel as="div">Holding up</SectionLabel>
-            <RecordLink to={`${projectHref}?item=${encodeURIComponent(row.workItemId)}`}>{row.workItemTitle}</RecordLink>
+        {held.map((w) => (
+          <Stack key={w.id} gap="none" data-testid="decision-held-work">
+            <SectionLabel as="div">{w.label}</SectionLabel>
+            <RecordLink to={w.href}>{w.title}</RecordLink>
           </Stack>
-        )}
+        ))}
       </RailSection>
 
       <RailSection title="People">

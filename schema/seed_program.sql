@@ -468,6 +468,9 @@ UPDATE work_items SET title = 'Cold-start p99 breaches SLA after scale-to-zero',
 UPDATE work_items SET title = 'Flink checkpoint tuning for sub-minute recovery', summary = 'Recover from a task failure in under 60 seconds.', description = 'Checkpoints take 3 to 4 minutes because the job snapshots 180 GB of keyed state in full each time. Incremental RocksDB checkpoints, plus unaligned checkpoints under backpressure, bring the interval to 30 seconds and recovery under a minute.', blocked_reason = NULL, next_step = NULL, next_step_detail = NULL WHERE id = 'wi-rta-e1-s1';
 UPDATE work_items SET title = 'Late events dropped at the watermark boundary', summary = 'Events arriving after the watermark are silently dropped from the hourly aggregates.', description = 'Mobile clients batch events and deliver them up to 4 minutes late, but the watermark allows 30 seconds of lateness, so about 0.6 percent of events miss their window. Late events should go to a side output and be merged by a correction job, not vanish.', blocked_reason = NULL, next_step = NULL, next_step_detail = NULL WHERE id = 'wi-rta-e1-b3';
 
+-- Blocked work: the decision each blocked item waits on.
+UPDATE work_items SET blocked_by_decision_id = 'd-cognito-cutover' WHERE id = 'wi-auth-e2-s2';
+
 -- Backfill app_users.person_id (identity_schema loads before the people rows exist).
 UPDATE app_users u SET person_id = p.id FROM people p WHERE u.person_id IS NULL AND lower(p.email) = lower(u.email);
 

@@ -58,7 +58,7 @@ describe('initiative deck store (Aurora)', () => {
 const item = (over: Partial<WorkItem>): WorkItem => ({
   id: 'wi-1', projectId: 'p-1', projectName: 'Pilot', parentId: null, type: 'story', title: 'Ship it', description: null,
   status: 'open', priority: 'high', assigneeId: null, assigneeName: null, assigneeDept: null, labels: [], storyPoints: 3,
-  summary: null, blockedReason: 'waiting on the key rotation window', nextStep: null, nextStepDetail: null, sprintId: null, estimatedCostUsd: 1.25,
+  summary: null, blockedReason: 'waiting on the key rotation window', nextStep: null, nextStepDetail: null, blockedByDecisionId: null, sprintId: null, estimatedCostUsd: 1.25,
   estimatedBy: null, estimatedByName: null, estimatedAt: null, estimateModel: null, estimateForecast: null,
   estimateReviewedBy: null, estimateReviewedByName: null, estimateReviewedAt: null, prUrl: null, prStatus: null,
   createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z', completedAt: null, childCount: 0, childDoneCount: 0, ...over,

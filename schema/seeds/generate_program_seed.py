@@ -982,6 +982,17 @@ BRIEFS: dict[str, dict[str, str]] = {
 }
 BRIEF_FIELDS = ('summary', 'description', 'blocked_reason', 'next_step', 'next_step_detail')
 
+# The decision a blocked item waits on (work_items.blocked_by_decision_id).
+# The seed already implied each link: the decision names the item as its
+# work_item_id, the item carries the `blocked` label, and its brief's
+# blocked_reason quotes the decision's topic. Deciding the decision settles the
+# item (middleware providers/work-items.ts settle). Emitted as UPDATEs after
+# the briefs, for the same reason the briefs are. middleware/src/mock/
+# work-items.ts mirrors this table as SEEDED_BLOCKED_BY_DECISION.
+BLOCKED_BY_DECISION: dict[str, str] = {
+    'wi-auth-e2-s2': 'd-cognito-cutover',
+}
+
 # Every child's title as emitted, filled while the inserts are written, so a
 # brief's UPDATE restates the same title the INSERT carries.
 TITLES: dict[str, str] = {}
@@ -1337,6 +1348,14 @@ def main() -> None:
             for field in BRIEF_FIELDS
         ]
         emit(f"UPDATE work_items SET {', '.join(sets)} WHERE id = '{wid}'")
+
+    # The decision each blocked item waits on (see BLOCKED_BY_DECISION).
+    L.append('')
+    L.append('-- Blocked work: the decision each blocked item waits on.')
+    for wid, did in BLOCKED_BY_DECISION.items():
+        if wid not in TITLES:
+            raise SystemExit(f'BLOCKED_BY_DECISION names {wid!r}, which no initiative seeds')
+        emit(f"UPDATE work_items SET blocked_by_decision_id = '{did}' WHERE id = '{wid}'")
 
     # Link logins to their org-graph personas.
     #

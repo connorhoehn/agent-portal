@@ -103,6 +103,30 @@ export function standingLine(d: Pick<DecisionDetail, 'status' | 'decidedAt'> & {
 
 export interface HistoryEvent { id: string; at: string | null; label: string; detail: string }
 
+/** One row of the record's held-up work: "Holding up", "Unblocked" or "Still blocked", the item and its link. */
+export interface HeldWorkRow { id: string; label: 'Holding up' | 'Unblocked' | 'Still blocked' | 'Linked work'; title: string; href: string }
+
+/**
+ * The work the record lists beside the decision: the server's `heldWork`
+ * (deciding settles it: "Unblocked" once resolved, "Still blocked" when
+ * rejected, "Holding up" while it waits). Without it, the initiative row's
+ * linked work item, labelled for what the record can know.
+ */
+export function heldWorkRows(d: Pick<DecisionDetail, 'status' | 'projectId' | 'heldWork'>, row: DecisionInitiativeRow | null): HeldWorkRow[] {
+  const href = (projectId: string, itemId: string) =>
+    `/iq/projects/${encodeURIComponent(projectId)}?${new URLSearchParams({ tab: 'work', item: itemId }).toString()}`;
+  if (d.heldWork && d.heldWork.length > 0) {
+    return d.heldWork.map((w) => ({
+      id: w.id, title: w.title, href: href(w.projectId, w.id),
+      label: isWaiting(d.status) ? 'Holding up' : w.blocked ? 'Still blocked' : 'Unblocked',
+    }));
+  }
+  if (row?.workItemId && row.workItemTitle && d.projectId) {
+    return [{ id: row.workItemId, title: row.workItemTitle, href: href(d.projectId, row.workItemId), label: isWaiting(d.status) ? 'Holding up' : 'Linked work' }];
+  }
+  return [];
+}
+
 /**
  * The record's history, newest first: the calls recorded in the product
  * (`history`, G54: who, when and why), then what the table's columns say.
@@ -119,6 +143,10 @@ export function historyOf(
     label: e.kind === 'resolved' ? 'Decided' : 'Rejected',
     detail: e.rationale,
   }));
+  // Deciding it settled the work it held up, at the same moment as the call.
+  const at = d.history?.[0]?.at ?? d.decidedAt;
+  const unblocked = d.status === 'resolved' ? (d.heldWork ?? []).filter((w) => !w.blocked) : [];
+  events.unshift(...unblocked.map((w) => ({ id: `unblocked-${w.id}`, at, label: 'Unblocked', detail: w.title })));
   if ((d.status === 'resolved' || d.status === 'rejected') && events.length === 0) {
     events.push({
       id: 'settled', at: d.decidedAt,

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { collectionCommandAdapter } from '../../../components/collections/collectionCommands.ts';
 import { DECISION_GRAMMAR } from '../decisionCommands.ts';
-import { asInstant, decidedWhen, filterDecisions, historyOf, matchesDecision, sortDecisions, standingLine } from '../decisionFormat.ts';
+import { asInstant, decidedWhen, filterDecisions, heldWorkRows, historyOf, matchesDecision, sortDecisions, standingLine } from '../decisionFormat.ts';
 import type { DecisionDetail } from '../types';
 
 const person = (personId: string, name: string, role: string) => ({ personId, name, title: null, role, weight: 1 });
@@ -60,6 +60,22 @@ test('history: raised last, escalation and the settling call before it', () => {
   assert.deepEqual(ev.map((e) => e.id), ['settled', 'escalated', 'raised']);
   assert.equal(ev[0]!.detail, 'The call was made.', 'who is the Decided line\'s to say');
   assert.equal(historyOf(detail('open'), null, null).at(-1)!.detail, 'Raised as an organisation-wide call.');
+});
+
+test('held-up work: "Holding up" while it waits, "Unblocked" once resolved, "Still blocked" when rejected', () => {
+  const runbook = { id: 'wi-2', title: 'Cutover runbook', projectId: 'p-1', blocked: true };
+  const href = '/iq/projects/p-1?tab=work&item=wi-2';
+  assert.deepEqual(heldWorkRows({ ...detail('escalated'), heldWork: [runbook] }, null), [{ id: 'wi-2', title: 'Cutover runbook', href, label: 'Holding up' }]);
+  assert.equal(heldWorkRows({ ...detail('resolved'), heldWork: [{ ...runbook, blocked: false }] }, null)[0]!.label, 'Unblocked');
+  assert.equal(heldWorkRows({ ...detail('rejected'), heldWork: [runbook] }, null)[0]!.label, 'Still blocked');
+  // An older server sends no heldWork: the initiative row's linked item, labelled for what is known.
+  const row = { id: 'd-1', requiredRole: null, escalatedAt: null, workItemId: 'wi-2', workItemTitle: 'Cutover runbook' };
+  assert.equal(heldWorkRows(detail('open'), row)[0]!.label, 'Holding up');
+  assert.equal(heldWorkRows(detail('resolved'), row)[0]!.label, 'Linked work');
+  // The history says it was unblocked when the call was made.
+  const ev = historyOf({ ...detail('resolved', '2026-11-10'), heldWork: [{ ...runbook, blocked: false }],
+    history: [{ id: '1', kind: 'resolved', at: '2026-11-10T09:00:00Z', by: { id: 'p-2', name: 'Vera Green' }, rationale: 'Riskiest two tenants first' }] }, null, null);
+  assert.deepEqual(ev.slice(0, 2).map((e) => [e.label, e.detail, e.at]), [['Unblocked', 'Cutover runbook', '2026-11-10T09:00:00Z'], ['Decided', 'Riskiest two tenants first', '2026-11-10T09:00:00Z']]);
 });
 
 test('decisions grammar: status phrases and search; no decide verbs', async () => {

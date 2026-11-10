@@ -61,6 +61,17 @@ ALTER TABLE work_items
   ADD COLUMN IF NOT EXISTS next_step        TEXT,
   ADD COLUMN IF NOT EXISTS next_step_detail TEXT;
 
+-- The decision a blocked item waits on. Blocked is the `blocked` label plus
+-- blocked_reason; this names WHICH decision holds the item, so deciding it
+-- settles the item in the same transaction (middleware providers/work-items.ts
+-- txSettleWorkBlockedOn): resolved clears the label and the reason and keeps
+-- this id as the record of what it waited on; rejected leaves it blocked with
+-- the reason "Decision rejected: <topic>". Not a foreign key: the seed loads
+-- work_items before decisions. The middleware reads it through to_jsonb, so a
+-- cluster without the column reads null.
+ALTER TABLE work_items
+  ADD COLUMN IF NOT EXISTS blocked_by_decision_id TEXT;
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Upgrade decisions: add status, escalation, and project link
 -- ─────────────────────────────────────────────────────────────────────────────

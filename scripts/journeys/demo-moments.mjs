@@ -41,6 +41,7 @@ const DECISION = 'd-cognito-cutover';
 const OPTION = 'Riskiest two tenants first';
 const MESSAGE = 'The cutover order is decided; rehearsal Thursday.';
 const BUG = 'Logout leaves the legacy shim cookie alive';
+const RUNBOOK = 'Tenant-by-tenant cutover runbook with rollback';
 const SPRINT9_STORIES = ['BFF authorization-code + PKCE flow behind the middleware', 'JWKS verification with kid-rotation handling', 'Inventory every consumer still on the SAML shim'];
 const IAM_PEOPLE = ['Simone Chang', 'Diego Ortiz', 'Vera Green', 'Joy Chen', 'Nora DaSilva'];
 /** How far down the person results the five must all be. */
@@ -299,7 +300,7 @@ const M2 = {
       const r = await decided;
       check(r.status() === 200, `POST /decide answered ${r.status()}`);
       const out = await nthOutput(page, 1);
-      const say = terseSay(out, 'decide', 'Resolved: "Cutover order for legacy SSO tenants" (Riskiest two tenants first).');
+      const say = terseSay(out, 'decide', `Resolved: "Cutover order for legacy SSO tenants" (Riskiest two tenants first); "${RUNBOOK}" is unblocked.`);
       await stopVoice(page);
       return { say: [say] };
     });
@@ -312,12 +313,28 @@ async function assertDecided(s, page) {
     if (!page.url().includes(`/iq/decisions/${DECISION}`)) await go(page, `/iq/decisions/${DECISION}`);
     const t = await waitText(page, '[data-testid=decision-record]', /Decided .*by Vera Green/);
     check(t.includes(OPTION), `the record does not name the choice: "${t.slice(0, 300)}"`);
+    const held = await waitText(page, '[data-testid=decision-held-work]', /Unblocked/i);
+    check(held.includes(RUNBOOK), `the record does not say the runbook story was unblocked: "${held}"`);
   });
   await s('the runbook story is no longer blocked by a waiting decision', async () => {
     await go(page, INITIATIVE);
     const t = await waitText(page, '[data-testid=explorer-layout-pane]', /Auth Migration|points delivered/);
     check(!/Blocked on "Cutover order for legacy SSO tenants"/.test(t), 'the overview still shows the runbook story blocked on the cutover decision');
     check(!/Waiting on a decision/.test(t), 'the overview still lists a decision waiting');
+  });
+  await s('the Work tab and the story itself no longer read blocked; its history says why', async () => {
+    await go(page, `${INITIATIVE}?tab=work&item=wi-auth-e2-s2`);
+    const t = await waitText(page, '[data-testid=explorer-layout-pane]', new RegExp(RUNBOOK));
+    check(!/Blocked on "Cutover order for legacy SSO tenants"/.test(t), 'the Work tab still shows the runbook story blocked on the cutover decision');
+    const items = await page.context().request.get(`${PORTAL}/api/graph/projects/p-auth-migration/work`);
+    const flat = []; const walk = (n) => { if (Array.isArray(n)) n.forEach(walk); else if (n && typeof n === 'object') { if (n.id && n.title) flat.push(n); for (const k of ['children', 'items']) if (n[k]) walk(n[k]); } };
+    walk(await items.json());
+    const story = flat.find((w) => w.id === 'wi-auth-e2-s2');
+    check(story && !story.labels.includes('blocked') && !story.blockedReason, `the runbook story is still blocked: ${JSON.stringify(story && { labels: story.labels, blockedReason: story.blockedReason })}`);
+    check(story.status === 'open', `the runbook story left its status: ${story.status}`);
+    const feed = await (await page.context().request.get(`${PORTAL}/api/graph/work-items/wi-auth-e2-s2/comments`)).json();
+    const line = (feed.comments ?? []).find((c) => c.isSystem && /^Unblocked: Cutover order for legacy SSO tenants decided: Riskiest two tenants first/.test(c.body));
+    check(line, `the story's history has no "Unblocked: …" line: ${JSON.stringify((feed.comments ?? []).filter((c) => c.isSystem).map((c) => c.body))}`);
   });
 }
 

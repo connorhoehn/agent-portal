@@ -117,7 +117,7 @@ describe('GET /api/graph/decisions/:id', () => {
     const res = await request(buildApp()).get(`/api/graph/decisions/${first.id}`);
     expect(res.status).toBe(200);
     expect(Object.keys(res.body).sort()).toEqual(
-      ['decidedAt', 'decidedBy', 'history', 'id', 'options', 'outcome', 'participants', 'projectId', 'status', 'summary', 'topic', 'viewerMayDecide'],
+      ['decidedAt', 'decidedBy', 'heldWork', 'history', 'id', 'options', 'outcome', 'participants', 'projectId', 'status', 'summary', 'topic', 'viewerMayDecide'],
     );
     expect(Array.isArray(res.body.history)).toBe(true);
     expect(typeof res.body.viewerMayDecide).toBe('boolean');

@@ -56,7 +56,16 @@ export interface DecisionDetail {
   viewerMayDecide?: boolean;
   /** G57: the pre-canned answers a waiting decision offers, in order (the decision dialogue numbers them). */
   options?: DecisionOption[];
+  /**
+   * The work it holds (or held) up: `blocked` true while it still waits on
+   * this decision, false once deciding it unblocked the item. Older servers
+   * send nothing; the record then falls back to the initiative row's work item.
+   */
+  heldWork?: HeldWork[];
 }
+
+/** One work item a decision holds (or held) up. */
+export interface HeldWork { id: string; title: string; projectId: string; blocked: boolean }
 
 /** One pre-canned answer to a waiting decision (G57). */
 export interface DecisionOption { id: string; label: string; detail?: string }

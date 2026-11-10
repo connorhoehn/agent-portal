@@ -75,6 +75,15 @@ export interface WorkItem {
   nextStep: string | null;
   nextStepDetail: string | null;
   /**
+   * The decision this item waits (or waited) on (`work_items.blocked_by_decision_id`).
+   * Blocked is the `blocked` label plus `blockedReason`; this names WHICH
+   * decision holds it, so deciding that decision settles the item
+   * (`settleWorkBlockedOn`): resolved clears the label and the reason and keeps
+   * this id as the record of what it waited on; rejected leaves it blocked with
+   * the reason "Decision rejected: <topic>". Null when no decision holds it.
+   */
+  blockedByDecisionId: string | null;
+  /**
    * Sprint membership (`work_items.sprint_id`) and the dollar estimate
    * (`work_items.estimated_cost_usd`) — the two axes the program operating
    * model plans against (docs/program-operating-model.md). Both columns have
@@ -276,6 +285,7 @@ const ITEM_COLUMNS = `
       wi.estimate_reviewed_by, wi.estimate_reviewed_at,
 
       wi.pr_url, wi.pr_status,
+      to_jsonb(wi)->>'blocked_by_decision_id' AS blocked_by_decision_id,
       wi.created_at, wi.updated_at, wi.completed_at,
       a.id AS assignee_id, a.name AS assignee_name, a.team AS assignee_dept,
       (SELECT COUNT(*)::int FROM work_items c WHERE c.parent_id = wi.id) AS child_count,
@@ -604,7 +614,7 @@ async function dbCreateWorkItem(data: CreateWorkItemInput): Promise<WorkItem> {
       assigneeId: data.assigneeId ?? null, assigneeName: null, assigneeDept: null,
       labels: data.labels ?? [], storyPoints: data.storyPoints ?? null,
       // A new item has no brief until someone writes one.
-      summary: null, blockedReason: null, nextStep: null, nextStepDetail: null,
+      summary: null, blockedReason: null, nextStep: null, nextStepDetail: null, blockedByDecisionId: null,
       sprintId: data.sprintId ?? null, estimatedCostUsd: data.estimatedCostUsd ?? null,
       // A just-created item has no authorized estimate. Nobody has dispatched
       // it, so nobody has stood behind a forecast for it.
@@ -764,6 +774,7 @@ function rowToWorkItem(r: Record<string, unknown>): WorkItem {
     blockedReason: r['blocked_reason'] != null ? String(r['blocked_reason']) : null,
     nextStep: r['next_step'] != null ? String(r['next_step']) : null,
     nextStepDetail: r['next_step_detail'] != null ? String(r['next_step_detail']) : null,
+    blockedByDecisionId: r['blocked_by_decision_id'] != null ? String(r['blocked_by_decision_id']) : null,
     sprintId: r['sprint_id'] != null ? String(r['sprint_id']) : null,
     // NUMERIC arrives from the Data API as a string; Number() is the same
     // treatment story_points already gets.
@@ -1153,6 +1164,161 @@ export async function unlinkDecisionFromWorkItem(workItemId: string, decisionId:
   return true;
 }
 
+// ─── Deciding settles the work it held up ────────────────────────────────────
+//
+// A decision blocks work two ways the seed already wrote down: the decision
+// names the item (`decisions.work_item_id`) and the item carries the `blocked`
+// label, and the item names the decision (`work_items.blocked_by_decision_id`).
+// Blocked is a label plus a reason, never a status (lib/work-suggestions.ts),
+// so blocking never moved the item off the status it had and unblocking leaves
+// that status as it is: the item returns to exactly where it was.
+//
+// When the decision is RESOLVED every item blocked on it loses the `blocked`
+// label and its `blockedReason`, keeps `blockedByDecisionId` (the record of
+// what it waited on, which the decision record reads as "Unblocked: <story>"),
+// and gets an audit row "Unblocked: <topic> decided: <outcome>". When it is
+// REJECTED the item stays blocked, its reason becomes "Decision rejected:
+// <topic>" so someone replans it, and the audit row says so. Only items still
+// blocked are touched, so a repeated settle writes nothing twice; the decide
+// route's 409 already stops a second decide before it gets here.
+
+/** One work item a decision settled, as the decide result and the record name it. */
+export interface SettledWork {
+  id: string;
+  title: string;
+  projectId: string;
+}
+
+/** The decision's side of the settle: what it is called and the item it names. */
+export interface SettlingDecision {
+  id: string;
+  topic: string;
+  workItemId: string | null;
+}
+
+/** The reason a rejected decision leaves on the work it held up. */
+export function rejectedBlockReason(topic: string): string {
+  return `Decision rejected: ${topic}`;
+}
+
+/** The audit line the settle writes on each item. */
+export function settleHistoryLine(outcome: 'resolved' | 'rejected', topic: string, resolution: string): string {
+  return outcome === 'resolved'
+    ? `Unblocked: ${topic} decided: ${resolution}`
+    : `Still blocked: ${topic} was rejected: ${resolution}`;
+}
+
+/** Is `item` blocked on `decision`? The rule both stores apply. */
+export function isBlockedOn(
+  item: Pick<WorkItem, 'id' | 'labels' | 'blockedReason' | 'blockedByDecisionId'>,
+  decision: Pick<SettlingDecision, 'id' | 'workItemId'>,
+): boolean {
+  const blocked = item.labels.includes('blocked') || !!item.blockedReason?.trim();
+  return blocked && (item.blockedByDecisionId === decision.id || item.id === decision.workItemId);
+}
+
+/** Mock store: settle the fixture's rows (called by providers/decisions.ts in the same tick as the decide). */
+export function mockSettleWorkBlockedOn(decision: SettlingDecision, outcome: 'resolved' | 'rejected', resolution: string): SettledWork[] {
+  const now = clock.nowIso();
+  const settled: SettledWork[] = [];
+  for (const item of mockWorkItems()) {
+    if (!isBlockedOn(item, decision)) continue;
+    item.blockedByDecisionId = decision.id;
+    if (outcome === 'resolved') {
+      item.labels = item.labels.filter((l) => l !== 'blocked');
+      item.blockedReason = null;
+    } else {
+      if (!item.labels.includes('blocked')) item.labels = [...item.labels, 'blocked'];
+      item.blockedReason = rejectedBlockReason(decision.topic);
+    }
+    item.updatedAt = now;
+    workItemComments.rows().push({
+      id: `wic-${randomUUID()}`, workItemId: item.id, authorId: null,
+      body: settleHistoryLine(outcome, decision.topic, resolution), isSystem: true, createdAt: now,
+    });
+    settled.push({ id: item.id, title: item.title, projectId: item.projectId });
+  }
+  return settled;
+}
+
+/**
+ * Aurora: the same settle, inside the decide's transaction (`tx`), so the
+ * decision and the work it held up change together or not at all. The columns
+ * the middleware ships ahead of (`blocked_reason`, `blocked_by_decision_id`)
+ * are probed in the same transaction; a cluster without them settles what it
+ * has (the label and the decision's own `work_item_id` link).
+ */
+export async function txSettleWorkBlockedOn(
+  tx: (sql: string, params?: SqlParameter[]) => Promise<Record<string, unknown>[]>,
+  decision: SettlingDecision,
+  outcome: 'resolved' | 'rejected',
+  resolution: string,
+): Promise<SettledWork[]> {
+  const cols = new Set(((await tx(
+    `SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'work_items' AND column_name IN ('blocked_reason', 'blocked_by_decision_id')`,
+  )) ?? []).map((r) => String(r['column_name'])));
+  const withReason = cols.has('blocked_reason');
+  const withLink = cols.has('blocked_by_decision_id');
+  const params: SqlParameter[] = [strParam('did', decision.id)];
+  const sets = [
+    outcome === 'resolved'
+      ? `labels = array_remove(wi.labels, 'blocked')`
+      : `labels = CASE WHEN 'blocked' = ANY(wi.labels) THEN wi.labels ELSE array_append(COALESCE(wi.labels, ARRAY[]::TEXT[]), 'blocked') END`,
+    'updated_at = NOW()',
+  ];
+  if (withReason) {
+    if (outcome === 'resolved') sets.push('blocked_reason = NULL');
+    else { sets.push('blocked_reason = :reason'); params.push(strParam('reason', rejectedBlockReason(decision.topic))); }
+  }
+  if (withLink) sets.push('blocked_by_decision_id = :did');
+  const linked = withLink ? `(wi.id = d.work_item_id OR wi.blocked_by_decision_id = :did)` : `wi.id = d.work_item_id`;
+  const blocked = withReason ? `('blocked' = ANY(wi.labels) OR NULLIF(TRIM(wi.blocked_reason), '') IS NOT NULL)` : `'blocked' = ANY(wi.labels)`;
+  const rows = (await tx(
+    `UPDATE work_items wi SET ${sets.join(', ')}
+       FROM decisions d
+      WHERE d.id = :did AND ${linked} AND ${blocked}
+      RETURNING wi.id, wi.title, wi.project_id`,
+    params,
+  )) ?? [];
+  const line = settleHistoryLine(outcome, decision.topic, resolution);
+  for (const r of rows) {
+    await tx(
+      `INSERT INTO work_item_comments (work_item_id, author_id, body, is_system) VALUES (:wid, NULL, :body, TRUE)`,
+      [strParam('wid', String(r['id'])), strParam('body', line)],
+    );
+  }
+  return rows.map((r) => ({ id: String(r['id']), title: String(r['title'] ?? ''), projectId: String(r['project_id'] ?? '') }));
+}
+
+/** The work a decision holds (or held) up, as its record lists it: `blocked` false once it is unblocked. */
+export interface HeldWork extends SettledWork {
+  blocked: boolean;
+}
+
+/**
+ * The items `decision` holds up: those that name it (`blockedByDecisionId`),
+ * and the item it names when that item is blocked. A linked item that was
+ * never blocked (the judge-model decision shapes a story already in progress)
+ * is not held up by it, so it is not listed.
+ */
+export async function getWorkHeldBy(decision: SettlingDecision): Promise<HeldWork[]> {
+  if (config.mock.aurora) {
+    return mockWorkItems()
+      .filter((i) => i.blockedByDecisionId === decision.id || isBlockedOn(i, decision))
+      .map((i) => ({ id: i.id, title: i.title, projectId: i.projectId, blocked: i.labels.includes('blocked') }));
+  }
+  const rows = (await safeExec(
+    `SELECT wi.id, wi.title, wi.project_id, ('blocked' = ANY(wi.labels)) AS blocked
+       FROM work_items wi
+      WHERE to_jsonb(wi)->>'blocked_by_decision_id' = :did
+         OR (wi.id = :wid AND ('blocked' = ANY(wi.labels) OR NULLIF(TRIM(to_jsonb(wi)->>'blocked_reason'), '') IS NOT NULL))
+      ORDER BY wi.created_at`,
+    [strParam('did', decision.id), strParam('wid', decision.workItemId ?? '')],
+  )) ?? [];
+  return rows.map((r) => ({ id: String(r['id']), title: String(r['title'] ?? ''), projectId: String(r['project_id'] ?? ''), blocked: r['blocked'] === true }));
+}
+
 export async function createWorkItem(data: CreateWorkItemInput): Promise<WorkItem> {
   if (!config.mock.aurora) {
     const created = await dbCreateWorkItem(data);
@@ -1187,6 +1353,7 @@ export async function createWorkItem(data: CreateWorkItemInput): Promise<WorkIte
     blockedReason: null,
     nextStep: null,
     nextStepDetail: null,
+    blockedByDecisionId: null,
     sprintId: data.sprintId ?? null,
     estimatedCostUsd: data.estimatedCostUsd ?? null,
     // Same as the Aurora path: a new item has no estimator.

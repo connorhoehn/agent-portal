@@ -29,6 +29,8 @@ jest.mock('../../providers/identity.js', () => ({
   }),
 }));
 jest.mock('../../providers/projects.js', () => ({
+  // The work-item fixture names its initiatives through the real helpers (deciding settles the work it held up).
+  ...jest.requireActual('../../providers/projects.js'),
   getProject: jest.fn(async (id: string) => ({ 'p-llm-platform': { id, ownerId: 'p-047' }, 'p-auth-migration': { id, ownerId: 'p-002' } } as Record<string, unknown>)[id] ?? null),
 }));
 
@@ -40,6 +42,9 @@ import { fixtureRegistry } from '../../mock/core/index.js';
 import { decisionRows, decisionEventRows } from '../../mock/decisions.js';
 import { exec } from '../../providers/aurora.js';
 import { decideDecision } from '../../providers/decisions.js';
+import { getProjectWorkItems } from '../../providers/work-items.js';
+import { workItems } from '../../mock/work-items.js';
+import { workItemComments } from '../../mock/work-item-comments.js';
 
 const execMock = exec as unknown as jest.Mock;
 const JUDGE = '/api/graph/decisions/d-eval-judge-model';
@@ -239,6 +244,58 @@ describe('POST /api/graph/decisions/:id/decide with an option (G57)', () => {
   });
 });
 
+describe('deciding settles the work it held up', () => {
+  const CUTOVER = '/api/graph/decisions/d-cognito-cutover';
+  const STORY = 'wi-auth-e2-s2';
+  const story = () => workItems.rows().find((w) => w.id === STORY)!;
+  const audit = () => workItemComments.rows().filter((c) => c.workItemId === STORY && c.isSystem && /^(Unblocked|Still blocked):/.test(c.body));
+
+  it('the seed links the runbook story to the cutover decision both ways, and the record lists it as held up', async () => {
+    expect(story()).toEqual(expect.objectContaining({ blockedByDecisionId: 'd-cognito-cutover', status: 'open' }));
+    expect(story().labels).toContain('blocked');
+    const rec = await request(appAs('u-vera', 'org-leader')).get(CUTOVER);
+    expect(rec.body.heldWork).toEqual([{ id: STORY, title: 'Tenant-by-tenant cutover runbook with rollback', projectId: 'p-auth-migration', blocked: true }]);
+    // A linked item that was never blocked is not held up (the judge-model decision shapes a story in progress).
+    expect((await request(appAs('u-nina', 'sme')).get(JUDGE)).body.heldWork).toEqual([]);
+  });
+
+  it('resolved: the story loses its block, keeps its status, gets one history line, and the record reads it as unblocked', async () => {
+    const res = await request(appAs('u-vera', 'org-leader')).post(`${CUTOVER}/decide`).send({ optionId: 'riskiest-first', outcome: 'resolved' });
+    expect(res.status).toBe(200);
+    expect(res.body.heldWork).toEqual([expect.objectContaining({ id: STORY, blocked: false })]);
+    const s = story();
+    expect(s.labels).not.toContain('blocked');
+    expect(s.blockedReason).toBeNull();
+    expect(s.status).toBe('open');
+    expect(s.blockedByDecisionId).toBe('d-cognito-cutover');
+    expect(audit().map((c) => c.body)).toEqual(['Unblocked: Cutover order for legacy SSO tenants decided: Riskiest two tenants first']);
+    // The Work tab and the overview read the same rows.
+    const row = (await getProjectWorkItems('p-auth-migration')).find((w) => w.id === STORY)!;
+    expect(row.blockedReason).toBeNull();
+    expect(row.labels).not.toContain('blocked');
+    // Idempotent: a repeated decide is the 409 it was, and writes nothing more.
+    const again = await request(appAs('u-vera', 'org-leader')).post(`${CUTOVER}/decide`).send({ optionId: 'riskiest-first', outcome: 'resolved' });
+    expect(again.status).toBe(409);
+    expect(audit()).toHaveLength(1);
+  });
+
+  it('rejected: the story stays blocked with the reason "Decision rejected: <topic>" so someone replans it', async () => {
+    const res = await request(appAs('u-vera', 'org-leader')).post(`${CUTOVER}/decide`).send({ outcome: 'rejected', rationale: 'Neither order until the retry is clean.' });
+    expect(res.status).toBe(200);
+    expect(res.body.heldWork).toEqual([expect.objectContaining({ id: STORY, blocked: true })]);
+    const s = story();
+    expect(s.labels).toContain('blocked');
+    expect(s.blockedReason).toBe('Decision rejected: Cutover order for legacy SSO tenants');
+    expect(audit().map((c) => c.body)).toEqual(['Still blocked: Cutover order for legacy SSO tenants was rejected: Neither order until the retry is clean.']);
+  });
+
+  it('a decision that holds nothing up settles nothing', async () => {
+    const before = workItems.rows().map((w) => [w.id, w.labels.join(','), w.blockedReason]);
+    expect((await request(appAs('u-nina', 'sme')).post(`${JUDGE}/decide`).send({ outcome: 'resolved', rationale: RATIONALE })).status).toBe(200);
+    expect(workItems.rows().map((w) => [w.id, w.labels.join(','), w.blockedReason])).toEqual(before);
+  });
+});
+
 describe('the Aurora provider', () => {
   it('updates only a waiting row and appends its event in one transaction; a lost race reads back as settled', async () => {
     const config = jest.requireMock('../../config.js').config as { mock: { aurora: boolean } };
@@ -246,8 +303,11 @@ describe('the Aurora provider', () => {
     config.mock.aurora = false;
     try {
       const tx = jest.fn()
-        .mockResolvedValueOnce([{ id: 'd-x' }]) // UPDATE … RETURNING id
-        .mockResolvedValueOnce([]);             // INSERT INTO decision_events
+        .mockResolvedValueOnce([{ id: 'd-x', topic: 'T', work_item_id: 'wi-1' }]) // UPDATE … RETURNING id, topic, work_item_id
+        .mockResolvedValueOnce([])              // INSERT INTO decision_events
+        .mockResolvedValueOnce([{ column_name: 'blocked_reason' }, { column_name: 'blocked_by_decision_id' }]) // the column probe
+        .mockResolvedValueOnce([{ id: 'wi-1', title: 'Story', project_id: 'p-1' }]) // UPDATE work_items … RETURNING
+        .mockResolvedValueOnce([]);             // INSERT INTO work_item_comments
       aurora.withTransaction.mockImplementation(async (fn: (t: jest.Mock) => Promise<unknown>) => fn(tx));
       aurora.exec
         .mockResolvedValueOnce([{ id: 'd-x', topic: 'T', summary: null, status: 'resolved', project_id: null, decided_at: '2026-11-09', resolution: 'Why', decided_by: 'p-047', decided_by_name: 'Nina Rivera',
@@ -257,7 +317,13 @@ describe('the Aurora provider', () => {
       const ok = await decideDecision('d-x', { outcome: 'resolved', rationale: 'Why', actorId: 'p-047', actorName: 'Nina Rivera' });
       expect(String(tx.mock.calls[0]![0])).toMatch(/UPDATE decisions[\s\S]*status IN \('open', 'escalated'\)/);
       expect(String(tx.mock.calls[1]![0])).toMatch(/INSERT INTO decision_events/);
-      expect(ok).toEqual({ kind: 'ok', decision: expect.objectContaining({ decidedBy: { id: 'p-047', name: 'Nina Rivera' }, outcome: 'Why', history: [expect.objectContaining({ kind: 'resolved', rationale: 'Why' })] }) });
+      // The work it held up settles in the same transaction: the label and the reason cleared, the link kept, one audit row.
+      expect(String(tx.mock.calls[3]![0])).toMatch(/UPDATE work_items wi SET labels = array_remove\(wi\.labels, 'blocked'\), updated_at = NOW\(\), blocked_reason = NULL, blocked_by_decision_id = :did/);
+      expect(String(tx.mock.calls[3]![0])).toMatch(/wi\.id = d\.work_item_id OR wi\.blocked_by_decision_id = :did/);
+      expect(String(tx.mock.calls[4]![0])).toMatch(/INSERT INTO work_item_comments/);
+      expect(tx.mock.calls[4]![1]).toEqual([{ name: 'wid', value: { stringValue: 'wi-1' } }, { name: 'body', value: { stringValue: 'Unblocked: T decided: Why' } }]);
+      expect(ok.kind === 'ok' && ok.settled).toEqual([{ id: 'wi-1', title: 'Story', projectId: 'p-1' }]);
+      expect(ok).toEqual({ kind: 'ok', settled: expect.any(Array), decision: expect.objectContaining({ decidedBy: { id: 'p-047', name: 'Nina Rivera' }, outcome: 'Why', history: [expect.objectContaining({ kind: 'resolved', rationale: 'Why' })] }) });
       // The record reads the instant (`resolved_at`) over the DATE column's day.
       expect(String(aurora.exec.mock.calls[0]![0])).toMatch(/COALESCE\(to_char\(d\.resolved_at AT TIME ZONE 'UTC'[\s\S]*d\.decided_at::text\) AS decided_at/);
       // G57: the jsonb options column, read as text; malformed entries are dropped, never invented.

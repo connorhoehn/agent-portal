@@ -565,6 +565,8 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
       { seed: 'blocked_reason', mock: (i: { blockedReason: string | null }) => i.blockedReason },
       { seed: 'next_step', mock: (i: { nextStep: string | null }) => i.nextStep },
       { seed: 'next_step_detail', mock: (i: { nextStepDetail: string | null }) => i.nextStepDetail },
+      /** The decision a blocked item waits on (generate_program_seed.py BLOCKED_BY_DECISION); deciding it settles the item. */
+      { seed: 'blocked_by_decision_id', mock: (i: { blockedByDecisionId: string | null }) => i.blockedByDecisionId },
       /**
        * The seed omits `description` on most story/bug rows (the column is not
        * even in their INSERT column list), and the mock writes prose for three

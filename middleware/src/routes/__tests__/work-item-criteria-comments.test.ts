@@ -94,7 +94,7 @@ const ITEM: WorkItem = {
   parentId: 'wi-obs-e1', type: 'story', title: 'Decommission the legacy StatsD bridge', description: null,
   status: 'open', priority: 'medium', assigneeId: 'p-008', assigneeName: 'Layla Hassan',
   assigneeDept: 'Platform Engineering', labels: ['decom'], storyPoints: 5,
-  summary: 'Move remaining service metrics to OpenTelemetry.', blockedReason: null, nextStep: null, nextStepDetail: null,
+  summary: 'Move remaining service metrics to OpenTelemetry.', blockedReason: null, nextStep: null, nextStepDetail: null, blockedByDecisionId: null,
   sprintId: 'spr-obs-s3', estimatedCostUsd: 5.77,
   estimatedBy: null, estimatedByName: null, estimatedAt: null,
   estimateModel: null, estimateForecast: null,

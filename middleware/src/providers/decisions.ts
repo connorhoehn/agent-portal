@@ -18,6 +18,9 @@ import { decisionRows, decisionParticipantRows, decisionEventRows, type Decision
 
 export type { DecisionOption } from '../mock/decisions.js';
 import { mockPeople } from '../mock/people.js';
+import { getWorkHeldBy, mockSettleWorkBlockedOn, txSettleWorkBlockedOn, type HeldWork, type SettledWork } from './work-items.js';
+
+export type { HeldWork, SettledWork } from './work-items.js';
 
 // ─── Local RDS Data API parameter helpers (mirroring aurora.ts internals) ────
 
@@ -78,6 +81,12 @@ export interface DecisionDetail {
    * records the chosen label. Empty for a settled seed row.
    */
   options: DecisionOption[];
+  /**
+   * The work it holds (or held) up (providers/work-items.ts getWorkHeldBy):
+   * `blocked` true while it still waits, false once deciding unblocked it. The
+   * record reads "Unblocked: <story>" from the second.
+   */
+  heldWork: HeldWork[];
   participants: Array<{
     personId: string;
     avatarUrl: string | null;
@@ -129,7 +138,7 @@ function mockListDecisions(limit: number, since?: string): DecisionSummary[] {
     }));
 }
 
-function mockGetDecision(id: string): DecisionDetail | null {
+function mockGetDecision(id: string): Omit<DecisionDetail, 'heldWork'> | null {
   const head = decisionRows.rows().find((d) => d.id === id);
   if (!head) return null;
   const byId = new Map(mockPeople.map((p) => [p.id, p]));
@@ -222,10 +231,14 @@ export async function listDecisions(
 }
 
 export async function getDecision(id: string): Promise<DecisionDetail | null> {
-  if (config.mock.aurora) return mockGetDecision(id);
+  if (config.mock.aurora) {
+    const head = decisionRows.rows().find((d) => d.id === id);
+    const decision = mockGetDecision(id);
+    return head && decision ? { ...decision, heldWork: await getWorkHeldBy({ id, topic: head.topic, workItemId: head.workItemId }) } : null;
+  }
 
   const headRows = await exec(
-    `SELECT d.id, d.topic, d.summary, d.status, d.project_id, ${DECIDED_INSTANT} AS decided_at, d.resolution, d.decided_by,
+    `SELECT d.id, d.topic, d.summary, d.status, d.project_id, d.work_item_id, ${DECIDED_INSTANT} AS decided_at, d.resolution, d.decided_by,
             d.options::text AS options,
             COALESCE(p.name, d.decided_by) AS decided_by_name
        FROM decisions d LEFT JOIN people p ON p.id = d.decided_by
@@ -257,6 +270,7 @@ export async function getDecision(id: string): Promise<DecisionDetail | null> {
   );
 
   const avatars = await fetchAvatarsById(partRows.map(row => String(row['person_id'])));
+  const heldWork = await getWorkHeldBy({ id: String(head['id']), topic: String(head['topic'] ?? ''), workItemId: head['work_item_id'] != null ? String(head['work_item_id']) : null });
   return {
     id: String(head['id']),
     topic: String(head['topic'] ?? ''),
@@ -276,6 +290,7 @@ export async function getDecision(id: string): Promise<DecisionDetail | null> {
       rationale: String(r['rationale'] ?? ''),
     })),
     options: parseDecisionOptions(head['options']),
+    heldWork,
     participants: partRows.map((r) => ({
       personId: String(r['person_id']),
       avatarUrl: avatars.get(String(r['person_id'])) ?? null,
@@ -328,7 +343,8 @@ export interface DecideInput {
 }
 
 export type DecideResult =
-  | { kind: 'ok'; decision: DecisionDetail }
+  /** `settled`: the work items this decide unblocked (resolved) or left blocked with a new reason (rejected). */
+  | { kind: 'ok'; decision: DecisionDetail; settled: SettledWork[] }
   | { kind: 'not-found' }
   | { kind: 'settled'; status: string };
 
@@ -351,35 +367,41 @@ export async function decideDecision(id: string, input: DecideInput): Promise<De
       id: `de-${events.length + 1}`, decisionId: id, kind: input.outcome, at,
       actorId: input.actorId, actorName: input.actorName, rationale: input.rationale,
     });
-    const decision = mockGetDecision(id);
-    return decision ? { kind: 'ok', decision } : { kind: 'not-found' };
+    // The work it held up settles in the same tick: no read sees the one without the other.
+    const settled = mockSettleWorkBlockedOn({ id, topic: row.topic, workItemId: row.workItemId }, input.outcome, input.rationale);
+    const decision = await getDecision(id);
+    return decision ? { kind: 'ok', decision, settled } : { kind: 'not-found' };
   }
 
   // The guarded UPDATE is the race check: two deciders at once, one wins and
   // the other reads the settled status below.
-  const updated = await withTransaction(async (tx) => {
+  const settled = await withTransaction(async (tx): Promise<SettledWork[] | null> => {
     const rows = await tx(
       `UPDATE decisions
           SET status = :outcome, decided_at = CURRENT_DATE, resolved_at = NOW(),
               resolution = :rationale, decided_by = :actor
         WHERE id = :id AND status IN ('open', 'escalated')
-        RETURNING id`,
+        RETURNING id, topic, work_item_id`,
       [strParam('outcome', input.outcome), strParam('rationale', input.rationale), strParam('actor', input.actorId), strParam('id', id)],
     );
-    if (rows.length === 0) return false;
+    if (rows.length === 0) return null;
     await tx(
       `INSERT INTO decision_events (decision_id, kind, actor_id, actor_name, rationale)
        VALUES (:id, :outcome, :actor, :name, :rationale)`,
       [strParam('id', id), strParam('outcome', input.outcome), strParam('actor', input.actorId), strParam('name', input.actorName), strParam('rationale', input.rationale)],
     );
-    return true;
+    // The work it held up, in the same transaction (providers/work-items.ts).
+    const head = rows[0]!;
+    return txSettleWorkBlockedOn(tx, {
+      id, topic: String(head['topic'] ?? ''), workItemId: head['work_item_id'] != null ? String(head['work_item_id']) : null,
+    }, input.outcome, input.rationale);
   });
-  if (!updated) {
+  if (!settled) {
     const now = await exec(`SELECT status FROM decisions WHERE id = :id LIMIT 1`, [strParam('id', id)]);
     return now.length === 0 ? { kind: 'not-found' } : { kind: 'settled', status: String(now[0]!['status'] ?? '') };
   }
   const decision = await getDecision(id);
-  return decision ? { kind: 'ok', decision } : { kind: 'not-found' };
+  return decision ? { kind: 'ok', decision, settled } : { kind: 'not-found' };
 }
 
 // ─── Work-graph read (lib/work-graph/sources.ts) ─────────────────────────────

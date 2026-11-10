@@ -97,7 +97,7 @@ type EstimateFields =
 // for the in-flight items of the engineering arcs only (SEEDED_BRIEFS below),
 // and every other row is null in the seed too — restating four nulls on ~100
 // rows would be noise, not parity.
-type BriefFields = 'summary' | 'blockedReason' | 'nextStep' | 'nextStepDetail';
+type BriefFields = 'summary' | 'blockedReason' | 'nextStep' | 'nextStepDetail' | 'blockedByDecisionId';
 
 type MockSeed = Omit<WorkItem, 'projectName' | 'sprintId' | 'estimatedCostUsd' | 'childCount' | 'childDoneCount' | EstimateFields | BriefFields>
   & Partial<Pick<WorkItem, 'sprintId' | 'estimatedCostUsd' | EstimateFields | BriefFields>>;
@@ -518,6 +518,18 @@ const SEEDED_BRIEFS: Partial<Record<string, SeededBrief>> = {
   },
 };
 
+/**
+ * The decision a blocked item waits on (`work_items.blocked_by_decision_id`),
+ * mirroring schema/seeds/generate_program_seed.py BLOCKED_BY_DECISION row for
+ * row. The seed already implied each link: the decision names the item as its
+ * `work_item_id`, the item carries the `blocked` label, and its brief's
+ * `blockedReason` quotes the decision's topic. Deciding the decision settles
+ * the item (providers/work-items.ts `settleWorkBlockedOn`).
+ */
+const SEEDED_BLOCKED_BY_DECISION: Partial<Record<string, string>> = {
+  'wi-auth-e2-s2': 'd-cognito-cutover',
+};
+
 /** Sprint membership + dollar estimate for the seeds that carry one. */
 const MOCK_PROGRAM_FIELDS: Record<string, { sprintId?: string; estimatedCostUsd?: number }> = {
   // The SME's board, matching schema/seed_program.sql row for row.
@@ -622,6 +634,7 @@ function buildSeed(seed: MockSeed, idOverride?: { id: string; parentId: string |
     blockedReason: null,
     nextStep: null,
     nextStepDetail: null,
+    blockedByDecisionId: SEEDED_BLOCKED_BY_DECISION[seed.id] ?? null,
     ...seed,
     ...SEEDED_BRIEFS[seed.id],
     ...MOCK_PROGRAM_FIELDS[seed.id],

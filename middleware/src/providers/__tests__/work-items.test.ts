@@ -23,6 +23,8 @@ import {
   personExists,
   getProjectWorkItems,
   getProjectDecisions,
+  isBlockedOn,
+  txSettleWorkBlockedOn,
   type WorkItemStatus,
 } from '../work-items.js';
 
@@ -396,5 +398,42 @@ describe('decideStatusTransition', () => {
   it('applies the change-request check only to done, not to cancelled', () => {
     expect(decideStatusTransition({ status: 'in_review' }, 'cancelled', { openChangeRequests: 2 }))
       .toEqual({ kind: 'allow' });
+  });
+});
+
+describe('settling the work a decision held up', () => {
+  const CUTOVER = { id: 'd-cut', topic: 'Cutover order', workItemId: 'wi-1' };
+
+  it('an item is blocked on a decision when it is blocked and either side names the other', () => {
+    const item = { id: 'wi-1', labels: ['blocked'], blockedReason: null, blockedByDecisionId: null };
+    expect(isBlockedOn(item, CUTOVER)).toBe(true);
+    expect(isBlockedOn({ ...item, id: 'wi-2', blockedByDecisionId: 'd-cut' }, CUTOVER)).toBe(true);
+    expect(isBlockedOn({ ...item, id: 'wi-2' }, CUTOVER)).toBe(false);
+    // Linked but never blocked: nothing to unblock.
+    expect(isBlockedOn({ ...item, labels: [] }, CUTOVER)).toBe(false);
+    expect(isBlockedOn({ ...item, labels: [], blockedReason: 'Blocked on "Cutover order"' }, CUTOVER)).toBe(true);
+  });
+
+  it('rejected, inside the transaction: the item stays blocked with "Decision rejected: <topic>" and gets its audit row', async () => {
+    const tx = jest.fn()
+      .mockResolvedValueOnce([{ column_name: 'blocked_reason' }, { column_name: 'blocked_by_decision_id' }])
+      .mockResolvedValueOnce([{ id: 'wi-1', title: 'Runbook', project_id: 'p-1' }])
+      .mockResolvedValueOnce([]);
+    const out = await txSettleWorkBlockedOn(tx, CUTOVER, 'rejected', 'Not yet.');
+    expect(out).toEqual([{ id: 'wi-1', title: 'Runbook', projectId: 'p-1' }]);
+    expect(String(tx.mock.calls[1]![0])).toMatch(/array_append\(COALESCE\(wi\.labels, ARRAY\[\]::TEXT\[\]\), 'blocked'\)/);
+    expect(String(tx.mock.calls[1]![0])).toMatch(/blocked_reason = :reason/);
+    expect(tx.mock.calls[1]![1]).toContainEqual({ name: 'reason', value: { stringValue: 'Decision rejected: Cutover order' } });
+    expect(tx.mock.calls[2]![1]).toContainEqual({ name: 'body', value: { stringValue: 'Still blocked: Cutover order was rejected: Not yet.' } });
+  });
+
+  it('a cluster without the new columns settles what it has: the label, through the decision\'s own link', async () => {
+    const tx = jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    expect(await txSettleWorkBlockedOn(tx, CUTOVER, 'resolved', 'Riskiest first')).toEqual([]);
+    const sql = String(tx.mock.calls[1]![0]);
+    expect(sql).toMatch(/labels = array_remove\(wi\.labels, 'blocked'\)/);
+    expect(sql).not.toMatch(/blocked_reason|blocked_by_decision_id/);
+    expect(sql).toMatch(/WHERE d\.id = :did AND wi\.id = d\.work_item_id AND 'blocked' = ANY\(wi\.labels\)/);
+    expect(tx).toHaveBeenCalledTimes(2);
   });
 });

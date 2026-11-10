@@ -92,6 +92,11 @@ decisionsRouter.get(
 // the caller is neither its decider, its initiative's owner, nor an
 // org-leader / admin (NOT_DECIDER); 409 it is no longer waiting (already
 // resolved or rejected). 200 answers the decision as the record reads it.
+//
+// Deciding settles the work it held up in the same provider call
+// (providers/decisions.ts decideDecision, work-items.ts settle): resolved
+// unblocks every item blocked on it, rejected leaves them blocked with the
+// reason "Decision rejected: <topic>". The answer's `heldWork` lists them.
 decisionsRouter.post(
   '/:id/decide',
   requireAction('DecideDecision'),
@@ -151,6 +156,8 @@ decisionsRouter.post(
     }
     logAuthz(eventFromSession(session, 'DecideDecision', 'ALLOW', { path: req.path, reason: `${outcome}${typeof optionId === 'string' ? ` (option ${optionId.trim()})` : ''} via ${verdict.via}` }));
     noteSearchWriteSoon({ type: 'decision', id });
+    // The work it held up changed with it (providers/work-items.ts settleWorkBlockedOn).
+    for (const w of out.settled) noteSearchWriteSoon({ type: 'work', id: w.id });
     res.json({ ...await nameDeciders(session, out.decision), viewerMayDecide: true });
   }),
 );

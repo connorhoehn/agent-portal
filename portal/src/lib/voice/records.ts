@@ -55,7 +55,11 @@ interface DecidePlan {
   id: string;
   title: string;
   /** The verbs this row offers, each a fixed request; `note` is filled in at send time. */
-  sends: Partial<Record<Verb, { send: (note: string | undefined, optionId?: string) => Send; needsNote?: string; said: string; word?: string }>>;
+  sends: Partial<Record<Verb, {
+    send: (note: string | undefined, optionId?: string) => Send; needsNote?: string; said: string; word?: string;
+    /** What else the answer says happened, joined to the say line's one sentence after a semicolon (null: nothing). */
+    after?: (body: Rec | null) => string | null;
+  }>>;
   verb: Verb;
   note?: string;
   href: string;
@@ -298,11 +302,24 @@ const decisionRecord: Resolver = async (id, ctx) => {
     sends: {
       // G57: with an option the route records its label (and ", because <note>"); without one the note is the outcome.
       approve: { said: 'Resolved', word: 'Resolve', needsNote, send: (note, optionId) => ({ method: 'POST', url, body: optionId
-        ? { optionId, outcome: 'resolved', ...(note ? { rationale: note } : {}) } : { outcome: 'resolved', rationale: note } }) },
+        ? { optionId, outcome: 'resolved', ...(note ? { rationale: note } : {}) } : { outcome: 'resolved', rationale: note } }),
+        after: unblockedLine },
       reject: { said: 'Rejected', word: 'Reject', needsNote, send: (note) => ({ method: 'POST', url, body: { outcome: 'rejected', rationale: note } }) },
     },
   };
 };
+
+/**
+ * Deciding a decision settles the work it held up (the route's `heldWork`):
+ * with exactly one item unblocked the say line names it, in the same sentence
+ * ("…; "Tenant-by-tenant cutover runbook with rollback" is unblocked"). Several
+ * are left to the record, so the line stays one short sentence.
+ */
+export function unblockedLine(body: Rec | null): string | null {
+  const held = Array.isArray(body?.['heldWork']) ? body['heldWork'] as Rec[] : [];
+  const unblocked = held.filter((w) => w['blocked'] === false && typeof w['title'] === 'string' && w['title']);
+  return unblocked.length === 1 ? `"${String(unblocked[0]!['title'])}" is unblocked` : null;
+}
 
 /** Assessment: a finished draft (GET /api/assessment/drafts/:runId) not yet decided: accept writes it into the team, discard drops it. */
 const draft: Resolver = async (id, ctx) => {
@@ -426,8 +443,11 @@ const runDecide: VoiceToolRunner = async (_args, ctx, planned, answer?: CardAnsw
     const body = await res.json().catch(() => null) as Rec | null;
     if (!res.ok) return decideRefusal(res.status, body, plan.title);
     const prUrl = str(body?.['prUrl']);
-    return done('decided', { ref: `${plan.kind}:${plan.id}`, decision: verb, title: plan.title, href: plan.href, ...(note ? { note } : {}), ...(option ? { option: option.label } : {}), ...(prUrl ? { delivered: true } : {}) },
-      `${chosen.said}: ${plan.title}${option ? ` (${optionOutcome(option.label, note ?? '')})` : ''}`);
+    const also = chosen.after?.(body) ?? null;
+    const line = `${chosen.said}: ${plan.title}${option ? ` (${optionOutcome(option.label, note ?? '')})` : ''}${also ? `; ${also}` : ''}`;
+    const out = done('decided', { ref: `${plan.kind}:${plan.id}`, decision: verb, title: plan.title, href: plan.href, ...(note ? { note } : {}), ...(option ? { option: option.label } : {}), ...(prUrl ? { delivered: true } : {}) }, line);
+    // The strip's summary is capped; the spoken line keeps the unblocked story whole (still one sentence).
+    return also ? { ...out, output: { ...out.output, say: `${line}.` } } : out;
   }, () => done('decided', { ref: `${plan.kind}:${plan.id}`, decision: verb, title: plan.title, alreadyDecided: true }, `${plan.title} was already decided; nothing was sent again`));
 };
 
