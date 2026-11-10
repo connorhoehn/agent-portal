@@ -40,6 +40,14 @@ jest.mock('../../lib/initiative-scope.js', () => ({
       : initiativeId === 'p-auth-migration' ? new Set(['p-020']) : null)),
 }));
 jest.mock('../../lib/initiative-comments.js', () => ({ postInitiativeWorkComment: jest.fn() }));
+// The binding read's own gate (ViewSocial with a grant in orgiq); a refusal means the pane shows the old thread.
+const socialReaders = new Set<string>();
+jest.mock('../../lib/social-authority.js', () => ({
+  currentSocialAuthority: jest.fn(async (session: { sub: string }) => {
+    if (!socialReaders.has(session.sub)) throw Object.assign(new Error('Your Social grants do not allow this action'), { status: 403 });
+    return session;
+  }),
+}));
 
 jest.mock('../../providers/activity.js', () => ({
   getProjectActivitySeries: jest.fn(),
@@ -675,7 +683,16 @@ describe('POST /api/graph/projects/:id/discussion/comments', () => {
     expect(postCommentMock).toHaveBeenCalledWith({
       projectId: 'p-observability', workItemId: 'wi-obs-e1-s1',
       userId: 'u-rachel', displayName: 'Rachel Kowalski', personId: 'p-008', sub: 'u-rachel',
-      body: 'Collector rollout looks good', deliveryId: 'del_1-a',
+      body: 'Collector rollout looks good', deliveryId: 'del_1-a', readsSocial: false,
     });
+  });
+
+  it('passes whether the binding read admits the caller, so the note follows what their pane shows', async () => {
+    postCommentMock.mockResolvedValue({ id: 'm-2' });
+    socialReaders.add('u-rachel');
+    try {
+      await request(buildApp()).post(URL).send(GOOD);
+    } finally { socialReaders.delete('u-rachel'); }
+    expect(postCommentMock).toHaveBeenLastCalledWith(expect.objectContaining({ readsSocial: true }));
   });
 });

@@ -14,13 +14,20 @@
 //     read answers a non-member, routes/social.ts bindingView). Never a
 //     message, a member or a count.
 //   * visibleBoundChannel: the binding as ONE caller may know it (sweep 12,
-//     L2): a public channel, or a private one they are an active member of.
-//     Anything else reads as unbound, as both reads above answer that
-//     caller, so a write route never tells them more than a read would.
+//     L2): a public channel, or a private one they are an active member of
+//     AND whose binding read admits them (readsSocialBindings: a current
+//     Social grant that allows ViewSocial, and one in orgiq). Anything else
+//     reads as unbound, as both reads above answer that caller, so a write
+//     route never tells them more than a read would, and never points them
+//     somewhere other than what their pane shows: a member whose Social grant
+//     was removed (membership outlives the grant) gets the discussion-home
+//     read, which hides a private channel, so their pane shows the old thread.
 
 import { getBinding } from '../providers/social-bindings.js';
 import { getChannel } from '../providers/social-channels.js';
 import { slugForChannel, socialChat } from './social-chat.js';
+import { currentSocialAuthority } from './social-authority.js';
+import type { Session } from './session.js';
 
 export const initiativeBindingContext = (projectId: string) => ({ tenant: 'orgiq', kind: 'initiative', id: projectId });
 
@@ -40,15 +47,32 @@ export async function discussionHome(projectId: string): Promise<{ channel: stri
 }
 
 /**
- * The bound channel when `sub` may know of it (public, or a private channel
- * they are an active member of), else null. A channel with no directory row
- * counts as private here: the strict reading, since it leaks nothing.
+ * Whether the initiative page's binding read (GET /api/social/bindings,
+ * socialGate('ViewSocial') with a grant in orgiq) answers this caller: the
+ * page shows the bound channel only then, and asks the discussion-home read
+ * otherwise. Any refusal or error is false: the strict reading.
  */
-export async function visibleBoundChannel(projectId: string, sub: string): Promise<string | null> {
+export async function readsSocialBindings(session: Session): Promise<boolean> {
+  try {
+    await currentSocialAuthority(session, 'ViewSocial', { grantIn: 'orgiq' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The bound channel when `sub` may know of it (public, or a private channel
+ * they are an active member of and whose binding read admits them,
+ * `readsSocial`), else null. A channel with no directory row counts as
+ * private here: the strict reading, since it leaks nothing.
+ */
+export async function visibleBoundChannel(projectId: string, sub: string, readsSocial: boolean): Promise<string | null> {
   const channel = await boundChannel(projectId);
   const slug = channel ? slugForChannel(channel) : null;
   if (!channel || !slug) return null;
   if ((await getChannel(slug))?.privacy === 'public') return channel;
+  if (!readsSocial) return null;
   const chat = socialChat(); await chat.ready;
   await chat.membershipStore.hydrate(channel);
   return chat.membershipStore.isActiveMember(channel, sub) ? channel : null;

@@ -18,6 +18,8 @@ const input = {
   projectId: 'p-inference-platform', workItemId: 'wi-inf-e1-b3',
   userId: 'u-vera', displayName: 'Vera Green', personId: 'p-002',
   body: 'Confirm the cardinality threshold in CI.', deliveryId: 'rehearsal-comment-1',
+  // The binding read admits Vera (a Social grant); the last describe takes it away.
+  readsSocial: true,
 };
 // Auth Migration is bound to #auth-migration.
 const bound = { ...input, projectId: 'p-auth-migration', workItemId: 'wi-auth-e2-b3', deliveryId: 'rehearsal-comment-2' };
@@ -85,5 +87,19 @@ describe('a private binding the caller may not know of (sweep 12, L2)', () => {
     const message = await postInitiativeWorkComment({ ...input, userId: 'u-mira', displayName: 'Mira Okafor', personId: null, deliveryId: 'sweep12-l2-b' });
     expect(message.discussion).toBe('channel');
     expect(message.channel).toBe('orgiq:work:wi-inf-e1-b3');
+  });
+
+  it('a member whose Social grant is gone is answered as their pane shows: the old thread, never the channel', async () => {
+    bindPrivate();
+    const message = await postInitiativeWorkComment({ ...input, userId: 'u-mira', displayName: 'Mira Okafor', personId: null, deliveryId: 'sweep12-l2-c', readsSocial: false });
+    expect(message.discussion).toBe('thread');
+    expect(message.channel).toBe('orgiq:initiative:p-inference-platform');
+    expect(JSON.stringify(message)).not.toContain('moderators');
+    expect((await listWorkItemComments(input.workItemId, input.userId)).comments.some(c => c.id === message.id)).toBe(true);
+  });
+
+  it('a public binding is the channel either way (the page names it to a viewer without Social too)', async () => {
+    const message = await postInitiativeWorkComment({ ...bound, deliveryId: 'sweep12-l2-d', readsSocial: false });
+    expect(message.discussion).toBe('channel');
   });
 });

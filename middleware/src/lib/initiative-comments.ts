@@ -11,7 +11,8 @@
 //
 // "Bound" here is the binding as THIS caller may know it (sweep 12, L2,
 // lib/initiative-discussion.ts visibleBoundChannel): a public channel, or a
-// private one they are a member of. A caller the binding read and the
+// private one they are a member of and can read the binding of (a member
+// whose Social grant was removed reads the discussion home instead). A caller the binding read and the
 // discussion-home read both answer "unbound" sees the old initiative thread
 // in their pane, so their note goes there and the answer says
 // `discussion: 'thread'`, exactly as on an unbound initiative: the reply never
@@ -33,10 +34,16 @@ export async function postInitiativeWorkComment(input: {
   personId?: string | null; body: string; deliveryId: string;
   /** The caller's session subject, for channel membership (defaults to userId). */
   sub?: string;
+  /**
+   * Whether the page's binding read admits the caller (initiative-discussion.ts
+   * readsSocialBindings). Without it a private bound channel reads as unbound,
+   * membership or not: their pane shows the old thread, so the note goes there.
+   */
+  readsSocial: boolean;
 }) {
   const item = await getWorkItem(input.workItemId);
   if (!item || item.projectId !== input.projectId) throw new AppError(404, 'Work item is not in this initiative');
-  const bound = await visibleBoundChannel(input.projectId, input.sub ?? input.userId);
+  const bound = await visibleBoundChannel(input.projectId, input.sub ?? input.userId, input.readsSocial);
   const channel = bound ? workThreadChannel(input.workItemId) : `orgiq:initiative:${input.projectId}`;
   const discussion = bound ? 'channel' as const : 'thread' as const;
   const write = async () => {

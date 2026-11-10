@@ -65,7 +65,7 @@ import {
 } from '../providers/work-items.js';
 import { getProjectActivitySeries } from '../providers/activity.js';
 import { postInitiativeWorkComment } from '../lib/initiative-comments.js';
-import { discussionHome } from '../lib/initiative-discussion.js';
+import { discussionHome, readsSocialBindings } from '../lib/initiative-discussion.js';
 
 export const workItemsRouter = Router();
 
@@ -183,6 +183,8 @@ workItemsRouter.post('/projects/:id/discussion/comments', commentGate, asyncHand
   const message = await postInitiativeWorkComment({
     projectId: req.params['id'] as string, workItemId: body['workItemId'],
     userId: user.id, displayName: user.displayName, personId: user.personId, sub: session.sub,
+    // The destination follows what this viewer's pane shows (sweep 12 L2's edge: membership outlives a Social grant).
+    readsSocial: await readsSocialBindings(session),
     body: (body['body'] as string).trim(), deliveryId: body['clientDeliveryId'],
   });
   res.status(201).json(message);
