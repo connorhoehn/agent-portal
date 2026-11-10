@@ -286,6 +286,26 @@ export const PARAM_RESOLVERS: Record<string, ParamResolver> = {
   // usually belong to some other initiative and pin nothing but the 409, so
   // read the item's initiative off the board, then take a decision on that
   // initiative that is unlinked or already linked to this very item.
+  // The decision-link writes need an item whose initiative HAS such a
+  // decision; the board's first row is any item at all (an initiative with no
+  // decisions left the PUT/DELETE skipped). Walk the board in its own order —
+  // deterministic since providers/work-items.ts `byRecentThenId` — and take the
+  // first item with a free decision. Keyed on the full route, so the other
+  // `/api/graph/work-items/:id` routes keep the board's first row.
+  'id@/api/graph/work-items/:id/decisions/:decisionId': async ({ read }) => {
+    const board = objectRows(await read('/api/graph/work'));
+    const decisionsByProject = new Map<string, { [k: string]: Json }[]>();
+    for (const item of board) {
+      const itemId = item['id'];
+      const projectId = item['projectId'];
+      if (typeof itemId !== 'string' || typeof projectId !== 'string' || projectId.length === 0) continue;
+      if (!decisionsByProject.has(projectId)) {
+        decisionsByProject.set(projectId, objectRows(await read(`/api/graph/projects/${encodeURIComponent(projectId)}/decisions`)));
+      }
+      if (decisionsByProject.get(projectId)!.some((d) => d['workItemId'] === null || d['workItemId'] === itemId)) return itemId;
+    }
+    return null;
+  },
   'decisionId@/api/graph/work-items/:id/decisions': async ({ values, read }) => {
     const itemId = values['id'];
     const item = objectRows(await read('/api/graph/work')).find((w) => w['id'] === itemId);
@@ -391,9 +411,13 @@ export async function resolvePath(
     if (prefix.includes(':')) return { skipped: `nested param before :${param}` };
     // The same prefix with earlier params still spelled — a stable key.
     const template = path.slice(0, path.indexOf(`:${param}`)).replace(/\/$/, '');
-    const cacheKey = `${persona.name} ${prefix} ${param}`;
+    // A resolver keyed on the whole route wins over one keyed on the prefix,
+    // and caches under the route, so it never fills another route's param.
+    const routeKey = `${param}@${path}`;
+    const routeResolver = Object.hasOwn(PARAM_RESOLVERS, routeKey) ? PARAM_RESOLVERS[routeKey] : undefined;
+    const cacheKey = routeResolver ? `${persona.name} ${path} ${param}` : `${persona.name} ${prefix} ${param}`;
     let value = cache.get(cacheKey);
-    const resolver = PARAM_RESOLVERS[`${param}@${template}`];
+    const resolver = routeResolver ?? PARAM_RESOLVERS[`${param}@${template}`];
     if (value === undefined && resolver) {
       value = await resolver({
         values,

@@ -1202,8 +1202,9 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     },
   },
   {
-    // `:decisionId` comes from PARAM_RESOLVERS in http.ts: a decision on the
-    // SAME initiative as the resolved item, so this pins the 200, not a 409.
+    // Both ids come from PARAM_RESOLVERS in http.ts: `:id` is the first item on
+    // the board whose initiative has a free decision, `:decisionId` that
+    // decision, so this pins the 200, not a 409 or a skip.
     route: 'PUT /api/graph/work-items/:id/decisions/:decisionId',
     persona: 'orgiq/admin',
     safe: 'Sets `workItemId` on one row of the registered `graph-decisions` fixture (mock/decisions.ts) — reset puts the seeded link back. No AWS, no fs, no timer, no row added or removed. A refused link (another initiative, org-wide, already linked elsewhere) writes nothing and answers 409.',
