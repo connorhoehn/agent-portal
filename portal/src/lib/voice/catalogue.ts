@@ -531,8 +531,8 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       kind: str('Which kind of record.', { enum: listKinds(null) }),
       filter: obj({
         q: str('Words the name should contain.', { minLength: 1, maxLength: 120 }),
-        status: str('A status, as the page shows it ("blocked" for work items).', { minLength: 1, maxLength: 40 }),
-        who: str('work-item: the assignee\'s name ("me" for the user).', { minLength: 1, maxLength: 120 }),
+        status: str('A status, as the page shows it ("blocked" for work items; "waiting" or "decided" for decisions).', { minLength: 1, maxLength: 40 }),
+        who: str('work-item: the assignee ("me" for the user); decision: "me", what waits on the user.', { minLength: 1, maxLength: 120 }),
         sprint: str('work-item: "this", "last", "next" or a sprint name.', { minLength: 1, maxLength: 80 }),
         scope: str('"mine" (the user\'s own, where the kind takes it), "all" (everything the user can read: any kind), or "reports" (the user\'s reports\' access requests).', { enum: ['mine', 'all', 'reports'] }),
         since: str(`Only records since: ${SINCE_WORDS}.`, { minLength: 1, maxLength: 40 }),

@@ -370,7 +370,35 @@ const C4 = {
   },
 };
 
-const CAPABILITIES = { C1, C2, C2B, C3, C4 };
+/** C5: decisions (Vera, the org leader an escalated decision waits on). */
+const C5 = {
+  title: 'Decisions waiting and decided', persona: 'vera',
+  async run(s, page) {
+    await s('voice: "What is waiting on me?", "What did we decide about the lakehouse table format?", "Tell me about the cutover order."', async () => {
+      await go(page, '/iq/decisions');
+      await waitText(page, 'body', /Cutover order for legacy SSO tenants/);
+      await startVoice(page, [
+        { said: 'What decisions are waiting on me?', call: { name: 'list', arguments: { ...LIST, kind: 'decision', filter: { ...FILTER, who: 'me' } } } },
+        { said: 'What did we decide about the lakehouse table format?', call: { name: 'list', arguments: { ...LIST, kind: 'decision', filter: { ...FILTER, q: 'lakehouse table format', status: 'decided' } } } },
+        { said: 'Tell me about the cutover order decision.', call: { name: 'get', arguments: { ...GET, ref: 'decision:d-cognito-cutover' } } },
+      ]);
+      const all = await json(page, '/api/graph/decisions?limit=50');
+      const waiting = all.filter((d) => d.status === 'open' || d.status === 'escalated').slice(0, 10);
+      let mine = 0;
+      for (const d of waiting) if ((await json(page, `/api/graph/decisions/${d.id}`)).viewerMayDecide === true) mine++;
+      const out = await nthOutput(page, 1);
+      const a = terseSay(out, 'waiting on me', new RegExp(`^${mine} decisions? waits? on you; first "`));
+      check(out.count === mine, `waiting on Vera: ${out.count}, the decision pages say ${mine}`);
+      const iceberg = all.find((d) => d.id === 'd-iceberg');
+      const b = terseSay(await nthOutput(page, 2), 'decided about', new RegExp(`^"${iceberg.topic}" was decided: ${iceberg.outcome.split(' ').slice(0, 5).join(' ')}`));
+      const c = terseSay(await nthOutput(page, 3), 'get decision', '"Cutover order for legacy SSO tenants" is escalated, waiting on Sienna Garcia; it holds 1 work item.');
+      await stopVoice(page);
+      return { say: [a, b, c] };
+    });
+  },
+};
+
+const CAPABILITIES = { C1, C2, C2B, C3, C4, C5 };
 
 // ── the run ──────────────────────────────────────────────────────────────────
 

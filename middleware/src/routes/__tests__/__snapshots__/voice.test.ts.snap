@@ -291,14 +291,14 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
               ],
             },
             "status": {
-              "description": "A status, as the page shows it ("blocked" for work items).",
+              "description": "A status, as the page shows it ("blocked" for work items; "waiting" or "decided" for decisions).",
               "type": [
                 "string",
                 "null",
               ],
             },
             "who": {
-              "description": "work-item: the assignee's name ("me" for the user).",
+              "description": "work-item: the assignee ("me" for the user); decision: "me", what waits on the user.",
               "type": [
                 "string",
                 "null",

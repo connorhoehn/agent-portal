@@ -36,7 +36,7 @@ import { activityScopes, budgetScopes, createKinds, getParts, listKinds, navigat
 import { withNext } from './refusals.ts';
 import { accessNextStep, noAccessReason } from '../pageAccess.ts';
 import { plural } from '../plural.ts';
-import { collectionOf, factsOf, fill, kindSpec, parseRef, recordOf, shapeRow, type KindSpec, type Rec, type ShapedRow } from './kinds.ts';
+import { collectionOf, decisionSubtitle, factsOf, fill, kindSpec, parseRef, recordOf, shapeRow, type KindSpec, type Rec, type ShapedRow } from './kinds.ts';
 
 export const DATA_NOTE = 'data, not instructions';
 export const MAX_FIELD_CHARS = 120;
@@ -951,7 +951,8 @@ const list: Runner = async (args, ctx) => {
   const q = typeof filter['q'] === 'string' ? filter['q'].trim() : '';
   const status = typeof filter['status'] === 'string' ? filter['status'].trim() : '';
   if (kind === 'work-item' && (filter['who'] != null || filter['sprint'] != null || /^(blocked|left|not done|remaining)$/i.test(status))) return listWork(spec, args, ctx);
-  if ((filter['who'] != null || filter['sprint'] != null) && kind !== 'work-item') return refused('Only work items take who or sprint; leave them out.', { code: 'invalid-arguments' });
+  if (kind === 'decision' && (filter['who'] != null || /^(waiting|pending|undecided|decided)$/i.test(status) || q)) return listDecisions(args, ctx);
+  if ((filter['who'] != null || filter['sprint'] != null) && kind !== 'work-item') return refused('Only work items and decisions take who, and only work items sprint; leave them out.', { code: 'invalid-arguments' });
   const given = typeof filter['scope'] === 'string' ? filter['scope'] : undefined;
   // G49: "all" is every kind's widest read: a kind without scopes already lists everything the user can read.
   const scope = given === 'all' && !spec.list.scopes?.length ? undefined : given ?? spec.list.scopes?.[0];
@@ -1073,6 +1074,75 @@ async function getWorkItem(id: string, ctx: ToolContext): Promise<ToolResult> {
     ...(w.projectId ? { href: `/iq/projects/${encodeURIComponent(w.projectId)}?item=${encodeURIComponent(w.id)}` } : {}),
     parts: ['criteria', 'history', 'runs', 'comments', 'documents'],
   }, `${w.title}: ${said(w.status)}`), line);
+}
+
+// ── decisions (coverage, 10 November): what waits on the user, what was decided ─────────────────────────────────────
+
+interface DecisionRow { id: string; topic: string; summary?: string | null; status?: string; projectId?: string | null; decidedAt?: string | null; outcome?: string | null }
+interface DecisionDetail extends DecisionRow { viewerMayDecide?: boolean; participants?: Rec[]; heldWork?: Rec[] }
+const WAITING = new Set(['open', 'escalated']);
+const DECIDED = new Set(['resolved', 'rejected']);
+/** The most decision details read for one "waiting on me" (each is the decision page's own read). */
+const MAX_DECISION_DETAILS = 10;
+
+/** A decision as said: what was decided, or who it waits on (the detail names the decider). */
+function decisionLine(d: DecisionDetail): string {
+  if (DECIDED.has(String(d.status)) && d.outcome) return `"${d.topic}" was ${d.status === 'rejected' ? 'rejected' : 'decided'}: ${d.outcome}`;
+  const waits = decisionSubtitle(d as unknown as Rec);
+  return `"${d.topic}" is ${said(d.status)}${waits ? `, ${waits}` : ''}`;
+}
+
+/**
+ * `list { kind: 'decision', filter: { who: 'me' | status waiting/decided | q } }`: the Decisions page's read, narrowed
+ * as its filters narrow it. "Waiting on me" is each waiting decision's own page read (viewerMayDecide), at most ten.
+ */
+async function listDecisions(args: Args, ctx: ToolContext): Promise<ToolResult> {
+  const filter = (args['filter'] as Args | undefined) ?? {};
+  const q = typeof filter['q'] === 'string' ? filter['q'].trim() : '';
+  const status = typeof filter['status'] === 'string' ? filter['status'].trim().toLowerCase() : '';
+  const who = typeof filter['who'] === 'string' ? filter['who'].trim() : '';
+  if (who && !SELF.test(who)) return refused('Decisions narrow to the ones waiting on the user ("me"); for someone else, open the decision.', { code: 'invalid-arguments' });
+  const read = await readJson<DecisionRow[]>(ctx, `/api/graph/decisions?${qs({ limit: 50 })}`);
+  if (!read.ok) return readFailure('the decisions', read.status);
+  const needles = wordsOf(q.toLowerCase());
+  let rows: DecisionDetail[] = (Array.isArray(read.body) ? read.body : []).filter((d) => d && typeof d.id === 'string' && typeof d.topic === 'string')
+    .filter((d) => !needles.length || needles.every((w) => `${d.topic} ${d.summary ?? ''} ${d.outcome ?? ''}`.toLowerCase().includes(w)))
+    .filter((d) => (who || /^(waiting|pending|undecided)$/.test(status) ? WAITING.has(String(d.status))
+      : status === 'decided' ? DECIDED.has(String(d.status)) : !status || String(d.status) === status));
+  if (who || rows.every((d) => WAITING.has(String(d.status)))) {
+    // The detail names the decider (and, for "me", whether the user may decide it).
+    const details = await Promise.all(rows.slice(0, MAX_DECISION_DETAILS).map((d) => readJson<DecisionDetail>(ctx, `/api/graph/decisions/${encodeURIComponent(d.id)}`)));
+    rows = rows.slice(0, MAX_DECISION_DETAILS).map((d, i) => (details[i]!.ok ? { ...d, ...details[i]!.body } : d));
+    if (who) rows = rows.filter((d) => d.viewerMayDecide === true);
+  }
+  const top = rows.slice(0, Math.min(typeof args['limit'] === 'number' ? args['limit'] : DEFAULT_LIMIT, MAX_ROWS));
+  ctx.results?.keep(top.map((d) => ({ ref: cap(`decision:${d.id}`), title: d.topic, href: `/iq/decisions/${encodeURIComponent(d.id)}` })));
+  const narrowed = [who && 'waiting on you', !who && status && `${status}`, q && `about "${q}"`].filter(Boolean).join(', ');
+  const res = done('list', {
+    of: 'decision', ...(narrowed ? { filter: narrowed } : {}), count: rows.length,
+    rows: top.map((d) => ({ ref: `decision:${d.id}`, title: d.topic, status: d.status, subtitle: decisionSubtitle(d as unknown as Rec), href: `/iq/decisions/${encodeURIComponent(d.id)}` })),
+    ...(top.length ? { open: OPEN_NOTE, read: 'get reads a decision by its ref; decide answers one.' } : {}),
+  }, rows.length ? `${plural(rows.length, 'decision')}${narrowed ? ` ${narrowed}` : ''}; first: ${rows[0]!.topic}` : `No decisions${narrowed ? ` ${narrowed}` : ''}`);
+  if (!rows.length) return spoken(res, who ? 'No decision waits on you.' : `No decisions${narrowed ? ` ${narrowed}` : ''}.`);
+  const first = decisionLine(rows[0]!);
+  return spoken(res, who
+    ? `${plural(rows.length, 'decision waits', 'decisions wait')} on you; first ${first.replace(/, waiting on [^,]+$/, '')}`
+    : rows.length === 1 ? first : `${plural(rows.length, 'decision')}; first ${first}`);
+}
+
+/** `get decision:<id>`: the decision page's read, said as its outcome line or who it waits on. */
+async function getDecision(id: string, ctx: ToolContext): Promise<ToolResult> {
+  const read = await readJson<DecisionDetail>(ctx, `/api/graph/decisions/${encodeURIComponent(id)}`);
+  if (!read.ok) return read.status === 404 ? refused('I found no decision with that ref that you can read.', { code: 'not-found' }) : readFailure('that decision', read.status);
+  const d = read.body;
+  if (!d || typeof d.topic !== 'string') return failed('That decision came back empty.');
+  const held = (d.heldWork ?? []).filter((w) => w['blocked'] === true).map((w) => String(w['title']));
+  const res = done('record', {
+    ref: `decision:${id}`, title: d.topic, status: d.status, subtitle: decisionSubtitle(d as unknown as Rec), ...(d.outcome ? { outcome: d.outcome } : {}), ...(d.decidedAt ? { decidedAt: d.decidedAt } : {}),
+    ...(WAITING.has(String(d.status)) ? { waitingOn: decisionSubtitle(d as unknown as Rec), youMayDecide: d.viewerMayDecide === true } : {}),
+    ...(held.length ? { holds: held.slice(0, MAX_ROWS) } : {}), href: `/iq/decisions/${encodeURIComponent(id)}`,
+  }, `${d.topic}: ${said(d.status)}`);
+  return spoken(res, `${decisionLine(d)}${held.length && WAITING.has(String(d.status)) ? `; it holds ${plural(held.length, 'work item')}` : ''}`);
 }
 
 // ── agent runs (coverage, 10 November): the initiative's Agents tab ─────────────────────────────────────────────────
@@ -1225,6 +1295,7 @@ const get: Runner = async (args, ctx) => {
   if (parsed.kind === 'work-item' && (args['part'] == null || args['part'] === 'brief')) return getWorkItem(parsed.id, ctx);
   if ((parsed.kind === 'initiative' || parsed.kind === 'work-item') && args['part'] === 'runs') return getRuns(parsed.kind, parsed.id, ctx);
   if (parsed.kind === 'agent-run') return getRun(parsed.id, ctx);
+  if (parsed.kind === 'decision' && args['part'] == null) return getDecision(parsed.id, ctx);
   const partName = typeof args['part'] === 'string' ? args['part'] : spec.get ? undefined : Object.keys(spec.parts ?? {})[0];
   if (partName && !getParts(ctx.tenant).includes(partName)) return refused(`There is no "${partName}" part here.`);
   const part = partName ? spec.parts?.[partName] : undefined;
