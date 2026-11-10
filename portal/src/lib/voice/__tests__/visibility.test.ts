@@ -83,7 +83,7 @@ const VARIANTS: Record<string, unknown[]> = {
     { kind: 'work-item', scope: 'this-page' }, { kind: 'decision', scope: 'this-page' },
     // Coverage (10 November): work items by owner, sprint and blocked, on the page and through the board.
     { kind: 'work-item', scope: 'this-page', filter: { who: 'Nobody Here' } }, { kind: 'work-item', scope: 'this-page', filter: { sprint: 'last' } }, { kind: 'work-item', filter: { sprint: 'Sprint Zero' } }, { kind: 'work-item', filter: { status: 'blocked' } }],
-  get: [{ ref: '1' }, { ref: 'decision:d-sana-1' }, { ref: 'initiative:p-unknown', part: 'runs' }, { ref: 'work-item:w-sana-1', part: 'runs' }, { ref: 'agent-run:r-sana-1' }, { ref: 'initiative:p-unknown' }, { ref: 'bot:b-x', part: 'runs' }, { ref: 'person:p-sana-x' }, { ref: 'Sana Alpha Initiative' },
+  get: [{ ref: '1' }, { ref: 'consult:c-sana-1' }, { ref: 'decision:d-sana-1' }, { ref: 'initiative:p-unknown', part: 'runs' }, { ref: 'work-item:w-sana-1', part: 'runs' }, { ref: 'agent-run:r-sana-1' }, { ref: 'initiative:p-unknown' }, { ref: 'bot:b-x', part: 'runs' }, { ref: 'person:p-sana-x' }, { ref: 'Sana Alpha Initiative' },
     { ref: 'work-item:w-sana-1' }, { ref: 'work-item:w-not-theirs', part: 'brief' }, { ref: 'work-item:w-sana-1', part: 'history' }],
   computer: [{ action: 'start', initiatives: ['Unknown Initiative'] }, { action: 'open-shell', computer: 'unknown-box' },
     { action: 'run', computer: 'unknown-box', phrase: 'status' }, { action: 'run', computer: 'unknown-box', phrase: 'commits-since', since: 'soon' },
@@ -91,7 +91,7 @@ const VARIANTS: Record<string, unknown[]> = {
     { action: 'hand-work', machine: 'nobody-laptop', job: 'x' }, { action: 'hand-work', machine: 'sana', job: 'nothing like it' }, { action: 'hand-work', machine: 'sana-laptop', job: 'sana' },
     { action: 'hand-work', machine: 'sana-parked-laptop', job: 'sana' }, { action: 'hand-work' }],
   budget: [{ scope: 'me' }, { scope: 'initiative', initiative: 'Nobody Initiative' }, { scope: 'initiative', initiative: 'Initiative' }, { scope: 'org' }, { scope: 'allocations' }, { scope: 'cost' }, { scope: 'initiative', initiative: 'this-page', period: '7d' }, { scope: 'envelopes', initiative: 'this-page', sprint: 'this' }, { scope: 'envelopes', initiative: 'Initiative', sprint: 'last' }],
-  summary: [{ kind: 'sprint' }, { kind: 'sweeps', since: 'whenever' }, { kind: 'sweeps', since: 'yesterday' }, { kind: 'fleet' }, { kind: 'live' }, { kind: 'ingest' }, { kind: 'rollup' }, { kind: 'today' }],
+  summary: [{ kind: 'sprint' }, { kind: 'review' }, { kind: 'sweeps', since: 'whenever' }, { kind: 'sweeps', since: 'yesterday' }, { kind: 'fleet' }, { kind: 'live' }, { kind: 'ingest' }, { kind: 'rollup' }, { kind: 'today' }],
   message: [{ target: { kind: 'dm', name: 'Ada' }, text: 'hello' }, { target: { kind: 'team', name: 'nobody' }, text: 'x' }],
   call: [{ action: 'start', target: { kind: 'dm', name: 'Ada' } }, { action: 'join' }, { action: 'join', target: { kind: 'channel', name: 'nowhere' } }, { action: 'start' }],
   set_status: [{ status: 'away', message: 'out' }],

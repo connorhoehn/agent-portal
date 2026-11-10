@@ -30,7 +30,7 @@ import { DELEGATION_REASON_MIN, DELEGATION_WINDOWS, JUSTIFICATION_MIN, delegatio
 import { WORK_PLANNERS, WORK_RUNNERS, matchByName } from './work.ts';
 import { dialogueRows, matchDialogueRow, optionOutcome, type DialogueRow } from '../../pages/decisions/decisionDialogue.ts';
 import {
-  channelTag, ambiguous, deliveryIdFor, done, failed, findByName, localHref, once, pageRowNamed, qs, readFailure, readJson, refused, resolveSprint, samePerson, socialGrantRefusal, workItemRow,
+  channelTag, ambiguous, deliveryIdFor, done, failed, findByName, localHref, once, pageRowNamed, qs, readFailure, readJson, refused, resolveSprint, samePerson, sayLine, socialGrantRefusal, workItemRow,
   type CardAnswer, type ConfirmPlan, type ToolContext, type ToolResult, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 
@@ -79,6 +79,8 @@ interface Resolved {
   noteOnCard?: boolean;
   /** G57: the numbered rows a decision's dialogue offers (its options, Something else…, Reject); `option` names one. */
   choices?: DialogueRow[];
+  /** Coverage (10 November): the note is the answer itself (a consult): the card says "Answer", and a voice may confirm it. */
+  answer?: boolean;
 }
 
 type Resolver = (id: string, ctx: ToolContext) => Promise<Resolved | { result: ToolResult }>;
@@ -247,7 +249,8 @@ const consult: Resolver = async (id, ctx) => {
     title: `the consult "${str(row['question']) ?? id}"`,
     detail: [],
     href: '/iq/work',
-    sends: { approve: { said: 'Answered', needsNote: 'Say the answer as the note.', send: (note) => ({ method: 'POST', url: `/api/lab/consults/${enc(id)}/answer`, body: { answer: note } }) } },
+    sends: { approve: { said: 'Answered', word: 'Answer', needsNote: 'Say the answer as the note.', send: (note) => ({ method: 'POST', url: `/api/lab/consults/${enc(id)}/answer`, body: { answer: note } }) } },
+    answer: true,
   };
 };
 
@@ -399,7 +402,9 @@ const planDecide: VoiceToolPlanner = async (args, ctx) => {
   const card: ConfirmPlan = {
     title: `${chosen.word ?? VERB_WORD[verb]} ${row.title}`,
     // The chosen option first (G57), then what the user said as its why.
-    detail: [...row.detail, ...(option ? [`Option ${option.n}: ${option.label}`] : []), ...(note ? [`${option ? 'Why' : 'Note'}: ${note}`] : [])],
+    detail: [...row.detail, ...(option ? [`Option ${option.n}: ${option.label}`] : []), ...(note ? [`${option ? 'Why' : row.answer ? 'Answer' : 'Note'}: ${note}`] : [])],
+    // The answer is on the card word for word, so the spoken "confirm" may send it (decide is otherwise click-only).
+    ...(row.answer && note ? { confirmBy: 'voice' as const } : {}),
     // Both ways open: the library's toggle and note, starting where the user said; Confirm answers { decision, note }.
     ...(both ? { fields: { decision: verb === 'reject' ? 'reject' : 'approve', notePlaceholder: option ? 'Why (optional)' : row.notePlaceholder ?? (row.sends.reject?.needsNote ? 'Reason (needed to reject)' : 'Note (optional)') } } : {}),
     data: plan,
@@ -446,6 +451,8 @@ const runDecide: VoiceToolRunner = async (_args, ctx, planned, answer?: CardAnsw
     const also = chosen.after?.(body) ?? null;
     const line = `${chosen.said}: ${plan.title}${option ? ` (${optionOutcome(option.label, note ?? '')})` : ''}${also ? `; ${also}` : ''}`;
     const out = done('decided', { ref: `${plan.kind}:${plan.id}`, decision: verb, title: plan.title, href: plan.href, ...(note ? { note } : {}), ...(option ? { option: option.label } : {}), ...(prUrl ? { delivered: true } : {}) }, line);
+    // A consult's answer is said back as the words sent (coverage, 10 November), not the long question.
+    if (plan.kind === 'consult' && note) return { ...out, output: { ...out.output, say: sayLine(`Answered the agent: "${note}"`) } };
     // The strip's summary is capped; the spoken line keeps the unblocked story whole (still one sentence).
     return also ? { ...out, output: { ...out.output, say: `${line}.` } } : out;
   }, () => done('decided', { ref: `${plan.kind}:${plan.id}`, decision: verb, title: plan.title, alreadyDecided: true }, `${plan.title} was already decided; nothing was sent again`));

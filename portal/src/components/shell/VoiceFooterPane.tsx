@@ -85,7 +85,7 @@ import { useSharedNotificationsOptional } from './SharedNotifications';
 import { VoiceJobTracker, jobNotification, type JobNotice } from '../../lib/voice/work';
 import { addLocalNotification, getLocalNotifications } from '../../lib/localNotifications';
 import { subscribeWorkEvents } from '../../hooks/useWorkEvents';
-import { ResultMemory, type CallAccess, type CommandOutputView, type ComputeAccess, type DeliveryRecord, type PresenceAccess, type PresencePerson, type SocialAccess, type ToolContext, type VoiceComputer } from '../../lib/voice/tools';
+import { ResultMemory, type BellNotification, type CallAccess, type CommandOutputView, type ComputeAccess, type DeliveryRecord, type PresenceAccess, type PresencePerson, type SocialAccess, type ToolContext, type VoiceComputer } from '../../lib/voice/tools';
 import { useCallHost } from '../../lib/conversationCall';
 import { useSocialCall } from '../../pages/social/useSocialCall';
 import { SocialSendError, sendAndWaitForSocialChatAck, socialChatError, socialChatErrorCode, type SocialSendFailure } from '../../pages/social/socialChatDelivery';
@@ -356,6 +356,7 @@ function VoiceFooterPane() {
   }), []);
   useEffect(() => () => jobs.dispose(), [jobs]);
 
+  const bellNotes = useRef<ReadonlyArray<BellNotification> | null>(null);
   const controller = useMemo(() => new VoiceController({
     fetch: (url, init) => fetch(url, init),
     media: browserMedia(),
@@ -379,6 +380,8 @@ function VoiceFooterPane() {
       socialRequestItemId: live.current.socialRequestItemId,
       results: live.current.results,
       inbox: live.current.inbox,
+      // Coverage (10 November): the bell's list, backlog included, for summary review.
+      notifications: () => bellNotes.current ?? [],
       toast: {
         pending: (title, detail) => toastPending(title, detail),
         success: (id, title, detail) => { toastSuccess(id, title, detail); },
@@ -452,6 +455,7 @@ function VoiceFooterPane() {
   const notifications = useSharedNotificationsOptional();
   const seenNotes = useRef<Set<string> | null>(null);
   const noteList = notifications?.notifications;
+  bellNotes.current = noteList ?? null;
   useEffect(() => {
     const list = noteList ?? [];
     if (!seenNotes.current) { seenNotes.current = new Set(list.map((n) => n.id)); return; }

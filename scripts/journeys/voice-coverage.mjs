@@ -398,7 +398,41 @@ const C5 = {
   },
 };
 
-const CAPABILITIES = { C1, C2, C2B, C3, C4, C5 };
+/** C6: what needs review, the agent's question, and a spoken answer (Nora, who may answer an agent). */
+const C6 = {
+  title: 'Review queue and an agent question answered by voice', persona: 'nora',
+  async run(s, page) {
+    await s('voice: "What needs my review?", "Read the agent\'s question.", "Answer: riskiest two first." then "Confirm."', async () => {
+      await go(page, '/iq/work');
+      await waitText(page, 'body', /Which customer tenant goes first/);
+      const consults = (await json(page, '/api/lab/consults?status=pending')).consults;
+      const proposals = (await json(page, '/api/work/proposals?status=pending')).proposals;
+      const id = consults[0].id;
+      const sent = page.waitForResponse((r) => r.url().includes(`/api/lab/consults/${id}/answer`) && r.request().method() === 'POST', { timeout: 30000 });
+      await startVoice(page, [
+        { said: 'What needs my review?', call: { name: 'summary', arguments: { kind: 'review', since: null } } },
+        { said: "Read me the agent's question.", call: { name: 'get', arguments: { ...GET, ref: `consult:${id}` } } },
+        { said: 'Tell it: riskiest two first, while the shim is warm.', call: { name: 'decide', arguments: { ref: `consult:${id}`, decision: 'approve', note: 'Riskiest two first, while the shim is warm.', option: null } } },
+        { said: 'Confirm.', on: 'card' },
+      ]);
+      const review = await nthOutput(page, 1);
+      const a = terseSay(review, 'review', new RegExp(`^\\d+ things? needs? you: ${consults.length} agent question${consults.length > 1 ? 's' : ''}, ${proposals.length} proposals`));
+      const b = terseSay(await nthOutput(page, 2), 'agent question', `The agent asks: ${consults[0].question.match(/^.+?[.?!](?=\s|$)/)[0]}`);
+      await page.getByTestId('voice-confirm-card').waitFor({ timeout: 15000 });
+      const card = await text(page, '[data-testid=voice-confirm-card]');
+      check(/Answer: Riskiest two first, while the shim is warm\./.test(card), `the card does not show the answer: ${card.slice(0, 200)}`);
+      const r = await sent.catch(() => { throw new StepFailure('the spoken confirm sent no answer (is the card still click-only?)'); });
+      check(r.status() < 300, `POST /api/lab/consults/${id}/answer answered ${r.status()}`);
+      const c = terseSay(await nthOutput(page, 3, 20000), 'answer', 'Answered the agent: "Riskiest two first, while the shim is warm."');
+      const after = (await json(page, '/api/lab/consults?status=pending')).consults;
+      check(!after.some((x) => x.id === id), 'the consult is still pending');
+      await stopVoice(page);
+      return { say: [a, b, c] };
+    });
+  },
+};
+
+const CAPABILITIES = { C1, C2, C2B, C3, C4, C5, C6 };
 
 // ── the run ──────────────────────────────────────────────────────────────────
 

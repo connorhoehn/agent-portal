@@ -387,7 +387,7 @@ export function getParts(tenant: string | null): string[] {
  * pipelines: what failed and the dead letters; access: its summary.
  */
 export const SUMMARY_KINDS: Readonly<Record<string, readonly string[]>> = {
-  orgiq: ['sweeps', 'sprint', 'work', 'fleet', 'machines', 'health', 'ingest', 'today', 'unread', 'live'],
+  orgiq: ['sweeps', 'sprint', 'review', 'work', 'fleet', 'machines', 'health', 'ingest', 'today', 'unread', 'live'],
   social: ['live', 'unread'],
   assessment: ['rollup', 'live', 'unread'],
   pipelines: ['pipelines', 'live', 'unread'],
@@ -544,7 +544,7 @@ export const DECIDE_SAYS: Readonly<Record<string, string>> = {
   change: 'an agent change (approve, reject, or deliver once approved)',
   'runbook-proposal': 'a runbook proposal (accept or reject; a rejection needs a note)',
   proposal: 'a graph change proposal (approve or reject)',
-  consult: 'a computer\'s consult (approve, with the answer as the note)',
+  consult: 'an agent\'s question (approve, the user\'s spoken answer as the note)',
   design: 'a design thread (approve or reject the sign-off)',
   decision: 'a waiting decision (resolve with an option, or the outcome and why as note; or reject)',
   draft: 'a finished assessment draft (accept or discard)',
@@ -758,13 +758,13 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     // toolsForTenant names the tenant's own kinds in the description it renders.
     description: 'Read one aggregate as a few figures: what failed since a time ("what failed last night"), the work queue, the fleet, paired machines, platform health, ingestion, what is on today, unread discussions, who is live, the program rollup or the access summary.',
     parameters: obj({
-      kind: str('Which aggregate: "sweeps" (sweep and bot runs that failed, open findings), "sprint" (the sprint in view or the user\'s: left, done, blocked on what), "work" (the work queue), "fleet" (the computers), "machines" (paired machines), "health" (agent runs in the last 24 hours), "ingest", "today", "unread" (discussions), "live" (who is online, in a call), "pipelines" (failed runs, dead letters), "rollup" (the assessment program), "access".', { enum: summaryKinds(null) }),
+      kind: str('Which aggregate: "sweeps" (sweep and bot runs that failed, open findings), "sprint" (the sprint in view or the user\'s: left, done, blocked on what), "review" (what needs the user: agent questions, jobs, proposals, unread notifications), "work" (the work queue), "fleet" (the computers), "machines" (paired machines), "health" (agent runs in the last 24 hours), "ingest", "today", "unread" (discussions), "live" (who is online, in a call), "pipelines" (failed runs, dead letters), "rollup" (the assessment program), "access".', { enum: summaryKinds(null) }),
       since: str(`Since when, for sweeps, pipelines, machines and unread: ${SINCE_WORDS} (default yesterday for sweeps and pipelines).`, { minLength: 1, maxLength: 40 }),
     }, ['kind']),
     kind: 'read', backing: 'search', confirm: false, action: null,
     gate: 'per kind, the page\'s own gate: sweeps the ViewWork floor and the run history\'s read tier else ManageBots; fleet the devbox read tier else ManageDevbox; health ViewObservability; ingest the read tier else ManageIngest / ManageKB; live the Social grant; pipelines ViewPipelines; rollup ViewAssessment; access ViewAccess; the rest a session floor', spend: 'none', idempotent: true,
     says: 'Checking the sweeps since yesterday.', tenants: VOICE_TENANTS,
-    mapsTo: 'GET /api/work/sweeps/runs, GET /api/work/findings, GET /api/bots, GET /api/bots/runs, GET /api/sprints, GET /api/graph/work?sprint=, GET /api/work/summary, GET /api/devbox/boxes, GET /api/bots/active-runs, GET /api/local-compute/nodes, GET /api/local-compute/runs, GET /api/observability/summary, GET /api/ingest/stats, GET /api/admin/kb-registry/health, GET /api/today, GET /api/discussions/unread, GET /api/social/plane/active, GET /api/social/summary, GET /api/pipelines/runs, GET /api/pipelines/queues, GET /api/assessment/rollup, GET /api/access/summary',
+    mapsTo: 'GET /api/work/sweeps/runs, GET /api/work/findings, GET /api/bots, GET /api/bots/runs, GET /api/sprints, GET /api/graph/work?sprint=, GET /api/lab/consults?status=pending, GET /api/work/jobs?status=awaiting_review, GET /api/work/proposals?status=pending, GET /api/work/summary, GET /api/devbox/boxes, GET /api/bots/active-runs, GET /api/local-compute/nodes, GET /api/local-compute/runs, GET /api/observability/summary, GET /api/ingest/stats, GET /api/admin/kb-registry/health, GET /api/today, GET /api/discussions/unread, GET /api/social/plane/active, GET /api/social/summary, GET /api/pipelines/runs, GET /api/pipelines/queues, GET /api/assessment/rollup, GET /api/access/summary',
   },
   {
     name: 'budget',

@@ -575,16 +575,17 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "Read one aggregate as a few figures: what failed since a time ("what failed last night"), the work queue, the fleet, paired machines, platform health, ingestion, what is on today, unread discussions, who is live, the program rollup or the access summary. The kinds here: sweeps, sprint, work, fleet, machines, health, ingest, today, unread, live.",
+    "description": "Read one aggregate as a few figures: what failed since a time ("what failed last night"), the work queue, the fleet, paired machines, platform health, ingestion, what is on today, unread discussions, who is live, the program rollup or the access summary. The kinds here: sweeps, sprint, review, work, fleet, machines, health, ingest, today, unread, live.",
     "name": "summary",
     "parameters": {
       "additionalProperties": false,
       "properties": {
         "kind": {
-          "description": "Which aggregate: "sweeps" (sweep and bot runs that failed, open findings), "sprint" (the sprint in view or the user's: left, done, blocked on what), "work" (the work queue), "fleet" (the computers), "machines" (paired machines), "health" (agent runs in the last 24 hours), "ingest", "today", "unread" (discussions), "live" (who is online, in a call), "pipelines" (failed runs, dead letters), "rollup" (the assessment program), "access".",
+          "description": "Which aggregate: "sweeps" (sweep and bot runs that failed, open findings), "sprint" (the sprint in view or the user's: left, done, blocked on what), "review" (what needs the user: agent questions, jobs, proposals, unread notifications), "work" (the work queue), "fleet" (the computers), "machines" (paired machines), "health" (agent runs in the last 24 hours), "ingest", "today", "unread" (discussions), "live" (who is online, in a call), "pipelines" (failed runs, dead letters), "rollup" (the assessment program), "access".",
           "enum": [
             "sweeps",
             "sprint",
+            "review",
             "work",
             "fleet",
             "machines",
@@ -960,7 +961,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "Decide something waiting on the user, by the ref a list or get result gave: approve or reject (accept and discard for a draft or a runbook proposal, resolve or reject for a decision, with what was decided and why as the note), or deliver an approved change. The user confirms on a card that shows what it is (with its amount where it has one) and may flip the decision or add a note there. List what is waiting first. Here it decides: hitl-approval, a pending transaction (approve or reject; the card shows its amount); change, an agent change (approve, reject, or deliver once approved); runbook-proposal, a runbook proposal (accept or reject; a rejection needs a note); proposal, a graph change proposal (approve or reject); consult, a computer's consult (approve, with the answer as the note); design, a design thread (approve or reject the sign-off); decision, a waiting decision (resolve with an option, or the outcome and why as note; or reject).",
+    "description": "Decide something waiting on the user, by the ref a list or get result gave: approve or reject (accept and discard for a draft or a runbook proposal, resolve or reject for a decision, with what was decided and why as the note), or deliver an approved change. The user confirms on a card that shows what it is (with its amount where it has one) and may flip the decision or add a note there. List what is waiting first. Here it decides: hitl-approval, a pending transaction (approve or reject; the card shows its amount); change, an agent change (approve, reject, or deliver once approved); runbook-proposal, a runbook proposal (accept or reject; a rejection needs a note); proposal, a graph change proposal (approve or reject); consult, an agent's question (approve, the user's spoken answer as the note); design, a design thread (approve or reject the sign-off); decision, a waiting decision (resolve with an option, or the outcome and why as note; or reject).",
     "name": "decide",
     "parameters": {
       "additionalProperties": false,
