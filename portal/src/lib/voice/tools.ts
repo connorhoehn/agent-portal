@@ -28,7 +28,7 @@
 // No React and only `.ts` imports, so `node --test` runs it.
 
 import type { Action } from '../capabilities';
-import { PAGE_ROWS_MAX, type PageRow, type PageTabs, type PublishedPage } from './pageContext.ts';
+import { field, PAGE_ROWS_MAX, type PageRow, type PageTabs, type PublishedPage } from './pageContext.ts';
 import { INBOUND_TEXT_MAX, inboundRef, notificationItem, safeLabel, type InboundMemory } from './inbound.ts';
 import { waitingOn } from '../../pages/projects/budgetAccessModel.ts';
 import type { AccessRequest } from '../accessRequests';
@@ -1171,7 +1171,10 @@ async function getWorkItem(id: string, ctx: ToolContext): Promise<ToolResult> {
   const found = await workItemRow(ctx, id);
   if ('result' in found) return found.result;
   const w = found.row;
-  const next = (await workItemNextStep(ctx, w))?.step ?? null;
+  // The derived step quotes a decision's topic or a criterion: row text, fenced and capped as the page note's
+  // fields are (pageContext.ts field; sweep 12, L4) in both the spoken line and the record.
+  const derived = (await workItemNextStep(ctx, w))?.step;
+  const next = derived ? field(derived) || null : null;
   const summary = typeof w.summary === 'string' && w.summary.trim() ? w.summary.trim() : null;
   const owner = w.assigneeName ? `, owned by ${w.assigneeName}` : ', unassigned';
   const line = `"${w.title}" is ${said(w.status)}${owner}${w.blockedOn ? `; blocked on "${w.blockedOn}"` : next ? `; next: ${next}` : ''}`;

@@ -507,6 +507,7 @@ function ProjectDetailPage() {
     request: prepareJobRequest,
     onDispatched: handleDispatched,
     onEstimateSaved: handleEstimateSaved,
+    decisions: decisions ?? null,
   });
 
   // ComposerPromptDeck owns focus for new and reopened questions. Keeping a

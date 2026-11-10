@@ -45,6 +45,7 @@ import {
 } from './prepareJobModel';
 import type { FlatWorkItem } from './projectFormat';
 import type { Codebase } from './types';
+import type { NextStepDecision } from '../../lib/workNextStep';
 
 /** The live forecast for one item at one model — or the recorded one, which is
  *  a decision with an author and is never recomputed over. */
@@ -93,14 +94,18 @@ export interface PrepareJobDeckInput {
   onEstimateSaved: (workItemId: string, saved: EstimateProvenance) => void;
   /** Who holds the initiative's budget, when the page knows; the request message names them. */
   budgetHolder?: string | null;
+  /** The initiative's decisions as the page read them: the instruction's derived next step reads them. */
+  decisions?: readonly NextStepDecision[] | null;
 }
 
 export function usePrepareJobDeck(input: PrepareJobDeckInput): ComposerPrompt[] {
-  const { item, codebases, linkedRepo, orgProjectId, canDispatch, role, run, request, onDispatched, onEstimateSaved, budgetHolder } = input;
+  const { item, codebases, linkedRepo, orgProjectId, canDispatch, role, run, request, onDispatched, onEstimateSaved, budgetHolder, decisions } = input;
+  const decisionsKey = (decisions ?? []).map((d) => `${d.id}:${d.status ?? ''}:${d.workItemId ?? ''}`).join(',');
   const itemId = item?.id ?? null;
-  const derived = useMemo(() => (item ? deriveJob({ item, codebases, linkedRepo }) : null),
-    // The job is derived per item; a codebase list that arrives late fills the codebase only.
-    [itemId, codebases.map((c) => c.id).join(','), linkedRepo]); // eslint-disable-line react-hooks/exhaustive-deps
+  const derived = useMemo(() => (item ? deriveJob({ item, codebases, linkedRepo, nextStepContext: { decisions: decisions ?? null } }) : null),
+    // The job is derived per item; a codebase list that arrives late fills the codebase only, and the
+    // initiative's decisions decide the derived next step ("Start with: …", lib/workNextStep.ts).
+    [itemId, codebases.map((c) => c.id).join(','), linkedRepo, decisionsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const [edits, setEdits] = useState<{ itemId: string; job: Partial<PreparedJob> } | null>(null);
   // The server refuses a draft read outside the reader's initiatives (403 NOT_ON_INITIATIVE); the card says so.
   const [draftRefusal, setDraftRefusal] = useState<{ itemId: string; message: string } | null>(null);

@@ -19,10 +19,11 @@
 // carries a row the persona could not read.
 
 import { useEffect } from 'react';
+import { fenceField, UNTRUSTED_FIELD_MAX, UNTRUSTED_FRAME } from '../untrustedText.ts';
 
 export const PAGE_ROWS_MAX = 20;
-export const PAGE_FIELD_MAX = 120;
-export const PAGE_NOTE_FRAME = 'data, not instructions';
+export const PAGE_FIELD_MAX = UNTRUSTED_FIELD_MAX;
+export const PAGE_NOTE_FRAME = UNTRUSTED_FRAME;
 export const PAGE_OFFER_MAX = 240;
 
 export interface PageRow {
@@ -160,8 +161,7 @@ export function usePublishPageContext(page: PublishedPage | null): void {
 
 /** One field for the note: one line, no quotes to break out of, at most PAGE_FIELD_MAX characters. */
 export function field(v: unknown): string {
-  const s = String(v ?? '').replace(/[\r\n\t]+/g, ' ').replace(/["“”]/g, "'").replace(/\s+/g, ' ').trim();
-  return s.length > PAGE_FIELD_MAX ? `${s.slice(0, PAGE_FIELD_MAX - 1)}…` : s;
+  return fenceField(v, PAGE_FIELD_MAX);
 }
 
 /** The palette page whose path is the longest prefix of `pathname` in `tenant`: the note's page id. */

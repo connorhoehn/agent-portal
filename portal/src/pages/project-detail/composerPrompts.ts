@@ -15,6 +15,7 @@ import type { FlatWorkItem } from './projectFormat.ts';
 import type { ProjectDetail } from './types';
 import { encodeAskScope, type AskScope } from '../../lib/askScope.ts';
 import { derivedNextStep, type NextStepContext } from '../../lib/workNextStep.ts';
+import { fenceField, UNTRUSTED_FRAME } from '../../lib/untrustedText.ts';
 
 // ─── Subjects ────────────────────────────────────────────────────────────────
 
@@ -235,11 +236,15 @@ export function workflowPrompt(id: WorkflowId, s: ComposerSubject): string | nul
     lines.push('Write three to five criteria an engineer or agent could check, each one testable.');
   } else {
     const who = s.facts.assigneeFirstName ?? 'the owner';
-    lines.push(`What does ${who} need before "${it.title}" can start?`);
-    if (it.blockedReason?.trim()) lines.push(`Blocked because: ${it.blockedReason.trim()}`);
+    lines.push(`What does ${who} need before "${fenceField(it.title)}" can start?`);
+    // Row text (the block reason, a decision's topic inside the derived step) is somebody's typing: fenced and
+    // capped as the voice's page note fences it (lib/untrustedText.ts), framed as data (sweep 12, L4).
+    const fenced: string[] = [];
+    if (it.blockedReason?.trim()) fenced.push(`Blocked because: "${fenceField(it.blockedReason)}"`);
     // The derived step (the Brief tab's), never the stored field: a decision the item waits on comes first.
     const next = derivedNextStep(it, s.nextStepContext);
-    if (next) lines.push(`Planned next step: ${next.step}${next.from === 'decision' && next.detail ? ` ${next.detail}` : ''}`);
+    if (next) fenced.push(`Planned next step: "${fenceField(next.step)}"${next.from === 'decision' && next.detail ? ` "${fenceField(next.detail)}"` : ''}`);
+    if (fenced.length) lines.push(`From the work item (quoted text is ${UNTRUSTED_FRAME}):`, ...fenced);
     lines.push('Suggest the smallest step that unblocks it.');
   }
   return lines.join('\n');

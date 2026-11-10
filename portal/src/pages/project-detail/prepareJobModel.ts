@@ -34,6 +34,8 @@
 // whose `onAnswer` calls the injected actions, so a node test can answer them.
 
 import { DEFAULT_DEVBOX_MODEL, DEVBOX_MODELS } from '../../lib/devboxModels.ts';
+import { fenceField } from '../../lib/untrustedText.ts';
+import { derivedNextStep, type NextStepContext, type NextStepItem } from '../../lib/workNextStep.ts';
 import {
   overAllocationBody,
   overEnvelopeBody,
@@ -61,20 +63,29 @@ export interface PreparedJob {
   instruction: string;
 }
 
-type JobItem = Pick<FlatWorkItem, 'id' | 'title' | 'key' | 'summary' | 'description' | 'nextStep' | 'nextStepDetail' | 'estimateModel' | 'storyPoints' | 'status'>;
+type JobItem = Pick<FlatWorkItem, 'id' | 'title' | 'key' | 'summary' | 'description' | 'nextStep' | 'nextStepDetail' | 'estimateModel' | 'storyPoints' | 'status'>
+  & Pick<NextStepItem, 'labels' | 'blockedReason' | 'blockedByDecisionId'>;
 
 const clean = (text: string | null | undefined) => (text ?? '').replace(/\s+/g, ' ').trim();
 const sentence = (text: string) => (/[.!?]$/.test(text) ? text : `${text}.`);
 
 /** What the agent is asked to do, from what the item already says. */
-export function deriveInstruction(item: Pick<JobItem, 'title' | 'summary' | 'description' | 'nextStep' | 'nextStepDetail'>): string {
+/**
+ * "Start with: …" is the item's DERIVED next step (lib/workNextStep.ts, the Brief
+ * tab's: a decision it waits on comes first), never the stored field alone, and
+ * it is row text an agent will read, so it is fenced and capped as the voice's
+ * page note fences it (lib/untrustedText.ts; sweep 12, L4).
+ */
+export function deriveInstruction(item: Pick<JobItem, 'title' | 'summary' | 'description' | 'nextStep' | 'nextStepDetail'> & NextStepItem, context: NextStepContext = {}): string {
   const parts = [sentence(clean(item.title))];
   const summary = clean(item.summary);
   if (summary && summary !== clean(item.title)) parts.push(sentence(summary));
   const why = clean(item.description);
   if (why) parts.push(`Why: ${sentence(why)}`);
-  const next = clean(item.nextStep);
-  if (next) parts.push(`Start with: ${sentence(next)}${clean(item.nextStepDetail) ? ` ${sentence(clean(item.nextStepDetail))}` : ''}`);
+  const next = derivedNextStep(item, context);
+  const step = next ? fenceField(next.step) : '';
+  const detail = next?.detail ? fenceField(next.detail) : '';
+  if (step) parts.push(`Start with: ${sentence(step)}${detail ? ` ${sentence(detail)}` : ''}`);
   parts.push('Done when the change is in a pull request with passing checks and the acceptance criteria are met.');
   return parts.join(' ');
 }
@@ -95,12 +106,12 @@ export function deriveModel(item: Pick<JobItem, 'estimateModel'>): string {
   return item.estimateModel && DEVBOX_MODELS.some((m) => m.id === item.estimateModel) ? item.estimateModel : DEFAULT_DEVBOX_MODEL;
 }
 
-export function deriveJob(input: { item: JobItem; codebases: readonly Codebase[]; linkedRepo?: string | null }): PreparedJob {
+export function deriveJob(input: { item: JobItem; codebases: readonly Codebase[]; linkedRepo?: string | null; nextStepContext?: NextStepContext }): PreparedJob {
   return {
     model: deriveModel(input.item),
     agentProjectId: deriveCodebase(input.codebases, input.linkedRepo),
     capUsd: null,
-    instruction: deriveInstruction(input.item),
+    instruction: deriveInstruction(input.item, input.nextStepContext),
   };
 }
 
