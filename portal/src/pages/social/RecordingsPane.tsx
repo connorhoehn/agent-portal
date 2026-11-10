@@ -96,8 +96,8 @@ export default function RecordingsPane({ me, nameOf, rooms, mayManage, postTarge
         <EmptyState testId="social-empty-recordings" align="start" title="No recordings yet"
           description="A recorded call lands here for everyone who was on it. Nothing you were on has been recorded in this workspace." />
       ) : (
-        <Inline gap="lg" align="start" wrap={false}>
-          <Stack gap="none" className="w-96 shrink-0" data-testid="social-recording-list">
+        <Inline gap="lg" align="start" wrap>
+          <Stack gap="none" className="w-96 max-w-full shrink-0" data-testid="social-recording-list">
             <RecordingList
               recordings={items}
               {...(selectedId ? { selectedId } : {})}
