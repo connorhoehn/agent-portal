@@ -473,6 +473,30 @@ describe('machine-callback secrets', () => {
   });
 });
 
+describe('signed-invoke nonces are shared across replicas (AGENT_INVOKE_REPLAY_TABLE)', () => {
+  const VERIFIERS = ['supervisor', 'search', 'advisor', 'assessment-scorer', 'assessment-drafter'];
+
+  test('every agent that verifies a signed invoke names the table and may only put on the agents\' keys', () => {
+    for (const agent of ALL_AGENTS) {
+      const env = envOf(phaseTwo, agent);
+      const st = statementsForRole(phaseTwo, `orgiq-${agent}-execution-role`).filter((x: any) => x.Sid === 'SignedRequestReplayPut');
+      if (!VERIFIERS.includes(agent)) {
+        assert.equal(env.AGENT_INVOKE_REPLAY_TABLE, undefined, agent);
+        assert.equal(st.length, 0, agent);
+        continue;
+      }
+      assert.equal(env.AGENT_INVOKE_REPLAY_TABLE, 'orgiq-signed-request-replay', agent);
+      assert.equal(st.length, 1, agent);
+      assert.deepEqual(actionsOf(st[0]!), ['dynamodb:PutItem'], agent);
+      assert.match(flatten(st[0]!.Resource), /table\/orgiq-signed-request-replay"/, agent);
+      assert.deepEqual((st[0] as any).Condition, {
+        Null: { 'dynamodb:LeadingKeys': 'false' },
+        'ForAllValues:StringNotLike': { 'dynamodb:LeadingKeys': ['service-envelope#*'] },
+      }, agent);
+    }
+  });
+});
+
 describe('model policy', () => {
   test('the default model is AWS-native Nova — no Anthropic model in the OrgIQ fleet', () => {
     for (const agent of ALL_AGENTS) {

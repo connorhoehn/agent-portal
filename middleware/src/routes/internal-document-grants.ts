@@ -11,7 +11,7 @@ internalDocumentGrantsRouter.post('/session', async (req, res) => {
   if (!serviceAuthConfigured(DOCUMENT_POLICY_SERVICE_AUTH)) {
     res.status(503).json({ error: 'document policy authentication unavailable' }); return;
   }
-  if (!hasServiceAuth(req, DOCUMENT_POLICY_SERVICE_AUTH)) {
+  if (!(await hasServiceAuth(req, DOCUMENT_POLICY_SERVICE_AUTH))) {
     res.status(401).json({ error: 'unauthorized' }); return;
   }
   const { sub, tenantId, sessionId } = req.body ?? {};

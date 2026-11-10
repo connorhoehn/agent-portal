@@ -9,6 +9,7 @@ import { trustedService } from './service-trust';
 import { dbMasterSecret } from './context-flags';
 import { namedSecret, readNamedSecrets, refusePlaintext } from './callback-secrets';
 import { DEFAULT_MODEL_REGISTRY_FILE, loadModelRegistry, primaryModelFor } from './model-registry';
+import { replayPutStatement, replayTableName } from './replay-table';
 
 /**
  * Resolve `<repo>:latest` to a digest-pinned URI at synth time so CFN sees a
@@ -491,6 +492,11 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
       const callbacks = CALLBACKS.filter(c => c.agents === null || (c.agents as readonly string[]).includes(agentName))
         .map(c => ({ env: c.env, ...namedSecret(this, prefix, c.slug) }));
       executionRole.addToPolicy(readNamedSecrets('CallbackSecrets', callbacks.map(c => c.arn)));
+      // Agents that verify a signed invoke share their nonces across replicas
+      // through the replay table (agents/_shared/replay_store.py): a put on
+      // the agents' side of its key split, nothing else.
+      const verifiesInvokes = callbacks.some(c => c.env === 'AGENT_INVOKE_SECRET');
+      if (verifiesInvokes) executionRole.addToPolicy(replayPutStatement(this, prefix, 'agent'));
 
       // Wildcard over all KBs in this account — covers the default orgiq KB and
       // any new KBs provisioned via the portal registry wizard (Wave 1+).
@@ -649,6 +655,8 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
           ...(props.approvalsRequestSecret && { APPROVALS_REQUEST_SECRET: props.approvalsRequestSecret }),
           ...(props.harnessTraceSecret && { HARNESS_TRACE_SECRET: props.harnessTraceSecret }),
           ...(props.assessmentRunCompleteSecret && { ASSESSMENT_RUN_COMPLETE_SECRET: props.assessmentRunCompleteSecret }),
+          // Single-use signed invokes across replicas (agents/_shared/replay_store.py).
+          ...(verifiesInvokes && { AGENT_INVOKE_REPLAY_TABLE: replayTableName(prefix) }),
           // Where those callbacks go — see `middlewareUrl` on the props.
           ...(props.middlewareUrl && { MIDDLEWARE_URL: props.middlewareUrl }),
         },

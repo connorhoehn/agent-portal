@@ -25,6 +25,26 @@ function bucketByName(suffix: string): [string, any] {
 
 const throwaway = Template.fromStack(foundationStack({ protectData: 'false' }));
 
+describe('the signed-request replay table (lib/replay-table.ts)', () => {
+  test('keyed by nonce_hash, TTL on expires_at, on-demand, DESTROY like the sessions table', () => {
+    template.hasResource('AWS::DynamoDB::Table', {
+      DeletionPolicy: 'Delete',
+      Properties: Match.objectLike({
+        TableName: 'orgiq-signed-request-replay',
+        KeySchema: [{ AttributeName: 'nonce_hash', KeyType: 'HASH' }],
+        AttributeDefinitions: [{ AttributeName: 'nonce_hash', AttributeType: 'S' }],
+        BillingMode: 'PAY_PER_REQUEST',
+        TimeToLiveSpecification: { AttributeName: 'expires_at', Enabled: true },
+      }),
+    });
+  });
+
+  test('the agent base role is granted nothing on it (the writers\' grants live with their roles)', () => {
+    const st = statementsForRole(template, 'orgiq-agent-base-role');
+    assert.ok(!JSON.stringify(st).includes('SignedRequestReplay'));
+  });
+});
+
 describe('protectData (the default) keeps the documents bucket', () => {
   test('the documents bucket is RETAIN; the artifacts bucket is still DESTROY', () => {
     const [, docs] = bucketByName('documents');

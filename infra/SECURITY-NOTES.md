@@ -147,6 +147,14 @@ The infrastructure half of `docs/microvm-runner-design.md` (§2, §5, §7, §11,
   4. Re-point the registry's default row with the corpus load or `/admin/knowledge` adoption (it reads `DataSourceId`).
 - **Not covered.** Knowledge bases created at run time by the registry (`/admin/knowledge`) are separate knowledge bases with their own data source, outside this stack. Presigned landing-zone uploads cannot write a sidecar; the backfill covers them until the landing zone writes one itself.
 
+## Signed-request replay table
+
+- **The weakness.** A signed request carries a fresh nonce, and each verifier remembered spent nonces only in its own process. With more than one middleware replica, or an agent runtime serving one endpoint from several replicas, a captured signed request could be accepted once more per replica inside its 70 second window.
+- **The fix.** OrgIQ-Foundation creates `<prefix>-signed-request-replay`: string partition key `nonce_hash`, TTL on `expires_at`, on-demand, default encryption like the other Foundation tables, and DESTROY (its items live for one signature window). Each verifier keeps its in-process cache in front and then claims the nonce with one conditional put; a live item means another replica already accepted it.
+- **Two writers, one table.** The middleware (`SERVICE_AUTH_REPLAY_TABLE`, `middleware/src/lib/service-nonce-store.ts`) writes keys prefixed `service-envelope#`; the agents that verify signed invokes (`AGENT_INVOKE_REPLAY_TABLE`, `agents/_shared/replay_store.py`) write a bare SHA-256 digest. Each role gets `dynamodb:PutItem` only, on this table only, with `dynamodb:LeadingKeys` pinning it to its side of the prefix, so neither writer can spend the other's nonces and nobody can read, scan or delete.
+- **Fail closed.** With the variable set, any store error (throttling, no permission, a missing table, an unreachable endpoint, a client that cannot be built) refuses the request. Unset keeps the in-process cache alone, which is what local runs use. `*_DYNAMODB_ENDPOINT` points either verifier at a local DynamoDB-compatible store; it is not set in the cloud.
+- **Order.** Deploy OrgIQ-Foundation before the runtimes and the middleware: once they carry the variable, a missing table refuses every signed request.
+
 ## Open items
 
 - **SpanProjector and PromptCanary still use the master secret.** They write observability tables and could run as `orgiq_app_middleware` or a new observability role.

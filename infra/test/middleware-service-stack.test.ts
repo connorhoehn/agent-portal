@@ -285,6 +285,29 @@ describe('routing and health', () => {
   });
 });
 
+describe('signed-envelope nonces are shared across replicas (SERVICE_AUTH_REPLAY_TABLE)', () => {
+  test('the container names the replay table', () => {
+    const env = ((containerDefinition(closedTemplate).Environment ?? []) as any[]);
+    assert.equal(env.find((e) => e.Name === 'SERVICE_AUTH_REPLAY_TABLE')?.Value, 'orgiq-signed-request-replay');
+  });
+
+  test('the task role may only put, on that table, on the middleware\'s key prefix', () => {
+    const statements = Object.values<any>(closedTemplate.findResources('AWS::IAM::Policy'))
+      .flatMap((p) => (p.Properties?.PolicyDocument?.Statement ?? []) as any[]);
+    const st = statements.filter((s) => s.Sid === 'SignedRequestReplayPut');
+    assert.equal(st.length, 1);
+    assert.equal(st[0].Action, 'dynamodb:PutItem');
+    assert.match(JSON.stringify(st[0].Resource), /table\/orgiq-signed-request-replay"/);
+    assert.deepEqual(st[0].Condition, {
+      Null: { 'dynamodb:LeadingKeys': 'false' },
+      'ForAllValues:StringLike': { 'dynamodb:LeadingKeys': ['service-envelope#*'] },
+    });
+    // No other statement reaches the table.
+    const others = statements.filter((s) => s.Sid !== 'SignedRequestReplayPut');
+    assert.ok(!JSON.stringify(others).includes('signed-request-replay'));
+  });
+});
+
 describe('IAM scoping that is easy to widen by accident', () => {
   test('devbox shell/stop permissions are scoped to devbox runtimes only', () => {
     // InvokeAgentRuntimeCommandShell on * would hand every runtime an

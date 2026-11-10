@@ -120,7 +120,7 @@ Sweep 10 (10 November, §10 "Sweep 10") closed the rest of that review: the trac
 
 Still open from these items:
 
-- The invoke replay cache across replicas: the shared store is built (10 November, round 3, `b5c0c8eb`; `agents/_shared/replay_store.py`). With `AGENT_INVOKE_REPLAY_TABLE` set, the in-process cache (its bounds still refuse first) is layered over a conditional put into that DynamoDB-compatible table, keyed by a hash of the nonce, carrying the caller key and the run, expiring with the window; a store error refuses the invoke. Left: create the table (partition key `nonce_hash`, TTL on `expires_at`) and set the variable on any runtime that serves one endpoint from several replicas. The middleware's own service-envelope nonce cache (`lib/service-auth.ts`) is still per process; the BFF runs as one replica.
+- Replay across replicas: built and wired, not deployed. The agents' invoke replay store (`b5c0c8eb`, `agents/_shared/replay_store.py`) and now the middleware's service-envelope nonces (`lib/service-nonce-store.ts`, `SERVICE_AUTH_REPLAY_TABLE`) both layer their in-process cache over a conditional put into one table, `<prefix>-signed-request-replay` in OrgIQ-Foundation, separated by key prefix and by `dynamodb:LeadingKeys` on put-only grants; a store error refuses the request. The middleware task and the five invoke-verifying runtimes carry the variable (`infra/SECURITY-NOTES.md`, "Signed-request replay table"). Left: deploy Foundation before the runtimes and the middleware.
 - The realtime-modules proxy client still accepts a signing secret in a browser. The portal is pinned by a test never to pass one; the library-side refusal is a realtime-modules item.
 - The knowledge-base change needs its migration run in a deployed environment (replace the data source, backfill the tenant metadata, re-ingest). Uploads by link write the same tenant metadata sidecar as file uploads since `afc0b257` (10 November, round 3); the backfill still covers link uploads made before it.
 
@@ -729,7 +729,7 @@ Four items the regression walk left open, one commit each.
 ### Open after this run
 
 - The owner's decisions: rewrite history or not; a fine-grained CI token; the Docker registry prefix default in `scripts/build.sh`.
-- Deploy notes that only matter on AWS: the middleware and the agents ship together (signed block with a nonce); with more than one replica, create the replay table and set `AGENT_INVOKE_REPLAY_TABLE` (round 3); documents need tenant metadata backfilled (`infra/SECURITY-NOTES.md`); one new column (`devbox_boxes.last_occupant`).
+- Deploy notes that only matter on AWS: the middleware and the agents ship together (signed block with a nonce); the replay table is in OrgIQ-Foundation and the middleware and invoke-verifying runtimes name it, so Foundation deploys first (round 3); documents need tenant metadata backfilled (`infra/SECURITY-NOTES.md`); one new column (`devbox_boxes.last_occupant`).
 - Not proven on a live model: the voice passes drive scripted calls. The owner's 13:53 session on 9 November (four and a half silent minutes with no stopped round) has no proven cause; the diagnostics will explain the next one.
 - Library gaps: `DataTable` has no column-priority prop; ui-components has no ESLint installed, so its safe-URL rule runs as a script.
 - Traces on AWS (leftovers 2): the owner annotations are unproven on a live runtime. GetTraceSummaries only sees indexed spans, and Transaction Search indexes a sample (1% by default), so a member sees only the sampled share of their own traces until the indexing share is raised (`xrayIndexingPercent`, sweep 12).
@@ -743,6 +743,7 @@ The code items of the two open lists, one commit each on branch `worktree-agent-
 - **Link-upload tenant metadata** (`afc0b257`). The upload-link path writes the same sidecar as the file path; the tenant-metadata test covers both and checks they write the same key and sidecar.
 - **Voice catalogue headroom** (`9171c0b9`). The delegation's fixed input went from 29,265 to 26,565 characters; the 20-turn peak from 37,364 to 34,664 of 38,000 (headroom 636 to 3,336). What only the voice needs (confirm cards, kind lists the enums carry) moved to a voice-only line; the voice prompt keeps every sentence.
 - **Shared replay store** (`b5c0c8eb`). See "Open security items".
+- **Middleware nonces across replicas, and the table.** The service-envelope nonce cache sits behind a store interface: in-process by default, a conditional put into the shared replay table when `SERVICE_AUTH_REPLAY_TABLE` is set, failing closed. The table, the put-only grants and both variables are in the CDK stacks. See "Open security items".
 - **Voice dispatch "Start with"** (`e494c986`). It reads the initiative's decisions, as the drawer does; a failed read falls back to the item's own step.
 - **Private binding after a lost Social grant** (`e74113d8`). A private binding counts only when the binding read admits the caller as well as membership; otherwise the note goes on the thread their pane shows.
 - **Not done here.** The wire routes snapshot's hand-added discussion row still waits for the next full capture.

@@ -104,8 +104,10 @@ const slug = (title: string): string =>
 
 /** Mark a request that carries a valid service credential. Never rejects. */
 const machineMark: RequestHandler = (req, res, next) => {
-  if (hasServiceAuth(req, LAB_CALLBACK_SERVICE_AUTH)) res.locals['machine'] = true;
-  next();
+  void hasServiceAuth(req, LAB_CALLBACK_SERVICE_AUTH).then((ok) => {
+    if (ok) res.locals['machine'] = true;
+    next();
+  }, next);
 };
 /** Run `human` only for a caller that is not a machine. */
 const unlessMachine = (human: RequestHandler): RequestHandler => (req, res, next) => {

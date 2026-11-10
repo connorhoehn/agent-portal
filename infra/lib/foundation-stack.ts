@@ -7,6 +7,7 @@ import * as cr from 'aws-cdk-lib/custom-resources';
 import type { Construct } from 'constructs';
 import { trustedService } from './service-trust';
 import { protectData as protectDataFlag } from './context-flags';
+import { REPLAY_PARTITION_KEY, REPLAY_TTL_ATTRIBUTE, replayTableName } from './replay-table';
 
 export interface FoundationStackProps extends cdk.StackProps {
   readonly prefix?: string;
@@ -27,6 +28,8 @@ export class FoundationStack extends cdk.Stack {
   public readonly sessionsTable: dynamodb.Table;
   /** DynamoDB table for leaderboard snapshots */
   public readonly leaderboardsTable: dynamodb.Table;
+  /** Single-use nonces for signed service requests, shared across replicas (lib/replay-table.ts) */
+  public readonly replayTable: dynamodb.Table;
   /** Base execution role for AgentCore Runtime agents */
   public readonly agentBaseRole: iam.Role;
 
@@ -153,6 +156,19 @@ export class FoundationStack extends cdk.Stack {
       partitionKey: { name: 'personId', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'boardId', type: dynamodb.AttributeType.STRING },
       projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    // Signed-request replay nonces: the middleware's service envelopes and the
+    // agents' signed invokes, so a captured request is single-use across every
+    // replica. Items live for one signature window (TTL); nothing in it is
+    // worth keeping, so it is DESTROY like the sessions table. The writers'
+    // put-only grants live with their roles (lib/replay-table.ts).
+    this.replayTable = new dynamodb.Table(this, 'SignedRequestReplayTable', {
+      tableName: replayTableName(prefix),
+      partitionKey: { name: REPLAY_PARTITION_KEY, type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      timeToLiveAttribute: REPLAY_TTL_ATTRIBUTE,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
     // -------------------------------------------------------------------

@@ -40,8 +40,10 @@ const RUNBOOK_ID = /^rb-[a-z0-9][a-z0-9-]{1,58}$/;
 
 /** One hasServiceAuth per request (a signed envelope's nonce is single-use). */
 const machineMark: RequestHandler = (req, res, next) => {
-  if (hasServiceAuth(req, LAB_CALLBACK_SERVICE_AUTH)) res.locals['machine'] = true;
-  next();
+  void hasServiceAuth(req, LAB_CALLBACK_SERVICE_AUTH).then((ok) => {
+    if (ok) res.locals['machine'] = true;
+    next();
+  }, next);
 };
 const unlessMachine = (human: RequestHandler): RequestHandler => (req, res, next) => {
   if (res.locals['machine']) { next(); return; }

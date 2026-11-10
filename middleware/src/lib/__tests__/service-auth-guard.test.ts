@@ -109,14 +109,14 @@ describe('secret hygiene', () => {
     expect(serviceAuthConfigured(SPEC)).toBe(false);
   });
 
-  it('trims the secret so a pasted trailing newline still matches', () => {
+  it('trims the secret so a pasted trailing newline still matches', async () => {
     process.env[SPEC.envVar] = 'sesame\n';
     const req = { headers: { [SPEC.header]: 'sesame' } } as unknown as express.Request;
-    expect(hasServiceAuth(req, SPEC)).toBe(true);
+    await expect(hasServiceAuth(req, SPEC)).resolves.toBe(true);
   });
 
-  it('hasServiceAuth is false when nothing is configured, header or not', () => {
+  it('hasServiceAuth is false when nothing is configured, header or not', async () => {
     const req = { headers: { [SPEC.header]: 'sesame' } } as unknown as express.Request;
-    expect(hasServiceAuth(req, SPEC)).toBe(false);
+    await expect(hasServiceAuth(req, SPEC)).resolves.toBe(false);
   });
 });

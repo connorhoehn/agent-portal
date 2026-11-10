@@ -22,6 +22,7 @@ import { microvmLabApiBase } from './microvm-network-stack';
 import { contextFlag } from './context-flags';
 import type { Construct } from 'constructs';
 import { trustedService } from './service-trust';
+import { replayPutStatement, replayTableName } from './replay-table';
 import {
   realtimeJwtSecretArnParameterName, socialPlatformInternalUrl, socialRedisUrlParameterName, socialTablePrefix,
 } from './social-stack';
@@ -527,6 +528,10 @@ export class MiddlewareServiceStack extends cdk.Stack {
         `${props.sessionsTableArn}/index/*`,
       ],
     }));
+
+    // Signed-envelope nonces shared across replicas (SERVICE_AUTH_REPLAY_TABLE):
+    // a conditional put on the middleware's own key prefix, nothing else.
+    taskRole.addToPolicy(replayPutStatement(this, prefix, 'middleware'));
 
     // S3 — documents read/write (landing-zone uploads + deletes) + artifacts read/write
     taskRole.addToPolicy(new iam.PolicyStatement({
@@ -1057,6 +1062,8 @@ export class MiddlewareServiceStack extends cdk.Stack {
       // Foundation tables
       SCORES_TABLE: props.scoresTableName,
       SESSIONS_TABLE: props.sessionsTableName,
+      // Single-use signed-envelope nonces across replicas (lib/service-nonce-store.ts).
+      SERVICE_AUTH_REPLAY_TABLE: replayTableName(prefix),
 
       // Foundation buckets. The task role is granted S3 on both above; without
       // these two it could not name the bucket it had access to, so every

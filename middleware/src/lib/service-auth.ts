@@ -82,10 +82,13 @@
 // unchanged and ignore the flag. An unset secret answers 503 unless
 // INSECURE_DEV_MODE=true, and `serviceAuthOr` never opens.
 //
-// REPLAY SCOPE. The nonce cache is per process. The BFF runs as one replica
-// today (the single-gateway safeguard pins it); with more replicas a captured
-// request could be replayed once per replica inside the 70 s window. Moving the
-// cache to Redis is the follow-up if that safeguard is lifted.
+// REPLAY SCOPE. The in-process nonce cache stops a replay to the same process.
+// With SERVICE_AUTH_REPLAY_TABLE set, a nonce the process has not seen is also
+// claimed with a conditional put into a shared DynamoDB-compatible table
+// (lib/service-nonce-store.ts), so a captured request cannot be accepted again
+// on another replica inside the 70 s window. Once that table is configured any
+// store error refuses the request (fail closed); unset keeps the process-only
+// cache, which is enough for the single replica the BFF runs as today.
 //
 // Ordered rollout: docs/agentcore-preview-surface.md §6a.
 
@@ -94,6 +97,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import { SERVICE_AUTH_HEADER, verifyServiceRequest } from '@connorhoehn/service-runtime';
 import { insecureDevMode } from './insecure-dev-mode.js';
+import { sharedNonceStore, type NonceStore } from './service-nonce-store.js';
 
 export interface SignedServiceAuth {
   /** Audience prefix the signer binds; the nonce is appended as `#<nonce>`. */
@@ -214,25 +218,56 @@ export function captureRawBody(req: IncomingMessage, _res: ServerResponse, buf: 
   if (req.headers[SERVICE_AUTH_HEADER.toLowerCase()]) (req as RawBodyRequest).rawBody = buf;
 }
 
-// Single-use nonces: `<serviceId>:<nonce>` → expiry (ms). Insertion order is
-// expiry order (fixed window), so sweeping from the front is enough.
-const seenNonces = new Map<string, number>();
-const NONCE_CACHE_MAX = 50_000;
-const NONCE_WINDOW_MS = (ENVELOPE_TTL_SEC + ENVELOPE_TOLERANCE_SEC) * 1000;
+/**
+ * Single-use nonces: the in-process cache in front (a replay to the same
+ * process never leaves it), then the shared store when one is configured.
+ * One guard per process; tests build a second one to stand in for another
+ * replica.
+ */
+export class ServiceNonceGuard {
+  // `<serviceId>:<nonce>` → expiry (ms). Insertion order is expiry order
+  // (fixed window), so sweeping from the front is enough.
+  private readonly seen = new Map<string, number>();
 
-function claimNonce(key: string, nowMs: number): boolean {
-  for (const [k, exp] of seenNonces) {
-    if (exp > nowMs && seenNonces.size < NONCE_CACHE_MAX) break;
-    seenNonces.delete(k);
+  constructor(private readonly shared: () => NonceStore | null = () => sharedNonceStore()) {}
+
+  /** 'ok' on first use; 'replayed' if spent here or on another replica; 'store-unavailable' when the shared store cannot decide. */
+  async claim(key: string, nowMs: number): Promise<'ok' | 'replayed' | 'store-unavailable'> {
+    for (const [k, exp] of this.seen) {
+      if (exp > nowMs && this.seen.size < NONCE_CACHE_MAX) break;
+      this.seen.delete(k);
+    }
+    if (this.seen.has(key)) return 'replayed';
+    this.seen.set(key, nowMs + NONCE_WINDOW_MS);
+    const store = this.shared();
+    if (!store) return 'ok';
+    try {
+      return (await store.claim(key, nowMs, NONCE_WINDOW_MS)) ? 'ok' : 'replayed';
+    } catch (e) {
+      noteStoreError(e);
+      return 'store-unavailable';
+    }
   }
-  if (seenNonces.has(key)) return false;
-  seenNonces.set(key, nowMs + NONCE_WINDOW_MS);
-  return true;
+
+  reset(): void { this.seen.clear(); }
 }
 
-/** Test hook — forget every claimed nonce. */
+const NONCE_CACHE_MAX = 50_000;
+const NONCE_WINDOW_MS = (ENVELOPE_TTL_SEC + ENVELOPE_TOLERANCE_SEC) * 1000;
+const processNonces = new ServiceNonceGuard();
+
+let lastStoreErrorLog = 0;
+function noteStoreError(e: unknown): void {
+  const now = Date.now();
+  if (now - lastStoreErrorLog < 60_000) return;
+  lastStoreErrorLog = now;
+  console.error(`[service-auth] the shared replay store refused the write (${(e as Error)?.name ?? 'Error'}); `
+    + 'signed requests are refused until it recovers');
+}
+
+/** Test hook — forget every nonce this process claimed. */
 export function resetServiceNonceCache(): void {
-  seenNonces.clear();
+  processNonces.reset();
 }
 
 export type EnvelopeVerdict =
@@ -243,7 +278,12 @@ export type EnvelopeVerdict =
  * Verify the signed envelope on `req` for `spec` (lane C4). The caller has
  * already established that a secret is configured and the header is present.
  */
-export function verifySignedRequest(req: Request, spec: ServiceAuthSpec, secret: string): EnvelopeVerdict {
+export async function verifySignedRequest(
+  req: Request,
+  spec: ServiceAuthSpec,
+  secret: string,
+  nonces: ServiceNonceGuard = processNonces,
+): Promise<EnvelopeVerdict> {
   if (!spec.signed) return { ok: false, reason: 'unsigned-spec' };
   const header = req.headers[SERVICE_AUTH_HEADER.toLowerCase()];
   const nonce = req.headers[SERVICE_NONCE_HEADER];
@@ -268,7 +308,8 @@ export function verifySignedRequest(req: Request, spec: ServiceAuthSpec, secret:
   }
   if (!result.ok) return { ok: false, reason: result.reason };
   // After the MAC, never before: only a holder of the secret can spend a nonce.
-  if (!claimNonce(`${result.serviceId}:${nonce}`, Date.now())) return { ok: false, reason: 'replayed' };
+  const claimed = await nonces.claim(`${result.serviceId}:${nonce}`, Date.now());
+  if (claimed !== 'ok') return { ok: false, reason: claimed };
   return { ok: true, serviceId: result.serviceId };
 }
 
@@ -283,12 +324,12 @@ export function verifySignedRequest(req: Request, spec: ServiceAuthSpec, secret:
  * static header passes only for unsigned specs or while the transition flag
  * accepts it.
  */
-export function hasServiceAuth(req: Request, spec: ServiceAuthSpec): boolean {
+export async function hasServiceAuth(req: Request, spec: ServiceAuthSpec): Promise<boolean> {
   const secret = serviceSecret(spec);
   if (!secret) return false;
   if (spec.signed) {
     if (req.headers[SERVICE_AUTH_HEADER.toLowerCase()] !== undefined) {
-      return verifySignedRequest(req, spec, secret).ok;
+      return (await verifySignedRequest(req, spec, secret)).ok;
     }
     if (!legacyHeadersAccepted()) return false;
   }
@@ -331,8 +372,10 @@ export function requireServiceAuth(
       res.status(503).json({ error: 'service authentication is not configured' });
       return;
     }
-    if (hasServiceAuth(req, spec)) { next(); return; }
-    res.status(401).json({ error: message });
+    void hasServiceAuth(req, spec).then((ok) => {
+      if (ok) { next(); return; }
+      res.status(401).json({ error: message });
+    }, next);
   };
 }
 
@@ -344,8 +387,10 @@ export function requireServiceAuth(
  */
 export function serviceAuthOr(spec: ServiceAuthSpec, ...human: RequestHandler[]): RequestHandler {
   return (req: Request, res: Response, next: NextFunction): void => {
-    if (hasServiceAuth(req, spec)) { next(); return; }
-    runChain(human, req, res, next);
+    void hasServiceAuth(req, spec).then((ok) => {
+      if (ok) { next(); return; }
+      runChain(human, req, res, next);
+    }, next);
   };
 }
 
