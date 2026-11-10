@@ -72,8 +72,8 @@ export default function DecisionsPage() {
 
   const columns: DataTableColumn<DecisionSummary>[] = [
     {
-      key: 'topic', header: 'Decision', sortable: true,
-      render: (d) => <RecordLink to={href(d.id, search)} className="block max-w-[13rem] truncate" title={d.topic}>{d.topic}</RecordLink>,
+      key: 'topic', header: 'Decision', sortable: true, truncate: true, wrap: 'two-lines', width: '16rem',
+      render: (d) => <RecordLink to={href(d.id, search)}>{d.topic}</RecordLink>,
     },
     {
       // The date and the secondary columns give way as the table narrows (DataTable `responsiveColumns`,
