@@ -160,6 +160,8 @@ describe('machine-callback secrets are injected, never baked into the task defin
     'HARNESS_TRACE_SECRET',
     'ASSESSMENT_RUN_COMPLETE_SECRET',
     'LAB_CALLBACK_SECRET',
+    // Signs the invoke auth block the supervisor verifies (lib/agent-invoke-auth.ts).
+    'AGENT_INVOKE_SECRET',
   ];
   for (const name of names) {
     test(`${name} is an ECS secret and absent from plaintext Environment`, () => {
@@ -177,6 +179,7 @@ describe('machine-callback secrets are injected, never baked into the task defin
       'orgiq-harness-trace-secret',
       'orgiq-assessment-run-complete-secret',
       'orgiq-lab-callback-secret',
+      'orgiq-agent-invoke-secret',
     ]) {
       closedTemplate.hasResourceProperties('AWS::SecretsManager::Secret', {
         Name: secretName,

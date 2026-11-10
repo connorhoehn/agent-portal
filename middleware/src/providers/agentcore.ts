@@ -52,6 +52,7 @@ import type {
   BrowserSession,
 } from './types.js';
 
+import { signedAuthFields } from '../lib/agent-invoke-auth.js';
 import { attempt, reached, unreachable, type Upstream } from '../lib/upstream.js';
 
 import { mockAgents } from '../mock/agent-statuses.js';
@@ -705,7 +706,8 @@ export const realAgentCore: AgentCoreProvider = {
       input_text: payload.message,
       ...(payload.sessionId ? { sessionId: payload.sessionId } : {}),
       ...(payload.userId ? { userId: payload.userId } : {}),
-      ...(payload.auth ? { auth: payload.auth } : {}),
+      // The caller identity, signed for the agent to verify (lib/agent-invoke-auth.ts).
+      ...signedAuthFields(payload),
       ...(payload.history?.length ? { history: payload.history } : {}),
     });
 
@@ -761,7 +763,8 @@ export const realAgentCore: AgentCoreProvider = {
       ...(payload.sessionId ? { sessionId: payload.sessionId } : {}),
       ...(payload.runId ? { runId: payload.runId } : {}),
       ...(payload.userId ? { userId: payload.userId } : {}),
-      ...(payload.auth ? { auth: payload.auth } : {}),
+      // The caller identity, signed for the agent to verify (lib/agent-invoke-auth.ts).
+      ...signedAuthFields(payload),
       ...(payload.history?.length ? { history: payload.history } : {}),
     });
 

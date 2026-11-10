@@ -417,6 +417,17 @@ export class MiddlewareServiceStack extends cdk.Stack {
     });
     harnessRunnerSecret.grantRead(taskRole);
 
+    // Signs the caller identity on every agent invoke (middleware
+    // lib/agent-invoke-auth.ts); the supervisor runtime reads the same secret by
+    // name (AgentCoreRuntimeStack CALLBACKS, `agent-invoke`) and refuses an
+    // unsigned `auth` block. Fixed name for that reason.
+    const agentInvokeSecret = new secretsmanager.Secret(this, 'AgentInvokeSecret', {
+      secretName: `${prefix}-agent-invoke-secret`,
+      description: 'HMAC key for the signed auth block on agent invokes (authSig), verified by the supervisor runtime',
+      generateSecretString: { excludePunctuation: true, passwordLength: 40 },
+    });
+    agentInvokeSecret.grantRead(taskRole);
+
     this.approvalsRequestSecretArn = approvalsRequestSecret.secretArn;
     this.harnessTraceSecretArn = harnessTraceSecret.secretArn;
     this.assessmentRunCompleteSecretArn = assessmentRunCompleteSecret.secretArn;
@@ -1204,6 +1215,8 @@ export class MiddlewareServiceStack extends cdk.Stack {
       LAB_CALLBACK_SECRET: ecs.Secret.fromSecretsManager(labCallbackSecret),
       // The realtime token secret — no blackout window, see RealtimeJwtSecret.
       REALTIME_JWT_SECRET: ecs.Secret.fromSecretsManager(realtimeJwtSecret),
+      // Signs the invoke auth block the supervisor verifies.
+      AGENT_INVOKE_SECRET: ecs.Secret.fromSecretsManager(agentInvokeSecret),
       ...portalSecrets,
       // The GitHub App's id and key (DE-45), only when the secret is wired.
       ...(githubAppSecret ? {

@@ -206,7 +206,7 @@ class ReadDocumentTests(unittest.TestCase):
             "ContentType": "application/pdf", "ContentLength": 1234,
             "Body": mock.Mock(read=lambda: b"%PDF-1.7"),
         }
-        out = json.loads(ing.read_document("wikis/handbook.pdf"))
+        out = json.loads(ing.read_document("uploads/handbook.pdf"))
         self.assertNotIn("content", out)
         self.assertIn("Binary format", out["note"])
 
@@ -215,7 +215,7 @@ class ReadDocumentTests(unittest.TestCase):
             "ContentType": "text/plain", "ContentLength": 999_999,
             "Body": mock.Mock(read=lambda: b"a" * 200_000),
         }
-        out = json.loads(ing.read_document("notes.txt"))
+        out = json.loads(ing.read_document("uploads/notes.txt"))
         self.assertEqual(len(out["content"]), 51200)
 
     def test_undecodable_bytes_do_not_raise(self):
@@ -223,7 +223,7 @@ class ReadDocumentTests(unittest.TestCase):
             "ContentType": "text/plain", "ContentLength": 4,
             "Body": mock.Mock(read=lambda: b"\xff\xfe ok"),
         }
-        out = json.loads(ing.read_document("notes.txt"))
+        out = json.loads(ing.read_document("uploads/notes.txt"))
         self.assertIn("ok", out["content"])
 
 
@@ -240,22 +240,71 @@ class ListDocumentsTests(unittest.TestCase):
     def test_directory_placeholders_are_excluded(self):
         self.s3.list_objects_v2.return_value = {
             "Contents": [
-                {"Key": "wikis/", "Size": 0,
+                {"Key": "uploads/", "Size": 0,
                  "LastModified": datetime(2026, 1, 1, tzinfo=timezone.utc)},
-                {"Key": "wikis/a.md", "Size": 12,
+                {"Key": "uploads/a.md", "Size": 12,
                  "LastModified": datetime(2026, 1, 1, tzinfo=timezone.utc)},
             ]
         }
         out = json.loads(ing.list_documents())
         self.assertEqual(out["count"], 1)
-        self.assertEqual(out["objects"][0]["key"], "wikis/a.md")
+        self.assertEqual(out["objects"][0]["key"], "uploads/a.md")
 
-    def test_prefix_is_forwarded_only_when_given(self):
+    def test_listing_never_leaves_the_run_prefix(self):
         self.s3.list_objects_v2.return_value = {"Contents": []}
         ing.list_documents()
-        self.assertNotIn("Prefix", self.s3.list_objects_v2.call_args.kwargs)
+        self.assertEqual(self.s3.list_objects_v2.call_args.kwargs["Prefix"], "uploads/")
         ing.list_documents(prefix="wikis/")
-        self.assertEqual(self.s3.list_objects_v2.call_args.kwargs["Prefix"], "wikis/")
+        self.assertEqual(self.s3.list_objects_v2.call_args.kwargs["Prefix"], "uploads/wikis/")
+        ing.list_documents(prefix="uploads/2026/")
+        self.assertEqual(self.s3.list_objects_v2.call_args.kwargs["Prefix"], "uploads/2026/")
+        self.s3.list_objects_v2.reset_mock()
+        out = json.loads(ing.list_documents(prefix="uploads/../tenants/"))
+        self.assertIn("outside", out["error"])
+        self.s3.list_objects_v2.assert_not_called()
+
+
+class RunPrefixConfinement(unittest.TestCase):
+    """The model chooses the keys and reads untrusted text, so a run reads only
+    its own prefix: the payload's `s3Prefix`, else uploads/."""
+
+    def setUp(self):
+        self.s3 = mock.Mock()
+        self.s3.get_object.return_value = {
+            "ContentType": "text/plain", "ContentLength": 2, "Body": mock.Mock(read=lambda: b"ok"),
+        }
+        patcher = mock.patch.object(ing, "_s3", self.s3)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        bucket = mock.patch.object(ing, "_documents_bucket", return_value="orgiq-docs")
+        bucket.start()
+        self.addCleanup(bucket.stop)
+
+    def test_a_key_outside_the_run_prefix_is_refused_before_s3(self):
+        for key in ("tenants/assessment/report.md", "notes.txt", "uploads/../tenants/x.md", "uploadsX/a.md"):
+            out = json.loads(ing.read_document(key))
+            self.assertIn("outside", out["error"], key)
+        self.s3.get_object.assert_not_called()
+
+    def test_the_payload_prefix_becomes_the_run_prefix(self):
+        prefix = ing.run_prefix_from({"s3Prefix": "kb/hr-handbook"})
+        self.assertEqual(prefix, "kb/hr-handbook/")
+        token = ing._run_prefix.set(prefix)
+        try:
+            self.assertIn("content", json.loads(ing.read_document("kb/hr-handbook/a.md")))
+            self.assertIn("error", json.loads(ing.read_document("uploads/a.md")))
+        finally:
+            ing._run_prefix.reset(token)
+
+    def test_a_bad_payload_prefix_is_refused(self):
+        for bad in ("../x", "/abs", "a/../b", 42, "a\\b", "."):
+            self.assertIsNone(ing.run_prefix_from({"s3Prefix": bad}), bad)
+        self.assertEqual(ing.run_prefix_from({}), "uploads/")
+
+    def test_the_entrypoint_refuses_a_bad_prefix(self):
+        import asyncio
+        out = asyncio.run(ing.handle({"input_text": "list", "s3Prefix": "../secrets"}))
+        self.assertIn("s3Prefix", out["error"])
 
 
 if __name__ == "__main__":

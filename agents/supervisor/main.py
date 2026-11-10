@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import os
@@ -19,6 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.approval_tool import request_approval  # noqa: E402
 from _shared.prompt_source import resolve_system_prompt
+from _shared.invoke_auth import verified_identity  # noqa: E402
 from _shared.model_registry import invoke_with_fallback, resolve_model  # noqa: E402
 from _shared.agui_stream import with_usage  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
@@ -31,6 +33,7 @@ from _shared.instrumentation import (  # noqa: E402
     reset_active_ctx,
     set_active_ctx,
     short_prompt_hash,
+    text_fingerprint,
     with_orgiq_root,
 )
 
@@ -47,6 +50,32 @@ install_bedrock_usage_capture()
 _current_ctx: ContextVar[TraceContext | None] = ContextVar(
     "supervisor_trace_ctx", default=None
 )
+
+# The verified caller of this invocation: (tenant, sub, conversation id), set
+# by `handle()` from the signed auth block (_shared/invoke_auth.py) and read by
+# `_invoke_sub_agent` to derive each sub-agent's runtime session server-side.
+# None when the caller could not be verified: sub-agents then get a fresh
+# session per call, never one a prompt or a payload chose.
+_invoke_identity: ContextVar[tuple[str, str, str] | None] = ContextVar(
+    "supervisor_invoke_identity", default=None
+)
+
+
+def _sub_agent_session_id(runtime_arn: str) -> str:
+    """The sub-agent runtime session for this conversation, derived server-side.
+
+    The model used to pass `session_id` as a tool argument, so a prompt could
+    name another conversation's sub-agent session and continue it. Now it is a
+    hash of the verified (tenant, caller, conversation) and the sub-agent, so it
+    is stable for one conversation and unreachable from any other. ``""`` when
+    there is no verified conversation.
+    """
+    ident = _invoke_identity.get()
+    if not ident or not ident[2]:
+        return ""
+    tenant, sub, conversation = ident
+    digest = hashlib.sha256(f"{tenant}|{sub}|{conversation}|{runtime_arn}".encode("utf-8")).hexdigest()
+    return f"sub-{digest}"
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -103,7 +132,7 @@ def _get_runtime_arn(agent_name: str) -> str:
     return ""
 
 
-def _invoke_sub_agent(runtime_arn: str, input_text: str, session_id: str = "") -> str:
+def _invoke_sub_agent(runtime_arn: str, input_text: str) -> str:
     """Invoke a sub-agent over the AgentCore Runtime invoke API.
 
     NOT A2A, despite what this docstring said until 2026-09-16: the call below
@@ -137,10 +166,12 @@ def _invoke_sub_agent(runtime_arn: str, input_text: str, session_id: str = "") -
         "qualifier": "DEFAULT",
         "payload": json.dumps(payload_obj),
     }
+    session_id = _sub_agent_session_id(runtime_arn)
     if session_id:
         kwargs["runtimeSessionId"] = session_id
 
-    log.info("Invoking sub-agent ARN=%s session=%s input=%s", runtime_arn, session_id or "(none)", input_text[:80])
+    log.info("Invoking sub-agent ARN=%s session=%s input %s", runtime_arn,
+             "derived" if session_id else "(fresh)", text_fingerprint(input_text))
 
     try:
         response = _agentcore_runtime.invoke_agent_runtime(**kwargs)
@@ -155,7 +186,7 @@ def _invoke_sub_agent(runtime_arn: str, input_text: str, session_id: str = "") -
     if isinstance(body, bytes):
         body = body.decode("utf-8", errors="replace")
 
-    log.info("Sub-agent response (first 200 chars): %s", str(body)[:200])
+    log.info("Sub-agent response %s", text_fingerprint(str(body)))
 
     try:
         parsed = json.loads(body)
@@ -166,14 +197,13 @@ def _invoke_sub_agent(runtime_arn: str, input_text: str, session_id: str = "") -
 
 @tool
 @instrumented_tool(_current_ctx.get)
-def search_organization(query: str, session_id: str = "") -> str:
+def search_organization(query: str) -> str:
     """Route a search query to the Search agent for KB + graph retrieval.
 
     Use for: finding people, expertise, documents, decisions, team information.
 
     Args:
         query: Natural language search query
-        session_id: Conversation session ID for context continuity (optional)
 
     Returns:
         Search results from KB and organizational graph
@@ -181,19 +211,18 @@ def search_organization(query: str, session_id: str = "") -> str:
     runtime_arn = _get_runtime_arn("search")
     if not runtime_arn:
         return json.dumps({"error": "Search agent not deployed — deploy with --context deployRuntimes=true"})
-    return _invoke_sub_agent(runtime_arn, query, session_id)
+    return _invoke_sub_agent(runtime_arn, query)
 
 
 @tool
 @instrumented_tool(_current_ctx.get)
-def get_expertise_scores(request: str, session_id: str = "") -> str:
+def get_expertise_scores(request: str) -> str:
     """Route a scoring request to the Scoring agent for expertise metrics and leaderboards.
 
     Use for: PageRank scores, expertise rankings, team leaderboards, influence metrics.
 
     Args:
         request: Scoring request (e.g. 'top ML experts', 'score team Platform Engineering')
-        session_id: Conversation session ID (optional)
 
     Returns:
         Expertise scores and ranking results
@@ -201,12 +230,12 @@ def get_expertise_scores(request: str, session_id: str = "") -> str:
     runtime_arn = _get_runtime_arn("scoring")
     if not runtime_arn:
         return json.dumps({"error": "Scoring agent not deployed — deploy with --context deployRuntimes=true"})
-    return _invoke_sub_agent(runtime_arn, request, session_id)
+    return _invoke_sub_agent(runtime_arn, request)
 
 
 @tool
 @instrumented_tool(_current_ctx.get)
-def get_strategic_advice(question: str, session_id: str = "") -> str:
+def get_strategic_advice(question: str) -> str:
     """Route a strategic question to the Advisor agent for org intelligence recommendations.
 
     Use for: expertise gap analysis, team composition advice, mentorship suggestions,
@@ -214,7 +243,6 @@ def get_strategic_advice(question: str, session_id: str = "") -> str:
 
     Args:
         question: Strategic question about the organization
-        session_id: Conversation session ID (optional)
 
     Returns:
         Strategic recommendations grounded in graph data
@@ -222,19 +250,18 @@ def get_strategic_advice(question: str, session_id: str = "") -> str:
     runtime_arn = _get_runtime_arn("advisor")
     if not runtime_arn:
         return json.dumps({"error": "Advisor agent not deployed — deploy with --context deployRuntimes=true"})
-    return _invoke_sub_agent(runtime_arn, question, session_id)
+    return _invoke_sub_agent(runtime_arn, question)
 
 
 @tool
 @instrumented_tool(_current_ctx.get)
-def ingest_documents(instruction: str, session_id: str = "") -> str:
+def ingest_documents(instruction: str) -> str:
     """Route a document ingestion task to the Ingestion agent.
 
     Use for: uploading new documents, syncing the knowledge base, checking ingestion status.
 
     Args:
         instruction: Ingestion instruction (e.g. 'sync KB', 'list pending documents')
-        session_id: Conversation session ID (optional)
 
     Returns:
         Ingestion status and results
@@ -242,12 +269,12 @@ def ingest_documents(instruction: str, session_id: str = "") -> str:
     runtime_arn = _get_runtime_arn("ingestion")
     if not runtime_arn:
         return json.dumps({"error": "Ingestion agent not deployed — deploy with --context deployRuntimes=true"})
-    return _invoke_sub_agent(runtime_arn, instruction, session_id)
+    return _invoke_sub_agent(runtime_arn, instruction)
 
 
 @tool
 @instrumented_tool(_current_ctx.get)
-def build_graph(instruction: str, session_id: str = "") -> str:
+def build_graph(instruction: str) -> str:
     """Route a graph construction task to the Graph-Builder agent.
 
     Use for: extracting entities from documents, updating the knowledge graph,
@@ -255,7 +282,6 @@ def build_graph(instruction: str, session_id: str = "") -> str:
 
     Args:
         instruction: Graph-building instruction or document text to process
-        session_id: Conversation session ID (optional)
 
     Returns:
         Graph construction results with counts of nodes and relationships created
@@ -263,7 +289,7 @@ def build_graph(instruction: str, session_id: str = "") -> str:
     runtime_arn = _get_runtime_arn("graph-builder")
     if not runtime_arn:
         return json.dumps({"error": "Graph-Builder agent not deployed — deploy with --context deployRuntimes=true"})
-    return _invoke_sub_agent(runtime_arn, instruction, session_id)
+    return _invoke_sub_agent(runtime_arn, instruction)
 
 
 @tool
@@ -472,22 +498,31 @@ log.info("Supervisor roles configured: %s", sorted(_ROLES.keys()))
 def _resolve_identity(payload: dict) -> tuple[str, str]:
     """(tenant, role) for the caller. Unknown roles keep their name (the
     guardrail mapping in _agents_for_role maps them to the strictest, member,
-    guardrail); an unrecognized or missing tenant falls back to orgiq. A payload
-    with no auth block is treated as the least-privileged orgiq member AND
-    logged, since in normal operation the middleware always attaches auth — a
-    missing block means a direct-invoke that bypassed it, which we want visible
-    rather than silently trusted."""
-    auth = payload.get("auth") if isinstance(payload, dict) else None
-    if not isinstance(auth, dict):
+    guardrail); an unrecognized or missing tenant falls back to orgiq.
+
+    The auth block counts only when its signature verifies against the
+    middleware's envelope (_shared/invoke_auth.py), or in dev mode without a
+    secret. A payload with no block, or one that does not verify, is the
+    least-privileged orgiq member AND logged: in normal operation the
+    middleware always attaches a signed block, so anything else is a direct
+    invoke that bypassed it. Also records the verified conversation for
+    `_sub_agent_session_id`."""
+    ident = verified_identity(payload) if isinstance(payload, dict) else None
+    if ident is None:
+        _invoke_identity.set(None)
         log.warning(
-            "invoke payload has no auth block; defaulting to %s/%s (least privilege)",
+            "invoke payload has no verified auth block; defaulting to %s/%s (least privilege)",
             DEFAULT_TENANT, DEFAULT_ROLE,
         )
         return DEFAULT_TENANT, DEFAULT_ROLE
+    auth = ident.auth
     role = auth.get("role")
     tenant = auth.get("tenant")
+    resolved_tenant = tenant if isinstance(tenant, str) and tenant in KNOWN_TENANTS else DEFAULT_TENANT
+    sub = auth.get("sub") if isinstance(auth.get("sub"), str) else ""
+    _invoke_identity.set((resolved_tenant, sub, ident.conversation_id))
     return (
-        tenant if isinstance(tenant, str) and tenant in KNOWN_TENANTS else DEFAULT_TENANT,
+        resolved_tenant,
         role if isinstance(role, str) and role else DEFAULT_ROLE,
     )
 
@@ -701,8 +736,8 @@ async def _handle_streaming(payload: dict, input_text: str, role: str, tenant: s
         )
 
         log.info(
-            "Supervisor AG-UI streaming (tenant=%s, role=%s, thread=%s, run=%s, invocation=%s): %s",
-            tenant, role, thread_id, run_id, ctx.invocation_id, input_text[:120],
+            "Supervisor AG-UI streaming (tenant=%s, role=%s, thread=%s, run=%s, invocation=%s): prompt %s",
+            tenant, role, thread_id, run_id, ctx.invocation_id, text_fingerprint(input_text),
         )
 
         with with_orgiq_root(
@@ -842,8 +877,8 @@ async def _handle_sync(payload: dict, input_text: str, role: str, tenant: str = 
     shared_token = set_active_ctx(ctx)
 
     log.info(
-        "Supervisor sync handling (role=%s, invocation=%s, parent=%s, history_turns=%d): %s",
-        role, ctx.invocation_id, ctx.parent_invocation_id or "—", len(messages), input_text[:120],
+        "Supervisor sync handling (role=%s, invocation=%s, parent=%s, history_turns=%d): prompt %s",
+        role, ctx.invocation_id, ctx.parent_invocation_id or "—", len(messages), text_fingerprint(input_text),
     )
 
     with with_orgiq_root(

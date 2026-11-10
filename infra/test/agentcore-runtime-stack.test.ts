@@ -411,14 +411,15 @@ describe('machine-callback secrets', () => {
 
   test('each runtime gets the NAMES of the callback secrets it signs with, and may read only those', () => {
     const want: Record<string, string[]> = {
-      supervisor: ['APPROVALS_REQUEST_SECRET', 'HARNESS_TRACE_SECRET'],
+      // AGENT_INVOKE_SECRET verifies the signed invoke auth block (agents/_shared/invoke_auth.py).
+      supervisor: ['APPROVALS_REQUEST_SECRET', 'HARNESS_TRACE_SECRET', 'AGENT_INVOKE_SECRET'],
       ingestion: ['APPROVALS_REQUEST_SECRET', 'HARNESS_TRACE_SECRET'],
       'assessment-scorer': ['HARNESS_TRACE_SECRET', 'ASSESSMENT_RUN_COMPLETE_SECRET'],
       'assessment-drafter': ['HARNESS_TRACE_SECRET', 'ASSESSMENT_RUN_COMPLETE_SECRET'],
     };
     const slug: Record<string, string> = {
       APPROVALS_REQUEST_SECRET: 'approvals-request', HARNESS_TRACE_SECRET: 'harness-trace',
-      ASSESSMENT_RUN_COMPLETE_SECRET: 'assessment-run-complete',
+      ASSESSMENT_RUN_COMPLETE_SECRET: 'assessment-run-complete', AGENT_INVOKE_SECRET: 'agent-invoke',
     };
     for (const agent of ALL_AGENTS) {
       const env = envOf(phaseTwo, agent);

@@ -184,6 +184,16 @@ def short_prompt_hash(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
 
 
+def text_fingerprint(text: str) -> str:
+    """``len=<bytes> sha256=<12 hex>`` for a prompt or response in a log line.
+
+    Enough to correlate two log lines about the same text; never the text
+    itself, which is a person's question (or an answer about people).
+    """
+    raw = (text or "").encode("utf-8", errors="replace")
+    return f"len={len(raw)} sha256={hashlib.sha256(raw).hexdigest()[:12]}"
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 

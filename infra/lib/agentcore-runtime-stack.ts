@@ -141,6 +141,9 @@ const CALLBACKS = [
   { env: 'APPROVALS_REQUEST_SECRET', slug: 'approvals-request', agents: ['supervisor', 'ingestion'] },
   { env: 'HARNESS_TRACE_SECRET', slug: 'harness-trace', agents: null },
   { env: 'ASSESSMENT_RUN_COMPLETE_SECRET', slug: 'assessment-run-complete', agents: ['assessment-scorer', 'assessment-drafter'] },
+  // Not a callback: the key the supervisor verifies the invoke `auth` block
+  // with (agents/_shared/invoke_auth.py). Same by-name delivery, read-only.
+  { env: 'AGENT_INVOKE_SECRET', slug: 'agent-invoke', agents: ['supervisor'] },
 ] as const;
 
 const READ_AGENTS = new Set<(typeof ALL_AGENT_NAMES)[number]>(['search', 'advisor']);

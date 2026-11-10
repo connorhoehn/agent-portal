@@ -27,6 +27,7 @@ from _shared.instrumentation import (  # noqa: E402
     reset_active_ctx,
     set_active_ctx,
     short_prompt_hash,
+    text_fingerprint,
     with_orgiq_root,
 )
 
@@ -61,6 +62,45 @@ _bedrock_agent = boto3.client("bedrock-agent", region_name=REGION)
 _bedrock_runtime = boto3.client("bedrock-runtime", region_name=REGION)
 
 # Documents bucket follows naming convention from foundation stack
+# ── The run's S3 prefix ───────────────────────────────────────────────────────
+# The documents bucket holds every tenant's uploads and every knowledge base's
+# sources. The model picks the keys these tools read, and the text it reads is
+# untrusted (a document can carry instructions), so a run is confined to ONE
+# prefix: the payload's `s3Prefix` when the caller names one (validated), else
+# DEFAULT_RUN_PREFIX, where portal uploads land (middleware routes/ingest.ts).
+DEFAULT_RUN_PREFIX = "uploads/"
+_run_prefix: ContextVar[str] = ContextVar("ingestion_run_prefix", default=DEFAULT_RUN_PREFIX)
+
+
+def run_prefix_from(payload) -> str | None:
+    """The prefix this run may read, or None when the payload names a bad one."""
+    raw = payload.get("s3Prefix") if isinstance(payload, dict) else None
+    if raw is None or raw == "":
+        return DEFAULT_RUN_PREFIX
+    if not isinstance(raw, str):
+        return None
+    if raw.strip().startswith("/"):
+        return None
+    prefix = raw.strip().rstrip("/")
+    if not prefix or "\\" in prefix or any(part in ("", ".", "..") for part in prefix.split("/")):
+        return None
+    return prefix + "/"
+
+
+def _key_in_run(key: str) -> bool:
+    prefix = _run_prefix.get()
+    if not isinstance(key, str) or not key.startswith(prefix):
+        return False
+    return not any(part in ("", ".", "..") for part in key[len(prefix):].split("/")[:-1])
+
+
+def _outside_run(key: str) -> str:
+    return json.dumps({
+        "error": f"key {key!r} is outside this run's prefix {_run_prefix.get()!r}",
+        "hint": "this run may only read documents under its own prefix",
+    })
+
+
 def _documents_bucket() -> str:
     account = boto3.client("sts").get_caller_identity()["Account"]
     return f"{PREFIX}-documents-{account}-{REGION}"
@@ -106,10 +146,15 @@ def list_documents(prefix: str = "") -> str:
     Returns:
         JSON list of {key, size, last_modified} for each object
     """
+    run_prefix = _run_prefix.get()
+    wanted = (prefix or "").lstrip("/")
+    if wanted and not wanted.startswith(run_prefix):
+        wanted = run_prefix + wanted
+    wanted = wanted or run_prefix
+    if ".." in wanted.split("/"):
+        return _outside_run(wanted)
     bucket = _documents_bucket()
-    kwargs = {"Bucket": bucket, "MaxKeys": 100}
-    if prefix:
-        kwargs["Prefix"] = prefix
+    kwargs = {"Bucket": bucket, "MaxKeys": 100, "Prefix": wanted}
 
     response = _s3.list_objects_v2(**kwargs)
     objects = [
@@ -138,6 +183,8 @@ def read_document(key: str) -> str:
     Returns:
         Document content as a string (truncated to 50KB for LLM processing)
     """
+    if not _key_in_run(key):
+        return _outside_run(key)
     bucket = _documents_bucket()
     response = _s3.get_object(Bucket=bucket, Key=key)
     content_type = response.get("ContentType", "")
@@ -340,6 +387,16 @@ _agent = RegistryAgent(
 )
 
 
+async def _confined(prefix: str, events):
+    """Run a streamed turn with this run's prefix set where its tools read it."""
+    token = _run_prefix.set(prefix)
+    try:
+        async for event in events:
+            yield event
+    finally:
+        _run_prefix.reset(token)
+
+
 @app.entrypoint
 async def handle(payload: dict) -> AsyncIterator | dict:
     if isinstance(payload, dict):
@@ -355,12 +412,16 @@ async def handle(payload: dict) -> AsyncIterator | dict:
     if not input_text:
         return {"agent": "ingestion", "error": "missing input_text/prompt/message"}
 
+    run_prefix = run_prefix_from(payload)
+    if run_prefix is None:
+        return {"agent": "ingestion", "error": "s3Prefix must be a relative S3 prefix without '.' or '..' segments"}
+
     # Genuine AG-UI streaming when the caller asked for it — the middleware
     # sets "stream": true for user-facing invocations. A2A sub-agent calls
     # from the supervisor do not, and keep the synchronous dict path below,
     # which is what they expect to receive.
     if wants_stream(payload):
-        return stream_agui(
+        return _confined(run_prefix, stream_agui(
             payload=payload,
             input_text=input_text,
             live_agent=_agent,
@@ -368,17 +429,18 @@ async def handle(payload: dict) -> AsyncIterator | dict:
             agent_name="Ingestion",
             model_id=_agent.model_id,
             ctx_var=_current_ctx,
-        )
+        ))
 
     # ── Sprint 2 instrumentation ─────────────────────────────────────────────
     # Picks up ``parentInvocationId`` when the supervisor invoked us via A2A.
     ctx = TraceContext.from_request_payload(payload if isinstance(payload, dict) else {})
     token = _current_ctx.set(ctx)
     shared_token = set_active_ctx(ctx)
+    prefix_token = _run_prefix.set(run_prefix)
 
     log.info(
         "Ingestion handling (invocation=%s, parent=%s): %s",
-        ctx.invocation_id, ctx.parent_invocation_id or "—", input_text[:120],
+        ctx.invocation_id, ctx.parent_invocation_id or "—", text_fingerprint(input_text),
     )
 
     with with_orgiq_root(
@@ -395,6 +457,7 @@ async def handle(payload: dict) -> AsyncIterator | dict:
         finally:
             _current_ctx.reset(token)
             reset_active_ctx(shared_token)
+            _run_prefix.reset(prefix_token)
         duration_ms = int((time.monotonic() - t0) * 1000)
 
         response_text = str(result)

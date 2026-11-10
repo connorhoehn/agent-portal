@@ -46,6 +46,7 @@ from .instrumentation import (
     record_guardrail_action,
     reset_active_ctx,
     set_active_ctx,
+    text_fingerprint,
     usage_block,
     with_orgiq_root,
 )
@@ -206,9 +207,9 @@ async def stream_agui(
     try:
         run_input = build_run_input(payload, input_text)
         log.info(
-            "%s AG-UI streaming (thread=%s, run=%s, invocation=%s): %s",
+            "%s AG-UI streaming (thread=%s, run=%s, invocation=%s): prompt %s",
             agent_name, run_input.thread_id, run_input.run_id, ctx.invocation_id,
-            input_text[:120],
+            text_fingerprint(input_text),
         )
 
         with with_orgiq_root(

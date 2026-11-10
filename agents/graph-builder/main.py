@@ -26,6 +26,7 @@ from _shared.instrumentation import (  # noqa: E402
     reset_active_ctx,
     set_active_ctx,
     short_prompt_hash,
+    text_fingerprint,
     with_orgiq_root,
 )
 
@@ -624,7 +625,7 @@ async def handle(payload: dict) -> AsyncIterator | dict:
 
         log.info(
             "Graph-Builder handling (invocation=%s, parent=%s): %s",
-            ctx.invocation_id, ctx.parent_invocation_id or "—", input_text[:120],
+            ctx.invocation_id, ctx.parent_invocation_id or "—", text_fingerprint(input_text),
         )
 
         with with_orgiq_root(

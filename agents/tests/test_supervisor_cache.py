@@ -127,6 +127,17 @@ class GuardrailMappingTests(SupervisorTestCase):
 
 
 class IdentityResolutionTests(SupervisorTestCase):
+    """How a TRUSTED auth block maps to (tenant, role). Trust here comes from
+    the dev-mode path (no AGENT_INVOKE_SECRET, INSECURE_DEV_MODE=true); whether
+    a block is trusted at all is test_supervisor_invoke_auth.py's business."""
+
+    def setUp(self):
+        super().setUp()
+        env = mock.patch.dict("os.environ", {"INSECURE_DEV_MODE": "true", "APP_ENV": "", "NODE_ENV": "",
+                                             "AGENT_INVOKE_SECRET": "", "AGENT_INVOKE_SECRET_ID": ""})
+        env.start()
+        self.addCleanup(env.stop)
+
     def test_the_auth_block_supplies_the_tenant_and_role(self):
         self.assertEqual(
             self.sup._resolve_identity({"auth": {"tenant": "orgiq", "role": "org-leader"}}),
