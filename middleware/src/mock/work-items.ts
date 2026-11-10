@@ -438,8 +438,10 @@ const SEEDED_BRIEFS: Partial<Record<string, SeededBrief>> = {
     summary: 'Score every canary answer on a weighted rubric so a prompt change is judged, not eyeballed.',
     description: 'The judge scores grounding, completeness, tone and latency against the retrieved context. On the 120-question pilot set it agrees with human labels 82 percent of the time. Which model judges is the open decision "Judge model for canary evaluation".',
     blockedReason: null,
-    nextStep: 'Nina Rivera decides the judge model.',
-    nextStepDetail: 'Run both candidates over the pilot set with the final weights and report agreement and cost per 1,000 judged answers side by side.',
+    // What follows the open decision: the readers derive "the decision comes first" from it (portal
+    // lib/workNextStep.ts), so no stored step says who decides (check-story: pending-decision-step).
+    nextStep: 'Wire the chosen judge model into the canary scoring run.',
+    nextStepDetail: 'Re-score the 120-question pilot set with the chosen judge and the final weights; agreement with human labels stays at 82 percent or better.',
   },
   'wi-llm-e1-b3': {
     summary: 'Every replica refetches its prompt in the same second when the cache expires.',
@@ -501,8 +503,8 @@ const SEEDED_BRIEFS: Partial<Record<string, SeededBrief>> = {
     summary: 'The first request after scale-to-zero waits 40 to 90 seconds for the model to load.',
     description: 'Models idle for 15 minutes scale to zero, and the next request pays the container start plus a 7 GB weight load. p99 on the embedding model reached 74 seconds against a 2.5-second SLO. The fix is a warm floor on tier-1 models or a faster load path.',
     blockedReason: null,
-    nextStep: 'Paolo Mancini decides the warm floor for tier-1 models.',
-    nextStepDetail: 'A warm replica costs about $380 a month per model on the current instance type. The decision "Warm floor or scale-to-zero for tier-1 models" holds the comparison.',
+    nextStep: 'Apply the decided warm floor to the tier-1 models.',
+    nextStepDetail: 'Replay the cold-start trace afterwards: p99 on the embedding model back under the 2.5-second SLO. A warm replica costs about $380 a month per model on the current instance type.',
   },
   'wi-rta-e1-s1': {
     summary: 'Recover from a task failure in under 60 seconds.',

@@ -28,6 +28,11 @@
 //                            (`[wi-auth-e2-b3]`), from a dispatch prompt or a
 //                            seeded run
 //   surname-crowd            one surname on more than two people
+//   pending-decision-step    a work item's stored next step (or its detail)
+//                            says who decides, or names a pending decision the
+//                            item waits on: the readers derive that line from
+//                            the decision (portal lib/workNextStep.ts), and the
+//                            prose goes stale once it is decided
 //
 //   node scripts/content/check-story.mjs     prints every finding; exit 1 on any
 //
@@ -212,10 +217,28 @@ for (const [surname, names] of bySurname) {
   if (names.length > 2) fail('surname-crowd', surname, `${names.length} people: ${names.join(', ')}`);
 }
 
+// ── Stored next steps that wait on a decision ──
+// The brief, the voice and the composer derive "the decision comes first" from
+// the decision itself (portal lib/workNextStep.ts), so a seeded next step that
+// names who decides, or the pending decision, goes stale the moment it is made.
+const DECIDER_PROSE = /\bdecid(e|es|ing)\b/i;
+const PENDING = new Set(['open', 'escalated']);
+let nextSteps = 0;
+for (const wi of items) {
+  for (const [field, text] of [['nextStep', wi.nextStep], ['nextStepDetail', wi.nextStepDetail]]) {
+    if (typeof text !== 'string' || !text.trim()) continue;
+    if (field === 'nextStep') nextSteps += 1;
+    const waits = decisions.filter((d) => PENDING.has(d.status) && (d.id === wi.blockedByDecisionId || d.workItemId === wi.id));
+    const named = waits.find((d) => text.includes(d.topic));
+    if (named) fail('pending-decision-step', wi.id, `stored ${field} names the pending decision "${named.topic}": "${text}"`);
+    else if (DECIDER_PROSE.test(text)) fail('pending-decision-step', wi.id, `stored ${field} says who decides: "${text}"`);
+  }
+}
+
 // ── Report ──
 if (findings.length === 0) {
   console.log(`check-story: the Work story holds: ${decisions.length} decisions, ${initiatives.rows().length} initiatives, ` +
-    `${sprints.rows().filter((x) => x.status === 'active').length} active sprints, ${scanned} display strings, ${bySurname.size} surnames.`);
+    `${sprints.rows().filter((x) => x.status === 'active').length} active sprints, ${scanned} display strings, ${bySurname.size} surnames, ${nextSteps} next steps.`);
   process.exit(0);
 }
 const byCheck = Object.groupBy(findings, (f) => f.check);

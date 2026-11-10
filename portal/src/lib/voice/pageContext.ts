@@ -37,6 +37,11 @@ export interface PageRow {
   sprint?: string | null;
   /** Why the row cannot move, when it is blocked: the decision it waits on ("Cutover order…"), else the reason. */
   blockedOn?: string | null;
+  /**
+   * What comes next on the row (a work item): the derived step (lib/workNextStep.ts, the Brief tab's), never the
+   * stored field, so a decision it waits on comes first. Only said in the note for a row that is not blocked.
+   */
+  nextStep?: string | null;
   /** The row's own page in the portal, when it has one (open goes there). */
   href?: string | null;
 }
@@ -196,7 +201,7 @@ export function pageContextNote(o: { tenant: string; pathname: string; pageId?: 
     lines.push(`It shows these ${field(p.rowsLabel ?? 'rows')}${of}, in the page's order:`);
     rows.forEach((r, i) => {
       const facts = [r.status ? `status ${field(r.status)}` : null, r.priority ? `priority ${field(r.priority)}` : null,
-        r.assignee ? `owner ${field(r.assignee)}` : null, r.blockedOn ? `blocked on '${field(r.blockedOn)}'` : null].filter(Boolean).join(', ');
+        r.assignee ? `owner ${field(r.assignee)}` : null, r.blockedOn ? `blocked on '${field(r.blockedOn)}'` : r.nextStep ? `next '${field(r.nextStep)}'` : null].filter(Boolean).join(', ');
       lines.push(`${i + 1}. ${field(r.ref)} "${field(r.title)}"${facts ? ` (${facts})` : ''}`);
     });
     lines.push('To answer about these rows or act on them, use list or open with scope "this-page", and their positions above; do not search again for them.');

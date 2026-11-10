@@ -14,6 +14,7 @@ import { isBlocked } from './workListModel.ts';
 import type { FlatWorkItem } from './projectFormat.ts';
 import type { ProjectDecision, WorkItemPriority } from './types';
 import type { Criterion, ThreadComment } from './useWorkItemThread.ts';
+import { derivedNextStep } from '../../lib/workNextStep.ts';
 
 /** One read as the page holds it: data once loaded, or an error. */
 export interface Read<T> {
@@ -64,47 +65,18 @@ export interface NextStepContext {
   criteria?: readonly Pick<Criterion, 'text' | 'done' | 'position'>[] | null;
 }
 
-const OPEN_DECISION = new Set(['open', 'escalated']);
-const sentence = (text: string): string => (/[.!?]$/.test(text) ? text : `${text}.`);
-
 /**
  * The amber callout; null when there is no next step (hidden, not faked).
- *
- * A decision the item waits on is live state, never seeded prose (second
- * regression walk, 10 November: after the cutover decision was resolved the
- * runbook story still said "Sienna Garcia decides"). So the decision the item
- * names (`blockedByDecisionId`, or the decision that names the item) decides
- * the line: still open while the item is blocked, the decision comes first and
- * the block's reason says who and when; rejected, the item is replanned;
- * decided (the settle keeps `blockedByDecisionId` as the record), the next
- * real step is the brief's first unmet acceptance criterion. Otherwise (an
- * open decision the item is not blocked on, no unmet criterion, no link) the
- * row's own next step stands.
+ * The step itself is lib/workNextStep.ts's, the one rule every reader shares
+ * (the voice's `get`, the page context note, the composer's prompts): a
+ * decision the item waits on is live state, never seeded prose.
  */
 export function nextStepCallout(
   item: Pick<FlatWorkItem, 'nextStep' | 'nextStepDetail'> & Partial<Pick<FlatWorkItem, 'id' | 'labels' | 'blockedReason' | 'blockedByDecisionId'>>,
   context: NextStepContext = {},
 ): NextStepCallout | null {
-  const callout = (step: string, detail: string | null): NextStepCallout => ({ title: 'Next step', step, detail, actionLabel: 'Open discussion' });
-  const own = item.nextStep?.trim() ? callout(item.nextStep.trim(), item.nextStepDetail?.trim() || null) : null;
-  const decisions = context.decisions ?? [];
-  const blocked = (item.labels?.includes('blocked') ?? false) || !!item.blockedReason?.trim();
-  const named = item.blockedByDecisionId ? decisions.find((d) => d.id === item.blockedByDecisionId) : undefined;
-  const linked = item.id ? decisions.filter((d) => d.workItemId === item.id) : [];
-  const waitsOn = named ?? linked.find((d) => OPEN_DECISION.has(d.status)) ?? linked[0];
-  if (!waitsOn) return own;
-  const reason = item.blockedReason?.trim() || null;
-  if (OPEN_DECISION.has(waitsOn.status) && blocked) {
-    return callout(`The ${waitsOn.status === 'escalated' ? 'escalated ' : ''}decision "${waitsOn.topic}" comes first.`, reason);
-  }
-  if (waitsOn.status === 'rejected') {
-    return callout(`Replan this item: the decision "${waitsOn.topic}" was rejected.`, reason);
-  }
-  if (waitsOn.status === 'resolved' && !blocked) {
-    const next = [...(context.criteria ?? [])].sort((a, b) => a.position - b.position).find((c) => !c.done && c.text.trim());
-    if (next) return callout(sentence(next.text.trim()), `"${waitsOn.topic}" is decided.`);
-  }
-  return own;
+  const next = derivedNextStep(item, context);
+  return next ? { title: 'Next step', step: next.step, detail: next.detail, actionLabel: 'Open discussion' } : null;
 }
 
 // ─── Complete the brief ──────────────────────────────────────────────────────

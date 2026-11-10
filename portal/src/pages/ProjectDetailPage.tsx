@@ -50,6 +50,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { usePublishPageContext, usePublishPageTabs } from '../lib/voice/pageContext';
+import { derivedNextStep } from '../lib/workNextStep';
 import { ConversationOwner, ConversationThread } from '../components/chat/ConversationThread';
 import { useEmbeddedSocial } from '../components/shell/EmbeddedSocial';
 import type { EstimateProvenance } from '../components/marketplace/EstimateDrawer';
@@ -362,6 +363,8 @@ function ProjectDetailPage() {
     rows: visibleRows.map((r) => ({
       ref: `work-item:${r.id}`, title: r.title, status: r.status ?? null, priority: r.priority ?? null, assignee: r.assigneeName ?? null, sprint: r.sprintId ?? null,
       blockedOn: isBlocked(r) ? (decisions?.find((d) => d.id === r.blockedByDecisionId)?.topic ?? r.blockedReason ?? 'not given') : null,
+      // What comes next, as the Brief tab derives it (a decision the row waits on first), never the stored field.
+      nextStep: derivedNextStep(r, { decisions: decisions ?? null })?.step ?? null,
       href: `/iq/projects/${encodeURIComponent(id)}?item=${encodeURIComponent(r.id)}`,
     })),
   } : null);
@@ -723,7 +726,7 @@ function ProjectDetailPage() {
   if (onWork && current) {
     const criteriaRead = { data: thread.criteriaLoading ? null : thread.criteria, error: thread.criteriaError };
     const facts = briefFacts(current, criteriaRead);
-    subject = { kind: 'item', project: projectRef, item: current, facts };
+    subject = { kind: 'item', project: projectRef, item: current, facts, nextStepContext: { decisions: decisions ?? null, criteria: criteriaRead.data } };
     const seeded = composerSeed && composerSeed.itemId === current.id ? composerSeed : null;
     composerSetup = seeded
       ? { draft: seeded.text, draftKey: `item:${current.id}:seed:${seeded.n}` }

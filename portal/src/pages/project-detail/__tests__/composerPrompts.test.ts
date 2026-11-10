@@ -92,6 +92,16 @@ test('workflow prompts are built from the rows', () => {
   assert.match(workflowPrompt('prioritize', listSubject)!, /- Observability Platform \(in_progress, owner Nora DaSilva, 2 running\)/);
 });
 
+test('the unblock prompt reads the derived next step, never a stale stored one (leftovers 2)', () => {
+  const waiting: ComposerSubject = {
+    ...itemSubject,
+    nextStepContext: { decisions: [{ id: 'd-map', topic: 'Who owns the dependency map', status: 'open', workItemId: b4.id }] },
+  } as ComposerSubject;
+  const u = workflowPrompt('unblock', waiting)!;
+  assert.match(u, /Planned next step: The decision "Who owns the dependency map" comes first\./);
+  assert.doesNotMatch(u, /Planned next step: Confirm the dependency map/);
+});
+
 test('the Ask link carries the question as typed and its context as a structured scope; empty text asks nothing', () => {
   const href = askHref('Why is this blocked?', itemSubject)!;
   assert.ok(href.startsWith('/iq/invoke?prompt='));

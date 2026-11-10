@@ -100,9 +100,15 @@ test('a decision the item waits on is live state: open, then decided, then the n
   assert.equal(rejected?.step, 'Replan this item: the decision "Cutover order for legacy SSO tenants" was rejected.');
   // The decisions read not loaded yet: the row's own step, or nothing.
   assert.equal(nextStepCallout(story), null);
-  // An open decision the item is NOT blocked on leaves the row's own step.
-  const own = { id: 'wi-llm', labels: [], blockedReason: null, blockedByDecisionId: null, nextStep: 'Nina Rivera decides the judge model.', nextStepDetail: null };
-  assert.equal(nextStepCallout(own, { decisions: [{ ...decision, status: 'open', workItemId: 'wi-llm' }] })?.step, 'Nina Rivera decides the judge model.');
+  // An open decision that names the item comes first even when the item is not blocked on it (leftovers 2: the
+  // judge-model story said "Nina Rivera decides the judge model." long after anyone would); the row's own step follows.
+  const own = { id: 'wi-llm', labels: [], blockedReason: null, blockedByDecisionId: null, nextStep: 'Wire the chosen judge into the nightly eval run', nextStepDetail: null };
+  const judge = { ...decision, id: 'd-judge', topic: 'Judge model for nightly evals', status: 'open', workItemId: 'wi-llm' };
+  assert.deepEqual(nextStepCallout(own, { decisions: [judge] }), {
+    title: 'Next step', step: 'The decision "Judge model for nightly evals" comes first.', detail: 'Then: Wire the chosen judge into the nightly eval run.', actionLabel: 'Open discussion',
+  });
+  // Decided with no criteria read: the row's own step stands.
+  assert.equal(nextStepCallout(own, { decisions: [{ ...judge, status: 'resolved' }] })?.step, 'Wire the chosen judge into the nightly eval run');
 });
 
 test('brief facts: unknown criteria stay unknown', () => {

@@ -14,13 +14,18 @@ import type { BriefFacts } from './briefModel.ts';
 import type { FlatWorkItem } from './projectFormat.ts';
 import type { ProjectDetail } from './types';
 import { encodeAskScope, type AskScope } from '../../lib/askScope.ts';
+import { derivedNextStep, type NextStepContext } from '../../lib/workNextStep.ts';
 
 // ─── Subjects ────────────────────────────────────────────────────────────────
 
 export type ComposerSubject =
   | { kind: 'initiatives'; rows: ProjectSummary[] | null }
   | { kind: 'initiative'; project: Pick<ProjectDetail, 'id' | 'name'>; rows: FlatWorkItem[] | null }
-  | { kind: 'item'; project: Pick<ProjectDetail, 'id' | 'name'>; item: FlatWorkItem; facts: BriefFacts };
+  | {
+    kind: 'item'; project: Pick<ProjectDetail, 'id' | 'name'>; item: FlatWorkItem; facts: BriefFacts;
+    /** The initiative's decisions and the item's criteria as the page read them: the next step is derived from them (lib/workNextStep.ts). */
+    nextStepContext?: NextStepContext;
+  };
 
 /** Mirrors the library's ComposerReference (plus L10's `marker`) without
  *  importing it, so this file stays runnable under plain node:test. */
@@ -232,7 +237,9 @@ export function workflowPrompt(id: WorkflowId, s: ComposerSubject): string | nul
     const who = s.facts.assigneeFirstName ?? 'the owner';
     lines.push(`What does ${who} need before "${it.title}" can start?`);
     if (it.blockedReason?.trim()) lines.push(`Blocked because: ${it.blockedReason.trim()}`);
-    if (it.nextStep?.trim()) lines.push(`Planned next step: ${it.nextStep.trim()}`);
+    // The derived step (the Brief tab's), never the stored field: a decision the item waits on comes first.
+    const next = derivedNextStep(it, s.nextStepContext);
+    if (next) lines.push(`Planned next step: ${next.step}${next.from === 'decision' && next.detail ? ` ${next.detail}` : ''}`);
     lines.push('Suggest the smallest step that unblocks it.');
   }
   return lines.join('\n');

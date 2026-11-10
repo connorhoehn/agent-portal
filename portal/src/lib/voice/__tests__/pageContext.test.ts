@@ -50,6 +50,16 @@ test('the note: workspace, page id, the record as a typed ref, the rows in order
   assert.match(pageContextNote({ tenant: 'orgiq', pathname: '/x', page: null }), /has not shown any rows yet/);
 });
 
+test('the note says a row\'s derived next step, and only for a row that is not blocked (leftovers 2)', () => {
+  const page = { ...INITIATIVE, rows: [
+    { ref: 'work-item:w-1', title: 'Judge rubric', status: 'open', nextStep: 'The decision "Judge model for canary evaluation" comes first.' },
+    { ref: 'work-item:w-2', title: 'Cutover runbook', status: 'open', blockedOn: 'Cutover order', nextStep: 'The decision "Cutover order" comes first.' },
+  ] };
+  const note = pageContextNote({ tenant: 'orgiq', pathname: INITIATIVE.path, page });
+  assert.match(note, /1\. work-item:w-1 "Judge rubric" \(status open, next 'The decision .Judge model for canary evaluation. comes first\.'\)/);
+  assert.match(note, /2\. work-item:w-2 "Cutover runbook" \(status open, blocked on 'Cutover order'\)\n/);
+});
+
 test('the registry: the newest page wins, an unmount clears only its own entry, another path reads nothing', () => {
   resetPageContext();
   const offA = publishPageContext(INITIATIVE);

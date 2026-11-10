@@ -890,9 +890,12 @@ BRIEFS: dict[str, dict[str, str]] = {
         description='The judge scores grounding, completeness, tone and latency against the retrieved '
                     'context. On the 120-question pilot set it agrees with human labels 82 percent of the '
                     'time. Which model judges is the open decision "Judge model for canary evaluation".',
-        next_step='Nina Rivera decides the judge model.',
-        next_step_detail='Run both candidates over the pilot set with the final weights and report agreement '
-                         'and cost per 1,000 judged answers side by side.',
+        # What follows the decision: while "Judge model for canary evaluation" is open the brief
+        # derives "the decision comes first" from it (portal lib/workNextStep.ts), so no seeded
+        # line names who decides (scripts/content/check-story.mjs, pending-decision-step).
+        next_step='Wire the chosen judge model into the canary scoring run.',
+        next_step_detail='Re-score the 120-question pilot set with the chosen judge and the final weights; '
+                         'agreement with human labels stays at 82 percent or better.',
     ),
     'wi-llm-e1-b3': dict(
         summary='Every replica refetches its prompt in the same second when the cache expires.',
@@ -962,9 +965,10 @@ BRIEFS: dict[str, dict[str, str]] = {
         description='Models idle for 15 minutes scale to zero, and the next request pays the container start '
                     'plus a 7 GB weight load. p99 on the embedding model reached 74 seconds against a '
                     '2.5-second SLO. The fix is a warm floor on tier-1 models or a faster load path.',
-        next_step='Paolo Mancini decides the warm floor for tier-1 models.',
-        next_step_detail='A warm replica costs about $380 a month per model on the current instance type. '
-                         'The decision "Warm floor or scale-to-zero for tier-1 models" holds the comparison.',
+        # What follows the open decision "Warm floor or scale-to-zero for tier-1 models" (as above).
+        next_step='Apply the decided warm floor to the tier-1 models.',
+        next_step_detail='Replay the cold-start trace afterwards: p99 on the embedding model back under the '
+                         '2.5-second SLO. A warm replica costs about $380 a month per model on the current instance type.',
     ),
     # ── Real-time Analytics Pipeline ──
     'wi-rta-e1-s1': dict(

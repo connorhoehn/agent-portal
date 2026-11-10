@@ -116,6 +116,18 @@ test('get: a work item\'s brief is one terse line; its criteria and history come
   assert.equal(missing.output['code'], 'not-found');
 });
 
+test('get: the next step is the derived one, never a stored line about who decides (leftovers 2)', async () => {
+  const pending = { id: 'd-cookie', topic: 'Keep the shim cookie name', status: 'open', workItemId: 'wi-auth-e2-b3' };
+  const criteria = route('GET', '/api/graph/work-items/wi-auth-e2-b3/criteria', 200, { criteria: [{ id: 'c1', text: 'Logout clears the shim cookie', done: true, position: 0 }, { id: 'c2', text: 'A test proves it', done: false, position: 1 }] });
+  const open = ctxFor({ extra: [route('GET', `/api/graph/projects/${P}/decisions`, 200, [...AUTH_DECISIONS, pending])] });
+  const waiting = await runVoiceTool('get', { ref: 'work-item:wi-auth-e2-b3' }, open.ctx);
+  assert.equal(waiting.output['next'], 'The decision "Keep the shim cookie name" comes first.');
+  assert.match(waiting.output['say'] as string, /next: The decision "Keep the shim cookie name" comes first/);
+  const decided = ctxFor({ extra: [route('GET', `/api/graph/projects/${P}/decisions`, 200, [...AUTH_DECISIONS, { ...pending, status: 'resolved' }]), criteria] });
+  const after = await runVoiceTool('get', { ref: 'work-item:wi-auth-e2-b3' }, decided.ctx);
+  assert.equal(after.output['next'], 'A test proves it.', 'decided: the first unmet criterion, as the Brief tab shows');
+});
+
 test('list: the page\'s rows by owner, sprint and blocked; a past sprint through the sprint board\'s own read', async () => {
   const { ctx, log } = ctxFor();
   const vera = await runVoiceTool('list', { kind: 'work-item', scope: 'this-page', filter: { who: 'Vera' } }, ctx);
