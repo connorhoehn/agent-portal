@@ -36,6 +36,7 @@ import {
   deskSummary, filterAndSortTeams, formatTeamStatus, nextActionFor, statusOptions, teamsForCohort,
   type NextActionKind,
 } from '../assessmentFormat';
+import { deskColumnHide } from './deskColumns';
 import { MOTIONS, fmtDate, highestVerifiedLevel, motionFor, type Cohort, type TeamSummary } from '../types';
 
 const ALL = 'all';
@@ -63,11 +64,9 @@ interface AssessorDeskProps {
   onRetry: () => void;
 }
 
-/** "L3 verified · 12/17" on the verified track, with the claim gap beside it. */
 /**
- * The desk's "Updated" date: the year only when it is not this year. The ten
- * columns fit 1440 with no horizontal scroll (regression walk, 9 November
- * night: "Next action" sat past the table's edge); the full date is the title.
+ * The desk's "Updated" date: the year only when it is not this year; the full
+ * date is the cell's tooltip (UX leftovers, 10 November).
  */
 function deskDate(iso: string | undefined | null): string {
   if (!iso) return '—';
@@ -77,10 +76,16 @@ function deskDate(iso: string | undefined | null): string {
   return d.toLocaleDateString(undefined, sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+/**
+ * "L3 verified · 12/17 at L3" on the verified track, with the open-claims count beside it: the
+ * thing an assessor acts on, so it stays in the row at every width (UX leftovers, 10 November,
+ * restoring what 242429fe dropped to fit 1440; the fit is now the columns' priorities').
+ */
 function CertificationCell({ team }: { team: TeamSummary }) {
   const cert = team.certification;
   if (!cert || !cert.assessed) return <MetaLine size="xs" tone="tertiary" items={['Not yet assessed']} />;
   const verified = highestVerifiedLevel(cert);
+  const claims = cert.claims_open ?? 0;
   return (
     <Inline gap="xs" align="center" wrap={false}>
       <Chip
@@ -91,6 +96,12 @@ function CertificationCell({ team }: { team: TeamSummary }) {
         {verified === null ? 'unverified' : `L${verified} verified`}
       </Chip>
       <MetaLine size="xs" tone="secondary" items={[`${cert.at_or_above_target}/${cert.applicable} at L${cert.target_level}`]} />
+      {claims > 0 && (
+        <Chip size="xs" tone="warning" title={`${claims} claim${claims === 1 ? '' : 's'} open — dimensions whose claim sits above what verification reached`}
+          data-testid="desk-claims-open">
+          {claims} open
+        </Chip>
+      )}
     </Inline>
   );
 }
@@ -183,7 +194,12 @@ export function AssessorDesk({
             onRefresh={onRetry}
           />
 
+          {/* Column priorities (UX leftovers, 10 November): every column shows when the table has room
+              for them, and the ones whose fact is elsewhere too (Step, Motion, Lead) give way first as the
+              table narrows (deskColumns.ts), keyed on the table's own width. Under 40rem a row is a
+              stacked card with every field (`narrow`). */}
           <DataTable<TeamSummary>
+            narrow
             data={rows}
             keyField={(t) => t.id}
             onRowClick={(t) => onSelectTeam(t.id)}
@@ -203,12 +219,14 @@ export function AssessorDesk({
           {
             key: 'lead',
             header: 'Lead',
+            className: deskColumnHide('lead'),
             render: (t) => <T size="sm" tone={t.assessment_lead ? 'primary' : 'tertiary'}>{t.assessment_lead || 'no lead yet'}</T>,
           },
           {
             key: 'cohort',
             header: 'Motion',
             sortable: true,
+            className: deskColumnHide('cohort'),
             render: (t) => <Chip size="xs" tone={motionFor(t.cohort).accent}>{motionFor(t.cohort).title}</Chip>,
           },
           { key: 'certification', header: 'Certification', render: (t) => <CertificationCell team={t} /> },
@@ -217,6 +235,7 @@ export function AssessorDesk({
             header: 'Assessed',
             sortable: true,
             numeric: true,
+            className: deskColumnHide('dimensions_assessed'),
             render: (t) => (
               // DotMeter is a block; the Inline puts it flush right like the
               // column's other numbers.
@@ -263,6 +282,7 @@ export function AssessorDesk({
             header: 'Step',
             sortable: true,
             width: '130px',
+            className: deskColumnHide('workflow_step'),
             render: (t) => {
               const ladder = t.workflow_steps && t.workflow_steps.length > 0
                 ? t.workflow_steps.map((w) => `${w.done ? '✓' : w.active ? '●' : '○'} ${w.step} · ${w.label}`).join('\n')
@@ -276,8 +296,8 @@ export function AssessorDesk({
           },
           {
             key: 'contributors',
-            header: 'People',
-            label: 'Contributors',
+            header: 'Contributors',
+            className: deskColumnHide('contributors'),
             render: (t) => {
               const avatars = contributorAvatars(t.contributors);
               return avatars.length > 0 ? (
@@ -311,8 +331,12 @@ export function AssessorDesk({
               );
             },
           },
-          { key: 'updated_at', header: 'Updated', sortable: true, numeric: true,
-            render: (t) => <span title={fmtDate(t.updated_at)}>{deskDate(t.updated_at)}</span> },
+          { key: 'updated_at', header: 'Updated', sortable: true, numeric: true, className: deskColumnHide('updated_at'),
+            render: (t) => (
+              <Tooltip content={fmtDate(t.updated_at)}>
+                <T as="span" size="sm" tone="inherit">{deskDate(t.updated_at)}</T>
+              </Tooltip>
+            ) },
             ]}
           />
         </>
