@@ -1755,6 +1755,42 @@ describe('the fenced job writes', () => {
     expect((await getJob(held.jobId))!.status).toBe('awaiting_review');
   });
 
+  it('stores the run report a completion carries: block parsed, kept folders proposed, cost reported not billed', async () => {
+    const held = await claimed();
+    const { runbookStore } = await import('../../lib/runbooks/store-select.js');
+    const { runReportStore } = await import('../../lib/run-reports/store-select.js');
+    const block = 'Done.\n```lab-report\n' + JSON.stringify({ summary: 'Checked the test.', verification: [{ command: 'npm test', passed: true }], obstacles: [] }) + '\n```';
+    const { renderSkill } = await import('../../lib/runbooks/skill.js');
+    const { flakyRerunDiff } = await import('../../lib/runbooks/__tests__/fixtures/good.js');
+    const skillMd = renderSkill('rb-collector-rerun-twice', flakyRerunDiff);
+    const res = await request(anon()).post(`${BASE}/jobs/${held.jobId}/complete`).set(bearer(held.node.nodeToken)).send({
+      claimToken: held.claimToken, status: 'done', costUsd: 0.05,
+      report: {
+        block, skillsLoaded: ['rb-not-given', '../etc', 7],
+        kept: [
+          { name: 'rb-collector-rerun-twice', body: { kind: 'new', skill_md: skillMd, files: [], rationale: 'kept', source: { run_ref: 'someone-elses-run' } } },
+          { name: 'rb-refused', problems: ['no SKILL.md'] },
+          { name: 'rb-bad-files', body: { kind: 'new', skill_md: skillMd, files: [{ path: '../../.ssh/id_rsa', content: 'x' }], rationale: 'kept' } },
+        ],
+      },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.costUsd).toBe(0);
+    expect(res.body.report).toEqual({ selfReport: 'ok', runbooksUsed: 1, kept: 3 });
+    const report = (await runReportStore().getReport(held.jobId))!;
+    expect(report).toMatchObject({ executor: 'local', outcome: 'done', summary: 'Checked the test.', cost: { billedUsd: 0, reportedUsd: 0.05, basis: 'reported' } });
+    // A name the brief never gave is evidence of nothing; junk names are dropped.
+    expect(report.runbooksUsed).toEqual([{ id: 'rb-not-given', version: null, source: 'observed' }]);
+    const [kept, refused, badFiles] = report.kept;
+    expect(kept!.proposalId).toMatch(/^prop-/);
+    expect(refused).toEqual({ name: 'rb-refused', proposalId: null, problems: ['no SKILL.md'] });
+    expect(badFiles!.proposalId).toBeNull();
+    // The proposal is attributed from the run, never from the body's run_ref.
+    const p = (await runbookStore().getProposal(kept!.proposalId!))!;
+    expect(p.source).toMatchObject({ kind: 'run', run_ref: held.jobId });
+    expect(p.status).toBe('open');
+  });
+
   it('400s a completion with no usable status — the write that ends a job gets no default', async () => {
     const held = await claimed();
     for (const status of [undefined, 'finished', 'queued', 'running', 42]) {
