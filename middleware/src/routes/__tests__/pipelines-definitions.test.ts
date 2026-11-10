@@ -256,6 +256,13 @@ describe('approvals — ApproveStep, routed to the existing decision paths', () 
     expect(consult).toMatchObject({ type: 'pipeline.approval.requested', requiredRoles: ['operator'] });
   });
 
+  it('a note past the consult\'s answer cap is a 400 and the consult still waits (sweep 12, U1)', async () => {
+    const { CONSULT_ANSWER_MAX, getConsult } = await import('../../providers/lab.js');
+    const res = await request(kofi()).post('/api/pipelines/approvals/consult%3Acon-mock-1/decide').send({ decision: 'approve', note: 'n'.repeat(CONSULT_ANSWER_MAX) });
+    expect(res.status).toBe(400);
+    expect((await getConsult('con-mock-1'))?.status).toBe('pending');
+  });
+
   it('an operator approves a lab consult through the consult answer path', async () => {
     const res = await request(kofi()).post('/api/pipelines/approvals/consult%3Acon-mock-1/decide').send({ decision: 'approve', note: 'smallest first' });
     expect(res.status).toBe(200);

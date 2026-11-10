@@ -48,7 +48,7 @@ jest.mock('../../lib/runbooks/store-select.js', () => ({
 
 import { labRouter } from '../lab.js';
 import { mintRunToken, RUN_TOKEN_HEADER } from '../../lib/run-token.js';
-import { listExperiences } from '../../providers/lab.js';
+import { answerConsult, CONSULT_ANSWER_MAX, listExperiences } from '../../providers/lab.js';
 import { listFindings } from '../../providers/org-sweeps.js';
 
 function appWith(session: { sub: string; role: string; tenant: string } | null) {
@@ -168,6 +168,18 @@ describe('lab consults', () => {
     // Answering twice conflicts.
     const again = await request(leader()).post(`/api/lab/consults/${id}/answer`).send({ answer: 'no' });
     expect(again.status).toBe(409);
+  });
+
+  it('the server caps an answer whatever the client\'s card allows (sweep 12, U1)', async () => {
+    const opened = await request(agent()).post('/api/lab/consults').send({ question: 'Which flag name?' });
+    const id = opened.body.consult.id as string;
+    const tooLong = await request(leader()).post(`/api/lab/consults/${id}/answer`).send({ answer: 'a'.repeat(CONSULT_ANSWER_MAX + 1) });
+    expect(tooLong.status).toBe(400);
+    expect((await request(agent()).get(`/api/lab/consults/${id}`)).body.consult.status).toBe('pending');
+    // The provider holds the same line for any other caller.
+    await expect(answerConsult(id, 'a'.repeat(CONSULT_ANSWER_MAX + 1), 'u-vera')).rejects.toMatchObject({ status: 400 });
+    const atCap = await request(leader()).post(`/api/lab/consults/${id}/answer`).send({ answer: 'a'.repeat(CONSULT_ANSWER_MAX) });
+    expect(atCap.status).toBe(200);
   });
 
   it('the human list requires a session; the agent poll does not', async () => {

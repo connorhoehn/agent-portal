@@ -19,6 +19,7 @@
 
 import { exec } from './aurora.js';
 import { config } from '../config.js';
+import { ValidationError } from '../lib/async-handler.js';
 // The mock stores below are fixture writes living outside src/mock, so their
 // stamps come from the one clock rather than `new Date()` — freezeClock can
 // then pin what a write recorded, and expireStale reads the same instant the
@@ -249,8 +250,19 @@ export async function listConsults(opts: { status?: string; limit?: number } = {
   return rows.map(rowToConsult);
 }
 
+/**
+ * The longest answer a consult takes, whatever client sent it (sweep 12, U1).
+ * The voice card caps its note at 500 characters (portal lib/voice/records.ts
+ * ANSWER_MAX), but the answer route and the approvals inbox's decide (which
+ * answers with "Approved — <note>") are reachable without that card, and the
+ * answer is fed back into a running agent's session as prose. Generous
+ * enough for a typed paragraph or two; enforced here so both routes share it.
+ */
+export const CONSULT_ANSWER_MAX = 2000;
+
 /** Answer a pending consult. Attribution comes from the session, never the body. */
 export async function answerConsult(id: string, answer: string, answeredBy: string): Promise<LabConsult | null> {
+  if (answer.length > CONSULT_ANSWER_MAX) throw new ValidationError(`an answer is at most ${CONSULT_ANSWER_MAX} characters`);
   if (config.mock.aurora) {
     const c = labConsults.rows().find((x) => x.id === id);
     if (!c || expireStale(c).status !== 'pending') return null;

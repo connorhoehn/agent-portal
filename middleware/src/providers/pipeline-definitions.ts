@@ -602,8 +602,11 @@ async function decideApprovalRow(id: string, decision: 'approve' | 'reject', opt
     if (!out.ok) return { ok: false, status: 409, error: out.error ?? 'could not decide the change' };
     return { ok: true, approval, decision, outcome: out.status ?? decision };
   }
-  const { answerConsult } = await import('./lab.js');
-  const consult = await answerConsult(approval.sourceId, consultAnswer(decision, note), opts.sub ?? 'unknown');
+  const { answerConsult, CONSULT_ANSWER_MAX } = await import('./lab.js');
+  const answer = consultAnswer(decision, note);
+  // The consult's own cap (sweep 12, U1), the same one POST /api/lab/consults/:id/answer applies.
+  if (answer.length > CONSULT_ANSWER_MAX) return { ok: false, status: 400, error: `an answer is at most ${CONSULT_ANSWER_MAX} characters` };
+  const consult = await answerConsult(approval.sourceId, answer, opts.sub ?? 'unknown');
   if (!consult) return { ok: false, status: 409, error: 'the consult is no longer pending' };
   return { ok: true, approval, decision, outcome: consult.status };
 }

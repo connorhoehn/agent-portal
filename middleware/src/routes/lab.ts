@@ -23,7 +23,7 @@ import { rateLimit } from '../lib/rate-limit.js';
 import { fileLabSignal } from '../providers/org-sweeps.js';
 import {
   recordExperience, listExperiences, EXPERIENCE_KINDS, type ExperienceKind,
-  openConsult, getConsult, listConsults, answerConsult,
+  openConsult, getConsult, listConsults, answerConsult, CONSULT_ANSWER_MAX,
 } from '../providers/lab.js';
 import { requireServiceAuth, LAB_CALLBACK_SERVICE_AUTH } from '../lib/service-auth.js';
 import { notifyPipelinesWorkGraphChanged } from '../lib/work-graph/live.js';
@@ -203,6 +203,8 @@ labRouter.get('/consults/:id', callbackLimit, sessionOrLabAuth, asyncHandler(asy
 labRouter.post('/consults/:id/answer', orgiqOnly, requireAction('DispatchAgentRun'), asyncHandler(async (req, res) => {
   const answer = str((req.body ?? {})['answer']);
   if (!answer) throw new ValidationError('`answer` is required');
+  // The server's own cap, whatever the client's card allows (sweep 12, U1).
+  if (answer.length > CONSULT_ANSWER_MAX) throw new ValidationError(`\`answer\` is at most ${CONSULT_ANSWER_MAX} characters`);
   const who = req.session?.sub ?? 'unknown';
   // An answer steers a running agent: only for someone on its initiative (DE-44 row 29).
   const pending = await getConsult(String(req.params['id']));
