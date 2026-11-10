@@ -93,6 +93,28 @@ REGION = os.environ.get("AWS_REGION", "us-east-1")
 MODEL_ROLE = "supervisor"
 #: Bound on one sub-agent answer handed to this model.
 SUB_AGENT_MAX_CHARS = 40_000
+#: Earlier turns replayed into a run: the newest ones, each bounded.
+MAX_HISTORY_TURNS = 40
+HISTORY_TURN_MAX_CHARS = 8_000
+
+
+def history_turns(raw_history) -> list[tuple[str, str]]:
+    """The caller's earlier turns as ``(role, content)``, newest
+    ``MAX_HISTORY_TURNS``. A user turn is the caller's own words and stays as
+    written (bounded); an assistant turn can quote what was retrieved for it
+    (documents, other agents' answers), so it is replayed as a fenced data
+    block (_shared/untrusted_text.py), never as instructions. Malformed turns
+    are dropped."""
+    fence = Fence()
+    out: list[tuple[str, str]] = []
+    for turn in raw_history if isinstance(raw_history, list) else []:
+        if not (isinstance(turn, dict) and turn.get("role") and isinstance(turn.get("content"), str) and turn["content"]):
+            continue
+        if turn["role"] == "user":
+            out.append(("user", turn["content"][:HISTORY_TURN_MAX_CHARS]))
+        else:
+            out.append(("assistant", fence.wrap(turn["content"], kind="earlier-answer", max_chars=HISTORY_TURN_MAX_CHARS)))
+    return out[-MAX_HISTORY_TURNS:]
 _MODEL_DEFAULTS = {"default_model_id": "amazon.nova-pro-v1:0", "default_temperature": 0.0, "default_max_tokens": 4096}
 MODEL_ID = resolve_model(MODEL_ROLE, **_MODEL_DEFAULTS).model_id
 PREFIX = os.environ.get("PROJECT_PREFIX", "orgiq")
@@ -730,13 +752,12 @@ async def _handle_streaming(payload: dict, input_text: str, role: str, tenant: s
         # omitting it is a pydantic ValidationError that kills the invocation
         # (found live after the 2026-08 base-image rebuild pulled the newer SDK).
         messages = []
-        for i, turn in enumerate(payload.get("history", [])):
-            if isinstance(turn, dict) and turn.get("role") and turn.get("content"):
-                if turn["role"] == "user":
-                    messages.append(UserMessage(id=f"hist-{i}", role="user", content=turn["content"]))
-                else:
-                    from ag_ui.core import AssistantMessage
-                    messages.append(AssistantMessage(id=f"hist-{i}", role="assistant", content=turn["content"]))
+        for i, (turn_role, content) in enumerate(history_turns(payload.get("history", []))):
+            if turn_role == "user":
+                messages.append(UserMessage(id=f"hist-{i}", role="user", content=content))
+            else:
+                from ag_ui.core import AssistantMessage
+                messages.append(AssistantMessage(id=f"hist-{i}", role="assistant", content=content))
 
         # Add the current user message.
         messages.append(UserMessage(id=f"msg-{time.time_ns()}", role="user", content=input_text))
@@ -885,11 +906,8 @@ async def _handle_sync(payload: dict, input_text: str, role: str, tenant: str = 
     _sync_model = resolve_model(MODEL_ROLE, **_MODEL_DEFAULTS)
     served_model = _sync_model.model_id
 
-    messages = []
     raw_history = payload.get("history", []) if isinstance(payload, dict) else []
-    for turn in raw_history:
-        if isinstance(turn, dict) and turn.get("role") and turn.get("content"):
-            messages.append({"role": turn["role"], "content": [{"text": turn["content"]}]})
+    messages = [{"role": r, "content": [{"text": c}]} for r, c in history_turns(raw_history)]
 
     ctx = TraceContext.from_request_payload(payload if isinstance(payload, dict) else {})
     token = _current_ctx.set(ctx)
