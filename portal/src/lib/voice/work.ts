@@ -64,6 +64,7 @@ import type { PageRow } from './pageContext.ts';
 import { deriveJob, dispatchBlockedReason, dispatchBody, modelLabel } from '../../pages/project-detail/prepareJobModel.ts';
 import { flattenWorkItems } from '../../pages/project-detail/projectFormat.ts';
 import type { Codebase, WorkItemTree } from '../../pages/project-detail/types.ts';
+import type { NextStepDecision } from '../workNextStep.ts';
 
 // ── targets ─────────────────────────────────────────────────────────────────
 
@@ -436,14 +437,19 @@ async function planDispatch(ctx: ToolContext, rows: ReadonlyArray<Pick<PageRow, 
   const projectId = initiativeId ?? (record && /^initiative:(.+)$/.exec(record.ref)?.[1]) ?? null;
   if (!projectId) return { result: refused('Open the initiative whose work this is, then ask again.', { code: 'not-on-this-page' }) };
   const canDispatch = ctx.can('DispatchAgentRun');
-  const [tree, detail, codebases] = await Promise.all([
+  const [tree, detail, codebases, decisionsRead] = await Promise.all([
     readJson<WorkItemTree[]>(ctx, `/api/graph/projects/${enc(projectId)}/work`),
     readJson<{ name?: string; repoFullName?: string | null }>(ctx, `/api/graph/projects/${enc(projectId)}`),
     readJson<{ projects?: Codebase[] }>(ctx, '/api/agent-projects'),
+    // The drawer's own read: the initiative's decisions decide the instruction's "Start with" (lib/workNextStep.ts).
+    readJson<NextStepDecision[]>(ctx, `/api/graph/projects/${enc(projectId)}/decisions`),
   ]);
   if (!tree.ok) return { result: readFailure('the initiative\'s work', tree.status) };
   if (!detail.ok) return { result: readFailure('the initiative', detail.status) };
   const initiative = detail.body.name ?? 'the initiative';
+  // Unread (a failed read) is what the drawer has before its read lands: the item's own step, fenced.
+  const decisions = decisionsRead.ok && Array.isArray(decisionsRead.body)
+    ? decisionsRead.body.filter((d) => d && typeof d.id === 'string' && typeof d.topic === 'string') : null;
   const all = flattenWorkItems(Array.isArray(tree.body) ? tree.body : []);
   const repos = codebases.ok ? (codebases.body.projects ?? []).filter((c) => c.orgProjectId === projectId) : [];
   const said = typeof args['model'] === 'string' ? args['model'] : undefined;
@@ -456,7 +462,7 @@ async function planDispatch(ctx: ToolContext, rows: ReadonlyArray<Pick<PageRow, 
     if (!item) return { result: refused(`"${rows[i]!.title}" is not work of ${initiative} you can dispatch.`, { code: 'not-on-initiative' }) };
     const blocked = dispatchBlockedReason(item, canDispatch);
     if (blocked) return { result: refused(`"${item.title}" cannot be dispatched: ${blocked.toLowerCase()}.`, { code: 'not-dispatchable', blocked }) };
-    const job = deriveJob({ item, codebases: repos, linkedRepo: detail.body.repoFullName ?? null });
+    const job = deriveJob({ item, codebases: repos, linkedRepo: detail.body.repoFullName ?? null, nextStepContext: { decisions } });
     if (named) job.model = named.id;
     if (!items.some((x) => x.id === item.id)) items.push({ id: item.id, title: item.title, body: dispatchBody(item.id, job, {}), model: job.model, points: item.storyPoints!, agentProjectId: job.agentProjectId });
   }

@@ -366,8 +366,11 @@ const PROJECTS = [{ id: 'p-auth', name: 'Auth Migration' }, { id: 'p-obs', name:
 /** The initiative page's own reads (G22): its work tree, its detail (the linked repo), the codebases that deliver it. */
 const CODEBASE = '11111111-2222-4333-8444-555555555555';
 const RETRY_STORM = { id: 'w-9', type: 'story', title: 'Fix the retry storm', status: 'open', priority: 'high', storyPoints: 3, children: [] };
+/** The initiative's decisions, as the drawer reads them for the derived "Start with" (none links the retry storm here). */
+const AUTH_DECISIONS = [{ id: 'd-1', topic: 'Session store for the new auth service', status: 'open', workItemId: 'w-other' }];
 const INITIATIVE_READS: Route[] = [
   route('GET', '/api/graph/projects/p-auth/work', 200, [{ id: 'e-1', type: 'epic', title: 'Resilience', children: [RETRY_STORM] }]),
+  route('GET', '/api/graph/projects/p-auth/decisions', 200, AUTH_DECISIONS),
   route('GET', '/api/graph/projects/p-auth', 200, { id: 'p-auth', name: 'Auth Migration', repoFullName: 'acme/auth' }),
   route('GET', '/api/agent-projects', 200, { projects: [{ id: CODEBASE, repoFullName: 'acme/auth', orgProjectId: 'p-auth' }] }),
 ];
@@ -504,6 +507,32 @@ test('V2-9: the dispatch card shows the drawer\'s forecast; an unknown model is 
   assert.equal(braked.res?.outcome, 'refused');
   assert.match(braked.res?.summary ?? '', /needs a confirm on its page, not by voice: over the allocation/);
   assert.ok(!JSON.stringify(braked.log.map((l) => l.body)).includes('confirmOver'), 'no confirm flag is ever sent');
+});
+
+test('sweep 12 follow-up: a voice dispatch reads the initiative\'s decisions, so "Start with" is the drawer\'s derived next step, fenced', async () => {
+  const dispatch = CASES.find((c) => c.kind === 'dispatch')!;
+  const waiting = { ...RETRY_STORM, labels: ['blocked'], blockedReason: 'Waits on the "session store" call; Nora Diaz decides Friday', blockedByDecisionId: 'd-2', nextStep: 'Add jitter to the retry loop "now"' };
+  const decisions = [...AUTH_DECISIONS, { id: 'd-2', topic: 'Retry budget for "auth" callers', status: 'open', workItemId: 'w-9' }];
+  const routes = [
+    route('GET', '/api/graph/work', 200, [{ id: 'w-9', title: 'Fix the retry storm', projectId: 'p-auth', storyPoints: 3 }]),
+    route('GET', '/api/graph/projects/p-auth/work', 200, [{ id: 'e-1', type: 'epic', title: 'Resilience', children: [waiting] }]),
+    route('GET', '/api/graph/projects/p-auth/decisions', 200, decisions),
+    ...INITIATIVE_READS.slice(2),
+    ...dispatch.routes.slice(1 + INITIATIVE_READS.length),
+  ];
+  const r = await kindRun({ ...dispatch, routes });
+  assert.equal(r.res?.outcome, 'done', r.res?.summary);
+  assert.ok(r.log.some((l) => l.method === 'GET' && l.url === '/api/graph/projects/p-auth/decisions'), 'the decisions are read before the card');
+  const sent = r.log.find((l) => l.method === 'POST' && l.url === '/api/bots/dispatch-work')!.body as { instruction: string };
+  const item = { ...waiting, summary: null, description: null, nextStepDetail: null };
+  assert.equal(sent.instruction, deriveInstruction(item, { decisions }), 'the drawer\'s instruction for the same item and decisions');
+  assert.notEqual(sent.instruction, deriveInstruction(item), 'not the row\'s own step');
+  assert.match(sent.instruction, /Start with: The decision .*Retry budget for .*auth.* callers.* comes first\./);
+  assert.doesNotMatch(sent.instruction.split('Start with:')[1]!, /"/, 'row text is fenced: no double quotes');
+  // A decisions read that fails is the drawer before its read lands: the item's own step.
+  const down = await kindRun({ ...dispatch, routes: [route('GET', '/api/graph/projects/p-auth/decisions', 503, { error: 'down' }), ...routes.filter((_, i) => i !== 2)] });
+  const sentDown = down.log.find((l) => l.method === 'POST' && l.url === '/api/bots/dispatch-work')!.body as { instruction: string };
+  assert.equal(sentDown.instruction, deriveInstruction(item));
 });
 
 test('V2-9: each kind is refused on its page button\'s action before any request; a kind from another workspace is refused too', async () => {

@@ -41,6 +41,8 @@ async function run(opts: { dispatch?: Route; confirm?: boolean } = {}) {
       model: 'gpt-live-1', voice: null, toolsEnabled: true, tools: ['queue_work'], budget: { holdUsd: 0.5, usdPerMinute: 0.05 }, mockScript: mockLiveScript(SESSION, DISPATCH),
     }),
     route('GET', '/api/graph/projects/p-auth/work', 200, [{ id: 'e-1', type: 'epic', title: 'Auth', children: ITEMS }]),
+    // The drawer's decisions read: the instruction's "Start with" is derived from them (lib/workNextStep.ts).
+    route('GET', '/api/graph/projects/p-auth/decisions', 200, [{ id: 'd-9', topic: 'Cookie lifetime', status: 'open', workItemId: 'w-4' }]),
     route('GET', '/api/graph/projects/p-auth', 200, { id: 'p-auth', name: 'Auth migration', repoFullName: 'acme/auth' }),
     route('GET', '/api/agent-projects', 200, { projects: [{ id: CODEBASE, repoFullName: 'acme/auth', orgProjectId: 'p-auth' }] }),
     route('GET', '/api/bots/estimate', 200, { costUsdP25: 0.5, costUsdP75: 1.5 }),
@@ -89,6 +91,7 @@ test('three page rows dispatch after one confirm, with the page\'s defaults and 
   assert.equal((posts[1]!.body as Record<string, unknown>)['model'], 'us.anthropic.claude-sonnet-5', 'the item\'s own recorded model');
   assert.equal((posts[0]!.body as Record<string, unknown>)['model'], 'us.anthropic.claude-haiku-4-5-20251001-v1:0', 'else the runtime default');
   assert.deepEqual(r.tracked, ['job-1', 'job-2', 'job-3'], 'one followed job each');
+  assert.equal(r.log.filter((l) => l.url === '/api/graph/projects/p-auth/decisions').length, 1, 'the initiative\'s decisions are read once for the card');
   const confirms = loggedEvents(r.log).filter((e) => e['kind'] === 'confirm-shown');
   assert.equal(confirms.length, 1);
   const calls = r.after.turns.flatMap((t) => t.toolCalls ?? []);
