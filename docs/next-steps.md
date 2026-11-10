@@ -670,3 +670,23 @@ The items the lanes above logged as not done, one commit each, checked headlessl
 - **Ids in Runs and the Queue.** An unnamed bot firing reads "Bot firing", not "bot <uuid>"; a dispatched run with no item title reads "Marketplace work" with the id behind `CopyIdButton`; an artifact's Where names the place ("Work queue · the job's result", "Changes · change request", "Commit abc1234") with the key in the title. A sweep of /iq/runs, one run of each kind and the Queue finds no bracketed id, `bot:` id or UUID left in visible text; the job record's "Technical details" keeps its labelled ids.
 
 Library gap (not released here): DataTable has no column-priority prop, so the desk's priorities are container-query classes on its columns (`deskColumns.ts`); a `priority` on `DataTableColumn` would let any table do it.
+
+## 14. 9–10 November 2026, in one place
+
+139 commits on main between `5fa46fc6` and `9fa198fc`, all pushed. Each lane's detail is in the sections above and in `docs/voice-navigator-gaps.md`; this is the map.
+
+- **Voice.** A stopped round always continues (the session can no longer go deaf), an empty hand-off is watched from its last activity, three unanswered utterances offer a restart, and one runaway restart is automatic (G59–G65). Session diagnostics record what each utterance led to, with no words stored (G63). A replay suite drives today's controller with the shape of every logged session; its fixture carries no ids, hashes or timestamps. Coverage grew inside the same tools: work items, budgets, runs, sprint questions, decisions, the review queue and runbooks.
+- **Journeys.** `cd portal && npm run journey:demo-moments` (five demo moments, by hand and by voice on the mock) and `npm run journey:voice-coverage` both pass. Deciding unblocks the work it held up; an initiative with a bound channel has one conversation.
+- **Content.** The Work demo data tells the Halyard story; `scripts/content/check-story.mjs` runs in CI.
+- **Pages.** Two full walks (Work, then the other four tenants), a regression walk and four fix lanes: in-place no-access pages with a role switch or an access request, narrow-width forms, disabled controls that say why, names instead of ids.
+- **Security.** Sweeps 8, 9 and 10 found and fixed: trace text scoped everywhere a member can read it, with a guard over every reader; identity taken only from the signed block, with a nonce; untrusted text fenced in every prompt, in both languages; one knowledge-base data source per tenant; demo users as a dev-only seed; health detail for local callers only. Libraries: realtime-modules 0.147.1 (hooks required, browser-safe client with a bundle guard), ui-components 2.515.11 (every link through the safe-URL check), platform-api 0.1.8, event-catalog 0.10.8, realtime-examples 0.2.12.
+- **Public repository.** No live credential was found in the full history. The first replay fixture (session ids and argument hash prefixes) is still in history at `8f14eb64`; rewriting history is the owner's decision.
+- **How changes are verified now.** A library pin bump is merged only after a headless page load on a fresh Vite optimizer cache inside the project and a check of the production bundle; an HTTP 200 from the dev server proves nothing. Merges to main wait for the newest voice session to be closed, because the owner's portal and middleware run from the main checkout.
+
+### Open after this run
+
+- The owner's decisions: rewrite history or not; a fine-grained CI token; the Docker registry prefix default in `scripts/build.sh`.
+- Deploy notes that only matter on AWS: the middleware and the agents ship together (signed block with a nonce); the replay cache needs a shared store with more than one replica; documents need tenant metadata backfilled (`infra/SECURITY-NOTES.md`); one new column (`devbox_boxes.last_occupant`).
+- Not proven on a live model: the voice passes drive scripted calls. The owner's 13:53 session on 9 November (four and a half silent minutes with no stopped round) has no proven cause; the diagnostics will explain the next one.
+- Library gaps: `DataTable` has no column-priority prop; ui-components has no ESLint installed, so its safe-URL rule runs as a script.
+- Small: people without Social access still see the old initiative thread on a bound initiative; `/comment` notes stay on that thread; the catalogue's fixed input is 652 characters under its limit.
