@@ -37,6 +37,7 @@ import {
 import { buildTenantDeckFromText, deckCommandSpec } from '../../components/chat/tenantDeckCompose';
 import { useCapabilities } from '../../lib/capabilities';
 import { postInitiativeComment } from './initiativeComment';
+import { workNoteNotNotified, workNoteReferenceMetadata, workNoteReferenceText } from './initiativeConversationModel';
 import { initiativeAgentRequest, type InitiativeAgentRequest } from './initiativeAgentRequest';
 import { useSession } from '../../lib/auth';
 import { useCallHost } from '../../lib/conversationCall';
@@ -296,22 +297,46 @@ function DockedComposer({
     { trigger: '/invite', label: 'Invite to the current huddle', description: 'Request an invitation for exact @names without posting a chat message.', modes: ['chat'],
       run: input => invitePeople(input.argumentText) },
     ...(subject.kind === 'item' ? [{ trigger: '/comment', label: 'Add a work-item comment', hint: subject.item.key ?? subject.item.title,
-      description: 'Save a note on this work item and keep it in the initiative conversation.', modes: ['chat' as const],
+      description: discussionLabel.startsWith('#') ? `Save a note on this work item and mention it in ${discussionLabel}.` : 'Save a note on this work item and keep it in the initiative conversation.', modes: ['chat' as const],
       run: async (input: { argumentText: string }) => {
         const body = input.argumentText.trim();
         if (!body) return 'Write a note after /comment.';
-        if (!conversation?.maySend) return 'Your role cannot comment on work items.';
+        // A bound initiative's note is a record on the work item (the server's comment rule decides); posting the
+        // channel's reference is the channel's rule, checked after the note is saved. Unbound: the thread's writers.
+        const boundHere = discussionLabel.startsWith('#');
+        if (!boundHere && !conversation?.maySend) return 'Your role cannot comment on work items.';
         const captured = latestScope.current;
         const signature = `${scopeKey}:${subject.project.id}:${subject.item.id}:${body}`;
         if (commentDelivery.current?.signature !== signature) commentDelivery.current = { signature, id: crypto.randomUUID() };
         const editor = composerRef.current?.editor;
         const submittedHtml = editor?.getHTML();
-        await postInitiativeComment(subject.project.id, subject.item.id, body, commentDelivery.current.id);
+        const saved = await postInitiativeComment(subject.project.id, subject.item.id, body, commentDelivery.current.id);
         if (latestScope.current !== captured || composerRef.current?.editor !== editor) return false;
         commentDelivery.current = null;
         // Clear before navigation refreshes the activity view. A new edit made
         // while the request was pending belongs to the next message.
         if (editor && !editor.isDestroyed && editor.getHTML() === submittedHtml) editor.commands.clearContent(true);
+        if (saved.discussion === 'channel') {
+          // Bound (leftovers 2): one line in the channel through the route every channel message takes (the
+          // gateway, under the channel's posting rule), marked so the pane's Work notes view finds it.
+          const label = boundHere ? discussionLabel : "the initiative's channel";
+          const item = subject.item.title;
+          const canPost = !!conversation?.maySend && conversation.connected && !!gateway?.onMessage && conversation.channel.startsWith('social:');
+          let notice = workNoteNotNotified(item, label, chatUnavailableReason ?? `You cannot post in ${label}.`);
+          if (canPost) {
+            try {
+              const sent = await discussionDelivery.send({ scopeKey, channel: conversation!.channel, userId: conversation!.userId,
+                text: workNoteReferenceText(item, body), metadata: workNoteReferenceMetadata(subject.item.id),
+                signal: abort.current.signal, current: () => latestScope.current === captured,
+                listen: gateway!.onMessage, sendMessage: conversation!.chat.sendMessage, newId: () => crypto.randomUUID() });
+              if (sent) notice = `Comment saved on ${item} and mentioned in ${label}.`;
+            } catch (error) {
+              notice = workNoteNotNotified(item, label, error instanceof Error ? error.message : 'the message was not confirmed.');
+            }
+            if (latestScope.current !== captured) return false;
+          }
+          setReceipt({ scope: scopeKey, destination: label, state: 'notice', detail: notice });
+        }
         onComment?.();
         return true;
       },

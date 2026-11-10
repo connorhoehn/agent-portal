@@ -117,7 +117,7 @@ import { InitiativeAgentPanel, type InitiativeAgentHandle } from './projects/Ini
 import { useInitiativeCall } from './projects/InitiativeCall';
 import { postInitiativeComment } from './projects/initiativeComment';
 import { InitiativeComposer } from './projects/InitiativeComposer';
-import { initiativeConversationMessages, type InitiativeConversationFilter } from './projects/initiativeConversationModel';
+import { CHANNEL_FILTERS, channelConversationMessages, initiativeConversationMessages, parseChannelFilter, type ChannelConversationFilter, type InitiativeConversationFilter } from './projects/initiativeConversationModel';
 import { InitiativeDetailsTrigger, type InitiativeFactsInput } from './projects/InitiativeDetailsCard';
 import { useInitiativeSocialChannel } from './projects/InitiativeDiscussion';
 import { NOT_A_MEMBER_REASON, discussionAccess, initiativeDiscussionTarget } from './projects/initiativeDiscussionTarget';
@@ -390,6 +390,8 @@ function ProjectDetailPage() {
   const [initiativeThread, setInitiativeThread] = useState<WorkThread | null>(null);
   const [conversationFilter, setConversationFilter] = useUrlState<InitiativeConversationFilter>('conversation',
     raw => raw === 'all' || raw === 'initiative' ? raw : 'dialogue', value => value === 'dialogue' ? null : value);
+  // A channel-backed pane's view (leftovers 2): All / Messages / Work notes / Agent, from each message's metadata.
+  const [channelFilter, setChannelFilter] = useUrlState<ChannelConversationFilter>('channelView', parseChannelFilter, value => value === 'all' ? null : value);
   useEffect(() => { if (current) thread.refreshComments(); }, [current?.id, initiativeThread?.chat.messages, thread.refreshComments]);
 
   const patchItem = useCallback((itemId: string, fields: WorkItemPatch): Promise<boolean> => {
@@ -1000,6 +1002,15 @@ function ProjectDetailPage() {
           <Stack gap="none" className="h-full min-h-0" data-testid="initiative-live-discussion">
             <Inline gap="sm" justify="between" align="center" className="border-b border-border px-4 py-2">
               <T size="xs" tone="secondary" data-testid="initiative-discussion-label">{discussion.kind === 'channel' || discussion.kind === 'elsewhere' ? `${discussion.label} · the initiative's channel` : 'Initiative channel'}</T>
+              {/* A bound channel's view: its messages, the /comment references (work notes) and agent posts, by metadata. */}
+              {discussion.kind === 'channel' && discussion.joined && <DropdownMenu trigger={<T as="span" size="xs" weight="medium">View: {CHANNEL_FILTERS.find((f) => f.id === channelFilter)?.label ?? 'All'}</T>}
+                triggerLabel="Filter the channel's messages" triggerVariant="link" align="end"
+                triggerTitle="Filter the messages you can read. This does not change posting access."
+                triggerTestId="initiative-conversation-filter" data-testid="initiative-conversation-filter-menu"
+                className="w-[280px] max-w-[calc(100vw-32px)]"
+                sections={[{ label: 'Message view', items: CHANNEL_FILTERS.map((f) => ({
+                  label: f.label, checked: channelFilter === f.id, description: f.description, onSelect: () => setChannelFilter(f.id),
+                })) }]} />}
               {/* Work-item notes (/comment) live on the initiative thread, so the views filter only that thread. */}
               {discussion.kind === 'thread' && <DropdownMenu trigger={<T as="span" size="xs" weight="medium">View: {conversationFilter === 'all' ? 'All messages' : conversationFilter === 'initiative' ? 'Initiative only' : 'Dialogue'}</T>}
                 triggerLabel="Filter initiative conversation" triggerVariant="link" align="end"
@@ -1018,16 +1029,17 @@ function ProjectDetailPage() {
               <EmptyState title={`Not a member of ${discussion.label}`} description={NOT_A_MEMBER_REASON} data-testid="initiative-discussion-not-member" />
             )}
             {/* The thread only: its one input is the content column's composer. */}
-            {initiativeThread && <ConversationThread key={initiativeThread.channel} conversation={discussion.kind === 'channel' ? initiativeThread
+            {initiativeThread && <ConversationThread key={initiativeThread.channel} conversation={discussion.kind === 'channel'
+              ? { ...initiativeThread, chat: { ...initiativeThread.chat, messages: channelConversationMessages(initiativeThread.chat.messages, channelFilter) } }
               : { ...initiativeThread, chat: { ...initiativeThread.chat, messages: initiativeConversationMessages(initiativeThread.chat.messages, conversationFilter) } }}
               title={discussion.kind === 'channel' ? discussion.label : 'Initiative discussion'} input="below" notices includeFiles={false}
               renderMessageReferences={workConversationReferences(project.id, openItem, treeRead && !workFailure ? [...workTree, ...allRows] : null)}
               emptyState={<Stack gap="xs" className="px-4 py-4" data-testid="initiative-conversation-empty">
                 <T size="sm" weight="semibold">{initiativeThread.chat.messages.length ? 'No messages in this view' : 'No messages yet'}</T>
                 <T size="xs" tone="secondary" wrap>{initiativeThread.chat.messages.length
-                  ? 'Other messages are available in All messages.'
+                  ? `Other messages are available in ${discussion.kind === 'channel' ? 'All' : 'All messages'}.`
                   : discussionNow.maySend ? 'Write in the composer below. Use /comment for a work-item note.' : 'Messages will appear here when someone posts.'}</T>
-                {initiativeThread.chat.messages.length > 0 && <Button variant="link" size="sm" className="self-start" onClick={() => setConversationFilter('all')} data-testid="initiative-conversation-show-all">
+                {initiativeThread.chat.messages.length > 0 && <Button variant="link" size="sm" className="self-start" onClick={() => (discussion.kind === 'channel' ? setChannelFilter('all') : setConversationFilter('all'))} data-testid="initiative-conversation-show-all">
                   <T as="span" size="xs">Show all messages</T>
                 </Button>}
               </Stack>}

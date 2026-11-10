@@ -1,8 +1,17 @@
-// A work comment is stored once in its initiative conversation. Work-item
-// comment feeds project the messages carrying that item's page reference.
+// A work comment (/comment) is a record on its work item, stored once:
+//   * unbound initiative: in the initiative conversation `orgiq:initiative:<id>`,
+//     whose work-item comment feeds project the messages carrying that item's
+//     page reference (providers/work-items.ts visibleThread);
+//   * an initiative bound to a Social channel (leftovers 2): the old thread is
+//     nobody's conversation any more, so the note goes on the item's own
+//     thread `orgiq:work:<id>`, which the same feed reads. The page then posts
+//     a one-line reference in the channel through the route every channel
+//     message takes (the gateway, governed by the channel's posting rule);
+//     `discussion: 'channel'` in the answer tells it to.
 import { AppError } from './async-handler.js';
 import { getWorkItem } from '../providers/work-items.js';
-import { liveMessageId } from './work-thread.js';
+import { liveMessageId, workThreadChannel } from './work-thread.js';
+import { boundChannel } from './initiative-discussion.js';
 import { postThreadMessage, socialChat } from './social-chat.js';
 import { clock } from '../mock/core/index.js';
 import { config } from '../config.js';
@@ -15,7 +24,9 @@ export async function postInitiativeWorkComment(input: {
 }) {
   const item = await getWorkItem(input.workItemId);
   if (!item || item.projectId !== input.projectId) throw new AppError(404, 'Work item is not in this initiative');
-  const channel = `orgiq:initiative:${input.projectId}`;
+  const bound = await boundChannel(input.projectId);
+  const channel = bound ? workThreadChannel(input.workItemId) : `orgiq:initiative:${input.projectId}`;
+  const discussion = bound ? 'channel' as const : 'thread' as const;
   const write = async () => {
     const backend = socialChat(); await backend.ready;
     const prior = (await backend.chatStore.listMessages(channel, 1000)).find(message =>
@@ -42,5 +53,5 @@ export async function postInitiativeWorkComment(input: {
   };
   const next = (pending.get(channel) ?? Promise.resolve()).catch(() => undefined).then(write);
   pending.set(channel, next);
-  try { return await next; } finally { if (pending.get(channel) === next) pending.delete(channel); }
+  try { return { ...(await next), discussion }; } finally { if (pending.get(channel) === next) pending.delete(channel); }
 }
