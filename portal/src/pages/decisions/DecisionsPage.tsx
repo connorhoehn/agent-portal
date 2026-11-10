@@ -19,9 +19,8 @@ import { collectionCommandAdapter, resolveCollectionTarget } from '../../compone
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { useUrlState } from '../../lib/useUrlState';
-import { relativeTime } from '../../lib/relativeTime';
 import { DECISION_GRAMMAR } from './decisionCommands';
-import { DECISIONS_SOURCE, decidedWhen, filterDecisions, matchesDecision, outcomeFirstLine, sortDecisions, statusLabel, STATUS_TONE } from './decisionFormat';
+import { DECISIONS_SOURCE, decidedShort, filterDecisions, matchesDecision, outcomeFirstLine, sortDecisions, statusLabel, STATUS_TONE } from './decisionFormat';
 import DecisionRecordPage from './DecisionRecordPage';
 import { RecordLink } from './RecordLink';
 import type { DecisionSummary, InitiativeName } from './types';
@@ -74,14 +73,14 @@ export default function DecisionsPage() {
   const columns: DataTableColumn<DecisionSummary>[] = [
     {
       key: 'topic', header: 'Decision', sortable: true,
-      render: (d) => <RecordLink to={href(d.id, search)} className="block max-w-[11rem] truncate" title={d.topic}>{d.topic}</RecordLink>,
+      render: (d) => <RecordLink to={href(d.id, search)} className="block max-w-[13rem] truncate" title={d.topic}>{d.topic}</RecordLink>,
     },
     {
       // The date and the secondary columns give way as the table narrows (DataTable `responsiveColumns`,
-      // ui-components 2.516.0): Decided, People, Outcome, then Initiative; the decision and its status never hide.
-      key: 'projectId', header: 'Initiative', sortable: true, priority: 2,
+      // ui-components 2.516.0): Outcome, then Initiative go first; the decision, its status and the short date stay. (The people count is on the record page; the list carries no decider.)
+      key: 'projectId', header: 'Initiative', sortable: true, priority: 3,
       compare: (a, b) => (nameOf(a.projectId) ?? '').localeCompare(nameOf(b.projectId) ?? ''),
-      render: (d) => <T size="xs" tone="secondary" className="block max-w-40 truncate" title={nameOf(d.projectId) ?? 'Organisation-wide'}>{nameOf(d.projectId) ?? 'Organisation-wide'}</T>,
+      render: (d) => <T size="xs" tone="secondary" className="block max-w-[9rem] truncate" title={nameOf(d.projectId) ?? 'Organisation-wide'}>{nameOf(d.projectId) ?? 'Organisation-wide'}</T>,
     },
     {
       key: 'status', header: 'Status', sortable: true,
@@ -89,20 +88,16 @@ export default function DecisionsPage() {
     },
     {
       // G54: what a settled decision decided, its first line; a waiting one has none yet.
-      key: 'outcome', header: 'Outcome', priority: 3,
+      key: 'outcome', header: 'Outcome', priority: 4,
       render: (d) => {
         const line = outcomeFirstLine(d);
-        return <T size="xs" tone={line ? 'secondary' : 'tertiary'} className="block max-w-48 truncate" title={line ?? undefined}>{line ?? '—'}</T>;
+        return <T size="xs" tone={line ? 'secondary' : 'tertiary'} className="block max-w-36 truncate" title={line ?? undefined}>{line ?? '—'}</T>;
       },
     },
     {
-      key: 'participantCount', header: 'People', align: 'right', numeric: true, priority: 4,
-      render: (d) => <T size="xs" tone="tertiary">{d.participantCount}</T>,
-    },
-    {
-      key: 'decidedAt', header: 'Decided', align: 'right', sortable: true, priority: 5,
+      key: 'decidedAt', header: 'Decided', align: 'right', sortable: true, priority: 2,
       compare: (a, b) => (a.decidedAt ?? '').localeCompare(b.decidedAt ?? ''),
-      render: (d) => <T size="xs" tone="tertiary" className="whitespace-nowrap">{d.decidedAt ? decidedWhen(d.decidedAt, relativeTime) : '—'}</T>,
+      render: (d) => <T size="xs" tone="tertiary" className="whitespace-nowrap">{d.decidedAt ? decidedShort(d.decidedAt) : '—'}</T>,
     },
   ];
 

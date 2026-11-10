@@ -54,6 +54,15 @@ export function decidedWhen(value: string, relative: (iso: string) => string, no
   return said.startsWith('in ') ? calendarDay(iso) : said;
 }
 
+/** The table's date: "today", else "Nov 2" (with the year only when it is not this one). The record page says the rest. */
+export function decidedShort(value: string, now: number = Date.now()): string {
+  const at = Date.parse(asInstant(value));
+  if (!Number.isFinite(at)) return value;
+  if (new Date(at).toDateString() === new Date(now).toDateString()) return 'today';
+  const sameYear = new Date(at).getFullYear() === new Date(now).getFullYear();
+  return new Date(at).toLocaleDateString('en-US', sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: '2-digit' });
+}
+
 export const statusLabel = (status: string): string => STATUS_LABEL[status] ?? status;
 
 /** Waiting decisions first (escalated, then open), then the settled ones, newest first. */

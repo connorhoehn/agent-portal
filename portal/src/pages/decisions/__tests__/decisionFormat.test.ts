@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { collectionCommandAdapter } from '../../../components/collections/collectionCommands.ts';
 import { DECISION_GRAMMAR } from '../decisionCommands.ts';
-import { asInstant, decidedWhen, filterDecisions, heldWorkRows, historyOf, matchesDecision, sortDecisions, standingLine } from '../decisionFormat.ts';
+import { asInstant, decidedShort, decidedWhen, filterDecisions, heldWorkRows, historyOf, matchesDecision, sortDecisions, standingLine } from '../decisionFormat.ts';
 import type { DecisionDetail } from '../types';
 
 const person = (personId: string, name: string, role: string) => ({ personId, name, title: null, role, weight: 1 });
@@ -89,4 +89,12 @@ test('decisions grammar: status phrases and search; no decide verbs', async () =
   for (const bad of ['decide d-1', 'escalate everything', 'approve all decisions']) {
     await assert.rejects(() => Promise.resolve(adapter.execute(bad)), bad);
   }
+});
+
+test('decidedShort: the table date is today, Nov 7, or Jun 22, 25 for another year', () => {
+  const now = new Date(2026, 10, 10, 15).getTime();
+  assert.equal(decidedShort('2026-11-10', now), 'today');
+  assert.equal(decidedShort('2026-11-07', now), 'Nov 7');
+  assert.equal(decidedShort('2025-06-22', now), 'Jun 22, 25');
+  assert.equal(decidedShort('not a date', now), 'not a date');
 });

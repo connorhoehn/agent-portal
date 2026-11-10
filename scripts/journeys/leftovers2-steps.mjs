@@ -27,7 +27,19 @@ export default {
       const ctx = await ctxFor(browser, 'vera', w, w === 390 ? 844 : 900);
       const page = await ctx.newPage(); watch(page, `1-vera-${w}`);
       await go(page, INIT);
-      if (w === 390) { await page.getByTestId('shell-footer-context-chat').click().catch(() => undefined); await sleep(1500); }
+      // The header stats: one line at width, one cluster per line when narrow; never a "•" that ends or starts a wrapped line.
+      const stats = await page.evaluate(() => {
+        const vis = (e) => !!e && e.getBoundingClientRect().width > 0 && getComputedStyle(e).display !== 'none';
+        const strip = document.querySelector('[data-testid=overview-stats]');
+        const stacked = document.querySelector('[data-testid=overview-stats-stacked]');
+        const rows = [...document.querySelectorAll('[data-testid=overview-decision-row]')];
+        const clipped = rows.flatMap((r) => [...r.querySelectorAll('*')].filter((c) => c.scrollWidth > c.clientWidth + 1 && getComputedStyle(c).overflow !== 'visible').map((c) => c.innerText.slice(0, 30)));
+        const rowText = rows.map((r) => r.innerText.replace(/\s+/g, ' '));
+        return { stripShown: vis(strip), stackedShown: vis(stacked), stackedLines: stacked ? [...stacked.children].filter(vis).length : 0, clipped, rowText, hscroll: document.documentElement.scrollWidth - window.innerWidth };
+      });
+      note(`1d stats line @${w}`, w === 390 ? (!stats.stripShown && stats.stackedShown && stats.stackedLines >= 2) : (stats.stripShown && !stats.stackedShown), stats);
+      note(`1e waiting row wraps, never clips @${w}`, stats.rowText.length > 0 && stats.clipped.length === 0 && stats.hscroll <= 0, stats);
+      if (w === 390) { await shot(page, '1-vera-390'); await page.getByTestId('shell-footer-context-chat').click().catch(() => undefined); await sleep(1500); }
       await shot(page, `1b-social-${w}`);
       if (w === 1440) {
         await page.getByTestId('initiative-conversation-filter').click().catch((e) => console.log('filter click failed', String(e).slice(0, 100)));
@@ -112,6 +124,10 @@ export default {
         await sleep(500);
         const step = await body(page, '[data-testid=work-item-next-step]').catch(() => 'ABSENT');
         await shot(page, `3-${name}-${w}`);
+        // At 390 the compact composer is one idle row (Agent, the input, Send) until it is focused, and then keeps its
+        // toolbar (and so Workflow) behind the "Aa" toggle: focus the input, open the toolbar, pick Workflow.
+        if (w === 390) { await page.locator('[data-testid=rich-chat-composer] .ProseMirror').first().click().catch(() => undefined); await sleep(500); }
+        if (w === 390 && !(await page.getByRole('button', { name: /Workflow/ }).first().isVisible().catch(() => false))) { await page.getByTestId('rich-chat-composer-format-toggle').click().catch(() => undefined); await sleep(300); }
         await page.getByRole('button', { name: /Workflow/ }).first().click().catch(() => undefined);
         await sleep(400);
         // A blocked item offers "Unblock this item"; one that only waits on a pending decision, "What does this wait on?" (walk fixes).
@@ -194,11 +210,13 @@ export default {
     }
   },
   async 5(browser, H) {
-    const { ctxFor, watch, go, shot, note, sleep } = H;
+    const { ctxFor, watch, go, body, shot, note, sleep } = H;
+    // `need`: the headers that must be on screen at each width (the others may fold into "+N columns");
+    // `sample`: text a row shows when the table has stacked into cards (no header row at all).
     const pages = [
-      ['decisions', 'vera', '/iq/decisions', 'table'],
-      ['budgets', 'vera', '/admin/budgets', 'table'],
-      ['assessment-teams', 'asha', '/assessment/teams', '[data-testid=assessment-teams] table, table'],
+      ['decisions', 'vera', '/iq/decisions', 'table', { 1440: ['Decision', 'Status', 'Decided'], 1280: ['Decision', 'Status', 'Decided'], 1024: ['Decision', 'Status', 'Decided'] }, 'Judge model for canary evaluation'],
+      ['budgets', 'vera', '/admin/budgets', 'table', { 1440: ['Initiative', 'Budget'], 1280: ['Initiative', 'Budget'], 1024: ['Initiative', 'Budget'], 768: ['Initiative', 'Budget'], 390: ['Initiative', 'Budget'] }, null],
+      ['assessment-teams', 'asha', '/assessment/teams', '[data-testid=assessment-teams] table, table', { 1440: ['Team', 'Certification'], 1280: ['Team', 'Certification'], 1024: ['Team', 'Certification'] }, 'Motion Assessment Factory'],
     ];
     const measure = (page, tableSel) => page.evaluate((sel) => {
       const tables = [...document.querySelectorAll(sel)].filter((t) => t.getBoundingClientRect().width > 0);
@@ -213,7 +231,7 @@ export default {
       const more = [...document.querySelectorAll('button')].filter((b) => /^\+\d+ columns?$/.test(b.innerText.trim())).map((b) => b.innerText.trim());
       return { tables: out, more, hscroll: document.documentElement.scrollWidth - window.innerWidth, bodyScroll: document.body.scrollWidth - window.innerWidth };
     }, tableSel);
-    for (const [name, who, url, sel] of pages) {
+    for (const [name, who, url, sel, need, sample] of pages) {
       const ctx = await ctxFor(browser, who, 1440, 900);
       const page = await ctx.newPage(); watch(page, `5-${name}`);
       let prev = null;
@@ -231,7 +249,13 @@ export default {
           await page.keyboard.press('Escape');
         }
         const first = m.tables[0] ?? null;
-        note(`5 ${name} @${w}`, m.hscroll <= 0 && m.bodyScroll <= 0 && !!first, { heads: first?.heads, more: m.more, popover, hscroll: m.hscroll, clipped: first?.clipped, ellipsized: first?.ellipsized, tableW: first?.w });
+        // Either every needed header is shown (a "+N" control then lists the rest, never empty), or the table has
+        // stacked into cards: no header row, and the rows' text is still on the page.
+        const heads = (first?.heads ?? []).map((h) => h.toLowerCase());
+        const missing = (need[w] ?? []).filter((h) => !heads.includes(h.toLowerCase()));
+        const cards = !first && !!sample && (await body(page)).includes(sample);
+        const moreOk = m.more.length === 0 || (popover ?? '').length > 0;
+        note(`5 ${name} @${w}`, m.hscroll <= 0 && m.bodyScroll <= 0 && moreOk && ((!!first && missing.length === 0) || cards), { mode: first ? 'table' : cards ? 'cards' : 'none', missing,  heads: first?.heads, more: m.more, popover, hscroll: m.hscroll, clipped: first?.clipped, ellipsized: first?.ellipsized, tableW: first?.w });
       }
       // resize within one load: 1440 -> 800 -> 1440
       await page.setViewportSize({ width: 1440, height: 900 });
@@ -243,7 +267,8 @@ export default {
       await page.setViewportSize({ width: 1440, height: 900 }); await sleep(1200);
       const c = (await measure(page, sel)).tables[0]?.heads ?? [];
       await shot(page, `5-${name}-resized-back-1440`);
-      note(`5 ${name} resize roundtrip`, JSON.stringify(a) === JSON.stringify(c) && b.length < a.length, { at1440: a, at800: b, back1440: c });
+      // The same columns come back after a narrow detour. (800 may show more columns than 1440 once it is cards or has room.)
+      note(`5 ${name} resize roundtrip`, a.length > 0 && b.length > 0 && JSON.stringify(a) === JSON.stringify(c), { at1440: a, at800: b, back1440: c });
       await ctx.close();
     }
   },

@@ -14,7 +14,7 @@ const playwright = await import(pathToFileURL(req.resolve('playwright')).href);
 const chromium = playwright.chromium ?? playwright.default.chromium;
 const PORTAL = (process.env.PORTAL_URL ?? 'http://localhost:5153').replace(/\/$/, '');
 const MIDDLEWARE = (process.env.MIDDLEWARE_URL ?? 'http://127.0.0.1:3953').replace(/\/$/, '');
-const OUT = process.env.OUT_DIR ?? fs.mkdtempSync('/tmp/leftovers2-');
+const OUT = (process.argv.includes('--out') ? process.argv[process.argv.indexOf('--out') + 1] : undefined) ?? process.env.OUT_DIR ?? fs.mkdtempSync('/tmp/leftovers2-');
 const ONLY = new Set((process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1] : '1,2,3,4,5').split(','));
 fs.mkdirSync(OUT, { recursive: true });
 

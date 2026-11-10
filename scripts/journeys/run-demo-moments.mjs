@@ -101,7 +101,7 @@ const argv = process.argv.slice(2);
 const at = argv.indexOf('--journey');
 const name = at >= 0 ? argv[at + 1] : 'demo-moments';
 const args = at >= 0 ? [...argv.slice(0, at), ...argv.slice(at + 2)] : argv;
-if (!/^[a-z-]+$/.test(name ?? '') || !fs.existsSync(path.join(ROOT, 'scripts', 'journeys', `${name}.mjs`))) {
+if (!/^[a-z0-9-]+$/.test(name ?? '') || !fs.existsSync(path.join(ROOT, 'scripts', 'journeys', `${name}.mjs`))) {
   console.error(`no journey "${name}" in scripts/journeys`);
   stopAll();
   process.exit(2);
