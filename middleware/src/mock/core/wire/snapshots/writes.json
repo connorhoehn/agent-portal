@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-10T11:35:36.556Z",
-  "serverHandlerSha": "d6b48561b69cf98f1b6783d815f8d631f2fdde2801166c2e5451d1fc87ee4ed1",
+  "capturedAt": "2026-11-10T11:49:52.177Z",
+  "serverHandlerSha": "266fc0cacce2aa166c18b541cbeee8f9e131fab6c2339c020cb4d9cb7e37b509",
   "baseUrl": "http://127.0.0.1:3945",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -155,7 +155,14 @@
       }
     },
     "DELETE /api/graph/work-items/:id/decisions/:decisionId": {
-      "skipped": "no value found for :decisionId under /api/graph/work-items/wi-rta-e1-s1/decisions (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 404,
+      "shape": {
+        "$": "object",
+        "error": "string"
+      },
+      "values": {},
+      "sent": []
     },
     "DELETE /api/graph/work-items/:id/documents/:documentId": {
       "refused": {
@@ -538,7 +545,7 @@
         "childDoneCount": "number",
         "completedAt": "null",
         "createdAt": "string",
-        "description": "string",
+        "description": "null",
         "estimateForecast": "null",
         "estimateModel": "null",
         "estimateReviewedAt": "null",
@@ -563,14 +570,14 @@
         "sprintId": "string",
         "status": "string",
         "storyPoints": "number",
-        "summary": "string",
+        "summary": "null",
         "title": "string",
         "type": "string",
         "updatedAt": "string"
       },
       "values": {
         "key": [
-          "ORG-RTA-2"
+          "ORG-DSAPI-2"
         ],
         "status": [
           "in_progress"
@@ -4852,7 +4859,25 @@
       }
     },
     "PUT /api/graph/work-items/:id/decisions/:decisionId": {
-      "skipped": "no value found for :decisionId under /api/graph/work-items/wi-rta-e1-s1/decisions (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "escalatedAt": "null",
+        "id": "string",
+        "requiredRole": "null",
+        "status": "string",
+        "summary": "string",
+        "topic": "string",
+        "workItemId": "string",
+        "workItemTitle": "string"
+      },
+      "values": {
+        "status": [
+          "resolved"
+        ]
+      },
+      "sent": []
     },
     "PUT /api/graph/work-items/:id/documents/:documentId": {
       "refused": {

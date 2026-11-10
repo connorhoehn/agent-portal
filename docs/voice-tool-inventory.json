@@ -11,8 +11,8 @@
   "pages": "portal/src/components/shell/portalCommands.ts",
   "catalogue": "middleware/src/lib/voice/catalogue.ts",
   "out": "docs/voice-tool-inventory.json",
-  "capturedAt": "2026-11-10T11:35:36.556Z",
-  "serverHandlerSha": "d6b48561b69cf98f1b6783d815f8d631f2fdde2801166c2e5451d1fc87ee4ed1"
+  "capturedAt": "2026-11-10T11:49:52.177Z",
+  "serverHandlerSha": "266fc0cacce2aa166c18b541cbeee8f9e131fab6c2339c020cb4d9cb7e37b509"
  },
  "summary": {
   "routes": 848,
@@ -444,11 +444,11 @@
   "writePolicy": {
    "refused:control-plane": 3,
    "refused:destructive": 43,
-   "allowed": 124,
+   "allowed": 126,
    "refused:unclassified": 75,
    "refused:spends": 25,
    "refused:fires": 26,
-   "skipped": 32,
+   "skipped": 30,
    "refused:assessment-private-draft": 5,
    "refused:document-service": 18,
    "refused:session": 8,
@@ -4264,8 +4264,8 @@
   {"method":"POST","path":"/api/graph/work-items/:id/criteria","source":"src/routes/work-items.ts:691","declaredAt":"src/routes/work-items.ts:691","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"DispatchAgentRun","actions":["DispatchAgentRun"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"acceptance criteria, decisions and document links are edited on the item"}},
   {"method":"DELETE","path":"/api/graph/work-items/:id/criteria/:criterionId","source":"src/routes/work-items.ts:751","declaredAt":"src/routes/work-items.ts:751","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"DispatchAgentRun","actions":["DispatchAgentRun"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"acceptance criteria, decisions and document links are edited on the item"}},
   {"method":"PATCH","path":"/api/graph/work-items/:id/criteria/:criterionId","source":"src/routes/work-items.ts:716","declaredAt":"src/routes/work-items.ts:716","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"DispatchAgentRun","actions":["DispatchAgentRun"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"acceptance criteria, decisions and document links are edited on the item"}},
-  {"method":"DELETE","path":"/api/graph/work-items/:id/decisions/:decisionId","source":"src/routes/work-items.ts:877","declaredAt":"src/routes/work-items.ts:877","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"DispatchAgentRun","actions":["DispatchAgentRun"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"skipped","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"acceptance criteria, decisions and document links are edited on the item"}},
-  {"method":"PUT","path":"/api/graph/work-items/:id/decisions/:decisionId","source":"src/routes/work-items.ts:852","declaredAt":"src/routes/work-items.ts:852","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"DispatchAgentRun","actions":["DispatchAgentRun"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"skipped","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"acceptance criteria, decisions and document links are edited on the item"}},
+  {"method":"DELETE","path":"/api/graph/work-items/:id/decisions/:decisionId","source":"src/routes/work-items.ts:877","declaredAt":"src/routes/work-items.ts:877","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"DispatchAgentRun","actions":["DispatchAgentRun"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"acceptance criteria, decisions and document links are edited on the item"}},
+  {"method":"PUT","path":"/api/graph/work-items/:id/decisions/:decisionId","source":"src/routes/work-items.ts:852","declaredAt":"src/routes/work-items.ts:852","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"DispatchAgentRun","actions":["DispatchAgentRun"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"acceptance criteria, decisions and document links are edited on the item"}},
   {"method":"GET","path":"/api/graph/work-items/:id/documents","source":"src/routes/work-documents.ts:128","declaredAt":"src/routes/work-documents.ts:128","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"documents","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":["get"],"v2":{"decision":"read","tool":"get","note":"mapsTo"}},
   {"method":"DELETE","path":"/api/graph/work-items/:id/documents/:documentId","source":"src/routes/work-documents.ts:158","declaredAt":"src/routes/work-documents.ts:158","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"documents","cedarAction":null,"actions":[],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"acceptance criteria, decisions and document links are edited on the item"}},
   {"method":"PUT","path":"/api/graph/work-items/:id/documents/:documentId","source":"src/routes/work-documents.ts:144","declaredAt":"src/routes/work-documents.ts:144","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"documents","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"acceptance criteria, decisions and document links are edited on the item"}},
