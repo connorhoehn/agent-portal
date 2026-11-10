@@ -159,7 +159,7 @@ export default function LibraryPage() {
 
   return (
     <StackedCatalogLayout
-      catalogOverview title="Agent library" group="Build" basePath="/iq/library" listTitle={kind === 'all' ? 'All assets' : KIND_LABEL[kind]}
+      catalogOverview narrow title="Agent library" group="Build" basePath="/iq/library" listTitle={kind === 'all' ? 'All assets' : KIND_LABEL[kind]}
       overviewDescription="Reusable instructions and tools for your agents."
       overviewActions={canAuthor ? <Button variant="primary" size="sm" onClick={() => navigate('/iq/prompts?mode=create')}>New asset</Button> : undefined}
       items={[

@@ -17,8 +17,10 @@ export function StackedCatalogLayout({
   narrow = false,
 }: {
   /**
-   * The narrow form (`combined` only; library `MasterDetailPage narrow`, since
-   * 2.515.1): under 40rem of the frame's own width the rail and the record stop
+   * The narrow form. `stacked`: library `SectionLayout narrow` (the section
+   * rail as one row; with a record open, the record under "All <title>").
+   * `combined`: library `MasterDetailPage narrow`, since
+   * 2.515.1: under 40rem of the frame's own width the rail and the record stop
    * sitting side by side. With no record open the title band and then the rail
    * fill the width, and the rail carries the records as the page's list (on a
    * wide frame the overview's table is that list, so the rail shows only the
@@ -150,6 +152,11 @@ export function StackedCatalogLayout({
         },
         ...(footer != null ? { footer } : {}),
       })}
+      // Narrow (stacked): under 40rem the section rail folds to one row of links and, with a
+      // record open, the list rail gives way to the record under a back control, so the trail
+      // and the record's one h1 fill the width (UX leftovers, 10 November: the agent-library
+      // record at 390 showed two rails and no heading).
+      {...(narrow ? { narrow: overview ? {} : { list: { showing: selectedId ? 'record' as const : 'list' as const, onBack: () => navigate(listHref), backLabel: listTitle } } } : {})}
       bodyClassName={overview ? undefined : 'overflow-x-auto'}
       data-testid="stacked-catalog"
     >
