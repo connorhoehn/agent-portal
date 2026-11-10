@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-09T21:28:26.367Z",
-  "serverHandlerSha": "28f4032a88502ca04784abf5498afef909b67f27e40151b8fab46b27d6c3f499",
-  "baseUrl": "http://127.0.0.1:3980",
+  "capturedAt": "2026-11-10T03:45:04.310Z",
+  "serverHandlerSha": "a364d2e7d9cb46c2b75cc3a77fddc3bf6f1063b983a70f3f0491cbddeef3e87a",
+  "baseUrl": "http://127.0.0.1:3971",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -1454,6 +1454,8 @@
         "$": "object",
         "counts": "object(dictionary)",
         "edges": "array",
+        "lowerBoundCounts": "array",
+        "lowerBoundCounts[]": "string",
         "partial": "array",
         "partial[]": "string",
         "query": "string",
@@ -2300,6 +2302,7 @@
         "briefs[].skill_library.skills[]": "object",
         "briefs[].skill_library.skills[].name": "string",
         "briefs[].skill_library.skills[].version": "number",
+        "briefs[].task_title": "null",
         "briefs[].used_tokens": "number",
         "briefs[].work_item_id": "null",
         "next": "null"
@@ -3007,7 +3010,6 @@
         "boxes[].status": [
           "idle",
           "running",
-          "stopped",
           "waiting"
         ]
       }
@@ -3926,7 +3928,6 @@
           "ORG-LLM-10",
           "ORG-LLM-3",
           "ORG-LLM-4",
-          "ORG-LLM-5",
           "ORG-LLM-7",
           "ORG-LLM-9",
           "ORG-MOB-2",
@@ -3940,6 +3941,7 @@
           "ORG-OBS-4",
           "ORG-OBS-5",
           "ORG-OBS-8",
+          "ORG-RAG-2",
           "ORG-RAG-3",
           "ORG-RAG-4",
           "ORG-RTA-2",
@@ -8718,8 +8720,7 @@
         "edges[].label": "string",
         "edges[].source": "string",
         "edges[].target": "string",
-        "partial": "array",
-        "partial[]": "string",
+        "lowerBoundCounts": "array",
         "query": "string",
         "related": "array",
         "related[]": "object|object(dictionary)",
@@ -11064,7 +11065,6 @@
         "running",
         "staged",
         "stale",
-        "stopped",
         "submitted",
         "superseded",
         "unproven",

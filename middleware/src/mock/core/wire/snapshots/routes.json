@@ -198,107 +198,107 @@
     {
       "method": "GET",
       "path": "/api/admin/kb-registry",
-      "source": "src/routes/kb-admin.ts:245"
+      "source": "src/routes/kb-admin.ts:246"
     },
     {
       "method": "POST",
       "path": "/api/admin/kb-registry",
-      "source": "src/routes/kb-admin.ts:257"
+      "source": "src/routes/kb-admin.ts:258"
     },
     {
       "method": "DELETE",
       "path": "/api/admin/kb-registry/:id",
-      "source": "src/routes/kb-admin.ts:496"
+      "source": "src/routes/kb-admin.ts:513"
     },
     {
       "method": "GET",
       "path": "/api/admin/kb-registry/:id",
-      "source": "src/routes/kb-admin.ts:442"
+      "source": "src/routes/kb-admin.ts:459"
     },
     {
       "method": "PATCH",
       "path": "/api/admin/kb-registry/:id",
-      "source": "src/routes/kb-admin.ts:470"
+      "source": "src/routes/kb-admin.ts:487"
     },
     {
       "method": "GET",
       "path": "/api/admin/kb-registry/:id/docs",
-      "source": "src/routes/kb-admin.ts:752"
+      "source": "src/routes/kb-admin.ts:769"
     },
     {
       "method": "GET",
       "path": "/api/admin/kb-registry/:id/jobs",
-      "source": "src/routes/kb-admin.ts:667"
+      "source": "src/routes/kb-admin.ts:684"
     },
     {
       "method": "GET",
       "path": "/api/admin/kb-registry/:id/landing-zone/files",
-      "source": "src/routes/kb-admin.ts:412"
+      "source": "src/routes/kb-admin.ts:429"
     },
     {
       "method": "POST",
       "path": "/api/admin/kb-registry/:id/landing-zone/upload",
-      "source": "src/routes/kb-admin.ts:422"
+      "source": "src/routes/kb-admin.ts:439"
     },
     {
       "method": "POST",
       "path": "/api/admin/kb-registry/:id/provision",
-      "source": "src/routes/kb-admin.ts:514"
+      "source": "src/routes/kb-admin.ts:531"
     },
     {
       "method": "GET",
       "path": "/api/admin/kb-registry/:id/status",
-      "source": "src/routes/kb-admin.ts:535"
+      "source": "src/routes/kb-admin.ts:552"
     },
     {
       "method": "POST",
       "path": "/api/admin/kb-registry/:id/sync",
-      "source": "src/routes/kb-admin.ts:611"
+      "source": "src/routes/kb-admin.ts:628"
     },
     {
       "method": "GET",
       "path": "/api/admin/kb-registry/check",
-      "source": "src/routes/kb-admin.ts:88"
+      "source": "src/routes/kb-admin.ts:89"
     },
     {
       "method": "GET",
       "path": "/api/admin/kb-registry/health",
-      "source": "src/routes/kb-admin.ts:113"
+      "source": "src/routes/kb-admin.ts:114"
     },
     {
       "method": "GET",
       "path": "/api/admin/kb-registry/reconcile",
-      "source": "src/routes/kb-admin.ts:346"
-    },
-    {
-      "method": "POST",
-      "path": "/api/admin/kb-registry/reconcile/adopt",
-      "source": "src/routes/kb-admin.ts:351"
-    },
-    {
-      "method": "GET",
-      "path": "/api/admin/kb-registry/upload-links",
       "source": "src/routes/kb-admin.ts:363"
     },
     {
       "method": "POST",
-      "path": "/api/admin/kb-registry/upload-links",
+      "path": "/api/admin/kb-registry/reconcile/adopt",
       "source": "src/routes/kb-admin.ts:368"
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/kb-registry/upload-links",
+      "source": "src/routes/kb-admin.ts:380"
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/kb-registry/upload-links",
+      "source": "src/routes/kb-admin.ts:385"
     },
     {
       "method": "DELETE",
       "path": "/api/admin/kb-registry/upload-links/:linkId",
-      "source": "src/routes/kb-admin.ts:401"
+      "source": "src/routes/kb-admin.ts:418"
     },
     {
       "method": "GET",
       "path": "/api/admin/kb-registry/upload-links/:linkId/files",
-      "source": "src/routes/kb-admin.ts:397"
+      "source": "src/routes/kb-admin.ts:414"
     },
     {
       "method": "GET",
       "path": "/api/agent-detail/:agentId",
-      "source": "src/routes/agent-detail.ts:244"
+      "source": "src/routes/agent-detail.ts:248"
     },
     {
       "method": "GET",
@@ -343,17 +343,17 @@
     {
       "method": "GET",
       "path": "/api/agents",
-      "source": "src/routes/agents.ts:50"
+      "source": "src/routes/agents.ts:51"
     },
     {
       "method": "POST",
       "path": "/api/agents/:agentId/invoke",
-      "source": "src/routes/agents.ts:292"
+      "source": "src/routes/agents.ts:293"
     },
     {
       "method": "GET",
       "path": "/api/agents/:agentId/metrics",
-      "source": "src/routes/agents.ts:55"
+      "source": "src/routes/agents.ts:56"
     },
     {
       "method": "GET",
@@ -1508,17 +1508,17 @@
     {
       "method": "DELETE",
       "path": "/api/devbox/:sessionId",
-      "source": "src/routes/devbox.ts:1205"
+      "source": "src/routes/devbox.ts:1223"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/command",
-      "source": "src/routes/devbox.ts:958"
+      "source": "src/routes/devbox.ts:972"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/shell-url",
-      "source": "src/routes/devbox.ts:1134"
+      "source": "src/routes/devbox.ts:1150"
     },
     {
       "method": "POST",
@@ -2588,72 +2588,72 @@
     {
       "method": "GET",
       "path": "/api/observability/cost/a2a-overhead",
-      "source": "src/routes/cost.ts:491"
+      "source": "src/routes/cost.ts:497"
     },
     {
       "method": "GET",
       "path": "/api/observability/cost/by-model",
-      "source": "src/routes/cost.ts:417"
+      "source": "src/routes/cost.ts:423"
     },
     {
       "method": "GET",
       "path": "/api/observability/cost/deploy-markers",
-      "source": "src/routes/cost.ts:616"
+      "source": "src/routes/cost.ts:622"
     },
     {
       "method": "GET",
       "path": "/api/observability/cost/per-agent",
-      "source": "src/routes/cost.ts:193"
+      "source": "src/routes/cost.ts:194"
     },
     {
       "method": "GET",
       "path": "/api/observability/cost/summary",
-      "source": "src/routes/cost.ts:660"
+      "source": "src/routes/cost.ts:666"
     },
     {
       "method": "GET",
       "path": "/api/observability/cost/timeseries",
-      "source": "src/routes/cost.ts:270"
+      "source": "src/routes/cost.ts:271"
     },
     {
       "method": "GET",
       "path": "/api/observability/cost/top",
-      "source": "src/routes/cost.ts:350"
+      "source": "src/routes/cost.ts:354"
     },
     {
       "method": "GET",
       "path": "/api/observability/cost/total",
-      "source": "src/routes/cost.ts:125"
+      "source": "src/routes/cost.ts:126"
     },
     {
       "method": "GET",
       "path": "/api/observability/cost/value-ratio",
-      "source": "src/routes/cost.ts:563"
+      "source": "src/routes/cost.ts:569"
     },
     {
       "method": "GET",
       "path": "/api/observability/drift/neighbors/:invocationId",
-      "source": "src/routes/drift.ts:381"
+      "source": "src/routes/drift.ts:388"
     },
     {
       "method": "GET",
       "path": "/api/observability/drift/outliers",
-      "source": "src/routes/drift.ts:140"
+      "source": "src/routes/drift.ts:141"
     },
     {
       "method": "GET",
       "path": "/api/observability/drift/summary",
-      "source": "src/routes/drift.ts:51"
+      "source": "src/routes/drift.ts:52"
     },
     {
       "method": "GET",
       "path": "/api/observability/drift/templates",
-      "source": "src/routes/drift.ts:302"
+      "source": "src/routes/drift.ts:309"
     },
     {
       "method": "GET",
       "path": "/api/observability/drift/timeseries",
-      "source": "src/routes/drift.ts:217"
+      "source": "src/routes/drift.ts:224"
     },
     {
       "method": "GET",
@@ -2688,107 +2688,107 @@
     {
       "method": "GET",
       "path": "/api/observability/harness/cases",
-      "source": "src/routes/harness.ts:451"
+      "source": "src/routes/harness.ts:452"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/cases",
-      "source": "src/routes/harness.ts:520"
+      "source": "src/routes/harness.ts:521"
     },
     {
       "method": "DELETE",
       "path": "/api/observability/harness/cases/:id",
-      "source": "src/routes/harness.ts:677"
+      "source": "src/routes/harness.ts:678"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/cases/:id",
-      "source": "src/routes/harness.ts:479"
+      "source": "src/routes/harness.ts:480"
     },
     {
       "method": "PATCH",
       "path": "/api/observability/harness/cases/:id",
-      "source": "src/routes/harness.ts:595"
+      "source": "src/routes/harness.ts:596"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/coverage",
-      "source": "src/routes/harness.ts:1194"
+      "source": "src/routes/harness.ts:1203"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/promote",
-      "source": "src/routes/harness.ts:1569"
+      "source": "src/routes/harness.ts:1580"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/promoted-versions",
-      "source": "src/routes/harness.ts:1697"
+      "source": "src/routes/harness.ts:1708"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/results/:invocationId/rejudge",
-      "source": "src/routes/harness.ts:1141"
+      "source": "src/routes/harness.ts:1145"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs",
-      "source": "src/routes/harness.ts:808"
+      "source": "src/routes/harness.ts:809"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/runs",
-      "source": "src/routes/harness.ts:707"
+      "source": "src/routes/harness.ts:708"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs/:id",
-      "source": "src/routes/harness.ts:831"
+      "source": "src/routes/harness.ts:832"
     },
     {
       "method": "PATCH",
       "path": "/api/observability/harness/runs/:id",
-      "source": "src/routes/harness.ts:1052"
+      "source": "src/routes/harness.ts:1056"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/runs/:id/execute",
-      "source": "src/routes/harness.ts:766"
+      "source": "src/routes/harness.ts:767"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs/:id/status",
-      "source": "src/routes/harness.ts:889"
+      "source": "src/routes/harness.ts:893"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/runs/:runId/results",
-      "source": "src/routes/harness.ts:950"
+      "source": "src/routes/harness.ts:954"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs/:runIdA/compare/:runIdB",
-      "source": "src/routes/harness.ts:1432"
+      "source": "src/routes/harness.ts:1443"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/trace",
-      "source": "src/routes/harness.ts:337"
+      "source": "src/routes/harness.ts:338"
     },
     {
       "method": "GET",
       "path": "/api/observability/invocations/:invocationId",
-      "source": "src/routes/invocations.ts:429"
+      "source": "src/routes/invocations.ts:383"
     },
     {
       "method": "POST",
       "path": "/api/observability/invocations/:invocationId/replay",
-      "source": "src/routes/invocations.ts:819"
+      "source": "src/routes/invocations.ts:773"
     },
     {
       "method": "GET",
       "path": "/api/observability/invocations/search",
-      "source": "src/routes/invocations.ts:176"
+      "source": "src/routes/invocations.ts:131"
     },
     {
       "method": "GET",
@@ -2808,22 +2808,22 @@
     {
       "method": "GET",
       "path": "/api/observability/oncall/alarms",
-      "source": "src/routes/oncall.ts:538"
+      "source": "src/routes/oncall.ts:540"
     },
     {
       "method": "GET",
       "path": "/api/observability/oncall/hitl-sla",
-      "source": "src/routes/oncall.ts:551"
+      "source": "src/routes/oncall.ts:553"
     },
     {
       "method": "GET",
       "path": "/api/observability/oncall/recent-events",
-      "source": "src/routes/oncall.ts:627"
+      "source": "src/routes/oncall.ts:629"
     },
     {
       "method": "GET",
       "path": "/api/observability/oncall/timeline",
-      "source": "src/routes/oncall.ts:342"
+      "source": "src/routes/oncall.ts:344"
     },
     {
       "method": "GET",
@@ -2848,12 +2848,12 @@
     {
       "method": "POST",
       "path": "/api/observability/quality/feedback",
-      "source": "src/routes/quality.ts:159"
+      "source": "src/routes/quality.ts:165"
     },
     {
       "method": "GET",
       "path": "/api/observability/quality/scores",
-      "source": "src/routes/quality.ts:64"
+      "source": "src/routes/quality.ts:65"
     },
     {
       "method": "GET",
