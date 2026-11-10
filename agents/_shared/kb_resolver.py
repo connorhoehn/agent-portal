@@ -222,11 +222,14 @@ def invalidate_cache() -> None:
 # Tenant filter at retrieval time.
 # ---------------------------------------------------------------------------
 #
-# One Bedrock knowledge base indexes the whole documents bucket, so a
-# retrieve returns any tenant's chunks. Documents carry no tenant metadata
-# attribute today (the S3 data source writes no sidecars), so a Bedrock
-# metadata filter would drop every document; ownership comes from the
-# registry instead. A document belongs to the tenant whose registered
+# One Bedrock knowledge base holds every tenant's documents, through one data
+# source per declared prefix (tenants/kb-prefixes.json; infra creates them).
+# Two checks keep a retrieve to the caller's tenant: a Bedrock metadata
+# filter on the `tenant` attribute each document carries in its
+# `<key>.metadata.json` sidecar (written by the middleware's upload, the
+# crawler and the corpus load; schema/backfill_kb_tenant_metadata.py for
+# older documents), and the key-prefix ownership below on every result.
+# A document belongs to the tenant whose registered
 # knowledge-base prefix is the LONGEST one its key starts with. The home
 # tenant's corpus (orgiq's, which predates the registry) is registered here
 # explicitly (HOME_PREFIXES, the same list as middleware/src/lib/kb-prefixes.ts).
@@ -243,8 +246,43 @@ def invalidate_cache() -> None:
 # is the home tenant's.
 
 HOME_TENANT = "orgiq"
-#: The home tenant's corpus prefixes, registered by code rather than by row.
-HOME_PREFIXES = ("orgiq/", "synth/", "uploads/", "crawled/")
+#: Each tenant's declared corpus prefixes, registered by code rather than by
+#: row: the same map as tenants/kb-prefixes.json (which the infra reads to
+#: create one knowledge-base data source per prefix) and
+#: middleware/src/lib/kb-prefixes.ts; agents/tests/test_kb_tenant_filter.py
+#: keeps the three equal.
+DECLARED_PREFIXES = {
+    "orgiq": ("orgiq/", "synth/", "uploads/", "crawled/"),
+    "assessment": ("assessment/",),
+}
+#: The home tenant's corpus prefixes.
+HOME_PREFIXES = DECLARED_PREFIXES[HOME_TENANT]
+#: The document metadata attribute that names the owning tenant. Written
+#: beside each document as ``<key>.metadata.json`` and matched on retrieval.
+TENANT_METADATA_KEY = "tenant"
+
+
+def tenant_metadata_filter(tenant: str) -> dict:
+    """The Bedrock retrieval filter for one tenant's documents."""
+    return {"equals": {"key": TENANT_METADATA_KEY, "value": tenant}}
+
+
+def tenant_vector_search_config(num_results: int, tenant: str) -> dict:
+    """``vector_search_config`` with the caller's tenant metadata filter: the
+    first of two checks (``filter_for_tenant`` on the key prefix is the second)."""
+    return vector_search_config(num_results, filter=tenant_metadata_filter(tenant))
+
+
+def declared_owner(key: str) -> Optional[str]:
+    """The tenant whose declared prefix is the longest one ``key`` starts
+    with, or None. What the tenant metadata of a document under a declared
+    prefix must say."""
+    best, owner = -1, None
+    for tenant, prefixes in DECLARED_PREFIXES.items():
+        for p in prefixes:
+            if key.startswith(p) and len(p) > best:
+                best, owner = len(p), tenant
+    return owner
 _PREFIX_TTL_S = 60.0
 _prefix_cache: dict = {}
 
@@ -297,9 +335,8 @@ def document_owner(source_uri: str, prefixes: list, home: str = HOME_TENANT) -> 
     if key.startswith("s3://"):
         rest = key[len("s3://"):]
         key = rest.split("/", 1)[1] if "/" in rest else ""
-    if not prefixes:
-        return home
-    candidates = list(prefixes) + [(p, home) for p in HOME_PREFIXES]
+    declared = [(p, t) for t, ps in DECLARED_PREFIXES.items() for p in ps]
+    candidates = list(prefixes or []) + declared
     best, owner = -1, None
     for prefix, tenant in candidates:
         p = _norm(prefix)
@@ -307,6 +344,9 @@ def document_owner(source_uri: str, prefixes: list, home: str = HOME_TENANT) -> 
             continue
         if key.startswith(p) and len(p) > best:
             best, owner = len(p), tenant
+    if owner is None and not prefixes:
+        # No registry rows at all (a local agent): nothing else to know about.
+        return home
     return owner
 
 

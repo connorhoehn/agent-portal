@@ -196,6 +196,25 @@ class SyncTargetComesFromTheRunTests(_Base):
         self.run.data_source_id = "DSX"
         self.assertIn("error", json.loads(ing.sync_knowledge_base()))
 
+    def test_with_one_data_source_per_prefix_the_runs_prefix_picks_it(self):
+        self.agent.list_data_sources.return_value = {
+            "dataSourceSummaries": [{"dataSourceId": "DSORG"}, {"dataSourceId": "DSUP"}, {"dataSourceId": "DSASM"}]
+        }
+        prefixes = {"DSORG": ["orgiq/"], "DSUP": ["uploads/"], "DSASM": ["assessment/"]}
+        self.agent.get_data_source.side_effect = lambda knowledgeBaseId, dataSourceId: {
+            "dataSource": {"dataSourceConfiguration": {"s3Configuration": {"inclusionPrefixes": prefixes[dataSourceId]}}}
+        }
+        token = ing._run_prefix.set("uploads/")
+        try:
+            self.assertEqual(json.loads(ing.sync_knowledge_base())["data_source_id"], "DSUP")
+        finally:
+            ing._run_prefix.reset(token)
+        token = ing._run_prefix.set("kb/elsewhere/")
+        try:
+            self.assertIn("no data source", json.loads(ing.sync_knowledge_base())["error"])
+        finally:
+            ing._run_prefix.reset(token)
+
     def test_status_reads_only_jobs_this_run_started(self):
         self.agent.get_ingestion_job.return_value = {"ingestionJob": {"status": "COMPLETE"}}
         self.assertIn("not started by this run", json.loads(ing.check_ingestion_status("job-1"))["error"])

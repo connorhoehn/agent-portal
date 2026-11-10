@@ -1,0 +1,8 @@
+{
+  "$comment": "Which tenant owns which declared prefix of the documents bucket. The one source for: the knowledge-base data sources (infra/lib/knowledge-base-stack.ts creates one per prefix, with that prefix as its inclusion prefix), document ownership in the middleware (middleware/src/lib/kb-prefixes.ts DECLARED_KB_PREFIXES) and in the agents (agents/_shared/kb_resolver.py DECLARED_PREFIXES), and the tenant metadata written beside each document. The middleware and agent copies are literals because their images do not carry this file; tests compare them to it (agents/tests/test_kb_tenant_filter.py, middleware/src/lib/__tests__/kb-prefixes.test.ts, infra/test/knowledge-base-data-sources.test.ts). A Bedrock knowledge base takes at most 5 data sources, so at most 5 prefixes in all. Prefixes registered at run time (/admin/knowledge) live in the registry, not here.",
+  "homeTenant": "orgiq",
+  "tenants": {
+    "orgiq": ["orgiq/", "synth/", "uploads/", "crawled/"],
+    "assessment": ["assessment/"]
+  }
+}

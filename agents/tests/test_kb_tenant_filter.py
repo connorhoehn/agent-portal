@@ -81,11 +81,33 @@ class Ownership(unittest.TestCase):
     def test_no_registered_prefix_means_everything_is_home(self):
         self.assertEqual(kb.document_owner(BUCKET + "legacy/x.md", []), "orgiq")
 
-    def test_home_prefixes_match_the_middleware(self):
+    def test_declared_prefixes_match_the_shared_file_and_the_middleware(self):
+        """tenants/kb-prefixes.json is the one source (infra creates a data
+        source per prefix from it); the agents' and the middleware's literal
+        copies must say the same."""
         import re
-        ts = (Path(__file__).resolve().parents[2] / "middleware/src/lib/kb-prefixes.ts").read_text()
-        listed = re.search(r"HOME_KB_PREFIXES: readonly string\[\] = \[([^\]]*)\]", ts).group(1)
-        self.assertEqual(tuple(re.findall(r"'([^']+)'", listed)), kb.HOME_PREFIXES)
+        root = Path(__file__).resolve().parents[2]
+        declared = json.loads((root / "tenants/kb-prefixes.json").read_text())
+        self.assertEqual(declared["homeTenant"], kb.HOME_TENANT)
+        self.assertEqual({t: tuple(ps) for t, ps in declared["tenants"].items()}, kb.DECLARED_PREFIXES)
+        ts = (root / "middleware/src/lib/kb-prefixes.ts").read_text()
+        block = re.search(r"DECLARED_KB_PREFIXES[^=]*= \{(.*?)\n\};", ts, re.S).group(1)
+        from_ts = {m.group(1): tuple(re.findall(r"'([^']+)'", m.group(2)))
+                   for m in re.finditer(r"(\w+): \[([^\]]*)\]", block)}
+        self.assertEqual(from_ts, kb.DECLARED_PREFIXES)
+        self.assertEqual(kb.HOME_PREFIXES, kb.DECLARED_PREFIXES["orgiq"])
+
+    def test_a_declared_prefix_owns_its_keys_with_or_without_a_registry(self):
+        self.assertEqual(kb.document_owner(BUCKET + "assessment/x/a.md", []), "assessment")
+        self.assertEqual(kb.document_owner(BUCKET + "assessment/x/a.md", PREFIXES), "assessment")
+        self.assertEqual(kb.declared_owner("synth/a.md"), "orgiq")
+        self.assertIsNone(kb.declared_owner("elsewhere/a.md"))
+
+    def test_retrieval_carries_the_tenant_metadata_filter(self):
+        cfg = kb.tenant_vector_search_config(5, "assessment")
+        self.assertEqual(cfg["filter"], {"equals": {"key": "tenant", "value": "assessment"}})
+        self.assertEqual(cfg["numberOfResults"], 5)
+        self.assertIn("overrideSearchType", cfg)
 
     def test_an_unreadable_registry_returns_nothing(self):
         with mock.patch.object(kb, "tenant_prefixes", return_value=None):
@@ -124,6 +146,7 @@ class FakeBedrock:
         self.results = results
 
     def retrieve(self, **kwargs):
+        self.last = kwargs
         return {"retrievalResults": self.results}
 
 
@@ -147,6 +170,20 @@ class ReadAgentsFilter(unittest.TestCase):
                 self.assertEqual(self._sources(agent_dir, tool, "assessment"),
                                  ["assessment/evidence/acme/report.md"])
                 self.assertEqual(self._sources(agent_dir, tool, "nobody"), [])
+
+    def test_both_read_agents_send_the_tenant_metadata_filter(self):
+        for agent_dir, tool in (("search", "query_knowledge_base"), ("advisor", "retrieve_context")):
+            with self.subTest(agent=agent_dir):
+                mod = load_agent(agent_dir)
+                mod._bedrock = FakeBedrock(HITS)
+                token = mod._caller_tenant.set("assessment")
+                try:
+                    with mock.patch.object(kb, "tenant_prefixes", return_value=PREFIXES):
+                        getattr(mod, tool)(query="anything")
+                finally:
+                    mod._caller_tenant.reset(token)
+                cfg = mod._bedrock.last["retrievalConfiguration"]["vectorSearchConfiguration"]
+                self.assertEqual(cfg["filter"], {"equals": {"key": "tenant", "value": "assessment"}})
 
 
 class SupervisorThreadsTheTenant(unittest.TestCase):

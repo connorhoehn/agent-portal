@@ -5,6 +5,7 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import type { Construct } from 'constructs';
 import { trustedService } from './service-trust';
+import { declaredKbPrefixes } from './kb-prefixes';
 
 export interface KnowledgeBaseStackProps extends cdk.StackProps {
   readonly prefix?: string;
@@ -388,30 +389,47 @@ def handler(event, context):
     this.knowledgeBaseArn = knowledgeBase.attrKnowledgeBaseArn;
 
     // -------------------------------------------------------------------
-    // S3 Data Source
+    // S3 Data Sources: one per declared tenant prefix
     // -------------------------------------------------------------------
+    //
+    // tenants/kb-prefixes.json names each tenant's corpus prefixes (the same
+    // map the middleware and the agents use to decide who owns a document).
+    // Each prefix gets its own data source with that prefix as its only
+    // inclusion prefix, so nothing outside a declared prefix is indexed and
+    // every indexed chunk came from one tenant's prefix. Retrieval also
+    // filters on the `tenant` metadata each document carries
+    // (`<key>.metadata.json`); see infra/SECURITY-NOTES.md for the migration.
 
-    const s3DataSource = new cdk.aws_bedrock.CfnDataSource(this, 'S3DataSource', {
-      name: `${prefix}-documents-source`,
-      description: 'S3 data source for organizational documents',
-      knowledgeBaseId: knowledgeBase.attrKnowledgeBaseId,
-      dataSourceConfiguration: {
-        type: 'S3',
-        s3Configuration: {
-          bucketArn: props.documentsBucket.bucketArn,
-        },
-      },
-      vectorIngestionConfiguration: {
-        chunkingConfiguration: {
-          chunkingStrategy: 'SEMANTIC',
-          semanticChunkingConfiguration: {
-            breakpointPercentileThreshold: 95,
-            bufferSize: 0,
-            maxTokens: 512,
+    const dataSources = declaredKbPrefixes().map(({ tenant, prefix: s3Prefix }) => {
+      const slug = s3Prefix.replace(/\/+$/, '').replace(/[^A-Za-z0-9-]/g, '-');
+      const ds = new cdk.aws_bedrock.CfnDataSource(this, `DataSource-${tenant}-${slug}`, {
+        name: `${prefix}-${tenant}-${slug}-source`,
+        description: `S3 data source for tenant ${tenant}, prefix ${s3Prefix}`,
+        knowledgeBaseId: knowledgeBase.attrKnowledgeBaseId,
+        dataSourceConfiguration: {
+          type: 'S3',
+          s3Configuration: {
+            bucketArn: props.documentsBucket.bucketArn,
+            inclusionPrefixes: [s3Prefix],
           },
         },
-      },
+        vectorIngestionConfiguration: {
+          chunkingConfiguration: {
+            chunkingStrategy: 'SEMANTIC',
+            semanticChunkingConfiguration: {
+              breakpointPercentileThreshold: 95,
+              bufferSize: 0,
+              maxTokens: 512,
+            },
+          },
+        },
+      });
+      return { tenant, s3Prefix, ds };
     });
+    const sourceFor = (p: string) => dataSources.find((d) => d.s3Prefix === p)?.ds;
+    // The registry's default row sits under orgiq/; the synthetic corpus under synth/.
+    const s3DataSource = sourceFor('orgiq/') ?? dataSources[0]!.ds;
+    const synthDataSource = sourceFor('synth/') ?? s3DataSource;
 
     // -------------------------------------------------------------------
     // Outputs
@@ -439,7 +457,19 @@ def handler(event, context):
     // another stack imports it.
     new cdk.CfnOutput(this, 'DataSourceId', {
       value: s3DataSource.attrDataSourceId,
-      description: 'S3 data source id — required by the corpus KB sync',
+      description: 'The orgiq/ data source id (the registry default row) — the corpus load links the registry to it',
+    });
+    new cdk.CfnOutput(this, 'SynthDataSourceId', {
+      value: synthDataSource.attrDataSourceId,
+      description: 'The synth/ data source id — the corpus load syncs it',
+    });
+    new cdk.CfnOutput(this, 'TenantDataSources', {
+      value: cdk.Fn.join('', [
+        '{',
+        cdk.Fn.join(',', dataSources.map(({ s3Prefix, ds }) => cdk.Fn.join('', [`"${s3Prefix}":"`, ds.attrDataSourceId, '"']))),
+        '}',
+      ]),
+      description: 'JSON map of declared prefix to data source id (tenants/kb-prefixes.json)',
     });
   }
 }

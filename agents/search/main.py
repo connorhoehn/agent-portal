@@ -60,6 +60,7 @@ app = BedrockAgentCoreApp()
 REGION = os.environ.get("AWS_REGION", "us-east-1")
 from _shared.kb_resolver import resolve_kb_id as _resolve_kb_id
 from _shared.kb_resolver import vector_search_config as _vector_search_config
+from _shared.kb_resolver import tenant_vector_search_config as _tenant_vector_search_config  # noqa: E402
 from _shared.kb_resolver import caller_tenant as _caller_tenant_of, filter_for_tenant as _filter_for_tenant  # noqa: E402
 KB_ID: str = _resolve_kb_id("orgiq", "default") or ""
 AURORA_CLUSTER_ARN = os.environ.get("AURORA_CLUSTER_ARN", "")
@@ -119,7 +120,9 @@ def query_knowledge_base(query: str, max_results: int = 5) -> str:
             retrievalConfiguration={
                 # Search type is pinned in _shared/kb_resolver — the Bedrock
                 # default ranks this store's results worst-first.
-                "vectorSearchConfiguration": _vector_search_config(min(max_results, 20))
+                # Belt and braces: the tenant metadata filter here, the key-prefix
+                # filter on the results below.
+                "vectorSearchConfiguration": _tenant_vector_search_config(min(max_results, 20), _caller_tenant.get())
             },
         )
         results = [

@@ -153,6 +153,22 @@ def run_sync_from(payload) -> RunSync | None:
     return RunSync(slugs, ds or "")
 
 
+def _data_source_for_prefix(kb_id: str, sources: list, run_prefix: str) -> str | None:
+    """The data source whose S3 inclusion prefix contains ``run_prefix`` (the
+    longest such), or None."""
+    best, chosen = -1, None
+    for s in sources:
+        ds_id = s.get("dataSourceId")
+        if not ds_id:
+            continue
+        ds = _bedrock_agent.get_data_source(knowledgeBaseId=kb_id, dataSourceId=ds_id).get("dataSource", {})
+        s3 = ((ds.get("dataSourceConfiguration") or {}).get("s3Configuration") or {})
+        for p in s3.get("inclusionPrefixes") or []:
+            if isinstance(p, str) and p and run_prefix.startswith(p) and len(p) > best:
+                best, chosen = len(p), ds_id
+    return chosen
+
+
 def _documents_bucket() -> str:
     account = boto3.client("sts").get_caller_identity()["Account"]
     return f"{PREFIX}-documents-{account}-{REGION}"
@@ -302,8 +318,17 @@ def sync_knowledge_base(kb_slug: str = "default") -> str:
                 "error": f"data source {run.data_source_id!r} is not on knowledge base {resolved_kb_id}",
             })
         data_source_id = run.data_source_id
-    else:
+    elif len(sources) == 1:
         data_source_id = sources[0]["dataSourceId"]
+    else:
+        # One data source per tenant prefix (infra/lib/knowledge-base-stack.ts):
+        # sync the one whose inclusion prefix holds this run's prefix.
+        data_source_id = _data_source_for_prefix(resolved_kb_id, sources, _run_prefix.get())
+        if not data_source_id:
+            return json.dumps({
+                "error": f"no data source of knowledge base {resolved_kb_id} covers this run's prefix "
+                         f"{_run_prefix.get()!r}",
+            })
     response = _bedrock_agent.start_ingestion_job(
         knowledgeBaseId=resolved_kb_id,
         dataSourceId=data_source_id,

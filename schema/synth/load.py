@@ -12,8 +12,10 @@ proceed offline and be loaded later.
 """
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from functools import lru_cache
 
 import boto3
@@ -55,7 +57,35 @@ def upload_body(doc: LoadableDoc) -> str:
         ContentType="text/markdown; charset=utf-8",
         Metadata={"orgiq-doc-id": doc.id, "orgiq-source": doc.source},
     )
+    # The owning tenant as Bedrock metadata: retrieval filters on it.
+    owner = declared_owner(key)
+    if owner:
+        _s3().put_object(
+            Bucket=bucket,
+            Key=f"{key}.metadata.json",
+            Body=json.dumps({"metadataAttributes": {"tenant": owner}}).encode("utf-8"),
+            ContentType="application/json",
+        )
     return f"s3://{bucket}/{key}"
+
+
+_KB_PREFIXES = Path(__file__).resolve().parents[2] / "tenants" / "kb-prefixes.json"
+
+
+@lru_cache(maxsize=1)
+def _declared() -> list:
+    data = json.loads(_KB_PREFIXES.read_text(encoding="utf-8"))
+    return [(p, t) for t, ps in data["tenants"].items() for p in ps]
+
+
+def declared_owner(key: str) -> str | None:
+    """The tenant whose declared prefix (tenants/kb-prefixes.json) is the
+    longest one ``key`` starts with, or None."""
+    best, owner = -1, None
+    for p, t in _declared():
+        if key.startswith(p) and len(p) > best:
+            best, owner = len(p), t
+    return owner
 
 
 def _str_or_null(v: str | None) -> dict:
@@ -195,8 +225,10 @@ def trigger_kb_sync() -> str | None:
         log.warning("KB/DataSource IDs missing from stack outputs — skipping KB sync")
         return None
     reconcile_kb_registry(kb_id, ds_id)
+    # One data source per declared prefix: the corpus lives under synth/.
+    sync_ds = outputs.get("SynthDataSourceId") or ds_id
     bedrock_agent = boto3.client("bedrock-agent", region_name=CONFIG.region)
-    resp = bedrock_agent.start_ingestion_job(knowledgeBaseId=kb_id, dataSourceId=ds_id)
+    resp = bedrock_agent.start_ingestion_job(knowledgeBaseId=kb_id, dataSourceId=sync_ds)
     job_id = resp["ingestionJob"]["ingestionJobId"]
     log.info("KB ingestion job started: %s", job_id)
     return job_id

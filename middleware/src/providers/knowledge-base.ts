@@ -21,6 +21,7 @@ import { S3Client, ListObjectsV2Command, PutObjectCommand } from '@aws-sdk/clien
 import { extname, basename } from 'node:path';
 import { config } from '../config.js';
 import type { StorageBreakdown } from '../lib/crawler-types.js';
+import { ownerOfKey, tenantMetadataSidecar } from '../lib/kb-prefixes.js';
 import { exec } from './aurora.js';
 import { clock, groupBy, sumBy } from '../mock/core/index.js';
 import {
@@ -740,6 +741,9 @@ export async function uploadDocument(
   body: Buffer,
   contentType: string,
   prefix = 'uploads',
+  /** The tenant that owns `prefix` (lib/kb-prefixes.ts `ownerOfKey`); written as
+   * the document's `tenant` metadata, which retrieval filters on. */
+  tenant?: string | null,
 ): Promise<UploadResult> {
   const bucket = mockAws() ? mockBucket() : config.foundation.documentsBucket;
   if (!bucket) throw new Error('DOCUMENTS_BUCKET not configured');
@@ -760,6 +764,13 @@ export async function uploadDocument(
     ContentType: contentType,
     Metadata: { 'uploaded-at': new Date().toISOString(), 'original-name': filename.slice(0, 512) },
   }));
+  const owner = tenant ?? ownerOfKey(key);
+  if (owner) {
+    const sidecar = tenantMetadataSidecar(key, owner);
+    await s3.send(new PutObjectCommand({
+      Bucket: bucket, Key: sidecar.key, Body: sidecar.body, ContentType: 'application/json',
+    }));
+  }
   return { key, bucket, size: body.length, contentType, url: `s3://${bucket}/${key}` };
 }
 
