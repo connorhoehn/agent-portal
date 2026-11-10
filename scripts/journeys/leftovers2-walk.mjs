@@ -15,7 +15,7 @@ const chromium = playwright.chromium ?? playwright.default.chromium;
 const PORTAL = (process.env.PORTAL_URL ?? 'http://localhost:5153').replace(/\/$/, '');
 const MIDDLEWARE = (process.env.MIDDLEWARE_URL ?? 'http://127.0.0.1:3953').replace(/\/$/, '');
 const OUT = (process.argv.includes('--out') ? process.argv[process.argv.indexOf('--out') + 1] : undefined) ?? process.env.OUT_DIR ?? fs.mkdtempSync('/tmp/leftovers2-');
-const ONLY = new Set((process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1] : '1,2,2t,3,4,5').split(','));
+const ONLY = new Set((process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1] : '1,2,2t,3,4,5,6').split(','));
 fs.mkdirSync(OUT, { recursive: true });
 
 const P = { vera: ['u-vera', 'org-leader', 'orgiq'], hr: ['u-hr', 'hr-admin', 'orgiq'], nora: ['u-nora', 'sme', 'orgiq'], asha: ['u-asha', 'assessor', 'assessment'], jonas: ['u-jonas', 'lead-assessor', 'assessment'] };

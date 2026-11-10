@@ -63,4 +63,9 @@
   .shell-social-footer [data-testid="shell-footer-row"]:has([data-testid="shell-footer-context"][data-phase="joinable"]) { gap: 4px; padding-inline: 8px; }
   .shell-social-footer .shell-collaboration-bar:is([data-phase="idle"], [data-phase="joinable"]) { padding-left: 4px; padding-right: 8px; }
   .shell-social-footer .shell-collaboration-bar:is([data-phase="idle"], [data-phase="joinable"]) > div:last-child { flex-wrap: nowrap; gap: 2px; padding: 2px; }
+  /* Sweep 15 (L2): while a voice session is live (or its card waits) the voice slot takes the first row whole
+     (VoiceFooterPane: order-first, basis-full) and the other slots wrap onto a row below it. The idle rule above
+     kept the row on one line, which pushed End past the right edge at 390 with the microphone hot. Same
+     specificity as that rule and later, so it wins. */
+  .shell-social-footer [data-testid="shell-footer-row"]:has(> [data-testid="shell-footer-voice"][data-voice-live]) { flex-wrap: wrap; row-gap: 2px; }
 }

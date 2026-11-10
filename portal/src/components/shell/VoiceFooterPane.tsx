@@ -114,6 +114,9 @@ const WORK_EVENT_KINDS: ReadonlySet<string> = new Set(['sweep', 'bot-run', 'job'
 /** Social actions whose grant comes from the plane outside the Social tenant (routes/social-plane.ts PLANE_ACTIONS). */
 const PLANE_ACTIONS: ReadonlySet<Action> = new Set<Action>(['PostMessage', 'StartCall']);
 
+/** Sweep 15 (L2): the phases of a session whose microphone may be hot: on a phone the dock then leads the footer, whole. */
+const LIVE_DOCK_PHASES: ReadonlySet<string> = new Set(['connecting', 'listening', 'thinking', 'executing', 'speaking', 'confirming']);
+
 /** System › Logging (G37) is registered under the dev server only (App.tsx features.voiceLog), as is this control; it is an orgiq page, so other tenants' footers leave it out. */
 const VOICE_LOG_AVAILABLE = features.voiceLog;
 /** How often a kept transcript is saved while the words stream in. */
@@ -524,7 +527,14 @@ function VoiceFooterPane() {
     onCancel: () => controller.cancelChoice(),
   } : null;
   const turns = snap.turns;
-  return <Inline gap="xs" align="center" wrap={false} className="min-w-0 max-w-[min(30rem,100%)] shrink border-l border-border pl-2 max-sm:pl-1" data-testid="shell-footer-voice">
+  // Sweep 15 (L2): a live session (or a card or choice waiting) takes the footer's first row on a phone, whole, so
+  // End is never pushed past the right edge while the microphone is hot; Social, presence and the huddle controls
+  // wrap onto a second row below it (socialFooter.css lets the row wrap while `data-voice-live` is set).
+  const voiceLive = LIVE_DOCK_PHASES.has(snap.phase) || !!pending || !!pendingChoice;
+  return <Inline gap="xs" align="center" wrap={false}
+    className={`min-w-0 max-w-[min(30rem,100%)] shrink border-l border-border pl-2 max-sm:pl-1${voiceLive ? ' max-sm:order-first max-sm:max-w-full max-sm:basis-full max-sm:border-l-0 max-sm:pl-0' : ''}`}
+    {...(voiceLive ? { 'data-voice-live': '' } : {})}
+    data-testid="shell-footer-voice">
     <VoiceDock
       size="footer"
       // Phone width: the idle phase text and ring give way, captions and history move into one overflow (2.519.0).

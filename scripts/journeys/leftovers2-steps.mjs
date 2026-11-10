@@ -279,6 +279,57 @@ export default {
       }
     }
   },
+  // Sweep 15 (L2): on a phone, a live voice session (and a card waiting on it) leads the footer, whole: End is inside
+  // the viewport and not covered, the mute control shows, and the header's persona control is still there.
+  async 6(browser, H) {
+    const { ctxFor, watch, go, shot, note, sleep, reset, PORTAL } = H;
+    const turns = [{ said: 'Tell #auth-migration the cutover order is decided.', call: { name: 'message', arguments: { target: { kind: 'channel', name: 'auth-migration' }, text: 'The cutover order is decided.', thread: null, attach: null } } }];
+    const measure = (page) => page.evaluate(() => {
+      const box = (id) => {
+        const el = document.querySelector(`[data-testid="${id}"]`);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        const cs = getComputedStyle(el);
+        const shown = r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none';
+        const inside = r.left >= 0 && r.top >= 0 && r.right <= window.innerWidth + 0.5 && r.bottom <= window.innerHeight + 0.5;
+        const hitEl = shown ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
+        return { l: Math.round(r.left), r: Math.round(r.right), t: Math.round(r.top), b: Math.round(r.bottom), shown, inside, unobstructed: !!hitEl && (hitEl === el || el.contains(hitEl)) };
+      };
+      const row = document.querySelector('[data-testid="shell-footer-row"]');
+      return {
+        vw: window.innerWidth, end: box('shell-voice-dock-stop'), mute: box('shell-voice-dock-mute'), persona: box('masquerade-menu-compact'),
+        live: !!document.querySelector('[data-testid="shell-footer-voice"][data-voice-live]'),
+        rowH: row ? Math.round(row.getBoundingClientRect().height) : null, hscroll: document.documentElement.scrollWidth - window.innerWidth,
+      };
+    });
+    const ok = (m, persona) => !!m.end && m.end.shown && m.end.inside && m.end.unobstructed && !!m.mute && m.mute.shown && m.mute.inside && m.hscroll <= 0 && (!persona || (!!m.persona && m.persona.shown && m.persona.inside));
+    for (const w of [390, 360]) {
+      await reset();
+      const ctx = await ctxFor(browser, 'vera', w, 844);
+      const page = await ctx.newPage(); watch(page, `6-voice-${w}`);
+      await go(page, INIT);
+      const r = await ctx.request.put(`${PORTAL}/api/voice/mock-script`, { data: { turns } });
+      if (r.status() !== 204) { note(`6 voice footer @${w}`, false, `mock-script ${r.status()}`); await ctx.close(); continue; }
+      await page.getByTestId('shell-voice-dock-start').click();
+      try {
+        await page.getByTestId('voice-confirm-card').waitFor({ timeout: 15000 });
+        await sleep(800);
+        const m = await measure(page);
+        await shot(page, `6-voice-card-${w}`);
+        note(`6 End inside the viewport, card pending @${w}`, ok(m, w === 390), m);
+        await page.getByTestId('voice-confirm-card-cancel').click();
+        await sleep(1500);
+        const l = await measure(page);
+        await shot(page, `6-voice-live-${w}`);
+        note(`6 End inside the viewport, live @${w}`, l.live && ok(l, w === 390), l);
+      } catch (e) {
+        note(`6 voice footer @${w}`, false, String(e).slice(0, 200));
+        await shot(page, `6-voice-${w}-failed`);
+      }
+      await page.getByTestId('shell-voice-dock-stop').click().catch(() => undefined);
+      await ctx.close();
+    }
+  },
   async 5(browser, H) {
     const { ctxFor, watch, go, body, shot, note, sleep } = H;
     // `need`: the headers that must be on screen at each width (the others may fold into "+N columns");
