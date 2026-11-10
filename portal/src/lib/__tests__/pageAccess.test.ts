@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { REQUESTABLE_ROLES, accessNextStep, noAccessReason, offerPage, roleOpens, rolesPhrase } from '../pageAccess.ts';
+import { REQUESTABLE_ROLES, accessNextStep, noAccessReason, offerPage, otherWorkspaceRefusal, roleOpens, rolesPhrase } from '../pageAccess.ts';
 import { pageRefusal } from '../voice/tools.ts';
 import { refusalNext } from '../voice/refusals.ts';
 
@@ -77,4 +77,31 @@ test('voice open refuses with the same next step, coded as a role refusal', () =
   const identity = { label: 'Identity', path: '/admin/identity', tenant: 'admin', roles: BUILD, pageId: 'identity' };
   const ask = pageRefusal(identity, { tenant: 'orgiq', role: 'member', switchable: null }).output;
   assert.equal(ask['reason'], 'Identity opens for hr-admin; you are signed in as member. Ask an org-leader for hr-admin.');
+});
+
+// Regression walk, 9 November 2026 (night), defect B: a URL another workspace owns used to redirect
+// silently to the viewer's own front door. It now says whose page it is and offers the switch only
+// with a grant there, naming the workspace and nothing about the page.
+test('another workspace\'s URL names the workspace, and offers the switch only with a grant there', () => {
+  const assessor = { tenant: 'assessment', availableTenants: ['assessment'] };
+  const both = { tenant: 'social', availableTenants: ['social', 'orgiq'] };
+  const none = otherWorkspaceRefusal(assessor, 'orgiq');
+  assert.equal(none.canSwitch, false);
+  assert.equal(none.title, 'This page belongs to the Work workspace');
+  assert.equal(none.description, 'You are in Assessment. Your account has no access to Work.');
+  const granted = otherWorkspaceRefusal(both, 'orgiq');
+  assert.equal(granted.canSwitch, true);
+  assert.equal(granted.description, 'You are in Social. Switch to Work to open it.');
+  assert.equal(otherWorkspaceRefusal({ tenant: 'pipelines', availableTenants: ['pipelines'] }, 'access').title, 'This page belongs to the Access workspace');
+});
+
+test('the other-workspace page never names the page, and every tenant tree falls back to it', () => {
+  for (const t of ['orgiq', 'assessment', 'social', 'pipelines', 'access']) {
+    const r = otherWorkspaceRefusal({ tenant: 'social', availableTenants: ['social'] }, t);
+    // Only the workspace and the viewer's own workspace appear: no path, no page label.
+    assert.doesNotMatch(`${r.title} ${r.description}`, /\/|budget|catalog|project/i);
+  }
+  const app = readFileSync(new URL('../../App.tsx', import.meta.url), 'utf8');
+  assert.equal((app.match(/<RequireTenant tenant="\w+" fallback=\{<HomeRedirect \/>\}>/g) ?? []).length, 0);
+  assert.equal((app.match(/<RequireTenant tenant="(\w+)" fallback=\{<OtherWorkspace tenant="\1" \/>\}>/g) ?? []).length, 6);
 });

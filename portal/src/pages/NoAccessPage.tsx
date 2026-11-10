@@ -4,7 +4,8 @@ import { CapabilityDeniedFallback, PageSection } from '@connorhoehn/ui-component
 import type { EmptyStateAction } from '@connorhoehn/ui-components/shared';
 import { useSession } from '../lib/auth';
 import { useFetch } from '../hooks/useFetch';
-import { accessNextStep, noAccessReason, rolesPhrase } from '../lib/pageAccess';
+import { accessNextStep, noAccessReason, otherWorkspaceRefusal, rolesPhrase, workspaceName } from '../lib/pageAccess';
+import type { Tenant } from '../lib/tenants.generated';
 import { PAGES } from '../components/shell/portalCommands';
 import { QuickAccessForm } from './projects/BudgetAccess';
 import { mineUrl, openStatusText, quickRequestState, requestHref } from './projects/budgetAccessModel';
@@ -75,6 +76,32 @@ export default function NoAccessPage({ roles }: { roles: readonly string[] }) {
           onFiled={() => { mine.refresh(); setFormOpen(false); }}
         />
       )}
+    </PageSection>
+  );
+}
+
+/**
+ * A URL another workspace owns (App.tsx `RequireTenant` fallbacks). The URL stays, the page names the
+ * workspace (never the page or its data), and "Switch workspace" appears only when the session holds a
+ * grant there; switching lands back on this same URL (lib/pageAccess.ts `otherWorkspaceRefusal`).
+ */
+export function OtherWorkspacePage({ tenant }: { tenant: Tenant }) {
+  const { pathname, search, hash } = useLocation();
+  const navigate = useNavigate();
+  const { session, enterContext } = useSession();
+  const [switching, setSwitching] = useState(false);
+  const refusal = otherWorkspaceRefusal(session, tenant);
+  const actions: EmptyStateAction[] = [];
+  if (refusal.canSwitch) {
+    actions.push({
+      label: switching ? 'Switching…' : 'Switch workspace',
+      onClick: () => { setSwitching(true); void enterContext(tenant, undefined, `${pathname}${search}${hash}`).finally(() => setSwitching(false)); },
+    });
+  }
+  actions.push({ label: 'Back to home', variant: 'link', onClick: () => navigate('/') });
+  return (
+    <PageSection title={`${workspaceName(tenant)} workspace`}>
+      <CapabilityDeniedFallback title={refusal.title} description={refusal.description} actions={actions} testId="other-workspace" />
     </PageSection>
   );
 }

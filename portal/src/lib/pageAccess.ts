@@ -16,6 +16,8 @@
 //
 // Presentation only: the server still gates every read. No React — node:test runs it.
 
+import { TENANT_DISPLAY_NAMES } from './tenants.generated.ts';
+
 /** Least to most privileged within each tenant; the first role in this order that opens a page is the one named. */
 export const ROLE_ORDER = [
   'member', 'sme', 'program-owner', 'org-leader', 'hr-admin',
@@ -102,4 +104,40 @@ export function offerPage(session: AccessSession | null | undefined, roles: read
 /** The refusal sentence a page gate gives (the no-access page's body and the voice `open` refusal share it). */
 export function noAccessReason(label: string, role: string, roles: readonly string[]): string {
   return `${label} opens for ${rolesPhrase(roles)}; you are signed in as ${role}.`;
+}
+
+/** A tenant's product name ("Work" for orgiq), or the id when it has none. */
+export function workspaceName(tenant: string): string {
+  return (TENANT_DISPLAY_NAMES as Readonly<Record<string, string>>)[tenant] ?? tenant;
+}
+
+export interface OtherWorkspaceRefusal {
+  title: string;
+  description: string;
+  /** The session holds a grant in the page's workspace: offer "Switch workspace". */
+  canSwitch: boolean;
+}
+
+/**
+ * A URL that belongs to another workspace (App.tsx `RequireTenant` fallbacks, regression walk
+ * 9 November 2026, defect B). It used to redirect silently to the viewer's own front door. The page
+ * now says the URL is another workspace's and offers the switch only when the session holds a grant
+ * there (`availableTenants`). It names that workspace and nothing else: never the page, never its
+ * data, because a viewer with no grant there has no business learning what it holds.
+ */
+export function otherWorkspaceRefusal(
+  session: { tenant: string; availableTenants?: readonly string[] | null } | null | undefined,
+  tenant: string,
+): OtherWorkspaceRefusal {
+  const name = workspaceName(tenant);
+  const here = session ? workspaceName(session.tenant) : null;
+  const canSwitch = !!session && session.tenant !== tenant && (session.availableTenants ?? []).includes(tenant);
+  const where = here ? `You are in ${here}. ` : '';
+  return {
+    title: `This page belongs to the ${name} workspace`,
+    description: canSwitch
+      ? `${where}Switch to ${name} to open it.`
+      : `${where}Your account has no access to ${name}.`,
+    canSwitch,
+  };
 }

@@ -300,7 +300,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (actor) markContextChosen(actor);
         // The shared tenant home owns the destination; explicit deep links
         // must stay inside that tenant's route family.
-        window.location.assign(to && to.startsWith(`${tenantHome(tenant).split('/').slice(0, 2).join('/')}/`) ? to : tenantHome(tenant));
+        // (orgiq owns two: its /iq pages and the /admin platform pages.)
+        const families = [`${tenantHome(tenant).split('/').slice(0, 2).join('/')}/`, ...(tenant === 'orgiq' ? ['/admin/'] : [])];
+        window.location.assign(to && families.some((f) => to.startsWith(f)) ? to : tenantHome(tenant));
       });
     } catch (error) {
       if (tenantChanged) {

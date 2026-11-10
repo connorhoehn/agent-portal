@@ -6,6 +6,7 @@ import { RouteErrorBoundary } from './components/shell/RouteErrorBoundary';
 import { useSession } from './lib/auth';
 import { ACCESS_ENABLED, ASSESSMENT_ENABLED, PIPELINES_ENABLED, SOCIAL_ENABLED, features, tenantEnabled } from './lib/features';
 import { CHOOSER, resolveHome, tenantHome } from './lib/tenantHome';
+import type { Tenant } from './lib/tenants.generated';
 import { OptionalGatewayProvider } from './components/OptionalGatewayProvider';
 import { SharedNotificationsProvider } from './components/shell/SharedNotifications';
 // Eager: a redirect has nothing to lazy-load and must not flash a spinner.
@@ -86,6 +87,7 @@ const AccessAuditPage = lazy(() => import('./pages/access/AuditPage'));
 const AccessConfigurationPage = lazy(() => import('./pages/access/ConfigurationPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const NoAccessPage = lazy(() => import('./pages/NoAccessPage'));
+const OtherWorkspacePage = lazy(() => import('./pages/NoAccessPage').then((m) => ({ default: m.OtherWorkspacePage })));
 const KnowledgeHomePage = lazy(() => import('./pages/knowledge/KnowledgeHomePage'));
 const KnowledgeLayout = lazy(() => import('./pages/knowledge/KnowledgeLayout'));
 const DropPage = lazy(() => import('./pages/DropPage'));
@@ -236,6 +238,19 @@ function HomeRedirect() {
 }
 
 /**
+ * A URL another workspace owns (every tenant tree's RequireTenant fallback). It used to redirect
+ * silently to the viewer's own front door; now the URL stays and the page says whose it is, offering
+ * "Switch workspace" only when the session holds a grant there (pages/NoAccessPage.tsx,
+ * lib/pageAccess.ts `otherWorkspaceRefusal`). A signed-out visit still goes home to sign in.
+ */
+function OtherWorkspace({ tenant }: { tenant: Tenant }) {
+  const { session, isLoading } = useSession();
+  if (isLoading) return <Loading />;
+  if (!session) return <HomeRedirect />;
+  return <Page element={<OtherWorkspacePage tenant={tenant} />} />;
+}
+
+/**
  * A route gated to `roles` (every tenant's gated pages; lane D extended it from orgiq and platform to
  * Pipelines Configuration and Access Approvals/Configuration/Audit). A role that cannot open it gets the "no access" page
  * in place, with the URL kept — what the page is, which role opens it, and the next step that exists
@@ -300,7 +315,7 @@ export function App() {
           <Route
             path="assessment"
             element={(
-              <RequireTenant tenant="assessment" fallback={<HomeRedirect />}>
+              <RequireTenant tenant="assessment" fallback={<OtherWorkspace tenant="assessment" />}>
                 <Page element={<AssessmentLayout />} />
               </RequireTenant>
             )}
@@ -350,7 +365,7 @@ export function App() {
           <Route
             path="social"
             element={(
-              <RequireTenant tenant="social" fallback={<HomeRedirect />}>
+              <RequireTenant tenant="social" fallback={<OtherWorkspace tenant="social" />}>
                 <Page element={<SocialLayout />} />
               </RequireTenant>
             )}
@@ -387,7 +402,7 @@ export function App() {
           <Route
             path="pipelines"
             element={(
-              <RequireTenant tenant="pipelines" fallback={<HomeRedirect />}>
+              <RequireTenant tenant="pipelines" fallback={<OtherWorkspace tenant="pipelines" />}>
                 <Page element={<PipelinesLayout />} />
               </RequireTenant>
             )}
@@ -447,7 +462,7 @@ export function App() {
           <Route
             path="access"
             element={(
-              <RequireTenant tenant="access" fallback={<HomeRedirect />}>
+              <RequireTenant tenant="access" fallback={<OtherWorkspace tenant="access" />}>
                 <Page element={<AccessLayout />} />
               </RequireTenant>
             )}
@@ -479,13 +494,13 @@ export function App() {
         )}
 
         {/* ── /iq/* — OrgIQ tenant pages. Guarded like the other two trees:
-             an assessor who types /iq/projects must land on their own home,
-             not on the assessment shell wrapped around an orgiq page that
-             dies with the server's 403. ── */}
+             an assessor who types /iq/projects gets the other-workspace page
+             (OtherWorkspace above), not an orgiq page that dies with the
+             server's 403. ── */}
         <Route
           path="iq"
           element={(
-            <RequireTenant tenant="orgiq" fallback={<HomeRedirect />}>
+            <RequireTenant tenant="orgiq" fallback={<OtherWorkspace tenant="orgiq" />}>
               <Page element={<IqLayout />} />
             </RequireTenant>
           )}
@@ -663,7 +678,7 @@ export function App() {
         <Route
           path="admin"
           element={(
-            <RequireTenant tenant="orgiq" fallback={<HomeRedirect />}>
+            <RequireTenant tenant="orgiq" fallback={<OtherWorkspace tenant="orgiq" />}>
               <Page element={<AdminLayout />} />
             </RequireTenant>
           )}
