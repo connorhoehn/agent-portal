@@ -212,12 +212,19 @@ describe('gateway switches (gateway/auth.ts, gateway/env.ts, gateway-attachments
     expect(realtimeGatewayEnabled({})).toBe(true);
     expect(realtimeGatewayEnabled({ NODE_ENV: 'production' })).toBe(false);
   });
-  it('the inbound rate limit and authority cache are ON with nothing set (the brakes default closed)', () => {
+  it('the inbound rate limit is ON with nothing set, production included (the brake defaults closed)', () => {
     expect(inboundRateLimit({})).toEqual({ framesPerSecond: 50, burst: 100 });
-    expect(authorityCacheEnabled({})).toBe(true);
+    expect(inboundRateLimit({ NODE_ENV: 'production' })).toEqual({ framesPerSecond: 50, burst: 100 });
+    // NODE_ENV=production vetoes the dev flag, so the brake stays on.
+    expect(inboundRateLimit({ NODE_ENV: 'production', INSECURE_DEV_MODE: 'true' })).toEqual({ framesPerSecond: 50, burst: 100 });
   });
-  it('…and OFF in production until an operator sets them (documented; the audit flags the inverted default)', () => {
-    expect(inboundRateLimit({ NODE_ENV: 'production' })).toBe(false);
+  it('…OFF only under the dev flag, or when an operator says off', () => {
+    expect(inboundRateLimit({ INSECURE_DEV_MODE: 'true' })).toBe(false);
+    expect(inboundRateLimit({ NODE_ENV: 'production', REALTIME_INBOUND_RATE_LIMIT: 'off' })).toBe(false);
+    expect(inboundRateLimit({ INSECURE_DEV_MODE: 'true', REALTIME_INBOUND_RATE_LIMIT: 'on' })).toEqual({ framesPerSecond: 50, burst: 100 });
+  });
+  it('the authority cache is ON outside production and OFF in production (a cache of positive verdicts, not a brake)', () => {
+    expect(authorityCacheEnabled({})).toBe(true);
     expect(authorityCacheEnabled({ NODE_ENV: 'production' })).toBe(false);
   });
   it('GATEWAY_UPLOADS: on outside production, off in production without a mounted dir', () => {

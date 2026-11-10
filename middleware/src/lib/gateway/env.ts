@@ -1,5 +1,7 @@
 // The /ws gateway's tuning knobs, each read once at attach and validated loudly.
 
+import { insecureDevMode } from '../insecure-dev-mode.js';
+
 /** Canonical router setting, with the old main branch's explicit Redis opt-in
  * mapped to the native leased router. REDIS_URL alone never enables fan-out. */
 export function realtimeGatewayRouting(env: NodeJS.ProcessEnv = process.env): 'local' | 'redis' {
@@ -75,9 +77,24 @@ export function authorityCacheMaxAgeMs(env: NodeJS.ProcessEnv = process.env): nu
 }
 
 /**
+ * REALTIME_INBOUND_RATE_LIMIT unset: ON, except under INSECURE_DEV_MODE
+ * (which NODE_ENV=production vetoes). It used to be the other way round — off
+ * in production — so a deployed gateway let one socket send frames as fast as
+ * it could. A brake is a safety default, so it is on wherever nothing says
+ * otherwise; the deployed task needs no extra setting.
+ */
+function inboundBrakeOn(env: NodeJS.ProcessEnv): boolean {
+  const raw = (env['REALTIME_INBOUND_RATE_LIMIT'] ?? '').trim().toLowerCase();
+  if (!raw) return !insecureDevMode(env);
+  if (raw === 'on' || raw === 'true' || raw === '1') return true;
+  if (raw === 'off' || raw === 'false' || raw === '0') return false;
+  throw new Error('REALTIME_INBOUND_RATE_LIMIT must be on or off');
+}
+
+/**
  * The per-socket inbound frame budget (realtime-modules 0.120 `inboundRateLimit`),
- * or false. REALTIME_INBOUND_RATE_LIMIT=on|off (default on outside production,
- * off in production); REALTIME_INBOUND_FPS (default 50) and
+ * or false. REALTIME_INBOUND_RATE_LIMIT=on|off (default on, off under the dev
+ * flag — inboundBrakeOn); REALTIME_INBOUND_FPS (default 50) and
  * REALTIME_INBOUND_BURST (default 2 × fps).
  *
  * Measured 2026-10-14 (headless Chromium against dev:mock, pipelines run
@@ -89,7 +106,7 @@ export function authorityCacheMaxAgeMs(env: NodeJS.ProcessEnv = process.env): nu
  * 14× the load burst, so it is kept.
  */
 export function inboundRateLimit(env: NodeJS.ProcessEnv = process.env): false | { framesPerSecond: number; burst: number } {
-  if (!switchFlag('REALTIME_INBOUND_RATE_LIMIT', env)) return false;
+  if (!inboundBrakeOn(env)) return false;
   const read = (name: string, fallback: number, max: number) => {
     const raw = (env[name] ?? '').trim();
     if (!raw) return fallback;
