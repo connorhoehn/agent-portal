@@ -31,6 +31,8 @@ services:
       PORT: "3001"
       NODE_ENV: development
       INSECURE_DEV_MODE: "true"
+      # The dev flag binds loopback unless told otherwise; the port is published to 127.0.0.1 above.
+      BIND_HOST: "0.0.0.0"
       DEV_OFFLINE: "true"
       AUTH_DEMO_MODE: "true"
       MOCK_AURORA: "true"

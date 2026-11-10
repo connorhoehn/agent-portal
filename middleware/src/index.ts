@@ -93,6 +93,7 @@ import { readDatastoreStatus } from './lib/datastore-probe.js';
 import { createHealthHandler, livezHandler } from './lib/health-handler.js';
 import { createHealthProbe } from './lib/health-probe.js';
 import { resolveRuntimeProfile, validateRuntimeProfile } from './lib/runtime-profile.js';
+import { listenHost } from './lib/bind-host.js';
 import { announceInsecureDevMode } from './lib/insecure-dev-mode.js';
 import { hasPullSideColumns } from './providers/agent-jobs.js';
 import { inProcessQueue, pipelineQueue } from './lib/pipeline-queue-transport.js';
@@ -709,11 +710,12 @@ const gatewayHandle = gatewayOn ? await startRealtimeGateway(server, { leaseGrou
 if (mockRestartSnapshot()) { await fleetInitialization; assertMockRestartIdleDirectors(getDemoState()); completeMockRestartReplay(); }
 if (!gatewayHandle) console.log('[realtime-gateway] off (REALTIME_GATEWAY) — /ws upgrades are refused');
 rejectUnsupportedUpgrades(server, { allowPaths: gatewayOn ? [REALTIME_GATEWAY_PATH] : [] });
-server.listen(config.port, '0.0.0.0', () => {
+const bindHost = listenHost();
+server.listen(config.port, bindHost, () => {
   consumeMockRestartHandoff();
   const mockedDomains = Object.entries(config.mock).filter(([, v]) => v).map(([k]) => k);
   const mockSuffix = mockedDomains.length > 0 ? `mock=${mockedDomains.join(',')}` : 'mocks=off';
-  console.log(`orgiq-middleware listening on :${config.port} (${mockSuffix})`);
+  console.log(`orgiq-middleware listening on ${bindHost}:${config.port} (${mockSuffix})`);
 });
 let closing = false;
 const shutdown = async () => {

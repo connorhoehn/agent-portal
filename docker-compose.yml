@@ -62,6 +62,10 @@ services:
       # The one dev switch (middleware/.env.example): the portal's localhost
       # origin, seed-policy authz without a policy store, the dev keys.
       - INSECURE_DEV_MODE=true
+      # The dev flag binds loopback by default (lib/bind-host.ts); inside a
+      # container that is unreachable, and the published port above is
+      # already pinned to the host's 127.0.0.1.
+      - BIND_HOST=0.0.0.0
       - PORT=3001
     restart: unless-stopped
     networks:
