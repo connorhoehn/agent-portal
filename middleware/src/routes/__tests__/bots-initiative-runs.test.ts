@@ -18,6 +18,8 @@ jest.mock('../../lib/authz.js', () => {
   return {
     readForRolesElseAction: deny,
     requireAction: deny,
+    // The budgets read tier asks Cedar for ManageBudgets last: a member holds nothing.
+    isAllowed: async () => false,
     requireSession: (label: string) => {
       sessionLabels.push(label);
       return (_req: unknown, _res: unknown, next: () => void) => next();
@@ -42,11 +44,11 @@ import { getMaintenance30d } from '../../providers/budgets.js';
 
 beforeEach(() => __resetMockRuns());
 
-function buildApp() {
+function buildApp(role = 'member') {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
-    (req as unknown as { session: unknown }).session = { sub: 'u-release', role: 'member', tenant: 'orgiq' };
+    (req as unknown as { session: unknown }).session = { sub: 'u-release', role, tenant: 'orgiq' };
     next();
   });
   app.use('/api/bots', botsRouter);
@@ -59,8 +61,16 @@ describe('GET /api/bots/initiative-runs — a member on an initiative', () => {
     expect(sessionLabels).toContain('InitiativeRuns');
   });
 
-  it('carries the 30-day maintenance floor as the view states it, decided on the server (never summed in the browser)', async () => {
+  it('withholds the maintenance floor below the budgets read tier, saying why (sweep 11, L2); each run keeps its own cost', async () => {
     const res = await request(buildApp()).get('/api/bots/initiative-runs?orgProjectId=p-llm-platform');
+    expect(res.status).toBe(200);
+    expect(res.body.maintenance30d).toBeNull();
+    expect(res.body.budgetAccess).toMatchObject({ visible: false, requestItemId: 'capability:orgiq:budgets-read' });
+    expect(res.body.runs.some((r: { costUsd: unknown }) => typeof r.costUsd === 'number')).toBe(true);
+  });
+
+  it('carries the 30-day maintenance floor to the tier as the view states it, decided on the server (never summed in the browser)', async () => {
+    const res = await request(buildApp('org-leader')).get('/api/bots/initiative-runs?orgProjectId=p-llm-platform');
     expect(res.status).toBe(200);
     const expected = await getMaintenance30d('p-llm-platform');
     expect(res.body.maintenance30d).toEqual(expected);
@@ -101,7 +111,9 @@ describe('GET /api/bots/initiative-runs — a member on an initiative', () => {
     const app = buildApp();
     const res = await request(app).get('/api/bots/initiative-runs?orgProjectId=p-does-not-exist');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ runs: [], bots: [], maintenance30d: { cronRuns: 0, costUsd: 0 } });
+    expect(res.body).toMatchObject({ runs: [], bots: [], maintenance30d: null });
+    expect((await request(buildApp('org-leader')).get('/api/bots/initiative-runs?orgProjectId=p-does-not-exist')).body)
+      .toEqual({ runs: [], bots: [], maintenance30d: { cronRuns: 0, costUsd: 0 } });
     expect((await request(app).get('/api/bots/initiative-runs')).status).toBe(400);
   });
 });

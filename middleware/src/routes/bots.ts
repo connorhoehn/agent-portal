@@ -607,9 +607,18 @@ botsRouter.get('/initiative-runs', requireSession('InitiativeRuns'), asyncHandle
   // COSTED runs attributed to the initiative) — the same value the Budgets ledger reads, decided
   // here, never summed in a browser from a capped run list with unknown costs counted as zero
   // (CLAUDE.md: unknown burn is unknown, not zero). Null when the view could not be read.
+  //
+  // The floor is the Budgets ledger's own aggregate, so it is tier data (sweep 11, L2): below the
+  // budgets read tier it is withheld with `budgetAccess` saying why, never zeroed. Each run's own
+  // `costUsd` stays: it is the price of one run, the figure the work queue already shows every
+  // session and the one an SME manages their envelope by (docs/next-steps.md, sweep 11).
+  // Loaded here, not at module scope: the tier module reaches config.ts (import.meta), which the
+  // CommonJS test config cannot compile for the many suites that load this router (initiative-scope.ts, same reason).
+  const { budgetAccessLocked, canReadBudgets } = await import('../lib/budget-read-tier.js');
+  const tier = await canReadBudgets(req.session ?? null);
   let maintenance30d: Awaited<ReturnType<typeof getMaintenance30d>> | null = null;
-  try { maintenance30d = await getMaintenance30d(orgProjectId); } catch { maintenance30d = null; }
-  res.json({ runs, bots, maintenance30d, ...(roster.degraded ? degradedFields(roster) : degradedFields(history)) });
+  if (tier) { try { maintenance30d = await getMaintenance30d(orgProjectId); } catch { maintenance30d = null; } }
+  res.json({ runs, bots, maintenance30d, ...(tier ? {} : { budgetAccess: budgetAccessLocked() }), ...(roster.degraded ? degradedFields(roster) : degradedFields(history)) });
 }));
 
 // GET /api/bots/runs?botIds=a,b,c
