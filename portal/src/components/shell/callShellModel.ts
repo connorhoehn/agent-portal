@@ -84,3 +84,28 @@ export function huddleChatScopeTenant(tenant: string | null, joined: boolean): s
 export function hasJoinedCall(call: { callId: string } | null | undefined, phase: string): boolean {
   return !!call?.callId && ['connecting', 'live', 'reconnecting'].includes(phase);
 }
+
+/**
+ * Where a huddle can be started, in the viewing tenant's own words (UX walk D, 9 November 2026): each
+ * tenant is its own product, so the footer never names objects another product has (an initiative in
+ * Pipelines, a document in Access). Pipelines and Access have no huddle pages of their own.
+ */
+const HUDDLE_PLACES: Readonly<Record<string, string>> = {
+  orgiq: 'open an initiative, team, run, document, conversation or person',
+  assessment: 'open a team, a document or a conversation',
+  social: 'open a conversation, a hangout or a contact',
+};
+
+/**
+ * The footer's pre-call controls (Huddle, Message) on a page with no huddle of its own: hidden when the
+ * viewer has no Social grant and the tenant has no huddle pages (the footer shows only what the tenant
+ * and the grant give them); otherwise disabled with the tenant's own reason. A page that registered a
+ * huddle always shows them, and its lobby decides the reasons.
+ */
+export function idleHuddleControls(input: { tenant: string | null | undefined; hasLobby: boolean; hasSocialGrant: boolean }):
+  { show: false } | { show: true; startReason: string | null; messageReason: string | null } {
+  if (input.hasLobby) return { show: true, startReason: null, messageReason: null };
+  const places = input.tenant ? HUDDLE_PLACES[input.tenant] : undefined;
+  if (!places && !input.hasSocialGrant) return { show: false };
+  return { show: true, startReason: `This page has no huddle — ${places ?? 'open a conversation in Communication'}`, messageReason: 'No huddle here to message' };
+}

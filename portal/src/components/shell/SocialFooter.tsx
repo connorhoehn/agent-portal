@@ -33,7 +33,7 @@ import { EmbeddedSocialEntry } from './EmbeddedSocial';
 import { HuddleReactionBar, useHuddleChat, useHuddleChatToggle, useHuddleReact } from './HuddleChat';
 import { useMeetingBarItems } from './CallMeeting';
 import { ShellCallMedia } from './ShellCallHost';
-import { callScopeKey, hasJoinedCall } from './callShellModel';
+import { callScopeKey, hasJoinedCall, idleHuddleControls } from './callShellModel';
 import { VoiceFooterSlot } from './VoiceFooterPane';
 import './socialFooter.css';
 
@@ -138,11 +138,15 @@ function FooterIdle() {
   const host = useCallHost();
   const focus = useComposerFocus();
   const pane = useSidePaneHost();
+  const { session } = useSession();
   const composerMounted = focus.present;
   const lobby = host?.lobby ?? null;
-  const startReason = !lobby ? 'This page has no huddle — open an initiative, team, run, document, conversation or person'
+  // The tenant's own places, or nothing at all without a grant or a huddle page (callShellModel.idleHuddleControls).
+  const idle = idleHuddleControls({ tenant: session?.tenant, hasLobby: !!lobby, hasSocialGrant: (session?.grants.social?.length ?? 0) > 0 });
+  if (!idle.show) return null;
+  const startReason = !lobby ? idle.startReason ?? undefined
     : lobby.startBlockedReason ?? (host?.startBound ? undefined : 'This page cannot start a huddle');
-  const messageReason = !lobby ? 'No huddle here to message'
+  const messageReason = !lobby ? idle.messageReason ?? undefined
     : composerMounted || pane.registered ? undefined : 'Start the huddle to message it, or open a page with a conversation';
   // A huddle already live on this page (the host watches the lobby, realtime-modules 0.136): who is in it, and Join.
   const live = lobby && host?.call.phase === 'idle' ? host.call.call : null;

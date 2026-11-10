@@ -15,7 +15,7 @@ import { realtimeTokenSource } from '../../lib/realtimeToken';
 import { communicationUnread, communicationUnreadCount } from '../../lib/communicationPlane';
 import { presenceAvatarUsers } from '../../pages/assessment/knowledge/knowledgeFormat';
 import SocialConversation from '../../pages/social/SocialConversation';
-import { TenantDirectEntry } from './TenantDirectMessages';
+import { TenantPresenceAnnouncement } from './TenantDirectMessages';
 import { MessagesOverviewDialog, type ConversationPreview } from './MessagesOverviewDialog';
 import { showSocialTenantDoor, socialActivityPath, socialEntryTarget } from './socialEntryModel';
 import { SOCIAL_PRESENCE_CHANNEL, namesFrom } from '../../pages/social/socialPlatform';
@@ -235,9 +235,9 @@ export function EmbeddedSocialProvider({ children }: { children: ReactNode }) {
 export function EmbeddedSocialEntry() {
   const social = useEmbeddedSocial();
   if (!social) return null;
-  // No Social grant: the tenant-neutral presence and DM entry (people who share
-  // the active tenant, `<tenant>:lobby`, `<tenant>:dm:<ids>`).
-  if (!social.available) return <TenantDirectEntry />;
+  // No Social grant: only the tenant lobby announcement (voice set_status), nothing drawn —
+  // the footer shows only what the tenant and the grant give (UX walk D).
+  if (!social.available) return <TenantPresenceAnnouncement />;
   return <SocialEntryRow social={social} />;
 }
 

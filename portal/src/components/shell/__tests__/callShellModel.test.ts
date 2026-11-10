@@ -1,6 +1,22 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { acceptedCallHref, callPeopleHref, callScopeKey, hasJoinedCall, huddleChatScopeTenant, pageHuddleHref, shellCallDockTestId } from '../callShellModel.ts';
+import { acceptedCallHref, callPeopleHref, callScopeKey, hasJoinedCall, huddleChatScopeTenant, idleHuddleControls, pageHuddleHref, shellCallDockTestId } from '../callShellModel.ts';
+
+test('the footer huddle controls name only the viewing tenant\'s own places, and hide without a grant or a huddle page (UX walk D)', () => {
+  // Pipelines and Access, no Social grant, no page huddle: no Huddle or Message at all.
+  assert.deepEqual(idleHuddleControls({ tenant: 'pipelines', hasLobby: false, hasSocialGrant: false }), { show: false });
+  assert.deepEqual(idleHuddleControls({ tenant: 'access', hasLobby: false, hasSocialGrant: false }), { show: false });
+  // A Social grant in Pipelines: conversations in Communication, never an initiative or a document.
+  const granted = idleHuddleControls({ tenant: 'pipelines', hasLobby: false, hasSocialGrant: true });
+  assert.ok(granted.show && /Communication/.test(granted.startReason ?? ''));
+  for (const tenant of ['assessment', 'social', 'pipelines', 'access']) {
+    const c = idleHuddleControls({ tenant, hasLobby: false, hasSocialGrant: true });
+    if (c.show) assert.doesNotMatch(c.startReason ?? '', /initiative/, tenant);
+  }
+  assert.match((idleHuddleControls({ tenant: 'orgiq', hasLobby: false, hasSocialGrant: false }) as { startReason: string }).startReason, /initiative/);
+  // A page that registered a huddle shows the controls; its lobby gives the reasons.
+  assert.deepEqual(idleHuddleControls({ tenant: 'access', hasLobby: true, hasSocialGrant: false }), { show: true, startReason: null, messageReason: null });
+});
 
 const actor = { sub: 'u-vera', tenant: 'orgiq', masquerading: null };
 test('Accept retains work, scoped Search, and a deck already bound to the same initiative', () => {
