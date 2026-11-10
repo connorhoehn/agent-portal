@@ -10,19 +10,21 @@ Verdicts: **fine** (closed, or explicit opt-in), **needs a flag** (open path mus
 **needs fail-closed** (no flag should open it). The middleware rows are pinned by
 `middleware/src/lib/__tests__/fail-closed-startup.test.ts` (section 3). Companion: `docs/next-steps.md` §"Cross-cutting" item 1.
 
+*Status, 9 November 2026:* the aws-agentcore rows fixed since this audit carry their commit in the verdict column. The realtime-modules "needs fail-closed" rows are still open (tracked in realtime-modules). `docs/next-steps.md` §10 "Still open" has the current list.
+
 ## 1. Decision points
 
 | repo | file:line | what opens | what closes it | default | dev flag | verdict |
 |---|---|---|---|---|---|---|
 | aws-agentcore | middleware/src/lib/session.ts:249 | session cookies signed with the published dev key | `SESSION_SIGNING_SECRET_ARN`; production throws | open | no | needs a flag |
-| aws-agentcore | middleware/src/lib/session.ts:434 (+ authz.ts:312, call-access.ts:30, live-principal.ts:66, document-session.ts:13) | cookie-less request = permissive demo identity, every grant | production unless `AUTH_DEMO_MODE=true`; any Cognito config | open | no | needs a flag |
+| aws-agentcore | middleware/src/lib/session.ts:434 (+ authz.ts:312, call-access.ts:30, live-principal.ts:66, document-session.ts:13) | cookie-less request = permissive demo identity, every grant | production unless `AUTH_DEMO_MODE=true`; any Cognito config | open | no | fixed: only under `INSECURE_DEV_MODE` (`f3a90e18`); `AUTH_DEMO_MODE` alone no longer counts and a production boot with it refuses (`cdf66348`) |
 | aws-agentcore | middleware/src/lib/authz.ts:248 | no `POLICY_STORE_ID`: Cedar seed matrix decides (admin = `*`) | production → DENY | open (seeds) | no | needs a flag |
 | aws-agentcore | middleware/src/lib/service-auth.ts:328 (approvals.ts:57, harness.ts:90, assessment.ts:453, lab.ts:42, runbooks.ts:126) | `requireServiceAuth`: unset secret lets the machine callback through | production → 503 | open | no | needs a flag |
-| aws-agentcore | middleware/src/lib/service-auth.ts:206 | static bearer header accepted beside the signed envelope | `SERVICE_AUTH_LEGACY_HEADERS=refuse` (ECS sets it) | open | no | needs a flag |
+| aws-agentcore | middleware/src/lib/service-auth.ts:206 | static bearer header accepted beside the signed envelope | `SERVICE_AUTH_LEGACY_HEADERS=refuse` (ECS sets it) | open | no | fixed: refused by default (`f3a90e18`) |
 | aws-agentcore | middleware/src/lib/internal-service-auth.ts:39 | body-only envelope accepted on the internal routers | `SERVICE_AUTH_LEGACY_BODY_ONLY=refuse` | open | no | needs a flag |
 | aws-agentcore | middleware/src/lib/realtime-token.ts:41 | realtime JWTs signed and verified with the published dev secret (/ws, lobby-access) | `REALTIME_JWT_SECRET`; production → null/503 | open | no | needs a flag |
 | aws-agentcore | middleware/src/lib/gateway/auth.ts:38 | /ws gateway on | `REALTIME_GATEWAY=off`, production | open (feature) | no | fine |
-| aws-agentcore | middleware/src/lib/gateway/env.ts:52 | inbound rate limit and authority cache OFF in production | `REALTIME_INBOUND_RATE_LIMIT=on` | closed unset, off in prod | no | needs a flag (inverted) |
+| aws-agentcore | middleware/src/lib/gateway/env.ts:52 | inbound rate limit and authority cache OFF in production | `REALTIME_INBOUND_RATE_LIMIT=on` | closed unset, off in prod | no | fixed: the inbound brake is on unless `INSECURE_DEV_MODE` (`e1e198ce`); the authority cache is unchanged |
 | aws-agentcore | middleware/src/lib/gateway-attachments.ts:116 | upload verbs on outside production | `GATEWAY_UPLOADS=off`; prod needs a dir | open (channel-guarded) | no | fine |
 | aws-agentcore | middleware/src/lib/browser-origin.ts:29 | localhost origins with credentials | production | open (loopback) | no | needs a flag |
 | aws-agentcore | middleware/src/lib/trusted-proxy.ts:12 | — | `TRUST_PROXY_HOPS` unset ignores forwarding headers | closed | — | fine |
@@ -39,7 +41,7 @@ Verdicts: **fine** (closed, or explicit opt-in), **needs a flag** (open path mus
 | aws-agentcore | middleware/src/lib/search-index/kv.ts:39 (+ runbooks/store-dynamo.ts:51, social-chat.ts:626, migrate-work-comments.ts:247, document-comment-import.ts:206) | dummy credentials to a local DynamoDB endpoint | production | closed (keeps real keys off emulators) | no | fine |
 | aws-agentcore | middleware/src/mock/restart-state.ts:50, initiative-deck-durability.ts:104, dev-pairings.ts:40 | mock persistence | `DEV_OFFLINE`+`MOCK_AURORA`, `MOCK_PERSIST_PAIRINGS=1` | closed | yes | fine |
 | aws-agentcore | agents/_shared/secret_resolver.py:43 | plaintext callback secret when the named secret cannot be read | `PLAINTEXT_CALLBACK_SECRETS=1` | closed | yes | fine |
-| aws-agentcore | agents/_shared/callbacks.py:42, agents/devbox/lab:88 | static header sent beside the envelope | `SERVICE_AUTH_LEGACY_HEADERS=refuse` | open | no | needs a flag |
+| aws-agentcore | agents/_shared/callbacks.py:42, agents/devbox/lab:88 | static header sent beside the envelope | `SERVICE_AUTH_LEGACY_HEADERS=refuse` | open | no | fixed: sent only when set to `accept` (`19b7efc9`) |
 | aws-agentcore | infra/lib/middleware-service-stack.ts:966,1018,1024; social-stack.ts:517,535 | — | ECS sets `NODE_ENV=production`, `BUDGET_FAIL_CLOSED`, legacy `refuse`; lobby authority URL | closed | — | fine (code defaults lean on it) |
 | aws-agentcore | middleware/Dockerfile, portal/Dockerfile | image sets no `NODE_ENV`; every NODE_ENV row above opens if the task env drops it | ECS task env | open if orchestrator forgets | no | needs fail-closed |
 | aws-agentcore | docker-compose.yml:185 | social-gateway `SKIP_AUTH=true` without `INSECURE_DEV_MODE` | realtime-examples 0.2.x boot gate refuses it | will not start | no | needs a flag (compose) |
@@ -136,7 +138,7 @@ Verdicts: **fine** (closed, or explicit opt-in), **needs a flag** (open path mus
 | event-catalog | production without auth fails to boot; queue secret without auth fails to boot; CORS off; short tokens rejected | `startServer({ insecure })` from the helper replaces `NODE_ENV === 'production'` at `index.ts:422`; `HOST` default `127.0.0.1` |
 | ui-components | n/a (React library) | none for this convention; replace `innerHTML` in `SharedTextEditor.tsx:36,50` with text as realtime-modules did in 0.146.0 |
 
-aws-agentcore: done 2026-11-07, commits f3a90e18 (middleware, service-runtime 0.7.3) and 37387e74 (launchers, images, infra test). All 17 cases in `fail-closed-startup.test.ts` are plain tests. Not done from that row: `gateway/env.ts` brakes stay off in production (a plain test pins it), the agents' `SERVICE_AUTH_LEGACY_HEADERS` default (agents/ was out of scope), and no `assertDevShortcutAllowed` boot gate (production `AUTH_DEMO_MODE=true` stays a pinned opt-in). Deliberate differences: `demoModeEnabled` is `AUTH_DEMO_MODE==='true' || insecureDevMode()`, and the ECS task gets no body-only `accept` because it sets no internal-router secret.
+aws-agentcore: done 2026-11-07, commits f3a90e18 (middleware, service-runtime 0.7.3) and 37387e74 (launchers, images, infra test). All 17 cases in `fail-closed-startup.test.ts` are plain tests. The three items that row left open are now closed. The agents' `SERVICE_AUTH_LEGACY_HEADERS` default is refuse (`19b7efc9`). On 9 November, on a branch not yet merged, `demoModeEnabled` became `insecureDevMode()` alone, with an `assertDemoModeAllowed` boot gate (`cdf66348`), and the `gateway/env.ts` inbound brake turned on unless the dev flag is set (`e1e198ce`). One deliberate difference remains: the ECS task gets no body-only `accept`, because it sets no internal-router secret.
 
 ## 3. First instance: the middleware's fail-closed test
 
