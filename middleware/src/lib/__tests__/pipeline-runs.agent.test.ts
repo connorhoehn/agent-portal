@@ -129,6 +129,15 @@ describe('a bundle with a runId is exactly one agent Run', () => {
     expect(p.unlinked.invocation_traces).toBe(0);
   });
 
+  it('the run title never carries the prompt (the projection is read across users and tenants)', async () => {
+    await postBundle({ runId: 'run-private' });
+    const p = projectRuns({ ...EMPTY, invocations: onlyWritten() });
+    const run = p.runs.find((r) => r.context.aguiRunId === 'run-private')!;
+    expect(run.context.title).toMatch(/ run$/);
+    const source = invocationSourceFromRow({ invocation_id: 'x', prompt_snippet: 'my salary question' });
+    expect(JSON.stringify(source)).not.toContain('salary');
+  });
+
   it('a run with no STEP_* recorded still has one step — the invocation', async () => {
     await postBundle({ runId: 'run-nosteps' });
     const p = projectRuns({ ...EMPTY, invocations: onlyWritten() });

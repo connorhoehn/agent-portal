@@ -260,7 +260,6 @@ export interface InvocationSource {
   guardrailAction: string | null;
   schemaValid: boolean | null;
   totalCostUsd: number | null;
-  promptSnippet?: string | null;
 }
 
 /**
@@ -785,7 +784,10 @@ function projectAgentRuns(src: RunSources, runs: Run[], steps: Map<string, Step[
           { table: 'invocation_traces', id: t.invocationId, status: sourceStatus, role: 'primary' },
           ...extra.map((x): SourceRef => ({ table: 'invocation_traces', id: x.invocationId, status: traceSourceStatus(x), role: 'child' })),
         ],
-        title: t.promptSnippet?.trim() || `${t.agentName} run`,
+        // Never the prompt: the projection is read across users and tenants
+        // (the pipelines tenant's view, search, decks), and a prompt snippet is
+        // the asking user's text (lib/trace-scope.ts).
+        title: `${t.agentName} run`,
         aguiRunId: rid, threadId: t.threadId, agentId: t.agentId,
         error: traceFailureReason(t),
       },

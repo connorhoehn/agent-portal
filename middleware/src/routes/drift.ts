@@ -21,6 +21,7 @@ import {
   mockDriftTimeseries,
 } from '../mock/observability-queries.js';
 import { EMBEDDING_DIMENSIONS } from '../lib/embedding.js';
+import { traceScope, scopeSql, rowInScope } from '../lib/trace-scope.js';
 
 /**
  * Marks a response whose query failed — the wrapper from routes/cost.ts, kept
@@ -143,6 +144,11 @@ driftRouter.get('/outliers', asyncHandler(async (req, res) => {
   const limit = Number.isFinite(rawLimit) && rawLimit > 0
     ? Math.min(rawLimit, 500)
     : 50;
+  // Each outlier carries its prompt and response: only the caller's own rows
+  // (lib/trace-scope.ts). The centroids stay fleet-wide aggregates.
+  const scope = traceScope(req, res);
+  if (scope === 'refused') return;
+  const scoped = scopeSql(scope, 'w.');
 
   // Compute per-row distance to the agent's centroid in the last 1h.
   // Agent filter is optional — without it we rank globally across all agents.
@@ -169,18 +175,19 @@ driftRouter.get('/outliers', asyncHandler(async (req, res) => {
            w.ts
       FROM window_rows w
       JOIN centroids c USING (agent_id)
-     WHERE 1=1 ${whereAgent}
+     WHERE 1=1 ${whereAgent}${scoped.clause}
      ORDER BY dist DESC
      LIMIT :lim`;
 
   const params: import('@aws-sdk/client-rds-data').SqlParameter[] = [
     { name: 'lim', value: { longValue: limit } },
+    ...scoped.params,
   ];
   if (agentId) params.push({ name: 'agent', value: { stringValue: agentId } });
 
   try {
     const rows = config.mock.aurora
-      ? mockDriftOutliers(agentId, limit)
+      ? mockDriftOutliers(agentId, limit).filter((r) => rowInScope(scope, r))
       : await exec(sql, params);
     const out: DriftOutlierRow[] = rows.map((r) => ({
       invocationId: String(r['invocation_id'] ?? ''),
@@ -381,12 +388,18 @@ interface DriftNeighbor {
 driftRouter.get('/neighbors/:invocationId', asyncHandler(async (req, res) => {
   const id = (req.params['invocationId'] as string).trim();
   const limit = Math.min(Math.max(parseInt((req.query['limit'] as string) ?? '3', 10) || 3, 1), 20);
+  // Neighbours carry response text: the probe and every neighbour must be in
+  // the caller's scope (lib/trace-scope.ts).
+  const scope = traceScope(req, res);
+  if (scope === 'refused') return;
+  const probeScope = scopeSql(scope);
+  const rowScope = scopeSql(scope, 't.');
 
   const sql = `
     WITH probe AS (
       SELECT agent_id, template_id, output_embedding
         FROM observability.invocation_traces
-       WHERE invocation_id = :id::uuid
+       WHERE invocation_id = :id::uuid${probeScope.clause}
     )
     SELECT t.invocation_id::text AS invocation_id,
            t.ts::text AS ts,
@@ -398,16 +411,17 @@ driftRouter.get('/neighbors/:invocationId', asyncHandler(async (req, res) => {
        AND t.agent_id = p.agent_id
        AND t.output_embedding IS NOT NULL
        AND (t.judge_score IS NULL OR t.judge_score >= 0.7)
-       AND t.ts > now() - INTERVAL '7 days'
+       AND t.ts > now() - INTERVAL '7 days'${rowScope.clause}
      ORDER BY t.output_embedding <=> p.output_embedding ASC
      LIMIT :lim`;
 
   try {
     const rows = config.mock.aurora
-      ? mockDriftNeighbors(id, limit)
+      ? mockDriftNeighbors(id, limit).filter((r) => rowInScope(scope, r))
       : await exec(sql, [
           { name: 'id',  value: { stringValue: id } },
           { name: 'lim', value: { longValue: limit } },
+          ...rowScope.params,
         ]);
     const out: DriftNeighbor[] = rows.map((r) => ({
       invocationId: String(r['invocation_id'] ?? ''),

@@ -48,6 +48,7 @@ import {
   mockCostValueRatio,
 } from '../mock/observability-queries.js';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
+import { traceScope, scopeSql, rowInScope, type TraceScope } from '../lib/trace-scope.js';
 
 
 /**
@@ -304,7 +305,9 @@ function emptyCostTop(windowHours: number): CostTopResponse {
   return { invocations: [], withCost: 0, windowHours };
 }
 
-async function fetchCostTop(windowHours: number, limit: number): Promise<CostTopResponse> {
+async function fetchCostTop(windowHours: number, limit: number, scope: TraceScope | null): Promise<CostTopResponse> {
+  // Each row quotes its prompt: only the caller's own (lib/trace-scope.ts).
+  const scoped = scopeSql(scope);
   // Order by total_cost_usd DESC NULLS LAST so null-cost rows fall to the
   // bottom rather than masking the real top-N. Only rows with a real cost
   // value are interesting in a "most expensive" list.
@@ -320,15 +323,16 @@ async function fetchCostTop(windowHours: number, limit: number): Promise<CostTop
       FROM observability.invocation_traces
      WHERE ts > now() - (INTERVAL '1 hour' * :hours)
        AND (template_id NOT LIKE 'test:%' OR template_id IS NULL)
-       AND total_cost_usd IS NOT NULL
+       AND total_cost_usd IS NOT NULL${scoped.clause}
      ORDER BY total_cost_usd DESC NULLS LAST
      LIMIT :lim`;
 
   const rows = config.mock.aurora
-    ? mockCostTop(windowHours, limit)
+    ? mockCostTop(windowHours, limit).filter((r) => rowInScope(scope, r))
     : await exec(sql, [
         { name: 'hours', value: { longValue: windowHours } },
         { name: 'lim',   value: { longValue: limit } },
+        ...scoped.params,
       ]);
   const invocations: CostTopInvocation[] = rows.map((r) => ({
     invocationId: String(r['invocation_id'] ?? ''),
@@ -350,9 +354,11 @@ async function fetchCostTop(windowHours: number, limit: number): Promise<CostTop
 costRouter.get('/top', asyncHandler(async (req, res) => {
   const windowHours = clampWindowHours(req.query['windowHours'] as string | undefined);
   const limit = clampLimit(req.query['limit'] as string | undefined, 20, 500);
+  const scope = traceScope(req, res);
+  if (scope === 'refused') return;
 
   try {
-    res.json(await fetchCostTop(windowHours, limit));
+    res.json(await fetchCostTop(windowHours, limit, scope));
   } catch (err) {
     console.warn('[cost] /top failed:', (err as Error).message);
     res.json(degraded(emptyCostTop(windowHours), err));
@@ -667,6 +673,8 @@ costRouter.get('/summary', asyncHandler(async (req, res) => {
     168,
     24 * 30,
   );
+  const scope = traceScope(req, res);
+  if (scope === 'refused') return;
 
   const sections = [
     { name: 'total' as const, run: () => fetchCostTotal(windowHours), empty: emptyCostTotal(windowHours) },
@@ -676,7 +684,7 @@ costRouter.get('/summary', asyncHandler(async (req, res) => {
       run: () => fetchCostTimeseries(windowHours, bucketMin, agentId),
       empty: emptyCostTimeseries(windowHours, bucketMin),
     },
-    { name: 'top' as const, run: () => fetchCostTop(windowHours, limit), empty: emptyCostTop(windowHours) },
+    { name: 'top' as const, run: () => fetchCostTop(windowHours, limit, scope), empty: emptyCostTop(windowHours) },
     { name: 'byModel' as const, run: () => fetchCostByModel(windowHours), empty: emptyCostByModel(windowHours) },
     {
       name: 'a2aOverhead' as const,

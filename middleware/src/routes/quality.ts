@@ -16,6 +16,7 @@ import { clock } from '../mock/core/clock.js';
 import { mockSetHumanLabel, traceRows } from '../mock/observability.js';
 
 import { reasonLine } from '../lib/upstream.js';
+import { traceScope, rowInScope } from '../lib/trace-scope.js';
 /**
  * Marks a response whose query failed — the wrapper from routes/cost.ts, kept
  * local so each router owns its own copy.
@@ -63,6 +64,11 @@ interface ScorePoint {
 
 qualityRouter.get('/scores', asyncHandler(async (req, res) => {
   const agentId = (req.query['agentId'] as string | undefined)?.trim();
+  // Every point stays (the chart is an aggregate), but the judge's rationale
+  // quotes the prompt and answer: it is returned only for the caller's own
+  // rows (lib/trace-scope.ts).
+  const scope = traceScope(req, res);
+  if (scope === 'refused') return;
   const sinceRaw = (req.query['since'] as string | undefined)?.trim();
   // `since` is optional. Accept either an ISO timestamp or a number of
   // minutes ("60m"). Default = last 24 hours.
@@ -112,7 +118,7 @@ qualityRouter.get('/scores', asyncHandler(async (req, res) => {
     SELECT invocation_id::text AS invocation_id,
            agent_id, ts,
            judge_score, schema_valid, human_label,
-           judge_rationale,
+           judge_rationale, user_id, tenant,
            input_tokens, output_tokens,
            est_cost_usd, judge_cost_usd, total_cost_usd,
            prompt_version, model_id
@@ -134,7 +140,7 @@ qualityRouter.get('/scores', asyncHandler(async (req, res) => {
       judgeScore: r['judge_score'] == null ? null : Number(r['judge_score']),
       schemaValid: r['schema_valid'] == null ? null : Boolean(r['schema_valid']),
       humanLabel: r['human_label'] == null ? null : String(r['human_label']),
-      judgeRationale: r['judge_rationale'] == null ? null : String(r['judge_rationale']),
+      judgeRationale: r['judge_rationale'] == null || !rowInScope(scope, r) ? null : String(r['judge_rationale']),
       inputTokens: r['input_tokens'] == null ? null : Number(r['input_tokens']),
       outputTokens: r['output_tokens'] == null ? null : Number(r['output_tokens']),
       estCostUsd: r['est_cost_usd'] == null ? null : Number(r['est_cost_usd']),

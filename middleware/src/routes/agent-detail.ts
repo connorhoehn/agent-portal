@@ -25,6 +25,7 @@ import { agentcore } from '../providers/index.js';
 import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
+import { scopeForSession, scopeSql, type TraceScope } from '../lib/trace-scope.js';
 
 export const agentDetailRouter: Router = Router();
 
@@ -144,15 +145,18 @@ async function livePrompt(runtimeName: string): Promise<LivePrompt> {
  * that into "No invocations recorded". A broken query and a quiet system are
  * not the same answer, and the page had no way to tell them apart.
  */
-async function recentInvocations(runtimeName: string): Promise<{
+async function recentInvocations(runtimeName: string, scope: TraceScope | null): Promise<{
   rows: Array<Record<string, unknown>>; problem?: string;
 }> {
   if (config.mock.aurora) return { rows: [] };
   const slug = agentSlug(runtimeName);
+  // Each row quotes its prompt: only the caller's own (lib/trace-scope.ts).
+  const scoped = scopeSql(scope);
   const params: SqlParameter[] = [
     { name: 'a1', value: { stringValue: runtimeName } },
     { name: 'a2', value: { stringValue: `orgiq-${slug}` } },
     { name: 'a3', value: { stringValue: slug } },
+    ...scoped.params,
   ];
   try {
     const rows = await exec(
@@ -160,7 +164,7 @@ async function recentInvocations(runtimeName: string): Promise<{
               COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0) AS tokens,
               total_cost_usd, judge_score, guardrail_action, model_id, session_id
          FROM observability.invocation_traces
-        WHERE agent_id IN (:a1, :a2, :a3)
+        WHERE agent_id IN (:a1, :a2, :a3)${scoped.clause}
         ORDER BY ts DESC
         LIMIT 25`,
       params,
@@ -263,12 +267,17 @@ agentDetailRouter.get('/:agentId', asyncHandler(async (req, res) => {
   }
 
   const logLimit = Math.min(Number(req.query['logLimit'] ?? 100) || 100, 500);
+  const scope = scopeForSession(req.session as never);
+  if (scope === 'none') {
+    res.status(401).json({ error: 'session required' });
+    return;
+  }
 
   // Independent reads, so one slow or broken source does not hold the others.
   const [prompt, metrics, invocations, log] = await Promise.all([
     livePrompt(runtime.name),
     agentcore.getRuntimeMetrics(runtime.id).catch(() => null),
-    recentInvocations(runtime.name),
+    recentInvocations(runtime.name, scope),
     recentLogs(runtime.id, logLimit),
   ]);
 

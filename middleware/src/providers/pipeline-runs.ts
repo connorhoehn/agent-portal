@@ -48,7 +48,6 @@ export function invocationSourceFromRow(r: Record<string, unknown>): InvocationS
     guardrailAction: str(r['guardrail_action']),
     schemaValid: typeof r['schema_valid'] === 'boolean' ? r['schema_valid'] : null,
     totalCostUsd: num(r['total_cost_usd']),
-    promptSnippet: str(r['prompt_snippet']),
   };
 }
 
@@ -129,7 +128,7 @@ export async function loadRunSources(): Promise<{ sources: RunSources; unavailab
                 parent_invocation_id::text AS parent_invocation_id, user_id,
                 to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS ts_iso,
                 duration_ms, guardrail_action, schema_valid,
-                total_cost_usd::float8 AS total_cost_usd, prompt_snippet
+                total_cost_usd::float8 AS total_cost_usd
            FROM observability.invocation_traces
           WHERE ts > now() - make_interval(hours => :hours)
           ORDER BY ts DESC

@@ -46,6 +46,9 @@ const BASE = '/api/observability/oncall';
 function buildApp() {
   const app = express();
   app.use(express.json());
+  // The snippet routes read their scope from the session (lib/trace-scope.ts); these
+  // cases are about the data plane, so they run as the cross-tenant admin.
+  app.use((req, _res, next) => { (req as unknown as { session: unknown }).session = { sub: 'u-admin', role: 'admin', tenant: 'orgiq', grants: {}, iat: 0 }; next(); });
   app.use(BASE, oncallRouter);
   app.use(errorHandler);
   return app;

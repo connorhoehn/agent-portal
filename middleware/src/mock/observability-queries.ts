@@ -234,6 +234,8 @@ export function mockDriftOutliers(agentId: string | undefined, limit: number, sc
     .filter((r) => !agentId || r.agent_id === agentId)
     .map((r) => ({
       invocation_id: r.invocation_id,
+      // Read by lib/trace-scope.ts rowInScope: the offline twin of the routes' user clause.
+      user_id: r.user_id,
       agent_id: r.agent_id,
       agent_name: r.agent_name,
       template_id: r.template_id,
@@ -320,6 +322,8 @@ export function mockDriftNeighbors(invocationId: string, limit: number, scenario
     .filter((r) => new Date(r.tsIso).getTime() > cutoff)
     .map((r) => ({
       invocation_id: r.invocation_id,
+      // Read by lib/trace-scope.ts rowInScope: the offline twin of the routes' user clause.
+      user_id: r.user_id,
       ts: r.ts,
       response_snippet: r.response_snippet,
       judge_score: r.judge_score,
@@ -415,6 +419,8 @@ export function mockQualityScores(
     .slice(0, 5000)
     .map((r) => ({
       invocation_id: r.invocation_id,
+      // Read by lib/trace-scope.ts rowInScope (the rationale is redacted out of scope).
+      user_id: r.user_id,
       agent_id: r.agent_id,
       ts: r.ts,
       judge_score: r.judge_score,
@@ -845,6 +851,8 @@ export function mockCostTop(windowHours: number, limit: number, scenario?: Scena
     .slice(0, Math.max(0, limit))
     .map((r) => ({
       invocation_id: r.invocation_id,
+      // Read by lib/trace-scope.ts rowInScope: the offline twin of the routes' user clause.
+      user_id: r.user_id,
       agent_id: r.agent_id,
       prompt_snippet: r.prompt_snippet,
       total_cost_usd: r.total_cost_usd,
@@ -1106,6 +1114,8 @@ export function mockOncallJudgeRegressions(windowHours: number, scenario?: Scena
     .slice(0, 200)
     .map((r) => ({
       invocation_id: r.invocation_id,
+      // Read by lib/trace-scope.ts rowInScope: the offline twin of the routes' user clause.
+      user_id: r.user_id,
       ts: r.ts,
       agent_id: r.agent_id,
       judge_score: r.judge_score,

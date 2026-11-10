@@ -72,6 +72,7 @@ import {
 } from '../mock/harness.js';
 import { mockListPromotedVersions, mockPromotePromptVersion } from '../mock/prompt-versions.js';
 import { sinkTraceById } from '../mock/trace-sink.js';
+import { scopeForSession, scopeSql, joinScopeSql, rowInScope, type TraceScope } from '../lib/trace-scope.js';
 
 export const harnessRouter = Router();
 
@@ -851,6 +852,9 @@ harnessRouter.get('/runs/:id', runnerOr(requireAction('ViewObservability')), asy
     res.status(404).json({ error: 'run not found' });
     return;
   }
+  // A result names its invocation; the trace's text joins in only for a
+  // harness trace or one in the caller's scope (lib/trace-scope.ts).
+  const traceJoin = joinScopeSql(scopeForSession(req.session as never), 't.');
   const resultRows = await exec(
     `SELECT r.run_id::text AS run_id, r.test_id,
             r.invocation_id::text AS invocation_id,
@@ -868,10 +872,10 @@ harnessRouter.get('/runs/:id', runnerOr(requireAction('ViewObservability')), asy
        FROM observability.test_results r
        LEFT JOIN observability.test_cases c ON c.test_id = r.test_id
        LEFT JOIN observability.invocation_traces t
-         ON t.invocation_id = r.invocation_id
+         ON t.invocation_id = r.invocation_id${traceJoin.clause}
       WHERE r.run_id = CAST(:id AS uuid)
       ORDER BY r.ts ASC, r.test_id ASC`,
-    [strParam('id', id)],
+    [strParam('id', id), ...traceJoin.params],
   );
   const results: TestResult[] = resultRows.map((r) => {
     const out = rowToTestResult(r);
@@ -1152,16 +1156,21 @@ harnessRouter.post('/results/:invocationId/rejudge', requireAction('ManageCanary
   // traffic in `mock/observability.ts`, whose ids (`mock-inv-0`) are not uuids
   // and are rejected by the guard above. So the offline sequence is the real
   // one: post a trace, take the uuid it returns, re-judge that.
+  // The judge reads (and its rationale quotes) the trace's text: the trace
+  // must be in the caller's scope, else it answers like a missing id.
+  const scope = scopeForSession(req.session as never);
+  if (scope === 'none') { res.status(401).json({ error: 'session required' }); return; }
+  const scoped = scopeSql(scope);
   const rows = config.mock.aurora
     ? (() => {
-      const t = sinkTraceById(invocationId);
-      return t ? [{ prompt_snippet: t.prompt_snippet, response_snippet: t.response_snippet }] : [];
+      const t = sinkTraceById(invocationId) as unknown as Record<string, unknown> | undefined;
+      return t && rowInScope(scope, t) ? [{ prompt_snippet: t['prompt_snippet'], response_snippet: t['response_snippet'] }] : [];
     })()
     : await exec(
       `SELECT prompt_snippet, response_snippet
          FROM observability.invocation_traces
-        WHERE invocation_id = CAST(:id AS uuid)`,
-      [strParam('id', invocationId)],
+        WHERE invocation_id = CAST(:id AS uuid)${scoped.clause}`,
+      [strParam('id', invocationId), ...scoped.params],
     );
   if (rows.length === 0) throw new NotFoundError('trace not found');
   const trace = rows[0]!;
@@ -1336,7 +1345,7 @@ interface JoinedResultRow {
   response_snippet: string | null;
 }
 
-async function fetchJoinedResults(runId: string): Promise<JoinedResultRow[]> {
+async function fetchJoinedResults(runId: string, scope: TraceScope | null | 'none'): Promise<JoinedResultRow[]> {
   if (config.mock.aurora) {
     return mockGetResults(runId).map((r) => ({
       test_id: r.testId,
@@ -1348,6 +1357,8 @@ async function fetchJoinedResults(runId: string): Promise<JoinedResultRow[]> {
       response_snippet: r.responseSnippet,
     }));
   }
+  // The trace's text joins in only for a harness trace or one in scope.
+  const traceJoin = joinScopeSql(scope, 't.');
   const rows = await exec(
     `SELECT r.test_id AS test_id,
             COALESCE(c.agent_id, '') AS agent_id,
@@ -1359,9 +1370,9 @@ async function fetchJoinedResults(runId: string): Promise<JoinedResultRow[]> {
        FROM observability.test_results r
        LEFT JOIN observability.test_cases c ON c.test_id = r.test_id
        LEFT JOIN observability.invocation_traces t
-         ON t.invocation_id = r.invocation_id
+         ON t.invocation_id = r.invocation_id${traceJoin.clause}
       WHERE r.run_id = CAST(:id AS uuid)`,
-    [strParam('id', runId)],
+    [strParam('id', runId), ...traceJoin.params],
   );
   return rows.map((r) => ({
     test_id: String(r['test_id'] ?? ''),
@@ -1446,8 +1457,8 @@ harnessRouter.get('/runs/:runIdA/compare/:runIdB', requireAction('ViewObservabil
   }
 
   const [rowsA, rowsB] = await Promise.all([
-    fetchJoinedResults(runIdA),
-    fetchJoinedResults(runIdB),
+    fetchJoinedResults(runIdA, scopeForSession(req.session as never)),
+    fetchJoinedResults(runIdB, scopeForSession(req.session as never)),
   ]);
 
   const mapA = new Map<string, JoinedResultRow>(rowsA.map((r) => [r.test_id, r]));

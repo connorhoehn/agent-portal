@@ -23,7 +23,7 @@
 
 import { Router, type Request, type Response } from 'express';
 import { requireAction } from '../lib/authz.js';
-import { FLEET_WIDE_ROLES } from '../lib/devbox-visibility.js';
+import { traceScope, scopeSql, rowInScope } from '../lib/trace-scope.js';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import {
   BedrockAgentCoreClient,
@@ -68,53 +68,8 @@ export const invocationsRouter = Router();
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-/**
- * Whose traces this caller may read.
- *
- * invocation_traces holds every user's prompt and response snippets, in every
- * tenant, and the RLS script exempts it on purpose — so the scope is enforced
- * here. `ViewObservability` (every orgiq member holds it) answers "may you open
- * the observability pages", not "may you read everyone's prompts". A fleet-wide
- * role (lib/devbox-visibility.ts FLEET_WIDE_ROLES: org-leader, hr-admin, admin
- * — the same roles that see every computer) reads the whole table; everyone
- * else reads only their own traces in their own tenant, whatever the query
- * string says. `null` means fleet-wide.
- */
-interface TraceScope { tenant: string; userId: string }
-
-function traceScope(req: Request, res: Response): TraceScope | null | 'refused' {
-  const session = req.session;
-  if (!session?.sub) {
-    res.status(401).json({ error: 'session required' });
-    return 'refused';
-  }
-  if (session.role && FLEET_WIDE_ROLES.includes(session.role)) return null;
-  return { tenant: String(session.tenant), userId: session.sub };
-}
-
-/** SQL clause + parameters for a scope, or nothing for a fleet-wide caller. */
-function scopeSql(scope: TraceScope | null): { clause: string; params: SqlParameter[] } {
-  if (!scope) return { clause: '', params: [] };
-  return {
-    clause: ' AND user_id = :scope_user AND tenant = :scope_tenant',
-    params: [
-      { name: 'scope_user', value: { stringValue: scope.userId } },
-      { name: 'scope_tenant', value: { stringValue: scope.tenant } },
-    ],
-  };
-}
-
-/**
- * The same rule over a returned row — the offline corpus is answered by
- * functions that do not read the SQL. It has no tenant column (it is orgiq's
- * own corpus), so an absent tenant checks the user alone.
- */
-function rowInScope(scope: TraceScope | null, row: Record<string, unknown> | undefined): boolean {
-  if (!scope || !row) return true;
-  if (row['user_id'] !== scope.userId) return false;
-  const tenant = row['tenant'];
-  return tenant === undefined || tenant === scope.tenant;
-}
+// Whose traces a caller may read: lib/trace-scope.ts, shared with every route
+// that returns snippet text from invocation_traces.
 
 function clampLimit(raw: string | undefined, def = 50, max = 500): number {
   const n = parseInt(raw ?? String(def), 10);
@@ -199,9 +154,8 @@ invocationsRouter.get('/search', asyncHandler(async (req, res) => {
   if (scope === 'refused') return;
   // `?userId=` is a filter only a fleet-wide role may choose; everyone else is
   // pinned to their own id and their own tenant whatever the query says.
-  const userId = scope
-    ? scope.userId
-    : typeof req.query['userId'] === 'string' ? req.query['userId'].trim() : '';
+  const userId = scope?.userId
+    ?? (typeof req.query['userId'] === 'string' ? req.query['userId'].trim() : '');
   const limit = clampLimit(req.query['limit'] as string | undefined, 50, 500);
 
   // Build WHERE clauses incrementally. We never inline user-supplied strings;

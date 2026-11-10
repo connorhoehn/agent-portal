@@ -43,6 +43,8 @@ import {
   mockCostDeployMarkers,
 } from '../mock/observability-queries.js';
 
+import { traceScope, scopeSql, rowInScope } from '../lib/trace-scope.js';
+
 export const oncallRouter = Router();
 
 /**
@@ -632,6 +634,11 @@ oncallRouter.get('/recent-events', asyncHandler(async (req, res) => {
 
   const events: RecentEvent[] = [];
   const failures: string[] = [];
+  // Judge regressions quote the prompt and the answer: only the caller's own
+  // (lib/trace-scope.ts).
+  const scope = traceScope(req, res);
+  if (scope === 'refused') return;
+  const judgeScope = scopeSql(scope);
 
   // 1) Deploys (prompt_versions registrations in last 24h)
   try {
@@ -710,7 +717,7 @@ oncallRouter.get('/recent-events', asyncHandler(async (req, res) => {
   //    in last 24h. We don't try to dedupe (each bad row is its own event).
   try {
     const rows = config.mock.aurora
-      ? mockOncallJudgeRegressions(24)
+      ? mockOncallJudgeRegressions(24).filter((r) => rowInScope(scope, r))
       : await exec(
       `SELECT invocation_id::text AS invocation_id,
               ts::text AS ts,
@@ -719,9 +726,10 @@ oncallRouter.get('/recent-events', asyncHandler(async (req, res) => {
         WHERE ts > now() - INTERVAL '24 hours'
           AND judge_score IS NOT NULL
           AND judge_score < 0.3
-          AND (template_id NOT LIKE 'test:%' OR template_id IS NULL)
+          AND (template_id NOT LIKE 'test:%' OR template_id IS NULL)${judgeScope.clause}
         ORDER BY ts DESC
         LIMIT 200`,
+      judgeScope.params,
     );
     for (const r of rows) {
       const agentId = String(r['agent_id'] ?? '');
