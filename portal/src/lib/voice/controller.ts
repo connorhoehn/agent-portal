@@ -203,6 +203,18 @@ export const CARD_HINT = { voice: 'Say confirm, or cancel.', click: 'Click Confi
 export function cardHint(mode: 'voice' | 'click', label?: string): string {
   return mode === 'click' && label ? `Click ${label} on the card; say cancel to drop it.` : CARD_HINT[mode];
 }
+/**
+ * G66: how long a spoken answer can confirm a card, from when it opened. After it (or after a page navigation, or a
+ * new delegation that is not the card's answer) the card stays open but takes only a click; a spoken cancel still
+ * drops it. The phone's bottom sheet keeps a card up while the user does other things, so a later, unrelated "ok"
+ * must not send a message or queue work.
+ */
+export const VOICE_CONFIRM_WINDOW_MS = 45_000;
+/** G66: why a card stopped taking a spoken confirm (the closed vocabulary its events carry). */
+export type VoiceWindowEnd = 'timeout' | 'navigation' | 'delegation';
+/** G66: the silent note the voice gets, once, when a card stops taking a spoken confirm. */
+export const voiceWindowNote = (line: string): string =>
+  `The open confirm card no longer takes a spoken yes; it now needs a click. If the user says yes or ok to it, say exactly: "${line}" A spoken cancel still drops it.`;
 /** How long a session the page or the connection dropped can be resumed (G35). */
 export const RESUME_MS = 60_000;
 /** The note a resumed session starts with. */
@@ -362,6 +374,8 @@ interface Pending {
   callId: string; delegationId: string; call: PreparedCall; plan: ConfirmPlan | null; startedAt: number; heard: Heard; view: VoicePendingView;
   /** G40: who may answer, the line the voice asks with, when the card opened, and whether a spoken yes was already told to click. */
   mode: 'voice' | 'click'; line: string; shownAt: number; toldToClick?: boolean;
+  /** G66: the button's verb, the page it opened on, the voice-confirm window's timer, and why that window ended. */
+  label?: string; openedOn?: string; voiceWindow?: Timer | null; windowEnded?: VoiceWindowEnd;
 }
 
 /** The card id of a mint that waits on the user's budget (not a tool call). */
@@ -435,6 +449,8 @@ export class VoiceController {
   private sessionTurnFrom = 1;
   /** The last page context the voice was given, so the same page is not appended twice. */
   private lastPageNote: string | null = null;
+  /** G66: the route in view (pathChanged), so a card knows the page it opened on. */
+  private path: string | undefined;
   private levels = { input: 0, output: 0 };
   private muted = false;
   private warned = false;
@@ -726,6 +742,16 @@ export class VoiceController {
     this.publish();
   }
 
+  /**
+   * G66: the route in view changed (the shell calls this on every pathname, the first one included). A card that
+   * opened on another page stops taking a spoken confirm: the user has moved on, and their next "ok" is not its answer.
+   */
+  pathChanged(path: string): void {
+    this.path = path;
+    const p = this.pending;
+    if (p && p.openedOn !== path) this.endVoiceWindow(p, 'navigation');
+  }
+
   /** The page in view, for the voice (G21): appended when it differs from the last one it was given. */
   notePage(): void {
     if (this.machine.base !== 'live' || !this.client) return;
@@ -870,6 +896,8 @@ export class VoiceController {
         return;
       case 'delegation':
         if (!this.delegations.has(f.delegationId)) {
+          // G66: a new request while a card is open ends its spoken confirm, unless it follows the card's own answer.
+          if (this.pending && this.pending.delegationId !== f.delegationId) this.delegationDuringCard(this.pending);
           this.emit({ kind: 'delegation', data: { delegationId: f.delegationId } });
           this.diag.delegated();
           this.context.newTurn();
@@ -1019,7 +1047,11 @@ export class VoiceController {
       const text = { ...described, ...(card.clickOnly ? {} : { hint: cardHint(mode, label) }), confirmBy: mode };
       this.pending = { callId, delegationId, call, plan, startedAt, heard: { text: '', lastEndMs: null, quiet: null, done: false },
         mode, line: plan?.line ?? confirmLine(call, mode, label), shownAt: this.now(),
+        ...(label ? { label } : {}), ...(this.path !== undefined ? { openedOn: this.path } : {}),
         view: { callId, requestId: ++this.requestSeq, tool: name, ...text, ...(plan?.fields ? { fields: plan.fields } : {}), ...(Object.keys(card).length ? { card } : {}) } };
+      // G66: a spoken confirm counts for VOICE_CONFIRM_WINDOW_MS only.
+      const opened = this.pending;
+      if (mode === 'voice') opened.voiceWindow = this.setTimer(() => { opened.voiceWindow = null; this.endVoiceWindow(opened, 'timeout'); }, VOICE_CONFIRM_WINDOW_MS);
       this.attachTool(name, 'running', text.title);
       this.emit({ kind: 'confirm-shown', tool: name, data: { requestId: this.pending.view.requestId, callId, by: mode, ...(plan?.fields ? { fields: true } : {}) } });
       this.dispatch({ type: 'confirm-shown', callId });
@@ -1362,6 +1394,12 @@ export class VoiceController {
     // The voice's own line through the speaker (no echo cancellation, an external mic) is not the user's answer.
     if (echoesCardLine(h.text, p.line)) { this.listenAgain(p); return; }
     const decision = confirmDecision(h.text, true);
+    // G66: a card whose voice-confirm window ended ignores a yes; the voice was told, when it ended, to ask for the click.
+    if (decision === 'confirm' && p.windowEnded) {
+      this.emit({ kind: 'client', data: { event: 'confirm-expired', requestId: p.view.requestId, tool: p.call.spec.name, cause: p.windowEnded } });
+      this.listenAgain(p);
+      return;
+    }
     // G40: a click-only card (computer, decide, an access request) is never confirmed by voice: the voice says to click, once.
     if (decision === 'confirm' && p.mode === 'click') { this.tellToClick(p); return; }
     if (decision) { this.resolvePending(decision === 'confirm', 'voice'); return; }
@@ -1384,11 +1422,45 @@ export class VoiceController {
     this.addLine('assistant', p.line);
   }
 
+  /**
+   * G66: the card stops taking a spoken confirm. It stays open; its hint and policy become the click card's, the voice
+   * is told once (silently) to ask for the click, and a spoken cancel still drops it. A click-only card has nothing to end.
+   */
+  private endVoiceWindow(p: Pending, cause: VoiceWindowEnd): void {
+    if (this.pending !== p || p.mode !== 'voice') return;
+    if (p.voiceWindow != null) { this.clearTimer(p.voiceWindow); p.voiceWindow = null; }
+    p.mode = 'click';
+    p.windowEnded = cause;
+    p.toldToClick = true;
+    p.line = confirmLine(p.call, 'click', p.label);
+    p.view = { ...p.view, ...(p.view.hint !== undefined ? { hint: cardHint('click', p.label) } : {}), confirmBy: 'click' };
+    // The card line is the click line now; the dock no longer says the spoken one for it.
+    this.clearCardLine();
+    this.emit({ kind: 'client', data: { event: 'confirm-window-ended', requestId: p.view.requestId, tool: p.call.spec.name, cause } });
+    this.noteContext(voiceWindowNote(p.line));
+    this.publish();
+  }
+
+  /**
+   * G66: a delegation that is not the card's arrived while it is open. When the words heard since the card are an
+   * affirmation still waiting for the utterance to end, that delegation is the voice reacting to the answer: decide it
+   * now. Anything else is a new request, which ends the card's spoken confirm.
+   */
+  private delegationDuringCard(p: Pending): void {
+    const h = p.heard;
+    if (p.mode === 'voice' && !h.done && h.text.trim() && !echoesCardLine(h.text, p.line) && confirmDecision(h.text, true) === 'confirm') {
+      this.endUtterance(p);
+      return;
+    }
+    this.endVoiceWindow(p, 'delegation');
+  }
+
   private resolvePending(confirmed: boolean, by: 'voice' | 'click', answer?: CardAnswer): void {
     const p = this.pending;
     const client = this.client;
     if (!p || !client) return;
     if (p.heard.quiet != null) { this.clearTimer(p.heard.quiet); p.heard.quiet = null; }
+    if (p.voiceWindow != null) { this.clearTimer(p.voiceWindow); p.voiceWindow = null; }
     this.pending = null;
     this.clearCardLine();
     // G40: the matched word of a spoken answer (the closed vocabulary, never the utterance) and how long the card waited.

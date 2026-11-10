@@ -419,7 +419,8 @@ function VoiceFooterPane() {
   }, [controller, session?.tenant]);
 
   // Moving by hand, or the page showing its rows: the voice learns where the user is and what is on screen, silently (G21).
-  useEffect(() => { controller.notePage(); }, [controller, pathname]);
+  // G66: a card left open on another page stops taking a spoken confirm.
+  useEffect(() => { controller.pathChanged(pathname); controller.notePage(); }, [controller, pathname]);
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const off = subscribePageContext(() => {
