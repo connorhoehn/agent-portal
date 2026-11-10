@@ -172,6 +172,10 @@ const tables = {
 };
 for (const [source, rows] of Object.entries(tables)) for (const row of rows) scanRow(source, row);
 for (const [key, where, , , text] of HISTORY) scanText(`chat ${where} ${key}`, text);
+// What a simulated run hands back in its report (mock/run-report-fixtures.ts): the
+// summary, obstacles and commands a dispatch on the mock stores and the run page shows.
+const { simulatedRunTexts } = await load('mock/run-report-fixtures.ts');
+for (const { key, text } of simulatedRunTexts()) scanText(`simulated run report (${key})`, text);
 
 // ── Agent runs: the supervisor traces that open a run (pipelines P1) ──
 // Their step names are the run's Steps table; one run never repeats a name.
