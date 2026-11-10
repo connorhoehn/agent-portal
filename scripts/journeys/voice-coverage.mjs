@@ -24,7 +24,7 @@ const flag = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 
 const PORTAL = (process.env.PORTAL_URL ?? 'http://localhost:5166').replace(/\/$/, '');
 const MIDDLEWARE = (process.env.MIDDLEWARE_URL ?? 'http://127.0.0.1:3966').replace(/\/$/, '');
 const OUT = flag('--out') ?? process.env.OUT_DIR ?? fs.mkdtempSync(path.join(os.tmpdir(), 'voice-coverage-'));
-const ONLY = new Set((flag('--only') ?? 'C1,C2,C3,C4,C5,C6,C7').split(',').map((s) => s.trim().toUpperCase()));
+const ONLY = new Set((flag('--only') ?? 'C1,C2,C3,C4,C5,C6,C7,C8').split(',').map((s) => s.trim().toUpperCase()));
 fs.mkdirSync(path.join(OUT, 'shots'), { recursive: true });
 
 const PERSONAS = {
@@ -506,7 +506,55 @@ const C7 = {
   },
 };
 
-const CAPABILITIES = { C1, C2, C2B, C3, C4, C5, C6, C7 };
+/**
+ * C8: a confirm card that opens while the person is typing in the composer never takes the composer's focus or its
+ * Enter (ui-components 2.519.0). The voice starts from the composer with its hotkey (focus stays there), a `message`
+ * card is scripted to open mid-sentence, and the composer's own Enter must send the composer's text while the card
+ * stays pending: before the fix the card took focus and that Enter confirmed the voice's message.
+ */
+const C8 = {
+  title: 'A card never takes the composer\'s focus or Enter', persona: 'vera',
+  async run(s, page) {
+    await s('a `message` card opens while the composer has typed text; Enter sends the composer\'s text and the card stays pending', async () => {
+      await go(page, INITIATIVE);
+      await waitText(page, '[data-testid=initiative-header]', /Auth Migration/);
+      const r = await page.context().request.put(`${PORTAL}/api/voice/mock-script`, { data: { turns: [
+        { said: 'Tell #auth-migration the cutover order is decided.', call: { name: 'message', arguments: { target: { kind: 'channel', name: 'auth-migration' }, text: 'Voice card text that must not be sent by the composer Enter.', thread: null, attach: null } } },
+      ] } });
+      check(r.status() === 204, `PUT /api/voice/mock-script answered ${r.status()}`);
+      await page.evaluate(() => { window.__voiceFrames = []; window.__voiceStarted = true; });
+      const ed = page.locator('[data-testid=initiative-central-composer] .ProseMirror').first();
+      const TYPED = `Composer note ${Date.now() % 100000} typed while a voice card opens`;
+      await ed.click();
+      await page.keyboard.type(TYPED.slice(0, 14), { delay: 30 });
+      // The voice hotkey: the session starts and focus stays in the composer.
+      await page.keyboard.press('Control+Shift+Space');
+      const cardSeen = page.getByTestId('voice-confirm-card').waitFor({ timeout: 20000 }).then(() => Date.now());
+      const typingStart = Date.now();
+      await page.keyboard.type(TYPED.slice(14), { delay: 60 });
+      const typingEnd = Date.now();
+      const openedAt = await cardSeen.catch(() => { throw new StepFailure('no confirm card opened'); });
+      await sleep(400);
+      const state = await page.evaluate(() => {
+        const box = document.querySelector('[data-testid=initiative-central-composer] .ProseMirror');
+        return { focusInComposer: !!box && box.contains(document.activeElement), text: (box?.innerText ?? '').replace(/\u00a0/g, ' ').trim() };
+      });
+      check(state.focusInComposer, 'the card took focus from the composer');
+      check(state.text === TYPED, `the composer text changed: ${JSON.stringify(state.text)} (want ${JSON.stringify(TYPED)})`);
+      await page.keyboard.press('Enter');
+      await sleep(1500);
+      const after = await page.evaluate(() => (document.querySelector('[data-testid=initiative-central-composer] .ProseMirror')?.innerText ?? '').trim());
+      check(after === '', `the composer did not act on its own Enter (it still holds ${JSON.stringify(after)})`);
+      check(await page.getByTestId('voice-confirm-card').isVisible(), 'the card closed: the composer\'s Enter confirmed (or cancelled) it');
+      const panel = await text(page, '[data-testid=scope-discussion-panel]').catch(() => '');
+      await page.getByTestId('voice-confirm-card-cancel').click().catch(() => undefined);
+      await stopVoice(page);
+      return { openedWhileTyping: openedAt >= typingStart && openedAt <= typingEnd, cardOpenedMsAfterTypingStart: openedAt - typingStart, typingMs: typingEnd - typingStart, sentToThread: panel.includes(TYPED) };
+    });
+  },
+};
+
+const CAPABILITIES = { C1, C2, C2B, C3, C4, C5, C6, C7, C8 };
 
 // ── the run ──────────────────────────────────────────────────────────────────
 

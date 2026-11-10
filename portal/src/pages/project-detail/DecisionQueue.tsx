@@ -75,11 +75,12 @@ export function DecisionQueue({ decisions, onOpen, workItemKeys = NO_KEYS }: {
     );
   }
   return (
-    // The role, then the work item and the date give way as the table narrows (each row's "+N" lists them);
-    // under 40rem a row is a stacked card with every field.
+    // The role, then the work item and the date give way as the table narrows (one "+N" control in the header lists
+    // them, each row's chevron its own values; ui-components 2.519.0); under 40rem a row is a stacked card with every field.
     <DataTable<ProjectDecision>
       narrow
       responsiveColumns
+      hiddenColumnsControl="header"
       data={decisions}
       columns={columnsFor(workItemKeys)}
       keyField={(d) => d.id}

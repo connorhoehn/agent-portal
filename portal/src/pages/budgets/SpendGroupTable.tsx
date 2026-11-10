@@ -117,6 +117,7 @@ export function SpendGroupTable({ groups, groupBy, period, lock, query }: {
     <DataTable
       data-testid="spend-group-table"
       responsiveColumns
+      hiddenColumnsControl="header"
       aria-label={`Spend by ${GROUP_HEADINGS[groupBy].toLowerCase()}`}
       data={shown}
       columns={columns}

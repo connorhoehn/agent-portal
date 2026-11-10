@@ -145,7 +145,7 @@ export default function DecisionsPage() {
               <EmptyState title="No decisions" description={query.trim() ? 'No loaded decision matches this search.' : 'Nothing is recorded in this view yet.'} />
             ) : (
               // Narrow: under 40rem of its width each decision is a card of label/value pairs.
-              <DataTable<DecisionSummary> narrow responsiveColumns data={rows} columns={columns} keyField={(d) => d.id}
+              <DataTable<DecisionSummary> narrow responsiveColumns hiddenColumnsControl="header" data={rows} columns={columns} keyField={(d) => d.id}
                 onRowClick={(d) => open(d.id)} pageSize={25} emptyMessage="No decisions" />
             )}
           <CollectionCommandHost adapter={adapter} />

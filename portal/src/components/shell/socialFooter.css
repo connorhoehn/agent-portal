@@ -54,24 +54,13 @@
 }
 
 /* Phone width (below 40rem, Tailwind's `sm`): the footer is ONE row (walk, 10 November: three rows left half the
-   screen to a sheet). Social, presence and the bell come from EmbeddedSocial (icon and count only); here the
-   library's own controls give way. The library draws their labels as plain text, so they shrink to nothing (the
-   button keeps its text for assistive tech) rather than being removed. Asked of the library: an icon-only start
-   button on HuddleBar and a compact density on VoiceDock. */
+   screen to a sheet). Social, presence and the bell come from EmbeddedSocial (icon and count only); the huddle bar
+   and the voice dock take the library's compact forms (ui-components 2.519.0: HuddleBar `compact`, VoiceDock
+   `density="compact"`, see phoneFooter.ts). Only the row's spacing is set here. */
 @media (width < 40rem) {
-  /* Only the idle bar is this small; a live huddle or a joinable one still wraps onto a second row. */
+  /* The idle bar always fits; a joinable bar stays on the row when it fits and otherwise wraps onto its own row. */
   .shell-social-footer [data-testid="shell-footer-row"]:has([data-testid="shell-footer-context"][data-phase="idle"]) { flex-wrap: nowrap; gap: 4px; padding-inline: 8px; }
-  .shell-social-footer .shell-collaboration-bar[data-phase="idle"] { padding-left: 4px; padding-right: 8px; }
-  .shell-social-footer .shell-collaboration-bar[data-phase="idle"] > div:last-child { flex-wrap: nowrap; gap: 2px; padding: 2px; }
-  /* Huddle: the icon alone. */
-  .shell-social-footer [data-testid="shell-footer-context-start"] { font-size: 0; gap: 0; padding-inline: 6px; }
-  .shell-social-footer [data-testid="shell-footer-context-start"] svg { width: 1rem; height: 1rem; }
-  /* Voice: the idle phase text and the history control wait until a session needs them. */
-  .shell-social-footer [data-testid="shell-footer-voice"] { padding-left: 4px; }
-  .shell-social-footer [data-voice-dock][data-phase="off"] [data-testid="shell-voice-dock-phase"] {
-    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
-  }
-  .shell-social-footer [data-testid="shell-voice-dock-history"],
-  .shell-social-footer [data-voice-dock][data-phase="off"] [data-testid="shell-voice-dock-cc"],
-  .shell-social-footer [data-voice-dock][data-phase="off"] [data-testid="shell-voice-dock-ring"] { display: none; }
+  .shell-social-footer [data-testid="shell-footer-row"]:has([data-testid="shell-footer-context"][data-phase="joinable"]) { gap: 4px; padding-inline: 8px; }
+  .shell-social-footer .shell-collaboration-bar:is([data-phase="idle"], [data-phase="joinable"]) { padding-left: 4px; padding-right: 8px; }
+  .shell-social-footer .shell-collaboration-bar:is([data-phase="idle"], [data-phase="joinable"]) > div:last-child { flex-wrap: nowrap; gap: 2px; padding: 2px; }
 }

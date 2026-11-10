@@ -207,11 +207,13 @@ export function AssessorDesk({
           {/* Column priorities (UX leftovers, 10 November): every column shows when the table has room
               for them, and the ones whose fact is elsewhere too (Step, Motion, Lead) give way first as the
               table narrows (deskColumns.ts; DataTable `responsiveColumns`, measured on the table's own width),
-              each row's "+N columns" listing what hid. Under 40rem a row is a stacked card with every field
-              (`narrow`). */}
+              one "+N columns" control in the "More" header listing what hid (ui-components 2.519.0
+              `hiddenColumnsControl="header"`; each row's chevron shows its own hidden values, so rows no longer
+              repeat "+3 columns"). Under 40rem a row is a stacked card with every field (`narrow`). */}
           <DataTable<TeamSummary>
             narrow
             responsiveColumns
+            hiddenColumnsControl="header"
             data={rows}
             keyField={(t) => t.id}
             onRowClick={(t) => onSelectTeam(t.id)}

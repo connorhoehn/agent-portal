@@ -36,6 +36,7 @@ import { ShellCallMedia } from './ShellCallHost';
 import { callScopeKey, hasJoinedCall, idleHuddleControls } from './callShellModel';
 import { VoiceFooterSlot } from './VoiceFooterPane';
 import { lineStarts } from './footerLines';
+import { usePhoneFooter } from './phoneFooter';
 import './socialFooter.css';
 
 const noop = () => {};
@@ -137,6 +138,8 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
  */
 function FooterIdle() {
   const host = useCallHost();
+  // Phone width: Huddle and Join are icon-only (`compact`, the label stays their name and tooltip).
+  const compact = usePhoneFooter();
   const focus = useComposerFocus();
   const pane = useSidePaneHost();
   const { session } = useSession();
@@ -163,7 +166,10 @@ function FooterIdle() {
     chatLabel="Message"
     {...(messageReason ? { chatDisabledReason: messageReason } : {})}
     extras={<DeviceSettings onClick={() => host?.checkDevices()} disabled={!host} />}
-    className="shell-collaboration-bar shrink-0 grow basis-[14rem] border-l border-border"
+    compact={compact}
+    // At phone width it asks for no more than its icons, so it stays on the row when there is room and otherwise
+    // wraps onto a second row of its own (it is the row's last slot).
+    className="shell-collaboration-bar shrink-0 grow basis-[14rem] max-sm:basis-[7.5rem] border-l border-border"
     data-testid="shell-footer-context"
   />;
   return <HuddleBar
@@ -173,6 +179,7 @@ function FooterIdle() {
     {...(startReason ? { startDisabledReason: startReason } : {})}
     {...(host?.startBound ? { onStart: host.startBound } : { onStart: noop })}
     startLabel="Huddle"
+    compact={compact}
     onToggleChat={() => { pane.reveal(); focus.request({ mode: 'chat', target: { kind: 'discussion' } }); }}
     chatLabel="Message"
     {...(messageReason ? { chatDisabledReason: messageReason } : {})}

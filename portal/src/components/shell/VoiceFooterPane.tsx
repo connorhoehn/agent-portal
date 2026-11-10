@@ -90,6 +90,7 @@ import { useCallHost } from '../../lib/conversationCall';
 import { useSocialCall } from '../../pages/social/useSocialCall';
 import { SocialSendError, sendAndWaitForSocialChatAck, socialChatError, socialChatErrorCode, type SocialSendFailure } from '../../pages/social/socialChatDelivery';
 import { useEmbeddedSocial } from './EmbeddedSocial';
+import { usePhoneFooter } from './phoneFooter';
 import { PAGES, isPageVisible } from './portalCommands';
 import { dockPending, dockTranscriptProps, isVoiceHotkey, voiceDockVisible, voiceLogHref } from './voiceDockModel';
 import { tenantLobbyPresence } from './tenantPresence';
@@ -182,6 +183,7 @@ function VoiceChatChannel({ channel, userId, displayName, onReady, onFailed }: {
 }
 
 function VoiceFooterPane() {
+  const phoneFooter = usePhoneFooter();
   const { session } = useSession();
   const { can } = useCapabilities();
   const navigate = useNavigate();
@@ -521,9 +523,11 @@ function VoiceFooterPane() {
     onCancel: () => controller.cancelChoice(),
   } : null;
   const turns = snap.turns;
-  return <Inline gap="xs" align="center" wrap={false} className="min-w-0 max-w-[min(30rem,100%)] shrink border-l border-border pl-2" data-testid="shell-footer-voice">
+  return <Inline gap="xs" align="center" wrap={false} className="min-w-0 max-w-[min(30rem,100%)] shrink border-l border-border pl-2 max-sm:pl-1" data-testid="shell-footer-voice">
     <VoiceDock
       size="footer"
+      // Phone width: the idle phase text and ring give way, captions and history move into one overflow (2.519.0).
+      density={phoneFooter ? 'compact' : 'default'}
       phase={snap.phase}
       level={snap.level}
       outputLevel={snap.outputLevel}

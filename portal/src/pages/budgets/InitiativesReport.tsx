@@ -438,6 +438,8 @@ export function InitiativesReport({
         data-testid="budgets-initiatives-table"
         narrow
         responsiveColumns
+        // One "+N columns" control in the header, a chevron per row (ui-components 2.519.0).
+        hiddenColumnsControl="header"
         data={budgets.filter((row) => matchesBudget(row, query))}
         emptyMessage="No initiative matches this search."
         columns={columns}

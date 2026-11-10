@@ -76,23 +76,15 @@ export default {
     await shot(page, '2a2-composer-1440');
     const ed = page.locator('[data-testid=initiative-central-composer] .ProseMirror, [data-testid=rich-chat-composer] .ProseMirror').first();
     await ed.click();
-    // The command token first, then a pause for its menu to settle; then the note at a pace the composer's draft
-    // sync can follow. The library's RichChatComposer re-applies a draft one keystroke old when a render commits
-    // between two keystrokes (a stale `setContent`, seen as a lost space at 15 ms a key; docs in the 10 November
-    // report), so the typed text is read back and retyped when it is not exactly what was sent.
-    const typed = async () => (await ed.evaluate((e) => e.innerText.replace(/\s+/g, ' ').trim())).replace(/^\/comment /, '');
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      await ed.click();
-      await page.keyboard.press(process.platform === 'darwin' ? 'Meta+a' : 'Control+a');
-      await page.keyboard.press('Backspace');
-      await sleep(300);
-      await page.keyboard.type('/comment ', { delay: 60 });
-      await sleep(500);
-      await page.keyboard.type(TEXT, { delay: 45 * attempt });
-      await sleep(400);
-      if ((await typed()).endsWith(TEXT)) break;
-      console.log(`2 typing attempt ${attempt}: composer holds "${(await typed()).slice(-70)}"`);
-    }
+    // The command token, a pause for its menu to settle, then the note at 15 ms a key. ui-components 2.519.0 fixed the
+    // composer re-applying its own one-keystroke-old draft (the lost spaces); one read-back, no retry, so a regression
+    // fails here loudly instead of being typed around.
+    await page.keyboard.type('/comment ', { delay: 15 });
+    await sleep(400);
+    await page.keyboard.type(TEXT, { delay: 15 });
+    await sleep(400);
+    const typed = (await ed.evaluate((e) => e.innerText.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim())).replace(/^\/comment /, '');
+    note('2 typed note is exact (one pass, 15 ms a key)', typed === TEXT, { typed, want: TEXT });
     await shot(page, '2b-typed-1440');
     await page.getByTestId('rich-chat-composer-send').click();
     await sleep(3000);
@@ -134,6 +126,49 @@ export default {
     await sleep(1200);
     await shot(p2, '2h-item-activity-390');
     await c2.close();
+  },
+  async '2t'(browser, H) {
+    const { ctxFor, watch, go, note, sleep, shot } = H;
+    // Typing fidelity (ui-components 2.519.0): a 120-character sentence typed into the initiative composer and a
+    // work-item composer at 15, 40 and 80 ms a key, ten times each, must land exactly every time. Before the fix a
+    // render committing between two keys re-applied the composer's own older draft and dropped the newest key.
+    // Nothing is sent: the editor is cleared between runs and at the end.
+    const SENTENCE = 'Typing fidelity check, the cutover rehearsal moves to Thursday so the legacy tenants get one more day of shadow traffic.';
+    if (SENTENCE.length !== 120) throw new Error(`sentence is ${SENTENCE.length} characters, not 120`);
+    const RUNS = Number(process.env.TYPING_RUNS ?? 10);
+    const targets = [['initiative', INIT], ['work-item', `${INIT}?tab=work&item=wi-auth-e2-b3`]];
+    const summary = {};
+    for (const [name, url] of targets) {
+      const ctx = await ctxFor(browser, 'vera', 1440, 900);
+      const page = await ctx.newPage(); watch(page, `2t-${name}`);
+      await go(page, url);
+      // A work item opens with its "Prepare job" dialogue in the composer; Hide gives the text box back (as step 2).
+      if (name === 'work-item') { await page.getByRole('button', { name: 'Hide', exact: true }).click().catch(() => undefined); await sleep(600); }
+      const ed = page.locator('[data-testid=initiative-central-composer] .ProseMirror').first();
+      const read = () => ed.evaluate((e) => e.innerText.replace(/\u00a0/g, ' ').replace(/\n+$/, ''));
+      const clear = async () => {
+        await ed.click();
+        await page.keyboard.press('ControlOrMeta+a');
+        await page.keyboard.press('Backspace');
+        await sleep(250);
+      };
+      for (const delay of [15, 40, 80]) {
+        const misses = [];
+        for (let run = 1; run <= RUNS; run++) {
+          await clear();
+          await page.keyboard.type(SENTENCE, { delay });
+          await sleep(300);
+          const got = await read();
+          if (got !== SENTENCE) misses.push({ run, got: got.slice(0, 160), len: got.length });
+        }
+        summary[`${name}@${delay}ms`] = `${RUNS - misses.length}/${RUNS}`;
+        note(`2t ${name} composer exact at ${delay} ms a key`, misses.length === 0, { exact: `${RUNS - misses.length}/${RUNS}`, misses: misses.slice(0, 3) });
+      }
+      await shot(page, `2t-${name}-last-1440`);
+      await clear();
+      await ctx.close();
+    }
+    console.log('2t typing fidelity', JSON.stringify(summary));
   },
   async 3(browser, H) {
     const { ctxFor, watch, go, body, shot, note, sleep } = H;
@@ -265,8 +300,11 @@ export default {
         const ell = [...t.querySelectorAll('th,td,td *')].filter((c) => getComputedStyle(c).textOverflow === 'ellipsis' && c.scrollWidth > c.clientWidth + 1).length;
         return { heads, hiddenAttr, clipped: clipped.slice(0, 4), ellipsized: ell, w: Math.round(t.getBoundingClientRect().width) };
       });
-      const more = [...document.querySelectorAll('button')].filter((b) => /^\+\d+ columns?$/.test(b.innerText.trim())).map((b) => b.innerText.trim());
-      return { tables: out, more, hscroll: document.documentElement.scrollWidth - window.innerWidth, bodyScroll: document.body.scrollWidth - window.innerWidth };
+      // ui-components 2.519.0 `hiddenColumnsControl="header"`: ONE "+N columns" control in the "More" header; rows carry
+      // only a chevron, never a repeated "+N columns" link.
+      const more = [...document.querySelectorAll('[data-testid=datatable-more-header-control]')].filter((b) => b.getBoundingClientRect().width > 0).map((b) => b.innerText.trim());
+      const rowMore = [...document.querySelectorAll('tbody button')].filter((b) => /^\+\d+ columns?$/.test(b.innerText.trim())).length;
+      return { tables: out, more, rowMore, hscroll: document.documentElement.scrollWidth - window.innerWidth, bodyScroll: document.body.scrollWidth - window.innerWidth };
     }, tableSel);
     for (const [name, who, url, sel, need, sample] of pages) {
       const ctx = await ctxFor(browser, who, 1440, 900);
@@ -279,9 +317,9 @@ export default {
         await shot(page, `5-${name}-${w}`);
         let popover = null;
         if (m.more.length) {
-          await page.locator('button', { hasText: /^\+\d+ columns?$/ }).first().click().catch(() => undefined);
+          await page.getByTestId('datatable-more-header-control').first().click().catch(() => undefined);
           await sleep(500);
-          popover = await page.evaluate(() => (document.querySelector('[data-testid$="-popover"]')?.innerText ?? '').replace(/\s+/g, ' ').slice(0, 300));
+          popover = await page.evaluate(() => (document.querySelector('[data-testid=datatable-more-header-menu]')?.innerText ?? '').replace(/\s+/g, ' ').slice(0, 300));
           await shot(page, `5-${name}-${w}-popover`);
           await page.keyboard.press('Escape');
         }
@@ -292,7 +330,7 @@ export default {
         const missing = (need[w] ?? []).filter((h) => !heads.includes(h.toLowerCase()));
         const cards = !first && !!sample && (await body(page)).includes(sample);
         const moreOk = m.more.length === 0 || (popover ?? '').length > 0;
-        note(`5 ${name} @${w}`, m.hscroll <= 0 && m.bodyScroll <= 0 && moreOk && ((!!first && missing.length === 0) || cards), { mode: first ? 'table' : cards ? 'cards' : 'none', missing,  heads: first?.heads, more: m.more, popover, hscroll: m.hscroll, clipped: first?.clipped, ellipsized: first?.ellipsized, tableW: first?.w });
+        note(`5 ${name} @${w}`, m.hscroll <= 0 && m.bodyScroll <= 0 && moreOk && m.rowMore === 0 && ((!!first && missing.length === 0) || cards), { mode: first ? 'table' : cards ? 'cards' : 'none', missing,  heads: first?.heads, more: m.more, rowMore: m.rowMore, popover, hscroll: m.hscroll, clipped: first?.clipped, ellipsized: first?.ellipsized, tableW: first?.w });
       }
       // resize within one load: 1440 -> 800 -> 1440
       await page.setViewportSize({ width: 1440, height: 900 });
