@@ -12,6 +12,7 @@ import { createElement, useCallback, type ComponentProps } from 'react';
 import { useMentionCandidates } from '../components/chat/useMentionCandidates';
 import { CallBlock, callDrawn, useCallHost } from './conversationCall';
 import { attachmentMetadata } from './shareToSocial';
+import { useStableCommands } from './stableCommands';
 
 const BoundConversationComposer = createConversationComposer(client);
 /** Every tenant's composer shares the same branded particle backdrop. Agent
@@ -24,7 +25,12 @@ export function ConversationComposer(props: ComponentProps<typeof BoundConversat
   // is not the signed-in workspace. The endpoint owns that directory scope.
   const mentions = useMentionCandidates(!props.onSearchPeople, { userId: props.identity?.userId,
     key: props.channel ?? props.context.id });
+  // Hosts rebuild `commands` every render, and the library re-derives its command bar whenever the
+  // array changes: with a host that writes state per keystroke, fast typing threw "Maximum update
+  // depth exceeded" (lib/stableCommands.ts). Same content, same array; functions stay current.
+  const commands = useStableCommands(props.commands);
   return createElement(ComposerSurface, null, createElement(BoundConversationComposer, { ...props, console: false,
+    ...(commands ? { commands } : {}),
     // A central/external input needs the same directory as a thread's input.
     // Social's explicit member-only lookup keeps its existing membership flow.
     onSearchPeople: props.onSearchPeople ?? mentions,
