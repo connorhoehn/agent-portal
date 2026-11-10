@@ -178,6 +178,33 @@ class PromptsAreNotLogged(SupervisorTestCase):
         self.assertIn("sha256=", text)
 
 
+class FingerprintsAreKeyed(unittest.TestCase):
+    """A log fingerprint is an HMAC under a per-deployment key, so a short
+    prompt cannot be confirmed from the logs by hashing guesses."""
+
+    def setUp(self):
+        from _shared import instrumentation
+        self.inst = instrumentation
+        self.addCleanup(setattr, instrumentation, "_FINGERPRINT_KEY", None)
+        instrumentation._FINGERPRINT_KEY = None
+
+    def test_not_a_bare_sha256_and_stable_per_deployment(self):
+        import hashlib
+        with mock.patch.dict("os.environ", {"HARNESS_TRACE_SECRET": "deployment-a", "HARNESS_TRACE_SECRET_ID": ""}):
+            fp = self.inst.text_fingerprint("yes")
+            self.assertNotIn(hashlib.sha256(b"yes").hexdigest()[:12], fp)
+            self.assertEqual(fp, self.inst.text_fingerprint("yes"))
+        self.inst._FINGERPRINT_KEY = None
+        with mock.patch.dict("os.environ", {"HARNESS_TRACE_SECRET": "deployment-b", "HARNESS_TRACE_SECRET_ID": ""}):
+            self.assertNotEqual(fp, self.inst.text_fingerprint("yes"))
+
+    def test_without_a_secret_a_random_key_per_process(self):
+        with mock.patch.dict("os.environ", {"HARNESS_TRACE_SECRET": "", "HARNESS_TRACE_SECRET_ID": ""}):
+            fp = self.inst.text_fingerprint("yes")
+            self.assertEqual(fp, self.inst.text_fingerprint("yes"))
+            self.assertTrue(fp.startswith("len=3 sha256="))
+
+
 class RequestFields(unittest.TestCase):
     """Structured fields come from the nested `input`, never identity keys."""
 

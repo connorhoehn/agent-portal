@@ -41,6 +41,7 @@ we wrap the bare Python callable, leaving the tool surface untouched.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -184,14 +185,49 @@ def short_prompt_hash(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
 
 
+_FINGERPRINT_KEY: bytes | None = None
+#: The callback secret every runtime holds (infra CALLBACKS `agents: null`).
+_FINGERPRINT_SECRET_ENV = "HARNESS_TRACE_SECRET"
+
+
+def _fingerprint_key() -> bytes:
+    """The per-deployment key log fingerprints are keyed with.
+
+    Derived (HMAC with a fixed label, so the callback key itself is never used
+    for anything else) from HARNESS_TRACE_SECRET, which every runtime holds:
+    the same text fingerprints alike across a deployment's runtimes and
+    restarts, while someone holding only the logs cannot test guessed short
+    prompts against them. Without the secret (local runs) a random key per
+    process: fingerprints still correlate within one process's logs.
+    """
+    global _FINGERPRINT_KEY
+    if _FINGERPRINT_KEY is None:
+        secret = ""
+        try:
+            try:
+                from .secret_resolver import resolve_secret
+            except ImportError:  # pragma: no cover — flat layout
+                from secret_resolver import resolve_secret  # type: ignore[no-redef]
+            secret = resolve_secret(_FINGERPRINT_SECRET_ENV)
+        except Exception:  # noqa: BLE001 — a log helper never raises
+            secret = ""
+        _FINGERPRINT_KEY = (
+            hmac.new(secret.encode("utf-8"), b"orgiq/log-fingerprint/v1", hashlib.sha256).digest()
+            if secret else os.urandom(32)
+        )
+    return _FINGERPRINT_KEY
+
+
 def text_fingerprint(text: str) -> str:
     """``len=<bytes> sha256=<12 hex>`` for a prompt or response in a log line.
 
     Enough to correlate two log lines about the same text; never the text
-    itself, which is a person's question (or an answer about people).
+    itself, which is a person's question (or an answer about people). The
+    digest is an HMAC under a per-deployment key (``_fingerprint_key``), not a
+    bare SHA-256: a short prompt's bare hash is guessable from the logs alone.
     """
     raw = (text or "").encode("utf-8", errors="replace")
-    return f"len={len(raw)} sha256={hashlib.sha256(raw).hexdigest()[:12]}"
+    return f"len={len(raw)} sha256={hmac.new(_fingerprint_key(), raw, hashlib.sha256).hexdigest()[:12]}"
 
 
 def _now_iso() -> str:
