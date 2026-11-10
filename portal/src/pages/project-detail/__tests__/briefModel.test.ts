@@ -74,6 +74,37 @@ test('the next-step callout comes from the row, and hides without one', () => {
   assert.equal(nextStepCallout({ nextStep: '  ', nextStepDetail: 'x' }), null);
 });
 
+test('a decision the item waits on is live state: open, then decided, then the next unmet criterion (second regression walk)', () => {
+  const decision = { id: 'd-cut', topic: 'Cutover order for legacy SSO tenants', summary: null, status: 'escalated', requiredRole: 'org-leader', escalatedAt: null, workItemId: 'wi-s2', workItemTitle: null };
+  const reason = 'Blocked on "Cutover order for legacy SSO tenants", escalated to Sienna Garcia. She decides once the second internal rehearsal passes.';
+  const story = { id: 'wi-s2', labels: ['runbook', 'blocked'], blockedReason: reason, blockedByDecisionId: 'd-cut', nextStep: null, nextStepDetail: null };
+  const criteria = [
+    { text: 'Record the decided tenant order and the reason for it', done: false, position: 2 },
+    { text: 'Rehearse the cutover on both internal tenants with zero forced logouts', done: true, position: 0 },
+    { text: 'Pre-flight: the tenant origin is in the Cognito app client CallbackURLs before the flip', done: false, position: 1 },
+  ];
+  // Waiting: the decision comes first; the block's reason says who and when.
+  assert.deepEqual(nextStepCallout(story, { decisions: [decision], criteria }), {
+    title: 'Next step', step: 'The escalated decision "Cutover order for legacy SSO tenants" comes first.', detail: reason, actionLabel: 'Open discussion',
+  });
+  // Decided: the settle drops the label and the reason and keeps the link; nobody "decides" any more.
+  const settled = { ...story, labels: ['runbook'], blockedReason: null };
+  const decided = nextStepCallout(settled, { decisions: [{ ...decision, status: 'resolved' }], criteria });
+  assert.deepEqual(decided, {
+    title: 'Next step', step: 'Pre-flight: the tenant origin is in the Cognito app client CallbackURLs before the flip.',
+    detail: '"Cutover order for legacy SSO tenants" is decided.', actionLabel: 'Open discussion',
+  });
+  assert.doesNotMatch(JSON.stringify(decided), /decides|waits|escalated/);
+  // Rejected: still blocked, replanned.
+  const rejected = nextStepCallout({ ...story, blockedReason: 'Decision rejected: Cutover order for legacy SSO tenants' }, { decisions: [{ ...decision, status: 'rejected' }], criteria });
+  assert.equal(rejected?.step, 'Replan this item: the decision "Cutover order for legacy SSO tenants" was rejected.');
+  // The decisions read not loaded yet: the row's own step, or nothing.
+  assert.equal(nextStepCallout(story), null);
+  // An open decision the item is NOT blocked on leaves the row's own step.
+  const own = { id: 'wi-llm', labels: [], blockedReason: null, blockedByDecisionId: null, nextStep: 'Nina Rivera decides the judge model.', nextStepDetail: null };
+  assert.equal(nextStepCallout(own, { decisions: [{ ...decision, status: 'open', workItemId: 'wi-llm' }] })?.step, 'Nina Rivera decides the judge model.');
+});
+
 test('brief facts: unknown criteria stay unknown', () => {
   assert.deepEqual(briefFacts(b4, { data: [] }), { criteriaCount: 0, blocked: true, assigneeFirstName: 'Eli' });
   assert.equal(briefFacts(b4, { data: [], error: 'x' }).criteriaCount, null);

@@ -833,13 +833,13 @@ BRIEFS: dict[str, dict[str, str]] = {
         summary='Sequence the remaining customer tenants off the SAML shim, each with a two-minute way back.',
         description='Each tenant already moves with the single-tenant cutover runbook: pre-flight the '
                     'Cognito app client, flip the IdP route, watch the login error rate for 15 minutes, and '
-                    'roll back by restoring the shim route. This story writes the order the 12 remaining '
-                    'customer tenants move in and the rollback for each, which waits on the escalated '
-                    'decision "Cutover order for legacy SSO tenants".',
-        blocked_reason='Blocked on "Cutover order for legacy SSO tenants", escalated to Sienna Garcia.',
-        next_step='Sienna Garcia decides the cutover order.',
-        next_step_detail='She decides once the second internal rehearsal passes. Review the proposed '
-                         'callback-list step for the cutover runbook first, so the retry can run.',
+                    'roll back by restoring the shim route. This story writes down the order the 12 remaining '
+                    'customer tenants move in, as the decision "Cutover order for legacy SSO tenants" sets it, '
+                    'and the rollback for each.',
+        # The waiting state lives in the block (label, reason, blocked_by_decision_id), which deciding
+        # settles; the brief derives its "Next step" from it, so no seeded line says who decides.
+        blocked_reason='Blocked on "Cutover order for legacy SSO tenants", escalated to Sienna Garcia. '
+                       'She decides once the second internal rehearsal passes.',
     ),
     'wi-auth-e1-s1': dict(
         description='The BFF runs the authorization-code flow with PKCE (S256) against the Cognito hosted UI '

@@ -236,7 +236,8 @@ export function WorkItemDetail({
   });
   const filled = (id: BriefRow['id']) => brief.rows.find((r) => r.id === id)?.filled ?? false;
   const showCriteria = filled('criteria') || writingCriteriaFor === item.id;
-  const nextStep = nextStepCallout(item);
+  // The waiting line comes from the live block state (the decision's status), never seeded prose.
+  const nextStep = nextStepCallout(item, { decisions: decisions.data ?? null, criteria: thread.criteriaLoading ? null : thread.criteria });
 
   const onRowAction = (row: BriefRow) => {
     if (row.id === 'criteria') {
