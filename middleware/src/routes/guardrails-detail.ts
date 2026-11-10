@@ -26,6 +26,8 @@ import {
   mockGuardrailInterventions,
 } from '../mock/observability-queries.js';
 import { listUsers } from '../providers/identity.js';
+import { withMockOwners } from '../mock/observability.js';
+import { traceScope, redactTextOutOfScope } from '../lib/trace-scope.js';
 
 /**
  * Marks a response whose query failed — the wrapper from routes/cost.ts, kept
@@ -236,6 +238,11 @@ guardrailsDetailRouter.get('/by-actor', asyncHandler(async (req, res) => {
 // ── GET /interventions ────────────────────────────────────────────────────
 
 guardrailsDetailRouter.get('/interventions', asyncHandler(async (req, res) => {
+  // `matched_text` is the span of the asker's prompt (or the answer) the rule
+  // fired on, so it is read through the owning trace's scope
+  // (lib/trace-scope.ts); the rule, action and time stay for everyone.
+  const scope = traceScope(req, res);
+  if (scope === 'refused') return;
   const invocationId = isValidUuid(req.query['invocationId'] as string | undefined)
     ? (req.query['invocationId'] as string)
     : null;
@@ -251,31 +258,34 @@ guardrailsDetailRouter.get('/interventions', asyncHandler(async (req, res) => {
   const wheres: string[] = [];
   const params: SqlParameter[] = [longParam('lim', limit)];
   if (invocationId) {
-    wheres.push('invocation_id = :iid::uuid');
+    wheres.push('g.invocation_id = :iid::uuid');
     params.push(strParam('iid', invocationId));
   }
   if (ruleName) {
-    wheres.push('rule_name = :rule');
+    wheres.push('g.rule_name = :rule');
     params.push(strParam('rule', ruleName));
   }
   const whereSql = wheres.length > 0 ? `WHERE ${wheres.join(' AND ')}` : '';
 
   const sql = `
-    SELECT intervention_id::text   AS intervention_id,
-           invocation_id::text     AS invocation_id,
-           agent_id, rule_name, rule_category, severity, action,
-           matched_text,
-           ts::text                AS ts
-      FROM observability.guardrail_interventions
+    SELECT g.intervention_id::text AS intervention_id,
+           g.invocation_id::text   AS invocation_id,
+           g.agent_id, g.rule_name, g.rule_category, g.severity, g.action,
+           g.matched_text,
+           g.ts::text              AS ts,
+           t.user_id               AS trace_user_id,
+           t.tenant                AS trace_tenant
+      FROM observability.guardrail_interventions g
+      LEFT JOIN observability.invocation_traces t ON t.invocation_id = g.invocation_id
      ${whereSql}
-     ORDER BY ts DESC
+     ORDER BY g.ts DESC
      LIMIT :lim`;
 
   try {
     const rows = config.mock.aurora
-      ? mockGuardrailInterventions(mockInvocationFilter, ruleName, limit)
+      ? withMockOwners(mockGuardrailInterventions(mockInvocationFilter, ruleName, limit))
       : await exec(sql, params);
-    const interventions: GuardrailIntervention[] = rows.map((r) => ({
+    const interventions: GuardrailIntervention[] = rows.map((r) => redactTextOutOfScope(scope, r, ['matched_text'])).map((r) => ({
       interventionId: String(r['intervention_id'] ?? ''),
       invocationId: r['invocation_id'] == null ? null : String(r['invocation_id']),
       agentId: String(r['agent_id'] ?? ''),

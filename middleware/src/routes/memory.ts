@@ -23,7 +23,8 @@ import { reasonLine } from '../lib/upstream.js';
 import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import { mockMemoryEvents, mockMemoryStats } from '../mock/observability-queries.js';
-import { mockInsertMemoryEvent } from '../mock/observability.js';
+import { mockInsertMemoryEvent, withMockOwners } from '../mock/observability.js';
+import { traceScope, redactTextOutOfScope } from '../lib/trace-scope.js';
 
 /**
  * Marks a response whose query failed — the wrapper from routes/cost.ts, kept
@@ -120,6 +121,8 @@ function isValidKind(s: string | undefined | null): s is MemoryKind {
 // Default ordering newest-first. Capped at 500 rows.
 
 memoryRouter.get('/events', asyncHandler(async (req, res) => {
+  const scope = traceScope(req, res);
+  if (scope === 'refused') return;
   const invocationId = isValidUuid(req.query['invocationId'] as string | undefined)
     ? (req.query['invocationId'] as string)
     : null;
@@ -137,36 +140,42 @@ memoryRouter.get('/events', asyncHandler(async (req, res) => {
   const wheres: string[] = [];
   const params: SqlParameter[] = [longParam('lim', limit)];
   if (invocationId) {
-    wheres.push('invocation_id = :iid::uuid');
+    wheres.push('m.invocation_id = :iid::uuid');
     params.push(strParam('iid', invocationId));
   }
   if (agentId) {
-    wheres.push('agent_id = :agent');
+    wheres.push('m.agent_id = :agent');
     params.push(strParam('agent', agentId));
   }
   if (kind) {
-    wheres.push('kind = :kind');
+    wheres.push('m.kind = :kind');
     params.push(strParam('kind', kind));
   }
   const whereSql = wheres.length > 0 ? `WHERE ${wheres.join(' AND ')}` : '';
 
+  // The query and what came back are the asker's words and the memory written
+  // for them, so the text is read through the owning trace's scope
+  // (lib/trace-scope.ts). Every event stays: the counts and timings are the page.
   const sql = `
-    SELECT memory_event_id::text   AS memory_event_id,
-           invocation_id::text     AS invocation_id,
-           agent_id, session_id, kind, memory_id, query_text,
-           result_count, duration_ms, retrieved_summary,
-           errored, error_message,
-           ts::text                AS ts
-      FROM observability.memory_events
+    SELECT m.memory_event_id::text AS memory_event_id,
+           m.invocation_id::text   AS invocation_id,
+           m.agent_id, m.session_id, m.kind, m.memory_id, m.query_text,
+           m.result_count, m.duration_ms, m.retrieved_summary,
+           m.errored, m.error_message,
+           m.ts::text              AS ts,
+           t.user_id               AS trace_user_id,
+           t.tenant                AS trace_tenant
+      FROM observability.memory_events m
+      LEFT JOIN observability.invocation_traces t ON t.invocation_id = m.invocation_id
      ${whereSql}
-     ORDER BY ts DESC
+     ORDER BY m.ts DESC
      LIMIT :lim`;
 
   try {
     const rows = config.mock.aurora
-      ? mockMemoryEvents(mockInvocationFilter, agentId, kind, limit)
+      ? withMockOwners(mockMemoryEvents(mockInvocationFilter, agentId, kind, limit))
       : await exec(sql, params);
-    const events: MemoryEvent[] = rows.map((r) => ({
+    const events: MemoryEvent[] = rows.map((r) => redactTextOutOfScope(scope, r, ['query_text', 'retrieved_summary', 'error_message'])).map((r) => ({
       memoryEventId: String(r['memory_event_id'] ?? ''),
       invocationId: r['invocation_id'] == null ? null : String(r['invocation_id']),
       agentId: String(r['agent_id'] ?? ''),

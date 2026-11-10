@@ -819,7 +819,9 @@ function projectAgentRuns(src: RunSources, runs: Run[], steps: Map<string, Step[
         tenant, kind: 'agent', table: 'invocation_traces', id: live.runId, sourceStatus: live.status,
         // No row yet: the trace that will close this run has not been filed.
         sources: [],
-        title: live.prompt?.trim() || `${live.agentName} run`,
+        // Never the prompt, for the reason the bundle path above gives: a
+        // relayed run is read through the same cross-user projection.
+        title: `${live.agentName} run`,
         aguiRunId: live.runId, threadId: live.threadId, agentId: live.agentId,
         error: live.error,
       },

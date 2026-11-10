@@ -225,6 +225,8 @@ describe('a relayed run exists from RUN_STARTED, before its bundle', () => {
     let run = p.runs.find((r) => r.id === 'agent-run:run-live')!;
     expect(run.status).toBe('running');
     expect(run.context.sources).toEqual([]);
+    // The relayed run is titled for its agent, never its asker's prompt.
+    expect(run.context.title).toBe('Supervisor run');
     expect(p.steps.get(run.id)![0]).toMatchObject({ label: 'search', status: 'running' });
     expect(p.steps.get(run.id)![0]!.attempts[0]).toMatchObject({ label: 'search_organization', status: 'running' });
 

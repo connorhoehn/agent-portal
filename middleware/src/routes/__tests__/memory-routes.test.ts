@@ -54,6 +54,9 @@ const UUID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 function buildApp() {
   const app = express();
   app.use(express.json());
+  // The text columns are read through the caller's trace scope (lib/trace-scope.ts);
+  // these cases are about the data plane, so they run as the cross-tenant admin.
+  app.use((req, _res, next) => { (req as unknown as { session: unknown }).session = { sub: 'u-admin', role: 'admin', tenant: 'orgiq', grants: {}, iat: 0 }; next(); });
   app.use('/api/observability/memory', memoryRouter);
   app.use(errorHandler);
   return app;
@@ -108,7 +111,7 @@ describe('GET /events', () => {
 
     execMock.mockClear();
     await request(app).get(`/api/observability/memory/events?invocationId=${UUID}&agentId=orgiq-search&kind=retrieve`);
-    expect(sqlOf(0)).toMatch(/invocation_id = :iid::uuid AND agent_id = :agent AND kind = :kind/);
+    expect(sqlOf(0)).toMatch(/m\.invocation_id = :iid::uuid AND m\.agent_id = :agent AND m\.kind = :kind/);
     expect(sqlOf(0)).not.toMatch(/orgiq-search/);
     expect(valueOf(0, 'kind')).toEqual({ stringValue: 'retrieve' });
   });

@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import { Router, type Request } from 'express';
+import { traceScope, rowInScope } from '../lib/trace-scope.js';
 import { randomUUID } from 'crypto';
 import {
   BedrockRuntimeClient,
@@ -31,6 +32,12 @@ const _bedrockRt = new BedrockRuntimeClient({ region: config.region });
 const VISION_MODEL = 'amazon.nova-lite-v1:0';
 
 export const capabilitiesRouter = Router();
+
+/** Who ran a capability call, stamped on what it records (lib/trace-scope.ts reads it back). */
+function actorOf(req: Request): { userId: string | null; tenant: string | null } {
+  const session = req.session as { sub?: string; tenant?: unknown } | undefined;
+  return { userId: session?.sub ?? null, tenant: session?.tenant == null ? null : String(session.tenant) };
+}
 
 // Code-interpreter executions, browser microVM sessions and crawls spend real
 // AWS resources, so every mutation on this surface requires ManageDevbox.
@@ -127,6 +134,7 @@ capabilitiesRouter.post('/code-interpreter/execute', asyncHandler(async (req, re
   const startedAt = new Date();
   const result = await agentcore.executeCode(code, language ?? 'python');
   recordCapabilityEvent({
+    ...actorOf(req),
     id: randomUUID(),
     kind: 'code_execute',
     startedAt: startedAt.toISOString(),
@@ -174,6 +182,7 @@ capabilitiesRouter.post('/browser-sessions', asyncHandler(async (req, res) => {
   }
 
   recordCapabilityEvent({
+    ...actorOf(req),
     id: randomUUID(),
     kind: 'browser_launch',
     startedAt: startedAt.toISOString(),
@@ -195,6 +204,7 @@ capabilitiesRouter.delete('/browser-sessions/:sessionId', asyncHandler(async (re
   const ok = await agentcore.closeBrowserSession(sessionId);
   if (!ok) { res.status(404).json({ error: 'Session not found' }); return; }
   recordCapabilityEvent({
+    ...actorOf(req),
     id: randomUUID(),
     kind: 'browser_close',
     startedAt: startedAt.toISOString(),
@@ -232,6 +242,7 @@ capabilitiesRouter.post('/browser-sessions/:sessionId/navigate', asyncHandler(as
   }
 
   recordCapabilityEvent({
+    ...actorOf(req),
     id: randomUUID(),
     kind: 'browser_navigate',
     startedAt: startedAt.toISOString(),
@@ -249,7 +260,19 @@ capabilitiesRouter.post('/browser-sessions/:sessionId/navigate', asyncHandler(as
 
 capabilitiesRouter.get('/browser-sessions/:sessionId/journey', (req, res) => {
   const sessionId = req.params['sessionId'] as string;
-  res.json({ steps: getJourney(sessionId) });
+  // A web-Q&A step quotes the asker's question and the model's answer: those
+  // two are read through the trace scope (lib/trace-scope.ts); the page, its
+  // title and the screenshot stay for everyone who can open the dashboard.
+  const scope = traceScope(req, res);
+  if (scope === 'refused') return;
+  res.json({
+    steps: getJourney(sessionId).map((step) => {
+      if (step.question === undefined && step.answer === undefined) return step;
+      if (rowInScope(scope, { user_id: step.userId ?? null, tenant: step.tenant ?? null })) return step;
+      const { question: _q, answer: _a, ...rest } = step;
+      return { ...rest, textWithheld: true };
+    }),
+  });
 });
 
 capabilitiesRouter.delete('/browser-sessions/:sessionId/journey', (req, res) => {
@@ -333,10 +356,12 @@ capabilitiesRouter.post('/browser/web-qa', asyncHandler(async (req, res) => {
       textSnippet: '',
       question,
       answer,
+      ...actorOf(req),
       ...(shot?.imageDataUrl ? { imageDataUrl: shot.imageDataUrl } : {}),
     });
 
     recordCapabilityEvent({
+      ...actorOf(req),
       id: randomUUID(),
       kind: 'browser_navigate',
       startedAt: startedAt.toISOString(),
@@ -364,6 +389,7 @@ capabilitiesRouter.post('/browser-sessions/:sessionId/screenshot', asyncHandler(
   const startedAt = new Date();
   const shot = await agentcore.screenshotBrowser(sessionId);
   recordCapabilityEvent({
+    ...actorOf(req),
     id: randomUUID(),
     kind: 'browser_screenshot',
     startedAt: startedAt.toISOString(),

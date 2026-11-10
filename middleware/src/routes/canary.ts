@@ -11,7 +11,8 @@
 // canary landing page. Mutation routes (/weight, /halt) are individually
 // Cedar-gated by `ManageCanary`.
 
-import { Router } from 'express';
+import { Router, type Request } from 'express';
+import { traceScope, rowInScope } from '../lib/trace-scope.js';
 import { randomUUID } from 'node:crypto';
 import {
   BedrockRuntimeClient,
@@ -42,6 +43,12 @@ import { fireJudge } from '../lib/canary-judge.js';
 import { offlineSubjectAnswer } from '../mock/canary-ask.js';
 import { findMockPrompt } from '../mock/canary-library.js';
 import type { CanaryEvent, CanaryVersionLabel } from '../lib/canary-types.js';
+
+/** The asker, stamped on the events that quote their question and its answer. */
+function askerOf(req: Request): { user_id: string | null; tenant: string | null } {
+  const session = req.session as { sub?: string; tenant?: unknown } | undefined;
+  return { user_id: session?.sub ?? null, tenant: session?.tenant == null ? null : String(session.tenant) };
+}
 
 export const canaryRouter = Router();
 
@@ -112,6 +119,7 @@ canaryRouter.post('/ask', asyncHandler(async (req, res) => {
     version_label: version,
     question,
     ts: new Date(startedAt).toISOString(),
+    ...askerOf(req),
   };
   canaryBroker.publish(startedEvent);
 
@@ -176,6 +184,7 @@ canaryRouter.post('/ask', asyncHandler(async (req, res) => {
     latency_ms: latencyMs,
     response_preview: responsePreview,
     ts: new Date().toISOString(),
+    ...askerOf(req),
   };
   canaryBroker.publish(completeEvent);
 
@@ -210,11 +219,21 @@ canaryRouter.post('/ask', asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 canaryRouter.get('/events', (req, res) => {
+  // The stream is every asker's: a question and its answer go out whole only
+  // inside the caller's trace scope (lib/trace-scope.ts); everyone else sees
+  // the event with its text withheld, so the timeline and the scores still add up.
+  const scope = traceScope(req, res);
+  if (scope === 'refused') return;
+  const scoped = (ev: CanaryEvent): CanaryEvent => {
+    if (ev.type === 'invocation_started' && !rowInScope(scope, { user_id: ev.user_id ?? null, tenant: ev.tenant ?? null })) return { ...ev, question: '' };
+    if (ev.type === 'invocation_complete' && !rowInScope(scope, { user_id: ev.user_id ?? null, tenant: ev.tenant ?? null })) return { ...ev, response_preview: '' };
+    return ev;
+  };
   initSSE(res);
   for (const ev of canaryBroker.replay()) {
-    writeSSE(res, ev);
+    writeSSE(res, scoped(ev));
   }
-  const unsubscribe = canaryBroker.subscribe((ev) => writeSSE(res, ev));
+  const unsubscribe = canaryBroker.subscribe((ev) => writeSSE(res, scoped(ev)));
   req.on('close', () => {
     unsubscribe();
     endSSE(res);

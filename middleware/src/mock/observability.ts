@@ -1107,6 +1107,30 @@ export function tracesInWindow(hours: number, scenario?: ScenarioName): MockTrac
 }
 
 /**
+ * Who owns each trace, by invocation id: the offline twin of joining
+ * `invocation_traces` for `user_id, tenant`. The rows that hang off a trace
+ * (memory events, fired rules, tool errors, the activity tail) quote that
+ * person's text, so their readers check this owner with lib/trace-scope.ts
+ * `rowInScope`. The seeded half has no tenant (it is orgiq's own corpus), so
+ * the owner carries one only when the row does.
+ */
+export function mockTraceOwners(scenario?: ScenarioName): Map<string, { user_id: string | null; tenant?: string }> {
+  return new Map(traceRows(scenario).map((r) => [r.invocation_id, { user_id: r.user_id, ...(r.tenant ? { tenant: r.tenant } : {}) }]));
+}
+
+/**
+ * Rows keyed by `invocation_id`, given the `trace_user_id` / `trace_tenant`
+ * columns the live query joins in (lib/trace-scope.ts `joinedOwner`).
+ */
+export function withMockOwners<R extends Record<string, unknown>>(rows: R[], scenario?: ScenarioName): Array<R & { trace_user_id: string | null }> {
+  const owners = mockTraceOwners(scenario);
+  return rows.map((row) => {
+    const owner = owners.get(String(row['invocation_id'] ?? ''));
+    return { ...row, trace_user_id: owner?.user_id ?? null, ...(owner?.tenant ? { trace_tenant: owner.tenant } : {}) };
+  });
+}
+
+/**
  * `(template_id NOT LIKE 'test:%' OR template_id IS NULL)` — the live-traffic
  * filter every read in these routers applies except the tool-error tail, which
  * deliberately keeps test rows so a researcher can debug a failing test case.

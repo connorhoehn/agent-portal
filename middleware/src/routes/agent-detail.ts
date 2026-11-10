@@ -25,7 +25,7 @@ import { agentcore } from '../providers/index.js';
 import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
-import { scopeForSession, scopeSql, type TraceScope } from '../lib/trace-scope.js';
+import { scopeForSession, scopeSql, readsOwnerlessText, type TraceScope } from '../lib/trace-scope.js';
 
 export const agentDetailRouter: Router = Router();
 
@@ -278,7 +278,16 @@ agentDetailRouter.get('/:agentId', asyncHandler(async (req, res) => {
     livePrompt(runtime.name),
     agentcore.getRuntimeMetrics(runtime.id).catch(() => null),
     recentInvocations(runtime.name, scope),
-    recentLogs(runtime.id, logLimit),
+    // The runtime's own log quotes whatever the agent printed about each
+    // request, for every caller, and names none of them: the cross-tenant
+    // admin's alone (lib/trace-scope.ts readsOwnerlessText).
+    readsOwnerlessText(scope)
+      ? recentLogs(runtime.id, logLimit)
+      : Promise.resolve({
+        logGroup: `/aws/bedrock-agentcore/runtimes/${runtime.id}-DEFAULT`,
+        events: [] as Array<{ at: string; message: string }>,
+        problem: 'The runtime log is shown to administrators only: it carries every caller’s requests.',
+      }),
   ]);
 
   res.json({

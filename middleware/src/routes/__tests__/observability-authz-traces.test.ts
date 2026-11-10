@@ -100,6 +100,10 @@ beforeEach(() => {
 afterEach(() => { jest.restoreAllMocks(); });
 
 const member = () => sessionFor('member', 'orgiq');
+// The text-bearing reads apply the caller's trace scope (lib/trace-scope.ts);
+// the data-plane cases below run as the cross-tenant admin, and the member's
+// view of the same rows is pinned beside them.
+const admin = () => sessionFor('admin', 'orgiq');
 
 describe('the whole router sits behind the observability read', () => {
   const READS = [
@@ -145,36 +149,61 @@ describe('GET /api/observability/authz', () => {
 describe('GET /api/observability/recent-invocations and /capability-events', () => {
   it('passes a clamped limit (default 50, 1..200) and answers under its collection key', async () => {
     recentMock.mockReturnValue([{ invocationId: 'i-1' }]);
-    const res = await request(buildApp(member())).get('/api/observability/recent-invocations');
+    const res = await request(buildApp(admin())).get('/api/observability/recent-invocations');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ invocations: [{ invocationId: 'i-1' }] });
-    expect(recentMock).toHaveBeenLastCalledWith(50);
-    await request(buildApp(member())).get('/api/observability/recent-invocations?limit=9999');
-    expect(recentMock).toHaveBeenLastCalledWith(200);
-    await request(buildApp(member())).get('/api/observability/recent-invocations?limit=-4');
-    expect(recentMock).toHaveBeenLastCalledWith(1);
+    expect(recentMock).toHaveBeenLastCalledWith(50, expect.any(Function));
+    await request(buildApp(admin())).get('/api/observability/recent-invocations?limit=9999');
+    expect(recentMock).toHaveBeenLastCalledWith(200, expect.any(Function));
+    await request(buildApp(admin())).get('/api/observability/recent-invocations?limit=-4');
+    expect(recentMock).toHaveBeenLastCalledWith(1, expect.any(Function));
+  });
+
+  it('a member keeps only their own rows in their own tenant', async () => {
+    await request(buildApp(member())).get('/api/observability/recent-invocations');
+    const keep = recentMock.mock.calls.at(-1)![1] as (r: Record<string, unknown>) => boolean;
+    expect(keep({ id: 'a', userId: 'u-member', tenant: 'orgiq' })).toBe(true);
+    expect(keep({ id: 'b', userId: 'u-other', tenant: 'orgiq' })).toBe(false);
+    expect(keep({ id: 'c', userId: 'u-member', tenant: 'assessment' })).toBe(false);
+    expect(keep({ id: 'd', userId: null, tenant: null })).toBe(false);
   });
 
   it('capability events forward the kind filter with the clamped limit', async () => {
     capEventsMock.mockReturnValue([{ kind: 'browser', id: 'e-1' }]);
-    const res = await request(buildApp(member())).get('/api/observability/capability-events?kind=browser&limit=5');
+    const res = await request(buildApp(admin())).get('/api/observability/capability-events?kind=browser&limit=5');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ events: [{ kind: 'browser', id: 'e-1' }] });
     expect(capEventsMock).toHaveBeenLastCalledWith(5, 'browser');
-    await request(buildApp(member())).get('/api/observability/capability-events?limit=abc');
+    await request(buildApp(admin())).get('/api/observability/capability-events?limit=abc');
     expect(capEventsMock).toHaveBeenLastCalledWith(50, undefined);
+  });
+
+  it('a member keeps every event but reads only their own code and output', async () => {
+    capEventsMock.mockReturnValue([
+      { kind: 'code_execute', id: 'e-1', userId: 'u-member', tenant: 'orgiq', detail: { codeSnippet: 'mine', language: 'python' } },
+      { kind: 'code_execute', id: 'e-2', userId: 'u-other', tenant: 'orgiq', detail: { codeSnippet: 'theirs', language: 'python' } },
+    ]);
+    const res = await request(buildApp(member())).get('/api/observability/capability-events');
+    expect(res.body.events.map((e: { detail: unknown }) => e.detail)).toEqual([
+      { codeSnippet: 'mine', language: 'python' }, { language: 'python' }]);
   });
 });
 
 describe('GET /api/observability/bedrock-invocations', () => {
   it('clamps limit to 1..100 and the window to 1..1440 minutes, in milliseconds', async () => {
     bedrockMock.mockResolvedValue([{ requestId: 'r-1' }]);
-    const res = await request(buildApp(member())).get('/api/observability/bedrock-invocations?limit=500&sinceMin=5000');
+    const res = await request(buildApp(admin())).get('/api/observability/bedrock-invocations?limit=500&sinceMin=5000');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ entries: [{ requestId: 'r-1' }] });
     expect(bedrockMock).toHaveBeenLastCalledWith({ limit: 100, sinceMs: 1440 * 60_000 });
-    await request(buildApp(member())).get('/api/observability/bedrock-invocations');
+    await request(buildApp(admin())).get('/api/observability/bedrock-invocations');
     expect(bedrockMock).toHaveBeenLastCalledWith({ limit: 20, sinceMs: 60 * 60_000 });
+  });
+
+  it('names no caller, so anyone but the cross-tenant admin gets the entries without their text', async () => {
+    bedrockMock.mockResolvedValue([{ requestId: 'r-1', promptSnippet: 'p', responseSnippet: 'r', inputTokens: 3 }]);
+    const res = await request(buildApp(member())).get('/api/observability/bedrock-invocations');
+    expect(res.body).toEqual({ entries: [{ requestId: 'r-1', promptSnippet: '', responseSnippet: '', inputTokens: 3 }], textWithheld: true });
   });
 
   it('a CloudWatch failure is a 5xx, not an empty list', async () => {
@@ -193,7 +222,7 @@ describe('GET /api/observability/summary and /traces', () => {
 
   it('traces lists with the requested limit (default 10) under `traces`', async () => {
     listTracesMock.mockResolvedValue([{ traceId: '1-a' }, { traceId: '1-b' }]);
-    const res = await request(buildApp(member())).get('/api/observability/traces?limit=2');
+    const res = await request(buildApp(admin())).get('/api/observability/traces?limit=2');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ traces: [{ traceId: '1-a' }, { traceId: '1-b' }] });
     expect(listTracesMock).toHaveBeenLastCalledWith(2);
@@ -270,10 +299,16 @@ describe('GET /api/observability/traces/:traceId', () => {
   it('returns the provider trace for the requested id', async () => {
     const trace = { traceId: '1-abc', durationMs: 412, spans: [{ name: 'AGENT', durationMs: 400 }] };
     getTraceMock.mockResolvedValue(trace);
-    const res = await request(buildApp(member())).get('/api/observability/traces/1-abc');
+    const res = await request(buildApp(admin())).get('/api/observability/traces/1-abc');
     expect(res.status).toBe(200);
     expect(res.body).toEqual(trace);
     expect(getTraceMock).toHaveBeenCalledWith('1-abc');
+  });
+
+  it('drops span attributes that quote what someone asked, for anyone but the cross-tenant admin', async () => {
+    getTraceMock.mockResolvedValue({ traceId: '1-abc', spans: [{ name: 'AGENT', attributes: { 'agent.id': 'orgiq-supervisor', 'user.query': 'my question', 'query.type': 'sql', 'tokens.in': 4 } }] });
+    const res = await request(buildApp(member())).get('/api/observability/traces/1-abc');
+    expect(res.body.spans[0].attributes).toEqual({ 'agent.id': 'orgiq-supervisor', 'query.type': 'sql', 'tokens.in': 4 });
   });
 
   it('404s a trace the provider does not know, rather than answering an empty 200', async () => {

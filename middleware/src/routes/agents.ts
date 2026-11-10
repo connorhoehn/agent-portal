@@ -616,6 +616,8 @@ agentsRouter.post('/:agentId/invoke', invokeLimit, requireAction('Search'), requ
         responseSnippet: snippet(fullText),
         guardrailIntervened: false,
         error: errMsg,
+        userId: principal?.sub ?? null,
+        tenant: principal ? String(principal.tenant) : null,
       });
       // Durability: if part of the answer already streamed, persist the turn
       // anyway — otherwise a mid-stream error (or tab close) silently drops the
@@ -652,6 +654,8 @@ agentsRouter.post('/:agentId/invoke', invokeLimit, requireAction('Search'), requ
       promptSnippet: snippet(userMessage),
       responseSnippet: snippet(fullText),
       guardrailIntervened: intervened,
+      userId: principal?.sub ?? null,
+      tenant: principal ? String(principal.tenant) : null,
     });
 
     // Persist turn + title generation (fire-and-forget).

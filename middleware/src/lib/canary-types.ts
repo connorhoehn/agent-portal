@@ -21,6 +21,9 @@ export type CanaryEvent =
       version_label: CanaryVersionLabel;
       question: string;
       ts: string;
+      /** Who asked: the question is theirs (routes/canary.ts /events scopes it). */
+      user_id?: string | null;
+      tenant?: string | null;
     }
   | {
       type: 'invocation_complete';
@@ -28,6 +31,9 @@ export type CanaryEvent =
       latency_ms: number;
       response_preview: string;
       ts: string;
+      /** Who asked: the answer was written for them. */
+      user_id?: string | null;
+      tenant?: string | null;
     }
   | {
       type: 'judge_score';

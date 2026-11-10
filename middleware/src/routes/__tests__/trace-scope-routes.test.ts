@@ -40,6 +40,9 @@ import { costRouter } from '../cost.js';
 import { qualityRouter } from '../quality.js';
 import { agentDetailRouter } from '../agent-detail.js';
 import { harnessRouter } from '../harness.js';
+import { memoryRouter } from '../memory.js';
+import { guardrailsDetailRouter } from '../guardrails-detail.js';
+import { toolCallsRouter } from '../tool-calls.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { exec } from '../../providers/aurora.js';
 import { scopeSql, joinScopeSql, rowInScope, scopeForSession } from '../../lib/trace-scope.js';
@@ -105,8 +108,11 @@ describe('a member reads only their own snippet rows, route by route', () => {
   });
 
   it('agent detail recent invocations', async () => {
-    await request(app('/a', agentDetailRouter, member)).get('/a/orgiq_search').expect(200);
+    const res = await request(app('/a', agentDetailRouter, member)).get('/a/orgiq_search').expect(200);
     expectMemberScoped(snippetCall());
+    // The runtime log names no caller, so only the cross-tenant admin reads it.
+    expect(res.body.log.events).toEqual([]);
+    expect(res.body.log.problem).toMatch(/administrators only/);
   });
 
   it('harness re-judge reads only an in-scope trace', async () => {
@@ -152,6 +158,29 @@ it('no session is refused before any read', async () => {
     await request(app(mount, router, null)).get(path).expect(401);
   }
   expect(snippetCall()).toBeUndefined();
+});
+
+describe('feeds that hang off a trace keep every row but quote only the caller\'s text', () => {
+  const mine = { trace_user_id: 'u-member', trace_tenant: 'orgiq' };
+  const theirs = { trace_user_id: 'u-other', trace_tenant: 'orgiq' };
+  it('memory events: the query and what came back', async () => {
+    execMock.mockResolvedValue([{ memory_event_id: 'm1', query_text: 'mine', retrieved_summary: 'mine', ...mine },
+      { memory_event_id: 'm2', query_text: 'theirs', retrieved_summary: 'theirs', ...theirs }]);
+    const res = await request(app('/m', memoryRouter, member)).get('/m/events').expect(200);
+    expect(String(execMock.mock.calls[0]![0])).toMatch(/LEFT JOIN observability\.invocation_traces t ON t\.invocation_id = m\.invocation_id/);
+    expect(res.body.events.map((e: { queryText: string | null; retrievedSummary: string | null }) => [e.queryText, e.retrievedSummary]))
+      .toEqual([['mine', 'mine'], [null, null]]);
+  });
+  it('guardrail interventions: the matched text', async () => {
+    execMock.mockResolvedValue([{ intervention_id: 'g1', matched_text: 'mine', ...mine }, { intervention_id: 'g2', matched_text: 'theirs', ...theirs }]);
+    const res = await request(app('/g', guardrailsDetailRouter, member)).get('/g/interventions').expect(200);
+    expect(res.body.interventions.map((i: { matchedText: string | null }) => i.matchedText)).toEqual(['mine', null]);
+  });
+  it('tool errors: the error text', async () => {
+    execMock.mockResolvedValue([{ tool_call_id: 't1', error_message: 'mine', ...mine }, { tool_call_id: 't2', error_message: 'theirs', ...theirs }]);
+    const res = await request(app('/t', toolCallsRouter, member)).get('/t/errors').expect(200);
+    expect(res.body.errors.map((e: { errorMessage: string | null }) => e.errorMessage)).toEqual(['mine', null]);
+  });
 });
 
 describe('the helper', () => {

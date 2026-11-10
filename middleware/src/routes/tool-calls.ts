@@ -26,6 +26,8 @@ import {
   mockToolLatency,
   mockToolTimeseries,
 } from '../mock/observability-queries.js';
+import { withMockOwners } from '../mock/observability.js';
+import { traceScope, redactTextOutOfScope } from '../lib/trace-scope.js';
 
 /**
  * Marks a response whose query failed — the wrapper from routes/cost.ts, kept
@@ -209,6 +211,11 @@ interface ToolErrorRow {
 }
 
 toolCallsRouter.get('/errors', asyncHandler(async (req, res) => {
+  // A tool's error text can quote the arguments the asker's question produced,
+  // so it is read through the owning trace's scope (lib/trace-scope.ts); the
+  // row, its tool and its time stay for everyone.
+  const scope = traceScope(req, res);
+  if (scope === 'refused') return;
   const limit = clampLimit(req.query['limit'] as string | undefined, 50, 500);
 
   const sql = `
@@ -217,7 +224,9 @@ toolCallsRouter.get('/errors', asyncHandler(async (req, res) => {
            COALESCE(it.agent_id, '')                                       AS agent_id,
            tc.tool_name                                                    AS tool_name,
            tc.error_message                                                AS error_message,
-           tc.ts::text                                                     AS ts
+           tc.ts::text                                                     AS ts,
+           it.user_id                                                      AS trace_user_id,
+           it.tenant                                                       AS trace_tenant
       FROM observability.tool_calls tc
       LEFT JOIN observability.invocation_traces it
         ON it.invocation_id = tc.invocation_id
@@ -227,9 +236,9 @@ toolCallsRouter.get('/errors', asyncHandler(async (req, res) => {
 
   try {
     const rows = config.mock.aurora
-      ? mockToolErrors(limit)
+      ? withMockOwners(mockToolErrors(limit))
       : await exec(sql, [{ name: 'lim', value: { longValue: limit } }]);
-    const errors: ToolErrorRow[] = rows.map((r) => ({
+    const errors: ToolErrorRow[] = rows.map((r) => redactTextOutOfScope(scope, r, ['error_message'])).map((r) => ({
       toolCallId: String(r['tool_call_id'] ?? ''),
       invocationId: String(r['invocation_id'] ?? ''),
       agentId: String(r['agent_id'] ?? ''),

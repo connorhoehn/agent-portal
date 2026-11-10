@@ -9,6 +9,10 @@ import { driftRouter } from './drift.js';
 import { qualityRouter } from './quality.js';
 import { prWatchHealth } from '../lib/pr-watch-poller.js';
 import { userNameFor } from '../lib/user-names.js';
+import { traceScope, rowInScope, readsOwnerlessText, type TraceScope } from '../lib/trace-scope.js';
+import { config } from '../config.js';
+import { mockTraceOwners } from '../mock/observability.js';
+import type { Trace } from '../providers/types.js';
 
 export const observabilityRouter = Router();
 
@@ -84,25 +88,62 @@ observabilityRouter.get('/authz/stream', (req, res) => {
   req.on('close', () => { unsubscribe(); endSSE(res); });
 });
 
+// The activity tail and the capability log quote people's prompts, answers,
+// code and output, so each row is read through the caller's trace scope
+// (lib/trace-scope.ts): a member sees their own, a fleet-wide role their
+// tenant's, the cross-tenant admin everything. A row with no recorded owner
+// (the mock tail's agent-to-agent rows, a crawler's events) is the admin's.
 observabilityRouter.get('/recent-invocations', (req, res) => {
+  const scope = traceScope(req, res);
+  if (scope === 'refused') return;
   const limit = Math.max(1, Math.min(200, parseInt((req.query['limit'] as string) ?? '50', 10) || 50));
-  res.json({ invocations: getRecentInvocations(limit) });
+  const mockOwners = config.mock.agentcore && scope !== null ? mockTraceOwners() : null;
+  const invocations = getRecentInvocations(limit, (rec) => {
+    if (scope === null) return true;
+    const owner = rec.userId !== undefined
+      ? { user_id: rec.userId, tenant: rec.tenant ?? null }
+      : mockOwners?.get(rec.id) ?? { user_id: null };
+    return rowInScope(scope, owner);
+  });
+  res.json({ invocations });
 });
+
+/** Capability detail fields that are labels, not anyone's content. */
+const CAPABILITY_DETAIL_LABELS = new Set(['language', 'agentName', 'source', 'mode', 'crawlId']);
 
 observabilityRouter.get('/capability-events', (req, res) => {
+  const scope = traceScope(req, res);
+  if (scope === 'refused') return;
   const limit = Math.max(1, Math.min(200, parseInt((req.query['limit'] as string) ?? '50', 10) || 50));
   const kind = req.query['kind'] as CapabilityEventKind | undefined;
-  res.json({ events: getCapabilityEvents(limit, kind) });
+  // Every event stays (the timeline is an activity count); the code, output,
+  // URLs and titles are kept only for the caller's own events.
+  const events = getCapabilityEvents(limit, kind).map((ev) => {
+    if (rowInScope(scope, { user_id: ev.userId ?? null, tenant: ev.tenant ?? null })) return ev;
+    const detail = Object.fromEntries(Object.entries(ev.detail ?? {}).filter(([key, value]) =>
+      typeof value !== 'string' || CAPABILITY_DETAIL_LABELS.has(key)));
+    return { ...ev, detail, textWithheld: true };
+  });
+  res.json({ events });
 });
 
+// Bedrock's model-invocation log carries every caller's prompt and answer and
+// names no caller (only the agent's role), so the text is the cross-tenant
+// admin's; everyone else gets the counts, tokens and interventions.
 observabilityRouter.get('/bedrock-invocations', asyncHandler(async (req, res) => {
+  const scope = traceScope(req, res);
+  if (scope === 'refused') return;
   const limit = Math.max(1, Math.min(100, parseInt((req.query['limit'] as string) ?? '20', 10) || 20));
   const sinceMin = Math.max(1, Math.min(1440, parseInt((req.query['sinceMin'] as string) ?? '60', 10) || 60));
   const entries = await cloudwatch.listBedrockInvocations({
     limit,
     sinceMs: sinceMin * 60 * 1000,
   });
-  res.json({ entries });
+  if (readsOwnerlessText(scope)) { res.json({ entries }); return; }
+  res.json({
+    entries: entries.map((e) => ({ ...e, promptSnippet: '', responseSnippet: '' })),
+    textWithheld: true,
+  });
 }));
 
 observabilityRouter.get(
@@ -113,24 +154,48 @@ observabilityRouter.get(
   }),
 );
 
+/**
+ * Span attributes that can carry what someone typed or was told (the root
+ * span's `user.query`, a model call's input or output). X-Ray names no caller,
+ * so these are the cross-tenant admin's; identifiers, counts and timings stay.
+ */
+const SPAN_TEXT_KEY = /(^user\.|query$|prompt|response|question|answer|input$|output$|message|text|content|summary)/i;
+
+function withoutSpanText(trace: Trace, scope: TraceScope | null): Trace {
+  if (readsOwnerlessText(scope)) return trace;
+  if (!Array.isArray(trace.spans)) return trace;
+  return {
+    ...trace,
+    spans: trace.spans.map((span) => (span.attributes ? {
+      ...span,
+      attributes: Object.fromEntries(Object.entries(span.attributes)
+        .filter(([key, value]) => typeof value !== 'string' || !SPAN_TEXT_KEY.test(key))),
+    } : span)),
+  };
+}
+
 observabilityRouter.get(
   '/traces',
   asyncHandler(async (req, res) => {
+    const scope = traceScope(req, res);
+    if (scope === 'refused') return;
     const limit = parseInt((req.query['limit'] as string) ?? '10', 10);
     const traces = await cloudwatch.listTraces(limit);
-    res.json({ traces });
+    res.json({ traces: traces.map((t) => withoutSpanText(t, scope)) });
   }),
 );
 
 observabilityRouter.get(
   '/traces/:traceId',
   asyncHandler(async (req, res) => {
+    const scope = traceScope(req, res);
+    if (scope === 'refused') return;
     const traceId = req.params['traceId'] as string;
     const trace = await cloudwatch.getTrace(traceId);
     if (!trace) {
       res.status(404).json({ error: 'Trace not found' });
       return;
     }
-    res.json(trace);
+    res.json(withoutSpanText(trace, scope));
   }),
 );

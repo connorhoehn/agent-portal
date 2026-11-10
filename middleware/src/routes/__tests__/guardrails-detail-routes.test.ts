@@ -54,6 +54,9 @@ const valueOf = (call: number, name: string): unknown =>
 function buildApp() {
   const app = express();
   app.use(express.json());
+  // The text columns are read through the caller's trace scope (lib/trace-scope.ts);
+  // these cases are about the data plane, so they run as the cross-tenant admin.
+  app.use((req, _res, next) => { (req as unknown as { session: unknown }).session = { sub: 'u-admin', role: 'admin', tenant: 'orgiq', grants: {}, iat: 0 }; next(); });
   app.use('/api/observability/guardrails-detail', guardrailsDetailRouter);
   app.use(errorHandler);
   return app;
@@ -165,7 +168,7 @@ describe('GET /interventions', () => {
     execMock.mockResolvedValue([]);
     await request(buildApp())
       .get(`/api/observability/guardrails-detail/interventions?invocationId=${UUID}&ruleName=PII_EMAIL`);
-    expect(sqlOf(0)).toMatch(/invocation_id = :iid::uuid AND rule_name = :rule/);
+    expect(sqlOf(0)).toMatch(/g\.invocation_id = :iid::uuid AND g\.rule_name = :rule/);
     expect(sqlOf(0)).not.toMatch(/PII_EMAIL/);
     expect(valueOf(0, 'rule')).toBe('PII_EMAIL');
   });

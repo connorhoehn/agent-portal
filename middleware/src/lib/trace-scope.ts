@@ -84,3 +84,36 @@ export function joinScopeSql(scope: TraceScope | null | 'none', alias: string): 
   const inner = scopeSql(scope, alias);
   return { clause: ` AND (${alias}user_id IS NULL OR (TRUE${inner.clause}))`, params: inner.params };
 }
+
+/**
+ * Text that carries no owner at all (Bedrock's model-invocation log, X-Ray
+ * span attributes, a runtime's own log tail) cannot be filtered row by row,
+ * so only the cross-tenant admin reads it; everyone else gets the row with
+ * the text withheld.
+ */
+export function readsOwnerlessText(scope: TraceScope | null): boolean {
+  return scope === null;
+}
+
+/**
+ * The owner of a row that hangs off a trace (a memory event, a fired rule, a
+ * tool error), from the joined `trace_user_id` / `trace_tenant` columns, in
+ * the shape `rowInScope` reads. A row with no trace has no owner, which only
+ * the cross-tenant admin can read. The offline corpus carries no tenant
+ * column, so an absent `trace_tenant` checks the user alone (as `rowInScope`).
+ */
+export function joinedOwner(row: Record<string, unknown>): Record<string, unknown> {
+  return { user_id: row['trace_user_id'] ?? null, ...('trace_tenant' in row ? { tenant: row['trace_tenant'] } : {}) };
+}
+
+/**
+ * The row with its text `fields` nulled when its owning trace is outside the
+ * caller's scope: for feeds whose rows are counts and timings everyone may
+ * read, beside text only the asker (or their tenant's fleet-wide role) may.
+ */
+export function redactTextOutOfScope<R extends Record<string, unknown>>(scope: TraceScope | null, row: R, fields: readonly string[]): R {
+  if (rowInScope(scope, joinedOwner(row))) return row;
+  const out: Record<string, unknown> = { ...row };
+  for (const field of fields) out[field] = null;
+  return out as R;
+}
