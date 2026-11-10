@@ -23,7 +23,7 @@ export function createHealthHandler(options: {
   return (req: Request, res: Response): void => {
     // /health answers before any auth (the load balancer's check). Its
     // diagnostics (profile, mocks, region, probe errors) go only to a loopback
-    // caller or a signed-in session; anyone else gets the verdict alone, with
+    // caller or a signed-cookie session (never the demo fallback); anyone else gets the verdict alone, with
     // the same status code.
     const detailed = healthDetailAllowed(req);
     const send = (code: number, body: Record<string, unknown>) => {
@@ -109,11 +109,17 @@ export function isLoopbackRequest(req: Request): boolean {
   return clients.length > 0 && clients.every(isLoopbackAddress);
 }
 
-/** Health diagnostics: a loopback caller, or a signed-in session. */
+/**
+ * Health diagnostics: a loopback caller, or a session from a real signed
+ * cookie. The INSECURE_DEV_MODE demo fallback gives every cookie-less request
+ * a session (lib/session.ts), so a session alone would hand the diagnostics to
+ * anyone who can reach the port; it never counts here (second regression walk,
+ * 10 November).
+ */
 export function healthDetailAllowed(req: Request): boolean {
   if (isLoopbackRequest(req)) return true;
-  const session = (req as Request & { session?: { sub?: string } }).session;
-  return typeof session?.sub === 'string' && session.sub.length > 0;
+  const r = req as Request & { session?: { sub?: string }; sessionSource?: 'cookie' | 'demo' };
+  return r.sessionSource === 'cookie' && typeof r.session?.sub === 'string' && r.session.sub.length > 0;
 }
 
 /** Process liveness only: no dependency, lease or probe is consulted. */

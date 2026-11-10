@@ -436,6 +436,12 @@ declare module 'express-serve-static-core' {
     session?: Session;
     /** A presented credential was rejected. Never resolve it to a demo user. */
     sessionInvalid?: boolean;
+    /**
+     * Where `session` came from: a verified signed cookie, or the INSECURE_DEV_MODE
+     * demo fallback every cookie-less request gets. A check that means "a real
+     * signed-in caller" (health diagnostics) reads `cookie`, never just `session`.
+     */
+    sessionSource?: 'cookie' | 'demo';
   }
 }
 
@@ -567,6 +573,7 @@ export function sessionMiddleware() {
               if (verified.act) reminted.iat = verified.iat;
               setSessionCookie(res, await signSession(reminted));
               req.session = reminted;
+              req.sessionSource = 'cookie';
               withDbTenant(reminted, next);
               return;
             }
@@ -582,6 +589,7 @@ export function sessionMiddleware() {
           }
         }
         req.session = verified;
+        req.sessionSource = 'cookie';
         withDbTenant(verified, next);
         return;
       }
@@ -595,6 +603,7 @@ export function sessionMiddleware() {
     }
     if (demoFallbackAllowed()) {
       req.session = demoSession();
+      req.sessionSource = 'demo';
       withDbTenant(req.session, next);
       return;
     }

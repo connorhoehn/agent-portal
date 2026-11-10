@@ -1,6 +1,6 @@
 // /health answers before any auth (the load balancer checks it), so its
 // diagnostics (profile, mocks, region, probe errors) go only to a loopback
-// caller or a signed-in session. Anyone else gets the verdict and the same
+// caller or a session from a signed cookie (never the demo fallback). Anyone else gets the verdict and the same
 // status code. A forwarding header never makes a request loopback.
 import type { Request, Response } from 'express';
 import { createHealthHandler, healthDetailAllowed } from '../health-handler.js';
@@ -71,9 +71,15 @@ describe('health detail gate', () => {
     }
   });
 
-  it('a signed-in session gets the diagnostics (the portal shell reads them)', () => {
-    const out = call(remote({ session: { sub: 'u-1' } } as never));
+  it('a signed-in session from a signed cookie gets the diagnostics (the portal shell reads them)', () => {
+    const out = call(remote({ session: { sub: 'u-1' }, sessionSource: 'cookie' } as never));
     expect(out.body).toHaveProperty('mocks');
-    expect(healthDetailAllowed(remote({ session: { sub: '' } } as never) as Request)).toBe(false);
+    expect(healthDetailAllowed(remote({ session: { sub: '' }, sessionSource: 'cookie' } as never) as Request)).toBe(false);
+  });
+
+  it('the demo fallback session (every cookie-less request under INSECURE_DEV_MODE) is not a signed-in caller', () => {
+    expect(call(remote({ session: { sub: 'demo-user' }, sessionSource: 'demo' } as never)).body).toEqual({ status: 'degraded', service: 'orgiq-middleware' });
+    // A session with no recorded source never counts either.
+    expect(healthDetailAllowed(remote({ session: { sub: 'u-1' } } as never) as Request)).toBe(false);
   });
 });
