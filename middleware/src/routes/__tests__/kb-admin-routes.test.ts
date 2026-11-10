@@ -162,14 +162,42 @@ describe('POST /', () => {
     const cases: Array<[Partial<typeof VALID>, RegExp]> = [
       [{ ...VALID, name: '  ' }, /name/],
       [{ ...VALID, slug: 'Not A Slug' }, /\^\[a-z0-9-\]\+\$/],
-      [{ ...VALID, tenant: '' }, /tenant/],
       [{ ...VALID, purpose: '' }, /purpose/],
       [{ ...VALID, s3Prefix: '' }, /s3Prefix/],
+      [{ ...VALID, s3Prefix: '../assessment/' }, /s3Prefix/],
+      [{ ...VALID, s3Prefix: '/abs/' }, /s3Prefix/],
+      [{ ...VALID, s3Prefix: 'uploads' }, /landing zone/],
     ];
     for (const [body, pattern] of cases) {
       const res = await request(app).post('/api/admin/kb-registry').send(body);
       expect(res.status).toBe(400);
       expect(res.body.error).toMatch(pattern);
+    }
+    // The cross-tenant admin names the tenant, so it must name one.
+    const admin = await request(buildApp({ sub: 'u-root', role: 'admin', tenant: 'orgiq' }))
+      .post('/api/admin/kb-registry').send({ ...VALID, tenant: '' });
+    expect(admin.status).toBe(400);
+    expect(admin.body.error).toMatch(/tenant/);
+    expect(createKbEntry).not.toHaveBeenCalled();
+  });
+
+  it('takes the tenant from the session, never the body', async () => {
+    m(createKbEntry).mockResolvedValue({ ...KB, id: 'kb-row-4', status: 'PENDING' });
+    const res = await request(buildApp()).post('/api/admin/kb-registry').send({ ...VALID, tenant: 'assessment' });
+    expect(res.status).toBe(201);
+    expect(m(createKbEntry).mock.calls[0]![0]).toMatchObject({ tenant: 'orgiq' });
+    // Only the cross-tenant admin may register for another tenant.
+    await request(buildApp({ sub: 'u-root', role: 'admin', tenant: 'orgiq' }))
+      .post('/api/admin/kb-registry').send({ ...VALID, slug: 'assessment-docs', name: 'Assessment docs', tenant: 'assessment' });
+    expect(m(createKbEntry).mock.calls[1]![0]).toMatchObject({ tenant: 'assessment' });
+  });
+
+  it('409s a prefix that overlaps another tenant\'s knowledge base, in either direction', async () => {
+    m(listKbs).mockResolvedValue([{ ...KB, tenant: 'assessment', name: 'Evidence', s3Prefix: 'assessment/evidence/' }]);
+    for (const s3Prefix of ['assessment/evidence', 'assessment/', 'assessment/evidence/2026/']) {
+      const res = await request(buildApp()).post('/api/admin/kb-registry').send({ ...VALID, s3Prefix });
+      expect(res.status).toBe(409);
+      expect(res.body.error).toMatch(/another tenant/);
     }
     expect(createKbEntry).not.toHaveBeenCalled();
   });

@@ -208,52 +208,52 @@
     {
       "method": "DELETE",
       "path": "/api/admin/kb-registry/:id",
-      "source": "src/routes/kb-admin.ts:472"
+      "source": "src/routes/kb-admin.ts:496"
     },
     {
       "method": "GET",
       "path": "/api/admin/kb-registry/:id",
-      "source": "src/routes/kb-admin.ts:418"
+      "source": "src/routes/kb-admin.ts:442"
     },
     {
       "method": "PATCH",
       "path": "/api/admin/kb-registry/:id",
-      "source": "src/routes/kb-admin.ts:446"
+      "source": "src/routes/kb-admin.ts:470"
     },
     {
       "method": "GET",
       "path": "/api/admin/kb-registry/:id/docs",
-      "source": "src/routes/kb-admin.ts:728"
+      "source": "src/routes/kb-admin.ts:752"
     },
     {
       "method": "GET",
       "path": "/api/admin/kb-registry/:id/jobs",
-      "source": "src/routes/kb-admin.ts:643"
+      "source": "src/routes/kb-admin.ts:667"
     },
     {
       "method": "GET",
       "path": "/api/admin/kb-registry/:id/landing-zone/files",
-      "source": "src/routes/kb-admin.ts:388"
+      "source": "src/routes/kb-admin.ts:412"
     },
     {
       "method": "POST",
       "path": "/api/admin/kb-registry/:id/landing-zone/upload",
-      "source": "src/routes/kb-admin.ts:398"
+      "source": "src/routes/kb-admin.ts:422"
     },
     {
       "method": "POST",
       "path": "/api/admin/kb-registry/:id/provision",
-      "source": "src/routes/kb-admin.ts:490"
+      "source": "src/routes/kb-admin.ts:514"
     },
     {
       "method": "GET",
       "path": "/api/admin/kb-registry/:id/status",
-      "source": "src/routes/kb-admin.ts:511"
+      "source": "src/routes/kb-admin.ts:535"
     },
     {
       "method": "POST",
       "path": "/api/admin/kb-registry/:id/sync",
-      "source": "src/routes/kb-admin.ts:587"
+      "source": "src/routes/kb-admin.ts:611"
     },
     {
       "method": "GET",
@@ -268,32 +268,32 @@
     {
       "method": "GET",
       "path": "/api/admin/kb-registry/reconcile",
-      "source": "src/routes/kb-admin.ts:322"
+      "source": "src/routes/kb-admin.ts:346"
     },
     {
       "method": "POST",
       "path": "/api/admin/kb-registry/reconcile/adopt",
-      "source": "src/routes/kb-admin.ts:327"
+      "source": "src/routes/kb-admin.ts:351"
     },
     {
       "method": "GET",
       "path": "/api/admin/kb-registry/upload-links",
-      "source": "src/routes/kb-admin.ts:339"
+      "source": "src/routes/kb-admin.ts:363"
     },
     {
       "method": "POST",
       "path": "/api/admin/kb-registry/upload-links",
-      "source": "src/routes/kb-admin.ts:344"
+      "source": "src/routes/kb-admin.ts:368"
     },
     {
       "method": "DELETE",
       "path": "/api/admin/kb-registry/upload-links/:linkId",
-      "source": "src/routes/kb-admin.ts:377"
+      "source": "src/routes/kb-admin.ts:401"
     },
     {
       "method": "GET",
       "path": "/api/admin/kb-registry/upload-links/:linkId/files",
-      "source": "src/routes/kb-admin.ts:373"
+      "source": "src/routes/kb-admin.ts:397"
     },
     {
       "method": "GET",

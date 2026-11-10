@@ -264,8 +264,16 @@ kbAdminRouter.post('/', asyncHandler(async (req, res) => {
   if (typeof body.slug !== 'string' || !/^[a-z0-9-]+$/.test(body.slug)) {
     throw new ValidationError('slug must match /^[a-z0-9-]+$/');
   }
-  if (typeof body.tenant !== 'string' || !body.tenant.trim()) {
-    throw new ValidationError('tenant must be a non-empty string');
+  // The tenant comes from the session, never the body — same rule as GET above.
+  // A registered prefix becomes an allowed upload prefix for its tenant
+  // (routes/ingest.ts uploadPrefix), so a body-chosen tenant let a tenant admin
+  // widen another tenant's upload surface. Only the cross-tenant admin role may
+  // name a tenant.
+  const session = req.session;
+  const bodyTenant = typeof body.tenant === 'string' ? body.tenant.trim() : '';
+  const tenant = session?.role === 'admin' ? bodyTenant : String(session?.tenant ?? '');
+  if (!tenant) {
+    throw new ValidationError(session?.role === 'admin' ? 'tenant must be a non-empty string' : 'a session tenant is required');
   }
   if (typeof body.purpose !== 'string' || !body.purpose.trim()) {
     throw new ValidationError('purpose must be a non-empty string');
@@ -273,14 +281,30 @@ kbAdminRouter.post('/', asyncHandler(async (req, res) => {
   if (typeof body.s3Prefix !== 'string' || !body.s3Prefix.trim()) {
     throw new ValidationError('s3Prefix must be a non-empty string');
   }
+  const s3Prefix = body.s3Prefix.trim();
+  if (s3Prefix.startsWith('/') || s3Prefix.includes('\\') || s3Prefix.split('/').some((p) => p === '..' || p === '.')) {
+    throw new ValidationError('s3Prefix must be a relative S3 prefix without "." or ".." segments');
+  }
+  // Nor may a tenant register a prefix that is, contains, or sits inside
+  // another tenant's: that would make the other tenant's knowledge base an
+  // upload target of this one. `uploads` is the shared landing zone, never a KB.
+  const norm = (p: string) => `${p.trim().replace(/\/+$/, '')}/`;
+  const mine = norm(s3Prefix);
+  if (mine === 'uploads/') throw new ValidationError('s3Prefix "uploads" is the shared upload landing zone');
+  const overlap = (await listKbs()).find((kb) => kb.tenant !== tenant && kb.s3Prefix.trim() !== ''
+    && (norm(kb.s3Prefix).startsWith(mine) || mine.startsWith(norm(kb.s3Prefix))));
+  if (overlap) {
+    res.status(409).json({ error: `s3Prefix overlaps a knowledge base of another tenant ("${overlap.s3Prefix}")` });
+    return;
+  }
 
   const input: CreateKbInput = {
     name: body.name.trim(),
     slug: body.slug,
-    tenant: body.tenant.trim(),
+    tenant,
     purpose: body.purpose.trim(),
     description: typeof body.description === 'string' ? body.description : undefined,
-    s3Prefix: body.s3Prefix.trim(),
+    s3Prefix,
     chunkingStrategy: typeof body.chunkingStrategy === 'string' ? body.chunkingStrategy : undefined,
     maxTokens: typeof body.maxTokens === 'number' ? body.maxTokens : undefined,
   };
