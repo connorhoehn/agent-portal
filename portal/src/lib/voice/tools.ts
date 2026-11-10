@@ -395,6 +395,12 @@ export interface VoiceCardOptions {
   noteMaxLength?: number;
   /** The primary button's verb ("Send", "Queue"); the spoken vocabulary stays "confirm". */
   confirmLabel?: string;
+  /**
+   * With the approve / reject toggle showing, the button's verb for each side ("Approve" / "Reject"): the dock hands
+   * the library a function of the toggle (ui-components 2.517.0), so the button never says Confirm beside a toggle
+   * that decides which way it goes. Plain strings here, so a plan stays data.
+   */
+  confirmLabels?: { approve: string; reject: string };
   hideDecisionToggle?: boolean;
   /** The card shows "Check it, then click <confirmLabel>" as its hint, in place of the who-may-answer line. */
   clickOnly?: boolean;
@@ -406,6 +412,8 @@ export interface VoiceCardOptions {
  */
 export function confirmLabelOf(call: PreparedCall, plan?: ConfirmPlan | null): string | undefined {
   if (plan?.card?.confirmLabel) return plan.card.confirmLabel;
+  // A toggle card: the side it opens on (the card's own button follows the toggle).
+  if (plan?.card?.confirmLabels) return plan.card.confirmLabels[plan.fields?.decision === 'reject' ? 'reject' : 'approve'];
   switch (call.spec.name) {
     case 'message': return 'Send';
     case 'queue_work': return 'Queue';

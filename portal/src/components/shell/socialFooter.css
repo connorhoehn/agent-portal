@@ -10,7 +10,11 @@
      live bar inside the shared 48px footer contract. */
   padding: 1px 0 1px 12px;
 }
-.shell-social-footer .shell-collaboration-bar > div:first-child { max-width: 55%; }
+/* The status half only. With `showContext={false}` (the idle and joinable bars) the first child is the
+   controls group, and capping it at 55% pushed Huddle, Message and the device gear 24px past the
+   window at 768px (walk, 10 November). The controls group may wrap instead of overflowing. */
+.shell-social-footer .shell-collaboration-bar > [data-testid$="-status"] { max-width: 55%; }
+.shell-social-footer .shell-collaboration-bar > div:last-child { flex-shrink: 1; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
 /* Idle controls have no status label, including during a shared-package refresh. */
 .shell-social-footer .shell-collaboration-bar[data-phase="idle"] > [data-testid$="-status"] { display: none; }
 .shell-social-footer .shell-collaboration-bar > div:last-child {

@@ -83,9 +83,9 @@ test('a decision the item waits on is live state: open, then decided, then the n
     { text: 'Rehearse the cutover on both internal tenants with zero forced logouts', done: true, position: 0 },
     { text: 'Pre-flight: the tenant origin is in the Cognito app client CallbackURLs before the flip', done: false, position: 1 },
   ];
-  // Waiting: the decision comes first; the block's reason says who and when.
+  // Waiting: the decision comes first; the block's reason says who and when, without naming the decision a second time (walk, 10 November).
   assert.deepEqual(nextStepCallout(story, { decisions: [decision], criteria }), {
-    title: 'Next step', step: 'The escalated decision "Cutover order for legacy SSO tenants" comes first.', detail: reason, actionLabel: 'Open discussion',
+    title: 'Next step', step: 'The escalated decision "Cutover order for legacy SSO tenants" comes first.', detail: 'Escalated to Sienna Garcia. She decides once the second internal rehearsal passes.', actionLabel: 'Open discussion',
   });
   // Decided: the settle drops the label and the reason and keeps the link; nobody "decides" any more.
   const settled = { ...story, labels: ['runbook'], blockedReason: null };

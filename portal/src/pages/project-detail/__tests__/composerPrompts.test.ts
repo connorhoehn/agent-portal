@@ -151,3 +151,23 @@ test('a slash command expands to its workflow, and an inapplicable one asks noth
   assert.match(prompt, /^What does Eli need[\s\S]*\n\nby Friday\?$/);
   assert.equal(askHref('/criteria', initiativeSubject), null);
 });
+
+test('an item linked to a pending decision but not marked blocked offers "What does this wait on?" with the derived step (walk, 10 November)', () => {
+  const linked: ComposerSubject = {
+    ...itemSubject,
+    item: { ...b4, labels: b4.labels.filter((l) => l !== 'blocked'), blockedReason: null },
+    facts: { ...itemSubject.facts, blocked: false },
+    nextStepContext: { decisions: [{ id: 'd-cut', topic: 'Cutover order for legacy SSO tenants', status: 'escalated', workItemId: b4.id }] },
+  } as ComposerSubject;
+  const row = workflowMenuRows(linked).find((r) => r.id === 'unblock')!;
+  assert.deepEqual([row.label, row.disabled], ['What does this wait on?', false]);
+  assert.equal(composerCommands(linked).find((c) => c.trigger === '/unblock')?.disabled, false);
+  const u = workflowPrompt('unblock', linked)!;
+  assert.match(u, /^What does "[^"]+" wait on, and what would settle it/);
+  assert.match(u, /Planned next step: "The escalated decision 'Cutover order for legacy SSO tenants' comes first\."/);
+  // Once decided, nothing waits: the workflow is unavailable again, as before.
+  const decided = { ...linked, nextStepContext: { decisions: [{ id: 'd-cut', topic: 'Cutover order for legacy SSO tenants', status: 'resolved', workItemId: b4.id }] } } as ComposerSubject;
+  assert.equal(workflowMenuRows(decided).find((r) => r.id === 'unblock')?.disabled, true);
+  // A blocked item keeps "Unblock this item".
+  assert.equal(workflowMenuRows(itemSubject).find((r) => r.id === 'unblock')?.label, 'Unblock this item');
+});

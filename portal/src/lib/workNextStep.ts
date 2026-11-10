@@ -61,6 +61,28 @@ export interface DerivedNextStep {
 
 export const OPEN_DECISION_STATUSES: ReadonlySet<string> = new Set(['open', 'escalated']);
 const sentence = (text: string): string => (/[.!?]$/.test(text) ? text : `${text}.`);
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * The block's reason without the decision's title, which the step line already says ("The escalated decision
+ * "Cutover order…" comes first."): the cutover story's callout named it twice (walk, 10 November). A leading
+ * "Blocked on "<topic>", " goes, and the rest starts with a capital ("Escalated to Sienna Garcia. She decides…");
+ * the title quoted elsewhere in the reason reads "that decision". A reason that does not name it is unchanged, and a
+ * reason that is only the title is dropped (null).
+ */
+export function reasonWithoutTopic(reason: string | null, topic: string): string | null {
+  if (!reason) return null;
+  const t = topic.trim();
+  if (!t) return reason;
+  const quoted = new RegExp(`["“]${escapeRe(t)}["”]`, 'g');
+  if (!quoted.test(reason)) return reason;
+  const rest = reason
+    .replace(new RegExp(`^\\s*(?:blocked|waiting)\\s+on\\s+(?:the\\s+(?:escalated\\s+)?decision\\s+)?["“]${escapeRe(t)}["”]\\s*[,.;:—–-]?\\s*`, 'i'), '')
+    .replace(quoted, 'that decision')
+    .trim();
+  if (!rest || /^that decision[.!]?$/i.test(rest)) return null;
+  return rest.charAt(0).toUpperCase() + rest.slice(1);
+}
 
 /** The decision the item waits on, if any: the one it names, else an open one that names it, else any that names it. */
 export function decisionWaitedOn(item: NextStepItem, decisions: readonly NextStepDecision[] | null | undefined): NextStepDecision | null {
@@ -81,10 +103,10 @@ export function derivedNextStep(item: NextStepItem, context: NextStepContext = {
   const status = String(waitsOn.status ?? '');
   if (OPEN_DECISION_STATUSES.has(status)) {
     const step = `The ${status === 'escalated' ? 'escalated ' : ''}decision "${waitsOn.topic}" comes first.`;
-    return { step, detail: blocked ? reason : ownStep ? `Then: ${sentence(ownStep)}` : null, from: 'decision' };
+    return { step, detail: blocked ? reasonWithoutTopic(reason, waitsOn.topic) : ownStep ? `Then: ${sentence(ownStep)}` : null, from: 'decision' };
   }
   if (status === 'rejected') {
-    return { step: `Replan this item: the decision "${waitsOn.topic}" was rejected.`, detail: reason, from: 'decision' };
+    return { step: `Replan this item: the decision "${waitsOn.topic}" was rejected.`, detail: reasonWithoutTopic(reason, waitsOn.topic), from: 'decision' };
   }
   if (status === 'resolved' && !blocked) {
     const next = [...(context.criteria ?? [])].sort((a, b) => a.position - b.position).find((c) => !c.done && c.text.trim());

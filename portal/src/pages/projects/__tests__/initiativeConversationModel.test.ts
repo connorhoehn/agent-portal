@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   CHANNEL_FILTERS, channelConversationMessages, channelMessageKind, initiativeConversationMessages, parseChannelFilter,
-  workNoteNotNotified, workNoteReferenceMetadata, workNoteReferenceText,
+  receiptTone, workNoteNotNotified, workNoteReferenceMetadata, workNoteReferenceText,
 } from '../initiativeConversationModel.ts';
 
 test('a channel-backed pane filters All / Messages / Work notes / Agent by message metadata (leftovers 2)', () => {
@@ -57,4 +57,16 @@ test('the composer posts the reference with no part of the note, and the client-
   // Outside the pane's filter (this model), nothing reads `workComment`: the reference chip names the item only.
   assert.doesNotMatch(src('workConversationContext.tsx').replace(/\/\*[\s\S]*?\*\//g, ''), /workComment/);
   assert.doesNotMatch(composer, /metadata\??\.workComment/);
+});
+
+test('the receipt row is the library Banner, toned by what happened (walk, 10 November)', () => {
+  assert.equal(receiptTone('notice', 'Comment saved on ORG-AUTH-9 and mentioned in #auth-migration.'), 'success');
+  assert.equal(receiptTone('notice', workNoteNotNotified('ORG-AUTH-9', '#auth-migration', 'You cannot post in #auth-migration.')), 'warning');
+  assert.equal(receiptTone('notice', 'The retained draft was discarded.'), 'info');
+  assert.equal(receiptTone('saved'), 'success');
+  assert.equal(receiptTone('failed'), 'error');
+  assert.equal(receiptTone('pending'), 'info');
+  const composer = readFileSync(new URL('../InitiativeComposer.tsx', import.meta.url), 'utf8');
+  assert.match(composer, /<Banner\s+variant=\{receiptTone\(/);
+  assert.doesNotMatch(composer, />Dismiss<\/Button>\}\s*\n\s*<\/Inline>/);
 });

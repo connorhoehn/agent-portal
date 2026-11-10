@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { AccessNotice } from '@connorhoehn/ui-components';
+import { EmptyState } from '@connorhoehn/ui-components';
 import { useSession } from '../../lib/auth';
 import { useFetch } from '../../hooks/useFetch';
 import { grantRequestNextStep } from '../../lib/pageAccess';
@@ -14,6 +14,9 @@ import { mineUrl, openStatusText, quickRequestState, requestHref } from './budge
 // (lib/pageAccess.ts grantRequestNextStep): the quick access request for the
 // Social role the catalog offers, its status once filed, else who to ask.
 // Nothing of the channel is read here; the server still gates every read.
+// It is the pane's empty state (the library's EmptyState, as "Not a member of
+// #channel" beside it), so it takes the pane's padding and its action sits
+// under the text, never against the pane's edge (walk, 10 November, 390px).
 
 export function DiscussionElsewhereNotice({ reason }: { reason: string }) {
   const navigate = useNavigate();
@@ -39,7 +42,13 @@ export function DiscussionElsewhereNotice({ reason }: { reason: string }) {
 
   return (
     <>
-      <AccessNotice tone="info" title="Discussion is in Social" body={next ? `${reason} ${next}.` : reason} action={action} data-testid="initiative-discussion-elsewhere" />
+      <EmptyState
+        title="Discussion is in Social"
+        description={next ? `${reason} ${next}.` : reason}
+        {...(action ? { actions: [{ label: action.label, onClick: action.onClick, variant: 'secondary' as const }] } : {})}
+        testId="initiative-discussion-elsewhere"
+        actionTestId="initiative-discussion-elsewhere-action"
+      />
       {step.kind === 'request' && (
         <QuickAccessForm
           open={formOpen}

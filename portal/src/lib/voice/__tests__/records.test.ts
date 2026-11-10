@@ -253,3 +253,31 @@ test('update: pause a bot, withdraw a request only when it can be, cancel a queu
   const noPublish = await act('update', { ref: 'report:program', fields: { publish: true } }, { tenant: 'assessment', allow: [], routes: [] });
   assert.equal(noPublish.result.outcome, 'refused');
 });
+
+test('labelAtWord: a long consult question is cut at a word, the ellipsis inside the quote (walk, 10 November)', async () => {
+  const { labelAtWord } = await import('../records.ts');
+  const q = 'Which customer tenant goes first after the rehearsals, the smallest or the riskiest? The cutover sequence cannot be written until this is settled.';
+  const cut = labelAtWord(q, 120);
+  assert.ok(cut.length <= 120, cut);
+  assert.ok(cut.endsWith('…'), cut);
+  assert.ok(q.startsWith(cut.slice(0, -1)), cut);
+  // The character after the cut in the source is a space: never mid-word ("writ").
+  assert.equal(q[cut.length - 1], ' ');
+  assert.equal(labelAtWord('Short question?', 120), 'Short question?');
+  assert.equal(labelAtWord('Say "yes" here', 120), "Say 'yes' here");
+  // No space early enough: cut at the bound.
+  assert.equal(labelAtWord('x'.repeat(200), 10), `${'x'.repeat(9)}…`);
+});
+
+test('decide: a card that shows the approve / reject toggle names its button for the side chosen (ui-components 2.517.0)', async () => {
+  const { dockPending } = await import('../../../components/shell/voiceDockModel.ts');
+  const r = await decide({ ref: 'approval:r-ada', decision: 'approve' }, { ...ACCESS, routes: [route('GET', '/api/access/approvals', 200, { items: [ADA] }), route('POST', '/api/access/requests/r-ada/steps/2/decide', 200, { id: 'r-ada' })] });
+  assert.deepEqual(r.card!.card, { confirmLabels: { approve: 'Approve', reject: 'Reject' }, clickOnly: true });
+  // The plan stays data; the dock turns the pair into the library's function of the toggle.
+  const pending = dockPending({ title: r.card!.title, requestId: 1, fields: r.card!.fields!, card: { ...r.card!.card, confirmLabel: 'Approve' } }, { confirm: () => undefined, cancel: () => undefined });
+  const label = pending.confirmLabel as unknown as (d: 'approve' | 'reject') => string;
+  assert.equal(typeof label, 'function');
+  assert.equal(label('approve'), 'Approve');
+  assert.equal(label('reject'), 'Reject');
+  assert.equal('confirmLabels' in pending, false);
+});

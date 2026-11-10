@@ -79,3 +79,13 @@ export function workNoteNotNotified(item: string, label: string, reason: string)
   const why = reason.trim().replace(/[.\s]+$/, '');
   return `Comment saved on ${item}. ${label} was not notified: ${why}.`;
 }
+
+/** The tone of the composer's receipt row (a library Banner): a failure is an error, a note the channel was not told of a warning, a saved note or message a success, the rest information. */
+export type ReceiptTone = 'error' | 'warning' | 'success' | 'info';
+export function receiptTone(state: 'pending' | 'saved' | 'requested' | 'failed' | 'notice', detail?: string): ReceiptTone {
+  if (state === 'failed') return 'error';
+  if (state === 'saved') return 'success';
+  if (state !== 'notice') return 'info';
+  if (/\bwas not notified\b/.test(detail ?? '')) return 'warning';
+  return /^Comment saved on\b/.test(detail ?? '') ? 'success' : 'info';
+}

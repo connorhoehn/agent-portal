@@ -64,6 +64,8 @@ export interface DockPendingView {
     noteLabel?: string;
     noteMaxLength?: number;
     confirmLabel?: string;
+    /** The button's verb per side of the toggle; becomes the library's `confirmLabel` function (2.517.0). */
+    confirmLabels?: { approve: string; reject: string };
     hideDecisionToggle?: boolean;
     clickOnly?: boolean;
   };
@@ -75,6 +77,15 @@ export interface DockPendingView {
  * (ui-components 2.514.1), never folded into the detail lines; decide's `fields` (2.510.5) as they are; the card's
  * own options (2.516.0: the button's verb, a consult's dictated answer in the note field, no toggle, click-only).
  */
+/** The card options as the library takes them: `confirmLabels` becomes a `confirmLabel` that follows the toggle. */
+function cardOptions(card: DockPendingView['card']) {
+  if (!card) return {};
+  const { confirmLabels, ...rest } = card;
+  if (!confirmLabels) return rest;
+  // The per-side labels win over the one the controller copied in for its spoken line (the starting side's).
+  return { ...rest, confirmLabel: (decision: 'approve' | 'reject') => (decision === 'reject' ? confirmLabels.reject : confirmLabels.approve) };
+}
+
 export function dockPending<R>(view: DockPendingView, on: { confirm(result?: R): void; cancel(): void }) {
   return {
     title: view.title,
@@ -82,7 +93,7 @@ export function dockPending<R>(view: DockPendingView, on: { confirm(result?: R):
     ...(view.detail ? { detail: view.detail } : {}),
     ...(view.hint ? { hint: view.hint } : {}),
     ...(view.fields ? { fields: view.fields } : {}),
-    ...view.card,
+    ...cardOptions(view.card),
     onConfirm: (result?: R) => on.confirm(result),
     onCancel: () => on.cancel(),
   };

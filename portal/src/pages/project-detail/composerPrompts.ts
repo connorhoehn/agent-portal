@@ -14,7 +14,7 @@ import type { BriefFacts } from './briefModel.ts';
 import type { FlatWorkItem } from './projectFormat.ts';
 import type { ProjectDetail } from './types';
 import { encodeAskScope, type AskScope } from '../../lib/askScope.ts';
-import { derivedNextStep, type NextStepContext } from '../../lib/workNextStep.ts';
+import { decisionWaitedOn, derivedNextStep, OPEN_DECISION_STATUSES, type NextStepContext } from '../../lib/workNextStep.ts';
 import { fenceField, UNTRUSTED_FRAME } from '../../lib/untrustedText.ts';
 
 // ─── Subjects ────────────────────────────────────────────────────────────────
@@ -130,6 +130,30 @@ export const WORKFLOWS: readonly ComposerWorkflow[] = [
   { id: 'unblock', label: 'Unblock this item', description: 'Work out what the owner needs to start' },
 ];
 
+/**
+ * An item that is not marked blocked but whose derived next step is a decision still open or escalated (its
+ * `blockedByDecisionId`, or a decision that names it): the cutover sibling stories linked to the escalated decision
+ * had "Unblock this item" greyed out while the Brief said the decision comes first (walk, 10 November). Such an item
+ * gets the workflow as "What does this wait on?", built on the same derived step.
+ */
+export function waitsOnPendingDecision(s: ComposerSubject): boolean {
+  if (s.kind !== 'item') return false;
+  const next = derivedNextStep(s.item, s.nextStepContext);
+  if (next?.from !== 'decision') return false;
+  const d = decisionWaitedOn(s.item, s.nextStepContext?.decisions);
+  return !!d && OPEN_DECISION_STATUSES.has(String(d.status));
+}
+
+/** The label and description a workflow shows on this subject (the unblock workflow reads as a question while the item only waits). */
+function workflowFor(w: ComposerWorkflow, s: ComposerSubject): ComposerWorkflow {
+  if (w.id === 'unblock' && s.kind === 'item' && !s.facts.blocked && waitsOnPendingDecision(s)) {
+    return { ...w, label: WAIT_ON_LABEL, description: 'Work out what the pending decision needs before this can start' };
+  }
+  return w;
+}
+
+export const WAIT_ON_LABEL = 'What does this wait on?';
+
 /** Why a workflow cannot run on this subject; null when it can. */
 export function workflowUnavailable(id: WorkflowId, s: ComposerSubject): string | null {
   switch (id) {
@@ -141,13 +165,13 @@ export function workflowUnavailable(id: WorkflowId, s: ComposerSubject): string 
       return s.kind === 'item' ? null : 'Open a work item first';
     case 'unblock':
       if (s.kind !== 'item') return 'Open a work item first';
-      return s.facts.blocked ? null : 'This item is not blocked';
+      return s.facts.blocked || waitsOnPendingDecision(s) ? null : 'This item is not blocked';
   }
 }
 
 /** The Workflow ▾ menu: every workflow, disabled with a reason where it does not apply. */
 export function workflowMenu(s: ComposerSubject): Array<ComposerWorkflow & { disabledReason: string | null }> {
-  return WORKFLOWS.map((w) => ({ ...w, disabledReason: workflowUnavailable(w.id, s) }));
+  return WORKFLOWS.map((w) => ({ ...workflowFor(w, s), disabledReason: workflowUnavailable(w.id, s) }));
 }
 
 /** One row of the Workflow ▾ menu, shaped for the library's DropdownMenuItem
@@ -236,7 +260,9 @@ export function workflowPrompt(id: WorkflowId, s: ComposerSubject): string | nul
     lines.push('Write three to five criteria an engineer or agent could check, each one testable.');
   } else {
     const who = s.facts.assigneeFirstName ?? 'the owner';
-    lines.push(`What does ${who} need before "${fenceField(it.title)}" can start?`);
+    lines.push(s.facts.blocked || !waitsOnPendingDecision(s)
+      ? `What does ${who} need before "${fenceField(it.title)}" can start?`
+      : `What does "${fenceField(it.title)}" wait on, and what would settle it so ${who} can start?`);
     // Row text (the block reason, a decision's topic inside the derived step) is somebody's typing: fenced and
     // capped as the voice's page note fences it (lib/untrustedText.ts), framed as data (sweep 12, L4).
     const fenced: string[] = [];

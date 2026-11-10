@@ -314,10 +314,15 @@ export function AssessorDesk({
             header: 'Questions',
             sortable: true,
             numeric: true,
+            // Flush right like the header and the column's other values: a bare
+            // MetaLine is a flex row, so its "—" sat at the cell's left edge
+            // under a right-aligned header (walk, 10 November).
             render: (t) => (
-              t.followups_open > 0
-                ? <Chip tone="warning" size="xs">{t.followups_open} open</Chip>
-                : <MetaLine size="xs" tone="tertiary" items={['—']} />
+              <Inline justify="end" wrap={false}>
+                {t.followups_open > 0
+                  ? <Chip tone="warning" size="xs">{t.followups_open} open</Chip>
+                  : <MetaLine size="xs" tone="tertiary" items={['—']} />}
+              </Inline>
             ),
           },
           {

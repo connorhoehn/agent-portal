@@ -114,14 +114,18 @@ export default {
         await shot(page, `3-${name}-${w}`);
         await page.getByRole('button', { name: /Workflow/ }).first().click().catch(() => undefined);
         await sleep(400);
-        await page.getByText('Unblock this item', { exact: true }).first().click().catch(() => undefined);
+        // A blocked item offers "Unblock this item"; one that only waits on a pending decision, "What does this wait on?" (walk fixes).
+        await page.getByText(/^(Unblock this item|What does this wait on\?)$/).first().click().catch(() => undefined);
         await sleep(700);
         const prefill = await page.locator('[data-testid=rich-chat-composer] .ProseMirror, [data-testid=initiative-central-composer] .ProseMirror').first().innerText().catch(() => 'NO EDITOR');
         await shot(page, `3-${name}-prefill-${w}`);
         const nextLine = step.replace(/^Next step /, '').replace(/ Open discussion$/, '');
         const planned = (prefill.match(/Planned next step: ([^\n]*)/) ?? [])[1] ?? '';
         const named = step.includes(topic) && prefill.includes(topic.slice(0, 20)) || planned.includes(topic);
-        note(`3 ${name} @${w}`, step.includes(`"${topic}"`) && !/ decides\b/.test(step.split('Blocked on')[0]) && planned.length > 0 && planned.startsWith(nextLine.split('. ')[0].slice(0, 40)), { step, planned, prefill: prefill.replace(/\s+/g, ' ').slice(0, 400) });
+        // The pick writes the /unblock command; the prompt with the derived step is built at Send (3b checks it).
+        // The step names the decision once (walk fixes: the reason no longer repeats the title).
+        const once = step.split(`"${topic}"`).length - 1 === 1;
+        note(`3 ${name} @${w}`, step.includes(`"${topic}"`) && once && !/ decides\b/.test(step.split(' comes first.')[0]) && (planned.length > 0 ? planned.startsWith(nextLine.split('. ')[0].slice(0, 40)) : /^\/unblock\b/.test(prefill.trim())), { step, planned, prefill: prefill.replace(/\s+/g, ' ').slice(0, 400) });
       }
       await ctx.close();
     }

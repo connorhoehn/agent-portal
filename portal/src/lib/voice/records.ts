@@ -249,6 +249,20 @@ const graphProposal: Resolver = async (id, ctx) => {
   };
 };
 
+/**
+ * `safeLabel` held to `max` characters at a word boundary: a longer text ends at its last whole word within the bound
+ * and an ellipsis ("…which tenant goes first…"), never mid-word ("writ") and never with an unclosed quote. A text with
+ * no space in its first 60% is cut at the bound instead. The result, ellipsis included, is at most `max` characters.
+ */
+export function labelAtWord(s: string, max: number): string {
+  const full = safeLabel(s, Number.MAX_SAFE_INTEGER);
+  if (full.length <= max) return full;
+  const room = full.slice(0, Math.max(1, max - 1));
+  const space = room.lastIndexOf(' ');
+  const cut = space >= Math.floor(max * 0.6) ? room.slice(0, space) : room;
+  return `${cut.replace(/[\s,.;:'\u2013\u2014-]+$/, '')}…`;
+}
+
 /** Work: a computer's pending consult (GET /api/lab/consults?status=pending); the answer is the user's note, verbatim on the card. */
 const consult: Resolver = async (id, ctx) => {
   const read = await readJson<{ consults?: Rec[] }>(ctx, `/api/lab/consults?${qs({ status: 'pending' })}`);
@@ -256,8 +270,9 @@ const consult: Resolver = async (id, ctx) => {
   const row = (read.body.consults ?? []).find((r) => r['id'] === id);
   if (!row) return notWaiting('consult');
   return {
-    // Sweep 11 (L5): the agent's question is agent-written text; the card title holds it to the row-title bound.
-    title: `the consult "${safeLabel(str(row['question']) ?? id, MAX_FIELD_CHARS)}"`,
+    // Sweep 11 (L5): the agent's question is agent-written text; the card title holds it to the row-title bound,
+    // cut at a word with the ellipsis inside the closing quote (the card wraps and clamps what is left).
+    title: `the consult "${labelAtWord(str(row['question']) ?? id, MAX_FIELD_CHARS)}"`,
     detail: [],
     href: '/iq/work',
     sends: { approve: { said: 'Answered', word: 'Answer', needsNote: 'Say the answer as the note.', send: (note) => ({ method: 'POST', url: `/api/lab/consults/${enc(id)}/answer`, body: { answer: note } }) } },
@@ -424,7 +439,10 @@ const planDecide: VoiceToolPlanner = async (args, ctx) => {
       card: { noteDefault: note, noteLabel: ANSWER_LABEL, noteMaxLength: ANSWER_MAX, confirmLabel: 'Send', hideDecisionToggle: true, clickOnly: true },
       // A button named for one way (Resolve / Reject) never sits beside a toggle that could send the other: the
       // toggle is hidden and the note stays; to go the other way the user cancels and says it.
-    } : chosen.word ? { card: { confirmLabel: chosen.word, ...(both ? { hideDecisionToggle: true } : {}) } } : {}),
+    } : chosen.word ? { card: { confirmLabel: chosen.word, ...(both ? { hideDecisionToggle: true } : {}) } }
+      // The toggle shows (both ways open, no one-way word): the button follows it, Approve or Reject (2.517.0).
+      // Click-only like every decide (M2), so the hint is the library's "Check it, then click <label>", following it too.
+      : both ? { card: { confirmLabels: { approve: row.sends.approve!.word ?? VERB_WORD.approve, reject: row.sends.reject!.word ?? VERB_WORD.reject }, clickOnly: true } } : {}),
     // Both ways open: the library's toggle and note, starting where the user said; Confirm answers { decision, note }.
     ...(both ? { fields: { decision: verb === 'reject' ? 'reject' : 'approve', notePlaceholder: option ? 'Why (optional)' : row.notePlaceholder ?? (row.sends.reject?.needsNote ? 'Reason (needed to reject)' : 'Note (optional)') } } : {}),
     data: plan,

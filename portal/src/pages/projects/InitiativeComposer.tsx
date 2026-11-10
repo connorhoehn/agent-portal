@@ -22,7 +22,7 @@ import { useLocation, useNavigate } from 'react-router';
 import type { ComposerPrompt, ConversationCommand, ConversationOutgoing, ConversationRecipient, RichChatComposerHandle } from '@connorhoehn/ui-components/social/rich-composer';
 import { ComposerSendError, composerDraftOf } from '@connorhoehn/ui-components/social/rich-composer';
 import { useGatewayOptional } from '@connorhoehn/realtime-modules/client';
-import { Button, Inline, Select, Stack, T, useDensity } from '@connorhoehn/ui-components/shared';
+import { Banner, Button, Inline, Select, Stack, T, useDensity } from '@connorhoehn/ui-components/shared';
 import { useSidePane } from '@connorhoehn/ui-components';
 import { useHuddleChat } from '../../components/shell/HuddleChat';
 import { useEmbeddedSocial } from '../../components/shell/EmbeddedSocial';
@@ -37,7 +37,7 @@ import {
 import { buildTenantDeckFromText, deckCommandSpec } from '../../components/chat/tenantDeckCompose';
 import { useCapabilities } from '../../lib/capabilities';
 import { postInitiativeComment } from './initiativeComment';
-import { workNoteNotNotified, workNoteReferenceMetadata, workNoteReferenceText } from './initiativeConversationModel';
+import { receiptTone, workNoteNotNotified, workNoteReferenceMetadata, workNoteReferenceText } from './initiativeConversationModel';
 import { initiativeAgentRequest, type InitiativeAgentRequest } from './initiativeAgentRequest';
 import { useSession } from '../../lib/auth';
 import { useCallHost } from '../../lib/conversationCall';
@@ -378,11 +378,16 @@ function DockedComposer({
       onModeChange={value => { if (value === 'agent' || value === 'chat') setMode(value); }}
       modeRowEnd={mode === 'chat' && currentHuddle && !huddleDraftSelected ? <Button variant="secondary" size="sm" className="text-xs shrink-0" onClick={() => { selectRecipient(currentHuddle); setMode('chat'); }}>Huddle chat</Button> : undefined}
       above={((receipt?.scope === scopeKey) || retiredDrafts.length > 0 || (mode === 'chat' && (mentionedPeople.length > 0 || selectedRecipient?.id.startsWith('person:')))) ? <Stack gap="xs">
-        {receipt?.scope === scopeKey && <Inline gap="xs" align="center" wrap className="text-xs" data-testid="initiative-chat-receipt" role="status">
-          <T size="xs" tone="secondary" wrap>{receipt.state === 'saved' ? `Message saved to ${receipt.destination}.` : receipt.state === 'requested' ? invitationFeedback ?? `Invitation requested for ${receipt.detail} · ${receipt.destination}.` : receipt.state === 'pending' ? `Confirming message in ${receipt.destination}…` : receipt.detail}</T>
-          {receipt.open && <Button variant="link" size="sm" className="!text-xs !min-h-0 !h-auto !py-0" onClick={receipt.open}>Open conversation</Button>}
-          {receipt.state !== 'pending' && <Button variant="ghost" size="sm" className="!text-xs !min-h-0 !h-auto !py-0" onClick={() => setReceipt(null)}>Dismiss</Button>}
-        </Inline>}
+        {/* The composer's notice treatment (the library's Banner, as its offline row): a bordered row on the
+            composer's edges, the message, Open conversation as its action and the quiet × to dismiss (walk, 10 November:
+            a bare text strip 4px off the composer with a bold "Dismiss"). */}
+        {receipt?.scope === scopeKey && <Banner
+          variant={receiptTone(receipt.state, receipt.detail)}
+          {...(receipt.open ? { action: <Button variant="link" size="sm" onClick={receipt.open}>Open conversation</Button> } : {})}
+          {...(receipt.state !== 'pending' ? { onDismiss: () => setReceipt(null) } : {})}
+          data-testid="initiative-chat-receipt">
+          {receipt.state === 'saved' ? `Message saved to ${receipt.destination}.` : receipt.state === 'requested' ? invitationFeedback ?? `Invitation requested for ${receipt.detail} · ${receipt.destination}.` : receipt.state === 'pending' ? `Confirming message in ${receipt.destination}…` : receipt.detail}
+        </Banner>}
         {visibleRetiredDraft && <Inline gap="xs" wrap data-testid="initiative-retired-huddle-draft">
           <T size="xs" tone="secondary" wrap>{retiredDrafts.length > 1 ? `${retiredDrafts.length} unsent huddle drafts` : `Unsent draft · ${visibleRetiredDraft.title || 'Previous huddle'}`}</T>
           {retiredDrafts.length > 1 && <Select aria-label="Retained huddle draft" size="sm" value={visibleRetiredDraft.scope.callId} className="max-w-64 text-xs"
