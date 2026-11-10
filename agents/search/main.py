@@ -15,6 +15,7 @@ from strands.models.bedrock import BedrockModel
 # Shared instrumentation — pull TraceContext + decorator from agents/_shared.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.model_registry import RegistryAgent, invoke_with_fallback, resolve_model
+from _shared.untrusted_text import fence_results, with_data_rule  # noqa: E402
 from _shared.agui_stream import stream_agui, wants_stream  # noqa: E402
 from _shared.sql_guard import read_only_error  # noqa: E402
 from _shared.result_size_guard import result_size_error  # noqa: E402
@@ -131,7 +132,8 @@ def query_knowledge_base(query: str, max_results: int = 5) -> str:
         ]
         results = _filter_for_tenant(results, _caller_tenant.get())
         record_retrieval_documents(r_span, results)
-        return json.dumps(results, ensure_ascii=False)
+        # Retrieved text is untrusted: each passage fenced as data (_shared/untrusted_text.py).
+        return json.dumps(fence_results(results), ensure_ascii=False)
 
 
 @tool
@@ -319,7 +321,7 @@ _agent = RegistryAgent(
     build=lambda system_prompt, model_id: Agent(
         model=BedrockModel(**_model_kwargs(model_id)),
         tools=[query_knowledge_base, query_graph],
-        system_prompt=system_prompt,
+        system_prompt=with_data_rule(system_prompt),
     ),
 )
 

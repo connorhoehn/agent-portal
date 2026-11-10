@@ -29,6 +29,8 @@ from agui_harness import (  # noqa: E402
 )
 
 from botocore.exceptions import ClientError  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from _shared.untrusted_text import with_data_rule  # noqa: E402  (the agents append the data rule)
 
 
 def guardrail_of(agent) -> str:
@@ -219,7 +221,7 @@ class PromptResolutionTests(SupervisorTestCase):
         patcher, _ = self._with_library(LIVE_PROMPT)
         with patcher:
             agent, _, _ = self.prewarm()
-        self.assertEqual(agent.system_prompt, LIVE_PROMPT)
+        self.assertEqual(agent.system_prompt, with_data_rule(LIVE_PROMPT))
 
     def test_the_sha_recorded_is_the_prompt_that_actually_served(self):
         patcher, _ = self._with_library(LIVE_PROMPT)
@@ -254,7 +256,7 @@ class PromptResolutionTests(SupervisorTestCase):
         self.assertEqual(result["agent"], "supervisor")
         self.assertEqual(
             self.sup._AGENTS_BY_KEY[("orgiq", "member")].system_prompt,
-            self.sup.SYSTEM_PROMPT,
+            with_data_rule(self.sup.SYSTEM_PROMPT),
         )
 
     def test_the_fallback_records_the_baked_sha_not_a_stale_live_one(self):
@@ -273,7 +275,7 @@ class PromptResolutionTests(SupervisorTestCase):
             second, second_ui, second_sha = self.prewarm()
 
         self.assertIsNot(first, second)
-        self.assertEqual(second.system_prompt, NEWER_PROMPT)
+        self.assertEqual(second.system_prompt, with_data_rule(NEWER_PROMPT))
         self.assertNotEqual(first_sha, second_sha)
 
     def test_a_prompt_edit_also_rebuilds_the_ag_ui_adapter(self):
@@ -288,7 +290,7 @@ class PromptResolutionTests(SupervisorTestCase):
 
         self.assertIsNot(first_ui, second_ui)
         self.assertIs(second_ui.agent, second_agent)
-        self.assertEqual(second_ui.agent.system_prompt, NEWER_PROMPT)
+        self.assertEqual(second_ui.agent.system_prompt, with_data_rule(NEWER_PROMPT))
 
     def test_an_unchanged_prompt_does_not_rebuild(self):
         patcher, _ = self._with_library(LIVE_PROMPT)
@@ -312,14 +314,14 @@ class PromptResolutionTests(SupervisorTestCase):
 
         self.assertEqual(guardrail_of(member), "gr-member")
         self.assertEqual(guardrail_of(hr), "gr-hradmin")
-        self.assertEqual(member.system_prompt, NEWER_PROMPT)
+        self.assertEqual(member.system_prompt, with_data_rule(NEWER_PROMPT))
 
     def test_the_kill_switch_pins_the_literal_without_calling_bedrock(self):
         self.ps.DISABLED = True
         patcher, client = self._with_library(LIVE_PROMPT)
         with patcher:
             agent, _, sha = self.prewarm()
-        self.assertEqual(agent.system_prompt, self.sup.SYSTEM_PROMPT)
+        self.assertEqual(agent.system_prompt, with_data_rule(self.sup.SYSTEM_PROMPT))
         self.assertEqual(sha, self.sup._BAKED_PROMPT_SHA)
         client.get_paginator.assert_not_called()
 

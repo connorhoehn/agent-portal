@@ -280,7 +280,10 @@ class ScorerEntrypoint(_EntrypointBase):
             "relevant_dimension_ids": ["1", "2"],
             "evidence": [{"id": "e1", "source_type": "document", "text": "We run CI."}],
         })
-        sent = json.loads(self.agent.calls[0][0])
+        from _shared.untrusted_text import unwrap
+
+        # The input reaches the model as one fenced data block.
+        sent = json.loads(unwrap(self.agent.calls[0][0]))
         self.assertEqual(sent["team_id"], "TEAM-002")
         self.assertEqual(sent["relevant_dimension_ids"], ["1", "2"])
         self.assertEqual(sent["evidence"][0]["id"], "e1")

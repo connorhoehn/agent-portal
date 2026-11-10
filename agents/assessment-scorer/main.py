@@ -15,6 +15,7 @@ from strands.models.bedrock import BedrockModel
 # the same way every other agent does.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.model_registry import RegistryAgent, invoke_with_fallback, resolve_model  # noqa: E402
+from _shared.untrusted_text import Fence, with_data_rule  # noqa: E402
 from _shared.agui_stream import stream_agui, wants_stream  # noqa: E402
 from _shared.tenant_guard import reject_wrong_tenant  # noqa: E402
 from _shared.invoke_auth import request_fields  # noqa: E402
@@ -62,6 +63,8 @@ MODEL_ID = resolve_model(MODEL_ROLE, **_MODEL_DEFAULTS).model_id
 # session that reached it directly (bypassing the middleware gate, or a
 # future caller that forgets to add one).
 EXPECTED_TENANT = "assessment"
+#: Bound on the fenced input JSON (the middleware caps the body near 64 KB).
+MAX_INPUT_CHARS = 80_000
 
 
 @tool
@@ -269,7 +272,7 @@ _agent = RegistryAgent(
     build=lambda system_prompt, model_id: Agent(
         model=BedrockModel(**_model_kwargs(model_id)),
         tools=[classify_evidence, score_dimension],
-        system_prompt=system_prompt,
+        system_prompt=with_data_rule(system_prompt),
     ),
 )
 
@@ -299,7 +302,9 @@ async def handle(payload: dict) -> AsyncIterator | dict:
     # Built before the trace context on purpose: the streaming branch below
     # returns a generator that establishes its OWN context, so setting one here
     # first would leak a context this call never resets.
-    input_text = json.dumps(
+    # The evidence is untrusted text (transcripts, uploads): the whole input
+    # JSON goes in as one fenced data block (_shared/untrusted_text.py).
+    input_text = Fence().wrap(json.dumps(
         {
             "team_id": team_id,
             "mode": mode,
@@ -309,7 +314,7 @@ async def handle(payload: dict) -> AsyncIterator | dict:
         },
         ensure_ascii=False,
         default=str,
-    )
+    ), kind="input-json", max_chars=MAX_INPUT_CHARS)
 
     # Genuine AG-UI streaming when the caller asked for it. Nothing
     # post-processes this agent's output, so its tokens can go out as they

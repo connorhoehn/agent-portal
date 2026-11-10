@@ -311,8 +311,10 @@ class ReadDocumentTests(unittest.TestCase):
             "ContentType": "text/plain", "ContentLength": 999_999,
             "Body": mock.Mock(read=lambda: b"a" * 200_000),
         }
+        from _shared.untrusted_text import unwrap
+
         out = json.loads(ing.read_document("uploads/notes.txt"))
-        self.assertEqual(len(out["content"]), 51200)
+        self.assertEqual(len(unwrap(out["content"])), 51200)
 
     def test_undecodable_bytes_do_not_raise(self):
         self.s3.get_object.return_value = {

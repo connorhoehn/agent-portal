@@ -18,6 +18,7 @@ from _shared.approval_tool import request_approval  # noqa: E402
 from _shared.invoke_auth import request_fields, verified_identity  # noqa: E402
 from _shared.kb_resolver import resolve_kb_id_by_slug as _resolve_kb_id_by_slug  # noqa: E402
 from _shared.model_registry import RegistryAgent, invoke_with_fallback, resolve_model
+from _shared.untrusted_text import Fence, with_data_rule  # noqa: E402
 from _shared.agui_stream import stream_agui, wants_stream  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
     attach_usage,
@@ -242,7 +243,9 @@ def read_document(key: str) -> str:
 
     raw = response["Body"].read()
     text = raw[:51200].decode("utf-8", errors="replace")  # 50KB cap
-    return json.dumps({"key": key, "content_type": content_type, "content": text})
+    # Uploaded text is untrusted: fenced as data (_shared/untrusted_text.py).
+    content = Fence().wrap(text, source=key, max_chars=51200)
+    return json.dumps({"key": key, "content_type": content_type, "content": content})
 
 
 @tool
@@ -367,10 +370,10 @@ def extract_entities_preview(text: str) -> str:
     Returns:
         JSON with extracted {people, teams, skills, decisions, projects}
     """
-    prompt = f"""Extract organizational entities from this text. Return ONLY valid JSON.
+    fenced = Fence().wrap(text, max_chars=10000)
+    prompt = f"""Extract organizational entities from the text below. Return ONLY valid JSON.
 
-Text:
-{text[:10000]}
+{fenced}
 
 Return JSON with these keys:
 - people: list of {{name, role, team}} objects
@@ -384,6 +387,7 @@ JSON:"""
     response, _served = invoke_with_fallback(
         lambda model_id: _bedrock_runtime.converse(
             modelId=model_id,
+            system=[{"text": with_data_rule("You extract organizational entities from text into JSON.")}],
             messages=[{"role": "user", "content": [{"text": prompt}]}],
             inferenceConfig={"maxTokens": 1024},
         ),
@@ -444,7 +448,7 @@ _agent = RegistryAgent(
     build=lambda system_prompt, model_id: Agent(
         model=BedrockModel(**_model_kwargs(model_id)),
         tools=[list_documents, read_document, sync_knowledge_base, check_ingestion_status, extract_entities_preview, request_approval],
-        system_prompt=system_prompt,
+        system_prompt=with_data_rule(system_prompt),
     ),
 )
 

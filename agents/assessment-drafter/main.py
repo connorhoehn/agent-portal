@@ -21,6 +21,7 @@ from strands.models.bedrock import BedrockModel
 # the same way every other agent does.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.model_registry import RegistryAgent, invoke_with_fallback, resolve_model  # noqa: E402
+from _shared.untrusted_text import Fence, with_data_rule  # noqa: E402
 from _shared.agui_stream import (  # noqa: E402
     agui_events_for_text,
     run_error_event,
@@ -266,7 +267,7 @@ _agent = RegistryAgent(
     build=lambda system_prompt, model_id: Agent(
         model=BedrockModel(**_model_kwargs(model_id)),
         tools=[check_story_draft, validate_facts],
-        system_prompt=system_prompt,
+        system_prompt=with_data_rule(system_prompt),
     ),
 )
 
@@ -350,6 +351,18 @@ async def _stream_result(result: dict) -> AsyncIterator:
         yield event
 
 
+#: The input JSON carries uploaded documents and evidence text; the middleware
+#: caps it near 64 KB, so this bound only matters for a direct invoke.
+MAX_INPUT_CHARS = 80_000
+
+
+def _fenced_input(fields: dict) -> str:
+    """The run's input JSON (documents, evidence, team context: untrusted
+    text) as one fenced data block (_shared/untrusted_text.py)."""
+    return Fence().wrap(json.dumps(fields, ensure_ascii=False, default=str), kind="input-json",
+                        max_chars=MAX_INPUT_CHARS)
+
+
 async def _handle_sync(payload: dict) -> dict:
     if not isinstance(payload, dict):
         payload = {}
@@ -376,7 +389,7 @@ async def _handle_sync(payload: dict) -> dict:
     token = _current_ctx.set(ctx)
     shared_token = set_active_ctx(ctx)
 
-    input_text = (DOCUMENT_PROMPT + "\n" if mode in DOCUMENT_MODES else DECK_PROMPT + "\n" if mode in DECK_MODES else EVIDENCE_PROMPT + "\n" if mode in EVIDENCE_MODES else AGENT_PLAN_PROMPT + "\n" if mode in AGENT_PLAN_MODES else DECK_NARRATIVE_PROMPT + "\n" if mode in DECK_NARRATIVE_MODES else "") + json.dumps(fields, ensure_ascii=False, default=str)
+    input_text = (DOCUMENT_PROMPT + "\n" if mode in DOCUMENT_MODES else DECK_PROMPT + "\n" if mode in DECK_MODES else EVIDENCE_PROMPT + "\n" if mode in EVIDENCE_MODES else AGENT_PLAN_PROMPT + "\n" if mode in AGENT_PLAN_MODES else DECK_NARRATIVE_PROMPT + "\n" if mode in DECK_NARRATIVE_MODES else "") + _fenced_input(fields)
 
     log.info(
         "AssessmentDrafter handling (invocation=%s, parent=%s, team=%s, mode=%s)",

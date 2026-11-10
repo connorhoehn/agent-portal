@@ -16,6 +16,7 @@ from strands.models.bedrock import BedrockModel
 # Shared instrumentation — pull TraceContext + decorator from agents/_shared.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.model_registry import RegistryAgent, invoke_with_fallback, resolve_model
+from _shared.untrusted_text import Fence, with_data_rule  # noqa: E402
 from _shared.agui_stream import stream_agui, wants_stream  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
     attach_usage,
@@ -331,11 +332,14 @@ def extract_and_build(document_text: str, source_key: str = "") -> str:
         document_text: Raw text (max 20,000 chars)
         source_key: S3 key for provenance (optional)
     """
-    prompt = f"""Extract entities from this organizational document for an org-knowledge graph.
+    # The document is untrusted: fenced with a random per-call delimiter,
+    # tag look-alikes inside it defused, cut to 20,000 characters, and the
+    # system prompt says the fenced block is data (_shared/untrusted_text.py).
+    fenced = Fence().wrap(document_text, source=source_key or "unknown", max_chars=20_000)
+    prompt = f"""Extract entities from the organizational document below for an org-knowledge graph.
 Return ONLY valid JSON — no explanation, no markdown.
 
-Document (source: {source_key or 'unknown'}):
-{document_text[:20000]}
+{fenced}
 
 JSON schema:
 {{
@@ -358,6 +362,7 @@ JSON:"""
     resp, _served = invoke_with_fallback(
         lambda model_id: _bedrock_runtime.converse(
             modelId=model_id,
+            system=[{"text": with_data_rule("You extract entities from organizational documents into JSON.")}],
             messages=[{"role": "user", "content": [{"text": prompt}]}],
             inferenceConfig={"maxTokens": 2048},
         ),
@@ -576,7 +581,7 @@ _agent = RegistryAgent(
             merge_relationship, embed_and_store, extract_and_build,
             run_in_sandbox,
         ],
-        system_prompt=system_prompt,
+        system_prompt=with_data_rule(system_prompt),
     ),
 )
 

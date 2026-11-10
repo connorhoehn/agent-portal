@@ -22,6 +22,7 @@ from _shared.approval_tool import request_approval  # noqa: E402
 from _shared.prompt_source import resolve_system_prompt
 from _shared.invoke_auth import sign_identity, verified_identity  # noqa: E402
 from _shared.model_registry import invoke_with_fallback, resolve_model  # noqa: E402
+from _shared.untrusted_text import Fence, with_data_rule  # noqa: E402
 from _shared.agui_stream import with_usage  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
     attach_usage,
@@ -90,6 +91,8 @@ REGION = os.environ.get("AWS_REGION", "us-east-1")
 # what users were served; Lite is now the registry's capacity fallback.
 # MODEL_ID is the import-time view; each invocation re-resolves (60 s cache).
 MODEL_ROLE = "supervisor"
+#: Bound on one sub-agent answer handed to this model.
+SUB_AGENT_MAX_CHARS = 40_000
 _MODEL_DEFAULTS = {"default_model_id": "amazon.nova-pro-v1:0", "default_temperature": 0.0, "default_max_tokens": 4096}
 MODEL_ID = resolve_model(MODEL_ROLE, **_MODEL_DEFAULTS).model_id
 PREFIX = os.environ.get("PROJECT_PREFIX", "orgiq")
@@ -200,11 +203,15 @@ def _invoke_sub_agent(runtime_arn: str, input_text: str) -> str:
 
     log.info("Sub-agent response %s", text_fingerprint(str(body)))
 
+    # A sub-agent's answer quotes retrieved documents: it reaches this model as
+    # a fenced data block, never as instructions (_shared/untrusted_text.py).
     try:
         parsed = json.loads(body)
-        return parsed.get("response", body)
+        text = parsed.get("response", body) if isinstance(parsed, dict) else body
     except json.JSONDecodeError:
-        return body
+        text = body
+    return Fence().wrap(text if isinstance(text, str) else json.dumps(text, default=str),
+                        kind="agent-answer", max_chars=SUB_AGENT_MAX_CHARS)
 
 
 @tool
@@ -436,7 +443,7 @@ def _build_agent(guardrail_id: str, system_prompt: str, model_id: str | None = N
     return Agent(
         model=BedrockModel(**_model_kwargs(guardrail_id, model_id)),
         tools=SUPERVISOR_TOOLS,
-        system_prompt=system_prompt,
+        system_prompt=with_data_rule(system_prompt),
     )
 
 
