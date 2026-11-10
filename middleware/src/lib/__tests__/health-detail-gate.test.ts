@@ -43,6 +43,34 @@ describe('health detail gate', () => {
     }
   });
 
+  it('a remote caller relayed by a proxy on this host gets the verdict only (the portal dev server, a sidecar)', () => {
+    // The portal's dev server listens on every interface and proxies /api from
+    // loopback, recording the real client (xfwd).
+    for (const headers of [
+      { 'x-forwarded-for': '::ffff:192.168.1.20' },
+      { 'x-forwarded-for': '127.0.0.1, 192.168.1.20' },   // a forged loopback entry, then the hop's real one
+      { 'x-real-ip': '10.0.0.9' },
+      { forwarded: 'for="[2001:db8::7]";proto=http' },
+      { forwarded: 'for=unknown' },
+      { via: '1.1 sidecar' },                            // relayed, but no address recorded
+    ]) {
+      const out = call({ socket: { remoteAddress: '127.0.0.1' }, headers } as unknown as Partial<Request>);
+      expect([JSON.stringify(headers), out.body]).toEqual([JSON.stringify(headers), { status: 'degraded', service: 'orgiq-middleware' }]);
+    }
+  });
+
+  it('a local browser through the dev-server proxy still gets the diagnostics', () => {
+    for (const headers of [{ 'x-forwarded-for': '::1' }, { 'x-forwarded-for': '127.0.0.1' }, { forwarded: 'for=127.0.0.1' }]) {
+      expect(healthDetailAllowed({ socket: { remoteAddress: '::ffff:127.0.0.1' }, headers } as unknown as Request)).toBe(true);
+    }
+  });
+
+  it('neither a forwarding header nor the Host header makes a remote socket loopback', () => {
+    for (const headers of [{ 'x-forwarded-for': '127.0.0.1' }, { host: 'localhost:3001' }, { forwarded: 'for=127.0.0.1', host: '127.0.0.1' }]) {
+      expect(healthDetailAllowed({ socket: { remoteAddress: '10.0.0.4' }, headers } as unknown as Request)).toBe(false);
+    }
+  });
+
   it('a signed-in session gets the diagnostics (the portal shell reads them)', () => {
     const out = call(remote({ session: { sub: 'u-1' } } as never));
     expect(out.body).toHaveProperty('mocks');

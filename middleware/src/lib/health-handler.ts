@@ -63,11 +63,50 @@ export function createHealthHandler(options: {
   };
 }
 
-const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+/** 127.0.0.0/8, ::1, or either written as an IPv4-mapped IPv6 address. */
+function isLoopbackAddress(raw: string): boolean {
+  let a = raw.trim().toLowerCase();
+  if (a.startsWith('[')) a = a.slice(1, a.indexOf(']') > 0 ? a.indexOf(']') : undefined);
+  else if (/^\d+\.\d+\.\d+\.\d+:\d+$/.test(a)) a = a.slice(0, a.lastIndexOf(':'));
+  if (a.startsWith('::ffff:')) a = a.slice('::ffff:'.length);
+  if (a === '::1' || a === '0:0:0:0:0:0:0:1') return true;
+  return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(a);
+}
 
-/** The socket peer is this host (never a forwarding header). */
+/** Every client address a forwarding hop recorded (X-Forwarded-For, Forwarded `for=`, X-Real-IP). */
+function forwardedClients(req: Request): string[] | null {
+  const headers = (req.headers ?? {}) as Record<string, string | string[] | undefined>;
+  const values = (name: string): string[] => {
+    const v = headers[name];
+    return v === undefined ? [] : (Array.isArray(v) ? v : [v]);
+  };
+  const out: string[] = [];
+  for (const v of values('x-forwarded-for')) out.push(...v.split(','));
+  for (const v of values('x-real-ip')) out.push(v);
+  for (const v of values('forwarded')) {
+    for (const part of v.split(/[,;]/)) {
+      const m = /^\s*for\s*=\s*"?([^";]*)"?\s*$/i.exec(part);
+      if (m) out.push(m[1]!);
+    }
+  }
+  const proxied = out.length > 0 || values('via').length > 0 || values('forwarded').length > 0;
+  return proxied ? out.map((s) => s.trim()) : null;
+}
+
+/**
+ * The caller is this host. The socket peer must be loopback, and when a proxy
+ * on this host relayed the request (the portal's dev server proxies /api from
+ * an address the whole network can reach, and a local sidecar or load
+ * balancer would too), every client address it recorded must be loopback as
+ * well. A forwarding header can only take loopback away, never grant it: a
+ * remote socket is never loopback, whatever its headers say, and the Host
+ * header is not read at all.
+ */
 export function isLoopbackRequest(req: Request): boolean {
-  return LOOPBACK.has(req.socket?.remoteAddress ?? '');
+  if (!isLoopbackAddress(req.socket?.remoteAddress ?? '')) return false;
+  const clients = forwardedClients(req);
+  if (clients === null) return true;
+  return clients.length > 0 && clients.every(isLoopbackAddress);
 }
 
 /** Health diagnostics: a loopback caller, or a signed-in session. */

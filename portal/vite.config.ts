@@ -114,6 +114,11 @@ export default defineConfig(async () => ({
       '/api': {
         target: await apiTarget(),
         changeOrigin: true,
+        // Record the real client in X-Forwarded-For. This server listens on
+        // every interface and reaches the middleware from loopback, so without
+        // it a request from anywhere on the network would look local to the
+        // middleware's loopback-only /health diagnostics (lib/health-handler.ts).
+        xfwd: true,
         // SSE: do not buffer, and do not let the proxy negotiate a compressed
         // upstream response. EventSource fires `onopen` on the response head,
         // so a proxy that holds the head back leaves every live surface in the
