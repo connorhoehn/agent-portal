@@ -57,7 +57,7 @@ import type { Notification } from '@connorhoehn/realtime-modules/client';
 import { QUEUE_WORK_ACTIONS, type QueueWorkKind } from './catalogue.ts';
 import { DEFAULT_DEVBOX_MODEL, DEVBOX_MODELS } from '../devboxModels.ts';
 import {
-  ambiguous, done, failed, findByName, localHref, nearMatches, once, pageRowAt, pageRowNamed, qs, readFailure, readJson, refused,
+  channelTag, ambiguous, done, failed, findByName, localHref, nearMatches, once, pageRowAt, pageRowNamed, qs, readFailure, readJson, refused,
   type ConfirmPlan, type JobFollow, type JobTracking, type QueuedJob, type ToolContext, type ToolResult, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 import type { PageRow } from './pageContext.ts';
@@ -223,7 +223,7 @@ async function conversationOf(ctx: ToolContext, target: string): Promise<{ chann
     if (!read.ok) { if (read.status === 404) continue; return { result: readFailure(`the ${kind}`, read.status) }; }
     if (!read.body.match) return { result: ambiguous(`Several ${kind}s match "${target}". Ask which one.`, read.body.candidates.map((c) => ({ name: c.name }))) };
     const m = read.body.match;
-    return { channel: m.channel, name: kind === 'team' ? `the ${m.name} team` : `#${m.name}`, href: kind === 'channel' ? `/social/channels/${enc(m.id)}` : '/social/teams' };
+    return { channel: m.channel, name: kind === 'team' ? `the ${m.name} team` : channelTag(m.id), href: kind === 'channel' ? `/social/channels/${enc(m.id)}` : '/social/teams' };
   }
   return { result: refused(`There is no channel or team called "${target}" you can read.`) };
 }

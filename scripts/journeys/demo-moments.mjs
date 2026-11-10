@@ -431,7 +431,7 @@ const M4 = {
       ]);
       await page.getByTestId('voice-confirm-card').waitFor({ timeout: 15000 });
       const out = await nthOutput(page, 1, 20000);
-      const say = terseSay(out, 'message', 'Posted to #Auth migration.');
+      const say = terseSay(out, 'message', 'Posted to #auth-migration.');
       await stopVoice(page);
       return { say: [say] };
     });

@@ -389,6 +389,19 @@ function result(outcome: ToolOutcome, kind: string, body: Record<string, unknown
   return { outcome, output: shapeOutput({ kind, note: DATA_NOTE, ...body }) as Record<string, unknown>, summary: cap(summary) };
 }
 export const done = (kind: string, body: Record<string, unknown>, summary: string) => result('done', kind, body, summary);
+
+/**
+ * A channel as the voice names it: `#` and its slug, the way the page shows it
+ * ("#auth-migration"), never its display name ("#Auth migration"). A slug
+ * passes through; a name is slugged the way the server slugs a new channel
+ * (middleware lib/social-chat.ts slugify), so a card for a channel not yet
+ * resolved names it as the page will.
+ */
+export function channelTag(slugOrName: string): string {
+  const slug = slugOrName.replace(/^#/, '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '');
+  return `#${slug || slugOrName.replace(/^#/, '')}`;
+}
 export const refused = (reason: string, body: Record<string, unknown> = {}): ToolResult => result('refused', 'refused', { reason, ...body }, reason);
 export const failed = (reason: string, body: Record<string, unknown> = {}): ToolResult => result('failed', 'failed', { reason, ...body }, reason);
 /** A refusal the model should turn into a question: several things match the name. */

@@ -134,7 +134,7 @@
 import { VoiceClient, type ClientEvent, type CloseCause, type CloseWhy, type MediaFactory, type StopReason, type TransportCause, type VoiceFrame, type VoiceMint } from './client.ts';
 import { MIC_QUIET_MS, SPEAKING_LEVEL, initialMachine, phaseAt, reduce, sessionOpen, type MachineEvent, type MachineState, type VoicePhase } from './machine.ts';
 import {
-  cancelledResult, confirmLine, confirmModeOf, hashToolArgs, localHref, needsConfirm, type CardAnswer, openableHref, planPreparedCall, prepareToolCall, refused, runPreparedCall, spokenOrdinal, toolAvailable,
+  channelTag, cancelledResult, confirmLine, confirmModeOf, hashToolArgs, localHref, needsConfirm, type CardAnswer, openableHref, planPreparedCall, prepareToolCall, refused, runPreparedCall, spokenOrdinal, toolAvailable,
   type ConfirmPlan, type PreparedCall, type ToolContext, type ToolResult, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 import { VOICE_PLANNERS, VOICE_RUNNERS } from './actions.ts';
@@ -398,7 +398,7 @@ export function defaultConfirmText(call: PreparedCall): { title: string; detail?
   const a = call.args;
   if (call.spec.name === 'message') {
     const target = (a['target'] ?? {}) as Record<string, unknown>;
-    const where = target['kind'] === 'dm' ? String(target['name']) : `#${String(target['name'])}`;
+    const where = target['kind'] === 'dm' ? String(target['name']) : channelTag(String(target['name']));
     return { title: `Post to ${where}`, detail: String(a['text'] ?? '') };
   }
   if (call.spec.name === 'computer' && a['action'] === 'start') {

@@ -72,7 +72,7 @@
 
 import type { RunCommandPhrase } from './catalogue.ts';
 import {
-  ambiguous, computersOf, done, failed, once, qs, readFailure, readJson, refused, socialGrantRefusal, TOOL_RUNNERS,
+  channelTag, ambiguous, computersOf, done, failed, once, qs, readFailure, readJson, refused, socialGrantRefusal, TOOL_RUNNERS,
   type CallAccess, type ConfirmPlan, type DeliveryRecord, type PresenceWriter, type ProjectRow, type ToolContext, type ToolResult,
   type VoiceComputer, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
@@ -641,7 +641,8 @@ export function deliveryFor(book: Map<string, DeliveryRecord>, channel: string, 
   return fresh;
 }
 
-const where = (kind: PostPlan['kind'], name: string) => (kind === 'person' || kind === 'thread' ? name : kind === 'team' ? `the ${name} team` : `#${name}`);
+// A channel's `name` here is its slug (the resolver's `id`): the voice says "#auth-migration", as the page shows it.
+const where = (kind: PostPlan['kind'], name: string) => (kind === 'person' || kind === 'thread' ? name : kind === 'team' ? `the ${name} team` : channelTag(name));
 
 type Match = NonNullable<ResolveBody['match']>;
 type Target = { kind: 'team' | 'channel' | 'dm'; name: string };
@@ -737,19 +738,21 @@ const planSendChat: VoiceToolPlanner = async (args, ctx) => {
   const { kind, match } = resolved;
   // G46: a channel the caller never joined refuses the socket's join (`not-a-member`), so the post could only fail.
   if (kind === 'channel' && match.joined === false) {
-    return { result: refused(`You are not a member of #${match.name}, so nothing can be posted there yet. Offer to join it (update ref "channel:${match.id}", fields member true), then post.`,
+    return { result: refused(`You are not a member of ${channelTag(match.id)}, so nothing can be posted there yet. Offer to join it (update ref "channel:${match.id}", fields member true), then post.`,
       { code: 'not-a-member', channel: `channel:${match.id}` }) };
   }
   const body = { match };
   const now = ctx.now().getTime();
   const record = deliveryFor(social.deliveries, body.match.channel, text, now);
-  const label = where(kind, body.match.name);
+  // A channel is named by its slug (match.id), as the page shows it; a team or a person by name.
+  const named = kind === 'channel' ? body.match.id : body.match.name;
+  const label = where(kind, named);
   if (record.state === 'sent') {
     return { result: done('posted', { to: label, posted: true, alreadyPosted: true },
       `Already posted to ${label}; nothing was sent again`) };
   }
   // A person's DM is only named here; the runner opens it on confirm (G14), so the plan keeps the peer's id.
-  const plan: PostPlan = { channel: body.match.channel, name: body.match.name, kind, text, deliveryId: record.deliveryId, key: deliveryKey(body.match.channel, text),
+  const plan: PostPlan = { channel: body.match.channel, name: named, kind, text, deliveryId: record.deliveryId, key: deliveryKey(body.match.channel, text),
     ...(kind === 'person' ? { userId: body.match.id } : {}) };
   // The card shows the channel and the text verbatim (§6): the message is sent exactly as shown.
   const title = kind === 'person' ? `Message ${body.match.name}` : `Post to ${label}`;
@@ -822,7 +825,7 @@ const planStartCall: VoiceToolPlanner = async (args, ctx) => {
   const plan: CallPlan = kind === 'person'
     ? { kind, name: m.name, channel: m.channel, userId: m.id, title: m.name }
     // A channel is named by its slug (the resolver's id), as the Social page's own call names it (`#<slug>`).
-    : { kind, name: m.name, channel: m.channel, title: kind === 'team' ? `${m.name} team` : `#${m.id}` };
+    : { kind, name: m.name, channel: m.channel, title: kind === 'team' ? `${m.name} team` : channelTag(m.id) };
   // Who the call reaches is the card (§6): a person is rung; a team or channel huddle rings nobody.
   return { plan: kind === 'person'
     ? { title: `Call ${m.name}`, detail: `This rings ${m.name}.`, data: plan }
@@ -889,7 +892,7 @@ const planJoinCall: VoiceToolPlanner = async (args, ctx) => {
   if ('result' in resolved) return resolved;
   const { kind, match: m } = resolved;
   // The index names a huddle by where it is: "#<slug>" for a channel, the team's name, the people in a DM.
-  const where = kind === 'channel' ? `#${m.id}` : m.name;
+  const where = kind === 'channel' ? channelTag(m.id) : m.name;
   const huddle = live.rows.find((h) => h.title.toLowerCase() === `live huddle in ${where.toLowerCase()}`)
     ?? live.rows.find((h) => h.title.toLowerCase().includes(m.name.toLowerCase()));
   if (!huddle) return { result: refused(`Nobody is in a huddle in ${kind === 'channel' ? where : m.name} right now. Start one instead.`) };

@@ -30,7 +30,7 @@ import { DELEGATION_REASON_MIN, DELEGATION_WINDOWS, JUSTIFICATION_MIN, delegatio
 import { WORK_PLANNERS, WORK_RUNNERS, matchByName } from './work.ts';
 import { dialogueRows, matchDialogueRow, optionOutcome, type DialogueRow } from '../../pages/decisions/decisionDialogue.ts';
 import {
-  ambiguous, deliveryIdFor, done, failed, findByName, localHref, once, pageRowNamed, qs, readFailure, readJson, refused, socialGrantRefusal,
+  channelTag, ambiguous, deliveryIdFor, done, failed, findByName, localHref, once, pageRowNamed, qs, readFailure, readJson, refused, socialGrantRefusal,
   type CardAnswer, type ConfirmPlan, type ToolContext, type ToolResult, type VoiceToolArgs, type VoiceToolPlanner, type VoiceToolRunner,
 } from './tools.ts';
 
@@ -589,7 +589,7 @@ async function planCreateKind(kind: string, f: Rec, ctx: ToolContext): Promise<{
         ? { name, ...(description ? { description } : {}), privacy: priv ? 'private' : 'public' }
         : { name, ...(description ? { description } : {}), visibility: priv ? 'private' : 'org' };
       const url = `/api/social/${kind}s`;
-      const label = kind === 'channel' ? `#${name}` : `the ${name} ${kind}`;
+      const label = kind === 'channel' ? channelTag(name) : `the ${name} ${kind}`;
       return card(`Create ${label}`, [priv ? 'Private: only the people you add see it.' : 'Open to everyone in Social.', ...(description ? [description] : [])],
         { key: `POST ${url} ${name.toLowerCase()}`, send: { method: 'POST', url, body }, done: `Created ${label}`, result: { kind, name }, href: kind === 'channel' ? '/social/channels' : kind === 'team' ? '/social/teams' : '/social/rooms' });
     }
@@ -803,9 +803,9 @@ async function planUpdateKind(kind: string, field: string, value: unknown, field
       if (value === true) {
         // Joining posts membership the channel's people see: the route asks PostMessage (the plane's grant outside Social).
         if (!ctx.can('PostMessage')) return { result: refused("I can't join channels with your role.") };
-        return mk(`Join #${row.title}`, ['Its people see you join; you can post there.'], 'POST', `${base}/channels/${id}/join`, {}, `Joined #${row.title}`);
+        return mk(`Join ${channelTag(row.id)}`, ['Its people see you join; you can post there.'], 'POST', `${base}/channels/${id}/join`, {}, `Joined ${channelTag(row.id)}`);
       }
-      return mk(`Leave #${row.title}`, ['You stop seeing its messages.'], 'POST', `${base}/channels/${id}/leave`, {}, `Left #${row.title}`);
+      return mk(`Leave ${channelTag(row.id)}`, ['You stop seeing its messages.'], 'POST', `${base}/channels/${id}/leave`, {}, `Left ${channelTag(row.id)}`);
     }
     case 'dm.read':
       if (value !== true) return { result: refused('A conversation is marked read, never unread, by voice.') };

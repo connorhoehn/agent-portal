@@ -11,7 +11,7 @@ import {
 } from '../actions.ts';
 import { RUN_COMMAND_PHRASES } from '../catalogue.ts';
 import {
-  MAX_FIELD_CHARS, MAX_ROWS, needsConfirm, planPreparedCall, prepareToolCall, ResultMemory, runPreparedCall,
+  channelTag, MAX_FIELD_CHARS, MAX_ROWS, needsConfirm, planPreparedCall, prepareToolCall, ResultMemory, runPreparedCall,
   type CallAccess, type CommandEvent, type CommandOutputView, type ComputeAccess, type DeliveryRecord, type SocialAccess, type ToolResult, type VoiceComputer,
 } from '../tools.ts';
 import { presenceAvatarUsers } from '../../../pages/assessment/knowledge/knowledgeFormat.ts';
@@ -590,6 +590,22 @@ test('message: several matches go back as candidates with no card and no send; n
   assert.equal(social.sends.length, 0);
 });
 
+test('message: a channel is named by its slug as the page shows it ("#auth-migration"), never its display name, on the card and in the say line', async () => {
+  const resolved = { kind: 'channel', match: { id: 'auth-migration', name: 'Auth migration', channelId: 'auth-migration', channel: 'social:ch:auth-migration', joined: true }, candidates: [{ id: 'auth-migration', name: 'Auth migration' }] };
+  const { fetch } = fakeFetch([route('GET', '/api/social/plane/resolve', 200, resolved)]);
+  const social = fakeSocial();
+  const r = await confirmAndRun('message', { target: { kind: 'channel', name: 'Auth migration' }, text: 'The cutover order is decided.' }, toolContext({ fetch, social }));
+  assert.equal(r.card!.title, 'Post to #auth-migration');
+  assert.equal(r.result.outcome, 'done');
+  assert.equal(r.result.summary, 'Posted to #auth-migration');
+  assert.equal(r.result.output['to'], '#auth-migration');
+  assert.equal(social.sends[0]!.channel, 'social:ch:auth-migration');
+  // The card drawn before a planner answers names it the same way, from whatever the model said.
+  assert.equal(channelTag('Auth migration'), '#auth-migration');
+  assert.equal(channelTag('#auth-migration'), '#auth-migration');
+  assert.equal(channelTag('Design Reviews!'), '#design-reviews');
+});
+
 test('message (G46): a channel the user never joined, or a socket that is down, refuses before any card; a failed post names its code', async () => {
   const notJoined = { kind: 'channel', match: { id: 'general', name: 'General', channelId: 'general', channel: 'social:ch:general', joined: false }, candidates: [{ id: 'general', name: 'General' }] };
   const { fetch } = fakeFetch([route('GET', '/api/social/plane/resolve', 200, notJoined)]);
@@ -598,7 +614,7 @@ test('message (G46): a channel the user never joined, or a socket that is down, 
   assert.equal(outsider.card, null, 'no card for a post that could only fail');
   assert.equal(outsider.result.outcome, 'refused');
   assert.equal(outsider.result.output['code'], 'not-a-member');
-  assert.match(String(outsider.result.output['reason']), /not a member of #General/);
+  assert.match(String(outsider.result.output['reason']), /not a member of #general,/, 'the slug, as the page shows it');
   assert.equal(social.sends.length, 0);
   // A member's channel posts as before.
   const { fetch: member } = fakeFetch([route('GET', '/api/social/plane/resolve', 200, { ...notJoined, match: { ...notJoined.match, joined: true } })]);
