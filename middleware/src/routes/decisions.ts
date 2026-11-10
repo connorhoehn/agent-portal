@@ -92,11 +92,6 @@ decisionsRouter.get(
 // the caller is neither its decider, its initiative's owner, nor an
 // org-leader / admin (NOT_DECIDER); 409 it is no longer waiting (already
 // resolved or rejected). 200 answers the decision as the record reads it.
-//
-// Deciding settles the work it held up in the same provider call
-// (providers/decisions.ts decideDecision, work-items.ts settle): resolved
-// unblocks every item blocked on it, rejected leaves them blocked with the
-// reason "Decision rejected: <topic>". The answer's `heldWork` lists them.
 decisionsRouter.post(
   '/:id/decide',
   requireAction('DecideDecision'),
@@ -148,6 +143,9 @@ decisionsRouter.post(
     }
 
     const actor = await decisionActor(session);
+    // Deciding settles the work it held up in the same provider call (providers/decisions.ts decideDecision →
+    // work-items.ts settle): resolved unblocks every item blocked on it, rejected leaves them blocked with the reason
+    // "Decision rejected: <topic>". The answer's `heldWork` lists them.
     const out = await decideDecision(id, { outcome, rationale: recorded, actorId: actor.id, actorName: actor.name });
     if (out.kind === 'not-found') throw new NotFoundError('Decision not found');
     if (out.kind === 'settled') {
