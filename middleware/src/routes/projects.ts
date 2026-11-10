@@ -11,7 +11,8 @@
 // a contributor holds (project_contributions.role) — are gated on
 // DispatchAgentRun: naming an owner or an SME is deciding who may direct
 // agents on this initiative, the same authority the marketplace's dispatch
-// carries.
+// carries. Both also need the initiative's own people (requireInitiativeScope),
+// and naming the owner needs its current owner or an org-wide role.
 
 import { Router, type Response } from 'express';
 import {
@@ -22,7 +23,9 @@ import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { requireAction, resolveSession } from '../lib/authz.js';
 import { mineViewer } from '../lib/mine.js';
 import { canReadBudgets, withholdBudget } from '../lib/budget-read-tier.js';
-import { stewardsInitiative } from '../lib/initiative-scope.js';
+import { ORG_WIDE_INITIATIVE_ROLES, ownsInitiative, requireInitiativeScope, stewardsInitiative } from '../lib/initiative-scope.js';
+import { DEMO_SUB } from '../lib/demo-sub.js';
+import { insecureDevMode } from '../lib/insecure-dev-mode.js';
 import { PROFILE_ID_RE } from '../lib/devbox-profile.js';
 import { latestProfile, setInitiativeProfile } from '../providers/devbox-profiles.js';
 
@@ -78,8 +81,28 @@ projectsRouter.get('/:id', asyncHandler(async (req, res) => {
     return;
   }
   res.setHeader('Cache-Control', 'no-store');
-  res.json(await canReadBudgets(resolveSession(req)) ? project : withholdBudget(project));
+  const session = resolveSession(req);
+  // canWriteWork: whether this caller is one of the initiative's people (owner,
+  // contributor or an org-wide role), the scope every work write asks
+  // (routes/work-items.ts). The page hides its edit controls without it; the
+  // role's own action is the portal's can() and is not repeated here.
+  const canWriteWork = await stewardsInitiative(session, id);
+  res.json({ ...(await canReadBudgets(session) ? project : withholdBudget(project)), canWriteWork });
 }));
+
+/**
+ * Naming who runs an initiative is its owner's call, or an org-wide role's
+ * (the demo identity counts as one under INSECURE_DEV_MODE, as in
+ * stewardsInitiative). A contributor may not make themselves owner.
+ */
+async function mayNameOwner(req: { session?: import('../lib/session.js').Session | null }, res: Response, id: string): Promise<boolean> {
+  const session = req.session ?? null;
+  if (session?.role && ORG_WIDE_INITIATIVE_ROLES.includes(session.role)) return true;
+  if (session?.sub === DEMO_SUB && insecureDevMode()) return true;
+  if (await ownsInitiative(session, id)) return true;
+  res.status(403).json({ error: 'only the initiative\'s owner or an org-wide role can name its owner', code: 'NOT_INITIATIVE_OWNER', initiativeId: id });
+  return false;
+}
 
 /** The provider names each refusal's HTTP meaning; the route just relays it. */
 function relayFailure(res: Response, result: GovernanceWriteResult): boolean {
@@ -101,6 +124,8 @@ projectsRouter.patch('/:id', governGate, asyncHandler(async (req, res) => {
   }
   const ownerId = body.ownerId === null ? null : body.ownerId.trim();
   if (ownerId === '') throw new ValidationError('ownerId cannot be empty — use null to clear');
+  if (!await requireInitiativeScope(req, res, id, { action: 'change the owner of' })) return;
+  if (!await mayNameOwner(req, res, id)) return;
 
   const result = await updateProjectOwner(id, ownerId);
   if (relayFailure(res, result)) return;
@@ -122,6 +147,7 @@ projectsRouter.patch('/:id/contributors/:personId', governGate, asyncHandler(asy
   }
   const role = body.role === null ? null : body.role.trim();
   if (role === '') throw new ValidationError('role cannot be empty — use null to clear');
+  if (!await requireInitiativeScope(req, res, id, { action: 'change contributor roles on' })) return;
 
   const result = await setContributionRole(id, personId, role);
   if (relayFailure(res, result)) return;

@@ -34,6 +34,10 @@ jest.mock('../../lib/initiative-scope.js', () => ({
     if (initiativeId && scopeDeny.has(initiativeId)) { res.status(403).json({ error: 'not your initiative' }); return false; }
     return true;
   }),
+  // The people on each initiative (owner and contributors).
+  initiativePeople: jest.fn(async (initiativeId: string) => (
+    initiativeId === 'p-observability' ? new Set(['p-008', 'p-004', 'p-011'])
+      : initiativeId === 'p-auth-migration' ? new Set(['p-020']) : null)),
 }));
 jest.mock('../../lib/initiative-comments.js', () => ({ postInitiativeWorkComment: jest.fn() }));
 
@@ -352,14 +356,86 @@ describe('sprint moves ask what the sprints route asks (DE-44 row 22)', () => {
     expect(updateMock).not.toHaveBeenCalled();
   });
 
-  it('refuses a sprint move by someone who does not steward the initiative, and lets them clear nothing else', async () => {
+  it('refuses a sprint move by someone who does not steward the initiative, and every other change too (sweep 11)', async () => {
     scopeDeny.add('p-observability');
     const res = await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send({ sprintId: 'spr-obs-s2' });
     expect(res.status).toBe(403);
+    // Clearing the sprint, or leaving it as it is while changing the title, is a write like any other.
+    expect((await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send({ sprintId: null })).status).toBe(403);
+    expect((await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send({ sprintId: ITEM.sprintId, title: 'Retitled' })).status).toBe(403);
     expect(updateMock).not.toHaveBeenCalled();
-    // Clearing the sprint, or leaving it as it is, asks nothing.
-    expect((await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send({ sprintId: null })).status).toBe(200);
-    expect((await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send({ sprintId: ITEM.sprintId, title: 'Retitled' })).status).toBe(200);
+  });
+});
+
+// ── Sweep 11 (M1): the action alone is not the initiative's people ───────────
+// A holder of DispatchAgentRun (the mocked gate lets every caller through)
+// who is not on the item's initiative is refused on create and on each field.
+
+describe("work-item writes need the initiative's own people", () => {
+  beforeEach(() => { scopeDeny.clear(); getMock.mockResolvedValue(ITEM); updateMock.mockResolvedValue(ITEM); createMock.mockResolvedValue(ITEM); });
+  afterEach(() => { scopeDeny.clear(); });
+
+  it('403s a create on an initiative the caller is not on', async () => {
+    scopeDeny.add('p-observability');
+    const res = await request(buildApp()).post('/api/graph/work-items').send({ projectId: 'p-observability', type: 'bug', title: 'x' });
+    expect(res.status).toBe(403);
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['status', { status: 'in_review' }],
+    ['priority', { priority: 'low' }],
+    ['title', { title: 'Retitled' }],
+    ['description', { description: 'why' }],
+    ['labels', { labels: ['x'] }],
+    ['parentId', { parentId: 'wi-obs-e2' }],
+    ['storyPoints', { storyPoints: 3 }],
+    ['sprintId', { sprintId: 'spr-obs-s2' }],
+    ['estimatedCostUsd', { estimatedCostUsd: 1 }],
+    ['assigneeId', { assigneeId: 'p-004' }],
+    ['prUrl', { prUrl: 'https://example.test/pr/2' }],
+    ['prStatus', { prStatus: 'merged' }],
+  ])('403s a patch of %s by someone not on the initiative', async (_label, body) => {
+    scopeDeny.add('p-observability');
+    const res = await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send(body);
+    expect(res.status).toBe(403);
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it("400s an assignee who is not one of the initiative's people, naming how many are, never who", async () => {
+    const res = await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send({ assigneeId: 'p-020' });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('ASSIGNEE_NOT_ON_INITIATIVE');
+    expect(res.body.allowed).toBe(3);
+    expect(JSON.stringify(res.body)).not.toMatch(/p-008|p-004|p-011/);
+    expect(updateMock).not.toHaveBeenCalled();
+    const created = await request(buildApp()).post('/api/graph/work-items').send({ projectId: 'p-observability', type: 'bug', title: 'x', assigneeId: 'p-020' });
+    expect(created.status).toBe(400);
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the current assignee, takes a contributor, and clears to nobody', async () => {
+    getMock.mockResolvedValue({ ...ITEM, assigneeId: 'p-099' });
+    expect((await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send({ assigneeId: 'p-099' })).status).toBe(200);
+    expect((await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send({ assigneeId: 'p-011' })).status).toBe(200);
+    expect((await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send({ assigneeId: null })).status).toBe(200);
+  });
+
+  it('400s a parent on another initiative, so an item never moves between initiatives', async () => {
+    getMock.mockImplementation(async (id: string) => (id === 'wi-auth-e1' ? { ...ITEM, id, projectId: 'p-auth-migration' } : ITEM));
+    const patched = await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send({ parentId: 'wi-auth-e1' });
+    expect(patched.status).toBe(400);
+    expect(patched.body.code).toBe('PARENT_ON_OTHER_INITIATIVE');
+    const created = await request(buildApp()).post('/api/graph/work-items').send({ projectId: 'p-observability', type: 'story', title: 'x', parentId: 'wi-auth-e1' });
+    expect(created.status).toBe(400);
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses a projectId in a patch: an item does not change initiatives', async () => {
+    const res = await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send({ projectId: 'p-auth-migration' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/projectId/);
   });
 });
 

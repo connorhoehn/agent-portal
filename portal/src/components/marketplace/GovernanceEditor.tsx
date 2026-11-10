@@ -85,9 +85,11 @@ export interface OwnerEditorProps {
   onOwner: (ownerId: string | null, ownerName: string | null) => void;
   /** Optimistic apply / revert of one contributor's role chip. */
   onRole: (personId: string, role: string | null) => void;
+  /** False when the viewer is not one of this initiative's people: the server refuses their governance edits. */
+  editable?: boolean;
 }
 
-export function OwnerEditor({ projectId, contributors, ownerId, ownerName, onOwner, onRole }: OwnerEditorProps) {
+export function OwnerEditor({ projectId, contributors, ownerId, ownerName, onOwner, onRole, editable = true }: OwnerEditorProps) {
   const { can, ready } = useCapabilities();
 
   async function pick(person: GovernanceContributor | null) {
@@ -119,7 +121,7 @@ export function OwnerEditor({ projectId, contributors, ownerId, ownerName, onOwn
 
   // Hide the affordance entirely without dispatch rights — the "Run by" line
   // in the header stays; only the pencil goes away.
-  if (!ready || !can('DispatchAgentRun')) return null;
+  if (!ready || !can('DispatchAgentRun') || !editable) return null;
 
   const sections: DropdownMenuSection[] = [
     {
@@ -157,11 +159,14 @@ export function RoleCycleChip({
   personId,
   role,
   onRole,
+  editable = true,
 }: {
   projectId: string;
   personId: string;
   role: string | null;
   onRole: (personId: string, role: string | null) => void;
+  /** False when the viewer is not one of this initiative's people: the chip stays informational. */
+  editable?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const { can, ready } = useCapabilities();
@@ -170,7 +175,7 @@ export function RoleCycleChip({
 
   // Without dispatch rights the role stays informational: the same chip,
   // not a button.
-  if (!ready || !can('DispatchAgentRun')) {
+  if (!ready || !can('DispatchAgentRun') || !editable) {
     return norm === 'owner' ? (
       <Chip tone="purple" size="xs">owner</Chip>
     ) : norm === 'sme' ? (

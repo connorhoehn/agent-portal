@@ -55,6 +55,10 @@ test('refusalNext: every refusal code names a change and ends with the no-repeat
   assert.match(refusalNext('list', { reason: 'There is no "ticket" list in this workspace.' }, { tenant: 'access' }), new RegExp(`The kinds here: ${listKinds('access').join(', ')}\\.`));
   assert.match(refusalNext('message', { reason: 'There is no person called "Ada" you can post to.' }, { tenant: 'orgiq' }), /Name one person/);
   assert.match(refusalNext('message', { reason: "You don't have Social access here. I can open the access request.", hint: {} }, { tenant: 'orgiq' }), /ask for access/);
+  // Sweep 11: not one of the initiative's people offers its membership, never a retry of the write.
+  const offWork = refusalNext('update', { reason: 'Only the people on Alpha (its owner and contributors) change its work, and you are not one of them.', code: 'not-on-initiative', requestItemId: 'initiative:p-alpha' }, { tenant: 'orgiq', role: 'sme' });
+  assert.match(offWork, /item: "initiative:p-alpha"/);
+  assert.ok(offWork.endsWith(NO_REPEAT));
 });
 
 test('a runner\'s refusal reaches the model with `next`; a done result carries none', async () => {

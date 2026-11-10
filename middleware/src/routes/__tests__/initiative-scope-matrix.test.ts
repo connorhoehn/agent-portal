@@ -15,8 +15,16 @@ import { resolve } from 'node:path';
 const ROUTES = resolve(__dirname, '..');
 const FILES = ['bots', 'work', 'agent-projects', 'sdlc', 'internal-devbox', 'work-items', 'work-documents',
   'budgets', 'grants', 'lab', 'designs', 'initiative-decks', 'devbox', 'sprints', 'prompt-pointers', 'user-budgets',
-  'ops-switches'];
-const SCOPE_CHECK = /requireInitiativeScope|requireBoxAccess|userReachesBox|requireInitiativeSteward|sprintMoveAllowed|userStewardsInitiative|stewardsInitiative|grantScopedDispatchVerdict|canSee\(|runAttribution\(|itemInScope\(|designInScope\(|requireBudgetScope\(/;
+  'ops-switches', 'projects'];
+// `sprintMoveAllowed` is deliberately NOT a scope check here (sweep 11, M1): it
+// runs only when a write moves an item into a sprint, so a route that named it
+// passed this matrix while every other field was open to anyone with the action.
+const SCOPE_CHECK = /requireInitiativeScope|requireBoxAccess|userReachesBox|requireInitiativeSteward|userStewardsInitiative|stewardsInitiative|grantScopedDispatchVerdict|canSee\(|runAttribution\(|itemInScope\(|designInScope\(|requireBudgetScope\(/;
+// The direct checks a handler can make itself, for the top-level test below.
+const DIRECT_CHECK = /requireInitiativeScope\(|itemInScope\(|stewardsInitiative\(/;
+// Files whose SCOPED routes must make that check unconditionally, at the
+// handler's own top level rather than inside a branch.
+const TOP_LEVEL_FILES = ['work-items', 'projects'];
 
 const SCOPED = [
   'agent-projects DELETE /:id', 'agent-projects POST /', 'agent-projects POST /:id/clone-command',
@@ -40,7 +48,15 @@ const SCOPED = [
   'sprints DELETE /:sprintId/items/:itemId', 'sprints PATCH /:sprintId/items', 'sprints POST /',
   'work DELETE /jobs/:id', 'work POST /findings/:id/promote', 'work POST /jobs', 'work POST /jobs/:id/requeue',
   'work POST /jobs/:id/review', 'work POST /sweeps/run',
+  // Sweep 11 (M1): every field of a work item, and creating one, is the
+  // initiative's own people's call, checked at the handler's top level.
   'work-items PATCH /work-items/:id', 'work-items POST /work-items',
+  // Sweep 11: who runs an initiative and its contributors' roles are its own
+  // people's call (naming the owner also needs the owner or an org-wide role).
+  'projects PATCH /:id', 'projects PATCH /:id/contributors/:personId', 'projects PATCH /:id/devbox-profile',
+  // Sweep 11: an initiative's deck is built and saved by its own people
+  // (lib/deck-shared/authority.ts asks stewardsInitiative for orgiq).
+  'initiative-decks POST /projects/:projectId', 'initiative-decks POST /:id/revisions', 'initiative-decks POST /:id/revise',
   // DE-50: an initiative pause is its stewards' (ManageBudgets + requireInitiativeScope);
   // the fleet scope needs an org-wide role instead.
   'ops-switches PUT /switches/:scope',
@@ -69,10 +85,7 @@ const OPEN: Record<string, string> = {
   // DE-55: which bots are funded first is the release manager's money call,
   // gated like budgets PUT (same program-owner decision, DE-44 row 20).
   'bots PUT /:id/essential': 'DE-55: ManageBudgets marks a bot essential; not in §9 item 8a (budgets and grants only), so program-owner is still program-wide here',
-  'initiative-decks POST /projects/:projectId': 'DE-44 row 31: deck save permissions are an open user decision (CLAUDE.md, deck save-permission unification)',
-  'initiative-decks POST /:id/revisions': 'DE-44 row 31: deck save permissions are an open user decision (CLAUDE.md, deck save-permission unification)',
-  'initiative-decks POST /:id/revise': 'DE-44 row 31: deck save permissions are an open user decision (CLAUDE.md, deck save-permission unification)',
-  'initiative-decks POST /:id/preview': 'DE-44 row 31: deck save permissions are an open user decision (CLAUDE.md, deck save-permission unification)',
+  'initiative-decks POST /:id/preview': 'renders a caller-supplied spec for a deck the caller can read and saves nothing (readGate)',
   'sdlc POST /policies': 'the org set only (no initiative); ManageSdlcPolicies + org-wide role + self-gate + two-person rule in lib/sdlc-policy-governance.ts (DE-43/DE-46)',
   'sdlc DELETE /policies/:id': 'same as POST /policies: the org set only',
   'devbox POST /sessions': 'mints a fresh session id for the caller; nothing to scope until a box is registered',
@@ -111,6 +124,18 @@ describe('DE-44 initiative-scope matrix', () => {
 
   it('an OPEN route that gained a scope check is moved to SCOPED', () => {
     expect(Object.keys(OPEN).filter((r) => SCOPE_CHECK.test(routes.get(r) ?? ''))).toEqual([]);
+  });
+
+  it('work-item and initiative writes check scope at the handler top level, never only in a branch', () => {
+    const conditional = SCOPED.filter((r) => TOP_LEVEL_FILES.includes(r.split(' ')[0]!)).filter((r) => {
+      const src = routes.get(r) ?? '';
+      const body = src.slice(src.indexOf('=> {') + 4).split('\n');
+      const first = body.find((l) => l.trim() && !l.trim().startsWith('//'));
+      if (!first) return true;
+      const top = first.length - first.trimStart().length;
+      return !body.some((l) => l.length - l.trimStart().length === top && DIRECT_CHECK.test(l) && !/sprint/i.test(l));
+    });
+    expect(conditional).toEqual([]);
   });
 
   it('every OPEN route says why', () => {

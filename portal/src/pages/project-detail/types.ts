@@ -137,6 +137,10 @@ export interface ProjectDetail {
   /** Present only below the budgets read tier: the dollar fields were withheld (projects/types.ts BudgetAccessLocked). */
   budgetAccess?: import('../projects/types').BudgetAccessLocked;
   contributors: ProjectContributor[];
+  /** Whether this viewer is one of the initiative's people (owner, contributor or an
+      org-wide role), the scope every work write asks server-side. Absent on an older
+      middleware, which is read as "not known" and changes nothing. */
+  canWriteWork?: boolean;
 }
 
 /** One row of the ManageDevbox-gated codebase list, filtered to this initiative. */

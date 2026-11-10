@@ -27,7 +27,7 @@ import { asyncHandler } from '../lib/async-handler.js';
 import { requireAction, resolveSession } from '../lib/authz.js';
 import { getUser } from '../providers/identity.js';
 import { getSprint } from '../providers/sprints.js';
-import { requireInitiativeScope } from '../lib/initiative-scope.js';
+import { initiativePeople, requireInitiativeScope } from '../lib/initiative-scope.js';
 import { notifyWorkItemAssigned } from '../lib/social-notify.js';
 import { publishChannelActivity } from '../lib/gateway-run-feed.js';
 import { notifyWorkGraphChanged } from '../lib/work-graph/live.js';
@@ -103,7 +103,46 @@ async function sprintMoveAllowed(
 // Writes are gated per-route on DispatchAgentRun (the marketplace authority) —
 // the mount's tenant guard alone let any orgiq member create or mutate board
 // state. GETs stay tenant-open: the board is operational visibility.
+//
+// The action alone is not enough (sweep 11, M1): every write also needs the
+// item's initiative's own people (owner, contributor, or an org-wide role;
+// requireInitiativeScope), checked unconditionally in each handler, never only
+// inside a branch such as the sprint move.
 const writeGate = requireAction('DispatchAgentRun');
+
+/**
+ * Who may hold an item of `initiativeId`: one of its people (owner or
+ * contributor), the item's current assignee (`keep`), or nobody (null).
+ * Answers the 400 itself, naming how many people qualify but never who: the
+ * list is the initiative page's to show. True means go on.
+ */
+async function assigneeAllowed(res: Response, initiativeId: string, assigneeId: unknown, keep: string | null): Promise<boolean> {
+  if (assigneeId === undefined || assigneeId === null || assigneeId === keep) return true;
+  const people = await initiativePeople(initiativeId);
+  if (!people) { res.status(400).json({ error: 'no such project' }); return false; }
+  if (people.has(assigneeId as string)) return true;
+  res.status(400).json({
+    error: `assigneeId must be one of this initiative's ${people.size} people (its owner and contributors), the current assignee, or null`,
+    code: 'ASSIGNEE_NOT_ON_INITIATIVE', allowed: people.size,
+  });
+  return false;
+}
+
+/**
+ * A parent must be an item of the same initiative: a work item never moves
+ * between initiatives (there is no projectId patch), and a parent elsewhere
+ * would hang this item under work its people do not steward. True means go on.
+ */
+async function parentAllowed(res: Response, initiativeId: string, parentId: unknown): Promise<boolean> {
+  if (parentId === undefined || parentId === null) return true;
+  const parent = await getWorkItem(parentId as string);
+  if (!parent) { res.status(400).json({ error: 'no such parent work item' }); return false; }
+  if (parent.projectId !== initiativeId) {
+    res.status(400).json({ error: 'a parent must be a work item of the same initiative', code: 'PARENT_ON_OTHER_INITIATIVE' });
+    return false;
+  }
+  return true;
+}
 
 // A comment is discussion, not a state change (docs/next-steps.md §9 item 8d):
 // it needs ViewWorkItems plus membership of the item's initiative (owner,
@@ -406,12 +445,18 @@ workItemsRouter.post(
     const fieldError = checkStoryPoints(storyPoints)
       ?? checkEstimatedCost(body['estimatedCostUsd'])
       ?? checkLabels(body['labels'])
-      ?? checkNullableId(body['sprintId'], 'sprintId');
+      ?? checkNullableId(body['sprintId'], 'sprintId')
+      ?? checkNullableId(body['parentId'], 'parentId')
+      ?? checkNullableId(body['assigneeId'], 'assigneeId');
     if (fieldError) {
       res.status(400).json({ error: fieldError });
       return;
     }
 
+    // Creating work on an initiative is its own people's call, whatever the body holds.
+    if (!await requireInitiativeScope(req, res, projectId, { action: 'create work' })) return;
+    if (!await parentAllowed(res, projectId, body['parentId'])) return;
+    if (!await assigneeAllowed(res, projectId, body['assigneeId'], null)) return;
     if (!await sprintMoveAllowed(req, res, projectId, body['sprintId'])) return;
 
     try {
@@ -509,6 +554,11 @@ workItemsRouter.patch(
       res.status(404).json({ error: 'Work item not found' });
       return;
     }
+    // Every field of an item is its initiative's people's to change, not only its sprint.
+    if (!await requireInitiativeScope(req, res, current.projectId, { action: 'change work' })) return;
+    if ('assigneeId' in body && !await assigneeAllowed(res, current.projectId, body['assigneeId'], current.assigneeId)) return;
+    if ('parentId' in body && body['parentId'] !== current.parentId
+      && !await parentAllowed(res, current.projectId, body['parentId'])) return;
     if ('sprintId' in body && body['sprintId'] !== current.sprintId
       && !await sprintMoveAllowed(req, res, current.projectId, body['sprintId'])) return;
 

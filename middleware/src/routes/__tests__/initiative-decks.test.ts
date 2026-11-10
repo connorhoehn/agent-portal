@@ -9,6 +9,13 @@ jest.mock('../../lib/live-principal.js', () => ({
   ...jest.requireActual('../../lib/live-principal.js'),
   currentLiveSession: async (session: unknown) => session,
 }));
+// Who is on the initiative (sweep 11): the org-wide roles everywhere, every
+// other hand-built session on PID only, and `u-off` on nothing.
+jest.mock('../../lib/initiative-scope.js', () => ({
+  ...jest.requireActual('../../lib/initiative-scope.js'),
+  stewardsInitiative: async (session: { sub?: string; role?: string } | null, id: string) =>
+    ['org-leader', 'hr-admin', 'admin'].includes(session?.role ?? '') || (id === 'p-auth-migration' && !!session?.sub && session.sub !== 'u-off'),
+}));
 jest.mock('../../config.js', () => ({
   config: { auth: { policyStoreId: undefined, cognito: null }, mock: { aurora: true, agentcore: true } },
 }));
@@ -136,8 +143,9 @@ describe('initiative status deck — facts equal the initiative data', () => {
     expect(buildInitiativeDeckFacts(source).spec).toEqual(buildInitiativeDeckFacts(source).spec);
   });
 
-  it('an unknown initiative is 404', async () => {
-    expect((await request(as('sme')).post(`${BASE}/projects/p-nope`).send({})).status).toBe(404);
+  it('an unknown initiative is 404 to an org-wide role, and 403 to an SME who cannot be on it', async () => {
+    expect((await request(as('org-leader')).post(`${BASE}/projects/p-nope`).send({})).status).toBe(404);
+    expect((await request(as('sme')).post(`${BASE}/projects/p-nope`).send({})).status).toBe(403);
   });
 });
 
@@ -219,6 +227,15 @@ describe('initiative status deck — authz', () => {
     expect((await request(member).get(`${BASE}/${made.deckId}`)).status).toBe(200);
     expect((await request(member).post(`${BASE}/${made.deckId}/revisions`).send({ spec: made.spec, baseRevisionId: made.revisionId })).status).toBe(403);
     expect((await request(member).post(`${BASE}/${made.deckId}/preview`).send({ spec: made.spec })).status).toBe(200);
+  });
+
+  it('a DispatchAgentRun holder who is not on the initiative cannot build, save or revise its deck (sweep 11)', async () => {
+    const off = appAs({ role: 'sme' as Session['role'], tenant: 'orgiq', sub: 'u-off' });
+    expect((await request(off).post(`${BASE}/projects/${PID}`).send({})).status).toBe(403);
+    const made = await build(as('sme'));
+    expect((await request(off).post(`${BASE}/${made.deckId}/revisions`).send({ spec: made.spec, baseRevisionId: made.revisionId })).status).toBe(403);
+    expect((await request(off).post(`${BASE}/${made.deckId}/revise`).send({ instruction: 'shorter', baseRevisionId: made.revisionId })).status).toBe(403);
+    expect((await request(off).get(`${BASE}/${made.deckId}`)).status).toBe(200);
   });
 
   it('other tenants are refused before any handler', async () => {

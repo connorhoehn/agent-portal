@@ -121,6 +121,7 @@ import { InitiativeDetailsTrigger, type InitiativeFactsInput } from './projects/
 import { useInitiativeSocialChannel } from './projects/InitiativeDiscussion';
 import { NOT_A_MEMBER_REASON, discussionAccess, initiativeDiscussionTarget } from './projects/initiativeDiscussionTarget';
 import { InitiativeFiles } from './projects/InitiativeFiles';
+import { WORK_EDIT_DENIED_HINT } from './projects/initiativeFilesModel';
 import { useInitiativeListRail } from './projects/InitiativeListRail';
 import { initiativeBreadcrumbs, initiativeHref } from './projects/initiativeNavigation';
 import { InitiativeRecordings } from './projects/InitiativeRecordings.tsx';
@@ -296,6 +297,11 @@ function ProjectDetailPage() {
   const { data: rawTree, isLoading: workLoading, error: workError, degraded: workDegraded, refresh: refreshWork } =
     useFetch<WorkItemTree[]>(id ? `/api/graph/projects/${encodeURIComponent(id)}/work` : '');
   const workFailure = workError ?? workDegraded;
+  // The server holds every work write to the initiative's own people (sweep 11):
+  // a role that could edit work, viewing an initiative it is not on, sees the
+  // controls read-only with that reason rather than a 403 after the click.
+  const offInitiative = canDispatch && project?.canWriteWork === false;
+  const canEditWork = canDispatch && !offInitiative;
 
   const { data: decisions, error: decisionsError, degraded: decisionsDegraded, refresh: refreshDecisions } =
     useFetch<ProjectDecision[]>(id ? `/api/graph/projects/${encodeURIComponent(id)}/decisions` : '');
@@ -591,6 +597,7 @@ function ProjectDetailPage() {
           ownerName={ownerName}
           onOwner={(oid, oname) => setOwnerOverride({ ownerId: oid, ownerName: oname })}
           onRole={handleRoleOverride}
+          editable={!offInitiative}
         />
       ),
     },
@@ -622,8 +629,8 @@ function ProjectDetailPage() {
           ...(current ? [{ label: canDispatch ? 'Prepare job' : 'View job setup',
             'data-testid': 'work-item-prepare-job',
             onSelect: () => setPrepareJobRequest(previous => ({ itemId: current.id, revision: (previous?.revision ?? 0) + 1 })) }] : []),
-          ...(canDispatch && current ? [{ label: `New story in ${current.epicTitle}`, onSelect: () => setCreating({ parentId: current.epicId, parentTitle: current.epicTitle }) }] : []),
-          ...(canDispatch ? [{ label: 'New epic', onSelect: () => setCreating({ parentId: null, parentTitle: null }) }] : []),
+          ...(canEditWork && current ? [{ label: `New story in ${current.epicTitle}`, onSelect: () => setCreating({ parentId: current.epicId, parentTitle: current.epicTitle }) }] : []),
+          ...(canEditWork ? [{ label: 'New epic', onSelect: () => setCreating({ parentId: null, parentTitle: null }) }] : []),
           { label: 'Initiative details', onSelect: () => paneControl.open('details') },
           { label: 'Workspace documents', onSelect: () => current ? setDetailTab('docs') : setTab('docs') },
           { label: 'Contributors', onSelect: () => setTab('contributors') },
@@ -793,7 +800,7 @@ function ProjectDetailPage() {
     activeFilterCount: activeFilterCount(filters),
     onClearFilters: () => setFilters(NO_FILTERS),
     onOpenItem: (row) => openItem(row.id),
-    onToggleDone: canDispatch
+    onToggleDone: canEditWork
         ? (row, done) => {
             void patchItem(row.id, { status: done ? 'done' : 'open' }).then((ok) => {
               if (ok && row.id === current?.id) thread.refreshComments();
@@ -805,7 +812,7 @@ function ProjectDetailPage() {
     onRetry: refreshWork,
     emptyLabel: allRows.length > 0
         ? 'No work matches this search or these filters'
-        : canDispatch
+        : canEditWork
           ? "No work yet — ingest this initiative's documents or add an epic"
           : "No work yet — it arrives when this initiative's documents are ingested",
   };
@@ -849,7 +856,8 @@ function ProjectDetailPage() {
       runs={marketplaceRuns}
       tab={detailTab}
       onTabChange={setDetailTab}
-      canEdit={canDispatch}
+      canEdit={canEditWork}
+      {...(offInitiative ? { readOnlyReason: WORK_EDIT_DENIED_HINT } : {})}
       onPatch={(fields) => {
         // A status move writes an audit row server-side; re-read the thread
         // so Activity shows it.
@@ -952,6 +960,7 @@ function ProjectDetailPage() {
                 contributors={contributors}
                 projectId={id ?? ''}
                 onRole={handleRoleOverride}
+                editable={!offInitiative}
                 onOpenPerson={(personId) => paneControl.open('person', personId)}
               />
             )}

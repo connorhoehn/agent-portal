@@ -20,6 +20,10 @@ jest.mock('@aws-sdk/client-verifiedpermissions', () => ({
   IsAuthorizedCommand: class {},
 }));
 jest.mock('../../live-principal.js', () => ({ currentLiveSession: async (session: unknown) => session }));
+// Sweep 11: an orgiq deck is written by its initiative's own people; `u-off` is on none.
+jest.mock('../../initiative-scope.js', () => ({
+  stewardsInitiative: async (session: { sub?: string } | null) => !!session?.sub && session.sub !== 'u-off',
+}));
 // Social: the conversation's current grant + membership is chatAccess; the members below are the only ones it admits.
 jest.mock('../../../routes/chat-pins.js', () => ({
   chatAccess: async (req: { session?: { sub: string; role: string } }, channel: string, action: string) => {
@@ -64,6 +68,14 @@ describe.each(CASES)('deckWriteAuthority — $tenant', (c) => {
   });
   it('a forged subject (another tenant\'s subject under this tenant\'s rule) is refused', async () => {
     expect(await status(deckWriteAuthority(c.tenant, c.foreign, req(c.writer)))).toBe(403);
+  });
+});
+
+describe('deckWriteAuthority — orgiq needs the initiative\'s own people (sweep 11)', () => {
+  it('a DispatchAgentRun holder who is not on the initiative is refused every write', async () => {
+    for (const op of ['build', 'save', 'revise', 'share'] as const) {
+      expect(await status(deckWriteAuthority('orgiq', { tenant: 'orgiq', projectId: 'p-soc2' }, req({ sub: 'u-off', tenant: 'orgiq', role: 'sme' }), op))).toBe(403);
+    }
   });
 });
 

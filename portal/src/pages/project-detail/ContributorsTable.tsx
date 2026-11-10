@@ -19,9 +19,12 @@ export function ContributorsTable({
   projectId,
   onRole,
   onOpenPerson,
+  editable = true,
 }: {
   contributors: ProjectContributor[];
   projectId: string;
+  /** False when the viewer is not one of this initiative's people: roles stay informational. */
+  editable?: boolean;
   /** Optimistic apply / revert of one contributor's role. */
   onRole: (personId: string, role: string | null) => void;
   /** Open the shared, page-level person card (keeps the breadcrumb). */
@@ -64,7 +67,7 @@ export function ContributorsTable({
       // optimistically; a 403 reverts with a quiet toast.
       render: (c) => (
         <span onClick={(e) => e.stopPropagation()}>
-          <RoleCycleChip projectId={projectId} personId={c.personId} role={c.role} onRole={onRole} />
+          <RoleCycleChip projectId={projectId} personId={c.personId} role={c.role} onRole={onRole} editable={editable} />
         </span>
       ),
     },

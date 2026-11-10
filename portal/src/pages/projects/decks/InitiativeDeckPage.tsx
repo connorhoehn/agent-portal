@@ -9,7 +9,8 @@
 //   save      POST /api/initiative-decks/:id/revisions with baseRevisionId; 409 -> banner
 //   instruct  POST /api/initiative-decks/:id/revise (DispatchAgentRun), answered in the request -> open the new revision
 //   download  GET  /api/initiative-decks/:id/revisions/:rid/file (attachment)
-// Edits need DispatchAgentRun; any orgiq reader previews and downloads, except a
+// Edits need DispatchAgentRun and the initiative's own people (the detail's
+// `onInitiative`); any orgiq reader previews and downloads, except a
 // deck with budget figures, which the server shows only to budget readers (404
 // otherwise). Such a deck is not offered for Social sharing: the figures would
 // leave the tier. Presence, slide viewers and Follow ride `orgiq:deck:<id>`.
@@ -41,7 +42,7 @@ function useInitiativeRevise(doc: DeckEditorDocument<InitiativeDeckDetail>): Dec
   const { can, ready } = useCapabilities();
   return useDeckAgentRun(doc, {
     questionAgent: 'orgiq-supervisor',
-    canInstruct: ready && can('DispatchAgentRun'),
+    canInstruct: ready && can('DispatchAgentRun') && doc.deck?.onInitiative !== false,
     hints: INSTRUCT_HINTS,
     reviseNow: reviseInitiativeDeck,
     progressTitle: () => 'The agent is revising this deck',
@@ -54,7 +55,7 @@ function InitiativeDeckPage() {
   return (
     <DeckEditorPage
       deckId={deckId} api={DECK_API} previewDeck={previewInitiativeDeck} fileUrl={initiativeDeckPaths.file}
-      tenant="orgiq" testIdPrefix="initiative-deck" useExtras={useInitiativeRevise} readOnly={ready ? !can('DispatchAgentRun') : true}
+      tenant="orgiq" testIdPrefix="initiative-deck" useExtras={useInitiativeRevise} readOnly={(deck) => !ready || !can('DispatchAgentRun') || deck.onInitiative === false}
       huddle={(deck) => ({ channel: `orgiq:initiative:${deck.projectId}`, title: `${deck.title} huddle` })}
       followLatest
       breadcrumbs={(deck, navigate) => {

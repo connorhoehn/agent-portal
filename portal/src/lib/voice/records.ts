@@ -526,6 +526,19 @@ function fieldProblem(kind: string, fields: Rec): string | null {
 
 const isoDay = (v: unknown): string | null => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) ? v : null);
 
+/**
+ * Sweep 11 (M1): the server holds every work write to the initiative's own people (owner, contributor or an
+ * org-wide role). The initiative's read says whether this session is one (`canWriteWork`), so the voice refuses
+ * before a card, with the access next step (the initiative's membership item), rather than after a click.
+ * A failed read refuses nothing: the route still decides.
+ */
+async function offInitiative(ctx: ToolContext, projectId: string, title?: string): Promise<{ result: ToolResult } | null> {
+  const read = await readJson<{ canWriteWork?: unknown; name?: unknown }>(ctx, `/api/graph/projects/${enc(projectId)}`);
+  if (!read.ok || read.body.canWriteWork !== false) return null;
+  const name = title ?? (typeof read.body.name === 'string' ? read.body.name : 'this initiative');
+  return { result: refused(`Only the people on ${name} (its owner and contributors) change its work, and you are not one of them.`, { code: 'not-on-initiative', requestItemId: `initiative:${projectId}` }) };
+}
+
 async function planCreateKind(kind: string, f: Rec, ctx: ToolContext): Promise<{ plan: ConfirmPlan } | { result: ToolResult }> {
   const card = (title: string, detail: string[], act: ActPlan) => ({ plan: { title, detail, data: act } satisfies ConfirmPlan });
   switch (kind) {
@@ -533,6 +546,8 @@ async function planCreateKind(kind: string, f: Rec, ctx: ToolContext): Promise<{
       // Coverage (10 November): on an initiative's page "add a bug: …" files it on the initiative in view.
       const where = await initiativeOf(ctx, f['initiative']);
       if ('result' in where) return where;
+      const off = await offInitiative(ctx, where.id, where.title);
+      if (off) return off;
       const type = String(f['type'] ?? 'story');
       const body = { projectId: where.id, type, title: String(f['title']).trim(), priority: 'medium' };
       return card(`Create a ${type} on ${where.title}`, [`"${body.title}"`, 'Priority medium; it starts open.'],
@@ -857,6 +872,10 @@ async function planWorkItemUpdate(field: string, value: unknown, ref: string, ct
   const plan = (title: string, detail: string[], send: Send, doneLine: string, result: Record<string, unknown>) =>
     ({ plan: { title, detail, data: { key: key(send.method, send.url, send.body), send, done: doneLine, result: { ref: `work-item:${w.id}`, ...result }, ...(href ? { href } : {}) } satisfies ActPlan } satisfies ConfirmPlan });
   const statusNow = String(w.status ?? '');
+  if (w.projectId) {
+    const off = await offInitiative(ctx, w.projectId);
+    if (off) return off;
+  }
   if (field === 'status') {
     const to = String(value);
     if (statusNow === to) return { result: refused(`${named} is already ${words(to)}.`) };

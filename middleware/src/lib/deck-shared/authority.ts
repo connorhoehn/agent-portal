@@ -6,9 +6,10 @@
 //
 //     assessment  RunAssessmentAgent  + current team read      (ViewAssessment)
 //     pipelines   RunPipeline         + current run read       (ViewPipelines)
-//     orgiq       DispatchAgentRun    + initiative read        (tenant-open; the
-//                                       budget-tier redaction stays a READ rule,
-//                                       providers/initiative-decks.ts)
+//     orgiq       DispatchAgentRun    + the initiative's own people (owner,
+//                                       contributor or org-wide role; reading is
+//                                       tenant-open, the budget-tier redaction a
+//                                       READ rule, providers/initiative-decks.ts)
 //     social      PostMessage         + CURRENT conversation membership
 //                                       (routes/chat-pins.ts chatAccess); only
 //                                       the owner may delete.
@@ -64,6 +65,16 @@ export async function deckWriteAuthority(
     try { ok = await isAllowed(principal, action); }
     catch { throw new AppError(503, 'authorization unavailable'); }
     if (!ok) throw new AppError(403, `Forbidden: ${action} is required to ${op} a deck`);
+  }
+  // An initiative's deck is written by that initiative's own people (owner,
+  // contributor or an org-wide role), the rule every other initiative write
+  // asks (sweep 11: work items, workspace pages). Reading stays tenant-open.
+  if (subject.tenant === 'orgiq') {
+    const { stewardsInitiative } = await import('../initiative-scope.js');
+    // An unknown deck (no projectId) falls through to the route's own 404.
+    if (subject.projectId && !await stewardsInitiative(live, subject.projectId)) {
+      throw new AppError(403, `you can only ${op} decks on initiatives you own or contribute to`);
+    }
   }
   return { sub: live.sub, session: live };
 }

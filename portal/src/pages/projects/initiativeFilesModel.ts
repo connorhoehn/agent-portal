@@ -39,6 +39,8 @@ export const newFileOffers = (choices: readonly NewFileChoice[]): PageOffer[] =>
 
 /** Beside the disabled New file trigger, when this viewer may create nothing here. */
 export const NEW_FILE_DENIED_HINT = 'Only this initiative’s people and org-leaders add files here.';
+/** Why a work item's controls are read-only to a viewer whose role could edit work but who is not on this initiative. */
+export const WORK_EDIT_DENIED_HINT = 'Only this initiative’s people and org-leaders change its work.';
 
 /** The New file trigger stays drawn; it is enabled only when there is a choice to make. */
 export const newFileTrigger = (choices: readonly NewFileChoice[]): { disabled: boolean } => ({ disabled: choices.length === 0 });

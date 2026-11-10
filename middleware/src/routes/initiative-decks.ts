@@ -1,7 +1,7 @@
 // Orgiq initiative status decks — mounted at /api/initiative-decks behind
 // requireTenant('orgiq') (docs/agentic-flows-migration.md slice 6). Reads need a
 // session; every write is decided by deckWriteAuthority alone (DispatchAgentRun +
-// initiative read), no new Cedar action:
+// the initiative's own people, sweep 11), no new Cedar action:
 //
 //   POST /projects/:projectId        deckWriteAuthority 201 { deckId, revisionId, includesBudget, narrative, brief }
 //                                    body { title?, narrative?, includeBudget?, brief? } — brief (G55, ≤ 200 chars) is
@@ -23,6 +23,7 @@ import { asyncHandler, NotFoundError } from '../lib/async-handler.js';
 import { requireSession, resolveSession } from '../lib/authz.js';
 import { deckWriteAuthority, makeDeckHandlers, sendFail } from '../lib/deck-shared/index.js';
 import * as decks from '../providers/initiative-decks.js';
+import { stewardsInitiative } from '../lib/initiative-scope.js';
 
 export const initiativeDecksRouter: Router = Router();
 
@@ -57,6 +58,7 @@ const h = makeDeckHandlers<decks.DeckViewer>({
 });
 
 initiativeDecksRouter.post('/projects/:projectId', asyncHandler(async (req, res) => {
+  // deckWriteAuthority asks stewardsInitiative: the initiative's own people build its decks.
   await deckWriteAuthority('orgiq', { tenant: 'orgiq', projectId: String(req.params['projectId'] ?? '') }, req, 'build');
   const result = await decks.createDeck(String(req.params['projectId'] ?? ''), (req.body ?? {}) as Record<string, unknown>, await viewerOf(req), req.session?.sub ?? null);
   if (!result.ok) { sendFail(res, result); return; }
@@ -68,9 +70,18 @@ initiativeDecksRouter.get('/', readGate, asyncHandler(async (req, res) => {
   res.json(await decks.listDecks(await viewerOf(req), projectId));
 }));
 
-initiativeDecksRouter.get('/:id', readGate, h.detail);
+// The detail adds `onInitiative`: whether this reader is one of the deck's
+// initiative's people, the half of the write rule the portal cannot see (its
+// can('DispatchAgentRun') is the other half). The editor is read-only without it.
+initiativeDecksRouter.get('/:id', readGate, asyncHandler(async (req, res) => {
+  const id = String(req.params['id'] ?? '');
+  const deck = decks.isDeckId(id) ? await decks.getDeck(id, await viewerOf(req)) : null;
+  if (!deck) throw new NotFoundError('deck not found');
+  res.json({ ...deck, onInitiative: await stewardsInitiative(resolveSession(req), deck.projectId) });
+}));
 initiativeDecksRouter.get('/:id/revisions/:rid/spec', readGate, h.spec);
-initiativeDecksRouter.post('/:id/revisions', h.save);
-initiativeDecksRouter.post('/:id/revise', h.revise);
+// Both hand over to writeDeck, whose deckWriteAuthority asks stewardsInitiative for the deck's own initiative.
+initiativeDecksRouter.post('/:id/revisions', h.save); // writeDeck → stewardsInitiative
+initiativeDecksRouter.post('/:id/revise', h.revise); // writeDeck → stewardsInitiative
 initiativeDecksRouter.post('/:id/preview', readGate, h.preview);
 initiativeDecksRouter.get('/:id/revisions/:rid/file', readGate, h.file);

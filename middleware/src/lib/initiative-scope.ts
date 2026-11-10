@@ -134,6 +134,23 @@ export async function personOnInitiative(personId: string | null | undefined, in
 }
 
 /**
+ * The person ids on `initiativeId`: its owner and its contributors. Who may
+ * hold its work (an assignee) is one of these. Null when the initiative is
+ * unknown or cannot be read, so a caller refuses rather than guesses.
+ */
+export async function initiativePeople(initiativeId: string): Promise<Set<string> | null> {
+  try {
+    const { getProject } = await providers();
+    const project = await getProject(initiativeId);
+    if (!project) return null;
+    return new Set([...(project.ownerId ? [project.ownerId] : []), ...project.contributors.map((c) => c.personId)]);
+  } catch (err) {
+    console.warn(`[initiative-scope] could not read the people of ${initiativeId}:`, (err as Error).message);
+    return null;
+  }
+}
+
+/**
  * Whether a user, named by a service-signed call rather than a cookie, may
  * reach a box: its owner, a steward of the initiative it is charged to, or an
  * org-wide role (DE-44 rows 24–26). Read authoritatively; any lookup failure

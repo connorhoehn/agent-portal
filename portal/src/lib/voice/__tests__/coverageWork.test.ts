@@ -135,3 +135,26 @@ test('list: the page\'s rows by owner, sprint and blocked; a past sprint through
   const bad = await runVoiceTool('list', { kind: 'decision', filter: { who: 'Vera' } }, ctx);
   assert.equal(bad.output['code'], 'invalid-arguments');
 });
+
+test('sweep 11: someone not on the initiative is refused before any card, with `not-on-initiative` and its membership as the next step', async () => {
+  const off = [route('GET', `/api/graph/projects/${P}`, 200, { ...DETAIL, canWriteWork: false })];
+  const calls: Array<[string, Record<string, unknown>]> = [
+    ['update', { ref: 'work-item:wi-auth-e2-b3', fields: { status: 'in_progress' } }],
+    ['update', { ref: 'work-item:wi-auth-e2-b3', fields: { assignee: 'Nora' } }],
+    ['update', { ref: 'work-item:wi-auth-e2-b3', fields: { sprint: 'this' } }],
+    ['create', { kind: 'work-item', fields: { title: 'Logout skips the BFF revoke', type: 'bug' } }],
+  ];
+  for (const [name, args] of calls) {
+    const { ctx, log } = ctxFor({ extra: off });
+    const r = await plan(name, args, ctx);
+    assert.equal(r.card, null, `${name} ${JSON.stringify(args)} shows no card`);
+    assert.equal(r.result!.output['code'], 'not-on-initiative');
+    assert.equal(r.result!.output['requestItemId'], `initiative:${P}`);
+    assert.match(r.result!.output['reason'] as string, /Only the people on Auth Migration/);
+    assert.deepEqual(writes(log), []);
+  }
+  // A member (canWriteWork true, or a middleware that does not say) still gets the card.
+  const member = await plan('update', { ref: 'work-item:wi-auth-e2-b3', fields: { status: 'in_progress' } },
+    ctxFor({ extra: [route('GET', `/api/graph/projects/${P}`, 200, { ...DETAIL, canWriteWork: true })] }).ctx);
+  assert.ok(member.card);
+});

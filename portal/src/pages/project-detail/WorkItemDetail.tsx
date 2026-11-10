@@ -129,6 +129,8 @@ export interface WorkItemDetailProps {
   runs: BotRun[];
   /** The board's write gate (DispatchAgentRun). */
   canEdit: boolean;
+  /** Why the controls are read-only when `canEdit` is false; the role reason when absent. */
+  readOnlyReason?: string;
   tab: DetailTab;
   onTabChange: (tab: DetailTab) => void;
   onPatch: (fields: WorkItemPatch) => void;
@@ -165,6 +167,7 @@ export function WorkItemDetail({
   contributors,
   runs,
   canEdit,
+  readOnlyReason,
   tab,
   onTabChange,
   onPatch,
@@ -180,7 +183,7 @@ export function WorkItemDetail({
   liveNotes = null,
   headActions,
 }: WorkItemDetailProps) {
-  const readOnly = canEdit ? undefined : 'Your role cannot edit work items';
+  const readOnly = canEdit ? undefined : readOnlyReason ?? 'Your role cannot edit work items';
   // An editor with no criteria yet can also write them by hand; the list
   // opens under the table once asked for. Keyed by item so it never carries.
   const [writingCriteriaFor, setWritingCriteriaFor] = useState<string | null>(null);

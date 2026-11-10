@@ -32,6 +32,19 @@ jest.mock('../../providers/projects.js', () => ({
   setContributionRole: jest.fn(),
 }));
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
+// Who is on which initiative (sweep 11): `onInitiative` holds the initiatives
+// the caller is one of the people of, `ownerOf` the ones they own.
+const onInitiative = new Set<string>(['p-observability', 'p-o']);
+const ownerOf = new Set<string>(['p-observability', 'p-o']);
+jest.mock('../../lib/initiative-scope.js', () => ({
+  ORG_WIDE_INITIATIVE_ROLES: ['org-leader', 'hr-admin', 'admin'],
+  stewardsInitiative: jest.fn(async (_s: unknown, id: string) => onInitiative.has(id)),
+  ownsInitiative: jest.fn(async (_s: unknown, id: string) => ownerOf.has(id)),
+  requireInitiativeScope: jest.fn(async (_req: unknown, res: { status(n: number): { json(b: unknown): void } }, id: string) => {
+    if (onInitiative.has(id)) return true;
+    res.status(403).json({ error: 'not on this initiative', code: 'NOT_ON_INITIATIVE' }); return false;
+  }),
+}));
 
 // The budgets read tier (lib/budget-read-tier.ts) decides whether the dollar
 // fields ship; these suites read as a tier holder unless a case says otherwise.
@@ -68,6 +81,8 @@ beforeEach(() => {
   listMock.mockReset(); getMock.mockReset(); ownerMock.mockReset(); roleMock.mockReset();
   getUserMock.mockReset();
   sessionValue = { sub: 'u-1', name: 'RM' };
+  onInitiative.clear(); ['p-observability', 'p-o'].forEach((id) => onInitiative.add(id));
+  ownerOf.clear(); ['p-observability', 'p-o'].forEach((id) => ownerOf.add(id));
 });
 
 describe('auth floor', () => {
@@ -144,7 +159,7 @@ describe('the budgets read tier (lib/budget-read-tier.ts)', () => {
     listMock.mockResolvedValue([row]);
     getMock.mockResolvedValue({ ...row, contributors: [] });
     expect((await request(buildApp()).get('/api/graph/projects')).body).toEqual([row]);
-    expect((await request(buildApp()).get('/api/graph/projects/p-observability')).body).toEqual({ ...row, contributors: [] });
+    expect((await request(buildApp()).get('/api/graph/projects/p-observability')).body).toEqual({ ...row, contributors: [], canWriteWork: true });
   });
 
   it('below the tier the dollar fields are withheld and budgetAccess says why and what to request', async () => {
@@ -155,7 +170,7 @@ describe('the budgets read tier (lib/budget-read-tier.ts)', () => {
     const list = await request(buildApp()).get('/api/graph/projects');
     expect(list.body).toEqual([{ id: 'p-observability', name: 'Observability', status: 'active', budgetAccess: locked }]);
     const detail = await request(buildApp()).get('/api/graph/projects/p-observability');
-    expect(detail.body).toEqual({ id: 'p-observability', name: 'Observability', status: 'active', contributors: [], budgetAccess: locked });
+    expect(detail.body).toEqual({ id: 'p-observability', name: 'Observability', status: 'active', contributors: [], budgetAccess: locked, canWriteWork: true });
   });
 });
 
@@ -170,6 +185,40 @@ describe('GET /api/graph/projects/:id', () => {
     const missing = await request(buildApp()).get('/api/graph/projects/p-nope');
     expect(missing.status).toBe(404);
     expect(missing.body).toEqual({ error: 'Project not found' });
+  });
+});
+
+describe('canWriteWork on the detail (sweep 11)', () => {
+  it('says whether the caller is one of the initiative\'s people', async () => {
+    getMock.mockResolvedValue({ id: 'p-elsewhere', name: 'Elsewhere', contributors: [] });
+    expect((await request(buildApp()).get('/api/graph/projects/p-elsewhere')).body.canWriteWork).toBe(false);
+    getMock.mockResolvedValue({ id: 'p-observability', name: 'Observability', contributors: [] });
+    expect((await request(buildApp()).get('/api/graph/projects/p-observability')).body.canWriteWork).toBe(true);
+  });
+});
+
+describe('governance writes need the initiative\'s own people (sweep 11)', () => {
+  it('403s an owner change and a role change on an initiative the caller is not on', async () => {
+    ownerMock.mockResolvedValue({ ok: true }); roleMock.mockResolvedValue({ ok: true });
+    expect((await request(buildApp()).patch('/api/graph/projects/p-elsewhere').send({ ownerId: 'p-004' })).status).toBe(403);
+    expect((await request(buildApp()).patch('/api/graph/projects/p-elsewhere/contributors/p-004').send({ role: 'sme' })).status).toBe(403);
+    expect(ownerMock).not.toHaveBeenCalled();
+    expect(roleMock).not.toHaveBeenCalled();
+  });
+
+  it('a contributor who is not the owner cannot name the owner; an org-wide role can', async () => {
+    ownerMock.mockResolvedValue({ ok: true });
+    ownerOf.delete('p-observability');
+    const res = await request(buildApp()).patch('/api/graph/projects/p-observability').send({ ownerId: 'p-004' });
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('NOT_INITIATIVE_OWNER');
+    expect(ownerMock).not.toHaveBeenCalled();
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => { (req as unknown as { session: unknown }).session = { sub: 'u-9', role: 'org-leader' }; next(); });
+    app.use('/api/graph/projects', projectsRouter);
+    app.use(errorHandler);
+    expect((await request(app).patch('/api/graph/projects/p-observability').send({ ownerId: 'p-004' })).status).toBe(200);
   });
 });
 

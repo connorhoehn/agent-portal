@@ -105,6 +105,11 @@ export function refusalNext(tool: string, output: Record<string, unknown>, ctx: 
     // A page gate the session can pass by wearing a role it already holds (lib/pageAccess.ts): no request to file.
     return `The user's current role cannot open this, but they also hold ${output['switchRole']}: tell them to switch to ${output['switchRole']} from the header's role menu (switching reloads the page and ends nothing else), then ask again. ${NO_REPEAT}`;
   }
+  if (code === 'not-on-initiative' && requestItemOf(output)) {
+    // Sweep 11: not one of the initiative's people. The next step is its membership (the owner approves), never a retry.
+    if (createKinds(ctx.tenant).includes('access-request')) return fileRequestNext(requestItemOf(output)!);
+    return `The user is not one of this initiative's people (its owner and contributors): tell them, and offer to ask its owner to add them. ${NO_REPEAT}`;
+  }
   if (offersAccess && (code === 'role' || code === 'no-grant' || code === 'other')) {
     // G27: where create files an access request, the refusal's item is a turn of its own: offer, file on yes, retry once approved.
     const item = requestItemOf(output);

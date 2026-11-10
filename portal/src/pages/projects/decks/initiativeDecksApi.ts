@@ -18,6 +18,8 @@ export interface InitiativeDeckDetail extends DeckDetailCore {
   projectId: string;
   /** True when the deck carries allocation/spend/envelope/maintenance figures. */
   includesBudget: boolean;
+  /** Whether this reader is one of the initiative's people (owner, contributor or an org-wide role); only they edit its decks. */
+  onInitiative?: boolean;
 }
 
 export interface InitiativeDeckSummary {
