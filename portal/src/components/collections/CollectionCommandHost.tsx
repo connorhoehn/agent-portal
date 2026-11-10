@@ -8,6 +8,7 @@ import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-comp
 import { ConversationComposer } from '../../lib/conversationComposer';
 import { useSession } from '../../lib/auth';
 import { askTenantAnswer, tenantAnswers, type TenantAnswerFact } from '../../lib/tenantAnswer';
+import { collectionSubmitReason } from '../../lib/composerSubmitReason';
 
 export interface CollectionCommandResult {
   message: string;
@@ -33,9 +34,11 @@ export interface CollectionCommandAdapter {
  * spanning it, with every other block of the page above it. It still drives
  * that section's table: the portal keeps it in the section's React tree. In a
  * host with no dock it renders in place (docs/layout-cascade.md). */
-export function CollectionCommandHost({ adapter, disabled = false, prompts, inPlace = false }: {
+export function CollectionCommandHost({ adapter, disabled = false, disabledReason, prompts, inPlace = false }: {
   adapter: CollectionCommandAdapter;
   disabled?: boolean;
+  /** Why `disabled` (said on Apply and under the input); default: wait for the current change. */
+  disabledReason?: string;
   /** Items on the page that wait on a person (agent questions, work to review), as the composer's
    *  prompt deck — answered here, paged with the keyboard, instead of a block above the composer.
    *  A record page's own dialogue rides here too (G57: a waiting decision's numbered options,
@@ -75,6 +78,8 @@ export function CollectionCommandHost({ adapter, disabled = false, prompts, inPl
     } finally { locked.current = false; setBusy(false); }
   };
   const Dock = inPlace ? Fragment : ColumnDock;
+  // Why Apply is off (ui-components 2.515.6); an empty box and a running command say nothing.
+  const submitDisabledReason = collectionSubmitReason({ disabled, disabledReason, confirming: !!pending, commandCount: adapter.examples.length });
   return <Dock><Stack gap="none" className="shrink-0 min-w-0" data-testid="collection-command-host" data-collection-command={adapter.id}>
     <ConversationComposer channel={null} context={{ kind: 'document', id: adapter.id, title: adapter.label }}
       capabilities={{ maySend: false, agent: { allowed: true } }} defaultMode="agent" mode="agent"
@@ -83,6 +88,7 @@ export function CollectionCommandHost({ adapter, disabled = false, prompts, inPl
       data-testid="collection-command-composer" composerTestId="collection-command-input"
       modePlaceholders={{ agent: adapter.placeholder }}
       submitLabel={{ agent: 'Apply' }} answersFocus disabled={disabled || busy || !!pending}
+      {...(submitDisabledReason ? { submitDisabledReason } : {})}
       allowEmoji={false} persistDraft={false} onAgent={submit}
       {...(prompts?.length ? { prompts } : {})}
       modeRowEnd={<><Tooltip content="Supported table commands"><IconButton ref={helpRef} size="sm" aria-label={`Available ${adapter.label.toLowerCase()} commands`}

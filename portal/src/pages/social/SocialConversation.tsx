@@ -57,6 +57,7 @@ import { socialChatCommands } from '../../components/chat/chatCommandRegistry';
 import { conversationCommands } from './socialConversationModel';
 import { socialAgentApi } from '../../components/chat/conversationAgent';
 import { useCallBlock } from '../../lib/conversationCall';
+import { conversationSubmitReason } from '../../lib/composerSubmitReason';
 
 const OFFLINE_REASON = offlineReason('this conversation');
 /** The views the header offers, in the reference's order. */
@@ -215,6 +216,8 @@ function SocialConversationInner({
   const [joined, setJoined] = useState<{ channel: string; epoch: number | undefined } | null>(null);
   const ready = maySend && connected && joined?.channel === channel && joined.epoch === sessionEpoch;
   const unavailableReason = connected ? 'This conversation is connecting. Wait until chat is ready before sending.' : OFFLINE_REASON;
+  // Why Send is off (ui-components 2.515.6): read-only here, or the socket is not up (yet).
+  const submitDisabledReason = conversationSubmitReason({ destinationChosen: true, maySend, connected: ready, offlineReason: unavailableReason });
   const sendScope = useRef(new AbortController());
   useEffect(() => {
     const controller = new AbortController(); sendScope.current = controller;
@@ -383,6 +386,7 @@ function SocialConversationInner({
           threaded={!channel.startsWith('social:dm:')} readReceipts={receipts.receipts} readReceiptsEnabled={receipts.enabled} {...(unreadFrom ? { unreadFrom } : {})}
           composer={<ConversationComposer channel={channel} chat={threadChat} context={{ kind: 'conversation', id: channel, title: name }}
             capabilities={{ maySend, mayAttach: !onSendText }} offline={ready || !maySend ? null : unavailableReason}
+            {...(submitDisabledReason ? { submitDisabledReason } : {})}
             identity={{ userId, displayName }} reply={quote} commands={summarize.commands} callBlock={callBlock}
             recipients={[{ id: 'discussion', label: name, channel, attachments: true, send: out => send(out.text, out.metadata) }]}
             modePlaceholders={{ chat: placeholder }} onSearchPeople={onSearchPeople} draftKey={`social:${channel}`}

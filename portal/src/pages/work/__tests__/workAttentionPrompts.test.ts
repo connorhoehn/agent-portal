@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { attentionCount, attentionPrompts } from '../workAttentionPrompts.ts';
+import { ANSWER_NOT_WAITING, ANSWER_ROLE_REASON, attentionCount, attentionPrompts, consultAnswerReason } from '../workAttentionPrompts.ts';
 import type { Job, LabConsult, Proposal } from '../workShared';
 
 const now = '2026-10-14T09:00:00Z';
@@ -31,21 +31,33 @@ test('answers call the page handlers; a failed write stays on the card', async (
   assert.deepEqual(calls, ['consult c1 Yes, one release', 'review j-awaiting_review accept']);
 });
 
-test('a reader without the capability sees the prompts read-only', () => {
-  assert.ok(build(false).every((p) => typeof p.readOnlyReason === 'string' && p.readOnlyReason.length > 0));
-  assert.ok(build(true).every((p) => p.readOnlyReason === undefined));
+test('a reader without the capability sees reviews read-only and the question drawn with why it cannot be answered', () => {
+  const [question, ...rest] = build(false);
+  assert.equal(question!.readOnlyReason, undefined);
+  assert.equal(question!.disabledReason, ANSWER_ROLE_REASON);
+  assert.ok(rest.every((p) => typeof p.readOnlyReason === 'string' && p.readOnlyReason.length > 0));
+  assert.ok(build(true).every((p) => p.readOnlyReason === undefined && p.disabledReason === undefined));
+});
+
+test('consultAnswerReason: a waiting question this role may answer has no reason; empty text is never one', () => {
+  assert.equal(consultAnswerReason({ status: 'pending' }, true), null);
+  assert.equal(consultAnswerReason({ status: 'pending' }, false), ANSWER_ROLE_REASON);
+  assert.equal(consultAnswerReason({ status: 'answered' }, true), ANSWER_NOT_WAITING.answered);
+  assert.equal(consultAnswerReason({ status: 'expired' }, false), ANSWER_NOT_WAITING.expired);
+  assert.equal(consultAnswerReason({ status: 'withdrawn' }, true), ANSWER_NOT_WAITING.withdrawn);
 });
 
 // These capabilities intentionally differ for program owners and org leaders.
 test('dispatch-only people can answer questions without receiving queue review controls', () => {
   const [question, review, proposal] = build(false, true);
   assert.equal(question!.readOnlyReason, undefined);
+  assert.equal(question!.disabledReason, undefined);
   assert.ok(review!.readOnlyReason);
   assert.ok(proposal!.readOnlyReason);
 });
 test('devbox-only capability cannot enable consult answers', () => {
   const [question, review, proposal] = build(true, false);
-  assert.ok(question!.readOnlyReason);
+  assert.equal(question!.disabledReason, ANSWER_ROLE_REASON);
   assert.equal(review!.readOnlyReason, undefined);
   assert.equal(proposal!.readOnlyReason, undefined);
 });

@@ -66,3 +66,14 @@ export function caseResultFor(run: EvalRun | null, caseId: string): EvalCaseResu
 export function progressColor(rate: number | null): string | undefined {
   return rate != null && rate < 0.8 ? 'var(--color-danger)' : undefined;
 }
+
+/**
+ * Why "Run evals" is off, or null when it can run (the reader holds Manage
+ * bots; without it the button is not drawn). Said as the button's tooltip and
+ * accessible description, and as a line beside it.
+ */
+export function runEvalsDisabledReason({ busy, caseCount }: { busy: boolean; caseCount: number }): string | null {
+  if (busy) return 'An eval run is already in progress.';
+  if (caseCount === 0) return 'This asset has no eval cases yet, so there is nothing to run.';
+  return null;
+}

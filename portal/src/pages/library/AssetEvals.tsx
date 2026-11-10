@@ -7,7 +7,7 @@
 // drawer owner drops it in wherever it fits rather than this file reaching
 // into AssetDrawer's layout decisions.
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import {
   Button, Card, Chip, DetailSection, Inline, InlinePlaceholder, LoadingState, ProgressBar, Stack, T,
 } from '@connorhoehn/ui-components/shared';
@@ -17,12 +17,13 @@ import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { writeJson } from '../../lib/writeJson';
 import {
-  assertionSummary, caseResultFor, formatPassRate, latestRun, progressColor,
+  assertionSummary, caseResultFor, formatPassRate, latestRun, progressColor, runEvalsDisabledReason,
   type EvalCase, type EvalRun,
 } from './evalFormat';
 
 export function AssetEvals({ assetId, version }: { assetId: string; version: string }) {
   const [busy, setBusy] = useState(false);
+  const runReasonId = `${useId()}-run-evals-reason`;
   const base = `/api/library/evals/${encodeURIComponent(assetId)}`;
   // ManageBots — the same gate the server's run route enforces
   // (middleware/src/routes/prompt-evals.ts). Without this, a member saw a
@@ -65,6 +66,7 @@ export function AssetEvals({ assetId, version }: { assetId: string; version: str
   const runs = runsData?.runs ?? [];
   const latest = latestRun(runs);
   const rate = latest?.passRate ?? null;
+  const runReason = runEvalsDisabledReason({ busy, caseCount: cases.length });
 
   return (
     <Stack gap="lg">
@@ -92,9 +94,13 @@ export function AssetEvals({ assetId, version }: { assetId: string; version: str
         hint={runsLoading ? undefined : (latest ? `ran by ${latest.ranBy} on v${latest.version}` : undefined)}
         actions={
           canRun ? (
-            <Button size="sm" variant="secondary" disabled={busy || cases.length === 0} onClick={() => void runNow()}>
-              {busy ? 'Running…' : 'Run evals'}
-            </Button>
+            <Inline gap="xs" align="center" wrap={false} className="min-w-0">
+              {runReason && !busy && <T size="xs" tone="tertiary" id={runReasonId} data-testid="run-evals-reason">{runReason}</T>}
+              <Button size="sm" variant="secondary" disabled={!!runReason} onClick={() => void runNow()}
+                {...(runReason ? { title: runReason, ...(busy ? {} : { 'aria-describedby': runReasonId }) } : {})}>
+                {busy ? 'Running…' : 'Run evals'}
+              </Button>
+            </Inline>
           ) : (
             <T size="xs" className="text-text-tertiary">Running evals needs Manage bots.</T>
           )

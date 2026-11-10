@@ -550,3 +550,7 @@ On branch `worktree-agent-af5e61d8dc5c963be`; library ui-components 2.515.5 (`c3
 - Footer: wrapped lines drop their left rule at 390; `audit-ui-dom.cjs` falls back to the installed Chromium revision and says so.
 
 Left: u- ids still appear inside the collapsed byte-exact file diffs of a proposal (they are the snapshot's data); 390 tables on Scores, Run, Bot and Calibration scroll inside their box rather than reflowing; the agent-library record at 390 shows no h1 while the drawer is open.
+
+### Lane C
+
+- Disabled controls say why (defects 15, 16; ui-components 2.515.6, tag `v2.515.6`): the docked composer's Apply and Send take `submitDisabledReason` (tooltip, `aria-describedby`, one line under the input at every density) from `portal/src/lib/composerSubmitReason.ts` (no commands, pending confirm, page hold, read-only destination, no destination, socket down; an empty box is not a reason); an agent question on the Automate inbox that this role cannot answer is drawn with its field and Answer off and the reason beside Answer (`ComposerPrompt.disabledReason`); the work graph's ‹ › / Following now / Earlier work say why from their own state; "Run evals" says the asset has no eval cases. Left: consults carry no owner, so "not your item" has no rule; Answer and Apply stay quietly off while the box is empty.

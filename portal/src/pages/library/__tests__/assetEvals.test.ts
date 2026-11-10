@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  formatPassRate, assertionSummary, latestRun, caseResultFor, progressColor,
+  formatPassRate, assertionSummary, latestRun, caseResultFor, progressColor, runEvalsDisabledReason,
   type EvalRun,
 } from '../evalFormat.ts';
 
@@ -48,4 +48,10 @@ test('progressColor: red only below the 80% gate floor', () => {
   assert.equal(progressColor(0.79), 'var(--color-danger)');
   assert.equal(progressColor(0.8), undefined);
   assert.equal(progressColor(null), undefined);
+});
+
+test('runEvalsDisabledReason: no cases or a run in progress say why; a runnable suite says nothing', () => {
+  assert.equal(runEvalsDisabledReason({ busy: false, caseCount: 3 }), null);
+  assert.match(runEvalsDisabledReason({ busy: false, caseCount: 0 })!, /no eval cases/);
+  assert.match(runEvalsDisabledReason({ busy: true, caseCount: 3 })!, /in progress/);
 });

@@ -45,6 +45,7 @@ import { useConversationReadState } from './useConversationReadState';
 import { conversationChatCommands } from './chatCommandRegistry';
 import { useConversationSummarize, type ConversationSummarize } from './useConversationSummarize';
 import { useMentionCandidates } from './useMentionCandidates';
+import { conversationSubmitReason } from '../../lib/composerSubmitReason';
 
 /** Said to a reader who may see the thread but not post. */
 export const READ_ONLY_REASON = 'You can read and filter messages. Your current role cannot post.';
@@ -199,11 +200,15 @@ export function ConversationThread({ conversation, title, readOnlyReason = null,
   const readPending = readState?.phase === 'loading';
   const readError = readState?.phase === 'error' ? readState : null;
   const canWrite = maySend && !readOnlyReason && !readPending && !readError;
+  // Why Send is off (ui-components 2.515.6): read-only here, or the socket is down. A pending read stays quiet.
+  const submitDisabledReason = conversationSubmitReason({ destinationChosen: true, maySend: maySend && !readError, pending: readPending,
+    readOnlyReason: readOnlyReason ?? readError?.message ?? null, connected, offlineReason: OFFLINE_REASON });
   const field = input === 'below' ? <Fragment />
     : elsewhere ? <ThreadInputHandoff label={elsewhere.label} onFocus={() => owner.focus()} {...(testId ? { 'data-testid': `${testId}-input-elsewhere` } : {})} />
     : <ConversationComposer channel={channel} chat={chat} context={{ kind: 'conversation', id: channel, title }}
         capabilities={{ maySend: canWrite, ...(readOnlyReason ? { readOnlyReason } : {}), mayAttach: attachments && canWrite }}
         offline={connected ? null : OFFLINE_REASON} identity={{ userId, displayName }} commands={summarize.commands} reply={quote}
+        {...(submitDisabledReason ? { submitDisabledReason } : {})}
         draftKey={`${channel}:summarizable`} modePlaceholders={{ chat: placeholder ?? 'Write a message, or /summarize…' }}
         {...(onSearchPeople ? { onSearchPeople } : {})}
         {...(testId ? { 'data-testid': `${testId}-composer-dock`, composerTestId: `${testId}-composer` } : {})} {...composer} />;

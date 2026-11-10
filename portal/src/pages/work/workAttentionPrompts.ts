@@ -13,7 +13,13 @@ export interface AttentionHandlers {
   decideProposal(p: Proposal, decision: 'approve' | 'reject'): Promise<void>;
 }
 
-const ANSWER_READ_ONLY = 'Your access allows you to read this question, but not answer it.';
+/** Why a consult's Answer is off (ui-components 2.515.6 `ComposerPrompt.disabledReason`): drawn, not hidden. */
+export const ANSWER_ROLE_REASON = 'Your role cannot answer agent questions: answering directs a running agent (Dispatch agent runs).';
+export const ANSWER_NOT_WAITING: Record<Exclude<LabConsult['status'], 'pending'>, string> = {
+  answered: 'No question is waiting: this one was already answered.',
+  expired: 'No question is waiting: this one expired before an answer.',
+  withdrawn: 'No question is waiting: the agent withdrew it.',
+};
 const REVIEW_READ_ONLY = 'Your access allows you to read this review, but not decide it.';
 
 /** How many items wait on a person. */
@@ -25,6 +31,18 @@ const done = async (run: () => Promise<void>): Promise<ComposerPromptResult> => 
   try { await run(); return undefined; } catch (err) { return { error: (err as Error).message || 'The answer could not be saved.' }; }
 };
 
+/**
+ * Why this reader cannot answer this agent question, or null when they can.
+ * An empty answer box is not a reason. ("Not your item" has no rule: a consult
+ * carries no owner, and anyone who may dispatch runs may answer it.)
+ */
+export function consultAnswerReason(consult: Pick<LabConsult, 'status'>, canAnswer: boolean): string | null {
+  if (consult.status !== 'pending') return ANSWER_NOT_WAITING[consult.status];
+  if (!canAnswer) return ANSWER_ROLE_REASON;
+  return null;
+}
+const withReason = (reason: string | null) => reason ? { disabledReason: reason } : {};
+
 export function attentionPrompts(
   { consults, jobs, proposals, canAnswerConsults, canReview, money, label }: {
     consults: readonly LabConsult[]; jobs: readonly Job[]; proposals: readonly Proposal[]; canAnswerConsults: boolean; canReview: boolean;
@@ -32,7 +50,6 @@ export function attentionPrompts(
   },
   handlers: AttentionHandlers,
 ): ComposerPrompt[] {
-  const answerAccess = canAnswerConsults ? {} : { readOnlyReason: ANSWER_READ_ONLY };
   const reviewAccess = canReview ? {} : { readOnlyReason: REVIEW_READ_ONLY };
   const out: ComposerPrompt[] = [];
   for (const c of consults) out.push({
@@ -43,7 +60,7 @@ export function attentionPrompts(
       ...(c.repo ? [{ label: 'Repo', value: c.repo, mono: true }] : []),
       ...(c.boxId ? [{ label: 'Box', value: c.boxId, mono: true }] : []),
     ],
-    ...answerAccess,
+    ...withReason(consultAnswerReason(c, canAnswerConsults)),
     onAnswer: (answer) => answer.kind === 'text' ? done(() => handlers.answerConsult(c.id, answer.text)) : { error: 'Type an answer.' },
   });
   for (const j of jobs.filter((x) => x.status === 'awaiting_review')) out.push({
