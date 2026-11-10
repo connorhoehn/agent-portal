@@ -370,9 +370,13 @@ describe('POST /api/voice/sessions — the mint', () => {
     await request(app).post(`/api/voice/sessions/${second.body.sessionId}/close`).send({ seconds: 15 });
     expect(named((await mint({})).body.mockScript)).toEqual(['search']);
     process.env['NODE_ENV_SAVED'] = process.env['NODE_ENV'] ?? '';
-    process.env['NODE_ENV'] = 'production';
-    try { expect((await request(app).put('/api/voice/mock-script').send({ turns })).status).toBe(404); }
-    finally { process.env['NODE_ENV'] = process.env['NODE_ENV_SAVED']; delete process.env['NODE_ENV_SAVED']; }
+    try {
+      // Any spelling of production closes it, not only the exact lower-case word.
+      for (const value of ['production', 'Production', ' PRODUCTION ', 'prod']) {
+        process.env['NODE_ENV'] = value;
+        expect((await request(app).put('/api/voice/mock-script').send({ turns })).status).toBe(404);
+      }
+    } finally { process.env['NODE_ENV'] = process.env['NODE_ENV_SAVED']; delete process.env['NODE_ENV_SAVED']; }
   });
 
   it('defaults the delegation model to gpt-6-luna', async () => {

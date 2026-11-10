@@ -97,7 +97,7 @@ import { randomUUID } from 'node:crypto';
 import { asyncHandler } from '../lib/async-handler.js';
 import { isAllowed, requireSession, resolveSession } from '../lib/authz.js';
 import { DEMO_SUB, type Session } from '../lib/session.js';
-import { insecureDevMode } from '../lib/insecure-dev-mode.js';
+import { insecureDevMode, isProductionEnv } from '../lib/insecure-dev-mode.js';
 import { emitFleetMetric } from '../lib/fleet-metrics.js';
 import { rateLimit } from '../lib/rate-limit.js';
 import { clock } from '../mock/core/index.js';
@@ -607,7 +607,8 @@ function closeBody(row: VoiceSessionRow, alreadyClosed: boolean) {
  * 400 when a turn is malformed, names no catalogue tool, or the first turn is not a request (openai.ts parseMockTurns).
  */
 const mockTurnsBySub = new Map<string, MockTurn[]>();
-const mockScriptOpen = (): boolean => voiceConfig().mock && process.env['NODE_ENV'] !== 'production';
+// Any spelling of production closes it (lib/insecure-dev-mode.ts), not only the exact lower-case word.
+const mockScriptOpen = (): boolean => voiceConfig().mock && !isProductionEnv();
 
 function scriptedTurns(sub: string, sessionId: string) {
   const turns = mockTurnsBySub.get(sub);
