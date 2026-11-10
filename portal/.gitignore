@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# The production build's module-graph check (scripts/node-free-graph.mjs).
+.module-graph.json
 .vite/
 .env.local
 .env.*.local

@@ -4,6 +4,8 @@ import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
 import { existsSync } from 'fs';
 import type { Plugin } from 'vite';
+// The production module graph must not reach Node-only code (scripts/node-free-graph.mjs).
+import { nodeFreeGraph } from './scripts/node-free-graph.mjs';
 
 // realtime-modules ships its canvas client and TipTap adapters as CommonJS, so
 // a production build resolves their `require`s through the packages' `require`
@@ -56,7 +58,7 @@ export default defineConfig(async () => ({
   define: {
     global: 'globalThis',
   },
-  plugins: [editorStackAsEsm(), react(), tailwindcss()],
+  plugins: [editorStackAsEsm(), react(), tailwindcss(), nodeFreeGraph({ root: __dirname }) as Plugin],
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),
