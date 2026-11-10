@@ -3,7 +3,7 @@
 exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
 [
   {
-    "description": "Open, in the current workspace, a page, a row of the last result (ref or position), a record by kind and name ("open the payments initiative" is kind initiative, name payments), or a tab of the page in view (scope "this-page" and tab). Several matches come back as a numbered choice the user picks by number or click.",
+    "description": "Open, in the current workspace, a page, a row of the last result (ref or position), a record by kind and name ("open the payments initiative" is kind initiative, name payments), or a tab of the page in view (scope "this-page" and tab).",
     "name": "open",
     "parameters": {
       "additionalProperties": false,
@@ -181,7 +181,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
           ],
         },
         "tab": {
-          "description": "A tab, as the page context lists them ("decisions", "work", "docs"): of the page in view with scope "this-page", else of the ref's record.",
+          "description": "A tab the page context lists ("decisions"): of the page in view with scope "this-page", else of the ref's record.",
           "type": [
             "string",
             "null",
@@ -216,7 +216,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
           ],
         },
         "detail": {
-          "description": "True only when the user asked for every row: the full list.",
+          "description": "True only when the user asked for every row.",
           "type": [
             "boolean",
             "null",
@@ -292,7 +292,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
       "additionalProperties": false,
       "properties": {
         "detail": {
-          "description": "True only when the user asked for every row: the full list.",
+          "description": "True only when the user asked for every row.",
           "type": [
             "boolean",
             "null",
@@ -322,7 +322,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
               ],
             },
             "since": {
-              "description": "Only records since: "yesterday", "last night", "3 hours ago", "last week" or a YYYY-MM-DD date.",
+              "description": "Only records since a time.",
               "type": [
                 "string",
                 "null",
@@ -436,7 +436,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
       "additionalProperties": false,
       "properties": {
         "detail": {
-          "description": "True only when the user asked for every row: the full list.",
+          "description": "True only when the user asked for every row.",
           "type": [
             "boolean",
             "null",
@@ -484,7 +484,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "Act on the user's computers. "start": one cloud computer per initiative in \`initiatives\` (a running one is reused; for "each of my active projects" list the initiatives first, kind initiative, scope mine). "stop": stop one of the user's own computers. "open-shell": open a shell tab on one. "run": run one read-only command, chosen by \`phrase\` from a fixed list, never free-form (for anything else tell the user to open the shell and type it). "hand-work": hand a work item or a bot's mission (\`job\`) to one of the user's paired machines (\`machine\`). Everything except open-shell asks the user first.",
+    "description": "Act on the user's computers. "start": one cloud computer per initiative in \`initiatives\` (a running one is reused; for "each of my active projects" list the initiatives first, kind initiative, scope mine). "stop": stop one of the user's own computers. "open-shell": open a shell tab on one. "run": run one read-only command, chosen by \`phrase\` from a fixed list, never free-form (for anything else tell the user to open the shell and type it). "hand-work": hand a work item or a bot's mission (\`job\`) to one of the user's paired machines (\`machine\`).",
     "name": "computer",
     "parameters": {
       "additionalProperties": false,
@@ -553,7 +553,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
           ],
         },
         "since": {
-          "description": "For run's commits-since: "yesterday", "last night", "3 hours ago", "last week" or a YYYY-MM-DD date.",
+          "description": "For run's commits-since: a time.",
           "type": [
             "string",
             "null",
@@ -575,13 +575,13 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "Read one aggregate as a few figures: what failed since a time ("what failed last night"), the work queue, the fleet, paired machines, platform health, ingestion, what is on today, unread discussions, who is live, the program rollup or the access summary. The kinds here: sweeps, sprint, review, work, fleet, machines, health, ingest, today, unread, live.",
+    "description": "Read one aggregate as a few figures (kind says which).",
     "name": "summary",
     "parameters": {
       "additionalProperties": false,
       "properties": {
         "kind": {
-          "description": "Which aggregate: "sweeps" (sweep and bot runs that failed, open findings), "sprint" (the sprint in view or the user's: left, done, blocked on what), "review" (what needs the user: agent questions, jobs, proposals, unread notifications), "work" (the work queue), "fleet" (the computers), "machines" (paired machines), "health" (agent runs in the last 24 hours), "ingest", "today", "unread" (discussions), "live" (who is online, in a call), "pipelines" (failed runs, dead letters), "rollup" (the assessment program), "access".",
+          "description": "Which aggregate: "sweeps" (sweep and bot runs that failed, open findings), "sprint" (the sprint in view or the user's: left, done, blocked on what), "review" (what needs the user: agent questions, jobs, proposals, unread notifications), "work" (the work queue), "fleet" (the computers), "machines" (paired machines), "health" (agent runs in the last 24 hours), "ingest", "today", "unread" (discussions), "live" (who is online, in a call).",
           "enum": [
             "sweeps",
             "sprint",
@@ -598,7 +598,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
           "type": "string",
         },
         "since": {
-          "description": "Since when, for sweeps, pipelines, machines and unread: "yesterday", "last night", "3 hours ago", "last week" or a YYYY-MM-DD date (default yesterday for sweeps and pipelines).",
+          "description": "Since when, for sweeps, pipelines, machines and unread (default yesterday for sweeps and pipelines).",
           "type": [
             "string",
             "null",
@@ -615,7 +615,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "Read money: what the user spent this month, an initiative's or the org's spend and pace, allocations, people's budgets, whether the fleet is paused, sprint envelopes or agent cost. Figures beyond the user's own need the budgets read tier; below it the result offers the access request instead. The scopes here: me, initiative, org, allocations, users, switches, envelopes, cost.",
+    "description": "Read money (scope says whose). Figures beyond the user's own need the budgets read tier; below it the result offers the access request instead.",
     "name": "budget",
     "parameters": {
       "additionalProperties": false,
@@ -687,7 +687,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "Read what is happening around the user from the social app's activity and the presence roster: who is online, who is in a call or huddle now, the user's missed calls, recent messages or pinned messages (optionally from or about one person), what a person worked on, or everything recent since a time.",
+    "description": "Read what is happening around the user from the social app's activity and the presence roster (scope says what).",
     "name": "activity",
     "parameters": {
       "additionalProperties": false,
@@ -706,7 +706,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
           "type": "string",
         },
         "since": {
-          "description": "Since when, for messages, pins, missed-calls, work and recent: "yesterday", "last night", "3 hours ago", "last week" or a YYYY-MM-DD date.",
+          "description": "Since when, for messages, pins, missed-calls, work and recent.",
           "type": [
             "string",
             "null",
@@ -731,7 +731,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "Post a message the user dictated to a team, a channel or a person (target), or reply to an inbound message in its own conversation (thread), as a social-app activity. Always read it back and ask the user first.",
+    "description": "Post a message the user dictated to a team, a channel or a person (target), or reply to an inbound message in its own conversation (thread), as a social-app activity.",
     "name": "message",
     "parameters": {
       "additionalProperties": false,
@@ -793,7 +793,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "A call (a huddle) as a social-app activity. "start": in a team's channel or a channel, where nobody is rung and anyone who opens it can join, or with one person, who is rung. "join": walk into the huddle that is live now in a channel, a team or a conversation (the one the activity read shows; target may be left out when exactly one is live). The user confirms first. Never while the user is already in a call.",
+    "description": "A call (a huddle) as a social-app activity. "start": in a team's channel, a channel or with one person. "join": walk into the huddle that is live now in a channel, a team or a conversation (the one the activity read shows; target may be left out when exactly one is live). Never while the user is already in a call.",
     "name": "call",
     "parameters": {
       "additionalProperties": false,
@@ -876,7 +876,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "Queue background work the user asks for. The user confirms first; the portal shows its progress and tells you the outcome. The kinds here: "sweep" runs the org sweeps now (target "all" or "nightly", or one of bus factor, stale docs, orphan decisions); "bot-run" runs one bot now (target: the bot); "job" queues one of the suggested jobs for the fleet (target: the suggestion); "dispatch" dispatches a work item to an agent (target: the work item; model: Haiku, Sonnet or Opus if the user named one); the card shows the forecast; "finding-promote" turns a finding into a job (target: the finding); "finding-analyze" analyses a document finding (target: the finding); "change-rereview" re-reviews an agent change (target: the change); "change-address" has an agent address a change's review comments (target: the change); "deck" builds a status deck, a PowerPoint (target: the initiative in Work, the team in Assessment, the run in Pipelines, the channel in Social; in Work, on an initiative's page, scope "this-page" builds it for the initiative in view, and focus carries what it should cover); "summarize" summarises a conversation (target: the initiative in Work, the channel in Social); "diagram" draws a diagram of a conversation (target as summarize); "doc" drafts a document from a conversation (target as summarize).",
+    "description": "Queue background work the user asks for. The kinds here: "sweep" runs the org sweeps now (target "all" or "nightly", or one of bus factor, stale docs, orphan decisions); "bot-run" runs one bot now (target: the bot); "job" queues one of the suggested jobs for the fleet (target: the suggestion); "dispatch" dispatches a work item to an agent (target: the work item; model only if the user named one); "finding-promote" turns a finding into a job (target: the finding); "finding-analyze" analyses a document finding (target: the finding); "change-rereview" re-reviews an agent change (target: the change); "change-address" has an agent address a change's review comments (target: the change); "deck" builds a status deck, a PowerPoint (target: the initiative; on an initiative's page, scope "this-page" builds it for the initiative in view, and focus carries what it should cover); "summarize" summarises a conversation (target: the initiative); "diagram" draws a diagram of a conversation (target as summarize); "doc" drafts a document from a conversation (target as summarize).",
     "name": "queue_work",
     "parameters": {
       "additionalProperties": false,
@@ -961,7 +961,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "Decide something waiting on the user, by the ref a list or get result gave: approve or reject (accept and discard for a draft or a runbook proposal, resolve or reject for a decision, with what was decided and why as the note), or deliver an approved change. The user confirms on a card that shows what it is (with its amount where it has one) and may flip the decision or add a note there. List what is waiting first. Here it decides: hitl-approval, a pending transaction (approve or reject; the card shows its amount); change, an agent change (approve, reject, or deliver once approved); runbook-proposal, a runbook proposal (accept or reject; a rejection needs a note); proposal, a graph change proposal (approve or reject); consult, an agent's question (approve, the user's answer as the note; only a click sends it); design, a design thread (approve or reject the sign-off); decision, a waiting decision (resolve with an option, or the outcome and why as note; or reject).",
+    "description": "Decide something waiting on the user, by the ref a list or get result gave, as its kind below allows. List what is waiting first. Here it decides: hitl-approval, a pending transaction (approve or reject; the card shows its amount); change, an agent change (approve, reject, or deliver once approved); runbook-proposal, a runbook proposal (accept or reject; a rejection needs a note); proposal, a graph change proposal (approve or reject); consult, an agent's question (approve, the user's answer as the note; only a click sends it); design, a design thread (approve or reject the sign-off); decision, a waiting decision (resolve with an option, or the outcome and why as note; or reject).",
     "name": "decide",
     "parameters": {
       "additionalProperties": false,
@@ -1021,7 +1021,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "Create a record of one kind through the form its page uses, with the fields that kind takes. The user confirms on a card that shows exactly what will be created (an access request's approvers and conflicts first). The kinds here and their fields: work-item (title, initiative?, type?); comment (on, text); saved-search (name, query); sprint (initiative, name, startsOn, endsOn); meeting (initiative, time, thread?); access-request (item, justification, duration?); document (initiative?, title?); whiteboard (initiative?, title?); deck (initiative?, focus?).",
+    "description": "Create a record of one kind through the form its page uses, with the fields that kind takes. The kinds here and their fields: work-item (title, initiative?, type?); comment (on, text); saved-search (name, query); sprint (initiative, name, startsOn, endsOn); meeting (initiative, time, thread?); access-request (item, justification, duration?); document (initiative?, title?); whiteboard (initiative?, title?); deck (initiative?, focus?).",
     "name": "create",
     "parameters": {
       "additionalProperties": false,
@@ -1030,21 +1030,21 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
           "additionalProperties": false,
           "properties": {
             "delegate": {
-              "description": "delegation: who decides for the user.",
+              "description": "Who decides for the user.",
               "type": [
                 "string",
                 "null",
               ],
             },
             "description": {
-              "description": "channel, team, room: one line about it.",
+              "description": "One line about it.",
               "type": [
                 "string",
                 "null",
               ],
             },
             "duration": {
-              "description": "access-request: how long (outside Access, a week when not said).",
+              "description": "How long (outside Access, a week when not said).",
               "enum": [
                 "8h",
                 "24h",
@@ -1058,56 +1058,56 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
               ],
             },
             "endsOn": {
-              "description": "sprint: its last day, YYYY-MM-DD.",
+              "description": "Last day, YYYY-MM-DD.",
               "type": [
                 "string",
                 "null",
               ],
             },
             "focus": {
-              "description": "deck: what it should cover, in the user's words.",
+              "description": "What the deck should cover, in the user's words.",
               "type": [
                 "string",
                 "null",
               ],
             },
             "initiative": {
-              "description": "work-item, sprint, meeting, document, whiteboard, deck: the initiative, by name or ref; for work-item, document, whiteboard and deck "this-page" (or left out) is the one in view.",
+              "description": "By name or ref; "this-page" (or left out) is the one in view, except for a sprint or a meeting.",
               "type": [
                 "string",
                 "null",
               ],
             },
             "item": {
-              "description": "access-request: the catalog item, by name or ref; outside Access, the requestItemId a refusal named.",
+              "description": "The catalog item, by name or ref; outside Access, the requestItemId a refusal named.",
               "type": [
                 "string",
                 "null",
               ],
             },
             "justification": {
-              "description": "access-request: why (in Access at least 20 characters).",
+              "description": "Why (in Access at least 20 characters).",
               "type": [
                 "string",
                 "null",
               ],
             },
             "name": {
-              "description": "saved-search, sprint, channel, team, room: its name.",
+              "description": "Its name.",
               "type": [
                 "string",
                 "null",
               ],
             },
             "on": {
-              "description": "comment: the work item it is on (ref or position).",
+              "description": "The work item it is on (ref or position).",
               "type": [
                 "string",
                 "null",
               ],
             },
             "privacy": {
-              "description": "channel, team, room: public (default) or private.",
+              "description": "public (default) or private.",
               "enum": [
                 "public",
                 "private",
@@ -1119,56 +1119,56 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
               ],
             },
             "query": {
-              "description": "saved-search: the search text.",
+              "description": "The search text.",
               "type": [
                 "string",
                 "null",
               ],
             },
             "reason": {
-              "description": "delegation: why (at least 10 characters).",
+              "description": "Why (at least 10 characters).",
               "type": [
                 "string",
                 "null",
               ],
             },
             "startsOn": {
-              "description": "sprint: its first day, YYYY-MM-DD.",
+              "description": "First day, YYYY-MM-DD.",
               "type": [
                 "string",
                 "null",
               ],
             },
             "text": {
-              "description": "comment: the comment.",
+              "description": "The comment.",
               "type": [
                 "string",
                 "null",
               ],
             },
             "thread": {
-              "description": "meeting: the inbound message it answers ("message:<id>"); the time and the room go back there.",
+              "description": "The inbound message it answers ("message:<id>"); the time and the room go back there.",
               "type": [
                 "string",
                 "null",
               ],
             },
             "time": {
-              "description": "meeting: when ("5 pm", "tomorrow at 10").",
+              "description": "When ("5 pm", "tomorrow at 10").",
               "type": [
                 "string",
                 "null",
               ],
             },
             "title": {
-              "description": "work-item, document, whiteboard: its title (without one a document or whiteboard is "Untitled").",
+              "description": "Its title (a document or whiteboard without one is "Untitled").",
               "type": [
                 "string",
                 "null",
               ],
             },
             "type": {
-              "description": "work-item: story (default), bug or epic.",
+              "description": "story (default), bug or epic.",
               "enum": [
                 "story",
                 "bug",
@@ -1181,7 +1181,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
               ],
             },
             "window": {
-              "description": "delegation: for how long.",
+              "description": "For how long.",
               "enum": [
                 "1d",
                 "3d",
@@ -1245,7 +1245,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "Change one thing on a record a result named (by its ref or position): one field per kind, through the button its page uses. The user confirms on a card that shows the change. The ref kinds here and their field: work-item (status or assignee or sprint); bot (paused); finding (status); job (reviewed or requeued); channel (member); dm (read).",
+    "description": "Change one thing on a record a result named (by its ref or position): one field per kind, through the button its page uses. The ref kinds here and their field: work-item (status or assignee or sprint); bot (paused); finding (status); job (reviewed or requeued); channel (member); dm (read).",
     "name": "update",
     "parameters": {
       "additionalProperties": false,
@@ -1254,42 +1254,42 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
           "additionalProperties": false,
           "properties": {
             "assignee": {
-              "description": "work-item: who owns it, by name ("me" for the user).",
+              "description": "Who owns it, by name ("me" for the user).",
               "type": [
                 "string",
                 "null",
               ],
             },
             "member": {
-              "description": "channel: true joins it, false leaves it.",
+              "description": "true joins it, false leaves it.",
               "type": [
                 "boolean",
                 "null",
               ],
             },
             "paused": {
-              "description": "bot: true pauses it, false resumes it.",
+              "description": "true pauses it, false resumes it.",
               "type": [
                 "boolean",
                 "null",
               ],
             },
             "publish": {
-              "description": "report: true publishes the program report to its readers.",
+              "description": "true publishes the program report to its readers.",
               "type": [
                 "boolean",
                 "null",
               ],
             },
             "read": {
-              "description": "dm: true marks it read.",
+              "description": "true marks it read.",
               "type": [
                 "boolean",
                 "null",
               ],
             },
             "requeued": {
-              "description": "job: true runs a failed or cancelled job again.",
+              "description": "true runs a failed or cancelled job again.",
               "type": [
                 "boolean",
                 "null",
@@ -1303,7 +1303,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
               ],
             },
             "reviewed": {
-              "description": "job: accept or reject its result.",
+              "description": "Accept or reject its result.",
               "enum": [
                 "accept",
                 "reject",
@@ -1315,14 +1315,14 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
               ],
             },
             "sprint": {
-              "description": "work-item: "this", "next", "none" or a sprint name.",
+              "description": ""this", "next", "none" or a sprint name.",
               "type": [
                 "string",
                 "null",
               ],
             },
             "status": {
-              "description": "work-item: open, in_progress, in_review, done or cancelled; finding: dismissed; run: stopped (Assessment) or cancelled (Pipelines); feedback: resolved or dismissed; request: withdrawn; delegation: ended.",
+              "description": "work-item: open, in_progress, in_review, done or cancelled; finding: dismissed.",
               "enum": [
                 "open",
                 "in_progress",
@@ -1357,7 +1357,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
           "type": "object",
         },
         "ref": {
-          "description": "The row to change: a ref, a position in the last result, a row the page in view shows (by name), or "report:program" for the assessment program report.",
+          "description": "The row to change: a ref, a position in the last result, or a row the page in view shows (by name).",
           "type": "string",
         },
       },

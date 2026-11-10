@@ -482,16 +482,15 @@ export const RUN_COMMAND_PHRASES = [
 ] as const;
 export type RunCommandPhrase = typeof RUN_COMMAND_PHRASES[number];
 
-/** What `since` takes (computer run's commits-since, list, summary, activity); parseSince and gitSince read exactly these. */
-const SINCE_WORDS = '"yesterday", "last night", "3 hours ago", "last week" or a YYYY-MM-DD date';
-
+// What `since` takes (computer run's commits-since, list, summary, activity) is said once, in the middleware's
+// delegationInstructions; parseSince and gitSince read exactly those words.
 const obj = (properties: Record<string, JsonSchema>, required: string[] = []): JsonSchema =>
   ({ type: 'object', properties, required, additionalProperties: false });
 const str = (description: string, extra: Partial<JsonSchema> = {}): JsonSchema => ({ type: 'string', description, ...extra });
 const limit: JsonSchema = { type: 'integer', minimum: 1, maximum: 10, description: 'Default 5.' };
 
 /** G33: list, search and get hand the model a count, three rows and `more` unless the user asked for everything. */
-const detail: JsonSchema = { type: 'boolean', description: 'True only when the user asked for every row: the full list.' };
+const detail: JsonSchema = { type: 'boolean', description: 'True only when the user asked for every row.' };
 const searchScope = str('"workspace" (default) or one initiative id to search inside.', { minLength: 1, maxLength: 200 });
 
 export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
@@ -503,7 +502,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       kind: str('With name: the kind of record the user named.', { enum: openKinds(null) }),
       name: str('With kind: the record\'s name.', { minLength: 1, maxLength: 120 }),
       scope: str('"this-page": the ref or name is one of the rows the page in view shows; kind is then optional. With tab alone: a tab of that page.', { enum: ['this-page'] }),
-      tab: str('A tab, as the page context lists them ("decisions", "work", "docs"): of the page in view with scope "this-page", else of the ref\'s record.', { minLength: 1, maxLength: 40 }),
+      tab: str('A tab the page context lists ("decisions"): of the page in view with scope "this-page", else of the ref\'s record.', { minLength: 1, maxLength: 40 }),
       params: obj({
         q: str('Search text for the page, when it takes one.'),
         type: str('A result type filter, when the page takes one.'),
@@ -535,7 +534,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
         who: str('work-item: the assignee ("me" for the user); decision: "me", what waits on the user.', { minLength: 1, maxLength: 120 }),
         sprint: str('work-item: "this", "last", "next" or a sprint name.', { minLength: 1, maxLength: 80 }),
         scope: str('"mine" (the user\'s own, where the kind takes it), "all" (everything the user can read: any kind), or "reports" (the user\'s reports\' access requests).', { enum: ['mine', 'all', 'reports'] }),
-        since: str(`Only records since: ${SINCE_WORDS}.`, { minLength: 1, maxLength: 40 }),
+        since: str('Only records since a time.', { minLength: 1, maxLength: 40 }),
       }),
       scope: str('"this-page": the rows the page in view shows, in its order, instead of reading again; filter and limit still apply.', { enum: ['this-page'] }),
       limit,
@@ -563,7 +562,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       },
       computer: str('For stop, open-shell and run: the computer, by id, name or initiative.', { minLength: 1, maxLength: 200 }),
       phrase: str('For run: which command.', { enum: [...RUN_COMMAND_PHRASES] }),
-      since: str(`For run's commits-since: ${SINCE_WORDS}.`, { maxLength: 40 }),
+      since: str('For run\'s commits-since: a time.', { maxLength: 40 }),
       machine: str('For hand-work: the paired machine.', { minLength: 1, maxLength: 120 }),
       job: str('For hand-work: the work item or bot whose mission to hand over.', { minLength: 1, maxLength: 200 }),
     }, ['action']),
@@ -575,7 +574,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
     name: 'summary',
     parameters: obj({
       kind: str('Which aggregate: "sweeps" (sweep and bot runs that failed, open findings), "sprint" (the sprint in view or the user\'s: left, done, blocked on what), "review" (what needs the user: agent questions, jobs, proposals, unread notifications), "work" (the work queue), "fleet" (the computers), "machines" (paired machines), "health" (agent runs in the last 24 hours), "ingest", "today", "unread" (discussions), "live" (who is online, in a call), "pipelines" (failed runs, dead letters), "rollup" (the assessment program), "access".', { enum: summaryKinds(null) }),
-      since: str(`Since when, for sweeps, pipelines, machines and unread: ${SINCE_WORDS} (default yesterday for sweeps and pipelines).`, { minLength: 1, maxLength: 40 }),
+      since: str('Since when, for sweeps, pipelines, machines and unread (default yesterday for sweeps and pipelines).', { minLength: 1, maxLength: 40 }),
     }, ['kind']),
     kind: 'read', backing: 'search', confirm: false, action: null, says: 'Checking the sweeps since yesterday.', tenants: VOICE_TENANTS,
   },
@@ -594,7 +593,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
     name: 'activity',
     parameters: obj({
       scope: str('What to read: "online", "live-calls" (a call or huddle now), "missed-calls", "messages", "pins", "work" (what a person worked on, in Work) or "recent" (messages, pins, missed calls and, in Work, work items, since a time; yesterday by default).', { enum: activityScopes(null) }),
-      since: str(`Since when, for messages, pins, missed-calls, work and recent: ${SINCE_WORDS}.`, { minLength: 1, maxLength: 40 }),
+      since: str('Since when, for messages, pins, missed-calls, work and recent.', { minLength: 1, maxLength: 40 }),
       who: str('One person to narrow the read to ("what did Ada work on").', { minLength: 1, maxLength: 120 }),
     }, ['scope']),
     kind: 'read', backing: 'search', confirm: false, action: null, says: 'Checking who is on a call.', tenants: ACTIVITY_TENANTS,
@@ -664,26 +663,26 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
     parameters: obj({
       kind: str('What to create.', { enum: createKinds(null) }),
       fields: obj({
-        initiative: str('work-item, sprint, meeting, document, whiteboard, deck: the initiative, by name or ref; for work-item, document, whiteboard and deck "this-page" (or left out) is the one in view.', { minLength: 1, maxLength: 200 }),
-        title: str('work-item, document, whiteboard: its title (without one a document or whiteboard is "Untitled").', { minLength: 1, maxLength: 200 }),
-        focus: str('deck: what it should cover, in the user\'s words.', { minLength: 1, maxLength: 200 }),
-        type: str('work-item: story (default), bug or epic.', { enum: ['story', 'bug', 'epic'] }),
-        on: str('comment: the work item it is on (ref or position).', { minLength: 1, maxLength: 200 }),
-        text: str('comment: the comment.', { minLength: 1, maxLength: 2000 }),
-        name: str('saved-search, sprint, channel, team, room: its name.', { minLength: 1, maxLength: 80 }),
-        query: str('saved-search: the search text.', { minLength: 1, maxLength: 200 }),
-        startsOn: str('sprint: its first day, YYYY-MM-DD.', { minLength: 10, maxLength: 10 }),
-        endsOn: str('sprint: its last day, YYYY-MM-DD.', { minLength: 10, maxLength: 10 }),
-        description: str('channel, team, room: one line about it.', { minLength: 1, maxLength: 280 }),
-        privacy: str('channel, team, room: public (default) or private.', { enum: ['public', 'private'] }),
-        item: str('access-request: the catalog item, by name or ref; outside Access, the requestItemId a refusal named.', { minLength: 1, maxLength: 200 }),
-        justification: str('access-request: why (in Access at least 20 characters).', { minLength: 1, maxLength: 2000 }),
-        duration: str('access-request: how long (outside Access, a week when not said).', { enum: ['8h', '24h', '7d', '30d'] }),
-        time: str('meeting: when ("5 pm", "tomorrow at 10").', { minLength: 1, maxLength: 40 }),
-        thread: str('meeting: the inbound message it answers ("message:<id>"); the time and the room go back there.', { minLength: 9, maxLength: 200 }),
-        delegate: str('delegation: who decides for the user.', { minLength: 1, maxLength: 120 }),
-        window: str('delegation: for how long.', { enum: ['1d', '3d', '7d', '14d'] }),
-        reason: str('delegation: why (at least 10 characters).', { minLength: 1, maxLength: 2000 }),
+        initiative: str('By name or ref; "this-page" (or left out) is the one in view, except for a sprint or a meeting.', { minLength: 1, maxLength: 200 }),
+        title: str('Its title (a document or whiteboard without one is "Untitled").', { minLength: 1, maxLength: 200 }),
+        focus: str('What the deck should cover, in the user\'s words.', { minLength: 1, maxLength: 200 }),
+        type: str('story (default), bug or epic.', { enum: ['story', 'bug', 'epic'] }),
+        on: str('The work item it is on (ref or position).', { minLength: 1, maxLength: 200 }),
+        text: str('The comment.', { minLength: 1, maxLength: 2000 }),
+        name: str('Its name.', { minLength: 1, maxLength: 80 }),
+        query: str('The search text.', { minLength: 1, maxLength: 200 }),
+        startsOn: str('First day, YYYY-MM-DD.', { minLength: 10, maxLength: 10 }),
+        endsOn: str('Last day, YYYY-MM-DD.', { minLength: 10, maxLength: 10 }),
+        description: str('One line about it.', { minLength: 1, maxLength: 280 }),
+        privacy: str('public (default) or private.', { enum: ['public', 'private'] }),
+        item: str('The catalog item, by name or ref; outside Access, the requestItemId a refusal named.', { minLength: 1, maxLength: 200 }),
+        justification: str('Why (in Access at least 20 characters).', { minLength: 1, maxLength: 2000 }),
+        duration: str('How long (outside Access, a week when not said).', { enum: ['8h', '24h', '7d', '30d'] }),
+        time: str('When ("5 pm", "tomorrow at 10").', { minLength: 1, maxLength: 40 }),
+        thread: str('The inbound message it answers ("message:<id>"); the time and the room go back there.', { minLength: 9, maxLength: 200 }),
+        delegate: str('Who decides for the user.', { minLength: 1, maxLength: 120 }),
+        window: str('For how long.', { enum: ['1d', '3d', '7d', '14d'] }),
+        reason: str('Why (at least 10 characters).', { minLength: 1, maxLength: 2000 }),
       }),
     }, ['kind', 'fields']),
     kind: 'action', backing: 'work', confirm: true, confirmBy: 'voice', clickFor: { kind: ['access-request'] }, sayToConfirm: 'create it', action: null, says: 'Creating that once you confirm.', tenants: ['orgiq', 'social', 'access'],
@@ -694,15 +693,15 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
       ref: str('The row to change: a ref, a position in the last result, a row the page in view shows (by name), or "report:program" for the assessment program report.', { minLength: 1, maxLength: 200 }),
       fields: obj({
         status: str('work-item: open, in_progress, in_review, done or cancelled; finding: dismissed; run: stopped (Assessment) or cancelled (Pipelines); feedback: resolved or dismissed; request: withdrawn; delegation: ended.', { enum: ['open', 'in_progress', 'in_review', 'done', 'cancelled', 'dismissed', 'stopped', 'resolved', 'withdrawn', 'ended'] }),
-        assignee: str('work-item: who owns it, by name ("me" for the user).', { minLength: 1, maxLength: 120 }),
-        sprint: str('work-item: "this", "next", "none" or a sprint name.', { minLength: 1, maxLength: 80 }),
+        assignee: str('Who owns it, by name ("me" for the user).', { minLength: 1, maxLength: 120 }),
+        sprint: str('"this", "next", "none" or a sprint name.', { minLength: 1, maxLength: 80 }),
         response: str('feedback resolved: the response.', { minLength: 1, maxLength: 2000 }),
-        paused: { type: 'boolean', description: 'bot: true pauses it, false resumes it.' },
-        reviewed: str('job: accept or reject its result.', { enum: ['accept', 'reject'] }),
-        requeued: { type: 'boolean', description: 'job: true runs a failed or cancelled job again.' },
-        member: { type: 'boolean', description: 'channel: true joins it, false leaves it.' },
-        read: { type: 'boolean', description: 'dm: true marks it read.' },
-        publish: { type: 'boolean', description: 'report: true publishes the program report to its readers.' },
+        paused: { type: 'boolean', description: 'true pauses it, false resumes it.' },
+        reviewed: str('Accept or reject its result.', { enum: ['accept', 'reject'] }),
+        requeued: { type: 'boolean', description: 'true runs a failed or cancelled job again.' },
+        member: { type: 'boolean', description: 'true joins it, false leaves it.' },
+        read: { type: 'boolean', description: 'true marks it read.' },
+        publish: { type: 'boolean', description: 'true publishes the program report to its readers.' },
       }),
     }, ['ref', 'fields']),
     kind: 'action', backing: 'work', confirm: true, confirmBy: 'voice', clickFor: { 'fields.status': ['cancelled'] }, sayToConfirm: 'save it', action: null, says: 'Changing that once you confirm.', tenants: ['orgiq', 'social', 'assessment', 'pipelines', 'access'],
