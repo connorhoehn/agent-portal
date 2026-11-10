@@ -71,7 +71,7 @@ import { VoiceDock, type VoiceConfirmResult, type VoicePending, type VoicePendin
 import { useSession } from '../../lib/auth';
 import { useCapabilities, type Action } from '../../lib/capabilities';
 import { features } from '../../lib/features';
-import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
+import { toastError, toastInfo, toastPending, toastSuccess } from '../../lib/toastStore';
 import { useFetch } from '../../hooks/useFetch';
 import { browserMedia } from '../../lib/voice/client';
 import { keepTranscripts, setKeepTranscripts, subscribeKeepTranscripts, transcriptStore } from '../../lib/voice/transcriptKeep';
@@ -490,6 +490,11 @@ function VoiceFooterPane() {
     const t = setTimeout(save, KEEP_SAVE_MS);
     return () => clearTimeout(t);
   }, [keep, keptStore, controller, snap.sessionId, snap.turns, snap.phase]);
+
+  // A start that ends unavailable says why once, aloud to assistive tech and on screen (UX walk D: the pill
+  // read "Unavailable Voice" and kept its reason — no grant, no key, no microphone — in a hover title only).
+  const unavailableReason = snap.phase === 'unavailable' ? snap.reason : null;
+  useEffect(() => { if (unavailableReason) toastInfo('Voice is unavailable', unavailableReason); }, [unavailableReason]);
 
   // G26: CC toggles the strip inline above the dock (the library's `transcriptOpen`), never a popover.
   const [stripOpen, setStripOpen] = useState(false);

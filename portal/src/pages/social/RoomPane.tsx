@@ -81,7 +81,7 @@ export default function RoomPane({ selected, room, nameOf, call, onBrowse, inset
     <Button variant="link" size="sm" className="self-start" onClick={onBrowse} data-testid="social-room-back">All hangouts</Button>
     <PageSection size={inset ? 'lg' : 'md'} title={room.name} description={room.description}
       actions={<Inline gap="sm">{mayConfigure && <Button variant="secondary" size="sm" onClick={() => setConfiguring(true)}>Configure hangout</Button>}
-        {!here && <Button variant="primary" size="sm" disabled={!!call.unavailable} onClick={() => call.joinRoom(room)} data-testid="social-room-join">Join call</Button>}</Inline>} />
+        {!here && <Button variant="primary" size="sm" disabled={!!call.unavailable} title={call.unavailable ?? undefined} aria-description={call.unavailable ?? undefined} onClick={() => call.joinRoom(room)} data-testid="social-room-join">Join call</Button>}</Inline>} />
     {call.unavailable && <InlineAlert tone="info">{call.unavailable}</InlineAlert>}
     <Tabs idPrefix="hangout-view" aria-label="Hangout views" variant="underline" value={view} onValueChange={changeView}
       items={VIEWS.map(id => ({ id, label: id[0]!.toUpperCase() + id.slice(1) }))} />

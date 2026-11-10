@@ -15,7 +15,7 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  Button, Chip, EmptyState, ErrorState, LoadingState, PageHeader, Stack,
+  Button, Chip, EmptyState, ErrorState, InlineAlert, LoadingState, PageHeader, Stack,
 } from '@connorhoehn/ui-components/shared';
 import { CallLogList } from '@connorhoehn/ui-components/social';
 import { callBackTargets, callRows, roomSlugFromLobby, type CallRow, type NameOf, type SocialCall as SocialCallEntry, type SocialRoom, type SocialSource } from './socialPlatform';
@@ -60,7 +60,9 @@ export default function CallLogPane({ calls, me, nameOf, rooms, call }: { calls:
         <EmptyState testId="social-empty-calls" align="start" title="No calls yet"
           description="Calls you place or receive in this workspace, and the ones you missed, are listed here."
           actionLabel="Call someone" onAction={() => navigate(callSomeone)} />
-      ) : (
+      ) : (<>
+        {/* The list's Call back / Open room have no reason prop: one line above the list says why they are off (UX walk D). */}
+        {call.unavailable && <InlineAlert tone="info" data-testid="social-call-log-unavailable">{call.unavailable}</InlineAlert>}
         <CallLogList
           rows={allRows}
           callBackDisabled={!!call.unavailable}
@@ -69,7 +71,7 @@ export default function CallLogPane({ calls, me, nameOf, rooms, call }: { calls:
           formatWhen={when}
           data-testid="social-call-log"
         />
-      )}
+      </>)}
     </Stack>
   );
 }

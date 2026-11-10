@@ -187,7 +187,7 @@ function ContactsWorkspace() {
                 )}
                 {mayCall && (
                   <Tooltip content={call.unavailable ?? `Call ${open.displayName}`}>
-                    <Button size="sm" variant="secondary" disabled={!!call.unavailable} data-testid="social-contact-record-call"
+                    <Button size="sm" variant="secondary" disabled={!!call.unavailable} title={call.unavailable ?? undefined} aria-description={call.unavailable ?? undefined} data-testid="social-contact-record-call"
                       onClick={() => call.callPeople([{ userId: open.userId, displayName: open.displayName }])}><PhoneIcon />Call</Button>
                   </Tooltip>
                 )}
@@ -254,7 +254,8 @@ function ContactsWorkspace() {
                 )}
                 {mayCall && (
                   <Tooltip content={call.unavailable ?? `Call ${r.displayName}`}><IconButton variant="ghost" size="sm" aria-label={`Call ${r.displayName}`} icon={<PhoneIcon />}
-                    disabled={!!call.unavailable} onClick={() => call.callPeople([{ userId: r.userId, displayName: r.displayName }])} data-testid="social-contact-call" /></Tooltip>
+                    disabled={!!call.unavailable} title={call.unavailable ?? undefined} aria-description={call.unavailable ?? undefined}
+                    onClick={() => call.callPeople([{ userId: r.userId, displayName: r.displayName }])} data-testid="social-contact-call" /></Tooltip>
                 )}
               </Inline>
             )}
