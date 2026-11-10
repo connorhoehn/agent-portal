@@ -598,7 +598,7 @@ function closeBody(row: VoiceSessionRow, alreadyClosed: boolean) {
 }
 
 /**
- * MOCK_VOICE only (404 otherwise, and always under NODE_ENV=production): the turns the caller's NEXT scripted
+ * MOCK_VOICE only (404 otherwise, and always under any spelling of production, lib/insecure-dev-mode.ts): the turns the caller's NEXT scripted
  * session plays instead of the persona's one call, so a headless journey can say several things in one session
  * ("open Auth Migration", then "open decisions"; a request, then "confirm" once its card opens). Consumed by that
  * mint; one script per person; a real session never reads it.
@@ -607,7 +607,6 @@ function closeBody(row: VoiceSessionRow, alreadyClosed: boolean) {
  * 400 when a turn is malformed, names no catalogue tool, or the first turn is not a request (openai.ts parseMockTurns).
  */
 const mockTurnsBySub = new Map<string, MockTurn[]>();
-// Any spelling of production closes it (lib/insecure-dev-mode.ts), not only the exact lower-case word.
 const mockScriptOpen = (): boolean => voiceConfig().mock && !isProductionEnv();
 
 function scriptedTurns(sub: string, sessionId: string) {

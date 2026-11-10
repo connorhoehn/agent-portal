@@ -10,7 +10,7 @@ import { asyncHandler } from '../lib/async-handler.js';
 import { degradedFields } from '../lib/upstream.js';
 import { guardrails, agentcore, cloudwatch } from '../providers/index.js';
 import { config } from '../config.js';
-import { Fence, withDataRule } from '../lib/untrusted-text.js';
+import { fenceText, withDataRule } from '../lib/untrusted-text.js';
 import {
   recordCapabilityEvent,
   snippet,
@@ -31,7 +31,6 @@ import { reconcileCapabilities } from '../providers/capability-reconcile.js';
 
 const _bedrockRt = new BedrockRuntimeClient({ region: config.region });
 const VISION_MODEL = 'amazon.nova-lite-v1:0';
-
 export const capabilitiesRouter = Router();
 
 /** Who ran a capability call, stamped on what it records (lib/trace-scope.ts reads it back). */
@@ -322,7 +321,6 @@ capabilitiesRouter.post('/browser/web-qa', asyncHandler(async (req, res) => {
     // plus the user question and a short instruction. Cheaper than Pro for
     // a single Q&A turn.
     let answer = '';
-    const pageFence = new Fence();
     if (imageBytes && imageBytes.length > 0) {
       try {
         const visionResp = await _bedrockRt.send(
@@ -335,8 +333,7 @@ capabilitiesRouter.post('/browser/web-qa', asyncHandler(async (req, res) => {
               role: 'user',
               content: [
                 { image: { format: 'png', source: { bytes: imageBytes } } },
-                // The page's URL and title are the site's text: fenced as data.
-                { text: `Page:\n${pageFence.wrap(`URL: ${url}\nTitle: ${nav.pageTitle ?? ''}`, { kind: 'web-page', maxChars: 2_000 })}\n\nQuestion: ${question}` },
+                { text: `Page (the site's own text, fenced as data):\n${fenceText(`URL: ${url}\nTitle: ${nav.pageTitle ?? ''}`, { kind: 'web-page', maxChars: 2_000 })}\n\nQuestion: ${question}` },
               ],
             }],
             inferenceConfig: { maxTokens: 400, temperature: 0.2 },

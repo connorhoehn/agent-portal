@@ -56,6 +56,16 @@ export const ALLOWED: { file: string; entries: AllowEntry[] } = {
         'defaulted" — a role the server DOES send would not test anything.',
     },
     {
+      file: 'middleware/src/routes/__tests__/trace-text-guard.test.ts',
+      field: 'role',
+      value: 'guard-operator',
+      reason:
+        'Deliberately not a seeded role. The guard needs a caller that holds every ' +
+        'write capability under the observability prefixes yet is neither fleet-wide ' +
+        'nor cross-tenant, so a 403 cannot make a write check vacuous; no seeded role ' +
+        'is that, and the test defines it in its own mocked role registry.',
+    },
+    {
       file: 'portal/src/components/communication/__tests__/planeRailModel.test.ts',
       field: 'status',
       value: 'away',
