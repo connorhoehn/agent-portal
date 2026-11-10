@@ -4,7 +4,20 @@
 
 `scripts/journeys/demo-moments.mjs` walks the five moments of the Work demo ([demo-script.md](demo-script.md) §1, the Halyard story on Auth Migration) in headless Chromium, each one twice: by hand (clicks and keys) and by voice on the scripted session. It exits 0 only when every step of all ten runs passed, 1 when any failed and 2 when the stack is not reachable.
 
-### Running it
+### The journeys job
+
+One command starts its own stack, runs all ten, stops what it started and exits with the journey's code:
+
+```sh
+cd portal && npm run journey:demo-moments            # all ten runs
+cd portal && npm run journey:demo-moments -- --only M2 --mode hand
+```
+
+`scripts/journeys/run-demo-moments.mjs` starts the middleware with `dev:mock`'s environment (read from `middleware/package.json`) plus `MOCK_VOICE=1`, its own `VOICE_LOG_DIR` and port 3966, and the portal on 5166 proxying `/api` to it; it waits (bounded, three minutes) for both, runs the journey against them, then stops only the processes it started. A port that already answers is refused rather than reused: set `JOURNEY_MIDDLEWARE_PORT` and `JOURNEY_PORTAL_PORT` to free ones. Logs and results land in a new directory under the OS temp dir (printed at the start), or `--out <dir>`. As a CI job it is this one command after `npm ci` in `middleware/` and `portal/` and `npx playwright install chromium-headless-shell` in `portal/`; it needs no AWS, no gateway and no microphone, and gates on its exit code (0 all ten passed, 1 a step failed, 2 the stack never came up).
+
+`scripts/validate-mock-floor.sh` is not part of this job: it judges the mock data floor (wire snapshots, write routes reaching unmocked providers), not the demo, and is red on `main` for reasons the journey does not touch (stale `wire.json`/`writes.json` snapshots and 123 unmocked write-route hits against a budget of 25; docs/next-steps.md).
+
+### Running it by hand
 
 It needs a middleware with the mock backend and the scripted voice session, and a portal that proxies `/api` to it. Use your own ports; never point it at a server someone else is using, because every run resets the mock.
 
@@ -17,7 +30,7 @@ cd portal && VITE_GATEWAY_URL=http://localhost:3966 API_PROXY_TARGET=http://127.
 PORTAL_URL=http://localhost:5166 MIDDLEWARE_URL=http://127.0.0.1:3966 node scripts/journeys/demo-moments.mjs
 ```
 
-Options: `--only M2,M4` runs some moments, `--mode hand` or `--mode voice` one way, `--out <dir>` (or `OUT_DIR`) keeps the results (default: a new directory under the OS temp dir). `CHROMIUM_PATH` names a Chromium or headless-shell binary when Playwright's own (found through `PLAYWRIGHT_BROWSERS_PATH`) is not installed. Chromium runs with the fake media flags, so the voice dock opens without a microphone.
+Options: `--only M2,M4` runs some moments, `--mode hand` or `--mode voice` one way, `--out <dir>` (or `OUT_DIR`) keeps the results (default: a new directory under the OS temp dir). `CHROMIUM_PATH` names a Chromium or headless-shell binary; without it the journey uses Playwright's own build, else the newest headless shell or Chromium already in the browsers cache (`PLAYWRIGHT_BROWSERS_PATH`, else the platform's default cache). Chromium runs with the fake media flags, so the voice dock opens without a microphone.
 
 Each of the ten runs starts from seeded state (`POST /api/__mock/reset`), signs its person in through the session API (`POST /api/session/login`, then `/api/session/role`), and records for every step: pass or fail, milliseconds, the `/api` requests and the WebSocket frames it sent (with their channel), the `say` line each voice result carried, and a screenshot. `results.json` holds all of it; `results.md` is the table.
 

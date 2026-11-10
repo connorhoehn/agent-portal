@@ -654,9 +654,32 @@ function markdown(runs) {
 
 const unreachable = await reachable();
 if (unreachable) { console.error(`not reachable: ${unreachable}`); process.exit(2); }
+/**
+ * The browser: CHROMIUM_PATH, else Playwright's own, else (Playwright's build of it not downloaded) the newest
+ * headless shell or Chromium already in the browsers cache, so a machine with an older download still runs.
+ */
+function chromiumPath() {
+  if (process.env.CHROMIUM_PATH) return process.env.CHROMIUM_PATH;
+  try { if (fs.existsSync(chromium.executablePath())) return undefined; } catch { /* no expected build */ }
+  const cache = process.env.PLAYWRIGHT_BROWSERS_PATH
+    ?? path.join(os.homedir(), process.platform === 'darwin' ? 'Library/Caches/ms-playwright' : '.cache/ms-playwright');
+  const dirs = (() => { try { return fs.readdirSync(cache); } catch { return []; } })()
+    .filter((d) => /^chromium(_headless_shell)?-\d+$/.test(d))
+    .sort((a, b) => Number(b.split('-').pop()) - Number(a.split('-').pop()) || (a.includes('headless') ? -1 : 1));
+  for (const d of dirs) {
+    for (const sub of (() => { try { return fs.readdirSync(path.join(cache, d)); } catch { return []; } })()) {
+      for (const exe of ['chrome-headless-shell', 'Chromium.app/Contents/MacOS/Chromium', 'chrome']) {
+        const p = path.join(cache, d, sub, exe);
+        if (fs.existsSync(p) && fs.statSync(p).isFile()) return p;
+      }
+    }
+  }
+  return undefined;
+}
+const executablePath = chromiumPath();
 const browser = await chromium.launch({
   headless: true,
-  ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
+  ...(executablePath ? { executablePath } : {}),
   args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required'],
 });
 const runs = [];

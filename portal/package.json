@@ -17,7 +17,8 @@
     "prototype": "vite --config vite.prototype.config.ts",
     "prototype:build": "vite build --config vite.prototype.config.ts && node prototypes/inline.mjs \"prototypes/${PROTOTYPE:-active-now}/build\"",
     "audit:ui": "node ../scripts/audit-ui-dom.cjs",
-    "check:bundle": "node scripts/check-bundle-node-free.mjs"
+    "check:bundle": "node scripts/check-bundle-node-free.mjs",
+    "journey:demo-moments": "node ../scripts/journeys/run-demo-moments.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
