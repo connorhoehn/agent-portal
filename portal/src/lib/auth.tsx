@@ -3,6 +3,7 @@ import { clearContextChosen, markContextChosen } from './contextChoice';
 import { announceTenantSwitch } from './voice/tenantSwitch';
 import { tenantHome } from './tenantHome';
 import { clearTenantScopedCaches } from './tenantCaches';
+import { clearSocialStatus } from './socialStatusStore';
 import { SESSION_INVALID_EVENT } from './apiFailure';
 import { realtimeTokenSource } from './realtimeToken';
 import { Button, Card, Inline, LoadingState, LockIcon, MetaLine, SectionLabel, Stack, T } from '@connorhoehn/ui-components/shared';
@@ -263,6 +264,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // Scrub tenant/user-scoped caches so a different identity signing in on this
     // (possibly shared) browser inherits none of the previous session's data.
     clearTenantScopedCaches();
+    // The Social status is the person's, kept across workspaces; it goes with them.
+    clearSocialStatus();
     // Hard redirect: through the Cognito hosted logout when SSO is on (clears
     // the IdP session too), else to the root so the app remounts signed-out.
     window.location.href = ssoLogoutUrl ?? '/';
@@ -328,6 +331,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // Same threat as logout: this swaps identity outright, so the incoming user
     // must not inherit the previous one's tenant/user-scoped caches.
     clearTenantScopedCaches();
+    clearSocialStatus();
     window.location.assign('/');
   }), [withIdentityChange]);
 

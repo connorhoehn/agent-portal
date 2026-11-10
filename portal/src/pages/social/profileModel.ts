@@ -27,9 +27,14 @@ export function profileUnavailableReason(input: { hasSocialGrant: boolean; gatew
   return null;
 }
 
-/** The status the page starts from: what peers see now (an idle entry reads as away). */
-export function initialStatus(self: { idle?: boolean } | null | undefined): ProfileStatus {
-  return self?.idle ? 'away' : 'online';
+/**
+ * The status the page starts from: what peers see now (an idle entry reads as
+ * away). The roster says only online or not, so a not-online entry whose kept
+ * status (lib/socialStatusStore.ts) is "busy" reads as Do not disturb.
+ */
+export function initialStatus(self: { idle?: boolean } | null | undefined, saved?: string | null): ProfileStatus {
+  if (!self?.idle) return 'online';
+  return saved === 'busy' ? 'busy' : 'away';
 }
 
 /** The message as it is sent: trimmed, capped, empty clears it. */

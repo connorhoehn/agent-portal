@@ -12,6 +12,7 @@ import { tenantEnabled } from '../../lib/features';
 import { EmbeddedSocialSession, createEmbeddedSocialClient, embeddedSocialScopeKey, embeddedTokenMatchesSource,
   emptyEmbeddedSocialState, type EmbeddedSocialDraft, type EmbeddedSocialState, type EmbeddedSocialTransport } from '../../lib/embeddedSocial';
 import { realtimeTokenSource } from '../../lib/realtimeToken';
+import { loadSocialStatus, saveSocialStatus } from '../../lib/socialStatusStore';
 import { communicationUnread, communicationUnreadCount } from '../../lib/communicationPlane';
 import { presenceAvatarUsers } from '../../pages/assessment/knowledge/knowledgeFormat';
 import SocialConversation from '../../pages/social/SocialConversation';
@@ -68,8 +69,30 @@ const PAGE_VIEWS: readonly ConversationFeature[] = ['chat', 'pins'];
 /** Exactly one workspace announcement. Route surfaces may only read it. */
 function ShellSocialPresence({ onPeople, onControls }: { onPeople: (people: ReturnType<typeof presenceAvatarUsers>) => void; onControls: (controls: ShellPresenceControls | null) => void }) {
   const { roster, setStatus, updateMetadata } = usePresence(SOCIAL_PRESENCE_CHANNEL, { join: true });
-  // The one announcement's writers, for set_status (voice): a status set here is the entry every peer reads.
-  useLayoutEffect(() => { onControls({ setStatus, updateMetadata }); return () => onControls(null); }, [onControls, setStatus, updateMetadata]);
+  const userId = useSession().session?.sub ?? '';
+  // What the person set survives a reload (lib/socialStatusStore.ts): a new
+  // socket's entry starts empty, so the saved status and line are announced
+  // again on join, through the same writers, into the same metadata.
+  useEffect(() => {
+    const saved = loadSocialStatus(userId);
+    if (saved?.status) setStatus(saved.status);
+    if (saved?.statusMessage) updateMetadata({ statusMessage: saved.statusMessage });
+  }, [userId, setStatus, updateMetadata]);
+  // The one announcement's writers, for set_status (voice) and the profile page:
+  // a status set here is the entry every peer reads, and is kept for the next load.
+  useLayoutEffect(() => {
+    onControls({
+      setStatus: (status) => { saveSocialStatus(userId, { status }); setStatus(status); },
+      updateMetadata: (meta) => {
+        if ('statusMessage' in meta) {
+          const line = meta['statusMessage'];
+          saveSocialStatus(userId, { statusMessage: typeof line === 'string' ? line : null });
+        }
+        updateMetadata(meta);
+      },
+    });
+    return () => onControls(null);
+  }, [onControls, setStatus, updateMetadata, userId]);
   const people = useMemo(() => presenceAvatarUsers(roster.filter(entry => typeof entry.metadata?.userId === 'string')), [roster]);
   // Every presence frame hands usePresence a new roster array. Mirroring it into
   // the provider from a passive effect made each frame two commits, and a burst

@@ -15,6 +15,7 @@ import { useFlushTrailItems } from '../../components/shell/FlushPage';
 import { useEmbeddedSocial } from '../../components/shell/EmbeddedSocial';
 import { useSession } from '../../lib/auth';
 import { toastSuccess } from '../../lib/toastStore';
+import { loadSocialStatus } from '../../lib/socialStatusStore';
 import {
   PROFILE_STATUS_OPTIONS, STATUS_MESSAGE_MAX, initialStatus, profileUnavailableReason, roleLine, statusMessageValue,
   type ProfileStatus,
@@ -33,15 +34,18 @@ export default function ProfilePage() {
     gatewayConfigured: !!gateway,
     presenceReady: !!social?.presence,
   });
-  const [status, setStatus] = useState<ProfileStatus>(() => initialStatus(self));
+  // What peers see comes from the presence metadata the footer reads; the kept
+  // status only tells "busy" from "away", which the roster does not (E4).
+  const savedStatus = loadSocialStatus(session?.sub ?? '')?.status ?? null;
+  const [status, setStatus] = useState<ProfileStatus>(() => initialStatus(self, savedStatus));
   const [message, setMessage] = useState(self?.detail ?? '');
   const [touched, setTouched] = useState(false);
   // Until the person edits, follow what peers see (the roster arrives after the page).
   useEffect(() => {
     if (touched) return;
-    setStatus(initialStatus(self));
+    setStatus(initialStatus(self, savedStatus));
     setMessage(self?.detail ?? '');
-  }, [touched, self?.idle, self?.detail]);
+  }, [touched, self?.idle, self?.detail, savedStatus]);
 
   const save = () => {
     const presence = social?.presence;
