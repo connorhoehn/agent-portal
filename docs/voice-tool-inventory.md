@@ -73,7 +73,7 @@ The 109 palette pages (`portalCommands.ts:108-350`) are the navigation surface; 
 | "open the catalog", "my requests", "open requests", "new request", "approvals", "policies", "reviews", "audit" | `/access/*` (five with ids) | approvals: approver, access-admin | access | navigate | `open` |
 | "open observability", "on-call", "cost", "the approval queue", "identity", "knowledge", "ingest" | 29 platform pages under `/admin/observability/*`, `/admin/identity*`, `/admin/knowledge`, `/admin/ingest/*`, `/iq/prompts`, `/iq/history`, `/iq/diff`, `/iq/evaluations`, `/iq/agents`, `/iq/canary`, `/iq/prompt-ops`, `/iq/scores*` | PLATFORM (org-leader, hr-admin) or BUILD (hr-admin) | orgiq (admin pages) | navigate | `open` (opening a console is harmless; acting in it is §3's never list) |
 | "switch to the access workspace" | `/workspaces` | none | all | navigate; ends the session (spec §2, §6) | `open { page: 'workspaces' }` as today |
-| "settings" | `/settings`, `/social/settings`, `/pipelines/settings`, `/access/settings` | none | universal and per tenant | navigate | `open` |
+| "settings" | `/settings`, `/access/settings` | none | universal and per tenant | navigate | `open` |
 
 ### 2.2 Search and questions
 

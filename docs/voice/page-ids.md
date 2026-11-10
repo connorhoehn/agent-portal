@@ -89,7 +89,7 @@ Every palette page (`PAGES` in `portal/src/components/shell/portalCommands.ts`) 
 - `runs` → /assessment/runs (System: Activity)
 - `assessment-configuration` → /assessment/configuration (System: Configuration)
 
-## social (11)
+## social (10)
 
 - `channels` → /social/channels (Talk: Channels)
 - `direct-messages` → /social/dms (Talk: Direct messages)
@@ -101,9 +101,8 @@ Every palette page (`PAGES` in `portal/src/components/shell/portalCommands.ts`) 
 - `recordings` → /social/recordings (Library: Recordings)
 - `work-graph` → /social/work-graph (Library: Work graph)
 - `social-configuration` → /social/configuration (System: Configuration)
-- `social-settings` → /social/settings (System: Social settings)
 
-## pipelines (14)
+## pipelines (13)
 
 - `definitions` → /pipelines/definitions (Catalog: Definitions)
 - `runbooks` → /pipelines/runbooks (Catalog: Runbooks)
@@ -118,7 +117,6 @@ Every palette page (`PAGES` in `portal/src/components/shell/portalCommands.ts`) 
 - `commands` → /pipelines/commands (Sources: Commands)
 - `pipelines-configuration` → /pipelines/configuration (System: Configuration)
 - `system-logging` → /pipelines/logging (System: Logging; dev server with the voice navigator on)
-- `pipeline-settings` → /pipelines/settings (System: Pipeline settings)
 
 ## access (11)
 

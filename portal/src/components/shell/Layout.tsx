@@ -192,6 +192,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/social/rooms',         label: 'Hangouts',           tenant: 'social', group: 'Meet' },
   { path: '/social/contacts',      label: 'Contacts',        tenant: 'social', group: 'People' },
   { path: '/social/teams',         label: 'Teams',           tenant: 'social', group: 'People' },
+  { path: '/social/profile',       label: 'Profile',         tenant: 'social', group: 'People' },
   { path: '/social/recordings',    label: 'Recordings',      tenant: 'social', group: 'Library' },
   // The work graph: ViewSocial, which every social role holds (route and API), so no roles.
   { path: '/social/work-graph',       label: 'Work graph',      tenant: 'social', group: 'Library' },

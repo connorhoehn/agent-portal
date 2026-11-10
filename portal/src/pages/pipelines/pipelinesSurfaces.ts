@@ -10,7 +10,7 @@
 
 export type PipelinesSurfaceId =
   | 'definitions' | 'runbooks' | 'runs' | 'approvals' | 'artifacts'
-  | 'agents' | 'bots' | 'commands' | 'configuration' | 'settings';
+  | 'agents' | 'bots' | 'commands' | 'configuration';
 
 export interface PipelinesSurface {
   id: PipelinesSurfaceId;
@@ -109,15 +109,6 @@ export const PIPELINES_SURFACES: Record<PipelinesSurfaceId, PipelinesSurface> = 
     emptyBody: 'Settings appear here as the features they govern arrive. Only a pipeline admin can change them.',
     phase: 'P2',
     next: 'Lane P2 brings approver and retention settings.',
-  },
-  settings: {
-    id: 'settings',
-    title: 'Pipeline settings',
-    description: 'Your own run notifications and default views.',
-    emptyTitle: 'No preferences to set yet',
-    emptyBody: 'Run notifications arrive with the activity bell; your defaults are kept here.',
-    phase: 'P2',
-    next: 'Lane P2 brings run notifications you can tune.',
   },
 };
 

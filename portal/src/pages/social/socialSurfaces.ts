@@ -8,7 +8,7 @@
 
 export type SocialSurfaceId =
   | 'channels' | 'dms' | 'calls' | 'rooms' | 'contacts' | 'teams'
-  | 'profile' | 'recordings' | 'configuration' | 'settings';
+  | 'profile' | 'recordings' | 'configuration';
 
 export interface SocialSurface {
   id: SocialSurfaceId;
@@ -107,15 +107,6 @@ export const SOCIAL_SURFACES: Record<SocialSurfaceId, SocialSurface> = {
     emptyBody: 'Settings appear here as the features they govern arrive. Only a community admin can change them.',
     phase: 'S2',
     next: 'Lane S2 brings retention and room policy, on the same forms the other workspaces use.',
-  },
-  settings: {
-    id: 'settings',
-    title: 'Social settings',
-    description: 'Your own notification and call preferences for this workspace.',
-    emptyTitle: 'No preferences to set yet',
-    emptyBody: 'Notification and call preferences arrive with the activity bell and calls.',
-    phase: 'N',
-    next: 'Lane N brings the activity bell; its read state and quiet hours are set here.',
   },
 };
 

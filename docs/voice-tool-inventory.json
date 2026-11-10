@@ -19,13 +19,13 @@
   "routesInSnapshot": 835,
   "snapshotDuplicates": 0,
   "routesDeclaredNotInSnapshot": 10,
-  "pages": 111,
+  "pages": 109,
   "byKind": {
    "dev": 13,
    "write": 359,
    "read": 443,
    "internal": 30,
-   "navigate": 111
+   "navigate": 109
   },
   "byFamily": {
    "dev": {
@@ -349,15 +349,15 @@
     }
    },
    "navigate": {
-    "total": 111,
+    "total": 109,
     "read": 0,
     "write": 0,
-    "navigate": 111,
+    "navigate": 109,
     "internal": 0,
     "dev": 0,
-    "covered": 111,
+    "covered": 109,
     "v2": {
-     "open": 111
+     "open": 109
     }
    }
   },
@@ -376,8 +376,8 @@
   "coveredRoutes": 233,
   "coveredReads": 161,
   "coveredWrites": 72,
-  "coveredPages": 111,
-  "pagesWithPageId": 111,
+  "coveredPages": 109,
+  "pagesWithPageId": 109,
   "v1Tools": 16,
   "v2Tools": 15,
   "v2Decisions": {
@@ -754,7 +754,7 @@
    ],
    "mapsTo": "useNavigate() to the palette entry's path, the kept row's href, or the kind's href built from a typed ref; a name through the kind's list read (list's routes)",
    "routes": [],
-   "line": 659
+   "line": 657
   },
   {
    "name": "search",
@@ -808,7 +808,7 @@
      "path": "/api/access/search/answer"
     }
    ],
-   "line": 680
+   "line": 678
   },
   {
    "name": "list",
@@ -1046,7 +1046,7 @@
      "path": "/api/access/audit"
     }
    ],
-   "line": 698
+   "line": 696
   },
   {
    "name": "get",
@@ -1284,7 +1284,7 @@
      "path": "/api/access/reviews/:id"
     }
    ],
-   "line": 719
+   "line": 717
   },
   {
    "name": "computer",
@@ -1343,7 +1343,7 @@
      "path": "/api/local-compute/nodes/:nodeId/work"
     }
    ],
-   "line": 732
+   "line": 730
   },
   {
    "name": "summary",
@@ -1441,7 +1441,7 @@
      "path": "/api/access/summary"
     }
    ],
-   "line": 755
+   "line": 753
   },
   {
    "name": "budget",
@@ -1491,7 +1491,7 @@
      "path": "/api/observability/cost/summary"
     }
    ],
-   "line": 768
+   "line": 766
   },
   {
    "name": "activity",
@@ -1520,7 +1520,7 @@
      "path": "/api/search"
     }
    ],
-   "line": 782
+   "line": 780
   },
   {
    "name": "message",
@@ -1551,7 +1551,7 @@
      "path": "/api/social/plane/work-sharing"
     }
    ],
-   "line": 795
+   "line": 793
   },
   {
    "name": "call",
@@ -1582,7 +1582,7 @@
      "path": "/api/social/plane/search"
     }
    ],
-   "line": 811
+   "line": 809
   },
   {
    "name": "set_status",
@@ -1598,7 +1598,7 @@
    ],
    "mapsTo": "usePresence('<tenant>:lobby') (the shell's tenant lobby, manifest presenceLobby) then usePresence('social:lobby') with a Social grant: setStatus(status) and updateMetadata({ statusMessage })",
    "routes": [],
-   "line": 826
+   "line": 824
   },
   {
    "name": "queue_work",
@@ -1815,7 +1815,7 @@
      "path": "/api/pipelines/runs/:id/events"
     }
    ],
-   "line": 838
+   "line": 836
   },
   {
    "name": "decide",
@@ -1932,7 +1932,7 @@
      "path": "/api/assessment/drafts/:runId/discard"
     }
    ],
-   "line": 860
+   "line": 858
   },
   {
    "name": "create",
@@ -2016,7 +2016,7 @@
      "path": "/api/access/delegations"
     }
    ],
-   "line": 876
+   "line": 874
   },
   {
    "name": "update",
@@ -2158,7 +2158,7 @@
      "path": "/api/access/delegations/:id/end"
     }
    ],
-   "line": 910
+   "line": 908
   },
   {
    "name": "access_request_status",
@@ -2188,7 +2188,7 @@
      "path": "/api/access/approvals"
     }
    ],
-   "line": 932
+   "line": 930
   }
  ],
  "navigatePages": [
@@ -2788,13 +2788,6 @@
    ]
   },
   {
-   "id": "social-settings",
-   "path": "/social/settings",
-   "tenants": [
-    "social"
-   ]
-  },
-  {
    "id": "definitions",
    "path": "/pipelines/definitions",
    "tenants": [
@@ -2881,13 +2874,6 @@
   {
    "id": "system-logging",
    "path": "/pipelines/logging",
-   "tenants": [
-    "pipelines"
-   ]
-  },
-  {
-   "id": "pipeline-settings",
-   "path": "/pipelines/settings",
    "tenants": [
     "pipelines"
    ]
@@ -4794,31 +4780,29 @@
   {"method":"PAGE","path":"/social/recordings","source":"portal/src/components/shell/portalCommands.ts:294","tenants":["social"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Recordings","group":"Library","roles":null,"pageId":"recordings","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
   {"method":"PAGE","path":"/social/work-graph","source":"portal/src/components/shell/portalCommands.ts:296","tenants":["social"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Work graph","group":"Library","roles":null,"pageId":"work-graph","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
   {"method":"PAGE","path":"/social/configuration","source":"portal/src/components/shell/portalCommands.ts:298","tenants":["social"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Configuration","group":"System","roles":null,"pageId":"social-configuration","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/social/settings","source":"portal/src/components/shell/portalCommands.ts:300","tenants":["social"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Social settings","group":"System","roles":null,"pageId":"social-settings","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/pipelines/definitions","source":"portal/src/components/shell/portalCommands.ts:302","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Definitions","group":"Catalog","roles":null,"pageId":"definitions","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/pipelines/runbooks","source":"portal/src/components/shell/portalCommands.ts:307","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Runbooks","group":"Catalog","roles":null,"pageId":"runbooks","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/pipelines/queues","source":"portal/src/components/shell/portalCommands.ts:309","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Queues","group":"Runs","roles":null,"pageId":"queues","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/pipelines/runs","source":"portal/src/components/shell/portalCommands.ts:310","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Runs","group":"Runs","roles":null,"pageId":"runs","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/pipelines/activity","source":"portal/src/components/shell/portalCommands.ts:312","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Work graph","group":"Runs","roles":null,"pageId":"work-graph","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/pipelines/communication","source":"portal/src/components/shell/portalCommands.ts:314","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Communication","group":"Runs","roles":null,"pageId":"communication","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/pipelines/approvals","source":"portal/src/components/shell/portalCommands.ts:316","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Approvals","group":"Runs","roles":null,"pageId":"approvals","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/pipelines/artifacts","source":"portal/src/components/shell/portalCommands.ts:318","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Artifacts","group":"Runs","roles":null,"pageId":"artifacts","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/pipelines/agents","source":"portal/src/components/shell/portalCommands.ts:320","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Agents","group":"Sources","roles":null,"pageId":"agents","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/pipelines/bots","source":"portal/src/components/shell/portalCommands.ts:322","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Bots","group":"Sources","roles":null,"pageId":"bots","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/pipelines/commands","source":"portal/src/components/shell/portalCommands.ts:324","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Commands","group":"Sources","roles":null,"pageId":"commands","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/pipelines/configuration","source":"portal/src/components/shell/portalCommands.ts:326","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Configuration","group":"System","roles":["pipeline-admin"],"pageId":"pipelines-configuration","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/pipelines/logging","source":"portal/src/components/shell/portalCommands.ts:329","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Logging","group":"System","roles":null,"pageId":"system-logging","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/pipelines/settings","source":"portal/src/components/shell/portalCommands.ts:331","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Pipeline settings","group":"System","roles":null,"pageId":"pipeline-settings","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/catalog","source":"portal/src/components/shell/portalCommands.ts:333","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Catalog","group":"Request","roles":null,"pageId":"catalog","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/requests","source":"portal/src/components/shell/portalCommands.ts:339","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Requests","group":"Request","roles":null,"pageId":"requests","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/requests?status=open","source":"portal/src/components/shell/portalCommands.ts:341","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Open requests","group":"Request","roles":null,"pageId":"open-requests","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/requests/new","source":"portal/src/components/shell/portalCommands.ts:343","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"New request","group":"Request","roles":null,"pageId":"new-request","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/approvals","source":"portal/src/components/shell/portalCommands.ts:345","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Approvals","group":"Approve","roles":["approver"],"pageId":"approvals","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/policies","source":"portal/src/components/shell/portalCommands.ts:347","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Policies","group":"Govern","roles":null,"pageId":"policies","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/reviews","source":"portal/src/components/shell/portalCommands.ts:349","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Reviews","group":"Govern","roles":null,"pageId":"reviews","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/reviews?status=open","source":"portal/src/components/shell/portalCommands.ts:351","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Open reviews","group":"Govern","roles":null,"pageId":"open-reviews","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/audit","source":"portal/src/components/shell/portalCommands.ts:353","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Audit","group":"Govern","roles":null,"pageId":"audit","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/configuration","source":"portal/src/components/shell/portalCommands.ts:355","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Configuration","group":"System","roles":["access-admin"],"pageId":"access-configuration","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
-  {"method":"PAGE","path":"/access/settings","source":"portal/src/components/shell/portalCommands.ts:357","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Access settings","group":"System","roles":null,"pageId":"access-settings","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}}
+  {"method":"PAGE","path":"/pipelines/definitions","source":"portal/src/components/shell/portalCommands.ts:300","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Definitions","group":"Catalog","roles":null,"pageId":"definitions","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/pipelines/runbooks","source":"portal/src/components/shell/portalCommands.ts:305","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Runbooks","group":"Catalog","roles":null,"pageId":"runbooks","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/pipelines/queues","source":"portal/src/components/shell/portalCommands.ts:307","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Queues","group":"Runs","roles":null,"pageId":"queues","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/pipelines/runs","source":"portal/src/components/shell/portalCommands.ts:308","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Runs","group":"Runs","roles":null,"pageId":"runs","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/pipelines/activity","source":"portal/src/components/shell/portalCommands.ts:310","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Work graph","group":"Runs","roles":null,"pageId":"work-graph","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/pipelines/communication","source":"portal/src/components/shell/portalCommands.ts:312","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Communication","group":"Runs","roles":null,"pageId":"communication","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/pipelines/approvals","source":"portal/src/components/shell/portalCommands.ts:314","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Approvals","group":"Runs","roles":null,"pageId":"approvals","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/pipelines/artifacts","source":"portal/src/components/shell/portalCommands.ts:316","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Artifacts","group":"Runs","roles":null,"pageId":"artifacts","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/pipelines/agents","source":"portal/src/components/shell/portalCommands.ts:318","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Agents","group":"Sources","roles":null,"pageId":"agents","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/pipelines/bots","source":"portal/src/components/shell/portalCommands.ts:320","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Bots","group":"Sources","roles":null,"pageId":"bots","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/pipelines/commands","source":"portal/src/components/shell/portalCommands.ts:322","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Commands","group":"Sources","roles":null,"pageId":"commands","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/pipelines/configuration","source":"portal/src/components/shell/portalCommands.ts:324","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Configuration","group":"System","roles":["pipeline-admin"],"pageId":"pipelines-configuration","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/pipelines/logging","source":"portal/src/components/shell/portalCommands.ts:327","tenants":["pipelines"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Logging","group":"System","roles":null,"pageId":"system-logging","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/catalog","source":"portal/src/components/shell/portalCommands.ts:329","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Catalog","group":"Request","roles":null,"pageId":"catalog","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/requests","source":"portal/src/components/shell/portalCommands.ts:335","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Requests","group":"Request","roles":null,"pageId":"requests","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/requests?status=open","source":"portal/src/components/shell/portalCommands.ts:337","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Open requests","group":"Request","roles":null,"pageId":"open-requests","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/requests/new","source":"portal/src/components/shell/portalCommands.ts:339","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"New request","group":"Request","roles":null,"pageId":"new-request","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/approvals","source":"portal/src/components/shell/portalCommands.ts:341","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Approvals","group":"Approve","roles":["approver"],"pageId":"approvals","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/policies","source":"portal/src/components/shell/portalCommands.ts:343","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Policies","group":"Govern","roles":null,"pageId":"policies","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/reviews","source":"portal/src/components/shell/portalCommands.ts:345","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Reviews","group":"Govern","roles":null,"pageId":"reviews","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/reviews?status=open","source":"portal/src/components/shell/portalCommands.ts:347","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Open reviews","group":"Govern","roles":null,"pageId":"open-reviews","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/audit","source":"portal/src/components/shell/portalCommands.ts:349","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Audit","group":"Govern","roles":null,"pageId":"audit","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/configuration","source":"portal/src/components/shell/portalCommands.ts:351","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Configuration","group":"System","roles":["access-admin"],"pageId":"access-configuration","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
+  {"method":"PAGE","path":"/access/settings","source":"portal/src/components/shell/portalCommands.ts:353","tenants":["access"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Access settings","group":"System","roles":null,"pageId":"access-settings","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}}
  ]
 }

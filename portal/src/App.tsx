@@ -46,7 +46,7 @@ const AssessmentDecksPage = lazy(() => import('./pages/assessment/decks/DecksLis
 const AssessmentDeckPage = lazy(() => import('./pages/assessment/decks/DeckPage'));
 const AssessmentConfigurationPage = lazy(() => import('./pages/assessment/ConfigurationPage'));
 const SocialLayout = lazy(() => import('./pages/social/SocialLayout'));
-const SocialSurfacePage = lazy(() => import('./pages/social/SocialSurfacePage'));
+const SocialProfilePage = lazy(() => import('./pages/social/ProfilePage'));
 const SocialChannelsPage = lazy(() => import('./pages/social/ChannelsPage'));
 const SocialDmsPage = lazy(() => import('./pages/social/DmsPage'));
 const SocialCallsPage = lazy(() => import('./pages/social/CallsPage'));
@@ -59,7 +59,6 @@ const SocialConfigurationPage = lazy(() => import('./pages/social/ConfigurationP
 const SocialWorkGraphPage = lazy(() => import('./pages/social/WorkGraphPage'));
 const SocialDeckPage = lazy(() => import('./pages/social/decks/SocialDeckPage'));
 const PipelinesLayout = lazy(() => import('./pages/pipelines/PipelinesLayout'));
-const PipelinesSurfacePage = lazy(() => import('./pages/pipelines/PipelinesSurfacePage'));
 const PipelinesRunsPage = lazy(() => import('./pages/pipelines/RunsPage'));
 const PipelinesRunDetailPage = lazy(() => import('./pages/pipelines/RunDetailPage'));
 const PipelinesActivityPage = lazy(() => import('./pages/pipelines/ActivityPage'));
@@ -237,7 +236,8 @@ function HomeRedirect() {
 }
 
 /**
- * A route gated to `roles` (orgiq and platform pages). A role that cannot open it gets the "no access" page
+ * A route gated to `roles` (every tenant's gated pages; lane D extended it from orgiq and platform to
+ * Pipelines Configuration and Access Approvals/Configuration/Audit). A role that cannot open it gets the "no access" page
  * in place, with the URL kept — what the page is, which role opens it, and the next step that exists
  * (lib/pageAccess.ts) — instead of the old silent redirect to the tenant's front door, which left a member on
  * an empty "My initiatives" view with no word about why (UX walk, 9 November 2026).
@@ -345,8 +345,7 @@ export function App() {
         )}
 
         {/* ── /social/* — the third tenant (docs/social-tenant-design.md §4).
-             Flag ON by default (SOCIAL_ENABLED). Phase S0: every page is an
-             empty state naming the lane that brings its data. ── */}
+             Flag ON by default (SOCIAL_ENABLED). ── */}
         {SOCIAL_ENABLED ? (
           <Route
             path="social"
@@ -366,13 +365,14 @@ export function App() {
             <Route path="contacts" element={<Page element={<SocialContactsPage />} />} />
             <Route path="contacts/:userId" element={<Page element={<SocialContactsPage />} />} />
             <Route path="teams" element={<Page element={<SocialTeamsPage />} />} />
-            <Route path="profile" element={<Page element={<SocialSurfacePage surface="profile" />} />} />
+            <Route path="profile" element={<Page element={<SocialProfilePage />} />} />
             <Route path="recordings" element={<Page element={<SocialRecordingsPage />} />} />
             {/* The work graph: open to every social role (ViewSocial), like /api/social/work-graph. */}
             <Route path="work-graph" element={<Page element={<SocialWorkGraphPage />} />} />
             <Route path="configuration" element={<Page element={<SocialConfigurationPage />} />} />
             <Route path="decks/:deckId" element={<Page element={<SocialDeckPage />} />} />
-            <Route path="settings" element={<Page element={<SocialSurfacePage surface="settings" />} />} />
+            {/* Social settings was a registration stub (UX walk D): presence and do-not-disturb live on Profile, so the old URL lands there. */}
+            <Route path="settings" element={<Navigate to="/social/profile" replace />} />
           </Route>
         ) : (
           <Route path="social/*" element={<Navigate to="/" replace />} />
@@ -382,8 +382,7 @@ export function App() {
              §5). Flag ON by default (PIPELINES_ENABLED). Runs, run detail and
              Artifacts read the run projection (lane P0); Definitions,
              Runbooks, Approvals and the three Sources lists read the
-             definition registry (lane P2); Configuration and Settings are
-             still empty states naming the lane that brings their data. ── */}
+             definition registry (lane P2); Configuration is pipeline-admin's. ── */}
         {PIPELINES_ENABLED ? (
           <Route
             path="pipelines"
@@ -425,11 +424,12 @@ export function App() {
             {/* pipeline-admin only (separation of duties): author and operator
                 never see Configuration — rail, palette and route agree. */}
             <Route path="configuration" element={
-              <RequireRole roles={['pipeline-admin']} fallback={<HomeRedirect />}>
+              <Gate roles={['pipeline-admin']}>
                 <Page element={<PipelinesConfigurationPage />} />
-              </RequireRole>
+              </Gate>
             } />
-            <Route path="settings" element={<Page element={<PipelinesSurfacePage surface="settings" />} />} />
+            {/* Pipeline settings was a registration stub with no preferences behind it (UX walk D): the old URL lands on the shared Settings page. */}
+            <Route path="settings" element={<Navigate to="/settings" replace />} />
             {/* System › Logging in this tenant (G37b): the voice sessions and the pipeline runs it can read; dev server with the voice navigator on. */}
             {LoggingPage && <Route path="logging/*" element={<Page element={<LoggingPage />} />} />}
           </Route>
@@ -458,9 +458,9 @@ export function App() {
             <Route path="requests/new" element={<Page element={<AccessRequestNewPage />} />} />
             <Route path="requests/:id" element={<Page element={<AccessRequestRecordPage />} />} />
             <Route path="approvals" element={
-              <RequireRole roles={['approver', 'access-admin']} fallback={<HomeRedirect />}>
+              <Gate roles={['approver', 'access-admin']}>
                 <Page element={<AccessApprovalsPage />} />
-              </RequireRole>
+              </Gate>
             } />
             <Route path="policies" element={<Page element={<AccessPoliciesPage />} />} />
             <Route path="policies/:id" element={<Page element={<AccessPoliciesPage />} />} />
@@ -468,9 +468,9 @@ export function App() {
             <Route path="reviews/:id" element={<Page element={<AccessReviewRecordPage />} />} />
             <Route path="audit" element={<Page element={<AccessAuditPage />} />} />
             <Route path="configuration" element={
-              <RequireRole roles={['access-admin']} fallback={<HomeRedirect />}>
+              <Gate roles={['access-admin']}>
                 <Page element={<AccessConfigurationPage />} />
-              </RequireRole>
+              </Gate>
             } />
             <Route path="settings" element={<Page element={<AccessSettingsPage />} />} />
           </Route>

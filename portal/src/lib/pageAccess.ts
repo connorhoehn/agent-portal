@@ -16,8 +16,15 @@
 //
 // Presentation only: the server still gates every read. No React — node:test runs it.
 
-/** Least to most privileged; the first role in this order that opens a page is the one named. */
-export const ROLE_ORDER = ['member', 'sme', 'program-owner', 'org-leader', 'hr-admin', 'admin'] as const;
+/** Least to most privileged within each tenant; the first role in this order that opens a page is the one named. */
+export const ROLE_ORDER = [
+  'member', 'sme', 'program-owner', 'org-leader', 'hr-admin',
+  'assessor', 'lead-assessor', 'program-lead',
+  'participant', 'moderator', 'community-admin',
+  'author', 'operator', 'pipeline-admin',
+  'requester', 'approver', 'access-admin',
+  'admin',
+] as const;
 
 /**
  * The tenant roles the Access catalog offers as requestable items (`role:<tenant>:<role>`), mirroring

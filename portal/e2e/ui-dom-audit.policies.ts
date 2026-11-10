@@ -30,7 +30,6 @@ export function pipelineComposerPolicy(path: string, view: PipelineViewEvidence 
   }
   if (pathname === '/pipelines/configuration' && view.configurationReadOnly) return { mode: 'exempt', reason: 'The default approver details are visible without editing controls for this role; this read-only setting has no message input.' };
   if (pathname === '/pipelines/configuration' && view.configurationForm) return { mode: 'exempt', reason: 'This single-setting approval-authority form uses an explicit role selector and Save action, rather than a searchable collection.' };
-  if (pathname === '/pipelines/settings' && view.settingsPlaceholder) return { mode: 'exempt', reason: 'The preferences feature is not available yet; the page displays its registration state and exposes no configurable data.' };
   if (/^\/pipelines\/decks\/[^/]+$/.test(pathname)) return view.missingDeck
     ? { mode: 'exempt', reason: 'The report endpoint returned 404 and its load-error view is visible; there is no document to compose against. Loaded report coverage remains separate.' }
     : { mode: 'required' };

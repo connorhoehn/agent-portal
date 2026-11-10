@@ -290,16 +290,14 @@ export const PAGES: readonly PageEntry[] = [
     keywords: ['contact', 'people', 'follow', 'presence'] },
   { label: 'Teams',              hint: 'Teams and their channels',            path: '/social/teams',                               tenant: 'social', group: 'People', pageId: 'teams',
     keywords: ['team', 'group', 'members'] },
-  { label: 'Profile',            hint: 'How you appear to others here',       path: '/social/profile',                             tenant: 'social', group: 'People', pageId: 'profile',
-    keywords: ['profile', 'status', 'avatar', 'me'] },
+  { label: 'Profile',            hint: 'How you appear to others here, and do not disturb', path: '/social/profile',               tenant: 'social', group: 'People', pageId: 'profile',
+    keywords: ['profile', 'status', 'avatar', 'me', 'presence', 'away', 'busy', 'do not disturb'] },
   { label: 'Recordings',         hint: 'Call recordings and their shares',    path: '/social/recordings',                          tenant: 'social', group: 'Library', pageId: 'recordings',
     keywords: ['recording', 'video', 'playback', 'share'] },
   { label: 'Work graph',         hint: 'Your conversations, calls, recordings and decks for the day', path: '/social/work-graph', tenant: 'social', group: 'Library', pageId: 'work-graph',
     keywords: ['activity', 'graph', 'conversations', 'calls', 'recordings', 'decks', 'today'] },
   { label: 'Configuration',      hint: 'Retention, rooms and integrations',   path: '/social/configuration',                       tenant: 'social', group: 'System', pageId: 'social-configuration',
     keywords: ['configuration', 'retention', 'policy', 'integration'] },
-  { label: 'Social settings',    hint: 'Your notification and call preferences', path: '/social/settings',                        tenant: 'social', group: 'System', pageId: 'social-settings',
-    keywords: ['settings', 'preferences', 'notifications', 'do not disturb'] },
   // Pipelines tenant — its own map (Catalog / Runs / Sources / System),
   // mirroring NAV_ITEMS in Layout.tsx. Every route is readable by every
   // pipelines role (ViewPipelines); writes are gated inside the pages.
@@ -329,8 +327,6 @@ export const PAGES: readonly PageEntry[] = [
     keywords: ['configuration', 'approver', 'default', 'policy'] },
   { label: 'Logging',            hint: 'Voice sessions and pipeline runs',    path: '/pipelines/logging',                          tenant: 'pipelines', group: 'System', pageId: 'system-logging', feature: 'voiceLog',
     keywords: ['logging', 'log', 'voice', 'session', 'transcript', 'history', 'tool call', 'pipeline', 'run', 'trace'] },
-  { label: 'Pipeline settings',  hint: 'Your run notifications and views',    path: '/pipelines/settings',                         tenant: 'pipelines', group: 'System', pageId: 'pipeline-settings',
-    keywords: ['settings', 'preferences', 'notifications'] },
   // Access tenant — its own map (Request / Approve / Govern / System),
   // mirroring NAV_ITEMS in Layout.tsx. Request and Govern are readable by every
   // access role (ViewAccess); Approvals is DecideAccess (approver,
