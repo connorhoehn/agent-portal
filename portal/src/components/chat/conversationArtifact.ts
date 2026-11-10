@@ -11,6 +11,7 @@
 // the conversation until the requester presses Post (diagram) or Save (doc).
 
 import type { AgentRunStatus, ChatCommand } from '@connorhoehn/ui-components/social';
+import { assertTenantConversation } from './channelPlane.ts';
 
 export type ArtifactCommandName = 'diagram' | 'doc';
 export interface ArtifactSpan { text: string; messageId: string; author: string }
@@ -68,6 +69,8 @@ export function artifactApi(base: string, command: ArtifactCommandName): Artifac
   return {
     command,
     async start(channel, argumentText, doFetch = fetch) {
+      // The tenant mount never receives a Social channel (channelPlane.ts).
+      if (base === CONVERSATION_ARTIFACT_BASE) assertTenantConversation(channel);
       return json(await doFetch(`${root}/run`, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ channel, text: argumentText }) }), `The ${label} could not be started.`);
     },

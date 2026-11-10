@@ -195,6 +195,13 @@ const OPEN = { page: null, ref: null, kind: null, name: null, scope: null, tab: 
 const M1 = {
   title: 'Open Auth Migration and walk its tabs', persona: 'vera',
   async hand(s, page) {
+    // No 4xx while the initiative page is open (second regression walk: the pane, on social:ch:auth-migration,
+    // polled the tenant /api/conversations/agent/waiting route and got 400 on every poll).
+    const refused = [];
+    page.on('response', (r) => {
+      const u = r.url();
+      if (u.includes('/api/') && r.status() >= 400 && r.status() < 500 && page.url().includes('/iq/projects/p-auth-migration')) refused.push(`${r.request().method()} ${u.replace(PORTAL, '')} ${r.status()}`);
+    });
     await s('open Auth Migration from Initiatives', async () => {
       await go(page, '/iq/projects');
       await page.getByRole('link', { name: 'Auth Migration', exact: true }).first().click();
@@ -222,6 +229,10 @@ const M1 = {
       const t = await waitText(page, '[data-testid=initiative-pane-discussion]', /Second rehearsal failed at the flip/);
       check(/#auth-migration/.test(t), `the Discussion pane does not name #auth-migration: "${t.slice(0, 200)}"`);
       check(/Then I decide the order once the retry is clean/.test(t), "Sienna's promise is not in the Discussion pane");
+    });
+    await s('no request on the initiative page was refused (4xx), including the pane\'s waiting-approval poll', async () => {
+      await sleep(6000); // one more /agent waiting poll (5 s)
+      check(refused.length === 0, `refused on the initiative page: ${[...new Set(refused)].join(' | ')}`);
     });
     await s('Agents tab', async () => {
       await page.getByTestId('initiative-header-tab-agents').click();

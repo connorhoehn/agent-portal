@@ -34,7 +34,7 @@ import { useMessagePortraits } from '../../hooks/useMessagePortraits';
 import { usePageCalls, usePeopleNames } from '../../hooks/usePageCalls';
 import { useUnreadBoundary } from '../../hooks/useUnreadBoundary';
 import { useSession } from '../../lib/auth';
-import { ConversationComposer, useAttachmentSource } from '../../lib/conversationComposer';
+import { ConversationComposer, useAttachmentSource, useChatAttachmentSend } from '../../lib/conversationComposer';
 import { isPageCallLobby } from '../../lib/pageCalls';
 import { PageCallsView } from '../calls/PageCallsView';
 import { OFFLINE_REASON, isConnected } from './chatConnection';
@@ -42,7 +42,9 @@ import type { ConversationReadState } from './conversationReadState';
 import { useChatForward } from './useChatForward';
 import { useChatPins } from './useChatPins';
 import { useConversationReadState } from './useConversationReadState';
-import { conversationChatCommands } from './chatCommandRegistry';
+import { conversationPlaneApis } from './conversationPlane';
+import { artifactFile } from './conversationArtifact';
+import { fetchDeckFile, postMetadata, requestDeckPost } from '../../pages/social/decks/socialDecksApi';
 import { useConversationSummarize, type ConversationSummarize } from './useConversationSummarize';
 import { useMentionCandidates } from './useMentionCandidates';
 import { conversationSubmitReason } from '../../lib/composerSubmitReason';
@@ -112,12 +114,36 @@ export function useConversation(channel: string, { maySend, post, confirmHistory
   const quote = useQuoteReply(channel);
   const postRef = useRef(post);
   postRef.current = post;
-  const summarize = useConversationSummarize({ channel, userId, displayName, maySend, commands: conversationChatCommands(channel),
-    post: async (message) => {
-      if (!connected) throw new Error(OFFLINE_REASON);
-      if (postRef.current) return postRef.current(message.text, message.metadata);
-      chat.sendMessage(message.text, { displayName, ...message.metadata });
-    } });
+  // The channel's plane picks the command routes: a bound initiative's pane runs on `social:ch:<slug>`, whose
+  // /summarize, /diagram, /doc, /deck and /agent (and the waiting-approval poll) are Social's (conversationPlane.ts).
+  const plane = useMemo(() => conversationPlaneApis(channel), [channel]);
+  const social = plane.plane === 'social';
+  // Social's /diagram, /doc and /deck carry their file as an attachment (SocialConversation.tsx's sendArtifact and postDeck).
+  const files = useChatAttachmentSend(social ? channel : null, displayName);
+  const send = async (text: string, metadata: Record<string, unknown>): Promise<void> => {
+    if (!connected) throw new Error(OFFLINE_REASON);
+    if (postRef.current) return postRef.current(text, metadata);
+    chat.sendMessage(text, { displayName, ...metadata });
+  };
+  const summarize = useConversationSummarize({ channel, userId, displayName, maySend, commands: plane.commands,
+    summarizeApi: plane.summarizeApi, artifactApi: plane.artifactApi, agentApi: plane.agentApi,
+    post: message => send(message.text, message.metadata),
+    ...(social ? {
+      testIdPrefix: 'social', privateOnly: true, channelKind: channel.startsWith('social:dm:') ? 'dm' as const : 'room' as const,
+      sendArtifact: async (message, result) => {
+        if (message.channel !== channel) throw new Error('This result belongs to another conversation.');
+        const { uploaded, metadata } = await files.prepare(message.text, [artifactFile(result)]);
+        if (uploaded.length === 0) throw new Error('The file was not uploaded.');
+        await send(message.text, { ...message.metadata, ...metadata });
+      },
+      postDeck: async (deckId) => {
+        const posted = await requestDeckPost(deckId);
+        if (posted.channel !== channel) throw new Error('This deck belongs to another conversation.');
+        const { uploaded, metadata } = await files.prepare(posted.text, [await fetchDeckFile(posted)]);
+        if (uploaded.length === 0) throw new Error('The deck file was not uploaded.');
+        await send(posted.text, postMetadata(posted, metadata, displayName));
+      },
+    } : {}) });
   return { channel, chat, receipts, reactions, quote, connected, ...(readState ? { readState } : {}), maySend, userId, displayName, commands: summarize.commands, summarize };
 }
 
@@ -191,7 +217,8 @@ export function ConversationThread({ conversation, title, readOnlyReason = null,
       view: <PageCallsView lobby={callLobby} calls={pageCalls} me={userId} nameOf={peopleNames} testId={testId ? `${testId}-calls` : 'page-calls'} /> } } : {}),
     ...(pins && includeFiles ? { files: { items: channelFiles.files, error: channelFiles.error, isLoading: channelFiles.isLoading, thumbnailSrc: a => srcFor(a) } } : {}),
     currentUser: { id: userId, displayName }, testId: testId ? `${testId}-pins` : 'chat-pins' });
-  const onSearchPeople = useMentionCandidates(true, { userId, key: channel, tenant: channel.split(':')[0] });
+  // A Social channel is not one tenant's: its @ menu is the shell's directory, unfiltered by tenant (the gateway notifies only readers).
+  const onSearchPeople = useMentionCandidates(true, { userId, key: channel, ...(channel.startsWith('social:') ? {} : { tenant: channel.split(':')[0] }) });
   const unreadFrom = useUnreadBoundary(channel, userId, chat.messages);
   const forward = useChatForward({ channel, userId, displayName, enabled: editable });
   // One input per conversation: a composer elsewhere on the page that claims this channel owns it.

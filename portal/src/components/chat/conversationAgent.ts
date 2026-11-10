@@ -11,6 +11,7 @@
 // that already exist, and each finished step shows that flow's own card.
 
 import type { AgentRunStatus, ChatCommand } from '@connorhoehn/ui-components/social';
+import { assertTenantConversation } from './channelPlane.ts';
 
 export type AgentStepKind = 'summarize' | 'deck' | 'diagram' | 'doc' | 'draft' | 'note' | 'document:create' | 'meeting:create' | 'approval';
 export interface AgentPlanStep { kind: AgentStepKind; title: string; instruction: string; acceptance: string; body?: string }
@@ -73,12 +74,15 @@ export interface AgentApi {
 
 /** The calls against one mount (`base`). */
 export function agentApi(base: string): AgentApi {
+  // The tenant mount never receives a Social channel (channelPlane.ts): refused here, before a request.
+  const plane = (channel: string) => { if (base === CONVERSATION_AGENT_BASE) assertTenantConversation(channel); };
   const post = (runId: string, verb: 'approve' | 'discard', doFetch: Fetch, fallback: string) =>
     doFetch(`${base}/runs/${encodeURIComponent(runId)}/${verb}`, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
       // One id per run: a retried Approve answers the same 202 and never starts a second loop.
       body: JSON.stringify(verb === 'approve' ? { requestId: `rq-${runId}` } : {}) }).then(r => json<{ runId: string; stage: AgentStage }>(r, fallback));
   return {
     async start(channel, argumentText, doFetch = fetch) {
+      plane(channel);
       return json(await doFetch(`${base}/run`, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ channel, text: argumentText }) }), 'The plan could not be started.');
     },
@@ -86,6 +90,7 @@ export function agentApi(base: string): AgentApi {
       return json(await doFetch(`${base}/runs/${encodeURIComponent(runId)}`, { credentials: 'include' }), 'The plan could not be read.');
     },
     async waiting(channel, doFetch = fetch) {
+      plane(channel);
       const out = await json<{ runs: AgentWaitingRun[] }>(await doFetch(`${base}/waiting?channel=${encodeURIComponent(channel)}`, { credentials: 'include' }), 'Waiting approvals could not be read.');
       return out.runs;
     },

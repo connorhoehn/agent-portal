@@ -9,6 +9,7 @@
 // conversation").
 
 import type { AgentRunStatus, ChatCommand } from '@connorhoehn/ui-components/social';
+import { assertTenantConversation } from './channelPlane.ts';
 
 export interface SummarizeSpan { text: string; messageId: string; author: string }
 export interface SummarizeResult {
@@ -52,6 +53,8 @@ export interface SummarizeApi {
 export function summarizeApi(base: string): SummarizeApi {
   return {
     async start(channel, argumentText, doFetch = fetch) {
+      // The tenant mount never receives a Social channel (channelPlane.ts).
+      if (base === CONVERSATION_SUMMARIZE_BASE) assertTenantConversation(channel);
       return json(await doFetch(`${base}/run`, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ channel, text: argumentText }) }), 'The summary could not be started.');
     },
