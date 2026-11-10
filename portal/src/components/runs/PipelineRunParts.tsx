@@ -18,7 +18,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
 import { usd } from '../../lib/format';
 import {
-  artifactKindLabel, artifactPlace, artifactStepLabel, attemptItems, definitionLabel, kindLabel, runHref, runStatusChip, sourceLabel, sourceStatusNote, stepperSteps, stepStatusChip,
+  artifactKindLabel, artifactPlace, artifactStepLabel, attemptItems, contextTenantLabel, definitionLabel, kindLabel, runHref, runStatusChip, sourceLabel, sourceStatusNote, stepperSteps, stepStatusChip,
   type PipelineArtifact, type PipelineRun, type PipelineStep,
 } from '../../lib/pipelineRuns';
 import { RunTimeline } from './RunTimeline';
@@ -73,7 +73,7 @@ export function PipelineRunSummary({ run, definitionName }: { run: PipelineRun; 
               {run.definitionId && <CopyIdButton value={run.definitionId} label="Copy the definition's id" />}
             </Inline>
           ) },
-          { label: 'Workspace', value: run.context.tenant },
+          { label: 'Acts for', value: contextTenantLabel(run.context.tenant) },
           { label: 'Source', value: sourceLabel(run.context.table), title: run.context.id },
           { label: 'Source status', value: run.context.sourceStatus.replace(/_/g, ' ') },
           { label: 'Triggered by', value: run.triggeredByName ?? run.triggeredBy ?? 'not recorded', muted: run.triggeredBy == null },

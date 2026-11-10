@@ -48,9 +48,9 @@ export const EXTRA_CHANNELS: readonly HistoryChannel[] = [
   { slug: 'events', name: 'Events', description: 'Tech talks, office hours and the quarterly community call.', privacy: 'public', owner: 'u-mira', daysAgo: 13,
     members: ['u-lena', 'u-sana', 'u-farah', 'u-asha', 'u-jonas'] },
   // The two initiative channels beside #auth-migration, bound in mock/social-bindings.ts.
-  { slug: 'observability', name: 'Observability', description: 'Collectors, span metrics and burn-rate alerts. Bound to the Observability Platform initiative in Work.', privacy: 'public', owner: 'u-nora', daysAgo: 12,
+  { slug: 'observability', name: 'Observability', description: 'Collectors, span metrics and burn-rate alerts.', privacy: 'public', owner: 'u-nora', daysAgo: 12,
     members: ['u-layla', 'u-eli', 'u-caleb', 'u-vera', 'u-rachel'] },
-  { slug: 'llm-platform', name: 'LLM platform', description: 'Prompts, the canary judge and golden sets. Bound to the LLM Application Platform initiative in Work.', privacy: 'public', owner: 'u-nina', daysAgo: 11,
+  { slug: 'llm-platform', name: 'LLM platform', description: 'Prompts, the canary judge and golden sets.', privacy: 'public', owner: 'u-nina', daysAgo: 11,
     members: ['u-katya', 'u-caleb', 'u-vera'] },
 ];
 
@@ -71,7 +71,7 @@ export const HISTORY: readonly HistoryLine[] = [
   ['g02', 'general', 'u-jonas', 233, 'Thursdays work for me. Will the recording and its transcript go up under Recordings like last time?'],
   ['g03', 'general', 'u-mira', 232, '@Jonas Lindqvist yes, the recording and the transcript land under Recordings within the hour.'],
   ['g04', 'general', 'u-asha', 214, 'New here from the assessment side. I score CI maturity for client teams; which channel has the pipeline and release talk?'],
-  ['g05', 'general', 'u-lena', 213, '@Asha Nair this one for release trains and freezes, #incidents for anything on fire, and the initiative channels like #auth-migration for the actual cutover work.'],
+  ['g05', 'general', 'u-lena', 213, '@Asha Nair this one for release trains and freezes, #incidents for anything on fire, and #auth-migration for the actual cutover work.'],
   ['g06', 'general', 'u-theo', 190, 'Reminder: #incidents is for live incidents and their write-ups. If an alert fired and you do not understand it, start a thread here first.'],
   ['g07', 'general', 'u-nora', 168, 'OTel office hours on Wednesday, 11 to 12 in the Town hall room. Bring a service that still emits StatsD and we will move it to OTLP live, alerts included.'],
   ['g08', 'general', 'u-rachel', 166, '@Nora DaSilva bringing the billing worker: 14 StatsD counters and two alerts that page on them.'],

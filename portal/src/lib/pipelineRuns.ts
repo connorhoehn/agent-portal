@@ -258,8 +258,22 @@ export const KIND_FILTER_OPTIONS: Array<{ value: string; label: string }> = [
   ...(['bot', 'agent', 'assessment-command'] as DefinitionKind[]).map((k) => ({ value: k, label: KIND_LABEL[k] })),
 ];
 
+/**
+ * The product a run, definition or artifact acts for, by its display name (UX walk D: the tenants are
+ * separate products, so Pipelines names Work as "Work" — a neutral source label — never the raw tenant id
+ * `orgiq`, and never as a link into it). Mirrors TENANT_DISPLAY_NAMES (lib/tenants.generated.ts); kept
+ * inline because this module has no imports.
+ */
+const CONTEXT_TENANT_LABELS: Readonly<Record<string, string>> = {
+  orgiq: 'Work', assessment: 'Assessment', social: 'Social', pipelines: 'Pipelines', access: 'Access',
+};
+export function contextTenantLabel(tenant: string | null | undefined): string {
+  if (!tenant) return '—';
+  return CONTEXT_TENANT_LABELS[tenant] ?? 'Another product';
+}
+
 export const TENANT_FILTER_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: '', label: 'Any workspace' },
+  { value: '', label: 'Any product' },
   { value: 'orgiq', label: 'Work' },
   { value: 'assessment', label: 'Assessment' },
 ];

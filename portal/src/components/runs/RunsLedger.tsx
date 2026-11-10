@@ -20,6 +20,7 @@ import {
   KIND_FILTER_OPTIONS,
   STATUS_FILTER_OPTIONS,
   TENANT_FILTER_OPTIONS,
+  contextTenantLabel,
   kindLabel,
   runHref,
   runsQuery,
@@ -37,7 +38,8 @@ import { writeJson } from '../../lib/writeJson';
 import { CollectionCommandHost, type CollectionCommandAdapter } from '../collections/CollectionCommandHost';
 import { EMPTY_RUN_FILTERS, parseRunCommand, resolveRunCommand, runCommandExamples, type RunFilters } from './runCommands';
 
-function columns(showWorkspace: boolean, detailBase: string | null): DataTableColumn<PipelineRun>[] {
+// Initiative is Work's own column: Pipelines and Assessment never show it (UX walk D, tenant isolation).
+function columns(showWorkspace: boolean, showInitiative: boolean, detailBase: string | null): DataTableColumn<PipelineRun>[] {
   return [
     { key: 'title', header: 'Run', render: (r) => {
       const title = <T size="sm" title={r.context.title} className="block max-w-[32rem] truncate">{r.context.title}</T>;
@@ -49,10 +51,10 @@ function columns(showWorkspace: boolean, detailBase: string | null): DataTableCo
         <PipelineRunStatusChip status={r.status} title={sourceStatusNote(r) ?? undefined} />
       ),
     },
-    { key: 'initiative', header: 'Initiative', render: (r) => r.context.initiativeName ?? <T size="xs" tone="tertiary">—</T> },
+    ...(showInitiative ? [{ key: 'initiative', header: 'Initiative', render: (r: PipelineRun) => r.context.initiativeName ?? <T size="xs" tone="tertiary">—</T> }] : []),
     { key: 'owner', header: 'Owner', render: (r) => r.ownerName ?? <T size="xs" tone="tertiary">—</T> },
     { key: 'kind', header: 'Kind', render: (r) => kindLabel(r.context.kind) },
-    ...(showWorkspace ? [{ key: 'tenant', header: 'Workspace', render: (r: PipelineRun) => <Chip tone="neutral" size="xs">{r.context.tenant}</Chip> }] : []),
+    ...(showWorkspace ? [{ key: 'tenant', header: 'Acts for', render: (r: PipelineRun) => <Chip tone="neutral" size="xs">{contextTenantLabel(r.context.tenant)}</Chip> }] : []),
     { key: 'triggerType', header: 'Started by', render: (r) => (r.triggeredByName ? `${r.triggeredByName} · ${r.context.trigger ?? r.triggerType}` : r.context.trigger ?? r.triggerType) },
     { key: 'costUsd', header: 'Cost', numeric: true, render: (r) => (r.costUsd != null ? usd(r.costUsd, { precision: 4 }) : '—') },
     {
@@ -112,7 +114,7 @@ export function RunsLedger({ actions, endpoint, detailBase, showWorkspace = fals
       const resolved = resolveRunCommand(command, scope);
       if (resolved.kind === 'filter') {
         setFilters(current => ({ ...current, ...resolved.filters }));
-        return { message: `Applied ${Object.entries(resolved.filters).map(([key, value]) => `${key === 'contextTenant' ? 'workspace' : key}: ${value}`).join(', ')}. Other filters and sorting are unchanged.${resolved.filters.title ? ' Title search covers loaded rows only.' : ''}` };
+        return { message: `Applied ${Object.entries(resolved.filters).map(([key, value]) => `${key === 'contextTenant' ? `acts for: ${contextTenantLabel(value)}` : `${key}: ${value}`}`).join(', ')}. Other filters and sorting are unchanged.${resolved.filters.title ? ' Title search covers loaded rows only.' : ''}` };
       }
       if (resolved.kind === 'open') {
         navigate(runHref(detailBase!, resolved.run.id));
@@ -143,7 +145,7 @@ export function RunsLedger({ actions, endpoint, detailBase, showWorkspace = fals
       <CollectionToolbar label="Run filters" filters={[
         { id: 'status', label: 'Status', value: status, onChange: value => setFilter('status', value), options: STATUS_FILTER_OPTIONS },
         { id: 'kind', label: 'Kind', value: kind, onChange: value => setFilter('kind', value), options: KIND_FILTER_OPTIONS },
-        ...(showWorkspace ? [{ id: 'workspace', label: 'Workspace', value: contextTenant, onChange: (value: string) => setFilter('contextTenant', value), options: TENANT_FILTER_OPTIONS }] : []),
+        ...(showWorkspace ? [{ id: 'workspace', label: 'Acts for', value: contextTenant, onChange: (value: string) => setFilter('contextTenant', value), options: TENANT_FILTER_OPTIONS }] : []),
       ]} summary={data ? showingLabel(runs.length, data.total, 'runs') : undefined}
         search={{ value: title, onChange: value => setFilter('title', value), placeholder: 'Search loaded run titles', 'aria-label': 'Search loaded run titles' }}
         notices={[scopeNote, ...(data && unlinkedNote(data.unlinked) ? [unlinkedNote(data.unlinked)] : [])]}
@@ -159,7 +161,7 @@ export function RunsLedger({ actions, endpoint, detailBase, showWorkspace = fals
         <DataTable
           data-testid={testId}
           data={runs}
-          columns={columns(showWorkspace, detailBase)}
+          columns={columns(showWorkspace, session?.tenant === 'orgiq', detailBase)}
           keyField={(r) => r.id}
           loading={isLoading && !data}
           pageSize={pageSize}

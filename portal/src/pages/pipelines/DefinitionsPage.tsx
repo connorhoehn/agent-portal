@@ -37,7 +37,7 @@ import {
   type DefinitionsResponse,
   type PipelineDefinition,
 } from '../../lib/pipelineDefinitions';
-import { kindLabel } from '../../lib/pipelineRuns';
+import { contextTenantLabel, kindLabel } from '../../lib/pipelineRuns';
 import { relativeTime } from '../../lib/relativeTime';
 import { DefinitionDiscussion, DefinitionRecord } from './DefinitionRecord';
 
@@ -52,7 +52,7 @@ const COLUMNS: DataTableColumn<PipelineDefinition>[] = [
   },
   { key: 'kind', header: 'Kind', render: (d) => kindLabel(d.kind) },
   { key: 'owner', header: 'Owner', render: (d) => d.ownerName ?? d.owner ?? <T size="xs" tone="tertiary">—</T> },
-  { key: 'contextTenant', header: 'Workspace', render: (d) => <Chip tone="neutral" size="xs">{d.contextTenant}</Chip> },
+  { key: 'contextTenant', header: 'Acts for', render: (d) => <Chip tone="neutral" size="xs">{contextTenantLabel(d.contextTenant)}</Chip> },
   { key: 'triggers', header: 'Triggers', render: (d) => triggerSummary(d.triggers) },
   { key: 'approvers', header: 'Approved by', render: (d) => approverSummary(d.effectiveApproverRoles, d.approversDefaulted) },
   { key: 'runCount', header: 'Runs', numeric: true, sortable: true, compare: (a, b) => a.runCount - b.runCount, render: (d) => d.runCount },

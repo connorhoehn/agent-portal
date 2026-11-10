@@ -59,7 +59,7 @@ function seedChannels(): SocialChannelRow[] {
     { tenant: 'social', slug: 'general', name: 'General', description: 'Release trains, change freezes, office hours and new runbooks. Questions without a home start here.', privacy: 'public', createdBy: 'u-mira', createdAt: clock.daysAgo(21) },
     { tenant: 'social', slug: 'design-reviews', name: 'Design reviews', description: 'Design docs and UI reviews: say the decision you need, by when, and tag one reviewer.', privacy: 'public', createdBy: 'u-lena', createdAt: clock.daysAgo(14) },
     { tenant: 'social', slug: 'moderators', name: 'Moderators', description: 'Moderation calls and escalations.', privacy: 'private', createdBy: 'u-lena', createdAt: clock.daysAgo(10) },
-    { tenant: 'social', slug: 'auth-migration', name: 'Auth migration', description: 'Customer tenants moving off the legacy SAML shim to Cognito, one at a time. Bound to the Auth Migration initiative in Work.', privacy: 'public', createdBy: 'u-vera', createdAt: clock.daysAgo(8) },
+    { tenant: 'social', slug: 'auth-migration', name: 'Auth migration', description: 'Customer tenants moving off the legacy SAML shim to Cognito, one at a time.', privacy: 'public', createdBy: 'u-vera', createdAt: clock.daysAgo(8) },
     // The demo history's extra channels (mock/social-history.ts).
     ...EXTRA_CHANNELS.map((c): SocialChannelRow => ({ tenant: 'social', slug: c.slug, name: c.name, description: c.description, privacy: c.privacy, createdBy: c.owner, createdAt: clock.daysAgo(c.daysAgo) })),
   ];

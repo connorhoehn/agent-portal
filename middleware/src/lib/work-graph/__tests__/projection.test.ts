@@ -360,6 +360,9 @@ describe('pipelines projection honesty', () => {
     const detail = p.details.find(d => d.nodeId === pNodeIdFor.run('run-live'))!;
     expect(detail.lines).toContain('Cost · $0.5000');
     expect(detail.participants).toEqual([{ id: 'u-ines', label: 'u-ines' }]);
+    // The product a run acts for, by its display name: never the raw tenant id inside Pipelines (UX walk D).
+    expect(detail.lines).toContain('Acts for · Work');
+    expect((detail.lines ?? []).join(' ')).not.toMatch(/orgiq/i);
   });
 
   it('names relationships from the rows: run→definition, step→run, approval→step, deck→run', () => {

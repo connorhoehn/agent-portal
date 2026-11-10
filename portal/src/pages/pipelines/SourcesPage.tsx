@@ -35,6 +35,7 @@ import {
 } from '../../lib/pipelineDefinitions';
 import { pipelineCollectionAdapter, resolvePipelineCollectionTarget } from './pipelineCollectionCommands';
 import { relativeTime } from '../../lib/relativeTime';
+import { contextTenantLabel } from '../../lib/pipelineRuns';
 
 const str = (v: unknown): string => (typeof v === 'string' && v ? v : '—');
 
@@ -59,7 +60,7 @@ const PAGES: Record<SourcePageId, { title: string; description: string; noun: st
     columns: [
       { key: 'title', header: 'Agent', sortable: true, compare: (a, b) => a.title.localeCompare(b.title), render: (d) => <RecordLink to={definitionHref(d.id)}>{d.title}</RecordLink> },
       { key: 'id', header: 'Runtime', render: (d) => <T size="xs" tone="tertiary">{d.source.id}</T> },
-      { key: 'workspace', header: 'Workspace', render: (d) => <Chip tone="neutral" size="xs">{d.contextTenant}</Chip> },
+      { key: 'workspace', header: 'Acts for', render: (d) => <Chip tone="neutral" size="xs">{contextTenantLabel(d.contextTenant)}</Chip> },
       { key: 'model', header: 'Model', render: (d) => str(d.meta['model']) },
       { key: 'tools', header: 'Tools', numeric: true, render: (d) => (Array.isArray(d.meta['tools']) ? (d.meta['tools'] as unknown[]).length : 0) },
       { key: 'status', header: 'Status', width: '112px', render: (d) => <Chip tone={d.meta['status'] === 'healthy' ? 'success' : d.meta['status'] === 'degraded' ? 'warning' : 'neutral'} size="xs">{str(d.meta['status'])}</Chip> },
@@ -68,7 +69,7 @@ const PAGES: Record<SourcePageId, { title: string; description: string; noun: st
   },
   bots: {
     title: 'Bots',
-    description: 'Standing missions from the org workspace — each bot is a definition, each firing one of its runs.',
+    description: 'Standing missions from Work — each bot is a definition, each firing one of its runs.',
     noun: 'bots',
     empty: 'No bots are registered.',
     columns: [
@@ -78,7 +79,8 @@ const PAGES: Record<SourcePageId, { title: string; description: string; noun: st
       },
       { key: 'state', header: 'State', width: '96px', render: (d) => (d.enabled ? <Chip tone="success" size="xs">active</Chip> : <Chip tone="neutral" size="xs">paused</Chip>) },
       { key: 'trigger', header: 'Trigger', render: (d) => (d.meta['cronExpr'] ? `${triggerSummary(d.triggers)} · ${String(d.meta['cronExpr'])}` : triggerSummary(d.triggers)) },
-      { key: 'initiative', header: 'Initiative', render: (d) => str(d.meta['initiativeName'] ?? d.meta['initiativeId'] ?? d.meta['repo']) },
+      // Which Work initiative a bot serves is Work's vocabulary: Pipelines names the product only (UX walk D).
+      { key: 'actsFor', header: 'Acts for', render: (d) => <Chip tone="neutral" size="xs">{contextTenantLabel(d.contextTenant)}</Chip> },
       { key: 'model', header: 'Model', render: (d) => str(d.meta['model']) },
       ...RUNS,
     ],

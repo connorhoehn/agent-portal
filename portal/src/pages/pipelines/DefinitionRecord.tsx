@@ -19,7 +19,7 @@ import { writeJson } from '../../lib/writeJson';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { PipelineRunStatusChip } from '../../components/runs/PipelineRunParts';
-import { kindLabel, runHref, type PipelineRun } from '../../lib/pipelineRuns';
+import { contextTenantLabel, kindLabel, runHref, type PipelineRun } from '../../lib/pipelineRuns';
 import {
   approverSummary, canDryRun, promotionVerdict, roleLabel, rungLabel, triggerSummary,
   type DefinitionStep, type DryRunRecord, type PipelineDefinition, type RunbookState,
@@ -126,7 +126,7 @@ export function DefinitionRecord({ id, onChanged }: { id: string; onChanged: () 
           <KeyValue
             layout="row"
             items={[
-              { label: 'Workspace', value: def.contextTenant === 'assessment' ? 'Assessment' : 'Work' },
+              { label: 'Acts for', value: contextTenantLabel(def.contextTenant) },
               { label: 'Owner', value: def.ownerName ?? def.owner ?? 'Not recorded', muted: !def.owner },
               { label: 'Version', value: `v${def.version}${def.recorded ? ' (recorded)' : ' (derived)'}` },
               { label: 'Source', value: `${def.source.table} · ${def.source.id}`, mono: true },

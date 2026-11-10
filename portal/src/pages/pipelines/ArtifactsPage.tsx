@@ -20,7 +20,7 @@ import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { PipelineRunStatusChip } from '../../components/runs/PipelineRunParts';
 import { useFetch } from '../../hooks/useFetch';
 import { showingLabel } from '../../lib/format';
-import { artifactKindLabel, runHref, type PipelineArtifact } from '../../lib/pipelineRuns';
+import { artifactKindLabel, contextTenantLabel, runHref, type PipelineArtifact } from '../../lib/pipelineRuns';
 import { relativeTime } from '../../lib/relativeTime';
 
 const KIND_OPTIONS = [
@@ -33,7 +33,7 @@ const COLUMNS: DataTableColumn<PipelineArtifact>[] = [
   { key: 'title', header: 'Artifact', render: (a) => <T size="sm" title={a.title} className="block max-w-[24rem] truncate">{a.title}</T>, sortable: true, compare: (x, y) => x.title.localeCompare(y.title) },
   { key: 'runId', header: 'Run', render: (a) => (a.runId ? <T size="xs" tone="secondary" title={a.runTitle ?? a.runId} className="block max-w-[24rem] truncate">{a.runTitle ?? a.runId}</T> : 'no run') },
   { key: 'runStatus', header: 'Run status', width: '128px', render: (a) => (a.runStatus ? <PipelineRunStatusChip status={a.runStatus} /> : '—') },
-  { key: 'contextTenant', header: 'Workspace', render: (a) => a.contextTenant ?? '—' },
+  { key: 'contextTenant', header: 'Acts for', render: (a) => contextTenantLabel(a.contextTenant) },
   {
     key: 'createdAt', header: 'Created', numeric: true, sortable: true,
     compare: (x, y) => (x.createdAt ?? '').localeCompare(y.createdAt ?? ''),

@@ -28,6 +28,7 @@
 // where the row lives, not data: it carries no count or timestamp of its own.
 
 import { intervalOverlapsWorkDay } from './day-overlap.js';
+import { TENANT_MANIFEST } from '../tenants.generated.js';
 import {
   type ViewerWorkActivityDetail, type ViewerWorkEdge, type ViewerWorkNode, type ViewerWorkOperation,
   type WorkDayWindow, type WorkRelation, type WorkStatus,
@@ -157,7 +158,8 @@ export function projectPipelinesWorkGraph(input: PipelinesProjectionInput): Proj
     const lines = [
       run.costUsd != null ? `Cost · $${run.costUsd.toFixed(4)}` : null,
       `Trigger · ${words(run.triggerType)}`,
-      `Acts for · ${words(run.contextTenant)}`,
+      // The product by its display name ("Work"), never the raw tenant id (UX walk D, tenant isolation).
+      `Acts for · ${(TENANT_MANIFEST as Record<string, { displayName: string } | undefined>)[run.contextTenant]?.displayName ?? words(run.contextTenant)}`,
     ].filter((l): l is string => !!l);
     details.set(id, {
       nodeId: id, summary: clip(definition ? `${words(definition.kind)} · ${definition.title}` : 'Pipeline run'), badge: words(run.status),
