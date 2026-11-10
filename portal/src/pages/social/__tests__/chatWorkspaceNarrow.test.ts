@@ -26,3 +26,13 @@ test('the rail takes the full width at phone width in both forms, and a host vie
   assert.match(src, /\{\.\.\.\(narrow \? \{ className: 'w-full border-r-0' \} : \{\}\)\}/);
   assert.match(src, /\|\| !!embedding\?\.pane;/);
 });
+
+test('"All conversations" reaches the list: the back route is the bare section and its landing opens nothing at phone width', () => {
+  // narrowBack from an open channel goes to `${base}/channels`; the plane's landing there must not re-open a conversation.
+  assert.match(src, /\(route === 'channels' && slug\)[^\n]*navigate\(`\$\{base\}\/\$\{route\}`\)/);
+  assert.match(src, /activePeople: activeTiles, narrow,/);
+  const plane = readFileSync(new URL('../../communication/CommunicationPlane.tsx', import.meta.url), 'utf8');
+  assert.match(plane, /<CommunicationLanding [^>]*narrow=\{data\.narrow\}/);
+  const landing = readFileSync(new URL('../../../components/communication/CommunicationLanding.tsx', import.meta.url), 'utf8');
+  assert.match(landing, /landingDecision\(\{[^}]*narrow \}/);
+});

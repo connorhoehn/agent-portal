@@ -230,7 +230,7 @@ function SocialPlaneMount({ route, tenant, base, crumbs, pageCalls, pageMissed }
           </Inline>
         ),
         landing: (data) => (
-          <CommunicationLanding base={base} org={org} ready={data.ready} channels={data.channels} conversations={data.conversations}
+          <CommunicationLanding base={base} org={org} ready={data.ready} narrow={data.narrow} channels={data.channels} conversations={data.conversations}
             activePeople={data.activePeople} active={active} liveLobbies={live} onSelectGroup={selectRow}
             onMessage={(userId) => { void startDm(userId); }} onSharedWork={(userId) => navigate(planeViewHref(base, { kind: 'person', userId }))} />
         ),

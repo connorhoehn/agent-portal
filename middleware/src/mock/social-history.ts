@@ -44,7 +44,8 @@ export const EXTRA_CHANNELS: readonly HistoryChannel[] = [
   { slug: 'random', name: 'Random', description: 'Off-topic. Links, lunch, and the occasional cat.', privacy: 'public', owner: 'u-theo', daysAgo: 20,
     members: ['u-farah', 'u-sana', 'u-jonas', 'u-asha', 'u-mia', 'u-nora', 'u-vera', 'u-rachel'] },
   { slug: 'incidents', name: 'Incidents', description: 'Live incidents and their write-ups: severity, symptom, who is commanding, when the next update lands.', privacy: 'public', owner: 'u-rachel', daysAgo: 16,
-    members: ['u-vera', 'u-theo', 'u-release', 'u-nora', 'u-mia', 'u-sana'] },
+    // Tomás (pipelines author with Social): the Pipelines Communication plane has conversations to open.
+    members: ['u-vera', 'u-theo', 'u-release', 'u-nora', 'u-mia', 'u-sana', 'u-tomas'] },
   { slug: 'events', name: 'Events', description: 'Tech talks, office hours and the quarterly community call.', privacy: 'public', owner: 'u-mira', daysAgo: 13,
     members: ['u-lena', 'u-sana', 'u-farah', 'u-asha', 'u-jonas'] },
   // The two initiative channels beside #auth-migration, bound in mock/social-bindings.ts.
@@ -56,7 +57,7 @@ export const EXTRA_CHANNELS: readonly HistoryChannel[] = [
 
 /** People added to channels the base seed already had (never #moderators, never Sana in #design-reviews). */
 export const EXTRA_MEMBERS: Record<string, readonly string[]> = {
-  'general': ['u-vera', 'u-release', 'u-rachel', 'u-mia', 'u-nora', 'u-asha', 'u-jonas'],
+  'general': ['u-vera', 'u-release', 'u-rachel', 'u-mia', 'u-nora', 'u-asha', 'u-jonas', 'u-tomas'],
   'design-reviews': ['u-asha', 'u-jonas', 'u-nora'],
   'auth-migration': ['u-nora', 'u-rachel'],
 };

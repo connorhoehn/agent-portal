@@ -165,6 +165,8 @@ export interface WorkspaceLandingData {
   channels: readonly SocialChannel[];
   conversations: readonly SocialDm[];
   activePeople: ComponentProps<typeof ActivePeopleGrid>['people'];
+  /** Phone width: the list and the pane show one at a time, so the landing opens nothing on its own. */
+  narrow: boolean;
 }
 
 /** What the workspace hands a host rail section: the find box and presence. Folds are the rail's own (data sections, keyed by label). */
@@ -695,7 +697,7 @@ export default function SocialChatWorkspace({ route, embedding }: { route: Socia
       if (!slug && embedding?.landing) {
         return embedding.landing({
           ready: !!(channelsFetch.data || channelsFetch.error) && !!(dmsFetch.data || dmsFetch.error),
-          channels, conversations, activePeople: activeTiles,
+          channels, conversations, activePeople: activeTiles, narrow,
         });
       }
       if (channelsFetch.isLoading && !channelsFetch.data) return <Inline gap="sm" role="status" data-testid="loading-state"><Spinner size="md" decorative /><T>Loading channels…</T></Inline>;

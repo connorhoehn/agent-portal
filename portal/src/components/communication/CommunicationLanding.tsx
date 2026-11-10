@@ -26,6 +26,8 @@ export interface CommunicationLandingProps {
   base: string;
   org: PlaneOrg;
   ready: boolean;
+  /** Phone width: the workspace shows its list; nothing opens on its own (landingModel.ts). */
+  narrow?: boolean;
   channels: ReadonlyArray<{ slug: string; name: string; joined: boolean; memberCount: number; description: string | null; lastMessageAt: string | null }>;
   conversations: ReadonlyArray<{ channel: string; lastMessageAt: string | null }>;
   activePeople: ComponentProps<typeof ActivePeopleGrid>['people'];
@@ -38,14 +40,14 @@ export interface CommunicationLandingProps {
 }
 
 export function CommunicationLanding(props: CommunicationLandingProps) {
-  const { base, org, ready, channels, conversations } = props;
+  const { base, org, ready, channels, conversations, narrow = false } = props;
   const navigate = useNavigate();
   const [waitedLong, setWaitedLong] = useState(false);
   useEffect(() => {
     const timer = window.setTimeout(() => setWaitedLong(true), BINDINGS_WAIT_MS);
     return () => window.clearTimeout(timer);
   }, []);
-  const decision = landingDecision({ ready, groups: org.groups, groupsLoading: org.groupsLoading, bindings: org.bindings, channels, conversations }, base, waitedLong);
+  const decision = landingDecision({ ready, groups: org.groups, groupsLoading: org.groupsLoading, bindings: org.bindings, channels, conversations, narrow }, base, waitedLong);
   const href = decision.kind === 'open' ? decision.href : null;
   useEffect(() => { if (href) navigate(href, { replace: true }); }, [href, navigate]);
 

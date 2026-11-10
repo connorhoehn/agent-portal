@@ -18,6 +18,11 @@ export interface LandingInput {
   bindings: ReadonlyMap<string, { binding: { slug: string | null } | null; joined: boolean }>;
   channels: ReadonlyArray<{ slug: string; joined: boolean; lastMessageAt: string | null }>;
   conversations: ReadonlyArray<{ channel: string; lastMessageAt: string | null }>;
+  /**
+   * Phone width: the workspace shows the list or the pane, one at a time. Nothing opens on its own there, or
+   * "All conversations" would land back on the same conversation (second regression walk, 10 November).
+   */
+  narrow?: boolean;
 }
 
 export type LandingDecision =
@@ -32,6 +37,7 @@ const at = (iso: string | null) => (iso ? Date.parse(iso) || 0 : 0);
  * failed never answers, so after a short wait the recent conversation decides.
  */
 export function landingDecision(input: LandingInput, base: string, waitedLong = false): LandingDecision {
+  if (input.narrow) return { kind: 'overview' };
   if (!input.ready) return { kind: 'wait' };
   const joined = new Set(input.channels.filter((c) => c.joined).map((c) => c.slug));
   const contexts = input.groups.map(groupBindingContext).filter((c): c is string => !!c);

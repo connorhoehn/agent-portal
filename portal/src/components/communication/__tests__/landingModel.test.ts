@@ -47,3 +47,12 @@ test('an unanswered binding waits, then the recent conversation decides', () => 
 test('nothing joined and no DMs: the overview', () => {
   assert.deepEqual(landingDecision(input({ channels: [{ slug: 'events', joined: false, lastMessageAt: null }] }), base), { kind: 'overview' });
 });
+
+test('at phone width nothing opens on its own: the workspace shows its list (second regression walk, 10 November)', () => {
+  // "All conversations" goes back to the bare channels route; a landing that opened the default conversation again
+  // made the list unreachable at 390 px on /iq/communication and /assessment/communication.
+  const wide = input({ channels: [{ slug: 'general', joined: true, lastMessageAt: '2026-10-07T12:00:00Z' }] });
+  assert.equal(landingDecision(wide, base).kind, 'open');
+  assert.deepEqual(landingDecision({ ...wide, narrow: true }, base), { kind: 'overview' });
+  assert.deepEqual(landingDecision({ ...wide, ready: false, narrow: true }, base, true), { kind: 'overview' });
+});
