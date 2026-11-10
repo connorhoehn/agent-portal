@@ -41,3 +41,33 @@ it('nests caller input under `input` and sets identity last: an input `tenant` o
   expect(JSON.parse(sent.input)).toEqual({ mode: 'x' });
   expect(sent.auth).toEqual({ sub: 'u-member', role: 'member', tenant: 'orgiq' });
 });
+
+// Sweep 11 (L3): an agent that cold-started after the invoke was signed answers a retryable refusal
+// (agents/_shared/invoke_auth.py STALE_SIGNATURE_CODE); the middleware invokes once more, freshly built.
+const stale = { response: { transformToString: async () => JSON.stringify({ code: 'INVOKE_SIGNED_BEFORE_START', retryable: true }) } };
+const answer = (text: string) => ({ response: { transformToString: async () => JSON.stringify({ response: text }) } });
+
+it('invokes once more when the agent answers that it started after the signature, and only once', async () => {
+  mockDataSend.mockReset();
+  mockDataSend.mockResolvedValueOnce(stale).mockResolvedValueOnce(answer('the plan'));
+  const out = await realAgentCore.invokeAgent('orgiq-assessment-scorer', { message: 'find the plan', sessionId: 's-1' });
+  expect(mockDataSend).toHaveBeenCalledTimes(2);
+  expect(out.text).toBe('the plan');
+  mockDataSend.mockReset();
+  mockDataSend.mockResolvedValue(stale);
+  await realAgentCore.invokeAgent('orgiq-assessment-scorer', { message: 'find the plan', sessionId: 's-1' });
+  expect(mockDataSend).toHaveBeenCalledTimes(2);
+});
+
+it('a streaming invoke retries the same refusal before yielding anything', async () => {
+  const body = (text: string) => ({ response: (async function* () { yield new TextEncoder().encode(text); })() });
+  mockDataSend.mockReset();
+  mockDataSend
+    .mockResolvedValueOnce(body(JSON.stringify({ code: 'INVOKE_SIGNED_BEFORE_START', retryable: true })))
+    .mockResolvedValueOnce(body(JSON.stringify({ agent: 'search', response: 'the plan' })));
+  const events: unknown[] = [];
+  for await (const ev of realAgentCore.invokeAgentStreaming('orgiq-assessment-scorer', { message: 'find the plan', sessionId: 's-1' })) events.push(ev);
+  expect(mockDataSend).toHaveBeenCalledTimes(2);
+  expect(JSON.stringify(events)).toContain('the plan');
+  expect(JSON.stringify(events)).not.toContain('INVOKE_SIGNED_BEFORE_START');
+});

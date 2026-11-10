@@ -190,6 +190,34 @@ class SubAgentSession(SupervisorTestCase):
     def test_an_unverified_caller_gets_a_fresh_session_every_call(self):
         self.assertIsNone(self._session_for({"auth": {"role": "member"}, "sessionId": "conv-1"}))
 
+    def test_a_sub_agent_that_started_after_the_signature_is_called_once_more_freshly_signed(self):
+        # Sweep 11 (L3): the cold-started sub-agent answers a retryable refusal; the second call is re-signed.
+        from _shared import invoke_auth
+        answers = [json.dumps({"code": invoke_auth.STALE_SIGNATURE_CODE, "retryable": True}).encode(),
+                   json.dumps({"response": "sub-agent said hi"}).encode()]
+        original = self.runtime.invoke_agent_runtime
+
+        def invoke(**kwargs):
+            original(**kwargs)
+            return {"response": answers.pop(0)}
+
+        self.runtime.invoke_agent_runtime = invoke
+        self.runtime.calls.clear()
+        self.sup._resolve_identity(signed({"sub": "u-1", "role": "member", "tenant": "orgiq"}, "conv-1"))
+        out = self.sup.search_organization("who knows auth")
+        self.assertEqual(len(self.runtime.calls), 2)
+        first, second = (json.loads(c["payload"]) for c in self.runtime.calls)
+        self.assertNotEqual(first["authNonce"], second["authNonce"])
+        self.assertIn("sub-agent said hi", out)
+
+    def test_the_entrypoint_answers_a_stale_signature_with_a_retryable_refusal(self):
+        from _shared import invoke_auth
+        payload = signed({"sub": "u-1", "role": "member", "tenant": "orgiq"}, "conv-1")
+        with mock.patch.object(invoke_auth, "PROCESS_STARTED_AT", invoke_auth.PROCESS_STARTED_AT + 10_000):
+            _events, result, _error = self.invoke(payload)
+        self.assertEqual(result["code"], invoke_auth.STALE_SIGNATURE_CODE)
+        self.assertEqual(self.runtime.calls, [])
+
 
 class PromptsAreNotLogged(SupervisorTestCase):
     def test_sub_agent_calls_log_a_fingerprint_not_the_prompt(self):

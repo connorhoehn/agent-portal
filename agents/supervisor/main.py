@@ -20,7 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.approval_tool import request_approval  # noqa: E402
 from _shared.prompt_source import resolve_system_prompt
-from _shared.invoke_auth import sign_identity, verified_identity  # noqa: E402
+from _shared.invoke_auth import STALE_SIGNATURE_CODE, sign_identity, stale_signature_refusal, verified_identity  # noqa: E402
 from _shared.model_registry import invoke_with_fallback, resolve_model  # noqa: E402
 from _shared.untrusted_text import Fence, with_data_rule  # noqa: E402
 from _shared.agui_stream import with_usage  # noqa: E402
@@ -191,47 +191,57 @@ def _invoke_sub_agent(runtime_arn: str, input_text: str) -> str:
     # retrieval to its tenant (kb_resolver.caller_tenant reads only a verified
     # block). Set last, after every other field. Absent when the caller is
     # unverified, which the sub-agent reads as the least-privileged home tenant.
+    handed: dict | None = None
     if ident and ident[0]:
-        handed: dict = {"tenant": ident[0]}
+        handed = {"tenant": ident[0]}
         if ident[1]:
             handed["sub"] = ident[1]
         payload_obj["auth"] = handed
-        # authSig and a fresh authNonce (the sub-agent refuses a reused one).
-        payload_obj.update(sign_identity(handed, payload_obj.get("sessionId") or "", prompt=input_text))
-    kwargs: dict = {
-        "agentRuntimeArn": runtime_arn,
-        "qualifier": "DEFAULT",
-        "payload": json.dumps(payload_obj),
-    }
     session_id = _sub_agent_session_id(runtime_arn)
-    if session_id:
-        kwargs["runtimeSessionId"] = session_id
 
     log.info("Invoking sub-agent ARN=%s session=%s input %s", runtime_arn,
              "derived" if session_id else "(fresh)", text_fingerprint(input_text))
 
-    try:
-        response = _agentcore_runtime.invoke_agent_runtime(**kwargs)
-    except Exception as exc:
-        log.error("invoke_agent_runtime failed: %s: %s", type(exc).__name__, exc)
-        return json.dumps({"error": f"Sub-agent invocation failed: {exc}"})
+    # Two attempts at most: a sub-agent that cold-started after this call was
+    # signed answers a retryable refusal (sweep 11, L3), and the second call
+    # carries a fresh signature and nonce.
+    for attempt in range(2):
+        if handed is not None:
+            # authSig and a fresh authNonce (the sub-agent refuses a reused one).
+            payload_obj.update(sign_identity(handed, payload_obj.get("sessionId") or "", prompt=input_text))
+        kwargs: dict = {
+            "agentRuntimeArn": runtime_arn,
+            "qualifier": "DEFAULT",
+            "payload": json.dumps(payload_obj),
+        }
+        if session_id:
+            kwargs["runtimeSessionId"] = session_id
+        try:
+            response = _agentcore_runtime.invoke_agent_runtime(**kwargs)
+        except Exception as exc:
+            log.error("invoke_agent_runtime failed: %s: %s", type(exc).__name__, exc)
+            return json.dumps({"error": f"Sub-agent invocation failed: {exc}"})
 
-    # Response body is a streaming blob (key is "response", not "body")
-    body = response.get("response", b"")
-    if hasattr(body, "read"):
-        body = body.read()
-    if isinstance(body, bytes):
-        body = body.decode("utf-8", errors="replace")
+        # Response body is a streaming blob (key is "response", not "body")
+        body = response.get("response", b"")
+        if hasattr(body, "read"):
+            body = body.read()
+        if isinstance(body, bytes):
+            body = body.decode("utf-8", errors="replace")
 
-    log.info("Sub-agent response %s", text_fingerprint(str(body)))
+        log.info("Sub-agent response %s", text_fingerprint(str(body)))
 
-    # A sub-agent's answer quotes retrieved documents: it reaches this model as
-    # a fenced data block, never as instructions (_shared/untrusted_text.py).
-    try:
-        parsed = json.loads(body)
-        text = parsed.get("response", body) if isinstance(parsed, dict) else body
-    except json.JSONDecodeError:
-        text = body
+        # A sub-agent's answer quotes retrieved documents: it reaches this model as
+        # a fenced data block, never as instructions (_shared/untrusted_text.py).
+        try:
+            parsed = json.loads(body)
+            text = parsed.get("response", body) if isinstance(parsed, dict) else body
+        except json.JSONDecodeError:
+            parsed, text = None, body
+        if attempt == 0 and handed is not None and isinstance(parsed, dict) and parsed.get("code") == STALE_SIGNATURE_CODE:
+            log.warning("sub-agent started after the call was signed; invoking once more with a fresh signature")
+            continue
+        break
     return Fence().wrap(text if isinstance(text, str) else json.dumps(text, default=str),
                         kind="agent-answer", max_chars=SUB_AGENT_MAX_CHARS)
 
@@ -672,6 +682,10 @@ def _run_error_event(message: str, code: str = "supervisor_stream_error"):
 
 @app.entrypoint
 async def handle(payload: dict) -> AsyncIterator | dict:
+    # Sweep 11 (L3): a signature older than this process is refused retryably, never run with no identity.
+    stale = stale_signature_refusal(payload)
+    if stale is not None:
+        return stale
     if isinstance(payload, dict):
         input_text = (
             payload.get("input_text")

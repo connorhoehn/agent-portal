@@ -140,6 +140,21 @@ class SignAndVerify(unittest.TestCase):
         with mock.patch.dict("os.environ", {"AGENT_INVOKE_SECRET": ""}):
             self.assertEqual(ia.sign_identity({"tenant": "orgiq"}, "c"), {})
 
+    def test_a_signature_from_before_the_start_gets_a_retryable_refusal(self):
+        # Sweep 11 (L3): the cold-started agent answers a code the signer retries, never a run with no identity.
+        payload = self._handed()
+        with mock.patch.object(ia, "PROCESS_STARTED_AT", time.time() + 120):
+            refusal = ia.stale_signature_refusal(payload)
+        self.assertEqual(refusal["code"], ia.STALE_SIGNATURE_CODE)
+        self.assertTrue(refusal["retryable"])
+        # A fresh signature after the start, an unsigned payload, a malformed one and dev mode get none.
+        self.assertIsNone(ia.stale_signature_refusal(self._handed()))
+        self.assertIsNone(ia.stale_signature_refusal({"input_text": "q"}))
+        with mock.patch.object(ia, "PROCESS_STARTED_AT", time.time() + 120):
+            self.assertIsNone(ia.stale_signature_refusal({**payload, "authSig": "garbage"}))
+            with mock.patch.dict("os.environ", {"AGENT_INVOKE_SECRET": ""}):
+                self.assertIsNone(ia.stale_signature_refusal(payload))
+
     def test_the_nonce_is_an_identity_key(self):
         self.assertIn("authNonce", ia.IDENTITY_KEYS)
         self.assertNotIn("authNonce", ia.request_fields({"authNonce": "x", "mode": "m"}))

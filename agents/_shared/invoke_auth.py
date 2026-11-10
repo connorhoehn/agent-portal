@@ -126,6 +126,43 @@ def issued_before_start(sig: str, *, started_at: float | None = None, grace: int
     return int(parts[2]) < floor
 
 
+#: What an agent answers, instead of running, when a signed invoke was issued
+#: before this process started (sweep 11, L3). On a hosted runtime each new
+#: session cold-starts after the request was signed; a start slower than the
+#: grace used to run that first message with no identity (an empty answer).
+#: The middleware sees the code and invokes once more with a fresh signature.
+STALE_SIGNATURE_CODE = "INVOKE_SIGNED_BEFORE_START"
+
+
+def stale_signature_refusal(payload) -> dict | None:
+    """A retryable refusal when ``payload`` carries a well-formed signature
+    issued before this process started (less the grace), else ``None``.
+
+    Grants nothing: it only answers an error the signer can retry, where the
+    verifier would otherwise run the request as least privileged. Off when no
+    secret is configured (dev mode has no signature to judge)."""
+    if not isinstance(payload, dict):
+        return None
+    sig = payload.get("authSig")
+    if not isinstance(sig, str):
+        return None
+    parts = sig.split(".")
+    if len(parts) != 4 or not parts[2].isdigit():
+        return None
+    try:
+        secret = resolve_secret(SECRET_ENV)
+    except SecretResolutionError:
+        return None
+    if not secret or not issued_before_start(sig):
+        return None
+    log.warning("invoke-auth: the signature was issued before this process started; answering a retryable refusal")
+    return {
+        "error": "the invocation was signed before this agent started; invoke again with a fresh signature",
+        "code": STALE_SIGNATURE_CODE,
+        "retryable": True,
+    }
+
+
 class ReplayCacheFull(Exception):
     """The cache cannot record another nonce without dropping one that is
     still inside its signature window; the invocation is refused instead."""

@@ -14,6 +14,7 @@ from strands.models.bedrock import BedrockModel
 
 # Shared instrumentation — pull TraceContext + decorator from agents/_shared.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from _shared.invoke_auth import stale_signature_refusal  # noqa: E402
 from _shared.model_registry import RegistryAgent, invoke_with_fallback, resolve_model
 from _shared.untrusted_text import fence_results, with_data_rule  # noqa: E402
 from _shared.agui_stream import stream_agui, wants_stream  # noqa: E402
@@ -285,6 +286,10 @@ async def _for_tenant(tenant: str, events):
 
 @app.entrypoint
 async def handle(payload: dict) -> AsyncIterator | dict:
+    # Sweep 11 (L3): a signature older than this process is refused retryably, never run with no identity.
+    stale = stale_signature_refusal(payload)
+    if stale is not None:
+        return stale
     if isinstance(payload, dict):
         input_text = (
             payload.get("input_text")

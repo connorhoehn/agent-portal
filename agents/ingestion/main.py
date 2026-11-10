@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.approval_tool import request_approval  # noqa: E402
-from _shared.invoke_auth import request_fields, verified_identity  # noqa: E402
+from _shared.invoke_auth import request_fields, stale_signature_refusal, verified_identity  # noqa: E402
 from _shared.kb_resolver import resolve_kb_id_by_slug as _resolve_kb_id_by_slug  # noqa: E402
 from _shared.model_registry import RegistryAgent, invoke_with_fallback, resolve_model
 from _shared.untrusted_text import Fence, with_data_rule  # noqa: E402
@@ -492,6 +492,10 @@ async def _confined(prefix: str, sync: RunSync, events):
 
 @app.entrypoint
 async def handle(payload: dict) -> AsyncIterator | dict:
+    # Sweep 11 (L3): a signature older than this process is refused retryably, never run with no identity.
+    stale = stale_signature_refusal(payload)
+    if stale is not None:
+        return stale
     if isinstance(payload, dict):
         input_text = (
             payload.get("input_text")

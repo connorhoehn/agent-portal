@@ -28,7 +28,7 @@ from _shared.agui_stream import (  # noqa: E402
     wants_stream,
 )
 from _shared.tenant_guard import reject_wrong_mode_tenant  # noqa: E402
-from _shared.invoke_auth import request_fields  # noqa: E402
+from _shared.invoke_auth import request_fields, stale_signature_refusal  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
     attach_usage,
     TraceContext,
@@ -333,6 +333,10 @@ async def handle(payload: dict) -> AsyncIterator | dict:
     the validated answer is emitted as AG-UI events: same protocol and same
     consumers, one content event instead of many.
     """
+    # Sweep 11 (L3): a signature older than this process is refused retryably, never run with no identity.
+    stale = stale_signature_refusal(payload)
+    if stale is not None:
+        return stale
     result = await _handle_sync(payload)
     if wants_stream(payload):
         return _stream_result(result)

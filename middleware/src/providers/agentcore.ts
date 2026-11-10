@@ -29,6 +29,7 @@ import {
   StartCodeInterpreterSessionCommand,
   StopBrowserSessionCommand,
   StopCodeInterpreterSessionCommand,
+  type InvokeAgentRuntimeCommandOutput,
   type ListBrowserSessionsCommandOutput,
   type ListCodeInterpreterSessionsCommandOutput,
 } from '@aws-sdk/client-bedrock-agentcore';
@@ -58,6 +59,91 @@ import { attempt, reached, unreachable, type Upstream } from '../lib/upstream.js
 import { mockAgents } from '../mock/agent-statuses.js';
 import { browserSessions, codeSessions } from '../mock/capabilities.js';
 import { selectMockResponse } from '../mock/responses.js';
+
+/** The code an agent answers when its process started after the invoke was signed (agents/_shared/invoke_auth.py). */
+export const STALE_SIGNATURE_CODE = 'INVOKE_SIGNED_BEFORE_START';
+
+/** Whether an agent's answer is that retryable refusal (sweep 11, L3). */
+export function signedBeforeStart(raw: unknown): boolean {
+  return !!raw && typeof raw === 'object' && (raw as Record<string, unknown>)['code'] === STALE_SIGNATURE_CODE;
+}
+
+function parseJson(text: string): unknown {
+  try { return JSON.parse(text); } catch { return null; }
+}
+
+/** One streaming invoke; `attempt` 0 may be followed by one fresh-signed retry. */
+async function* streamInvoke(agentId: string, arn: string, payload: Parameters<AgentCoreProvider['invokeAgentStreaming']>[1], attempt: number): AsyncGenerator<unknown> {
+  // Structured input nested under `input`, identity set last (lib/agent-invoke-auth.ts).
+  const body = JSON.stringify(buildInvokeBody(payload, { stream: true }));
+
+  const resp = await dataClient().send(
+    new InvokeAgentRuntimeCommand({
+      agentRuntimeArn: arn,
+      qualifier: 'DEFAULT',
+      accept: 'text/event-stream',
+      payload: new TextEncoder().encode(body),
+      ...((payload.runtimeSessionId ?? payload.sessionId) ? { runtimeSessionId: payload.runtimeSessionId ?? payload.sessionId } : {}),
+    }),
+  );
+
+  // Parse SSE lines from the streaming response.
+  const stream = resp.response;
+  if (!stream) return;
+
+  // The raw body is kept alongside the line buffer because a non-SSE agent
+  // (see envelopeToAguiEvents) sends one JSON object with no `data: ` prefix
+  // and no trailing newline — the line walk below discards every byte of it.
+  // `sawSse` records whether the response ACTUALLY was an event stream, which
+  // is the only reliable signal: `accept` is a request header, and asking for
+  // text/event-stream does not make an agent produce one.
+  let buffer = '';
+  let raw = '';
+  let sawSse = false;
+  for await (const chunk of stream as AsyncIterable<Uint8Array>) {
+    const text = new TextDecoder().decode(chunk);
+    raw += text;
+    buffer += text;
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const jsonStr = line.slice(6).trim();
+      if (!jsonStr) continue;
+      try {
+        const ev = JSON.parse(jsonStr);
+        sawSse = true;
+        yield ev;
+      } catch {
+        // Malformed SSE line — skip.
+      }
+    }
+  }
+  // Flush any remaining buffered line.
+  if (buffer.startsWith('data: ')) {
+    const jsonStr = buffer.slice(6).trim();
+    if (jsonStr) {
+      try {
+        const ev = JSON.parse(jsonStr);
+        sawSse = true;
+        yield ev;
+      } catch { /* skip */ }
+    }
+  }
+
+  // Not an event stream after all: project the single JSON envelope onto the
+  // same AG-UI events an SSE agent would have emitted.
+  if (!sawSse) {
+    // A cold-started agent's retryable refusal (sweep 11, L3): nothing was yielded yet, so invoke once more.
+    if (attempt === 0 && signedBeforeStart(parseJson(raw))) {
+      console.warn(`[agentcore] ${agentId} started after the invoke was signed; invoking once more with a fresh signature`);
+      yield* streamInvoke(agentId, arn, payload, 1);
+      return;
+    }
+    yield* envelopeToAguiEvents(raw);
+  }
+}
+
 
 // ─── Non-streaming agents → AG-UI events ────────────────────────────
 //
@@ -700,24 +786,32 @@ export const realAgentCore: AgentCoreProvider = {
     }
 
     // Structured input nested under `input`, identity set last (lib/agent-invoke-auth.ts).
-    const body = JSON.stringify(buildInvokeBody(payload));
-
-    const resp = await dataClient().send(
-      new InvokeAgentRuntimeCommand({
-        agentRuntimeArn: arn,
-        qualifier: 'DEFAULT',
-        payload: new TextEncoder().encode(body),
-        ...(payload.sessionId ? { runtimeSessionId: payload.sessionId } : {}),
-      }),
-      payload.timeoutMs ? { abortSignal: AbortSignal.timeout(payload.timeoutMs) } : undefined,
-    );
-
-    const text = await streamToString(resp.response);
+    // Two attempts at most: an agent that cold-started after the first was signed answers a
+    // retryable refusal (sweep 11, L3), and the second carries a fresh signature and nonce.
+    let resp: InvokeAgentRuntimeCommandOutput | undefined;
     let raw: unknown;
-    try {
-      raw = JSON.parse(text);
-    } catch {
-      raw = text;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const body = JSON.stringify(buildInvokeBody(payload));
+      resp = await dataClient().send(
+        new InvokeAgentRuntimeCommand({
+          agentRuntimeArn: arn,
+          qualifier: 'DEFAULT',
+          payload: new TextEncoder().encode(body),
+          ...(payload.sessionId ? { runtimeSessionId: payload.sessionId } : {}),
+        }),
+        payload.timeoutMs ? { abortSignal: AbortSignal.timeout(payload.timeoutMs) } : undefined,
+      );
+      const text = await streamToString(resp.response);
+      try {
+        raw = JSON.parse(text);
+      } catch {
+        raw = text;
+      }
+      if (attempt === 0 && signedBeforeStart(raw)) {
+        console.warn(`[agentcore] ${agentId} started after the invoke was signed; invoking once more with a fresh signature`);
+        continue;
+      }
+      break;
     }
 
     let sandboxExecutions: import('./types.js').SandboxExecution[] | undefined;
@@ -733,7 +827,7 @@ export const realAgentCore: AgentCoreProvider = {
     return {
       text: extractText(raw),
       raw,
-      runtimeSessionId: resp.runtimeSessionId,
+      runtimeSessionId: resp?.runtimeSessionId,
       ...(sandboxExecutions ? { sandboxExecutions } : {}),
       ...(toolCalls.length > 0 ? { toolCalls } : {}),
     };
@@ -744,69 +838,7 @@ export const realAgentCore: AgentCoreProvider = {
     if (!arn) {
       throw new Error(`Agent runtime not found for "${agentId}"`);
     }
-
-    // Structured input nested under `input`, identity set last (lib/agent-invoke-auth.ts).
-    const body = JSON.stringify(buildInvokeBody(payload, { stream: true }));
-
-    const resp = await dataClient().send(
-      new InvokeAgentRuntimeCommand({
-        agentRuntimeArn: arn,
-        qualifier: 'DEFAULT',
-        accept: 'text/event-stream',
-        payload: new TextEncoder().encode(body),
-        ...((payload.runtimeSessionId ?? payload.sessionId) ? { runtimeSessionId: payload.runtimeSessionId ?? payload.sessionId } : {}),
-      }),
-    );
-
-    // Parse SSE lines from the streaming response.
-    const stream = resp.response;
-    if (!stream) return;
-
-    // The raw body is kept alongside the line buffer because a non-SSE agent
-    // (see envelopeToAguiEvents) sends one JSON object with no `data: ` prefix
-    // and no trailing newline — the line walk below discards every byte of it.
-    // `sawSse` records whether the response ACTUALLY was an event stream, which
-    // is the only reliable signal: `accept` is a request header, and asking for
-    // text/event-stream does not make an agent produce one.
-    let buffer = '';
-    let raw = '';
-    let sawSse = false;
-    for await (const chunk of stream as AsyncIterable<Uint8Array>) {
-      const text = new TextDecoder().decode(chunk);
-      raw += text;
-      buffer += text;
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const jsonStr = line.slice(6).trim();
-        if (!jsonStr) continue;
-        try {
-          const ev = JSON.parse(jsonStr);
-          sawSse = true;
-          yield ev;
-        } catch {
-          // Malformed SSE line — skip.
-        }
-      }
-    }
-    // Flush any remaining buffered line.
-    if (buffer.startsWith('data: ')) {
-      const jsonStr = buffer.slice(6).trim();
-      if (jsonStr) {
-        try {
-          const ev = JSON.parse(jsonStr);
-          sawSse = true;
-          yield ev;
-        } catch { /* skip */ }
-      }
-    }
-
-    // Not an event stream after all: project the single JSON envelope onto the
-    // same AG-UI events an SSE agent would have emitted.
-    if (!sawSse) {
-      yield* envelopeToAguiEvents(raw);
-    }
+    yield* streamInvoke(agentId, arn, payload, 0);
   },
 
   /**
