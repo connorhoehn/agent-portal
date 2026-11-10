@@ -4,7 +4,9 @@
 // so user_tenant_roles is read under row-level security like every tenant table.
 //
 // When Aurora is unreachable or the identity tables don't exist yet, falls back
-// to an in-memory mirror of the seed data so local dev works with no database.
+// to an in-memory mirror of the demo seed so local dev works with no database;
+// only under MOCK_AURORA or INSECURE_DEV_MODE (demoDirectoryAllowed), never in
+// a deployed process.
 
 import { type SqlParameter, type Field } from '@aws-sdk/client-rds-data';
 
@@ -24,6 +26,7 @@ import {
 import { randomBytes } from 'node:crypto';
 import { clock } from '../mock/core/index.js';
 import { invalidateForUser } from '../lib/gateway/authority-invalidation.js';
+import { insecureDevMode } from '../lib/insecure-dev-mode.js';
 
 export interface TenantInfo {
   id: string;
@@ -158,6 +161,12 @@ const FALLBACK_USERS: UserInfo[] = [
  * the same objects, so the in-place epoch bump below stays visible.
  */
 function fallbackUsers(): UserInfo[] {
+  // The demo cast (an all-tenant admin among them) exists only offline: under
+  // MOCK_AURORA or INSECURE_DEV_MODE. A deployed process whose identity
+  // tables are empty, missing or unreachable answers with nobody, never with
+  // the seed mirror (an SSO email match or a picker login would otherwise
+  // land on a demo account).
+  if (!demoDirectoryAllowed()) return [];
   const writes = identityGrantWritesFixture.rows();
   if (writes.length === 0) return FALLBACK_USERS;
   const byUser = new Map(writes.map((w) => [w.userId, w.grants]));
@@ -241,6 +250,11 @@ function readField(cell: Field | undefined): unknown {
   return null;
 }
 
+/** The offline demo directory may answer: MOCK_AURORA, or the explicit dev flag. */
+export function demoDirectoryAllowed(): boolean {
+  return !!config.mock?.aurora || insecureDevMode();
+}
+
 function auroraConfigured(): boolean {
   return !!(config.aurora?.clusterArn && config.aurora?.secretArn);
 }
@@ -281,6 +295,7 @@ function groupGrants(rows: unknown[][]): Map<string, Grants> {
 
 /** The seeded login linked to an org-graph person (the fallback mirror of `app_users.person_id`), if any. */
 export function seedUserForPerson(personId: string): { id: string; displayName: string } | null {
+  if (!demoDirectoryAllowed()) return null;
   const user = FALLBACK_USERS.find((u) => u.personId === personId);
   return user ? { id: user.id, displayName: user.displayName } : null;
 }

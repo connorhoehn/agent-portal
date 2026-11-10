@@ -343,6 +343,34 @@ class ManifestTests(unittest.TestCase):
         self.assertNotIn('schema/seed_demo_identities.sql', apply_all_seed.FILES)
         self.assertEqual(apply_all_seed.DEMO_IDENTITIES, 'schema/seed_demo_identities.sql')
 
+    def test_demo_users_are_refused_for_a_production_target(self):
+        import apply_all_seed as aas
+        with tempfile.TemporaryDirectory() as d:
+            envs = Path(d)
+            (envs / 'lab.json').write_text(json.dumps({'name': 'lab'}))
+            (envs / 'prod.json').write_text(json.dumps({'name': 'prod', 'production': True}))
+            self.assertIsNone(aas.demo_users_refusal(None, {}, envs))
+            self.assertIsNone(aas.demo_users_refusal('lab', {'NODE_ENV': 'development'}, envs))
+            self.assertIn('production', aas.demo_users_refusal('prod', {}, envs))
+            self.assertIn('production', aas.demo_users_refusal(None, {'ORGIQ_ENV': 'prod'}, envs))
+            for var, value in (('NODE_ENV', 'production'), ('APP_ENV', ' Production '), ('NODE_ENV', 'prod')):
+                self.assertIsNotNone(aas.demo_users_refusal('lab', {var: value}, envs), (var, value))
+            # An unknown target is not assumed safe.
+            self.assertIn('cannot be read', aas.demo_users_refusal('nowhere', {}, envs))
+            self.assertIsNotNone(aas.demo_users_refusal('../lab', {}, envs))
+        # The real lab environment is the research lab: allowed.
+        self.assertIsNone(aas.demo_users_refusal('lab', {}))
+
+    def test_the_demo_switch_refuses_before_touching_any_database(self):
+        import apply_all_seed as aas
+        with mock.patch.object(aas, 'get_cluster_info') as cluster, \
+                mock.patch.dict(os.environ, {'NODE_ENV': 'production'}), \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(aas.main(['--with-demo-users']), 2)
+            self.assertEqual(aas.main(['--demo-identities']), 2)
+        cluster.assert_not_called()
+        self.assertIn('refusing --with-demo-users', err.getvalue())
+
     def test_order_constraints_survive(self):
         files = sm.schema_files()
         self.assertEqual(files.index('spend_ledger_schema.sql'), files.index('program_schema.sql') + 1)

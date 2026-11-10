@@ -64,11 +64,17 @@ plain `python3 schema/apply_all_seed.py` never apply it. To load it into a
 local or demo database, ask for it:
 
 ```bash
-python3 schema/apply_all_seed.py --demo-identities
+python3 schema/apply_all_seed.py --with-demo-users   # old name: --demo-identities
 ```
 
 That applies it first, before the rest of the seed run, so the seeds that look
-users up find them. Never use the flag against a shared or production cluster.
+users up find them. The switch refuses to run (exit 2, before any database
+call) when the target is production: the target environment file
+(`infra/environments/<name>.json`, picked by `--env` or `ORGIQ_ENV`, default
+`lab`) says `"production": true` or cannot be read, or `NODE_ENV` / `APP_ENV`
+says `production` (or `prod`).
 Offline (`MOCK_AURORA`) the middleware does not read this file: the same cast
 is mirrored in `FALLBACK_USERS` in `middleware/src/providers/identity.ts`, and
-the parity tests in `middleware/src/mock/core/parity` compare the two.
+the parity tests in `middleware/src/mock/core/parity` compare the two. That
+mirror answers only under `MOCK_AURORA` or `INSECURE_DEV_MODE`; a deployed
+middleware whose identity tables are empty or unreachable lists nobody.

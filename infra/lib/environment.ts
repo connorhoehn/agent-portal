@@ -30,6 +30,9 @@ export interface Environment {
   readonly edge: { readonly mode: 'cloudfront' | 'domain'; readonly certificateArn?: string; readonly portalAlbOriginHost?: string };
   readonly features: { readonly social: boolean; readonly documents: boolean; readonly devbox: boolean };
   readonly monthlyBudgetUsd: number;
+  /** A production environment: tooling that writes demo data (schema/apply_all_seed.py
+   * `--with-demo-users`) refuses it. Default false (the research lab). */
+  readonly production: boolean;
 }
 
 const NAME_RE = /^[a-z][a-z0-9-]{0,19}$/;
@@ -51,7 +54,7 @@ function fail(name: string, msg: string): never {
 export function parseEnvironment(name: string, raw: unknown, forbidden: readonly string[]): Environment {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail(name, 'must be a JSON object');
   const o = raw as Record<string, any>;
-  const allowed = new Set(['name', 'account', 'region', 'prefix', 'stackPrefix', 'edge', 'features', 'monthlyBudgetUsd']);
+  const allowed = new Set(['name', 'account', 'region', 'prefix', 'stackPrefix', 'edge', 'features', 'monthlyBudgetUsd', 'production']);
   for (const k of Object.keys(o)) {
     if (!allowed.has(k)) fail(name, k === 'alertEmail'
       ? '"alertEmail" is personal data; pass --context alertEmail=... or keep it in SSM'
@@ -90,6 +93,7 @@ export function parseEnvironment(name: string, raw: unknown, forbidden: readonly
   }
   const budget = o.monthlyBudgetUsd ?? 200;
   if (typeof budget !== 'number' || !(budget > 0)) fail(name, 'monthlyBudgetUsd must be a positive number');
+  if (o.production !== undefined && typeof o.production !== 'boolean') fail(name, 'production must be a boolean');
 
   return {
     name, account: o.account, region: o.region, prefix: o.prefix, stackPrefix: o.stackPrefix,
@@ -97,6 +101,7 @@ export function parseEnvironment(name: string, raw: unknown, forbidden: readonly
       ...(edge.portalAlbOriginHost && { portalAlbOriginHost: edge.portalAlbOriginHost }) },
     features: { social: f.social === true, documents: f.documents === true, devbox: f.devbox === true },
     monthlyBudgetUsd: budget,
+    production: o.production === true,
   };
 }
 

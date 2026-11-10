@@ -11,6 +11,7 @@ Run from repo root:  python3 schema/apply_all_seed.py
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 import sys
@@ -33,10 +34,46 @@ RETRYABLE = ('HttpEndpointNotEnabledException', 'ThrottlingException', 'Statemen
 FILES = seed_run_files()
 
 # The demo sign-in cast (u-operator holds `admin` in every tenant). Never part
-# of the manifest or the default run; only `--demo-identities` applies it, and
-# first, so the seeds that look users up (assessment_team_members_schema's
-# EXISTS guard, access_schema's person re-link) find them.
+# of the manifest or the default run; only `--with-demo-users` (old name
+# `--demo-identities`) applies it, and first, so the seeds that look users up
+# (assessment_team_members_schema's EXISTS guard, access_schema's person
+# re-link) find them. The switch refuses a production target (below).
 DEMO_IDENTITIES = 'schema/seed_demo_identities.sql'
+
+# The target environment: infra/environments/<name>.json (the file CDK deploys
+# from, DE-17), named by --env or ORGIQ_ENV, default `lab`. A file with
+# "production": true is a production target.
+ENVIRONMENTS_DIR = REPO_ROOT / 'infra' / 'environments'
+DEFAULT_ENVIRONMENT = 'lab'
+
+
+def _is_production_word(value) -> bool:
+    return isinstance(value, str) and value.strip().lower() in ('production', 'prod')
+
+
+def demo_users_refusal(env_name: str | None, environ=None, env_dir: Path = ENVIRONMENTS_DIR) -> str | None:
+    """Why the demo cast may not be applied to this target, or None when it may.
+
+    Refused when the target environment's file says "production": true, when
+    the file cannot be read (an unknown target is not assumed safe), or when
+    this shell says production (NODE_ENV / APP_ENV)."""
+    environ = os.environ if environ is None else environ
+    for var in ('NODE_ENV', 'APP_ENV'):
+        if _is_production_word(environ.get(var)):
+            return f'{var}={environ.get(var)} names a production target'
+    name = (env_name or environ.get('ORGIQ_ENV') or DEFAULT_ENVIRONMENT).strip()
+    if not name or '/' in name or name.startswith('.'):
+        return f'environment name {name!r} is not valid'
+    path = env_dir / f'{name}.json'
+    try:
+        data = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError) as exc:
+        return f'environment {name!r} cannot be read ({path.name}: {exc.__class__.__name__})'
+    if not isinstance(data, dict):
+        return f'environment {name!r} is not a JSON object'
+    if data.get('production') is True:
+        return f'environment {name!r} is marked "production": true'
+    return None
 
 # The role created by graph_readonly_role.sql, and the Secrets Manager secret
 # OrgIQ-Aurora mints for it. The SQL file deliberately creates the role with no
@@ -256,10 +293,19 @@ def main(argv=None) -> int:
     parser.add_argument('--roles-only', action='store_true',
                         help='Apply every role file (service roles + reader), set their passwords and verify; '
                              'no seed data. Run after every migration.')
-    parser.add_argument('--demo-identities', action='store_true',
+    parser.add_argument('--with-demo-users', '--demo-identities', dest='demo_identities', action='store_true',
                         help=f'Also apply {DEMO_IDENTITIES} (the demo sign-in cast, including an '
-                             'all-tenant admin). Local and demo databases only.')
+                             'all-tenant admin). Local and demo databases only: refused for a '
+                             'production environment.')
+    parser.add_argument('--env', default=None,
+                        help=f'Target environment (infra/environments/<name>.json); default ORGIQ_ENV '
+                             f'or {DEFAULT_ENVIRONMENT}. Decides whether --with-demo-users is allowed.')
     options = parser.parse_args(argv)
+    if options.demo_identities and not (options.readonly_role_only or options.roles_only):
+        why = demo_users_refusal(options.env)
+        if why:
+            print(f'refusing --with-demo-users: {why}', file=sys.stderr)
+            return 2
     if options.readonly_role_only:
         files = ['schema/graph_readonly_role.sql']
     elif options.roles_only:

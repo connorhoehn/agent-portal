@@ -51,6 +51,12 @@ describe('loadEnvironment', () => {
     assert.throws(() => loadEnvironment('nope'), /does not exist/);
   });
 
+  test('"production" is an optional boolean, false by default (lab is the research lab)', () => {
+    assert.equal(loadEnvironment('lab').production, false);
+    assert.equal(parseEnvironment('lab', withLab(e => { e.production = true; }), forbidden).production, true);
+    assert.throws(() => parseEnvironment('lab', withLab(e => { e.production = 'yes'; }), forbidden), /production must be a boolean/);
+  });
+
   test('a checked-in environment file cannot carry a forbidden account', () => {
     for (const file of fs.readdirSync(path.join(INFRA, 'environments')).filter(f => f !== 'forbidden-accounts.json')) {
       const e = JSON.parse(fs.readFileSync(path.join(INFRA, 'environments', file), 'utf8'));

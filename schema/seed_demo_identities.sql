@@ -2,7 +2,8 @@
 --
 -- Not in schema/manifest.json and not applied by load_schema.py, a deploy, or
 -- a plain `python3 schema/apply_all_seed.py`. Apply it on purpose with
--- `python3 schema/apply_all_seed.py --demo-identities`. It includes
+-- `python3 schema/apply_all_seed.py --with-demo-users` (refused for a
+-- production target; see schema/README.md). It includes
 -- u-operator, which holds `admin` in all five tenants, and real-looking
 -- emails: never apply it to a shared or production cluster.
 --

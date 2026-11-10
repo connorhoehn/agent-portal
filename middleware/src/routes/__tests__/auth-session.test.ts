@@ -274,6 +274,24 @@ describe('production picker boundary', () => {
     expect(listUsers).not.toHaveBeenCalled();
   });
 
+  it('keeps the picker closed outside production too when the dev flag is off', async () => {
+    const priorFlag = process.env['INSECURE_DEV_MODE'];
+    process.env['NODE_ENV'] = 'test';
+    process.env['AUTH_DEMO_MODE'] = 'true';
+    delete process.env['INSECURE_DEV_MODE'];
+    try {
+      const res = await request(buildApp()).post('/api/session/login').send({ userId: 'u-operator' });
+      expect(res.status).toBe(403);
+      expect(sessionCookies(res)).toHaveLength(0);
+      expect(getUser).not.toHaveBeenCalled();
+      expect((await request(buildApp()).get('/api/session/users')).status).toBe(403);
+      expect(listUsers).not.toHaveBeenCalled();
+    } finally {
+      if (priorFlag === undefined) delete process.env['INSECURE_DEV_MODE'];
+      else process.env['INSECURE_DEV_MODE'] = priorFlag;
+    }
+  });
+
   it('keeps the picker closed in production even with AUTH_DEMO_MODE=true', async () => {
     process.env['AUTH_DEMO_MODE'] = 'true';
     const res = await request(buildApp()).post('/api/session/login').send({ userId: 'u-operator' });
