@@ -1749,6 +1749,8 @@ describe('the fenced job writes', () => {
     expect(done.status).toBe(200);
     expect(done.body).toEqual({
       ok: true, jobId: held.jobId, status: 'awaiting_review', costUsd: 0, provider: 'local',
+      // The run report: a completion that sends no report block stores one with the self-report missing.
+      report: { selfReport: 'missing', runbooksUsed: 0, kept: 0 },
     });
     expect((await getJob(held.jobId))!.status).toBe('awaiting_review');
   });

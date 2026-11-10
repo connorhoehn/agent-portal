@@ -53,7 +53,7 @@ import {
   AlreadyExistsError, InvalidWriteError, NotFoundError as StoreNotFound, ProposalClosedError, RunbookStoreError,
   SelfAcceptError, VersionConflictError, RetiredRunbookError,
   type LintContext, type LintFinding, type Runbook, type RunbookApplication, type RunbookDoc, type RunbookProposal,
-  type RunbookScope, type RunbookStore, type RunbookVersion,
+  type RunbookScope, type RunbookStore, type RunbookVersion, type SessionBrief,
 } from '../lib/runbooks/index.js';
 import { repoLintContext } from '../lib/runbooks/repo-context.js';
 import { RunbookFileError, filesOf, fileManifest, parseSkill, skillDescription, type RunbookFile } from '../lib/runbooks/index.js';
@@ -188,6 +188,127 @@ const handler = (fn: (req: Request, res: Response, next: NextFunction) => Promis
     try { await fn(req, res, next); } catch (err) { if (!storeError(err, res)) throw err; }
   });
 
+/** The lint context for a proposal: the tree, its files, and the skill it becomes (its name; collisions are judged at write time). */
+function lintFor(files: readonly RunbookFile[] | undefined, name: string | null, others?: Array<{ name: string; description: string }>): LintContext {
+  return { ...(lintCtx() ?? {}), files: files ?? [], skill: { name, ...(others ? { others } : {}) } };
+}
+
+/** Every skill a new one must not collide with: the library's (published runbooks) and the box's own (the live session bundle). */
+async function otherSkills(s: RunbookStore): Promise<Array<{ name: string; description: string }>> {
+  const lib = (await loadCandidates(s, Date.parse(clock.nowIso()))).map((c) => ({ name: c.runbook.id, description: skillDescription(c.version.doc) }));
+  let box: Array<{ name: string; description: string }> = [];
+  try {
+    const { liveBundleSkills } = await import('../lib/run-brief.js');
+    box = (await liveBundleSkills()).map((k) => ({ name: k.id, description: k.description }));
+  } catch { box = []; }
+  return [...lib, ...box];
+}
+
+/** A proposal's list view: files as a manifest, lint re-run. */
+function proposalView(p: RunbookProposal, extra: Record<string, unknown> = {}) {
+  // A list shows what files a proposal carries, not their bytes; the detail route adds the diff.
+  const { proposed_files: files, ...rest } = p;
+  return {
+    ...rest,
+    ...(files ? { proposed_files: fileManifest(files) } : {}),
+    lint: p.proposed ? lintRunbook(p.proposed, lintFor(files, p.runbook_id ?? p.proposed_id ?? null)) : [],
+    ...extra,
+  };
+}
+
+/** What filing a proposal answered: the HTTP status and body the route sends, and the proposal when one was stored. */
+export interface ProposeResult { status: number; body: Record<string, unknown>; proposal?: RunbookProposal }
+
+/**
+ * File one proposal from a request body whose `source` is already decided (a person's session,
+ * or a run's frozen brief). The proposals route and the local-compute completion (a local run's
+ * kept skill folders, the same body `lab keep` posts) both come through here, so a kept folder
+ * from a laptop meets exactly the checks a devbox's does: files first, parse, lint, dedupe, and
+ * nothing reaches the library until a person accepts it. Throws ValidationError for a 400.
+ */
+export async function fileProposal(s: RunbookStore, body: Record<string, unknown>, source: RunbookProposal['source']): Promise<ProposeResult> {
+  const kind = oneOf(['new', 'edit', 'retire'] as const, body['kind'], 'kind');
+  if (!kind) throw new ValidationError('`kind` is required: new | edit | retire');
+  const rationale = str(body['rationale']);
+  if (!rationale) throw new ValidationError('`rationale` is required');
+
+  let runbookId: string | null = null;
+  let baseVersion: number | null = null;
+  let target: Runbook | null = null;
+  if (kind !== 'new') {
+    runbookId = str(body['runbook_id']) ?? null;
+    if (!runbookId) throw new ValidationError('`runbook_id` is required for an edit or a retire');
+    target = await s.getRunbook(runbookId);
+    if (!target) return { status: 404, body: { error: 'runbook not found' } };
+    if (target.status === 'retired') return { status: 409, body: { error: `${target.id} is retired`, code: 'RETIRED' } };
+    baseVersion = int(body['base_version']) ?? target.current_version;
+    if (baseVersion < 1 || baseVersion > target.current_version) throw new ValidationError(`base_version must be between 1 and ${target.current_version}`);
+  } else if (body['runbook_id'] !== undefined && body['runbook_id'] !== null) {
+    throw new ValidationError('a `new` proposal has no runbook_id');
+  }
+
+  let proposed: RunbookDoc | null = null;
+  let proposedFiles: RunbookFile[] | undefined;
+  let proposedId: string | undefined;
+  if (kind !== 'retire') {
+    // Either canonical runbook markdown (`lab propose`) or a SKILL.md-shaped draft (`lab keep`, R8):
+    // frontmatter name + description, then the same canonical body.
+    // Files first, before any parsing — they are untrusted input: safe paths only, text only, capped per file and per bundle (lib/runbooks/files.ts).
+    if (body['files'] !== undefined) {
+      try { proposedFiles = filesOf(body['files']); } catch (e) {
+        if (e instanceof RunbookFileError) return { status: 422, body: { error: 'the files are not acceptable', code: 'FILES', problems: e.problems } };
+        throw e;
+      }
+    }
+    const md = typeof body['markdown'] === 'string' ? body['markdown'] : typeof body['skill_md'] === 'string' ? body['skill_md'] : undefined;
+    if (!md || !md.trim()) throw new ValidationError('`markdown` (or `skill_md`) is required for a new runbook or an edit');
+    if (md.length > 200_000) throw new ValidationError('`markdown` is too long');
+    const parsed = parseSkill(md);
+    if (!parsed.ok) return { status: 422, body: { error: 'the runbook markdown does not parse', code: 'PARSE', problems: parsed.errors } };
+    proposed = parsed.doc;
+    if (kind === 'new' && parsed.name) {
+      if (!RUNBOOK_ID.test(parsed.name)) throw new ValidationError('the draft\'s `name` must look like rb-some-name (lowercase letters, digits, hyphens)');
+      proposedId = parsed.name;
+    }
+    if (kind === 'edit') {
+      const base = await s.getVersion(target!.id, baseVersion!);
+      // An edit that sends no `files` keeps the base's; `files: []` removes them.
+      if (proposedFiles === undefined && base?.files?.length) proposedFiles = base.files;
+      const next = versionOf({ runbook_id: target!.id, version: baseVersion!, doc: proposed, author: { kind: 'person', id: '-' }, files: proposedFiles ?? [] });
+      if (base && (next.bundle_sha256 ?? next.sha256) === (base.bundle_sha256 ?? base.sha256)) {
+        return { status: 422, body: { error: 'the proposal changes nothing from the base version', code: 'NO_CHANGE' } };
+      }
+    }
+  }
+
+  const others = proposed ? await otherSkills(s) : [];
+  const lint: LintFinding[] = proposed ? lintRunbook(proposed, lintFor(proposedFiles, runbookId ?? proposedId ?? slug(proposed.title), others)) : [];
+  const similar = kind === 'new' && proposed
+    ? findSimilar(proposed, { kind: 'org', ref: null }, (await loadCandidates(s, Date.parse(clock.nowIso()))).map((c) => ({ runbook_id: c.runbook.id, scope: c.runbook.scope, doc: c.version.doc })))
+    : [];
+
+  const proposal: RunbookProposal = {
+    id: `prop-${randomUUID().slice(0, 12)}`,
+    kind, runbook_id: runbookId, base_version: baseVersion, proposed, rationale, source,
+    ...(proposedFiles ? { proposed_files: proposedFiles } : {}),
+    ...(proposedId ? { proposed_id: proposedId } : {}),
+    lint, similar, status: 'open', decided_by: null, decided_at: null, note: null, merged_into: null, created_at: clock.nowIso(),
+  };
+  await s.putProposal(proposal);
+  return { status: 201, body: { proposal: proposalView(proposal) }, proposal };
+}
+
+/** A run proposal's source, attributed from the run's frozen brief (never the body). */
+export function runProposalSource(brief: Pick<SessionBrief, 'work_item_id'> & { dispatched_by?: string | null }, runRef: string, src: Record<string, unknown>): RunbookProposal['source'] {
+  const labIds = Array.isArray(src['lab_experience_ids']) ? src['lab_experience_ids'].filter((x): x is string => typeof x === 'string') : [];
+  return {
+    kind: 'run', run_ref: runRef, lab_experience_ids: labIds,
+    ...(str(src['session_id']) ? { session_id: str(src['session_id'])! } : {}),
+    ...(brief.work_item_id ? { work_item_id: brief.work_item_id } : {}),
+    ...(brief.dispatched_by ? { dispatched_by: brief.dispatched_by } : {}),
+  };
+}
+
 // ── The router ───────────────────────────────────────────────────────────────
 
 export function createRunbooksRouter(deps: RunbooksDeps): Router {
@@ -236,32 +357,6 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     res.status(403).json({ error: v.reason, code: 'OUT_OF_SCOPE', action });
   }
 
-  function proposalView(p: RunbookProposal, extra: Record<string, unknown> = {}) {
-    // A list shows what files a proposal carries, not their bytes; the detail route adds the diff.
-    const { proposed_files: files, ...rest } = p;
-    return {
-      ...rest,
-      ...(files ? { proposed_files: fileManifest(files) } : {}),
-      lint: p.proposed ? lintRunbook(p.proposed, lintFor(files, p.runbook_id ?? p.proposed_id ?? null)) : [],
-      ...extra,
-    };
-  }
-
-  /** The lint context for a proposal: the tree, its files, and the skill it becomes (its name; collisions are judged at write time). */
-  function lintFor(files: readonly RunbookFile[] | undefined, name: string | null, others?: Array<{ name: string; description: string }>): LintContext {
-    return { ...(lintCtx() ?? {}), files: files ?? [], skill: { name, ...(others ? { others } : {}) } };
-  }
-
-  /** Every skill a new one must not collide with: the library's (published runbooks) and the box's own (the live session bundle). */
-  async function otherSkills(s: RunbookStore): Promise<Array<{ name: string; description: string }>> {
-    const lib = (await loadCandidates(s, Date.parse(now()))).map((c) => ({ name: c.runbook.id, description: skillDescription(c.version.doc) }));
-    let box: Array<{ name: string; description: string }> = [];
-    try {
-      const { liveBundleSkills } = await import('../lib/run-brief.js');
-      box = (await liveBundleSkills()).map((k) => ({ name: k.id, description: k.description }));
-    } catch { box = []; }
-    return [...lib, ...box];
-  }
 
   // ── Reads ──────────────────────────────────────────────────────────────────
 
@@ -381,10 +476,10 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const s = await store();
     const machine = res.locals['machine'] === true;
     const body = (req.body ?? {}) as Record<string, unknown>;
+    // Shape errors before attribution, as before: an unknown kind or no rationale is a 400 for anyone.
     const kind = oneOf(['new', 'edit', 'retire'] as const, body['kind'], 'kind');
     if (!kind) throw new ValidationError('`kind` is required: new | edit | retire');
-    const rationale = str(body['rationale']);
-    if (!rationale) throw new ValidationError('`rationale` is required');
+    if (!str(body['rationale'])) throw new ValidationError('`rationale` is required');
     const src = (body['source'] && typeof body['source'] === 'object' ? body['source'] : {}) as Record<string, unknown>;
     const labIds = Array.isArray(src['lab_experience_ids']) ? src['lab_experience_ids'].filter((x): x is string => typeof x === 'string') : [];
 
@@ -404,12 +499,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
       // the person who dispatched it — who may then not accept it (decidable's SELF_ACCEPT).
       const brief = await s.getBrief(runRef);
       if (!brief) { res.status(409).json({ error: `no brief was frozen for run ${runRef}`, code: 'NO_BRIEF' }); return; }
-      source = {
-        kind: 'run', run_ref: runRef, lab_experience_ids: labIds,
-        ...(str(src['session_id']) ? { session_id: str(src['session_id'])! } : {}),
-        ...(brief.work_item_id ? { work_item_id: brief.work_item_id } : {}),
-        ...(brief.dispatched_by ? { dispatched_by: brief.dispatched_by } : {}),
-      };
+      source = runProposalSource(brief, runRef, src);
     } else {
       if (refuseMasquerade(req, res)) return;
       const { actor } = await actorId(session(req));
@@ -419,71 +509,8 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
       };
     }
 
-    let runbookId: string | null = null;
-    let baseVersion: number | null = null;
-    let target: Runbook | null = null;
-    if (kind !== 'new') {
-      runbookId = str(body['runbook_id']) ?? null;
-      if (!runbookId) throw new ValidationError('`runbook_id` is required for an edit or a retire');
-      target = await s.getRunbook(runbookId);
-      if (!target) { res.status(404).json({ error: 'runbook not found' }); return; }
-      if (target.status === 'retired') { res.status(409).json({ error: `${target.id} is retired`, code: 'RETIRED' }); return; }
-      baseVersion = int(body['base_version']) ?? target.current_version;
-      if (baseVersion < 1 || baseVersion > target.current_version) throw new ValidationError(`base_version must be between 1 and ${target.current_version}`);
-    } else if (body['runbook_id'] !== undefined && body['runbook_id'] !== null) {
-      throw new ValidationError('a `new` proposal has no runbook_id');
-    }
-
-    let proposed: RunbookDoc | null = null;
-    let proposedFiles: RunbookFile[] | undefined;
-    let proposedId: string | undefined;
-    if (kind !== 'retire') {
-      // Either canonical runbook markdown (`lab propose`) or a SKILL.md-shaped draft (`lab keep`, R8):
-      // frontmatter name + description, then the same canonical body.
-      // Files first, before any parsing — they are untrusted input: safe paths only, text only, capped per file and per bundle (lib/runbooks/files.ts).
-      if (body['files'] !== undefined) {
-        try { proposedFiles = filesOf(body['files']); } catch (e) {
-          if (e instanceof RunbookFileError) { res.status(422).json({ error: 'the files are not acceptable', code: 'FILES', problems: e.problems }); return; }
-          throw e;
-        }
-      }
-      const md = typeof body['markdown'] === 'string' ? body['markdown'] : typeof body['skill_md'] === 'string' ? body['skill_md'] : undefined;
-      if (!md || !md.trim()) throw new ValidationError('`markdown` (or `skill_md`) is required for a new runbook or an edit');
-      if (md.length > 200_000) throw new ValidationError('`markdown` is too long');
-      const parsed = parseSkill(md);
-      if (!parsed.ok) { res.status(422).json({ error: 'the runbook markdown does not parse', code: 'PARSE', problems: parsed.errors }); return; }
-      proposed = parsed.doc;
-      if (kind === 'new' && parsed.name) {
-        if (!RUNBOOK_ID.test(parsed.name)) throw new ValidationError('the draft\'s `name` must look like rb-some-name (lowercase letters, digits, hyphens)');
-        proposedId = parsed.name;
-      }
-      if (kind === 'edit') {
-        const base = await s.getVersion(target!.id, baseVersion!);
-        // An edit that sends no `files` keeps the base's; `files: []` removes them.
-        if (proposedFiles === undefined && base?.files?.length) proposedFiles = base.files;
-        const next = versionOf({ runbook_id: target!.id, version: baseVersion!, doc: proposed, author: { kind: 'person', id: '-' }, files: proposedFiles ?? [] });
-        if (base && (next.bundle_sha256 ?? next.sha256) === (base.bundle_sha256 ?? base.sha256)) {
-          res.status(422).json({ error: 'the proposal changes nothing from the base version', code: 'NO_CHANGE' });
-          return;
-        }
-      }
-    }
-
-    const others = proposed ? await otherSkills(s) : [];
-    const lint: LintFinding[] = proposed ? lintRunbook(proposed, lintFor(proposedFiles, runbookId ?? proposedId ?? slug(proposed.title), others)) : [];
-    const similar = kind === 'new' && proposed
-      ? findSimilar(proposed, { kind: 'org', ref: null }, (await loadCandidates(s, Date.parse(now()))).map((c) => ({ runbook_id: c.runbook.id, scope: c.runbook.scope, doc: c.version.doc })))
-      : [];
-
-    const proposal: RunbookProposal = {
-      id: `prop-${randomUUID().slice(0, 12)}`,
-      kind, runbook_id: runbookId, base_version: baseVersion, proposed, rationale, source,
-      ...(proposedFiles ? { proposed_files: proposedFiles } : {}),
-      ...(proposedId ? { proposed_id: proposedId } : {}),
-      lint, similar, status: 'open', decided_by: null, decided_at: null, note: null, merged_into: null, created_at: now(),
-    };
-    await s.putProposal(proposal);
-    res.status(201).json({ proposal: proposalView(proposal) });
+    const out = await fileProposal(s, body, source);
+    res.status(out.status).json(out.body);
   }));
 
   // ── Deciding ───────────────────────────────────────────────────────────────

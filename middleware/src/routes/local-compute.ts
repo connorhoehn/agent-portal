@@ -649,6 +649,8 @@ localComputeRouter.post('/jobs/:jobId/complete', workLoopLimit, requireNodeToken
   const body = (req.body ?? {}) as {
     status?: unknown; result?: unknown; error?: unknown; costUsd?: unknown;
     model?: unknown; tokensIn?: unknown; tokensOut?: unknown;
+    /** The run report's worker half (tools/local-compute-report.mjs): untrusted, validated in recordLocalReport. */
+    report?: unknown;
   };
   const status = typeof body.status === 'string' && TERMINAL.includes(body.status)
     ? body.status as 'done' | 'failed' | 'awaiting_review'
@@ -735,8 +737,67 @@ localComputeRouter.post('/jobs/:jobId/complete', workLoopLimit, requireNodeToken
       outputTokens: Number.isFinite(Number(body.tokensOut)) ? Number(body.tokensOut) : null,
     }, { unlessBotRunOwnsJob: held.job.id });
   }
-  res.json({ ok: true, jobId: held.job.id, status, costUsd: cost.costUsd, provider: cost.provider });
+  // The run report (docs/learning-loop-design.md §1): the return path a local run never had.
+  const report = await recordLocalReport(held.job, status, {
+    report: body.report, reportedUsd: reported,
+    model: typeof body.model === 'string' ? body.model.slice(0, MAX_MODEL_LEN) : null,
+    error: typeof body.error === 'string' ? body.error : null,
+  });
+  res.json({
+    ok: true, jobId: held.job.id, status, costUsd: cost.costUsd, provider: cost.provider,
+    report: report ? { selfReport: report.selfReport, runbooksUsed: report.runbooksUsed.length, kept: report.kept.length } : null,
+  });
 }));
+
+/**
+ * A local run's report, from its completion body. Everything in `report` is the
+ * machine's word: the final message's lab-report block (parsed tolerantly), the
+ * skills its stream showed it loading, and its kept skill folders — each kept
+ * folder enters the proposals queue exactly as a devbox's `lab keep` does
+ * (routes/runbooks.ts fileProposal: attributed from the frozen brief, linted,
+ * reviewed by a person). The reported cost is stored as reported, never billed.
+ */
+async function recordLocalReport(
+  job: AgentJob, status: 'done' | 'failed' | 'awaiting_review',
+  input: { report: unknown; reportedUsd: number | null; model: string | null; error: string | null },
+): Promise<import('../lib/run-reports/types.js').RunReport | null> {
+  const { recordRunEnd, outcomeOfJobStatus, failureCodeOf } = await import('../lib/run-reports/record.js');
+  const raw = (input.report && typeof input.report === 'object' && !Array.isArray(input.report) ? input.report : {}) as Record<string, unknown>;
+  const kept: Array<{ name: string; proposalId: string | null; problems: string[] }> = [];
+  const keptIn = Array.isArray(raw['kept']) ? raw['kept'].slice(0, 10) : [];
+  if (keptIn.length) {
+    const { runbookStore } = await import('../lib/runbooks/store-select.js');
+    const { fileProposal, runProposalSource } = await import('./runbooks.js');
+    const store = runbookStore();
+    const brief = await store.getBrief(job.id).catch(() => null);
+    for (const k of keptIn) {
+      const o = (k && typeof k === 'object' ? k : {}) as Record<string, unknown>;
+      const name = typeof o['name'] === 'string' ? o['name'].slice(0, 64) : '';
+      if (!name) continue;
+      const problems = Array.isArray(o['problems']) ? o['problems'].filter((x): x is string => typeof x === 'string').slice(0, 5) : [];
+      const pb = o['body'] && typeof o['body'] === 'object' && !Array.isArray(o['body']) ? o['body'] as Record<string, unknown> : null;
+      if (!pb || problems.length) { kept.push({ name, proposalId: null, problems: problems.length ? problems : ['no proposal body'] }); continue; }
+      if (!brief) { kept.push({ name, proposalId: null, problems: ['no brief was frozen for this run'] }); continue; }
+      try {
+        const src = (pb['source'] && typeof pb['source'] === 'object' ? pb['source'] : {}) as Record<string, unknown>;
+        const out = await fileProposal(store, pb, runProposalSource(brief, job.id, { session_id: job.sessionId ?? src['session_id'] }));
+        kept.push({ name, proposalId: out.proposal?.id ?? null, problems: out.proposal ? [] : [String(out.body['error'] ?? 'refused')] });
+      } catch (err) {
+        kept.push({ name, proposalId: null, problems: [(err as Error).message] });
+      }
+    }
+  }
+  return recordRunEnd({
+    runRef: job.id, executor: 'local', outcome: outcomeOfJobStatus(status),
+    failureCode: status === 'failed' ? failureCodeOf(input.error) : null,
+    model: input.model, billedUsd: 0,
+    worker: {
+      block: typeof raw['block'] === 'string' ? raw['block'] : null,
+      skillsLoaded: Array.isArray(raw['skillsLoaded']) ? raw['skillsLoaded'] as string[] : [],
+      kept, reportedCostUsd: input.reportedUsd,
+    },
+  });
+}
 
 // ─── Run logs ────────────────────────────────────────────────────────────────
 //
