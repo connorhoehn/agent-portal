@@ -16,6 +16,7 @@ from strands.models.bedrock import BedrockModel
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.model_registry import RegistryAgent, invoke_with_fallback, resolve_model
 from _shared.agui_stream import stream_agui, wants_stream  # noqa: E402
+from _shared.untrusted_text import Fence, fence_results, with_data_rule  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
     attach_usage,
     TraceContext,
@@ -122,6 +123,13 @@ WITH inbound AS (
 """
 
 
+def _fenced_names(rows: list) -> list:
+    """Each row's person ``name`` as a fenced data block (sweep 11, L8): names
+    reach the people table from ingested documents (graph-builder), and this
+    model also holds ``run_in_sandbox``, so a name is data, never instructions."""
+    return fence_results(rows, field="name", source_field="id", kind="person-name", max_chars=200)
+
+
 @tool
 @instrumented_tool(_current_ctx.get)
 def compute_expertise_scores(topic: str = "", limit: int = 20) -> str:
@@ -197,7 +205,7 @@ def compute_expertise_scores(topic: str = "", limit: int = 20) -> str:
             {"id": person_id, "name": name, "score": raw_score, "normalized_score": normalized}
         )
 
-    return json.dumps(results, ensure_ascii=False)
+    return json.dumps(_fenced_names(results), ensure_ascii=False)
 
 
 @tool
@@ -235,7 +243,7 @@ def get_scores(person_id: str = "", topic: str = "", limit: int = 10) -> str:
     if topic:
         results = [r for r in results if r["topic"] == topic]
     results.sort(key=lambda x: x["normalized_score"], reverse=True)
-    return json.dumps(results[:limit], ensure_ascii=False)
+    return json.dumps(_fenced_names(results[:limit]), ensure_ascii=False)
 
 
 @tool
@@ -279,7 +287,7 @@ def get_leaderboard(team: str = "", skill: str = "", limit: int = 10) -> str:
         {"rank": i + 1, "id": str(r[0]), "name": str(r[1]), "score": float(r[2])}
         for i, r in enumerate(rows)
     ]
-    return json.dumps(leaderboard, ensure_ascii=False)
+    return json.dumps(_fenced_names(leaderboard), ensure_ascii=False)
 
 
 @tool
@@ -344,7 +352,8 @@ def run_in_sandbox(python_code: str) -> str:
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
         _sandbox_log.get().append(entry)
-        return json.dumps({"sessionId": session_id, "output": output})
+        # What the code printed can quote the names above: fenced like them.
+        return json.dumps({"sessionId": session_id, "output": Fence().wrap(output, kind="sandbox-output", max_chars=20_000)})
     except Exception as e:
         err_output = f"sandbox error: {e}"
         entry = {
@@ -413,7 +422,7 @@ _agent = RegistryAgent(
     build=lambda system_prompt, model_id: Agent(
         model=BedrockModel(**_model_kwargs(model_id)),
         tools=[compute_expertise_scores, get_scores, get_leaderboard, run_in_sandbox],
-        system_prompt=system_prompt,
+        system_prompt=with_data_rule(system_prompt),
     ),
 )
 

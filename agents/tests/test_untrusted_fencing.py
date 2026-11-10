@@ -133,7 +133,7 @@ class AssessmentAgentsFenceTheirInput(unittest.TestCase):
 
 class EveryAgentCarriesTheDataRule(unittest.TestCase):
     AGENTS = ("graph-builder", "ingestion", "search", "advisor", "assessment-drafter",
-              "assessment-scorer", "supervisor")
+              "assessment-scorer", "supervisor", "scoring")
 
     def test_each_agent_builds_its_model_with_the_rule(self):
         root = Path(__file__).resolve().parent.parent
