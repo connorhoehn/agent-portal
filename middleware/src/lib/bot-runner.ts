@@ -1818,12 +1818,18 @@ async function settleSimulatedRun(input: {
   const summary =
     `Simulated run for ${input.item.id}: no devbox runtime is deployed, so nothing was ` +
     'checked out and no diff was captured.';
+  // What the run hands back (docs/learning-loop-design.md §1): a fixture keyed by the work
+  // item's labels (mock/run-report-fixtures.ts) — one of them a run that stops failed.
+  const { simulatedRunFixture, simulatedFinalMessage } = await import('../mock/run-report-fixtures.js');
+  const fx = simulatedRunFixture(input.item);
+  const failed = fx.outcome === 'failed';
 
   // job-dispatcher.ts's own result shape, minus `transcript` — there is no
   // transcript, and an empty one would read as a run that said nothing rather
   // than a run that was never streamed.
   const committed = await completeJob(input.jobId, {
-    claimToken: input.claimToken, status: 'done',
+    claimToken: input.claimToken, status: failed ? 'failed' : 'done',
+    ...(failed ? { error: fx.summary } : {}),
     result: {
       summary, durationMs,
       costUsd: SIMULATED_RESULT.costUsd,
@@ -1833,19 +1839,28 @@ async function settleSimulatedRun(input: {
   });
   if (!committed) return;
   appendEvent(input.boxId, {
-    type: 'job_finished', jobId: input.jobId, ok: true, ts: new Date().toISOString(),
+    type: 'job_finished', jobId: input.jobId, ok: !failed, ts: new Date().toISOString(),
+  });
+  // The run report, through the one function every executor's end goes through.
+  const { recordRunEnd } = await import('./run-reports/record.js');
+  await recordRunEnd({
+    runRef: input.jobId, executor: 'mock', outcome: failed ? 'failed' : 'done', failureCode: fx.failureCode,
+    billedUsd: SIMULATED_RESULT.costUsd, simulated: true,
+    worker: { block: simulatedFinalMessage(fx), skillsLoaded: fx.skillsLoaded },
   });
 
   await updateWorkItem(input.item.id, { status: 'open' });
   await addWorkItemComment(
     input.item.id,
-    'Marketplace run completed without a captured change — the run was simulated, ' +
-    'because no devbox runtime is deployed.',
+    failed
+      ? 'Marketplace run stopped before changing anything — the run was simulated, because no devbox runtime is deployed.'
+      : 'Marketplace run completed without a captured change — the run was simulated, ' +
+        'because no devbox runtime is deployed.',
     { isSystem: true },
   );
 
   await finalizeBotRun(input.runId, {
-    status: 'done',
+    status: failed ? 'failed' : 'done',
     costUsd: SIMULATED_RESULT.costUsd,
     // The provider column's third value earns its place here: this run's cost is
     // a plausible fiction (SIMULATED_RESULT), and without a marker saying so it

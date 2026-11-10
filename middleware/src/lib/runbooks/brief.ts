@@ -22,6 +22,7 @@
 // "Skills on this box" and never dropped.
 import type { BriefSection, SessionBrief } from './types.js';
 import { estimateTokens, groupThousands, sha256Hex } from './tokens.js';
+import { LAB_REPORT_ASK } from '../run-reports/self-report.js';
 
 export const ASSEMBLER_VERSION = '2';
 export const DEFAULT_BRIEF_BUDGET = 6_000;
@@ -148,6 +149,8 @@ function reportSection(): string {
     '- If a skill was wrong or missing a step, write the corrected runbook markdown to a file and run `lab propose <skill> ./runbook.md` (or `lab propose new ./runbook.md`). A person reviews it.',
     '- If you built a tool worth keeping (a script, a client, a harness), put it in `.lab/keep/<rb-name>/` as SKILL.md + scripts/ + data/ with an offline Verify step. It is proposed when the session ends, and a person reviews it before any box gets it.',
     '- Record anything else you learned with `lab remember`.',
+    // The run report's self-report (docs/learning-loop-design.md §1), in the same three lines the local framing uses.
+    ...LAB_REPORT_ASK.map((l) => `- ${l}`),
   ].join('\n');
 }
 

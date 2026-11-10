@@ -16,6 +16,7 @@
 // credential for this surface.
 
 import type { ComputeNode } from '../providers/local-compute.js';
+import { LAB_REPORT_ASK } from './run-reports/self-report.js';
 
 /**
  * The job kinds local execution is allowed at all.
@@ -202,7 +203,9 @@ export function frameLocalPrompt(task: string, reviewed: boolean, brief?: Framed
     reviewed
       ? 'Someone will read the result afterwards, so put every assumption you made where they will see it.'
       : 'Nobody will review this before it lands, so take the conservative option wherever you have to choose, and state what you assumed at the end.',
-    ...(brief ? ['', ...briefBlock(brief)] : []),
+    // The run report's three lines (docs/learning-loop-design.md §1). A brief carries them in its
+    // "How to report back"; a run with no brief gets them here, so every local run is asked once.
+    ...(brief ? ['', ...briefBlock(brief)] : ['', ...LAB_REPORT_ASK]),
     '',
     'The task:',
     '',
@@ -238,7 +241,7 @@ export const BRIEF_END = '----- END SESSION BRIEF -----';
 function briefBlock(b: FramedBrief): string[] {
   return [
     `Below is the session brief for this run (${b.id}, sha256 ${b.sha256}): the project context, the decisions that bind the work, and where the org's skills are. Follow a skill where it fits the task.`,
-    'This machine has no `lab` command. Where the brief says to run one, write that line, as written, at the end of your final message instead.',
+    'This machine has no `lab` command. Where the brief says to run one, write that line, as written, near the end of your final message instead, before the `lab-report` block.',
     '',
     BRIEF_BEGIN,
     b.markdown.replace(/\n$/, ''),

@@ -6,6 +6,9 @@
 //   GET /api/work-items/:id/brief-preview   what a run would be given now (assembled, never stored)
 //   GET /api/runs/:ref/skills               R8: the WHOLE skill library, files included, for a box to sync
 //   GET /api/skill-library                  R8: the library's manifest (no file bytes), for people
+//   GET /api/runs/:ref/report               the run's report (docs/learning-loop-design.md §1), same door as its brief
+//   GET /api/work-items/:id/run-reports     every report of a work item's runs, newest first
+//   GET /api/initiatives/:id/run-reports    every report of an initiative's runs, newest first
 //
 // Mounted at /api with NO blanket gate: the first is read by two kinds of caller —
 // a box (devbox `lab brief`, a signed LAB_CALLBACK_SERVICE_AUTH envelope, no cookie)
@@ -31,9 +34,12 @@ import { liveBundleSkills, loadWorkContext } from '../lib/run-brief.js';
 import { RUN_TOKEN_HEADER, runTokenMatches } from '../lib/run-token.js';
 import { loadSkillLibrary, skillDescription, skillLibraryForRun, type RunbookStore, type SessionBrief } from '../lib/runbooks/index.js';
 import { clock } from '../mock/core/clock.js';
+import type { RunReportStore } from '../lib/run-reports/store.js';
 
 export interface SessionBriefDeps {
   store: () => RunbookStore | Promise<RunbookStore>;
+  /** The run report store (lib/run-reports/store-select.ts); injected by suites. */
+  reports?: () => RunReportStore | Promise<RunReportStore>;
 }
 
 const RUNBOOK_ID = /^rb-[a-z0-9][a-z0-9-]{1,58}$/;
@@ -174,6 +180,42 @@ export function createSessionBriefsRouter(deps: SessionBriefDeps): Router {
       const inm = String(req.headers['if-none-match'] ?? '').split(',').map((x) => x.trim());
       if (inm.includes(etag) || inm.includes(lib.sha256)) { res.status(304).end(); return; }
       res.json({ format: 'orgiq-skill-library/1', sha256: lib.sha256, bytes: lib.bytes, skills: lib.skills, files: lib.files, skipped: lib.skipped });
+    }));
+
+  // The run report: what the run handed back when it ended. Read by the same two callers as the
+  // brief and under the same rule — a box with the lab envelope AND this run's token, or a person
+  // with ViewSessionBrief. Its worker-written fields are text, served as JSON strings, never markup.
+  const reports = async (): Promise<RunReportStore> =>
+    deps.reports ? deps.reports() : (await import('../lib/run-reports/store-select.js')).runReportStore();
+  const pageQuery = (q: Record<string, unknown>): { cursor?: string; limit?: number } => {
+    const n = Number(q['limit']);
+    return {
+      ...(typeof q['cursor'] === 'string' && q['cursor'] ? { cursor: q['cursor'] } : {}),
+      ...(Number.isInteger(n) && n > 0 ? { limit: Math.min(n, 200) } : {}),
+    };
+  };
+
+  router.get('/runs/:ref/report', briefLimit, machineMark,
+    unlessMachine(requireTenant('orgiq')), unlessMachine(requireAction('ViewSessionBrief')),
+    asyncHandler(async (req, res) => {
+      const ref = String(req.params['ref']);
+      if (res.locals['machine'] && !(await runTokenMatches(req, ref))) { refuseRunToken(res); return; }
+      const report = await (await reports()).getReport(ref);
+      if (!report) { res.status(404).json({ error: 'this run has not reported (it is still running, or it ended before reports existed)', code: 'NO_REPORT' }); return; }
+      res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+      res.json({ report });
+    }));
+
+  router.get('/work-items/:id/run-reports', briefLimit, requireTenant('orgiq'), requireAction('ViewSessionBrief'),
+    asyncHandler(async (req, res) => {
+      const page = await (await reports()).listReports({ workItemId: String(req.params['id']), ...pageQuery(req.query) });
+      res.json({ reports: page.items, next: page.next });
+    }));
+
+  router.get('/initiatives/:id/run-reports', briefLimit, requireTenant('orgiq'), requireAction('ViewSessionBrief'),
+    asyncHandler(async (req, res) => {
+      const page = await (await reports()).listReports({ initiativeId: String(req.params['id']), ...pageQuery(req.query) });
+      res.json({ reports: page.items, next: page.next });
     }));
 
   router.get('/skill-library', briefLimit, requireTenant('orgiq'), requireAction('ViewSessionBrief'),
