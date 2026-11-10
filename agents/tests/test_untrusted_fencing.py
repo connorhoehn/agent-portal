@@ -42,6 +42,9 @@ class GraphBuilderDelimiters(unittest.TestCase):
         self.gb = load_agent("graph-builder")
         self.bedrock = mock.Mock()
         self.bedrock.converse.return_value = {"output": {"message": {"content": [{"text": '{"people": []}'}]}}}
+        # A verified orgiq caller: extraction runs (and calls the model) only for one.
+        caller = self.gb._caller_auth.set({"sub": "u-1", "role": "member", "tenant": "orgiq"})
+        self.addCleanup(self.gb._caller_auth.reset, caller)
         patcher = mock.patch.object(self.gb, "_bedrock_runtime", self.bedrock)
         patcher.start()
         self.addCleanup(patcher.stop)

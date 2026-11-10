@@ -11,7 +11,11 @@ handful of decisions that make those writes safe to repeat and hard to corrupt:
   * a blank field on a re-merge preserves what is already stored instead of
     erasing it (``COALESCE(NULLIF(...))``) — this is what makes a second
     ingestion pass idempotent rather than destructive;
-  * an unrecognised relationship type writes nothing at all.
+  * an unrecognised relationship type writes nothing at all;
+  * nothing is written for a caller outside the graph's tenant, and an
+    extraction is checked against the schema and its own document before any
+    write (``_shared/graph_extraction.py``; the checks themselves are pinned in
+    ``_shared/test_graph_extraction.py``).
 
 No AWS: every client is a fake. Run from this directory:
 
@@ -33,12 +37,20 @@ from agent_harness import FakeRds, load_agent  # noqa: E402
 gb = load_agent("graph-builder")
 
 
+ORGIQ_CALLER = {"sub": "u-1", "role": "member", "tenant": "orgiq"}
+
+
 class _Base(unittest.TestCase):
+    #: The verified caller the write tools see (handle() sets it in production).
+    caller = ORGIQ_CALLER
+
     def setUp(self):
         self.rds = FakeRds()
         patcher = mock.patch.object(gb, "_rds", self.rds)
         patcher.start()
         self.addCleanup(patcher.stop)
+        token = gb._caller_auth.set(self.caller)
+        self.addCleanup(gb._caller_auth.reset, token)
 
 
 # ── Id slugification ─────────────────────────────────────────────────────────
@@ -160,12 +172,13 @@ class MergeOtherNodeTests(_Base):
 
 class MergeRelationshipTests(_Base):
     def test_each_known_type_writes_to_its_mapped_table(self):
+        to_labels = {"HAS_SKILL": "Skill", "MEMBER_OF": "Team", "WORKED_ON": "Project"}
         for rel, (table, src, dst) in gb._REL_TABLES.items():
             with self.subTest(rel=rel):
                 self.rds.calls.clear()
                 gb.merge_relationship(
                     from_id="alice", from_label="Person",
-                    to_id="k8s", to_label="Skill", rel_type=rel,
+                    to_id="k8s", to_label=to_labels.get(rel, "Decision"), rel_type=rel,
                 )
                 self.assertIn(f"INSERT INTO {table} ({src}, {dst}, weight)", self.rds.sql)
                 self.assertIn(f"ON CONFLICT ({src}, {dst}) DO UPDATE", self.rds.sql)
@@ -358,6 +371,8 @@ class ExtractAndBuildTests(_Base):
         self.assertTrue(gb.MODEL_ID.startswith("amazon."), gb.MODEL_ID)
         self.assertNotIn("anthropic", gb.MODEL_ID)
 
+    DOC = "Alice Smith, an SRE on Platform, runs Kubernetes for Atlas."
+
     def test_writes_every_extracted_entity_and_relationship(self):
         self._reply(json.dumps({
             "people": [{"id": "Alice Smith", "name": "Alice Smith", "role": "SRE"}],
@@ -370,7 +385,8 @@ class ExtractAndBuildTests(_Base):
                 "type": "HAS_SKILL", "weight": 0.9,
             }],
         }))
-        out = json.loads(gb.extract_and_build(document_text="doc", source_key="s3://k"))
+        out = json.loads(gb.extract_and_build(document_text=self.DOC, source_key="s3://k"))
+        self.assertEqual(out["dropped"], {})
         self.assertEqual(out["nodes_created"], 4)
         self.assertEqual(out["relationships_created"], 1)
         self.assertEqual(out["embeddings_stored"], 2)  # people + skills only
@@ -387,7 +403,7 @@ class ExtractAndBuildTests(_Base):
             '{"people": [{"id": "bob", "name": "Bob"}], "skills": [], "teams": [], '
             '"projects": [], "relationships": []}\n```\nHope that helps.'
         )
-        out = json.loads(gb.extract_and_build(document_text="doc"))
+        out = json.loads(gb.extract_and_build(document_text="Bob wrote this."))
         self.assertEqual(out["nodes_created"], 1)
 
     def test_a_reply_with_no_json_is_an_error_envelope_not_an_exception(self):
@@ -405,15 +421,101 @@ class ExtractAndBuildTests(_Base):
 
     def test_missing_keys_are_treated_as_empty_not_fatal(self):
         self._reply('{"people": [{"id": "bob", "name": "Bob"}]}')
-        out = json.loads(gb.extract_and_build(document_text="doc"))
+        out = json.loads(gb.extract_and_build(document_text="Bob wrote this."))
         self.assertEqual(out["nodes_created"], 1)
         self.assertEqual(out["relationships_created"], 0)
+
+    def test_what_fails_the_check_is_dropped_counted_and_never_written(self):
+        self._reply(json.dumps({
+            "people": [
+                {"id": "alice_smith", "name": "Alice Smith"},
+                {"id": "mallory", "name": "Mallory Planted"},
+            ],
+            "skills": [{"id": "kubernetes", "name": "Kubernetes"}],
+            "relationships": [
+                {"from_id": "alice_smith", "from_label": "Person", "to_id": "kubernetes",
+                 "to_label": "Skill", "type": "HAS_SKILL", "weight": 0.9},
+                {"from_id": "mallory", "from_label": "Person", "to_id": "kubernetes",
+                 "to_label": "Skill", "type": "HAS_SKILL"},
+                {"from_id": "alice_smith", "from_label": "Person", "to_id": "kubernetes",
+                 "to_label": "Skill", "type": "MADE"},
+            ],
+        }))
+        out = json.loads(gb.extract_and_build(document_text=self.DOC))
+        self.assertEqual(out["nodes_created"], 2)
+        self.assertEqual(out["relationships_created"], 1)
+        self.assertEqual(out["dropped"], {"not_in_source": 1, "unknown_endpoint": 1, "kind": 1})
+        written = json.dumps([c.get("parameters") for c in self.rds.calls], default=str)
+        self.assertNotIn("mallory", written.lower())
 
     def test_document_text_is_capped_in_the_prompt(self):
         self._reply('{"people": []}')
         gb.extract_and_build(document_text="w" * 50000)
         prompt = self.bedrock.converse.call_args.kwargs["messages"][0]["content"][0]["text"]
         self.assertLess(prompt.count("w"), 20050)
+
+
+class CallerScopeTests(_Base):
+    """Nothing reaches the graph for a caller outside its tenant."""
+
+    caller = {"sub": "u-2", "role": "member", "tenant": "assessment"}
+
+    def setUp(self):
+        super().setUp()
+        self.bedrock = mock.Mock()
+        patcher = mock.patch.object(gb, "_bedrock_runtime", self.bedrock)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_every_write_tool_refuses_another_tenant(self):
+        outs = [
+            gb.merge_person(person_id="bob", name="Bob"),
+            gb.merge_skill(skill_id="k8s", name="Kubernetes"),
+            gb.merge_team(team_id="t", name="T"),
+            gb.merge_project(project_id="p", name="P"),
+            gb.merge_relationship(from_id="a", from_label="Person", to_id="b",
+                                  to_label="Skill", rel_type="HAS_SKILL"),
+            gb.embed_and_store(node_id="bob", node_label="Person", content="Bob"),
+        ]
+        for out in outs:
+            self.assertEqual(json.loads(out)["reason"], "tenant")
+        self.assertEqual(self.rds.calls, [])
+        self.bedrock.invoke_model.assert_not_called()
+
+    def test_extraction_refuses_before_the_model_call(self):
+        out = json.loads(gb.extract_and_build(document_text="Bob wrote this."))
+        self.assertEqual(out["refused"], "tenant")
+        self.bedrock.converse.assert_not_called()
+        self.assertEqual(self.rds.calls, [])
+
+    def test_no_verified_caller_writes_nothing(self):
+        token = gb._caller_auth.set(None)
+        try:
+            out = json.loads(gb.merge_person(person_id="bob", name="Bob"))
+        finally:
+            gb._caller_auth.reset(token)
+        self.assertEqual(out["reason"], "tenant")
+        self.assertEqual(self.rds.calls, [])
+
+
+class AdminCallerTests(_Base):
+    caller = {"sub": "u-3", "role": "admin", "tenant": "assessment"}
+
+    def test_the_cross_tenant_admin_may_write(self):
+        out = json.loads(gb.merge_person(person_id="bob", name="Bob"))
+        self.assertEqual(out["merged"], "Person")
+
+
+class HandleSetsTheCallerTests(unittest.TestCase):
+    def test_handle_reads_the_caller_from_the_verified_block_only(self):
+        seen = []
+        with mock.patch.object(gb, "verified_auth", side_effect=lambda p: seen.append(p) or None), \
+                mock.patch.object(gb, "post_trace"), \
+                mock.patch.object(gb, "_agent", side_effect=lambda text: seen.append(gb._caller_auth.get()) or "ok"):
+            import asyncio
+            asyncio.run(gb.handle({"prompt": "hi", "tenant": "orgiq", "auth": {"tenant": "orgiq"}}))
+        self.assertEqual(len(seen), 2)
+        self.assertIsNone(seen[1], "an unverified block must not become the write caller")
 
 
 # ── Sandbox tool ─────────────────────────────────────────────────────────────

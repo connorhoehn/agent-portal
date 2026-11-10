@@ -17,6 +17,13 @@ from strands.models.bedrock import BedrockModel
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.model_registry import RegistryAgent, invoke_with_fallback, resolve_model
 from _shared.untrusted_text import Fence, with_data_rule  # noqa: E402
+from _shared.invoke_auth import verified_auth  # noqa: E402
+from _shared.graph_extraction import (  # noqa: E402
+    caller_may_write,
+    check_edge,
+    check_extraction,
+    check_node,
+)
 from _shared.agui_stream import stream_agui, wants_stream  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
     attach_usage,
@@ -65,6 +72,16 @@ _bedrock_runtime = boto3.client("bedrock-runtime", region_name=REGION)
 _agentcore_data = boto3.client("bedrock-agentcore", region_name=REGION)
 
 _sandbox_log: ContextVar[list[dict]] = ContextVar("sandbox_log", default=[])
+
+# The verified caller of this invocation (``invoke_auth.verified_auth``), set
+# by ``handle``. Every write tool asks ``_shared/graph_extraction.py`` whether
+# this caller may write the graph (the orgiq tenant or the cross-tenant admin);
+# with no verified caller nothing is written.
+_caller_auth: ContextVar[dict | None] = ContextVar("graph_builder_caller_auth", default=None)
+
+
+def _refused(kind: str, reason: str) -> str:
+    return json.dumps({"refused": kind, "reason": reason})
 
 # Each relationship label maps to the edge table that stores it.
 # Cross-checked with schema/orgiq_schema.sql.
@@ -142,6 +159,9 @@ def merge_person(person_id: str, name: str, email: str = "", team: str = "", rol
     Returns:
         JSON confirmation with row id
     """
+    why = check_node("Person", person_id, name, _caller_auth.get())
+    if why:
+        return _refused("Person", why)
     safe = _safe_id(person_id)
     _exec_sql(
         """
@@ -175,6 +195,9 @@ def merge_skill(skill_id: str, name: str, domain: str = "") -> str:
     Returns:
         JSON confirmation
     """
+    why = check_node("Skill", skill_id, name, _caller_auth.get())
+    if why:
+        return _refused("Skill", why)
     safe = _safe_id(skill_id)
     _exec_sql(
         """
@@ -193,6 +216,9 @@ def merge_skill(skill_id: str, name: str, domain: str = "") -> str:
 @instrumented_tool(_current_ctx.get)
 def merge_team(team_id: str, name: str) -> str:
     """Upsert a Team row."""
+    why = check_node("Team", team_id, name, _caller_auth.get())
+    if why:
+        return _refused("Team", why)
     safe = _safe_id(team_id)
     _exec_sql(
         "INSERT INTO teams (id, name) VALUES (:id, :name) "
@@ -206,6 +232,9 @@ def merge_team(team_id: str, name: str) -> str:
 @instrumented_tool(_current_ctx.get)
 def merge_project(project_id: str, name: str, status: str = "") -> str:
     """Upsert a Project row."""
+    why = check_node("Project", project_id, name, _caller_auth.get())
+    if why:
+        return _refused("Project", why)
     safe = _safe_id(project_id)
     _exec_sql(
         "INSERT INTO projects (id, name, status) VALUES (:id, :name, :status) "
@@ -244,6 +273,9 @@ def merge_relationship(
         rel_type: Relationship type (UPPER_SNAKE_CASE)
         weight: Relationship strength 0.0-1.0 (default 1.0)
     """
+    why = check_edge(rel_type, from_label, to_label, _caller_auth.get())
+    if why:
+        return _refused("relationship", why)
     from_safe = _safe_id(from_id)
     to_safe = _safe_id(to_id)
     rel = rel_type.upper().strip()
@@ -291,6 +323,8 @@ def embed_and_store(node_id: str, node_label: str, content: str) -> str:
         node_label: Source table name as a label (Person, Skill, Team, Project, Decision)
         content: Text to embed (name + description + key properties)
     """
+    if not caller_may_write(_caller_auth.get()):
+        return _refused("embedding", "tenant")
     response = _bedrock_runtime.invoke_model(
         modelId=EMBED_MODEL,
         body=json.dumps({"inputText": content, "dimensions": 1024, "normalize": True}),
@@ -325,13 +359,21 @@ def extract_and_build(document_text: str, source_key: str = "") -> str:
 
     Pipeline:
       1. Bedrock NER extracts {people, skills, teams, projects, relationships}
-      2. Upserts each entity via merge_* tools
-      3. Embeds people + skills into node_embeddings
+      2. The extraction is checked against the schema, the document and the
+         verified caller (_shared/graph_extraction.py); what fails is dropped
+         and counted in ``dropped``
+      3. Upserts each accepted entity via merge_* tools
+      4. Embeds people + skills into node_embeddings
 
     Args:
         document_text: Raw text (max 20,000 chars)
         source_key: S3 key for provenance (optional)
     """
+    auth = _caller_auth.get()
+    if not caller_may_write(auth):
+        # No model call and no write for a caller outside the graph's tenant.
+        return json.dumps({"error": "this caller may not write the org graph", "refused": "tenant",
+                           "nodes_created": 0, "relationships_created": 0, "embeddings_stored": 0})
     # The document is untrusted: fenced with a random per-call delimiter,
     # tag look-alikes inside it defused, cut to 20,000 characters, and the
     # system prompt says the fenced block is data (_shared/untrusted_text.py).
@@ -355,7 +397,7 @@ JSON schema:
 Rules:
 - Use lowercase_underscore slugs for all ids
 - Only extract entities explicitly mentioned in the text
-- Relationship types: HAS_SKILL, MEMBER_OF, WORKED_WITH, WORKED_ON, MADE, PARTICIPATED_IN
+- Relationship types: HAS_SKILL (Person to Skill), MEMBER_OF (Person to Team), WORKED_ON (Person to Project), WORKED_WITH (Person to Person)
 
 JSON:"""
 
@@ -380,61 +422,53 @@ JSON:"""
     except json.JSONDecodeError as e:
         return json.dumps({"error": f"JSON parse failed: {e}", "raw": raw_text[start:start + 500]})
 
+    checked = check_extraction(extracted, document_text, auth)
+    if checked.dropped_total:
+        log.info("graph-builder: dropped %d extracted elements %s", checked.dropped_total, checked.dropped)
+
     nodes_created = 0
     rels_created = 0
     embeds_stored = 0
 
-    for person in extracted.get("people", []):
+    for person in checked.entities["people"]:
         merge_person(
-            person_id=person.get("id", ""),
-            name=person.get("name", ""),
+            person_id=person["id"],
+            name=person["name"],
             email=person.get("email", ""),
             team=person.get("team", ""),
             role=person.get("role", ""),
         )
-        content = f"{person.get('name', '')} {person.get('role', '')} {person.get('team', '')}"
-        embed_and_store(
-            node_id=_safe_id(person.get("id", "")),
-            node_label="Person",
-            content=content.strip(),
-        )
+        content = f"{person['name']} {person.get('role', '')} {person.get('team', '')}"
+        embed_and_store(node_id=person["id"], node_label="Person", content=content.strip())
         nodes_created += 1
         embeds_stored += 1
 
-    for skill in extracted.get("skills", []):
-        merge_skill(
-            skill_id=skill.get("id", ""),
-            name=skill.get("name", ""),
-            domain=skill.get("domain", ""),
-        )
+    for skill in checked.entities["skills"]:
+        merge_skill(skill_id=skill["id"], name=skill["name"], domain=skill.get("domain", ""))
         embed_and_store(
-            node_id=_safe_id(skill.get("id", "")),
+            node_id=skill["id"],
             node_label="Skill",
-            content=f"{skill.get('name', '')} {skill.get('domain', '')}".strip(),
+            content=f"{skill['name']} {skill.get('domain', '')}".strip(),
         )
         nodes_created += 1
         embeds_stored += 1
 
-    for team in extracted.get("teams", []):
-        merge_team(team_id=team.get("id", team.get("name", "")), name=team.get("name", ""))
+    for team in checked.entities["teams"]:
+        merge_team(team_id=team["id"], name=team["name"])
         nodes_created += 1
 
-    for project in extracted.get("projects", []):
-        merge_project(
-            project_id=project.get("id", project.get("name", "")),
-            name=project.get("name", ""),
-            status=project.get("status", ""),
-        )
+    for project in checked.entities["projects"]:
+        merge_project(project_id=project["id"], name=project["name"], status=project.get("status", ""))
         nodes_created += 1
 
-    for rel in extracted.get("relationships", []):
+    for rel in checked.relationships:
         merge_relationship(
-            from_id=rel.get("from_id", ""),
-            from_label=rel.get("from_label", "Person"),
-            to_id=rel.get("to_id", ""),
-            to_label=rel.get("to_label", "Skill"),
-            rel_type=rel.get("type", "RELATED_TO"),
-            weight=float(rel.get("weight", 1.0)),
+            from_id=rel["from_id"],
+            from_label=rel["from_label"],
+            to_id=rel["to_id"],
+            to_label=rel["to_label"],
+            rel_type=rel["type"],
+            weight=rel["weight"],
         )
         rels_created += 1
 
@@ -442,6 +476,8 @@ JSON:"""
         "nodes_created": nodes_created,
         "relationships_created": rels_created,
         "embeddings_stored": embeds_stored,
+        "dropped": checked.dropped,
+        "fields_cleared": checked.fields_cleared,
         "source": source_key,
     })
 
@@ -589,6 +625,9 @@ _agent = RegistryAgent(
 @app.entrypoint
 async def handle(payload: dict) -> AsyncIterator | dict:
     token = _sandbox_log.set([])
+    # The caller every write tool checks; read once, from the verified block only.
+    caller = verified_auth(payload) if isinstance(payload, dict) else None
+    auth_token = _caller_auth.set(caller)
     try:
         if isinstance(payload, dict):
             input_text = (
@@ -619,7 +658,7 @@ async def handle(payload: dict) -> AsyncIterator | dict:
                 agent_name="Graph Builder",
                 model_id=_agent.model_id,
                 ctx_var=_current_ctx,
-                scoped_vars=[(_sandbox_log, [])],
+                scoped_vars=[(_sandbox_log, []), (_caller_auth, caller)],
             )
 
         # ── Sprint 2 instrumentation ─────────────────────────────────────────
@@ -677,6 +716,7 @@ async def handle(payload: dict) -> AsyncIterator | dict:
         return attach_usage(response, ctx, _agent.model_id)
     finally:
         _sandbox_log.reset(token)
+        _caller_auth.reset(auth_token)
 
 
 if __name__ == "__main__":
