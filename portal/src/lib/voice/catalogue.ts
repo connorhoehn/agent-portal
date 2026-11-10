@@ -224,7 +224,7 @@ export const LIST_KINDS: Readonly<Record<string, readonly string[]>> = {
 
 /** The parts `get` may read of a record, per tenant (the union of that tenant's kinds' parts). */
 export const GET_PARTS: Readonly<Record<string, readonly string[]>> = {
-  orgiq: ['work', 'decisions', 'activity', 'documents', 'brief', 'comments', 'criteria', 'history', 'runs', 'steps', 'versions', 'applications', 'evaluations', 'evidence', 'members', 'transcript'],
+  orgiq: ['work', 'decisions', 'activity', 'documents', 'runs', 'brief', 'comments', 'criteria', 'history', 'steps', 'versions', 'applications', 'evaluations', 'evidence', 'members', 'transcript'],
   social: ['members', 'recent', 'activity', 'transcript'],
   assessment: ['evidence', 'exceptions', 'recommendations', 'stories', 'members', 'activity', 'transcript'],
   pipelines: ['steps', 'members', 'activity', 'transcript'],
@@ -705,7 +705,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
         publish: { type: 'boolean', description: 'report: true publishes the program report to its readers.' },
       }),
     }, ['ref', 'fields']),
-    kind: 'action', backing: 'work', confirm: true, confirmBy: 'voice', sayToConfirm: 'save it', action: null, says: 'Changing that once you confirm.', tenants: ['orgiq', 'social', 'assessment', 'pipelines', 'access'],
+    kind: 'action', backing: 'work', confirm: true, confirmBy: 'voice', clickFor: { 'fields.status': ['cancelled'] }, sayToConfirm: 'save it', action: null, says: 'Changing that once you confirm.', tenants: ['orgiq', 'social', 'assessment', 'pipelines', 'access'],
   },
   {
     name: 'access_request_status',

@@ -1075,6 +1075,75 @@ async function getWorkItem(id: string, ctx: ToolContext): Promise<ToolResult> {
   }, `${w.title}: ${said(w.status)}`), line);
 }
 
+// ── agent runs (coverage, 10 November): the initiative's Agents tab ─────────────────────────────────────────────────
+
+/** A run as the Agents tab reads it (GET /api/bots/initiative-runs?orgProjectId=). */
+interface RunRow { id: string; trigger?: string; workItemId?: string | null; status?: string; costUsd?: number | null; startedAt?: string; finishedAt?: string | null; outcome?: { reason?: string; prUrl?: string | null } | null }
+
+const runHref = (initiativeId: string, r: RunRow) => (r.workItemId
+  ? `/iq/projects/${encodeURIComponent(initiativeId)}?item=${encodeURIComponent(r.workItemId)}` : `/iq/projects/${encodeURIComponent(initiativeId)}?tab=agents`);
+/** A run said: status, cost when the route gave one, and its outcome line. */
+const runLine = (r: RunRow) => `${said(r.status)}${typeof r.costUsd === 'number' ? `, ${usd(r.costUsd)}` : ''}${r.outcome?.reason ? `: ${r.outcome.reason}` : ''}`;
+
+async function readRuns(ctx: ToolContext, initiativeId: string): Promise<{ runs: RunRow[] } | { result: ToolResult }> {
+  const read = await readJson<{ runs?: RunRow[] }>(ctx, `/api/bots/initiative-runs?${qs({ orgProjectId: initiativeId })}`);
+  if (!read.ok) return { result: read.status === 404 ? refused('I found no initiative with that ref that you can read.', { code: 'not-found' }) : readFailure('the agent runs', read.status) };
+  const runs = (read.body.runs ?? []).filter((r) => r && typeof r.id === 'string');
+  return { runs: runs.sort((a, b) => String(b.startedAt ?? '').localeCompare(String(a.startedAt ?? ''))) };
+}
+
+/** `get initiative:<id> | work-item:<id>, part runs`: the Agents tab's runs, newest first, a work item's alone. */
+async function getRuns(kind: 'initiative' | 'work-item', id: string, ctx: ToolContext): Promise<ToolResult> {
+  let initiativeId = id;
+  let item: { id: string; title: string } | null = null;
+  if (kind === 'work-item') {
+    const found = await workItemRow(ctx, id);
+    if ('result' in found) return found.result;
+    if (!found.row.projectId) return refused('That work item belongs to no initiative, so it has no agent runs.', { code: 'not-on-initiative' });
+    initiativeId = found.row.projectId;
+    item = { id: found.row.id, title: found.row.title };
+  }
+  const read = await readRuns(ctx, initiativeId);
+  if ('result' in read) return read.result;
+  const all = item ? read.runs.filter((r) => r.workItemId === item!.id) : read.runs;
+  const rows = all.slice(0, MAX_ROWS);
+  ctx.results?.keep(rows.map((r) => ({ ref: cap(`agent-run:${r.id}`), title: r.outcome?.reason ?? `${r.trigger ?? 'agent'} run`, href: runHref(initiativeId, r) })));
+  const where = item ? `"${item.title}"` : (pageInitiative(ctx)?.id === initiativeId ? pageInitiative(ctx)!.title : 'the initiative');
+  const res = done('record_part', {
+    ref: `${kind}:${id}`, part: 'runs', count: all.length,
+    rows: rows.map((r) => ({
+      ref: `agent-run:${r.id}`, title: r.outcome?.reason ?? `${r.trigger ?? 'agent'} run`, status: r.status,
+      subtitle: [r.trigger, typeof r.costUsd === 'number' ? usd(r.costUsd) : null, r.outcome?.prUrl ? 'PR open' : null].filter(Boolean).join(' · ') || undefined,
+      at: r.startedAt, href: runHref(initiativeId, r),
+    })),
+    ...(rows.length ? { read: 'get reads a run by its ref; open goes to its page.' } : {}),
+  }, all.length ? `${plural(all.length, 'run')} on ${where}` : `No agent runs on ${where}`);
+  return spoken(res, all.length ? `${plural(all.length, 'agent run')} on ${where}; latest ${runLine(all[0]!)}` : `No agent runs on ${where}.`);
+}
+
+/** `get agent-run:<id>`: one run a runs part returned (its initiative from the kept row's page). */
+async function getRun(id: string, ctx: ToolContext): Promise<ToolResult> {
+  const kept = ctx.results?.find(`agent-run:${id}`) ?? null;
+  const initiativeId = decodeURIComponent(/\/iq\/projects\/([^?/#]+)/.exec(kept?.href ?? '')?.[1] ?? '') || pageInitiative(ctx)?.id;
+  if (!initiativeId) return refused('Read the runs of an initiative or a work item first, then ask about one.', { code: 'not-read-yet' });
+  const read = await readRuns(ctx, initiativeId);
+  if ('result' in read) return read.result;
+  const r = read.runs.find((x) => x.id === id);
+  if (!r) return refused('I found no agent run with that ref that you can read.', { code: 'not-found' });
+  let on = 'a scheduled sweep';
+  if (r.workItemId) {
+    const w = await workItemRow(ctx, r.workItemId);
+    on = 'row' in w ? `"${w.row.title}"` : 'its work item';
+  }
+  const res = done('record', {
+    ref: `agent-run:${r.id}`, title: r.outcome?.reason ?? `${r.trigger ?? 'agent'} run`, status: r.status, trigger: r.trigger,
+    ...(typeof r.costUsd === 'number' ? { costUsd: r.costUsd } : {}), startedAt: r.startedAt, ...(r.finishedAt ? { finishedAt: r.finishedAt } : {}),
+    href: runHref(initiativeId, r), ...(r.outcome?.prUrl ? { pr: 'Its PR link is on the work item\'s page; open goes there.' } : {}),
+    ...(r.workItemId ? { rerun: `queue_work dispatch with target "agent-run:${r.id}" runs its work item again.` } : {}),
+  }, `Run on ${on}: ${said(r.status)}`);
+  return spoken(res, `The run on ${on} ${r.status === 'done' ? 'finished' : `is ${said(r.status)}`}${typeof r.costUsd === 'number' ? `, ${usd(r.costUsd)}` : ''}${r.outcome?.reason ? `: ${r.outcome.reason}` : ''}`);
+}
+
 /** `list { kind: 'work-item', filter: { who | sprint | status blocked } }` away from the page's own rows. */
 async function listWork(spec: KindSpec, args: Args, ctx: ToolContext): Promise<ToolResult> {
   const filter = (args['filter'] as Args | undefined) ?? {};
@@ -1149,6 +1218,8 @@ const get: Runner = async (args, ctx) => {
   if (gate) return gate;
   // Coverage (10 November): a work item's Brief tab (its summary, next step and what blocks it) is the item itself.
   if (parsed.kind === 'work-item' && (args['part'] == null || args['part'] === 'brief')) return getWorkItem(parsed.id, ctx);
+  if ((parsed.kind === 'initiative' || parsed.kind === 'work-item') && args['part'] === 'runs') return getRuns(parsed.kind, parsed.id, ctx);
+  if (parsed.kind === 'agent-run') return getRun(parsed.id, ctx);
   const partName = typeof args['part'] === 'string' ? args['part'] : spec.get ? undefined : Object.keys(spec.parts ?? {})[0];
   if (partName && !getParts(ctx.tenant).includes(partName)) return refused(`There is no "${partName}" part here.`);
   const part = partName ? spec.parts?.[partName] : undefined;
@@ -2212,7 +2283,9 @@ export function socialGrantRefusal(ctx: Pick<ToolContext, 'tenant' | 'socialRequ
 /** Who may answer this call's card (G40): the catalogue's policy, click-only for the argument values `clickFor` names. */
 export function confirmModeOf(call: PreparedCall): 'voice' | 'click' {
   if (call.spec.confirmBy === 'click') return 'click';
-  return Object.entries(call.spec.clickFor ?? {}).some(([arg, values]) => values.includes(String(call.args[arg]))) ? 'click' : 'voice';
+  // A dotted key names a nested argument (update's `fields.status`: a cancel is click-only).
+  const at = (path: string): unknown => path.split('.').reduce<unknown>((o, k) => (o && typeof o === 'object' ? (o as Rec)[k] : undefined), call.args);
+  return Object.entries(call.spec.clickFor ?? {}).some(([arg, values]) => values.includes(String(at(arg)))) ? 'click' : 'voice';
 }
 
 /** The line the voice asks with when the card opens (G40): "Say confirm to send.", or for a click-only card, "Click confirm on the card to go ahead." */

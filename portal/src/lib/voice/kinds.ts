@@ -257,6 +257,8 @@ const ORGIQ: readonly KindSpec[] = [
       decisions: { path: '/api/graph/projects/:id/decisions', kind: 'decision' },
       activity: { path: '/api/graph/projects/:id/activity' },
       documents: { path: '/api/graph/projects/:projectId/workspace-documents', kind: 'document' },
+      // Coverage (10 November): its Agents tab's runs (GET /api/bots/initiative-runs), read in tools.ts (getRuns).
+      runs: {},
     },
     subtitle: (r) => (r['ownerName'] ? `Owner: ${String(r['ownerName'])}` : undefined), at: ['lastActivityAt', 'createdAt'],
     href: (id) => `/iq/projects/${enc(id)}`,
@@ -270,9 +272,16 @@ const ORGIQ: readonly KindSpec[] = [
       brief: {}, comments: { path: '/api/graph/work-items/:id/comments' }, criteria: { path: '/api/graph/work-items/:id/criteria', title: 'text', status: (r) => (r['done'] === true ? 'done' : 'open') },
       history: { path: '/api/graph/work-items/:id/comments', key: 'comments', title: 'body', subtitle: (r) => (r['isSystem'] === true ? 'the board' : r['authorName']), at: 'createdAt', newestFirst: 'createdAt' },
       documents: { path: '/api/graph/work-items/:id/documents', kind: 'document' },
+      runs: {},
     },
     subtitle: (r) => [r['key'], r['assigneeName']].filter(Boolean).join(' · ') || undefined,
     href: (_id, r) => (typeof r['projectId'] === 'string' ? `/iq/projects/${enc(r['projectId'])}` : undefined),
+  },
+  {
+    // Coverage (10 November): an agent run on an initiative's Agents tab, read through the `runs` part of the
+    // initiative or a work item, then get by ref (tools.ts getRun); its page is its work item's, else the Agents tab.
+    kind: 'agent-run', label: 'agent runs', one: 'agent run',
+    parts: {},
   },
   {
     // Read through an initiative's or a work item's documents part, then get by ref; no flat list route.

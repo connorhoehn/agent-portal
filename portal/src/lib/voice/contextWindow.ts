@@ -217,9 +217,11 @@ export function briefOutput(tool: string, args: unknown, output: Record<string, 
   const high = rows.filter((r) => /^(high|urgent|critical|p0|p1)$/i.test(String(r['priority'] ?? ''))).length;
   const names = top.map((r) => shortName(r['title'] ?? r['ref']));
   const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0];
-  const say = tool === 'search'
+  // A runner's own line (a part's count and its latest: coverage, 10 November) stands; else the count and top names.
+  const own = typeof output['say'] === 'string' && output['say'].trim() ? output['say'] : null;
+  const say = own ?? (tool === 'search'
     ? searchSay(output, total, names[0]!)
-    : `${total} ${labelOf(output, total)}${high ? `, ${high} high priority` : ''}: ${list}${more ? `, and ${more} more` : ''}.`;
+    : `${total} ${labelOf(output, total)}${high ? `, ${high} high priority` : ''}: ${list}${more ? `, and ${more} more` : ''}.`);
   return { ...output, rows: top, count: total, more, say, detail: 'Pass detail true to get every row; only when the user asks for all of them.' };
 }
 

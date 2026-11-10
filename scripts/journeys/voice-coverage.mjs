@@ -294,7 +294,54 @@ const C2B = {
   },
 };
 
-const CAPABILITIES = { C1, C2, C2B };
+const GET = { ref: null, part: null, detail: null };
+const QUEUE = { kind: null, target: null, note: null, model: null, rows: null, scope: null, focus: null };
+
+/** C3: runs and agents on Auth Migration (Nora, who may dispatch). */
+const C3 = {
+  title: 'Agent runs and a re-run', persona: 'nora',
+  async run(s, page) {
+    await s('voice: "What have the agents run on this initiative?", "On the logout bug?", "Tell me about that run."', async () => {
+      await go(page, `${INITIATIVE}?tab=agents`);
+      await waitText(page, '[data-testid=initiative-header]', /Auth Migration/);
+      await startVoice(page, [
+        { said: 'What have the agents run on this initiative?', call: { name: 'get', arguments: { ...GET, ref: `initiative:${P}`, part: 'runs' } } },
+        { said: 'And on the logout bug?', call: { name: 'get', arguments: { ...GET, ref: `work-item:${BUG_ID}`, part: 'runs' } } },
+        { said: 'Tell me about that run.', call: { name: 'get', arguments: { ...GET, ref: 'agent-run:run-mkt-auth-e2-b3' } } },
+      ]);
+      const runs = (await json(page, `/api/bots/initiative-runs?orgProjectId=${P}`)).runs;
+      const all = await nthOutput(page, 1);
+      const a = terseSay(all, 'initiative runs', new RegExp(`^${runs.length} agent runs on Auth Migration; latest `));
+      check(all.rows.every((r) => /^agent-run:/.test(r.ref ?? '')), 'a run row carries no ref to read or open it by');
+      const b = terseSay(await nthOutput(page, 2), 'work item runs', `1 agent run on "${BUG}"; latest done, $0.96: traced the logout path that leaves the legacy shim cookie alive.`);
+      const c = terseSay(await nthOutput(page, 3), 'one run', `The run on "${BUG}" finished, $0.96: traced the logout path that leaves the legacy shim cookie alive.`);
+      return { say: [a, b, c] };
+    });
+    await s('"Run it again." then "Confirm.": the drawer\'s dispatch of its work item', async () => {
+      await stopVoice(page);
+      await go(page, `${INITIATIVE}?tab=work&item=${BUG_ID}`);
+      await waitText(page, '[data-testid=explorer-layout-pane]', new RegExp(BUG));
+      const sent = page.waitForResponse((r) => r.url().includes('/api/bots/dispatch-work'), { timeout: 30000 });
+      await startVoice(page, [
+        { said: 'What has the agent run on the logout bug?', call: { name: 'get', arguments: { ...GET, ref: `work-item:${BUG_ID}`, part: 'runs' } } },
+        { said: 'Run it again.', call: { name: 'queue_work', arguments: { ...QUEUE, kind: 'dispatch', target: 'agent-run:run-mkt-auth-e2-b3' } } },
+        { said: 'Confirm.', on: 'card' },
+      ]);
+      await nthOutput(page, 1);
+      await page.getByTestId('voice-confirm-card').waitFor({ timeout: 15000 })
+        .catch(async () => { throw new StepFailure(`no card; the voice results: ${JSON.stringify((await voiceOutputs(page)).slice(1)).slice(0, 400)}`); });
+      const card = await text(page, '[data-testid=voice-confirm-card]');
+      check(card.includes(`Dispatch "${BUG}"`), `the card is not the drawer's dispatch: ${card.slice(0, 200)}`);
+      const r = await sent;
+      check(r.status() === 202, `POST /api/bots/dispatch-work answered ${r.status()}`);
+      const say = terseSay(await nthOutput(page, 2, 20000), 'queue_work re-run', `"${BUG}": queued.`);
+      await stopVoice(page);
+      return { say: [say] };
+    });
+  },
+};
+
+const CAPABILITIES = { C1, C2, C2B, C3 };
 
 // ── the run ──────────────────────────────────────────────────────────────────
 

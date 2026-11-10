@@ -83,7 +83,7 @@ const VARIANTS: Record<string, unknown[]> = {
     { kind: 'work-item', scope: 'this-page' }, { kind: 'decision', scope: 'this-page' },
     // Coverage (10 November): work items by owner, sprint and blocked, on the page and through the board.
     { kind: 'work-item', scope: 'this-page', filter: { who: 'Nobody Here' } }, { kind: 'work-item', scope: 'this-page', filter: { sprint: 'last' } }, { kind: 'work-item', filter: { sprint: 'Sprint Zero' } }, { kind: 'work-item', filter: { status: 'blocked' } }],
-  get: [{ ref: '1' }, { ref: 'initiative:p-unknown' }, { ref: 'bot:b-x', part: 'runs' }, { ref: 'person:p-sana-x' }, { ref: 'Sana Alpha Initiative' },
+  get: [{ ref: '1' }, { ref: 'initiative:p-unknown', part: 'runs' }, { ref: 'work-item:w-sana-1', part: 'runs' }, { ref: 'agent-run:r-sana-1' }, { ref: 'initiative:p-unknown' }, { ref: 'bot:b-x', part: 'runs' }, { ref: 'person:p-sana-x' }, { ref: 'Sana Alpha Initiative' },
     { ref: 'work-item:w-sana-1' }, { ref: 'work-item:w-not-theirs', part: 'brief' }, { ref: 'work-item:w-sana-1', part: 'history' }],
   computer: [{ action: 'start', initiatives: ['Unknown Initiative'] }, { action: 'open-shell', computer: 'unknown-box' },
     { action: 'run', computer: 'unknown-box', phrase: 'status' }, { action: 'run', computer: 'unknown-box', phrase: 'commits-since', since: 'soon' },
@@ -96,7 +96,7 @@ const VARIANTS: Record<string, unknown[]> = {
   call: [{ action: 'start', target: { kind: 'dm', name: 'Ada' } }, { action: 'join' }, { action: 'join', target: { kind: 'channel', name: 'nowhere' } }, { action: 'start' }],
   set_status: [{ status: 'away', message: 'out' }],
   access_request_status: [{ scope: 'approvals' }, { query: 'budget' }],
-  queue_work: [{ kind: 'sweep', target: 'vibes' }, { kind: 'bot-run', target: 'nightly' }, { kind: 'bot-run', target: 'unknown thing' }, { kind: 'bot-run', target: 'sana parked' }, { kind: 'pipeline', target: 'ingest' },
+  queue_work: [{ kind: 'dispatch', target: 'agent-run:r-sana-1' }, { kind: 'sweep', target: 'vibes' }, { kind: 'bot-run', target: 'nightly' }, { kind: 'bot-run', target: 'unknown thing' }, { kind: 'bot-run', target: 'sana parked' }, { kind: 'pipeline', target: 'ingest' },
     // V2-9: the new kinds, driven to an ambiguity (two of the persona's own rows), nothing found, or the gate.
     { kind: 'job', target: 'sana fix' }, { kind: 'job', target: 'payroll' }, { kind: 'dispatch', target: 'nothing like it' }, { kind: 'dispatch', target: 'Initiative', model: 'gpt-9' },
     { kind: 'finding-promote', target: 'x' }, { kind: 'finding-analyze', target: '3' }, { kind: 'change-address', target: 'anything' }, { kind: 'change-rereview', target: 'anything' },

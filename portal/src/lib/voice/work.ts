@@ -279,6 +279,16 @@ async function planKind(kind: QueueWorkKind, target: string, args: VoiceToolArgs
       }));
     }
     case 'dispatch': {
+      // Coverage (10 November): "run it again" on a run a runs part returned is its work item, dispatched afresh.
+      const run = /^agent-run:/.test(target) ? ctx.results?.find(target) ?? null : null;
+      if (/^agent-run:/.test(target)) {
+        const item = /[?&]item=([^&#]+)/.exec(run?.href ?? '')?.[1];
+        if (!run) return { result: refused('Read the runs of an initiative or a work item first, then ask to run one again.', { code: 'not-read-yet' }) };
+        if (!item) return { result: refused('That run was a scheduled sweep, not a work item; run the sweep instead.', { code: 'not-dispatchable' }) };
+        // Its initiative's own tree and defaults, as the drawer dispatches it (the run's page names the initiative).
+        const initiativeId = decodeURIComponent(/\/iq\/projects\/([^?/#]+)/.exec(run.href)?.[1] ?? '');
+        return planDispatch(ctx, [{ ref: `work-item:${decodeURIComponent(item)}`, title: 'that run\'s work item' }], args, note, initiativeId || undefined);
+      }
       const found = await findByName(ctx, 'work-item', target);
       if ('result' in found) return found;
       // G22: the item's initiative's defaults, as the page's drawer has them, on one card.

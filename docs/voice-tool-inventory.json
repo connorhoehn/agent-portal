@@ -165,12 +165,12 @@
     "navigate": 0,
     "internal": 0,
     "dev": 0,
-    "covered": 13,
+    "covered": 14,
     "v2": {
-     "read": 8,
+     "read": 9,
      "never": 9,
      "confirm": 5,
-     "not-yet": 3
+     "not-yet": 2
     }
    },
    "runbooks": {
@@ -373,16 +373,16 @@
   "peopleRoutes": 804,
   "peopleReads": 443,
   "peopleWrites": 361,
-  "coveredRoutes": 235,
-  "coveredReads": 161,
+  "coveredRoutes": 236,
+  "coveredReads": 162,
   "coveredWrites": 74,
   "coveredPages": 109,
   "pagesWithPageId": 109,
   "v1Tools": 16,
   "v2Tools": 15,
   "v2Decisions": {
-   "not-yet": 172,
-   "read": 161,
+   "not-yet": 171,
+   "read": 162,
    "never": 369,
    "confirm": 73,
    "n/a": 28,
@@ -393,7 +393,7 @@
    "list": 55,
    "create": 12,
    "update": 20,
-   "get": 55,
+   "get": 56,
    "decide": 14,
    "summary": 15,
    "queue_work": 34,
@@ -405,7 +405,7 @@
   },
   "v2Backlog": {
    "create": 11,
-   "list": 66,
+   "list": 65,
    "queue_work": 6,
    "decide": 15,
    "get": 34,
@@ -1061,7 +1061,7 @@
     "pipelines",
     "access"
    ],
-   "mapsTo": "GET /api/graph/projects/:id, GET /api/graph/projects/:id/work, GET /api/graph/projects/:id/decisions, GET /api/graph/projects/:id/activity, GET /api/graph/projects/:projectId/workspace-documents, GET /api/graph/work-items/:id/comments, GET /api/graph/work-items/:id/criteria, GET /api/graph/work-items/:id/documents, GET /api/graph/documents/:documentId, GET /api/graph/decisions/:id, GET /api/designs/:id, GET /api/work/jobs/:id, GET /api/lab/consults/:id, GET /api/bots/:id, GET /api/bots/:id/runs, GET /api/runs/:id, GET /api/runs/:id/steps, GET /api/environments/:id, GET /api/environments/:id/runs, GET /api/runbooks/:id, GET /api/runbooks/:id/versions, GET /api/runbooks/:id/applications, GET /api/runbooks/proposals/:pid, GET /api/sdlc/changes/:id, GET /api/sdlc/changes/:id/evaluations, GET /api/initiative-decks/:id, GET /api/agent-projects/:id/runs, GET /api/graph/people/:personId, GET /api/graph/people/:personId/work, GET /api/graph/people/:personId/evidence, GET /api/library/:id, GET /api/runs/:ref/brief, GET /api/social/plane/teams/:teamId, GET /api/social/plane/rooms/:slug, GET /api/social/plane/rooms/:slug/activity, GET /api/social/plane/recordings/:recordingId/transcript, GET /api/social/channels/:slug, GET /api/social/teams/:teamId, GET /api/social/rooms/:slug, GET /api/social/rooms/:slug/activity, GET /api/social/recordings/:recordingId/transcript, GET /api/assessment/teams/:id, GET /api/assessment/teams/:id/evidence, GET /api/assessment/teams/:id/exceptions, GET /api/assessment/teams/:id/recommendations, GET /api/assessment/teams/:id/stories, GET /api/assessment/runs/:runId, GET /api/assessment/feedback/:taskId, GET /api/assessment/decks/:id, GET /api/pipelines/runs/:id, GET /api/pipelines/runs/:id/steps, GET /api/pipelines/definitions/:id, GET /api/pipelines/decks/:id, GET /api/access/requests/:id, GET /api/access/reviews/:id",
+   "mapsTo": "GET /api/graph/projects/:id, GET /api/graph/projects/:id/work, GET /api/graph/projects/:id/decisions, GET /api/graph/projects/:id/activity, GET /api/graph/projects/:projectId/workspace-documents, GET /api/graph/work-items/:id/comments, GET /api/graph/work-items/:id/criteria, GET /api/graph/work-items/:id/documents, GET /api/bots/initiative-runs?orgProjectId=, GET /api/graph/documents/:documentId, GET /api/graph/decisions/:id, GET /api/designs/:id, GET /api/work/jobs/:id, GET /api/lab/consults/:id, GET /api/bots/:id, GET /api/bots/:id/runs, GET /api/runs/:id, GET /api/runs/:id/steps, GET /api/environments/:id, GET /api/environments/:id/runs, GET /api/runbooks/:id, GET /api/runbooks/:id/versions, GET /api/runbooks/:id/applications, GET /api/runbooks/proposals/:pid, GET /api/sdlc/changes/:id, GET /api/sdlc/changes/:id/evaluations, GET /api/initiative-decks/:id, GET /api/agent-projects/:id/runs, GET /api/graph/people/:personId, GET /api/graph/people/:personId/work, GET /api/graph/people/:personId/evidence, GET /api/library/:id, GET /api/runs/:ref/brief, GET /api/social/plane/teams/:teamId, GET /api/social/plane/rooms/:slug, GET /api/social/plane/rooms/:slug/activity, GET /api/social/plane/recordings/:recordingId/transcript, GET /api/social/channels/:slug, GET /api/social/teams/:teamId, GET /api/social/rooms/:slug, GET /api/social/rooms/:slug/activity, GET /api/social/recordings/:recordingId/transcript, GET /api/assessment/teams/:id, GET /api/assessment/teams/:id/evidence, GET /api/assessment/teams/:id/exceptions, GET /api/assessment/teams/:id/recommendations, GET /api/assessment/teams/:id/stories, GET /api/assessment/runs/:runId, GET /api/assessment/feedback/:taskId, GET /api/assessment/decks/:id, GET /api/pipelines/runs/:id, GET /api/pipelines/runs/:id/steps, GET /api/pipelines/definitions/:id, GET /api/pipelines/decks/:id, GET /api/access/requests/:id, GET /api/access/reviews/:id",
    "routes": [
     {
      "method": "GET",
@@ -1094,6 +1094,10 @@
     {
      "method": "GET",
      "path": "/api/graph/work-items/:id/documents"
+    },
+    {
+     "method": "GET",
+     "path": "/api/bots/initiative-runs"
     },
     {
      "method": "GET",
@@ -4069,7 +4073,7 @@
   {"method":"GET","path":"/api/bots/active-runs","source":"src/routes/bots.ts:553","declaredAt":"src/routes/bots.ts:553","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"bots","cedarAction":null,"actions":[],"floor":["ActiveRuns"],"writePolicy":null,"pageId":null,"coveredBy":["summary"],"v2":{"decision":"read","tool":"summary","note":"mapsTo"}},
   {"method":"POST","path":"/api/bots/dispatch-work","source":"src/routes/bots.ts:225","declaredAt":"src/routes/bots.ts:225","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"bots","cedarAction":"DispatchAgentRun","actions":["DispatchAgentRun"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"refused:fires","pageId":null,"coveredBy":["queue_work"],"v2":{"decision":"confirm","tool":"queue_work","note":"mapsTo"}},
   {"method":"GET","path":"/api/bots/estimate","source":"src/routes/bots.ts:212","declaredAt":"src/routes/bots.ts:212","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"bots","cedarAction":"DispatchAgentRun","actions":[],"readRoles":["org-leader","hr-admin"],"readElseAction":"DispatchAgentRun","holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":["queue_work"],"v2":{"decision":"read","tool":"queue_work","note":"mapsTo"}},
-  {"method":"GET","path":"/api/bots/initiative-runs","source":"src/routes/bots.ts:591","declaredAt":"src/routes/bots.ts:591","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"bots","cedarAction":null,"actions":[],"floor":["InitiativeRuns"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
+  {"method":"GET","path":"/api/bots/initiative-runs","source":"src/routes/bots.ts:591","declaredAt":"src/routes/bots.ts:591","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"bots","cedarAction":null,"actions":[],"floor":["InitiativeRuns"],"writePolicy":null,"pageId":null,"coveredBy":["get"],"v2":{"decision":"read","tool":"get","note":"mapsTo"}},
   {"method":"GET","path":"/api/bots/marketplace-runs","source":"src/routes/bots.ts:573","declaredAt":"src/routes/bots.ts:573","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"bots","cedarAction":"DispatchAgentRun","actions":[],"readRoles":["org-leader","hr-admin"],"readElseAction":"DispatchAgentRun","holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
   {"method":"GET","path":"/api/bots/runs","source":"src/routes/bots.ts:622","declaredAt":"src/routes/bots.ts:622","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"bots","cedarAction":"ManageBots","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageBots","holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":["summary"],"v2":{"decision":"read","tool":"summary","note":"mapsTo"}},
   {"method":"POST","path":"/api/bots/work-items/:id/estimate","source":"src/routes/bots.ts:486","declaredAt":"src/routes/bots.ts:486","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"bots","cedarAction":"DispatchAgentRun","actions":["DispatchAgentRun"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the dispatch drawer's own drafts and estimates"}},
