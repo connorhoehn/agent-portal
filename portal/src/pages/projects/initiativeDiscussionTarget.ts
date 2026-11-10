@@ -15,6 +15,14 @@
 // channel's own reason ("Join the channel in Social to read and post here.")
 // and the composer cannot post.
 //
+// A viewer with no Social grant cannot read the binding at all, and used to
+// fall back to the old thread, which nobody else reads any more (leftovers 2).
+// The page asks where the discussion lives instead (GET
+// /api/graph/projects/:id/discussion: a public bound channel's slug only), and
+// a bound initiative is `elsewhere`: a read-only notice in the pane ("This
+// initiative's discussion is in #<channel> in Social. You don't have Social
+// access."), the Social access next step, and no thread anywhere.
+//
 // Pure: the page (ProjectDetailPage.tsx) feeds it the binding state.
 
 import { scopeDiscussionChannel } from './scopeDiscussionModel.ts';
@@ -31,7 +39,20 @@ export type DiscussionTarget =
   /** No binding (or no Social grant to read one): the initiative's own thread. */
   | { kind: 'thread'; channel: string; label: string }
   /** Bound: the channel IS the discussion. `joined` false: the viewer is not a member and reads nothing. */
-  | { kind: 'channel'; channel: string; slug: string; label: string; joined: boolean };
+  | { kind: 'channel'; channel: string; slug: string; label: string; joined: boolean }
+  /** Bound, and the viewer has no Social grant: nothing to read or post here, only the notice and the access step. */
+  | { kind: 'elsewhere'; slug: string; label: string; reason: string };
+
+/** What the discussion-home read answered (GET /api/graph/projects/:id/discussion), for a viewer with no Social grant. */
+export interface HomeRead {
+  data: { channel: { slug: string } | null } | null;
+  error: string | null;
+}
+
+/** The notice a viewer with no Social access reads where the thread used to be (and the voice's refusal). */
+export function noSocialAccessReason(label: string): string {
+  return `This initiative's discussion is in ${label} in Social. You don't have Social access.`;
+}
 
 export const NOT_A_MEMBER_REASON = 'Join the channel in Social to read and post here.';
 
@@ -40,9 +61,18 @@ export function initiativeDiscussionTarget(o: {
   /** The viewer holds a Social grant, so the shell reads the binding. Without one there is none to read. */
   socialAvailable: boolean;
   binding: BindingRead | null;
+  /** Without a Social grant: where the discussion lives (the page reads it only then). */
+  home?: HomeRead | null;
 }): DiscussionTarget {
   const thread: DiscussionTarget = { kind: 'thread', channel: scopeDiscussionChannel(o.projectId), label: 'Initiative discussion' };
-  if (!o.socialAvailable || !o.binding) return thread;
+  if (!o.socialAvailable) {
+    // A failed read keeps today's thread rather than no discussion at all, as a failed binding read does.
+    if (!o.home || o.home.error) return thread;
+    if (!o.home.data) return { kind: 'loading' };
+    const slug = o.home.data.channel?.slug;
+    return slug ? { kind: 'elsewhere', slug, label: `#${slug}`, reason: noSocialAccessReason(`#${slug}`) } : thread;
+  }
+  if (!o.binding) return thread;
   // A failed binding read keeps today's thread rather than no discussion at all.
   if (o.binding.error) return thread;
   if (!o.binding.data) return { kind: 'loading' };
@@ -59,6 +89,7 @@ export function initiativeDiscussionTarget(o: {
  */
 export function discussionAccess(t: DiscussionTarget, can: { postMessage: boolean; dispatch: boolean }): { maySend: boolean; reason: string | null } {
   if (t.kind === 'loading') return { maySend: false, reason: 'The initiative discussion is still loading.' };
+  if (t.kind === 'elsewhere') return { maySend: false, reason: t.reason };
   if (t.kind === 'thread') return { maySend: can.dispatch, reason: can.dispatch ? null : 'You can read messages. Your current role cannot post to this discussion.' };
   if (!t.joined) return { maySend: false, reason: `You are not a member of ${t.label}. ${NOT_A_MEMBER_REASON}` };
   return { maySend: can.postMessage, reason: can.postMessage ? null : `You can read ${t.label}. Your current role cannot post there.` };

@@ -93,6 +93,19 @@ export function accessNextStep(session: AccessSession | null | undefined, roles:
   return { kind: 'ask', label: `Ask ${ASK_WHOM[session.tenant] ?? 'an admin'} for ${rolesPhrase(gate)}` };
 }
 
+/**
+ * The next step for a viewer with no grant at all in another workspace (an initiative's discussion in Social,
+ * leftovers 2): request the catalog item that grants it through the quick request when the catalog offers one
+ * (`itemId`, e.g. Social's `requestItemId` from /api/social/plane/capabilities) and the viewer can file it,
+ * else ask that workspace's steward.
+ */
+export function grantRequestNextStep(tenant: string, itemId: string | null | undefined, opts: { canRequest?: boolean } = {}): AccessNextStep {
+  const name = workspaceName(tenant);
+  const role = itemId?.match(/^role:[^:]+:(.+)$/)?.[1] ?? null;
+  if (itemId && role && opts.canRequest !== false) return { kind: 'request', role, itemId, label: `Request ${name} access` };
+  return { kind: 'ask', label: `Ask ${ASK_WHOM[tenant] ?? 'an admin'} for ${name} access` };
+}
+
 /** Whether the ⌘K palette offers a gated page: the viewer opens it, or can switch into a role that does (the rail lists current-role pages only). */
 export function offerPage(session: AccessSession | null | undefined, roles: readonly string[] | null | undefined): { offer: boolean; switchTo: string | null } {
   if (!session) return { offer: false, switchTo: null };

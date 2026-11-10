@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { REQUESTABLE_ROLES, accessNextStep, noAccessReason, offerPage, otherWorkspaceRefusal, roleOpens, rolesPhrase } from '../pageAccess.ts';
+import { REQUESTABLE_ROLES, accessNextStep, grantRequestNextStep, noAccessReason, offerPage, otherWorkspaceRefusal, roleOpens, rolesPhrase } from '../pageAccess.ts';
 import { pageRefusal } from '../voice/tools.ts';
 import { refusalNext } from '../voice/refusals.ts';
 
@@ -15,6 +15,13 @@ const BUILD = ['hr-admin'];
 const DEMO = { role: 'member', tenant: 'orgiq', switchable: { orgiq: ['member', 'sme', 'program-owner', 'org-leader', 'hr-admin', 'admin'] } };
 const THEO = { role: 'member', tenant: 'orgiq', switchable: { orgiq: ['member'], social: ['participant'] } };
 const SIENNA = { role: 'member', tenant: 'orgiq', switchable: { orgiq: ['org-leader', 'member'] } };
+
+test('no grant in another workspace: request its catalog item when it can be filed, else ask (leftovers 2)', () => {
+  assert.deepEqual(grantRequestNextStep('social', 'role:social:moderator'),
+    { kind: 'request', role: 'moderator', itemId: 'role:social:moderator', label: 'Request Social access' });
+  assert.deepEqual(grantRequestNextStep('social', 'role:social:moderator', { canRequest: false }), { kind: 'ask', label: 'Ask a Social moderator for Social access' });
+  assert.deepEqual(grantRequestNextStep('social', null), { kind: 'ask', label: 'Ask a Social moderator for Social access' });
+});
 
 test('a role that opens the page has no next step; admin passes every gate', () => {
   assert.equal(accessNextStep({ role: 'org-leader', tenant: 'orgiq' }, PLATFORM), null);

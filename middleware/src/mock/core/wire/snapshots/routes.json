@@ -1771,6 +1771,11 @@
       "source": "src/routes/projects.ts:168"
     },
     {
+      "method": "GET",
+      "path": "/api/graph/projects/:id/discussion",
+      "source": "src/routes/work-items.ts:161"
+    },
+    {
       "method": "POST",
       "path": "/api/graph/projects/:id/discussion/comments",
       "source": "src/routes/work-items.ts:154"

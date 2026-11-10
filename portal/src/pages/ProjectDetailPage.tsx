@@ -121,6 +121,7 @@ import { initiativeConversationMessages, type InitiativeConversationFilter } fro
 import { InitiativeDetailsTrigger, type InitiativeFactsInput } from './projects/InitiativeDetailsCard';
 import { useInitiativeSocialChannel } from './projects/InitiativeDiscussion';
 import { NOT_A_MEMBER_REASON, discussionAccess, initiativeDiscussionTarget } from './projects/initiativeDiscussionTarget';
+import { DiscussionElsewhereNotice } from './projects/DiscussionElsewhereNotice';
 import { InitiativeFiles } from './projects/InitiativeFiles';
 import { WORK_EDIT_DENIED_HINT } from './projects/initiativeFilesModel';
 import { useInitiativeListRail } from './projects/InitiativeListRail';
@@ -345,14 +346,20 @@ function ProjectDetailPage() {
   // One conversation per initiative (projects/initiativeDiscussionTarget.ts): bound to a Social channel, the
   // Discussion pane and the composer ARE that channel; unbound, the initiative's own thread.
   const embeddedSocial = useEmbeddedSocial();
-  const discussion = initiativeDiscussionTarget({ projectId: project?.id ?? id ?? '', socialAvailable: !!embeddedSocial?.available, binding: embeddedSocial?.pageChannel ?? null });
+  // Without a Social grant the binding read refuses this viewer: ask where the discussion lives instead (a public
+  // bound channel's slug only), so a bound initiative shows a notice, never the old thread nobody reads (leftovers 2).
+  const discussionHome = useFetch<{ channel: { slug: string } | null }>(!embeddedSocial?.available && id ? `/api/graph/projects/${encodeURIComponent(id)}/discussion` : null);
+  const discussion = initiativeDiscussionTarget({ projectId: project?.id ?? id ?? '', socialAvailable: !!embeddedSocial?.available, binding: embeddedSocial?.pageChannel ?? null,
+    home: { data: discussionHome.data, error: discussionHome.error } });
   // Posting to a channel is Social's question: the plane asks the actor's current Social grants (as the
   // Communication page does embedded), never this tenant's `can()`.
   const socialCaps = useFetch<{ actions: Record<string, boolean> }>(discussion.kind === 'channel' ? '/api/social/plane/capabilities' : null, 60_000);
   const discussionNow = discussionAccess(discussion, { postMessage: !!socialCaps.data?.actions['PostMessage'], dispatch: canDispatch });
   const discussionPending = discussion.kind === 'loading' || (discussion.kind === 'channel' && discussion.joined && !socialCaps.data && !socialCaps.error);
-  // A message said with no target goes to the bound channel (voice `message`).
-  const pageChannel = discussion.kind === 'channel' ? { slug: discussion.slug } : null;
+  // A message said with no target goes to the bound channel (voice `message`); without Social access it is refused
+  // with the pane's own reason (lib/voice/actions.ts planSendChat).
+  const pageChannel = discussion.kind === 'channel' ? { slug: discussion.slug }
+    : discussion.kind === 'elsewhere' ? { slug: discussion.slug, noAccessReason: discussion.reason } : null;
   usePublishPageContext(project && id && decisionRows ? {
     path: pathname, record: { ref: `initiative:${id}`, title: project.name }, rowsLabel: 'decisions', total: decisionRows.length, channel: pageChannel,
     rows: decisionRows.map((d) => ({ ref: `decision:${d.id}`, title: d.topic, status: d.status, href: `/iq/decisions/${encodeURIComponent(d.id)}` })),
@@ -992,7 +999,7 @@ function ProjectDetailPage() {
         discussion={(
           <Stack gap="none" className="h-full min-h-0" data-testid="initiative-live-discussion">
             <Inline gap="sm" justify="between" align="center" className="border-b border-border px-4 py-2">
-              <T size="xs" tone="secondary" data-testid="initiative-discussion-label">{discussion.kind === 'channel' ? `${discussion.label} · the initiative's channel` : 'Initiative channel'}</T>
+              <T size="xs" tone="secondary" data-testid="initiative-discussion-label">{discussion.kind === 'channel' || discussion.kind === 'elsewhere' ? `${discussion.label} · the initiative's channel` : 'Initiative channel'}</T>
               {/* Work-item notes (/comment) live on the initiative thread, so the views filter only that thread. */}
               {discussion.kind === 'thread' && <DropdownMenu trigger={<T as="span" size="xs" weight="medium">View: {conversationFilter === 'all' ? 'All messages' : conversationFilter === 'initiative' ? 'Initiative only' : 'Dialogue'}</T>}
                 triggerLabel="Filter initiative conversation" triggerVariant="link" align="end"
@@ -1005,6 +1012,8 @@ function ProjectDetailPage() {
                   { label: 'Initiative only', checked: conversationFilter === 'initiative', description: 'Messages without work-item context', onSelect: () => setConversationFilter('initiative') },
                 ] }]} />}
             </Inline>
+            {/* No Social access: a read-only notice and the access next step; no thread is mounted (leftovers 2). */}
+            {discussion.kind === 'elsewhere' && <DiscussionElsewhereNotice reason={discussion.reason} />}
             {discussion.kind === 'channel' && !discussion.joined && (
               <EmptyState title={`Not a member of ${discussion.label}`} description={NOT_A_MEMBER_REASON} data-testid="initiative-discussion-not-member" />
             )}

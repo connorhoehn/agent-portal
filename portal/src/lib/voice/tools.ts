@@ -2559,11 +2559,13 @@ export const accessRequestHref = (itemId: string): string => `/access/requests/n
  * plane named the catalog item that grants it. The request page is the Access workspace's, so the dock offers
  * the workspace switch (open `workspaces`) and says that it ends the voice session.
  */
-export function socialGrantRefusal(ctx: Pick<ToolContext, 'tenant' | 'socialRequestItemId'>, fallback: string): ToolResult {
+export function socialGrantRefusal(ctx: Pick<ToolContext, 'tenant' | 'socialRequestItemId'>, fallback: string, reason?: string): ToolResult {
   const item = ctx.tenant !== 'social' ? ctx.socialRequestItemId : null;
   if (!item) return refused(fallback);
+  // `reason` (the page's own notice) replaces the opening sentence; the next step is the same.
+  const why = reason ?? "You don't have Social access here.";
   // G27: where create files access requests the voice offers to file it; elsewhere it opens the request.
-  return refused(createKinds(ctx.tenant).includes('access-request') ? "You don't have Social access here. I can file the access request for you." : "You don't have Social access here. I can open the access request.", {
+  return refused(createKinds(ctx.tenant).includes('access-request') ? `${why} I can file the access request for you.` : `${why} I can open the access request.`, {
     requestItemId: item,
     hint: {
       label: 'Request Social access', href: accessRequestHref(item), item,

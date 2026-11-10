@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { NOT_A_MEMBER_REASON, discussionAccess, initiativeDiscussionTarget } from '../initiativeDiscussionTarget.ts';
+import { NOT_A_MEMBER_REASON, discussionAccess, initiativeDiscussionTarget, noSocialAccessReason } from '../initiativeDiscussionTarget.ts';
 
 const bound = (joined: boolean) => ({ data: { binding: { channel: 'social:ch:auth-migration', slug: 'auth-migration', name: 'Auth migration' }, joined }, error: null });
 
@@ -30,6 +30,25 @@ test('unbound, no Social grant, or an unreadable binding: the initiative\'s own 
   assert.deepEqual(initiativeDiscussionTarget({ projectId: 'p-x', socialAvailable: true, binding: { data: null, error: 'HTTP 500' } }), thread);
   assert.deepEqual(discussionAccess(thread as never, { postMessage: true, dispatch: false }),
     { maySend: false, reason: 'You can read messages. Your current role cannot post to this discussion.' });
+});
+
+test('no Social grant, bound: a read-only notice in the pane, never the old thread (leftovers 2)', () => {
+  const home = (slug: string | null) => ({ data: { channel: slug ? { slug } : null }, error: null });
+  const t = initiativeDiscussionTarget({ projectId: 'p-auth-migration', socialAvailable: false, binding: null, home: home('auth-migration') });
+  assert.deepEqual(t, {
+    kind: 'elsewhere', slug: 'auth-migration', label: '#auth-migration',
+    reason: "This initiative's discussion is in #auth-migration in Social. You don't have Social access.",
+  });
+  assert.equal(noSocialAccessReason('#auth-migration'), (t as { reason: string }).reason);
+  assert.deepEqual(discussionAccess(t, { postMessage: true, dispatch: true }), { maySend: false, reason: (t as { reason: string }).reason },
+    'nothing to post to: the composer offers no initiative thread');
+  // Unbound (or a private channel, which reads as unbound): the initiative's own thread, as before.
+  assert.equal(initiativeDiscussionTarget({ projectId: 'p-x', socialAvailable: false, binding: null, home: home(null) }).kind, 'thread');
+  // While the read is out, nothing is mounted; a failed read keeps the thread.
+  assert.deepEqual(initiativeDiscussionTarget({ projectId: 'p-x', socialAvailable: false, binding: null, home: { data: null, error: null } }), { kind: 'loading' });
+  assert.equal(initiativeDiscussionTarget({ projectId: 'p-x', socialAvailable: false, binding: null, home: { data: null, error: 'HTTP 500' } }).kind, 'thread');
+  // A viewer WITH Social never reads the home: the binding decides, as before.
+  assert.equal(initiativeDiscussionTarget({ projectId: 'p-auth-migration', socialAvailable: true, binding: bound(true), home: home('auth-migration') }).kind, 'channel');
 });
 
 test('while the binding is read, nothing is mounted (never one conversation, then the other)', () => {

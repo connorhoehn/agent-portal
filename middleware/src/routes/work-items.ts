@@ -4,6 +4,7 @@
 //   GET  /api/graph/work                   — cross-project search (label, team, sprint, status, period)
 //   GET  /api/graph/projects/:id/work      — hierarchical work tree for one project
 //   GET  /api/graph/projects/:id/decisions — decisions queue for one project
+//   GET  /api/graph/projects/:id/discussion — where its discussion lives (a public bound channel's slug)
 //   GET  /api/graph/people/:personId/work  — work assigned to a person
 //   POST /api/graph/work-items             — create a new work item
 //   PATCH /api/graph/work-items/:id        — update an existing work item
@@ -64,6 +65,7 @@ import {
 } from '../providers/work-items.js';
 import { getProjectActivitySeries } from '../providers/activity.js';
 import { postInitiativeWorkComment } from '../lib/initiative-comments.js';
+import { discussionHome } from '../lib/initiative-discussion.js';
 
 export const workItemsRouter = Router();
 
@@ -149,6 +151,19 @@ async function parentAllowed(res: Response, initiativeId: string, parentId: unkn
 // contributor, or an org-wide role; requireInitiativeScope), not the
 // DispatchAgentRun write gate. Sprint, owner and status moves keep theirs.
 const commentGate = requireAction('ViewWorkItems');
+
+// GET /api/graph/projects/:id/discussion — where the initiative's discussion
+// lives, for a Work viewer the Social binding read refuses (no Social grant):
+// `{ channel: { slug } | null }`, a public bound channel's slug only, so the
+// page shows "This initiative's discussion is in #<slug> in Social" instead of
+// the old thread nobody reads (lib/initiative-discussion.ts). No message, no
+// membership: nothing of the channel is readable through it.
+workItemsRouter.get('/projects/:id/discussion', commentGate, asyncHandler(async (req, res) => {
+  const id = req.params['id'] as string;
+  if (await parentMissing(res, 'project', id)) return;
+  const home = await discussionHome(id);
+  res.json({ channel: home ? { slug: home.slug } : null });
+}));
 
 // An explicit /comment adds a work note to the persistent initiative dialogue.
 workItemsRouter.post('/projects/:id/discussion/comments', commentGate, asyncHandler(async (req, res) => {

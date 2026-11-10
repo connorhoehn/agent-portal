@@ -621,6 +621,22 @@ test('message on an initiative page whose discussion is a channel: no target goe
   assert.match(nowhere.result.summary, /Say where it goes/);
 });
 
+test('message with no target on a bound initiative this viewer has no Social access to: the pane\'s reason and the access step (leftovers 2)', async () => {
+  const reason = 'This initiative\'s discussion is in #auth-migration in Social. You don\'t have Social access.';
+  const page = () => ({ path: '/iq/projects/p-auth-migration', record: { ref: 'initiative:p-auth-migration', title: 'Auth Migration' }, rows: [], channel: { slug: 'auth-migration', noAccessReason: reason } });
+  const { fetch, log } = fakeFetch([]);
+  const r = await confirmAndRun('message', { target: null, text: 'Rehearsal Thursday.', thread: null, attach: null },
+    toolContext({ fetch, social: null, page, socialRequestItemId: 'role:social:moderator' }));
+  assert.equal(r.card, null);
+  assert.equal(r.result.outcome, 'refused');
+  assert.match(String(r.result.output['reason']), /^This initiative's discussion is in #auth-migration in Social\. You don't have Social access\. I can (file|open) the access/, 'the reason, then the step (cut at 120 by shapeOutput)');
+  assert.equal(r.result.output['requestItemId'], 'role:social:moderator');
+  assert.deepEqual(log, [], 'nothing read, nothing posted');
+  // Nothing requestable: the same reason, and who to ask.
+  const ask = await confirmAndRun('message', { target: null, text: 'hi', thread: null, attach: null }, toolContext({ fetch, social: null, page }));
+  assert.match(String(ask.result.output['reason'] ?? ask.result.summary), /You don't have Social access\. Ask a Social moderator for /);
+});
+
 test('message (G46): a channel the user never joined, or a socket that is down, refuses before any card; a failed post names its code', async () => {
   const notJoined = { kind: 'channel', match: { id: 'general', name: 'General', channelId: 'general', channel: 'social:ch:general', joined: false }, candidates: [{ id: 'general', name: 'General' }] };
   const { fetch } = fakeFetch([route('GET', '/api/social/plane/resolve', 200, notJoined)]);

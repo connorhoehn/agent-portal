@@ -79,6 +79,7 @@ import {
 import { messageAvailability } from '../../pages/search/searchMessageModel.ts';
 import type { RosterUser } from '../conversationCallModel.ts';
 import { inboundRef } from './inbound.ts';
+import { grantRequestNextStep } from '../pageAccess.ts';
 import { matchByName, WORK_PLANNERS, WORK_RUNNERS } from './work.ts';
 import { RECORD_PLANNERS, RECORD_RUNNERS } from './records.ts';
 
@@ -726,6 +727,11 @@ const sendFailure = (err: unknown): string => {
 
 const planSendChat: VoiceToolPlanner = async (args, ctx) => {
   const social = ctx.social;
+  // An initiative whose discussion is a channel this viewer cannot reach (no Social access): a message with no target
+  // is refused with the page's own notice and the Social access next step, never posted to the old thread.
+  const unreachable = ctx.page?.()?.channel?.noAccessReason ?? null;
+  const untargeted = args['target'] == null && !(typeof args['thread'] === 'string' && args['thread'].trim());
+  if (unreachable && untargeted) return { result: socialGrantRefusal(ctx, `${unreachable} ${grantRequestNextStep('social', null).label}.`, unreachable) };
   if (!social) return { result: socialGrantRefusal(ctx, 'Messages go through Social, which this session cannot reach.') };
   // G46: the socket is down, so no card: the voice says Social is not connected instead of a card whose post fails.
   if (social.unavailable) return { result: refused(social.unavailable, { code: 'not-connected' }) };

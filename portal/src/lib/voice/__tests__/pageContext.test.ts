@@ -60,6 +60,13 @@ test('the note says a row\'s derived next step, and only for a row that is not b
   assert.match(note, /2\. work-item:w-2 "Cutover runbook" \(status open, blocked on 'Cutover order'\)\n/);
 });
 
+test('a bound initiative this viewer has no Social access to: the note says so and offers no thread (leftovers 2)', () => {
+  const note = pageContextNote({ tenant: 'orgiq', pathname: INITIATIVE.path,
+    page: { ...INITIATIVE, channel: { slug: 'auth-migration', noAccessReason: 'This initiative\'s discussion is in #auth-migration in Social. You don\'t have Social access.' } } });
+  assert.match(note, /Its discussion is the channel #auth-migration in Social, which this viewer cannot reach \(no Social access\); there is no separate thread/);
+  assert.doesNotMatch(note, /a message about it goes there/);
+});
+
 test('the registry: the newest page wins, an unmount clears only its own entry, another path reads nothing', () => {
   resetPageContext();
   const offA = publishPageContext(INITIATIVE);
