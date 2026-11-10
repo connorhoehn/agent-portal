@@ -21,7 +21,7 @@ import {
 } from '../providers/agent-jobs.js';
 import {
   listBoxes, appendEvent, getBox, registerBox, isReserved, claimBox, releaseBox, refreshFromShared, allHolds,
-  changesHands, setOccupant,
+  changesHands, setOccupant, isFleetOwnedBox,
 } from './devbox-fleet.js';
 import { isLocalBoxId } from './local-compute-fleet.js';
 import { isMicrovmBoxId } from './microvm-ids.js';
@@ -232,8 +232,13 @@ async function runJob(job: ClaimedAgentJob, policy: LifetimePolicy = lifetimePol
       tokens: frozen.brief.used_tokens, ts: new Date().toISOString(),
     });
     // The box served whoever ran the last job on it. A job for someone else
-    // starts on an empty workspace and never resumes the previous occupant's
-    // conversation; a failed wipe fails the job rather than run it on their files.
+    // never resumes the previous occupant's conversation. Only a box the fleet
+    // made for itself (nobody's, on no initiative: isFleetOwnedBox, the task
+    // route's rule) is wiped first; a personal or initiative computer keeps
+    // its workspace, which is its owner's or its initiative's to share. An
+    // unknown last occupant (a box from before the field) counts as someone
+    // else's: a fleet box is wiped, a personal or initiative one is not.
+    // A failed wipe fails the job rather than run it on their files.
     const occupant = jobOccupant(job);
     const box = getBox(boxId);
     let resume = Boolean(job.payload['resume']);
@@ -242,10 +247,12 @@ async function runJob(job: ClaimedAgentJob, policy: LifetimePolicy = lifetimePol
         resume = false;
         appendEvent(boxId, { type: 'resume_refused', jobId: job.id, ts: new Date().toISOString() });
       }
-      const wiped = await attempt.run(() => wipeDevboxWorkspace(sessionId));
-      attempt.assertLive();
-      if (!wiped.ok) throw new Error(`workspace wipe before hand-over failed: ${wiped.error ?? 'unknown'}`);
-      appendEvent(boxId, { type: 'workspace_wiped', jobId: job.id, removed: wiped.removed ?? 0, ts: new Date().toISOString() });
+      if (isFleetOwnedBox(box)) {
+        const wiped = await attempt.run(() => wipeDevboxWorkspace(sessionId));
+        attempt.assertLive();
+        if (!wiped.ok) throw new Error(`workspace wipe before hand-over failed: ${wiped.error ?? 'unknown'}`);
+        appendEvent(boxId, { type: 'workspace_wiped', jobId: job.id, removed: wiped.removed ?? 0, ts: new Date().toISOString() });
+      }
     }
     setOccupant(boxId, occupant);
     const guard = attempt;

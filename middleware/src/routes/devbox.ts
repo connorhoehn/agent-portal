@@ -921,24 +921,14 @@ devboxRouter.post('/:sessionId/task', requireBoxAction('RunDevboxTask'), asyncHa
   // the run (runTaskAndForward below), and resuming it is the point.
   const occupant = req.session?.sub ?? 'anonymous';
   const box = getBoxBySession(sessionId);
-  if (box && !isReserved(box.id) && changesHands(box, occupant)) {
-    if (body.resume) {
-      res.status(409).json({
-        error: 'resume_refused',
-        message: 'This computer last ran someone else\'s task; start a new conversation instead of resuming theirs.',
-      });
-      return;
-    }
-    if (isFleetOwnedBox(box)) {
-      const wiped = await wipeDevboxWorkspace(sessionId);
-      if (!wiped.ok) {
-        res.status(502).json({ error: 'wipe_failed', message: `The computer could not be cleared for a new occupant: ${wiped.error ?? 'unknown'}` });
-        return;
-      }
-      appendEvent(box.id, { type: 'workspace_wiped', removed: wiped.removed ?? 0, ts: new Date().toISOString() });
-    }
+  if (box && !isReserved(box.id) && changesHands(box, occupant) && body.resume) {
+    res.status(409).json({
+      error: 'resume_refused',
+      message: 'This computer last ran someone else\'s task; start a new conversation instead of resuming theirs.',
+    });
+    return;
   }
-  if (box && !isReserved(box.id)) setOccupant(box.id, occupant);
+  if (!await takeOccupancy(sessionId, occupant, res)) return;
 
   await runTaskAndForward({
     sessionId, prompt, resume: Boolean(body.resume), res, arn,
@@ -951,6 +941,30 @@ devboxRouter.post('/:sessionId/task', requireBoxAction('RunDevboxTask'), asyncHa
     timeout: governed.timeout,
   });
 }));
+
+/**
+ * Hand the box to `occupant` before a task, a command or a shell reaches it.
+ * A box the fleet made for itself (nobody's, on no initiative) that last held
+ * someone else's work, or whose last occupant is unknown, is wiped first; a
+ * personal or initiative box keeps its workspace (whoever reaches it already
+ * passed requireBoxAccess, the rule that shares it). A box a governed run
+ * holds (isReserved) is left alone. Records the occupant. Answers 502 and
+ * returns false when the wipe fails: nobody works on another person's files.
+ */
+async function takeOccupancy(sessionId: string, occupant: string, res: Response): Promise<boolean> {
+  const box = getBoxBySession(sessionId);
+  if (!box || isReserved(box.id)) return true;
+  if (changesHands(box, occupant) && isFleetOwnedBox(box)) {
+    const wiped = await wipeDevboxWorkspace(sessionId);
+    if (!wiped.ok) {
+      res.status(502).json({ error: 'wipe_failed', message: `The computer could not be cleared for a new occupant: ${wiped.error ?? 'unknown'}` });
+      return false;
+    }
+    appendEvent(box.id, { type: 'workspace_wiped', removed: wiped.removed ?? 0, ts: new Date().toISOString() });
+  }
+  setOccupant(box.id, occupant);
+  return true;
+}
 
 // Command mode: deterministic shell via the InvokeAgentRuntimeCommand
 // operation — no LLM in the loop. Allowlisted + metacharacter-banned; the cwd
@@ -972,6 +986,8 @@ devboxRouter.post('/:sessionId/command', requireBoxAction('OpenDevboxShell'), as
 
   const arn = await requireArn(res);
   if (!arn) return;
+  // A command reads and writes the workspace like a task does.
+  if (!await takeOccupancy(sessionId, req.session?.sub ?? 'anonymous', res)) return;
 
   const resp = await dataClient().send(new RunRuntimeCommand({
     agentRuntimeArn: arn,
@@ -1135,6 +1151,8 @@ devboxRouter.post('/:sessionId/shell-url', requireBoxAction('OpenDevboxShell'), 
   const sessionId = requireSessionId(String(req.params['sessionId'] ?? ''), res);
   if (!sessionId) return;
   if (!await requireBoxAccess(req, res, sessionId)) return;
+  // A shell reads and writes the workspace like a task does.
+  if (!await takeOccupancy(sessionId, req.session?.sub ?? 'anonymous', res)) return;
   await mintShellUrl(sessionId, (req.body ?? {}) as { shellId?: string; expiresIn?: number }, res);
 }));
 

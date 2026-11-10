@@ -92,23 +92,36 @@ export async function loadFleet(): Promise<FleetBox[]> {
     // (schema/devbox_profiles_schema.sql); a cluster without them falls to
     // the bare select so the fleet still restores.
     let rows: Record<string, unknown>[];
+    const missingColumn = (err: unknown) => /column .* does not exist/i.test((err as Error).message ?? '');
     try {
       rows = await exec(
         `SELECT id, session_id, label, owner_id, project_id, status,
                 created_at, last_activity_at, spend_usd, tokens_used, active_model,
-                profile_id, profile_version, task_started_at
+                profile_id, profile_version, task_started_at, last_occupant
            FROM devbox_boxes
           WHERE status <> 'stopped'`,
       );
     } catch (err) {
-      if (!/column .* does not exist/i.test((err as Error).message ?? '')) throw err;
-      profileColumns = false;
-      rows = await exec(
+      if (!missingColumn(err)) throw err;
+      occupantColumn = false;
+      try {
+        rows = await exec(
+          `SELECT id, session_id, label, owner_id, project_id, status,
+                  created_at, last_activity_at, spend_usd, tokens_used, active_model,
+                  profile_id, profile_version, task_started_at
+             FROM devbox_boxes
+            WHERE status <> 'stopped'`,
+        );
+      } catch (err2) {
+        if (!missingColumn(err2)) throw err2;
+        profileColumns = false;
+        rows = await exec(
         `SELECT id, session_id, label, owner_id, project_id, status,
                 created_at, last_activity_at, spend_usd, tokens_used, active_model
            FROM devbox_boxes
           WHERE status <> 'stopped'`,
-      );
+        );
+      }
     }
     // Best-effort tidy of the rows we just declined to restore. Fire-and-forget:
     // failing to prune is untidy, never incorrect.
@@ -131,16 +144,20 @@ export async function loadFleet(): Promise<FleetBox[]> {
  * landing instead of failing on every upsert until the schema is applied.
  */
 let profileColumns = true;
+/** Whether `devbox_boxes` carries `last_occupant` (schema/devbox_fleet_schema.sql); flipped like the above. */
+let occupantColumn = true;
 
 async function upsertRow(box: FleetBox): Promise<void> {
-  const extraCols = profileColumns ? ', profile_id, profile_version, task_started_at' : '';
-  const extraVals = profileColumns ? ', :profile_id, :profile_version, :task_started_at::timestamptz' : '';
-  const extraSet = profileColumns
+  const occupant = profileColumns && occupantColumn;
+  const extraCols = (profileColumns ? ', profile_id, profile_version, task_started_at' : '') + (occupant ? ', last_occupant' : '');
+  const extraVals = (profileColumns ? ', :profile_id, :profile_version, :task_started_at::timestamptz' : '') + (occupant ? ', :last_occupant' : '');
+  const extraSet = (profileColumns
     ? `,
        profile_id       = COALESCE(devbox_boxes.profile_id, EXCLUDED.profile_id),
        profile_version  = COALESCE(devbox_boxes.profile_version, EXCLUDED.profile_version),
        task_started_at  = EXCLUDED.task_started_at`
-    : '';
+    : '') + (occupant ? `,
+       last_occupant    = COALESCE(EXCLUDED.last_occupant, devbox_boxes.last_occupant)` : '');
   await exec(
     `INSERT INTO devbox_boxes
        (id, session_id, label, owner_id, project_id, status,
@@ -182,6 +199,7 @@ async function upsertRow(box: FleetBox): Promise<void> {
           : { name: 'profile_version', value: { longValue: box.profileVersion } } as SqlParameter,
         str('task_started_at', box.taskStartedAt ?? null),
       ] : []),
+      ...(occupant ? [str('last_occupant', box.lastOccupant ?? null)] : []),
     ],
   );
 }

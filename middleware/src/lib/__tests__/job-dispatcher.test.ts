@@ -10,6 +10,7 @@ jest.mock('../devbox-fleet.js', () => ({
   // The real hand-over rule over the box above; a test sets fleet.occupancy.
   changesHands: (...a: unknown[]) => jest.requireActual('../devbox-fleet.js').changesHands(...a),
   setOccupant: jest.fn(),
+  isFleetOwnedBox: (...a: unknown[]) => jest.requireActual('../devbox-fleet.js').isFleetOwnedBox(...a),
   // The box claim (DE-47): this process's claim, released when the attempt ends.
   ...(() => {
     const held = new Set<string>();
@@ -111,6 +112,25 @@ describe('a box changing hands', () => {
     await dispatchOnce(); await untilIdle();
     expect(wipeDevboxWorkspace).not.toHaveBeenCalled();
     expect(runDevboxTask).toHaveBeenCalledWith(expect.objectContaining({ resume: true }));
+  });
+
+  it('never wipes a personal or an initiative computer, but still refuses to resume another\'s conversation', async () => {
+    for (const owned of [{ ownerId: 'u-owner' }, { projectId: 'p-1' }]) {
+      (wipeDevboxWorkspace as jest.Mock).mockClear();
+      (runDevboxTask as jest.Mock).mockClear();
+      fleet.occupancy = { lastOccupant: 'u-previous', ...owned };
+      (claimNextJob as jest.Mock).mockReset().mockResolvedValueOnce({ ...job, payload: { ...job.payload, resume: true } }).mockResolvedValue(null);
+      await dispatchOnce(); await untilIdle();
+      expect(wipeDevboxWorkspace).not.toHaveBeenCalled();
+      expect(runDevboxTask).toHaveBeenCalledWith(expect.objectContaining({ resume: false }));
+    }
+  });
+
+  it('an unknown occupant (after a restart without the field) wipes a fleet box only', async () => {
+    fleet.occupancy = { currentTask: 'an earlier task', ownerId: 'u-owner' };
+    await dispatchOnce(); await untilIdle();
+    expect(wipeDevboxWorkspace).not.toHaveBeenCalled();
+    expect(runDevboxTask).toHaveBeenCalled();
   });
 
   it('fails the job rather than run it on the previous occupant\'s files when the wipe fails', async () => {

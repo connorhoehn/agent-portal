@@ -57,5 +57,7 @@ export function rowToBox(r: Record<string, unknown>): FleetBox {
     box.profileVersion = Number(r['profile_version']);
   }
   if (r['task_started_at'] != null && String(r['task_started_at']).trim()) box.taskStartedAt = utcIso(r['task_started_at']);
+  // Whose work the workspace holds, so a restart does not forget it.
+  if (r['last_occupant'] != null && String(r['last_occupant']).trim()) box.lastOccupant = String(r['last_occupant']);
   return box;
 }

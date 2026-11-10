@@ -65,5 +65,11 @@ CREATE TABLE IF NOT EXISTS devbox_boxes (
 -- The reaper's sweep reads every row and the visibility filter groups by
 -- initiative; both are small scans today, but `project_id` is the one column a
 -- fleet-wide role's page filters on often enough to be worth an index.
+-- Whose work the box's workspace holds (FleetBox.lastOccupant): the session
+-- sub of the last person to send it work, or `bot:<id>` / `fleet`. Stored so a
+-- restart does not forget it: an unknown occupant counts as someone else's,
+-- which wipes a fleet-owned box before its next job.
+ALTER TABLE devbox_boxes ADD COLUMN IF NOT EXISTS last_occupant TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_devbox_boxes_project ON devbox_boxes (project_id);
 CREATE INDEX IF NOT EXISTS idx_devbox_boxes_owner ON devbox_boxes (owner_id);

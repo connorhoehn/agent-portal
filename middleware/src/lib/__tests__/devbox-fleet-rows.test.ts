@@ -67,6 +67,11 @@ describe('row → box', () => {
     });
   });
 
+  it('restores the last occupant, so a restart does not forget whose work the box holds', () => {
+    expect(rowToBox({ ...ROW, last_occupant: 'u-rachel' }).lastOccupant).toBe('u-rachel');
+    expect('lastOccupant' in rowToBox(ROW)).toBe(false);
+  });
+
   it('leaves absent optional columns absent rather than null', () => {
     // `projectId` drives visibility (a box charged to an initiative is shared
     // with everyone on it), so a literal null would be a different claim from

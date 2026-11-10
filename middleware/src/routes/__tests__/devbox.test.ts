@@ -412,6 +412,34 @@ describe('POST /api/devbox/:sessionId/task — a box changing hands', () => {
     expect(payloadsOf(calls).map((p) => p['op'] ?? 'task')).toEqual(['wipe']);
   });
 
+  it('a command or a shell on a fleet box is a change of hands too: wiped first, occupant recorded', async () => {
+    _resetFleet();
+    const box = registerBox({ sessionId: SESSION });
+    const { calls } = mockDataClient(async (c) => (
+      (c.input as { payload?: Uint8Array }).payload
+        && JSON.parse(new TextDecoder().decode((c.input as { payload: Uint8Array }).payload)).op === 'wipe'
+        ? { response: { transformToString: async () => '{"ok": true, "removed": 2}' } }
+        : done()
+    ));
+    await request(buildApp({ sub: 'u-first' })).post(`/api/devbox/${SESSION}/task`).send({ prompt: 'mine' }).expect(200);
+    calls.length = 0;
+    process.env['MOCK_AGENTCORE'] = 'false';
+    await request(buildApp({ sub: 'u-second' })).post(`/api/devbox/${SESSION}/shell-url`).send({});
+    expect(payloadsOf(calls.filter((c) => (c.input as { payload?: Uint8Array }).payload))[0]).toEqual({ op: 'wipe' });
+    expect(getBox(box.id)?.lastOccupant).toBe('u-second');
+  });
+
+  it('a personal computer is never wiped on a change of hands', async () => {
+    _resetFleet();
+    const box = registerBox({ sessionId: SESSION, ownerId: 'u-first' });
+    const { calls } = mockDataClient(async () => done());
+    await request(buildApp({ sub: 'u-first' })).post(`/api/devbox/${SESSION}/task`).send({ prompt: 'mine' }).expect(200);
+    calls.length = 0;
+    await request(buildApp({ sub: 'u-second', role: 'org-leader' })).post(`/api/devbox/${SESSION}/task`).send({ prompt: 'look' });
+    expect(payloadsOf(calls).some((p) => p['op'] === 'wipe')).toBe(false);
+    expect(getBox(box.id)?.lastOccupant).toBe('u-second');
+  });
+
   it('lets a person answer a governed run\'s question in the box the run holds', async () => {
     _resetFleet();
     const box = registerBox({ sessionId: SESSION });

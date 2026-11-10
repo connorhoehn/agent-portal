@@ -143,8 +143,11 @@ export interface FleetBox {
 /**
  * Whether handing `box` to `occupant` crosses from one person's work to
  * another's. A box that never ran a task holds nobody's work; one whose last
- * occupant is unknown (it ran before this field, or this process restarted
- * without it) is treated as someone else's — the conservative reading.
+ * occupant is unknown (it ran before this field was stored) is treated as
+ * someone else's: the conservative reading. The field is persisted with the
+ * box (devbox_boxes.last_occupant, the mock restart mirror, the shared fleet
+ * record), so a restart does not forget it. Callers wipe only a fleet-owned
+ * box on a change of hands (isFleetOwnedBox).
  */
 export function changesHands(box: FleetBox, occupant: string): boolean {
   const used = Boolean(box.lastOccupant || box.currentTask || box.lastResult);
