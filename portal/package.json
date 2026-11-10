@@ -16,11 +16,12 @@
     "lint:ui": "eslint src",
     "prototype": "vite --config vite.prototype.config.ts",
     "prototype:build": "vite build --config vite.prototype.config.ts && node prototypes/inline.mjs \"prototypes/${PROTOTYPE:-active-now}/build\"",
-    "audit:ui": "node ../scripts/audit-ui-dom.cjs"
+    "audit:ui": "node ../scripts/audit-ui-dom.cjs",
+    "check:bundle": "node scripts/check-bundle-node-free.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
-    "@connorhoehn/realtime-modules": "file:vendor/connorhoehn-realtime-modules-0.147.0.tgz",
+    "@connorhoehn/realtime-modules": "file:vendor/connorhoehn-realtime-modules-0.147.1.tgz",
     "@connorhoehn/ui-components": "file:vendor/connorhoehn-ui-components-2.515.9.tgz",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
