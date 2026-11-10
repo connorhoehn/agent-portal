@@ -227,17 +227,24 @@ def invalidate_cache() -> None:
 # attribute today (the S3 data source writes no sidecars), so a Bedrock
 # metadata filter would drop every document; ownership comes from the
 # registry instead. A document belongs to the tenant whose registered
-# knowledge-base prefix is the LONGEST one its key starts with, and to the
-# knowledge base's home tenant (orgiq, whose corpus predates the registry)
-# when no prefix matches. The middleware refuses a prefix that overlaps
-# another tenant's (routes/kb-admin.ts), so ownership is unambiguous.
+# knowledge-base prefix is the LONGEST one its key starts with. The home
+# tenant's corpus (orgiq's, which predates the registry) is registered here
+# explicitly (HOME_PREFIXES, the same list as middleware/src/lib/kb-prefixes.ts).
+# A key no prefix matches belongs to NO tenant and is never returned: it used
+# to fall to the home tenant, so registering a parent prefix of unregistered
+# home documents captured them. The middleware refuses a prefix that overlaps
+# another tenant's, the home list included, or that already holds objects
+# outside the registering tenant's own prefixes (routes/kb-admin.ts).
 #
 # Every retrieve keeps only the caller's tenant's documents. A registry that
 # cannot be READ (configured but failing) fails closed: nothing is returned.
-# One that is not configured at all (a local agent with no Aurora) has no
-# other tenants to know about, so every document is the home tenant's.
+# One that is not configured at all (a local agent with no Aurora), or that
+# holds no prefix yet, has no other tenants to know about, so every document
+# is the home tenant's.
 
 HOME_TENANT = "orgiq"
+#: The home tenant's corpus prefixes, registered by code rather than by row.
+HOME_PREFIXES = ("orgiq/", "synth/", "uploads/", "crawled/")
 _PREFIX_TTL_S = 60.0
 _prefix_cache: dict = {}
 
@@ -282,15 +289,22 @@ def _norm(prefix: str) -> str:
     return prefix.strip().lstrip("/").rstrip("/") + "/"
 
 
-def document_owner(source_uri: str, prefixes: list, home: str = HOME_TENANT) -> str:
-    """The tenant a retrieved document belongs to (longest registered prefix wins)."""
+def document_owner(source_uri: str, prefixes: list, home: str = HOME_TENANT) -> Optional[str]:
+    """The tenant a retrieved document belongs to (longest registered prefix
+    wins, the home tenant's declared corpus included), or ``None`` when no
+    prefix matches. With no registered prefix at all, everything is home's."""
     key = source_uri
     if key.startswith("s3://"):
         rest = key[len("s3://"):]
         key = rest.split("/", 1)[1] if "/" in rest else ""
-    best, owner = -1, home
-    for prefix, tenant in prefixes:
+    if not prefixes:
+        return home
+    candidates = list(prefixes) + [(p, home) for p in HOME_PREFIXES]
+    best, owner = -1, None
+    for prefix, tenant in candidates:
         p = _norm(prefix)
+        if p == "/":
+            continue
         if key.startswith(p) and len(p) > best:
             best, owner = len(p), tenant
     return owner

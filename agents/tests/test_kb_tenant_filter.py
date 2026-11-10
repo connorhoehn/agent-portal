@@ -1,8 +1,8 @@
 """One knowledge base holds every tenant's documents; a retrieve returns only the caller's.
 
 Ownership is the registry's: the longest registered knowledge-base prefix a
-document's key starts with names its tenant, and an unregistered key belongs to
-the home tenant (orgiq). Both read agents (search, advisor) filter every
+document's key starts with names its tenant, the home tenant's (orgiq) corpus
+is registered explicitly in code, and a key no prefix matches belongs to no one. Both read agents (search, advisor) filter every
 retrieve to the tenant they were invoked for, and a registry that cannot be
 read returns nothing rather than everything.
 
@@ -50,7 +50,7 @@ HITS = [hit("synth/internal/adr/adr-d-aurora.md"), hit("assessment/evidence/acme
 
 
 class Ownership(unittest.TestCase):
-    def test_longest_prefix_wins_and_unregistered_keys_are_home(self):
+    def test_longest_prefix_wins_and_the_home_corpus_is_declared(self):
         self.assertEqual(kb.document_owner(BUCKET + "assessment/evidence/a.md", PREFIXES), "assessment")
         self.assertEqual(kb.document_owner(BUCKET + "synth/internal/x.md", PREFIXES), "orgiq")
         nested = PREFIXES + [("social/private/", "orgiq")]
@@ -58,11 +58,33 @@ class Ownership(unittest.TestCase):
         self.assertEqual(kb.document_owner(BUCKET + "social/x.md", nested), "social")
 
     def test_filter_keeps_only_the_callers_documents(self):
-        results = [{"source": BUCKET + k} for k in ("a.md", "assessment/evidence/b.md", "social/c.md")]
+        results = [{"source": BUCKET + k} for k in ("uploads/a.md", "assessment/evidence/b.md", "social/c.md")]
         self.assertEqual([r["source"] for r in kb.filter_for_tenant(results, "assessment", prefixes=PREFIXES)],
                          [BUCKET + "assessment/evidence/b.md"])
         self.assertEqual([r["source"] for r in kb.filter_for_tenant(results, "orgiq", prefixes=PREFIXES)],
-                         [BUCKET + "a.md"])
+                         [BUCKET + "uploads/a.md"])
+
+    def test_a_key_no_prefix_matches_belongs_to_no_one(self):
+        """It used to fall to the home tenant, so a parent prefix could capture it."""
+        self.assertIsNone(kb.document_owner(BUCKET + "legacy/postmortem.md", PREFIXES))
+        self.assertIsNone(kb.document_owner(BUCKET + "root.md", PREFIXES))
+        for tenant in ("orgiq", "assessment", "social"):
+            self.assertEqual(kb.filter_for_tenant([{"source": BUCKET + "legacy/x.md"}], tenant, prefixes=PREFIXES), [])
+
+    def test_t1_is_not_t10_and_trailing_slashes_do_not_matter(self):
+        rows = [("t1", "assessment"), ("t10/", "social")]
+        self.assertEqual(kb.document_owner(BUCKET + "t1/a.md", rows), "assessment")
+        self.assertEqual(kb.document_owner(BUCKET + "t10/a.md", rows), "social")
+        self.assertIsNone(kb.document_owner(BUCKET + "t100/a.md", rows))
+
+    def test_no_registered_prefix_means_everything_is_home(self):
+        self.assertEqual(kb.document_owner(BUCKET + "legacy/x.md", []), "orgiq")
+
+    def test_home_prefixes_match_the_middleware(self):
+        import re
+        ts = (Path(__file__).resolve().parents[2] / "middleware/src/lib/kb-prefixes.ts").read_text()
+        listed = re.search(r"HOME_KB_PREFIXES: readonly string\[\] = \[([^\]]*)\]", ts).group(1)
+        self.assertEqual(tuple(re.findall(r"'([^']+)'", listed)), kb.HOME_PREFIXES)
 
     def test_an_unreadable_registry_returns_nothing(self):
         with mock.patch.object(kb, "tenant_prefixes", return_value=None):

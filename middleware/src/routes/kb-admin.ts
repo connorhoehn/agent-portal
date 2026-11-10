@@ -40,7 +40,8 @@ import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { reconcileKnowledgeBases, adoptKnowledgeBase, syncState } from '../providers/kb-reconcile.js';
-import { startIngestionJob, listIngestionJobs } from '../providers/knowledge-base.js';
+import { startIngestionJob, listIngestionJobs, listObjectKeysUnder } from '../providers/knowledge-base.js';
+import { normPrefix, prefixesOverlap, withHomePrefixes, keyUnder } from '../lib/kb-prefixes.js';
 import express from 'express';
 import {
   createUploadLink, listUploadLinks, revokeUploadLink, listLinkFiles,
@@ -285,16 +286,32 @@ kbAdminRouter.post('/', asyncHandler(async (req, res) => {
   if (s3Prefix.startsWith('/') || s3Prefix.includes('\\') || s3Prefix.split('/').some((p) => p === '..' || p === '.')) {
     throw new ValidationError('s3Prefix must be a relative S3 prefix without "." or ".." segments');
   }
-  // Nor may a tenant register a prefix that is, contains, or sits inside
-  // another tenant's: that would make the other tenant's knowledge base an
-  // upload target of this one. `uploads` is the shared landing zone, never a KB.
-  const norm = (p: string) => `${p.trim().replace(/\/+$/, '')}/`;
-  const mine = norm(s3Prefix);
+  // A prefix decides whose documents retrieval returns (lib/kb-prefixes.ts),
+  // so registering one must not capture anything that is not already this
+  // tenant's. Three checks:
+  //   * never the bucket root, nor `uploads` (the shared landing zone);
+  //   * never a prefix that is, contains, or sits inside another tenant's,
+  //     the home tenant's declared corpus included (it used to be "whatever
+  //     no prefix matched", which a parent prefix could take over);
+  //   * never a prefix that already holds objects outside this tenant's own
+  //     registered prefixes: those belong to someone else, or to no one.
+  const mine = normPrefix(s3Prefix);
+  if (mine === '/') throw new ValidationError('s3Prefix must name a folder, not the bucket root');
   if (mine === 'uploads/') throw new ValidationError('s3Prefix "uploads" is the shared upload landing zone');
-  const overlap = (await listKbs()).find((kb) => kb.tenant !== tenant && kb.s3Prefix.trim() !== ''
-    && (norm(kb.s3Prefix).startsWith(mine) || mine.startsWith(norm(kb.s3Prefix))));
+  const registered = withHomePrefixes(await listKbs());
+  const overlap = registered.find((kb) => kb.tenant !== tenant && prefixesOverlap(kb.s3Prefix, mine));
   if (overlap) {
     res.status(409).json({ error: `s3Prefix overlaps a knowledge base of another tenant ("${overlap.s3Prefix}")` });
+    return;
+  }
+  const own = registered.filter((kb) => kb.tenant === tenant).map((kb) => kb.s3Prefix);
+  const existing = await listObjectKeysUnder(mine);
+  if (existing === null) {
+    res.status(503).json({ error: 'could not list the documents bucket to check the prefix; try again' });
+    return;
+  }
+  if (existing.some((key) => !keyUnder(key, own))) {
+    res.status(409).json({ error: `s3Prefix already holds documents that are not this tenant's ("${mine}")` });
     return;
   }
 

@@ -938,6 +938,26 @@ export async function countS3Documents(lastSyncAt?: string, s3Prefix?: string): 
   }
 }
 
+/**
+ * Up to `max` object keys under `prefix` in the documents bucket, or null when
+ * the bucket cannot be listed (kb-admin then refuses to register a prefix it
+ * could not check). `prefix` is used as given: pass it normalised with its
+ * trailing slash so `t1/` never lists `t10/`.
+ */
+export async function listObjectKeysUnder(prefix: string, max = 1000): Promise<string[] | null> {
+  if (mockAws()) return mockObjects().map((o) => o.key).filter((k) => k.startsWith(prefix)).slice(0, max);
+  const bucket = config.foundation?.documentsBucket;
+  if (!bucket) return [];
+  try {
+    const s3 = new S3Client({ region: config.region });
+    const resp = await s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, MaxKeys: max }));
+    return (resp.Contents ?? []).map((o) => o.Key ?? '').filter(Boolean);
+  } catch (err) {
+    console.warn('[kb] listObjectKeysUnder failed:', (err as Error).message);
+    return null;
+  }
+}
+
 // ─── Crawl → KB sync ──────────────────────────────────────────────────────────
 // The KB data source covers the entire bucket (no per-prefix scoping at the
 // data-source level), so we just call StartIngestionJob on the first S3 data

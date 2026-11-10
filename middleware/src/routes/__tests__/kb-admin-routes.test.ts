@@ -62,6 +62,12 @@ jest.mock('../../providers/landing-zones.js', () => ({
   listLandingZoneFiles: jest.fn(), uploadToLandingZone: jest.fn(),
 }));
 jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
+// The objects already under a prefix being registered (the bucket listing).
+const mockObjectKeys = jest.fn(async (_prefix: string): Promise<string[] | null> => []);
+jest.mock('../../providers/knowledge-base.js', () => ({
+  ...jest.requireActual('../../providers/knowledge-base.js'),
+  listObjectKeysUnder: (prefix: string) => mockObjectKeys(prefix),
+}));
 jest.mock('../../lib/provisioning-broker.js', () => {
   const { EventEmitter } = jest.requireActual<typeof import('node:events')>('node:events');
   return { provisioningBroker: new EventEmitter() };
@@ -200,6 +206,56 @@ describe('POST /', () => {
       expect(res.body.error).toMatch(/another tenant/);
     }
     expect(createKbEntry).not.toHaveBeenCalled();
+  });
+
+  it('refuses the bucket root however it is spelled', async () => {
+    for (const s3Prefix of ['//', ' / ']) {
+      const res = await request(buildApp()).post('/api/admin/kb-registry').send({ ...VALID, s3Prefix });
+      expect(res.status).toBe(400);
+    }
+    expect(createKbEntry).not.toHaveBeenCalled();
+  });
+
+  it('never captures the home tenant\'s declared corpus, registered or not', async () => {
+    m(listKbs).mockResolvedValue([]);
+    const admin = buildApp({ sub: 'u-root', role: 'admin', tenant: 'orgiq' });
+    for (const s3Prefix of ['synth', 'synth/', 'synth/internal/', 'crawled/x/', 'orgiq/']) {
+      const res = await request(admin).post('/api/admin/kb-registry')
+        .send({ ...VALID, slug: 'assess-x', name: 'Assess X', tenant: 'assessment', s3Prefix });
+      expect(res.status).toBe(409);
+      expect(res.body.error).toMatch(/another tenant/);
+    }
+    expect(createKbEntry).not.toHaveBeenCalled();
+  });
+
+  it('refuses a prefix that already holds documents outside the tenant\'s own prefixes', async () => {
+    m(listKbs).mockResolvedValue([{ ...KB, tenant: 'assessment', name: 'Evidence', slug: 'evidence', s3Prefix: 'assessment/evidence/' }]);
+    const admin = buildApp({ sub: 'u-root', role: 'admin', tenant: 'orgiq' });
+    mockObjectKeys.mockResolvedValueOnce(['legacy/postmortem.md']);
+    const taken = await request(admin).post('/api/admin/kb-registry')
+      .send({ ...VALID, slug: 'assess-legacy', name: 'Legacy', tenant: 'assessment', s3Prefix: 'legacy' });
+    expect(taken.status).toBe(409);
+    expect(taken.body.error).toMatch(/not this tenant's/);
+    expect(mockObjectKeys).toHaveBeenLastCalledWith('legacy/');
+    // A listing that fails refuses rather than guesses.
+    mockObjectKeys.mockResolvedValueOnce(null);
+    const unknown = await request(admin).post('/api/admin/kb-registry')
+      .send({ ...VALID, slug: 'assess-legacy', name: 'Legacy', tenant: 'assessment', s3Prefix: 'legacy' });
+    expect(unknown.status).toBe(503);
+    expect(createKbEntry).not.toHaveBeenCalled();
+  });
+
+  it('t1 and t10 are different prefixes, with or without the trailing slash', async () => {
+    m(listKbs).mockResolvedValue([{ ...KB, tenant: 'assessment', name: 'T1', slug: 't1', s3Prefix: 't1' }]);
+    m(createKbEntry).mockResolvedValue({ ...KB, id: 'kb-row-9', status: 'PENDING' });
+    mockObjectKeys.mockResolvedValueOnce([]);
+    const ok = await request(buildApp()).post('/api/admin/kb-registry').send({ ...VALID, s3Prefix: 't10/' });
+    expect(ok.status).toBe(201);
+    expect(mockObjectKeys).toHaveBeenLastCalledWith('t10/');
+    for (const s3Prefix of ['t1', 't1/', 't1/sub/']) {
+      const res = await request(buildApp()).post('/api/admin/kb-registry').send({ ...VALID, slug: 'other', name: 'Other', s3Prefix });
+      expect(res.status).toBe(409);
+    }
   });
 
   it('409s a duplicate slug with a readable message, provisioning nothing', async () => {
