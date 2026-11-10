@@ -39,14 +39,25 @@ export function realtimeGatewayEnabled(env: NodeJS.ProcessEnv = process.env): bo
 }
 
 /**
+ * The browser Origin rule for /ws: the BFF's allowlist, judged against the
+ * viewer's scheme behind the declared proxies (lib/trusted-proxy.ts). Since
+ * realtime-modules 0.147.0 the socket handler refuses (403) every browser
+ * origin it is not told about, so the gateway hands this same rule to
+ * `attachRealtime({ allowedOrigins })` as well as to the bearer admission
+ * below; the two must stay one function.
+ */
+export function gatewayOriginAllowed(origin: string, req: IncomingMessage): boolean {
+  return isAllowedBrowserOrigin(origin, `${upgradeScheme(req)}://${req.headers.host ?? ''}`);
+}
+
+/**
  * The library's bearer-subprotocol admission (realtime-modules 0.116
  * `bearerSubprotocolAuth`): the Origin check when the upgrade carries one, the
  * exact two-entry `bearer-token-v1, <jwt>` header, then this host's
  * verification. A verified identity without a user id is refused.
  */
 const bearerAuth = bearerSubprotocolAuth<RealtimeGatewayAuth>({
-  // The viewer's scheme behind the declared proxies (lib/trusted-proxy.ts).
-  allowOrigin: (origin, req) => isAllowedBrowserOrigin(origin, `${upgradeScheme(req)}://${req.headers.host ?? ''}`),
+  allowOrigin: gatewayOriginAllowed,
   verify: async token => {
     const secret = realtimeSigningSecret();
     if (!secret) throw new Error('realtime token verification unavailable');

@@ -6,6 +6,7 @@
 //     status:'connected'}` frame arrives;
 //   - no token, a token signed with another secret, an expired token, a token
 //     with another audience, and a bare-token subprotocol are all refused 401;
+//   - a browser Origin outside the allowlist is refused 403 (realtime-modules 0.147.0);
 //   - lobbyGuard: an orgiq caller may invite into `orgiq:dm:<self>:<other>`
 //     (the other side rings) but not `assessment:dm:…`, not an orgiq dm it is
 //     not part of, and not an untargeted broadcast — each refusal is an error
@@ -31,6 +32,7 @@ import {
   attachRealtimeGateway, channelGuard, gatewayStatsLine, type GatewayStatsInput, GATEWAY_STATS_TYPE, lobbyGuard, realtimeGatewayEnabled,
   realtimeGatewayStatus, REALTIME_GATEWAY_PATH, statsIntervalMs,
 } from '../realtime-gateway.js';
+import { authenticateGatewayUpgrade, gatewayOriginAllowed } from '../gateway/auth.js';
 import { rejectUnsupportedUpgrades } from '../unsupported-upgrades.js';
 import { signRealtimeToken, realtimeClaims, REALTIME_TOKEN_ISSUER, REALTIME_TOKEN_KIND } from '../realtime-token.js';
 import type { Session } from '../session.js';
@@ -150,9 +152,19 @@ describe('handshake', () => {
     }
   });
 
+  // realtime-modules 0.147.0: the socket handler's `allowedOrigins` (the same
+  // rule as the bearer admission) answers first, with 403.
   it('refuses a cross-site browser origin even with a valid token', async () => {
-    expect(await connect({ protocols: ['bearer-token-v1', await tokenFor('u-vera', 'Vera Green')], origin: 'https://attacker.example' }))
-      .toEqual({ refused: 401 });
+    const token = await tokenFor('u-vera', 'Vera Green');
+    expect(await connect({ protocols: ['bearer-token-v1', token], origin: 'https://attacker.example' }))
+      .toEqual({ refused: 403 });
+    // The bearer admission keeps its own copy of the rule (401 if reached).
+    const upgrade = (origin: string) => ({ headers: { origin, host: `127.0.0.1:${port}`, 'sec-websocket-protocol': `bearer-token-v1, ${token}` },
+      socket: {} }) as unknown as http.IncomingMessage;
+    await expect(authenticateGatewayUpgrade(upgrade('https://attacker.example'))).rejects.toThrow(/origin/i);
+    await expect(authenticateGatewayUpgrade(upgrade(`http://127.0.0.1:${port}`))).resolves.toMatchObject({ userId: 'u-vera' });
+    expect(gatewayOriginAllowed('https://attacker.example', upgrade('https://attacker.example'))).toBe(false);
+    expect(gatewayOriginAllowed(`http://127.0.0.1:${port}`, upgrade(`http://127.0.0.1:${port}`))).toBe(true);
   });
 
   describe('behind CloudFront → ALB (TRUST_PROXY_HOPS=2)', () => {
@@ -174,7 +186,7 @@ describe('handshake', () => {
     it('does not take the CloudFront header from a caller when no proxy is declared', async () => {
       delete process.env['TRUST_PROXY_HOPS'];
       expect(await connect({ protocols: ['bearer-token-v1', await tokenFor('u-vera', 'Vera Green')], origin: 'https://d111.cloudfront.net', headers: viaCloudFront }))
-        .toEqual({ refused: 401 });
+        .toEqual({ refused: 403 });
     });
   });
 

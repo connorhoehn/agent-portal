@@ -104,7 +104,7 @@ suite('work-comment migration into DynamoDB Local', () => {
     await s.members.putMember({ channel, userId: 'u-early', role: 'owner', addedBy: 'u-early', addedAt: comments[0]!.createdAt,
       historyFrom: null, removedAt: null });
 
-    const service = new ChatService({ messageRouter: new LocalRealtimeRouter() as never, logger: logger as never, chatStore: s, membershipStore: s.members } as never);
+    const service = new ChatService({ messageRouter: new LocalRealtimeRouter({ authorize: () => false }) as never, logger: logger as never, chatStore: s, membershipStore: s.members } as never);
     const late = await service.getChannelHistoryFor('u-late', channel, 50);
     expect(late.map((m) => m.metadata?.['commentId'])).toEqual(['wic-020']);
     const early = await service.getChannelHistoryFor('u-early', channel, 50);

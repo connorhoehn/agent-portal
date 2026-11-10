@@ -200,13 +200,14 @@ describe('default deny', () => {
     expect(env.service.getStats().subscriptions).toBe(1);
   });
 
-  it('a feature with no channelFor/source, or a router with no authorize, refuses', async () => {
-    for (const env of [setup({ feature: 'none' }), setup({ authorize: false })]) {
-      env.contexts.set('theo-s', ctxOf('theo', 'orgiq', 'member'));
-      await subscribe(env, 'theo-s', 'g1', `initiative:${INIT}`, 'owg2.1.orgiq.000000000000000000000000.00');
-      expect(env.acks('theo-s')).toEqual(['WORK_GRAPH_SUBSCRIBE_REFUSED']);
-      env.stop();
-    }
+  it('a feature with no channelFor/source refuses; a router with no authorize is not built', async () => {
+    const env = setup({ feature: 'none' });
+    env.contexts.set('theo-s', ctxOf('theo', 'orgiq', 'member'));
+    await subscribe(env, 'theo-s', 'g1', `initiative:${INIT}`, 'owg2.1.orgiq.000000000000000000000000.00');
+    expect(env.acks('theo-s')).toEqual(['WORK_GRAPH_SUBSCRIBE_REFUSED']);
+    env.stop();
+    // realtime-modules 0.147.0: a router without `authorize` throws at construction.
+    expect(() => setup({ authorize: false })).toThrow(/authorize hook is required/);
   });
 
   it('clients never publish, and a chat publish onto the stream channel is refused', async () => {

@@ -11,7 +11,8 @@ it.each(['social:workgraph:workspace', 'assessment:doc:', 'pipelines:run:run-42'
   const calls = new InMemoryCallStateStore(), state = new MemoryCallChatStateStore();
   const getState = jest.spyOn(state, 'get'), join = jest.spyOn(state, 'join');
   const authority = jest.fn().mockRejectedValue(new Error('OrgIQ authority must not run for another call tenant'));
-  const runtime = new CallChatRuntime({ calls, state, messages: new InMemoryChatStore(), router: new LocalRealtimeRouter(),
+  const runtime = new CallChatRuntime({ calls, state, messages: new InMemoryChatStore(), // No channel is read here: the router admits none (realtime-modules 0.147.0 requires a hook).
+    router: new LocalRealtimeRouter({ authorize: () => false }),
     lobbyAllowed: () => true, authority, maintenanceIntervalMs: 0 });
   try {
     await calls.registerParticipant('other-call', 'mira-seat', 'u-mira', lobbyName, ['u-sana']);

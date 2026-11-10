@@ -67,7 +67,8 @@ testRedis('the gateway joins the host LeaseGroup and connection loss retires its
   process.env.REALTIME_GATEWAY_NODE_ID = 'primary';
   const group = new LeaseGroup();
   const redis = await createBoundedRedis(redisUrl!);
-  const sibling = new RedisRealtimeRouter({ redis, namespace, nodeId: 'sibling', leaseGroup: group });
+  // Ownership only: the sibling admits no channel (realtime-modules 0.147.0 requires a hook).
+  const sibling = new RedisRealtimeRouter({ redis, namespace, nodeId: 'sibling', leaseGroup: group, authorize: () => false });
   const handle = await startRealtimeGateway(http.createServer(), { redisUrl, leaseGroup: group,
     pingIntervalMs: 0, statsIntervalMs: 0, socialChat: createMemorySocialChatBackend({ fixtures: false }) });
   try {
@@ -83,7 +84,7 @@ testRedis('the gateway joins the host LeaseGroup and connection loss retires its
     expect(realtimeGatewayStatus().ready).toBe(false);
     expect(sibling.isReady()).toBe(false);
     expect(await redis.command('GET', `realtime:${encodeURIComponent(namespace)}:node:sibling`)).toBeNull();
-    const late = new RedisRealtimeRouter({ redis, namespace, nodeId: 'late', leaseGroup: group });
+    const late = new RedisRealtimeRouter({ redis, namespace, nodeId: 'late', leaseGroup: group, authorize: () => false });
     try { await expect(late.start()).rejects.toThrow(/lease|ownership/i); } finally { await late.shutdown(); }
   } finally {
     await group.release();

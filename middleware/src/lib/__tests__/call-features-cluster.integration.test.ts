@@ -115,7 +115,9 @@ suite('call pages and huddle chat across native gateway nodes', () => {
       auth: req => {
         const current = identities.get(String(req.headers['x-test-credential'] ?? ''));
         if (!current) throw new Error('Unauthenticated');
-        return { userId: current.sub, org: current.tenant, role: current.role, epoch: current.epoch, sessionIat: current.iat };
+        // realtime-modules 0.147.0 treats a context without `exp` as expired.
+        return { userId: current.sub, org: current.tenant, role: current.role, epoch: current.epoch, sessionIat: current.iat,
+          exp: Math.floor(Date.now() / 1000) + 3600 };
       },
       onDisconnect: async id => {
         if ((await calls.getCall(callId))?.participantClientIds.includes(id)) await observed.removeParticipant(callId, id);

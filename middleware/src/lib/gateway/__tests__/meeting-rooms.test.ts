@@ -81,6 +81,9 @@ beforeEach(async () => {
     subscribeToChannel: async () => true,
     getUserIdForClient: id => CLIENTS[id],
     getClientData: id => ({ userContext: { userId: CLIENTS[id]!, displayName: CLIENTS[id] } }),
+    // realtime-modules 0.147.0 requires the router's channel check; this is the
+    // gateway's own (the router's `authorize` is `admitChannel`).
+    checkChannel: (kind, id, channel) => admitChannel({ kind, clientId: id, channel, ctx: ctx(CLIENTS[id]!) }),
   };
   service = new MeetingService({ router, config: { isOrganizer: ({ userId }) => userId === 'olive' } });
   for (const clientId of Object.keys(CLIENTS)) await service.handleAction(clientId, 'subscribe', { meetingId: LOBBY });

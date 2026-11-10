@@ -51,7 +51,9 @@ async function bundle(generation: string) {
   const state = new RedisCallChatStateStore(redis);
   const contexts = new Map<string, Record<string, unknown>>();
   let seatIndex = 0;
-  const router = new LocalRealtimeRouter();
+  // The runtime addresses seats directly (sendToClient), never a channel: the
+  // router admits no channel (realtime-modules 0.147.0 requires a hook).
+  const router = new LocalRealtimeRouter({ authorize: () => false });
   router._setHandle({
     wss: null, dispose: async () => {}, listClients: () => [...contexts.keys()],
     getClientContext: id => contexts.get(id) ?? null,

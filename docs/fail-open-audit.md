@@ -10,7 +10,7 @@ Verdicts: **fine** (closed, or explicit opt-in), **needs a flag** (open path mus
 **needs fail-closed** (no flag should open it). The middleware rows are pinned by
 `middleware/src/lib/__tests__/fail-closed-startup.test.ts` (section 3). Companion: `docs/next-steps.md` §"Cross-cutting" item 1.
 
-*Status, 9 November 2026:* the aws-agentcore rows fixed since this audit carry their commit in the verdict column. The realtime-modules "needs fail-closed" rows are still open (tracked in realtime-modules). `docs/next-steps.md` §10 "Still open" has the current list.
+*Status, 9 November 2026:* the aws-agentcore rows fixed since this audit carry their commit in the verdict column. The realtime-modules "needs fail-closed" rows for the socket handler, router, custom-router `checkChannel`, `lobbyGuard`/`CallService`, the presence/cursor/reaction/upload/notification hooks and the chat sender are fixed in realtime-modules 0.147.0, adopted in the adoption commit "Realtime gateway on realtime-modules 0.147.0"; the activity/work-graph row is unchanged. `docs/next-steps.md` §10 "Still open" has the current list.
 
 ## 1. Decision points
 

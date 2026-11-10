@@ -16,7 +16,7 @@ import type { RealtimeRouter } from '@connorhoehn/realtime-modules/server';
 import { getUser, type UserInfo } from '../../providers/identity.js';
 import { pageResourceVisible } from '../../lib/page-resources.js';
 import { CallMediaProofRuntime, setCallMediaProofRuntime } from '../../lib/call-media-proof.js';
-import { bindMeetingRooms, lobbyGuard } from '../../lib/gateway/authority.js';
+import { admitChannel, bindMeetingRooms, lobbyGuard } from '../../lib/gateway/authority.js';
 import { realtimeClaims, signRealtimeToken } from '../../lib/realtime-token.js';
 import type { Session } from '../../lib/session.js';
 import { realtimeLobbyAccessRouter } from '../realtime-lobby-access.js';
@@ -43,6 +43,9 @@ beforeEach(async () => {
   const meetingRouter: MeetingRouter = {
     sendToClient: () => true, sendToChannel: async () => undefined, subscribeToChannel: async () => true,
     getUserIdForClient: id => CLIENTS[id], getClientData: id => ({ userContext: { userId: CLIENTS[id]!, displayName: CLIENTS[id] } }),
+    // realtime-modules 0.147.0 requires the router's channel check; this is the
+    // gateway's own (the router's `authorize` is `admitChannel`).
+    checkChannel: (kind, id, channel) => admitChannel({ kind, clientId: id, channel, ctx: ctx(signed(CLIENTS[id]!)) }),
   };
   service = new MeetingService({ router: meetingRouter, config: { isOrganizer: ({ userId }) => userId === 'olive' } });
   for (const clientId of Object.keys(CLIENTS)) await service.handleAction(clientId, 'subscribe', { meetingId: LOBBY });

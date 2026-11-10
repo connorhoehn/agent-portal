@@ -75,7 +75,7 @@ import { tenantActivity, tenantPipeline } from './gateway-run-feed.js';
 import { directRecipientFilter } from './direct-recipient.js';
 import { admitChannel, admitMeetingRoomSync, admitPrincipal, bindMeetingRooms, callGuards, channelGuards, lobbyGuard, verdictCacheable } from './gateway/authority.js';
 import { applyChannel, authorityEpoch, bindAuthorityCache } from './gateway/authority-invalidation.js';
-import { authenticateGatewayUpgrade } from './gateway/auth.js';
+import { authenticateGatewayUpgrade, gatewayOriginAllowed } from './gateway/auth.js';
 import { socketContext, tenantCalls } from './gateway/calls.js';
 import { tenantMeeting } from './gateway/meeting.js';
 import { channelNotifyPlugin, dmNotifyPlugin, pageCursorChatOptions, tenantMentionNotifyPlugin } from './gateway/notify-plugins.js';
@@ -326,6 +326,10 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
       if (clusterRouter && !clusterRouter.isReady()) throw new Error('Realtime gateway ownership is unavailable');
       return ctx;
     },
+    // realtime-modules 0.147.0 refuses (403) every browser origin the handler
+    // is not given. The bearer admission above runs the same rule; the
+    // handler's copy answers first, before the token is read.
+    allowedOrigins: gatewayOriginAllowed,
     principal,
     // This socket carries signalling and chat; canvas updates use /realtime.
     maxPayload: 256 * 1024,
