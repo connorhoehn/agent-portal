@@ -234,7 +234,7 @@ export async function getDecision(id: string): Promise<DecisionDetail | null> {
   if (config.mock.aurora) {
     const head = decisionRows.rows().find((d) => d.id === id);
     const decision = mockGetDecision(id);
-    return head && decision ? { ...decision, heldWork: await getWorkHeldBy({ id, topic: head.topic, workItemId: head.workItemId }) } : null;
+    return head && decision ? { ...decision, heldWork: await getWorkHeldBy({ id, topic: head.topic, workItemId: head.workItemId, projectId: head.projectId }) } : null;
   }
 
   const headRows = await exec(
@@ -270,7 +270,11 @@ export async function getDecision(id: string): Promise<DecisionDetail | null> {
   );
 
   const avatars = await fetchAvatarsById(partRows.map(row => String(row['person_id'])));
-  const heldWork = await getWorkHeldBy({ id: String(head['id']), topic: String(head['topic'] ?? ''), workItemId: head['work_item_id'] != null ? String(head['work_item_id']) : null });
+  const heldWork = await getWorkHeldBy({
+    id: String(head['id']), topic: String(head['topic'] ?? ''),
+    workItemId: head['work_item_id'] != null ? String(head['work_item_id']) : null,
+    projectId: head['project_id'] != null ? String(head['project_id']) : null,
+  });
   return {
     id: String(head['id']),
     topic: String(head['topic'] ?? ''),
@@ -368,7 +372,7 @@ export async function decideDecision(id: string, input: DecideInput): Promise<De
       actorId: input.actorId, actorName: input.actorName, rationale: input.rationale,
     });
     // The work it held up settles in the same tick: no read sees the one without the other.
-    const settled = mockSettleWorkBlockedOn({ id, topic: row.topic, workItemId: row.workItemId }, input.outcome, input.rationale);
+    const settled = mockSettleWorkBlockedOn({ id, topic: row.topic, workItemId: row.workItemId, projectId: row.projectId }, input.outcome, input.rationale);
     const decision = await getDecision(id);
     return decision ? { kind: 'ok', decision, settled } : { kind: 'not-found' };
   }
@@ -381,7 +385,7 @@ export async function decideDecision(id: string, input: DecideInput): Promise<De
           SET status = :outcome, decided_at = CURRENT_DATE, resolved_at = NOW(),
               resolution = :rationale, decided_by = :actor
         WHERE id = :id AND status IN ('open', 'escalated')
-        RETURNING id, topic, work_item_id`,
+        RETURNING id, topic, work_item_id, project_id`,
       [strParam('outcome', input.outcome), strParam('rationale', input.rationale), strParam('actor', input.actorId), strParam('id', id)],
     );
     if (rows.length === 0) return null;
@@ -394,6 +398,7 @@ export async function decideDecision(id: string, input: DecideInput): Promise<De
     const head = rows[0]!;
     return txSettleWorkBlockedOn(tx, {
       id, topic: String(head['topic'] ?? ''), workItemId: head['work_item_id'] != null ? String(head['work_item_id']) : null,
+      projectId: head['project_id'] != null ? String(head['project_id']) : null,
     }, input.outcome, input.rationale);
   });
   if (!settled) {

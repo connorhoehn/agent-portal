@@ -1189,12 +1189,28 @@ export interface SettledWork {
   projectId: string;
 }
 
-/** The decision's side of the settle: what it is called and the item it names. */
+/** The decision's side of the settle: what it is called, the item it names and its initiative. */
 export interface SettlingDecision {
   id: string;
   topic: string;
   workItemId: string | null;
+  /**
+   * The decision's initiative. Only that initiative's work settles or is
+   * listed: a link from another initiative's item (blocked_by_decision_id)
+   * never reaches across. An org-wide decision (null) reaches only the item it
+   * names itself. The tables are the Work tenant's alone (no tenant column),
+   * so the initiative is the boundary.
+   */
+  projectId: string | null;
 }
+
+/** Is `item` inside the decision's reach (its initiative, or the one item an org-wide decision names)? */
+export function inDecisionScope(item: Pick<WorkItem, 'id' | 'projectId'>, decision: Pick<SettlingDecision, 'workItemId' | 'projectId'>): boolean {
+  return decision.projectId ? item.projectId === decision.projectId : item.id === decision.workItemId;
+}
+
+/** The same rule in SQL over `wi` (work_items) and `d` (decisions). */
+const DECISION_SCOPE_SQL = `((d.project_id IS NOT NULL AND wi.project_id = d.project_id) OR (d.project_id IS NULL AND wi.id = d.work_item_id))`;
 
 /** The reason a rejected decision leaves on the work it held up. */
 export function rejectedBlockReason(topic: string): string {
@@ -1210,11 +1226,11 @@ export function settleHistoryLine(outcome: 'resolved' | 'rejected', topic: strin
 
 /** Is `item` blocked on `decision`? The rule both stores apply. */
 export function isBlockedOn(
-  item: Pick<WorkItem, 'id' | 'labels' | 'blockedReason' | 'blockedByDecisionId'>,
-  decision: Pick<SettlingDecision, 'id' | 'workItemId'>,
+  item: Pick<WorkItem, 'id' | 'projectId' | 'labels' | 'blockedReason' | 'blockedByDecisionId'>,
+  decision: Pick<SettlingDecision, 'id' | 'workItemId' | 'projectId'>,
 ): boolean {
   const blocked = item.labels.includes('blocked') || !!item.blockedReason?.trim();
-  return blocked && (item.blockedByDecisionId === decision.id || item.id === decision.workItemId);
+  return blocked && inDecisionScope(item, decision) && (item.blockedByDecisionId === decision.id || item.id === decision.workItemId);
 }
 
 /** Mock store: settle the fixture's rows (called by providers/decisions.ts in the same tick as the decide). */
@@ -1277,7 +1293,7 @@ export async function txSettleWorkBlockedOn(
   const rows = (await tx(
     `UPDATE work_items wi SET ${sets.join(', ')}
        FROM decisions d
-      WHERE d.id = :did AND ${linked} AND ${blocked}
+      WHERE d.id = :did AND ${linked} AND ${blocked} AND ${DECISION_SCOPE_SQL}
       RETURNING wi.id, wi.title, wi.project_id`,
     params,
   )) ?? [];
@@ -1305,16 +1321,17 @@ export interface HeldWork extends SettledWork {
 export async function getWorkHeldBy(decision: SettlingDecision): Promise<HeldWork[]> {
   if (config.mock.aurora) {
     return mockWorkItems()
-      .filter((i) => i.blockedByDecisionId === decision.id || isBlockedOn(i, decision))
+      .filter((i) => inDecisionScope(i, decision) && (i.blockedByDecisionId === decision.id || isBlockedOn(i, decision)))
       .map((i) => ({ id: i.id, title: i.title, projectId: i.projectId, blocked: i.labels.includes('blocked') }));
   }
   const rows = (await safeExec(
     `SELECT wi.id, wi.title, wi.project_id, ('blocked' = ANY(wi.labels)) AS blocked
        FROM work_items wi
-      WHERE to_jsonb(wi)->>'blocked_by_decision_id' = :did
-         OR (wi.id = :wid AND ('blocked' = ANY(wi.labels) OR NULLIF(TRIM(to_jsonb(wi)->>'blocked_reason'), '') IS NOT NULL))
+      WHERE (to_jsonb(wi)->>'blocked_by_decision_id' = :did
+         OR (wi.id = :wid AND ('blocked' = ANY(wi.labels) OR NULLIF(TRIM(to_jsonb(wi)->>'blocked_reason'), '') IS NOT NULL)))
+        AND ${decision.projectId ? 'wi.project_id = :pid' : 'wi.id = :wid'}
       ORDER BY wi.created_at`,
-    [strParam('did', decision.id), strParam('wid', decision.workItemId ?? '')],
+    [strParam('did', decision.id), strParam('wid', decision.workItemId ?? ''), ...(decision.projectId ? [strParam('pid', decision.projectId)] : [])],
   )) ?? [];
   return rows.map((r) => ({ id: String(r['id']), title: String(r['title'] ?? ''), projectId: String(r['project_id'] ?? ''), blocked: r['blocked'] === true }));
 }

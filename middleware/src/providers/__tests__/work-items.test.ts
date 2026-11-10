@@ -402,16 +402,34 @@ describe('decideStatusTransition', () => {
 });
 
 describe('settling the work a decision held up', () => {
-  const CUTOVER = { id: 'd-cut', topic: 'Cutover order', workItemId: 'wi-1' };
+  const CUTOVER = { id: 'd-cut', topic: 'Cutover order', workItemId: 'wi-1', projectId: 'p-1' };
 
   it('an item is blocked on a decision when it is blocked and either side names the other', () => {
-    const item = { id: 'wi-1', labels: ['blocked'], blockedReason: null, blockedByDecisionId: null };
+    const item = { id: 'wi-1', projectId: 'p-1', labels: ['blocked'], blockedReason: null, blockedByDecisionId: null };
     expect(isBlockedOn(item, CUTOVER)).toBe(true);
     expect(isBlockedOn({ ...item, id: 'wi-2', blockedByDecisionId: 'd-cut' }, CUTOVER)).toBe(true);
     expect(isBlockedOn({ ...item, id: 'wi-2' }, CUTOVER)).toBe(false);
     // Linked but never blocked: nothing to unblock.
     expect(isBlockedOn({ ...item, labels: [] }, CUTOVER)).toBe(false);
     expect(isBlockedOn({ ...item, labels: [], blockedReason: 'Blocked on "Cutover order"' }, CUTOVER)).toBe(true);
+  });
+
+  it('never reaches another initiative\'s work, whichever side holds the link', () => {
+    const elsewhere = { id: 'wi-9', projectId: 'p-other', labels: ['blocked'], blockedReason: null, blockedByDecisionId: 'd-cut' };
+    expect(isBlockedOn(elsewhere, CUTOVER)).toBe(false);
+    expect(isBlockedOn({ ...elsewhere, id: 'wi-1' }, CUTOVER)).toBe(false);
+    // An org-wide decision reaches only the one item it names itself.
+    const orgWide = { ...CUTOVER, projectId: null };
+    expect(isBlockedOn(elsewhere, orgWide)).toBe(false);
+    expect(isBlockedOn({ ...elsewhere, id: 'wi-1' }, orgWide)).toBe(true);
+  });
+
+  it('the transaction carries the initiative clause', async () => {
+    const tx = jest.fn()
+      .mockResolvedValueOnce([{ column_name: 'blocked_reason' }, { column_name: 'blocked_by_decision_id' }])
+      .mockResolvedValueOnce([]);
+    await txSettleWorkBlockedOn(tx, CUTOVER, 'resolved', 'ok');
+    expect(String(tx.mock.calls[1]![0])).toContain('((d.project_id IS NOT NULL AND wi.project_id = d.project_id) OR (d.project_id IS NULL AND wi.id = d.work_item_id))');
   });
 
   it('rejected, inside the transaction: the item stays blocked with "Decision rejected: <topic>" and gets its audit row', async () => {
@@ -433,7 +451,7 @@ describe('settling the work a decision held up', () => {
     const sql = String(tx.mock.calls[1]![0]);
     expect(sql).toMatch(/labels = array_remove\(wi\.labels, 'blocked'\)/);
     expect(sql).not.toMatch(/blocked_reason|blocked_by_decision_id/);
-    expect(sql).toMatch(/WHERE d\.id = :did AND wi\.id = d\.work_item_id AND 'blocked' = ANY\(wi\.labels\)/);
+    expect(sql).toMatch(/WHERE d\.id = :did AND wi\.id = d\.work_item_id AND 'blocked' = ANY\(wi\.labels\) AND \(\(d\.project_id/);
     expect(tx).toHaveBeenCalledTimes(2);
   });
 });
