@@ -454,6 +454,8 @@ const C6 = {
   },
 };
 
+const SEARCH = { query: null, type: null, scope: null, sort: null, limit: null, answer: null, detail: null };
+
 /** C7: knowledge (Nora): a runbook found and its steps read, an ADR found and opened. */
 const C7 = {
   title: 'Runbooks and ADRs', persona: 'nora',
