@@ -791,3 +791,20 @@ Four items, one commit each on branch `worktree-agent-a542f9b74fc5705a6`, not me
 - **Deletes take the sidecar.** `deleteFromLandingZone` deletes the object, then its `.metadata.json` sidecar (`deleteDocumentWithSidecar`); a failed sidecar delete is logged, not thrown. The offline landing zone does the same, with a parity test. It is the only delete path into the documents bucket: crawls write under a fresh per-crawl prefix and never replace a page, the retention sweep touches database rows only, a KB deprovision drops the Bedrock KB and its table, and the bucket has no expiration rule.
 - **Decider on the Decisions list.** `GET /api/graph/decisions` rows carry `decidedBy` (settled) and `deciderRole` / `decider` (waiting: the decider participant, else the initiative owner, else the org-leader with no person), from `lib/decision-authority.ts`, mock and Aurora alike; the page has a Decider column and Decided reads "Waiting" for an open row. Wire snapshots re-captured: the seven new key paths, two route line numbers, and the `GET /api/graph/work` key sample swapping `ORG-INF-3` for `ORG-FS-4` at the 50-row page boundary (tied timestamps; no work-item code changed).
 - **Voice-coverage C4.** The one failure (a 20 s wait for result 2) was the page reloading under the live voice session: its log closes the session with cause `beforeunload` two seconds in, and the dev server logged no reload, which leaves the Vite client's own reload when its HMR socket drops. The journeys' portal now runs with no HMR socket and its own dependency cache (`scripts/journeys/journey-vite.mjs`), and `nthOutput` waits on the session itself: it fails at once, saying why, if the page reloads or the session closes, with a 90 s backstop only for a session that hangs while open. Five full runs passed, the third alongside a middleware jest shard.
+
+### Where the 10 November run stopped
+
+The loop stopped with nothing queued. Sweeps 12 to 15 each found only Low findings, and each is fixed (see the sweep sections in section 10). The portal is on ui-components 2.519.0.
+
+Open, small:
+
+- The phone footer is two rows while a voice session is live; the second row is mostly empty.
+- Two-line titles on the Decisions list need a library fix: the table gives a wrapping column a fixed narrow width.
+- Trace owner tags and the signed-request replay table are unproven on AWS. Deploy the Foundation stack first; signed requests are refused until the table exists.
+- The G66 confirm window and the 120 second message cover have unit tests with a fake clock and no journey step.
+
+Waiting on the owner:
+
+- A fresh clone cannot install the portal or the middleware without access to two private dependency repositories. Either make them public or vendor their tarballs.
+- Account ids in tracked environment files.
+- The history rewrite, the CI token, the registry default in `scripts/build.sh`, and back-publishing older library versions.
