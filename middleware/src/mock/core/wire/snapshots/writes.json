@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-10T03:45:09.924Z",
-  "serverHandlerSha": "a364d2e7d9cb46c2b75cc3a77fddc3bf6f1063b983a70f3f0491cbddeef3e87a",
-  "baseUrl": "http://127.0.0.1:3971",
+  "capturedAt": "2026-11-10T11:35:36.556Z",
+  "serverHandlerSha": "d6b48561b69cf98f1b6783d815f8d631f2fdde2801166c2e5451d1fc87ee4ed1",
+  "baseUrl": "http://127.0.0.1:3945",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -155,14 +155,7 @@
       }
     },
     "DELETE /api/graph/work-items/:id/decisions/:decisionId": {
-      "persona": "orgiq/admin",
-      "status": 404,
-      "shape": {
-        "$": "object",
-        "error": "string"
-      },
-      "values": {},
-      "sent": []
+      "skipped": "no value found for :decisionId under /api/graph/work-items/wi-rta-e1-s1/decisions (orgiq/admin)"
     },
     "DELETE /api/graph/work-items/:id/documents/:documentId": {
       "refused": {
@@ -272,8 +265,8 @@
     },
     "DELETE /api/voice/mock-script": {
       "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The only exceptions are deletes somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/work/jobs/:id": {
@@ -539,12 +532,13 @@
         "assigneeDept": "string",
         "assigneeId": "string",
         "assigneeName": "string",
+        "blockedByDecisionId": "null",
         "blockedReason": "null",
         "childCount": "number",
         "childDoneCount": "number",
-        "completedAt": "string",
+        "completedAt": "null",
         "createdAt": "string",
-        "description": "null",
+        "description": "string",
         "estimateForecast": "null",
         "estimateModel": "null",
         "estimateReviewedAt": "null",
@@ -561,25 +555,25 @@
         "nextStep": "null",
         "nextStepDetail": "null",
         "parentId": "string",
-        "prStatus": "string",
-        "prUrl": "string",
+        "prStatus": "null",
+        "prUrl": "null",
         "priority": "string",
         "projectId": "string",
         "projectName": "string",
         "sprintId": "string",
         "status": "string",
         "storyPoints": "number",
-        "summary": "null",
+        "summary": "string",
         "title": "string",
         "type": "string",
         "updatedAt": "string"
       },
       "values": {
         "key": [
-          "ORG-LLM-10"
+          "ORG-RTA-2"
         ],
         "status": [
-          "done"
+          "in_progress"
         ],
         "type": [
           "story"
@@ -710,6 +704,7 @@
         "workItem.assigneeDept": "string",
         "workItem.assigneeId": "string",
         "workItem.assigneeName": "string",
+        "workItem.blockedByDecisionId": "null",
         "workItem.blockedReason": "null",
         "workItem.childCount": "number",
         "workItem.childDoneCount": "number",
@@ -2603,6 +2598,12 @@
         "decidedBy": "object",
         "decidedBy.id": "string",
         "decidedBy.name": "string",
+        "heldWork": "array",
+        "heldWork[]": "object",
+        "heldWork[].blocked": "boolean",
+        "heldWork[].id": "string",
+        "heldWork[].projectId": "string",
+        "heldWork[].title": "string",
         "history": "array",
         "history[]": "object",
         "history[].at": "string",
@@ -2670,6 +2671,7 @@
         "assigneeDept": "null",
         "assigneeId": "null",
         "assigneeName": "null",
+        "blockedByDecisionId": "null",
         "blockedReason": "null",
         "childCount": "number",
         "childDoneCount": "number",
@@ -4850,25 +4852,7 @@
       }
     },
     "PUT /api/graph/work-items/:id/decisions/:decisionId": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "escalatedAt": "null",
-        "id": "string",
-        "requiredRole": "null",
-        "status": "string",
-        "summary": "string",
-        "topic": "string",
-        "workItemId": "string",
-        "workItemTitle": "string"
-      },
-      "values": {
-        "status": [
-          "resolved"
-        ]
-      },
-      "sent": []
+      "skipped": "no value found for :decisionId under /api/graph/work-items/wi-rta-e1-s1/decisions (orgiq/admin)"
     },
     "PUT /api/graph/work-items/:id/documents/:documentId": {
       "refused": {

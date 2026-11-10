@@ -733,7 +733,7 @@ Four items the regression walk left open, one commit each.
 - Not proven on a live model: the voice passes drive scripted calls. The owner's 13:53 session on 9 November (four and a half silent minutes with no stopped round) has no proven cause; the diagnostics will explain the next one.
 - Library gaps: `DataTable` has no column-priority prop; ui-components has no ESLint installed, so its safe-URL rule runs as a script.
 - Traces on AWS (leftovers 2): the owner annotations are unproven on a live runtime. GetTraceSummaries only sees indexed spans, and Transaction Search indexes a sample (1% by default), so a member sees only the sampled share of their own traces until the indexing share is raised (`xrayIndexingPercent`, sweep 12).
-- Small: the new `GET /api/graph/projects/:id/discussion` row was added to the wire routes snapshot by hand, so the next capture records its shape; a private bound channel still shows a viewer outside it the old thread (as before, for Social members and non-members alike; since sweep 12 their `/comment` lands there too, and since round 3 also for a member who lost Social).
+- Small: the mock board's `GET /api/graph/work` order is not stable across boots (stamps reprojected one clock read per row in `mock/work-items.ts` `onClock`, sorted with no tie-breaker), so a wire capture's work-item samples and the decision-link write rows vary run to run; a private bound channel still shows a viewer outside it the old thread (as before, for Social members and non-members alike; since sweep 12 their `/comment` lands there too, and since round 3 also for a member who lost Social).
 
 ### 10 November, round 3
 
@@ -746,4 +746,4 @@ The code items of the two open lists, one commit each on branch `worktree-agent-
 - **Middleware nonces across replicas, and the table.** The service-envelope nonce cache sits behind a store interface: in-process by default, a conditional put into the shared replay table when `SERVICE_AUTH_REPLAY_TABLE` is set, failing closed. The table, the put-only grants and both variables are in the CDK stacks. See "Open security items".
 - **Voice dispatch "Start with"** (`e494c986`). It reads the initiative's decisions, as the drawer does; a failed read falls back to the item's own step.
 - **Private binding after a lost Social grant** (`e74113d8`). A private binding counts only when the binding read admits the caller as well as membership; otherwise the note goes on the thread their pane shows.
-- **Not done here.** The wire routes snapshot's hand-added discussion row still waits for the next full capture.
+- **Wire snapshots re-captured.** All three from a full mock capture, the discussion row's shape included; every changed row is explained by a commit except the work-board samples above (the commit message lists them).

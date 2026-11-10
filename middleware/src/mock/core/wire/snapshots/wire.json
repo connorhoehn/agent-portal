@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-10T03:45:04.310Z",
-  "serverHandlerSha": "a364d2e7d9cb46c2b75cc3a77fddc3bf6f1063b983a70f3f0491cbddeef3e87a",
-  "baseUrl": "http://127.0.0.1:3971",
+  "capturedAt": "2026-11-10T11:35:31.127Z",
+  "serverHandlerSha": "d6b48561b69cf98f1b6783d815f8d631f2fdde2801166c2e5451d1fc87ee4ed1",
+  "baseUrl": "http://127.0.0.1:3945",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -3312,6 +3312,12 @@
         "$": "object",
         "decidedAt": "null",
         "decidedBy": "null",
+        "heldWork": "array",
+        "heldWork[]": "object",
+        "heldWork[].blocked": "boolean",
+        "heldWork[].id": "string",
+        "heldWork[].projectId": "string",
+        "heldWork[].title": "string",
         "history": "array",
         "id": "string",
         "options": "array",
@@ -3444,6 +3450,7 @@
         "$[].assigneeDept": "string",
         "$[].assigneeId": "string",
         "$[].assigneeName": "string",
+        "$[].blockedByDecisionId": "null",
         "$[].blockedReason": "null",
         "$[].childCount": "number",
         "$[].childDoneCount": "number",
@@ -3586,6 +3593,7 @@
         "activeAgentRuns": "number",
         "agentSpendUsd": "number",
         "allocatedUsd": "number",
+        "canWriteWork": "boolean",
         "contributors": "array",
         "contributors[]": "object",
         "contributors[].avatarUrl": "string",
@@ -3688,6 +3696,16 @@
         ]
       }
     },
+    "GET /api/graph/projects/:id/discussion": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "channel": "object",
+        "channel.slug": "string"
+      },
+      "values": {}
+    },
     "GET /api/graph/projects/:id/work": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -3697,6 +3715,7 @@
         "$[].assigneeDept": "string",
         "$[].assigneeId": "string",
         "$[].assigneeName": "string",
+        "$[].blockedByDecisionId": "null",
         "$[].blockedReason": "null",
         "$[].childCount": "number",
         "$[].childDoneCount": "number",
@@ -3705,6 +3724,7 @@
         "$[].children[].assigneeDept": "string",
         "$[].children[].assigneeId": "string",
         "$[].children[].assigneeName": "string",
+        "$[].children[].blockedByDecisionId": "null",
         "$[].children[].blockedReason": "null|string",
         "$[].children[].childCount": "number",
         "$[].children[].childDoneCount": "number",
@@ -3866,6 +3886,7 @@
         "$[].assigneeDept": "string",
         "$[].assigneeId": "string",
         "$[].assigneeName": "string",
+        "$[].blockedByDecisionId": "null|string",
         "$[].blockedReason": "null|string",
         "$[].childCount": "number",
         "$[].childDoneCount": "number",
@@ -3914,20 +3935,21 @@
           "ORG-DS-4",
           "ORG-DSAPI-1",
           "ORG-DSAPI-2",
+          "ORG-DSAPI-3",
           "ORG-DSAPI-4",
           "ORG-FS-1",
           "ORG-FS-3",
           "ORG-INF-1",
-          "ORG-INF-2",
           "ORG-INF-3",
-          "ORG-INF-4",
           "ORG-LAKE-2",
           "ORG-LAKE-3",
           "ORG-LAKE-4",
           "ORG-LLM-1",
           "ORG-LLM-10",
+          "ORG-LLM-2",
           "ORG-LLM-3",
           "ORG-LLM-4",
+          "ORG-LLM-5",
           "ORG-LLM-7",
           "ORG-LLM-9",
           "ORG-MOB-2",
@@ -3941,7 +3963,6 @@
           "ORG-OBS-4",
           "ORG-OBS-5",
           "ORG-OBS-8",
-          "ORG-RAG-2",
           "ORG-RAG-3",
           "ORG-RAG-4",
           "ORG-RTA-2",
@@ -6684,10 +6705,12 @@
         "traces[].spans[].traceId": "string",
         "traces[].startTime": "string",
         "traces[].status": "string",
+        "traces[].tenant": "string",
         "traces[].tokensIn": "number",
         "traces[].tokensOut": "number",
         "traces[].totalDurationMs": "number",
-        "traces[].traceId": "string"
+        "traces[].traceId": "string",
+        "traces[].userId": "string"
       },
       "values": {
         "traces[].spans[].attributes.error.type": [
@@ -6712,6 +6735,9 @@
         "traces[].status": [
           "error",
           "ok"
+        ],
+        "traces[].tenant": [
+          "orgiq"
         ]
       }
     },
@@ -6746,10 +6772,12 @@
         "spans[].traceId": "string",
         "startTime": "string",
         "status": "string",
+        "tenant": "string",
         "tokensIn": "number",
         "tokensOut": "number",
         "totalDurationMs": "number",
-        "traceId": "string"
+        "traceId": "string",
+        "userId": "string"
       },
       "values": {
         "spans[].attributes.query.type": [
@@ -6765,6 +6793,9 @@
         ],
         "status": [
           "ok"
+        ],
+        "tenant": [
+          "orgiq"
         ]
       }
     },
