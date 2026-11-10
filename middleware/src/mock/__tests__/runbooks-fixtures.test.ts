@@ -23,11 +23,10 @@ describe('runbook fixtures', () => {
     expect(runbooks.length).toBeGreaterThan(0);
     for (const r of runbooks) expect(runbookVersionsFixture.rows().some((v) => v.runbook_id === r.id && v.version === r.current_version)).toBe(true);
     for (const v of runbookVersionsFixture.rows()) expect(runbooks.some((r) => r.id === v.runbook_id)).toBe(true);
-    // Lane C's seeded proposals (mock/runbooks.seed.ts): a run's edit, a run's new runbook, a person's near-duplicate;
-    // R8's run edit that changes a tool's files (mock/runbook-bundles.ts); and the LLM-platform run's edit to the
-    // knowledge-base search runbook (mock/runbooks-engagement.ts).
+    // The seeded proposals: a failed run's edit to the cutover runbook (mock/runbooks.seed.ts) and a run's edit
+    // that changes a tool's files (mock/runbook-bundles.ts).
     expect(fixtureRegistry.get('runbook-proposals')!.rows().map((p) => (p as { id: string }).id).sort())
-      .toEqual(['prop-flaky-quarantine-check', 'prop-judge-rubric-weights', 'prop-kb-search-text-index', 'prop-presence-busy', 'prop-tenant-cutover-callback']);
+      .toEqual(['prop-presence-busy', 'prop-tenant-cutover-callback']);
   });
 
   it('default carries one frozen brief on a done Auth Migration job, and the runbook application that names it', () => {
@@ -35,7 +34,7 @@ describe('runbook fixtures', () => {
     expect(briefs.map((b) => b.run_ref)).toEqual(['job-auth-maint-1']);
     const [brief] = briefs;
     expect(brief!.initiative_id).toBe('p-auth-migration');
-    // R8: the brief records the org's skill library its box synced, the CSRF-gate skill in it.
+    // The brief records the org's skill library its box synced, the CSRF-gate skill in it.
     expect(brief!.skill_library?.skills.some((k) => k.name === 'rb-auth-pr-csrf-gate')).toBe(true);
     const app = runbookApplicationsFixture.rows().find((a) => a.run_ref === 'job-auth-maint-1');
     expect(app?.brief_id).toBe(brief!.id);
@@ -56,13 +55,13 @@ describe('runbook fixtures', () => {
     const before = runbooksFixture.rows().map((r) => r.id);
     const rb = (await store.getRunbook('rb-sso-new-origin'))!;
     await store.putVersion(versionOf({ runbook_id: rb.id, version: 2, doc: tenantCutoverV2, author: { kind: 'person', id: 'p-001' } }), rb.current_version, '2026-10-14T00:00:00.000Z');
-    await store.decideProposal({ proposal_id: 'prop-flaky-quarantine-check', decision: 'rejected', decided_by: 'p-001', at: '2026-10-14T00:00:00.000Z' });
+    await store.decideProposal({ proposal_id: 'prop-tenant-cutover-callback', decision: 'rejected', decided_by: 'p-001', at: '2026-10-14T00:00:00.000Z' });
     expect((await store.getRunbook(rb.id))!.current_version).toBe(2);
-    expect((await store.getProposal('prop-flaky-quarantine-check'))!.status).toBe('rejected');
+    expect((await store.getProposal('prop-tenant-cutover-callback'))!.status).toBe('rejected');
 
     fixtureRegistry.resetAll();
     expect((await store.getRunbook(rb.id))!.current_version).toBe(1);
-    expect((await store.getProposal('prop-flaky-quarantine-check'))!.status).toBe('open');
+    expect((await store.getProposal('prop-tenant-cutover-callback'))!.status).toBe('open');
     expect(runbooksFixture.rows().map((r) => r.id)).toEqual(before);
   });
 

@@ -291,11 +291,9 @@ export function guardMarkdown(markdown: string): string {
 
 // ── The retired /iq/distillation tree ────────────────────────────────────────
 
-/** Source artifact → the runbook the migration made of it. */
+/** Old Distillation artifact id → the seeded runbook it is now. */
 export const ARTIFACT_RUNBOOK: Readonly<Record<string, string>> = {
-  'art-001': 'rb-flaky-test-rerun-diff', 'art-002': 'rb-aurora-cold-start-retry', 'art-003': 'rb-fargate-arm64-image',
-  'art-004': 'rb-auth-pr-csrf-gate', 'art-005': 'rb-ingest-pii-scan', 'art-006': 'rb-statsd-decommission',
-  'art-009': 'rb-sso-new-origin', 'art-010': 'rb-tenant-cutover', 'art-011': 'rb-idle-teardown-proposal',
+  'art-004': 'rb-auth-pr-csrf-gate', 'art-009': 'rb-sso-new-origin', 'art-010': 'rb-tenant-cutover',
 };
 
 /** Where a retired /iq/distillation URL now lives. Review → Proposals, a known guide → its runbook, everything else → the Library. */
