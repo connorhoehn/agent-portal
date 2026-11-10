@@ -15,7 +15,7 @@
 jest.mock('../../config.js', () => ({ config: { mock: { aurora: true, agentcore: true } } }));
 
 import {
-  PIPELINE_RUN_STATUSES, crosswalkStatus, projectRuns, runEvents, SOURCE_TABLES, traceSourceStatus, agentTenant,
+  PIPELINE_RUN_STATUSES, crosswalkStatus, projectRuns, projectRunTitle, runEvents, SOURCE_TABLES, traceSourceStatus, agentTenant,
   type RunSources, type SourceTable, type Run,
 } from '../pipeline-runs.js';
 import { agentJobs } from '../../mock/agent-jobs.js';
@@ -136,5 +136,23 @@ describe('crosswalkStatus (research §D.3)', () => {
 
   it('reads a status no table produces as stuck, never as healthy', () => {
     expect(crosswalkStatus('mystery')).toBe('stuck');
+  });
+});
+
+// Regression walk, 9 November night (E3): /iq/runs titled a dispatched work
+// item's run with its whole prompt, so the row read the bracketed record id.
+describe('projectRunTitle', () => {
+  it('reads the work item title out of either prompt order, never the bracketed id', () => {
+    expect(projectRunTitle('Fix token refresh\nWork item AUTH-7 [wi-auth-e2-b3] (bug, 2 pts)\n\nDetails.'))
+      .toBe('Fix token refresh');
+    expect(projectRunTitle('Work item AUTH-7 [wi-auth-e2-b3] (bug, 2 pts)\nFix token refresh\n\nDetails.'))
+      .toBe('Fix token refresh');
+    expect(projectRunTitle('Retry [wi-auth-e2-b3] after the fix')).toBe('Retry after the fix');
+    expect(projectRunTitle('Summarize the incident.')).toBe('Summarize the incident.');
+  });
+
+  it('no projected run title carries a bracketed record id', () => {
+    const { runs } = projectRuns(fixtureSources());
+    expect(runs.filter((r) => /\[[a-z]+-[a-z0-9-]+\]/i.test(r.context.title)).map((r) => r.context.title)).toEqual([]);
   });
 });

@@ -463,6 +463,25 @@ function triggerStep(runId: string, trigger: BotRunSource | undefined): Step[] {
     typeof trigger.outcome?.['reason'] === 'string' ? String(trigger.outcome['reason']) : null)];
 }
 
+/** A work-item dispatch's bookkeeping line: `Work item KEY [wi-…] (bug, 2 pts)`. */
+const WORK_ITEM_PREAMBLE = /^Work item \S+(?: \[[^\]]+\])? \([^)]*\)$/;
+/** A bracketed record id (`[wi-auth-e2-b3]`), a reference no reader needs in a title. */
+const BRACKETED_ID = /\s*\[[a-z]+-[a-z0-9-]+\]/gi;
+
+/**
+ * A governed run's title: the first line of its prompt that is not the
+ * work-item bookkeeping, so a dispatched work item reads as the item's title.
+ * The ledger used the whole prompt, which on one truncated line read
+ * "<title> Work item KEY [wi-…] (bug, 2 pts)", and rows written before
+ * `renderWorkItemPrompt` put the title first led with the bracketed id
+ * (regression walk, 9 November night, E3).
+ */
+export function projectRunTitle(prompt: string): string {
+  const lines = prompt.split('\n').map((l) => l.trim()).filter(Boolean);
+  const line = lines.find((l) => !WORK_ITEM_PREAMBLE.test(l)) ?? lines[0] ?? '';
+  return line.replace(BRACKETED_ID, '').trim() || 'Agent run';
+}
+
 // ─── The projection ─────────────────────────────────────────────────────────
 
 export function projectRuns(src: RunSources): Projection {
@@ -570,7 +589,7 @@ export function projectRuns(src: RunSources): Projection {
         tenant: TENANT_OF.agent_project_runs, kind: trig?.botId ? 'bot' : 'agent',
         table: 'agent_project_runs', id: r.id, sourceStatus: r.status,
         sources: refs({ table: 'agent_project_runs', id: r.id, status: r.status, role: 'primary' }, trig),
-        title: r.prompt, botId: trig?.botId ?? null, projectId: r.projectId,
+        title: projectRunTitle(r.prompt), botId: trig?.botId ?? null, projectId: r.projectId,
         workItemId: r.workItemId ?? trig?.workItemId ?? null, trigger: trig?.trigger ?? null, error: r.error,
       },
     });

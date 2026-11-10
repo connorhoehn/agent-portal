@@ -64,7 +64,10 @@ export function presentRunTitles(runs: Run[], names: RunNames): void {
         break;
       }
       case 'agent_project_runs': {
+        // A dispatched work item's run is that item's work: its title, never
+        // the prompt line that carries the item's bracketed id (E3).
         const wi = c.workItemId ? names.workItem(c.workItemId) : null;
+        if (wi) c.title = wi.title;
         c.initiativeName = (c.projectId ? names.project(c.projectId) : null) ?? wi?.initiative ?? null;
         break;
       }

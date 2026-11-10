@@ -41,6 +41,12 @@ describe('presentRunTitles', () => {
     expect(runs.map((r) => r.context.initiativeName ?? null)).toEqual([null, 'Auth Migration', 'Auth Migration', 'Observability Platform']);
   });
 
+  it('names a governed run for a work item by the item, never by the bracketed id in its prompt', () => {
+    const r = run('agent_project_runs', { title: 'Work item AUTH-7 [wi-1] (bug, 2 pts)', workItemId: 'wi-1', projectId: 'p1' });
+    presentRunTitles([r], names);
+    expect(r.context.title).toBe('Logout leaves the shim cookie alive');
+  });
+
   it('leaves a title alone when no name is known: an id beats a guess', () => {
     const r = run('assessment_runs', { title: 'score-dimensions · TEAM-999', definitionId: 'assessment:score-dimensions' });
     presentRunTitles([r], names);

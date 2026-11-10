@@ -24,6 +24,9 @@
 //   run-steps-repeat         an agent run whose steps share a name (the Steps
 //                            table read "route, route"), scanned over the
 //                            supervisor runs the trace fixture projects
+//   run-title-id             a run title (/iq/runs) carries a bracketed record id
+//                            (`[wi-auth-e2-b3]`), from a dispatch prompt or a
+//                            seeded run
 //   surname-crowd            one surname on more than two people
 //
 //   node scripts/content/check-story.mjs     prints every finding; exit 1 on any
@@ -62,12 +65,14 @@ const [
   { CAST, HISTORY, EXTRA_CHANNELS }, { notificationsFixture }, { orgFindings },
   { kbRegistry }, { bots }, { workspaceDocuments }, { savedSearchesFixture },
   { socialChannelsFixture, socialChannelMessagesFixture }, { traceRows },
+  { renderWorkItemPrompt }, { projectRuns, projectRunTitle }, { agentProjectRuns }, { agentJobs }, { allMockRuns },
 ] = await Promise.all([
   'mock/initiatives.ts', 'mock/work-items.ts', 'mock/decisions.ts', 'mock/sprints.ts',
   'mock/budgets.ts', 'mock/people.ts', 'providers/identity.ts', 'mock/work-item-comments.ts',
   'mock/social-history.ts', 'mock/notifications.ts', 'mock/org-findings.ts',
   'mock/kb-registry.ts', 'mock/bots.ts', 'providers/work-documents.ts', 'providers/saved-searches.ts',
   'mock/social-channels.ts', 'mock/observability.ts',
+  'lib/bot-runner.ts', 'lib/pipeline-runs.ts', 'mock/agent-project-runs.ts', 'mock/agent-jobs.ts', 'mock/bots.ts',
 ].map(load));
 
 const findings = [];
@@ -172,6 +177,29 @@ for (const row of traceRows().filter((r) => r.agui_run_id && Array.isArray(r.ste
   const repeated = names.filter((n, i) => names.indexOf(n) !== i);
   if (repeated.length) fail('run-steps-repeat', where, `steps ${names.join(', ')} repeat ${[...new Set(repeated)].join(', ')}`);
 }
+// ── Run titles (/iq/runs): no bracketed record id ──
+// A dispatched work item's run is titled from its prompt, which carries
+// `KEY [wi-…]` on its bookkeeping line; the ledger once showed that line. Every
+// work item is rendered as a dispatch would render it, in both the current and
+// the earlier prompt order, plus the seeded runs as the projection titles them.
+const BRACKETED = /\[[a-z]+-[a-z0-9-]+\]/i;
+const legacyOrder = (prompt) => { const [title, preamble, ...rest] = prompt.split('\n'); return [preamble, title, ...rest].join('\n'); };
+for (const wi of items) {
+  const prompt = renderWorkItemPrompt(wi);
+  for (const [order, text] of [['dispatch', prompt], ['earlier dispatch', legacyOrder(prompt)]]) {
+    const title = projectRunTitle(text);
+    scanned += 1;
+    if (BRACKETED.test(title)) fail('run-title-id', `${order} of ${wi.id}`, `run title "${clip(title)}"`);
+  }
+}
+const { runs: seededRuns } = projectRuns({
+  agentJobs: agentJobs.rows(), botRuns: allMockRuns(), agentProjectRuns: agentProjectRuns.rows(), assessmentRuns: [],
+});
+for (const run of seededRuns) {
+  scanned += 1;
+  if (BRACKETED.test(run.context.title)) fail('run-title-id', run.id, `run title "${clip(run.context.title)}"`);
+}
+
 for (const ch of EXTRA_CHANNELS) { scanText(`channel ${ch.slug}.name`, ch.name); scanText(`channel ${ch.slug}.description`, ch.description); }
 
 // ── Surnames ──
