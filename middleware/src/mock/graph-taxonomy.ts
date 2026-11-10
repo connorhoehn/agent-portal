@@ -5,7 +5,7 @@
 // were literally `async () => ({ domains: [], skills: [], people: [],
 // personSkillEdges: [] })`. Both endpoints answered 200 with empty arrays, so
 // Explore's Skills and Projects views rendered an empty canvas — no error, no
-// console warning, nothing to grep for. `docs/mock-floor.md` calls this out as
+// console warning, nothing to grep for. `middleware/src/mock/core/contract.ts` calls this out as
 // the thing a mock must never be: a stub that returns a shape instead of data.
 //
 // GENERATED FROM `schema/seed.sql`, not written by hand — these are the same

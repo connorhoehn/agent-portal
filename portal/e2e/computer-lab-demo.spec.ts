@@ -54,7 +54,7 @@ async function beat(page: Page, ms = BEAT_MS): Promise<void> {
   await page.waitForTimeout(ms);
 }
 
-/** Put every fixture back and stop any story in flight (docs/mock-floor.md). */
+/** Put every fixture back and stop any story in flight (middleware/src/mock/core/contract.ts). */
 async function resetFixtures(request: APIRequestContext): Promise<void> {
   await request.post('/api/__mock/reset').catch(() => null);
 }

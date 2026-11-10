@@ -7,7 +7,7 @@
 // cheerful `200` and every check stayed green while the surface said nothing.
 // That is the worst shape a gap can take: a broken integration and an idle
 // repository render identically, and no reader (and no test) can tell them
-// apart. See docs/mock-floor.md § "What the judge cannot see", which named
+// apart. See middleware/src/mock/core/contract.ts § "What the judge cannot see", which named
 // this route by hand because nothing mechanical could.
 //
 // WIRE STRINGS ARE NOT INVENTED. `status` is GitHub's run *state* — queued,

@@ -161,7 +161,7 @@ export async function openAs(browser: Browser, userId: string | null, opts: Open
   } catch (error) { await context.close(); throw error; }
 }
 
-// ── dev:mock isolation (docs/mock-floor.md § Scopes and clones) ─────────────
+// ── dev:mock isolation (middleware/src/mock/core/contract.ts § Scopes and clones) ─────────────
 //
 // A clone is a user minted from a seed persona — same grants, person link and
 // name, its own id and session epoch — so two runs "as u-vera" never revoke

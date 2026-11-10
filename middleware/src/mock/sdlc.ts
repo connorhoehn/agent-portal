@@ -10,7 +10,7 @@
 // change. A 500 reads as "this feature is broken", which is the wrong message
 // for a feature that works.
 //
-// Four rules of the floor shaped what moved here (docs/mock-floor.md):
+// Four rules of the floor shaped what moved here (middleware/src/mock/core/contract.ts):
 //
 //   1. WRITES NEED SOMEWHERE TO GO. A raw `exec()` reaches the RDS Data API
 //      whatever `config.mock.aurora` says. A mock branch has to mutate

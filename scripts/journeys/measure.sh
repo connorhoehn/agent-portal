@@ -14,7 +14,7 @@
 # judge (the contract is recorded either way — a failing page is a contract too).
 set -u
 # Every sweep signs in as a dev:mock clone of its persona (own session epoch), so a measurement runs beside
-# an audit using the seed personas (docs/mock-floor.md § Scopes and clones). Same grants, same measurements.
+# an audit using the seed personas (middleware/src/mock/core/contract.ts § Scopes and clones). Same grants, same measurements.
 export JOURNEY_MEASURE_CLONES=1
 cd "$(dirname "$0")/../.."
 LOGDIR=${RAIL_PARITY_LOG_DIR:-/tmp}

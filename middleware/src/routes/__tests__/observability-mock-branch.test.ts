@@ -273,7 +273,7 @@ describe('the reads that stay honest about what they cannot do', () => {
     // failures — which have no embedding (`embedText('')` is null), hence no
     // distance to rank, hence an outlier list that was always []. That band
     // is gone: the day's errors are now interleaved through the default
-    // 50-row tail instead of staged ahead of it (docs/mock-floor.md, "The
+    // 50-row tail instead of staged ahead of it (middleware/src/mock/core/contract.ts, "The
     // error band, and what it costs"), so the newest hour legitimately holds
     // a mix of both — which is what a real fleet's last hour looks like, not
     // a defect this route needs to paper over.

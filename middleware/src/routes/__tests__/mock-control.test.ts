@@ -358,7 +358,7 @@ describe('X-Mock-Scenario header', () => {
 //   - POST /scenario {fixture:'compute-nodes',scenario:'error'} returned 200,
 //     GET /state then reported it pinned to `error`, and the rows came back
 //     `default` with HTTP 200.
-// An auditor doing exactly what docs/mock-floor.md says — "to see an empty or
+// An auditor doing exactly what middleware/src/mock/core/contract.ts says — "to see an empty or
 // error state, ask for it" — got a healthy page and would have concluded the
 // surface handles a failed read.
 describe('scenarios are per-fixture, not the global catalogue', () => {

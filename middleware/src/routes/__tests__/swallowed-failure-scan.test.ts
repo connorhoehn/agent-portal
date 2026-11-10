@@ -36,7 +36,7 @@
 // twenty-three now answer through a `degraded()` wrapper. The number may go
 // down. It must never go up.
 //
-// WHAT THIS CANNOT SEE. Say it out loud, as docs/mock-floor.md does for the
+// WHAT THIS CANNOT SEE. Say it out loud, as middleware/src/mock/core/contract.ts does for the
 // judge, so nobody over-trusts it:
 //
 //   * It is lexical. Only a `res.json` INSIDE a catch block counts. A handler

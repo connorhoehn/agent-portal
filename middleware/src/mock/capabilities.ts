@@ -152,7 +152,7 @@ export interface CodeSession {
  */
 // What each interpreter session has run, oldest first. `executionCount` is the
 // length of its list and `lastCode` is its last entry, so the counter and the
-// code it reports cannot disagree (docs/mock-floor.md rule 1).
+// code it reports cannot disagree (middleware/src/mock/core/contract.ts rule 1).
 const GRAPH_BUILDER_CODE = [
   'import json, re\nraw = open("auth-runbook.md").read()',
   'sections = re.split(r"^## ", raw, flags=re.M)\nprint(len(sections))',

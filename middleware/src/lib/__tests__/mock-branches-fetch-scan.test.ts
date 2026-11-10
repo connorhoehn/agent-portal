@@ -4,7 +4,7 @@
 // Data API) and nothing else, so "reaches a backend dev:mock cannot answer"
 // really meant "reaches AWS". Anything spoken over plain HTTP was structurally
 // invisible — `lib/github-connector.ts` talks to api.github.com and no check in
-// the repo could name it, which `docs/mock-floor.md § What the judge cannot
+// the repo could name it, which `middleware/src/mock/core/contract.ts § What the judge cannot
 // see` said out loud. These tests pin the widening in both directions: what it
 // must now find, and what it must still refuse to call a finding.
 

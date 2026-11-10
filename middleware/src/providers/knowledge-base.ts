@@ -1038,7 +1038,7 @@ export async function getStorageBreakdown(s3Prefix?: string): Promise<StorageBre
     // faithfully reproduce the deployed bug — the second wave indexed 4, so the
     // page read "4 documents" over a 14-document corpus the same fixture
     // exports. A fixture must never state a number it could count from rows it
-    // also exports (docs/mock-floor.md).
+    // also exports (middleware/src/mock/core/contract.ts).
     const lastComplete = (await listIngestionJobs(undefined, 10)).find(j => j.status === 'COMPLETE');
     return {
       bucket: mockBucket(),

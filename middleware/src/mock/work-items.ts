@@ -558,7 +558,7 @@ const MOCK_PROGRAM_FIELDS: Record<string, { sprintId?: string; estimatedCostUsd?
 /**
  * A seed stamp — `D(n)`, n days before MOCK_EPOCH — as the same n days before
  * the mock clock's now. Called inside the fixture factory, so the board moves
- * with the clock (docs/mock-floor.md rule 3) and agrees with Aurora, whose
+ * with the clock (middleware/src/mock/core/contract.ts rule 3) and agrees with Aurora, whose
  * seed writes `NOW() - INTERVAL 'n days'`. Before 2026-10-15 the rows kept
  * their spring dates and only the activity feed reprojected them, so an item
  * read "Created Apr 6" beside a comment from two days ago
@@ -629,7 +629,7 @@ function normalizeSeed(seed: MockSeed, idOverride?: { id: string; parentId: stri
 
 /**
  * An epic's children, counted from the rows. These two numbers were typed on
- * each epic beside the stories they claimed to count (docs/mock-floor.md rule
+ * each epic beside the stories they claimed to count (middleware/src/mock/core/contract.ts rule
  * 1), and drifted whenever a story was added; now the list is the authority.
  */
 function deriveChildCounts(items: WorkItem[]): WorkItem[] {

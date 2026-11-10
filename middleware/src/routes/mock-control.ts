@@ -164,7 +164,7 @@ function describeFixture(fixture: Fixture<unknown>): Scenario[] {
   // fixture's own — so `compute-nodes` advertised `error` ("Providers fail,
   // so a surface has to render an error state rather than a blank panel")
   // while declaring only default/empty/fresh/large. An auditor following
-  // docs/mock-floor.md exactly — "to see an empty or error state, ask for
+  // middleware/src/mock/core/contract.ts exactly — "to see an empty or error state, ask for
   // it" — pinned it, got a healthy 200 and a normal page, and would have
   // concluded the surface handles a failed read. It does not; the scenario
   // simply fell through to `default`. `declaredScenariosFor` is the same

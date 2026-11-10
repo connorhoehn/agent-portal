@@ -253,7 +253,7 @@ export function formatFindings(findings: readonly Finding[]): string {
   for (const f of findings) lines.push(`  ${f.where}`, `    ${f.message}`, '');
   lines.push(
     'A fixture may omit a field the server sends. It may never invent one.',
-    'If the server changed, regenerate the snapshot (docs/mock-floor.md, "Wire capture").',
+    'If the server changed, regenerate the snapshot (middleware/src/mock/core/contract.ts, "Wire capture").',
     `If the disagreement is intentional, declare it with a reason in ${ALLOWED.file}.`,
   );
   return lines.join('\n');

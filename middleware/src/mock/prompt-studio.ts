@@ -15,7 +15,7 @@
 //     sent and cannot mistake it for a completion.
 //   * optimize REFUSES. There is no rewrite a fixture can perform that would
 //     be a rewrite; returning the input unchanged and calling it "optimized"
-//     is the rubber stamp docs/mock-floor.md rules out, and returning invented
+//     is the rubber stamp middleware/src/mock/core/contract.ts rules out, and returning invented
 //     prose would be worse. It answers 503 with the reason, which is the same
 //     thing the live route answers when OptimizePrompt is unavailable.
 

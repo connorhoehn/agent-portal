@@ -736,7 +736,7 @@ canaryLibraryRouter.post(
 
     // Deliberately a refusal, not a fixture. A rewrite is the whole product of
     // this endpoint; handing back the input and calling it optimized would be
-    // the rubber stamp docs/mock-floor.md rules out.
+    // the rubber stamp middleware/src/mock/core/contract.ts rules out.
     if (config.mock.aurora) {
       res.status(503).json(offlineOptimize());
       return;

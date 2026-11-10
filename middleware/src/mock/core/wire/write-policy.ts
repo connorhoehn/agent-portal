@@ -47,7 +47,7 @@
 //      leaving the row byte-identical). It may not flip a seeded row's state:
 //      that is the exact damage the control plane exists to prevent —
 //      "promo-aurora-cold-start is now Promoted until the middleware restarts",
-//      quoted in docs/mock-floor.md.
+//      quoted in middleware/src/mock/core/contract.ts.
 //
 //      WHAT CHANGED. This paragraph used to name eight provider domains (bots,
 //      sprints, grants, work-items, promotions, session-bundle, lab,

@@ -107,7 +107,7 @@ export const workItemComments = defineFixture<WorkItemCommentRow>({
         body: '@Mia Singh do we keep the drawer swipe on Android, or open the drawer from the tab bar only? The back gesture and the swipe start from the same edge, and every fix that keeps both breaks one of them on some devices.' },
     ],
     // Declared, so an auditor can see the feed's own empty state without
-    // damaging the seed — see docs/mock-floor.md's fallback rule.
+    // damaging the seed — see middleware/src/mock/core/contract.ts's fallback rule.
     empty: () => [],
   },
 });

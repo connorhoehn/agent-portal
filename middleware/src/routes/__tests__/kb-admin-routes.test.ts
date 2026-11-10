@@ -636,7 +636,7 @@ describe('POST /:id/sync', () => {
 
 describe('offline (MOCK_AGENTCORE), the two Bedrock-backed routes', () => {
   // This pair was the last KB surface with no mock branch, and it failed in the
-  // shape docs/mock-floor.md calls the worst one: the page appeared to work.
+  // shape middleware/src/mock/core/contract.ts calls the worst one: the page appeared to work.
   // Both handlers sent to Bedrock unconditionally, so under `dev:mock` they
   // reached the real account with whatever credentials the developer had —
   // verified by hand, an honest AccessDeniedException from a live STS role.

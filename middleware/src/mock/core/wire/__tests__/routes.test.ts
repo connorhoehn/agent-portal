@@ -67,7 +67,7 @@ describe('route enumeration', () => {
 
     if (problem) {
       throw new Error(
-        `${problem}\n\nRegenerate the snapshot — see docs/mock-floor.md, "Wire capture":\n` +
+        `${problem}\n\nRegenerate the snapshot — see middleware/src/mock/core/contract.ts, "Wire capture":\n` +
           '  cd middleware && npm run dev:mock            # one terminal\n' +
           '  cd middleware && npx tsx src/mock/core/wire/capture.ts',
       );

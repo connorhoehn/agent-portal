@@ -18,7 +18,7 @@
 // (evidence_class "attested") a higher claim is held at Defined. The scores,
 // evidence, submissions and scoring logs are authored in assessment-content.ts.
 //
-// This module stands on the mock floor (src/mock/core, docs/mock-floor.md):
+// This module stands on the mock floor (src/mock/core, middleware/src/mock/core/contract.ts):
 //
 //   * Every collection is a `defineFixture` with a rows FACTORY, so a caller
 //     can ask for `empty`/`error`/`large` (GET/POST /api/__mock/scenario)

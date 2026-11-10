@@ -21,7 +21,7 @@
 // WHAT IT IS AND IS NOT. This is a REACHABILITY argument, not an execution
 // trace: "some path from this handler reaches a function that calls the RDS
 // Data API, an AWS SDK client, or an outbound `fetch`, with no `config.mock`
-// branch". It can be wrong in both directions and `docs/mock-floor.md § What
+// branch". It can be wrong in both directions and `middleware/src/mock/core/contract.ts § What
 // the judge cannot see` says how. It is a ratchet, not a gate.
 //
 // `fetch` was the third thing it could not see, added 2026-09. Counting only
@@ -319,7 +319,7 @@ const TRANSPORT_FNS = new Set(['exec', 'execWrite', 'safeExec', 'execOne']);
  * The layers a finding may name.
  *
  * `src/providers/**` was the whole scan until 2026-09. It under-reported by
- * exactly the amount `docs/mock-floor.md` warned it would: a handler that
+ * exactly the amount `middleware/src/mock/core/contract.ts` warned it would: a handler that
  * reaches AWS through `src/lib/**` was invisible, and that is where the entire
  * governed-run and change-delivery surface lived — `POST /api/agent-projects/:id/runs`
  * and `POST /api/sdlc/changes/:id/deliver` both 503'd offline at
@@ -371,7 +371,7 @@ const OUTBOUND_TRANSPORT_FNS = new Map<string, Set<string>>([
  * `fetch` was added 2026-09. Until then the scan counted only `.send(...)` and
  * `exec(...)`, so anything reached over plain HTTP was structurally invisible:
  * `lib/github-connector.ts` talks to api.github.com and nothing in the judge
- * could see it, which `docs/mock-floor.md § What the judge cannot see` said out
+ * could see it, which `middleware/src/mock/core/contract.ts § What the judge cannot see` said out
  * loud. That is why the budget rose again — the scan sees more, the code did
  * not get worse.
  */

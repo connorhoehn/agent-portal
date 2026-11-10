@@ -6,13 +6,13 @@
 # (u-lena, u-sana, u-asha, u-jonas, u-nora, u-rachel) hold real /ws sessions,
 # show up in Active now and channel presence, and post (off-topic, #random only) or react every 15-30 min.
 # The ten-day history, mentions and unread items it sits on are mock fixtures
-# (docs/mock-floor.md). Demo as u-farah (or u-mira/u-theo/u-vera); do not log
+# (middleware/src/mock/core/contract.ts). Demo as u-farah (or u-mira/u-theo/u-vera); do not log
 # in as a sim user, the tenant switch would sign the sim out and back in.
 # Stop it from the Tilt UI when you want a quiet workspace.
 
 # Real-media env (gitignored JSON, never printed): REALTIME_JWT_SECRET shared
 # with platform-api plus the public/internal URLs. Absent file = no media.
-# See docs/social-calls-first-call.md "Tilt stack".
+# The social compose profile is started with scripts/social-documents.mjs.
 _media_env = {}
 if os.path.exists('middleware/.env.tilt.local'):
     _media_env = read_json('middleware/.env.tilt.local')

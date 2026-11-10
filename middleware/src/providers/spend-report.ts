@@ -16,7 +16,7 @@
 // response carries `ledgerMode` so a reader can tell when the two differ.
 //
 // ── Mock ─────────────────────────────────────────────────────────────────────
-// Offline nothing here is stored (docs/mock-floor.md): the ledger is the
+// Offline nothing here is stored (middleware/src/mock/core/contract.ts): the ledger is the
 // stored `spend-entries` fixture rows plus a bot_run entry DERIVED from every
 // finished run in the bot_runs fixture, attributed by the same arms the Aurora
 // writer resolves — exactly what getActorSpend reads.

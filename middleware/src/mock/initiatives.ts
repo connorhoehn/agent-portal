@@ -3,7 +3,7 @@
 //
 // These rows were `MOCK_INITIATIVES`, a module-level array inside
 // providers/projects.ts. They moved here for three of the floor's reasons
-// (docs/mock-floor.md):
+// (middleware/src/mock/core/contract.ts):
 //
 //   1. TYPED AGGREGATES (rule 1). Each row carried `activeAgents: 2` — a count
 //      of `running` bot_runs typed beside a bot_runs fixture that had no running

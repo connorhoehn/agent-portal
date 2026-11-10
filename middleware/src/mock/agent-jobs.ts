@@ -3,7 +3,7 @@
 // This was `MOCK_JOBS`, a bare module-level array inside
 // providers/agent-jobs.ts, plus a second bare `Map` (`MOCK_CLAIM_TOKENS`) for
 // the pull-side fencing tokens local workers hold across a claim. Both moved
-// here for the reason the floor exists (docs/mock-floor.md): neither
+// here for the reason the floor exists (middleware/src/mock/core/contract.ts): neither
 // registered with the fixture registry, so `POST /api/__mock/reset` could not
 // undo a claim, a start, a heartbeat, a completed run or a fresh enqueue —
 // `mock/core/wire/write-policy.ts` refused the whole pull-side lifecycle as

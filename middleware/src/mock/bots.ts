@@ -3,7 +3,7 @@
 // These rows were three module-level arrays inside providers/bots.ts:
 // `MOCK_BOT_RUNS` (the seeded cron history), `MOCK_BOTS` (the roster) and
 // `MOCK_LIVE_RUNS` (every run this process recorded). They moved here for the
-// reasons the floor exists (docs/mock-floor.md):
+// reasons the floor exists (middleware/src/mock/core/contract.ts):
 //
 //   1. NOTHING COULD PUT THEM BACK. A write-capture sweep can only replay a
 //      write it can undo, and `POST /api/__mock/reset` walks the fixture
@@ -366,7 +366,7 @@ function largeBotRuns(): BotRun[] {
  * `dispatchedBy` null: no envelope burns down for them — they carry no cost.
  *
  * They are not in schema/seed_program.sql, so a seeded Aurora reads "Idle" for
- * Observability. That is a documented divergence (docs/mock-floor.md), not
+ * Observability. That is a documented divergence (middleware/src/mock/core/contract.ts), not
  * drift: a seed cannot hold a run "in flight" without it being in flight
  * forever, and the reconcile/sweep arms would rightly fail it on first boot.
  * Offline, both of those arms are no-ops (lib/bot-runner.ts), so these stay

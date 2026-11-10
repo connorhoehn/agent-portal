@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Live Social simulator for the local demo (docs/mock-floor.md § "Making Social feel populated").
+// Live Social simulator for the local demo (middleware/src/mock/core/contract.ts § "Making Social feel populated").
 //
 // Logs in a handful of seeded Social users through the normal picker login,
 // switches each to the `social` tenant, fetches their realtime token, and holds

@@ -183,7 +183,7 @@ export default {
   // Default: sign in as the seed persona itself. UI_DOM_AUDIT_CLONES=1 signs each actor in as a
   // fresh dev:mock clone of that persona (own session epoch), so the audit runs beside other
   // browser runs as the same persona without revoking them; UI_DOM_AUDIT_SCOPE=<scenario> also puts
-  // the actor's context in a scoped dev:mock world (docs/mock-floor.md § Scopes and clones).
+  // the actor's context in a scoped dev:mock world (middleware/src/mock/core/contract.ts § Scopes and clones).
   authenticate: async (context: Parameters<typeof signIn>[0], spec: InventoryRoute) => {
     const persona = spec.user ?? SWEEP_USER;
     if (process.env.AUDIT_CALL_STATES === '1') {

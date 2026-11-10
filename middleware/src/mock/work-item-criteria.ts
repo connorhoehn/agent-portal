@@ -103,7 +103,7 @@ export const workItemCriteria = defineFixture<WorkItemCriterionRow>({
       { id: 'wicr-rta-e1-s1-3', workItemId: 'wi-rta-e1-s1', text: 'Killing one task manager recovers in under 60 seconds with no duplicate output', done: false, position: 2, createdAt: clock.daysAgo(12), updatedAt: clock.daysAgo(12) },
     ],
     // Declared, so an auditor can see the checklist's own empty state without
-    // damaging the seed — see docs/mock-floor.md's fallback rule.
+    // damaging the seed — see middleware/src/mock/core/contract.ts's fallback rule.
     empty: () => [],
   },
 });

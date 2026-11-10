@@ -13,7 +13,7 @@ import { openAs } from './realSession';
 //   leave   one Leave ends a two-person call for BOTH ("Call ended")
 //   decline Decline -> the toast goes, Vera's dock reads "Call ended", and
 //           Start call works again
-// Cast: docs/social-calls-first-call.md. Vera is p-002 and Nora is p-004 on
+// Cast: Vera is p-002 and Nora is p-004 on
 // p-auth-migration (initiativeCallModel.ts maps person -> user through
 // GET /api/roster/users).
 //

@@ -1,5 +1,5 @@
 // Request-scoped scenarios and ephemeral identity clones (Lane M,
-// docs/mock-floor.md § Scopes and clones).
+// middleware/src/mock/core/contract.ts § Scopes and clones).
 //
 // The contracts this file holds:
 //   * a scoped scenario never leaks to another session or the global world;

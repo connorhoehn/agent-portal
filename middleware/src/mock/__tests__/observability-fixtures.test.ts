@@ -111,7 +111,7 @@ describe('the trace corpus is the invocation tail', () => {
     // mock-inv-0 used to be, by construction, the supervisor's A2A-timeout
     // row: errors were banded strictly ahead of every clean row, so the
     // newest rank was always a thrown one. Interleaving the errors through
-    // the tail (docs/mock-floor.md, "The error band, and what it costs")
+    // the tail (middleware/src/mock/core/contract.ts, "The error band, and what it costs")
     // means the newest rank is just whatever the day's own interleave order
     // puts there, which is now the supervisor's cleanly-answered Kubernetes
     // question. `mock/observability.ts`'s human-label fixture anchors by
@@ -213,7 +213,7 @@ describe('every rollup is reachable from the list beneath it', () => {
     //
     // The pinned count itself is not a designed target: `judge_score` is a
     // deterministic hash of each row's `invocation_id` (mock/observability.ts),
-    // and interleaving the errors through the tail (docs/mock-floor.md, "The
+    // and interleaving the errors through the tail (middleware/src/mock/core/contract.ts, "The
     // error band, and what it costs") changed which of ingestion's 12 clean
     // rows land on which id, which moves how many hash into the <0.3 bucket —
     // it happens to still be 6 once the errors were re-confined to

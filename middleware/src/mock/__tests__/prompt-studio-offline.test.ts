@@ -4,7 +4,7 @@
 // `/api/observability/canary/library` LOOKED mocked while `POST /library`,
 // `PUT /library/:id/draft` and `POST /library/:id/publish` called
 // CreatePrompt / UpdatePrompt / CreatePromptVersion against real Bedrock from a
-// laptop running `dev:mock`. That is the arrangement docs/mock-floor.md singles
+// laptop running `dev:mock`. That is the arrangement middleware/src/mock/core/contract.ts singles
 // out as the worst one — a surface that appears to work is a surface nobody
 // checks. These writes are invisible to `mock/core/wire/mock-branches.ts`,
 // which only reports leaves in `src/providers/**` and `src/lib/**`, so nothing

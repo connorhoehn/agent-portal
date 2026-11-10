@@ -323,7 +323,7 @@ const ALLOWED_HUMAN_LABELS = new Set(['good', 'bad', 'fixed']);
  * Each entry below is a demo narrative about a specific invocation — a
  * timeout, a guardrail miss, an answer worth citing — and `mock-inv-N` is a
  * RANK, not an identity: `mock/invocations.ts` interleaves the day's errors
- * through its tail (docs/mock-floor.md, "The error band, and what it
+ * through its tail (middleware/src/mock/core/contract.ts, "The error band, and what it
  * costs"), so the id a given prompt lands at moves whenever the corpus's
  * volume or error mix does. A hardcoded id here would silently detach a note
  * from the row it describes the next time the corpus changed shape — which is

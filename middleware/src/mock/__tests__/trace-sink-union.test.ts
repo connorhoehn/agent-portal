@@ -152,7 +152,7 @@ describe('the seeded day is unchanged by anything written beside it', () => {
     // `mock/invocations.ts` used to satisfy this with two disjoint recency
     // bands — every error strictly ahead of every clean row — which over-shot
     // the requirement and made the Runs list wall-to-wall red (see
-    // docs/mock-floor.md, "The error band, and what it costs"). Errors are now
+    // middleware/src/mock/core/contract.ts, "The error band, and what it costs"). Errors are now
     // interleaved through `ERROR_WINDOW` instead, so this only asserts what
     // the route (and the invariant that models its live-traffic case)
     // actually depends on, whatever the corpus size.
@@ -356,7 +356,7 @@ describe('a written row brings its own telemetry and is given none', () => {
     // two-band corpus put every clean row 8–24h back, so the 1h window held
     // only failures (no embedding, no distance) and a written row was the
     // ONLY thing that could ever appear. That is no longer true — interleaving
-    // the errors through the tail (docs/mock-floor.md, "The error band, and
+    // the errors through the tail (middleware/src/mock/core/contract.ts, "The error band, and
     // what it costs") means some of the day's own clean rows now legitimately
     // fall inside the newest hour too, so the list is non-empty before any
     // write. What's still true, and what this asserts instead: a written row

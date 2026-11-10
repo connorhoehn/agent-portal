@@ -6,7 +6,7 @@
 // them. This one did not: `GET /api/environments/:id/runs` catches, so an
 // unreachable api.github.com came back as `{ runs: [], note }` with a cheerful
 // `200`, indistinguishable from an idle repository. Nothing mechanical
-// reported it; docs/mock-floor.md § "What the judge cannot see" named it by
+// reported it; middleware/src/mock/core/contract.ts § "What the judge cannot see" named it by
 // hand.
 //
 // What is asserted here is what the floor asks of a fixture, not merely that

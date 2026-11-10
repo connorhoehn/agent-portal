@@ -1,7 +1,7 @@
 // The tile shelf is the shell's one media sink, collapsed under the footer row
 // (SocialFooter.tsx): the dock is read for text/phase, and the row holds Leave.
 // A call started from the Search page (docs/social-calls-plan.md step 6),
-// walked the way docs/social-calls-first-call.md walks the initiative call:
+// walked the way initiative-call.spec.ts walks the initiative call:
 // two browser contexts, fake camera + microphone, against the middleware's own
 // gateway (`/ws` on :3001), platform-api and the SFU.
 //

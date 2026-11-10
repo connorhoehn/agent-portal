@@ -86,7 +86,7 @@ describe('getProjectActivity — mock mode', () => {
 
   it('empties the feed under the `empty` scenario — the board as well as the discussion', async () => {
     // The control plane's own switch — an auditor asks for a world rather
-    // than mutating one (docs/mock-floor.md).
+    // than mutating one (middleware/src/mock/core/contract.ts).
     //
     // This used to assert the work events SURVIVED an `empty` switch, because
     // the board was a module-level array that no scenario could reach: only

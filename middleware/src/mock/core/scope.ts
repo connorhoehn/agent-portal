@@ -16,7 +16,7 @@
 // timers it starts — resolves through the scope. Nothing outside a request
 // (boot, the realtime gateway's socket handlers, a director's timer started
 // before the scope) sees one. What that leaves unscoped is written out in
-// docs/mock-floor.md § Scopes.
+// middleware/src/mock/core/contract.ts § Scopes.
 //
 // DATA STATES. A scope can ask for every registry scenario, plus three states
 // the registry derives for any fixture without the fixture declaring them:

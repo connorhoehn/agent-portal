@@ -3,7 +3,7 @@
 //   import { clock, defineFixture, todayInUtc } from '../core/index.js';
 //
 // The rules, the reasoning and the five bugs they exist to prevent are in
-// contract.ts; the human-length version is docs/mock-floor.md.
+// contract.ts; the long form is in contract.ts.
 
 export type {
   Fixture,

@@ -4,7 +4,7 @@
 // knowledge surface: the authenticated upload on `/admin/knowledge`, the drop
 // link a recipient uses, the `.keep` marker provisioning places, and the file
 // browser that lists what landed. Offline every one of those threw or lied,
-// and the two failure shapes were both bad in the way docs/mock-floor.md warns
+// and the two failure shapes were both bad in the way middleware/src/mock/core/contract.ts warns
 // about:
 //
 //   * `uploadToLandingZone` threw `DOCUMENTS_BUCKET not configured` — so the

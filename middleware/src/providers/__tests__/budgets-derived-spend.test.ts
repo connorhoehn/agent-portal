@@ -1,4 +1,4 @@
-// The ledger's money is SUMMED, never stored — docs/mock-floor.md rule 1.
+// The ledger's money is SUMMED, never stored — middleware/src/mock/core/contract.ts rule 1.
 //
 // `MOCK_BUDGETS` used to carry `spent`, `runs` and `maintenance` typed beside
 // the rows they claimed to count, and every one of them had drifted:

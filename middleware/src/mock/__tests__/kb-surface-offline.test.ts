@@ -6,7 +6,7 @@
 // underneath (`uploadToLandingZone`, `initLandingZone`). Every one of them
 // reached the RDS Data API or S3 with no `config.mock` branch, so the whole
 // surface 500'd in `dev:mock` while its READS were mocked — the arrangement
-// docs/mock-floor.md calls the worst one, because the page appears to work.
+// middleware/src/mock/core/contract.ts calls the worst one, because the page appears to work.
 //
 // The clock is frozen in every test that asserts a stamp, so these are exact
 // values rather than "roughly now". That is the point of the clock existing:

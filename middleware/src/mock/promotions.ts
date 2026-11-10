@@ -9,7 +9,7 @@
 //      APPENDS to its `rationale`, so a dismissal is not even idempotent: two
 //      dismissals leave two reasons glued to one sentence. Against a bare
 //      array those edits outlived every reset, which is exactly the state
-//      docs/mock-floor.md quotes an auditor warning the next auditor about
+//      middleware/src/mock/core/contract.ts quotes an auditor warning the next auditor about
 //      ("`promo-aurora-cold-start` is now Promoted until the middleware
 //      restarts"). Both writes were refused outright by the wire capture's
 //      write policy for that reason.
@@ -25,7 +25,7 @@
 //
 // IDS ARE PART OF THE CONTRACT. `promo-*` and `obs-*` are addressed by name
 // from providers/__tests__/promotions.test.ts and quoted in
-// docs/mock-floor.md, so they are written out rather than generated.
+// middleware/src/mock/core/contract.ts, so they are written out rather than generated.
 //
 // `supportCount` AND `sessionCount` ARE NOT STORED HERE, and that is rule 1:
 // both were literals sitting beside the very observations they claimed to
