@@ -626,8 +626,6 @@ const UNRESETTABLE: Family[] = [
   // named here has since been put behind `defineFixture`, which is the fix
   // the rule always pointed at:
   //
-  //   * session bundles -> `session-bundles` (mock/session-bundle.ts). Publish
-  //                        is replayed, predecessor supersession included.
   //   * local compute (presence half) -> `compute-nodes`,
   //                        `compute-pairing-codes` and `local-presence`
   //                        (mock/local-compute.ts), read by
@@ -1562,18 +1560,6 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     bodyFrom: 'routes/scores.ts: body ignored.',
     intercepts: ['aurora'],
     build: ok({}),
-  },
-
-  // ── session bundles ───────────────────────────────────────────────────────
-  //
-  // Refused as `unresettable` until the rows it flips moved behind a
-  // registered fixture.
-  {
-    route: 'POST /api/session-bundle/:id/publish',
-    persona: 'orgiq/admin',
-    safe: 'Publishes the pending bundle to the fleet: it goes `live`, the previously-live one is SUPERSEDED, and its `publishedAt`/`publishedBy` are re-stamped. `session-bundles` (mock/session-bundle.ts) is a registered fixture, so reset restores both rows — the predecessor included, which is the half a per-row undo would have missed. Nothing reaches a box: publishBundle only rewrites those rows.',
-    bodyFrom: 'routes/session-bundle.ts + providers/session-bundle.ts `decidePublish`: `dryRunBoxId` is only checked for presence (it gates `hasHooks`), never resolved against the fleet and never stored. `GET /api/devbox/boxes` is empty offline — no box exists to name — so this is `ctx.label()`, an open-set id the shape check never asserts on, and the publish it unlocks is real.',
-    build: async (ctx) => ({ dryRunBoxId: ctx.label() }),
   },
 
   // ── identity ──────────────────────────────────────────────────────────────

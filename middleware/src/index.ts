@@ -275,9 +275,7 @@ app.use('/api/designs', requireTenant('orgiq'), requireSession('ViewDesigns'), d
 // catalog. Read-open to the tenant; authoring/deploy stay gated elsewhere.
 app.use('/api/library', requireTenant('orgiq'), requireSession('ViewLibrary'), libraryRouter);
 // What every Claude Code devbox session is configured with — hooks, bundled
-// skills, settings. A release target in its own right: the SessionStart hook
-// runs on every session, so publishing one is the widest-blast-radius action
-// in the product.
+// skills, settings. Read-only.
 app.use('/api/session-bundle', requireTenant('orgiq'), requireSession('ViewSessionConfig'), sessionBundleRouter);
 // Look before you spend: prior experience matched on the PROBLEM's shape
 // rather than on the repo it was learned in, so knowledge from another project

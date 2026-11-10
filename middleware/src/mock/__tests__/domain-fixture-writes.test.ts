@@ -2,9 +2,7 @@
 // work-items, promotions, session-bundle, lab and prompt-evals.
 //
 // A bare array is not merely untidy — it is the reason the wire capture's
-// write policy could not replay these routes honestly.
-// `POST /api/session-bundle/:id/publish` was refused outright as
-// `unresettable`, and `PATCH /api/graph/work-items/
+// write policy could not replay these routes honestly: `PATCH /api/graph/work-items/
 // :id` was replayed only as an *echo-back*: it wrote the item's own current
 // priority straight back so the row ended byte-identical, which pins a
 // response shape and proves nothing about the write.
@@ -33,13 +31,12 @@ jest.mock('../../config.js', () => ({
 
 import { freezeClock, fixtureRegistry } from '../core/index.js';
 import { workItems } from '../work-items.js';
-import { sessionBundles } from '../session-bundle.js';
 import { labConsults, labExperiences } from '../lab.js';
 import { promptEvalCases, promptEvalRuns } from '../prompt-evals.js';
 
 import { createWorkItem, getWorkItem, updateWorkItem, searchWorkItems } from '../../providers/work-items.js';
 import { listCandidates } from '../../providers/promotions.js';
-import { getBundle, getLiveBundle, listBundles, publishBundle } from '../../providers/session-bundle.js';
+import { getLiveBundle } from '../../providers/session-bundle.js';
 import {
   answerConsult, getConsult, listConsults, listExperiences, openConsult, recordExperience,
 } from '../../providers/lab.js';
@@ -155,31 +152,6 @@ describe('the promotions fixture', () => {
 // ─── session bundles ─────────────────────────────────────────────────────────
 
 describe('session bundles', () => {
-  it('publishes, supersedes the live bundle, and the reset restores both', async () => {
-    expect((await getLiveBundle())!.id).toBe('sb-2026-08-fleet');
-
-    freeze('2026-09-06T11:22:33.000Z');
-    const result = await publishBundle('sb-2026-09-refresh', {
-      approvedBy: 'Platform Operator', dryRunBoxId: 'box-mock-1', hasHooks: true,
-    });
-    expect(result).toMatchObject({ ok: true });
-
-    // The publish rewrote a row it was not asked about — that is what made it
-    // unresettable, and why the write policy refused to replay it.
-    expect((await getBundle('sb-2026-08-fleet'))!.status).toBe('superseded');
-    const live = (await getLiveBundle())!;
-    expect(live.id).toBe('sb-2026-09-refresh');
-    expect(live.publishedAt).toBe('2026-09-06T11:22:33.000Z');
-    expect(live.publishedBy).toBe('Platform Operator');
-
-    sessionBundles.reset('default');
-
-    expect((await getLiveBundle())!.id).toBe('sb-2026-08-fleet');
-    expect(await getBundle('sb-2026-09-refresh')).toMatchObject({
-      status: 'pending', publishedBy: 'Layla Hassan',
-    });
-  });
-
   it('derives each skill status against the library rather than storing it', async () => {
     const live = (await getLiveBundle())!;
     // The one deliberate gap: bundled at v2, the library is on v3.
@@ -191,7 +163,6 @@ describe('session bundles', () => {
 
   it('leaves the fleet with no bundle at all under `empty`', async () => {
     fixtureRegistry.resetAll('empty');
-    expect(await listBundles()).toEqual([]);
     expect(await getLiveBundle()).toBeNull();
   });
 });

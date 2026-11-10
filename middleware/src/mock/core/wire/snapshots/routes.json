@@ -3392,21 +3392,6 @@
     },
     {
       "method": "GET",
-      "path": "/api/session-bundle",
-      "source": "src/routes/session-bundle.ts:30"
-    },
-    {
-      "method": "GET",
-      "path": "/api/session-bundle/:id",
-      "source": "src/routes/session-bundle.ts:46"
-    },
-    {
-      "method": "POST",
-      "path": "/api/session-bundle/:id/publish",
-      "source": "src/routes/session-bundle.ts:60"
-    },
-    {
-      "method": "GET",
       "path": "/api/session-bundle/live",
       "source": "src/routes/session-bundle.ts:40"
     },

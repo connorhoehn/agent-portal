@@ -532,7 +532,6 @@ export const V2_RULES = [
   [/^POST \/api\/runbooks\/proposals$/, 'never', null, 'a proposal is a diff, authored on the page or by a box'],
   [/^POST \/api\/runbooks\/:[^/]+\/retire$/, 'never', null, 'destructive for the fleet'],
   [/^POST \/api\/runbooks\/:[^/]+\/applications$/, 'n/a', null, 'lab envelope'],
-  [/^POST \/api\/session-bundle\/:[^/]+\/publish$/, 'never', null, 'the widest-blast-radius action in the product'],
   // Approvals (HITL)
   [/^POST \/api\/observability\/approvals\/:[^/]+\/decision$/, 'not-yet', 'decide', 'ApproveTransaction with the amount'],
   // Social

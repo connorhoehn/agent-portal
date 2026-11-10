@@ -4120,51 +4120,6 @@
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
     },
-    "POST /api/session-bundle/:id/publish": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "appliesTo": "array",
-        "appliesTo[]": "string",
-        "hooks": "array",
-        "hooks[]": "object",
-        "hooks[].command": "string",
-        "hooks[].description": "string",
-        "hooks[].enabled": "boolean",
-        "hooks[].event": "string",
-        "id": "string",
-        "publishedAt": "string",
-        "publishedBy": "string",
-        "sessionsAffected": "number",
-        "settings": "object",
-        "settings.ANTHROPIC_MODEL": "string",
-        "settings.ANTHROPIC_SMALL_FAST_MODEL": "string",
-        "settings.CLAUDE_CODE_USE_BEDROCK": "boolean",
-        "settings.DISABLE_AUTOUPDATER": "boolean",
-        "skills": "array",
-        "skills[]": "object",
-        "skills[].description": "string",
-        "skills[].id": "string",
-        "skills[].name": "string",
-        "skills[].source": "string",
-        "skills[].status": "string",
-        "skills[].version": "string",
-        "status": "string",
-        "version": "string"
-      },
-      "values": {
-        "skills[].status": [
-          "current"
-        ],
-        "status": [
-          "live"
-        ]
-      },
-      "sent": [
-        "dryRunBoxId"
-      ]
-    },
     "POST /api/session/login": {
       "refused": {
         "rule": "session",

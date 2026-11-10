@@ -39,26 +39,3 @@ export function driftLine(bundle: Pick<SessionBundle, 'skills'>): string | null 
 export function versionLabel(version: string): string {
   return `v${version.replace(/^v/i, '')}`;
 }
-
-/** A SessionStart hook whose command isn't pinned to a fixed script/version —
- *  mirrors the structural check in middleware/src/providers/session-bundle.ts
- *  so the UI can grey the Publish button out before a round trip, not just
- *  after a 409. The dry-run + approver gates still only get enforced server
- *  side, since they depend on runtime context this page doesn't have yet. */
-function isUnpinnedCommand(command: string): boolean {
-  return /\|\s*(sudo\s+)?(ba)?sh\b/i.test(command) || /@latest\b/i.test(command);
-}
-
-/**
- * Why a bundle can't be published right now, using only what's already on
- * the bundle — never null just because a dry run hasn't happened yet, since
- * that's a runtime fact the server decides at publish time, not a static
- * property of the bundle.
- */
-export function publishBlockedReason(bundle: SessionBundle): string | null {
-  if (bundle.status === 'live') return 'already live';
-  if (bundle.status === 'superseded') return 'superseded — publish a newer bundle instead';
-  const unpinned = bundle.hooks.find((h) => h.event === 'SessionStart' && h.enabled && isUnpinnedCommand(h.command));
-  if (unpinned) return `SessionStart hook runs an unpinned command ("${unpinned.command}")`;
-  return null;
-}

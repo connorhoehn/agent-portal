@@ -35,13 +35,8 @@ export interface SessionBundle {
   status: BundleStatus;
 }
 
-/** GET /live, GET /:id, and the publish response all carry the live impact
- *  count alongside the bundle — how many boxes a publish would touch, judged
- *  against the fleet as of the read, not baked into the bundle at rest. */
+/** GET /api/session-bundle/live carries the live impact count alongside the
+ *  bundle, judged against the fleet as of the read. */
 export interface SessionBundleDetail extends SessionBundle {
   sessionsAffected: number;
-}
-
-export interface SessionBundleListResponse {
-  bundles: SessionBundleDetail[];
 }

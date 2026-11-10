@@ -217,7 +217,6 @@ Reads under `/api/graph`, `/api/work` and `/api/work-graph` are tenant-open to o
 | "propose a runbook", "retire it" | `POST /api/runbooks/proposals` (`:378`, a person or a box's lab envelope), `POST /:id/retire` (`:744`) | floor; `ReviewRunbook` | orgiq | never: a proposal is a diff; retiring removes a procedure from the fleet | never |
 | "run the deploy runbook" (pipelines) | `GET /api/pipelines/runbooks` (`pipelines.ts:325`), `POST /api/pipelines/definitions/:id/dry-run` (`:287`) | `ViewPipelines`; `RunPipeline` | pipelines | confirm; money | `queue_work { kind: 'pipeline' }` (G19) |
 | "what brief did run X get", "the skill library", "preview the brief for this work item" | `GET /api/runs/:ref/brief`, `/skills`, `/runbooks/:id` (`session-briefs.ts:106-161`, a person needs `ViewSessionBrief`, a box signs an envelope), `GET /api/briefs` (`:92`), `/skill-library` (`:177`), `/work-items/:id/brief-preview` (`:186`) | `ViewSessionBrief` (every orgiq role) | orgiq | read | `list { kind: 'brief'|'skill' }`, `get` |
-| "publish the session bundle" | `POST /api/session-bundle/:id/publish` (`session-bundle.ts:60`) | `ManageDevbox` | orgiq | never: "the widest-blast-radius action in the product" (`index.ts:267-271`) | never |
 
 ### 2.12 Budgets and spend
 

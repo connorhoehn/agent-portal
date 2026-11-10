@@ -1,30 +1,8 @@
-// Session bundles — what a devbox session is actually running, offline.
+// The seeded session bundle: what a devbox session runs with, offline.
 //
-// These two bundles were a `MOCK_BUNDLES: RawBundle[]` inside
-// providers/session-bundle.ts. They moved here because publishing is the one
-// write in this product that rewrites rows it did not target:
-// `publishBundle` supersedes whichever bundle is currently `live`, promotes
-// the named one, and re-stamps its `publishedAt` and `publishedBy`. Against a
-// bare array that is a one-way door — the fleet's live bundle is `v13` for the
-// rest of the process's life, with no way back short of a restart — which is
-// why the wire capture's write policy refused
-// `POST /api/session-bundle/:id/publish` outright rather than replaying it.
-// Behind a fixture, `POST /api/__mock/reset` puts `v12` back on the fleet.
-//
-// The stamps were also minted off the wall clock (`new Date(Date.now() - h *
-// 3_600_000)`), so a frozen-clock test could not assert how old the live
-// bundle was.
-//
-// AGE IS THE CLAIM, NOT THE DAY, so neither row uses `keepWithinToday`: the
-// Release surface renders "published 9 days ago", and nothing buckets a
-// bundle by calendar day. A bundle published 20 hours ago is meant to read as
-// yesterday-ish whatever the wall clock says.
-//
-// IDS AND VERSIONS ARE PART OF THE CONTRACT. `sb-2026-08-fleet` (v12, live)
-// and `sb-2026-09-refresh` (v13, pending) are addressed by name from
-// providers/__tests__/session-bundle.test.ts, and the deliberate one-version
-// gap between the live bundle's `skill-flaky-test-triage` (v2) and the
-// library's (v3) is the only thing that makes the drift panel show anything.
+// Stamps are clock-relative so a frozen clock pins the bundle's age. The
+// one-version gap between the bundle's `skill-flaky-test-triage` (v2) and the
+// library's (v3) is what makes the drift column show a stale skill.
 
 import { clock, defineFixture } from './core/index.js';
 // Type-only, so it is erased at compile: providers/session-bundle.ts imports
@@ -72,11 +50,6 @@ const DEVBOX_SETTINGS: Record<string, string | boolean | number> = {
   ANTHROPIC_SMALL_FAST_MODEL: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
 };
 
-/**
- * The bundle each row ships. Written out per bundle rather than shared by
- * reference: the v13 refresh differs from v12 in exactly one version number,
- * and a shared array would make that difference impossible to express.
- */
 function seedBundles(): RawBundle[] {
   return [
     {
@@ -99,33 +72,10 @@ function seedBundles(): RawBundle[] {
       appliesTo: ['fleet'],
       status: 'live',
     },
-    {
-      // Picks up the flaky-test skill's v3 and keeps everything else — the
-      // publish this bundle awaits is what clears that one stale entry above.
-      id: 'sb-2026-09-refresh', version: 'v13',
-      publishedAt: ago(20), publishedBy: 'Layla Hassan',
-      hooks: [{ ...LAB_BRIEF_HOOK }],
-      skills: [
-        { id: 'skill-flaky-test-triage', name: 'Triage a flaky test',
-          description: 'Use when a test passes and fails without a code change. Reruns, diffs the outcomes, and files a bug with both logs.',
-          version: '3', source: 'library' },
-        { id: 'skill-cold-start-aurora', name: 'Recover a cold Aurora Data API',
-          description: 'Use when the first Data API call after idle fails with HttpEndpointNotEnabled. Warms the endpoint and retries with backoff.',
-          version: '2', source: 'library' },
-        { id: 'skill-pr-review-scoped', name: 'Review a PR diff-scoped',
-          description: 'Use when reviewing a pull request. Comments only on changed lines and posts one risk summary.',
-          version: '1', source: 'library' },
-      ],
-      settings: { ...DEVBOX_SETTINGS },
-      appliesTo: ['fleet'],
-      status: 'pending',
-    },
   ];
 }
 
 /**
- * The bundle ladder.
- *
  * `empty` — nothing has ever been published, so the fleet is running whatever
  *           the image baked and the Release surface has to say so. Declared
  *           explicitly: an undeclared scenario falls back to `default`, and
