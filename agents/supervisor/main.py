@@ -171,7 +171,7 @@ def _invoke_sub_agent(runtime_arn: str, input_text: str) -> str:
         if ident[1]:
             handed["sub"] = ident[1]
         payload_obj["auth"] = handed
-        sig = sign_identity(handed, payload_obj.get("sessionId") or "")
+        sig = sign_identity(handed, payload_obj.get("sessionId") or "", prompt=input_text)
         if sig:
             payload_obj["authSig"] = sig
     kwargs: dict = {

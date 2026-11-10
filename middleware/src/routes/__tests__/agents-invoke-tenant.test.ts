@@ -59,6 +59,6 @@ it('a member posting `tenant` (and a forged auth block) in the payload still inv
   const body = buildInvokeBody(sent, { stream: true });
   expect(body['tenant']).toBeUndefined();
   expect(body['authSig']).toBeUndefined();
-  expect(body['input']).toEqual({ mode: 'x' });
+  expect(JSON.parse(String(body['input']))).toEqual({ mode: 'x' });
   expect(body['auth']).toMatchObject({ tenant: 'orgiq', sub: 'u-member' });
 });

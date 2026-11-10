@@ -84,11 +84,12 @@ class SignedOnly(unittest.TestCase):
         from _shared import invoke_auth
         from _shared.callbacks import sign_service_request
 
-        sig = sign_service_request(
-            invoke_auth.METHOD, invoke_auth.TARGET, invoke_auth.canonical_body(auth, conversation),
+        payload = {"auth": auth, "sessionId": conversation}
+        payload["authSig"] = sign_service_request(
+            invoke_auth.METHOD, invoke_auth.TARGET, invoke_auth.canonical_for(payload),
             secret=self.SECRET, service_id=invoke_auth.SERVICE_ID, audience=invoke_auth.AUDIENCE,
         )
-        return {"auth": auth, "sessionId": conversation, "authSig": sig}
+        return payload
 
     def test_an_unsigned_assessment_block_is_refused(self):
         self.assertIsNotNone(_guard({"auth": {"sub": "u1", "tenant": "assessment"}}))

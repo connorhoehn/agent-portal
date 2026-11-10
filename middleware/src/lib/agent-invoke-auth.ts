@@ -7,15 +7,23 @@
 // (agents/_shared/invoke_auth.py): the supervisor before it picks a guardrail,
 // the read agents before they pick a retrieval tenant, the assessment agents
 // for their tenant floor. An unsigned or forged block counts as the
-// least-privileged caller. The canonical body is
-// built identically on both sides: `{"auth":{...string fields, sorted...},
-// "conversationId":"..."}` with no spaces.
+// least-privileged caller.
+//
+// The signature also binds what is asked, so a captured auth block cannot be
+// replayed with a different prompt inside its 300 s window: the SHA-256 of the
+// prompt, of the structured input (sent as JSON text so both sides hash the
+// same bytes), of the history (as [role, content] pairs), and the run id. The
+// canonical body is built identically on both sides, sorted keys, no spaces:
+// `{"auth":{...string fields...},"conversationId":"...","historySha256":"...",
+// "inputSha256":"...","promptSha256":"...","runId":"..."}` (an absent input
+// or history hashes as "", an absent run id is "").
 //
 // The secret is AGENT_INVOKE_SECRET (infra mints `<prefix>-agent-invoke-secret`
 // and gives it to this task and the supervisor runtime). Unset, nothing is
 // signed: a dev process talking to a dev agent keeps working through the
 // agent's INSECURE_DEV_MODE path, and a deployed agent refuses the block.
 
+import { createHash } from 'node:crypto';
 import { signServiceRequest } from '@connorhoehn/service-runtime';
 
 export const AGENT_INVOKE_SECRET_ENV = 'AGENT_INVOKE_SECRET';
@@ -24,26 +32,46 @@ export const AGENT_INVOKE_SERVICE_ID = 'orgiq-middleware';
 const METHOD = 'POST';
 const TARGET = '/invocations';
 
+/** What the signed identity is asking: bound into the signature. */
+export interface InvokeBinding {
+  prompt: string;
+  /** The structured input exactly as sent (JSON text), when there is one. */
+  input?: string;
+  history?: ReadonlyArray<{ role: string; content: string }>;
+  runId?: string;
+}
+
+const sha256 = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
+
 /** The exact string both sides sign and verify. */
-export function canonicalInvokeAuth(auth: Record<string, unknown>, conversationId: string): string {
+export function canonicalInvokeAuth(auth: Record<string, unknown>, conversationId: string, binding: InvokeBinding = { prompt: '' }): string {
   const fields: Record<string, string> = {};
   for (const key of Object.keys(auth).sort()) {
     const value = auth[key];
     if (typeof value === 'string') fields[key] = value;
   }
-  return JSON.stringify({ auth: fields, conversationId: conversationId ?? '' });
+  const history = binding.history?.length ? sha256(JSON.stringify(binding.history.map((h) => [h.role, h.content]))) : '';
+  return JSON.stringify({
+    auth: fields,
+    conversationId: conversationId ?? '',
+    historySha256: history,
+    inputSha256: binding.input ? sha256(binding.input) : '',
+    promptSha256: sha256(binding.prompt ?? ''),
+    runId: binding.runId ?? '',
+  });
 }
 
 /** `authSig` for this block, or null when no secret is configured. */
 export function signInvokeAuth(
   auth: Record<string, unknown>,
   conversationId: string | undefined,
+  binding: InvokeBinding = { prompt: '' },
   env: NodeJS.ProcessEnv = process.env,
 ): string | null {
   const secret = (env[AGENT_INVOKE_SECRET_ENV] ?? '').trim();
   if (!secret) return null;
   return signServiceRequest(
-    { method: METHOD, target: TARGET, body: canonicalInvokeAuth(auth, conversationId ?? '') },
+    { method: METHOD, target: TARGET, body: canonicalInvokeAuth(auth, conversationId ?? '', binding) },
     { secret, serviceId: AGENT_INVOKE_SERVICE_ID, audience: AGENT_INVOKE_AUDIENCE },
   );
 }
@@ -90,8 +118,16 @@ export function buildInvokeBody(payload: InvokeBodyPayload, opts: { stream?: boo
   const input = Object.fromEntries(Object.entries(structured).filter(([k]) => !INVOKE_BODY_KEYS.has(k)));
   const structuredRun = structured['run_id'];
   const runId = payload.runId ?? (typeof structuredRun === 'string' && structuredRun ? structuredRun : undefined);
+  // JSON text, so the agent hashes exactly the bytes that were signed.
+  const inputText = Object.keys(input).length ? JSON.stringify(input) : undefined;
+  const binding: InvokeBinding = {
+    prompt: payload.message,
+    ...(inputText ? { input: inputText } : {}),
+    ...(payload.history?.length ? { history: payload.history } : {}),
+    ...(runId ? { runId } : {}),
+  };
   return {
-    ...(Object.keys(input).length ? { input } : {}),
+    ...(inputText ? { input: inputText } : {}),
     message: payload.message,
     prompt: payload.message,
     input_text: payload.message,
@@ -100,8 +136,8 @@ export function buildInvokeBody(payload: InvokeBodyPayload, opts: { stream?: boo
     ...(payload.sessionId ? { sessionId: payload.sessionId } : {}),
     ...(runId ? { runId } : {}),
     ...(payload.userId ? { userId: payload.userId } : {}),
-    // The caller identity, signed for the agent to verify.
-    ...signedAuthFields(payload),
+    // The caller identity, signed with what it asks for the agent to verify.
+    ...signedAuthFields(payload, binding),
   };
 }
 
@@ -111,11 +147,12 @@ export function buildInvokeBody(payload: InvokeBodyPayload, opts: { stream?: boo
  */
 export function signedAuthFields(
   payload: { auth?: Record<string, unknown>; structuredInput?: Record<string, unknown>; sessionId?: string },
+  binding: InvokeBinding = { prompt: '' },
 ): { auth?: Record<string, unknown>; authSig?: string } {
   const fromStructured = payload.structuredInput?.['auth'];
   const auth = payload.auth
     ?? (fromStructured && typeof fromStructured === 'object' ? fromStructured as Record<string, unknown> : undefined);
   if (!auth) return {};
-  const sig = signInvokeAuth(auth, payload.sessionId);
+  const sig = signInvokeAuth(auth, payload.sessionId, binding);
   return sig ? { auth, authSig: sig } : { auth };
 }

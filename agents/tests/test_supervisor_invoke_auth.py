@@ -32,11 +32,12 @@ def signed(auth: dict, conversation: str, secret: str = SECRET, **over) -> dict:
     from _shared import invoke_auth
     from _shared.callbacks import sign_service_request
 
-    sig = sign_service_request(
-        invoke_auth.METHOD, invoke_auth.TARGET, invoke_auth.canonical_body(auth, conversation),
+    payload = {"input_text": "q", "auth": auth, "sessionId": conversation, **over}
+    payload["authSig"] = sign_service_request(
+        invoke_auth.METHOD, invoke_auth.TARGET, invoke_auth.canonical_for(payload),
         secret=secret, service_id=invoke_auth.SERVICE_ID, audience=invoke_auth.AUDIENCE,
     )
-    return {"input_text": "q", "auth": auth, "sessionId": conversation, "authSig": sig, **over}
+    return payload
 
 
 class CanonicalForm(unittest.TestCase):
@@ -45,8 +46,14 @@ class CanonicalForm(unittest.TestCase):
         from _shared.invoke_auth import canonical_body
 
         self.assertEqual(
-            canonical_body({"tenant": "orgiq", "sub": "u-lead", "role": "org-leader", "ignored": 42}, "conv-1"),
-            '{"auth":{"role":"org-leader","sub":"u-lead","tenant":"orgiq"},"conversationId":"conv-1"}',
+            canonical_body({"tenant": "orgiq", "sub": "u-lead", "role": "org-leader", "ignored": 42}, "conv-1",
+                           prompt="what is the plan", input_raw='{"mode":"x"}',
+                           history=[{"role": "user", "content": "hi"}], run_id="run-1"),
+            '{"auth":{"role":"org-leader","sub":"u-lead","tenant":"orgiq"},"conversationId":"conv-1",'
+            '"historySha256":"897be8e1f0370e7f41788b5b5337627e27486af82d28479ccfbe509c847683b9",'
+            '"inputSha256":"afb9161ad4b37bf3f4f0159b060c8140072dcbcf103c3d7b0eea3926028cf587",'
+            '"promptSha256":"75dbbc2af0d38560f0046d20c179a261220761a09d3733baaf7d6acf87302319",'
+            '"runId":"run-1"}',
         )
 
 
@@ -71,6 +78,24 @@ class SignedAuthBlock(SupervisorTestCase):
         payload = signed({"sub": "u-1", "role": "member", "tenant": "orgiq"}, "conv-1")
         payload["auth"] = {**payload["auth"], "role": "hr-admin"}
         self.assertEqual(self.sup._resolve_identity(payload), ("orgiq", "member"))
+
+    def test_a_replayed_block_with_a_different_prompt_is_refused(self):
+        payload = signed({"sub": "u-1", "role": "org-leader", "tenant": "orgiq"}, "conv-1")
+        self.assertEqual(self.sup._resolve_identity(payload), ("orgiq", "org-leader"))
+        replay = {**payload, "input_text": "something else", "prompt": "something else", "message": "something else"}
+        self.assertEqual(self.sup._resolve_identity(replay), ("orgiq", "member"))
+
+    def test_a_replay_that_changes_only_one_prompt_key_is_refused(self):
+        payload = signed({"sub": "u-1", "role": "org-leader", "tenant": "orgiq"}, "conv-1", prompt="q", message="q")
+        self.assertEqual(self.sup._resolve_identity({**payload, "input_text": "other"}), ("orgiq", "member"))
+
+    def test_a_replay_with_other_input_history_or_run_is_refused(self):
+        base = signed({"sub": "u-1", "role": "org-leader", "tenant": "orgiq"}, "conv-1",
+                      input='{"mode":"x"}', history=[{"role": "user", "content": "hi"}], runId="run-1")
+        self.assertEqual(self.sup._resolve_identity(base), ("orgiq", "org-leader"))
+        for change in ({"input": '{"mode":"y"}'}, {"history": [{"role": "user", "content": "other"}]}, {"runId": "run-2"}):
+            with self.subTest(change=change):
+                self.assertEqual(self.sup._resolve_identity({**base, **change}), ("orgiq", "member"))
 
     def test_a_block_moved_to_another_conversation_is_refused(self):
         payload = signed({"sub": "u-1", "role": "org-leader", "tenant": "orgiq"}, "conv-1")

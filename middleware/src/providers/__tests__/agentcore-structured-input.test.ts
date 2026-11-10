@@ -18,7 +18,7 @@ it('sends evidence, mode and trusted tenant to the actual runtime command rather
   const [command, options] = mockDataSend.mock.calls[0];
   const sent = JSON.parse(new TextDecoder().decode(command.input.payload));
   const { auth, ...fields } = input;
-  expect(sent.input).toEqual(fields);
+  expect(JSON.parse(sent.input)).toEqual(fields);
   expect(sent.auth).toEqual(auth);
   expect(command.input.agentRuntimeArn).toBe('arn:test:runtime');
   expect(options.abortSignal).toBeDefined();
@@ -38,6 +38,6 @@ it('nests caller input under `input` and sets identity last: an input `tenant` o
   expect(sent.sub).toBeUndefined();
   expect(sent.authSig).toBeUndefined();
   expect(sent.runId).toBeUndefined();
-  expect(sent.input).toEqual({ mode: 'x' });
+  expect(JSON.parse(sent.input)).toEqual({ mode: 'x' });
   expect(sent.auth).toEqual({ sub: 'u-member', role: 'member', tenant: 'orgiq' });
 });

@@ -11,9 +11,14 @@ agents' callbacks use — callbacks.py) and the supervisor verifies it here:
     payload["sessionId"] the conversation id the identity is bound to
     payload["authSig"]   v1.orgiq-middleware.<ts>.<mac> over both
 
-The canonical body is ``{"auth": {...string fields...}, "conversationId": ...}``
-with sorted keys and no spaces, built identically by
-``middleware/src/lib/agent-invoke-auth.ts``. The secret is
+The signature also binds what is asked, so a captured block cannot be replayed
+with another prompt inside its window: the canonical body is
+``{"auth": {...string fields...}, "conversationId": ..., "historySha256": ...,
+"inputSha256": ..., "promptSha256": ..., "runId": ...}`` with sorted keys and
+no spaces, built identically by ``middleware/src/lib/agent-invoke-auth.ts``.
+The prompt is the one the agent will read (``input_text``, ``prompt`` and
+``message`` must agree), the input is the ``input`` JSON text as sent, the
+history is its ``[role, content]`` pairs, and the run id is ``runId``. The secret is
 ``AGENT_INVOKE_SECRET`` (``_ID`` names it in Secrets Manager on a deployed
 runtime, secret_resolver.py).
 
@@ -31,6 +36,7 @@ supervisor re-signs its verified caller for the sub-agents it invokes, as
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -65,12 +71,61 @@ class InvokeIdentity:
     signed: bool
 
 
-def canonical_body(auth: dict, conversation_id: str) -> str:
+def _sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8", errors="surrogatepass")).hexdigest()
+
+
+def canonical_body(
+    auth: dict, conversation_id: str, *, prompt: str = "", input_raw: str = "",
+    history: list | None = None, run_id: str = "",
+) -> str:
     fields = {k: v for k, v in sorted(auth.items()) if isinstance(k, str) and isinstance(v, str)}
+    history_sha = ""
+    if history:
+        pairs = [[h.get("role"), h.get("content")] if isinstance(h, dict) else [None, None] for h in history]
+        history_sha = _sha256(json.dumps(pairs, separators=(",", ":"), ensure_ascii=False))
     return json.dumps(
-        {"auth": fields, "conversationId": conversation_id or ""},
+        {
+            "auth": fields,
+            "conversationId": conversation_id or "",
+            "historySha256": history_sha,
+            "inputSha256": _sha256(input_raw) if input_raw else "",
+            "promptSha256": _sha256(prompt or ""),
+            "runId": run_id or "",
+        },
         sort_keys=True, separators=(",", ":"), ensure_ascii=False,
     )
+
+
+def request_binding(payload: dict) -> dict | None:
+    """What this payload asks, as ``canonical_body`` keyword arguments, or
+    ``None`` when it cannot be bound (the three prompt keys disagree, or a
+    field has the wrong type): such a payload never verifies."""
+    prompts = [payload[k] for k in ("input_text", "prompt", "message") if payload.get(k) is not None]
+    if any(not isinstance(p, str) for p in prompts) or len(set(prompts)) > 1:
+        return None
+    raw_input = payload.get("input")
+    if raw_input is not None and not isinstance(raw_input, str):
+        return None
+    history = payload.get("history")
+    if history is not None and not isinstance(history, list):
+        return None
+    run_id = payload.get("runId")
+    if run_id is not None and not isinstance(run_id, str):
+        return None
+    return {"prompt": prompts[0] if prompts else "", "input_raw": raw_input or "",
+            "history": history or None, "run_id": run_id or ""}
+
+
+def canonical_for(payload: dict) -> str | None:
+    """The canonical body for a whole payload (its auth block, conversation
+    and request), or ``None`` when it cannot be bound."""
+    binding = request_binding(payload)
+    auth = payload.get("auth")
+    if binding is None or not isinstance(auth, dict):
+        return None
+    conversation_id = payload.get("sessionId") if isinstance(payload.get("sessionId"), str) else ""
+    return canonical_body(auth, conversation_id, **binding)
 
 
 def insecure_dev_mode(env=None) -> bool:
@@ -100,8 +155,12 @@ def verified_identity(payload: dict) -> InvokeIdentity | None:
         log.warning("invoke-auth: %s is unset outside dev mode; the auth block is not trusted", SECRET_ENV)
         return None
     sig = payload.get("authSig")
+    body = canonical_for(payload)
+    if body is None:
+        log.warning("invoke-auth: the request cannot be bound to the signature; treating the caller as least privileged")
+        return None
     ok, why = verify_service_request(
-        sig if isinstance(sig, str) else "", METHOD, TARGET, canonical_body(auth, conversation_id),
+        sig if isinstance(sig, str) else "", METHOD, TARGET, body,
         secret=secret, allowed_services=list(ALLOWED_SERVICES), audience=AUDIENCE, ttl_sec=TTL_SEC,
     )
     if not ok:
@@ -117,10 +176,14 @@ def verified_auth(payload) -> dict | None:
     return ident.auth if ident else None
 
 
-def sign_identity(auth: dict, conversation_id: str, *, service_id: str = SUPERVISOR_SERVICE_ID) -> str | None:
+def sign_identity(
+    auth: dict, conversation_id: str, *, prompt: str = "", run_id: str = "",
+    service_id: str = SUPERVISOR_SERVICE_ID,
+) -> str | None:
     """``authSig`` for a block this agent hands down (the supervisor to a
-    sub-agent), or ``None`` when no secret is configured (dev mode: the
-    sub-agent then trusts the block only under its own dev flag)."""
+    sub-agent), bound to the prompt it sends, or ``None`` when no secret is
+    configured (dev mode: the sub-agent then trusts the block only under its
+    own dev flag)."""
     try:
         secret = resolve_secret(SECRET_ENV)
     except SecretResolutionError as exc:
@@ -129,7 +192,7 @@ def sign_identity(auth: dict, conversation_id: str, *, service_id: str = SUPERVI
     if not secret:
         return None
     return sign_service_request(
-        METHOD, TARGET, canonical_body(auth, conversation_id),
+        METHOD, TARGET, canonical_body(auth, conversation_id, prompt=prompt, run_id=run_id),
         secret=secret, service_id=service_id, audience=AUDIENCE,
     )
 
