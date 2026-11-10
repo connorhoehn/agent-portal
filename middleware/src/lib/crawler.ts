@@ -15,7 +15,8 @@ import { agentcore } from '../providers/index.js';
 import { appendJourneyStep, recordCapabilityEvent } from './invocations.js';
 import { config } from '../config.js';
 import { extractFromScreenshot } from './vision-extractor.js';
-import { ownerOfKey, tenantMetadataSidecar } from './kb-prefixes.js';
+import { ownerOfKey } from './kb-prefixes.js';
+import { putDocumentWithSidecar } from './kb-document-put.js';
 import { crawlSessionRows } from '../mock/ingest-crawls.js';
 import { mockRestartMirror } from '../mock/restart-state.js';
 import type {
@@ -576,7 +577,8 @@ async function traverseSpaLinks(
 
 // ── S3 artifact upload ────────────────────────────────────────────────────────
 
-async function uploadArtifacts(
+/** Exported for tests (crawler-upload.test.ts). */
+export async function uploadArtifacts(
   crawl: CrawlSession,
   page: CrawlPage,
   pngBytes: Buffer,
@@ -616,6 +618,12 @@ async function uploadArtifacts(
     'depth': String(page.depth),
   };
 
+  // The indexed documents (markdown, analysis) carry their owning tenant in
+  // a metadata sidecar (retrieval filters on it beside the key prefix;
+  // lib/kb-prefixes.ts). They go through putDocumentWithSidecar, which puts
+  // the sidecar first so a document is never readable unlabelled, as the two
+  // upload paths do. The screenshot is not indexed and has no sidecar.
+  const owner = ownerOfKey(markdownKey);
   const uploads = await Promise.allSettled([
     s3.send(new PutObjectCommand({
       Bucket: bucket,
@@ -624,20 +632,20 @@ async function uploadArtifacts(
       ContentType: 'image/png',
       Metadata: metadata,
     })),
-    s3.send(new PutObjectCommand({
+    putDocumentWithSidecar(s3, {
       Bucket: bucket,
       Key: markdownKey,
       Body: markdown,
       ContentType: 'text/markdown',
       Metadata: metadata,
-    })),
-    s3.send(new PutObjectCommand({
+    }, owner),
+    putDocumentWithSidecar(s3, {
       Bucket: bucket,
       Key: analysisKey,
       Body: analysis,
       ContentType: 'application/json',
       Metadata: metadata,
-    })),
+    }, owner),
   ]);
 
   const [shotRes, mdRes, jsonRes] = uploads;
@@ -657,19 +665,6 @@ async function uploadArtifacts(
     page.s3AnalysisKey = analysisKey;
   } else {
     console.warn('[crawler] analysis upload failed:', (jsonRes.reason as Error).message);
-  }
-  // The indexed documents carry their owning tenant as metadata (retrieval
-  // filters on it beside the key prefix; lib/kb-prefixes.ts).
-  const owner = ownerOfKey(markdownKey);
-  if (owner) {
-    const written = [mdRes.status === 'fulfilled' ? markdownKey : null, jsonRes.status === 'fulfilled' ? analysisKey : null];
-    const sidecars = await Promise.allSettled(written.filter((k): k is string => !!k).map((k) => {
-      const sidecar = tenantMetadataSidecar(k, owner);
-      return s3.send(new PutObjectCommand({ Bucket: bucket, Key: sidecar.key, Body: sidecar.body, ContentType: 'application/json' }));
-    }));
-    for (const r of sidecars) {
-      if (r.status === 'rejected') console.warn('[crawler] tenant metadata upload failed:', (r.reason as Error).message);
-    }
   }
 
   if (!page.s3MarkdownKey && !page.s3ScreenshotKey && !page.s3AnalysisKey) {
