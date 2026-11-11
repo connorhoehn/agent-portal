@@ -201,12 +201,22 @@ On the mock, with no model and no cloud:
 4. Dispatch a related work item. Its brief preview names that runbook with a reason before dispatch; the run's page shows it offered and used.
 5. The runbook's Evidence shows the use and its health is proven.
 6. A run of an unrelated work item is offered nothing.
-7. Three retire lessons for one runbook produce one retire proposal. Two overlapping runbooks produce one merge proposal; accepting it retires both and names the successor.
+7. Three retire lessons for one runbook produce one retire proposal. 
 8. With the learning cap at zero and no paired machine, the lesson is `skipped: learning-budget` and the run page says so.
 9. An initiative crossing 80 percent of its cap produces one bell notification and a mark on Budgets.
 10. A local compute worker run against a test stack posts a report, and its run shows the reported cost as not billed.
 
 `npm run journey:learning-loop` walks 1 to 9 in the browser. `scripts/validate-learning-loop.sh` runs the journey and the suites and is the judge.
+
+## What is core and what waits
+
+Core, because the loop does not close without it: the run report and return path (A), the distiller (C), the offer and the record of use (D), the pages (E), and budgets (B).
+
+Deferred until the library is large enough to need them, and not built now:
+
+- **Consolidation (2b).** With a handful of reviewed runbooks, and a distiller that prefers revising an existing runbook to adding one, overlap is caught at review. It earns its place at roughly fifty runbooks or when reviewers start seeing duplicates.
+- **The notes store.** A lesson of `none` with its one-line reason is enough to start; a separate memory of not-yet-runbooks is a second thing to curate.
+- **Automated trials (C2).** The evaluation cases are still written with each proposal, because they cost little and make review concrete. Running them with and without the skill waits until proposals arrive faster than a person can judge them by reading.
 
 ## Build order
 
@@ -215,7 +225,7 @@ On the mock, with no model and no cloud:
 | A | Run report: shape, store, routes, local worker and devbox return path, mock reports, use detection, application rows | none |
 | B | Budgets: thresholds and notifications, local compute through run limits, learning line | none |
 | C | Distiller: the `distill-run` skill, job, three executors, schema-checked lessons, skill folders with evaluation cases, notes store, proposals with provenance, retire rule | A |
-| C3 | Consolidation: the weekly job, merge, split, retire and rename proposals, the open-proposal limit | C, D |
-| C2 | Trial: with and without runs of a proposal's evaluation cases, trigger check, results on the proposal | C |
+| C3 | Deferred. Consolidation | C, D |
+| C2 | Deferred. Trial runs | C |
 | D | Offer: selection at brief freeze, brief text and fence, brief preview, evidence figures | A |
 | E | Pages, vocabulary, removals, the journey and the validator | A to D and the page audit |
