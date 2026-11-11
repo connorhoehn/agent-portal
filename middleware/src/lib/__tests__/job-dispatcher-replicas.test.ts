@@ -11,7 +11,7 @@ const mockQueue = {
   completeJob: jest.fn(async () => true),
   heartbeatJob: jest.fn(async () => true),
   unclaimJob: jest.fn(async () => true),
-  reapStaleJobs: jest.fn(async () => ({ requeued: 0, failed: 0 })),
+  reapStaleJobs: jest.fn(async () => ({ requeued: 0, failed: 0, failedIds: [] })),
   listJobs: jest.fn(async () => []),
 };
 const mockRuntime = { runDevboxTask: jest.fn(), wipeDevboxWorkspace: jest.fn(async () => ({ ok: true, removed: 0 })) };

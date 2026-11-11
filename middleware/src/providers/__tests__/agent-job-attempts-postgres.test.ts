@@ -85,7 +85,7 @@ live('agent job attempts on PostgreSQL', () => {
     const first = await claimNextJob('old', 'old');
     expect(await markRunning(first!.id, first!.claimToken)).toBe(true);
     await sql("UPDATE agent_jobs SET updated_at=NOW()-INTERVAL '1 hour', heartbeat_at=NOW()-INTERVAL '1 hour';");
-    expect(await reapStaleJobs(1)).toEqual({ requeued: 1, failed: 0 });
+    expect(await reapStaleJobs(1)).toEqual({ requeued: 1, failed: 0, failedIds: [] });
     const second = await claimNextJob('new', 'new');
     expect(second?.id).toBe(job?.id);
     expect(await completeJob(first!.id, { status: 'done', result: { owner: 'old' } })).toBe(false);
@@ -119,9 +119,9 @@ live('agent job attempts on PostgreSQL', () => {
     const claim = (await claimJob(job!.id, 'box', 'session'))!;
     await sql("UPDATE agent_jobs SET updated_at=NOW()-INTERVAL '1 hour', heartbeat_at=NOW()-INTERVAL '1 hour';");
     expect(await heartbeatJob(claim.id, claim.claimToken)).toBe(true);
-    expect(await reapStaleJobs(1)).toEqual({ requeued: 0, failed: 0 });
+    expect(await reapStaleJobs(1)).toEqual({ requeued: 0, failed: 0, failedIds: [] });
     await sql("UPDATE agent_jobs SET updated_at=NOW()-INTERVAL '1 hour', heartbeat_at=NOW()-INTERVAL '1 hour';");
-    expect(await reapStaleJobs(1)).toEqual({ requeued: 0, failed: 1 });
+    expect(await reapStaleJobs(1)).toEqual({ requeued: 0, failed: 1, failedIds: [claim.id] });
     expect(await heartbeatJob(claim.id, claim.claimToken)).toBe(false);
     expect(await completeJob(claim.id, { claimToken: claim.claimToken, status: 'done' })).toBe(false);
     expect((await getJob(claim.id))?.status).toBe('failed');
@@ -144,7 +144,7 @@ live('agent job attempts on PostgreSQL', () => {
   it('does not revoke push or pull ownership during the zero-window boot sweep', async () => {
     await enqueueJob({ kind: 'devbox:task', title: 'push', payload: {} });
     const claim = (await claimNextJob('box', 'session'))!;
-    expect(await reapStaleJobs(0, { includeFenced: false })).toEqual({ requeued: 0, failed: 0 });
+    expect(await reapStaleJobs(0, { includeFenced: false })).toEqual({ requeued: 0, failed: 0, failedIds: [] });
     expect(await heartbeatJob(claim.id, claim.claimToken)).toBe(true);
   });
 

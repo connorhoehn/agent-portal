@@ -1,6 +1,6 @@
 jest.mock('../../providers/agent-jobs.js', () => ({
   claimNextJob: jest.fn(), markRunning: jest.fn(), completeJob: jest.fn(), heartbeatJob: jest.fn(), unclaimJob: jest.fn(async () => true),
-  reapStaleJobs: jest.fn(async () => ({ requeued: 0, failed: 0 })), listJobs: jest.fn(async () => []),
+  reapStaleJobs: jest.fn(async () => ({ requeued: 0, failed: 0, failedIds: [] })), listJobs: jest.fn(async () => []),
 }));
 // The fleet as the dispatcher sees it; a test may age the box (DE-48 rule 3).
 const fleet = { createdAt: new Date().toISOString(), occupancy: {} as Record<string, unknown> };

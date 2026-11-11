@@ -1229,8 +1229,8 @@ export interface ReapOptions {
 export async function reapStaleJobs(
   staleMinutes = 30,
   opts: ReapOptions = {},
-): Promise<{ requeued: number; failed: number }> {
-  if (config.mock.aurora) return { requeued: 0, failed: 0 };
+): Promise<{ requeued: number; failed: number; failedIds: string[] }> {
+  if (config.mock.aurora) return { requeued: 0, failed: 0, failedIds: [] };
   const fenced = await hasPullSideColumns();
   const includeFenced = opts.includeFenced ?? true;
 
@@ -1262,7 +1262,10 @@ export async function reapStaleJobs(
       RETURNING id`,
     [intParam('mins', staleMinutes)],
   );
-  return { requeued: requeued.length, failed: failed.length };
+  // The failed ids go back to the caller: a job the sweep fails for good has no
+  // worker left to write its run report, so the dispatcher writes it (a run
+  // that never reported back is still a run the loop should learn from).
+  return { requeued: requeued.length, failed: failed.length, failedIds: failed.map((r) => toStr(r['id'])) };
 }
 
 export async function queueStats(): Promise<Record<JobStatus | 'total', number>> {

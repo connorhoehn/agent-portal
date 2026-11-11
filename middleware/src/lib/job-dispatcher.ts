@@ -17,8 +17,9 @@
 
 import { EventEmitter } from 'node:events';
 import {
-  claimNextJob, markRunning, completeJob, reapStaleJobs, listJobs, unclaimJob, type AgentJob, type ClaimedAgentJob,
+  claimNextJob, markRunning, completeJob, reapStaleJobs, listJobs, unclaimJob, getJob, type AgentJob, type ClaimedAgentJob,
 } from '../providers/agent-jobs.js';
+import type { RunExecutor } from './run-reports/types.js';
 import {
   listBoxes, appendEvent, getBox, registerBox, isReserved, claimBox, releaseBox, refreshFromShared, allHolds,
   changesHands, setOccupant, isFleetOwnedBox,
@@ -318,6 +319,31 @@ async function runJob(job: ClaimedAgentJob, policy: LifetimePolicy = lifetimePol
   }
 }
 
+/**
+ * A job the stale sweep fails for good has no worker left to report, so the
+ * dispatcher writes its run report: outcome failed, code `worker_lost`, the
+ * executor read from the box the job held (a paired machine, a microVM, else
+ * the fleet), cost unknown (the worker may have spent before it vanished), and
+ * no debrief, since there is no session to resume. A report that already
+ * exists (the worker reported, then the sweep caught a stale row) is kept as it
+ * is by recordRunEnd. A failure here never reaches the sweep: the job is
+ * failed either way, and the next sweep does not see it again.
+ */
+async function recordStaleFailures(ids: readonly string[] | undefined): Promise<void> {
+  for (const id of ids ?? []) {
+    try {
+      const job = await getJob(id);
+      const executor: RunExecutor = isLocalBoxId(job?.boxId) ? 'local' : isMicrovmBoxId(job?.boxId) ? 'microvm' : 'fleet';
+      await recordRunEnd({
+        runRef: id, executor, outcome: 'failed', failureCode: 'worker_lost',
+        startedAt: job?.startedAt ?? null, billedUsd: null, worker: null, noDebrief: true,
+      });
+    } catch (err) {
+      console.warn(`[dispatcher] stale job ${id}: run report not written:`, (err as Error).message);
+    }
+  }
+}
+
 async function tick(): Promise<void> {
   if (ticking) return;          // a slow tick must not overlap the next one
   ticking = true;
@@ -326,6 +352,7 @@ async function tick(): Promise<void> {
     if (reaped.requeued || reaped.failed) {
       console.log(`[dispatcher] reaped stale jobs: requeued ${reaped.requeued}, failed ${reaped.failed}`);
     }
+    await recordStaleFailures(reaped.failedIds);
 
     // Idle = registered, not stopped/error, and not already running a job.
     //
@@ -427,6 +454,7 @@ async function recoverOrphanedWork(): Promise<void> {
       console.log('[dispatcher] restart recovery: another replica holds the recovery lock; skipping the sweep');
       return;
     }
+    await recordStaleFailures(reaped.failedIds);
     if (adopted || skippedLocal || reaped.requeued || reaped.failed) {
       console.log(
         `[dispatcher] restart recovery: re-registered ${adopted} worker(s), ` +

@@ -833,7 +833,7 @@ The design is `docs/learning-loop-design.md`. Lane A (the run report) is built o
 
 ### Left for later lanes
 
-- A job the stale reaper fails has no report (the reaper is a SQL update with no hook).
+- ~~A job the stale reaper fails has no report (the reaper is a SQL update with no hook).~~ *Done 11 November: the sweep hands back the failed ids and the dispatcher writes each report (`worker_lost`, executor from the box, cost unknown, no debrief).*
 - ~~The run page does not show the report yet (lane E).~~ *Done, lane E1.*
 - `lib/runbooks/skill.ts` writes only `name` and `description`; its parser accepts and drops any other frontmatter key, so nothing yet rejects a non-portable key (lane C owns the lint).
 

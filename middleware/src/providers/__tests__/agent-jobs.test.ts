@@ -94,7 +94,7 @@ describe('stale recovery', () => {
     expect(requeueSql).toMatch(/SET status='queued'/);
     expect(requeueSql).toMatch(/attempts < max_attempts/);
     expect(failSql).toMatch(/attempts >= max_attempts/);
-    expect(out).toEqual({ requeued: 1, failed: 1 });
+    expect(out).toEqual({ requeued: 1, failed: 1, failedIds: ['job-2'] });
   });
 });
 
