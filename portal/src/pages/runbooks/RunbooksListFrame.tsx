@@ -36,6 +36,9 @@ export interface ListFrameProps {
   emptyTitle: string;
   emptyDescription: string;
   onClear?: () => void;
+  /** A button in the section header, and the same action in the empty list. */
+  headerActions?: ReactNode;
+  emptyAction?: { label: string; onAction: () => void };
   storageKey: string;
   footerNote: ReactNode;
   commands: CollectionCommandAdapter;
@@ -59,7 +62,7 @@ export function RunbooksListFrame(p: ListFrameProps) {
     <EmptyState align="start"
       title={p.query ? 'No matches' : p.emptyTitle}
       description={p.query ? 'Nothing in this list matches the search.' : p.emptyDescription}
-      {...(p.query && p.onClear ? { actionLabel: 'Clear search', onAction: p.onClear } : {})}
+      {...(p.query && p.onClear ? { actionLabel: 'Clear search', onAction: p.onClear } : !p.query && p.emptyAction ? { actionLabel: p.emptyAction.label, onAction: p.emptyAction.onAction } : {})}
     />
   ) : (
     <GroupedList
@@ -76,7 +79,7 @@ export function RunbooksListFrame(p: ListFrameProps) {
   );
   return (
     <ListRailLayout
-      header={p.currentId ? <ScopeHeader variant="crumbs" breadcrumbs={p.breadcrumbs} data-testid="section-crumbs" /> : <SectionHeader breadcrumbs={p.breadcrumbs} title={p.title} {...(p.description ? { description: p.description } : {})} />}
+      header={p.currentId ? <ScopeHeader variant="crumbs" breadcrumbs={p.breadcrumbs} data-testid="section-crumbs" /> : <SectionHeader breadcrumbs={p.breadcrumbs} title={p.title} {...(p.description ? { description: p.description } : {})} {...(p.headerActions ? { actions: p.headerActions } : {})} />}
       list={{
         title: p.listTitle,
         ...(p.count != null ? { count: p.count } : {}),

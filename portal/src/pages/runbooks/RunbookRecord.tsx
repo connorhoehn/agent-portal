@@ -8,8 +8,8 @@ import { usePublishPageTabs } from '../../lib/voice/pageContext';
 import { ProcedureSteps, SourceList } from '@connorhoehn/ui-components';
 import { EditorShell } from '@connorhoehn/ui-components/doc-editor';
 import {
-  Banner, Button, Chip, DataTable, DetailSection, Disclosure, DiffViewer, EmptyState, FormField, Inline, Input, LoadingState, Select, Spinner, Stack, StatusPill, T,
-  Textarea, type DataTableColumn,
+  Banner, Button, Chip, DataTable, DetailSection, Disclosure, DiffViewer, EmptyState, Inline, LoadingState, Select, Spinner, Stack, StatusPill, T,
+  type DataTableColumn,
 } from '@connorhoehn/ui-components/shared';
 import { UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
@@ -17,6 +17,7 @@ import { useCrumbLabel } from '../../lib/crumbLabels';
 import { relativeTime } from '../../lib/relativeTime';
 import { writeJson } from '../../lib/writeJson';
 import { runsListHref } from '../iq/runsModel';
+import { LintList, ProposalFields } from './RunbookProposalFields';
 import { runbookDisplayTitle, runbookReadingMarkdown } from './runbookTitles';
 import { ReadOnlyDocument } from '../../components/documents/ReadOnlyDocument';
 import { useRunbookNames } from './useRunbookNames';
@@ -274,17 +275,6 @@ function RunsTab({ runbook, version, names, applications, evidence, error, onOpe
   );
 }
 
-function LintList({ findings }: { findings: readonly LintFinding[] }) {
-  if (!findings.length) return null;
-  return (
-    <Stack gap="xs" data-testid="suggest-lint">
-      {findings.map((f, i) => (
-        <Banner key={`${i}:${f.rule}:${f.path}`} variant={f.severity === 'error' ? 'error' : 'warning'} title={`${f.rule} · ${f.path}`}>{f.message}</Banner>
-      ))}
-    </Stack>
-  );
-}
-
 function SuggestTab({ runbook, version, onOpen, onChanged }: { runbook: RunbookRow; version: RunbookVersion; onOpen: (href: string) => void; onChanged: () => void }) {
   const [markdown, setMarkdown] = useState(version.markdown);
   const [rationale, setRationale] = useState('');
@@ -324,20 +314,13 @@ function SuggestTab({ runbook, version, onOpen, onChanged }: { runbook: RunbookR
       <T size="sm" tone="secondary" wrap>
         Edit the runbook below, say why, and send it for review. You are proposing a change to v{runbook.current_version}; the reviewer sees exactly the diff.
       </T>
-      <FormField label="Runbook markdown" hint="The same canonical format a box receives: numbered steps, a command under each, what to expect.">
-        {({ labelId: _l, ...w }) => (
-          <Textarea {...w} value={markdown} onChange={(e) => setMarkdown(e.target.value)} rows={22} data-testid="suggest-markdown" />
-        )}
-      </FormField>
-      <FormField label="Why this change" required>
-        {({ labelId: _l, ...w }) => (
-          <Input {...w} value={rationale} onChange={(e) => setRationale(e.target.value)} placeholder="The second pilot run failed at the flip because…" data-testid="suggest-rationale" />
-        )}
-      </FormField>
-      {error && <Banner variant="error" layout="callout" icon title="Not sent" data-testid="suggest-error">{error}</Banner>}
-      {problems.length > 0 && (
-        <Stack gap="xs">{problems.map((p) => <T key={p} size="sm" tone="secondary" className="text-danger-fg" wrap>{p}</T>)}</Stack>
-      )}
+      <ProposalFields
+        markdown={markdown} onMarkdown={setMarkdown}
+        markdownLabel="Runbook markdown" markdownHint="The same canonical format a box receives: numbered steps, a command under each, what to expect." markdownRows={22}
+        rationale={rationale} onRationale={setRationale}
+        rationaleLabel="Why this change" rationalePlaceholder="The second pilot run failed at the flip because…"
+        error={error} problems={problems}
+      />
       <Inline gap="sm" align="center">
         <Button variant="primary" disabled={busy || unchanged || !rationale.trim()} onClick={() => { void submit(); }} data-testid="suggest-submit">
           {busy ? 'Sending…' : 'Send for review'}

@@ -329,3 +329,34 @@ export function distillationRedirect(pathname: string, search = ''): string {
   if (runbook) return runbookHref(runbook);
   return RUNBOOKS;
 }
+
+// ── Writing a runbook by hand ────────────────────────────────────────────────
+
+/** The sections a hand-written runbook starts from, in the canonical headings the server reads. */
+export const NEW_RUNBOOK_BODY_STARTER = [
+  '## Use when', '', '- ', '',
+  '## Steps', '', '1. **Do the first thing**', '   ```sh', '   command', '   ```', '   Expect what you should see', '',
+  '## Verify', '', '- How you know it worked',
+].join('\n');
+
+export interface NewRunbookDraft { name: string; description: string; scopeKind: 'repo' | 'initiative'; scopeRef: string; body: string; rationale: string }
+
+/** The request body for a person's `new` proposal, or the one thing missing from the form. */
+export function newRunbookRequest(d: NewRunbookDraft): { ok: true; body: Record<string, unknown> } | { ok: false; error: string } {
+  const name = d.name.trim();
+  const description = d.description.trim().replace(/\s+/g, ' ');
+  if (!name) return { ok: false, error: 'Give the runbook a name.' };
+  if (!description) return { ok: false, error: 'Describe what the runbook is for in a sentence.' };
+  if (!d.scopeRef.trim()) return { ok: false, error: d.scopeKind === 'repo' ? 'Name the repository it applies to.' : 'Choose the initiative it applies to.' };
+  if (!d.body.trim()) return { ok: false, error: 'Write the runbook body.' };
+  if (!d.rationale.trim()) return { ok: false, error: 'Say why this runbook is worth keeping.' };
+  return {
+    ok: true,
+    body: {
+      kind: 'new',
+      markdown: `# ${name.replace(/\s+/g, ' ')}\n\n${description}\n\n${d.body.trim()}\n`,
+      rationale: d.rationale.trim(),
+      scope: { kind: d.scopeKind, ref: d.scopeRef.trim() },
+    },
+  };
+}

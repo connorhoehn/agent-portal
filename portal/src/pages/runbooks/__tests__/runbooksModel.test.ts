@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   briefRefOfRun, distillationRedirect, evidenceSentences, filterProposals, proposalStatusLabel, runbookEvidenceSentences, sameScope, scopeInWords, libraryCommandAdapter, libraryGroups, libraryRows, parseTab,
-  proposalGroups, proposalRows, fileLanguageLabel, fileModeLabel, filesDiffSummary, formatBytes, shortSha, SECTION_KIND_LABEL, refusalMessage, stepMarkers, viewerDiff,
+  proposalGroups, proposalRows, fileLanguageLabel, fileModeLabel, filesDiffSummary, formatBytes, shortSha, SECTION_KIND_LABEL, refusalMessage, stepMarkers, viewerDiff, NEW_RUNBOOK_BODY_STARTER, newRunbookRequest,
 } from '../runbooksModel.ts';
 import { briefTaskTitle, buildNames } from '../runbookNames.ts';
 import type { Proposal, RunbookApplication, RunbookRow } from '../types.ts';
@@ -170,4 +170,18 @@ test('scope in words, widening, expiry and the proposal filters', () => {
   assert.deepEqual(filterProposals(all, { kind: 'retire', source: null, status: null }).map((p) => p.id), ['2']);
   assert.deepEqual(filterProposals(all, { kind: null, source: 'run', status: 'open' }).map((p) => p.id), ['1']);
   assert.equal(filterProposals(all, { kind: null, source: null, status: null }).length, 3);
+});
+
+test('a hand-written runbook becomes a new proposal with its scope, or names what is missing', () => {
+  const draft = { name: 'Rerun a flaky test', description: 'Rerun it with the diff applied.', scopeKind: 'repo' as const, scopeRef: ' acme/api ', body: NEW_RUNBOOK_BODY_STARTER, rationale: 'Worth keeping.' };
+  const ok = newRunbookRequest(draft);
+  assert.equal(ok.ok, true);
+  if (ok.ok) {
+    assert.equal(ok.body['kind'], 'new');
+    assert.deepEqual(ok.body['scope'], { kind: 'repo', ref: 'acme/api' });
+    assert.match(String(ok.body['markdown']), /^# Rerun a flaky test\n\nRerun it with the diff applied\.\n\n## Use when/);
+  }
+  assert.deepEqual(newRunbookRequest({ ...draft, name: ' ' }), { ok: false, error: 'Give the runbook a name.' });
+  assert.deepEqual(newRunbookRequest({ ...draft, scopeKind: 'initiative', scopeRef: '' }), { ok: false, error: 'Choose the initiative it applies to.' });
+  assert.deepEqual(newRunbookRequest({ ...draft, rationale: '' }), { ok: false, error: 'Say why this runbook is worth keeping.' });
 });

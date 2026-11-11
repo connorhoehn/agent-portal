@@ -374,6 +374,19 @@ export async function fileProposal(
     ? findSimilar(proposed, runAuthored?.scope ?? { kind: 'org', ref: null }, (await loadCandidates(s, Date.parse(clock.nowIso()))).map((c) => ({ runbook_id: c.runbook.id, scope: c.runbook.scope, doc: c.version.doc })))
     : [];
 
+  // A person who writes a runbook by hand may say where it should apply: a repository or an initiative.
+  // It is a request the reviewer sees and confirms at accept, never a grant; the area checks there still apply.
+  let personScope: RunbookScope | null = null;
+  if (kind === 'new' && source.kind === 'person' && body['scope'] !== undefined && body['scope'] !== null) {
+    const raw = body['scope'] as Record<string, unknown>;
+    const sk = raw && typeof raw === 'object' ? raw['kind'] : undefined;
+    const ref = raw && typeof raw === 'object' ? str(raw['ref']) : undefined;
+    if ((sk !== 'repo' && sk !== 'initiative') || !ref || ref.length > 200) {
+      throw new ValidationError('`scope` must be { kind: "repo" | "initiative", ref } with a ref of at most 200 characters');
+    }
+    personScope = { kind: sk, ref };
+  }
+
   const proposal: RunbookProposal = {
     id: `prop-${randomUUID().slice(0, 12)}`,
     kind, runbook_id: runbookId, base_version: baseVersion, proposed, rationale, source,
@@ -381,7 +394,7 @@ export async function fileProposal(
     ...(proposedId ? { proposed_id: proposedId } : {}),
     lint, similar, status: 'open', decided_by: null, decided_at: null, note: null, merged_into: null, created_at: clock.nowIso(),
     ...(frontmatterKeys.length ? { proposed_frontmatter_keys: frontmatterKeys } : {}),
-    ...(runAuthored && kind === 'new' ? { proposed_scope: runAuthored.scope } : {}),
+    ...(runAuthored && kind === 'new' ? { proposed_scope: runAuthored.scope } : personScope ? { proposed_scope: personScope } : {}),
     ...(runAuthored?.debrief ? { debrief: { ...runAuthored.debrief, converted_from_new: convertedFrom !== null } } : {}),
   };
   await s.putProposal(proposal);

@@ -165,6 +165,25 @@ describe('proposing', () => {
     expect(res.body.proposal.similar.map((s: { runbook_id: string }) => s.runbook_id)).toContain('rb-flaky-test-rerun-diff');
   });
 
+  it('a person may name the repository or initiative a new runbook is for; anything else is a 400', async () => {
+    const ok = await request(appAs(USERS.member!)).post('/api/runbooks/proposals').send({ kind: 'new', markdown: NEW_MD, rationale: 'Worth keeping.', scope: { kind: 'repo', ref: 'acme/api' } });
+    expect(ok.status).toBe(201);
+    const stored = await store.getProposal(ok.body.proposal.id);
+    expect(stored?.proposed_scope).toEqual({ kind: 'repo', ref: 'acme/api' });
+    for (const scope of [{ kind: 'org' }, { kind: 'repo' }, 'repo']) {
+      expect((await request(appAs(USERS.member!)).post('/api/runbooks/proposals').send({ kind: 'new', markdown: NEW_MD_OTHER, rationale: 'x', scope })).status).toBe(400);
+    }
+  });
+
+  it('the Library form\'s starter text parses once the author has filled in the headings', async () => {
+    const markdown = '# Rerun a flaky test with its diff\n\nRerun a flaky test with the diff that introduced it applied so you can tell a flake from a regression.\n\n## Use when\n\n- A test flips between runs on one commit.\n\n## Steps\n\n1. **Do the first thing**\n   ```sh\n   command\n   ```\n   Expect what you should see\n\n## Verify\n\n- How you know it worked\n';
+    const res = await request(appAs(USERS.member!)).post('/api/runbooks/proposals').send({ kind: 'new', markdown, rationale: 'x', scope: { kind: 'initiative', ref: 'p-auth-migration' } });
+    expect(res.status).toBe(201);
+    const bad = await request(appAs(USERS.member!)).post('/api/runbooks/proposals').send({ kind: 'new', markdown: '# Only a title', rationale: 'x', scope: { kind: 'repo', ref: 'acme/api' } });
+    expect(bad.status).toBe(422);
+    expect(bad.body.code).toBe('PARSE');
+  });
+
   it('a box proposes with a signed lab envelope as a RUN; without one it is refused', async () => {
     await store.putBrief(assembleBrief({ run_ref: 'job-0042', assembled_at: '2026-10-14T00:00:00.000Z', framing: '', work_item: null, initiative: null, decisions: [] }));
     const token = await mintRunToken('job-0042');
