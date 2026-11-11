@@ -910,7 +910,7 @@ Open:
 - The Claude Code CLI has no turn-count flag, so the turn is bounded by the timeout and the dollar ceiling.
 - The initiative scope matrix test does not cover runbooks or local compute.
 
-Rebased onto lane D before merging: the evidence read's proposal row admits `source.kind: 'system'` (retire proposals), and the three contract briefs were re-recorded for the two new `lab-report` lines (`learned`, `runbooks`); nothing else in them moved. Pre-existing red, not from this lane: `src/lib/__tests__/sdlc-capture-requester.test.ts` (one of four) fails on main too — its partial mock of `providers/work-items` lacks `mockWorkItemProjectId`, which the sprint-envelope lookup in `lib/spend-holds.ts` now calls.
+Rebased onto lane D before merging: the evidence read's proposal row admits `source.kind: 'system'` (retire proposals), and the three contract briefs were re-recorded for the two new `lab-report` lines (`learned`, `runbooks`); nothing else in them moved. One pre-existing red fixed on the way: `src/lib/__tests__/sdlc-capture-requester.test.ts` refused its dispatch from the 10th of the month on, because the dispatcher's seeded personal budget (mock spend moves with the day) crossed its hard cap; the suite is about who a change records, so it now mocks the user-budget gate to "none", and a refusal prints its reason instead of a bare `false`.
 
 ### Lane E and the follow-ups: handed off
 

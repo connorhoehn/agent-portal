@@ -13,7 +13,15 @@ jest.mock('../run-brief.js', () => ({ freezeBrief: jest.fn(async () => { throw n
 jest.mock('../change-reviewer.js', () => ({ reviewDiff: jest.fn(async () => ({ model: 'm', verdict: 'approve', summary: null, findings: [] })) }));
 jest.mock('../change-delivery.js', () => ({ deliverChange: jest.fn() }));
 jest.mock('../delivery-guard.js', () => ({ deliveryBlockReason: jest.fn() }));
-jest.mock('../../providers/work-items.js', () => ({ getWorkItem: jest.fn(async () => null), updateWorkItem: jest.fn() }));
+// The dispatcher's personal budget is not the subject either, and the seeded one's monthly spend
+// moves with the day of the month (it crossed the cap on the 10th). No budget: the gate is skipped.
+jest.mock('../../providers/user-budgets.js', () => ({ readUserBudgetGate: jest.fn(async () => ({ kind: 'none' })) }));
+jest.mock('../../providers/work-items.js', () => ({
+  getWorkItem: jest.fn(async () => null), updateWorkItem: jest.fn(),
+  // The sprint-envelope lookup in spend-holds asks which initiative a work item belongs to;
+  // these runs have none, so the envelope is skipped rather than refused.
+  mockWorkItemProjectId: jest.fn(() => null),
+}));
 jest.mock('../project-runner.js', () => ({
   // The run "changes a file": onChanged fires, then capture asks git.
   executeProjectRun: jest.fn(async (opts: { onChanged: () => void }) => { opts.onChanged(); }),
@@ -51,7 +59,7 @@ async function requesterOf(input: Partial<Parameters<typeof dispatchGovernedRun>
   (createChangeRequest as jest.Mock).mockClear();
   (startRun as jest.Mock).mockClear();
   const out = await dispatchGovernedRun({ project: PROJECT, prompt: 'fix it', sessionId: 'sess-1', ...input });
-  expect(out.ok).toBe(true);
+  if (!out.ok) throw new Error(`dispatch refused: ${JSON.stringify(out)}`); // the reason, not a bare false
   for (let i = 0; i < 10; i++) await settle();
   expect(createChangeRequest).toHaveBeenCalledTimes(1);
   return ((createChangeRequest as jest.Mock).mock.calls[0]![0] as { requestedBy?: unknown }).requestedBy;
