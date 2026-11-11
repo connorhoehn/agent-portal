@@ -205,11 +205,12 @@ describe('whether to debrief: every reason, and the yes', () => {
   });
   it('a billed executor reserves the ceiling on the learning line; at the cap it is skipped; local reserves nothing', async () => {
     const reserve = jest.fn(async () => ({ ok: true as const, holdId: 'hold-1' }));
-    const d = await decideDebrief(rep({ executor: 'microvm' }), ctx({ reserve }));
+    const d = await decideDebrief(rep({ executor: 'microvm' }), ctx({ reserve, hasCheckout: true }));
     expect(reserve).toHaveBeenCalledWith({ runRef: 'job-1', estimate: 0.5 });
     expect(d).toMatchObject({ state: 'requested', holdId: 'hold-1', ceilingUsd: 0.5 });
     const capped = jest.fn(async () => ({ ok: false as const, reason: 'learning-budget', message: 'cap' }));
-    expect((await decideDebrief(rep({ executor: 'microvm' }), ctx({ reserve: capped }))).reason).toBe('learning-budget');
+    expect((await decideDebrief(rep({ executor: 'microvm' }), ctx({ reserve: capped, hasCheckout: true }))).reason).toBe('learning-budget');
+    expect((await decideDebrief(rep({ executor: 'microvm' }), ctx({ reserve }))).reason).toBe('executor-unsupported');
     const never = jest.fn();
     await decideDebrief(rep({ executor: 'local' }), ctx({ reserve: never }));
     expect(never).not.toHaveBeenCalled();
@@ -296,7 +297,7 @@ describe('a kept folder becomes a proposal, or is stopped at the right gate', ()
     const reserve = async () => ({ ok: true as const, holdId: 'hold-9' });
     const r = rep({ runRef: 'job-9', executor: 'microvm' });
     await reports.putReport(r);
-    await reports.setDebrief('job-9', await decideDebrief(r, { runbooks: store, reports: async () => [], nowIso, reserve }), null);
+    await reports.setDebrief('job-9', await decideDebrief(r, { runbooks: store, reports: async () => [], nowIso, reserve, hasCheckout: true }), null);
     const d = deps();
     expect(await settleDebrief({ runRef: 'job-9', sessionUnavailable: true }, d)).toMatchObject({ ok: true, debrief: { state: 'skipped', reason: 'session-unavailable' } });
     expect(d.release).toHaveBeenCalledWith('hold-9');
@@ -306,7 +307,7 @@ describe('a kept folder becomes a proposal, or is stopped at the right gate', ()
   it('a billed debrief settles its hold with what the turn reported', async () => {
     const r = rep({ runRef: 'job-8', executor: 'microvm' });
     await reports.putReport(r);
-    await reports.setDebrief('job-8', await decideDebrief(r, { runbooks: store, reports: async () => [], nowIso, reserve: async () => ({ ok: true as const, holdId: 'h' }) }), null);
+    await reports.setDebrief('job-8', await decideDebrief(r, { runbooks: store, reports: async () => [], nowIso, reserve: async () => ({ ok: true as const, holdId: 'h' }), hasCheckout: true }), null);
     const d = deps();
     await settleDebrief({ runRef: 'job-8', answer: { kind: 'none', reason: 'n' }, costUsd: 0.12 }, d);
     expect(d.settle).toHaveBeenCalledWith({ runRef: 'job-8', costUsd: 0.12 });

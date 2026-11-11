@@ -1003,5 +1003,118 @@ class LabOverBrokerTests(MicrovmCase):
         self.assertFalse(os.path.exists(os.path.join(self.root, ".claude", "skills", "rb-alpha")))
 
 
+# claude for a debrief: NUL-separated argv, then the VARIANT's folder, then one json result.
+CLAUDE_DEBRIEF = r"""
+for a in "$@"; do printf '%s\0' "$a"; done > "$OUT_DIR/argv0"
+pwd > "$OUT_DIR/cwd"
+d=.lab/keep/rb-widget-retry
+mkdir -p "$d"
+printf -- '---\nname: rb-widget-retry\ndescription: Retry the widget test.\n---\n\n# Retry\n' > "$d/SKILL.md"
+case "$VARIANT" in
+  link) mkdir -p "$d/scripts"; ln -s /etc/hosts "$d/scripts/hosts.txt" ;;
+  big) mkdir -p "$d/data"; head -c 40000 /dev/zero | tr '\0' x > "$d/data/big.txt" ;;
+  ok) mkdir -p "$d/scripts"; printf '#!/bin/sh\necho ok\n' > "$d/scripts/check.sh"; chmod +x "$d/scripts/check.sh" ;;
+esac
+echo '{"type":"result","subtype":"success","structured_output":{"kind":"new","reason":"r","folder":"rb-widget-retry"},"total_cost_usd":0.01}'
+"""
+
+DEBRIEF_REQUEST = {
+    "prompt": "This is a debrief.", "schema": {"type": "object"}, "maxBudgetUsd": 0.5, "timeoutS": 60,
+    "tools": ["Read", "Glob", "Grep", "Write", "Edit"],
+    "allowedTools": ["Read(./**)", "Edit(./.lab/keep/**)"],
+    "disallowedTools": ["Edit(./.git/**)", "Edit(**/.git/**)", "Bash", "WebFetch", "WebSearch"],
+}
+
+
+class DebriefTests(MicrovmCase):
+    def setUp(self):
+        super().setUp()
+        self.use_claude(CLAUDE_DEBRIEF)
+        os.environ["VARIANT"] = "ok"
+
+    def debrief(self, **over):
+        p = {"op": "debrief", "runner": "microvm", "request": dict(DEBRIEF_REQUEST), "claude_session_id": SESSION}
+        p.update(over)
+
+        async def go():
+            booted = await main.handle(self.boot_payload())
+            self.assertTrue(booted.get("ok"), booted)
+            return await main.handle(p)
+        return run(go())
+
+    def argv(self) -> list[str]:
+        return Path(self.out, "argv0").read_text().split("\0")[:-1]
+
+    def test_the_resume_has_the_bounded_flags_and_returns_the_folder(self):
+        out = self.debrief()
+        self.assertTrue(out["ok"], out)
+        a = self.argv()
+        self.assertEqual(a[:4], ["-p", "This is a debrief.", "--resume", SESSION])
+        tail = a[a.index("--fork-session"):]
+        tail = [x for i, x in enumerate(tail) if x != "--model" and (i == 0 or tail[i - 1] != "--model")]
+        self.assertEqual(tail, [
+            "--fork-session", "--output-format", "json", "--json-schema", '{"type":"object"}',
+            "--tools", "Read,Glob,Grep,Write,Edit", "--allowedTools", "Read(./**),Edit(./.lab/keep/**)",
+            "--disallowedTools", "Edit(./.git/**),Edit(**/.git/**),Bash,WebFetch,WebSearch",
+            "--permission-mode", "dontAsk", "--max-budget-usd", "0.5"])
+        self.assertNotIn("--dangerously-skip-permissions", a)
+        self.assertEqual(os.path.realpath(Path(self.out, "cwd").read_text().strip()), os.path.realpath(self.target))
+        self.assertEqual(out["answer"]["kind"], "new")
+        self.assertEqual(out["cost_usd"], 0.01)
+        self.assertEqual(out["folder"]["name"], "rb-widget-retry")
+        self.assertEqual(out["folder"]["files"], [{"path": "scripts/check.sh", "content": "#!/bin/sh\necho ok\n", "mode": "755"}])
+
+    def test_a_widened_request_is_narrowed_and_the_budget_capped(self):
+        req = dict(DEBRIEF_REQUEST, maxBudgetUsd=50, tools=["Bash"] + DEBRIEF_REQUEST["tools"],
+                   allowedTools=["Bash(*)", "Edit(./**)"] + DEBRIEF_REQUEST["allowedTools"], disallowedTools=[])
+        self.assertTrue(self.debrief(request=req)["ok"])
+        a = self.argv()
+        self.assertEqual(a[a.index("--tools") + 1], "Read,Glob,Grep,Write,Edit")
+        self.assertEqual(a[a.index("--allowedTools") + 1], "Read(./**),Edit(./.lab/keep/**)")
+        self.assertEqual(a[a.index("--disallowedTools") + 1], "Edit(./.git/**),Edit(**/.git/**),Bash,WebFetch,WebSearch")
+        self.assertEqual(a[a.index("--max-budget-usd") + 1], "2")
+
+    def test_a_bad_session_id_starts_nothing(self):
+        out = self.debrief(claude_session_id="../../etc")
+        self.assertEqual(out["error"], "session-unavailable")
+        self.assertFalse(Path(self.out, "argv0").exists())
+
+    def test_a_link_or_an_oversized_file_is_refused_not_read(self):
+        os.environ["VARIANT"] = "link"
+        out = self.debrief()
+        self.assertNotIn("folder", out)
+        self.assertIn("links are not carried", out["problems"][0])
+        self.assertNotIn("localhost", json.dumps(out))
+        os.environ["VARIANT"] = "big"
+        out = self.debrief()
+        self.assertNotIn("folder", out)
+        self.assertIn("max 32768", out["problems"][0])
+
+    def test_a_leftover_keep_link_is_removed_not_followed(self):
+        outside = os.path.join(self.tmp, "outside")
+        os.makedirs(outside)
+        Path(outside, "keepme").write_text("x")
+
+        async def go():
+            await main.handle(self.boot_payload())
+            os.makedirs(os.path.join(self.target, ".lab"), exist_ok=True)
+            os.symlink(outside, os.path.join(self.target, ".lab", "keep"))
+            return await main.handle({"op": "debrief", "runner": "microvm", "request": dict(DEBRIEF_REQUEST),
+                                      "claude_session_id": SESSION})
+        out = run(go())
+        self.assertTrue(out["ok"], out)
+        self.assertTrue(Path(outside, "keepme").exists())
+
+    def test_no_result_is_session_unavailable(self):
+        self.use_claude(CLAUDE_NO_RESULT)
+        self.assertEqual(self.debrief()["error"], "session-unavailable")
+
+    def test_debrief_before_boot_is_refused(self):
+        out = run(main.handle({"op": "debrief", "runner": "microvm", "request": DEBRIEF_REQUEST,
+                               "claude_session_id": SESSION}))
+        self.assertFalse(out["ok"])
+        self.assertEqual(out["error"], "not-booted")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -41,6 +41,7 @@ import os
 import re
 import shutil
 import signal
+import stat
 import tempfile
 import time
 import urllib.error
@@ -1408,6 +1409,240 @@ async def _mvm_push(payload: dict) -> dict:
     return {"ok": True, "head_sha": head, "pushed": True}
 
 
+# ── debrief (docs/learning-loop-design.md, Stage 2) ──────────────────────────
+#
+# After the task, while the session is still up, the dispatcher may send the
+# server's debrief request: resume the work session (forked) with the fixed
+# prompt, read the ONE folder the answer names under .lab/keep, and hand the
+# answer and folder back. The proposal is filed server side (the dispatcher
+# calls the same settle path the local route uses); nothing here posts it.
+# The same narrowing as tools/local-compute-report.mjs `debriefArgs`: a request
+# can only take tools away, and the budget is capped whatever it says.
+
+_KEEP_NAME = re.compile(r"^rb-[a-z0-9][a-z0-9-]{1,60}$")
+_KEEP_SEG = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]*$")
+_KEEP_FILE_MAX, _KEEP_BUNDLE_MAX, _KEEP_MAX_FILES, _KEEP_SKILL_MD_MAX = 32 * 1024, 80 * 1024, 24, 200_000
+_DEBRIEF_TOOL_CEILING = ("Read", "Glob", "Grep", "Write", "Edit")
+_DEBRIEF_ALLOW_RULE = re.compile(r"^(?:Read|Glob|Grep)(?:\(\./\*\*\))?$|^Edit\(\./\.lab/keep/\*\*\)$")
+_DEBRIEF_DENY_FLOOR = ("Edit(./.git/**)", "Edit(**/.git/**)", "Bash", "WebFetch", "WebSearch")
+_DEBRIEF_DENY_RULE = re.compile(r"^[A-Za-z]+(\([^\s]*\))?$")
+_DEBRIEF_MAX_USD = 2.0
+_DEBRIEF_MAX_TIMEOUT_S = 1800
+
+
+def _debrief_cmd(request: object, session_id: object, model: str) -> list[str] | None:
+    """The resume argv, or None when the request is not one this runner will run."""
+    if not isinstance(request, dict):
+        return None
+    if not isinstance(session_id, str) or not re.fullmatch(_SESSION_UUID, session_id):
+        return None
+    prompt = request.get("prompt")
+    if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 20_000:
+        return None
+    schema = request.get("schema")
+    if not isinstance(schema, dict):
+        return None
+    tools = [t for t in (request.get("tools") or []) if t in _DEBRIEF_TOOL_CEILING]
+    allowed = [t for t in (request.get("allowedTools") or []) if isinstance(t, str) and _DEBRIEF_ALLOW_RULE.match(t)]
+    denied = list(_DEBRIEF_DENY_FLOOR)
+    for t in request.get("disallowedTools") or []:
+        if isinstance(t, str) and _DEBRIEF_DENY_RULE.match(t) and t not in denied:
+            denied.append(t)
+    try:
+        usd = float(request.get("maxBudgetUsd"))
+    except (TypeError, ValueError):
+        return None
+    if not tools or not allowed or not (usd > 0):
+        return None
+    usd = min(usd, _DEBRIEF_MAX_USD)
+    cmd = [_claude_bin(), "-p", prompt, "--resume", session_id, "--fork-session",
+           "--output-format", "json", "--json-schema", json.dumps(schema, separators=(",", ":"))]
+    if model:
+        cmd += ["--model", model]
+    cmd += ["--tools", ",".join(tools), "--allowedTools", ",".join(allowed),
+            "--disallowedTools", ",".join(denied), "--permission-mode", "dontAsk",
+            "--max-budget-usd", f"{usd:g}"]
+    return cmd
+
+
+def _debrief_answer(result: object) -> dict | None:
+    if not isinstance(result, dict):
+        return None
+    so = result.get("structured_output")
+    if isinstance(so, dict):
+        return so
+    text = result.get("result")
+    if isinstance(text, str):
+        m = re.search(r"\{[\s\S]*\}$", text.strip())
+        if m:
+            try:
+                got = json.loads(m.group(0))
+                return got if isinstance(got, dict) else None
+            except ValueError:
+                return None
+    return None
+
+
+def _read_keep_folder(target: str, name: object) -> dict:
+    """The one kept folder, read as `lab keep` reads it: links never followed,
+    text only, names and sizes checked. {"folder"} | {"problems"} | {"missing"}."""
+    if not isinstance(name, str) or not _KEEP_NAME.match(name):
+        return {"problems": ["the answer names no usable folder"]}
+    keep = os.path.join(target, ".lab", "keep")
+    base = os.path.join(keep, name)
+    try:
+        if os.path.islink(keep) or not os.path.isdir(keep):
+            return {"missing": True}
+        st = os.lstat(base)
+    except OSError:
+        return {"missing": True}
+    if _is_link(st) or not _is_dir(st):
+        return {"missing": True}
+    problems: list[str] = []
+    skill_path = os.path.join(base, "SKILL.md")
+    try:
+        sst = os.lstat(skill_path)
+        if not _is_file(sst):
+            problems.append("no SKILL.md")
+        elif sst.st_size > _KEEP_SKILL_MD_MAX:
+            problems.append(f"SKILL.md is {sst.st_size} bytes (max {_KEEP_SKILL_MD_MAX})")
+    except OSError:
+        problems.append("no SKILL.md")
+    files: list[dict] = []
+    total = 0
+
+    def walk(d: str, rel: str) -> None:
+        nonlocal total
+        for n in sorted(os.listdir(d)):
+            full, r = os.path.join(d, n), f"{rel}/{n}"
+            s = os.lstat(full)
+            if _is_link(s):
+                problems.append(f"{r} is not a regular file (links are not carried)")
+                continue
+            if _is_dir(s):
+                walk(full, r)
+                continue
+            if not _is_file(s):
+                problems.append(f"{r} is not a regular file (links are not carried)")
+                continue
+            if not all(_KEEP_SEG.match(p) for p in r.split("/")[1:]):
+                problems.append(f"{r}: a name outside [A-Za-z0-9._-] or starting with . or -")
+                continue
+            if s.st_size > _KEEP_FILE_MAX:
+                problems.append(f"{r} is {s.st_size} bytes (max {_KEEP_FILE_MAX})")
+                continue
+            with open(full, "rb") as fh:
+                raw = fh.read()
+            if b"\0" in raw:
+                problems.append(f"{r} is binary (only text is carried)")
+                continue
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                problems.append(f"{r} is not UTF-8 text")
+                continue
+            total += len(raw)
+            files.append({"path": r, "content": text, "mode": "755" if s.st_mode & 0o111 else "644"})
+
+    for root in ("scripts", "data"):
+        t = os.path.join(base, root)
+        try:
+            ts = os.lstat(t)
+        except OSError:
+            continue
+        if _is_link(ts) or not _is_dir(ts):
+            continue
+        walk(t, root)
+    if len(files) > _KEEP_MAX_FILES:
+        problems.append(f"{len(files)} files (max {_KEEP_MAX_FILES})")
+    if total > _KEEP_BUNDLE_MAX:
+        problems.append(f"the files total {total} bytes (max {_KEEP_BUNDLE_MAX})")
+    if problems:
+        return {"problems": problems[:8]}
+    with open(skill_path, encoding="utf-8", errors="replace") as fh:
+        skill_md = fh.read()
+    return {"folder": {"name": name, "skill_md": skill_md, "files": files}}
+
+
+def _is_link(st: os.stat_result) -> bool:
+    return stat.S_ISLNK(st.st_mode)
+
+
+def _is_dir(st: os.stat_result) -> bool:
+    return stat.S_ISDIR(st.st_mode)
+
+
+def _is_file(st: os.stat_result) -> bool:
+    return stat.S_ISREG(st.st_mode)
+
+
+def _clear_keep(target: str) -> None:
+    """Start the debrief with an empty .lab/keep; a link is removed, never followed."""
+    keep = os.path.join(target, ".lab", "keep")
+    if os.path.islink(keep) or os.path.isfile(keep):
+        os.unlink(keep)
+    elif os.path.isdir(keep):
+        shutil.rmtree(keep)
+
+
+async def _mvm_debrief(payload: dict) -> dict:
+    """→ {"ok": true, "answer", "folder"? | "problems"?, "cost_usd"} or
+    {"ok": false, "error": "session-unavailable" | ...}. Never pushes, never posts."""
+    run = _RUN
+    if run is None:
+        return _Refusal("not-booted").result()
+    try:
+        model = _resolve_model(payload.get("model"))
+    except ModelNotAllowed as err:
+        return {"ok": False, "error": "model-not-allowlisted", "model": err.requested}
+    request = payload.get("request")
+    cmd = _debrief_cmd(request, payload.get("claude_session_id"), model)
+    if cmd is None:
+        return {"ok": False, "error": "session-unavailable", "detail": "the request or session id is not usable"}
+    try:
+        timeout_s = min(max(int(request.get("timeoutS") or 300), 30), _DEBRIEF_MAX_TIMEOUT_S)
+    except (TypeError, ValueError):
+        timeout_s = 300
+    try:
+        _clear_keep(run.target)
+    except OSError as err:
+        log.warning("microvm debrief: could not clear .lab/keep (%s)", type(err).__name__)
+    env = _microvm_claude_env(run, run.author)
+    proc = await asyncio.create_subprocess_exec(*cmd, cwd=run.target, env=env, stdin=asyncio.subprocess.DEVNULL,
+                                                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+                                                start_new_session=True)
+    try:
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
+    except asyncio.TimeoutError:
+        _kill_process_group(proc, timeout_s)
+        await proc.wait()
+        stdout = b""
+    result = None
+    for line in reversed(stdout[:1_000_000].decode("utf-8", errors="replace").strip().splitlines()):
+        try:
+            o = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(o, dict) and o.get("type") == "result":
+            result = o
+            break
+    answer = _debrief_answer(result)
+    if answer is None:
+        log.warning("microvm debrief: run=%s no answer (exit %s)", run.run_ref, proc.returncode)
+        return {"ok": False, "error": "session-unavailable", "detail": f"exit {proc.returncode}"}
+    cost = result.get("total_cost_usd") if isinstance(result, dict) else None
+    out: dict = {"ok": True, "answer": answer,
+                 "cost_usd": cost if isinstance(cost, (int, float)) and not isinstance(cost, bool) else None}
+    if answer.get("kind") in ("new", "revise"):
+        read = _read_keep_folder(run.target, answer.get("folder"))
+        if "folder" in read:
+            out["folder"] = read["folder"]
+        elif "problems" in read:
+            out["problems"] = read["problems"]
+    log.info("microvm debrief: run=%s kind=%s folder=%s", run.run_ref, answer.get("kind"), "folder" in out)
+    return out
+
+
 @app.entrypoint
 async def handle(payload: dict) -> AsyncIterator | dict:
     """Payload contract:
@@ -1432,7 +1667,7 @@ async def handle(payload: dict) -> AsyncIterator | dict:
     following a link) and recreate ~/.claude, → {"ok": true, "removed": n}.
 
     Or the microVM runner (`"runner": "microvm"`, design §3): `op` boot |
-    task | push — see _mvm_boot / _mvm_task / _mvm_push and
+    task | push | debrief — see _mvm_boot / _mvm_task / _mvm_push / _mvm_debrief and
     docs/microvm-runner-design.md for the field contract. Without `runner`
     (or with "fleet") everything below behaves as it always has.
 
@@ -1460,7 +1695,9 @@ async def handle(payload: dict) -> AsyncIterator | dict:
             return await _mvm_task(payload)
         if op == "push":
             return await _mvm_push(payload)
-        return {"ok": False, "error": "unsupported-op", "detail": "microvm ops are boot | task | push"}
+        if op == "debrief":
+            return await _mvm_debrief(payload)
+        return {"ok": False, "error": "unsupported-op", "detail": "microvm ops are boot | task | push | debrief"}
     if runner not in (None, "fleet"):
         return {"ok": False, "error": "unknown-runner", "detail": "runner is fleet | microvm"}
 

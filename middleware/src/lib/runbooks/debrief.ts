@@ -162,7 +162,12 @@ export interface DebriefContext {
   /** Every stored report (for the daily count and the pending requests). */
   reports: () => Promise<RunReport[]>;
   nowIso: () => string;
-  /** Local compute: whether the run had a checkout of its own. Ignored for other executors. */
+  /**
+   * Whether the run's checkout (and session) is still there to resume. Local compute: false means
+   * the job named no repository. MicroVM: must be true, which only a dispatcher that runs the
+   * devbox `debrief` op before stopping the session may say; today none does, so microVM runs are
+   * skipped as executor-unsupported and nothing is held on the learning line for them.
+   */
   hasCheckout?: boolean;
   /** Test seam for the learning line. Default: lib/learning-budget.ts. */
   reserve?: (input: { runRef: string; estimate: number }) => Promise<{ ok: true; holdId: string | null } | { ok: false; reason: string; message: string }>;
@@ -198,6 +203,7 @@ export async function decideDebrief(report: RunReport, ctx: DebriefContext): Pro
   if (!(report.learned ?? '').trim()) return skipped('nothing-learned', at);
   if (!corroborated(report)) return skipped('no-obstacle', at);
   if (!executorDebriefs(report.executor)) return skipped('executor-unsupported', at);
+  if (report.executor === 'microvm' && ctx.hasCheckout !== true) return skipped('executor-unsupported', at);
   if (report.executor === 'local' && ctx.hasCheckout === false) return skipped('no-checkout', at);
 
   const limits = debriefLimits();
