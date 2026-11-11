@@ -28,7 +28,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const PORT = Number(process.env.LL_E2E_PORT ?? 3919);
 const BASE = `http://127.0.0.1:${PORT}`;
-const RUNBOOK = 'rb-flaky-test-rerun-diff';
+const RUNBOOK = 'rb-tenant-cutover';
 const REPORTED_COST = 0.0421;
 
 const work = mkdtempSync(join(tmpdir(), 'll-e2e-'));
@@ -92,13 +92,13 @@ async function call(method, path, body) {
 function writeStubClaude(dir) {
   mkdirSync(dir, { recursive: true });
   const final = [
-    'Done. The collector test was flaky, not a regression.',
+    'Done. The cutover plan is written; the rehearsal tenant moved and rolled back cleanly.',
     '',
     '```lab-report',
     JSON.stringify({
-      summary: 'Checked the collector integration test against the flaky-test runbook and left the code as it was.',
-      verification: [{ command: 'npm test -- collector', passed: true }],
-      obstacles: ['The first run failed on a timing assertion; a rerun passed and the outputs differed only in timestamps.'],
+      summary: 'Wrote the cutover plan for one rehearsal tenant with the tenant cutover runbook and rehearsed its rollback.',
+      verification: [{ command: 'npm test -- cutover', passed: true }],
+      obstacles: ['Sign-in on the shim failed until the tenant callback URL was added; added it before moving the tenant.'],
     }),
     '```',
   ].join('\n');
@@ -148,8 +148,8 @@ try {
   const accept = await call('PATCH', `/api/local-compute/nodes/${nodeId}`, { acceptJobs: true });
   check(accept.status === 200, 'switched the machine on', JSON.stringify(accept.body).slice(0, 200));
   const queued = await call('POST', `/api/local-compute/nodes/${nodeId}/work`, {
-    title: 'Check whether the collector test is flaky',
-    prompt: 'Run the collector integration test twice and say whether it is flaky.',
+    title: 'Rehearse one tenant cutover with rollback',
+    prompt: 'Rehearse moving one test tenant from SAML to Cognito, then roll it back.',
     requiresReview: false,
   });
   check([200, 201, 202].includes(queued.status), 'queued a job for the machine', JSON.stringify(queued.body).slice(0, 300));
@@ -164,8 +164,8 @@ try {
   check(got.executor === 'local', 'executor is local', got.executor);
   check(got.outcome === 'done', 'outcome is done', got.outcome);
   check(got.selfReport === 'ok', 'the lab-report block parsed', got.selfReport);
-  check(/flaky-test runbook/.test(got.summary), 'summary came from the block', got.summary);
-  check(JSON.stringify(got.verification) === JSON.stringify([{ command: 'npm test -- collector', passed: true }]), 'verification came from the block', JSON.stringify(got.verification));
+  check(/tenant cutover runbook/.test(got.summary), 'summary came from the block', got.summary);
+  check(JSON.stringify(got.verification) === JSON.stringify([{ command: 'npm test -- cutover', passed: true }]), 'verification came from the block', JSON.stringify(got.verification));
   check(got.obstacles.length === 1, 'obstacles came from the block', JSON.stringify(got.obstacles));
   const use = got.runbooksUsed.find((u) => u.id === RUNBOOK);
   check(use?.source === 'observed' && Number.isInteger(use?.version), 'the Skill tool call is an observed use at the version the brief gave', JSON.stringify(got.runbooksUsed));

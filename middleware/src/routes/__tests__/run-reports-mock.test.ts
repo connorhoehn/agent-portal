@@ -64,19 +64,19 @@ async function dispatch(workItemId: string): Promise<{ jobId: string; report: Ru
 
 describe('the simulated run ends with a stored report', () => {
   it('a run that used a runbook it was given: observed use, an application row, health proven', async () => {
-    const { jobId, report } = await dispatch('wi-obs-e3-s1');
+    const { jobId, report } = await dispatch('wi-auth-e2-s2');
     expect(report).toMatchObject({
-      runRef: jobId, executor: 'mock', outcome: 'done', workItemId: 'wi-obs-e3-s1', initiativeId: 'p-observability',
+      runRef: jobId, executor: 'mock', outcome: 'done', workItemId: 'wi-auth-e2-s2', initiativeId: 'p-auth-migration',
       selfReport: 'ok', cost: { basis: 'simulated' }, failureCode: null,
     });
-    expect(report.summary).toMatch(/Metric cardinality budgets/);
+    expect(report.summary).toMatch(/tenant cutover runbook/);
     expect(report.verification).toEqual([{ command: 'npm test', passed: true }, { command: 'npm run lint', passed: true }]);
     expect(report.obstacles).toHaveLength(1);
     expect(report.briefId).toBe(`brief-${jobId}`);
-    const use = report.runbooksUsed.find((u) => u.id === 'rb-flaky-test-rerun-diff');
+    const use = report.runbooksUsed.find((u) => u.id === 'rb-tenant-cutover');
     expect(use).toMatchObject({ source: 'observed' });
     expect(use!.version).toEqual(expect.any(Number));
-    const apps = await runbookStore().listApplications('rb-flaky-test-rerun-diff');
+    const apps = await runbookStore().listApplications('rb-tenant-cutover');
     const mine = apps.filter((a) => a.run_ref === jobId);
     expect(mine).toEqual([expect.objectContaining({ outcome: 'followed', brief_id: `brief-${jobId}`, version: use!.version })]);
     expect(runbookHealth(apps, use!.version!, Date.parse(clock.nowIso())).status).toBe('proven');

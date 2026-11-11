@@ -1424,14 +1424,14 @@ describe('POST /api/local-compute/register', () => {
     // conclude there was no work. `devbox:task` is the one that matters — it is
     // the kind almost everything enqueues today.
     expect(res.body.rejectedKinds).toEqual(['devbox:task', 'sudo:make-me-a-sandwich']);
-    expect(res.body.runnableKinds).toEqual(['local:task', 'local:distill', 'local:consolidate']);
+    expect(res.body.runnableKinds).toEqual(['local:task', 'local:distill']);
   });
 
   it('orders kinds by the SERVER\'s list, so a node cannot choose what it is offered first', async () => {
     const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
     const res = await request(anon()).post(`${BASE}/register`).set(bearer(node.nodeToken))
-      .send({ jobKinds: ['local:consolidate', 'local:task', 'local:consolidate'] });
-    expect(res.body.jobKinds).toEqual(['local:task', 'local:consolidate']);
+      .send({ jobKinds: ['local:distill', 'local:task', 'local:distill'] });
+    expect(res.body.jobKinds).toEqual(['local:task', 'local:distill']);
   });
 
   it('caps maxConcurrency at the server ceiling and floors nonsense at 1', async () => {

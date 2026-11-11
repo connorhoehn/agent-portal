@@ -50,12 +50,12 @@ const FIXTURES: Array<{ when: (w: ItemLike) => boolean; build: (w: ItemLike) => 
     }),
   },
   {
-    when: (w) => w.projectId === 'p-observability' && (w.labels.includes('finops') || w.labels.includes('metrics')),
-    build: (w) => ({
-      key: 'used', outcome: 'done', failureCode: null, skillsLoaded: ['rb-flaky-test-rerun-diff'],
-      summary: `Worked "${w.title}" in the collector pipeline config and the processor that enforces it.`,
+    when: (w) => w.projectId === 'p-auth-migration' && (w.labels.includes('runbook') || /cutover/i.test(w.title)),
+    build: () => ({
+      key: 'used', outcome: 'done', failureCode: null, skillsLoaded: ['rb-tenant-cutover'],
+      summary: 'Wrote the tenant-by-tenant cutover plan with the tenant cutover runbook: sign-in checked on the shim before each tenant moves, one tenant at a time, and a rollback rehearsed on the first.',
       verification: [{ command: 'npm test', passed: true }, { command: 'npm run lint', passed: true }],
-      obstacles: ['The collector integration test failed on the first run. Followed the flaky-test runbook: reran it and compared the two outputs, which differed only in timing, so it was flaky rather than a regression.'],
+      obstacles: ['The rollback rehearsal failed on one test tenant because its SAML app had been switched off. Switched it back on for the rehearsal and added a check for it to the plan.'],
     }),
   },
 ];
@@ -82,7 +82,7 @@ export function simulatedRunTexts(): Array<{ key: string; text: string }> {
   const samples: ItemLike[] = [
     { title: 'Cold-start p99 breaches SLA after scale-to-zero', labels: ['latency'], projectId: 'p-inference-platform' },
     { title: 'Logout leaves the legacy shim cookie alive', labels: ['session', 'decom'] },
-    { title: 'Metric cardinality budgets', labels: ['finops', 'metrics'], projectId: 'p-observability' },
+    { title: 'Tenant-by-tenant cutover runbook with rollback', labels: ['decom', 'runbook', 'blocked'], projectId: 'p-auth-migration' },
     { title: 'Error-budget dashboard per team', labels: ['slo'] },
   ];
   return samples.flatMap((w) => {

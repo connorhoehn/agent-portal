@@ -1,4 +1,4 @@
-// Injection (docs/distillation-runbooks-design.md §3, lane E / R4): the session
+// Injection (the frozen brief; docs/learning-loop-design.md "What stays"): the session
 // brief is assembled ONCE, at the moment a run is bound to a box, frozen on the
 // store (write-once per run_ref), stamped onto the run, and delivered as those
 // exact bytes:
@@ -9,7 +9,7 @@
 //   local compute claim               routes/local-compute.ts → lib/local-work.ts briefForClaim
 //
 // A devbox receives the brief through its SessionStart hook (`lab brief` →
-// GET /api/runs/:ref/brief) with the LAB_* env set from `labRunEnv` — including
+// GET /api/runs/:ref/brief) with the LAB_* env set from `labRunContext` — including
 // the per-run token (lib/run-token.ts) that binds the box to this run and no
 // other. A local worker receives it inside the non-interactive framing.
 //

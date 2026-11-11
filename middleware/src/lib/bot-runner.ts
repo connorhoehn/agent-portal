@@ -1576,8 +1576,7 @@ const SIMULATED_RESULT = { costUsd: 0.0341, turns: 6, toolCalls: 5 } as const;
  * watches the job move instead of finding it already terminal; the audit that
  * asked for this had the same complaint about `compactNow`, and this is that
  * fix's shape. 0 runs the whole progression synchronously before the route
- * answers, which is the test seam (`providers/distillation.ts`'s
- * `__setCompactRunMs`).
+ * answers, which is the test seam (`__setMockDispatchStepMs` below).
  */
 let mockDispatchStepMs = 2_000;
 export function __setMockDispatchStepMs(ms: number): void { mockDispatchStepMs = ms; }
