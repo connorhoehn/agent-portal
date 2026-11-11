@@ -1750,7 +1750,7 @@ describe('the fenced job writes', () => {
     expect(done.body).toEqual({
       ok: true, jobId: held.jobId, status: 'awaiting_review', costUsd: 0, provider: 'local',
       // The run report: a completion that sends no report block stores one with the self-report missing.
-      report: { selfReport: 'missing', runbooksUsed: 0, kept: 0 },
+      report: { selfReport: 'missing', runbooksUsed: 0, kept: 0, debrief: { state: 'skipped', reason: 'nothing-learned' } },
     });
     expect((await getJob(held.jobId))!.status).toBe('awaiting_review');
   });
@@ -1776,7 +1776,7 @@ describe('the fenced job writes', () => {
     });
     expect(res.status).toBe(200);
     expect(res.body.costUsd).toBe(0);
-    expect(res.body.report).toEqual({ selfReport: 'ok', runbooksUsed: 1, kept: 3 });
+    expect(res.body.report).toEqual({ selfReport: 'ok', runbooksUsed: 1, kept: 3, debrief: { state: 'skipped', reason: 'nothing-learned' } });
     const report = (await runReportStore().getReport(held.jobId))!;
     expect(report).toMatchObject({ executor: 'local', outcome: 'done', summary: 'Checked the test.', cost: { billedUsd: 0, reportedUsd: 0.05, basis: 'reported' } });
     // A name the brief never gave is evidence of nothing; junk names are dropped.

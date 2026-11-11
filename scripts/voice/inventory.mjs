@@ -482,7 +482,7 @@ export const V2_RULES = [
   // Knowledge, ingestion, connections: never (admin and spend)
   [/^(PUT|PATCH|POST|DELETE) \/api\/(admin\/kb-registry|ingest|connections|knowledge-base)/, 'never', null, 'ManageKB / ManageIngest, reaches S3, KB and crawlers'],
   // Compute: machine and code paths
-  [/^\w+ \/api\/local-compute\/(announce|heartbeat|register|claim|log|sessions\/|jobs\/:[^/]+\/(start|heartbeat|skills|complete|log)$)/, 'n/a', null, 'node-token machine routes'],
+  [/^\w+ \/api\/local-compute\/(announce|heartbeat|register|claim|log|sessions\/|jobs\/:[^/]+\/(start|heartbeat|skills|complete|debrief|log)$)/, 'n/a', null, 'node-token machine routes'],
   [/^\w+ \/api\/local-compute\/pair\//, 'never', null, 'pairing a machine is a click with a code'],
   [/^(PATCH|DELETE) \/api\/local-compute\/nodes\/:[^/]+$/, 'never', null, 'rename or unpair a machine'],
   [/^POST \/api\/local-compute\/nodes\/:[^/]+\/work$/, 'not-yet', 'computer', 'hand-work to a paired machine (ConnectLocalCompute)'],

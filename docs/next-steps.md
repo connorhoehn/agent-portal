@@ -862,7 +862,7 @@ Open:
 
 ### Lane D: giving runbooks to a run
 
-Built on branch `learning-loop-lane-d`, not merged.
+Merged to main (f96019ca).
 
 - **Brief v3** (`middleware/src/lib/runbooks/brief.ts`, assembler version 3). Up to two runbooks chosen at freeze go into the brief as text, whole or not at all, inside the 6,000-token budget, each with its reason in words ("labels decom, runbook; shares tenant, cutover; on this initiative") and, when its health is drifting, the one-line warning. The task is never cut to make room. Earlier runs of the same work item that failed, were cancelled or were sent back by a reviewer are shown newest first, at most two, with outcome, failure code, summary, obstacles and what the reviewer asked for. The report section is the `lab-report` ask alone; `liveBundleSkills`, "Skills on this box" and the local framing's `lab` line are gone. The pointer at the installed library stays.
 - **Untrusted text.** The work item, the project line, decisions, previous attempts, runbook text and health warnings sit inside the middleware's fence (`lib/untrusted-text.ts`), with a token drawn at random per freeze and per preview and one note at the top saying what the fenced text is.
@@ -888,3 +888,24 @@ Left:
 - Debrief cost on the evidence line (lane C).
 - The pins write has no entry in the wire capture's write policy, so its response shape is not captured.
 - The seeded scheduled run's brief (`mock/runbooks.seed.ts`) is assembled directly and gives no runbook; its offer reads "No runbook matched this work."
+
+### Lane C: the debrief and proposals from runs
+
+Built:
+
+- **The run's own account.** The lab-report ask has two more lines: `learned` (the design's question, word for word) and `runbooks` (for each runbook the run was given: followed yes, partly or no, the step it had wrong, a note). Runbook health comes from those accounts. A silent observed load counts as followed only on a successful run, and a cancelled run writes no rows.
+- **The decision.** After a report is stored, `decideDebrief` (`middleware/src/lib/runbooks/debrief.ts`) checks, in order: a successful outcome, a `learned` sentence, an obstacle or failed check that backs it up, an executor that can resume, a checkout, a review queue under 10 (run-authored proposals plus pending requests), the daily limit, and money on the learning line for a billed executor. A skipped run stores one reason from a closed list, with a fixed sentence the run page prints. The `LEARNING_DEBRIEF_*` variables change the limits.
+- **The local debrief.** The completion reply carries a request: the fixed prompt (`debrief-v1`), the answer schema, the tools, a dollar ceiling and a one-use token. The worker starts every run with `--session-id`, keeps the checkout, resumes the session forked on a small model with only Read, Glob, Grep, Write and Edit, writes only under `.lab/keep/`, and posts the one folder to `POST /api/local-compute/jobs/:id/debrief`. The worker can only narrow what a request asks for.
+- **Proposals from a run.** The folder must pass lint, or it is stored on the run and never queued. Lint now checks for portable frontmatter, an `allowed-tools` line and text aimed at the reviewer. A new proposal is scoped to the run's repository or initiative, not the organisation, and a near duplicate is filed as an edit of the runbook it duplicates.
+- **Review rules.** Accepting a proposal with new or changed scripts needs the reviewer to confirm each script by its hash. The person who dispatched the run can accept it only when nobody else can review. Proposals expire after 14 days, and they are withdrawn when the run's change is rejected. Widening the scope must be confirmed, and organisation scope needs an org leader.
+- **Retirement.** When a report is saved, a retire proposal is filed for a runbook that went unfollowed on 3 successful runs on the current model, or one that fell out of use. There is at most one open retire proposal per runbook, and it names the runs.
+- **MicroVM.** `agents/devbox/main.py` has a `debrief` op with the same flags and folder rules. The microVM dispatcher does not call it yet, so microVM runs are skipped as "cannot be resumed yet" and hold no money.
+- **The mock.** The logout run is debriefed and files one runbook written by hand, marked as demo data. Every fixture says what it learned and how it used the runbooks it was given.
+- **Acceptance item 13.** `node scripts/learning-loop/debrief-e2e.mjs` runs the real worker on its own stack with a throwaway repository and a stub `claude`. It checks the session id, the exact resume flags and a proposal that passes lint, and it checks that five hostile folders are refused or stopped by lint.
+
+Open:
+
+- The microVM dispatcher must run the debrief op before it stops the session, and pass `hasCheckout: true` to `recordRunEnd`.
+- Fleet and governed runs are not debriefed.
+- The Claude Code CLI has no turn-count flag, so the turn is bounded by the timeout and the dollar ceiling.
+- The initiative scope matrix test does not cover runbooks or local compute.
