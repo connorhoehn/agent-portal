@@ -3847,8 +3847,13 @@
     },
     {
       "method": "GET",
+      "path": "/api/spend/entries",
+      "source": "src/routes/spend-report.ts:117"
+    },
+    {
+      "method": "GET",
       "path": "/api/spend/report",
-      "source": "src/routes/spend-report.ts:72"
+      "source": "src/routes/spend-report.ts:79"
     },
     {
       "method": "GET",

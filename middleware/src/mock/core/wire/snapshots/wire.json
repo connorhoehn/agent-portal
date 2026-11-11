@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-11T18:54:26.387Z",
-  "serverHandlerSha": "d4e89f9ed942ed6d3907b1effb97251d2157d3c5f6625c0fdc40cfa6a7d36806",
+  "capturedAt": "2026-11-11T19:43:13.194Z",
+  "serverHandlerSha": "2aa5a8735263ce86ca4f69ef752a9029f87e04c11a129d104c84625c62999af2",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -6043,7 +6043,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "null|number",
+        "points[].judgeP50": "number",
         "windowHours": "number"
       },
       "values": {}
@@ -9875,6 +9875,38 @@
         "sources[].health": "string",
         "sources[].source": "string",
         "watermark": "number"
+      },
+      "values": {}
+    },
+    "GET /api/spend/entries": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "asOf": "string",
+        "entries": "array",
+        "entries[]": "object",
+        "entries[].actorId": "null|string",
+        "entries[].actorName": "null|string",
+        "entries[].at": "string",
+        "entries[].botId": "null",
+        "entries[].costBasis": "string",
+        "entries[].costUsd": "number",
+        "entries[].initiativeId": "null",
+        "entries[].model": "string",
+        "entries[].runRef": "null",
+        "entries[].source": "string",
+        "entries[].sourceId": "string",
+        "entries[].sourceLabel": "string",
+        "entries[].what": "string",
+        "groupBy": "string",
+        "initiativeId": "null",
+        "key": "null",
+        "limit": "number",
+        "offset": "number",
+        "period": "string",
+        "since": "string",
+        "total": "number"
       },
       "values": {}
     },
