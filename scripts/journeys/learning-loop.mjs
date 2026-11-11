@@ -568,7 +568,9 @@ async function main() {
       check(await page.getByTestId('iq-runs-table').locator('[aria-label="Filed a runbook proposal"]').count() >= 1, 'no learned dot on a filed run');
       await shots(page, 'r2-runs-list-filed');
       check(await count(`?initiative=${PROJECT}`) === Math.min(auth, 50), `the ${NAME} filter should narrow to its ${auth} runs`);
-      check(await count('?executor=fleet') === 0, 'executor=fleet (queue) should be empty');
+      const fleet = all.filter((x) => x.executor === 'fleet').length;
+      check(await count('?executor=fleet') === Math.min(fleet, 50), `executor=fleet (queue) should list its ${fleet} runs`);
+      check(await count('?q=no-such-run-zzzz') === 0, 'a search that matches nothing should be empty');
       check(/No run matches these filters/.test(await bodyText(page)), 'an empty filter does not say so');
       check(await count('?debrief=skipped') >= 1, 'debrief=skipped should list the runs that skipped it');
       await go(page, '/iq/runs?executor=governed');

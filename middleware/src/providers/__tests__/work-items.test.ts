@@ -196,7 +196,7 @@ describe('searchWorkItems filters', () => {
     const sql = sqlOf();
     expect(sql).toContain(':label = ANY(wi.labels)');
     expect(sql).toContain('LOWER(:team)');
-    expect(sql).toContain('wi.status = :status');
+    expect(sql).toContain('wi.status IN (:status_0)');
     expect(sql).toContain("INTERVAL '7 days'");
   });
 });

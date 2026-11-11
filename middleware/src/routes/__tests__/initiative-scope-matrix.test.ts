@@ -87,6 +87,12 @@ const SCOPED = [
 ];
 
 /** Not scoped yet, each with why. Fixing one moves it to SCOPED. */
+// A route that MAKES an initiative has no initiative to check scope against yet. It is neither
+// SCOPED nor OPEN: it must carry its own authority, named here, on the route itself.
+const CREATES: Record<string, RegExp> = {
+  'projects POST /': /requireAction\('CreateInitiative'\)/,
+};
+
 const OPEN: Record<string, string> = {
   'runbooks POST /proposals': 'anyone signed in may suggest a runbook edit (SuggestRunbook), and a proposal changes nothing until a person with review rights decides it; a person\'s is attributed to their own session, a machine\'s only to the run its run token names (lib/run-token.ts) and its frozen brief',
   'runbooks POST /proposals/:pid/withdraw': 'identity-bound, not scope-bound: only the proposer may withdraw their own open proposal (NOT_PROPOSER otherwise), and a run cannot',
@@ -146,9 +152,9 @@ describe('DE-44 initiative-scope matrix', () => {
   const routes = writeRoutes();
 
   it('classifies every write route on these routers', () => {
-    const unlisted = [...routes.keys()].filter((r) => !SCOPED.includes(r) && !(r in OPEN));
+    const unlisted = [...routes.keys()].filter((r) => !SCOPED.includes(r) && !(r in OPEN) && !(r in CREATES));
     expect(unlisted).toEqual([]);
-    const stale = [...SCOPED, ...Object.keys(OPEN)].filter((r) => !routes.has(r));
+    const stale = [...SCOPED, ...Object.keys(OPEN), ...Object.keys(CREATES)].filter((r) => !routes.has(r));
     expect(stale).toEqual([]);
   });
 
@@ -178,7 +184,10 @@ describe('DE-44 initiative-scope matrix', () => {
   // its own top level; and a write form the route regex above would not see
   // (`.all`, `.route`, `.use` with a handler) fails it too.
   it('every write route on the work-item and initiative routers checks scope directly, with no OPEN escape', () => {
-    const top = [...routes.keys()].filter((r) => TOP_LEVEL_FILES.includes(r.split(' ')[0]!));
+    const everyTop = [...routes.keys()].filter((r) => TOP_LEVEL_FILES.includes(r.split(' ')[0]!));
+    // A creating route is held to its named authority instead of a scope check.
+    expect(Object.entries(CREATES).filter(([r, gate]) => !gate.test(routes.get(r) ?? ''))).toEqual([]);
+    const top = everyTop.filter((r) => !(r in CREATES));
     expect(top.filter((r) => r in OPEN)).toEqual([]);
     expect(top.filter((r) => !SCOPED.includes(r))).toEqual([]);
     expect(top.filter((r) => !DIRECT_CHECK.test(routes.get(r) ?? ''))).toEqual([]);

@@ -60,6 +60,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
             "work-queue",
             "findings",
             "initiatives",
+            "my-work",
             "decisions",
             "agent-library",
             "designs",
