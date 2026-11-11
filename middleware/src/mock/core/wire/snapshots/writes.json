@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-10T12:45:19.538Z",
-  "serverHandlerSha": "265a33681a396dbdab66aab08127d4ade4ae15ce83b766a908724be36fdc55d0",
-  "baseUrl": "http://127.0.0.1:3935",
+  "capturedAt": "2026-11-10T23:53:54.225Z",
+  "serverHandlerSha": "b4c4d0e58b99cb8e2acb806d9f1c6b65e659e0060647a926eed09de533953417",
+  "baseUrl": "http://127.0.0.1:3913",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",

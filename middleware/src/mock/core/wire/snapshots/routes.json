@@ -1883,7 +1883,7 @@
     {
       "method": "GET",
       "path": "/api/health",
-      "source": "src/index.ts:235"
+      "source": "src/index.ts:233"
     },
     {
       "method": "GET",
@@ -3378,7 +3378,7 @@
     {
       "method": "GET",
       "path": "/api/session-bundle/live",
-      "source": "src/routes/session-bundle.ts:40"
+      "source": "src/routes/session-bundle.ts:21"
     },
     {
       "method": "GET",
@@ -4053,7 +4053,7 @@
     {
       "method": "GET",
       "path": "/health",
-      "source": "src/index.ts:234"
+      "source": "src/index.ts:232"
     },
     {
       "method": "DELETE",
@@ -4138,7 +4138,7 @@
     {
       "method": "GET",
       "path": "/livez",
-      "source": "src/index.ts:236"
+      "source": "src/index.ts:234"
     }
   ],
   "unresolved": []

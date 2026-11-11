@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-10T12:45:13.725Z",
-  "serverHandlerSha": "265a33681a396dbdab66aab08127d4ade4ae15ce83b766a908724be36fdc55d0",
-  "baseUrl": "http://127.0.0.1:3935",
+  "capturedAt": "2026-11-10T23:53:48.838Z",
+  "serverHandlerSha": "b4c4d0e58b99cb8e2acb806d9f1c6b65e659e0060647a926eed09de533953417",
+  "baseUrl": "http://127.0.0.1:3913",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -7728,11 +7728,9 @@
         "runbooks[].scope.kind": [
           "initiative",
           "org",
-          "repo",
-          "tool"
+          "repo"
         ],
         "runbooks[].status": [
-          "draft",
           "published"
         ]
       }
@@ -7757,7 +7755,6 @@
         "current.doc.failure_modes[].symptom": "string",
         "current.doc.not_for": "array",
         "current.doc.not_for[]": "string",
-        "current.doc.notes": "string",
         "current.doc.preconditions": "array",
         "current.doc.preconditions[]": "string",
         "current.doc.rollback": "array",
@@ -7773,6 +7770,7 @@
         "current.doc.steps[].command.text": "string",
         "current.doc.steps[].do": "string",
         "current.doc.steps[].expect": "string",
+        "current.doc.steps[].why": "string",
         "current.doc.summary": "string",
         "current.doc.title": "string",
         "current.doc.triggers": "object",
@@ -7789,16 +7787,17 @@
         "current.doc.verify": "array",
         "current.doc.verify[]": "object",
         "current.doc.verify[].check": "string",
+        "current.doc.verify[].command": "object",
+        "current.doc.verify[].command.lang": "string",
+        "current.doc.verify[].command.text": "string",
         "current.markdown": "string",
         "current.proposal_id": "null",
         "current.provenance": "object",
         "current.provenance.lab_experience_ids": "array",
-        "current.provenance.lab_experience_ids[]": "string",
         "current.provenance.run_refs": "array",
         "current.provenance.session_ids": "array",
         "current.provenance.session_ids[]": "string",
         "current.provenance.source_artifact_ids": "array",
-        "current.provenance.source_artifact_ids[]": "string",
         "current.runbook_id": "string",
         "current.sha256": "string",
         "current.version": "number",
@@ -7823,10 +7822,10 @@
       },
       "values": {
         "current.author.kind": [
-          "migration"
+          "person"
         ],
         "runbook.health.status": [
-          "unproven"
+          "proven"
         ],
         "runbook.scope.kind": [
           "initiative"
@@ -7841,9 +7840,23 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "applications": "array"
+        "applications": "array",
+        "applications[]": "object",
+        "applications[].at": "string",
+        "applications[].brief_id": "null",
+        "applications[].failed_at_step": "null",
+        "applications[].id": "string",
+        "applications[].note": "null",
+        "applications[].outcome": "string",
+        "applications[].run_ref": "string",
+        "applications[].runbook_id": "string",
+        "applications[].version": "number"
       },
-      "values": {}
+      "values": {
+        "applications[].outcome": [
+          "followed"
+        ]
+      }
     },
     "GET /api/runbooks/:id/diff": {
       "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 400 (anonymous)"
@@ -7864,19 +7877,17 @@
         "versions[].proposal_id": "null",
         "versions[].provenance": "object",
         "versions[].provenance.lab_experience_ids": "array",
-        "versions[].provenance.lab_experience_ids[]": "string",
         "versions[].provenance.run_refs": "array",
         "versions[].provenance.session_ids": "array",
         "versions[].provenance.session_ids[]": "string",
         "versions[].provenance.source_artifact_ids": "array",
-        "versions[].provenance.source_artifact_ids[]": "string",
         "versions[].runbook_id": "string",
         "versions[].sha256": "string",
         "versions[].version": "number"
       },
       "values": {
         "versions[].author.kind": [
-          "migration"
+          "person"
         ]
       }
     },
@@ -7888,7 +7899,7 @@
         "next": "null",
         "proposals": "array",
         "proposals[]": "object",
-        "proposals[].base_version": "null|number",
+        "proposals[].base_version": "number",
         "proposals[].created_at": "string",
         "proposals[].decided_at": "null",
         "proposals[].decided_by": "null",
@@ -7948,17 +7959,12 @@
         "proposals[].proposed_files[].sha256": "string",
         "proposals[].proposed_files[].size": "number",
         "proposals[].rationale": "string",
-        "proposals[].runbook_id": "null|string",
+        "proposals[].runbook_id": "string",
         "proposals[].similar": "array",
-        "proposals[].similar[]": "object",
-        "proposals[].similar[].reason": "string",
-        "proposals[].similar[].runbook_id": "string",
-        "proposals[].similar[].score": "number",
         "proposals[].source": "object",
         "proposals[].source.dispatched_by": "string",
         "proposals[].source.kind": "string",
         "proposals[].source.lab_experience_ids": "array",
-        "proposals[].source.person_id": "string",
         "proposals[].source.run_ref": "string",
         "proposals[].source.session_id": "string",
         "proposals[].source.work_item_id": "string",
@@ -7966,15 +7972,13 @@
       },
       "values": {
         "proposals[].kind": [
-          "edit",
-          "new"
+          "edit"
         ],
         "proposals[].proposed_files[].mode": [
           "644",
           "755"
         ],
         "proposals[].source.kind": [
-          "person",
           "run"
         ],
         "proposals[].status": [
@@ -8710,12 +8714,10 @@
           "in_progress",
           "in_review",
           "open",
-          "published",
           "resolved"
         ],
         "related[].type": [
           "decision",
-          "knowledge",
           "person",
           "team",
           "work"
@@ -10704,9 +10706,7 @@
         "manager",
         "max_cost",
         "max_files",
-        "migration",
         "ms_forms_export",
-        "new",
         "option",
         "org",
         "person",
@@ -10758,6 +10758,7 @@
     "outcome": {
       "open": false,
       "values": [
+        "followed",
         "pass",
         "requires_approval"
       ]
@@ -10880,7 +10881,6 @@
         "awaiting_input",
         "blocked",
         "cancelled",
-        "candidate",
         "changes_requested",
         "claim_open",
         "committed",
@@ -10891,7 +10891,6 @@
         "delivered",
         "dismissed",
         "done",
-        "draft",
         "drifting",
         "error",
         "escalated",
