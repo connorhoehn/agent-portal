@@ -3,7 +3,7 @@
 // bot, microVM), initiative, outcome and whether the run was debriefed. The Automate rail's Runs, Local
 // compute's Runs and an initiative's Agents › Runs link here with the filter set (?executor=, ?initiative=).
 // Names are joined from reads the portal already makes: the job queue (what the run was for), the
-// façade /api/runs (a bot's name) and the initiatives list.
+// façade /api/runs (a bot's name), the work board (a governed run's work item) and the initiatives list.
 //
 // Gated like the reads it joins: the bots read gate (org-leader, hr-admin, program-owner, and anyone
 // holding ManageBots — sme), so the rail, the palette and the route admit exactly who the API serves
@@ -37,17 +37,21 @@ export default function IqRunsPage() {
   const jobs = useFetch<{ jobs: Array<{ id: string; title: string }> }>('/api/work/jobs?limit=200', 0, { share: true });
   const facade = useFetch<RunListResponse>('/api/runs?limit=200', 0, { share: true });
   const initiatives = useFetch<Array<{ id: string; name: string }>>('/api/graph/projects?limit=200', 0, { share: true });
+  // The work board: a governed run's ref is neither a queue job nor a façade run, so its name is its work item's title.
+  const work = useFetch<Array<{ id: string; title: string }>>('/api/graph/work?limit=200', 0, { share: true });
 
   const rows = useMemo<Row[]>(() => {
     const titles = new Map((jobs.data?.jobs ?? []).map((j) => [j.id, j.title]));
+    const workTitles = new Map((Array.isArray(work.data) ? work.data : []).map((w) => [w.id, w.title]));
     const bots = new Map<string, { title: string; bot: string | null }>();
     for (const r of facade.data?.runs ?? []) bots.set(r.id.replace(/^job:/, ''), { title: r.context.title, bot: r.context.kind === 'bot' ? r.context.title : null });
     const projects = new Map((Array.isArray(initiatives.data) ? initiatives.data : []).map((p) => [p.id, p.name]));
     return (reports.data?.reports ?? []).map((r) => {
       const known = bots.get(r.runRef);
-      return { ...r, what: titles.get(r.runRef) ?? known?.title ?? 'Run', who: whoRan(r.executor, known?.bot), initiativeName: r.initiativeId ? projects.get(r.initiativeId) ?? null : null };
+      const what = titles.get(r.runRef) ?? known?.title ?? (r.workItemId ? workTitles.get(r.workItemId) : undefined) ?? 'Run';
+      return { ...r, what, who: whoRan(r.executor, known?.bot), initiativeName: r.initiativeId ? projects.get(r.initiativeId) ?? null : null };
     });
-  }, [reports.data, jobs.data, facade.data, initiatives.data]);
+  }, [reports.data, jobs.data, facade.data, initiatives.data, work.data]);
 
   const columns: DataTableColumn<Row>[] = [
     { key: 'when', header: 'When', width: '112px', numeric: true, render: (r) => relativeTime(r.endedAt) },
