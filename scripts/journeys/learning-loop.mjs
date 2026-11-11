@@ -583,10 +583,11 @@ async function main() {
       await command('show failed runs');
       await page.waitForURL(url => url.searchParams.get('outcome') === 'failed');
       check(new URL(page.url()).searchParams.get('executor') === 'governed', 'the command replaced another filter');
-      await until('failed rows from the command', async () => await rows.count() === failed, 15000);
+      const governedFailed = all.filter((x) => x.outcome === 'failed' && x.executor === 'governed').length;
+      await until('failed rows from the command', async () => await rows.count() === governedFailed, 15000);
       await command('search runs for "no-matching-run-title"');
       await until('title search removes nonmatches', async () => await rows.count() === 0, 15000);
-      check(await page.getByRole('textbox', { name: 'Search loaded run titles', exact: true }).inputValue() === 'no-matching-run-title', 'composer and toolbar search disagree');
+      check(await page.getByRole('textbox', { name: 'Search runs by text', exact: true }).inputValue() === 'no-matching-run-title', 'composer and toolbar search disagree');
       const beforeUnsupported = page.url();
       await command('retry failed runs');
       await until('unsupported run action is refused', async () => /not recognized/.test(await page.getByTestId('collection-command-result').innerText()), 15000);
