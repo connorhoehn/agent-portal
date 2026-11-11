@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-11T06:46:56.415Z",
-  "serverHandlerSha": "b04acc6a7fb29443bbb31573b4ddc98d2ee517119eda646979fa854f2263287a",
-  "baseUrl": "http://127.0.0.1:3921",
+  "capturedAt": "2026-11-11T07:10:05.549Z",
+  "serverHandlerSha": "7c16d5ed4aace0596a7a5eeb46e54dc86bac32812d38e4cc888a5d14741523b4",
+  "baseUrl": "http://127.0.0.1:3922",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -2272,53 +2272,6 @@
     },
     "GET /api/bots/work-items/:id/job-draft": {
       "skipped": "no value found for :id under /api/bots/work-items (orgiq/admin); no value found for :id under /api/bots/work-items (assessment/admin); no value found for :id under /api/bots/work-items (anonymous)"
-    },
-    "GET /api/briefs": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "briefs": "array",
-        "briefs[]": "object",
-        "briefs[].assembled_at": "string",
-        "briefs[].assembler_version": "string",
-        "briefs[].budget_tokens": "number",
-        "briefs[].id": "string",
-        "briefs[].initiative_id": "string",
-        "briefs[].offer": "object",
-        "briefs[].offer.none_reason": "string",
-        "briefs[].offer.runbooks": "array",
-        "briefs[].omitted": "array",
-        "briefs[].previous_attempts": "array",
-        "briefs[].repo": "string",
-        "briefs[].run_ref": "string",
-        "briefs[].sections": "array",
-        "briefs[].sections[]": "object",
-        "briefs[].sections[].kind": "string",
-        "briefs[].sections[].reason": "string",
-        "briefs[].sections[].ref": "null|string",
-        "briefs[].sections[].tokens": "number",
-        "briefs[].sha256": "string",
-        "briefs[].skill_library": "object",
-        "briefs[].skill_library.dir": "string",
-        "briefs[].skill_library.sha256": "string",
-        "briefs[].skill_library.skills": "array",
-        "briefs[].skill_library.skills[]": "object",
-        "briefs[].skill_library.skills[].name": "string",
-        "briefs[].skill_library.skills[].version": "number",
-        "briefs[].task_title": "null",
-        "briefs[].used_tokens": "number",
-        "briefs[].work_item_id": "null",
-        "next": "null"
-      },
-      "values": {
-        "briefs[].sections[].kind": [
-          "framing",
-          "how_to_report",
-          "initiative",
-          "skill_library"
-        ]
-      }
     },
     "GET /api/budgets": {
       "persona": "orgiq/admin",
@@ -10796,14 +10749,12 @@
         "expired",
         "failed",
         "follow_up",
-        "framing",
         "general",
         "github",
         "gotcha",
         "grant",
         "hitl-decided",
         "hitl-expired",
-        "how_to_report",
         "in-review",
         "initiative",
         "initiative-membership",
@@ -10835,7 +10786,6 @@
         "retrieve",
         "run",
         "runbook",
-        "skill_library",
         "sod-blocked",
         "step-approved",
         "step-rejected",
