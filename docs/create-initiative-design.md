@@ -1,6 +1,6 @@
 # Creating an initiative by hand
 
-Package 14 of the [value sweep](value-sweep-2026-11-11.md). Until now an initiative existed only because the seed or ingestion wrote it: `middleware/src/routes/projects.ts` reads and patches, and nothing inserts. A real organisation cannot start work that way. This page is the design and its decisions; each can be overruled.
+Package 14 of the [value sweep](value-sweep-2026-11-11.md). Until now an initiative existed only because the seed or ingestion wrote it: `middleware/src/routes/projects.ts` read and patched, and nothing inserted. A real organisation cannot start work that way. This page is the design and its decisions; each can be overruled.
 
 ## What a person does
 
@@ -15,10 +15,14 @@ On the Initiatives list a person who may create one sees **New initiative**. The
 | 3 | The name is required, at most 80 characters, and unique within the tenant without regard to case. A duplicate is refused with the existing initiative named. | Two initiatives with one name cannot be told apart in a filter or a runbook's scope. | Organisations that reuse names across years; then add the year, do not relax the rule. |
 | 4 | The creator is the owner unless they name another person from the directory, and the owner is a contributor from the first moment. | The "mine" rule (`lib/initiative-scope.ts`) decides who stewards runbooks and proposals; an initiative with no one on it would have no reviewer below org-leader. | Nothing. |
 | 5 | A new initiative starts in the earliest status the data already uses, with no budget, no bots and no repository unless one is given. A repository is `owner/name` and is only recorded; nothing is cloned or checked. | Creation should not spend, dispatch or reach outside. | Nothing. |
-| 6 | A hand-made initiative and an ingested one are the same kind of row. Ingestion that later meets the same name merges into the existing row and does not make a second. | One list, one page, one scope. | Ingestion's merge key turns out not to be the name; then the create route writes whatever key it uses. |
+| 6 | A hand-made initiative and an ingested one are the same kind of row. Ingestion should merge into an existing initiative of the same name and not make a second. **Not yet true:** `merge_project` in `agents/graph-builder/main.py` merges on an id the model chooses, never on the name, so ingestion can still add a second row beside a hand-made one. The create route cannot predict that id. The fix belongs in the agent: look the name up first and reuse the existing id for the rest of that ingestion. | One list, one page, one scope. | Nothing; the agent change is owed. |
 | 7 | No delete. An initiative made by mistake is closed through the status it already has. | Runs, reports, runbooks and spend point at initiatives; removing one would orphan them. | Nothing. |
 | 8 | The write uses only the columns the projects table already has. No migration. The mock store gets the same insert so the feature works with no database. | Local first; a migration that is never run automatically would leave the feature broken where it matters. | A needed field has no column; then it waits for a migration and the form leaves it out. |
 | 9 | The Initiatives list's empty state keeps pointing at ingestion for people who cannot create, and offers New initiative to those who can. | The old copy was right for most people and wrong for the ones who can now act. | Nothing. |
+
+## As built
+
+`POST /api/graph/projects`, behind the tenant gate of the mount and `CreateInitiative` on the route. It writes `id`, `name`, `status`, `summary`, `sponsor_person_id` and `owner_id` on the project, the owner's contribution, and the repository through the existing link to the initiative's agent project; a repository already linked elsewhere is refused. The starting status is `planning`. If a later step fails the row is removed. The form opens in the Initiatives list's content area at `?new=1`.
 
 ## What is checked
 
