@@ -29,7 +29,8 @@ export default function IqRunsPage() {
 
   const { reports, rows, initiatives, work } = useRunRows(filters);
   const names = useRunbookNames();
-  const columns = runColumns();
+  // The eight the list has room for at 1440; Failure and Debrief are on the run's page and the initiative's Learning tab.
+  const columns = runColumns(['when', 'what', 'initiative', 'who', 'outcome', 'runbooks', 'learned', 'cost']);
 
   const visible = rows.filter(r => r.what.toLowerCase().includes(query.trim().toLowerCase()));
   const filtered = RUN_REPORT_FILTER_KEYS.some((k) => filters[k]) || !!query.trim();
