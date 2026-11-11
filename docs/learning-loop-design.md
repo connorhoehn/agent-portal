@@ -293,6 +293,8 @@ Lanes A and B are done or landing. C and D can run together after B merges; E fo
 
 Each lane regenerates the wire snapshots from its own server and explains every changed row.
 
+Lanes A to D are on main. The work order for lane E, the journey, the validator and the middleware follow-ups is [learning-loop-handoff.md](learning-loop-handoff.md): routes and shapes with file and line, the eight page packages with their acceptance, the verification list and the rules that bind the work.
+
 ## Risks
 
 - **A session cannot be resumed.** The session file must still exist on the machine and the checkout must be in place. The worker keeps the checkout until the debrief is posted or refused. Where resume fails the run records `skipped: session-unavailable`; nothing else depends on it.

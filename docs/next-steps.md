@@ -909,3 +909,9 @@ Open:
 - Fleet and governed runs are not debriefed.
 - The Claude Code CLI has no turn-count flag, so the turn is bounded by the timeout and the dollar ceiling.
 - The initiative scope matrix test does not cover runbooks or local compute.
+
+Rebased onto lane D before merging: the evidence read's proposal row admits `source.kind: 'system'` (retire proposals), and the three contract briefs were re-recorded for the two new `lab-report` lines (`learned`, `runbooks`); nothing else in them moved. Pre-existing red, not from this lane: `src/lib/__tests__/sdlc-capture-requester.test.ts` (one of four) fails on main too — its partial mock of `providers/work-items` lacks `mockWorkItemProjectId`, which the sprint-envelope lookup in `lib/spend-holds.ts` now calls.
+
+### Lane E and the follow-ups: handed off
+
+The pages, the journey for acceptance 1–12, `scripts/validate-learning-loop.sh` and the middleware follow-ups (microVM debrief, write-policy entries, scope-matrix rows, seeded ledger rows, Budgets at 1280) are specified for pickup in [learning-loop-handoff.md](learning-loop-handoff.md): eight packages with routes, shapes, file and line pointers, acceptance per package, the verification list and the rules that bind the work.
