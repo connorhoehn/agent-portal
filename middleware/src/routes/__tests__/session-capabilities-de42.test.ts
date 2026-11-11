@@ -64,15 +64,22 @@ describe('DE-42 actions in GET /api/session/capabilities', () => {
     expect(a['ManageSdlcPolicies']).toBe(false);
   });
 
-  it('org-leader: ManageSdlcPolicies true, the box actions false', async () => {
+  it('org-leader: ManageSdlcPolicies true; since the lab drive (11 Nov 2026) RunDevboxTask and OperateDevbox true, the other box actions and ManageDevbox false', async () => {
     const a = await caps('org-leader');
-    for (const k of BOX) expect([k, a[k]]).toEqual([k, false]);
+    for (const k of BOX) expect([k, a[k]]).toEqual([k, k === 'RunDevboxTask']);
     expect(a['ManageSdlcPolicies']).toBe(true);
+    expect(a['OperateDevbox']).toBe(true);
+    expect(a['ManageDevbox']).toBe(false);
   });
 
-  it.each(['member', 'program-owner'])('%s: every new action is a key and false', async (role) => {
+  it.each(['sme', 'hr-admin'])('%s: OperateDevbox true — the lab drive split out of ManageDevbox narrowed nobody', async (role) => {
     const a = await caps(role);
-    for (const k of NEW) expect([k, a[k]]).toEqual([k, false]);
+    expect([a['ManageDevbox'], a['OperateDevbox']]).toEqual([true, true]);
+  });
+
+  it.each(['member', 'program-owner'])('%s: every new action is a key and false, and so is the lab drive', async (role) => {
+    const a = await caps(role);
+    for (const k of [...NEW, 'OperateDevbox']) expect([k, a[k]]).toEqual([k, false]);
   });
 
   it('EditSdlcPolicy is gone from the capability list', () => {
