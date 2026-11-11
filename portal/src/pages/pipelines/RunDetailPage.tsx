@@ -4,8 +4,8 @@
 // bot detail page (components/runs/PipelineRunParts.tsx), which reads the same
 // run through the /api/runs façade.
 //
-// The same page serves /iq/runs/:id (lane E) with `apiBase="/api/runs"` — the
-// orgiq façade — and no Cancel: cancelling is the pipelines tenant's verb
+// `apiBase="/api/runs"` reads the orgiq façade with no Cancel (/iq/runs/:id is its own page now,
+// pages/iq/RunPage.tsx): cancelling is the pipelines tenant's verb
 // (POST /api/pipelines/runs/:id/cancel, CancelRun — operator and
 // pipeline-admin; author is forbidden it by the separation of duties).
 //
@@ -32,8 +32,6 @@ import { WorkGraphActivity } from '../../components/work-graph/WorkGraphActivity
 import { recordedRunActivity } from './recordedEvents';
 import { eventsSource, runChannel } from './pipelinesRealtime';
 import { useCrumbLabel } from '../../lib/crumbLabels';
-import { RunBriefPanel } from '../runbooks/RunBriefPanel';
-import { briefRefOfRun } from '../runbooks/runbooksModel';
 import { RunTimeline } from '../../components/runs/RunTimeline';
 import {
   PipelineRunArtifacts, PipelineRunSteps, PipelineRunSummary, usePipelineRun,
@@ -48,19 +46,15 @@ export interface RunDetailPageProps {
   cancelable?: boolean;
   /** Presence and the run discussion — pipelines tenant only: the gateway admits `pipelines:*` channels to its grant holders. */
   realtime?: boolean;
-  /** A Brief tab: the text the run was given at claim (the workspace Runs door). */
-  briefTab?: boolean;
 }
 
-export default function RunDetailPage({ apiBase = '/api/pipelines/runs', listPath = '/pipelines/runs', cancelable = true, realtime = cancelable, briefTab = false }: RunDetailPageProps) {
+export default function RunDetailPage({ apiBase = '/api/pipelines/runs', listPath = '/pipelines/runs', cancelable = true, realtime = cancelable }: RunDetailPageProps) {
   const { id } = useParams();
   const navigate = useNavigate();
   const { can } = useCapabilities();
   const [searchParams, setSearchParams] = useSearchParams();
   const onActivity = searchParams.get('tab') === 'activity' && realtime;
-  const briefRef = briefTab ? briefRefOfRun(id) : null;
-  const onBrief = searchParams.get('tab') === 'brief' && briefRef !== null;
-  const setRunTab = (next: string) => setSearchParams(prev => { const p = new URLSearchParams(prev); if (next === 'activity' || next === 'brief') p.set('tab', next); else p.delete('tab'); return p; });
+  const setRunTab = (next: string) => setSearchParams(prev => { const p = new URLSearchParams(prev); if (next === 'activity') p.set('tab', next); else p.delete('tab'); return p; });
   const [confirming, setConfirming] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
@@ -134,16 +128,13 @@ export default function RunDetailPage({ apiBase = '/api/pipelines/runs', listPat
         onConfirm={() => { void cancel(); }}
         onCancel={() => setConfirming(false)}
       />
-      {(realtime || briefRef !== null) && (
+      {realtime && (
         // shrink-0: the tab strip clips its own overflow, so as a flex child of this h-full column it was squeezed to 1px
         // (the tabs existed but could not be seen or clicked) whenever the sections below were taller than the pane.
         <Stack gap="none" className="shrink-0">
-          <Tabs idPrefix="run" aria-label="Run views" size="sm" value={onActivity ? 'activity' : onBrief ? 'brief' : 'run'} onValueChange={setRunTab}
-            items={[{ id: 'run', label: 'Run' }, ...(realtime ? [{ id: 'activity', label: 'Activity' }] : []), ...(briefRef !== null ? [{ id: 'brief', label: 'Brief' }] : [])]} />
+          <Tabs idPrefix="run" aria-label="Run views" size="sm" value={onActivity ? 'activity' : 'run'} onValueChange={setRunTab}
+            items={[{ id: 'run', label: 'Run' }, { id: 'activity', label: 'Activity' }]} />
         </Stack>
-      )}
-      {onBrief && briefRef !== null && (
-        <Stack gap="none" data-testid="pipeline-run-brief"><RunBriefPanel runRef={briefRef} /></Stack>
       )}
       {/* The run's own activity graph (steps, approvals you may decide, decks, your agent flows):
           the same projection and stream as /pipelines/activity, scoped to this run. Pipelines door only.
@@ -153,7 +144,7 @@ export default function RunDetailPage({ apiBase = '/api/pipelines/runs', listPat
           <WorkGraphActivity subject={{ kind: 'run', id: run.id }} cursorChannel={runChannel(run.id)} title={run.context.title} mode="full" className="h-full min-h-0 w-full" />
         </Stack>
       )}
-      {!onActivity && !onBrief && (
+      {!onActivity && (
         <Stack gap="md">
         <DetailSection as="h2" first title="Run" data-testid="pipeline-run">
           <PipelineRunSummary run={run} />

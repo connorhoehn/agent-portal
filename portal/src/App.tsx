@@ -65,6 +65,7 @@ const PipelinesActivityPage = lazy(() => import('./pages/pipelines/ActivityPage'
 const PipelinesRunDeckPage = lazy(() => import('./pages/pipelines/decks/PipelineDeckPage'));
 const PipelinesConfigurationPage = lazy(() => import('./pages/pipelines/ConfigurationPage'));
 const IqRunsPage = lazy(() => import('./pages/iq/RunsPage'));
+const IqRunPage = lazy(() => import('./pages/iq/RunPage'));
 const IqActivityPage = lazy(() => import('./pages/iq/ActivityPage'));
 const PipelinesArtifactsPage = lazy(() => import('./pages/pipelines/ArtifactsPage'));
 const PipelinesDefinitionsPage = lazy(() => import('./pages/pipelines/DefinitionsPage'));
@@ -531,7 +532,7 @@ export function App() {
           } />
           <Route path="runs/:id" element={
             <Gate roles={['hr-admin', 'sme', 'program-owner', 'org-leader']}>
-              <Page element={<PipelinesRunDetailPage apiBase="/api/runs" listPath="/iq/runs" cancelable={false} briefTab />} />
+              <Page element={<IqRunPage />} />
             </Gate>
           } />
           <Route path="search" element={<Page element={<SearchPage />} />} />
