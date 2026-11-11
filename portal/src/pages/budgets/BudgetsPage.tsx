@@ -74,7 +74,7 @@ const ORG_WIDE_ROLES = ['org-leader', 'hr-admin', 'admin'];
 const MONTH_LABEL = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
 const GROUP_NOUN: Readonly<Record<SpendGroupBy, string>> = {
-  initiative: 'initiatives', actor: 'people', model: 'models', source: 'sources', trigger: 'triggers',
+  initiative: 'initiatives', actor: 'people', model: 'models', source: 'sources', trigger: 'triggers', bot: 'bots',
 };
 
 export default function BudgetsPage() {

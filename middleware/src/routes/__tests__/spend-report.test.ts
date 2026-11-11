@@ -211,3 +211,104 @@ describe('GET /api/spend/report — below the budgets read tier', () => {
     expect(ini.runs.total).toBeGreaterThan(0);
   });
 });
+
+describe('GET /api/spend/report — groupBy=bot', () => {
+  it('groups bot runs by bot with its name, puts everything else in one "Not from a bot" group, and adds up to the initiative total', async () => {
+    const [bot, ini] = await Promise.all([leader({ groupBy: 'bot' }), leader({ groupBy: 'initiative' })]);
+    expect(bot.status).toBe(200);
+    const named = bot.body.groups.filter((g: { key: string | null }) => g.key != null);
+    expect(named.length).toBeGreaterThan(0);
+    for (const g of named) expect(g.label).not.toBe(g.key);
+    const none = bot.body.groups.filter((g: { key: string | null }) => g.key == null);
+    expect(none).toHaveLength(1);
+    expect(none[0].label).toBe('Not from a bot');
+    expect(bot.body.totals.knownUsd).toBeCloseTo(ini.body.totals.knownUsd, 4);
+    expect(bot.body.totals.entries).toBe(ini.body.totals.entries);
+    expect(bot.body.totals.unknownCount).toBe(ini.body.totals.unknownCount);
+    expect(bot.body.groups.reduce((a: number, g: { entries: number }) => a + g.entries, 0)).toBe(bot.body.totals.entries);
+  });
+
+  it('ties a stored job entry to the bot whose run carried that job, and keeps an unknown cost unknown', async () => {
+    const probe = await leader({ groupBy: 'bot' });
+    const botKey = probe.body.groups.find((g: { key: string | null }) => g.key != null).key as string;
+    const { listBotRuns } = await import('../../providers/bots.js');
+    const run = (await listBotRuns(botKey, 50)).find((r) => r.jobId);
+    expect(run).toBeTruthy();
+    const before = (await leader({ groupBy: 'bot' })).body.groups.find((g: { key: string }) => g.key === botKey);
+    await recordSpend({ source: 'job', sourceId: run!.jobId!, initiativeId: AUTH, grantId: null, boxId: null, actorId: null, model: 'nova-lite', costUsd: null });
+    const after = (await leader({ groupBy: 'bot' })).body.groups.find((g: { key: string }) => g.key === botKey);
+    expect(after.entries).toBe(before.entries + 1);
+    expect(after.unknownCount).toBe(before.unknownCount + 1);
+    expect(after.knownUsd).toBe(before.knownUsd);
+  });
+});
+
+describe('GET /api/spend/entries', () => {
+  const entries = (q: Record<string, string>, sub = 'u-release', role = 'org-leader') =>
+    request(app).get('/api/spend/entries').query(q).set('x-user', sub).set('x-role', role);
+
+  it('refuses a reader with no session', async () => {
+    const closed = express();
+    closed.use((req, _res, next) => { req.sessionInvalid = true; next(); });
+    closed.use('/api/spend', requireSession('ViewSpendReport'), spendReportRouter);
+    const res = await request(closed).get('/api/spend/entries').query({ groupBy: 'bot' });
+    expect(res.status).toBe(401);
+  });
+
+  it('rejects a bad grouping, period or page', async () => {
+    expect((await entries({ groupBy: 'nope' })).status).toBe(400);
+    expect((await entries({ groupBy: 'bot', period: 'year' })).status).toBe(400);
+    expect((await entries({ groupBy: 'bot', limit: '0' })).status).toBe(400);
+  });
+
+  it('lists every group of every grouping, newest first, adding up to the group count', async () => {
+    for (const groupBy of ['initiative', 'actor', 'model', 'source', 'trigger', 'bot']) {
+      const report = await leader({ groupBy });
+      for (const g of report.body.groups as Array<{ key: string | null; entries: number }>) {
+        if (g.entries === 0) continue;
+        const res = await entries({ groupBy, key: g.key ?? '', limit: '100' });
+        expect(res.status).toBe(200);
+        expect(res.body.total).toBe(g.entries);
+        const ats = res.body.entries.map((e: { at: string }) => e.at);
+        expect([...ats].sort().reverse()).toEqual(ats);
+      }
+    }
+  });
+
+  it('pages, links a bot run to its run report, and names the bot', async () => {
+    const report = await leader({ groupBy: 'bot' });
+    const g = report.body.groups.find((x: { key: string | null; entries: number }) => x.key != null && x.entries > 1);
+    const first = await entries({ groupBy: 'bot', key: g.key, limit: '1' });
+    const second = await entries({ groupBy: 'bot', key: g.key, limit: '1', offset: '1' });
+    expect(first.body.entries).toHaveLength(1);
+    expect(second.body.entries[0].sourceId).not.toBe(first.body.entries[0].sourceId);
+    expect(first.body.entries[0]).toMatchObject({ source: 'bot_run', botId: g.key, what: g.label });
+    expect(first.body.entries[0].runRef).toMatch(/^job-/);
+  });
+
+  it('shows an unknown cost as null with basis unknown, never zero', async () => {
+    await recordSpend({ source: 'box_task', sourceId: 'box-unknown-1', initiativeId: AUTH, grantId: null, boxId: null, actorId: 'u-nora', model: null, costUsd: null });
+    const res = await entries({ groupBy: 'source', key: 'box_task', limit: '100' });
+    const row = res.body.entries.find((e: { sourceId: string }) => e.sourceId === 'box-unknown-1');
+    expect(row.costUsd).toBeNull();
+    expect(row.costBasis).toBe('unknown');
+    expect(row.runRef).toBeNull();
+  });
+
+  it('withholds dollars and other people from a reader below the tier, and answers an actor grouping only for the caller', async () => {
+    await recordSpend({ source: 'box_task', sourceId: 'box-nora-1', initiativeId: AUTH, grantId: null, boxId: null, actorId: 'u-nora', model: 'nova-lite', costUsd: 0.2 });
+    const res = await entries({ groupBy: 'source', key: 'box_task', limit: '100' }, 'u-nora', 'sme');
+    expect(res.body.budgetAccess).toMatchObject({ visible: false });
+    expect(res.body.entries.length).toBeGreaterThan(0);
+    for (const e of res.body.entries) {
+      expect('costUsd' in e).toBe(false);
+      if (e.actorId != null) expect(e.actorId).toBe('u-nora');
+    }
+    const others = await entries({ groupBy: 'actor', key: 'u-release' }, 'u-nora', 'sme');
+    expect(others.body.entries).toEqual([]);
+    expect(others.body.total).toBe(0);
+    const own = await entries({ groupBy: 'actor', key: 'u-nora' }, 'u-nora', 'sme');
+    expect(own.body.entries.length).toBeGreaterThan(0);
+    expect('costUsd' in own.body.entries[0]).toBe(false);
+  });
+});

@@ -52,6 +52,8 @@ import { usd, showingLabel } from '../../lib/format';
 import { inputWiring, lastRanText } from './botsFormat';
 import { TEMPLATE_TONE, triggerSummary, type Bot, type BotRun } from './BotsPage';
 import { RecordLink } from '../decisions/RecordLink';
+import { useSession } from '../../lib/auth';
+import { spendReportPageHref } from '../budgets/spendReportModel';
 import { runHref } from '../iq/runRows';
 import { botRunSummary, costWords, OUTCOME_LABEL, OUTCOME_TONE, reportsByRunRef, type RunReportRow } from '../iq/runsModel';
 import { proposalsHref } from '../runbooks/runbooksModel';
@@ -114,6 +116,9 @@ export default function BotDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { can, ready } = useCapabilities();
+  // The Budgets page is open to these roles only, so only they get the way in to the spend report.
+  const { session } = useSession();
+  const canOpenSpend = ['org-leader', 'hr-admin', 'program-owner'].includes(session?.role ?? '');
   // The controls on this page (Run now, Pause/Resume, Delete, mission/guardrail
   // edits) all PATCH/POST /api/bots/:id* routes gated server-side on ManageBots
   // (middleware/src/routes/bots.ts `manageGate`) — a different capability from
@@ -524,6 +529,9 @@ export default function BotDetailPage() {
               {summary.proposals > 0
                 ? <RecordLink to={proposalsHref()} data-testid="bot-run-proposals">{`${summary.proposals} ${summary.proposals === 1 ? 'proposal' : 'proposals'} filed`}</RecordLink>
                 : <T size="xs" tone="tertiary">No proposals filed</T>}
+              {canOpenSpend && (
+                <RecordLink to={spendReportPageHref('bot', '30d')} data-testid="bot-run-spend-report" title="Spend by bot, last 30 days: every bot's ledger entries">Spend by bot, 30 days</RecordLink>
+              )}
             </Inline>
           )}
           {runsFailure ? (

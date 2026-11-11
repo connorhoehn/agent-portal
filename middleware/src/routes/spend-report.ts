@@ -1,4 +1,4 @@
-// GET /api/spend/report?groupBy=initiative|actor|model|source|trigger&period=month|7d|30d[&initiativeId=]
+// GET /api/spend/report?groupBy=initiative|actor|model|source|trigger|bot&period=month|7d|30d[&initiativeId=]
 //
 // One grouped read over the spend ledger and open spend holds
 // (docs/budget-system-analysis-2026-10-28.md §3; DE-53; DE-31's per-person
@@ -7,6 +7,13 @@
 // envelopes, holds, the forecast of open work with `fitsRemaining`, run
 // outcomes. Providers: providers/spend-report.ts; arithmetic:
 // lib/spend-report-model.ts.
+//
+// GET /api/spend/entries?groupBy=&key=&period=[&initiativeId=][&limit=&offset=]
+// lists one group's entries for the period, newest first, paged: the way in
+// from a group's entry count. `key` empty or absent is the group with no key.
+// Same mount, same gate and the same read tier as the report: below the tier
+// `costUsd` is ABSENT (never zero), an actor grouping answers only for the
+// caller's own key, and an entry names its actor only when that is the caller.
 //
 // ── Read tier ────────────────────────────────────────────────────────────────
 // Mounted behind a session floor (index.ts), not the budgets read gate, so the
@@ -24,7 +31,7 @@ import { AppError, asyncHandler, ValidationError } from '../lib/async-handler.js
 import { resolveSession } from '../lib/authz.js';
 import { budgetAccessLocked, canReadBudgets } from '../lib/budget-read-tier.js';
 import { GROUP_BYS, REPORT_PERIODS, withhold, type ReportPeriod, type SpendGroupBy } from '../lib/spend-report-model.js';
-import { getSpendReport, type SpendGroup, type SpendReport } from '../providers/spend-report.js';
+import { getSpendReport, listSpendEntries, type SpendEntriesPage, type SpendGroup, type SpendReport } from '../providers/spend-report.js';
 import { getUser } from '../providers/identity.js';
 
 export const spendReportRouter: Router = Router();
@@ -84,4 +91,47 @@ spendReportRouter.get('/report', asyncHandler(async (req, res) => {
   res.set('Cache-Control', 'no-store');
   if (await canReadBudgets(session)) { res.json(report); return; }
   res.json(await shapeBelowTier(report, session.sub));
+}));
+
+/** The page a reader below the budgets tier receives: no dollars, and no one else's name. */
+export function shapeEntriesBelowTier(page: SpendEntriesPage, sub: string): Record<string, unknown> {
+  const own = page.groupBy !== 'actor' || page.key === sub;
+  return {
+    ...page,
+    total: own ? page.total : 0,
+    entries: own ? page.entries.map((e) => {
+      const { costUsd: _costUsd, ...rest } = e;
+      return e.actorId === sub ? rest : { ...rest, actorId: null, actorName: null };
+    }) : [],
+    budgetAccess: budgetAccessLocked(),
+  };
+}
+
+function intParam(raw: unknown, name: string, min: number): number | undefined {
+  if (raw == null || raw === '') return undefined;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < min) throw new ValidationError(`${name} must be an integer of at least ${min}`);
+  return n;
+}
+
+spendReportRouter.get('/entries', asyncHandler(async (req, res) => {
+  const session = resolveSession(req);
+  if (!session) throw new AppError(401, 'Unauthenticated');
+  const groupBy = String(req.query['groupBy'] ?? 'initiative') as SpendGroupBy;
+  if (!GROUP_BYS.includes(groupBy)) throw new ValidationError(`groupBy must be one of ${GROUP_BYS.join(', ')}`);
+  const period = String(req.query['period'] ?? 'month') as ReportPeriod;
+  if (!REPORT_PERIODS.includes(period)) throw new ValidationError(`period must be one of ${REPORT_PERIODS.join(', ')}`);
+  const rawKey = req.query['key'];
+  const key = rawKey == null || rawKey === '' ? null : String(rawKey);
+  if (key != null && key.length > 200) throw new ValidationError('key is too long');
+  const rawId = req.query['initiativeId'];
+  const initiativeId = rawId == null || rawId === '' ? null : String(rawId).trim();
+  if (initiativeId != null && !ID_RE.test(initiativeId)) throw new ValidationError('initiativeId is not a valid id');
+  const limit = intParam(req.query['limit'], 'limit', 1);
+  const offset = intParam(req.query['offset'], 'offset', 0);
+
+  const page = await listSpendEntries({ groupBy, key, period, initiativeId, limit, offset });
+  res.set('Cache-Control', 'no-store');
+  if (await canReadBudgets(session)) { res.json(page); return; }
+  res.json(shapeEntriesBelowTier(page, session.sub));
 }));

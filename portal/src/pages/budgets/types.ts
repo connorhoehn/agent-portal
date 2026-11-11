@@ -122,7 +122,7 @@ export interface BudgetLines {
 // Below the budgets read tier every dollar field is ABSENT, never zero, and
 // `budgetAccess` says why — hence the optional dollar fields.
 
-export type SpendGroupBy = 'initiative' | 'actor' | 'model' | 'source' | 'trigger';
+export type SpendGroupBy = 'initiative' | 'actor' | 'model' | 'source' | 'trigger' | 'bot';
 export type SpendPeriod = 'month' | '7d' | '30d';
 
 export interface BudgetAccessLock {
@@ -264,5 +264,35 @@ export interface SpendReport {
   };
   groups: SpendGroup[];
   initiative?: InitiativeSpend;
+  budgetAccess?: BudgetAccessLock;
+}
+
+// ─── GET /api/spend/entries (routes/spend-report.ts) ────────────────────────
+// One group's entries for the period, newest first. `costUsd` is ABSENT below
+// the budgets read tier and null when the cost was never recorded.
+
+export type SpendCostBasis = 'reported' | 'estimated' | 'unknown';
+
+export interface SpendEntryRow {
+  at: string;
+  source: string;
+  sourceLabel: string;
+  sourceId: string;
+  what: string;
+  /** The run report this entry opens; null when none can exist. */
+  runRef: string | null;
+  botId: string | null;
+  model: string | null;
+  costUsd?: number | null;
+  costBasis: SpendCostBasis;
+  actorId: string | null;
+  actorName: string | null;
+}
+
+export interface SpendEntriesPage {
+  total: number;
+  limit: number;
+  offset: number;
+  entries: SpendEntryRow[];
   budgetAccess?: BudgetAccessLock;
 }

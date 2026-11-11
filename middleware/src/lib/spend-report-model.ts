@@ -12,10 +12,10 @@
 
 import { monthWindow } from './budget-periods.js';
 
-export type SpendGroupBy = 'initiative' | 'actor' | 'model' | 'source' | 'trigger';
+export type SpendGroupBy = 'initiative' | 'actor' | 'model' | 'source' | 'trigger' | 'bot';
 export type ReportPeriod = 'month' | '7d' | '30d';
 
-export const GROUP_BYS: readonly SpendGroupBy[] = ['initiative', 'actor', 'model', 'source', 'trigger'];
+export const GROUP_BYS: readonly SpendGroupBy[] = ['initiative', 'actor', 'model', 'source', 'trigger', 'bot'];
 export const REPORT_PERIODS: readonly ReportPeriod[] = ['month', '7d', '30d'];
 
 const DAY_MS = 86_400_000;
@@ -65,6 +65,8 @@ export interface ReportEntry {
   /** Null = unknown. */
   costUsd: number | null;
   occurredAt: string;
+  /** The bot this entry ties to through the bot-run join; null or absent = not from a bot. */
+  botId?: string | null;
 }
 
 /** The group key an entry falls under. Null = unattributed (no initiative, no actor). */
@@ -77,6 +79,7 @@ export function groupKeyOf(e: ReportEntry, by: SpendGroupBy): string | null {
     // A non-bot entry has no trigger; it groups by its source, as orgSummary's
     // `COALESCE(trigger, source)` does, so a box task is never "unknown trigger".
     case 'trigger': return e.trigger ?? e.source;
+    case 'bot': return e.botId ?? null;
   }
 }
 

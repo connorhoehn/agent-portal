@@ -6,7 +6,7 @@
 
 import { usd } from '../../lib/format.ts';
 import { modelLabelFor } from './budgetsFormat.ts';
-import type { BudgetRow, OpenItemFit, SpendEnvelope, SpendGroup, SpendGroupBy, SpendPeriod } from './types.ts';
+import type { BudgetRow, OpenItemFit, SpendCostBasis, SpendEnvelope, SpendGroup, SpendGroupBy, SpendPeriod } from './types.ts';
 
 export const GROUP_OPTIONS: ReadonlyArray<{ value: SpendGroupBy; label: string }> = [
   { value: 'initiative', label: 'Initiative' },
@@ -14,6 +14,7 @@ export const GROUP_OPTIONS: ReadonlyArray<{ value: SpendGroupBy; label: string }
   { value: 'model', label: 'Model' },
   { value: 'source', label: 'Source' },
   { value: 'trigger', label: 'Trigger' },
+  { value: 'bot', label: 'Bot' },
 ];
 
 export const PERIOD_OPTIONS: ReadonlyArray<{ value: SpendPeriod; label: string }> = [
@@ -35,6 +36,42 @@ export function spendReportUrl(groupBy: SpendGroupBy, period: SpendPeriod, initi
   const q = new URLSearchParams({ groupBy, period: groupBy === 'initiative' || initiativeId ? 'month' : period });
   if (initiativeId) q.set('initiativeId', initiativeId);
   return `/api/spend/report?${q}`;
+}
+
+/**
+ * One group's entries. An empty key is the group with no key (for example
+ * "Not from a bot"). Initiative grouping is the budget period, so it carries none.
+ */
+export function spendEntriesUrl(
+  groupBy: SpendGroupBy, key: string | null, period: SpendPeriod, limit: number, initiativeId?: string | null,
+): string {
+  const q = new URLSearchParams({ groupBy, key: key ?? '', period: groupBy === 'initiative' || initiativeId ? 'month' : period, limit: String(limit) });
+  if (initiativeId) q.set('initiativeId', initiativeId);
+  return `/api/spend/entries?${q}`;
+}
+
+/** The Budgets page's own URL for one grouped view of the spend report. */
+export function spendReportPageHref(groupBy: SpendGroupBy, period: SpendPeriod): string {
+  const q = new URLSearchParams();
+  if (groupBy !== 'initiative') q.set('group', groupBy);
+  if (period !== 'month') q.set('period', period);
+  const s = q.toString();
+  return `/iq/budgets${s ? `?${s}` : ''}`;
+}
+
+/** The bot a group names, as its page: only a real bot key has one. */
+export function botHref(key: string | null): string | null {
+  return key ? `/iq/bots/${encodeURIComponent(key)}` : null;
+}
+
+/**
+ * What one entry's cost cell says. Null = withheld (render the lock). A cost
+ * that was never recorded reads "unknown", never $0; an estimate says so.
+ */
+export function entryCost(costUsd: number | null | undefined, basis: SpendCostBasis): { text: string; note: string | null } | null {
+  if (costUsd === undefined) return null;
+  if (costUsd === null) return { text: 'unknown', note: null };
+  return { text: usd(costUsd, { precision: 4 }), note: basis === 'estimated' ? 'estimated' : null };
 }
 
 /** The column header over the spend figure, so the window is never implied. */

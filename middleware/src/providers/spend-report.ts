@@ -26,7 +26,7 @@ import { exec } from './aurora.js';
 import { config } from '../config.js';
 import { spendEntries } from '../mock/spend-ledger.js';
 import { allMockRuns } from '../mock/bots.js';
-import { MOCK_BOTS, mockBotRunInitiative, mockRunsAttributedTo, dispatchedSpendInWindow } from './bots.js';
+import { listBots, MOCK_BOTS, mockBotRunInitiative, mockRunsAttributedTo, dispatchedSpendInWindow } from './bots.js';
 import { mockProjectName } from './projects.js';
 import { displayNameForSubject, listUsers } from './identity.js';
 import { budgetedAllocation } from '../lib/budget-periods.js';
@@ -39,7 +39,7 @@ import {
   aggregateEntries, fitOpenItems, projectGroup, reportWindow, round4, SOURCE_LABELS, summarizeForecast, summarizeRuns,
   totalOf, TRIGGER_LABELS, daysLeftInPeriod,
   type ForecastSummary, type OpenItemFit, type RawGroup, type ReportEntry, type ReportPeriod, type ReportWindow,
-  type RunOutcomeInput, type RunOutcomes, type SpendGroupBy,
+  type RunOutcomeInput, type RunOutcomes, type SpendGroupBy, groupKeyOf,
 } from '../lib/spend-report-model.js';
 import { clock } from '../mock/core/index.js';
 
@@ -168,18 +168,38 @@ export interface SpendReport {
 
 // ─── Ledger rows ─────────────────────────────────────────────────────────────
 
+/** One ledger row with what the entries read needs beside what the grouping needs. */
+interface LedgerRow extends ReportEntry {
+  sourceId: string;
+  costBasis: 'reported' | 'estimated' | 'unknown';
+  /** The run report this entry opens: a job's own id, or a bot run's job id. Null when none can exist. */
+  runRef: string | null;
+}
+
 /** Offline: stored entries plus bot_run entries derived from the run fixture. */
-function mockLedgerEntries(w: ReportWindow, initiativeId: string | null): ReportEntry[] {
+function mockLedgerEntries(w: ReportWindow, initiativeId: string | null): LedgerRow[] {
   const from = w.readFrom.getTime();
-  let stored: ReportEntry[] = [];
+  const runs = allMockRuns();
+  // The bot-run join, offline: a bot_run entry is its run's id, a job entry is
+  // the run's job id, a direct agent run entry is the run's agent run id.
+  const runFor = (source: string, sourceId: string) => runs.find((r) => (
+    source === 'bot_run' ? r.id === sourceId
+      : source === 'job' ? r.jobId === sourceId
+        : source === 'agent_project_run' ? r.runId === sourceId : false));
+  let stored: LedgerRow[] = [];
   try {
-    stored = spendEntries.rows().map((e) => ({
-      initiativeId: e.initiativeId, actorId: e.actorId, model: e.model, source: e.source,
-      trigger: e.trigger, costUsd: e.costUsd, occurredAt: e.occurredAt,
-    }));
+    stored = spendEntries.rows().map((e) => {
+      const run = runFor(e.source, e.sourceId);
+      return {
+        initiativeId: e.initiativeId, actorId: e.actorId, model: e.model, source: e.source,
+        trigger: e.trigger, costUsd: e.costUsd, occurredAt: e.occurredAt,
+        botId: run?.botId ?? null, sourceId: e.sourceId, costBasis: e.costBasis,
+        runRef: e.source === 'job' ? e.sourceId : run?.jobId ?? null,
+      };
+    });
   } catch { stored = []; }
   const modelByBot = new Map(MOCK_BOTS.map((b) => [b.id, b.model]));
-  const derived: ReportEntry[] = allMockRuns()
+  const derived: LedgerRow[] = runs
     .filter((r) => (r.status === 'done' || r.status === 'failed') && Date.parse(r.startedAt) >= from)
     .map((r) => ({
       initiativeId: mockBotRunInitiative(r),
@@ -189,9 +209,27 @@ function mockLedgerEntries(w: ReportWindow, initiativeId: string | null): Report
       trigger: r.trigger,
       costUsd: r.costUsd ?? null,
       occurredAt: r.startedAt,
+      botId: r.botId,
+      sourceId: r.id,
+      costBasis: r.costUsd == null ? 'unknown' as const : 'reported' as const,
+      runRef: r.jobId,
     }));
   return [...stored, ...derived].filter((e) => Date.parse(e.occurredAt) >= from && (initiativeId == null || e.initiativeId === initiativeId));
 }
+
+/**
+ * The bot an entry ties to, through the bot-run join: a bot_run entry by its
+ * run id, a job entry by the run's job id, a direct agent run entry by the
+ * run's agent run id. Marketplace runs have no bot, so they fall in the null
+ * group with everything else that is not from a bot.
+ */
+const BOT_KEY_SQL = `(SELECT br.bot_id::text FROM bot_runs br
+   WHERE (spend_entries.source = 'bot_run' AND br.id::text = spend_entries.source_id)
+      OR (spend_entries.source = 'job' AND br.job_id::text = spend_entries.source_id)
+      OR (spend_entries.source = 'agent_project_run' AND br.run_id::text = spend_entries.source_id)
+   LIMIT 1)`;
+
+export const NOT_FROM_A_BOT = 'Not from a bot';
 
 const KEY_SQL: Readonly<Record<SpendGroupBy, string>> = {
   initiative: 'initiative_id',
@@ -199,6 +237,7 @@ const KEY_SQL: Readonly<Record<SpendGroupBy, string>> = {
   model: "COALESCE(model, 'unknown')",
   source: 'source',
   trigger: 'COALESCE(trigger, source)',
+  bot: BOT_KEY_SQL,
 };
 
 /** The grouped ledger read — the raw sums lib/spend-report-model.ts finishes. */
@@ -292,6 +331,11 @@ async function labelsFor(by: SpendGroupBy, keys: ReadonlyArray<string | null>): 
     let users: Array<{ id: string; displayName: string }> = [];
     try { users = await listUsers(); } catch { users = []; }
     for (const k of real) out.set(k, users.find((u) => u.id === k)?.displayName ?? displayNameForSubject(k) ?? k);
+  } else if (by === 'bot') {
+    out.set(null, NOT_FROM_A_BOT);
+    let bots: Array<{ id: string; name: string }> = [];
+    try { bots = await listBots(); } catch { bots = []; }
+    for (const k of real) out.set(k, bots.find((b) => b.id === k)?.name ?? k);
   } else if (by === 'source') {
     for (const k of real) out.set(k, SOURCE_LABELS[k] ?? k);
   } else if (by === 'trigger') {
@@ -530,4 +574,128 @@ export async function getSpendReport(opts: { groupBy: SpendGroupBy; period: Repo
     report.initiative = await initiativeBlocks(initiativeId, w, budgets?.[0] ?? null, people);
   }
   return report;
+}
+
+// ─── One group's entries (the drill-through) ─────────────────────────────────
+
+export interface SpendEntryRow {
+  at: string;
+  source: string;
+  sourceLabel: string;
+  sourceId: string;
+  /** What it was in words: the bot's name for a bot run, else the source's label. */
+  what: string;
+  /** The run report this entry opens (/iq/runs/<runRef>); null when none can exist. */
+  runRef: string | null;
+  botId: string | null;
+  initiativeId: string | null;
+  model: string | null;
+  /** Null = unknown, never zero. */
+  costUsd: number | null;
+  costBasis: 'reported' | 'estimated' | 'unknown';
+  actorId: string | null;
+  actorName: string | null;
+}
+
+export interface SpendEntriesPage {
+  groupBy: SpendGroupBy;
+  /** The group asked for; null = the group with no key (for example "Not from a bot"). */
+  key: string | null;
+  period: ReportPeriod;
+  since: string;
+  asOf: string;
+  initiativeId: string | null;
+  total: number;
+  limit: number;
+  offset: number;
+  entries: SpendEntryRow[];
+}
+
+export const ENTRIES_MAX_LIMIT = 100;
+
+/**
+ * The entries inside one group of the report, newest first, paged. It cuts the
+ * window the report cuts (`since` .. `now`) and matches a group by the same key
+ * the grouping uses, so the rows always add up to the group's entry count.
+ */
+export async function listSpendEntries(opts: {
+  groupBy: SpendGroupBy; key: string | null; period: ReportPeriod; initiativeId?: string | null;
+  limit?: number; offset?: number; now?: Date;
+}): Promise<SpendEntriesPage> {
+  const initiativeId = opts.initiativeId ?? null;
+  const limit = Math.min(Math.max(Math.trunc(opts.limit ?? 25), 1), ENTRIES_MAX_LIMIT);
+  const offset = Math.max(Math.trunc(opts.offset ?? 0), 0);
+  const budgets: BudgetRow[] | null = initiativeId ? await getBudget(initiativeId).then((b) => (b ? [b] : [])) : null;
+  const scoped = initiativeId ? budgets?.[0] : null;
+  const w = reportWindow(opts.period, opts.now ?? clock.now(),
+    scoped?.periodStart && scoped.periodEnd ? { start: new Date(scoped.periodStart), end: new Date(scoped.periodEnd) } : null);
+
+  type Raw = Omit<SpendEntryRow, 'sourceLabel' | 'what' | 'botName' | 'actorName'>;
+  let total = 0;
+  let page: Raw[] = [];
+  if (config.mock.aurora) {
+    const since = w.since.getTime();
+    const now = w.now.getTime();
+    const all = mockLedgerEntries(w, initiativeId)
+      .filter((e) => { const at = Date.parse(e.occurredAt); return Number.isFinite(at) && at >= since && at <= now && groupKeyOf(e, opts.groupBy) === opts.key; })
+      .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt) || b.sourceId.localeCompare(a.sourceId));
+    total = all.length;
+    page = all.slice(offset, offset + limit).map((e) => ({
+      at: e.occurredAt, source: e.source, sourceId: e.sourceId, runRef: e.runRef, botId: e.botId ?? null,
+      initiativeId: e.initiativeId, model: e.model, costUsd: e.costUsd, costBasis: e.costBasis, actorId: e.actorId,
+    }));
+  } else {
+    const where = `occurred_at >= :since::timestamptz AND occurred_at <= :now::timestamptz
+       ${initiativeId ? 'AND initiative_id = :pid' : ''}
+       AND ${KEY_SQL[opts.groupBy]} IS NOT DISTINCT FROM ${opts.key == null ? 'NULL::text' : ':key'}`;
+    const base = [
+      s('since', w.since.toISOString()), s('now', w.now.toISOString()),
+      ...(initiativeId ? [s('pid', initiativeId)] : []),
+      ...(opts.key == null ? [] : [s('key', opts.key)]),
+    ];
+    try {
+      const count = await exec(`SELECT COUNT(*)::int AS n FROM spend_entries WHERE ${where}`, base);
+      total = toNum(count[0]?.['n']);
+      const rows = await exec(
+        `SELECT source, source_id, initiative_id, actor_id, model, cost_usd::float8 AS cost, cost_basis, occurred_at,
+                ${BOT_KEY_SQL} AS bot_id,
+                CASE spend_entries.source
+                  WHEN 'job' THEN spend_entries.source_id
+                  WHEN 'bot_run' THEN (SELECT br.job_id::text FROM bot_runs br WHERE br.id::text = spend_entries.source_id)
+                END AS run_ref
+           FROM spend_entries WHERE ${where}
+          ORDER BY occurred_at DESC, source_id DESC LIMIT ${limit} OFFSET ${offset}`,
+        base,
+      );
+      page = rows.map((r) => ({
+        at: new Date(toStr(r['occurred_at'])).toISOString(), source: toStr(r['source']), sourceId: toStr(r['source_id']),
+        runRef: r['run_ref'] == null ? null : toStr(r['run_ref']), botId: r['bot_id'] == null ? null : toStr(r['bot_id']),
+        initiativeId: r['initiative_id'] == null ? null : toStr(r['initiative_id']),
+        model: r['model'] == null ? null : toStr(r['model']),
+        costUsd: r['cost'] == null ? null : round4(toNum(r['cost'])),
+        costBasis: r['cost'] == null ? 'unknown' : (toStr(r['cost_basis']) === 'estimated' ? 'estimated' : 'reported'),
+        actorId: r['actor_id'] == null ? null : toStr(r['actor_id']),
+      }));
+    } catch (err) {
+      if (!missingTable(err)) throw err;
+    }
+  }
+
+  let bots: Array<{ id: string; name: string }> = [];
+  let users: Array<{ id: string; displayName: string }> = [];
+  if (page.some((e) => e.botId)) { try { bots = await listBots(); } catch { bots = []; } }
+  if (page.some((e) => e.actorId)) { try { users = await listUsers(); } catch { users = []; } }
+  const entries: SpendEntryRow[] = page.map((e) => {
+    const botName = e.botId ? bots.find((b) => b.id === e.botId)?.name ?? null : null;
+    return {
+      ...e,
+      sourceLabel: SOURCE_LABELS[e.source] ?? e.source,
+      what: botName ?? SOURCE_LABELS[e.source] ?? e.source,
+      actorName: e.actorId ? users.find((u) => u.id === e.actorId)?.displayName ?? displayNameForSubject(e.actorId) ?? e.actorId : null,
+    };
+  });
+  return {
+    groupBy: opts.groupBy, key: opts.key, period: opts.period, since: w.since.toISOString(), asOf: w.now.toISOString(),
+    initiativeId, total, limit, offset, entries,
+  };
 }

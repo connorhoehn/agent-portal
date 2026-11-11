@@ -26,6 +26,7 @@ import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { LockedFigure } from '../projects/BudgetAccess';
 import { ago, budgetPeriodLabel, modelLabelFor, usd } from './budgetsFormat';
 import { SpendFigureCell } from './SpendGroupTable';
+import { SpendEntriesTable } from './SpendEntriesTable';
 import {
   basisLabel, envelopeBurn, fitPill, moneyOrDash, peopleWithEnvelopes, remainingTone, spendReportUrl,
   type PersonEnvelopeRow,
@@ -286,6 +287,15 @@ export function InitiativeSpendReport({ initiativeId, fallbackName }: { initiati
         storageKey="budgets.initiative-spend.runs"
       >
         <RunsTable runs={ini.runs} />
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Ledger entries this month"
+        badge={<Chip tone="neutral" size="xs">{data?.totals.entries ?? 0}</Chip>}
+        defaultOpen={false}
+        storageKey="budgets.initiative-spend.entries"
+      >
+        <SpendEntriesTable groupBy="initiative" groupKey={ini.id} period="month" lock={lock} />
       </CollapsibleSection>
     </Stack>
   );

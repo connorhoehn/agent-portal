@@ -6,16 +6,21 @@
 // Unknown costs are a chip beside the dollars, never a $0; a withheld figure is
 // the lock, never a zero.
 
+import { useState } from 'react';
 import {
   Chip,
   DataTable,
   type DataTableColumn,
   Inline,
+  PageSection,
+  Stack,
   T,
 } from '@connorhoehn/ui-components/shared';
+import { RecordLink } from '../decisions/RecordLink';
 import { LockedFigure } from '../projects/BudgetAccess';
 import { usd } from './budgetsFormat';
-import { groupLabel, moneyOrDash, periodHeading, remainingTone, spendFigure } from './spendReportModel';
+import { SpendEntriesTable } from './SpendEntriesTable';
+import { botHref, groupLabel, moneyOrDash, periodHeading, remainingTone, spendFigure } from './spendReportModel';
 import type { BudgetAccessLock, SpendGroup, SpendGroupBy, SpendPeriod } from './types';
 
 export function SpendFigureCell({ knownUsd, unknownCount, lock }: { knownUsd: number | undefined; unknownCount: number; lock: BudgetAccessLock | undefined }) {
@@ -43,6 +48,10 @@ export function SpendGroupTable({ groups, groupBy, period, lock, query }: {
   lock: BudgetAccessLock | undefined;
   query: string;
 }) {
+  // The group whose entries are open below the table. Tied to the view, so changing the
+  // grouping or the period closes it instead of showing another group's rows under it.
+  const [opened, setOpened] = useState<string | null>(null);
+  const viewKey = (g: SpendGroup) => `${groupBy}|${period}|${g.key ?? ''}`;
   const q = query.trim().toLowerCase();
   const shown = groups.filter((g) => !q || groupLabel(g, groupBy).toLowerCase().includes(q) || (g.key ?? '').toLowerCase().includes(q));
   const withBudget = groupBy === 'actor';
@@ -50,9 +59,11 @@ export function SpendGroupTable({ groups, groupBy, period, lock, query }: {
     {
       key: 'label',
       header: GROUP_HEADINGS[groupBy],
-      render: (g) => (
-        <T tone={g.key == null ? 'secondary' : undefined} title={g.key ?? undefined} className="truncate">{groupLabel(g, groupBy)}</T>
-      ),
+      render: (g) => {
+        const name = <T tone={g.key == null ? 'secondary' : undefined} title={g.key ?? undefined} className="truncate">{groupLabel(g, groupBy)}</T>;
+        const href = groupBy === 'bot' ? botHref(g.key) : null;
+        return href ? <RecordLink to={href} title="Open this bot">{name}</RecordLink> : name;
+      },
     },
     {
       key: 'known',
@@ -113,17 +124,31 @@ export function SpendGroupTable({ groups, groupBy, period, lock, query }: {
         ),
     }] : []),
   ];
+  const openGroup = groups.find((g) => viewKey(g) === opened);
   return (
-    <DataTable
-      data-testid="spend-group-table"
-      responsiveColumns
-      hiddenColumnsControl="header"
-      aria-label={`Spend by ${GROUP_HEADINGS[groupBy].toLowerCase()}`}
-      data={shown}
-      columns={columns}
-      keyField={(g) => g.key ?? '__unattributed'}
-      emptyMessage={q ? 'Nothing matches this search.' : 'No spend recorded in this window.'}
-    />
+    <Stack gap="lg" className="min-w-0">
+      <DataTable
+        data-testid="spend-group-table"
+        responsiveColumns
+        hiddenColumnsControl="header"
+        aria-label={`Spend by ${GROUP_HEADINGS[groupBy].toLowerCase()}`}
+        data={shown}
+        columns={columns}
+        keyField={(g) => g.key ?? '__unattributed'}
+        selectedKey={openGroup ? openGroup.key ?? '__unattributed' : null}
+        onRowClick={(g) => setOpened((cur) => (cur === viewKey(g) ? null : viewKey(g)))}
+        emptyMessage={q ? 'Nothing matches this search.' : 'No spend recorded in this window.'}
+      />
+      {openGroup && (
+        <PageSection
+          title={`Entries: ${groupLabel(openGroup, groupBy)}`}
+          description={`What the ${openGroup.entries} ${openGroup.entries === 1 ? 'entry' : 'entries'} in this group are, newest first.`}
+          count={openGroup.entries}
+        >
+          <SpendEntriesTable groupBy={groupBy} groupKey={openGroup.key} period={period} lock={lock} />
+        </PageSection>
+      )}
+    </Stack>
   );
 }
 
@@ -133,4 +158,5 @@ const GROUP_HEADINGS: Readonly<Record<SpendGroupBy, string>> = {
   model: 'Model',
   source: 'Source',
   trigger: 'Trigger',
+  bot: 'Bot',
 };

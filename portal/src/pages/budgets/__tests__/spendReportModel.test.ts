@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import {
   budgetRailRows, discretionaryBudget, envelopeBurn, fitPill, floorFigure, groupLabel, mergeInitiativeLedger,
   moneyOrDash, parseGroupBy, parsePeriod, peopleWithEnvelopes, periodHeading, remainingTone, spendFigure, spendReportUrl,
-  OVERVIEW_ROW_ID,
+  OVERVIEW_ROW_ID, botHref, entryCost, spendEntriesUrl, spendReportPageHref,
 } from '../spendReportModel.ts';
 import type { BudgetRow, SpendEnvelope, SpendGroup } from '../types.ts';
 
@@ -137,4 +137,31 @@ test('peopleWithEnvelopes joins spend and envelopes per person, keeps unlinked g
     ['p-design-v3', null, 0, 7],
     ['__none', null, 0, 9],
   ]);
+});
+
+test('the bot grouping is an option and parses back', () => {
+  assert.equal(parseGroupBy('bot'), 'bot');
+});
+
+test('the entries URL carries the group, an empty key for the group with none, and the period', () => {
+  assert.equal(spendEntriesUrl('bot', 'b-1', '30d', 25), '/api/spend/entries?groupBy=bot&key=b-1&period=30d&limit=25');
+  assert.equal(spendEntriesUrl('bot', null, '7d', 50), '/api/spend/entries?groupBy=bot&key=&period=7d&limit=50');
+  assert.equal(spendEntriesUrl('initiative', 'p-1', '7d', 25), '/api/spend/entries?groupBy=initiative&key=p-1&period=month&limit=25');
+});
+
+test('the spend report page URL carries the grouping and the period', () => {
+  assert.equal(spendReportPageHref('bot', '30d'), '/iq/budgets?group=bot&period=30d');
+  assert.equal(spendReportPageHref('bot', 'month'), '/iq/budgets?group=bot');
+});
+
+test('only a real bot key has a bot page', () => {
+  assert.equal(botHref('b-1'), '/iq/bots/b-1');
+  assert.equal(botHref(null), null);
+});
+
+test('an entry cost is unknown, never $0; withheld is null; an estimate says so', () => {
+  assert.deepEqual(entryCost(null, 'unknown'), { text: 'unknown', note: null });
+  assert.equal(entryCost(undefined, 'reported'), null);
+  assert.deepEqual(entryCost(0.0123, 'estimated'), { text: '$0.0123', note: 'estimated' });
+  assert.deepEqual(entryCost(0, 'reported'), { text: '$0.0000', note: null });
 });
