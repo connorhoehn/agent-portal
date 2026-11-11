@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { skillsLoadedFrom } from '../use-detection.js';
 import { readKeepFolder } from '../../runbooks/keep.js';
+import { DEBRIEF_ALLOWED_TOOLS, DEBRIEF_ANSWER_SCHEMA, DEBRIEF_DISALLOWED_TOOLS, DEBRIEF_TOOLS } from '../../runbooks/debrief.js';
 
 const MODULE = resolve(__dirname, '../../../../../tools/local-compute-report.mjs');
 
@@ -98,5 +99,42 @@ describe('kept folders: worker and lab keep agree', () => {
     expect(r.kept.map((k) => k.name)).toContain('rb-collector-rerun');
     const none = worker('buildReport', [{ finalMessage: '', stdout: '', workdir: null, runRef: 'j', sessionId: '' }]);
     expect(none).toEqual({ block: null, skillsLoaded: [], kept: [] });
+  });
+});
+
+describe('the debrief: the server asks, the worker only narrows', () => {
+  const SID = '0b7c6a52-3d1e-4f6a-9a1b-2c3d4e5f6a7b';
+  const request = {
+    prompt: 'debrief', schema: DEBRIEF_ANSWER_SCHEMA, maxBudgetUsd: 0.5,
+    tools: [...DEBRIEF_TOOLS], allowedTools: [...DEBRIEF_ALLOWED_TOOLS], disallowedTools: [...DEBRIEF_DISALLOWED_TOOLS],
+  };
+  it("the server's request becomes exactly the resume argv", () => {
+    expect(worker('debriefArgs', [request, { sessionId: SID, model: 'claude-haiku-4-5-20251001' }])).toEqual([
+      '-p', 'debrief', '--resume', SID, '--fork-session', '--output-format', 'json',
+      '--json-schema', JSON.stringify(DEBRIEF_ANSWER_SCHEMA), '--model', 'claude-haiku-4-5-20251001',
+      '--tools', DEBRIEF_TOOLS.join(','), '--allowedTools', DEBRIEF_ALLOWED_TOOLS.join(','),
+      '--disallowedTools', DEBRIEF_DISALLOWED_TOOLS.join(','), '--permission-mode', 'dontAsk', '--max-budget-usd', '0.5',
+    ]);
+  });
+  it('a widened request is narrowed, and a bad session id runs nothing', () => {
+    const wide = {
+      ...request, maxBudgetUsd: 50, tools: ['Bash', ...request.tools],
+      allowedTools: ['Bash(*)', 'Edit(./**)', ...request.allowedTools], disallowedTools: [],
+    };
+    const a = worker('debriefArgs', [wide, { sessionId: SID }]) as string[];
+    expect(a[a.indexOf('--tools') + 1]).toBe(DEBRIEF_TOOLS.join(','));
+    expect(a[a.indexOf('--allowedTools') + 1]).toBe(DEBRIEF_ALLOWED_TOOLS.join(','));
+    expect(a[a.indexOf('--disallowedTools') + 1]).toBe(DEBRIEF_DISALLOWED_TOOLS.join(','));
+    expect(a[a.indexOf('--max-budget-usd') + 1]).toBe('2');
+    expect(worker('debriefArgs', [request, { sessionId: '../x' }])).toBeNull();
+  });
+  it('the answer comes from structured output, else the result text', () => {
+    expect(worker('debriefAnswerOf', [{ structured_output: { kind: 'none', reason: 'r' } }])).toEqual({ kind: 'none', reason: 'r' });
+    expect(worker('debriefAnswerOf', [{ result: 'ok {"kind":"new","reason":"r","folder":"rb-a-b"}' }])).toEqual({ kind: 'new', reason: 'r', folder: 'rb-a-b' });
+    expect(worker('debriefAnswerOf', [{ result: 'no json' }])).toBeNull();
+  });
+  it('the session id comes from the stream', () => {
+    const stdout = [JSON.stringify({ type: 'system', subtype: 'init', session_id: SID }), 'junk'].join('\n');
+    expect(worker('sessionIdFromStream', [stdout])).toBe(SID);
   });
 });

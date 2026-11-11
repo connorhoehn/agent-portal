@@ -144,13 +144,111 @@ export function installedSkills(workdir) {
 
 /**
  * The `report` field of the completion body. `finalMessage` is the result event's text;
- * `stdout` the run's stream-json output; `workdir` the checkout (null: a job with no repo keeps nothing).
+ * `stdout` the run's stream-json output; `workdir` the checkout (null: a job with no repo keeps nothing);
+ * `claudeSessionId` the session the work turn ran in (the debrief resumes it).
  */
-export function buildReport({ finalMessage, stdout, workdir, runRef, sessionId }) {
+export function buildReport({ finalMessage, stdout, workdir, runRef, sessionId, claudeSessionId = null }) {
   const msg = typeof finalMessage === 'string' ? finalMessage : '';
   return {
     block: msg ? msg.slice(-BLOCK_TAIL) : null,
     skillsLoaded: skillsLoadedFromStream(stdout),
     kept: workdir ? readKeptFolders(join(workdir, '.lab', 'keep'), { runRef, sessionId, installed: installedSkills(workdir) }) : [],
+    ...(typeof claudeSessionId === 'string' && SESSION_UUID.test(claudeSessionId) ? { claudeSessionId } : {}),
   };
+}
+
+// ── The debrief (docs/learning-loop-design.md, Stage 2; lane C) ─────────────
+//
+// The server may answer a completion with a debrief request: resume the SAME session for one
+// bounded turn that writes one runbook folder under .lab/keep/, or answers that nothing is worth
+// keeping. Everything the worker does with it is here, pure, so the middleware's tests can hold it.
+
+/** A Claude Code session id. */
+export const SESSION_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * The session id the work turn ran in, from its own stream-json output: every event of
+ * `claude -p --output-format stream-json --verbose` carries `session_id` (the `system`/`init`
+ * event first, the `result` event last). The last valid one wins; null when none was seen.
+ */
+export function sessionIdFromStream(stdout) {
+  let found = null;
+  for (const line of String(stdout ?? '').split('\n')) {
+    const t = line.trim();
+    if (!t.startsWith('{') || !t.includes('session_id')) continue;
+    let ev;
+    try { ev = JSON.parse(t); } catch { continue; }
+    if (ev && typeof ev.session_id === 'string' && SESSION_UUID.test(ev.session_id)) found = ev.session_id;
+  }
+  return found;
+}
+
+/** What a debrief turn may ever be given, whatever a request says: the worker only narrows. */
+export const DEBRIEF_TOOL_CEILING = ['Read', 'Glob', 'Grep', 'Write', 'Edit'];
+const DEBRIEF_ALLOW_RULE = /^(?:Read|Glob|Grep)(?:\(\.\/\*\*\))?$|^Edit\(\.\/\.lab\/keep\/\*\*\)$/;
+const DEBRIEF_DENY_FLOOR = ['Edit(./.git/**)', 'Edit(**/.git/**)', 'Bash', 'WebFetch', 'WebSearch'];
+export const DEBRIEF_MAX_USD = 2;
+export const DEBRIEF_MAX_TIMEOUT_S = 1800;
+
+/**
+ * The resume invocation's argv (after the `claude` binary), or null when the request is not one
+ * this worker will run. Every flag is one `claude --help` lists:
+ *   -p <prompt> --resume <id> --fork-session   the work session, resumed, its own record untouched
+ *   --output-format json --json-schema <s>     one result object whose structured output is the answer
+ *   --model <m>                                the smaller model
+ *   --tools …                                  read, search and write files: no shell, no web
+ *   --allowedTools … --disallowedTools …       read the checkout, write only under .lab/keep/
+ *   --permission-mode dontAsk                  anything else is refused, never prompted
+ *   --max-budget-usd <n>                       the dollar ceiling the server set
+ * The CLI has no turn-count flag; the runner's wall clock (`timeoutS`) and the dollar ceiling bound the turn.
+ */
+export function debriefArgs(request, { sessionId, model = null, settingsOverride = null }) {
+  if (!request || typeof request !== 'object') return null;
+  if (typeof sessionId !== 'string' || !SESSION_UUID.test(sessionId)) return null;
+  if (typeof request.prompt !== 'string' || !request.prompt.trim() || request.prompt.length > 20_000) return null;
+  if (!request.schema || typeof request.schema !== 'object') return null;
+  const tools = (Array.isArray(request.tools) ? request.tools : []).filter((t) => DEBRIEF_TOOL_CEILING.includes(t));
+  const allowed = (Array.isArray(request.allowedTools) ? request.allowedTools : []).filter((t) => typeof t === 'string' && DEBRIEF_ALLOW_RULE.test(t));
+  const denied = [...new Set([...DEBRIEF_DENY_FLOOR, ...(Array.isArray(request.disallowedTools) ? request.disallowedTools : []).filter((t) => typeof t === 'string' && /^[A-Za-z]+(\([^\s]*\))?$/.test(t))])];
+  const usd = Number(request.maxBudgetUsd);
+  if (!tools.length || !allowed.length || !Number.isFinite(usd) || usd <= 0) return null;
+  return [
+    '-p', request.prompt,
+    '--resume', sessionId, '--fork-session',
+    '--output-format', 'json',
+    '--json-schema', JSON.stringify(request.schema),
+    ...(model ? ['--model', model] : []),
+    '--tools', tools.join(','),
+    '--allowedTools', allowed.join(','),
+    '--disallowedTools', denied.join(','),
+    '--permission-mode', 'dontAsk',
+    '--max-budget-usd', String(Math.min(usd, DEBRIEF_MAX_USD)),
+    ...(settingsOverride ? ['--settings', settingsOverride] : []),
+  ];
+}
+
+/** The debrief's answer from the turn's single json result: its structured output, else its text as JSON. */
+export function debriefAnswerOf(result) {
+  if (!result || typeof result !== 'object') return null;
+  const so = result.structured_output ?? result.structuredOutput;
+  if (so && typeof so === 'object' && !Array.isArray(so)) return so;
+  if (typeof result.result === 'string') {
+    const t = result.result.trim();
+    const m = /\{[\s\S]*\}$/.exec(t);
+    if (m) { try { return JSON.parse(m[0]); } catch { /* not JSON */ } }
+  }
+  return null;
+}
+
+/**
+ * The one folder the answer names, read with every rule `lab keep` uses (links never followed,
+ * text only, names and sizes checked). `{ folder }`, `{ problems }`, or `{ missing: true }`.
+ */
+export function readDebriefFolder(workdir, name) {
+  if (typeof name !== 'string' || !KEEP_NAME.test(name)) return { problems: ['the answer names no usable folder'] };
+  const all = readKeptFolders(join(workdir, '.lab', 'keep'), { runRef: '', installed: new Set() });
+  const hit = all.find((k) => k.name === name);
+  if (!hit) return { missing: true };
+  if (hit.problems?.length) return { problems: hit.problems.slice(0, 8) };
+  return { folder: { name, skill_md: hit.body.skill_md, files: hit.body.files } };
 }

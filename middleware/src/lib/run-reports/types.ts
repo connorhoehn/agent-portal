@@ -179,6 +179,8 @@ export interface RunReport {
   runbookAccounts?: RunReportRunbookAccount[];
   /** Lane C: whether the run was debriefed and how that ended. null/absent: not decided (older reports). */
   debrief?: RunDebrief | null;
+  /** Lane C: the Claude Code session the work turn ran in (a UUID the worker reported), which a debrief resumes. */
+  claudeSessionId?: string | null;
   /** The frozen brief this run was given, or null when none froze. */
   briefId: string | null;
   /** When the report was stored. */
@@ -199,6 +201,8 @@ export interface WorkerReportPart {
   kept?: RunReportKept[];
   /** The cost the worker reported, in USD. */
   reportedCostUsd?: number | null;
+  /** Lane C: the Claude Code session id of the work turn (validated as a UUID). */
+  claudeSessionId?: string | null;
 }
 
 /** Caps on every free-text and list field. Applied to everything a worker sends, and to fixtures too. */

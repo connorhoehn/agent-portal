@@ -932,6 +932,7 @@ async function recordLocalReport(
       block: typeof raw['block'] === 'string' ? raw['block'] : null,
       skillsLoaded: Array.isArray(raw['skillsLoaded']) ? raw['skillsLoaded'] as string[] : [],
       kept, reportedCostUsd: input.reportedUsd,
+      claudeSessionId: typeof raw['claudeSessionId'] === 'string' ? raw['claudeSessionId'] : null,
     },
   });
 }

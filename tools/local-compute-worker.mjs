@@ -83,14 +83,24 @@
 //                          default — for running a second worker (or a mock-mode
 //                          audit with MOCK_NODE_TOKEN) without touching the real one
 //
+// THE DEBRIEF (lane C, docs/learning-loop-design.md Stage 2). The work turn runs with a
+// --session-id the worker chose (the stream's own session_id wins if it differs). When the
+// completion answer carries a debrief request, the worker keeps the checkout (no other job may
+// reset it) and resumes that session once more: `claude -p <prompt> --resume <id> --fork-session
+// --json-schema <schema>` with read-only tools plus writes under .lab/keep/, no shell or web
+// tools, --permission-mode dontAsk, a dollar ceiling, the smaller model (LOCAL_DEBRIEF_MODEL,
+// default Haiku) and a wall-clock timeout. It posts the answer and the one folder it names to
+// POST /api/local-compute/jobs/:id/debrief, or says the session could not be resumed.
+//
 // The worker does NOT daemonize. Run it under systemd, launchd, tmux, or a plain
 // shell — a failed claim, a dead network, or a revoked token all exit non-zero,
 // and the operator decides whether to restart it.
 
-import { readFileSync, writeFileSync, appendFileSync, statSync, mkdirSync, existsSync, createWriteStream } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, statSync, mkdirSync, existsSync, createWriteStream, rmSync, lstatSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { syncProjectSkills, describeSync, skillsNote, BODY_MAX } from './local-compute-skills.mjs';
-import { buildReport } from './local-compute-report.mjs';
+import { buildReport, sessionIdFromStream, debriefArgs, readDebriefFolder, debriefAnswerOf, SESSION_UUID } from './local-compute-report.mjs';
 import { allowedToolsFrom, toolsForRun, allowedRepoHosts, normaliseRepoUrl, TEST_TOOLS } from './local-compute-policy.mjs';
 import { join, basename, dirname } from 'node:path';
 import { homedir, hostname, platform, arch, loadavg, cpus, totalmem, freemem, uptime } from 'node:os';
@@ -161,7 +171,7 @@ const DISALLOWED_TOOLS = ['Edit(./.git/**)', 'Edit(**/.git/**)'];
 // the fleet view (a job kind added, a claim-loop fix). Reported in
 // `metrics.workerVersion` — informational only, nothing server-side gates on
 // it today.
-const WORKER_VERSION = '1.2.0';
+const WORKER_VERSION = '1.3.0';
 
 // ─── Logging ─────────────────────────────────────────────────────────────────
 //
@@ -828,8 +838,13 @@ function runTask(config, jobId, cwd, prompt, systemNote = null, clonePath = null
   // fired, the pooled keep-alive socket to the middleware went stale, and the
   // very next request (the completion POST) died with `fetch failed`. Running it
   // as a child keeps the loop free to heartbeat, announce presence and ship logs.
+  // Lane C: the session id is chosen here (`--session-id`, a documented flag) so the debrief can
+  // resume exactly this session even if the stream is cut short; the stream's own `session_id`
+  // (every stream-json event carries it) wins when it disagrees.
+  const chosenSessionId = randomUUID();
   const args = [
     '-p', prompt,
+    '--session-id', chosenSessionId,
     '--output-format', 'stream-json',
     '--verbose',
     ...(ANTHROPIC_MODEL ? ['--model', ANTHROPIC_MODEL] : []),
@@ -915,11 +930,12 @@ function runTask(config, jobId, cwd, prompt, systemNote = null, clonePath = null
       logFile.end();
       // The run report's worker half (local-compute-report.mjs): the final message (its
       // lab-report block), the skills the stream showed it loading, and the checkout's kept folders.
+      const claudeSessionId = sessionIdFromStream(stdout) ?? chosenSessionId;
       let report = null;
       try {
         report = buildReport({
           finalMessage: typeof result.result === 'string' ? result.result : '',
-          stdout, workdir: clonePath, runRef: jobId, sessionId: held.get(jobId)?.sessionId ?? '',
+          stdout, workdir: clonePath, runRef: jobId, sessionId: held.get(jobId)?.sessionId ?? '', claudeSessionId,
         });
       } catch (err) {
         logFile.write?.(`[worker] could not read the run report: ${err.message}\n`);
@@ -930,6 +946,8 @@ function runTask(config, jobId, cwd, prompt, systemNote = null, clonePath = null
         exitCode,
         durationMs,
         report,
+        claudeSessionId,
+        settingsOverride,
       });
     };
 
@@ -1021,8 +1039,100 @@ async function complete(config, jobId, status, outcome) {
   log.ok(`recorded ${reply.status} · $${reply.costUsd} (${reply.provider})`, 1);
   if (reply.report) {
     log.info(`report: self-report ${reply.report.selfReport} · ${reply.report.runbooksUsed} runbook(s) used · ${reply.report.kept} kept`, 1);
+    if (reply.report.debrief?.state === 'skipped') log.info(`no debrief: ${reply.report.debrief.reason}`, 1);
   }
-  return true;
+  return reply;
+}
+
+// ─── The debrief (lane C) ────────────────────────────────────────────────────
+//
+// When the completion answers with a debrief request, the SAME session is resumed for one more
+// headless turn (docs/learning-loop-design.md, Stage 2): it writes one runbook folder under
+// .lab/keep/ in the checkout it worked in, or answers that nothing is worth keeping. The checkout
+// is held (no other job may reset it) until the folder is posted or the server is told the
+// session could not be resumed. The turn's bounds come from the request and are only narrowed
+// here (local-compute-report.mjs debriefArgs). In anthropic mode it runs on the smaller model.
+const DEBRIEF_MODEL = INFERENCE === 'loopback'
+  ? ANTHROPIC_MODEL
+  : (process.env.LOCAL_DEBRIEF_MODEL ?? 'claude-haiku-4-5-20251001');
+if (INFERENCE === 'anthropic' && !/sonnet|haiku/i.test(DEBRIEF_MODEL)) {
+  console.error(`LOCAL_DEBRIEF_MODEL=${DEBRIEF_MODEL} is not a Sonnet or Haiku id`);
+  process.exit(1);
+}
+
+async function postDebrief(config, jobId, body) {
+  try {
+    const res = await post(config, `/api/local-compute/jobs/${encodeURIComponent(jobId)}/debrief`, body, authHeaders(config));
+    if (!res.ok) { log.warn(`debrief not recorded: ${await describeFailure(res)}`, 1); return null; }
+    const out = await res.json();
+    const d = out.debrief ?? {};
+    log.ok(`debrief ${d.state}${d.proposalId ? ` · proposal ${d.proposalId}` : ''}${d.lint?.length ? ` · lint ${d.lint.join(', ')}` : ''}${d.problems?.length ? ` · ${d.problems[0]}` : ''}`, 1);
+    return out;
+  } catch (err) {
+    log.warn(`debrief not recorded: ${err.message}`, 1);
+    return null;
+  }
+}
+
+async function runDebrief(config, jobId, { request, claudeSessionId, workdir, settingsOverride }) {
+  log.step(`debrief: resuming session ${claudeSessionId ? claudeSessionId.slice(0, 8) : '?'}…`, 1);
+  // The folder the work turn kept was already sent with the completion; start the debrief clean
+  // so the folder it names is the one it wrote. rmSync removes a link, never what it points at.
+  try {
+    const keep = join(workdir, '.lab', 'keep');
+    if (existsSync(keep) || (() => { try { lstatSync(keep); return true; } catch { return false; } })()) rmSync(keep, { recursive: true, force: true });
+  } catch (err) { log.warn(`debrief: could not clear .lab/keep (${err.message})`, 1); }
+  const args = debriefArgs(request, { sessionId: claudeSessionId, model: DEBRIEF_MODEL, settingsOverride });
+  if (!args) {
+    await postDebrief(config, jobId, { token: request?.token, sessionUnavailable: true });
+    return;
+  }
+  const timeoutS = Math.min(Math.max(Number(request.timeoutS) || 300, 30), 1800);
+  const { CLAUDECODE: _cc, CLAUDE_CODE_ENTRYPOINT: _ep, ...childEnv } = process.env;
+  const outcome = await new Promise((resolveRun) => {
+    let stdout = '';
+    const child = spawn('claude', args, { cwd: workdir, stdio: ['ignore', 'pipe', 'pipe'], env: childEnv });
+    const timer = setTimeout(() => { try { child.kill('SIGTERM'); } catch { /* gone */ } }, timeoutS * 1000);
+    child.stdout.on('data', (b) => { if (stdout.length < 1_000_000) stdout += b.toString(); });
+    child.stderr.on('data', () => { /* the CLI's own warnings; the result object is what counts */ });
+    const done = (code) => { clearTimeout(timer); resolveRun({ code, stdout }); };
+    child.on('error', () => done(127));
+    child.on('close', (code) => done(code ?? 1));
+  });
+  let result = null;
+  for (const line of outcome.stdout.trim().split('\n').reverse()) {
+    try { const o = JSON.parse(line); if (o && o.type === 'result') { result = o; break; } } catch { /* keep looking */ }
+  }
+  const answer = debriefAnswerOf(result);
+  if (!answer && (outcome.code !== 0 || !result)) {
+    log.warn(`debrief: the session could not be resumed (exit ${outcome.code})`, 1);
+    await postDebrief(config, jobId, { token: request.token, sessionUnavailable: true });
+    return;
+  }
+  const costUsd = typeof result?.total_cost_usd === 'number' ? result.total_cost_usd : null;
+  const body = { token: request.token, answer, ...(costUsd !== null ? { costUsd } : {}) };
+  if (answer && (answer.kind === 'new' || answer.kind === 'revise')) {
+    const read = readDebriefFolder(workdir, answer.folder);
+    if (read.folder) body.folder = read.folder;
+    else if (read.problems) body.problems = read.problems;
+  }
+  await postDebrief(config, jobId, body);
+}
+
+/** One holder of a checkout at a time: a debrief keeps it until its folder is posted. */
+const checkoutLocks = new Map();
+async function holdCheckout(key, fn) {
+  if (!key) return fn();
+  const prev = checkoutLocks.get(key) ?? Promise.resolve();
+  let release;
+  const mine = new Promise((r) => { release = r; });
+  const chain = prev.then(() => mine);
+  checkoutLocks.set(key, chain);
+  await prev;
+  try { return await fn(); } finally {
+    release();
+    if (checkoutLocks.get(key) === chain) checkoutLocks.delete(key);
+  }
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -1042,6 +1152,9 @@ async function runJob(config, claim) {
       return;
     }
 
+    // The checkout is this run's from the reset in ensureRepo until its debrief (if any) is posted.
+    const lockKey = repoUrl ? `repo:${basename(String(repoUrl), '.git')}` : null;
+    await holdCheckout(lockKey, async () => {
     const { cwd, clonePath } = ensureRepo(repoUrl);
     // Skills go only into a checkout this worker owns (REPOS_DIR/<repo>), never the directory it
     // was started from, which may be the operator's home.
@@ -1063,7 +1176,16 @@ async function runJob(config, claim) {
       ? job.payload.requiresReview
       : Boolean(repoUrl);
     const status = outcome.ok ? (needsReview ? 'awaiting_review' : 'done') : 'failed';
-    await complete(config, job.id, status, outcome);
+    const reply = await complete(config, job.id, status, outcome);
+    // Lane C: a debrief runs only in a checkout this worker cloned; never in its own directory.
+    if (reply && reply.debrief) {
+      if (clonePath) {
+        await runDebrief(config, job.id, { request: reply.debrief, claudeSessionId: outcome.claudeSessionId, workdir: clonePath, settingsOverride: outcome.settingsOverride });
+      } else {
+        await postDebrief(config, job.id, { token: reply.debrief.token, sessionUnavailable: true });
+      }
+    }
+    });
   } catch (err) {
     log.err(`run failed: ${err.message}`, 1);
     await complete(config, job.id, 'failed', { ok: false, result: { error: err.message } }).catch(() => {});

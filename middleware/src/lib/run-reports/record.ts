@@ -157,7 +157,9 @@ export function normalizeWorkerPart(part: unknown): Required<WorkerReportPart> {
       kept.push({ name, proposalId, problems });
     }
   }
-  return { block, skillsLoaded: skills, kept, reportedCostUsd: money(p['reportedCostUsd']) };
+  const sid = p['claudeSessionId'];
+  const claudeSessionId = typeof sid === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(sid) ? sid : null;
+  return { block, skillsLoaded: skills, kept, reportedCostUsd: money(p['reportedCostUsd']), claudeSessionId };
 }
 
 /**
@@ -298,6 +300,7 @@ export async function recordRunEnd(input: RunEndInput, deps: RecordDeps = {}): P
       learned: self.learned,
       runbookAccounts: self.runbooks,
       debrief: null,
+      claudeSessionId: worker.claudeSessionId,
       briefId: brief?.id ?? null,
       createdAt: now(),
     };
