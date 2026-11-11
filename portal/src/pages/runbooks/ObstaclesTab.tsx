@@ -9,6 +9,7 @@ import { CollectionCommandPage } from '../../components/collections/CollectionCo
 import { useFetch } from '../../hooks/useFetch';
 import { relativeTime } from '../../lib/relativeTime';
 import { RecordLink } from '../decisions/RecordLink';
+import { useRunRows } from '../iq/runRows';
 import { runPageHref } from './runbooksModel';
 import { WINDOW_OPTIONS, obstaclesQuery, repoName, writeRunbookHref, type RecurringObstacle, type RecurringObstaclesResponse } from './obstaclesModel';
 
@@ -23,21 +24,25 @@ export default function ObstaclesTab() {
   const names = useMemo(() => new Map((Array.isArray(initiatives.data) ? initiatives.data : []).map((p) => [p.id, p.name])), [initiatives.data]);
   const where = (o: RecurringObstacle): string => (o.scope.kind === 'repo' ? repoName(o.scope.ref) : names.get(o.scope.ref) ?? o.scope.ref);
   const rows = feed.data?.obstacles ?? [];
+  // A run is named by what it was for (its job or work item), never by its ref.
+  const runs = useRunRows({ executor: '', initiative: '', outcome: '', debrief: '' }).rows;
+  const runName = (ref: string): string => runs.find((r) => r.runRef === ref)?.what ?? 'Run';
 
   const columns: DataTableColumn<RecurringObstacle>[] = [
-    { key: 'obstacle', header: 'Obstacle', render: (o) => <T size="sm" title={o.text} className="block max-w-[36rem] truncate">{o.text}</T> },
-    { key: 'where', header: 'Where', width: '176px', render: (o) => <T size="sm">{where(o)}</T> },
+    { key: 'obstacle', header: 'Obstacle', render: (o) => <T size="sm" title={o.text} className="block max-w-[26rem] truncate">{o.text}</T> },
+    { key: 'where', header: 'Where', width: '176px', priority: 4, render: (o) => <T size="sm">{where(o)}</T> },
     { key: 'runs', header: 'Runs', width: '72px', numeric: true, render: (o) => o.runs },
-    { key: 'workItems', header: 'Work items', width: '104px', numeric: true, render: (o) => o.workItems },
-    { key: 'failed', header: 'Failed', width: '80px', numeric: true, render: (o) => o.failedRuns },
-    { key: 'last', header: 'Last seen', width: '112px', numeric: true, render: (o) => relativeTime(o.lastSeen) },
-    { key: 'write', header: 'Action', width: '208px', render: (o) => (
+    { key: 'workItems', header: 'Work items', width: '104px', numeric: true, priority: 5, render: (o) => o.workItems },
+    { key: 'failed', header: 'Failed', width: '80px', numeric: true, priority: 3, render: (o) => o.failedRuns },
+    { key: 'last', header: 'Last seen', width: '112px', numeric: true, priority: 2, render: (o) => relativeTime(o.lastSeen) },
+    { key: 'write', header: 'Action', width: '176px', render: (o) => (
       <RecordLink to={writeRunbookHref(o)} data-testid="obstacle-write-runbook"><T size="sm">Write a runbook for this</T></RecordLink>
     ) },
-    { key: 'latest', header: 'Latest runs', priority: 3, render: (o) => (
-      <Inline gap="sm" wrap>
-        {o.runRefs.map((ref) => <RecordLink key={ref} to={runPageHref(ref)} data-testid="obstacle-run-link"><T size="xs" title={ref}>{ref}</T></RecordLink>)}
-      </Inline>
+    // The newest run opens from the row; the older ones open from the expanded row when the table folds its columns.
+    { key: 'latest', header: 'Latest run', width: '192px', render: (o) => (
+      <RecordLink to={runPageHref(o.runRefs[0]!)} data-testid="obstacle-run-link">
+        <T size="sm" title={o.runRefs.map(runName).join('; ')} className="block max-w-[11rem] truncate">{runName(o.runRefs[0]!)}</T>
+      </RecordLink>
     ) },
   ];
 
