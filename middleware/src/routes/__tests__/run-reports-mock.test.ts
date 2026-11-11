@@ -101,6 +101,34 @@ describe('the simulated run ends with a stored report', () => {
     expect((await getJob(jobId))!.status).toBe('failed');
   });
 
+  it('lane C: the logout run learned something, was debriefed, and its hand-written runbook is an open proposal marked demo data', async () => {
+    const { jobId, report } = await dispatch('wi-auth-e2-b3');
+    expect(report.learned).toMatch(/Domain and Path/);
+    expect(report.debrief).toMatchObject({ state: 'filed', simulated: true, proposalKind: 'new', reason: null });
+    const p = await runbookStore().getProposal(report.debrief!.proposalId!);
+    expect(p).toMatchObject({
+      kind: 'new', status: 'open', proposed_id: 'rb-logout-shim-cookie',
+      source: { kind: 'run', run_ref: jobId, work_item_id: 'wi-auth-e2-b3' },
+      // The run's repository (its frozen brief's), never the organisation.
+      proposed_scope: { kind: 'repo', ref: 'connorhoehn/orgiq-auth-service' },
+      debrief: { run_ref: jobId, answer_kind: 'new', simulated: true },
+      proposed_frontmatter_keys: ['name', 'description', 'metadata'],
+    });
+    expect(p!.lint.filter((f) => f.severity === 'error')).toEqual([]);
+    expect(p!.rationale).toContain(report.learned);
+  });
+
+  it('lane C: the cutover run followed its runbook and learned nothing; the dashboard run says why there was no debrief; the cold start failed', async () => {
+    const used = (await dispatch('wi-auth-e2-s2')).report;
+    expect(used.runbookAccounts).toEqual([{ id: 'rb-tenant-cutover', followed: 'yes', wrongStep: null, note: null }]);
+    expect(used.debrief).toMatchObject({ state: 'skipped', reason: 'nothing-learned' });
+    const dash = (await dispatch('wi-obs-e2-s3')).report;
+    expect(dash.debrief).toMatchObject({ state: 'skipped', reason: 'nothing-learned' });
+    expect(dash.debrief!.reasonText).toMatch(/nothing cost it time/);
+    const cold = (await dispatch('wi-inf-e1-b3')).report;
+    expect(cold.debrief).toMatchObject({ state: 'skipped', reason: 'not-successful' });
+  });
+
   it('reports are listed for the work item and for the initiative; a run with no report is a 404', async () => {
     const { jobId } = await dispatch('wi-obs-e2-s3');
     const byItem = await request(app()).get('/api/work-items/wi-obs-e2-s3/run-reports');

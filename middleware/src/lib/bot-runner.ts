@@ -1820,7 +1820,14 @@ async function settleSimulatedRun(input: {
   // What the run hands back (docs/learning-loop-design.md §1): a fixture keyed by the work
   // item's labels (mock/run-report-fixtures.ts) — one of them a run that stops failed.
   const { simulatedRunFixture, simulatedFinalMessage } = await import('../mock/run-report-fixtures.js');
-  const fx = simulatedRunFixture(input.item);
+  // The runbooks this run's frozen brief offered (lane D stores the offer), so the fixture can say what it did with each.
+  let given: string[] = [];
+  try {
+    const { runbookStore } = await import('./runbooks/store-select.js');
+    const { offeredFromBrief } = await import('./run-reports/record.js');
+    given = offeredFromBrief(await runbookStore().getBrief(input.jobId)).map((r) => r.id);
+  } catch { given = []; }
+  const fx = simulatedRunFixture(input.item, given);
   const failed = fx.outcome === 'failed';
 
   // job-dispatcher.ts's own result shape, minus `transcript` — there is no
@@ -1842,11 +1849,24 @@ async function settleSimulatedRun(input: {
   });
   // The run report, through the one function every executor's end goes through.
   const { recordRunEnd } = await import('./run-reports/record.js');
-  await recordRunEnd({
+  const report = await recordRunEnd({
     runRef: input.jobId, executor: 'mock', outcome: failed ? 'failed' : 'done', failureCode: fx.failureCode,
     billedUsd: SIMULATED_RESULT.costUsd, simulated: true,
     worker: { block: simulatedFinalMessage(fx), skillsLoaded: fx.skillsLoaded },
   });
+  // Lane C: the debrief, when the report earned one. The mock's turn is the hand-written folder
+  // (mock/debrief-fixtures.ts), filed through the same code a real worker's post goes through and
+  // marked as demo data all the way to the runbook version. A run with no fixture answers "none".
+  if (report?.debrief?.state === 'requested') {
+    const { settleDebrief } = await import('./runbooks/debrief-file.js');
+    const { LOGOUT_SHIM_COOKIE_ANSWER, logoutShimCookieFolder } = await import('../mock/debrief-fixtures.js');
+    const teaches = fx.key === 'teaches';
+    await settleDebrief({
+      runRef: input.jobId, simulated: true, costUsd: 0,
+      answer: teaches ? LOGOUT_SHIM_COOKIE_ANSWER : { kind: 'none', reason: 'The simulated run has no hand-written runbook to keep.' },
+      ...(teaches ? { folder: logoutShimCookieFolder() } : {}),
+    }).catch((err: unknown) => console.warn(`[bots] simulated debrief of ${input.jobId} failed:`, (err as Error).message));
+  }
 
   await updateWorkItem(input.item.id, { status: 'open' });
   await addWorkItemComment(

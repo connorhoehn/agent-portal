@@ -13,6 +13,10 @@
 //   used      a run that loaded a runbook it was given and finished well with it
 //   nothing   a run that needed nothing (the default)
 //   failed    a run that stopped before changing anything
+//
+// Lane C: each also says what it learned (`learned`, '' for nothing) and what it did with the
+// runbooks it was given (`runbooks`). Only `teaches` earns a debrief, which the mock plays from
+// the hand-written folder in mock/debrief-fixtures.ts.
 
 export interface SimulatedRunFixture {
   key: 'teaches' | 'used' | 'nothing' | 'failed';
@@ -23,6 +27,10 @@ export interface SimulatedRunFixture {
   summary: string;
   verification: Array<{ command: string; passed: boolean }>;
   obstacles: string[];
+  /** Lane C: the one sentence of what a written procedure would have saved the run ('' for nothing). */
+  learned: string;
+  /** Lane C: what the run said of each runbook it was given. */
+  runbooks: Array<{ id: string; followed: 'yes' | 'partly' | 'no'; wrongStep?: number; note?: string }>;
 }
 
 interface ItemLike { title: string; labels: readonly string[]; projectId?: string | null; type?: string | null }
@@ -35,6 +43,8 @@ const FIXTURES: Array<{ when: (w: ItemLike) => boolean; build: (w: ItemLike) => 
       summary: 'Stopped before changing anything: reproducing the cold start needs a GPU node pool that scales to zero, and the test account has none.',
       verification: [{ command: 'npm test -- cold-start', passed: false }],
       obstacles: ['The cold-start test waits for a GPU node to report ready and times out after ten minutes. There is no way round it without a node pool, so the run stopped rather than ship a fix it could not measure.'],
+      learned: 'Reproducing the cold start needs a GPU node pool that scales to zero, which the test account does not have.',
+      runbooks: [],
     }),
   },
   {
@@ -47,6 +57,8 @@ const FIXTURES: Array<{ when: (w: ItemLike) => boolean; build: (w: ItemLike) => 
         'Deleting the cookie by name alone did nothing: a browser only removes a cookie when Domain and Path match the ones it was set with. Read both from the shim\'s Set-Cookie header and matched them.',
         'The first test ran on a local origin with no parent domain, so it could not see the bug. Added a case that sets the cookie on the parent domain before logging out.',
       ],
+      learned: 'Clearing a cookie another service set takes its exact Domain and Path from that service\'s Set-Cookie header, and a test on a local origin cannot see the bug.',
+      runbooks: [],
     }),
   },
   {
@@ -56,24 +68,34 @@ const FIXTURES: Array<{ when: (w: ItemLike) => boolean; build: (w: ItemLike) => 
       summary: 'Wrote the tenant-by-tenant cutover plan with the tenant cutover runbook: sign-in checked on the shim before each tenant moves, one tenant at a time, and a rollback rehearsed on the first.',
       verification: [{ command: 'npm test', passed: true }, { command: 'npm run lint', passed: true }],
       obstacles: ['The rollback rehearsal failed on one test tenant because its SAML app had been switched off. Switched it back on for the rehearsal and added a check for it to the plan.'],
+      learned: '',
+      runbooks: [{ id: 'rb-tenant-cutover', followed: 'yes' }],
     }),
   },
 ];
 
-/** The fixture a simulated run of this work item ends with. */
-export function simulatedRunFixture(item: ItemLike): SimulatedRunFixture {
+/**
+ * The fixture a simulated run of this work item ends with. `given` is the runbooks its brief
+ * offered: a run that needed nothing says, of each, that it did not follow it (how a runbook given
+ * to runs that never use it comes up for retirement).
+ */
+export function simulatedRunFixture(item: ItemLike, given: readonly string[] = []): SimulatedRunFixture {
   for (const f of FIXTURES) if (f.when(item)) return f.build(item);
   return {
     key: 'nothing', outcome: 'done', failureCode: null, skillsLoaded: [],
     summary: `Worked "${item.title}" end to end. The change was small and followed patterns already in the repository.`,
     verification: [{ command: 'npm test', passed: true }],
     obstacles: [],
+    learned: '',
+    runbooks: given.map((id) => ({ id, followed: 'no' as const, note: 'The change did not need it.' })),
   };
 }
 
 /** The final message a worker would have written: a line of prose, then the lab-report block. */
 export function simulatedFinalMessage(f: SimulatedRunFixture): string {
-  const block = JSON.stringify({ summary: f.summary, verification: f.verification, obstacles: f.obstacles }, null, 2);
+  const block = JSON.stringify({
+    summary: f.summary, verification: f.verification, obstacles: f.obstacles, learned: f.learned, runbooks: f.runbooks,
+  }, null, 2);
   return `${f.outcome === 'failed' ? 'I could not finish this.' : 'Done.'}\n\n\`\`\`lab-report\n${block}\n\`\`\`\n`;
 }
 
@@ -87,6 +109,6 @@ export function simulatedRunTexts(): Array<{ key: string; text: string }> {
   ];
   return samples.flatMap((w) => {
     const f = simulatedRunFixture(w);
-    return [f.summary, ...f.obstacles, ...f.verification.map((v) => v.command)].map((text) => ({ key: f.key, text }));
+    return [f.summary, ...f.obstacles, ...f.verification.map((v) => v.command), ...(f.learned ? [f.learned] : [])].map((text) => ({ key: f.key, text }));
   });
 }
