@@ -939,3 +939,25 @@ Left:
 **Decided.** The pipelines "Runbooks" page is now Workflows at `/pipelines/workflows`; `/pipelines/runbooks` redirects. The API path `/api/pipelines/runbooks`, the `runbook` definition kind and the `runbook:<id>` ids stay: renaming them would move wire data and stored ids for no gain (the page's header comment says so). The runbook collision check no longer reads the session bundle: runbook ids carry the `rb-` prefix, which no bundle skill could collide with. The removed URLs are not redirected; they reach the not-found page and nothing links to them.
 
 **Left.** The Definitions page still filters by a `runbook` definition kind and the promotion helpers (`rungLabel`, `promotionVerdict`) still say "skill"; `runbooksModel.distillationRedirect` and its test stay in `pages/runbooks/` (another lane's folder). The Automate rail still frames `/admin/changes`.
+
+### Lane E1 + E2: the run page and the Runs list
+
+Built:
+
+- **Run page** (`portal/src/pages/iq/RunPage.tsx`, `/iq/runs/:id`, a `DetailPage`): Brief (the frozen text whole, no checksums), Report, Runbooks, Learned, and Steps when the façade has them. `:id` is a run ref or the façade's `job:<ref>`. A run with `selfReport` missing or malformed says "This run did not report". "Demo data" shows for `simulated` runs. The local job page has an "Open run report" button.
+- **Runs list** (`portal/src/pages/iq/RunsPage.tsx`): one list for every executor from the new `GET /api/run-reports?executor=&initiative=&outcome=&debrief=&cursor=&limit=` (`middleware/src/routes/run-reports.ts`; filtering lives in `filterReports`, shared by both stores). Names come from `/api/work/jobs`, `/api/runs` (a bot's name) and the initiatives list.
+- **Merged in**: Automate's queue entry and page read "Queue" and a new Runs entry links to `/iq/runs?executor=fleet`; Local compute's rail Runs links to `?executor=local`; the initiative's Agents runs view has "All runs for this initiative"; Local compute's runs view has "Open in Runs".
+- **Journey**: `scripts/journeys/learning-loop-runs.mjs` (acceptance 1, 5, 7, 8, a run that did not report, the list and its filters, the merge-ins).
+
+Decided where the spec was silent:
+
+- The journey's runs come from the real local worker with a stub `claude`, not from the mock's dispatch. On `dev:mock` a marketplace dispatch takes the governed path against the fake microVM (a report with no worker summary), and the hand-written fixtures play only when no devbox runtime resolves, so acceptance 1, 5, 7 and 8 are not reachable in a browser through a dispatch.
+- Executor words: fleet is "Queue", local "Your machine", governed and mock "Bot", microVM "MicroVM"; a bot job shows the bot's name. The debriefed filter offers filed, skipped, not asked; the API also accepts any debrief state.
+- The list reads the newest 200 runs and says so when there are more; there is no paging control yet.
+- The initiative's runs view keeps its spend table and gains a link rather than losing the table.
+
+Left:
+
+- The mock's fixtures are unreachable from a browser dispatch (above); making the fake microVM's final message carry a fixture report would make the Demo data path walkable. Not done: middleware behaviour.
+- The Demo data mark and the Runs filters are covered by unit tests and the URL-driven journey only; no browser walk reaches a simulated run.
+- The microVM executor has no run in the mock, so the MicroVM filter is untested in a browser.
