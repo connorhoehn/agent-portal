@@ -54,8 +54,12 @@ export async function newProposalScope(p: RunbookProposal): Promise<RunbookScope
 export async function reviewScopeOf(s: RunbookStore, p: RunbookProposal): Promise<{ scope: RunbookScope; owner: string | null; area: string | null } | null> {
   if (p.kind === 'new') {
     // A new proposal that already carries a scope (a run's) is judged against it, like the accept route does.
-    const scope = p.proposed_scope ?? await newProposalScope(p);
-    return { scope, owner: null, area: await proposalArea(p) };
+    const area = await proposalArea(p);
+    let scope = p.proposed_scope ?? await newProposalScope(p);
+    // A person's requested initiative is not their area unless the work item proves it: the accept
+    // route refuses a steward there, so the stewards of a merely requested initiative are not reviewers.
+    if (p.source.kind === 'person' && scope.kind === 'initiative' && scope.ref !== area) scope = { kind: 'org', ref: null };
+    return { scope, owner: null, area };
   }
   const target: Runbook | null = p.runbook_id ? await s.getRunbook(p.runbook_id) : null;
   return target ? { scope: target.scope, owner: target.owner_person_id, area: target.area ?? null } : null;

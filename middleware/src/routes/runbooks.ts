@@ -748,7 +748,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
       if (asked && !scopeEquals(asked, peek.proposed_scope)) {
         if (body['widen_scope'] !== true) {
           res.status(409).json({
-            error: `this runbook came from a run and is scoped to ${peek.proposed_scope.kind} ${peek.proposed_scope.ref ?? ''}`.trim() + '; confirm the wider scope with `widen_scope: true`',
+            error: `this runbook ${peek.source.kind === 'run' ? 'came from a run and is scoped' : 'was proposed for'} ${peek.source.kind === 'run' ? 'to ' : ''}${peek.proposed_scope.kind} ${peek.proposed_scope.ref ?? ''}`.trim() + '; confirm the different scope with `widen_scope: true`',
             code: 'WIDEN_UNCONFIRMED', proposed_scope: peek.proposed_scope,
           });
           return;
