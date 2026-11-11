@@ -44,7 +44,7 @@ export function useActiveRuns(): { runs: DispatchedRun[]; items: DropdownMenuIte
   const navigate = useNavigate();
   // Where a run leads depends on what the caller may open. ManageDevbox is
   // held by hr-admin and sme — NOT by org-leader, who can still dispatch. A
-  // link to /admin/devbox for that role hits RequireRole and bounces to
+  // link to /iq/computers for that role hits RequireRole and bounces to
   // /workspaces, which is exactly the dead end this widget exists to remove.
   const { can } = useCapabilities();
   const mayOpenLab = can('ManageDevbox');

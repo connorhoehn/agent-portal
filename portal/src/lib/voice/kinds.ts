@@ -345,7 +345,7 @@ const ORGIQ: readonly KindSpec[] = [
   {
     kind: 'computer', label: 'computers', action: 'ManageDevbox', readRoles: FLEET_READERS,
     list: { path: '/api/devbox/boxes', key: 'boxes' },
-    title: ['label', 'name', 'id'], subtitle: ['project', 'orgProjectName'], href: (id) => `/admin/devbox?box=${enc(id)}`,
+    title: ['label', 'name', 'id'], subtitle: ['project', 'orgProjectName'], href: (id) => `/iq/computers?computer=${enc(id)}`,
   },
   {
     // ManageEnvironments is not one of the portal's can() actions: the read tier alone opens it here; the route decides the rest.

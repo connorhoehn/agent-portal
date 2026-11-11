@@ -284,7 +284,7 @@ test('start_computer: the card lists every initiative with the idle-billing note
   const rows = result.output['rows'] as Array<Record<string, unknown>>;
   assert.deepEqual(rows.map((r) => [r['initiative'], r['computerId'], r['state'], r['reused'] ?? false]),
     [['Beta', 'new-1', 'provisioning', false], ['Gamma rollout', 'new-2', 'provisioning', false], ['Alpha', 'c-alpha', 'running', true]]);
-  assert.equal(result.output['lab'], '/admin/devbox', 'the boxes appear where open_computer_lab goes');
+  assert.equal(result.output['lab'], '/iq/computers', 'the boxes appear where open_computer_lab goes');
   assert.deepEqual(toasts, ['pending:Starting 2 computers', 'success:Started 2; 1 already running']);
 });
 
@@ -365,7 +365,7 @@ test('computer hand-work: the user\'s own machine and an item from the page\'s p
   const { card, result } = await confirmAndRun('computer', { action: 'hand-work', machine: 'macbook', job: 'login redirect' }, ctx);
   assert.deepEqual(card, { title: 'Hand "Fix the login redirect" to my-macbook', detail: 'Your machine runs the work item with its own login; a run that changes a repo waits for your review.' });
   assert.equal(result.outcome, 'done');
-  assert.equal(result.output['href'], '/iq/local-compute?machine=n-1');
+  assert.equal(result.output['href'], '/iq/computers?computer=local%3An-1');
   const posts = log.filter((l) => l.method === 'POST');
   assert.deepEqual(posts.map((p) => [p.url, p.body]), [['/api/local-compute/nodes/n-1/work', { workItemId: 'w-login', requiresReview: true }]]);
   assert.ok(!log.some((l) => l.url === '/api/bots'), 'bots are offered only with ManageBots');

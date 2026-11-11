@@ -57,7 +57,7 @@ export function dispatchedRunDestination(
   mayOpenLab: boolean,
 ): { path: string; kind: 'computer' | 'work-item' | 'list' } {
   const boxId = run.outcome?.boxId;
-  if (mayOpenLab && boxId) return { path: `/admin/devbox?box=${encodeURIComponent(boxId)}`, kind: 'computer' };
+  if (mayOpenLab && boxId) return { path: `/iq/computers?computer=${encodeURIComponent(boxId)}`, kind: 'computer' };
   if (run.projectId && run.workItemId) {
     return {
       path: `/iq/projects/${encodeURIComponent(run.projectId)}?item=${encodeURIComponent(run.workItemId)}`,

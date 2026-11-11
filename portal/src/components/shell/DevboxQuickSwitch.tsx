@@ -43,7 +43,7 @@ export function DevboxQuickSwitch({ onScopeChange }: DevboxQuickSwitchProps) {
   const [busy, setBusy] = useState(false);
 
   const go = useCallback((box: Computer) => {
-    navigate(`/admin/devbox?box=${box.id}`);
+    navigate(`/iq/computers?computer=${box.id}`);
   }, [navigate]);
 
   const provision = useCallback(async () => {
@@ -111,7 +111,7 @@ export function DevboxQuickSwitch({ onScopeChange }: DevboxQuickSwitchProps) {
     hint: 'or use + New computer above',
     group: 'Devbox',
     when: () => canManage && !error && !isLoading && boxes.length === 0,
-    run: () => navigate('/admin/devbox'),
+    run: () => navigate('/iq/computers'),
   }), [canManage, error, isLoading, boxes.length, navigate]));
 
   return (

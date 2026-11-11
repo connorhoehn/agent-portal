@@ -362,7 +362,7 @@ function JobDetailContent() {
       <PageHeader title={job.title} badge={<JobStatusPill status={job.status} />}
         description={`${job.botName ? `${job.botTrigger === 'cron' ? 'Scheduled' : 'Dispatched'} by ${job.botName}` : `Queued by ${job.createdBy ?? 'unknown'}`} · Attempt ${job.attempts} of ${job.maxAttempts}`}
         actions={<Inline gap="sm">
-          {job.boxId && canOpenWorker && <Button size="sm" variant="secondary" onClick={() => navigate(`/admin/devbox?box=${encodeURIComponent(job.boxId!)}`)}>Open computer ↗</Button>}
+          {job.boxId && canOpenWorker && <Button size="sm" variant="secondary" onClick={() => navigate(`/iq/computers?computer=${encodeURIComponent(job.boxId!)}`)}>Open computer ↗</Button>}
           {typeof job.payload.initiativeId === 'string' && <Button size="sm" variant="secondary" onClick={() => navigate(`/iq/projects/${encodeURIComponent(String(job.payload.initiativeId))}${typeof job.payload.workItemId === 'string' ? `?${new URLSearchParams({ tab: 'work', item: job.payload.workItemId })}` : ''}`)}>{typeof job.payload.workItemId === 'string' ? 'Open work item' : 'Open initiative'} ↗</Button>}
           {canOpenAutomation && !LIVE_STATUSES.has(job.status) && job.status !== 'queued' && <Button size="sm" variant="secondary" data-testid="job-run-report-link" onClick={() => navigate(`/iq/runs/${encodeURIComponent(job.id)}`)}>Open run report ↗</Button>}
           {job.botId && canOpenAutomation && <Button size="sm" variant="secondary" onClick={() => navigate(`/admin/bots/${encodeURIComponent(job.botId!)}`)}>Open automation ↗</Button>}
@@ -401,7 +401,7 @@ function JobDetailContent() {
             <KeyValue mono label="Run ID" value={job.id} /><KeyValue mono label="Kind" value={job.kind} />
             <KeyValue label="Priority" value={String(job.priority)} />
             <KeyValue mono label="Session" value={job.sessionId ?? '—'} />
-            {job.boxId && (canOpenWorker ? <Link to={`/admin/devbox?box=${encodeURIComponent(job.boxId)}`} className="text-primary text-sm hover:underline">Worker {job.boxId} ↗</Link> : <KeyValue label="Worker" value={job.boxId} />)}
+            {job.boxId && (canOpenWorker ? <Link to={`/iq/computers?computer=${encodeURIComponent(job.boxId)}`} className="text-primary text-sm hover:underline">Worker {job.boxId} ↗</Link> : <KeyValue label="Worker" value={job.boxId} />)}
             {typeof job.payload.findingId === 'string' && <Link to="/iq/work/findings" className="text-primary text-sm hover:underline">Source finding: {job.payload.findingId}</Link>}
           </Stack>
         </PageSection>

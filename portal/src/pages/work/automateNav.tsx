@@ -31,7 +31,7 @@ const BOTS_ITEM: SubNavItem = { path: '/admin/bots', label: 'Automations' };
  *  (and Cedar's ManageBots). Exported so QueuePulse's roster rows link into
  *  a bot's own page for exactly the roles that can actually open it. */
 export const BOTS_ROLES = ['hr-admin', 'sme', 'program-owner', 'org-leader', 'admin'];
-/** Roles that reach the Computer Lab — mirrors the /admin/devbox route gate
+/** Roles that reach the Computer Lab — mirrors the /iq/computers route gate
  *  (App.tsx). A member's role isn't in this list, so the Overview page's
  *  inline "Computer Lab" mention must not render as a link for them — the
  *  route redirects a member straight back to /iq/projects with no

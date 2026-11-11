@@ -91,8 +91,8 @@ export const OUTPUT_LINES_KEPT = 400;
 export const COMMAND_TIMEOUT_MS = 150_000;
 /** How long a delivered message suppresses an identical retry. */
 export const DELIVERY_MEMORY_MS = 10 * 60_000;
-/** The lab's path: open { page: 'computer-lab' } opens it and computer start's boxes appear in it. */
-export const LAB_PATH = '/admin/devbox';
+/** The lab's path: open { page: 'computers' } opens it and computer start's boxes appear in it. */
+export const LAB_PATH = '/iq/computers';
 
 // ── the phrase table (§6: the model picks the phrase, the dock owns the text) ──
 
@@ -389,7 +389,7 @@ const runHandWork: VoiceToolRunner = async (_args, ctx, planned) => {
   if (!plan?.nodeId) return refused('Work is handed to a machine only after the user confirms its card.');
   const url = `${NODES_URL}/${encodeURIComponent(plan.nodeId)}/work`;
   const body = { ...plan.origin, requiresReview: true };
-  const href = `/iq/local-compute?${qs({ machine: plan.nodeId })}`;
+  const href = `/iq/computers?${qs({ computer: `local:${plan.nodeId}` })}`;
   return once(ctx, `POST ${url} ${JSON.stringify(body)}`, async () => {
     let res: Response;
     try {

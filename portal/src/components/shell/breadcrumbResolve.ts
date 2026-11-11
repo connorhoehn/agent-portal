@@ -150,7 +150,7 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
         if (!b) return [...home, { label: 'Library' }];
         return [...home, { label: 'Library', path: '/iq/runbooks' }, { label: shortId(b), id: b }];
       }
-      case 'local-compute': return [{ label: 'Build' }, { label: 'Local compute' }];
+      case 'computers': return [{ label: 'Build' }, { label: 'Computers' }];
       default:
         if (a && PROMPT_PAGES[a]) {
           return [{ label: 'Build' }, { label: 'Agent library', path: '/iq/library' }, { label: 'Prompts', path: '/iq/prompt-ops' }, { label: PROMPT_PAGES[a] }];

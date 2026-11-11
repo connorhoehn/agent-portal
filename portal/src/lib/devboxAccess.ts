@@ -28,5 +28,6 @@ export function canOpenComputerLab(
 }
 
 /** Where "Open Computer Lab" should actually land for this session. */
-export const COMPUTER_LAB_PATH = '/admin/devbox';
-export const LOCAL_COMPUTE_PATH = '/iq/local-compute';
+export const COMPUTER_LAB_PATH = '/iq/computers';
+// Paired machines and lab machines share one page (lane E5), so both names point at it.
+export const LOCAL_COMPUTE_PATH = '/iq/computers';

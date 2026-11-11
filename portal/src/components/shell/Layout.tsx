@@ -135,7 +135,8 @@ const NAV_ITEMS: NavItem[] = [
   // what it LEARNED — procedures a person can read, that a booted box receives.
   { path: '/iq/runbooks', label: 'Runbooks', tenant: 'orgiq',   group: 'Build' },
   { path: '/iq/library', label: 'Agent library', tenant: 'orgiq', group: 'Build' },
-  { path: '/iq/local-compute', label: 'Local compute', tenant: 'orgiq', group: 'Build' },
+  // One door for every computer an agent can work on: the paired machines and the lab's (lane E5).
+  { path: '/iq/computers', label: 'Computers', tenant: 'orgiq', group: 'Build' },
   { path: '/iq/search',     label: 'Search',         tenant: 'orgiq',     group: 'Engage' },
   // Communication: the Social plane embedded in orgiq, with the call log as its Calls shelf. Every orgiq role
   // (Social reads gate on the Social grant at the BFF; no grant → the plane's own denied state).
@@ -252,20 +253,6 @@ const PLATFORM_ITEMS: NavItem[] = [
   // epics, features, the people who own them. This is the code that delivers them.
   // Session configuration lives beneath Local compute, not in a separate
   // Release group. Change review lives under Automate.
-  // 'Computers', not 'Devbox': the page is a fleet of microVMs agents work in,
-  // and the top-level menu reads as a place, not a single box.
-  //
-  // Open to every role that directs agent work, not just the two that
-  // administer it: an SME spends an envelope by assigning computers, a program
-  // owner runs the cadence those computers serve, and an org-leader funds it.
-  // If you can dispatch work onto the fleet you can see the fleet. The list
-  // each of them gets is scoped server-side to their own computers plus the
-  // ones shared on their initiatives (middleware lib/devbox-visibility.ts), so
-  // this is a door, not a key.
-  { path: '/admin/devbox',          label: 'Computer Lab',    tenant: 'admin', requireRoles: ['hr-admin', 'sme', 'org-leader', 'program-owner'], group: 'Build' }, // ManageDevbox + the /api/devbox read tier
-  // After Computer Lab so the two machine doors (Local compute — your own
-  // paired laptop; Computer Lab — the microVM fleet) sit together rather than
-  // with the repos wedged between them.
   { path: '/admin/projects',        label: 'Codebases',       tenant: 'admin', requireRoles: ['hr-admin'], group: 'Build' },
   // OPERATE — platform + ops.
   { path: '/admin/observability',   label: 'Observability',   tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'], group: 'Operate' },

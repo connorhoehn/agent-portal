@@ -59,14 +59,14 @@ export function FleetIndicator({ compact = false }: { compact?: boolean } = {}) 
   }
   if (labReadable) {
     fleetItems.push({
-      label: 'Cloud computers', description: 'Open Computer Lab',
+      label: 'Lab machines', description: 'Open Computers',
       icon: <CloudIcon size={14} aria-hidden="true" />, trailing: String(cloudCount),
       onSelect: () => navigate(COMPUTER_LAB_PATH),
     });
   }
   if (localReadable) {
     fleetItems.push({
-      label: 'Local computers', description: 'Your paired machines',
+      label: 'Your machines', description: 'Your paired machines',
       icon: <MonitorIcon size={14} aria-hidden="true" />, trailing: String(nodes.length),
       onSelect: () => navigate(LOCAL_COMPUTE_PATH),
     });

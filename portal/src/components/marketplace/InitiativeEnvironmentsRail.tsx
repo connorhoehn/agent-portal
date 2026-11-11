@@ -172,7 +172,7 @@ function EnvironmentRow({ env }: { env: Environment }) {
               <CodeBlock code={entryCommand(env, access)} language="bash" />
               <Stack gap="none">
                 <Link
-                  to="/admin/devbox"
+                  to="/iq/computers"
                   className="text-primary no-underline hover:underline text-xs"
                   title="Open the Computer Lab — run the command from a microVM"
                 >

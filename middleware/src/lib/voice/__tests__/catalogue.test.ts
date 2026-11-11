@@ -174,12 +174,12 @@ describe('tenant scoping (§6)', () => {
     const pages = (tenant: string, role?: string) => (toolsForTenant(tenant, role ? { role } : {}).find((t) => t.name === 'open')!.parameters.properties['page'] as { enum: string[] }).enum;
     expect(pages('social')).toEqual(expect.arrayContaining(['channels', 'contacts', 'teams', 'settings', 'workspaces']));
     expect(pages('social')).not.toContain('search');
-    expect(pages('orgiq')).toEqual(expect.arrayContaining(['search', 'initiatives', 'computer-lab', 'bots', 'workspaces']));
+    expect(pages('orgiq')).toEqual(expect.arrayContaining(['search', 'initiatives', 'computers', 'bots', 'workspaces']));
     expect(pages('orgiq', 'member')).not.toContain('bots');
-    expect(pages('orgiq', 'member')).not.toContain('computer-lab');
-    expect(pages('orgiq', 'sme')).toEqual(expect.arrayContaining(['bots', 'computer-lab']));
+    expect(pages('orgiq', 'member')).toContain('computers');
+    expect(pages('orgiq', 'sme')).toEqual(expect.arrayContaining(['bots', 'computers']));
     expect(pages('orgiq', 'admin')).toEqual(pages('orgiq'));
-    expect(NAVIGATE_PAGES.length).toBe(108);
+    expect(NAVIGATE_PAGES.length).toBe(107);
     for (const p of NAVIGATE_PAGES) expect(p.path.startsWith('/')).toBe(true);
     for (const tenant of VOICE_TENANTS) expect(new Set(pages(tenant)).size).toBe(pages(tenant).length);
   });

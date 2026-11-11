@@ -17,7 +17,7 @@ const run = (over: Partial<DispatchedRun> = {}): DispatchedRun => ({
 });
 
 test('a lab holder goes to the computer doing the work', () => {
-  assert.deepEqual(dispatchedRunDestination(run(), true), { path: '/admin/devbox?box=box%201', kind: 'computer' });
+  assert.deepEqual(dispatchedRunDestination(run(), true), { path: '/iq/computers?computer=box%201', kind: 'computer' });
 });
 
 test('everyone else goes to the work item on its initiative', () => {

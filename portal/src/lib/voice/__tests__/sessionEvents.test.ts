@@ -142,7 +142,7 @@ test('a call\'s shape tells calls of one tool apart, with no argument text, name
   assert.deepEqual(argShape('list', { kind: 'work-item', scope: 'this-page', filter: { q: 'login', status: 'open', scope: 'mine' } }), { kind: 'work-item', scope: 'this-page', filterScope: 'mine', filteredBy: 'q,status' });
   assert.deepEqual(argShape('get', { ref: 'initiative:p-secret-12', part: 'work' }), { part: 'work', refKind: 'initiative' });
   assert.deepEqual(argShape('open', { ref: '2', scope: 'this-page' }), { scope: 'this-page', refKind: 'position' });
-  assert.deepEqual(argShape('open', { page: 'computer-lab' }), { page: 'computer-lab' });
+  assert.deepEqual(argShape('open', { page: 'computers' }), { page: 'computers' });
   assert.deepEqual(argShape('open', { kind: 'initiative', name: 'Payments' }), { kind: 'initiative', byName: true });
   assert.deepEqual(argShape('search', { query: 'Kubernetes experts', scope: 'p-auth', type: 'person' }), { type: 'person', scope: 'initiative' });
   assert.deepEqual(argShape('budget', { scope: 'initiative', initiative: 'Payments' }), { scope: 'initiative' });

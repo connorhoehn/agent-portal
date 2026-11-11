@@ -10,7 +10,7 @@ const PAGES = PALETTE.pages;
 const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 test('every PAGES row has a kebab-case pageId', () => {
-  assert.equal(PAGES.length, 107);
+  assert.equal(PAGES.length, 106);
   for (const p of PAGES) {
     assert.ok(p.pageId, `${p.tenant} ${p.path} has no pageId`);
     assert.match(p.pageId!, KEBAB, `${p.tenant} ${p.path}`);
@@ -29,5 +29,5 @@ test('pageIds are unique within each tenant', () => {
 test('the full id table (tenant: id → path)', () => {
   const table = PAGES.map((p) => `${p.tenant}: ${p.pageId} → ${p.path}`).sort();
   console.log(`\n${table.join('\n')}\n`);
-  assert.equal(new Set(table).size, 107);
+  assert.equal(new Set(table).size, 106);
 });

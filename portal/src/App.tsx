@@ -6,6 +6,7 @@ import { RouteErrorBoundary } from './components/shell/RouteErrorBoundary';
 import { useSession } from './lib/auth';
 import { ACCESS_ENABLED, ASSESSMENT_ENABLED, PIPELINES_ENABLED, SOCIAL_ENABLED, features, tenantEnabled } from './lib/features';
 import { CHOOSER, resolveHome, tenantHome } from './lib/tenantHome';
+import { computersRedirect } from './pages/computers/computersModel';
 import type { Tenant } from './lib/tenants.generated';
 import { OptionalGatewayProvider } from './components/OptionalGatewayProvider';
 import { SharedNotificationsProvider } from './components/shell/SharedNotifications';
@@ -93,7 +94,6 @@ const KnowledgeLayout = lazy(() => import('./pages/knowledge/KnowledgeLayout'));
 const DropPage = lazy(() => import('./pages/DropPage'));
 const SelectContextPage = lazy(() => import('./pages/SelectContextPage'));
 const KBRegistryPage = lazy(() => import('./pages/admin/KBRegistryPage.js'));
-const DevboxPage = lazy(() => import('./pages/admin/DevboxPage'));
 const AgentProjectsPage = lazy(() => import('./pages/admin/AgentProjectsPage'));
 const BotsPage = lazy(() => import('./pages/bots/BotsPage'));
 const BudgetsPage = lazy(() => import('./pages/budgets/BudgetsPage'));
@@ -118,7 +118,7 @@ const RunbooksProposalsTab = lazy(() => import('./pages/runbooks/ProposalsTab'))
 const WorkFindingsPage = lazy(() => import('./pages/work/FindingsPage'));
 const JobDetailPage = lazy(() => import('./pages/work/JobDetailPage'));
 const GraphChangesPage = lazy(() => import('./pages/work/GraphChangesPage'));
-const LocalComputePage = lazy(() => import('./pages/local-compute/LocalComputePage'));
+const ComputersPage = lazy(() => import('./pages/computers/ComputersPage'));
 const DiffPage = lazy(() => import('./pages/iq/DiffPage'));
 const EvaluationsPage = lazy(() => import('./pages/iq/EvaluationsPage'));
 
@@ -203,6 +203,12 @@ function KbDetailRedirect() {
 function LegacyDecisionRedirect() {
   const { id } = useParams();
   return <Navigate to={`/iq/decisions/${id ?? ''}`} replace />;
+}
+
+/** The two old computer pages, and their query strings, land on the one Computers page. */
+function ComputersRedirect() {
+  const { search } = useLocation();
+  return <Navigate to={computersRedirect(search)} replace />;
 }
 
 function LegacyWorkspaceRedirect() {
@@ -621,7 +627,10 @@ export function App() {
             <Route path="proposals/:pid" element={<Page element={<RunbooksProposalsTab />} />} />
             <Route path=":id" element={<Page element={<RunbooksLibraryTab />} />} />
           </Route>
-          <Route path="local-compute" element={<Page element={<LocalComputePage />} />} />
+          {/* Computers: paired machines and lab machines in one list (learning loop, lane E5). The two
+              old pages redirect here; /admin/devbox is the other one (below). */}
+          <Route path="computers" element={<Page element={<ComputersPage />} />} />
+          <Route path="local-compute" element={<ComputersRedirect />} />
           <Route path="designs" element={<Page element={<DesignsPage />} />} />
           <Route path="designs/:id" element={<Page element={<DesignsPage />} />} />
           <Route path="work" element={<Page element={<WorkHomePage />} />} />
@@ -740,27 +749,9 @@ export function App() {
               <Page element={<ChangeReviewPage />} />
             </Gate>
           } />
-          {/* Computers is also an `sme` surface: the role spends a sprint
-              envelope by assigning computers to work, and is the one that has
-              to get into a cluster and run a command. The fleet an SME sees is
-              scoped server-side to their own computers plus the ones shared on
-              their initiatives (middleware lib/devbox-visibility.ts), so this
-              opens a door rather than handing over a key. */}
-          {/* Matches the /api/devbox mount in middleware/src/index.ts, which
-              serves a READ tier (org-leader, hr-admin, program-owner) on top
-              of ManageDevbox (sme, hr-admin). This gate used to be hr-admin +
-              sme only, which bounced org-leader and program-owner to
-              HomeRedirect before the page could render — including org-leader,
-              which devbox-visibility.ts treats as FLEET_WIDE and shows every
-              computer. DevboxPage was already built for the wider audience
-              (`FLEET_READ_ROLES` + a read-only mode for anyone without the
-              write capability); that fix just sat one layer below a door that
-              never opened. Writes are still refused by the API. */}
-          <Route path="devbox" element={
-            <Gate roles={['hr-admin', 'sme', 'org-leader', 'program-owner']}>
-              <Page element={<DevboxPage />} />
-            </Gate>
-          } />
+          {/* The Computer Lab is one page with Local compute now: /iq/computers (lane E5). Old links
+              (`?box=` from a work item's chip, `?machine=` from a voice link) keep working. */}
+          <Route path="devbox" element={<ComputersRedirect />} />
 
           <Route path="ingest" element={
             <Gate roles={['hr-admin']}>

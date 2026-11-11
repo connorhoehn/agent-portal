@@ -19,9 +19,9 @@ import {
   canOpenComputerLab,
 } from '../devboxAccess.ts';
 
-test('the two destinations are different pages', () => {
-  assert.notEqual(COMPUTER_LAB_PATH, LOCAL_COMPUTE_PATH);
-  assert.equal(COMPUTER_LAB_PATH, '/admin/devbox');
+test('both destinations are the one Computers page', () => {
+  assert.equal(COMPUTER_LAB_PATH, LOCAL_COMPUTE_PATH);
+  assert.equal(COMPUTER_LAB_PATH, '/iq/computers');
 });
 
 test('the write capability opens the Lab whatever the role', () => {

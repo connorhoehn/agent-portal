@@ -10,7 +10,7 @@ const P3_REFUSALS: Array<{ tool: string; args: Record<string, unknown>; ctx: Par
   { tool: 'search', args: { query: 'auth migration', type: 'decision', answer: true }, ctx: { deny: ['Search'] } },
   { tool: 'search', args: { query: 'who approved it', answer: true }, ctx: { tenant: 'access', deny: ['ViewAccess'] } },
   { tool: 'open', args: { page: 'bots' }, ctx: { role: 'member' } },
-  { tool: 'open', args: { page: 'computer-lab' }, ctx: { tenant: 'social' } },
+  { tool: 'open', args: { page: 'computers' }, ctx: { tenant: 'social' } },
   { tool: 'open', args: { ref: 'bot:b1' }, ctx: { role: 'member', deny: ['ManageBots'] } },
   { tool: 'open', args: { kind: 'initiative' }, ctx: {} },
   { tool: 'open', args: { page: 'search', ref: '1' }, ctx: {} },
@@ -340,20 +340,20 @@ test('get reads a kept row by ordinal or a typed ref: its summary with withheld 
   assert.equal((await runVoiceTool('get', { ref: 'request:r1' }, c)).outcome, 'refused');
 });
 
-test('open { page: computer-lab } opens the lab; open { kind: computer, name } opens the initiative\'s running computer on it', async () => {
+test('open { page: computers } opens the Computers page; open { kind: computer, name } opens the initiative\'s running computer on it', async () => {
   const c = toolContext();
-  const r = await runVoiceTool('open', { page: 'computer-lab' }, c);
+  const r = await runVoiceTool('open', { page: 'computers' }, c);
   assert.equal(r.outcome, 'done');
-  assert.deepEqual(c.navigations, ['/admin/devbox'], 'the lab that lists and starts computers, not /iq/local-compute');
+  assert.deepEqual(c.navigations, ['/iq/computers'], 'the one page that lists and starts computers');
   const { fetch } = fakeFetch([route('GET', '/api/devbox/boxes', 200, { boxes: [
     { id: 'c-idle', label: 'alpha-1', project: 'Alpha', status: 'idle' }, { id: 'c-run', label: 'alpha-2', project: 'Alpha', status: 'running' },
     { id: 'c-beta', label: 'beta-1', project: 'Beta', status: 'running' },
   ] })]);
   const focus = toolContext({ fetch, role: 'sme' });
   await runVoiceTool('open', { kind: 'computer', name: 'alpha' }, focus);
-  assert.deepEqual(focus.navigations, ['/admin/devbox?box=c-run']);
-  const member = await runVoiceTool('open', { page: 'computer-lab' }, toolContext({ role: 'member' }));
-  assert.equal(member.outcome, 'refused', 'the lab route\'s roles');
+  assert.deepEqual(focus.navigations, ['/iq/computers?computer=c-run']);
+  const member = await runVoiceTool('open', { page: 'computers' }, toolContext({ role: 'member' }));
+  assert.equal(member.outcome, 'done', 'every orgiq role may open Computers: a paired machine is theirs, the lab list follows the lab\'s own read gate');
 });
 
 test('open { kind, name }: one match opens in one step, two are a numbered choice kept for "the second one", none points at the nearest page', async () => {

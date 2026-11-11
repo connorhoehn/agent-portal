@@ -14,10 +14,8 @@ test('run deep links select Runs without lighting Inbox or adjacent work views',
   assert.deepEqual(resolveBreadcrumbs('/iq/work/job-123').map((c) => c.label), ['Build', 'Automate', 'Queue', 'Run job-123']);
 });
 
-test('local compute menu follows view while preserving deeper selection', () => {
-  assert.equal(isBuildNavActive('/iq/local-compute?view=machines', '/iq/local-compute', '?machine=node-1'), true);
-  assert.equal(isBuildNavActive('/iq/local-compute?view=runs', '/iq/local-compute', '?view=runs&run=job-123'), true);
-  assert.equal(isBuildNavActive('/iq/local-compute?view=machines', '/iq/local-compute', '?view=runs'), false);
+test('the computers menu keeps its row lit while a computer is selected', () => {
+  assert.equal(isBuildNavActive('/iq/computers', '/iq/computers', '?computer=local%3Anode-1'), true);
   assert.equal(isBuildNavActive('/admin/bots', '/admin/bots/bot-1'), true);
 });
 

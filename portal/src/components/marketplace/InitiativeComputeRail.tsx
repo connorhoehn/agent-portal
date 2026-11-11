@@ -55,7 +55,7 @@ export function ComputersRailCard({ initiativeId }: { initiativeId: string | und
                   />
                 )}
                 <Link
-                  to={`/admin/devbox?box=${encodeURIComponent(c.id)}`}
+                  to={`/iq/computers?computer=${encodeURIComponent(c.id)}`}
                   className="text-primary no-underline hover:underline text-xs whitespace-nowrap"
                   title="Open this computer in the Lab"
                 >

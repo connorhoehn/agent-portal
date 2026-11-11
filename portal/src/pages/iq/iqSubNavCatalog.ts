@@ -86,9 +86,9 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
   if (pathname.startsWith('/iq/work')) return automateSpec;
 
   if (pathname.startsWith('/iq/library')) return null; // The catalog owns its stacked menu.
-  if (pathname.startsWith('/iq/local-compute')) return {
-    title: 'Local compute', storageKey: 'local-compute-nav', items: [
-      { path: '/iq/local-compute?view=machines', label: 'Machines' },
+  if (pathname.startsWith('/iq/computers')) return {
+    title: 'Computers', storageKey: 'computers-nav', items: [
+      { path: '/iq/computers', label: 'Computers' },
       { path: '/iq/runs?executor=local', label: 'Runs' },
     ],
   };

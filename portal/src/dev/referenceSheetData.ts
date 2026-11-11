@@ -17,7 +17,7 @@ export const PRIMARY_NAV: SubNavItem[] = [
   { path: '/iq/work', label: 'Automate', group: 'Build', activity: { label: '2 running' } },
   { path: '/iq/runbooks', label: 'Runbooks', group: 'Build' },
   { path: '/iq/library', label: 'Agent library', group: 'Build' },
-  { path: '/iq/local-compute', label: 'Local compute', group: 'Build' },
+  { path: '/iq/computers', label: 'Computers', group: 'Build' },
   { path: '/iq/search', label: 'Search', group: 'Engage' },
   { path: '/iq/communication', label: 'Communication', group: 'Engage' },
   { path: '/settings', label: 'Settings', group: 'System' },

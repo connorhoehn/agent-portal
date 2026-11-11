@@ -7,10 +7,10 @@ import { resolveBreadcrumbs } from '../breadcrumbResolve.ts';
 // header rhythm (title 16px under the trail) breaks on that page alone.
 const RAIL_PATHS = [
   '/iq/projects', '/iq/projects/p-observability', '/iq/sprints', '/iq/work', '/iq/work/findings', '/iq/work/queue',
-  '/iq/runbooks', '/iq/runbooks/proposals', '/iq/runbooks/rb-tenant-cutover', '/iq/local-compute', '/iq/invoke', '/iq/explore', '/iq/scores', '/iq/scores/cohorts',
+  '/iq/runbooks', '/iq/runbooks/proposals', '/iq/runbooks/rb-tenant-cutover', '/iq/computers', '/iq/invoke', '/iq/explore', '/iq/scores', '/iq/scores/cohorts',
   '/iq/library', '/iq/library/lib-stakeholder-email', '/iq/designs', '/iq/designs/dr-1',
   '/iq/agents', '/iq/prompts', '/iq/history', '/iq/diff', '/iq/evaluations', '/iq/canary', '/iq/prompt-ops',
-  '/admin/budgets', '/admin/projects', '/admin/devbox', '/admin/observability', '/admin/observability/invocations',
+  '/admin/budgets', '/admin/projects', '/admin/observability', '/admin/observability/invocations',
   '/admin/knowledge', '/admin/capabilities', '/admin/identity', '/admin/identity/users', '/admin/bots', '/admin/changes',
   '/assessment/teams', '/assessment/teams/t-1', '/assessment/submissions', '/assessment/reports', '/assessment/feedback',
   '/assessment/enterprise', '/assessment/workspace', '/assessment/prompts', '/assessment/rules', '/assessment/runs',

@@ -69,10 +69,6 @@ const PLATFORM = ['org-leader', 'hr-admin'];
 const BUILD = ['hr-admin'];
 const BUDGETS = ['program-owner', 'org-leader', 'hr-admin'];   // ManageBudgets
 const BOTS = ['sme', 'program-owner', 'org-leader', 'hr-admin']; // ManageBots
-// ManageDevbox (sme, hr-admin) PLUS the read tier the /api/devbox mount
-// serves without it (org-leader, program-owner). org-leader is fleet-wide in
-// devbox-visibility.ts; program-owner falls through to the scoped view.
-const DEVBOX = ['sme', 'hr-admin', 'org-leader', 'program-owner'];
 const CHANGES = ['program-owner', 'hr-admin'];
 
 // Rail group order per tenant (top → bottom): the org tenant reads along its
@@ -144,11 +140,9 @@ export const PAGES: readonly PageEntry[] = [
     keywords: ['codebase', 'repository', 'repo', 'git', 'run'] },
   { label: 'Changes',            hint: 'Code review queue + policies',        path: '/admin/changes',                              tenant: 'admin',  group: 'Build', pageId: 'changes',   roles: CHANGES,
     keywords: ['change', 'review', 'pr', 'pull request', 'diff', 'policy'] },
-  // pageId: the voice navigator's `open` (page 'computer-lab') opens this page, where computer start's boxes appear.
-  { label: 'Computer Lab',       hint: 'MicroVM fleet + task runner',         path: '/admin/devbox',                               tenant: 'admin',  group: 'Build',   roles: DEVBOX, pageId: 'computer-lab',
-    keywords: ['devbox', 'computer', 'box', 'lab', 'microvm', 'terminal'] },
-  { label: 'Local compute',      hint: 'Your paired machines — hand them work', path: '/iq/local-compute',                         tenant: 'orgiq',  group: 'Build', pageId: 'local-compute',
-    keywords: ['machine', 'node', 'laptop', 'local', 'compute', 'paired'] },
+  // pageId: the voice navigator's `open` (page 'computers') opens this page, where computer start's machines appear.
+  { label: 'Computers',          hint: 'Your machines and the lab\'s — hand them work', path: '/iq/computers',                      tenant: 'orgiq',  group: 'Build', pageId: 'computers',
+    keywords: ['computer', 'machine', 'laptop', 'lab', 'local', 'paired', 'terminal', 'compute'] },
   { label: 'Runbooks',                hint: 'Procedures the fleet follows — read, version, review', path: '/iq/runbooks',    tenant: 'orgiq',  group: 'Build', pageId: 'runbooks',
     keywords: ['runbook', 'procedure', 'playbook', 'how to', 'steps', 'rollback', 'library', 'knowledge', 'guide', 'distillation', 'learned'] },
   { label: 'Runbook proposals',        hint: 'Edits and new runbooks waiting for a reviewer', path: '/iq/runbooks/proposals', tenant: 'orgiq',  group: 'Build', pageId: 'runbook-proposals',
@@ -500,7 +494,7 @@ export function usePortalDynamicCommands(): (query: string) => Command[] {
           hint: 'a terminal needs a computer to attach to',
           group: 'Terminals',
           keywords: ['terminal', 'shell'],
-          run: () => { navigate('/admin/devbox'); },
+          run: () => { navigate('/iq/computers'); },
         });
       }
       if (wantsShell) return shellCommands;
