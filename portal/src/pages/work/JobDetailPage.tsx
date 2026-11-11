@@ -113,6 +113,22 @@ function toEntries(ev: Record<string, unknown>): ActivityEntry[] {
 const STALL_AFTER_MS = 60_000;
 const WATCHDOG_EVERY_MS = 10_000;
 
+/**
+ * Why a local worker last turned this queued job away (`payload.claimRefusal`,
+ * routes/local-compute.ts): the run controls' own reason, and when it is tried
+ * again. Null when nothing refused it.
+ */
+function claimRefusalLine(payload: Record<string, unknown>): string | null {
+  const r = payload['claimRefusal'];
+  if (!r || typeof r !== 'object') return null;
+  const { reason, until } = r as { reason?: unknown; until?: unknown };
+  if (typeof reason !== 'string' || !reason) return null;
+  const when = typeof until === 'string' && Number.isFinite(Date.parse(until))
+    ? ` Tried again after ${new Date(until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`
+    : '';
+  return `Held back: ${reason.replace(/\.?$/, '.')}${when}`;
+}
+
 export default function JobDetailPage() {
   const { jobId = '' } = useParams();
   const { session } = useSession();
@@ -375,7 +391,7 @@ function JobDetailContent() {
       {tab === 'summary' && <Stack gap="lg" className="max-w-4xl">
         <PageSection size="sm" title="Outcome">
           <T wrap className={`text-sm ${job.error ? 'text-danger' : 'text-text-primary'}`}>
-            {job.error ?? job.result?.summary ?? (job.status === 'queued' ? 'Waiting for a worker.' : isLive ? 'This run is in progress.' : 'No outcome recorded.')}
+            {job.error ?? job.result?.summary ?? (job.status === 'queued' ? (claimRefusalLine(job.payload) ?? 'Waiting for a worker.') : isLive ? 'This run is in progress.' : 'No outcome recorded.')}
           </T>
         </PageSection>
         <PageSection size="sm" title="Task"><T size="sm" wrap className="text-text-secondary whitespace-pre-wrap">{prompt || 'No prompt recorded.'}</T></PageSection>

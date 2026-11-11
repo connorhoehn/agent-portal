@@ -125,6 +125,10 @@ import { recordSpend } from '../providers/spend-ledger.js';
 import { HOLD_GRACE_MS, reserveSpend, type ReserveSpendResult } from '../lib/spend-holds.js';
 import { spendRefusalResponse } from '../lib/spend-refusal.js';
 import { pauseFor, pauseMessage } from '../lib/fleet-switches.js';
+import { clock } from '../mock/core/index.js';
+
+/** A refused local claim leaves its job alone for at least this long (payload.claimRefusal). */
+const CLAIM_REFUSAL_BACKOFF_MS = 60_000;
 import { DEMO_NODE_ID, demoPresenceSessions, demoMetrics } from '../mock/local-compute.js';
 import {
   emitLocalAnnounce,
@@ -593,8 +597,19 @@ localComputeRouter.post('/claim', workLoopLimit, requireNodeToken(async (req, re
   // `paused`, 429 `run-limit` (with Retry-After), 503 `budget-state`/`spend-hold`.
   const gate = await localRunGate(claim.job);
   if (gate.kind !== 'held') {
-    await unclaimJob(claim.job.id, claim.claimToken);
     const refusal = spendRefusalResponse(gate);
+    // Backoff: the job carries why it was turned away and is not re-judged for
+    // a minute (longer when a run limit names its own Retry-After), so a paused
+    // initiative's job does not sit at the queue head and get refused on every
+    // poll — the worker's other work is claimed past it meanwhile.
+    const backoffMs = Math.max(CLAIM_REFUSAL_BACKOFF_MS, gate.kind === 'limited' ? gate.retryAfterS * 1000 : 0);
+    const at = clock.now().getTime();
+    await unclaimJob(claim.job.id, claim.claimToken, {
+      gate: String(refusal.body['gate'] ?? gate.kind),
+      reason: String(refusal.body['error'] ?? gate.kind),
+      at: new Date(at).toISOString(),
+      until: new Date(at + backoffMs).toISOString(),
+    });
     for (const [k, v] of Object.entries(refusal.headers ?? {})) res.setHeader(k, v);
     res.status(refusal.status).json(refusal.body);
     return;

@@ -842,6 +842,28 @@ export function _resetPullSideProbe(): void { _resetColumnProbes(); }
  * on somebody else's laptop. Both enqueue routes now refuse an untargeted local
  * job, so such a row can only be legacy; it waits until someone cancels it.
  */
+/**
+ * Why a local worker's claim was turned away, kept on the job (`payload.claimRefusal`)
+ * so the job shows it and the queue does not re-judge it on every poll: a worker
+ * skips the job until `until` (claimNextJobForWorker), and the next claim that
+ * gets it clears the marker. `gate`/`reason` are reserveSpend's own refusal
+ * (lib/spend-refusal.ts): `paused`, `run-limit`, `budget-state`, `spend-hold`, ...
+ */
+export interface ClaimRefusal {
+  gate: string;
+  reason: string;
+  at: string;
+  until: string;
+}
+
+/** A refusal marker that still holds the job back from worker claims. */
+function refusalHolds(payload: Record<string, unknown>, nowMs: number): boolean {
+  const r = payload['claimRefusal'];
+  if (!r || typeof r !== 'object') return false;
+  const until = Date.parse(String((r as Record<string, unknown>)['until'] ?? ''));
+  return Number.isFinite(until) && until > nowMs;
+}
+
 export async function claimNextJobForWorker(opts: {
   boxId: string;
   sessionId: string;
@@ -860,9 +882,14 @@ export async function claimNextJobForWorker(opts: {
 
   if (config.mock.aurora) {
     const next = mockJobs
-      .filter((j) => j.status === 'queued' && j.attempts < j.maxAttempts && opts.kinds.includes(j.kind) && targetOk(j.payload))
+      .filter((j) => j.status === 'queued' && j.attempts < j.maxAttempts && opts.kinds.includes(j.kind) && targetOk(j.payload)
+        && !refusalHolds(j.payload, clock.now().getTime()))
       .sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt))[0];
     if (!next) return null;
+    if ('claimRefusal' in next.payload) {
+      const { claimRefusal: _cleared, ...rest } = next.payload;
+      next.payload = rest;
+    }
     next.status = 'claimed';
     next.boxId = opts.boxId;
     next.sessionId = opts.sessionId;
@@ -883,11 +910,14 @@ export async function claimNextJobForWorker(opts: {
     `UPDATE agent_jobs
         SET status = 'claimed', box_id = :box, session_id = :session,
             claim_token = :token, claimed_at = NOW(), heartbeat_at = NOW(),
-            attempts = attempts + 1, updated_at = NOW()
+            attempts = attempts + 1, updated_at = NOW(),
+            payload = payload - 'claimRefusal'
       WHERE id = (
             SELECT id FROM agent_jobs
              WHERE status = 'queued' AND attempts < max_attempts AND kind IN (${kindList})
                AND payload->>'nodeId' = :node
+               AND (payload->'claimRefusal'->>'until' IS NULL
+                    OR (payload->'claimRefusal'->>'until')::timestamptz <= NOW())
              ORDER BY priority, created_at
              FOR UPDATE SKIP LOCKED
              LIMIT 1)
@@ -962,10 +992,11 @@ export async function heartbeatJob(id: string, claimToken: string): Promise<bool
  * stamps and the attempt counter — so the next tick re-claims it as if this
  * one had never happened. Fenced on the claim token like every other write.
  */
-export async function unclaimJob(id: string, claimToken: string): Promise<boolean> {
+export async function unclaimJob(id: string, claimToken: string, refusal?: ClaimRefusal): Promise<boolean> {
   if (config.mock.aurora) {
     const job = mockJobs.find((j) => j.id === id);
     if (!job || job.status !== 'claimed' || MOCK_CLAIM_TOKENS.get(id) !== claimToken) return false;
+    if (refusal) job.payload = { ...job.payload, claimRefusal: refusal };
     job.status = 'queued';
     job.boxId = null;
     job.sessionId = null;
@@ -979,10 +1010,12 @@ export async function unclaimJob(id: string, claimToken: string): Promise<boolea
     `UPDATE agent_jobs
         SET status = 'queued', box_id = NULL, session_id = NULL, claim_token = NULL,
             claimed_at = NULL, heartbeat_at = NULL,
-            attempts = GREATEST(attempts - 1, 0), updated_at = NOW()
+            attempts = GREATEST(attempts - 1, 0), updated_at = NOW(),
+            payload = payload || :patch::jsonb
       WHERE id = :id AND claim_token = :token AND status = 'claimed'
       RETURNING id, title, payload::text AS payload`,
-    [strParam('id', id), strParam('token', claimToken)],
+    [strParam('id', id), strParam('token', claimToken),
+      strParam('patch', JSON.stringify(refusal ? { claimRefusal: refusal } : {}))],
   );
   if (rows[0]) {
     emitJobChange({

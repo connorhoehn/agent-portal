@@ -853,7 +853,7 @@ Decided differently from the design, and why:
 - A reservation that crosses two thresholds sends two items (50 and 80), one per mark, rather than only the higher one.
 - Sprint envelope marks count the window's spend only, not money still held, because the envelope read has no held figure without loading the full ledger.
 - In the Halyard story Cost Optimization's allocation is per sprint ($2.20, 81 percent spent), because monthly mock spend moves with the day of the month and could not stay just over 80. Two budget tests name that one exception.
-- A refused local claim puts the job back in the queue, so a paused initiative's job can sit at the head of the queue and be refused on every poll.
+- A refused local claim puts the job back in the queue with a marker (`payload.claimRefusal`: the reason and when it is tried again). Workers skip it for a minute, or for a run limit's own Retry-After when that is longer, and the job page shows "Held back: …" meanwhile. The next claim that takes it clears the marker.
 
 Open:
 

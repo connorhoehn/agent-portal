@@ -44,6 +44,7 @@ import { spendHolds } from '../../mock/spend-holds.js';
 import { spendEntries } from '../../mock/spend-ledger.js';
 import { runLimits, runSlots, fleetSwitches } from '../../mock/run-controls.js';
 import { type Role, type Session } from '../../lib/session.js';
+import { freezeClock } from '../../mock/core/index.js';
 
 const BASE = '/api/local-compute';
 const AUTH = 'p-auth-migration';
@@ -179,5 +180,56 @@ describe('money does not judge a local run', () => {
     await queue(node, 'free text', null);
     expect((await claim(node)).status).toBe(200);
     expect(spendHolds.rows()).toHaveLength(0);
+  });
+});
+
+describe('a refused claim backs off', () => {
+  let restoreClock: () => void = () => undefined;
+  const at = (instant: string) => { restoreClock(); restoreClock = freezeClock(instant); };
+  afterEach(() => { restoreClock(); restoreClock = () => undefined; });
+
+  it('the job shows why, is skipped for a minute, then is judged again and the marker clears on a claim', async () => {
+    at('2026-11-10T12:00:00Z');
+    const node = await readyWorker();
+    const job = await queue(node, 'cutover runbook');
+    await setSwitch(`initiative:${AUTH}`, true, 'budget review', 'u-vera');
+    expect((await claim(node)).status).toBe(423);
+    expect((await getJob(job.id))!.payload['claimRefusal']).toEqual({
+      gate: 'paused', reason: expect.any(String), at: '2026-11-10T12:00:00.000Z', until: '2026-11-10T12:01:00.000Z',
+    });
+
+    // Inside the minute the paused job is not re-judged: the queue reads empty to this
+    // worker, and the next job behind it (no initiative, nothing paused) is claimed past it.
+    at('2026-11-10T12:00:30Z');
+    expect((await claim(node)).status).toBe(204);
+    const other = await queue(node, 'free text', null);
+    const past = await claim(node);
+    expect(past.status).toBe(200);
+    expect(past.body.job.id).toBe(other.id);
+
+    // After the minute it is judged again (still paused: refused again, a new marker).
+    at('2026-11-10T12:01:01Z');
+    expect((await claim(node)).status).toBe(423);
+    expect((await getJob(job.id))!.payload['claimRefusal']).toMatchObject({ until: '2026-11-10T12:02:01.000Z' });
+
+    // Unpaused and past the backoff: the claim takes it and clears the marker.
+    await setSwitch(`initiative:${AUTH}`, false, 'resolved', 'u-vera');
+    at('2026-11-10T12:02:02Z');
+    const taken = await claim(node);
+    expect(taken.status).toBe(200);
+    expect(taken.body.job.id).toBe(job.id);
+    expect((await getJob(job.id))!.payload['claimRefusal']).toBeUndefined();
+  });
+
+  it('a run limit backs off for its own Retry-After when that is longer than a minute', async () => {
+    at('2026-11-10T12:00:00Z');
+    const node = await readyWorker();
+    await upsertRunLimit('initiative', AUTH, { maxRunsPerDay: 0 }, 'u-vera');
+    const job = await queue(node, 'one');
+    const res = await claim(node);
+    expect(res.status).toBe(429);
+    const marker = (await getJob(job.id))!.payload['claimRefusal'] as { until: string };
+    expect(Date.parse(marker.until) - Date.parse('2026-11-10T12:00:00Z'))
+      .toBe(Math.max(60_000, Number(res.headers['retry-after']) * 1000));
   });
 });
