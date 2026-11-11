@@ -9,7 +9,8 @@
 //   POST   /api/local-compute/claim           take the next runnable job (machine, node token)
 //   POST   /api/local-compute/jobs/:id/start      claimed → running (machine, fenced)
 //   POST   /api/local-compute/jobs/:id/heartbeat  still working (machine, fenced)
-//   POST   /api/local-compute/jobs/:id/complete   terminal state + cost (machine, fenced)
+//   POST   /api/local-compute/jobs/:id/complete   terminal state + cost (machine, fenced); may carry a debrief request
+//   POST   /api/local-compute/jobs/:id/debrief    lane C: the debrief's answer and kept folder (machine, one-shot debrief token)
 //   POST   /api/local-compute/jobs/:id/skills     R8: the org's skill library for this run (machine, fenced)
 //   POST   /api/local-compute/jobs/:id/log        ship a chunk of run output (machine, fenced)
 //   GET    /api/local-compute/jobs/:id/log        read the run log (browser session, owner-scoped)
@@ -817,9 +818,69 @@ localComputeRouter.post('/jobs/:jobId/complete', workLoopLimit, requireNodeToken
     model: typeof body.model === 'string' ? body.model.slice(0, MAX_MODEL_LEN) : null,
     error: typeof body.error === 'string' ? body.error : null,
   });
+  // Lane C: when the report earns a debrief, the answer carries the request (the fixed prompt, the
+  // answer's schema, the bounds, and a one-shot token for POST /jobs/:id/debrief). The worker keeps
+  // the checkout and the session until it posts the folder or says it could not.
+  const { debriefRequestFor, givenIds } = await import('../lib/runbooks/debrief.js');
+  const debrief = report?.debrief?.state === 'requested' ? await debriefRequestFor(report, givenIds(report)) : null;
   res.json({
     ok: true, jobId: held.job.id, status, costUsd: cost.costUsd, provider: cost.provider,
-    report: report ? { selfReport: report.selfReport, runbooksUsed: report.runbooksUsed.length, kept: report.kept.length } : null,
+    report: report
+      ? {
+        selfReport: report.selfReport, runbooksUsed: report.runbooksUsed.length, kept: report.kept.length,
+        debrief: report.debrief ? { state: report.debrief.state, reason: report.debrief.reason } : null,
+      }
+      : null,
+    ...(debrief ? { debrief } : {}),
+  });
+}));
+
+/**
+ * Lane C: the debrief's folder, back from the worker (docs/learning-loop-design.md, Stage 2).
+ *
+ * The same machine authentication as the completion (the node token, and a job this node's box
+ * ran), plus the one-shot token the completion handed out for exactly this run's request — the
+ * claim is over by now, so the claim token proves nothing. The body is untrusted: the answer is
+ * checked against the schema, the folder's paths, sizes and text are checked again
+ * (lib/runbooks/files.ts), and what survives is linted and filed as a proposal that no run sees
+ * until a person accepts it (lib/runbooks/debrief-file.ts). The express body limit (100 KB) is the
+ * outer cap on everything.
+ *
+ * Body: { token, answer?, folder?: { name, skill_md, files }, sessionUnavailable?, problems?, costUsd? }
+ */
+const DEBRIEF_FIELDS = new Set(['token', 'answer', 'folder', 'sessionUnavailable', 'problems', 'costUsd']);
+localComputeRouter.post('/jobs/:jobId/debrief', workLoopLimit, requireNodeToken(async (req, res, node) => {
+  const body = (req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {}) as Record<string, unknown>;
+  const job = await getJob(String(req.params['jobId'] ?? ''));
+  if (!job || job.boxId !== localBoxId(node.id)) {
+    res.status(404).json({ error: 'no such run on this machine' });
+    return;
+  }
+  const extra = Object.keys(body).filter((k) => !DEBRIEF_FIELDS.has(k));
+  if (extra.length) { res.status(400).json({ error: `unknown fields: ${extra.slice(0, 5).join(', ')}` }); return; }
+  const { runReportStore } = await import('../lib/run-reports/store-select.js');
+  const report = await runReportStore().getReport(job.id);
+  const { debriefTokenMatches } = await import('../lib/runbooks/debrief.js');
+  if (!report || !(await debriefTokenMatches(body['token'], job.id, report.debrief))) {
+    res.status(403).json({ error: 'this run has no open debrief request for that token', code: 'DEBRIEF_TOKEN' });
+    return;
+  }
+  await touchNode(node.id);
+  const { settleDebrief } = await import('../lib/runbooks/debrief-file.js');
+  const out = await settleDebrief({
+    runRef: job.id,
+    answer: body['answer'],
+    folder: body['folder'],
+    sessionUnavailable: body['sessionUnavailable'] === true,
+    problems: body['problems'],
+    costUsd: typeof body['costUsd'] === 'number' ? body['costUsd'] : null,
+    repo: typeof job.payload['repo'] === 'string' ? job.payload['repo'] : null,
+  });
+  if (!out.ok) { res.status(out.status).json({ error: out.error, code: out.code }); return; }
+  const d = out.debrief;
+  res.json({
+    ok: true, jobId: job.id,
+    debrief: { state: d.state, reason: d.reason, proposalId: d.proposalId, proposalKind: d.proposalKind, problems: d.problems, lint: d.lint.map((f) => f.rule) },
   });
 }));
 
@@ -865,6 +926,8 @@ async function recordLocalReport(
     runRef: job.id, executor: 'local', outcome: outcomeOfJobStatus(status),
     failureCode: status === 'failed' ? failureCodeOf(input.error) : null,
     model: input.model, billedUsd: 0,
+    // A job with no repository runs in the worker's own directory, where a debrief must not write.
+    hasCheckout: typeof job.payload['repo'] === 'string' && job.payload['repo'].trim() !== '',
     worker: {
       block: typeof raw['block'] === 'string' ? raw['block'] : null,
       skillsLoaded: Array.isArray(raw['skillsLoaded']) ? raw['skillsLoaded'] as string[] : [],

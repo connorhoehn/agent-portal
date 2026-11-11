@@ -45,6 +45,18 @@ import { NEW_MD, USERS, seededStore, type TestUser } from './runbook-world.js';
 import { cdpWebsocketDoc, bundleFiles, CDP_RUNBOOK_ID } from '../../mock/runbook-bundles.js';
 
 const SECRET = 'lab-secret';
+
+/**
+ * Lane C (decision 10): a reviewer confirms each script by path and sha256 before an accept. These
+ * suites are about who may accept and what lands, so every accept here sends that confirmation,
+ * read from the proposal page's own `scripts_to_read`.
+ */
+async function acceptRead(user: TestUser, pid: string, body: Record<string, unknown> = {}) {
+  const detail = await request(appAs(user)).get(`/api/runbooks/proposals/${pid}`);
+  const scripts = (detail.body?.scripts_to_read ?? []) as Array<{ path: string; sha256: string }>;
+  return request(appAs(user)).post(`/api/runbooks/proposals/${pid}/accept`).send({ ...body, ...(scripts.length ? { scripts_read: scripts } : {}) });
+}
+
 let store: RunbookStore;
 
 function appAs(user: TestUser | null) {
@@ -128,7 +140,7 @@ describe('proposing files', () => {
     const created = await request(appAs(USERS.member!)).post('/api/runbooks/proposals').send({ kind: 'new', skill_md: skillMd(), files: leaky, rationale: 'x', source: { work_item_id: 'wi-auth-1' } });
     expect(created.status).toBe(201);
     expect(created.body.proposal.lint).toEqual(expect.arrayContaining([expect.objectContaining({ rule: 'R-secrets', path: 'files[data/sample-frames.jsonl]' })]));
-    const accepted = await request(appAs(USERS.leader!)).post(`/api/runbooks/proposals/${created.body.proposal.id}/accept`).send({});
+    const accepted = await acceptRead(USERS.leader!, created.body.proposal.id, {});
     expect(accepted.status).toBe(422);
     expect(accepted.body.code).toBe('LINT');
   });
@@ -152,11 +164,11 @@ describe('reviewing and accepting', () => {
     await freeze('job-cap-3', 'p-103');
     const pid = (await boxProposes('job-cap-3')).body.proposal.id;
     // An SME on another initiative is not this skill's steward; the dispatcher never is.
-    expect((await request(appAs(USERS.smeOther!)).post(`/api/runbooks/proposals/${pid}/accept`).send({})).status).toBe(403);
-    expect((await request(appAs(USERS.proposer!)).post(`/api/runbooks/proposals/${pid}/accept`).send({})).body.code).toBe('SELF_ACCEPT');
-    expect((await request(appAs(USERS.member!)).post(`/api/runbooks/proposals/${pid}/accept`).send({})).status).toBe(403);
+    expect((await acceptRead(USERS.smeOther!, pid, {})).status).toBe(403);
+    expect((await acceptRead(USERS.proposer!, pid, {})).body.code).toBe('SELF_ACCEPT');
+    expect((await acceptRead(USERS.member!, pid, {})).status).toBe(403);
     const before = (await loadSkillLibrary(store)).sha256;
-    const ok = await request(appAs(USERS.smeAuth!)).post(`/api/runbooks/proposals/${pid}/accept`).send({ note: 'Every realtime team wants this.' });
+    const ok = await acceptRead(USERS.smeAuth!, pid, { note: 'Every realtime team wants this.' });
     expect(ok.status).toBe(201);
     expect(ok.body.runbook).toEqual(expect.objectContaining({ id: NAME, scope: { kind: 'org', ref: null }, area: 'p-auth', status: 'published' }));
     expect(ok.body.version.files.map((f: { path: string }) => f.path)).toEqual(['data/expected-summary.txt', 'data/sample-frames.jsonl', 'scripts/cdp-ws-frames.mjs']);
@@ -172,13 +184,13 @@ describe('reviewing and accepting', () => {
   it('stewards: the org-leader accepts a captured tool from any area', async () => {
     await freeze('job-cap-4', 'p-101');
     const pid = (await boxProposes('job-cap-4')).body.proposal.id;
-    expect((await request(appAs(USERS.leader!)).post(`/api/runbooks/proposals/${pid}/accept`).send({})).status).toBe(201);
+    expect((await acceptRead(USERS.leader!, pid, {})).status).toBe(201);
   });
 
   it('files: an edit that sends no files keeps the base\'s; files: [] removes them', async () => {
     await freeze('job-cap-5', 'p-101');
     const pid = (await boxProposes('job-cap-5')).body.proposal.id;
-    await request(appAs(USERS.leader!)).post(`/api/runbooks/proposals/${pid}/accept`).send({});
+    await acceptRead(USERS.leader!, pid, {});
     const md = renderSkill(NAME, { ...cdpWebsocketDoc, notes: `${cdpWebsocketDoc.notes} Keep the capture short.`, steps: cdpWebsocketDoc.steps.map((s, i) => (i === 0 ? { ...s, command: { lang: 'bash' as const, text: `cd ~/.claude/skills/${NAME}` } } : s)) });
     const keep = await request(appAs(USERS.member!)).post('/api/runbooks/proposals').send({ kind: 'edit', runbook_id: NAME, skill_md: md, rationale: 'Note.' });
     expect(keep.status).toBe(201);
@@ -196,8 +208,7 @@ describe('reviewing and accepting', () => {
 describe('a proposer cannot choose the area that chooses their reviewer', () => {
   const personProposes = (user: TestUser, workItem: string, md = skillMd(), withFiles = true) =>
     request(appAs(user)).post('/api/runbooks/proposals').send({ kind: 'new', skill_md: md, ...(withFiles ? { files: files() } : {}), rationale: 'Mine.', source: { work_item_id: workItem } });
-  const accept = (user: TestUser, pid: string, body: Record<string, unknown> = {}) =>
-    request(appAs(user)).post(`/api/runbooks/proposals/${pid}/accept`).send(body);
+  const accept = (user: TestUser, pid: string, body: Record<string, unknown> = {}) => acceptRead(user, pid, body);
 
   it('an outsider naming someone else\'s work item gets no area: that initiative\'s SME is refused, only the org-leader accepts', async () => {
     // member (p-300) is on neither initiative and names a work item on p-auth.
@@ -266,7 +277,7 @@ describe('delivery', () => {
     // A runbook is published after the freeze: the current library moves.
     await freeze('job-cap-pub', 'p-101');
     const pid = (await boxProposes('job-cap-pub')).body.proposal.id;
-    expect((await request(appAs(USERS.leader!)).post(`/api/runbooks/proposals/${pid}/accept`).send({})).status).toBe(201);
+    expect((await acceptRead(USERS.leader!, pid, {})).status).toBe(201);
     const current = await loadSkillLibrary(store);
     expect(current.sha256).not.toBe(frozenSha);
 

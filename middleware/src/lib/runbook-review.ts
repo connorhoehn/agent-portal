@@ -34,6 +34,36 @@ export async function actorId(session: Session): Promise<{ actor: string; person
 }
 
 /**
+ * How many people OTHER than `exclude` could decide a proposal at this scope (decision 11, the
+ * sole-reviewer exception). Counted from the directory, read authoritatively: an org-leader or
+ * admin anywhere, the runbook's owner, or an SME / program owner attached to the scope's
+ * initiative (or the proposal's area). Any failure to read the directory counts as "someone else
+ * exists", so the exception is never granted on a lookup error.
+ */
+export async function eligibleReviewersExcept(
+  scope: RunbookScope, owner: string | null, area: string | null, exclude: ReadonlyArray<string | null | undefined>,
+): Promise<number> {
+  const skip = new Set(exclude.filter((x): x is string => typeof x === 'string' && x.length > 0));
+  try {
+    const { listUsers } = await import('../providers/identity.js');
+    const { personOnInitiative } = await import('./initiative-scope.js');
+    const initiative = scope.kind === 'initiative' && scope.ref ? scope.ref : area;
+    let n = 0;
+    for (const u of await listUsers({ authoritative: true })) {
+      if (skip.has(u.id) || (u.personId && skip.has(u.personId))) continue;
+      const roles = u.grants['orgiq'] ?? [];
+      if (roles.some((r) => (REVIEW_OVERRIDE_ROLES as readonly string[]).includes(r))) { n += 1; continue; }
+      if (owner && (owner === u.id || owner === u.personId)) { n += 1; continue; }
+      if (initiative && u.personId && roles.some((r) => (STEWARD_ROLES as readonly string[]).includes(r))
+        && await personOnInitiative(u.personId, initiative)) n += 1;
+    }
+    return n;
+  } catch {
+    return 1;
+  }
+}
+
+/**
  * @param owner  the runbook's owner person id, or null when there is no runbook yet
  *               (accepting a `new` proposal): ownership cannot authorise creating one.
  */

@@ -24,5 +24,5 @@ export * from './store.js';
 export { RowsRunbookStore, privateRowSources, type RunbookRowSources } from './store-rows.js';
 export { DynamoRunbookStore, runbookStoreConfig, ensureRunbookTable, dropRunbookTable, createRunbookDynamoClient, type RunbookStoreConfig } from './store-dynamo.js';
 export { FILE_LIMITS, FILE_ROOTS, RunbookFileError, checkFilePath, fileOf, filesOf, sortFiles, bundleSha, fileManifest, byteLength } from './files.js';
-export { renderSkill, parseSkill, skillDescription, checkSkillName, checkSkillDescription, SKILL_LIMITS, SKILL_NAME, type SkillParse } from './skill.js';
+export { renderSkill, parseSkill, skillDescription, checkSkillName, checkSkillDescription, SKILL_LIMITS, SKILL_NAME, PORTABLE_FRONTMATTER_KEYS, type SkillParse } from './skill.js';
 export { buildSkillLibrary, loadSkillLibrary, loadFrozenSkillLibrary, skillLibraryForRun, librarySha, briefLibraryOf, LIBRARY_FORMAT, BOX_SKILLS_DIR, PROJECT_SKILLS_DIR, type SkillLibrary, type LibrarySkill, type LibraryFile } from './library.js';

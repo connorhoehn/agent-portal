@@ -66,28 +66,46 @@ export function renderSkill(runbookId: string, doc: RunbookDoc): string {
 }
 
 export type SkillParse =
-  | { ok: true; name: string | null; description: string | null; doc: RunbookDoc }
+  | { ok: true; name: string | null; description: string | null; doc: RunbookDoc; keys: string[] }
   | { ok: false; errors: Array<ParseError | { line: number; message: string }> };
+
+/**
+ * The frontmatter keys an Agent Skill may carry and still be portable (Anthropic's skill format).
+ * Lane C: anything else in a draft is a lint error (R-frontmatter), and `allowed-tools` has its
+ * own (R-allowed-tools): a runbook never widens what a future run may do.
+ */
+export const PORTABLE_FRONTMATTER_KEYS: readonly string[] = ['name', 'description', 'license', 'compatibility', 'metadata'];
 
 /**
  * SKILL.md (or plain runbook markdown, for `lab propose`) → doc. The frontmatter
  * is optional; when present it must be the first lines and carry plain
- * `key: value` pairs. Only `name` is kept — the description is always derived.
+ * `key: value` pairs (a key with an empty value may be followed by indented
+ * lines: the `metadata` mapping). Only `name` is kept — the description is
+ * always derived — and every top-level key is reported in `keys` for lint.
  */
 export function parseSkill(text: string): SkillParse {
   const src = text.replace(/\r\n/g, '\n');
   let name: string | null = null;
   let description: string | null = null;
+  const keys: string[] = [];
   let body = src;
   if (src.startsWith('---\n')) {
     const end = src.indexOf('\n---\n', 4);
     if (end < 0) return { ok: false, errors: [{ line: 1, message: 'the frontmatter opened with --- is never closed' }] };
     const fm = src.slice(4, end).split('\n');
+    let nested = false;
     for (const [i, line] of fm.entries()) {
       if (!line.trim()) continue;
+      // An indented line belongs to the mapping a key with an empty value opened (`metadata:`).
+      if (/^[ \t]/.test(line)) {
+        if (nested) continue;
+        return { ok: false, errors: [{ line: i + 2, message: `frontmatter line is indented under a key with a value: ${line.slice(0, 60)}` }] };
+      }
       const m = /^([a-z][a-z0-9_-]*):\s*(.*)$/.exec(line);
       if (!m) return { ok: false, errors: [{ line: i + 2, message: `frontmatter line is not "key: value": ${line.slice(0, 60)}` }] };
       let v = m[2]!.trim();
+      if (!keys.includes(m[1]!)) keys.push(m[1]!);
+      nested = v === '';
       if (v.startsWith('"')) {
         try { v = JSON.parse(v) as string; } catch { return { ok: false, errors: [{ line: i + 2, message: 'frontmatter value is a malformed quoted string' }] }; }
       }
@@ -98,5 +116,5 @@ export function parseSkill(text: string): SkillParse {
   }
   const parsed = tryParseRunbook(body);
   if (!parsed.ok) return { ok: false, errors: parsed.errors };
-  return { ok: true, name, description, doc: parsed.doc };
+  return { ok: true, name, description, doc: parsed.doc, keys };
 }

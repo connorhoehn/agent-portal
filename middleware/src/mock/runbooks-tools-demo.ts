@@ -248,7 +248,9 @@ async function tell(base: string, signal: Signal): Promise<void> {
     if (seen.status !== 200) throw new Error(`skills demo: ${CAST.nora.name} could not open the proposal (${seen.status})`);
     await sleepUntilBeat(BEATS.accept, t0, signal);
     if (signal.cancelled) return;
-    const accepted = await nora('POST', `/api/runbooks/proposals/${proposal.id}/accept`, { note: REVIEW_NOTE });
+    // She read the scripts it carries (the page shows each in full), and says so by path and sha256.
+    const scriptsRead = (seen.body['scripts_to_read'] ?? []) as Array<{ path: string; sha256: string }>;
+    const accepted = await nora('POST', `/api/runbooks/proposals/${proposal.id}/accept`, { note: REVIEW_NOTE, scripts_read: scriptsRead });
     if (accepted.status !== 201) throw new Error(`skills demo: accepting the skill answered ${accepted.status}: ${String(accepted.body['error'] ?? '')}`);
     state.milestones.accepted = true;
 

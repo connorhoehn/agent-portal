@@ -280,6 +280,13 @@ sdlcRouter.post('/changes/:id/decide', asyncHandler(async (req, res) => {
   });
   if (!out.ok && out.gate) { res.status(409).json({ error: out.error, gate: out.gate }); return; }
   if (!out.ok) throw new ValidationError(out.error ?? 'could not decide');
+  // The learning loop (docs/learning-loop-design.md, Stage 3): a runbook proposed by a run whose
+  // change was rejected is withdrawn at once. Never fails the decision.
+  if (body.decision === 'reject') {
+    await import('../lib/runbooks/retire.js')
+      .then((m) => m.withdrawForRejectedChange(change.id))
+      .catch((err: unknown) => console.warn('[sdlc] could not withdraw the run\'s runbook proposals:', (err as Error).message));
+  }
   if (override) {
     logAuthz({
       decision: 'ALLOW', action: 'DecideAgentChange.Override', sub: session.sub, role: session.role,
