@@ -48,7 +48,11 @@ export default function ComputersPage() {
   const canPair = ready && can('ConnectLocalCompute');
   const compute = useComputeOptional();
   const canDriveLab = !!compute?.canManage;
-  const labReadOnly = ready && !(can('ManageDevbox') && (can('OpenDevboxShell') || can('RunDevboxTask')));
+  // Read-only when the viewer can neither drive the lab (OperateDevbox: provision, rename, stop,
+  // remove) nor hand it work (RunDevboxTask) — program-owner and member; since 11 November 2026
+  // an org leader does both. The shell is a third right (ManageDevbox + OpenDevboxShell), and
+  // ComputeHost withholds the terminal pane on its own.
+  const labReadOnly = ready && !(can('OperateDevbox') || can('RunDevboxTask'));
 
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();

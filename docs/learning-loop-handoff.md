@@ -4,13 +4,13 @@ This is the work order for whoever picks the loop up next (a person, Codex, or a
 
 ## Where main stands
 
-Lanes A (run report), B (budgets), C (debrief, proposals from runs, review rules, retirement) and D (giving runbooks to a run) are on main. The middleware side of the loop is complete and proven:
+Everything this work order asked for is on main (11 November 2026): lanes A (run report), B (budgets), C (debrief, proposals from runs, review rules, retirement) and D (giving runbooks to a run); the eight lane E packages (the run page, one Runs list, the brief preview and pins, the Runbooks pages, Bots and Computers, the removals, the Workflows rename, the journey and the validator); and the middleware follow-ups, except the Budgets table at 1280 px, which waits on the component library. The judge is `scripts/validate-learning-loop.sh`:
 
+- Acceptance 1 to 12 pass in the browser through real dispatches on the mock (`npm run journey:learning-loop`, in `portal/`).
 - Acceptance items 13 and 14 pass against the real local worker with a stub `claude` (`scripts/learning-loop/debrief-e2e.mjs`, `scripts/learning-loop/local-report-e2e.mjs`).
-- Acceptance item 11 passes in the browser (`npm run journey:learning-loop`, in `portal/`).
 - Acceptance 4, 5, 6 and 8 pass on the mock in `middleware/src/routes/__tests__/learning-loop-offer-mock.test.ts`.
 
-What is left is **lane E (the pages)**, the **journey for acceptance 1 to 12**, the **validator**, and four **middleware follow-ups** listed at the end. Nothing in lane E needs a model, and nothing in it spends money.
+The package sections below are kept as the as-built record: the file paths, contracts and acceptance each names are what was built. What remains open is in [next-steps.md](next-steps.md) under "Learning loop" (each lane's note) and in the decisions file.
 
 ## Rules that bind this work
 
@@ -77,9 +77,9 @@ Shapes are in TypeScript; line numbers are as of this writing (re-grep if they d
 
 ## Lane E: the pages
 
-Eight packages. Each can be taken alone, in this order; E1 to E4 are the loop, E5 to E7 are the consolidation the design asks for, E8 is the judge. Each package's acceptance is on the mock in a browser with no model.
+Eight packages, all done. E1 to E4 are the loop, E5 to E7 are the consolidation the design asks for, E8 is the judge. Each package's acceptance is on the mock in a browser with no model, and the judge runs them.
 
-### E1. The run page
+### E1. The run page (done)
 
 Route `/iq/runs/:id` (today `PipelinesRunDetailPage` with `briefTab`, `portal/src/App.tsx` around line 533). Replace the tab set with four sections, each from `GET /api/runs/:ref/report` and `GET /api/runs/:ref/brief`:
 
@@ -92,7 +92,7 @@ The same page serves local compute jobs (run ref = job id) and bot runs (the fa�
 
 Acceptance: items 1, 5 (the Brief shows the runbook's text; Runbooks shows it given and followed), 7 (the dashboard item's Learned says why there was no debrief, in the stored sentence), 8 (the second cold-start run's Brief shows the first attempt under previous attempts).
 
-### E2. One Runs list
+### E2. One Runs list (done)
 
 Route `/iq/runs` (today `portal/src/pages/iq/RunsPage.tsx`, bot runs only). One list for every executor, newest first, with filters: executor (queue, local, bot, microVM), initiative, outcome, and "debriefed" (filed / skipped / none). Columns: when, what (work item title or run title), who ran it (bot name, "Your machine", or the executor word), outcome, runbooks given (count), learned (a dot when a proposal was filed), cost.
 
@@ -102,7 +102,7 @@ Merged in, as the design lists: Automate › Runs (`portal/src/pages/work/automa
 
 Acceptance: after the mock's four dispatches, the list shows the four runs with their outcomes; the local filter is empty until a worker runs; the initiative filter narrows to Auth Migration.
 
-### E3. The work item: brief preview and pins
+### E3. The work item: brief preview and pins (done)
 
 `portal/src/pages/runbooks/WorkItemBriefPreview.tsx` already reads `GET /api/work-items/:id/brief-preview`. Extend it, where the dispatch card and the work item's drawer show it, with:
 
@@ -112,7 +112,7 @@ Acceptance: after the mock's four dispatches, the list shows the four runs with 
 
 Acceptance: item 4 (open a related work item; its preview lists `rb-logout-shim-cookie` with its reason before dispatch; pin a second runbook; it appears first).
 
-### E4. Runbooks: Library, Proposals, evidence
+### E4. Runbooks: Library, Proposals, evidence (done)
 
 `portal/src/pages/runbooks/RunbooksModule.tsx` keeps Library and Proposals; the Briefs tab goes (E6).
 
@@ -134,7 +134,9 @@ Two pages replace five places:
 
 Acceptance: both pages render from a library template with no internal words; the command palette (`portal/src/components/shell/portalCommands.ts`) and the nav (`portal/src/components/shell/Layout.tsx`) have one entry each; the old routes redirect.
 
-### E6. Removals
+### E6. Removals (done)
+
+Done, lane E6+E7, with the Definitions wording (the last of item 2) closed in lane E5; a removed path lands on "Page not found" by design (decision 20).
 
 Delete, with their routes, fixtures, tests, breadcrumb cases (`portal/src/components/shell/breadcrumbResolve.ts`), command-palette entries and voice kinds (`portal/src/lib/voice/kinds.ts`); then regenerate `docs/voice-tool-inventory.json` (`node scripts/voice/inventory.mjs`) and check it (`--check`):
 
@@ -147,11 +149,11 @@ Delete, with their routes, fixtures, tests, breadcrumb cases (`portal/src/compon
 
 Acceptance: `node scripts/docs/check-links.mjs` green (the removed-doc baseline `scripts/docs/removed-docs.txt` may grow by the removed pages' docs, ceiling 104 entries); the wire snapshots regenerated with the deleted routes gone and nothing else changed; the voice inventory check green; `scripts/validate-component-discipline.sh` green.
 
-### E7. Rename
+### E7. Rename (done)
 
 Done. The pipelines tenant's "Runbooks" is **Workflows** at `/pipelines/workflows` (`portal/src/pages/pipelines/WorkflowsPage.tsx`), with `/pipelines/runbooks` redirecting; behaviour unchanged, and the API path `/api/pipelines/runbooks` stays (noted in the page's header comment). E6 items 2 to 6 are done with it; the removed `/iq/promotions`, `/iq/distillation`, `/iq/release` and `/iq/local-compute/configuration` paths now land on "Page not found", which is what decision 20 asks for (nothing links to them). The Definitions page's kind filter and rung label now say Workflow (lane E5 session).
 
-### E8. The journey and the validator
+### E8. The journey and the validator (done)
 
 Done. `scripts/journeys/learning-loop.mjs` walks acceptance 1 to 12 through real dispatches on `dev:mock` (`npm run journey:learning-loop`, which boots its own middleware and Vite from `JOURNEY_MIDDLEWARE_PORT` and `JOURNEY_PORTAL_PORT`; `PLAYWRIGHT_BROWSERS_PATH` must name Playwright's browsers). `scripts/validate-learning-loop.sh` is the judge: the journey, `scripts/learning-loop/debrief-e2e.mjs` (13), `scripts/learning-loop/local-report-e2e.mjs` (14, ports `LL_DEBRIEF_PORT` and `LL_E2E_PORT`), the loop's middleware suites and the portal suite, one PASS or FAIL line per item. Lane E is done when it is green. What was built and decided is in `docs/next-steps.md`, "Lane E8".
 
@@ -188,3 +190,5 @@ Small, separate changes; each needs its own test.
 ## Open decisions the owner may overrule
 
 Each is recorded in [learning-loop-decisions.md](learning-loop-decisions.md) with what would change it. Two that lane E touches directly: decision 20 (the removals) and decision 4 (runbook text in the brief). Build to the decision as written; do not reopen it in the lane.
+
+One more the owner may overrule, outside the decisions file because it is the lab's, not the loop's: **the lab drive** (11 November 2026). `OperateDevbox` — provision, rename, stop and remove a lab computer — is its own Cedar action, held by sme, hr-admin and org-leader, and org-leader also holds `RunDevboxTask`; `ManageDevbox` (codebases, capability writes, session bundles) and the shell stay with the operators. To take the lab back from leaders, remove the two actions from `middleware/seeds/roles/orgiq/org-leader.cedar` and the matching rows in `authz-matrix.test.ts`, `cedar-policy-edges.test.ts` and `devbox-lab-drive.test.ts`; the Computers page then shows that role the read-only lab again on its own.

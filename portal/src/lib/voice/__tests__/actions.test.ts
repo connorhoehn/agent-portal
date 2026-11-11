@@ -77,10 +77,10 @@ async function confirmAndRun(name: string, args: unknown, ctx: ReturnType<typeof
 }
 
 const P4_REFUSALS: Array<{ tool: string; args: Record<string, unknown>; deny: string[] }> = [
-  { tool: 'computer', args: { action: 'start', initiatives: ['p1'] }, deny: ['ManageDevbox'] },
+  { tool: 'computer', args: { action: 'start', initiatives: ['p1'] }, deny: ['OperateDevbox'] },
   { tool: 'computer', args: { action: 'open-shell', computer: 'c-alpha' }, deny: ['OpenDevboxShell'] },
   { tool: 'computer', args: { action: 'run', computer: 'c-alpha', phrase: 'status' }, deny: ['OpenDevboxShell'] },
-  { tool: 'computer', args: { action: 'stop', computer: 'c-alpha' }, deny: ['ManageDevbox'] },
+  { tool: 'computer', args: { action: 'stop', computer: 'c-alpha' }, deny: ['OperateDevbox'] },
   { tool: 'computer', args: { action: 'hand-work', machine: 'laptop', job: 'login' }, deny: ['ConnectLocalCompute'] },
   { tool: 'message', args: { target: { kind: 'team', name: 'platform' }, text: 'out today' }, deny: ['PostMessage'] },
   { tool: 'call', args: { action: 'start', target: { kind: 'team', name: 'platform' } }, deny: ['StartCall'] },
@@ -304,7 +304,7 @@ test('start_computer: an initiative it cannot find goes back with the user\'s li
 // ── computer (V2-8): one tool, five actions; stop and hand-work ──
 
 test('computer: open-shell needs no card; every other action does, and each is gated on its own button\'s action', () => {
-  const ctx = toolContext({ allow: ['ManageDevbox', 'OpenDevboxShell'] });
+  const ctx = toolContext({ allow: ['ManageDevbox', 'OperateDevbox', 'OpenDevboxShell'] });
   const card = (args: Record<string, unknown>) => { const p = prepareToolCall('computer', args, ctx); assert.ok(p.ok); return needsConfirm(p.call); };
   assert.equal(card({ action: 'open-shell', computer: 'alpha-1' }), false);
   for (const action of ['start', 'stop', 'run']) assert.equal(card({ action, computer: 'alpha-1', initiatives: ['p1'], phrase: 'status' }), true, action);

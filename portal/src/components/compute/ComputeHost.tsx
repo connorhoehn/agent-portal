@@ -81,11 +81,16 @@ function notify(notice: ComputeNotice): void {
 export function ComputeHost({ children }: { children: ReactNode }) {
   const { can, ready } = useCapabilities();
   const { session } = useSession();
-  const canManage = ready && can('ManageDevbox');
+  // DRIVING the lab — provision, rename, stop, remove — is OperateDevbox, the
+  // lab's drive split out of ManageDevbox on 11 November 2026 so a leader who
+  // dispatches runs can drive a lab computer by hand; the library has one prop
+  // for all of its mutating controls, and this is it. ManageDevbox (codebases,
+  // capability writes, session bundles) and the shell stay with the operators.
+  const canManage = ready && can('OperateDevbox');
   // READING the fleet and DRIVING it are different rights, and this file used
   // to conflate them. `/api/devbox` mounts
   // `readForRolesElseAction(['org-leader','hr-admin','program-owner'],
-  // 'ManageDevbox')` — a deliberate read tier on top of the write capability —
+  // devboxWriteAction)` — a deliberate read tier on top of the write gates —
   // so the "it would be a 403 every poll" premise below is true only of roles
   // outside BOTH. Gating the poll on the write capability meant the lab
   // rendered "0 computers · Provision at least one" for precisely the roles the
@@ -139,8 +144,9 @@ export function ComputeHost({ children }: { children: ReactNode }) {
   // lib/devbox-visibility.ts) — so this list is both "what can I bill" and
   // "who else will see this".
   //
-  // Skipped entirely without the capability: the whole /api/devbox router is
-  // ManageDevbox-gated, so there is nothing to charge and no reason to ask.
+  // Skipped entirely without the drive: charging a computer to an initiative
+  // is part of provisioning it (POST /boxes, OperateDevbox), so a viewer who
+  // cannot provision has nothing to charge and no reason to ask.
   const { data: orgProjects } = useFetch<OrgProject[]>(canManage ? '/api/graph/projects' : null);
 
   // Budgets ride a SEPARATE fetch rather than joining server-side, on purpose:
@@ -202,11 +208,10 @@ export function ComputeHost({ children }: { children: ReactNode }) {
   // a microVM — see localMachines.tsx for why this cannot be a second kind —
   // and not to attach a shell the session's capabilities already refuse.
   // Attaching is POST /api/devbox/:sid/shell-url, which asks OpenDevboxShell
-  // (DE-42, devbox.ts:860) behind the mount's ManageDevbox, so both are asked.
-  // `canManage` itself stays ManageDevbox: provision / stop / remove
-  // (POST /boxes, PATCH, DELETE) are mount-gated on it, and the library has
-  // one prop for all of its mutating controls.
-  const canOpenShell = canManage && can('OpenDevboxShell');
+  // (DE-42, devbox.ts:860) behind the mount's ManageDevbox — the shell is not
+  // part of the drive, so both are asked here too: a leader who can provision
+  // and hand work (OperateDevbox, RunDevboxTask) still gets no terminal.
+  const canOpenShell = ready && can('ManageDevbox') && can('OpenDevboxShell');
   const paneKinds = useMemo(() => labPaneKinds(canOpenShell), [canOpenShell]);
 
   return (
@@ -215,8 +220,8 @@ export function ComputeHost({ children }: { children: ReactNode }) {
       paneKinds={paneKinds}
       canManage={canManage}
       // This provider polls on a timer for every user on every page, and every
-      // route under it is ManageDevbox-gated — without this it would be a 403
-      // every poll for anyone who lacks the capability, invisible in
+      // route under it is gated (the read tier, else a Cedar action) — without
+      // this it would be a 403 every poll for anyone outside the tier, invisible in
       // development because the developer always has it. Also paused while
       // the tab is backgrounded — see `pollEnabled` above.
       enabled={pollEnabled}

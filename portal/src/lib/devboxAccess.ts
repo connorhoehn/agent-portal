@@ -17,14 +17,16 @@ export const FLEET_READ_ROLES = ['org-leader', 'hr-admin', 'program-owner', 'adm
 /**
  * Whether this session can open Computer Lab at all.
  *
- * Reading the fleet and driving it are different rights: `ManageDevbox` is the
- * write capability, and the roles above get a read-only view without it.
+ * Reading the fleet and driving it are different rights: `OperateDevbox` drives
+ * it (provision, rename, stop, remove — the lab's drive, split out of
+ * `ManageDevbox` on 11 November 2026), `ManageDevbox` configures it, and the
+ * roles above get a read-only view with neither.
  */
 export function canOpenComputerLab(
-  hasManageDevbox: boolean,
+  canDrive: boolean,
   role: string | null | undefined,
 ): boolean {
-  return hasManageDevbox || FLEET_READ_ROLES.includes(role ?? '');
+  return canDrive || FLEET_READ_ROLES.includes(role ?? '');
 }
 
 /** Where "Open Computer Lab" should actually land for this session. */

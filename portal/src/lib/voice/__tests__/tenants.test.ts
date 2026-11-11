@@ -291,7 +291,7 @@ test('V2-8: an SME\'s scripted session stops a computer of their own: the card f
     { id: 'box-mock-0002', label: 'auth-migration-2', sessionId: 'b'.repeat(40), status: 'idle', projectId: 'p-auth-migration', ownerId: 'u-vera' },
   ] };
   const run = await scriptedRun('orgiq', {
-    role: 'sme', allow: ['Search', 'ManageDevbox', 'OpenDevboxShell', 'VoiceNavigate'], call,
+    role: 'sme', allow: ['Search', 'ManageDevbox', 'OperateDevbox', 'OpenDevboxShell', 'VoiceNavigate'], call,
     routes: [route('GET', '/api/devbox/boxes', 200, boxes)],
     ctx: { compute: {
       canManage: true, computers: () => [], openShell: () => ({ ok: false, reason: 'unused' }), runCommand: async () => {},
