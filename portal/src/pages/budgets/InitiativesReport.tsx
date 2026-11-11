@@ -463,6 +463,7 @@ export function InitiativesReport({
         columns={columns}
         keyField={(row) => row.orgProjectId}
         selectedKey={selectedKey}
+        revealSelection
       />
 
       <ConfirmDialog

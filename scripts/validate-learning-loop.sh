@@ -6,6 +6,7 @@
 #                   mock middleware and portal, real dispatches against the fake microVM, no model
 #   item 13         scripts/learning-loop/debrief-e2e.mjs: the real local worker, a stub `claude`, a throwaway repository
 #   item 14         scripts/learning-loop/local-report-e2e.mjs: the same harness, a brief that gives a runbook
+#   budget row      scripts/journeys/budgets-selection.mjs: offscreen selection at desktop, tablet and phone widths
 #   suites          the middleware suites the loop owns (run reports, runbooks, the debrief, the mock's offer, the brief
 #                   contract, local compute, the microVM dispatcher, the wire, parity, guard and scope suites) and the portal suite
 #
@@ -81,6 +82,16 @@ done
 if [ "$JOURNEY_CODE" -ne 0 ]; then
   fail "the journey exited $JOURNEY_CODE (see $JOURNEY_LOG)"
   grep -E "^FAIL|^  " "$JOURNEY_LOG" | head -20 | sed 's/^/      /'
+fi
+
+section "budget selection: visible after loading and resizing"
+node scripts/journeys/run-demo-moments.mjs --journey budgets-selection >"$LOGS/budgets-selection.log" 2>&1
+code=$?
+if [ "$code" -eq 0 ] && [ "$(grep -c '^PASS budget selection @' "$LOGS/budgets-selection.log")" -eq 6 ]; then
+  pass "budget selection: the selected row is visible at 1440, 1280 and 390 px after load and resize"
+else
+  fail "budget selection: exited $code (see $LOGS/budgets-selection.log)"
+  tail -n 12 "$LOGS/budgets-selection.log" | sed 's/^/      /'
 fi
 
 # ── items 13 and 14: the real local worker against a stub claude ─────────────

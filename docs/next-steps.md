@@ -858,7 +858,7 @@ Decided differently from the design, and why:
 Open:
 
 - Nothing seeds local compute ledger entries, so Lines shows $0 reported until a worker runs.
-- At 1280 wide and on phones the initiatives table shows in its card form (under 40rem of width beside three rails). The mark is there, but the page needs scrolling to find a highlighted row; the row is not scrolled into view.
+- Closed on 11 November: ui-components 2.522.0 adds optional `DataTable.revealSelection`, and the initiatives report opts in. A selected row is visible after loading and resizing at 1440, 1280 and 390 px, including card layout. The regression journey is part of `validate-learning-loop.sh`.
 
 ### Lane D: giving runbooks to a run
 
@@ -929,7 +929,7 @@ Decided:
 - The microVM report is recorded before the job completes, so a claim lost in between could leave a report for a run another attempt now owns; the dispatcher checks the claim just before.
 
 Left:
-- Budgets at 1280 px: the highlighted row is selected inside the library's table (`selectedKey` is passed straight through in `InitiativesReport.tsx`), so scrolling it into view in card form belongs in ui-components, not a one-line change in the page. Not done.
+- Budgets at 1280 px: closed by the selected-row pickup in ui-components 2.522.0 (`704280cea`, `codex/data-table-reveal-selection`); `InitiativesReport.tsx` opts into `revealSelection`. Background refresh, focus and manual pagination have library regression coverage. The separate deep DOM audit still reports the same 852 issues as 2.519.0 across six width/theme cases; see the handoff for scope.
 - The microVM debrief is proven against the fake devbox and the Python suite only; no real machine was started.
 
 ### Lane E6+E7: removals and the Workflows rename

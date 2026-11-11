@@ -4,7 +4,7 @@ This is the work order for whoever picks the loop up next (a person, Codex, or a
 
 ## Where main stands
 
-Everything this work order asked for is on main (11 November 2026): lanes A (run report), B (budgets), C (debrief, proposals from runs, review rules, retirement) and D (giving runbooks to a run); the eight lane E packages (the run page, one Runs list, the brief preview and pins, the Runbooks pages, Bots and Computers, the removals, the Workflows rename, the journey and the validator); and the middleware follow-ups, except the Budgets table at 1280 px, which waits on the component library. The judge is `scripts/validate-learning-loop.sh`:
+Everything this work order asked for is on main (11 November 2026): lanes A (run report), B (budgets), C (debrief, proposals from runs, review rules, retirement) and D (giving runbooks to a run); the eight lane E packages (the run page, one Runs list, the brief preview and pins, the Runbooks pages, Bots and Computers, the removals, the Workflows rename, the journey and the validator); and the middleware follow-ups, including selected-row visibility on Budgets at 1280 px. The judge is `scripts/validate-learning-loop.sh`:
 
 - Acceptance 1 to 12 pass in the browser through real dispatches on the mock (`npm run journey:learning-loop`, in `portal/`).
 - Acceptance items 13 and 14 pass against the real local worker with a stub `claude` (`scripts/learning-loop/debrief-e2e.mjs`, `scripts/learning-loop/local-report-e2e.mjs`).
@@ -12,11 +12,21 @@ Everything this work order asked for is on main (11 November 2026): lanes A (run
 
 The package sections below are kept as the as-built record: the file paths, contracts and acceptance each names are what was built. What remains open is in [next-steps.md](next-steps.md) under "Learning loop" (each lane's note) and in the decisions file.
 
-Pickup on 11 November: the MicroVM filter now has browser coverage in journey step R4, using two hand-written, clearly marked browser fixtures. It checks selection through the filter control, keeping another filter, reload, clearing, and the Demo data mark. The API suite separately checks real filtering over microVM and other executor reports. This does not prove a microVM dispatch: the default mock still produces governed runs, and real AWS execution remains unverified. The Budgets selection gap is now explicitly recorded in [ui-components-queue.md](ui-components-queue.md).
+Pickup on 11 November: the MicroVM filter now has browser coverage in journey step R4, using two hand-written, clearly marked browser fixtures. It checks selection through the filter control, keeping another filter, reload, clearing, and the Demo data mark. The API suite separately checks real filtering over microVM and other executor reports. This does not prove a microVM dispatch: the default mock still produces governed runs, and real AWS execution remains unverified. The subsequent Budgets pickup below closes the selected-row gap through the shared library.
 
-Component discipline retains main's known baseline of nine failing checks, confirmed in the preceding handoff: raw elements and inline styles exceed several area budgets, and card-stat and density-size rules fail in `ReferenceSheet.tsx` and `BotDetailPage.tsx`. This pickup changes no portal implementation. The loop's 61 middleware suites pass; the wider middleware run was stopped when the baseline was initially mistaken for a new merge blocker, so that run is not claimed as passing.
+Component discipline retains main's known baseline of nine failing checks, confirmed in the preceding handoff: raw elements and inline styles exceed several area budgets, and card-stat and density-size rules fail in `ReferenceSheet.tsx` and `BotDetailPage.tsx`. The MicroVM-filter pickup changed no portal implementation. The loop's 61 middleware suites pass; the wider middleware run was stopped when the baseline was initially mistaken for a new merge blocker, so that run is not claimed as passing.
 
 Pickup verification: all fourteen acceptance items and R1–R4 pass (`validate-learning-loop.sh --skip-suites`); separately, the loop's middleware suites pass 1,046 tests, the portal passes 2,448 tests with one skipped, and the devbox Python suite passes 65 tests. Both TypeScript checks, voice inventory, documentation links and story checks pass. All four journeys (learning loop, demo moments, voice coverage and leftovers) finish without failures. R4's screenshots were checked at 1280 and 1440 px; its reports remain browser-only fixtures.
+
+## Continuing work loop (11 November 2026)
+
+Repeat: select an actionable recorded gap, reproduce it, fix it on an isolated branch, run focused checks and the relevant journey, update this record, then fast-forward the clean main checkout and select the next gap. Keep user decisions and real-cloud validation outside that loop until their required input exists.
+
+The Budgets gap is closed with vendored ui-components 2.522.0, built from library commit `704280cea` on `codex/data-table-reveal-selection`. The library source remains on that branch because its main checkout contains unrelated edits. `DataTable` owns optional `revealSelection`; the page only opts in. It chooses the selected row's page, waits for layout and reveals the row without moving focus. Refreshing equivalent rows does not scroll again. `npm run journey:budgets-selection` in `portal/` checks an initially offscreen allocation at 1440, 1280 and 390 px on load and resize; the learning-loop validator now includes it.
+
+Library verification: 1,107 suites / 12,298 tests passed before the final refresh guard; the final guard and related checks pass 114 tests, and lint and build pass. The portal suite passes 2,448 tests with one skipped. The Budgets deep DOM audit is **not clean**: its six light/dark width cases produce 852 findings, with every issue identical against 2.519.0 using the same audit engine. They cover card/table geometry, narrow shell column expectations and leading separators; no tolerance or baseline was changed. These need a separate audit-contract/layout pass. On the final package, `validate-learning-loop.sh --skip-suites` passes all fourteen acceptance items, R1–R4 and the six budget visibility cases. Documentation links and story checks pass; component discipline remains at the same nine failures, with zero inheritance contract failures.
+
+Next actionable gap: preserve a structured failure code through governed runs instead of deriving it from the combined error message. Real governed debrief remains unsupported as decided; the MicroVM browser fixtures do not prove cloud execution.
 
 ## Rules that bind this work
 
@@ -191,7 +201,7 @@ Small, separate changes; each needs its own test.
 3. [done, lane C follow-up] **Write-policy entries** for `PUT /api/graph/work-items/:id/runbook-pins` and `POST /api/local-compute/jobs/:jobId/debrief` in `mock/core/wire/write-policy.ts`, each with the six-rule note the file asks for, so the capture records their response shapes.
 4. [done, lane C follow-up] **Scope matrix coverage.** `middleware/src/routes/__tests__/initiative-scope-matrix.test.ts` does not yet cover the runbooks routes or the local compute claim; add rows.
 5. [done, lane C follow-up] **Seeded ledger rows for local compute**, so the Budgets › Lines report shows a reported figure on the mock instead of $0 until a worker runs.
-6. [not done: the row selection lives in the ui-components table] **Budgets at 1280 px**: the initiatives table shows its card form and a highlighted row is not scrolled into view (lane B's note).
+6. [done, selected-row pickup] **Budgets at 1280 px**: `DataTable.revealSelection` in ui-components 2.522.0 reveals the selected row in table and card layouts; `InitiativesReport.tsx` opts in. The validator checks load and resize at 1440, 1280 and 390 px.
 
 ## Open decisions the owner may overrule
 
