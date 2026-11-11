@@ -23,6 +23,8 @@ export interface ListRunReportsQuery {
   outcome?: RunOutcome;
   /** A debrief state, or `none`: the run has no debrief record. */
   debrief?: DebriefState | 'none';
+  /** Only these runs (`?runRefs=a,b`). */
+  runRefs?: readonly string[];
   cursor?: string;
   limit?: number;
 }
@@ -46,7 +48,8 @@ export const byEndedDesc = (a: RunReport, b: RunReport): number =>
   b.endedAt.localeCompare(a.endedAt) || a.runRef.localeCompare(b.runRef);
 
 export function filterReports(rows: readonly RunReport[], q: ListRunReportsQuery | undefined): RunReport[] {
-  return rows.filter((r) => (!q?.workItemId || r.workItemId === q.workItemId)
+  return rows.filter((r) => (!q?.runRefs || q.runRefs.includes(r.runRef))
+    && (!q?.workItemId || r.workItemId === q.workItemId)
     && (!q?.initiativeId || r.initiativeId === q.initiativeId)
     && (!q?.runbookId || r.runbooksOffered.some((x) => x.id === q.runbookId) || r.runbooksUsed.some((x) => x.id === q.runbookId))
     && (!q?.executors?.length || q.executors.includes(r.executor))

@@ -71,6 +71,14 @@ describe('GET /api/run-reports', () => {
     expect(await refs('?runbook=rb-x&workItem=wi-1')).toEqual([]);
   });
 
+  it('filters to the run refs a bot page asks for, behind the same gate', async () => {
+    const app = await appAs(mia);
+    const refs = async (q: string) => (await request(app).get(`/api/run-reports${q}`)).body.reports.map((r: RunReport) => r.runRef);
+    expect(await refs('?runRefs=a,c,missing')).toEqual(['c', 'a']);
+    const member = await appAs({ role: 'member' as Role, tenant: 'orgiq' as Tenant, sub: 'u-m' });
+    expect((await request(member).get('/api/run-reports?runRefs=a')).status).toBe(403);
+  });
+
   it('pages with a cursor', async () => {
     const app = await appAs(mia);
     const first = await request(app).get('/api/run-reports?limit=2');

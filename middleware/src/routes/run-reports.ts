@@ -73,6 +73,9 @@ export function parseRunReportsQuery(q: Record<string, unknown>): ListRunReports
     if (!DEBRIEF_STATES.includes(debrief)) throw new ValidationError(`debrief "${debrief}" is not one of ${DEBRIEF_STATES.join(', ')}`);
     out.debrief = debrief as DebriefState | 'none';
   }
+  // A bot page asks for the reports of its own firings: a comma list of run refs (a bot run's job id).
+  const runRefs = text(q['runRefs']);
+  if (runRefs) out.runRefs = runRefs.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 200);
   const cursor = text(q['cursor']);
   if (cursor) out.cursor = cursor;
   const n = Number(q['limit']);

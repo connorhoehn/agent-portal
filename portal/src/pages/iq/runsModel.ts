@@ -153,9 +153,48 @@ export function runsListHref(f: Partial<{ executor: string; initiative: string; 
 }
 
 /**
- * Whether a run's page offers Retry: the run failed and the façade says it is a queue job, the one
+ * Whether a run's page offers Retry: the run failed or was cancelled and the façade says it is a queue job, the one
  * kind `POST /api/work/jobs/:id/requeue` can clone. Bot firings, project runs and assessment runs
  * show nothing rather than a button that would be refused.
  */
 export const canRetryRun = (outcome: RunOutcome | undefined, sourceTable: string | undefined): boolean =>
-  outcome === 'failed' && sourceTable === 'agent_jobs';
+  (outcome === 'failed' || outcome === 'cancelled') && sourceTable === 'agent_jobs';
+
+/** A bot run's queue job id is its run report's run ref: the join the initiative Agents tab and the bot page share. */
+export const reportsByRunRef = (reports: readonly RunReportRow[]): Map<string, RunReportRow> =>
+  new Map(reports.map((r) => [r.runRef, r] as const));
+
+export interface BotRunSummary {
+  /** Firings started inside the window. */
+  firings: number;
+  /** Of those, the ones that have a run report. */
+  reported: number;
+  done: number;
+  failed: number;
+  /** Runbook proposals the reported runs filed. */
+  proposals: number;
+  /** Money billed across the reported runs, or null when no report carries a billed figure. */
+  billedUsd: number | null;
+}
+
+/** The last-30-days line of a bot's page. Only reports whose cost was billed add to the money. */
+export function botRunSummary(
+  firings: ReadonlyArray<{ jobId: string | null; startedAt: string }>,
+  reports: ReadonlyMap<string, RunReportRow>,
+  sinceMs: number,
+  parse: (ts: string) => number,
+): BotRunSummary {
+  const out: BotRunSummary = { firings: 0, reported: 0, done: 0, failed: 0, proposals: 0, billedUsd: null };
+  for (const f of firings) {
+    if (parse(f.startedAt) < sinceMs) continue;
+    out.firings += 1;
+    const r = f.jobId ? reports.get(f.jobId) : undefined;
+    if (!r) continue;
+    out.reported += 1;
+    if (r.outcome === 'done') out.done += 1;
+    if (r.outcome === 'failed') out.failed += 1;
+    if (r.debrief?.state === 'filed' && r.debrief.proposalId) out.proposals += 1;
+    if (r.cost.basis === 'billed' && r.cost.billedUsd != null) out.billedUsd = (out.billedUsd ?? 0) + r.cost.billedUsd;
+  }
+  return out;
+}

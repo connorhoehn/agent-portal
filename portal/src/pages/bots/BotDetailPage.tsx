@@ -51,6 +51,10 @@ import { botStatusChip, runStateChip } from '../../lib/statusTone';
 import { usd, showingLabel } from '../../lib/format';
 import { inputWiring, lastRanText } from './botsFormat';
 import { TEMPLATE_TONE, triggerSummary, type Bot, type BotRun } from './BotsPage';
+import { RecordLink } from '../decisions/RecordLink';
+import { runHref } from '../iq/runRows';
+import { botRunSummary, costWords, OUTCOME_LABEL, OUTCOME_TONE, reportsByRunRef, type RunReportRow } from '../iq/runsModel';
+import { proposalsHref } from '../runbooks/runbooksModel';
 import { botRunRefusalMessage, type BotRunRefusal } from '../../lib/dispatchGates';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -144,6 +148,17 @@ export default function BotDetailPage() {
   const running = runs.some((r) => r.status === 'running');
   if (running !== anyRunning) setAnyRunning(running);
 
+  // A firing's outcome is its run report's, joined by the queue job id (the report's run ref). The read is gated to the
+  // roles that read run reports; for anyone else it fails quietly and the page stays as it was.
+  const reportRefs = runs.map((r) => r.jobId).filter((j): j is string => !!j).slice(0, 100);
+  const reportsRead = useFetch<{ reports: RunReportRow[] }>(
+    reportRefs.length > 0 ? `/api/run-reports?runRefs=${encodeURIComponent(reportRefs.join(','))}&limit=200` : null, 30_000,
+  );
+  const reportsReadable = !reportsRead.error && !!reportsRead.data;
+  const reportByJob = reportsByRunRef(reportsReadable ? reportsRead.data!.reports : []);
+  const THIRTY_DAYS_MS = 30 * 86_400_000;
+  const summary = reportsReadable ? botRunSummary(runs, reportByJob, Date.now() - THIRTY_DAYS_MS, parseTs) : null;
+
   // The same firings read as pipeline Runs (docs/pipelines-tenant-goal.md
   // §"The vertical slice"): each cron firing is the trigger of the queue job
   // it enqueued, rendered Run → Steps → Artifacts → Events through the orgiq
@@ -185,9 +200,15 @@ export default function BotDetailPage() {
         const o = r.outcome ?? {};
         const projectId = bot?.agentProjectId ?? null;
         const canLinkRun = r.runId != null && projectId != null;
-        const hasOutcome = Boolean(o.reason || o.changeId || o.prUrl || o.filesChanged != null || r.jobId || canLinkRun);
+        const report = r.jobId ? reportByJob.get(r.jobId) : undefined;
+        const hasOutcome = Boolean(report || o.reason || o.changeId || o.prUrl || o.filesChanged != null || r.jobId || canLinkRun);
         return (
           <Inline gap="sm" wrap={false} align="start" className="min-w-0" title={o.summary ?? o.reason}>
+            {report && (
+              <RecordLink to={runHref(report.runRef)} data-testid="bot-run-report">
+                <Chip tone={OUTCOME_TONE[report.outcome]} size="xs">{OUTCOME_LABEL[report.outcome]}</Chip>
+              </RecordLink>
+            )}
             {o.reason && (
               <T as="span" size="sm" tone={r.status === 'failed' ? 'danger' : 'inherit'} wrap className="min-w-0 flex-1 line-clamp-2">{o.reason}</T>
             )}
@@ -212,7 +233,7 @@ export default function BotDetailPage() {
                 run →
               </Link>
             )}
-            {!canLinkRun && r.jobId && (
+            {!canLinkRun && r.jobId && !report && (
               <Link
                 to={`/iq/work/${encodeURIComponent(r.jobId)}`}
                 title="Open the queued job this firing produced"
@@ -488,6 +509,23 @@ export default function BotDetailPage() {
               ? `${showingLabel(visibleRuns.length, runs.length, 'firings')} — what it did each time it fired.`
               : "This bot's dispatch history — what it did each time it fired."]}
           />
+          {summary && summary.firings > 0 && (
+            <Inline gap="md" align="center" wrap data-testid="bot-run-summary">
+              <MetaLine
+                size="xs" tone="secondary"
+                items={[
+                  `Last 30 days: ${summary.firings} ${summary.firings === 1 ? 'firing' : 'firings'}`,
+                  `${summary.reported} with a report`,
+                  `${summary.done} done`,
+                  `${summary.failed} failed`,
+                  `Billed ${summary.billedUsd != null ? usd(summary.billedUsd) : costWords({ billedUsd: null, reportedUsd: null, basis: 'unknown' }, usd)}`,
+                ]}
+              />
+              {summary.proposals > 0
+                ? <RecordLink to={proposalsHref()} data-testid="bot-run-proposals">{`${summary.proposals} ${summary.proposals === 1 ? 'proposal' : 'proposals'} filed`}</RecordLink>
+                : <T size="xs" tone="tertiary">No proposals filed</T>}
+            </Inline>
+          )}
           {runsFailure ? (
             <UnavailableNotice
               error={runsFailure}

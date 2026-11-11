@@ -36,7 +36,7 @@ import { EnvironmentsRailCard } from '../../components/marketplace/InitiativeEnv
 import { TEMPLATE_TONE, triggerSummary, type BotRun } from '../bots/BotsPage';
 import { RANGE_DAYS, runTableRows, type RunTableRow } from './agentRunsModel';
 import { flattenWorkItems } from './projectFormat';
-import { OUTCOME_LABEL, OUTCOME_TONE, runsListHref, type RunReportRow } from '../iq/runsModel';
+import { OUTCOME_LABEL, OUTCOME_TONE, reportsByRunRef, runsListHref, type RunReportRow } from '../iq/runsModel';
 import { runHref } from '../iq/runRows';
 import { RecordLink } from '../decisions/RecordLink';
 import type { Codebase, WorkItemTree } from './types';
@@ -106,7 +106,7 @@ export function InitiativeRail({
     initiativeId ? `/api/run-reports?initiative=${encodeURIComponent(initiativeId)}&limit=200` : null, 15_000,
   );
   const reportByJob = useMemo(
-    () => new Map((reportsRead.error ? [] : reportsRead.data?.reports ?? []).map((r) => [r.runRef, r] as const)),
+    () => reportsByRunRef(reportsRead.error ? [] : reportsRead.data?.reports ?? []),
     [reportsRead.data, reportsRead.error],
   );
   const runsError = error ?? (data?.degraded ? data.error ?? 'degraded' : null);

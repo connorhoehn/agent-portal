@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
-  canRetryRun, costWords, didNotReport, facadeIdOf, isSimulated, learnedDot, reportsQuery, runRefOf, runsListHref, stepDetail, stepWords, whoRan,
+  botRunSummary, canRetryRun, costWords, didNotReport, facadeIdOf, isSimulated, learnedDot, reportsByRunRef, reportsQuery, runRefOf, runsListHref, stepDetail, stepWords, whoRan,
 } from '../runsModel.ts';
 
 const usd = (n: number) => `$${n.toFixed(2)}`;
@@ -69,10 +69,30 @@ describe('debriefWords', () => {
     assert.equal(debriefWords({ debrief: { state: 'nothing-to-keep' } as never }), 'Nothing to keep');
   });
 
-  it('canRetryRun: only a failed queue job offers Retry', () => {
+  it('canRetryRun: only a failed or cancelled queue job offers Retry', () => {
     assert.equal(canRetryRun('failed', 'agent_jobs'), true);
     assert.equal(canRetryRun('failed', 'bot_runs'), false);
+    assert.equal(canRetryRun('cancelled', 'agent_jobs'), true);
+    assert.equal(canRetryRun('cancelled', 'bot_runs'), false);
     assert.equal(canRetryRun('done', 'agent_jobs'), false);
     assert.equal(canRetryRun(undefined, 'agent_jobs'), false);
+  });
+
+  it('botRunSummary counts the window, joins reports by job id, and never invents a cost', () => {
+    const rep = (runRef: string, outcome: string, extra: Record<string, unknown> = {}) =>
+      ({ runRef, outcome, cost: { billedUsd: null, reportedUsd: null, basis: 'unknown' }, debrief: null, ...extra }) as never;
+    const reports = reportsByRunRef([
+      rep('j1', 'done', { cost: { billedUsd: 0.5, reportedUsd: null, basis: 'billed' }, debrief: { state: 'filed', proposalId: 'p1' } }),
+      rep('j2', 'failed'),
+      rep('old', 'done'),
+    ]);
+    const parse = (t: string) => Date.parse(t);
+    const since = Date.parse('2026-10-12T00:00:00Z');
+    const firings = [
+      { jobId: 'j1', startedAt: '2026-11-01T00:00:00Z' }, { jobId: 'j2', startedAt: '2026-11-02T00:00:00Z' },
+      { jobId: null, startedAt: '2026-11-03T00:00:00Z' }, { jobId: 'old', startedAt: '2026-09-01T00:00:00Z' },
+    ];
+    assert.deepEqual(botRunSummary(firings, reports, since, parse), { firings: 3, reported: 2, done: 1, failed: 1, proposals: 1, billedUsd: 0.5 });
+    assert.equal(botRunSummary([firings[1]!], reports, since, parse).billedUsd, null);
   });
 });
