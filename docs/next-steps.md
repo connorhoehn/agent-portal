@@ -989,7 +989,7 @@ Left:
 - The evidence line is compared with `GET /api/runbooks/evidence`, not with fixed numbers; "finished done" counts 0 because a governed run with a change ends `needs-review`.
 
 **Left.**
-- The Runs list names a governed run "Run": names come from the queue's jobs and bots, and a governed run has neither. A work item title on the row would fix it (page work, not done).
+- The Runs list used to name a governed run "Run" (names came from the queue's jobs and bots, and a governed run has neither); the list now also reads the work board and names such a run by its work item's title.
 - The microVM executor still has no run on the mock, so its Runs filter is untested in a browser.
 - Real governed runs still cannot be debriefed (their devbox path reports no Claude session id).
 
