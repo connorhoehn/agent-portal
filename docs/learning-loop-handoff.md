@@ -123,7 +123,9 @@ Acceptance: item 4 (open a related work item; its preview lists `rb-logout-shim-
 
 Acceptance: items 2, 3 (a second persona accepts; the confirmation states the run's repository; the library shows a version naming the run), 6 (the runbook's page lists the run, health proven, the evidence line counts it), 9 (one retire proposal naming three runs: the fixtures need three successful unfollowed runs of `rb-tenant-cutover`, or the journey dispatches it three times with a fixture that reports `followed: no`), 10 (ten open run-authored proposals → the next debrief shows `skipped` with the `review-queue-full` sentence), 12 (a proposal with a script cannot be accepted until the reviewer ticks it).
 
-### E5. Bots and Computers
+### E5. Bots and Computers (done)
+
+Done: see next-steps.md, "Lane E5". Bots is `/admin/bots` (with `?initiative=`); Computers is `/iq/computers`, and the two old computer routes redirect there.
 
 Two pages replace five places:
 
@@ -147,7 +149,7 @@ Acceptance: `node scripts/docs/check-links.mjs` green (the removed-doc baseline 
 
 ### E7. Rename
 
-Done. The pipelines tenant's "Runbooks" is **Workflows** at `/pipelines/workflows` (`portal/src/pages/pipelines/WorkflowsPage.tsx`), with `/pipelines/runbooks` redirecting; behaviour unchanged, and the API path `/api/pipelines/runbooks` stays (noted in the page's header comment). E6 items 2 to 6 are done with it; the removed `/iq/promotions`, `/iq/distillation`, `/iq/release` and `/iq/local-compute/configuration` paths now land on "Page not found", which is what decision 20 asks for (nothing links to them). Left from E6: the Definitions page still filters by a `runbook` kind and its rung label still says "skill".
+Done. The pipelines tenant's "Runbooks" is **Workflows** at `/pipelines/workflows` (`portal/src/pages/pipelines/WorkflowsPage.tsx`), with `/pipelines/runbooks` redirecting; behaviour unchanged, and the API path `/api/pipelines/runbooks` stays (noted in the page's header comment). E6 items 2 to 6 are done with it; the removed `/iq/promotions`, `/iq/distillation`, `/iq/release` and `/iq/local-compute/configuration` paths now land on "Page not found", which is what decision 20 asks for (nothing links to them). The Definitions page's kind filter and rung label now say Workflow (lane E5 session).
 
 ### E8. The journey and the validator
 

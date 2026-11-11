@@ -12,7 +12,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
   Banner, Button, Card, Chip, CloseIcon, CollectionToolbar, ConfirmDialog, DataTable, DetailSection,
-  EmptyState, EntityCell, IconButton, Inline, InlineAlert, MetaLine, Stack, Switch, T, type DataTableColumn,
+  EmptyState, EntityCell, IconButton, Inline, InlineAlert, MetaLine, PauseCircleIcon, Stack, Switch, T, type DataTableColumn,
 } from '@connorhoehn/ui-components/shared';
 import { ComputerLab, useComputeOptional } from '@connorhoehn/ui-components/compute';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
@@ -201,15 +201,16 @@ export default function ComputersPage() {
           );
         }
         return canDriveLab && r.stoppable ? (
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={stopBusy === r.key}
-            onClick={(e) => { e.stopPropagation(); void stopLab(r); }}
-            aria-label={`Stop ${r.name}`}
-          >
-            {stopBusy === r.key ? 'Stopping…' : 'Stop'}
-          </Button>
+          <Inline gap="xs" align="center" justify="end" wrap={false}>
+            <IconButton
+              size="sm"
+              icon={<PauseCircleIcon />}
+              disabled={stopBusy === r.key}
+              onClick={(e) => { e.stopPropagation(); void stopLab(r); }}
+              aria-label={`Stop ${r.name}`}
+              title={stopBusy === r.key ? 'Stopping…' : 'Stop'}
+            />
+          </Inline>
         ) : null;
       },
     },
