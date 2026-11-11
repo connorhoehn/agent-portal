@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-11T03:22:03.166Z",
-  "serverHandlerSha": "9429825216c28e0068777d7c6e26ce9e9539e857749b3dfc7cd2ee54cbac63ef",
-  "baseUrl": "http://127.0.0.1:3909",
+  "capturedAt": "2026-11-11T03:36:36.674Z",
+  "serverHandlerSha": "256ccc5bba3f28950f5f32f1775608357c90a5db092c5eaf0df2edc82cd6d29e",
+  "baseUrl": "http://127.0.0.1:3996",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -3049,6 +3049,12 @@
     "POST /api/local-compute/jobs/:jobId/complete": {
       "skipped": "no body: a live claimToken only exists once POST /claim actually claims a row for this node, and this harness's BodyContext exposes GET only — it cannot chain a prior WRITE's response into this one, and every route is captured against an independently-reset world, so no claim from another spec's replay survives to be reused here"
     },
+    "POST /api/local-compute/jobs/:jobId/debrief": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "POST /api/local-compute/jobs/:jobId/heartbeat": {
       "skipped": "no body: a live claimToken only exists once POST /claim actually claims a row for this node, and this harness's BodyContext exposes GET only — it cannot chain a prior WRITE's response into this one, and every route is captured against an independently-reset world, so no claim from another spec's replay survives to be reused here"
     },
@@ -3545,6 +3551,7 @@
         "proposal.created_at": "string",
         "proposal.decided_at": "null",
         "proposal.decided_by": "null",
+        "proposal.expired": "boolean",
         "proposal.id": "string",
         "proposal.kind": "string",
         "proposal.lint": "array",
@@ -3817,6 +3824,7 @@
         "proposal.created_at": "string",
         "proposal.decided_at": "null",
         "proposal.decided_by": "null",
+        "proposal.expired": "boolean",
         "proposal.id": "string",
         "proposal.kind": "string",
         "proposal.lint": "array",

@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-11T03:21:58.304Z",
-  "serverHandlerSha": "9429825216c28e0068777d7c6e26ce9e9539e857749b3dfc7cd2ee54cbac63ef",
-  "baseUrl": "http://127.0.0.1:3909",
+  "capturedAt": "2026-11-11T03:36:31.774Z",
+  "serverHandlerSha": "256ccc5bba3f28950f5f32f1775608357c90a5db092c5eaf0df2edc82cd6d29e",
+  "baseUrl": "http://127.0.0.1:3996",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -8009,6 +8009,7 @@
         "proposals[].created_at": "string",
         "proposals[].decided_at": "null",
         "proposals[].decided_by": "null",
+        "proposals[].expired": "boolean",
         "proposals[].id": "string",
         "proposals[].kind": "string",
         "proposals[].lint": "array",
@@ -8113,6 +8114,7 @@
         "proposal.created_at": "string",
         "proposal.decided_at": "null",
         "proposal.decided_by": "null",
+        "proposal.expired": "boolean",
         "proposal.id": "string",
         "proposal.kind": "string",
         "proposal.lint": "array",
@@ -8183,7 +8185,8 @@
         "runbook.scope.kind": "string",
         "runbook.scope.ref": "string",
         "runbook.status": "string",
-        "runbook.updated_at": "string"
+        "runbook.updated_at": "string",
+        "scripts_to_read": "array"
       },
       "values": {
         "proposal.kind": [

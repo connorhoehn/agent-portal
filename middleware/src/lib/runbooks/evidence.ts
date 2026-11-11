@@ -176,7 +176,7 @@ export function runbookEvidence(
   };
 }
 
-export interface ProposalRow { source: { kind: 'run' | 'person' }; status: 'open' | 'accepted' | 'rejected' | 'merged' | 'withdrawn'; created_at: string }
+export interface ProposalRow { source: { kind: 'run' | 'person' | 'system' }; status: 'open' | 'accepted' | 'rejected' | 'merged' | 'withdrawn'; created_at: string }
 
 /** The loop as a whole, over `rows` and the run-authored proposals. */
 export function loopEvidence(
