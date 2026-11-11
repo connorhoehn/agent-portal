@@ -34,8 +34,8 @@ test('rule 1 in words: a completed run allows, anything else names why not', () 
   assert.equal(refused.tone, 'warning');
   assert.match(refused.detail, /completed dry-run/);
   assert.equal(promotionVerdict({ proposedKind: 'skill', candidateStatus: 'promoted', promotionToSkill: { ok: false, reason: 'x' } }).label, 'Already a skill');
-  assert.equal(rungLabel({ proposedKind: 'skill', candidateStatus: 'approved' }), 'Proposed as a skill · approved');
-  assert.equal(rungLabel({ proposedKind: 'runbook', candidateStatus: 'candidate' }), 'Runbook');
+  assert.equal(rungLabel({ proposedKind: 'skill', candidateStatus: 'approved' }), 'Proposed workflow · approved');
+  assert.equal(rungLabel({ proposedKind: 'runbook', candidateStatus: 'candidate' }), 'Workflow');
 });
 
 test('only an enabled runbook offers a dry-run', () => {

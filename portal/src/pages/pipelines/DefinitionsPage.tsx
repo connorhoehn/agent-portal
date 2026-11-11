@@ -114,7 +114,7 @@ export default function DefinitionsPage() {
   }
 
   return (
-    <CollectionCommandPage data-testid="pipelines-definitions" title="Definitions" description="What can run: every bot, assessment command, runbook and agent, with its triggers, steps and runs.">
+    <CollectionCommandPage data-testid="pipelines-definitions" title="Definitions" description="What can run: every bot, assessment command, workflow and agent, with its triggers, steps and runs.">
       <Stack gap="none" className="min-h-0 min-w-0 flex-1">
       <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)]">
       <CollectionToolbar {...{ label: 'Definition filters', search: { value: query, onChange: setQuery, placeholder: 'Search definitions', 'aria-label': 'Search definitions' },
@@ -130,7 +130,7 @@ export default function DefinitionsPage() {
         </Banner>
       )}
       {error ? (
-        <UnavailableNotice error={error} what="the definition catalog" source="Definitions are derived from bots, commands, runbooks and agents" onRetry={refresh} />
+        <UnavailableNotice error={error} what="the definition catalog" source="Definitions are derived from bots, commands, workflows and agents" onRetry={refresh} />
       ) : (
         <DataTable narrow
           data-testid="pipelines-definitions-table"

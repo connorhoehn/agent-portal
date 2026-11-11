@@ -94,7 +94,7 @@ export type SourcePageId = keyof typeof SOURCE_KINDS;
 
 export const DEFINITION_KIND_OPTIONS: Array<{ value: string; label: string }> = [
   { value: '', label: 'Any kind' },
-  { value: 'runbook', label: 'Runbook' },
+  { value: 'runbook', label: 'Workflow' },
   { value: 'bot', label: 'Bot' },
   { value: 'assessment-command', label: 'Assessment command' },
   { value: 'agent', label: 'Agent' },
@@ -130,9 +130,9 @@ const APPROVAL_SOURCE_LABEL: Record<ApprovalRequest['source'], string> = {
 };
 export const approvalSourceLabel = (s: string): string => APPROVAL_SOURCE_LABEL[s as ApprovalRequest['source']] ?? s;
 
-/** The ladder rung, in words: "Runbook proposed as a skill · approved". */
+/** The ladder rung, in words: "Proposed workflow · approved". */
 export function rungLabel(state: Pick<RunbookState, 'proposedKind' | 'candidateStatus'>): string {
-  const rung = state.proposedKind === 'skill' ? 'Proposed as a skill' : 'Runbook';
+  const rung = state.proposedKind === 'skill' ? 'Proposed workflow' : 'Workflow';
   return state.candidateStatus && state.candidateStatus !== 'candidate' ? `${rung} · ${state.candidateStatus}` : rung;
 }
 

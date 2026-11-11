@@ -112,7 +112,7 @@ export function DefinitionRecord({ id, onChanged }: { id: string; onChanged: () 
       {notFound ? (
         <EmptyState align="start" title="Definition not found" description={`No definition with id ${id ?? ''} — its source may have been removed.`} />
       ) : error && !def ? (
-        <UnavailableNotice error={error} what="this definition" source="Definitions are derived from bots, commands, runbooks and agents" onRetry={refresh} />
+        <UnavailableNotice error={error} what="this definition" source="Definitions are derived from bots, commands, workflows and agents" onRetry={refresh} />
       ) : !def ? (
         <LoadingState label={isLoading ? 'Loading definition…' : 'Loading…'} />
       ) : (

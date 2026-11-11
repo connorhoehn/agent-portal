@@ -171,7 +171,7 @@ export function sourceStatusNote(run: Pick<PipelineRun, 'status' | 'context'>): 
 }
 
 const KIND_LABEL: Record<DefinitionKind, string> = {
-  runbook: 'Runbook', agent: 'Agent', bot: 'Bot', 'assessment-command': 'Assessment command',
+  runbook: 'Workflow', agent: 'Agent', bot: 'Bot', 'assessment-command': 'Assessment command',
 };
 export function kindLabel(kind: string): string {
   return KIND_LABEL[kind as DefinitionKind] ?? kind;

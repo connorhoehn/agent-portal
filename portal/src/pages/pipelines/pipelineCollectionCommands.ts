@@ -11,7 +11,7 @@ export type PipelineCollectionCommand = { kind: 'help' | 'refresh' | 'reset' }
  * interpret arbitrary prose as a destructive operation or an agent request. */
 const FILTERS: Record<PipelineCollection, Record<string, string>> = {
   agents: {}, bots: {}, commands: {}, approvals: {},
-  definitions: { runbook: 'runbook', bot: 'bot', agent: 'agent', 'assessment command': 'assessment-command' },
+  definitions: { workflow: 'runbook', bot: 'bot', agent: 'agent', 'assessment command': 'assessment-command' },
   workflows: { passed: 'passed', 'needs dry-run': 'needs-dry-run', promoted: 'promoted' },
   queues: { available: 'available', missing: 'missing', unavailable: 'unavailable', 'dead-letter': 'dead-letter', work: 'work' },
   artifacts: { change: 'change', document: 'document', scores: 'scores', transcript: 'transcript', trace: 'trace' },
