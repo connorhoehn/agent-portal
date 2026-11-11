@@ -24,9 +24,24 @@ export function botsSummaryLine(total: number, shown: number): string {
   return `${shown} of ${total} ${noun} match`;
 }
 
-export function filterBots(bots: Bot[], opts: { search: string; status: BotStatusFilter }): Bot[] {
+/** The initiatives the roster's bots serve, one option each, for the Initiative filter. */
+export function botInitiatives(bots: readonly Bot[]): Array<{ id: string; name: string }> {
+  const seen = new Map<string, string>();
+  for (const b of bots) if (b.orgProjectId && !seen.has(b.orgProjectId)) seen.set(b.orgProjectId, b.orgProjectName ?? b.orgProjectId);
+  return [...seen].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** When a bot fires, in the words the page prints: a scheduled automation or one that runs on demand. */
+export function botScheduleText(bot: Pick<Bot, 'trigger' | 'cronExpr'>): string {
+  if (bot.trigger === 'cron') return bot.cronExpr ? `Scheduled: ${bot.cronExpr}` : 'Scheduled';
+  if (bot.trigger === 'pr_watch') return 'On new pull requests';
+  return 'On demand';
+}
+
+export function filterBots(bots: Bot[], opts: { search: string; status: BotStatusFilter; initiative?: string }): Bot[] {
   const q = opts.search.trim().toLowerCase();
   return bots.filter((b) => {
+    if (opts.initiative && b.orgProjectId !== opts.initiative) return false;
     if (opts.status === 'enabled' && botIsPaused(b)) return false;
     if (opts.status === 'paused' && !botIsPaused(b)) return false;
     if (!q) return true;

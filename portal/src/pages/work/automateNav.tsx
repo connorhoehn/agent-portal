@@ -25,7 +25,7 @@ const RUN_ITEMS: SubNavItem[] = [
   { path: '/iq/work/findings', label: 'Findings' },
   { path: '/iq/work/changes', label: 'Changes' },
 ];
-const BOTS_ITEM: SubNavItem = { path: '/admin/bots', label: 'Automations' };
+const BOTS_ITEM: SubNavItem = { path: '/admin/bots', label: 'Bots' };
 
 /** Roles that reach the Bots surface — mirrors the /admin/bots route gate
  *  (and Cedar's ManageBots). Exported so QueuePulse's roster rows link into

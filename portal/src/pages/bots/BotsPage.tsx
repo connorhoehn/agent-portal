@@ -8,7 +8,7 @@
 // the Changes review queue and policy gates.
 
 import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
   Banner, Button, Chip, CollectionToolbar, DataTable, DotMeter, EmptyState, IconButton, Inline,
   LoadingState, MetaLine, PauseCircleIcon, PlayCircleIcon, ProgressBar, RepeatIcon, Stack, StatStrip, T,
@@ -26,7 +26,7 @@ import { BotCreateWizard } from './BotCreateWizard';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { botsCommandAdapter } from './botsCommands';
-import { botIsPaused, botListLastRanText, botsRollup, botsSummaryLine, filterBots, type BotStatusFilter } from './botsFormat';
+import { botInitiatives, botIsPaused, botListLastRanText, botScheduleText, botsRollup, botsSummaryLine, filterBots, type BotStatusFilter } from './botsFormat';
 import { botRunRefusalMessage, type BotRunRefusal } from '../../lib/dispatchGates';
 
 // ─── Types (the /api/bots contract) ──────────────────────────────────────────
@@ -127,11 +127,20 @@ export default function BotsPage() {
 
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<BotStatusFilter>('all');
+  // `?initiative=` is the link an initiative's page writes: the same list, narrowed to one initiative.
+  const [params, setParams] = useSearchParams();
+  const initiative = params.get('initiative') ?? '';
+  const setInitiative = (id: string) => setParams((previous) => {
+    const next = new URLSearchParams(previous);
+    if (id) next.set('initiative', id); else next.delete('initiative');
+    return next;
+  }, { replace: true });
 
   const bots = data?.bots ?? [];
-  const filtered = useMemo(() => filterBots(bots, { search, status }), [bots, search, status]);
+  const filtered = useMemo(() => filterBots(bots, { search, status, initiative }), [bots, search, status, initiative]);
   const rollup = useMemo(() => botsRollup(bots), [bots]);
-  const hasFilters = search.trim() !== '' || status !== 'all';
+  const initiatives = useMemo(() => botInitiatives(bots), [bots]);
+  const hasFilters = search.trim() !== '' || status !== 'all' || initiative !== '';
 
   // Row actions: the same two operations the detail page exposes (Run now,
   // Pause/Resume), gated by the same `ManageBots` capability and hitting the
@@ -203,8 +212,32 @@ export default function BotsPage() {
       },
     },
     {
+      key: 'schedule',
+      header: 'Runs',
+      // Scheduled automations and on-demand bots are one list; this says which each one is.
+      render: (bot) => <MetaLine size="xs" items={[botScheduleText(bot)]} />,
+    },
+    {
+      key: 'initiative',
+      header: 'Initiative',
+      render: (bot) => (
+        bot.orgProjectId ? (
+          <Link
+            to={`/iq/projects/${bot.orgProjectId}`}
+            onClick={(e) => e.stopPropagation()}
+            title={`Open the initiative this bot serves: ${bot.orgProjectName ?? bot.orgProjectId}`}
+            className="text-xs text-primary no-underline hover:underline"
+          >
+            <T size="xs">{bot.orgProjectName ?? bot.orgProjectId}</T>
+          </Link>
+        ) : (
+          <MetaLine size="xs" tone="tertiary" items={['—']} />
+        )
+      ),
+    },
+    {
       key: 'target',
-      header: 'Target',
+      header: 'Codebase',
       render: (bot) => (
         bot.agentProjectRepo && bot.agentProjectId ? (
           <Link
@@ -215,17 +248,8 @@ export default function BotsPage() {
           >
             <T size="xs">{bot.agentProjectRepo}</T>
           </Link>
-        ) : bot.orgProjectId ? (
-          <Link
-            to={`/iq/projects/${bot.orgProjectId}`}
-            onClick={(e) => e.stopPropagation()}
-            title={`Open the initiative this bot serves: ${bot.orgProjectName ?? bot.orgProjectId}`}
-            className="text-xs text-primary no-underline hover:underline"
-          >
-            <T size="xs">{bot.orgProjectName ?? bot.orgProjectId}</T>
-          </Link>
         ) : (
-          <MetaLine size="xs" tone="tertiary" items={['no target']} />
+          <MetaLine size="xs" tone="tertiary" items={['—']} />
         )
       ),
     },
@@ -316,7 +340,7 @@ export default function BotsPage() {
     <CollectionCommandPage
       data-testid="bots-page"
       title="Bots"
-      description="Standing missions: pick a template, write what the bot should do, point it at a codebase or an initiative, and govern what it ships."
+      description="Every bot and scheduled automation: a written mission pointed at a codebase or an initiative, on a schedule or on demand, with every change still reviewed."
       headerActions={canManage ? (
         <Button variant="primary" size="sm" onClick={() => setWizardOpen(true)}>+ New bot</Button>
       ) : undefined}
@@ -365,7 +389,13 @@ export default function BotsPage() {
           <CollectionToolbar
             label="Bot filters"
             search={{ value: search, onChange: setSearch, placeholder: 'Search by name, codebase or initiative…', 'aria-label': 'Search bots' }}
-            filters={[{ id: 'status', label: 'Status', value: status, emptyValue: 'all', onChange: (value) => setStatus(value as BotStatusFilter), options: STATUS_OPTIONS }]}
+            filters={[
+              { id: 'status', label: 'Status', value: status, emptyValue: 'all', onChange: (value) => setStatus(value as BotStatusFilter), options: STATUS_OPTIONS },
+              ...(initiatives.length > 0 ? [{
+                id: 'initiative', label: 'Initiative', value: initiative, emptyValue: '', onChange: setInitiative,
+                options: [{ value: '', label: 'All initiatives' }, ...initiatives.map((i) => ({ value: i.id, label: i.name }))],
+              }] : []),
+            ]}
             summary={botsSummaryLine(bots.length, filtered.length)}
             notices={['Every bot fires on a cron schedule.', 'Every change still passes review and policy gates.']}
             onRefresh={refresh}

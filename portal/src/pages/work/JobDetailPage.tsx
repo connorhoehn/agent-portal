@@ -365,7 +365,7 @@ function JobDetailContent() {
           {job.boxId && canOpenWorker && <Button size="sm" variant="secondary" onClick={() => navigate(`/iq/computers?computer=${encodeURIComponent(job.boxId!)}`)}>Open computer ↗</Button>}
           {typeof job.payload.initiativeId === 'string' && <Button size="sm" variant="secondary" onClick={() => navigate(`/iq/projects/${encodeURIComponent(String(job.payload.initiativeId))}${typeof job.payload.workItemId === 'string' ? `?${new URLSearchParams({ tab: 'work', item: job.payload.workItemId })}` : ''}`)}>{typeof job.payload.workItemId === 'string' ? 'Open work item' : 'Open initiative'} ↗</Button>}
           {canOpenAutomation && !LIVE_STATUSES.has(job.status) && job.status !== 'queued' && <Button size="sm" variant="secondary" data-testid="job-run-report-link" onClick={() => navigate(`/iq/runs/${encodeURIComponent(job.id)}`)}>Open run report ↗</Button>}
-          {job.botId && canOpenAutomation && <Button size="sm" variant="secondary" onClick={() => navigate(`/admin/bots/${encodeURIComponent(job.botId!)}`)}>Open automation ↗</Button>}
+          {job.botId && canOpenAutomation && <Button size="sm" variant="secondary" onClick={() => navigate(`/admin/bots/${encodeURIComponent(job.botId!)}`)}>Open bot ↗</Button>}
           {canManage && (job.status === 'queued' || job.status === 'claimed') && <Button size="sm" variant="secondary" onClick={() => setConfirmCancel(true)}>Cancel</Button>}
           {canManage && job.status === 'awaiting_review' && <>
             <Button size="sm" variant="primary" onClick={() => void review('accept')}>Accept</Button>

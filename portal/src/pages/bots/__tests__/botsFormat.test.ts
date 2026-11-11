@@ -4,7 +4,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  botInitiatives,
   botIsPaused,
+  botScheduleText,
   botListLastRanText,
   botRunSummary,
   botsRollup,
@@ -303,4 +305,16 @@ test('botsRollup reports a null budget total when no bot has one set', () => {
 test('botsRollup is all-zero on an empty roster', () => {
   const r = botsRollup([]);
   assert.deepEqual(r, { enabled: 0, paused: 0, spendTodayUsd: 0, budgetTodayUsd: null, nearBudgetCount: 0 });
+});
+
+test('one list holds scheduled automations and on-demand bots, filterable by initiative', () => {
+  const a: Bot = { ...baseBot, id: 'a', name: 'Nightly', trigger: 'cron', cronExpr: '0 2 * * *', orgProjectId: 'p-1', orgProjectName: 'Alpha' };
+  const b: Bot = { ...baseBot, id: 'b', name: 'Ad hoc', trigger: 'manual', cronExpr: null, orgProjectId: 'p-2', orgProjectName: 'Beta' };
+  const c: Bot = { ...baseBot, id: 'c', name: 'Loose', trigger: 'manual', cronExpr: null, orgProjectId: null, orgProjectName: null };
+  assert.equal(botScheduleText(a), 'Scheduled: 0 2 * * *');
+  assert.equal(botScheduleText(b), 'On demand');
+  assert.equal(botScheduleText({ trigger: 'pr_watch', cronExpr: null }), 'On new pull requests');
+  assert.deepEqual(botInitiatives([b, a, c]), [{ id: 'p-1', name: 'Alpha' }, { id: 'p-2', name: 'Beta' }]);
+  assert.deepEqual(filterBots([a, b, c], { search: '', status: 'all', initiative: 'p-2' }).map((x) => x.id), ['b']);
+  assert.equal(filterBots([a, b, c], { search: '', status: 'all' }).length, 3);
 });

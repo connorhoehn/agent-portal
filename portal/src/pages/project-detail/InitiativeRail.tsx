@@ -205,7 +205,6 @@ export function InitiativeRail({
         <Inline gap="sm" align="center" wrap className="min-w-0">
           {meta.some(Boolean) && <MetaLine size="sm" tone="secondary" items={meta} data-testid="initiative-agents-meta" />}
           {view === 'runs' && initiativeId && <Button variant="link" onClick={() => navigate(runsListHref({ initiative: initiativeId }))} data-testid="initiative-runs-link">All runs for this initiative</Button>}
-          {view === 'bots' && canManageBots && <Button variant="link" onClick={() => navigate('/admin/bots')}>New bot</Button>}
         </Inline>
       </Inline>
 
@@ -227,7 +226,17 @@ export function InitiativeRail({
           </>
         )}
 
-        {view === 'bots' && (
+        {view === 'bots' && canManageBots && initiativeId && !botsError && (
+          // The roster is one page now (Bots); this is its link, narrowed to this initiative.
+          <Inline gap="sm" align="center" wrap data-testid="initiative-agents-bots">
+            <T size="sm">{botsLoading ? 'Loading bots…' : `${bots.length === 1 ? '1 bot serves' : `${bots.length} bots serve`} this initiative.`}</T>
+            <Button variant="link" onClick={() => navigate(`/admin/bots?initiative=${encodeURIComponent(initiativeId)}`)} data-testid="initiative-bots-link">
+              Open them in Bots
+            </Button>
+          </Inline>
+        )}
+
+        {view === 'bots' && !(canManageBots && initiativeId && !botsError) && (
           <ActionRowList
             aria-label="Bots pointed at this initiative"
             columns={rosterDenied ? [] : BOT_COLUMNS}
