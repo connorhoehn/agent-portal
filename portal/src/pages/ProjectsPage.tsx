@@ -18,6 +18,8 @@ import { useCapabilities } from '../lib/capabilities';
 import { InitiativesExplorer } from './projects/InitiativesExplorer';
 import { useInitiativeListRail } from './projects/InitiativeListRail';
 import { InitiativeComposer } from './projects/InitiativeComposer';
+import { NewInitiativeForm } from './projects/NewInitiativeForm';
+import { NEW_PARAM } from './projects/newInitiativeModel';
 import { initiativeBreadcrumbs, initiativeHref } from './projects/initiativeNavigation';
 import { ProjectTable } from './projects/ProjectTable';
 import { BudgetAccessRequest, LockedFigure } from './projects/BudgetAccess';
@@ -63,6 +65,7 @@ function ProjectsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { can: canDo, ready: capsReady } = useCapabilities();
   const canIngest = capsReady && canDo('ManageIngest');
+  const canCreate = capsReady && canDo('CreateInitiative');
 
   const wantsSprints = searchParams.get('lens') === 'sprints';
   const sprints = useSprintsLens(wantsSprints);
@@ -116,6 +119,13 @@ function ProjectsPage() {
     setSearchParams(next, { replace: true });
   };
   const openProject = (p: ProjectSummary) => navigate(initiativeHref(p.id, searchParams, scope));
+  // The New initiative form opens in the content area, addressed by ?new=1 so Back closes it.
+  const creating = canCreate && searchParams.get(NEW_PARAM) === '1';
+  const openCreate = () => { const next = new URLSearchParams(searchParams); next.set(NEW_PARAM, '1'); setSearchParams(next); };
+  const closeCreate = () => { const next = new URLSearchParams(searchParams); next.delete(NEW_PARAM); setSearchParams(next); };
+  const newInitiativeButton = canCreate && !creating
+    ? <Button size="sm" onClick={openCreate} data-testid="new-initiative">New initiative</Button>
+    : null;
   const refreshAll = () => { list.list.refresh(); person.refresh(); personDetail.refresh(); };
 
   const header = (title: string, description: string, actions?: ReactNode) => (
@@ -150,11 +160,14 @@ function ProjectsPage() {
   let paneHeader;
   let body;
 
-  if (lens === 'sprints') {
+  if (creating && lens !== 'sprints') {
+    paneHeader = header('New initiative', 'Start an initiative by hand. It opens empty: work items, bots and runs come as the team adds them.');
+    body = <NewInitiativeForm search={searchParams} scope={scope} onCancel={closeCreate} />;
+  } else if (lens === 'sprints') {
     paneHeader = header(SPRINTS_TITLE, SPRINTS_DESCRIPTION);
     body = <SprintsLens view="list" lens={sprints} />;
   } else if (scope === 'mine') {
-    paneHeader = header(MINE_TITLE, MINE_DESCRIPTION);
+    paneHeader = header(MINE_TITLE, MINE_DESCRIPTION, newInitiativeButton ?? undefined);
     if (mine.state === 'loading') body = <LoadingState label="Loading your initiatives…" />;
     else if (mine.state === 'error') {
       body = mine.failed === 'initiatives' ? failure : (
@@ -169,16 +182,24 @@ function ProjectsPage() {
     else body = <MineEmpty copy={mine.copy} onEveryone={() => setScope('all')} onProfile={() => navigate(mine.copy.secondary.href)} onRefresh={refreshAll} />;
   } else {
     paneHeader = header(EVERYONE_TITLE, EVERYONE_DESCRIPTION,
-      lock ? <BudgetAccessRequest lock={lock} autoOpen={wantsRequest} onClosed={dropRequestParam} /> : undefined);
+      lock || newInitiativeButton ? (
+        <Inline gap="sm">
+          {lock && <BudgetAccessRequest lock={lock} autoOpen={wantsRequest} onClosed={dropRequestParam} />}
+          {newInitiativeButton}
+        </Inline>
+      ) : undefined);
     if (rows == null) body = list.list.error ? failure : <LoadingState label="Loading initiatives…" />;
     else if (rows.length === 0) {
       body = (
         <EmptyState
           align="start"
           title="No initiatives yet"
-          description={canIngest
-            ? 'An initiative is a program with an owner, epics, stories and a budget. Nothing creates one by hand: they are built by the graph-builder agent from documents you ingest, so the way to fill this page is to point Ingestion at a source and run it.'
-            : 'An initiative is a program with an owner, epics, stories and a budget. Nothing creates one by hand: they are built by the graph-builder agent from documents someone ingests. Running ingestion needs the ManageIngest capability, which an HR admin holds — this page fills itself once they have pointed it at a source.'}
+          description={canCreate
+            ? 'An initiative is a program with an owner, epics, stories and a budget. Start one by hand, or point Ingestion at a source and the graph-builder agent will build them from your documents.'
+            : canIngest
+              ? 'An initiative is a program with an owner, epics, stories and a budget. They are built by the graph-builder agent from documents you ingest, so the way to fill this page is to point Ingestion at a source and run it.'
+              : 'An initiative is a program with an owner, epics, stories and a budget. They are built by the graph-builder agent from documents someone ingests. Running ingestion needs the ManageIngest capability, which an HR admin holds. A leader or program owner can also start one by hand, and this page fills itself once they have.'}
+          {...(canCreate ? { actions: [{ label: 'New initiative', onClick: openCreate }] } : {})}
         />
       );
     } else {

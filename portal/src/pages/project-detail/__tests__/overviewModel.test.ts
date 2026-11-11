@@ -141,3 +141,28 @@ test('learningAttention adds a line per non-zero count, each linking to the Lear
   assert.deepEqual(lines.map((l) => l.text), ['1 run failed in the last seven days', '2 runbook proposals awaiting review']);
   assert.ok(lines.every((l) => l.href === '/iq/projects/p%201?tab=learning'));
 });
+
+test('a freshly created initiative (no work, no runs, no spend, no summary, owner only) builds a ready overview without NaN', () => {
+  const fresh = {
+    ...OBS_PROJECT, id: 'p-fresh', name: 'Fresh', status: 'planning', summary: null,
+    sponsorId: null, sponsorName: null, sponsorTitle: null, repoFullName: null,
+    agentSpendUsd: 0, allocatedUsd: null, activeAgentRuns: 0,
+    ownerId: 'p-1', ownerName: 'Owner One',
+    contributors: [{ personId: 'p-1', name: 'Owner One', title: '', role: 'owner', weight: 1, avatarUrl: null }],
+  } as typeof OBS_PROJECT;
+  const model = buildOverview(fresh, { tree: [] });
+  assert.equal(model.state, 'ready');
+  if (model.state !== 'ready') return;
+  assert.equal(model.workCount, 0);
+  assert.equal(model.viewAll, null);
+  assert.deepEqual(model.attention, []);
+  assert.deepEqual(model.upNext, []);
+  const [points, agents, spend] = model.stats;
+  assert.equal(`${points!.value} ${points!.label}`, '0 points planned');
+  assert.equal(points!.progress, undefined);
+  assert.equal(`${agents!.value} ${agents!.label}`, '0 agents running');
+  assert.equal(`${spend!.value} ${spend!.label}`, '$0 spent');
+  for (const s of model.stats) assert.ok(!/NaN|Infinity/.test(`${s.value}${s.label}`));
+  assert.equal(headerStatsLine(fresh, []), '$0 spent');
+  assert.deepEqual(peopleGroups(fresh), [{ label: 'Owner', names: ['Owner One'] }]);
+});
