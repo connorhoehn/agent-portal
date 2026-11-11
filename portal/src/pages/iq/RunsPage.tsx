@@ -60,12 +60,14 @@ export default function IqRunsPage() {
     { key: 'what', header: 'What', render: (r) => (
       <RecordLink to={`/iq/runs/${encodeURIComponent(r.runRef)}`} data-testid="run-row-link"><T size="sm" title={r.what} className="block max-w-[32rem] truncate">{r.what}</T></RecordLink>
     ) },
-    { key: 'initiative', header: 'Initiative', render: (r) => r.initiativeName ?? <T size="xs" tone="tertiary">—</T> },
-    { key: 'who', header: 'Who ran it', render: (r) => r.who },
+    // Keep the run, timing, outcome, learned mark and cost in view. Secondary
+    // fields remain available through the shared table's column controls.
+    { key: 'initiative', header: 'Initiative', priority: 3, render: (r) => r.initiativeName ?? <T size="xs" tone="tertiary">—</T> },
+    { key: 'who', header: 'Who ran it', priority: 2, render: (r) => r.who },
     { key: 'outcome', header: 'Outcome', width: '128px', render: (r) => (
       <Chip tone={OUTCOME_TONE[r.outcome]} size="xs">{OUTCOME_LABEL[r.outcome]}</Chip>
     ) },
-    { key: 'runbooks', header: 'Runbooks given', width: '120px', numeric: true, render: (r) => r.runbooksOffered.length },
+    { key: 'runbooks', header: 'Runbooks given', width: '120px', numeric: true, priority: 4, render: (r) => r.runbooksOffered.length },
     { key: 'learned', header: 'Learned', width: '88px', render: (r) => (learnedDot(r)
       ? <StatusDot size="sm" color="var(--color-success)" title="Filed a runbook proposal" aria-label="Filed a runbook proposal" />
       : <T size="xs" tone="tertiary">—</T>) },
@@ -117,6 +119,8 @@ export default function IqRunsPage() {
       {reports.data?.next && <Banner variant="info">Showing the newest 200 runs. Narrow the filters to see older ones.</Banner>}
       <DataTable
         narrow
+        responsiveColumns
+        hiddenColumnsControl="header"
         data={visible}
         columns={columns}
         keyField={(r) => r.runRef}

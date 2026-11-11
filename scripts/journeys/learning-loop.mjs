@@ -34,6 +34,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { verifyMicrovmFilter } from './learning-loop-microvm.mjs';
 import { verifyDesktopAudit } from './desktop-audit.mjs';
+import { verifyRunsLayout } from './learning-loop-runs-layout.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const req = createRequire(path.join(ROOT, 'portal', 'package.json'));
@@ -478,8 +479,8 @@ async function main() {
       const mark = row.first().locator('[data-testid^="threshold-"]');
       check(await mark.count() >= 1, `the ${NAME} row shows no threshold mark: "${rowText.slice(0, 160)}"`);
       check(/80%|100%|%/.test(await mark.first().innerText()), `the mark reads "${await mark.first().innerText()}"`);
-      for (const width of [1440, 1280, 390]) {
-        await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      for (const width of [1440, 1280]) {
+        await page.setViewportSize({ width, height: 900 });
         await sleep(500);
         await page.screenshot({ path: path.join(SHOTS, `l11-budgets-row-${width}.png`), fullPage: false });
       }
@@ -553,6 +554,7 @@ async function main() {
       await go(page, '/iq/runs');
       const rows = page.getByTestId('run-row-link');
       await until('the rows', async () => await rows.count() > 0, 15000);
+      await verifyRunsLayout(page, OUT);
       const t = await bodyText(page);
       check(!INTERNAL.test(t), `internal words on the list: ${INTERNAL.exec(t)?.[0]}`);
       check(all[0].runRef === runs.silent.ref, 'the newest run is not first in the API');
