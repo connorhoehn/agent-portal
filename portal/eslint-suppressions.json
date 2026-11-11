@@ -324,12 +324,12 @@
       "count": 1
     }
   },
-  "src/pages/pipelines/RunbooksPage.tsx": {
+  "src/pages/pipelines/SourcesPage.tsx": {
     "ui-components/no-arbitrary-token-values": {
       "count": 1
     }
   },
-  "src/pages/pipelines/SourcesPage.tsx": {
+  "src/pages/pipelines/WorkflowsPage.tsx": {
     "ui-components/no-arbitrary-token-values": {
       "count": 1
     }

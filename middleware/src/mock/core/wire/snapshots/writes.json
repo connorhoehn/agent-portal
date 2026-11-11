@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-11T05:14:11.736Z",
-  "serverHandlerSha": "989303f537c6a9ec5fb1ca885836ca615c3fdeaea42a9bdf8bfca662e5db70fa",
-  "baseUrl": "http://127.0.0.1:3923",
+  "capturedAt": "2026-11-11T06:26:19.528Z",
+  "serverHandlerSha": "57f7891796d170784891517fdfa73df2abfd24347b9b2602c70d602dea31d525",
+  "baseUrl": "http://127.0.0.1:3924",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -3005,11 +3005,16 @@
         "$": "object",
         "assetId": "string",
         "id": "string",
-        "passRate": "null",
+        "passRate": "number",
         "passed": "number",
         "ranAt": "string",
         "ranBy": "string",
         "results": "array",
+        "results[]": "object",
+        "results[].caseId": "string",
+        "results[].failures": "array",
+        "results[].output": "string",
+        "results[].passed": "boolean",
         "total": "number",
         "version": "string"
       },

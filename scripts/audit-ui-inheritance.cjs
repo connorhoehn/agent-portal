@@ -34,7 +34,7 @@ function audit() {
     const file = `portal/src/pages/${area}/RunsPage.tsx`;
     requireContract(/<RunsLedger[\s/>]/.test(read(file)), `${file}: use the shared RunsLedger.`);
   }
-  const collectionFiles = ['Definitions', 'Artifacts', 'Approvals', 'Runbooks', 'Sources', 'Queues', 'Runs'].map(name => `portal/src/pages/pipelines/${name}Page.tsx`);
+  const collectionFiles = ['Definitions', 'Artifacts', 'Approvals', 'Workflows', 'Sources', 'Queues', 'Runs'].map(name => `portal/src/pages/pipelines/${name}Page.tsx`);
   for (const file of collectionFiles) {
     // CollectionCommandPage is the app's adapter over CollectionPage (components/collections); it owns the same composition.
     requireContract(/<Collection(?:Command)?Page[\s/>]/.test(read(file)), `${file}: collection layout belongs in CollectionPage.`);

@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-11T05:14:05.748Z",
-  "serverHandlerSha": "989303f537c6a9ec5fb1ca885836ca615c3fdeaea42a9bdf8bfca662e5db70fa",
-  "baseUrl": "http://127.0.0.1:3923",
+  "capturedAt": "2026-11-11T06:26:13.944Z",
+  "serverHandlerSha": "57f7891796d170784891517fdfa73df2abfd24347b9b2602c70d602dea31d525",
+  "baseUrl": "http://127.0.0.1:3924",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -5146,7 +5146,7 @@
         "assets[].contract.variables[].type": "string",
         "assets[].description": "string",
         "assets[].designReviewId": "null|string",
-        "assets[].evalPassRate": "null|number",
+        "assets[].evalPassRate": "number",
         "assets[].id": "string",
         "assets[].kind": "string",
         "assets[].lifecycleStatus": "string",
@@ -5166,9 +5166,7 @@
         "facets": "object",
         "facets.kind": "object",
         "facets.kind.evaluator": "number",
-        "facets.kind.insight": "number",
         "facets.kind.prompt": "number",
-        "facets.kind.skill": "number",
         "facets.kind.system": "number",
         "facets.role": "object",
         "facets.role.hr-admin": "number",
@@ -5193,9 +5191,7 @@
         ],
         "assets[].kind": [
           "evaluator",
-          "insight",
           "prompt",
-          "skill",
           "system"
         ],
         "assets[].roles[]": [
@@ -5214,13 +5210,22 @@
         "$": "object",
         "asset": "object",
         "asset.contract": "object",
-        "asset.contract.guardrailId": "null",
+        "asset.contract.guardrailId": "string",
         "asset.contract.kind": "string",
         "asset.contract.tier": "string",
         "asset.contract.variables": "array",
+        "asset.contract.variables[]": "object",
+        "asset.contract.variables[].default": "string",
+        "asset.contract.variables[].description": "string",
+        "asset.contract.variables[].name": "string",
+        "asset.contract.variables[].options": "array",
+        "asset.contract.variables[].options[]": "string",
+        "asset.contract.variables[].required": "boolean",
+        "asset.contract.variables[].source": "string",
+        "asset.contract.variables[].type": "string",
         "asset.description": "string",
-        "asset.designReviewId": "null",
-        "asset.evalPassRate": "null",
+        "asset.designReviewId": "string",
+        "asset.evalPassRate": "number",
         "asset.id": "string",
         "asset.kind": "string",
         "asset.lifecycleStatus": "string",
@@ -5235,38 +5240,34 @@
         "asset.tier": "string",
         "asset.updatedAt": "string",
         "asset.usedBy": "array",
+        "asset.usedBy[]": "string",
         "asset.version": "string",
         "readiness": "object",
         "readiness.checks": "object",
         "readiness.checks.contractComplete": "boolean",
-        "readiness.checks.evalPassRate": "null",
+        "readiness.checks.evalPassRate": "number",
         "readiness.checks.evaluated": "boolean",
         "readiness.checks.guardrailBound": "boolean",
         "readiness.checks.hasOwner": "boolean",
         "readiness.checks.signoffs": "number",
         "readiness.checks.undeclared": "array",
         "readiness.ok": "boolean",
-        "readiness.reason": "string",
         "readiness.tier": "string",
         "related": "array",
         "related[]": "object",
         "related[].asset": "object",
         "related[].asset.contract": "object",
-        "related[].asset.contract.guardrailId": "null|string",
+        "related[].asset.contract.guardrailId": "null",
         "related[].asset.contract.kind": "string",
         "related[].asset.contract.tier": "string",
         "related[].asset.contract.variables": "array",
         "related[].asset.contract.variables[]": "object",
-        "related[].asset.contract.variables[].default": "string",
-        "related[].asset.contract.variables[].description": "string",
         "related[].asset.contract.variables[].name": "string",
-        "related[].asset.contract.variables[].options": "array",
-        "related[].asset.contract.variables[].options[]": "string",
         "related[].asset.contract.variables[].required": "boolean",
         "related[].asset.contract.variables[].source": "string",
         "related[].asset.contract.variables[].type": "string",
         "related[].asset.description": "string",
-        "related[].asset.designReviewId": "null|string",
+        "related[].asset.designReviewId": "null",
         "related[].asset.evalPassRate": "number",
         "related[].asset.id": "string",
         "related[].asset.kind": "string",
@@ -5289,31 +5290,30 @@
       },
       "values": {
         "asset.contract.kind": [
-          "prompt"
+          "evaluator"
         ],
-        "asset.kind": [
-          "skill"
-        ],
-        "asset.roles[]": [
-          "program-owner",
-          "sme"
-        ],
-        "related[].asset.contract.kind": [
-          "evaluator",
-          "prompt"
-        ],
-        "related[].asset.contract.variables[].type": [
+        "asset.contract.variables[].type": [
           "enum",
           "longtext"
         ],
+        "asset.kind": [
+          "evaluator"
+        ],
+        "asset.roles[]": [
+          "hr-admin",
+          "sme"
+        ],
+        "related[].asset.contract.kind": [
+          "evaluator"
+        ],
+        "related[].asset.contract.variables[].type": [
+          "longtext"
+        ],
         "related[].asset.kind": [
-          "evaluator",
-          "skill"
+          "evaluator"
         ],
         "related[].asset.roles[]": [
-          "hr-admin",
-          "org-leader",
-          "sme"
+          "hr-admin"
         ]
       }
     },
@@ -5322,9 +5322,26 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "cases": "array"
+        "cases": "array",
+        "cases[]": "object",
+        "cases[].assertions": "array",
+        "cases[].assertions[]": "object",
+        "cases[].assertions[].description": "string",
+        "cases[].assertions[].kind": "string",
+        "cases[].assertions[].value": "string",
+        "cases[].assetId": "string",
+        "cases[].id": "string",
+        "cases[].name": "string",
+        "cases[].variables": "object",
+        "cases[].variables.diff": "string",
+        "cases[].variables.framework": "string"
       },
-      "values": {}
+      "values": {
+        "cases[].assertions[].kind": [
+          "json_has",
+          "not_contains"
+        ]
+      }
     },
     "GET /api/library/evals/:assetId/runs": {
       "persona": "orgiq/admin",
@@ -8873,49 +8890,6 @@
       },
       "values": {}
     },
-    "GET /api/session-bundle/live": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "appliesTo": "array",
-        "appliesTo[]": "string",
-        "hooks": "array",
-        "hooks[]": "object",
-        "hooks[].command": "string",
-        "hooks[].description": "string",
-        "hooks[].enabled": "boolean",
-        "hooks[].event": "string",
-        "id": "string",
-        "publishedAt": "string",
-        "publishedBy": "string",
-        "sessionsAffected": "number",
-        "settings": "object",
-        "settings.ANTHROPIC_MODEL": "string",
-        "settings.ANTHROPIC_SMALL_FAST_MODEL": "string",
-        "settings.CLAUDE_CODE_USE_BEDROCK": "boolean",
-        "settings.DISABLE_AUTOUPDATER": "boolean",
-        "skills": "array",
-        "skills[]": "object",
-        "skills[].description": "string",
-        "skills[].id": "string",
-        "skills[].name": "string",
-        "skills[].source": "string",
-        "skills[].status": "string",
-        "skills[].version": "string",
-        "status": "string",
-        "version": "string"
-      },
-      "values": {
-        "skills[].status": [
-          "current",
-          "stale"
-        ],
-        "status": [
-          "live"
-        ]
-      }
-    },
     "GET /api/session/capabilities": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -10823,8 +10797,8 @@
         "in-review",
         "initiative",
         "initiative-membership",
-        "insight",
         "jira",
+        "json_has",
         "judge-spike",
         "lambda",
         "link_document_mention",
@@ -10834,6 +10808,7 @@
         "max_cost",
         "max_files",
         "ms_forms_export",
+        "not_contains",
         "option",
         "org",
         "person",
@@ -10850,7 +10825,6 @@
         "retrieve",
         "run",
         "runbook",
-        "skill",
         "skill_library",
         "sod-blocked",
         "step-approved",
