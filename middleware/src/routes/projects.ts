@@ -16,7 +16,7 @@
 
 import { Router, type Response } from 'express';
 import {
-  listProjects, getProject, updateProjectOwner, setContributionRole,
+  listProjects, getProject, updateProjectOwner, setContributionRole, createProject,
   type GovernanceWriteResult,
 } from '../providers/projects.js';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
@@ -66,6 +66,56 @@ projectsRouter.get('/', asyncHandler(async (req, res) => {
   });
   res.setHeader('Cache-Control', 'no-store');
   res.json(await canReadBudgets(resolveSession(req)) ? projects : projects.map(withholdBudget));
+}));
+
+// POST /api/graph/projects  body {name, summary?, owner_person_id?, sponsor_person_id?, repo?}
+//
+// Start an initiative by hand (docs/create-initiative-design.md). The gate chain is
+// the mount's requireTenant('orgiq') (index.ts), then CreateInitiative here: held by
+// org-leader and program-owner, with admin passing as it does everywhere. The mount
+// carries no write gate of its own, so nothing else reaches this route. The server
+// makes the id; unknown fields are ignored.
+const REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+projectsRouter.post('/', requireAction('CreateInitiative'), asyncHandler(async (req, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const text = (key: string, max: number, required: boolean): string | null => {
+    const raw = body[key];
+    if (raw == null || raw === '') {
+      if (required) throw new ValidationError(`${key} is required`);
+      return null;
+    }
+    if (typeof raw !== 'string') throw new ValidationError(`${key} must be text`);
+    const v = raw.trim();
+    if (!v) {
+      if (required) throw new ValidationError(`${key} is required`);
+      return null;
+    }
+    if (v.length > max) throw new ValidationError(`${key} must be at most ${max} characters`);
+    return v;
+  };
+  const name = text('name', 80, true)!;
+  const summary = text('summary', 600, false);
+  const repo = text('repo', 140, false);
+  if (repo && !REPO_RE.test(repo)) throw new ValidationError('repo must look like owner/name');
+  const ownerNamed = text('owner_person_id', 200, false);
+  const sponsor = text('sponsor_person_id', 200, false);
+
+  const session = resolveSession(req);
+  const ownerPersonId = ownerNamed ?? (session ? (await mineViewer(session)).personId : null);
+  if (!ownerPersonId) {
+    throw new ValidationError('This account is not linked to a person, so name an owner (owner_person_id)');
+  }
+
+  const result = await createProject({ name, summary, ownerPersonId, sponsorPersonId: sponsor, repoFullName: repo });
+  if (!result.ok) {
+    res.status(result.status).json({
+      error: result.error, code: result.code,
+      ...(result.existingId ? { existingId: result.existingId } : {}),
+    });
+    return;
+  }
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(201).json({ ...(await canReadBudgets(session) ? result.project : withholdBudget(result.project)), canWriteWork: true });
 }));
 
 // GET /api/graph/projects/:id

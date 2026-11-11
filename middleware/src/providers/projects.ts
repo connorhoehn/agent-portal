@@ -29,6 +29,7 @@ import { mockRunsAttributedTo } from './bots.js';
 import { clock, countBy } from '../mock/core/index.js';
 import { initiatives, findInitiative, type MockInitiative } from '../mock/initiatives.js';
 import { mockAvatarUrl } from '../mock/avatars.js';
+import { mockPeople } from '../mock/people.js';
 import { devboxBoxes } from '../mock/devbox-fleet.js';
 import { fetchAvatarsById } from './aurora.js';
 
@@ -319,8 +320,17 @@ export function mockActiveAgentRuns(projectId: string): number {
   return Math.max(botRuns, boxes);
 }
 
+/** A person the seed's cast names, else one the mock directory knows (a person
+    an initiative made by hand can name), else nobody. */
+function castMember(personId: string): CastMember | undefined {
+  const cast = CAST[personId];
+  if (cast) return cast;
+  const person = (mockPeople as Array<{ id: string; name: string; title: string }>).find((x) => x.id === personId);
+  return person ? { personId: person.id, name: person.name, title: person.title } : undefined;
+}
+
 function castName(personId: string): string {
-  return CAST[personId]?.name ?? personId;
+  return castMember(personId)?.name ?? personId;
 }
 
 function mockSummaryRow(p: MockInitiative): Omit<ProjectSummary, keyof typeof EMPTY_ROLLUPS> {
@@ -653,8 +663,8 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
   if (config.mock.aurora) {
     const cast = findInitiative(id);
     if (!cast) return null;
-    const owner = CAST[cast.owner];
-    const sponsor = CAST[cast.sponsor];
+    const owner = castMember(cast.owner);
+    const sponsor = castMember(cast.sponsor);
     // Same ledger-derived spend and allocation listProjects reads — not a
     // second fixture — so this row and the Initiatives-list row for the same
     // id agree.
@@ -674,12 +684,12 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
       agentSpendUsd: budgetRow ? budgetRow.spentThisPeriodUsd : 0,
       allocatedUsd: budgetRow ? budgetRow.allocatedUsd : null,
       activeAgentRuns: mockActiveAgentRuns(id),
-      repoFullName: cast.repo,
+      repoFullName: cast.repo || null,
       // The owner first, then SMEs — the order Aurora's `weight DESC` returns
       // for the operating model's two weights.
       contributors: [
-        { ...CAST[cast.owner]!, role: 'owner', weight: 1.0, avatarUrl: mockAvatarUrl(cast.owner) },
-        ...cast.smes.map((pid) => ({ ...CAST[pid]!, role: 'sme', weight: 0.8, avatarUrl: mockAvatarUrl(pid) })),
+        { ...castMember(cast.owner)!, role: 'owner', weight: 1.0, avatarUrl: mockAvatarUrl(cast.owner) },
+        ...cast.smes.map((pid) => ({ ...castMember(pid)!, role: 'sme', weight: 0.8, avatarUrl: mockAvatarUrl(pid) })),
       ],
     };
   }
@@ -1001,4 +1011,130 @@ export async function removeContribution(projectId: string, personId: string, ro
   );
   if (rows.length > 0) await noteSearchWrite({ type: 'initiative', id: projectId });
   return { removed: rows.length > 0 };
+}
+
+
+// ─── Creating an initiative by hand ──────────────────────────────────────────
+// docs/create-initiative-design.md. The route is the only caller.
+
+/** The status a new initiative starts in: the earliest of the lifecycle the seed
+    declares ('planning' | 'in_progress' | 'completed'). */
+export const NEW_INITIATIVE_STATUS = 'planning';
+
+/** The project_contributions.role the "mine" rule (lib/initiative-scope.ts) and
+    updateProjectOwner treat as the owner's own row. */
+export const OWNER_CONTRIBUTION_ROLE = 'owner';
+
+export interface CreateProjectInput {
+  name: string;
+  summary?: string | null;
+  ownerPersonId: string;
+  sponsorPersonId?: string | null;
+  repoFullName?: string | null;
+}
+
+export type CreateProjectResult =
+  | { ok: true; project: ProjectDetail }
+  | { ok: false; status: 400 | 409; code: 'NAME_TAKEN' | 'REPO_LINKED' | 'NO_SUCH_PERSON'; error: string; existingId?: string };
+
+const ID_SLUG_MAX = 40;
+
+/** `p-` and a slug of the name: lowercase letters, digits and single hyphens,
+    at most 40 characters of slug. A name with no usable character slugs to
+    "initiative". `n` > 1 appends `-n`, still inside the 40. */
+export function initiativeIdFor(name: string, n = 1): string {
+  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'initiative';
+  const suffix = n > 1 ? `-${n}` : '';
+  const room = ID_SLUG_MAX - suffix.length;
+  return `p-${base.slice(0, room).replace(/-+$/, '')}${suffix}`;
+}
+
+async function personExists(personId: string): Promise<boolean> {
+  if (config.mock.aurora) return castMember(personId) !== undefined;
+  return (await exec('SELECT 1 FROM people WHERE id = :pid LIMIT 1', [strParam('pid', personId)])).length > 0;
+}
+
+/**
+ * Insert a project row and its owner's contribution, and return it as
+ * getProject reads it. Writes only columns the projects table already has
+ * (id, name, status, summary, sponsor_person_id, owner_id; created_at defaults)
+ * plus the existing agent_projects link for a repository, which is recorded and
+ * never cloned. The cluster has no multi-statement helper here, so the steps run
+ * in order and the project row is deleted if a later one fails.
+ */
+export async function createProject(input: CreateProjectInput): Promise<CreateProjectResult> {
+  const name = input.name;
+  const summary = input.summary?.trim() || null;
+  const sponsor = input.sponsorPersonId || null;
+  const repo = input.repoFullName || null;
+
+  if (!await personExists(input.ownerPersonId)) {
+    return { ok: false, status: 400, code: 'NO_SUCH_PERSON', error: 'The owner is not a person in the directory' };
+  }
+  if (sponsor && !await personExists(sponsor)) {
+    return { ok: false, status: 400, code: 'NO_SUCH_PERSON', error: 'The sponsor is not a person in the directory' };
+  }
+
+  // Name unique within the tenant, ignoring case.
+  const taken = config.mock.aurora
+    ? initiatives.rows().find((p) => p.name.toLowerCase() === name.toLowerCase())?.id
+    : (await exec('SELECT id FROM projects WHERE lower(name) = lower(:n) LIMIT 1', [strParam('n', name)]))[0]?.['id'];
+  if (taken != null) {
+    return { ok: false, status: 409, code: 'NAME_TAKEN', error: `An initiative named "${name}" already exists`, existingId: String(taken) };
+  }
+
+  // A repository already linked to another initiative is not re-pointed.
+  if (repo) {
+    const linkedTo = config.mock.aurora
+      ? (await (await import('./agent-projects.js')).listAgentProjects()).find((a) => a.repoFullName.toLowerCase() === repo.toLowerCase())?.orgProjectId
+      : (await exec('SELECT org_project_id FROM agent_projects WHERE lower(repo_full_name) = lower(:r) LIMIT 1', [strParam('r', repo)]))[0]?.['org_project_id'];
+    if (linkedTo != null && linkedTo !== '') {
+      return { ok: false, status: 409, code: 'REPO_LINKED', error: `${repo} is already linked to another initiative`, existingId: String(linkedTo) };
+    }
+  }
+
+  let id = '';
+  if (config.mock.aurora) {
+    for (let n = 1; ; n++) {
+      id = initiativeIdFor(name, n);
+      if (!findInitiative(id)) break;
+    }
+    initiatives.rows().push({
+      id, name, status: NEW_INITIATIVE_STATUS, createdAt: clock.now().toISOString(),
+      owner: input.ownerPersonId, smes: [], sponsor: sponsor ?? '', summary: summary ?? '',
+      repo: repo ?? '', priority: null,
+    });
+  } else {
+    for (let n = 1; n < 1000; n++) {
+      const candidate = initiativeIdFor(name, n);
+      const rows = await exec(
+        `INSERT INTO projects (id, name, status, summary, sponsor_person_id, owner_id)
+         VALUES (:id, :name, :status, :summary, :sponsor, :owner)
+         ON CONFLICT (id) DO NOTHING RETURNING id`,
+        [
+          strParam('id', candidate), strParam('name', name), strParam('status', NEW_INITIATIVE_STATUS),
+          summary == null ? { name: 'summary', value: { isNull: true } } : strParam('summary', summary),
+          sponsor == null ? { name: 'sponsor', value: { isNull: true } } : strParam('sponsor', sponsor),
+          strParam('owner', input.ownerPersonId),
+        ],
+      );
+      if (rows.length > 0) { id = candidate; break; }
+    }
+    if (!id) throw new Error('could not find a free initiative id');
+    try {
+      await addContribution(id, input.ownerPersonId, OWNER_CONTRIBUTION_ROLE);
+      if (repo) await (await import('./agent-projects.js')).linkAgentProject({ repoFullName: repo, orgProjectId: id });
+    } catch (err) {
+      await exec('DELETE FROM project_contributions WHERE project_id = :id', [strParam('id', id)]).catch(() => undefined);
+      await exec('DELETE FROM projects WHERE id = :id', [strParam('id', id)]).catch(() => undefined);
+      throw err;
+    }
+  }
+  if (config.mock.aurora && repo) {
+    await (await import('./agent-projects.js')).linkAgentProject({ repoFullName: repo, orgProjectId: id });
+  }
+  await noteSearchWrite({ type: 'initiative', id });
+  const project = await getProject(id);
+  if (!project) throw new Error(`initiative ${id} was not readable after it was made`);
+  return { ok: true, project };
 }

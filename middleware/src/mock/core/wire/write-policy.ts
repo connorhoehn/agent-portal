@@ -1232,6 +1232,14 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     alsoAccept: [404],
   },
   {
+    route: 'POST /api/graph/projects',
+    persona: 'orgiq/admin',
+    safe: 'Appends one row to the registered `initiatives` fixture (mock/initiatives.ts) and touches nothing seeded — reset takes it back. No AWS, no fs, no timer. The body names no repository, so no agent_projects link is written.',
+    bodyFrom: 'routes/projects.ts: `name` is required (1 to 80 characters); every other field is optional. The admin persona has no linked person, so the body names the owner from the seed (p-001).',
+    intercepts: ['aurora'],
+    build: ok({ name: 'Wire capture initiative', owner_person_id: 'p-001' }),
+  },
+  {
     route: 'PATCH /api/graph/projects/:id',
     persona: 'orgiq/admin',
     safe: "`updateProjectOwner` is mock-branched and answers 503 without touching anything, so this pins the refusal shape rather than the success one.",
