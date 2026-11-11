@@ -342,6 +342,7 @@ export async function recordRunEnd(input: RunEndInput, deps: RecordDeps = {}): P
         const decision: RunDebrief = await decideDebrief(stored, {
           runbooks, nowIso: now, reports: () => allReports(reports),
           ...(input.hasCheckout !== undefined ? { hasCheckout: input.hasCheckout } : {}),
+          ...(input.simulated ? { simulated: true } : {}),
         });
         final = (await reports.setDebrief(stored.runRef, decision, null)) ?? stored;
       } catch (e) {

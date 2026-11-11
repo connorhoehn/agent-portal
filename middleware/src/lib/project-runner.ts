@@ -184,6 +184,8 @@ export interface ProjectRunEnd {
   /** The run's final message (its lab-report block) and the skills it was seen loading. */
   finalMessage: string;
   skillsLoaded: string[];
+  /** The session the run ended in, when the runtime reported one (a debrief resumes it). */
+  claudeSessionId: string | null;
 }
 
 export async function executeProjectRun(req: ProjectRunRequest): Promise<ProjectRunEnd> {
@@ -246,7 +248,7 @@ export async function executeProjectRun(req: ProjectRunRequest): Promise<Project
     return {
       ok: outcome.ok, error: outcome.ok ? null : (outcome.error ?? 'the agent reported a failure'), cutoff: !!outcome.cutoff,
       costUsd: outcome.costUsd, model: outcome.model, filesChanged: diff.filesChanged,
-      finalMessage: outcome.summary, skillsLoaded: outcome.skillsLoaded ?? [],
+      finalMessage: outcome.summary, skillsLoaded: outcome.skillsLoaded ?? [], claudeSessionId: outcome.claudeSessionId ?? null,
     };
   } catch (err) {
     await finishRun(req.runId, {
@@ -257,7 +259,7 @@ export async function executeProjectRun(req: ProjectRunRequest): Promise<Project
     }).catch(() => { /* the run is lost either way; do not mask the original */ });
     return {
       ok: false, error: (err as Error).message, cutoff: false, costUsd: null, model: req.model ?? null, filesChanged: 0,
-      finalMessage: '', skillsLoaded: [],
+      finalMessage: '', skillsLoaded: [], claudeSessionId: null,
     };
   }
 }

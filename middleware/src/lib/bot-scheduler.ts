@@ -24,7 +24,8 @@ const tasks = new Map<string, cron.ScheduledTask>();
 let reconcileTimer: ReturnType<typeof setInterval> | null = null;
 let inited = false;
 
-const RECONCILE_INTERVAL_MS = 30_000;
+/** How often finished governed runs are settled (their bot run, their work item). BOT_RECONCILE_INTERVAL_MS overrides, for a walk that dispatches many runs in a row. */
+const RECONCILE_INTERVAL_MS = Math.max(500, Number(process.env['BOT_RECONCILE_INTERVAL_MS']) || 30_000);
 const CATCH_UP_DELAY_MS = 20_000;
 
 /**

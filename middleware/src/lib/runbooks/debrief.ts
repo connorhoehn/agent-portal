@@ -169,6 +169,12 @@ export interface DebriefContext {
    * skipped as executor-unsupported and nothing is held on the learning line for them.
    */
   hasCheckout?: boolean;
+  /**
+   * The run's executor is the mock's fake microVM, which can answer the devbox `debrief` op from a hand-written
+   * folder: a governed run on it is debriefable, and reserves nothing on the learning line. Real governed runs
+   * are not (executor-unsupported).
+   */
+  simulated?: boolean;
   /** Test seam for the learning line. Default: lib/learning-budget.ts. */
   reserve?: (input: { runRef: string; estimate: number }) => Promise<{ ok: true; holdId: string | null } | { ok: false; reason: string; message: string }>;
 }
@@ -202,7 +208,7 @@ export async function decideDebrief(report: RunReport, ctx: DebriefContext): Pro
   if (report.outcome !== 'done' && report.outcome !== 'needs-review') return skipped('not-successful', at);
   if (!(report.learned ?? '').trim()) return skipped('nothing-learned', at);
   if (!corroborated(report)) return skipped('no-obstacle', at);
-  if (!executorDebriefs(report.executor)) return skipped('executor-unsupported', at);
+  if (!executorDebriefs(report.executor) && ctx.simulated !== true) return skipped('executor-unsupported', at);
   if (report.executor === 'microvm' && ctx.hasCheckout !== true) return skipped('executor-unsupported', at);
   if (report.executor === 'local' && ctx.hasCheckout === false) return skipped('no-checkout', at);
 
@@ -223,7 +229,7 @@ export async function decideDebrief(report: RunReport, ctx: DebriefContext): Pro
   if (today >= limits.daily) return skipped('daily-limit', at);
 
   let holdId: string | null = null;
-  if (executorBilled(report.executor)) {
+  if (executorBilled(report.executor) && ctx.simulated !== true) {
     const reserve = ctx.reserve ?? (async (i: { runRef: string; estimate: number }) => (await import('../learning-budget.js')).reserveLearningSpend(i));
     const r = await reserve({ runRef: report.runRef, estimate: limits.ceilingUsd }).catch((e: unknown) => ({ ok: false as const, reason: 'unavailable', message: (e as Error).message }));
     if (!r.ok) return skipped('learning-budget', at);
@@ -233,7 +239,7 @@ export async function decideDebrief(report: RunReport, ctx: DebriefContext): Pro
     state: 'requested', reason: null, reasonText: null, promptVersion: DEBRIEF_PROMPT_VERSION, decidedAt: at,
     expiresAt: new Date(nowMs + limits.ttlMs).toISOString(), settledAt: null, nonce: randomBytes(12).toString('base64url'),
     holdId, ceilingUsd: limits.ceilingUsd, answer: null, proposalId: null, proposalKind: null, convertedFrom: null,
-    problems: [], lint: [], cost: { billedUsd: null, reportedUsd: null }, simulated: report.executor === 'mock',
+    problems: [], lint: [], cost: { billedUsd: null, reportedUsd: null }, simulated: report.executor === 'mock' || ctx.simulated === true,
   };
 }
 

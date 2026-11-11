@@ -12,6 +12,7 @@
 // concern, not a run concern: the runner's job is to run the agent and record
 // what changed; whether that change is allowed to ship is this file's job.
 
+import { config } from '../config.js';
 import { reserveSpend, forecastP75ForModel, meterForHold, type ReserveSpendResult } from './spend-holds.js';
 import { bindHoldSource, releaseHold } from '../providers/spend-holds.js';
 import { dispatchHoldTtlMs } from './bot-runner.js';
@@ -232,13 +233,28 @@ export async function dispatchGovernedRun(input: {
     // The run report (docs/learning-loop-design.md §1), keyed by the run id like its brief.
     const changeRequestId = await capture;
     const { recordRunEnd, failureCodeOf } = await import('./run-reports/record.js');
-    await recordRunEnd({
+    // On the mock the runtime is the fake microVM (mock/devbox-shell.ts), so what the run says and costs is a
+    // hand-written fixture: the report is marked simulated, and a debrief it asks for is played by the same
+    // step a microVM run's is (lib/microvm-dispatcher.ts debriefOnBox), against the same fake.
+    const fake = config.mock.agentcore;
+    const report = await recordRunEnd({
       runRef: run.id, executor: 'governed', outcome: end.ok ? (changeRequestId ? 'needs-review' : 'done') : 'failed',
       failureCode: end.ok ? null : end.cutoff ? 'budget' : failureCodeOf(end.error),
       workItemId: input.workItemId ?? null, initiativeId: input.project.orgProjectId ?? null,
       model: end.model ?? model, billedUsd: end.costUsd, changeRequestId,
-      worker: { block: end.finalMessage, skillsLoaded: end.skillsLoaded },
+      worker: { block: end.finalMessage, skillsLoaded: end.skillsLoaded, claudeSessionId: end.claudeSessionId },
+      ...(fake ? { simulated: true } : {}),
     });
+    if (fake && report?.debrief?.state === 'requested') {
+      const { debriefOnBox } = await import('./microvm-dispatcher.js');
+      const { settleDebrief } = await import('./runbooks/debrief-file.js');
+      await debriefOnBox(report, {
+        deps: { client: devboxDataClient, settleDebrief },
+        plan: { runtimeArn: arn, model },
+        sessionId: input.sessionId, repo: input.project.repoFullName, claudeSession: end.claudeSessionId,
+        say: () => undefined,
+      });
+    }
   }).catch((err: unknown) => console.warn(`[sdlc] run ${run.id} report:`, (err as Error).message)).finally(() => {
     releaseBox(box.id, holder);
     // The run is over: its concurrency slot frees now (DE-37).

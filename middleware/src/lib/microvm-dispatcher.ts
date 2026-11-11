@@ -870,11 +870,12 @@ class StepFailed extends Error {}
  * request `debriefRequestFor` builds (the box may only narrow it), then the answer and the kept
  * folder through the same `settleDebrief` the local compute route uses. A request that cannot be
  * made, a session that cannot be resumed, or an invoke that fails settles as `session-unavailable`;
- * the run is never failed by its debrief, and this never throws.
+ * the run is never failed by its debrief, and this never throws. The governed run on the mock's fake
+ * microVM (lib/sdlc-pipeline.ts) goes through this same function.
  */
-async function debriefOnBox(
+export async function debriefOnBox(
   report: RunReport,
-  ctx: { deps: MicrovmDeps; plan: Plan; sessionId: string; repo: string; claudeSession: string | null; say: (event: string, fields?: Record<string, unknown>) => void },
+  ctx: { deps: Pick<MicrovmDeps, 'client' | 'settleDebrief'>; plan: Pick<Plan, 'runtimeArn' | 'model'>; sessionId: string; repo: string; claudeSession: string | null; say: (event: string, fields?: Record<string, unknown>) => void },
 ): Promise<void> {
   const { deps, plan, sessionId, repo, claudeSession, say } = ctx;
   if (!deps.settleDebrief) return;

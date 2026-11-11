@@ -103,6 +103,8 @@ export interface DevboxRunOutcome {
    * use (lib/run-reports/use-detection.ts). Distinct, in first-load order.
    */
   skillsLoaded?: string[];
+  /** The Claude Code session the run ended in, when the runtime says (devbox_end's `claude_session_id`); a debrief resumes it. */
+  claudeSessionId?: string | null;
 }
 
 export interface DevboxRunOptions {
@@ -314,6 +316,7 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
           }
         } else if (type === 'devbox_end') {
           endSeen = true;
+          if (typeof ev['claude_session_id'] === 'string' && ev['claude_session_id']) outcome.claudeSessionId = ev['claude_session_id'];
           // The box's own token ceiling (DE-35 layer 1) fired.
           if (ev['killed_reason'] === 'budget') boxBudgetKill = true;
           outcome.exitCode = (ev['exit_code'] ?? null) as number | null;

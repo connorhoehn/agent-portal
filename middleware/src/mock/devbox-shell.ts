@@ -24,6 +24,8 @@
 import type { BedrockAgentCoreClient } from '@aws-sdk/client-bedrock-agentcore';
 import { clock } from './core/index.js';
 import { demoActive, demoBeatMs } from './demo-pace.js';
+import { simulatedFinalMessage, simulatedRunFixture, type SimulatedRunFixture } from './run-report-fixtures.js';
+import { LOGOUT_SHIM_COOKIE_ANSWER, logoutShimCookieFolder } from './debrief-fixtures.js';
 import type { ProductStep } from './demo-auth-products.js';
 import {
   type WorkProduct,
@@ -162,10 +164,78 @@ export function isAwaitingAnswer(sessionId: string): boolean {
 /** Release every held run and silence every stream in flight. */
 export function resetMockDevboxTransport(): void {
   epoch++;
+  fixtureBySession.clear();
   clearDevboxRecordings();
   const runs = [...held.values()];
   held.clear();
   for (const run of runs) run.release();
+}
+
+// ─── What a run of a work item says (docs/learning-loop-design.md, "The mock") ──
+//
+// A governed run of a work item (its `lab` context names the item) ends with the hand-written fixture
+// for it (mock/run-report-fixtures.ts): the `result` event's text is the final message a worker would
+// have written, with its `lab-report` block, so `recordRunEnd` reads it exactly as it reads a real
+// run's. The tree still changes as before, so capture, review and the gates still run; a fixture that
+// failed stops before changing anything. The session's fixture is kept so the `debrief` op can answer
+// for it (below), the way a real box resumes the session that did the work.
+
+/** A hand-written stand-in for the Claude Code session id a real devbox_end reports. */
+const FIXTURE_CLAUDE_SESSION = '00000000-0000-4000-8000-0000000000e8';
+
+const fixtureBySession = new Map<string, SimulatedRunFixture>();
+
+/** The fixture for the work item a run's `lab` context names, or null (a run with no work item keeps its plain product). */
+async function fixtureForLab(lab: unknown): Promise<SimulatedRunFixture | null> {
+  const l = (lab && typeof lab === 'object' ? lab : {}) as Record<string, unknown>;
+  const itemId = typeof l['work_item_id'] === 'string' ? l['work_item_id'] : '';
+  if (!itemId) return null;
+  try {
+    const { getWorkItem } = await import('../providers/work-items.js');
+    const item = await getWorkItem(itemId);
+    if (!item) return null;
+    // The runbooks this run's frozen brief offered, so the fixture can say what it did with each.
+    let given: string[] = [];
+    try {
+      const { runbookStore } = await import('../lib/runbooks/store-select.js');
+      const { offeredFromBrief } = await import('../lib/run-reports/record.js');
+      given = offeredFromBrief(await runbookStore().getBrief(String(l['run_ref'] ?? ''))).map((r) => r.id);
+    } catch { given = []; }
+    return simulatedRunFixture(item, given);
+  } catch { return null; }
+}
+
+/** The run, ending the way the fixture says: its final message, the skills it loaded, and the session it ended in. */
+function withFixture(run: PlannedRun, fx: SimulatedRunFixture): PlannedRun {
+  const failed = fx.outcome === 'failed';
+  const events: MockEvent[] = [];
+  for (const ev of run.events) {
+    if (ev['type'] === 'result') {
+      for (const skill of fx.skillsLoaded) events.push(use('Skill', { skill }));
+      events.push({
+        ...ev,
+        result: simulatedFinalMessage(fx),
+        ...(failed ? { subtype: 'error_during_execution', is_error: true, terminal_reason: fx.failureCode ?? 'failed' } : {}),
+      });
+    } else if (ev['type'] === 'devbox_end') {
+      events.push({ ...ev, claude_session_id: FIXTURE_CLAUDE_SESSION });
+    } else {
+      events.push(ev);
+    }
+  }
+  return { ...run, events };
+}
+
+/** The plan for a fixture that stopped before changing anything: nothing staged, a failed result. */
+function failedFixtureRun(fx: SimulatedRunFixture): PlannedRun {
+  return withFixture({
+    events: [
+      say('I read the repository and tried to reproduce this.'),
+      { type: 'result', subtype: 'success', num_turns: 1, total_cost_usd: IDLE_RUN_COST_USD, result: '' },
+      { type: 'devbox_end', exit_code: 0 },
+    ],
+    pace: 'default', awaitAnswer: null,
+  }, fx);
 }
 
 function planRun(sessionId: string, prompt: string): PlannedRun {
@@ -364,6 +434,21 @@ async function* gitStream(sessionId: string, payload: Record<string, unknown>): 
   yield frame({ type: 'git_end', op, exit_code: 0 });
 }
 
+/**
+ * The `debrief` op (agents/devbox/main.py `_mvm_debrief`): `{ ok, answer, folder?, cost_usd }`. The run that taught
+ * something answers with the hand-written folder; any other run answers that nothing is worth keeping; a session
+ * the fake never ran a fixture in cannot be resumed.
+ */
+async function* debriefStream(sessionId: string): AsyncGenerator<Uint8Array> {
+  const fx = fixtureBySession.get(sessionId);
+  const out = !fx
+    ? { ok: false, error: 'session-unavailable' }
+    : fx.key === 'teaches'
+      ? { ok: true, answer: LOGOUT_SHIM_COOKIE_ANSWER, folder: logoutShimCookieFolder(), cost_usd: 0 }
+      : { ok: true, answer: { kind: 'none', reason: 'The simulated run has no hand-written runbook to keep.' }, cost_usd: 0 };
+  yield new TextEncoder().encode(`data: ${JSON.stringify(out)}\n`);
+}
+
 export function mockDevboxClient(): BedrockAgentCoreClient {
   const client = {
     async send(command: unknown): Promise<unknown> {
@@ -391,8 +476,13 @@ export function mockDevboxClient(): BedrockAgentCoreClient {
         catch { parsed = {}; }
         // A credentialed git op (DE-45) — the image's other entrypoint.
         if (parsed['op'] === 'clone' || parsed['op'] === 'push') return { response: gitStream(sessionId, parsed) };
+        // The microVM runner's `debrief` op: the resume turn, answered from the fixture the session ran.
+        if (parsed['runner'] === 'microvm' && parsed['op'] === 'debrief') return { response: debriefStream(sessionId) };
         const prompt = String(parsed['prompt'] ?? '');
-        return { response: taskStream(planRun(sessionId, prompt)) };
+        const fx = await fixtureForLab(parsed['lab']);
+        if (fx) fixtureBySession.set(sessionId, fx); else fixtureBySession.delete(sessionId);
+        const run = !fx ? planRun(sessionId, prompt) : fx.outcome === 'failed' ? failedFixtureRun(fx) : withFixture(planRun(sessionId, prompt), fx);
+        return { response: taskStream(run) };
       }
 
       // StopRuntimeSession — what the reaper and `DELETE /boxes/:id` send. It
