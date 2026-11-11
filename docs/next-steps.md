@@ -1022,12 +1022,12 @@ The owner asked for a sweep for high-value software around initiatives, runs and
 7. ~~Retry a failed run from its own page.~~ Built: a failed or cancelled queue job's run page has Retry, through the Findings requeue route and its capability; other kinds of run show no button.
 8. ~~A bot's firings open the run record; outcomes, cost and proposals per bot.~~ Built: each firing with a report shows its outcome and opens the run; a thirty-day line gives firings, done, failed, billed (a dash when unknown) and proposals filed. `GET /api/run-reports` takes `runRefs`.
 9. ~~Restore a retired runbook by proposal.~~ Built: a person files a `restore` proposal with a reason from the retired runbook's page; the usual reviewers decide it and nobody accepts their own; on accept the runbook is published again at the version it had, the restore is on its record, and the retirement rules count only what happens after it.
-10. Search runs by text; runs, proposals and runbook bodies in the org index.
-11. Who would receive this proposal.
-12. My work across initiatives.
-13. Spend by bot, opened to its runs (check the ledger rows first).
-14. Create an initiative (design first).
+10. ~~Search runs by text; runs, proposals and runbook bodies in the org index.~~ Built: `GET /api/run-reports?q=` (every term, over summary, obstacles, learned, failure code and run ref), the Runs page searches on the server and pages; global search finds runs and proposals, each behind the same rule as its list, and reads a runbook's body.
+11. ~~Who would receive this proposal.~~ Built: the proposal read carries `reach`, the open work items the real selector would give the text to (lose it, for a retire; gain it, for a restore), at most 20 rows with the count, 200 items scanned at organisation scope; the review page shows it.
+12. ~~My work across initiatives.~~ Built: `/iq/my-work` in the Plan group, from `GET /api/graph/work?assignee=me`. A persona with no linked person sees an empty list.
+13. Spend by bot, opened to its runs. Checked: a ledger entry carries `source` and `sourceId` (`providers/spend-ledger.ts`), and a bot run's or job's id is its run's reference, so entries can open their run and group by bot through the bot-run join. Not built yet.
+14. ~~Create an initiative (design first).~~ Built to [create-initiative-design.md](create-initiative-design.md): `POST /api/graph/projects` behind the new `CreateInitiative` action (org-leader, program-owner). One decision there is not yet true: ingestion merges on a model-chosen id, so it can still add a second row beside a hand-made initiative; the fix is owed in `agents/graph-builder`.
 
-Cleanup alongside: the `local:distill` job kind, if nothing enqueues it.
+Cleanup alongside: ~~the `local:distill` job kind~~. Nothing enqueued it; the kind, its mock cycle and its seed rows are gone, and an old worker that still advertises it is treated as offering an unknown kind.
 
 The first six packages are walked by their own journey, `npm run journey:value-sweep` in `portal/` (`scripts/journeys/learning-loop-value-sweep.mjs`), on the default mock world.

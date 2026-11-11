@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-11T18:29:52.457Z",
-  "serverHandlerSha": "9a4a4298f951431fcb2ae9a92bdceae6dcf8b3d93f64ac8c98d86f3978d2507a",
+  "capturedAt": "2026-11-11T18:54:26.387Z",
+  "serverHandlerSha": "d4e89f9ed942ed6d3907b1effb97251d2157d3c5f6625c0fdc40cfa6a7d36806",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -4156,6 +4156,12 @@
         "schema.OrgIQ.actions.ConnectLocalCompute.appliesTo.principalTypes[]": "string",
         "schema.OrgIQ.actions.ConnectLocalCompute.appliesTo.resourceTypes": "array",
         "schema.OrgIQ.actions.ConnectLocalCompute.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.CreateInitiative": "object",
+        "schema.OrgIQ.actions.CreateInitiative.appliesTo": "object",
+        "schema.OrgIQ.actions.CreateInitiative.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.CreateInitiative.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.CreateInitiative.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.CreateInitiative.appliesTo.resourceTypes[]": "string",
         "schema.OrgIQ.actions.DecideAccess": "object",
         "schema.OrgIQ.actions.DecideAccess.appliesTo": "object",
         "schema.OrgIQ.actions.DecideAccess.appliesTo.principalTypes": "array",
@@ -6037,7 +6043,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "number",
+        "points[].judgeP50": "null|number",
         "windowHours": "number"
       },
       "values": {}
@@ -8252,6 +8258,23 @@
         "proposal.status": "string",
         "proposed_files": "array",
         "proposed_markdown": "string",
+        "reach": "object",
+        "reach.capped": "boolean",
+        "reach.items": "array",
+        "reach.items[]": "object",
+        "reach.items[].id": "string",
+        "reach.items[].initiative": "object",
+        "reach.items[].initiative.id": "string",
+        "reach.items[].initiative.name": "string",
+        "reach.items[].key": "string",
+        "reach.items[].outcome": "string",
+        "reach.items[].title": "string",
+        "reach.mode": "string",
+        "reach.scanned": "number",
+        "reach.scope": "object",
+        "reach.scope.kind": "string",
+        "reach.scope.ref": "string",
+        "reach.total": "number",
         "runbook": "object",
         "runbook.created_at": "string",
         "runbook.current_version": "number",
@@ -8273,6 +8296,23 @@
         ],
         "proposal.status": [
           "open"
+        ],
+        "reach.items[].key": [
+          "ORG-AUTH-1",
+          "ORG-AUTH-4",
+          "ORG-AUTH-6",
+          "ORG-AUTH-8",
+          "ORG-AUTH-9"
+        ],
+        "reach.items[].outcome": [
+          "chosen",
+          "passed_over"
+        ],
+        "reach.mode": [
+          "receive"
+        ],
+        "reach.scope.kind": [
+          "initiative"
         ],
         "runbook.scope.kind": [
           "initiative"
@@ -8936,6 +8976,7 @@
           "decision",
           "knowledge",
           "person",
+          "run",
           "team",
           "work"
         ]
@@ -8969,6 +9010,7 @@
           "AuthorDefinition",
           "CancelRun",
           "ConnectLocalCompute",
+          "CreateInitiative",
           "DecideAccess",
           "DecideAgentChange",
           "DecideDecision",
@@ -10735,6 +10777,7 @@
         "AuthorDefinition",
         "CancelRun",
         "ConnectLocalCompute",
+        "CreateInitiative",
         "DecideAccess",
         "DecideAgentChange",
         "DecideDecision",
@@ -10912,6 +10955,7 @@
         "browser",
         "browser_spa",
         "fetch",
+        "receive",
         "sim",
         "synced"
       ]
@@ -10919,10 +10963,12 @@
     "outcome": {
       "open": false,
       "values": [
+        "chosen",
         "done",
         "failed",
         "followed",
         "pass",
+        "passed_over",
         "requires_approval"
       ]
     },
@@ -11124,6 +11170,7 @@
         "person",
         "pipeline.approval.requested",
         "reports_to",
+        "run",
         "schedule",
         "sql",
         "story",

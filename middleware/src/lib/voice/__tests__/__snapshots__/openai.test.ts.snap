@@ -60,6 +60,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
             "work-queue",
             "findings",
             "initiatives",
+            "my-work",
             "decisions",
             "agent-library",
             "designs",

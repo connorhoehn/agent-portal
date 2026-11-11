@@ -520,6 +520,7 @@ export const V2_RULES = [
   // G55: creating a blank page or whiteboard (a title, no content) is `create`; what is written in it stays in the editor.
   [/^(PUT|PATCH|DELETE) \/api\/graph\/projects\/:[^/]+\/workspace-documents|^(POST|PUT|PATCH|DELETE) \/api\/graph\/documents/, 'never', null, 'document content'],
   [/^PATCH \/api\/graph\/projects\/:[^/]+(\/contributors\/:[^/]+)?$/, 'never', null, 'initiative governance edits'],
+  [/^POST \/api\/graph\/projects$/, 'never', null, 'creating an initiative is a form on the page (CreateInitiative)'],
   [/^POST \/api\/sprints$/, 'not-yet', 'create', 'sprint (ManageSprints)'],
   [/^(PATCH|DELETE) \/api\/sprints\/:[^/]+\/items/, 'not-yet', 'update', 'move work between sprints (ManageSprints)'],
   [/^POST \/api\/designs\/:[^/]+\/(answer|signoff)$/, 'not-yet', 'decide', 'a design question or sign-off (DispatchAgentRun)'],

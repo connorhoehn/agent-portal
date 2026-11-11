@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-11T18:30:03.886Z",
-  "serverHandlerSha": "9a4a4298f951431fcb2ae9a92bdceae6dcf8b3d93f64ac8c98d86f3978d2507a",
+  "capturedAt": "2026-11-11T18:54:37.926Z",
+  "serverHandlerSha": "d4e89f9ed942ed6d3907b1effb97251d2157d3c5f6625c0fdc40cfa6a7d36806",
   "baseUrl": "http://127.0.0.1:3961",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -2658,6 +2658,48 @@
       "sent": [
         "outcome",
         "rationale"
+      ]
+    },
+    "POST /api/graph/projects": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "activeAgentRuns": "number",
+        "agentSpendUsd": "number",
+        "allocatedUsd": "null",
+        "canWriteWork": "boolean",
+        "contributors": "array",
+        "contributors[]": "object",
+        "contributors[].avatarUrl": "string",
+        "contributors[].name": "string",
+        "contributors[].personId": "string",
+        "contributors[].role": "string",
+        "contributors[].title": "string",
+        "contributors[].weight": "number",
+        "createdAt": "string",
+        "id": "string",
+        "name": "string",
+        "ownerId": "string",
+        "ownerName": "string",
+        "repoFullName": "null",
+        "sponsorId": "null",
+        "sponsorName": "null",
+        "sponsorTitle": "null",
+        "status": "string",
+        "summary": "string"
+      },
+      "values": {
+        "contributors[].role": [
+          "owner"
+        ],
+        "status": [
+          "planning"
+        ]
+      },
+      "sent": [
+        "name",
+        "owner_person_id"
       ]
     },
     "POST /api/graph/projects/:id/discussion/comments": {
