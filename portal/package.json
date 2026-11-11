@@ -24,7 +24,8 @@
     "check:dev-server": "node scripts/check-dev-server.mjs",
     "journey:demo-moments": "node ../scripts/journeys/run-demo-moments.mjs",
     "journey:voice-coverage": "node ../scripts/journeys/run-demo-moments.mjs --journey voice-coverage",
-    "journey:leftovers2": "node ../scripts/journeys/run-demo-moments.mjs --journey leftovers2-walk"
+    "journey:learning-loop": "node ../scripts/journeys/run-demo-moments.mjs --journey learning-loop",
+    "journey:leftovers2":"node ../scripts/journeys/run-demo-moments.mjs --journey leftovers2-walk"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
