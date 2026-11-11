@@ -111,6 +111,7 @@ if [ "$SKIP_SUITES" -eq 0 ]; then
   # Regexes against test paths: run reports, runbooks, the debrief, the mock's offer and fake-microVM runs, the brief
   # contract, local compute, the microVM dispatcher, and the wire, parity, guard and scope suites.
   PATTERNS=(
+    'lib/__tests__/(run-cost|devbox-runner|job-dispatcher|sdlc-)'
     'lib/run-reports/__tests__' 'lib/runbooks/__tests__'
     'routes/__tests__/run-reports' 'routes/__tests__/runbook' 'routes/__tests__/learning-loop-offer-mock'
     'routes/__tests__/local-compute' 'lib/__tests__/local-compute' 'lib/__tests__/microvm-dispatcher'
@@ -126,7 +127,7 @@ if [ "$SKIP_SUITES" -eq 0 ]; then
   section "portal suite"
   ( cd portal && npm test ) >"$LOGS/portal-suite.log" 2>&1
   code=$?
-  summary="$(grep -E '^(Tests|Test Files|Test Suites):|Tests +[0-9]+' "$LOGS/portal-suite.log" | tr '\n' ' ')"
+  summary="$(grep -E '^(Tests|Test Files|Test Suites):|^ℹ (tests|suites|pass|fail|skipped) |Tests +[0-9]+' "$LOGS/portal-suite.log" | tr '\n' ' ')"
   if [ "$code" -eq 0 ]; then pass "portal suite: $summary"; else fail "portal suite: $summary(see $LOGS/portal-suite.log)"; grep -E '✕|FAIL|×' "$LOGS/portal-suite.log" | head -15 | sed 's/^/      /'; fi
 fi
 

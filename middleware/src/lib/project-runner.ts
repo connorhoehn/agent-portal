@@ -177,6 +177,7 @@ export interface ProjectRunRequest {
 export interface ProjectRunEnd {
   ok: boolean;
   error: string | null;
+  failureCode: string | null;
   cutoff: boolean;
   costUsd: number | null;
   model: string | null;
@@ -247,6 +248,7 @@ export async function executeProjectRun(req: ProjectRunRequest): Promise<Project
     }
     return {
       ok: outcome.ok, error: outcome.ok ? null : (outcome.error ?? 'the agent reported a failure'), cutoff: !!outcome.cutoff,
+      failureCode: outcome.ok ? null : outcome.failureCode ?? null,
       costUsd: outcome.costUsd, model: outcome.model, filesChanged: diff.filesChanged,
       finalMessage: outcome.summary, skillsLoaded: outcome.skillsLoaded ?? [], claudeSessionId: outcome.claudeSessionId ?? null,
     };
@@ -259,6 +261,7 @@ export async function executeProjectRun(req: ProjectRunRequest): Promise<Project
     }).catch(() => { /* the run is lost either way; do not mask the original */ });
     return {
       ok: false, error: (err as Error).message, cutoff: false, costUsd: null, model: req.model ?? null, filesChanged: 0,
+      failureCode: null,
       finalMessage: '', skillsLoaded: [], claudeSessionId: null,
     };
   }

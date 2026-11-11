@@ -12,7 +12,7 @@ import {
   StopRuntimeSessionCommand,
 } from '@aws-sdk/client-bedrock-agentcore';
 import {
-  parseReportedCost, parseResultUsage, resultEventError, resultEventSucceeded, settleRunCost, type CostBasis,
+  parseReportedCost, parseResultUsage, resultEventError, resultEventFailureCode, resultEventSucceeded, settleRunCost, type CostBasis,
 } from './run-cost.js';
 import { estimateUsageCost } from './model-prices.js';
 import type { TokenUsage } from './pricing.js';
@@ -93,6 +93,8 @@ export interface DevboxRunOutcome {
   toolCalls: number;
   exitCode: number | null;
   error?: string;
+  /** A validated terminal_reason from a failed result; error retains the full detail. */
+  failureCode?: string;
   /** Bounded record of the run, for review after the event buffer rolls. */
   transcript: ActivityEntry[];
   /** DE-35: set when the run was stopped at its spend ceiling. */
@@ -307,6 +309,7 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
           outcome.estimatedCostUsd = settled.estimatedCostUsd;
           if (typeof ev['result'] === 'string') outcome.summary = ev['result'];
           outcome.ok = resultEventSucceeded(ev);
+          outcome.failureCode = resultEventFailureCode(ev);
           if (!outcome.ok) {
             const err = resultEventError(ev);
             if (err) {

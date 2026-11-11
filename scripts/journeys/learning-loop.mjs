@@ -443,10 +443,13 @@ async function main() {
       const first = await dispatch(ITEMS.cold, 'cold1');
       const second = await dispatch(ITEMS.cold, 'cold2');
       check(first.report.outcome === 'failed' && second.report.outcome === 'failed', 'both cold-start runs should have failed');
+      check(first.report.failureCode === 'needs_gpu_pool' && second.report.failureCode === 'needs_gpu_pool',
+        'the structured failure code must not include the error message');
       await go(page, `${runUrl(second.ref)}?tab=brief`);
       const t = await waitText(page, /Previous attempts/, 25000);
       check(t.includes(first.report.obstacles[0].slice(0, 40)), "the first attempt's obstacle is not in the second run's brief");
       check(/Failed/.test(t), "the first attempt's outcome is not in the second run's brief");
+      check(t.includes('needs_gpu_pool') && !t.includes('needs_gpu_pool_'), "the previous attempt lost its structured failure code");
       await shots(page, 'l8-run-brief-previous-attempts');
       await tab(page, 'report');
       const rep = await waitText(page, new RegExp(escapeRe(second.report.summary.slice(0, 30))));

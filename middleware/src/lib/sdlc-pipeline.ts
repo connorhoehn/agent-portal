@@ -239,7 +239,7 @@ export async function dispatchGovernedRun(input: {
     const fake = config.mock.agentcore;
     const report = await recordRunEnd({
       runRef: run.id, executor: 'governed', outcome: end.ok ? (changeRequestId ? 'needs-review' : 'done') : 'failed',
-      failureCode: end.ok ? null : end.cutoff ? 'budget' : failureCodeOf(end.error),
+      failureCode: end.ok ? null : end.cutoff ? 'budget' : end.failureCode ?? failureCodeOf(end.error),
       workItemId: input.workItemId ?? null, initiativeId: input.project.orgProjectId ?? null,
       model: end.model ?? model, billedUsd: end.costUsd, changeRequestId,
       worker: { block: end.finalMessage, skillsLoaded: end.skillsLoaded, claudeSessionId: end.claudeSessionId },

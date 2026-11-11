@@ -10,7 +10,7 @@
 // confident non-zero lie.
 
 import {
-  asModelProvider, parseReportedCost, resolveRunCost, resultEventSucceeded, resultEventError,
+  asModelProvider, parseReportedCost, resolveRunCost, resultEventSucceeded, resultEventError, resultEventFailureCode,
   type ModelProvider,
 } from '../run-cost.js';
 import {
@@ -159,6 +159,22 @@ describe('resultEventSucceeded — is_error outranks subtype', () => {
     expect(resultEventError(measuredApiFailure)).toBe(
       'api_error: status 400: API Error (400 Bad Request): 400 The provided model identifier is invalid..',
     );
+  });
+
+  it('keeps the structured code independent of the failure prose', () => {
+    expect(resultEventFailureCode(measuredApiFailure)).toBe('api_error');
+    expect(resultEventFailureCode({ ...measuredApiFailure, terminal_reason: 'NEEDS_GPU_POOL', result: 'A different detail' })).toBe('needs_gpu_pool');
+    expect(resultEventFailureCode({ subtype: 'success', terminal_reason: 'api_error' })).toBeUndefined();
+  });
+
+  it.each([undefined, null, {}, 42, '', 'needs a GPU', 'api_error\n', 'a'.repeat(81)])(
+    'leaves an invalid structured reason to legacy error classification: %j', (terminal_reason) => {
+      expect(resultEventFailureCode({ ...measuredApiFailure, terminal_reason })).toBeUndefined();
+    },
+  );
+
+  it('accepts a reason at the report code length limit', () => {
+    expect(resultEventFailureCode({ ...measuredApiFailure, terminal_reason: 'a'.repeat(80) })).toBe('a'.repeat(80));
   });
 
   it('says something useful even when the event carries no detail', () => {

@@ -985,7 +985,7 @@ Left:
 - Every work item gets a fixture (the default "needs nothing" one covers items with no label match), because acceptance 9 dispatches a work item the journey creates. "No fixture, today's behaviour" is a run with no work item.
 - Journey order is 1, 2, 9, 10, 3, 4, 5, 6, 7, 8, 11, 12, for the reasons in its header. Item 11's dispatch is item 1's: the allocation is narrowed from what is spent so the run's cost carries Auth Migration over 80 percent, and the bell is read at step 11 after every run in between, so it also proves a later run adds no second item.
 - A governed run's change goes to review, so its work item stays `in_review` and cannot be dispatched again; the journey sends it back through `in_progress` to `open`, as the item machine says, and waits for the reconcile tick to hand back the concurrency slot (ceiling 3).
-- The cold-start run's failure code is the fixture's code followed by the start of its message (`needs_gpu_pool_...`): the governed path derives it from the error text, as it does for a real run.
+- Closed by the continuing-work pickup: governed and fleet runs retain a validated `terminal_reason` separately from the full error detail. The cold-start report and its next attempt's brief now carry exactly `needs_gpu_pool`. A successful run has no failure code, a budget cutoff still wins, and legacy or malformed reasons retain the existing error-text fallback. The journey checks both stored reports and the previous-attempt brief.
 - The evidence line is compared with `GET /api/runbooks/evidence`, not with fixed numbers; "finished done" counts 0 because a governed run with a change ends `needs-review`.
 
 **Left.**

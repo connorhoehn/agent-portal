@@ -291,7 +291,7 @@ async function runJob(job: ClaimedAgentJob, policy: LifetimePolicy = lifetimePol
       // final message (its lab-report block) and every skill load, so the server reads both here.
       await recordRunEnd({
         runRef: job.id, executor: 'fleet', outcome: outcomeOfJobStatus(status),
-        failureCode: outcome.ok ? null : outcome.cutoff ? 'budget' : failureCodeOf(outcome.error),
+        failureCode: outcome.ok ? null : outcome.cutoff ? 'budget' : outcome.failureCode ?? failureCodeOf(outcome.error),
         model: outcome.model, billedUsd: outcome.costUsd,
         worker: { block: outcome.summary, skillsLoaded: outcome.skillsLoaded ?? [] },
       });

@@ -55,6 +55,8 @@ import { releaseHold } from '../../providers/spend-holds.js';
 import { runDevboxTask, wipeDevboxWorkspace } from '../../routes/devbox.js';
 import { appendEvent, setOccupant } from '../devbox-fleet.js';
 import { dispatchOnce, dispatcherEvents, busyBoxes } from '../job-dispatcher.js';
+import { RowsRunReportStore, privateRunReportSources } from '../run-reports/store-rows.js';
+import { runReportStore, setRunReportStore } from '../run-reports/store-select.js';
 const outcome = { ok: true, summary: 'done', transcript: [] };
 const job = {
   id: 'job', boxId: 'box', sessionId: 'session', claimToken: 'private-attempt', attempts: 1, createdBy: 'u-sme', botId: null,
@@ -84,6 +86,24 @@ it('passes the winning token to every write and keeps it out of UI events', asyn
   expect(runDevboxTask).toHaveBeenCalledWith(expect.objectContaining({ signal: expect.any(AbortSignal) }));
   expect(JSON.stringify(events)).not.toContain('private-attempt');
   expect(events).toContainEqual(expect.objectContaining({ kind: 'done' }));
+});
+
+it.each([
+  [{ ok: false, failureCode: 'needs_gpu_pool', error: 'needs_gpu_pool: Waiting for a GPU node.' }, 'needs_gpu_pool'],
+  [{ ok: false, error: 'The worker timed out.' }, 'timeout'],
+  [{ ok: false, failureCode: 'needs_gpu_pool', error: 'Stopped at the ceiling.', cutoff: { reason: 'budget' } }, 'budget'],
+  [{ ok: true, failureCode: 'needs_gpu_pool' }, null],
+])('stores the structured code with budget and success precedence: %j', async (result, expected) => {
+  const previous = runReportStore();
+  const reports = new RowsRunReportStore(privateRunReportSources());
+  setRunReportStore(reports);
+  try {
+    (runDevboxTask as jest.Mock).mockResolvedValue({ ...outcome, ...result });
+    await dispatchOnce(); await untilIdle();
+    expect((await reports.getReport(job.id))?.failureCode).toBe(expected);
+  } finally {
+    setRunReportStore(previous);
+  }
 });
 
 describe('a box changing hands', () => {

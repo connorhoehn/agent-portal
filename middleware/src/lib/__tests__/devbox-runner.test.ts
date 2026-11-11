@@ -39,6 +39,25 @@ beforeEach(() => {
 afterAll(() => { fixtureRegistry.resetAll('default'); delete process.env['MOCK_AGENTCORE']; });
 
 describe('executeDevboxTask cost basis', () => {
+  it('carries a failed result code without replacing its detail, even when the process exits zero', async () => {
+    const outcome = await run([
+      { type: 'result', subtype: 'success', is_error: true, terminal_reason: 'needs_gpu_pool', result: 'The cold-start test waits for a GPU node.' },
+      { type: 'devbox_end', exit_code: 0 },
+    ]);
+    expect(outcome.ok).toBe(false);
+    expect(outcome.failureCode).toBe('needs_gpu_pool');
+    expect(outcome.error).toBe('needs_gpu_pool: The cold-start test waits for a GPU node.');
+  });
+
+  it('does not invent a structured code for a legacy result or a successful result', async () => {
+    const legacy = await run([{ type: 'result', subtype: 'error', result: 'The worker timed out.' }]);
+    expect(legacy.failureCode).toBeUndefined();
+    expect(legacy.error).toBe('The worker timed out.');
+    const success = await run([{ type: 'result', subtype: 'success', terminal_reason: 'api_error' }]);
+    expect(success.ok).toBe(true);
+    expect(success.failureCode).toBeUndefined();
+  });
+
   it.each([{}, [], { input_tokens: 100 }, { input_tokens: 100, output_tokens: -1 },
     { input_tokens: 100, output_tokens: 20, cache_read_input_tokens: 'invalid' }])(
     'does not turn incomplete or malformed usage into a free or partially priced run: %j', async (usage) => {

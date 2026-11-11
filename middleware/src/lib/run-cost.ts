@@ -71,6 +71,7 @@
  *                  never merge into a real rollup.
  */
 import type { TokenUsage } from './pricing.js';
+import { RUN_REPORT_LIMITS } from './run-reports/types.js';
 
 export type ModelProvider = 'bedrock' | 'local' | 'simulated';
 
@@ -253,6 +254,16 @@ export function resultEventSucceeded(ev: Record<string, unknown>): boolean {
 }
 
 const ERROR_DETAIL_MAX = 600;
+
+/** A runtime's structured failure code, kept separate from its human detail. */
+export function resultEventFailureCode(ev: Record<string, unknown>): string | undefined {
+  if (resultEventSucceeded(ev)) return undefined;
+  const reason = ev['terminal_reason'];
+  // Prose, objects and oversized values still use the caller's legacy error
+  // classification. Do not turn them into apparently structured reason codes.
+  if (typeof reason !== 'string' || reason.length > RUN_REPORT_LIMITS.failureCode || !/^[a-z][a-z0-9_-]*$/i.test(reason)) return undefined;
+  return reason.toLowerCase();
+}
 
 /** The failure text a non-success `result` event carries, if any. */
 export function resultEventError(ev: Record<string, unknown>): string | undefined {
