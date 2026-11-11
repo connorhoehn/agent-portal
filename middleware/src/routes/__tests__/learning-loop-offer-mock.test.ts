@@ -145,14 +145,16 @@ describe('acceptance 5 and 6: the run gets the text; the runbook and the loop co
     const ev = await request(app()).get('/api/runbooks/rb-tenant-cutover/evidence');
     expect(ev.status).toBe(200);
     expect(ev.body.health.status).toBe('proven');
-    expect(ev.body.evidence).toMatchObject({ runbookId: 'rb-tenant-cutover', windowDays: 30, given: 1, loaded: 1, outcomes: { done: 1 } });
-    expect(ev.body.evidence.runs).toEqual([expect.objectContaining({ runRef: jobId, workItemId: 'wi-auth-e2-s2', outcome: 'done', version: 1, loaded: true })]);
+    // The default world's seeded scheduled run was offered this runbook too and did not use it, so two runs were given it and one loaded it.
+    expect(ev.body.evidence).toMatchObject({ runbookId: 'rb-tenant-cutover', windowDays: 30, given: 2, loaded: 1, outcomes: { done: 2 } });
+    expect(ev.body.evidence.runs).toEqual(expect.arrayContaining([expect.objectContaining({ runRef: jobId, workItemId: 'wi-auth-e2-s2', outcome: 'done', version: 1, loaded: true })]));
+    expect(ev.body.evidence.runs).toHaveLength(2);
     expect(ev.body.evidence.comparison).toMatchObject({ available: false, withRunbookRuns: 1 });
 
     const loop = await request(app()).get('/api/runbooks/evidence');
     expect(loop.status).toBe(200);
-    expect(loop.body.evidence).toMatchObject({ windowDays: 30, runsGiven: 1 });
-    expect(loop.body.evidence.runbooks).toEqual(expect.arrayContaining([expect.objectContaining({ runbookId: 'rb-tenant-cutover', given: 1 })]));
+    expect(loop.body.evidence).toMatchObject({ windowDays: 30, runsGiven: 2 });
+    expect(loop.body.evidence.runbooks).toEqual(expect.arrayContaining([expect.objectContaining({ runbookId: 'rb-tenant-cutover', given: 2 })]));
     expect((await request(app()).get('/api/runbooks/rb-nope/evidence')).status).toBe(404);
   });
 
