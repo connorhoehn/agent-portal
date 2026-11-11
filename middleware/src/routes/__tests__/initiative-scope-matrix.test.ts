@@ -15,11 +15,11 @@ import { resolve } from 'node:path';
 const ROUTES = resolve(__dirname, '..');
 const FILES = ['bots', 'work', 'agent-projects', 'sdlc', 'internal-devbox', 'work-items', 'work-documents',
   'budgets', 'grants', 'lab', 'designs', 'initiative-decks', 'devbox', 'sprints', 'prompt-pointers', 'user-budgets',
-  'ops-switches', 'projects'];
+  'ops-switches', 'projects', 'runbooks', 'local-compute'];
 // `sprintMoveAllowed` is deliberately NOT a scope check here (sweep 11, M1): it
 // runs only when a write moves an item into a sprint, so a route that named it
 // passed this matrix while every other field was open to anyone with the action.
-const SCOPE_CHECK = /requireInitiativeScope|requireBoxAccess|userReachesBox|requireInitiativeSteward|userStewardsInitiative|stewardsInitiative|grantScopedDispatchVerdict|canSee\(|runAttribution\(|itemInScope\(|designInScope\(|requireBudgetScope\(/;
+const SCOPE_CHECK = /requireInitiativeScope|requireBoxAccess|userReachesBox|requireInitiativeSteward|userStewardsInitiative|stewardsInitiative|grantScopedDispatchVerdict|canSee\(|runAttribution\(|itemInScope\(|designInScope\(|requireBudgetScope\(|mayReviewRunbook\(|decidable\(|fencedJob\(|localBoxId\(node\.id\)|ownedNode\(/;
 // The direct checks a handler can make itself, for the top-level test below.
 const DIRECT_CHECK = /requireInitiativeScope\(|itemInScope\(|stewardsInitiative\(/;
 // Files whose SCOPED routes must make that check unconditionally, at the
@@ -72,10 +72,35 @@ const SCOPED = [
   'work-items POST /projects/:id/discussion/comments', 'work-items POST /work-items/:id/comments',
   // A workspace document is edited and created by members of its initiative (requireInitiativeScope).
   'work-documents PUT /documents/:documentId', 'work-documents POST /projects/:projectId/workspace-documents',
+  // The runbook library (learning loop): deciding a proposal or retiring a runbook needs review
+  // rights on the runbook's own scope (its owner, or an SME of its initiative; org-leader and admin
+  // override), through lib/runbook-review.ts mayReviewRunbook — `decidable` is the shared door for
+  // accept, reject and merge. Merge needs it on the target AND the proposal's own runbook.
+  'runbooks POST /proposals/:pid/accept', 'runbooks POST /proposals/:pid/reject', 'runbooks POST /proposals/:pid/merge', 'runbooks POST /:id/retire',
+  // Local compute: a machine's work loop is bound to the machine. The claim takes only jobs queued
+  // for the authenticated node (the box id and node id come from the node token, never the body),
+  // and every call after it is fenced to a job that box holds. Initiative authority was checked
+  // when the job was handed to the machine (POST /nodes/:nodeId/work: ownedNode + grantScopedDispatchVerdict).
+  'local-compute POST /claim', 'local-compute POST /jobs/:jobId/start', 'local-compute POST /jobs/:jobId/heartbeat',
+  'local-compute POST /jobs/:jobId/skills', 'local-compute POST /jobs/:jobId/complete', 'local-compute POST /jobs/:jobId/debrief',
+  'local-compute POST /jobs/:jobId/log', 'local-compute POST /nodes/:nodeId/work',
 ];
 
 /** Not scoped yet, each with why. Fixing one moves it to SCOPED. */
 const OPEN: Record<string, string> = {
+  'runbooks POST /proposals': 'anyone signed in may suggest a runbook edit (SuggestRunbook), and a proposal changes nothing until a person with review rights decides it; a person\'s is attributed to their own session, a machine\'s only to the run its run token names (lib/run-token.ts) and its frozen brief',
+  'runbooks POST /proposals/:pid/withdraw': 'identity-bound, not scope-bound: only the proposer may withdraw their own open proposal (NOT_PROPOSER otherwise), and a run cannot',
+  'runbooks POST /:id/applications': 'a box reports on a run (service auth plus the run token for exactly that run_ref); a person does not call it, and the run must have been given the runbook (NOT_GIVEN otherwise)',
+  // Machine presence and pairing: keyed by the authenticated node (or the pairing code), with no initiative in the request.
+  'local-compute POST /pair/start': 'mints a pairing code for the caller (ConnectLocalCompute); the owner is the session, never the request, and no initiative is involved',
+  'local-compute POST /pair/claim': 'the pairing code is the whole credential (rate-limited); it mints a machine for the code\'s owner and touches no initiative',
+  'local-compute POST /announce': 'the node token names the machine; presence rows are keyed by that node id and carry no initiative',
+  'local-compute POST /heartbeat': 'same as /announce: the authenticated node\'s own last-seen stamp',
+  'local-compute POST /sessions/:sessionId/end': 'the authenticated node ends a session in its own presence rows; another node\'s session id removes nothing',
+  'local-compute POST /register': 'the authenticated node states its own capabilities; only narrows (kinds intersected with the closed set, concurrency capped), and never sets accept-jobs, which is the owner\'s',
+  'local-compute POST /log': 'the authenticated node appends to its own machine log; keyed by node id',
+  'local-compute PATCH /nodes/:id': 'owner-bound, not initiative-bound: the machine\'s owner (session.sub) is in the UPDATE\'s WHERE, so another person\'s machine answers 404',
+  'local-compute DELETE /nodes/:id': 'same as PATCH: a soft revoke carrying the owner\'s id, so only the owner revokes it',
   'budgets PUT /learning': 'learning loop: the learning cap is the whole organisation\'s, with no initiative; ManageBudgets plus an org-wide role (a program-owner is refused in the handler)',
   'prompt-pointers POST /:agent/candidate': 'DE-4: prompts are org-wide, keyed by agent, with no initiative; ManageCanary (org-leader / hr-admin) is the gate',
   'prompt-pointers POST /:agent/promote': 'DE-4: same as candidate: org-wide, ManageCanary',
@@ -103,9 +128,15 @@ function writeRoutes(): Map<string, string> {
   const out = new Map<string, string>();
   for (const file of FILES) {
     const src = readFileSync(resolve(ROUTES, `${file}.ts`), 'utf8');
-    const hits = [...src.matchAll(/\b\w+Router\.(post|patch|put|delete)\(\s*'([^']+)'/g)];
+    const hits = [...src.matchAll(/\b(?:\w+Router|router)\.(post|patch|put|delete)\(\s*'([^']+)'/g)];
+    // A handler's source ends at the next write route, or at the next function declaration, so a
+    // scope check named in a helper declared between two routes (runbooks.ts and local-compute.ts
+    // declare several) is not read as the earlier route's own.
+    const fnStarts = [...src.matchAll(/^[ \t]*(?:export )?(?:async )?function \w+/gm)].map((m) => m.index!);
     hits.forEach((m, i) => {
-      out.set(`${file} ${m[1]!.toUpperCase()} ${m[2]}`, src.slice(m.index, i + 1 < hits.length ? hits[i + 1]!.index : undefined));
+      const nextRoute = i + 1 < hits.length ? hits[i + 1]!.index! : src.length;
+      const nextFn = fnStarts.find((at) => at > m.index!) ?? src.length;
+      out.set(`${file} ${m[1]!.toUpperCase()} ${m[2]}`, src.slice(m.index, Math.min(nextRoute, nextFn)));
     });
   }
   return out;
