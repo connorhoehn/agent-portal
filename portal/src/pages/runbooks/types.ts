@@ -28,6 +28,8 @@ export interface RunbookRow {
   created_at: string;
   updated_at: string;
   retired?: { at: string; by: string; reason: string; superseded_by: string | null };
+  /** Set when a retired runbook was brought back by an accepted restore proposal. */
+  restored?: { at: string; by: string; reason: string };
   title: string;
   summary: string;
   sha256: string | null;

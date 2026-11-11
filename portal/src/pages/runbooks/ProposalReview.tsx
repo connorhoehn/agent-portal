@@ -205,10 +205,11 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
     { id: 'summary', title: 'Change summary' },
     ...(p.kind !== 'retire' && p.kind !== 'restore' ? [{ id: 'changes', title: 'Document changes' }] : []),
     ...(data.files_diff?.text || data.proposed_files?.length ? [{ id: 'files', title: 'File changes' }] : []),
-    ...(data.reach ? [{ id: 'reach', title: reachTitle(data.reach) }] : []),
-    { id: 'checks', title: 'Review checks' },
+    // The same order the sections are drawn in below, so the numbers read 1, 2, 3 down the page.
     ...(p.source.kind === 'run' && p.source.run_ref ? [{ id: 'said', title: 'What the run said' }] : []),
     ...(p.kind === 'retire' && p.retire_evidence ? [{ id: 'runs', title: 'Runs it names' }] : []),
+    ...(data.reach ? [{ id: 'reach', title: reachTitle(data.reach) }] : []),
+    { id: 'checks', title: 'Review checks' },
     ...(p.proposed ? [{ id: 'preview', title: 'Proposed runbook' }] : []),
     ...(sources.length ? [{ id: 'sources', title: 'Sources' }] : []),
     ...(open && canReview && p.kind !== 'retire' && p.kind !== 'restore' && mergeTargets.length ? [{ id: 'merge', title: 'Merge proposal' }] : []),

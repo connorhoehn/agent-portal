@@ -150,12 +150,12 @@ test('the entries URL carries the group, an empty key for the group with none, a
 });
 
 test('the spend report page URL carries the grouping and the period', () => {
-  assert.equal(spendReportPageHref('bot', '30d'), '/iq/budgets?group=bot&period=30d');
-  assert.equal(spendReportPageHref('bot', 'month'), '/iq/budgets?group=bot');
+  assert.equal(spendReportPageHref('bot', '30d'), '/admin/budgets?group=bot&period=30d');
+  assert.equal(spendReportPageHref('bot', 'month'), '/admin/budgets?group=bot');
 });
 
 test('only a real bot key has a bot page', () => {
-  assert.equal(botHref('b-1'), '/iq/bots/b-1');
+  assert.equal(botHref('b-1'), '/admin/bots/b-1');
   assert.equal(botHref(null), null);
 });
 

@@ -77,6 +77,9 @@ describe('debriefWords', () => {
     assert.equal(canRetryRun('cancelled', 'bot_runs'), false);
     assert.equal(canRetryRun('done', 'agent_jobs'), false);
     assert.equal(canRetryRun(undefined, 'agent_jobs'), false);
+    assert.equal(canRetryRun(undefined, 'agent_jobs', 'failed'), true);
+    assert.equal(canRetryRun(undefined, 'agent_jobs', 'completed'), false);
+    assert.equal(canRetryRun(undefined, 'bot_runs', 'failed'), false);
   });
 
   it('botRunSummary counts the window, joins reports by job id, and never invents a cost', () => {

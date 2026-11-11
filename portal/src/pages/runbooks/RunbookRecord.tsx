@@ -145,6 +145,9 @@ function ReadTab({ runbook, version, names, onOpen, onChanged }: { runbook: Runb
           {runbook.health.warning ?? runbook.health.reason}
         </Banner>
       )}
+      {runbook.restored && !runbook.retired && (
+        <T size="xs" tone="tertiary" wrap data-testid="runbook-restored">{`Restored ${relativeTime(runbook.restored.at)} by ${names.person(runbook.restored.by)}: ${runbook.restored.reason}`}</T>
+      )}
       {runbook.area && <T size="xs" tone="tertiary" data-testid="runbook-area">{`Area: ${names.initiative(runbook.area)}`}</T>}
       <T size="xs" tone="tertiary" data-testid="runbook-health">{`${HEALTH_LABEL[runbook.health.status]}: ${runbook.health.reason} Health is derived from what runs said of this runbook, not from whether they finished.`}</T>
       <Stack gap="xs" className="shrink-0">

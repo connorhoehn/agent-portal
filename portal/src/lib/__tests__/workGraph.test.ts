@@ -191,7 +191,7 @@ test('view state and open destinations', () => {
   assert.equal(workGraphNodeHref('initiative:p-a', graph.edges, graph.nodes), '/iq/projects/p-a');
   assert.equal(workGraphNodeHref('work:wi-1', graph.edges, graph.nodes), '/iq/projects/p-a?tab=work&item=wi-1');
   assert.equal(workGraphNodeHref('run:r-1', graph.edges, graph.nodes), '/iq/projects/p-a?tab=work&item=wi-1');
-  assert.equal(workGraphNodeHref('agent:b-1', graph.edges, graph.nodes), '/iq/bots/b-1');
+  assert.equal(workGraphNodeHref('agent:b-1', graph.edges, graph.nodes), '/admin/bots/b-1');
   assert.equal(workGraphNodeHref('doc:adr-1', graph.edges, graph.nodes), '/iq/documents/adr-1');
   assert.equal(workGraphNodeHref('doc:h.abc', graph.edges, graph.nodes), null);
 });

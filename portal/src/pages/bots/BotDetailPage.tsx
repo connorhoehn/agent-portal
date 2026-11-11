@@ -521,16 +521,16 @@ export default function BotDetailPage() {
                 items={[
                   `Last 30 days: ${summary.firings} ${summary.firings === 1 ? 'firing' : 'firings'}`,
                   `${summary.reported} with a report`,
-                  `${summary.done} done`,
-                  `${summary.failed} failed`,
+                  `${summary.done} reported done`,
+                  `${summary.failed} reported failed`,
                   `Billed ${summary.billedUsd != null ? usd(summary.billedUsd) : costWords({ billedUsd: null, reportedUsd: null, basis: 'unknown' }, usd)}`,
                 ]}
               />
               {summary.proposals > 0
-                ? <RecordLink to={proposalsHref()} data-testid="bot-run-proposals">{`${summary.proposals} ${summary.proposals === 1 ? 'proposal' : 'proposals'} filed`}</RecordLink>
+                ? <RecordLink to={proposalsHref()} data-testid="bot-run-proposals"><T size="xs">{`${summary.proposals} ${summary.proposals === 1 ? 'proposal' : 'proposals'} filed`}</T></RecordLink>
                 : <T size="xs" tone="tertiary">No proposals filed</T>}
               {canOpenSpend && (
-                <RecordLink to={spendReportPageHref('bot', '30d')} data-testid="bot-run-spend-report" title="Spend by bot, last 30 days: every bot's ledger entries">Spend by bot, 30 days</RecordLink>
+                <RecordLink to={spendReportPageHref('bot', '30d')} data-testid="bot-run-spend-report" title="Spend by bot, last 30 days: every bot's ledger entries"><T size="xs">Spend by bot, 30 days</T></RecordLink>
               )}
             </Inline>
           )}

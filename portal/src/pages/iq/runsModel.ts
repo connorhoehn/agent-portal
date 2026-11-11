@@ -155,11 +155,12 @@ export function runsListHref(f: Partial<{ executor: string; initiative: string; 
 
 /**
  * Whether a run's page offers Retry: the run failed or was cancelled and the façade says it is a queue job, the one
- * kind `POST /api/work/jobs/:id/requeue` can clone. Bot firings, project runs and assessment runs
+ * kind `POST /api/work/jobs/:id/requeue` can clone. A job that died before it could report has no outcome, so the job's
+ * own status counts too (the route keys off the job's status). Bot firings, project runs and assessment runs
  * show nothing rather than a button that would be refused.
  */
-export const canRetryRun = (outcome: RunOutcome | undefined, sourceTable: string | undefined): boolean =>
-  (outcome === 'failed' || outcome === 'cancelled') && sourceTable === 'agent_jobs';
+export const canRetryRun = (outcome: RunOutcome | undefined, sourceTable: string | undefined, jobStatus?: string): boolean =>
+  (outcome === 'failed' || outcome === 'cancelled' || jobStatus === 'failed' || jobStatus === 'cancelled') && sourceTable === 'agent_jobs';
 
 /** A bot run's queue job id is its run report's run ref: the join the initiative Agents tab and the bot page share. */
 export const reportsByRunRef = (reports: readonly RunReportRow[]): Map<string, RunReportRow> =>

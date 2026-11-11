@@ -447,7 +447,7 @@ export function workGraphNodeHref(nodeId: string, edges: Record<string, WorkGrap
     case 'sprint': return '/iq/projects?lens=sprints';
     // A decision is a record page of its own, raised against an initiative or org-wide.
     case 'decision': return `/iq/decisions/${encodeURIComponent(id)}`;
-    case 'agent': return `/iq/bots/${encodeURIComponent(id)}`;
+    case 'agent': return `/admin/bots/${encodeURIComponent(id)}`;
     case 'doc': return `/iq/documents/${encodeURIComponent(id)}`;
     default: return null;
   }

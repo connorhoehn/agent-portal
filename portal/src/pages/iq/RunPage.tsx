@@ -51,8 +51,11 @@ export default function RunPage() {
   const briefFeed = useFetch<{ brief: Brief }>(ref ? `/api/runs/${encodeURIComponent(ref)}/brief` : null, 0);
   const facade = usePipelineRun('/api/runs', facadeId);
   const report = reportFeed.data?.report ?? null;
-  const title = facade.run?.context.title ?? 'Run';
-  useCrumbLabel(id, facade.run?.context.title);
+  // A run with no queue record (a fleet or local run) is named for the work item it was about, as the Runs list names it.
+  const itemTitle = report?.workItemId ? (Array.isArray(board.data) ? board.data : []).find((w) => w.id === report.workItemId)?.title : undefined;
+  const heading = facade.run?.context.title ?? itemTitle;
+  const title = heading ?? 'Run';
+  useCrumbLabel(id, heading);
   const { can, ready } = useCapabilities();
   const [retried, setRetried] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
@@ -74,7 +77,7 @@ export default function RunPage() {
 
   const hasSteps = facade.steps.length > 0;
   // Retry is the Findings failed view's requeue: same route, same capability.
-  const canRetry = ready && can('ManageDevbox') && ref !== null && canRetryRun(report?.outcome, facade.run?.context.table);
+  const canRetry = ready && can('ManageDevbox') && ref !== null && canRetryRun(report?.outcome, facade.run?.context.table, facade.run?.status);
   async function retry() {
     if (!ref) return;
     setRetrying(true);
@@ -85,13 +88,16 @@ export default function RunPage() {
     toastSuccess(tid, 'Back on the queue', 'the next idle worker picks it up');
     setRetried(res.data.id);
   }
+  // A queue job that died before it could report has no outcome of its own; the queue's status says how it ended.
+  const jobStatus = facade.run?.status;
+  const endedWithoutReport: 'failed' | 'cancelled' | null = !report && (jobStatus === 'failed' || jobStatus === 'cancelled') ? jobStatus : null;
   const tab = params.get('tab') ?? 'report';
   const setTab = (next: string) => setParams((prev) => { const p = new URLSearchParams(prev); if (next === 'report') p.delete('tab'); else p.set('tab', next); return p; }, { replace: true });
   const simulated = report ? isSimulated(report) : false;
   const botName = facade.run?.context.kind === 'bot' ? facade.run.context.title : null;
   const tabs: DetailPageTab[] = [
     { id: 'brief', label: 'Brief', testId: 'run-tab-brief', content: <BriefSection feed={briefFeed} /> },
-    { id: 'report', label: 'Report', testId: 'run-tab-report', content: <ReportSection report={report} missing={reportFeed.error} who={report ? whoRan(report.executor, botName) : null} onRetry={reportFeed.refresh} /> },
+    { id: 'report', label: 'Report', testId: 'run-tab-report', content: <ReportSection report={report} endedWithoutReport={endedWithoutReport} missing={reportFeed.error} who={report ? whoRan(report.executor, botName) : null} onRetry={reportFeed.refresh} /> },
     { id: 'runbooks', label: 'Runbooks', testId: 'run-tab-runbooks', content: <RunbooksSection report={report} offer={briefFeed.data?.brief.offer ?? null} names={names} /> },
     { id: 'learned', label: 'Learned', testId: 'run-tab-learned', content: <LearnedSection report={report} names={names} simulated={simulated} /> },
     ...(hasSteps ? [{ id: 'steps', label: 'Steps', testId: 'run-tab-steps', content: <StepsSection steps={facade.steps} eventsUrl={facade.eventsUrl} /> }] : []),
@@ -107,23 +113,25 @@ export default function RunPage() {
           <Chip tone={OUTCOME_TONE[report.outcome]} size="xs" data-testid="run-outcome">{OUTCOME_LABEL[report.outcome]}</Chip>
           {simulated && <Chip tone="neutral" size="xs" data-testid="run-demo-data">Demo data</Chip>}
         </Inline>
+      ) : endedWithoutReport ? (
+        <Chip tone={OUTCOME_TONE[endedWithoutReport]} size="xs" data-testid="run-outcome">{OUTCOME_LABEL[endedWithoutReport]}</Chip>
       ) : undefined}
-      meta={report ? (
+      meta={report || retried ? (
         <Stack gap="xs">
           {retried && (
-        <Banner variant="success" data-testid="run-retried">
-          A new attempt is queued. It will appear as its own run, and its brief carries this attempt&apos;s outcome.{' '}
-          <RecordLink to={`/iq/runs/${encodeURIComponent(retried)}`} data-testid="run-retried-link">Open the new attempt</RecordLink>
-        </Banner>
+            <Banner variant="success" data-testid="run-retried">
+              A new attempt is queued. It will appear as its own run, and its brief carries this attempt&apos;s outcome.{' '}
+              <RecordLink to={`/iq/runs/${encodeURIComponent(retried)}`} data-testid="run-retried-link">Open the new attempt</RecordLink>
+            </Banner>
           )}
-          <MetaLine size="xs" tone="tertiary" items={[whoRan(report.executor, botName), `ended ${relativeTime(report.endedAt)}`]} />
-          <Inline gap="md" align="center" wrap data-testid="run-links">
+          {report && <MetaLine size="xs" tone="tertiary" items={[whoRan(report.executor, botName), `ended ${relativeTime(report.endedAt)}`]} />}
+          {report && <Inline gap="md" align="center" wrap data-testid="run-links">
             {report.initiativeId && <RecordLink to={`/iq/projects/${encodeURIComponent(report.initiativeId)}`} data-testid="run-initiative-link"><T size="xs">{names.initiative(report.initiativeId)}</T></RecordLink>}
             {report.workItemId && report.initiativeId && <RecordLink to={workItemHref(report.initiativeId, report.workItemId)} data-testid="run-work-item-link"><T size="xs">{`Work item: ${workItemName(report.workItemId)}`}</T></RecordLink>}
             {report.workItemId && !report.initiativeId && <T size="xs" tone="tertiary">{`Work item: ${workItemName(report.workItemId)}`}</T>}
             {report.changes.changeRequestId && <RecordLink to={`/iq/changes/${encodeURIComponent(report.changes.changeRequestId)}`} data-testid="run-change-link"><T size="xs">{`Change ${report.changes.changeRequestId}`}</T></RecordLink>}
             {report.workItemId && <RecordLink to={runsListHref({ workItem: report.workItemId })} data-testid="run-item-runs-link"><T size="xs">Other runs of this work item</T></RecordLink>}
-          </Inline>
+          </Inline>}
         </Stack>
       ) : undefined}
       actions={canRetry ? (
@@ -176,8 +184,11 @@ const OBSTACLE_COLUMNS: DataTableColumn<{ text: string }>[] = [
   { key: 'text', header: 'What got in the way', render: (o) => <T size="sm" wrap>{o.text}</T> },
 ];
 
-function ReportSection({ report, missing, who, onRetry }: { report: RunReportRow | null; missing: string | null; who: string | null; onRetry: () => void }) {
+function ReportSection({ report, endedWithoutReport, missing, who, onRetry }: { report: RunReportRow | null; endedWithoutReport: 'failed' | 'cancelled' | null; missing: string | null; who: string | null; onRetry: () => void }) {
   if (!report) {
+    if (endedWithoutReport && (isNotFoundError(missing) || !missing)) {
+      return <EmptyState align="start" title={endedWithoutReport === 'failed' ? 'This run failed before it reported' : 'This run was cancelled before it reported'} description="The queue records how it ended; the Steps tab shows where it stopped." data-testid="run-report-none" />;
+    }
     return isNotFoundError(missing) || !missing
       ? <EmptyState align="start" title="This run has not reported" description="It is still running, or it ended before reports existed." data-testid="run-report-none" />
       : <UnavailableNotice error={missing} what="this run's report" source="Reports are read from the run report store" onRetry={onRetry} />;

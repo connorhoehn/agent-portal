@@ -7,19 +7,19 @@ import { outcomeLabel, reachEmpty, reachItemName, reachNote, type ProposalReach,
 
 export function ProposalReach({ reach }: { reach: ProposalReach }) {
   const columns: DataTableColumn<ReachItem>[] = [
-    { key: 'item', header: 'Work item', render: (i) => (
-      <RecordLink to={workItemHref(i.initiative.id, i.id)} data-testid="reach-work-item">
-        <T size="sm" title={reachItemName(i)} className="block max-w-[30rem] truncate">{reachItemName(i)}</T>
-      </RecordLink>
+    { key: 'item', header: 'Work item', truncate: true, wrap: 'two-lines', render: (i) => (
+      <RecordLink to={workItemHref(i.initiative.id, i.id)} data-testid="reach-work-item"><T size="sm">{reachItemName(i)}</T></RecordLink>
     ) },
-    { key: 'initiative', header: 'Initiative', width: '200px', priority: 3, render: (i) => <T size="sm" className="block truncate">{i.initiative.name}</T> },
-    { key: 'outcome', header: 'Result', width: '248px', priority: 2, render: (i) => <T size="sm" tone={i.outcome === 'chosen' ? 'primary' : 'secondary'}>{outcomeLabel(i.outcome)}</T> },
+    { key: 'initiative', header: 'Initiative', width: '176px', truncate: true, priority: 3, render: (i) => <T size="sm">{i.initiative.name}</T> },
+    { key: 'outcome', header: 'Result', width: '208px', truncate: true, wrap: 'two-lines', priority: 2, render: (i) => <T size="sm" tone={i.outcome === 'chosen' ? 'primary' : 'secondary'}>{outcomeLabel(i.outcome)}</T> },
   ];
   const note = reachNote(reach);
   return (
     <>
       <DataTable
         narrow
+        responsiveColumns
+        hiddenColumnsControl="header"
         data={reach.items}
         columns={columns}
         keyField={(i) => i.id}

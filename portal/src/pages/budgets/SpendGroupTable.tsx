@@ -6,7 +6,7 @@
 // Unknown costs are a chip beside the dollars, never a $0; a withheld figure is
 // the lock, never a zero.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Chip,
   DataTable,
@@ -125,6 +125,12 @@ export function SpendGroupTable({ groups, groupBy, period, lock, query }: {
     }] : []),
   ];
   const openGroup = groups.find((g) => viewKey(g) === opened);
+  // A long list of groups pushes the opened group's entries below the fold: bring them up when a group opens.
+  useEffect(() => {
+    if (!opened) return;
+    const frame = requestAnimationFrame(() => document.querySelector('[data-testid="spend-entries-section"]')?.scrollIntoView({ block: 'start' }));
+    return () => cancelAnimationFrame(frame);
+  }, [opened]);
   return (
     <Stack gap="lg" className="min-w-0">
       <DataTable
@@ -144,6 +150,7 @@ export function SpendGroupTable({ groups, groupBy, period, lock, query }: {
           title={`Entries: ${groupLabel(openGroup, groupBy)}`}
           description={`What the ${openGroup.entries} ${openGroup.entries === 1 ? 'entry' : 'entries'} in this group are, newest first.`}
           count={openGroup.entries}
+          data-testid="spend-entries-section"
         >
           <SpendEntriesTable groupBy={groupBy} groupKey={openGroup.key} period={period} lock={lock} />
         </PageSection>

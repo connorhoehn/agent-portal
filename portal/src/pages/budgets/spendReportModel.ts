@@ -56,12 +56,12 @@ export function spendReportPageHref(groupBy: SpendGroupBy, period: SpendPeriod):
   if (groupBy !== 'initiative') q.set('group', groupBy);
   if (period !== 'month') q.set('period', period);
   const s = q.toString();
-  return `/iq/budgets${s ? `?${s}` : ''}`;
+  return `/admin/budgets${s ? `?${s}` : ''}`;
 }
 
 /** The bot a group names, as its page: only a real bot key has one. */
 export function botHref(key: string | null): string | null {
-  return key ? `/iq/bots/${encodeURIComponent(key)}` : null;
+  return key ? `/admin/bots/${encodeURIComponent(key)}` : null;
 }
 
 /**
