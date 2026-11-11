@@ -86,10 +86,10 @@ export function InitiativeRail({
   const [days, setDays] = useState<number>(30);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  // /admin/bots is an hr-admin route (ManageDevbox): for anyone else a bot
-  // row opens nothing rather than a page that redirects them home.
+  // The Bots page is for the roles that hold ManageBots (the route's own gate lists the same roles): for
+  // anyone else the bots are listed here without a link that would redirect them home.
   const { can, ready } = useCapabilities();
-  const canManageBots = ready && can('ManageDevbox');
+  const canManageBots = ready && can('ManageBots');
 
   const { data, error, isLoading } = useFetch<InitiativeRunsResponse>(
     initiativeId ? `/api/bots/initiative-runs?orgProjectId=${encodeURIComponent(initiativeId)}` : null,

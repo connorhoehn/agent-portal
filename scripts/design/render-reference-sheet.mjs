@@ -36,7 +36,7 @@ const SHEET_MAX_BYTES = 8 * 1024 * 1024;
 const PAGES = [
   { name: 'projects', path: '/iq/projects' },
   { name: 'search', path: '/iq/search?q=kubernetes&type=person' },
-  { name: 'computer-lab', path: '/iq/local-compute' },
+  { name: 'computers', path: '/iq/computers' },
   { name: 'social', path: '/iq/communication/channels' },
 ];
 

@@ -33,7 +33,7 @@ export function botInitiatives(bots: readonly Bot[]): Array<{ id: string; name: 
 
 /** When a bot fires, in the words the page prints: a scheduled automation or one that runs on demand. */
 export function botScheduleText(bot: Pick<Bot, 'trigger' | 'cronExpr'>): string {
-  if (bot.trigger === 'cron') return bot.cronExpr ? `Scheduled: ${bot.cronExpr}` : 'Scheduled';
+  if (bot.trigger === 'cron') return bot.cronExpr ?? 'Scheduled';
   if (bot.trigger === 'pr_watch') return 'On new pull requests';
   return 'On demand';
 }

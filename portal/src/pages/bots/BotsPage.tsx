@@ -213,33 +213,25 @@ export default function BotsPage() {
     },
     {
       key: 'schedule',
-      header: 'Runs',
+      header: 'Schedule',
       // Scheduled automations and on-demand bots are one list; this says which each one is.
       render: (bot) => <MetaLine size="xs" items={[botScheduleText(bot)]} />,
     },
     {
       key: 'initiative',
       header: 'Initiative',
+      // The initiative the bot serves; a bot with none shows the codebase it works on instead.
       render: (bot) => (
         bot.orgProjectId ? (
           <Link
             to={`/iq/projects/${bot.orgProjectId}`}
             onClick={(e) => e.stopPropagation()}
-            title={`Open the initiative this bot serves: ${bot.orgProjectName ?? bot.orgProjectId}`}
+            title={`Open the initiative this bot serves: ${bot.orgProjectName ?? bot.orgProjectId}${bot.agentProjectRepo ? ` (codebase ${bot.agentProjectRepo})` : ''}`}
             className="text-xs text-primary no-underline hover:underline"
           >
             <T size="xs">{bot.orgProjectName ?? bot.orgProjectId}</T>
           </Link>
-        ) : (
-          <MetaLine size="xs" tone="tertiary" items={['—']} />
-        )
-      ),
-    },
-    {
-      key: 'target',
-      header: 'Codebase',
-      render: (bot) => (
-        bot.agentProjectRepo && bot.agentProjectId ? (
+        ) : bot.agentProjectRepo && bot.agentProjectId ? (
           <Link
             to={`/admin/projects?project=${bot.agentProjectId}`}
             onClick={(e) => e.stopPropagation()}

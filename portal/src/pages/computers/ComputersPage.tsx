@@ -8,8 +8,8 @@
 // Nothing here is a new backend: the rows come from the two reads that already existed
 // (GET /api/local-compute/nodes with its runs, and the lab's fleet from the app's ComputeProvider).
 
-import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
 import {
   Banner, Button, Card, Chip, CloseIcon, CollectionToolbar, ConfirmDialog, DataTable, DetailSection,
   EmptyState, EntityCell, IconButton, Inline, InlineAlert, MetaLine, Stack, Switch, T, type DataTableColumn,
@@ -30,6 +30,7 @@ import { PairMachineDialog } from '../local-compute/PairMachineDialog';
 import { RunLog } from '../local-compute/RunLog';
 import { useLocalComputeStream } from '../local-compute/useLocalComputeStream';
 import type { ComputeNode, RunRow } from '../local-compute/localComputeTypes';
+import { runsListHref } from '../iq/runsModel';
 import { computersCommandAdapter } from './computersCommands';
 import { computerRows, filterComputers, KIND_LABEL, LOCAL_KEY_PREFIX, type ComputerRow, type KindFilter } from './computersModel';
 import { READ_ONLY_REASON, refuseInstruction } from './devboxReadOnly';
@@ -49,6 +50,7 @@ export default function ComputersPage() {
   const canDriveLab = !!compute?.canManage;
   const labReadOnly = ready && !(can('ManageDevbox') && (can('OpenDevboxShell') || can('RunDevboxTask')));
 
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const selectedKey = params.get('computer');
   const selectedRunId = params.get('run');
@@ -84,6 +86,13 @@ export default function ComputersPage() {
   // The clock behind "last seen" and the run clocks: it ticks only while a run is in flight.
   const now = useNow(runs.some((r) => isLive(r.status)));
   const { connected: streamLive } = useLocalComputeStream({ onChange: () => { void refreshNodes(); void refreshRuns(); } });
+
+  // A selected row's working area opens below the table; bring it into view so the click visibly does something.
+  useEffect(() => {
+    if (!selectedKey) return;
+    const id = window.setTimeout(() => document.querySelector('[data-testid="computer-detail"]')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 150);
+    return () => window.clearTimeout(id);
+  }, [selectedKey]);
 
   const refreshAll = () => { void refreshNodes(); void refreshRuns(); void compute?.refresh(); };
 
@@ -155,7 +164,7 @@ export default function ComputersPage() {
     {
       key: 'running',
       header: 'Running',
-      render: (r) => <T size="sm" className="block max-w-[28rem] truncate" title={r.running}>{r.running}</T>,
+      render: (r) => <T size="sm" className="block max-w-[16rem] truncate" title={r.running}>{r.running}</T>,
     },
     {
       key: 'seen',
@@ -212,6 +221,7 @@ export default function ComputersPage() {
 
   const headerActions = (
     <Inline gap="xs" align="center">
+      <Button size="sm" variant="link" onClick={() => navigate(runsListHref({ executor: 'local' }))} data-testid="local-runs-link">Runs on your machines</Button>
       {canPair && <Button size="sm" variant="secondary" onClick={() => setPairOpen(true)}>Pair a machine</Button>}
       {canDriveLab && <Button size="sm" variant="primary" disabled={starting} onClick={() => { void startLab(); }}>{starting ? 'Starting…' : 'Start a lab machine'}</Button>}
     </Inline>
@@ -265,7 +275,7 @@ export default function ComputersPage() {
           )}
 
           {selectedRow?.kind === 'local' && selectedNode && (
-            <DetailSection title={selectedNode.label} hint={KIND_LABEL.local} actions={<Button size="sm" variant="ghost" onClick={() => setParam('computer', null)}>Close</Button>}>
+            <DetailSection data-testid="computer-detail" title={selectedNode.label} hint={KIND_LABEL.local} actions={<Button size="sm" variant="ghost" onClick={() => setParam('computer', null)}>Close</Button>}>
               <LocalMachineDetail
                 node={selectedNode}
                 runs={runs}
@@ -279,7 +289,7 @@ export default function ComputersPage() {
           )}
 
           {selectedRow?.kind === 'lab' && (
-            <DetailSection title={selectedRow.name} hint={KIND_LABEL.lab} actions={<Button size="sm" variant="ghost" onClick={() => setParam('computer', null)}>Close</Button>}>
+            <DetailSection data-testid="computer-detail" title={selectedRow.name} hint={KIND_LABEL.lab} actions={<Button size="sm" variant="ghost" onClick={() => setParam('computer', null)}>Close</Button>}>
               <Stack gap="sm">
                 {labReadOnly && <InlineAlert tone="info">{READ_ONLY_REASON}</InlineAlert>}
                 <Card padding="none" className="h-[34rem] min-h-0 overflow-hidden">

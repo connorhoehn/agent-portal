@@ -311,7 +311,7 @@ test('one list holds scheduled automations and on-demand bots, filterable by ini
   const a: Bot = { ...baseBot, id: 'a', name: 'Nightly', trigger: 'cron', cronExpr: '0 2 * * *', orgProjectId: 'p-1', orgProjectName: 'Alpha' };
   const b: Bot = { ...baseBot, id: 'b', name: 'Ad hoc', trigger: 'manual', cronExpr: null, orgProjectId: 'p-2', orgProjectName: 'Beta' };
   const c: Bot = { ...baseBot, id: 'c', name: 'Loose', trigger: 'manual', cronExpr: null, orgProjectId: null, orgProjectName: null };
-  assert.equal(botScheduleText(a), 'Scheduled: 0 2 * * *');
+  assert.equal(botScheduleText(a), '0 2 * * *');
   assert.equal(botScheduleText(b), 'On demand');
   assert.equal(botScheduleText({ trigger: 'pr_watch', cronExpr: null }), 'On new pull requests');
   assert.deepEqual(botInitiatives([b, a, c]), [{ id: 'p-1', name: 'Alpha' }, { id: 'p-2', name: 'Beta' }]);
