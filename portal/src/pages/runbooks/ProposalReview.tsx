@@ -19,6 +19,8 @@ import { RunbookDocView } from './RunbookDocView';
 import { RunbookFiles } from './RunbookFiles';
 import { ProposalAccept, type ScriptToRead } from './ProposalAccept';
 import { RunSaid } from './RunSaid';
+import { ProposalReach } from './ProposalReach';
+import { reachTitle, type ProposalReach as ProposalReachData } from './reachModel';
 import { useRunbookNames } from './useRunbookNames';
 import { diffWithNames, type Names } from './runbookNames';
 import {
@@ -60,6 +62,8 @@ interface ProposalResponse {
   files_diff?: FilesDiff | null;
   /** The scripts the reviewer must confirm reading: path and the hash of the bytes shown. */
   scripts_to_read?: ScriptToRead[];
+  /** The open work the selector would give this text to; absent when the reach could not be computed. */
+  reach?: ProposalReachData | null;
   can_review: boolean;
 }
 
@@ -201,6 +205,7 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
     { id: 'summary', title: 'Change summary' },
     ...(p.kind !== 'retire' && p.kind !== 'restore' ? [{ id: 'changes', title: 'Document changes' }] : []),
     ...(data.files_diff?.text || data.proposed_files?.length ? [{ id: 'files', title: 'File changes' }] : []),
+    ...(data.reach ? [{ id: 'reach', title: reachTitle(data.reach) }] : []),
     { id: 'checks', title: 'Review checks' },
     ...(p.source.kind === 'run' && p.source.run_ref ? [{ id: 'said', title: 'What the run said' }] : []),
     ...(p.kind === 'retire' && p.retire_evidence ? [{ id: 'runs', title: 'Runs it names' }] : []),
@@ -374,6 +379,12 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
               ))}
               <T size="xs" tone="tertiary" wrap>{p.rationale}</T>
             </Stack>
+          </DetailSection>
+        )}
+
+        {data.reach && (
+          <DetailSection as="h2" variant="heading" title={sectionTitle('reach')} hint={`${data.reach.total}`} data-testid="proposal-section-reach">
+            <Stack gap="xs"><ProposalReach reach={data.reach} /></Stack>
           </DetailSection>
         )}
 

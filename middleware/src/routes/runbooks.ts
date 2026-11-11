@@ -50,6 +50,7 @@ import { REVIEW_OVERRIDE_ROLES, actorId, mayReviewRunbook, type ReviewVerdict } 
 import { notifyDecided, notifyFiled, newProposalScope, proposalArea, reviewableOpenCount, reviewScopeOf } from '../lib/runbooks/notices.js';
 import { unifiedDiff } from '../lib/unified-diff.js';
 import { loadCandidates } from '../lib/session-brief-preview.js';
+import { proposalReach, providerReachSource, type ReachSource } from '../lib/runbooks/reach.js';
 import { clock } from '../mock/core/clock.js';
 import {
   findSimilar, lintErrors, lintRunbook, runbookHealth, versionOf,
@@ -74,6 +75,8 @@ export interface RunbooksDeps {
   reports?: () => RunReportStore | Promise<RunReportStore>;
   /** A work item's labels for the evidence comparison (providers/work-items.ts); injected by suites. */
   workItemLabels?: (workItemId: string) => Promise<string[] | null>;
+  /** Where a proposal's reach reads open work from (lib/runbooks/reach.ts); injected by suites. */
+  reachSource?: () => ReachSource | Promise<ReachSource>;
 }
 
 /** Every report that ended at or after `since`, newest first (the store lists newest first, so the walk stops early). */
@@ -554,7 +557,26 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const baseFiles = base?.files ?? [];
     const proposedFiles = p.proposed_files ?? ((p.kind === 'retire' || p.kind === 'restore') ? [] : baseFiles);
     const fd = (p.kind === 'retire' || p.kind === 'restore') ? null : filesUnifiedDiff(baseFiles, proposedFiles);
+    // Who would receive it: the open work items the selector would give this text to at the proposed scope.
+    // Read from the same providers as the work-item reads, which any orgiq member may make (this route is orgiq-gated).
+    let reach: Awaited<ReturnType<typeof proposalReach>> = null;
+    if (s0 && (s0.tenant === 'orgiq' || s0.role === 'admin')) { // the same test requireTenant('orgiq') applies to the work-item reads
+      try {
+      const targetVersion = target ? await s.getVersion(target.id, target.current_version) : null;
+      reach = await proposalReach({
+        proposal: p, target,
+        newScope: p.proposed_scope ?? await newProposalScope(p),
+        candidates: await loadCandidates(s, Date.parse(clock.nowIso())),
+        targetVersion,
+        source: deps.reachSource ? await deps.reachSource() : await providerReachSource(),
+      });
+      } catch (e) {
+        // The reach is a read for the reviewer, not part of deciding: a failed lookup leaves it out rather than the page.
+        console.warn('[runbooks] could not compute the proposal reach:', (e as Error).message);
+      }
+    }
     res.json({
+      reach,
       proposal: proposalView(p),
       runbook: target,
       base_markdown: base?.markdown ?? null,
