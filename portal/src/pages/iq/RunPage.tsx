@@ -9,6 +9,9 @@
 // or unreadable says it did not report. Mock runs carry `simulated` and show "Demo data".
 
 import { useState } from 'react';
+import { useCapabilities } from '../../lib/capabilities';
+import { writeJson } from '../../lib/writeJson';
+import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import { useParams, useSearchParams } from 'react-router';
 import {
   Banner, Button, Chip, DataTable, DetailPage, DetailSection, EmptyState, Inline, KeyValue, LoadingState, MetaLine, Stack, T,
@@ -29,7 +32,7 @@ import type { Brief, BriefOffer } from '../runbooks/types';
 import { useRunbookNames } from '../runbooks/useRunbookNames';
 import type { Names } from '../runbooks/runbookNames';
 import {
-  EXECUTOR_WORD, OUTCOME_LABEL, OUTCOME_TONE, costWords, didNotReport, facadeIdOf, failureWords, isSimulated, runRefOf, runsListHref, stepDetail, stepWords, whoRan,
+  EXECUTOR_WORD, canRetryRun, OUTCOME_LABEL, OUTCOME_TONE, costWords, didNotReport, facadeIdOf, failureWords, isSimulated, runRefOf, runsListHref, stepDetail, stepWords, whoRan,
   type RunReportRow,
 } from './runsModel';
 
@@ -50,6 +53,9 @@ export default function RunPage() {
   const report = reportFeed.data?.report ?? null;
   const title = facade.run?.context.title ?? 'Run';
   useCrumbLabel(id, facade.run?.context.title);
+  const { can, ready } = useCapabilities();
+  const [retried, setRetried] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
 
   if (!id) return <LoadingState label="Loading run…" />;
   const waiting = (ref !== null && reportFeed.isLoading && !reportFeed.data && !reportFeed.error) || (facade.loading && !facade.run && !facade.error);
@@ -67,6 +73,18 @@ export default function RunPage() {
   }
 
   const hasSteps = facade.steps.length > 0;
+  // Retry is the Findings failed view's requeue: same route, same capability.
+  const canRetry = ready && can('ManageDevbox') && ref !== null && canRetryRun(report?.outcome, facade.run?.context.table);
+  async function retry() {
+    if (!ref) return;
+    setRetrying(true);
+    const tid = toastPending('Retrying run', title);
+    const res = await writeJson<{ id: string }>(`/api/work/jobs/${encodeURIComponent(ref)}/requeue`, 'POST');
+    setRetrying(false);
+    if (!res.ok || !res.data) { toastError(tid, 'Retry failed', res.error ?? 'unknown error'); return; }
+    toastSuccess(tid, 'Back on the queue', 'the next idle worker picks it up');
+    setRetried(res.data.id);
+  }
   const tab = params.get('tab') ?? 'report';
   const setTab = (next: string) => setParams((prev) => { const p = new URLSearchParams(prev); if (next === 'report') p.delete('tab'); else p.set('tab', next); return p; }, { replace: true });
   const simulated = report ? isSimulated(report) : false;
@@ -92,6 +110,12 @@ export default function RunPage() {
       ) : undefined}
       meta={report ? (
         <Stack gap="xs">
+          {retried && (
+        <Banner variant="success" data-testid="run-retried">
+          A new attempt is queued. It will appear as its own run, and its brief carries this attempt&apos;s outcome.{' '}
+          <RecordLink to={`/iq/runs/${encodeURIComponent(retried)}`} data-testid="run-retried-link">Open the new attempt</RecordLink>
+        </Banner>
+          )}
           <MetaLine size="xs" tone="tertiary" items={[whoRan(report.executor, botName), `ended ${relativeTime(report.endedAt)}`]} />
           <Inline gap="md" align="center" wrap data-testid="run-links">
             {report.initiativeId && <RecordLink to={`/iq/projects/${encodeURIComponent(report.initiativeId)}`} data-testid="run-initiative-link"><T size="xs">{names.initiative(report.initiativeId)}</T></RecordLink>}
@@ -101,6 +125,9 @@ export default function RunPage() {
             {report.workItemId && <RecordLink to={runsListHref({ workItem: report.workItemId })} data-testid="run-item-runs-link"><T size="xs">Other runs of this work item</T></RecordLink>}
           </Inline>
         </Stack>
+      ) : undefined}
+      actions={canRetry ? (
+        <Button size="sm" variant="secondary" disabled={retrying || retried !== null} onClick={() => { void retry(); }} data-testid="run-retry">Retry</Button>
       ) : undefined}
       tabs={tabs}
       tabsLabel="Run sections"

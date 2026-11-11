@@ -151,3 +151,11 @@ export function runsListHref(f: Partial<{ executor: string; initiative: string; 
   const q = p.toString();
   return `/iq/runs${q ? `?${q}` : ''}`;
 }
+
+/**
+ * Whether a run's page offers Retry: the run failed and the façade says it is a queue job, the one
+ * kind `POST /api/work/jobs/:id/requeue` can clone. Bot firings, project runs and assessment runs
+ * show nothing rather than a button that would be refused.
+ */
+export const canRetryRun = (outcome: RunOutcome | undefined, sourceTable: string | undefined): boolean =>
+  outcome === 'failed' && sourceTable === 'agent_jobs';

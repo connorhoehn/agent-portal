@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
-  costWords, didNotReport, facadeIdOf, isSimulated, learnedDot, reportsQuery, runRefOf, runsListHref, stepDetail, stepWords, whoRan,
+  canRetryRun, costWords, didNotReport, facadeIdOf, isSimulated, learnedDot, reportsQuery, runRefOf, runsListHref, stepDetail, stepWords, whoRan,
 } from '../runsModel.ts';
 
 const usd = (n: number) => `$${n.toFixed(2)}`;
@@ -67,5 +67,12 @@ describe('debriefWords', () => {
     assert.equal(debriefWords({ debrief: null }), '');
     assert.equal(debriefWords({ debrief: { state: 'filed' } as never }), 'Filed a runbook');
     assert.equal(debriefWords({ debrief: { state: 'nothing-to-keep' } as never }), 'Nothing to keep');
+  });
+
+  it('canRetryRun: only a failed queue job offers Retry', () => {
+    assert.equal(canRetryRun('failed', 'agent_jobs'), true);
+    assert.equal(canRetryRun('failed', 'bot_runs'), false);
+    assert.equal(canRetryRun('done', 'agent_jobs'), false);
+    assert.equal(canRetryRun(undefined, 'agent_jobs'), false);
   });
 });
