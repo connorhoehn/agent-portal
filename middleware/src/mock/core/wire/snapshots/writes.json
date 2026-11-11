@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-11T00:28:38.366Z",
-  "serverHandlerSha": "46a31a9bf5ac53dd7a14448b8126667d59490de52543c429958a8966d41390e2",
-  "baseUrl": "http://127.0.0.1:3919",
+  "capturedAt": "2026-11-11T02:01:20.924Z",
+  "serverHandlerSha": "a805d13551da50bb428820a36db23b9d094b854efc2b92117ab1122745bdae97",
+  "baseUrl": "http://127.0.0.1:3915",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -4697,6 +4697,22 @@
         "rule": "unclassified",
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
+    },
+    "PUT /api/budgets/learning": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "learning": "object",
+        "learning.capSource": "string",
+        "learning.capUsd": "number",
+        "learning.updatedAt": "string",
+        "learning.updatedBy": "string"
+      },
+      "values": {},
+      "sent": [
+        "monthlyCapUsd"
+      ]
     },
     "PUT /api/calls/:callId/page": {
       "refused": {

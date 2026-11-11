@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-11T00:28:33.454Z",
-  "serverHandlerSha": "46a31a9bf5ac53dd7a14448b8126667d59490de52543c429958a8966d41390e2",
-  "baseUrl": "http://127.0.0.1:3919",
+  "capturedAt": "2026-11-11T02:01:16.067Z",
+  "serverHandlerSha": "a805d13551da50bb428820a36db23b9d094b854efc2b92117ab1122745bdae97",
+  "baseUrl": "http://127.0.0.1:3915",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -2352,6 +2352,9 @@
         "budgets[].rollingDays": "null",
         "budgets[].runCountThisPeriod": "number",
         "budgets[].spentThisPeriodUsd": "number",
+        "budgets[].threshold": "object",
+        "budgets[].threshold.percent": "null|number",
+        "budgets[].threshold.reached": "number",
         "budgets[].updatedAt": "null|string",
         "budgets[].updatedBy": "null|string",
         "budgets[].updatedByName": "null|string",
@@ -2372,7 +2375,9 @@
         "summary.window": "object",
         "summary.window.end": "string",
         "summary.window.period": "string",
-        "summary.window.start": "string"
+        "summary.window.start": "string",
+        "thresholds": "array",
+        "thresholds[]": "number"
       },
       "values": {}
     },
@@ -2414,7 +2419,35 @@
         "grants[].sprintId": "string",
         "grants[].sprintName": "string",
         "grants[].sprintStatus": "string",
-        "grants[].startsOn": "string"
+        "grants[].startsOn": "string",
+        "grants[].threshold": "object",
+        "grants[].threshold.percent": "number",
+        "grants[].threshold.reached": "number"
+      },
+      "values": {}
+    },
+    "GET /api/budgets/lines": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "learning": "object",
+        "learning.capSource": "string",
+        "learning.capUsd": "number",
+        "learning.entries": "number",
+        "learning.heldUsd": "number",
+        "learning.remainingUsd": "number",
+        "learning.spentUsd": "number",
+        "learning.threshold": "object",
+        "learning.threshold.percent": "number",
+        "learning.threshold.reached": "number",
+        "learning.updatedAt": "null",
+        "learning.updatedBy": "null",
+        "local": "object",
+        "local.billedUsd": "number",
+        "local.reportedUsd": "number",
+        "local.runs": "number",
+        "month": "string"
       },
       "values": {}
     },
@@ -6013,7 +6046,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "number",
+        "points[].judgeP50": "null|number",
         "windowHours": "number"
       },
       "values": {}
@@ -9858,9 +9891,14 @@
         "budgets[].setByName": "null|string",
         "budgets[].since": "string",
         "budgets[].spentUsd": "number",
+        "budgets[].threshold": "object",
+        "budgets[].threshold.percent": "null|number",
+        "budgets[].threshold.reached": "number",
         "budgets[].unknownCount": "number",
         "budgets[].updatedAt": "null|string",
-        "budgets[].userId": "string"
+        "budgets[].userId": "string",
+        "thresholds": "array",
+        "thresholds[]": "number"
       },
       "values": {}
     },
