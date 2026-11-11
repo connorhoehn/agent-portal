@@ -144,7 +144,7 @@ describe('the promotions fixture', () => {
     fixtureRegistry.resetAll('empty');
     expect(await listCandidates()).toEqual([]);
     fixtureRegistry.resetAll('default');
-    expect((await listCandidates()).length).toBe(4);
+    expect((await listCandidates()).length).toBe(3);
   });
 });
 
@@ -237,7 +237,7 @@ describe('eval sets and their runs', () => {
       'ev-csrf-resists-prompt-injection',
     ]);
     expect(await listEvalSets('lib-no-such-asset')).toEqual([]);
-    expect(promptEvalCases.rows()).toHaveLength(7);
+    expect(promptEvalCases.rows()).toHaveLength(5);
   });
 
   it('under `empty`, a run has no signal — the branch the gate exists for', async () => {

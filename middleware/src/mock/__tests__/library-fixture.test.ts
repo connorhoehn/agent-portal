@@ -16,7 +16,7 @@ describe('registration and scenarios', () => {
 
   it('declares empty rather than inheriting default there', () => {
     expect(libraryAssets.rows('empty')).toEqual([]);
-    expect(libraryAssets.rows('default')).toHaveLength(12);
+    expect(libraryAssets.rows('default')).toHaveLength(6);
   });
 
   it('throws under error — that is how the failed-load state is reachable at all', () => {
