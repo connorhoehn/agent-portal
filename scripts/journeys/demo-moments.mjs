@@ -381,7 +381,10 @@ const M3 = {
       ]);
       await page.getByTestId('voice-confirm-card').waitFor({ timeout: 15000 });
       const out = await nthOutput(page, 1, 30000);
-      const say = terseSay(out, 'queue_work deck', 'The Auth Migration deck: done (focus: Sprint 9 — OIDC core (2026-10-18 to 2026-10-31)).');
+      // The sprint's dates move with the mock's clock (the fixture is built relative to today), so the line is
+      // checked for its shape and the sprint it names, not for two literal dates.
+      const say = terseSay(out, 'queue_work deck');
+      check(/^The Auth Migration deck: done \(focus: Sprint 9 — OIDC core \(\d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}\)\)\.$/.test(say), `queue_work deck: the voice says ${JSON.stringify(say)}, the demo script quotes the Sprint 9 line with its dates`);
       return { say: [say] };
     });
     await s('the job toast reads Done, and its Open opens the deck', async () => {
