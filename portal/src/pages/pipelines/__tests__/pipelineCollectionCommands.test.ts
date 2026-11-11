@@ -5,7 +5,7 @@ import type { RunbookRow } from '../../../lib/pipelineDefinitions.ts';
 import type { PipelineArtifact } from '../../../lib/pipelineRuns.ts';
 import type { PipelineQueue } from '../../../lib/pipelineQueues.ts';
 
-for (const collection of ['definitions', 'runbooks', 'queues', 'artifacts'] as PipelineCollection[]) {
+for (const collection of ['definitions', 'workflows', 'queues', 'artifacts'] as PipelineCollection[]) {
   test(`${collection}: quoted search preserves punctuation and case; reset/refresh/help are bounded`, () => {
     assert.deepEqual(parsePipelineCollectionCommand(`search ${collection} for "DEP-5.1"`, collection), { kind: 'search', query: 'DEP-5.1' });
     assert.deepEqual(parsePipelineCollectionCommand(`Please refresh ${collection}!`, collection), { kind: 'refresh' });
@@ -32,7 +32,7 @@ for (const collection of ['definitions', 'runbooks', 'queues', 'artifacts'] as P
 }
 test('filter phrases select only supported values and reject qualifiers that would silently broaden scope', () => {
   assert.deepEqual(parsePipelineCollectionCommand('show assessment command definitions', 'definitions'), { kind: 'filter', value: 'assessment-command' });
-  assert.deepEqual(parsePipelineCollectionCommand('show needs dry-run runbooks', 'runbooks'), { kind: 'filter', value: 'needs-dry-run' });
+  assert.deepEqual(parsePipelineCollectionCommand('show needs dry-run workflows', 'workflows'), { kind: 'filter', value: 'needs-dry-run' });
   assert.deepEqual(parsePipelineCollectionCommand('show dead-letter queues', 'queues'), { kind: 'filter', value: 'dead-letter' });
   assert.deepEqual(parsePipelineCollectionCommand('show trace artifacts', 'artifacts'), { kind: 'filter', value: 'trace' });
   assert.throws(() => parsePipelineCollectionCommand('show dead-letter queues from yesterday', 'queues'));

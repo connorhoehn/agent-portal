@@ -1,9 +1,16 @@
-// /pipelines/runbooks — the seeded runbook definitions, each with its
-// last dry-run and what rule 1 says about making it a skill
-// (docs/social-tenant-design.md §5.2: a RUNBOOK becomes a SKILL only on a
-// completed run of its own definition). Read from GET /api/pipelines/runbooks;
-// Dry-run (RunPipeline holders only) queues a governed run on the existing
-// queue; a row opens the runbook's definition.
+// /pipelines/workflows — the pipelines tenant's workflow definitions, each
+// with its last dry-run and what rule 1 says about promoting it
+// (docs/social-tenant-design.md §5.2: a workflow is promoted only on a
+// completed run of its own definition). Dry-run (RunPipeline holders only)
+// queues a governed run on the existing queue; a row opens the definition.
+//
+// Renamed from "Runbooks" in the learning loop (lane E7): the Runbooks area is
+// now the orgiq catalogue of run-authored procedures, and these are a
+// different thing. Behaviour is unchanged. The API path stays
+// GET /api/pipelines/runbooks (and the `runbook` definition kind, the
+// `runbook:<id>` definition ids): renaming them would move wire data and
+// stored ids for no gain, so only the page, its URL and its copy changed.
+// /pipelines/runbooks redirects here (App.tsx).
 
 import { ofTotal } from '../../lib/plural';
 import {
@@ -38,10 +45,10 @@ import {
 import { relativeTime } from '../../lib/relativeTime';
 import { useDryRun } from './useDryRun';
 
-interface RunbooksResponse { runbooks: RunbookRow[]; total: number; unavailable: Array<{ source: string; error: string }> }
+interface WorkflowsResponse { runbooks: RunbookRow[]; total: number; unavailable: Array<{ source: string; error: string }> }
 
 const BASE_COLUMNS: DataTableColumn<RunbookRow>[] = [
-  { key: 'title', header: 'Runbook', sortable: true, compare: (a, b) => a.title.localeCompare(b.title), render: (r) => <RecordLink to={definitionHref(r.id)}>{r.title}</RecordLink> },
+  { key: 'title', header: 'Workflow', sortable: true, compare: (a, b) => a.title.localeCompare(b.title), render: (r) => <RecordLink to={definitionHref(r.id)}>{r.title}</RecordLink> },
   { key: 'rung', header: 'Rung', render: (r) => rungLabel(r.runbook) },
   { key: 'steps', header: 'Steps', numeric: true, render: (r) => r.steps.length },
   {
@@ -53,7 +60,7 @@ const BASE_COLUMNS: DataTableColumn<RunbookRow>[] = [
     render: (r) => (r.runbook.lastDryRun ? relativeTime(r.runbook.lastDryRun.startedAt) : '—'),
   },
   {
-    key: 'promotion', header: 'Promotion to skill',
+    key: 'promotion', header: 'Promotion',
     render: (r) => {
       const v = promotionVerdict(r.runbook);
       return <Chip tone={v.tone} size="xs" title={v.detail}>{v.label}</Chip>;
@@ -61,28 +68,28 @@ const BASE_COLUMNS: DataTableColumn<RunbookRow>[] = [
   },
 ];
 
-export default function RunbooksPage() {
+export default function WorkflowsPage() {
   const navigate = useNavigate();
   const { can, ready } = useCapabilities();
-  const { data, error, isLoading, refresh } = useFetch<RunbooksResponse>('/api/pipelines/runbooks', 30_000);
+  const { data, error, isLoading, refresh } = useFetch<WorkflowsResponse>('/api/pipelines/runbooks', 30_000);
   const dryRun = useDryRun(() => refresh());
   const canRun = ready && can('RunPipeline');
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('');
   const all = data?.runbooks ?? [];
   const rows = filterRunbooks(all, query, filter);
-  const adapter = pipelineCollectionAdapter('runbooks', { setQuery, setFilter, refresh,
-    scopeNote: 'Search and filter the runbooks shown. Passed means a completed dry-run. Commands never start a dry-run or promote a runbook.' });
+  const adapter = pipelineCollectionAdapter('workflows', { setQuery, setFilter, refresh,
+    scopeNote: 'Search and filter the workflows shown. Passed means a completed dry-run. Commands never start a dry-run or promote a workflow.' });
 
   return (
-    <CollectionCommandPage data-testid="pipelines-runbooks" title="Runbooks" description="Runbooks on their way to becoming skills. A runbook becomes a skill only after a completed dry-run of its own definition.">
+    <CollectionCommandPage data-testid="pipelines-workflows" title="Workflows" description="Workflow definitions and their dry-runs. A workflow is promoted only after a completed dry-run of its own definition.">
       <Stack gap="none" className="min-h-0 min-w-0 flex-1">
       <Stack gap="md" className="min-h-0 flex-1 overflow-auto px-[var(--ui-page-gutter)]">
-      <CollectionToolbar {...{ label: 'Runbook filters', search: { value: query, onChange: setQuery, placeholder: 'Search runbooks', 'aria-label': 'Search runbooks' },
+      <CollectionToolbar {...{ label: 'Workflow filters', search: { value: query, onChange: setQuery, placeholder: 'Search workflows', 'aria-label': 'Search workflows' },
         filters: [{ id: 'promotion', label: 'Promotion', value: filter, onChange: setFilter, options: [
-          { value: '', label: 'All runbooks' }, { value: 'passed', label: 'Dry-run passed' },
+          { value: '', label: 'All workflows' }, { value: 'passed', label: 'Dry-run passed' },
           { value: 'needs-dry-run', label: 'Needs dry-run' }, { value: 'promoted', label: 'Promoted' },
-        ] }], summary: data ? `${ofTotal(rows.length, all.length, 'runbook')} · ${rows.filter(r => r.runbook.promotionToSkill.ok).length} with a completed dry-run` : undefined,
+        ] }], summary: data ? `${ofTotal(rows.length, all.length, 'workflow')} · ${rows.filter(r => r.runbook.promotionToSkill.ok).length} with a completed dry-run` : undefined,
         onRefresh: refresh, refreshing: isLoading,
       }} />
 
@@ -93,10 +100,10 @@ export default function RunbooksPage() {
         </Banner>
       )}
       {error ? (
-        <UnavailableNotice error={error} what="runbooks" source="Runbooks are the seeded promotion candidates (mock/promotions.ts)" onRetry={refresh} />
+        <UnavailableNotice error={error} what="workflows" source="Workflows are the seeded promotion candidates (mock/promotions.ts)" onRetry={refresh} />
       ) : (
         <DataTable narrow
-          data-testid="pipelines-runbooks-table"
+          data-testid="pipelines-workflows-table"
           data={rows}
           columns={BASE_COLUMNS}
           keyField={(r) => r.id}
@@ -111,10 +118,10 @@ export default function RunbooksPage() {
               title={dryRun.busy === r.id ? 'Starting…' : 'Dry-run'}
               disabled={dryRun.busy === r.id || r.runbook.lastDryRun?.status === 'pending' || r.runbook.lastDryRun?.status === 'running'}
               onClick={(e) => { e.stopPropagation(); dryRun.start(r.id, r.title); }}
-              data-testid="pipelines-runbook-dry-run"
+              data-testid="pipelines-workflow-dry-run"
             />
           ) : null) : undefined}
-          emptyMessage={query || filter ? 'No runbooks match these filters.' : 'No runbooks.'}
+          emptyMessage={query || filter ? 'No workflows match these filters.' : 'No workflows.'}
         />
       )}
       <ConfirmDialog

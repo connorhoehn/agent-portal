@@ -218,7 +218,7 @@ export const TABLE_ROUTES: ReadonlyArray<{ tenant: Tenant; path: string; stats?:
   { tenant: 'pipelines', path: '/pipelines/bots' },
   { tenant: 'pipelines', path: '/pipelines/agents' },
   { tenant: 'pipelines', path: '/pipelines/commands' },
-  { tenant: 'pipelines', path: '/pipelines/runbooks' },
+  { tenant: 'pipelines', path: '/pipelines/workflows' },
   // Access: the lists whose rows the access admin reads in full (her own Requests may be empty).
   { tenant: 'access', path: '/access/catalog' },
   { tenant: 'access', path: '/access/approvals' },

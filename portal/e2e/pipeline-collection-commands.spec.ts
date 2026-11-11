@@ -20,13 +20,13 @@ test('pipeline collection commands synchronize search and filters with real tabl
   });
   const cases = [
     { name: 'definitions', toolbar: 'Definition filters', table: 'pipelines-definitions-table', filter: 'bot', label: 'Bot', serverKind: 'bot' },
-    { name: 'runbooks', toolbar: 'Runbook filters', table: 'pipelines-runbooks-table', filter: 'needs dry-run', label: 'Needs dry-run' },
+    { name: 'workflows', api: 'runbooks', toolbar: 'Workflow filters', table: 'pipelines-workflows-table', filter: 'needs dry-run', label: 'Needs dry-run' },
     { name: 'queues', toolbar: 'Queue filters', table: 'pipeline-queues-table', filter: 'dead-letter', label: 'Dead-letter' },
     { name: 'artifacts', toolbar: 'Artifact filters', table: 'pipelines-artifacts-table', filter: 'trace', label: 'Trace', serverKind: 'trace' },
   ];
   for (const entry of cases) {
     await test.step(entry.name, async () => {
-      const endpoint = `/api/pipelines/${entry.name}`;
+      const endpoint = `/api/pipelines/${(entry as { api?: string }).api ?? entry.name}`;
       const initialRead = page.waitForResponse(response => new URL(response.url()).pathname === endpoint && response.ok());
       await page.goto(`/pipelines/${entry.name}`);
       await initialRead;

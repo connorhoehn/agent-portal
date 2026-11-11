@@ -466,8 +466,8 @@ const PIPELINES: readonly KindSpec[] = [
     subtitle: 'kind', href: (id) => `/pipelines/definitions/${enc(id)}`,
   },
   {
-    kind: 'runbook', label: 'runbooks', action: 'ViewPipelines',
-    list: { path: '/api/pipelines/runbooks', key: 'runbooks' }, href: () => '/pipelines/runbooks',
+    kind: 'runbook', label: 'workflows', action: 'ViewPipelines',
+    list: { path: '/api/pipelines/runbooks', key: 'runbooks' }, href: () => '/pipelines/workflows',
   },
   {
     kind: 'approval', label: 'approvals', action: 'ViewPipelines',

@@ -215,7 +215,7 @@ export const NAVIGATE_PAGES: ReadonlyArray<{ id: string; path: string; tenants: 
   { id: 'work-graph', path: '/social/work-graph', tenants: ['social'] },
   { id: 'social-configuration', path: '/social/configuration', tenants: ['social'] },
   { id: 'definitions', path: '/pipelines/definitions', tenants: ['pipelines'] },
-  { id: 'runbooks', path: '/pipelines/runbooks', tenants: ['pipelines'] },
+  { id: 'workflows', path: '/pipelines/workflows', tenants: ['pipelines'] },
   { id: 'queues', path: '/pipelines/queues', tenants: ['pipelines'] },
   { id: 'runs', path: '/pipelines/runs', tenants: ['pipelines'] },
   { id: 'work-graph', path: '/pipelines/activity', tenants: ['pipelines'] },

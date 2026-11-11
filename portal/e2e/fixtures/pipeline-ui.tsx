@@ -9,7 +9,7 @@ import DefinitionsPage from '../../src/pages/pipelines/DefinitionsPage';
 import RunsPage from '../../src/pages/pipelines/RunsPage';
 import ApprovalsPage from '../../src/pages/pipelines/ApprovalsPage';
 import ArtifactsPage from '../../src/pages/pipelines/ArtifactsPage';
-import RunbooksPage from '../../src/pages/pipelines/RunbooksPage';
+import WorkflowsPage from '../../src/pages/pipelines/WorkflowsPage';
 import QueuesPage from '../../src/pages/pipelines/QueuesPage';
 import SourcesPage from '../../src/pages/pipelines/SourcesPage';
 import ConfigurationPage from '../../src/pages/pipelines/ConfigurationPage';
@@ -27,7 +27,7 @@ createRoot(document.getElementById('root')!).render(<BrowserRouter><SessionProvi
     <Route path="/pipelines/approvals" element={<ApprovalsPage />} />
     <Route path="/pipelines/approvals/:approvalId" element={<ApprovalsPage />} />
     <Route path="/pipelines/artifacts" element={<ArtifactsPage />} />
-    <Route path="/pipelines/runbooks" element={<RunbooksPage />} />
+    <Route path="/pipelines/workflows" element={<WorkflowsPage />} />
     <Route path="/pipelines/queues" element={<QueuesPage />} />
     <Route path="/pipelines/configuration" element={<ConfigurationPage />} />
     <Route path="/pipelines/activity" element={<ActivityPage />} />

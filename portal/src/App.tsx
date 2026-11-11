@@ -68,7 +68,7 @@ const IqRunsPage = lazy(() => import('./pages/iq/RunsPage'));
 const IqActivityPage = lazy(() => import('./pages/iq/ActivityPage'));
 const PipelinesArtifactsPage = lazy(() => import('./pages/pipelines/ArtifactsPage'));
 const PipelinesDefinitionsPage = lazy(() => import('./pages/pipelines/DefinitionsPage'));
-const PipelinesRunbooksPage = lazy(() => import('./pages/pipelines/RunbooksPage'));
+const PipelinesWorkflowsPage = lazy(() => import('./pages/pipelines/WorkflowsPage'));
 const PipelinesApprovalsPage = lazy(() => import('./pages/pipelines/ApprovalsPage'));
 const PipelinesQueuesPage = lazy(() => import('./pages/pipelines/QueuesPage'));
 const PipelinesSourcesPage = lazy(() => import('./pages/pipelines/SourcesPage'));
@@ -408,7 +408,9 @@ export function App() {
             <Route path="definitions" element={<Page element={<PipelinesDefinitionsPage />} />} />
             <Route path="definitions/:definitionId" element={<Page element={<PipelinesDefinitionsPage />} />} />
             <Route path="queues" element={<Page element={<PipelinesQueuesPage />} />} />
-            <Route path="runbooks" element={<Page element={<PipelinesRunbooksPage />} />} />
+            <Route path="workflows" element={<Page element={<PipelinesWorkflowsPage />} />} />
+            {/* Renamed from Runbooks (lane E7): the old address lands on Workflows. */}
+            <Route path="runbooks" element={<Navigate to="/pipelines/workflows" replace />} />
             <Route path="runs" element={<Page element={<PipelinesRunsPage />} />} />
             <Route path="runs/:id" element={<Page element={<PipelinesRunDetailPage />} />} />
             {/* The activity graph: open to every pipelines role (ViewPipelines), like /api/pipelines/work-graph. */}

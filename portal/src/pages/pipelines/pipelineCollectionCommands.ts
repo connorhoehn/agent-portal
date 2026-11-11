@@ -3,7 +3,7 @@ import { matchesDefinition, type RunbookRow } from '../../lib/pipelineDefinition
 import type { PipelineQueue } from '../../lib/pipelineQueues.ts';
 import type { PipelineArtifact } from '../../lib/pipelineRuns.ts';
 
-export type PipelineCollection = 'definitions' | 'runbooks' | 'queues' | 'artifacts' | 'agents' | 'bots' | 'commands' | 'approvals';
+export type PipelineCollection = 'definitions' | 'workflows' | 'queues' | 'artifacts' | 'agents' | 'bots' | 'commands' | 'approvals';
 export type PipelineCollectionCommand = { kind: 'help' | 'refresh' | 'reset' }
   | { kind: 'open'; target: string } | { kind: 'search'; query: string } | { kind: 'filter'; value: string };
 
@@ -12,7 +12,7 @@ export type PipelineCollectionCommand = { kind: 'help' | 'refresh' | 'reset' }
 const FILTERS: Record<PipelineCollection, Record<string, string>> = {
   agents: {}, bots: {}, commands: {}, approvals: {},
   definitions: { runbook: 'runbook', bot: 'bot', agent: 'agent', 'assessment command': 'assessment-command' },
-  runbooks: { passed: 'passed', 'needs dry-run': 'needs-dry-run', promoted: 'promoted' },
+  workflows: { passed: 'passed', 'needs dry-run': 'needs-dry-run', promoted: 'promoted' },
   queues: { available: 'available', missing: 'missing', unavailable: 'unavailable', 'dead-letter': 'dead-letter', work: 'work' },
   artifacts: { change: 'change', document: 'document', scores: 'scores', transcript: 'transcript', trace: 'trace' },
 };

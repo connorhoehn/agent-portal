@@ -104,7 +104,7 @@ Every palette page (`PAGES` in `portal/src/components/shell/portalCommands.ts`) 
 ## pipelines (13)
 
 - `definitions` → /pipelines/definitions (Catalog: Definitions)
-- `runbooks` → /pipelines/runbooks (Catalog: Runbooks)
+- `workflows` → /pipelines/workflows (Catalog: Workflows)
 - `queues` → /pipelines/queues (Runs: Queues)
 - `runs` → /pipelines/runs (Runs: Runs)
 - `work-graph` → /pipelines/activity (Runs: Work graph)

@@ -32,7 +32,7 @@ export const pipelinesSurfaces = defineFixture<PipelinesSurface>({
   scenarios: {
     default: () => [
       { id: 'definitions', label: 'Definitions', group: 'Catalog', phase: 'P2', live: true },
-      { id: 'runbooks', label: 'Runbooks', group: 'Catalog', phase: 'P2', live: true },
+      { id: 'workflows', label: 'Workflows', group: 'Catalog', phase: 'P2', live: true },
       { id: 'queues', label: 'Queues', group: 'Runs', phase: 'P2', live: true },
       { id: 'runs', label: 'Runs', group: 'Runs', phase: 'P0', live: true },
       { id: 'approvals', label: 'Approvals', group: 'Runs', phase: 'P2', live: true },

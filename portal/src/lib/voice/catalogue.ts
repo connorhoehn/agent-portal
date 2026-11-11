@@ -151,7 +151,7 @@ export const NAVIGATE_PAGE_IDS: ReadonlyArray<{ id: string; tenants: readonly st
   { id: 'work-graph', tenants: ['social'] },
   { id: 'social-configuration', tenants: ['social'] },
   { id: 'definitions', tenants: ['pipelines'] },
-  { id: 'runbooks', tenants: ['pipelines'] },
+  { id: 'workflows', tenants: ['pipelines'] },
   { id: 'queues', tenants: ['pipelines'] },
   { id: 'runs', tenants: ['pipelines'] },
   { id: 'work-graph', tenants: ['pipelines'] },

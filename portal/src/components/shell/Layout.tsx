@@ -203,7 +203,7 @@ const NAV_ITEMS: NavItem[] = [
   // produced) → SOURCES (the three producers) → SYSTEM. Every pipelines role
   // reads every page (ViewPipelines).
   { path: '/pipelines/definitions',   label: 'Definitions',   tenant: 'pipelines', group: 'Catalog' },
-  { path: '/pipelines/runbooks',      label: 'Runbooks',      tenant: 'pipelines', group: 'Catalog' },
+  { path: '/pipelines/workflows',     label: 'Workflows',     tenant: 'pipelines', group: 'Catalog' },
   { path: '/pipelines/queues', label: 'Queues', tenant: 'pipelines', group: 'Runs' },
   { path: '/pipelines/runs',          label: 'Runs',          tenant: 'pipelines', group: 'Runs' },
   { path: '/pipelines/activity',      label: 'Work graph',    tenant: 'pipelines', group: 'Runs' },

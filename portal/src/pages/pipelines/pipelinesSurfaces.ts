@@ -9,7 +9,7 @@
 // points at the real page and its row here goes.
 
 export type PipelinesSurfaceId =
-  | 'definitions' | 'runbooks' | 'runs' | 'approvals' | 'artifacts'
+  | 'definitions' | 'workflows' | 'runs' | 'approvals' | 'artifacts'
   | 'agents' | 'bots' | 'commands' | 'configuration';
 
 export interface PipelinesSurface {
@@ -38,14 +38,14 @@ export const PIPELINES_SURFACES: Record<PipelinesSurfaceId, PipelinesSurface> = 
     phase: 'P2',
     next: 'Lane P2 brings definitions — bots and assessment commands registered with their triggers.',
   },
-  runbooks: {
-    id: 'runbooks',
-    title: 'Runbooks',
-    description: 'Runbooks on their way to becoming skills.',
-    emptyTitle: 'No runbooks yet',
-    emptyBody: 'A runbook becomes a skill only after a completed dry-run of its definition. None are waiting.',
+  workflows: {
+    id: 'workflows',
+    title: 'Workflows',
+    description: 'Workflow definitions and their dry-runs.',
+    emptyTitle: 'No workflows yet',
+    emptyBody: 'A workflow is promoted only after a completed dry-run of its definition. None are waiting.',
     phase: 'P2',
-    next: 'Lane P2 brings runbook dry-runs, and promotion that refuses without one.',
+    next: 'Lane P2 brings workflow dry-runs, and promotion that refuses without one.',
   },
   runs: {
     id: 'runs',

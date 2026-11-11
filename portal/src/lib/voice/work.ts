@@ -728,7 +728,7 @@ const runQueueWork: VoiceToolRunner = async (_args, ctx, planned) => {
     if (typeof id === 'string' && id) job = { jobId: id, kind: 'bot-run', title: plan.title, href: page, botId: plan.botId! };
   } else {
     const posted = await post(ctx, `/api/pipelines/definitions/${encodeURIComponent(plan.definitionId!)}/dry-run`, {});
-    if (!posted.ok) return postRefusal(plan, posted, '/pipelines/runbooks');
+    if (!posted.ok) return postRefusal(plan, posted, '/pipelines/workflows');
     const id = (posted.body['run'] as { id?: unknown } | undefined)?.id;
     if (typeof id === 'string' && id) job = { jobId: id, kind: 'pipeline', title: plan.title, href: `/pipelines/runs/${encodeURIComponent(id)}` };
   }

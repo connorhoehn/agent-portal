@@ -17,7 +17,7 @@ const RAIL_PATHS = [
   '/assessment/configuration',
   '/social/channels', '/social/dms', '/social/calls', '/social/rooms', '/social/contacts', '/social/teams',
   '/social/recordings', '/social/configuration',
-  '/pipelines/definitions', '/pipelines/runbooks', '/pipelines/runs', '/pipelines/approvals', '/pipelines/artifacts',
+  '/pipelines/definitions', '/pipelines/workflows', '/pipelines/runs', '/pipelines/approvals', '/pipelines/artifacts',
   '/pipelines/agents', '/pipelines/bots', '/pipelines/commands', '/pipelines/configuration',
   '/settings',
 ];

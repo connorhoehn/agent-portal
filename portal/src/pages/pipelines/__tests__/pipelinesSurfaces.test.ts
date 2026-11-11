@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { PIPELINES_SURFACES, PIPELINES_SURFACE_IDS } from '../pipelinesSurfaces.ts';
 
 test('the nine pages of design §5.3 all have a page', () => {
-  for (const id of ['definitions', 'runbooks', 'runs', 'approvals', 'artifacts', 'agents', 'bots', 'commands', 'configuration']) {
+  for (const id of ['definitions', 'workflows', 'runs', 'approvals', 'artifacts', 'agents', 'bots', 'commands', 'configuration']) {
     assert.ok(PIPELINES_SURFACE_IDS.includes(id as never), `no page for /pipelines/${id}`);
   }
 });

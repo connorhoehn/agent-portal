@@ -301,8 +301,8 @@ export const PAGES: readonly PageEntry[] = [
   // pipelines role (ViewPipelines); writes are gated inside the pages.
   { label: 'Definitions',        hint: 'Pipeline definitions and versions',   path: '/pipelines/definitions',                      tenant: 'pipelines', group: 'Catalog', pageId: 'definitions',
     keywords: ['definition', 'pipeline', 'version', 'dag'] },
-  { label: 'Runbooks',           hint: 'Runbooks awaiting a dry-run',         path: '/pipelines/runbooks',                         tenant: 'pipelines', group: 'Catalog', pageId: 'runbooks',
-    keywords: ['runbook', 'skill', 'dry-run', 'promotion'] },
+  { label: 'Workflows',          hint: 'Workflows awaiting a dry-run',        path: '/pipelines/workflows',                         tenant: 'pipelines', group: 'Catalog', pageId: 'workflows',
+    keywords: ['workflow', 'runbook', 'dry-run', 'promotion'] },
   { label: 'Queues', hint: 'Backlog, in-flight work and dead-letter queues', path: '/pipelines/queues', tenant: 'pipelines', group: 'Runs', pageId: 'queues', keywords: ['queue', 'message-queue', 'backlog', 'dlq', 'realtime'] },
   { label: 'Runs',               hint: 'Every run, its steps and status',     path: '/pipelines/runs',                             tenant: 'pipelines', group: 'Runs', pageId: 'runs',
     keywords: ['run', 'job', 'execution', 'status', 'ledger'] },
