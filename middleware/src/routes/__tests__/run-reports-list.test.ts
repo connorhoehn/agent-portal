@@ -61,6 +61,16 @@ describe('GET /api/run-reports', () => {
     expect(await refs('?debrief=none')).toEqual(['c', 'b', 'a']);
   });
 
+  it('filters by work item and by runbook', async () => {
+    const app = await appAs(mia, [
+      report('d', { workItemId: 'wi-9', runbooksOffered: [{ id: 'rb-x', version: 1 }], endedAt: '2026-11-10T12:00:00.000Z' }),
+    ]);
+    const refs = async (q: string) => (await request(app).get(`/api/run-reports${q}`)).body.reports.map((r: RunReport) => r.runRef);
+    expect(await refs('?workItem=wi-9')).toEqual(['d']);
+    expect(await refs('?runbook=rb-x')).toEqual(['d']);
+    expect(await refs('?runbook=rb-x&workItem=wi-1')).toEqual([]);
+  });
+
   it('pages with a cursor', async () => {
     const app = await appAs(mia);
     const first = await request(app).get('/api/run-reports?limit=2');

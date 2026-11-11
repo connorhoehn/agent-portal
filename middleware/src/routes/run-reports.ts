@@ -45,6 +45,10 @@ export function parseRunReportsQuery(q: Record<string, unknown>): ListRunReports
   }
   const initiative = text(q['initiative']);
   if (initiative) out.initiativeId = initiative;
+  const workItem = text(q['workItem']);
+  if (workItem) out.workItemId = workItem;
+  const runbook = text(q['runbook']);
+  if (runbook) out.runbookId = runbook;
   const outcome = text(q['outcome']);
   if (outcome) {
     if (!(RUN_OUTCOMES as readonly string[]).includes(outcome)) throw new ValidationError(`outcome "${outcome}" is not one of ${RUN_OUTCOMES.join(', ')}`);

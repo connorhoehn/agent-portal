@@ -122,9 +122,12 @@ export const stepDetail = (detail: string | null | undefined): string | null => 
 /** The learned dot: a proposal was filed. */
 export const learnedDot = (r: Pick<RunReportRow, 'debrief'>): boolean => r.debrief?.state === 'filed';
 
-/** The query string a Runs list filter state makes (`executor`, `initiative`, `outcome`, `debrief`). */
-export function reportsQuery(f: { executor: string; initiative: string; outcome: string; debrief: string }, cursor?: string): string {
+/** The query string a Runs list filter state makes (`executor`, `initiative`, `outcome`, `debrief`, and the
+ * work item and runbook a link can carry). */
+export function reportsQuery(f: { executor: string; initiative: string; outcome: string; debrief: string; workItem?: string; runbook?: string }, cursor?: string): string {
   const p = new URLSearchParams();
+  if (f.workItem) p.set('workItem', f.workItem);
+  if (f.runbook) p.set('runbook', f.runbook);
   if (f.executor) p.set('executor', f.executor);
   if (f.initiative) p.set('initiative', f.initiative);
   if (f.outcome) p.set('outcome', f.outcome);
@@ -135,7 +138,7 @@ export function reportsQuery(f: { executor: string; initiative: string; outcome:
 }
 
 /** The Runs list's URL for a filter (what the rails link to). */
-export function runsListHref(f: Partial<{ executor: string; initiative: string; outcome: string; debrief: string }>): string {
+export function runsListHref(f: Partial<{ executor: string; initiative: string; outcome: string; debrief: string; workItem: string; runbook: string }>): string {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(f)) if (v) p.set(k, v);
   const q = p.toString();

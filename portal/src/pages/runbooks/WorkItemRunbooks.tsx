@@ -12,7 +12,8 @@ import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';
 import { writeJson } from '../../lib/writeJson';
 import { runbookDisplayTitle } from './runbookTitles';
-import { HEALTH_LABEL, HEALTH_TONE, runbookHref, scopeLabel } from './runbooksModel';
+import { runsListHref } from '../iq/runsModel';
+import { HEALTH_LABEL, HEALTH_TONE, runPageHref, runbookHref, scopeLabel } from './runbooksModel';
 import { useRunbookNames } from './useRunbookNames';
 import type { BriefPreviewResponse, RunbookRow, RunbookScope } from './types';
 
@@ -96,8 +97,10 @@ export function WorkItemRunbooks({ workItemId, preview, onChanged }: { workItemI
                 {a.summary && <T size="xs" tone="secondary" wrap>{a.summary}</T>}
                 {a.obstacles.map((o) => <T key={o} size="xs" tone="secondary" wrap>{`In the way: ${o}`}</T>)}
                 {a.requested_changes && <T size="xs" tone="secondary" wrap>{`The reviewer asked for: ${a.requested_changes}`}</T>}
+                <Link to={runPageHref(a.run_ref)} data-testid="previous-attempt-run">Open this run</Link>
               </Stack>
             ))}
+            <Link to={runsListHref({ workItem: workItemId })} data-testid="all-runs-of-item">All runs of this item</Link>
           </Stack>
         )}
       </DetailSection>

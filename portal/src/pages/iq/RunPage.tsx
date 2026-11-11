@@ -23,12 +23,13 @@ import { useCrumbLabel } from '../../lib/crumbLabels';
 import { usd } from '../../lib/format';
 import { relativeTime } from '../../lib/relativeTime';
 import { RecordLink } from '../decisions/RecordLink';
+import { workItemHref } from '../project-detail/overviewModel';
 import { briefReadingMarkdown } from '../runbooks/runbookTitles';
 import type { Brief, BriefOffer } from '../runbooks/types';
 import { useRunbookNames } from '../runbooks/useRunbookNames';
 import type { Names } from '../runbooks/runbookNames';
 import {
-  EXECUTOR_WORD, OUTCOME_LABEL, OUTCOME_TONE, costWords, didNotReport, facadeIdOf, failureWords, isSimulated, runRefOf, stepDetail, stepWords, whoRan,
+  EXECUTOR_WORD, OUTCOME_LABEL, OUTCOME_TONE, costWords, didNotReport, facadeIdOf, failureWords, isSimulated, runRefOf, runsListHref, stepDetail, stepWords, whoRan,
   type RunReportRow,
 } from './runsModel';
 
@@ -86,11 +87,18 @@ export default function RunPage() {
           {simulated && <Chip tone="neutral" size="xs" data-testid="run-demo-data">Demo data</Chip>}
         </Inline>
       ) : undefined}
-      meta={report ? <MetaLine size="xs" tone="tertiary" items={[
-        whoRan(report.executor, botName),
-        report.initiativeId ? names.initiative(report.initiativeId) : null,
-        `ended ${relativeTime(report.endedAt)}`,
-      ]} /> : undefined}
+      meta={report ? (
+        <Stack gap="xs">
+          <MetaLine size="xs" tone="tertiary" items={[whoRan(report.executor, botName), `ended ${relativeTime(report.endedAt)}`]} />
+          <Inline gap="md" align="center" wrap data-testid="run-links">
+            {report.initiativeId && <RecordLink to={`/iq/projects/${encodeURIComponent(report.initiativeId)}`} data-testid="run-initiative-link">{names.initiative(report.initiativeId)}</RecordLink>}
+            {report.workItemId && report.initiativeId && <RecordLink to={workItemHref(report.initiativeId, report.workItemId)} data-testid="run-work-item-link">{`Work item ${report.workItemId}`}</RecordLink>}
+            {report.workItemId && !report.initiativeId && <T size="xs" tone="tertiary">{`Work item ${report.workItemId}`}</T>}
+            {report.changes.changeRequestId && <RecordLink to={`/iq/changes/${encodeURIComponent(report.changes.changeRequestId)}`} data-testid="run-change-link">{`Change ${report.changes.changeRequestId}`}</RecordLink>}
+            {report.workItemId && <RecordLink to={runsListHref({ workItem: report.workItemId })} data-testid="run-item-runs-link">Other runs of this work item</RecordLink>}
+          </Inline>
+        </Stack>
+      ) : undefined}
       tabs={tabs}
       tabsLabel="Run sections"
       activeTab={tabs.some((t) => t.id === tab) ? tab : 'report'}

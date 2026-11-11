@@ -31,7 +31,7 @@ interface Row extends RunReportRow { what: string; who: string; initiativeName: 
 export default function IqRunsPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const filters = { executor: params.get('executor') ?? '', initiative: params.get('initiative') ?? '', outcome: params.get('outcome') ?? '', debrief: params.get('debrief') ?? '' };
+  const filters = { executor: params.get('executor') ?? '', initiative: params.get('initiative') ?? '', outcome: params.get('outcome') ?? '', debrief: params.get('debrief') ?? '', workItem: params.get('workItem') ?? '', runbook: params.get('runbook') ?? '' };
   const query = params.get('q') ?? '';
   const set = (key: typeof RUN_REPORT_FILTER_KEYS[number] | 'q', value: string) => setParams((prev) => { const p = new URLSearchParams(prev); if (value) p.set(key, value); else p.delete(key); return p; }, { replace: true });
 
@@ -95,6 +95,10 @@ export default function IqRunsPage() {
     },
   });
   const projectOptions = [{ value: '', label: 'All' }, ...(Array.isArray(initiatives.data) ? initiatives.data : []).map((p) => ({ value: p.id, label: p.name }))];
+  // A work item or runbook link carries the id; the filter shows it as the one choice beside "All" so it clears the way the initiative one does.
+  const workItemTitle = (Array.isArray(work.data) ? work.data : []).find((w) => w.id === filters.workItem)?.title;
+  const workItemOptions = [{ value: '', label: 'All' }, ...(filters.workItem ? [{ value: filters.workItem, label: workItemTitle ?? filters.workItem }] : [])];
+  const runbookOptions = [{ value: '', label: 'All' }, ...(filters.runbook ? [{ value: filters.runbook, label: filters.runbook }] : [])];
   return (
     <CollectionCommandPage
       data-testid="iq-runs"
@@ -106,6 +110,8 @@ export default function IqRunsPage() {
         filters: [
           { id: 'executor', label: 'Ran on', value: filters.executor, onChange: (v) => set('executor', v), options: [...EXECUTOR_FILTERS] },
           { id: 'initiative', label: 'Initiative', value: filters.initiative, onChange: (v) => set('initiative', v), options: projectOptions },
+          ...(filters.workItem ? [{ id: 'workItem', label: 'Work item', value: filters.workItem, onChange: (v: string) => set('workItem', v), options: workItemOptions }] : []),
+          ...(filters.runbook ? [{ id: 'runbook', label: 'Runbook', value: filters.runbook, onChange: (v: string) => set('runbook', v), options: runbookOptions }] : []),
           { id: 'outcome', label: 'Outcome', value: filters.outcome, onChange: (v) => set('outcome', v), options: [...OUTCOME_FILTERS] },
           { id: 'debrief', label: 'Debriefed', value: filters.debrief, onChange: (v) => set('debrief', v), options: [...DEBRIEF_FILTERS] },
         ],

@@ -16,6 +16,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { relativeTime } from '../../lib/relativeTime';
 import { writeJson } from '../../lib/writeJson';
+import { runsListHref } from '../iq/runsModel';
 import { runbookDisplayTitle, runbookReadingMarkdown } from './runbookTitles';
 import { ReadOnlyDocument } from '../../components/documents/ReadOnlyDocument';
 import { useRunbookNames } from './useRunbookNames';
@@ -80,7 +81,15 @@ export function RunbookRecord({ id, summary, onOpen, onChanged }: {
       titleSize="md" titleOverflow="wrap" titleAs="h1"
       title={runbookDisplayTitle(runbook.title)}
       statusPill={<Inline gap="sm"><Chip tone="neutral" size="md">Runbook</Chip><StatusPill tone={pill.tone} label={pill.label} size="sm" /></Inline>}
-      subtitle={<T size="xs" tone="tertiary">{`${scopeLabel(runbook.scope, names)} · owner ${names.person(runbook.owner_person_id)} · v${runbook.current_version} · updated ${relativeTime(runbook.updated_at)}`}</T>}
+      subtitle={(
+        <Inline gap="sm" align="center" wrap>
+          {runbook.scope.kind === 'initiative' && runbook.scope.ref
+            ? <><T size="xs" tone="tertiary">Initiative</T><Link to={`/iq/projects/${encodeURIComponent(runbook.scope.ref)}`} data-testid="runbook-scope-link">{names.initiative(runbook.scope.ref)}</Link></>
+            : <T size="xs" tone="tertiary">{scopeLabel(runbook.scope, names)}</T>}
+          <T size="xs" tone="tertiary">{`owner ${names.person(runbook.owner_person_id)} · v${runbook.current_version} · updated ${relativeTime(runbook.updated_at)}`}</T>
+          <Link to={runsListHref({ runbook: runbook.id })} data-testid="runbook-runs-link">Runs given this runbook</Link>
+        </Inline>
+      )}
       tabs={tabs}
       activeTab={tab}
       onTabChange={setTab}

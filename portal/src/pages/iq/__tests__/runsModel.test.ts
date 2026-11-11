@@ -56,5 +56,7 @@ describe('runsModel', () => {
     assert.equal(reportsQuery({ executor: 'governed,mock', initiative: '', outcome: 'failed', debrief: '' }), '?executor=governed%2Cmock&outcome=failed&limit=100');
     assert.equal(runsListHref({ initiative: 'p-auth-migration' }), '/iq/runs?initiative=p-auth-migration');
     assert.equal(runsListHref({}), '/iq/runs');
+    assert.equal(runsListHref({ workItem: 'wi-1' }), '/iq/runs?workItem=wi-1');
+    assert.equal(reportsQuery({ executor: '', initiative: '', outcome: '', debrief: '', workItem: 'wi-1', runbook: 'rb-a' }), '?workItem=wi-1&runbook=rb-a&limit=100');
   });
 });

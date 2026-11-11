@@ -4,7 +4,7 @@ import { collectionCommandAdapter } from '../../../components/collections/collec
 import { RUN_REPORT_GRAMMAR, runReportCommandFilter } from '../runReportCommands.ts';
 
 test('report commands preserve independent filters and reset all URL controls together', async () => {
-  let params = new URLSearchParams('initiative=p-auth&executor=local&outcome=done&debrief=filed&q=old&tab=history');
+  let params = new URLSearchParams('initiative=p-auth&executor=local&outcome=done&debrief=filed&workItem=wi-1&runbook=rb-a&q=old&tab=history');
   let refreshes = 0;
   const adapter = collectionCommandAdapter(RUN_REPORT_GRAMMAR, {
     setQuery: value => { if (value) params.set('q', value); else params.delete('q'); },

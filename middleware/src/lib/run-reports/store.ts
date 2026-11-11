@@ -16,6 +16,8 @@ import { InvalidWriteError, paginate, type Page } from '../runbooks/store.js';
 export interface ListRunReportsQuery {
   workItemId?: string;
   initiativeId?: string;
+  /** Reports whose brief offered this runbook, or whose run used it (`?runbook=rb-…`). */
+  runbookId?: string;
   /** One or more executors (`GET /api/run-reports?executor=fleet,mock`). */
   executors?: readonly RunExecutor[];
   outcome?: RunOutcome;
@@ -46,6 +48,7 @@ export const byEndedDesc = (a: RunReport, b: RunReport): number =>
 export function filterReports(rows: readonly RunReport[], q: ListRunReportsQuery | undefined): RunReport[] {
   return rows.filter((r) => (!q?.workItemId || r.workItemId === q.workItemId)
     && (!q?.initiativeId || r.initiativeId === q.initiativeId)
+    && (!q?.runbookId || r.runbooksOffered.some((x) => x.id === q.runbookId) || r.runbooksUsed.some((x) => x.id === q.runbookId))
     && (!q?.executors?.length || q.executors.includes(r.executor))
     && (!q?.outcome || r.outcome === q.outcome)
     && (!q?.debrief || (q.debrief === 'none' ? debriefStateOf(r) === null : debriefStateOf(r) === q.debrief)));

@@ -1,6 +1,6 @@
 import type { CollectionGrammar } from '../../components/collections/collectionCommands.ts';
 
-export const RUN_REPORT_FILTER_KEYS = ['executor', 'initiative', 'outcome', 'debrief'] as const;
+export const RUN_REPORT_FILTER_KEYS = ['executor', 'initiative', 'outcome', 'debrief', 'workItem', 'runbook'] as const;
 
 // These are the same values as the Runs toolbar and /api/run-reports. The
 // pipeline ledger's status/kind grammar describes a different collection.

@@ -75,6 +75,14 @@ describe.each(backends)('$name (RunReportStore contract)', ({ open }) => {
     expect(page.next).not.toBeNull();
   });
 
+  it('lists by runbook: a report whose brief offered it or whose run used it', async () => {
+    await store.putReport(report('a', { runbooksOffered: [{ id: 'rb-one', version: 1 }] }));
+    await store.putReport(report('b', { runbooksUsed: [{ id: 'rb-one', version: 1, source: 'observed' }] }));
+    await store.putReport(report('c', { runbooksOffered: [{ id: 'rb-two', version: 1 }] }));
+    expect((await store.listReports({ runbookId: 'rb-one' })).items.map((r) => r.runRef).sort()).toEqual(['a', 'b']);
+    expect((await store.listReports({ runbookId: 'rb-none' })).items).toHaveLength(0);
+  });
+
   it('lists a filtered page across executors: executor, outcome, debrief, initiative, newest first', async () => {
     const debrief = (state: 'filed' | 'skipped') => ({ state, reason: null, reasonText: null, promptVersion: null, decidedAt: '2026-11-10T10:00:00.000Z',
       expiresAt: null, settledAt: null, nonce: null, holdId: null, ceilingUsd: null, answer: null, proposalId: null, proposalKind: null,
