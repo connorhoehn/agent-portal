@@ -586,6 +586,13 @@ async function main() {
       await page.getByTestId('initiative-runs-link').first().waitFor({ timeout: 15000 });
       await page.getByTestId('initiative-runs-link').first().click();
       await page.waitForURL(new RegExp(`/iq/runs\\?initiative=${PROJECT}`), { timeout: 10000 });
+      // The old Local compute and Computer Lab URLs land on the one Computers page (lane E5), and the old
+      // Local compute runs view lands on the Runs list filtered to your machines.
+      await go(page, '/admin/devbox');
+      await page.waitForURL(/\/iq\/computers/, { timeout: 10000 });
+      await page.getByTestId('local-runs-link').first().waitFor({ timeout: 10000 });
+      await go(page, '/iq/local-compute?view=runs');
+      await page.waitForURL(/\/iq\/runs\?executor=local/, { timeout: 10000 });
     });
   } finally {
     await browser.close();
