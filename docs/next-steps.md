@@ -929,7 +929,7 @@ Decided:
 - The microVM report is recorded before the job completes, so a claim lost in between could leave a report for a run another attempt now owns; the dispatcher checks the claim just before.
 
 Left:
-- Budgets at 1280 px: closed by the selected-row pickup in ui-components 2.522.0 (`704280cea`, `codex/data-table-reveal-selection`); `InitiativesReport.tsx` opts into `revealSelection`. Background refresh, focus and manual pagination have library regression coverage. The separate deep DOM audit still reports the same 852 issues as 2.519.0 across six width/theme cases; see the handoff for scope.
+- Budgets at 1280 px: closed by the selected-row pickup in ui-components 2.522.0 (`704280cea`, `codex/data-table-reveal-selection`); `InitiativesReport.tsx` opts into `revealSelection`. Background refresh, focus and manual pagination have library regression coverage. A later audit pickup (ui-components 2.522.1, `9b0c53067`) adds explicit geometry profiles and measures clipped separators correctly. The recurring judge includes `journey:budgets-audit` at 1440 and 1280 px in both themes. Owner direction on 11 November: desktop/laptop only; no phone or tablet work. Computers passes the desktop sweep. Runs now has a command composer and a populated desktop audit (R5) with zero findings; next make its columns fit at 1280 px without horizontal scrolling. The navigation scanner's 49 role mismatches also need investigation against App's `Gate` wrapper. Historical mobile findings are outside scope; see the handoff.
 - The microVM debrief is proven against the fake devbox and the Python suite only; no real machine was started.
 
 ### Lane E6+E7: removals and the Workflows rename

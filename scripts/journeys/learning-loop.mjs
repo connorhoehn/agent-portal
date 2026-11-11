@@ -33,6 +33,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { verifyMicrovmFilter } from './learning-loop-microvm.mjs';
+import { verifyDesktopAudit } from './desktop-audit.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const req = createRequire(path.join(ROOT, 'portal', 'package.json'));
@@ -568,6 +569,32 @@ async function main() {
       check(await count('?executor=fleet') === 0, 'executor=fleet (queue) should be empty');
       check(/No run matches these filters/.test(await bodyText(page)), 'an empty filter does not say so');
       check(await count('?debrief=skipped') >= 1, 'debrief=skipped should list the runs that skipped it');
+      await go(page, '/iq/runs?executor=governed');
+      const host = page.getByTestId('collection-command-host');
+      const command = async (text) => {
+        const editor = host.locator('[contenteditable="true"]');
+        await editor.fill(text);
+        await editor.press('Enter');
+      };
+      await command('show failed runs');
+      await page.waitForURL(url => url.searchParams.get('outcome') === 'failed');
+      check(new URL(page.url()).searchParams.get('executor') === 'governed', 'the command replaced another filter');
+      await until('failed rows from the command', async () => await rows.count() === failed, 15000);
+      await command('search runs for "no-matching-run-title"');
+      await until('title search removes nonmatches', async () => await rows.count() === 0, 15000);
+      check(await page.getByRole('textbox', { name: 'Search loaded run titles', exact: true }).inputValue() === 'no-matching-run-title', 'composer and toolbar search disagree');
+      const beforeUnsupported = page.url();
+      await command('retry failed runs');
+      await until('unsupported run action is refused', async () => /not recognized/.test(await page.getByTestId('collection-command-result').innerText()), 15000);
+      check(page.url() === beforeUnsupported, 'unsupported command changed the filters');
+      await command('reset filters');
+      await page.waitForURL(url => !url.search);
+      await until('reset restores the newest run', async () => await rows.first().getAttribute('href') === runUrl(runs.silent.ref), 15000);
+      const reportHref = await rows.first().getAttribute('href');
+      const ref = decodeURIComponent(reportHref.split('/').at(-1));
+      await command(`open ${ref}`);
+      await page.waitForURL(url => url.pathname === reportHref);
+      await go(page, '/iq/runs');
       check(errors.length === 0, `page errors: ${errors.join(' | ')}`);
       return `${all.length} runs: ${failed} failed, ${filed} filed`;
     });
@@ -604,6 +631,13 @@ async function main() {
     await step('R4: MicroVM filter: labelled browser fixtures, selection, reload and clearing', async () => {
       await verifyMicrovmFilter(page, PORTAL, shots);
       return 'browser-only fixture; real microVM execution remains unverified';
+    });
+    // Last: the audit signs in independently and may revoke this browser's
+    // fixture session. Its table contains this journey's real mock dispatches.
+    await step('R5: populated Runs desktop audit in both themes at 1440 and 1280 px', async () => {
+      const audit = verifyDesktopAudit('/iq/runs', path.join(OUT, 'runs-audit'));
+      check(audit.cases.every(c => c.coverage.some(rule => rule.rule === 'table.geometry' && rule.rows > 0)), 'the Runs audit must measure populated rows in every case');
+      return 'four desktop cases, zero findings and complete composer classification';
     });
   } finally {
     await browser.close();

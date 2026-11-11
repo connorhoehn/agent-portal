@@ -6,7 +6,8 @@
 #                   mock middleware and portal, real dispatches against the fake microVM, no model
 #   item 13         scripts/learning-loop/debrief-e2e.mjs: the real local worker, a stub `claude`, a throwaway repository
 #   item 14         scripts/learning-loop/local-report-e2e.mjs: the same harness, a brief that gives a runbook
-#   budget row      scripts/journeys/budgets-selection.mjs: offscreen selection at desktop, tablet and phone widths
+#   budget row      scripts/journeys/budgets-selection.mjs: offscreen selection at 1440 and 1280 px desktop widths
+#   budget audit    scripts/journeys/budgets-audit.mjs: desktop geometry in both themes
 #   suites          the middleware suites the loop owns (run reports, runbooks, the debrief, the mock's offer, the brief
 #                   contract, local compute, the microVM dispatcher, the wire, parity, guard and scope suites) and the portal suite
 #
@@ -72,7 +73,7 @@ for n in 1 2 3 4 5 6 7 8 9 10 11 12; do
   fi
 done
 # The steps after the acceptance items belong to the journey too.
-for s in R1 R2 R3 R4; do
+for s in R1 R2 R3 R4 R5; do
   if grep -q "^PASS ${s}:" "$JOURNEY_LOG" && ! grep -q "^FAIL ${s}:" "$JOURNEY_LOG"; then
     pass "journey step $s"
   else
@@ -87,11 +88,21 @@ fi
 section "budget selection: visible after loading and resizing"
 node scripts/journeys/run-demo-moments.mjs --journey budgets-selection >"$LOGS/budgets-selection.log" 2>&1
 code=$?
-if [ "$code" -eq 0 ] && [ "$(grep -c '^PASS budget selection @' "$LOGS/budgets-selection.log")" -eq 6 ]; then
-  pass "budget selection: the selected row is visible at 1440, 1280 and 390 px after load and resize"
+if [ "$code" -eq 0 ] && [ "$(grep -c '^PASS budget selection @' "$LOGS/budgets-selection.log")" -eq 4 ]; then
+  pass "budget selection: the selected row is visible at 1440 and 1280 px after load and resize"
 else
   fail "budget selection: exited $code (see $LOGS/budgets-selection.log)"
   tail -n 12 "$LOGS/budgets-selection.log" | sed 's/^/      /'
+fi
+
+section "budget audit: desktop layout contracts"
+node scripts/journeys/run-demo-moments.mjs --journey budgets-audit >"$LOGS/budgets-audit.log" 2>&1
+code=$?
+if [ "$code" -eq 0 ] && grep -q '^PASS budgets audit:' "$LOGS/budgets-audit.log"; then
+  pass "budget audit: four desktop width/theme cases, zero findings and complete composer classification"
+else
+  fail "budget audit: exited $code (see $LOGS/budgets-audit.log)"
+  tail -n 12 "$LOGS/budgets-audit.log" | sed 's/^/      /'
 fi
 
 # ── items 13 and 14: the real local worker against a stub claude ─────────────

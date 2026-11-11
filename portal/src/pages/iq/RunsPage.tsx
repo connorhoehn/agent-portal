@@ -13,6 +13,8 @@ import { useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Banner, Chip, DataTable, StatusDot, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { collectionCommandAdapter, resolveCollectionTarget } from '../../components/collections/collectionCommands';
 import { useFetch } from '../../hooks/useFetch';
 import { showingLabel, usd } from '../../lib/format';
 import { relativeTime } from '../../lib/relativeTime';
@@ -22,16 +24,16 @@ import {
   DEBRIEF_FILTERS, EXECUTOR_FILTERS, OUTCOME_FILTERS, OUTCOME_LABEL, OUTCOME_TONE, costWords, isSimulated, learnedDot, reportsQuery, whoRan,
   type RunReportRow,
 } from './runsModel';
+import { RUN_REPORT_FILTER_KEYS, RUN_REPORT_GRAMMAR, runReportCommandFilter } from './runReportCommands';
 
 interface Row extends RunReportRow { what: string; who: string; initiativeName: string | null }
-
-const FILTER_KEYS = ['executor', 'initiative', 'outcome', 'debrief'] as const;
 
 export default function IqRunsPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const filters = { executor: params.get('executor') ?? '', initiative: params.get('initiative') ?? '', outcome: params.get('outcome') ?? '', debrief: params.get('debrief') ?? '' };
-  const set = (key: typeof FILTER_KEYS[number], value: string) => setParams((prev) => { const p = new URLSearchParams(prev); if (value) p.set(key, value); else p.delete(key); return p; }, { replace: true });
+  const query = params.get('q') ?? '';
+  const set = (key: typeof RUN_REPORT_FILTER_KEYS[number] | 'q', value: string) => setParams((prev) => { const p = new URLSearchParams(prev); if (value) p.set(key, value); else p.delete(key); return p; }, { replace: true });
 
   const reports = useFetch<{ reports: RunReportRow[]; next: string | null }>(`/api/run-reports${reportsQuery({ ...filters }).replace('limit=100', 'limit=200')}`, 15_000);
   const jobs = useFetch<{ jobs: Array<{ id: string; title: string }> }>('/api/work/jobs?limit=200', 0, { share: true });
@@ -75,7 +77,21 @@ export default function IqRunsPage() {
     } },
   ];
 
-  const filtered = FILTER_KEYS.some((k) => filters[k]);
+  const visible = rows.filter(r => r.what.toLowerCase().includes(query.trim().toLowerCase()));
+  const filtered = RUN_REPORT_FILTER_KEYS.some((k) => filters[k]) || !!query.trim();
+  const commands = collectionCommandAdapter(RUN_REPORT_GRAMMAR, {
+    id: 'run-reports-commands', label: 'Runs',
+    setQuery: value => set('q', value),
+    setFilter: value => setParams(previous => runReportCommandFilter(previous, value), { replace: true }),
+    refresh: reports.refresh,
+    scopeNote: 'Filter run reports, search loaded titles and open one report. Commands do not start, cancel or retry runs.',
+    open: target => {
+      if (!reports.data || reports.isLoading || reports.error) throw new Error('Wait for the run reports to load before opening one.');
+      const run = resolveCollectionTarget(target, visible.map(r => ({ id: r.runRef, title: r.what })));
+      navigate(`/iq/runs/${encodeURIComponent(run.id)}`);
+      return `Opening ${run.title}.`;
+    },
+  });
   const projectOptions = [{ value: '', label: 'All' }, ...(Array.isArray(initiatives.data) ? initiatives.data : []).map((p) => ({ value: p.id, label: p.name }))];
   return (
     <CollectionCommandPage
@@ -84,13 +100,14 @@ export default function IqRunsPage() {
       description="Everything that ran work for this workspace: your machines, bots and the queue."
       toolbar={{
         label: 'Run filters',
+        search: { value: query, onChange: value => set('q', value), placeholder: 'Search loaded run titles', 'aria-label': 'Search loaded run titles' },
         filters: [
           { id: 'executor', label: 'Ran on', value: filters.executor, onChange: (v) => set('executor', v), options: [...EXECUTOR_FILTERS] },
           { id: 'initiative', label: 'Initiative', value: filters.initiative, onChange: (v) => set('initiative', v), options: projectOptions },
           { id: 'outcome', label: 'Outcome', value: filters.outcome, onChange: (v) => set('outcome', v), options: [...OUTCOME_FILTERS] },
           { id: 'debrief', label: 'Debriefed', value: filters.debrief, onChange: (v) => set('debrief', v), options: [...DEBRIEF_FILTERS] },
         ],
-        summary: reports.data ? showingLabel(rows.length, reports.data.next ? null : rows.length, 'runs') : undefined,
+        summary: reports.data ? showingLabel(visible.length, reports.data.next ? null : rows.length, 'runs') : undefined,
         onRefresh: reports.refresh,
         refreshing: reports.isLoading,
       }}
@@ -100,7 +117,7 @@ export default function IqRunsPage() {
       {reports.data?.next && <Banner variant="info">Showing the newest 200 runs. Narrow the filters to see older ones.</Banner>}
       <DataTable
         narrow
-        data={rows}
+        data={visible}
         columns={columns}
         keyField={(r) => r.runRef}
         loading={reports.isLoading && !reports.data}
@@ -109,6 +126,7 @@ export default function IqRunsPage() {
         data-testid="iq-runs-table"
         emptyMessage={filtered ? 'No run matches these filters.' : 'No runs recorded yet.'}
       />
+      <CollectionCommandHost adapter={commands} />
     </CollectionCommandPage>
   );
 }

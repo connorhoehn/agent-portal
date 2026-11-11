@@ -46,8 +46,8 @@ try {
   });
 
   for (const { width, reload } of [
-    ...[1440, 1280, 390].map((width) => ({ width, reload: true })),
-    ...[1440, 1280, 390].map((width) => ({ width, reload: false })),
+    ...[1440, 1280].map((width) => ({ width, reload: true })),
+    ...[1440, 1280].map((width) => ({ width, reload: false })),
   ]) {
     await page.setViewportSize({ width, height: 900 });
     if (reload) await page.goto(`${portal}/admin/budgets?row=${encodeURIComponent(key)}`, { waitUntil: 'domcontentloaded' });
