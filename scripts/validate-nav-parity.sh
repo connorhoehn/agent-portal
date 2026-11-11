@@ -60,6 +60,14 @@ else
   fi
 fi
 
+section "route source mutation coverage"
+if node --test "$REPO/scripts/lib/nav-route-parity.test.cjs" "$REPO/scripts/lib/nav-server-tier.test.cjs" > "$TMP/source-tests.log" 2>&1; then
+  ok "forwarding role gates and wildcard roots; changed gates and missing targets still fail"
+else
+  fail "route source mutation tests"
+  tail -n 35 "$TMP/source-tests.log" | sed 's/^/      /'
+fi
+
 # ── The server's read tier ──────────────────────────────────────────────────
 # A nav item gated NARROWER than what the API actually serves. Ratcheted, not a
 # hard zero, because the fix is a PRODUCT decision and not always "widen": the
@@ -110,17 +118,19 @@ if git -C "$REPO" cat-file -e a257bf3^:portal/src/components/shell/portalCommand
   ln -sfn "$REPO/middleware/node_modules" "$TCAL/middleware/node_modules"
   ln -sfn "$REPO/middleware/seeds" "$TCAL/middleware/seeds"
   ln -sfn "$REPO/middleware/src/routes" "$TCAL/middleware/src/routes"
-  cp "$REPO/middleware/src/index.ts" "$TCAL/middleware/src/index.ts"
+  # Keep the historical palette and mount together. A newer per-route write
+  # selector must not turn an unresolved parse into a false recall success.
+  git -C "$REPO" show a257bf3^:middleware/src/index.ts > "$TCAL/middleware/src/index.ts"
   cp "$REPO/scripts/lib/nav-server-tier.cjs" "$TCAL/scripts/lib/"
-  if node "$TCAL/scripts/lib/nav-server-tier.cjs" 2>/dev/null | grep -q '"nav":"/admin/devbox"'; then
+  if node "$TCAL/scripts/lib/nav-server-tier.cjs" 2>/dev/null | grep '"rule":"nav-narrower-than-server"' | grep '"nav":"/admin/devbox"' | grep -q '"missing":"[^"]*org-leader'; then
     ok "server-tier recall: catches the pre-a257bf3 Computer Lab drift"
   else
     fail "server-tier recall: the pre-a257bf3 Computer Lab drift was NOT flagged — the rule has stopped working"
   fi
-  if node "$REPO/scripts/lib/nav-server-tier.cjs" 2>/dev/null | grep -q '"nav":"/admin/devbox"'; then
-    fail "server-tier precision: /admin/devbox flagged on main, where its gates were fixed to match the server"
+  if node "$REPO/scripts/lib/nav-server-tier.cjs" 2>/dev/null | grep -Eq '"nav":"(/admin/devbox|/iq/computers)"'; then
+    fail "server-tier precision: Computers or its retired palette entry was flagged"
   else
-    ok "server-tier precision: the fixed Computer Lab gates are correctly NOT flagged"
+    ok "server-tier precision: the unrestricted Computers page admits every server reader"
   fi
 fi
 

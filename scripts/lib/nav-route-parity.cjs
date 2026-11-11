@@ -66,6 +66,13 @@ function main() {
   const src = readSources();
   // A wildcard/param route is a shape, not a jump target.
   const routes = new Map(src.routes.filter((r) => !/[:*]/.test(r.path)).map((r) => [r.path, { roles: r.roles, isRedirect: r.isRedirect }]));
+  // A scoped splat also mounts at its root: /iq/logging/* accepts
+  // /iq/logging. Do not treat a catch-all or invented descendant as a page,
+  // and let an explicit root route retain precedence over its splat.
+  for (const route of src.routes) {
+    const root = route.path.endsWith('/*') ? route.path.slice(0, -2) : '';
+    if (root && !/[:*]/.test(root) && !routes.has(root)) routes.set(root, route);
+  }
   const pages = src.pages;
   const rail = new Map(src.rail.map((r) => [r.path, { roles: r.roles, hasRoles: r.hasRoles }]));
 

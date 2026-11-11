@@ -72,15 +72,43 @@ export function readRouteSources(root = REPO_ROOT): RouteSources {
     for (const el of e.elements) { if (ts.isStringLiteral(el)) out.push(el.text); else return null; }
     return out;
   };
-  // The outermost <RequireRole> inside a JSX expression: App.tsx writes the
-  // gate INSIDE `element={<RequireRole …><Page/></RequireRole>}`, almost never
+  const appSf = parse(path.join(root, 'portal', 'src', 'App.tsx'));
+  const roleGates = new Set(['RequireRole']);
+  // App's Gate adds the no-access fallback around RequireRole. Recognize
+  // wrappers from their forwarding body, not a trusted component name: a
+  // changed roles expression, prop spread or bypass must not look equivalent.
+  for (const declaration of appSf.statements) {
+    if (!ts.isFunctionDeclaration(declaration) || !declaration.name || declaration.parameters.length !== 1) continue;
+    const binding = declaration.parameters[0]!.name;
+    if (!ts.isObjectBindingPattern(binding) || declaration.body?.statements.length !== 1) continue;
+    const bound = (property: string): string | null => {
+      const item = binding.elements.find((el: any) => !el.dotDotDotToken && (el.propertyName?.text ?? el.name.text) === property);
+      return item && ts.isIdentifier(item.name) ? item.name.text : null;
+    };
+    const roles = bound('roles'), children = bound('children');
+    const statement = declaration.body.statements[0]!;
+    if (!roles || !children || !ts.isReturnStatement(statement)) continue;
+    let expression = statement.expression;
+    while (expression && ts.isParenthesizedExpression(expression)) expression = expression.expression;
+    if (!expression || !ts.isJsxElement(expression) || tagName(expression) !== 'RequireRole') continue;
+    if (expression.openingElement.attributes.properties.some((a: any) => ts.isJsxSpreadAttribute(a))) continue;
+    const gateRoles = attrs(expression)['roles'];
+    const content = expression.children.filter((child: any) => !(ts.isJsxText(child) && !child.text.trim()) && !(ts.isJsxExpression(child) && !child.expression));
+    if (gateRoles && ts.isJsxExpression(gateRoles) && gateRoles.expression && ts.isIdentifier(gateRoles.expression)
+      && gateRoles.expression.text === roles && content.length === 1 && ts.isJsxExpression(content[0]!)
+      && content[0]!.expression && ts.isIdentifier(content[0]!.expression) && content[0]!.expression.text === children) {
+      roleGates.add(declaration.name.text);
+    }
+  }
+  // The outermost role gate inside a JSX expression: App.tsx writes the
+  // gate INSIDE `element={<Gate …><Page/></Gate>}`, almost never
   // as an ancestor of the <Route>.
-  const outermostRequireRole = (init: any): string[] | null => {
+  const outermostRoleGate = (init: any): string[] | null => {
     if (!ts.isJsxExpression(init) || !init.expression) return null;
     let found: string[] | null = null;
     (function walk(n: any) {
       if (found) return;
-      if ((ts.isJsxElement(n) || ts.isJsxSelfClosingElement(n)) && tagName(n) === 'RequireRole') { found = stringArrayOf(attrs(n)['roles']); return; }
+      if ((ts.isJsxElement(n) || ts.isJsxSelfClosingElement(n)) && roleGates.has(tagName(n))) { found = stringArrayOf(attrs(n)['roles']); return; }
       n.forEachChild(walk);
     })(init.expression);
     return found;
@@ -99,7 +127,7 @@ export function readRouteSources(root = REPO_ROOT): RouteSources {
     if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
       const name = tagName(node);
       const a = attrs(node);
-      if (name === 'RequireRole') {
+      if (roleGates.has(name)) {
         const r = stringArrayOf(a['roles']);
         if (r) nextRoles = roles === null ? r.slice() : roles.filter((x) => r.includes(x));
       }
@@ -114,7 +142,7 @@ export function readRouteSources(root = REPO_ROOT): RouteSources {
           isRedirect = /(^|\W)Navigate(\W|$)/.test(text);
           forwards = isRedirect || /<[A-Za-z]*Redirect\b/.test(text);
         }
-        const elRoles = elInit ? outermostRequireRole(elInit) : null;
+        const elRoles = elInit ? outermostRoleGate(elInit) : null;
         if (elRoles) nextRoles = nextRoles === null ? elRoles.slice() : nextRoles.filter((x) => elRoles.includes(x));
         // Every <Route> is recorded, a pathless layout route under its prefix
         // too (the nav-parity judge has always resolved against that shape).
@@ -126,7 +154,7 @@ export function readRouteSources(root = REPO_ROOT): RouteSources {
       }
     }
     node.forEachChild((c: any) => visit(c, nextPrefix, nextRoles));
-  })(parse(path.join(root, 'portal', 'src', 'App.tsx')), '/', null);
+  })(appSf, '/', null);
 
   const shell = path.join(root, 'portal', 'src', 'components', 'shell');
   const layoutSf = parse(path.join(shell, 'Layout.tsx'));

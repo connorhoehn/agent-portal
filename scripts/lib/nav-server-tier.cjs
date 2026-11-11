@@ -35,7 +35,8 @@ const NAV_TO_ROUTER = [
   { nav: '/admin/ingest/storage',    file: 'middleware/src/index.ts',                  match: 'ingestRouter' },
   { nav: '/admin/ingest/sources',    file: 'middleware/src/index.ts',                  match: 'ingestRouter' },
   { nav: '/admin/ingest/schedules',  file: 'middleware/src/index.ts',                  match: 'ingestRouter' },
-  { nav: '/admin/devbox',            file: 'middleware/src/index.ts',                  match: 'devboxRouter' },
+  { nav: '/iq/computers',           file: 'middleware/src/index.ts',                  match: 'devboxRouter' },
+  { nav: '/admin/devbox',           file: 'middleware/src/index.ts',                  match: 'devboxRouter' }, // legacy alias, also used by historical calibration
   { nav: '/admin/budgets',           file: 'middleware/src/routes/budgets.ts',         match: null },
   { nav: '/admin/bots',              file: 'middleware/src/routes/bots.ts',            match: 'readGate' },
   { nav: '/admin/projects',          file: 'middleware/src/routes/agent-projects.ts',  match: null },
@@ -138,6 +139,12 @@ function paletteRoles() {
 function main() {
   const palette = paletteRoles();
   for (const row of NAV_TO_ROUTER) {
+    const navRoles = palette.get(row.nav);
+    if (navRoles === undefined) continue;          // not a palette entry
+    // An unrestricted page cannot hide any of the server's readers. This
+    // also covers Computers, which combines everyone's paired machines with
+    // lab reads gated within the page; its write selector need not be guessed.
+    if (navRoles === null) continue;
     const tier = readTierIn(row.file, row.match);
     if (!tier) {
       process.stdout.write(JSON.stringify({
@@ -150,9 +157,6 @@ function main() {
     // `admin` is cross-tenant and passes every gate; it is never listed in the
     // palette, so comparing it would flag every row.
     serverRead.delete('admin');
-    const navRoles = palette.get(row.nav);
-    if (navRoles === undefined) continue;          // not a palette entry
-    if (navRoles === null) continue;               // ungated: admits everyone
     const missing = [...serverRead].filter((r) => !navRoles.includes(r)).sort();
     if (missing.length > 0) {
       process.stdout.write(JSON.stringify({

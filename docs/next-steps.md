@@ -834,7 +834,7 @@ The design is `docs/learning-loop-design.md`. Lane A (the run report) is built o
 ### Left for later lanes
 
 - A job the stale reaper fails has no report (the reaper is a SQL update with no hook).
-- The run page does not show the report yet (lane E).
+- ~~The run page does not show the report yet (lane E).~~ *Done, lane E1.*
 - `lib/runbooks/skill.ts` writes only `name` and `description`; its parser accepts and drops any other frontmatter key, so nothing yet rejects a non-portable key (lane C owns the lint).
 
 ### Lane B: budgets (branch `lane-b-budgets`)
@@ -857,7 +857,7 @@ Decided differently from the design, and why:
 
 Open:
 
-- Nothing seeds local compute ledger entries, so Lines shows $0 reported until a worker runs.
+- ~~Nothing seeds local compute ledger entries, so Lines shows $0 reported until a worker runs.~~ *Done, lane C follow-up: seeded local ledger rows.*
 - Closed on 11 November: ui-components 2.522.0 adds optional `DataTable.revealSelection`, and the initiatives report opts in. A selected row is visible after loading and resizing at 1440, 1280 and 390 px, including card layout. The regression journey is part of `validate-learning-loop.sh`.
 
 ### Lane D: giving runbooks to a run
@@ -886,7 +886,7 @@ Left:
 
 - The work item page's pin control and the "Runbooks this run will get" panel, the run's Runbooks section and the evidence line (lane E).
 - Debrief cost on the evidence line (lane C).
-- The pins write has no entry in the wire capture's write policy, so its response shape is not captured.
+- ~~The pins write has no entry in the wire capture's write policy, so its response shape is not captured.~~ *Done, lane C follow-up: write-policy entries.*
 - The seeded scheduled run's brief (`mock/runbooks.seed.ts`) is assembled directly and gives no runbook; its offer reads "No runbook matched this work."
 
 ### Lane C: the debrief and proposals from runs
@@ -905,10 +905,10 @@ Built:
 
 Open:
 
-- The microVM dispatcher must run the debrief op before it stops the session, and pass `hasCheckout: true` to `recordRunEnd`.
-- Fleet and governed runs are not debriefed.
+- ~~The microVM dispatcher must run the debrief op before it stops the session, and pass `hasCheckout: true` to `recordRunEnd`.~~ *Done, lane C follow-up.*
+- ~~Fleet and governed runs are not debriefed.~~ *Decided per executor (lane C follow-up, decision 1): a run whose session cannot be resumed is not debriefed; the fake microVM on the mock is.*
 - The Claude Code CLI has no turn-count flag, so the turn is bounded by the timeout and the dollar ceiling.
-- The initiative scope matrix test does not cover runbooks or local compute.
+- ~~The initiative scope matrix test does not cover runbooks or local compute.~~ *Done, lane C follow-up: rows added.*
 
 Rebased onto lane D before merging: the evidence read's proposal row admits `source.kind: 'system'` (retire proposals), and the three contract briefs were re-recorded for the two new `lab-report` lines (`learned`, `runbooks`); nothing else in them moved. One pre-existing red fixed on the way: `src/lib/__tests__/sdlc-capture-requester.test.ts` refused its dispatch from the 10th of the month on, because the dispatcher's seeded personal budget (mock spend moves with the day) crossed its hard cap; the suite is about who a change records, so it now mocks the user-budget gate to "none", and a refusal prints its reason instead of a bare `false`.
 
@@ -1000,3 +1000,11 @@ Left:
 **Decided.** A "scheduled automation" is a bot with a cron trigger: there is no separate automation record, so one list needed no new read. Computers lives under the orgiq rail at `/iq/computers` (the lab was an admin-tenant row only some roles saw; the page itself reads the lab only where the role may). The two voice page ids `computer-lab` and `local-compute` became `computers`, open to every orgiq role (a member's machines are theirs; the lab rows follow the lab's own read gate). The initiative page's Bots link had asked for ManageDevbox, which org leaders lack; it asks ManageBots now, the capability the Bots route's roles hold.
 
 **Left at merge, done since (11 November 2026).** An org leader could drive paired machines fully (ConnectLocalCompute) but the lab stayed read-only for that role: start, stop and the workspace's Nudge sat behind ManageDevbox, which the role must not hold (it also covers linking codebases, capability writes and session bundles, and DE-43 keeps the SDLC policy editor out of every ManageDevbox role). Built as its own change: the lab's drive is a Cedar action of its own, `OperateDevbox` (provision, rename, stop, remove), split out of `ManageDevbox` the way DE-42 split the agent-code authorities and held by sme, hr-admin and org-leader; org-leader also holds `RunDevboxTask`, since handing work to a lab computer by hand is the `DispatchAgentRun` authority the role already has. The shell stays with the operators. The `/api/devbox` mount asks `devboxWriteAction` (`routes/devbox.ts`) per route instead of one action for every write; a route the table does not name is still `ManageDevbox`. `devbox-lab-drive.test.ts` mounts the router as `index.ts` does over the real seeds and pins who gets through; the matrix and Cedar-edge suites pin the holders; the Computers page and the voice catalogue key their controls off the new action. Handing work to a lab machine is the workspace's Nudge bar (a free-text task), not the pick list a paired machine has, because the lab's task route takes a prompt. The mock shell's banner inside the lab terminal still says "devbox" and "box" (library text; see `ui-components-queue.md`). The Computers page has no automatic first selection any more: the detail opens when a row is chosen.
+
+### Loop cycles after the handoff (11 November 2026)
+
+Codex picked the handoff up at 9807261a and ran five cycles on local main (MicroVM filter browser coverage, Budgets selected-row visibility, structured failure codes, the Runs composer and desktop audits, Runs columns at 1280 px), each with the learning-loop validator green, then hit its usage limit mid-way through the sixth. Its record is the handoff's "Continuing work loop" section. The owner's direction from that run stands: desktop and laptop only, 1440 and 1280 px.
+
+**Navigation parity** (the sixth cycle, finished from the Codex draft): `validate-nav-parity.sh` passes end to end. The scanner recognizes a role-forwarding wrapper by its body, treats a scoped splat's root as a page, maps Computers for the server-tier check, and carries 17 mutation tests of its own. The ~50 disagreements were the `Gate` wrapper (47) and the two `logging/*` roots, not product drift.
+
+**Library versions.** The three UI fixes behind the Budgets and Runs cycles live on branches of the component library (`codex/data-table-reveal-selection`, `codex/responsive-audit-profiles`, `codex/data-table-column-choice`; four commits ahead of its main) and reach the portal as vendored tarballs versioned 2.522.0 to 2.522.2 in `portal/vendor`. The library's main is 2.521.0, so those numbers will collide with its next real release. Decided (owner, 11 November): push main with the vendored tarballs; the library follows. What the library owes: merge the three branches into its main, release under the next real number, and the portal re-pins to that release and drops the three tarballs (keeping `portal/vendor` to the one current tarball, as before).
