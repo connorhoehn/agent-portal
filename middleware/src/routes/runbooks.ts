@@ -12,6 +12,8 @@
 //   GET  /api/runbooks/:id/diff                unified diff of canonical markdown, ?from=&to=
 //   POST /api/runbooks/:id/retire              ReviewRunbook + scope; names what superseded it
 //   GET  /api/runbooks/:id/applications        runs that were given it and reported (?version=)
+//   GET  /api/runbooks/evidence                the loop over 30 days, counted from run reports (lib/runbooks/evidence.ts)
+//   GET  /api/runbooks/:id/evidence            one runbook over 30 days: given, followed as the runs said, outcomes, runs
 //   POST /api/runbooks/:id/applications        a box reports (`lab applied`); service auth only
 //
 // GATING (two layers, the ManageSprints + requireInitiativeSteward shape):
@@ -58,9 +60,31 @@ import {
 import { repoLintContext } from '../lib/runbooks/repo-context.js';
 import { RunbookFileError, filesOf, fileManifest, parseSkill, skillDescription, type RunbookFile } from '../lib/runbooks/index.js';
 import { filesUnifiedDiff } from '../lib/runbooks/files-diff.js';
+import { loopEvidence, runbookEvidence, windowStart, EVIDENCE_WINDOW_DAYS } from '../lib/runbooks/evidence.js';
+import type { RunReport } from '../lib/run-reports/types.js';
+import type { RunReportStore } from '../lib/run-reports/store.js';
 
 export interface RunbooksDeps {
   store: () => RunbookStore | Promise<RunbookStore>;
+  /** The run report store the evidence reads count from (lib/run-reports/store-select.ts); injected by suites. */
+  reports?: () => RunReportStore | Promise<RunReportStore>;
+  /** A work item's labels for the evidence comparison (providers/work-items.ts); injected by suites. */
+  workItemLabels?: (workItemId: string) => Promise<string[] | null>;
+}
+
+/** Every report that ended at or after `since`, newest first (the store lists newest first, so the walk stops early). */
+async function reportsSince(reports: RunReportStore, since: string): Promise<RunReport[]> {
+  const out: RunReport[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await reports.listReports({ limit: 200, ...(cursor ? { cursor } : {}) });
+    for (const r of page.items) {
+      if (r.endedAt < since) return out;
+      out.push(r);
+    }
+    cursor = page.next ?? undefined;
+  } while (cursor);
+  return out;
 }
 
 const OUTCOMES = ['followed', 'followed_with_deviation', 'failed', 'not_used'] as const;
@@ -425,6 +449,47 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
       files_diff: fd,
       can_review: verdict.ok && !mine && p.status === 'open' && (await isAllowed(s0, 'ReviewRunbook')),
     });
+  }));
+
+  // ── Evidence (docs/learning-loop-design.md stage 5) ──────────────────────
+  // Counted from run-report rows at read time, over the last 30 days, with the sample sizes;
+  // no figure is stored apart from its rows. Same access as every other runbook read.
+  const reportStore = async (): Promise<RunReportStore> =>
+    deps.reports ? deps.reports() : (await import('../lib/run-reports/store-select.js')).runReportStore();
+  const labelsOf = async (id: string): Promise<string[] | null> => {
+    if (deps.workItemLabels) return deps.workItemLabels(id);
+    const { getWorkItem } = await import('../providers/work-items.js');
+    return (await getWorkItem(id))?.labels ?? null;
+  };
+
+  router.get('/evidence', ...readGate, handler(async (_req, res) => {
+    const s = await store();
+    const nowMs = Date.parse(now());
+    const rows = await reportsSince(await reportStore(), windowStart(nowMs));
+    const proposals: RunbookProposal[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await s.listProposals({ limit: 200, ...(cursor ? { cursor } : {}) });
+      proposals.push(...page.items);
+      cursor = page.next ?? undefined;
+    } while (cursor);
+    res.json({ evidence: loopEvidence(rows, proposals, { nowMs }) });
+  }));
+
+  router.get('/:id/evidence', ...readGate, handler(async (req, res) => {
+    const s = await store();
+    const r = await s.getRunbook(String(req.params['id']));
+    if (!r) { res.status(404).json({ error: 'runbook not found' }); return; }
+    const nowMs = Date.parse(now());
+    const rows = await reportsSince(await reportStore(), windowStart(nowMs, EVIDENCE_WINDOW_DAYS));
+    // Labels only for the work items the comparison can read: the window's runs.
+    const ids = [...new Set(rows.flatMap((x) => (x.workItemId ? [x.workItemId] : [])))];
+    const labels = new Map<string, string[]>();
+    for (const id of ids) {
+      const l = await labelsOf(id);
+      if (l) labels.set(id, l);
+    }
+    res.json({ evidence: runbookEvidence(r.id, rows, { nowMs, labelsOf: labels }), health: await healthOf(s, r) });
   }));
 
   router.get('/:id', ...readGate, handler(async (req, res) => {
