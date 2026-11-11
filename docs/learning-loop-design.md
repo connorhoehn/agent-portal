@@ -85,6 +85,21 @@ Where it runs, in this order:
 
 Skips are recorded, never silent: `skipped: learning-budget`, `skipped: no-report`, `skipped: run-failed-before-work`.
 
+### 2b. Consolidation
+
+The distiller adds and revises one runbook at a time, so without a second pass the library only grows. A consolidation job keeps it small.
+
+It runs weekly, and on demand from Runbooks › Proposals. It reads the whole library with each runbook's evidence and puts proposals in the same review queue:
+
+- `merge`: two or more runbooks that cover the same procedure (similar when-to-use lines and steps, or usually offered and used together). The proposal is one runbook that replaces them, with their evaluation cases combined. Accepting it retires the others and names the successor.
+- `split`: a runbook over the length limit, or one whose uses fall into two distinct kinds of work.
+- `retire`: a runbook not offered or not used in 90 days, or one whose trial no longer beats the run without it on the current model.
+- `rename`: a description that does not get the skill loaded on its own evaluation prompts.
+
+Nothing is consolidated automatically. Every change is a proposal a person accepts, and a merged runbook goes through the same trial as a new one. The job runs where the distiller runs, on the same budget line, and at most ten proposals are open from it at a time so the queue stays reviewable.
+
+At proposal time the distiller already checks a new lesson against the most similar runbooks and prefers `revise` over `new`; consolidation is for the overlap that still gets through.
+
 ### 3. Offer (choosing runbooks for a run)
 
 When a run's brief is frozen, the server chooses up to five runbooks for it:
@@ -186,7 +201,7 @@ On the mock, with no model and no cloud:
 4. Dispatch a related work item. Its brief preview names that runbook with a reason before dispatch; the run's page shows it offered and used.
 5. The runbook's Evidence shows the use and its health is proven.
 6. A run of an unrelated work item is offered nothing.
-7. Three retire lessons for one runbook produce one retire proposal.
+7. Three retire lessons for one runbook produce one retire proposal. Two overlapping runbooks produce one merge proposal; accepting it retires both and names the successor.
 8. With the learning cap at zero and no paired machine, the lesson is `skipped: learning-budget` and the run page says so.
 9. An initiative crossing 80 percent of its cap produces one bell notification and a mark on Budgets.
 10. A local compute worker run against a test stack posts a report, and its run shows the reported cost as not billed.
@@ -200,6 +215,7 @@ On the mock, with no model and no cloud:
 | A | Run report: shape, store, routes, local worker and devbox return path, mock reports, use detection, application rows | none |
 | B | Budgets: thresholds and notifications, local compute through run limits, learning line | none |
 | C | Distiller: the `distill-run` skill, job, three executors, schema-checked lessons, skill folders with evaluation cases, notes store, proposals with provenance, retire rule | A |
+| C3 | Consolidation: the weekly job, merge, split, retire and rename proposals, the open-proposal limit | C, D |
 | C2 | Trial: with and without runs of a proposal's evaluation cases, trigger check, results on the proposal | C |
 | D | Offer: selection at brief freeze, brief text and fence, brief preview, evidence figures | A |
 | E | Pages, vocabulary, removals, the journey and the validator | A to D and the page audit |
