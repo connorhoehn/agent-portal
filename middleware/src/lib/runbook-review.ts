@@ -34,30 +34,37 @@ export async function actorId(session: Session): Promise<{ actor: string; person
 }
 
 /**
- * How many people OTHER than `exclude` could decide a proposal at this scope (decision 11, the
- * sole-reviewer exception). Counted from the directory, read authoritatively: an org-leader or
- * admin anywhere, the runbook's owner, or an SME / program owner attached to the scope's
- * initiative (or the proposal's area). Any failure to read the directory counts as "someone else
- * exists", so the exception is never granted on a lookup error.
+ * The accounts OTHER than `exclude` that could decide a proposal at this scope (decision 11, the
+ * sole-reviewer exception, and the notices that tell reviewers a proposal waits). Read from the
+ * directory, authoritatively, and only among accounts holding an orgiq role: an org-leader or
+ * admin, the runbook's owner, or an SME / program owner attached to the scope's initiative (or
+ * the proposal's area). Throws when the directory cannot be read; callers decide what that means.
  */
+export async function eligibleReviewerIds(
+  scope: RunbookScope, owner: string | null, area: string | null, exclude: ReadonlyArray<string | null | undefined>,
+): Promise<string[]> {
+  const skip = new Set(exclude.filter((x): x is string => typeof x === 'string' && x.length > 0));
+  const { listUsers } = await import('../providers/identity.js');
+  const { personOnInitiative } = await import('./initiative-scope.js');
+  const initiative = scope.kind === 'initiative' && scope.ref ? scope.ref : area;
+  const out: string[] = [];
+  for (const u of await listUsers({ authoritative: true })) {
+    if (skip.has(u.id) || (u.personId && skip.has(u.personId))) continue;
+    const roles = u.grants['orgiq'] ?? [];
+    if (roles.some((r) => (REVIEW_OVERRIDE_ROLES as readonly string[]).includes(r))) { out.push(u.id); continue; }
+    if (owner && (owner === u.id || owner === u.personId)) { out.push(u.id); continue; }
+    if (initiative && u.personId && roles.some((r) => (STEWARD_ROLES as readonly string[]).includes(r))
+      && await personOnInitiative(u.personId, initiative)) out.push(u.id);
+  }
+  return out;
+}
+
+/** How many people OTHER than `exclude` could decide a proposal at this scope. Any lookup failure counts as "someone else exists". */
 export async function eligibleReviewersExcept(
   scope: RunbookScope, owner: string | null, area: string | null, exclude: ReadonlyArray<string | null | undefined>,
 ): Promise<number> {
-  const skip = new Set(exclude.filter((x): x is string => typeof x === 'string' && x.length > 0));
   try {
-    const { listUsers } = await import('../providers/identity.js');
-    const { personOnInitiative } = await import('./initiative-scope.js');
-    const initiative = scope.kind === 'initiative' && scope.ref ? scope.ref : area;
-    let n = 0;
-    for (const u of await listUsers({ authoritative: true })) {
-      if (skip.has(u.id) || (u.personId && skip.has(u.personId))) continue;
-      const roles = u.grants['orgiq'] ?? [];
-      if (roles.some((r) => (REVIEW_OVERRIDE_ROLES as readonly string[]).includes(r))) { n += 1; continue; }
-      if (owner && (owner === u.id || owner === u.personId)) { n += 1; continue; }
-      if (initiative && u.personId && roles.some((r) => (STEWARD_ROLES as readonly string[]).includes(r))
-        && await personOnInitiative(u.personId, initiative)) n += 1;
-    }
-    return n;
+    return (await eligibleReviewerIds(scope, owner, area, exclude)).length;
   } catch {
     return 1;
   }

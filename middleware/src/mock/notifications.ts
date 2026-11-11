@@ -9,7 +9,7 @@
 // every `POST /api/__mock/reset` / scenario switch — the store is a copy of
 // the rows, the same trap as the devbox fleet, so mock-control rehydrates it.
 //
-// One item of each kind the producers make, for the curated cast, each in a
+// One item of each kind the producers make (including the runbook proposal waiting for review), for the curated cast, each in a
 // tenant its recipient holds a grant in (the seed goes through the same grant
 // rule as a live item, so a row for the wrong person seeds nothing):
 //   - a reply        (assessment, u-farah ← Jonas, on the Rubric Overview thread)
@@ -169,6 +169,16 @@ function seedNotifications(): MockNotificationRow[] {
       href: '/iq/projects/p-auth-migration', actionLabel: 'Open the initiative',
       timestamp: clock.hoursAgo(1),
       extra: { kind: 'call-missed', callerId: 'u-nora', callerName: 'Nora DaSilva', reason: 'no-answer', channel: 'initiative:p-auth-migration' },
+    },
+    // The seeded open runbook proposal (mock/runbooks.seed.ts, prop-tenant-cutover-callback) waiting on the
+    // org-leader: the same item the filing notice makes (lib/runbooks/notices.ts), seeded so the bell shows it
+    // without a model run.
+    {
+      id: 'mock-notif-runbook-proposal-cutover', userId: 'u-release', tenant: 'orgiq', type: 'approval-requested',
+      title: 'A change to the tenant cutover runbook is waiting for review',
+      body: 'A run followed it and failed at step 2: the tenant\'s origin was never on the Cognito callback list. The change adds that step before the flag flip.',
+      href: '/iq/runbooks/proposals/prop-tenant-cutover-callback', actionLabel: 'Review the proposal', timestamp: clock.hoursAgo(1.5),
+      extra: { kind: 'runbook-proposal', event: 'filed', proposalId: 'prop-tenant-cutover-callback', proposalKind: 'edit', runbookId: 'rb-tenant-cutover' },
     },
     // Derived from the approval queue's own pending row, never typed beside it:
     // the bell and /admin/observability/approvals must be asking the same

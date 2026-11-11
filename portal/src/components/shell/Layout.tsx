@@ -46,6 +46,7 @@ import { ConversationInputProvider } from '@connorhoehn/ui-components/social/ric
 // no active state. Seven other layouts never stopped importing these, so the
 // rails had also stopped agreeing with each other.
 import { useFetch } from '../../hooks/useFetch';
+import { useCapabilities } from '../../lib/capabilities';
 import { useSession } from '../../lib/auth';
 import { Breadcrumbs } from './Breadcrumbs';
 import { AmbientVisitorTargets } from '../ambient/AmbientVisitor';
@@ -323,6 +324,10 @@ function ShellLayout() {
   const { data: work, error: workError } = useFetch<WorkSummary>(
     orgiqPolls ? '/api/work/summary' : null, 15_000);
   useRefreshSessionOnDeny(workError);
+  // Open runbook proposals this person may decide: only a role that holds the review capability asks.
+  const { can: canDo } = useCapabilities();
+  const { data: runbookReviews } = useFetch<{ count: number }>(
+    orgiqPolls && canDo('ReviewRunbook') ? '/api/runbooks/proposals/review-count' : null, 30_000);
   const location = useLocation();
   const { pathname } = location;
   // Which rail gives way on a deep page (the library rail model): from three
@@ -441,7 +446,7 @@ function ShellLayout() {
   // Findings and queued jobs are not counted — those are the system working,
   // not the system waiting.
   const needsYou =
-    (work?.jobs['awaiting_review'] ?? 0) + (work?.proposals['pending'] ?? 0);
+    (work?.jobs['awaiting_review'] ?? 0) + (work?.proposals['pending'] ?? 0) + (runbookReviews?.count ?? 0);
 
   // Combine the tenant + platform items and order them by rail group
   // (Build → OrgIQ → Operate → System). Array.sort is stable, so items keep

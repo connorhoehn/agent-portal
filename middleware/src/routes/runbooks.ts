@@ -46,7 +46,7 @@ import { LAB_CALLBACK_SERVICE_AUTH, hasServiceAuth, requireServiceAuth } from '.
 import { RUN_TOKEN_HEADER, runTokenMatches } from '../lib/run-token.js';
 import type { Session } from '../lib/session.js';
 import { REVIEW_OVERRIDE_ROLES, actorId, mayReviewRunbook, type ReviewVerdict } from '../lib/runbook-review.js';
-import { personOnInitiative } from '../lib/initiative-scope.js';
+import { notifyDecided, notifyFiled, newProposalScope, proposalArea, reviewableOpenCount } from '../lib/runbooks/notices.js';
 import { unifiedDiff } from '../lib/unified-diff.js';
 import { loadCandidates } from '../lib/session-brief-preview.js';
 import { clock } from '../mock/core/clock.js';
@@ -398,6 +398,8 @@ export async function fileProposal(
     ...(runAuthored?.debrief ? { debrief: { ...runAuthored.debrief, converted_from_new: convertedFrom !== null } } : {}),
   };
   await s.putProposal(proposal);
+  // Tell the people who may review it; best effort, never part of the filing's outcome.
+  await notifyFiled(s, proposal);
   return { status: 201, body: { proposal: proposalView(proposal), ...(convertedFrom ? { converted_from_new: convertedFrom } : {}) }, proposal };
 }
 
@@ -498,6 +500,13 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     });
     const items = kind ? page.items.filter((p) => p.kind === kind) : page.items;
     res.json({ proposals: items.map((p) => proposalView(p)), next: page.next });
+  }));
+
+  /** The rail's number: open proposals this caller may decide now (their own and expired ones excluded). */
+  router.get('/proposals/review-count', ...readGate, handler(async (req, res) => {
+    const sess = session(req);
+    const { actor, personId } = await actorId(sess);
+    res.json({ count: await reviewableOpenCount(await store(), sess, actor, personId, Date.parse(now())) });
   }));
 
   router.get('/proposals/:pid', ...readGate, handler(async (req, res) => {
@@ -807,6 +816,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
         retire: { reason, superseded_by: supersededBy },
       });
       noteSearchWriteSoon({ type: 'knowledge', id: result.runbook.id });
+      await notifyDecided(result.proposal, 'accepted', [actor, d.sess.sub]);
       res.json({ proposal: result.proposal, runbook: result.runbook, version: null });
       return;
     }
@@ -861,6 +871,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
       const version = { ...versionOf({ runbook_id: target!.id, version: target!.current_version + 1, doc, author, provenance, files }), ...stamp };
       const result = await s.acceptProposal({ proposal_id: p.id, decided_by: actor, at, note, version });
       noteSearchWriteSoon({ type: 'knowledge', id: result.runbook.id });
+      await notifyDecided(result.proposal, 'accepted', [actor, d.sess.sub]);
       res.json({ proposal: result.proposal, runbook: result.runbook, version: result.version });
       return;
     }
@@ -877,6 +888,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const version = { ...versionOf({ runbook_id: id, version: 1, doc, author, provenance, files }), ...stamp };
     const result = await s.acceptProposal({ proposal_id: p.id, decided_by: actor, at, note, runbook, version });
     noteSearchWriteSoon({ type: 'knowledge', id: result.runbook.id });
+    await notifyDecided(result.proposal, 'accepted', [actor, d.sess.sub]);
     res.status(201).json({ proposal: result.proposal, runbook: result.runbook, version: result.version });
   }));
 
@@ -892,6 +904,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     if (!d) return;
     if (d.soleReviewer) await s.putProposal({ ...d.p, decided_as: 'sole-reviewer-dispatcher' });
     const proposal = await s.decideProposal({ proposal_id: d.p.id, decision: 'rejected', decided_by: d.actor, at: now(), note });
+    await notifyDecided(proposal, 'rejected', [d.actor, d.sess.sub]);
     res.json({ proposal });
   }));
 
@@ -916,32 +929,6 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const proposal = await s.decideProposal({ proposal_id: p.id, decision: 'withdrawn', decided_by: actor, at: now(), note });
     res.json({ proposal });
   }));
-
-  /**
-   * R8: the initiative a proposal came from, the "area" whose SMEs steward a cross-project skill.
-   * The proposer must not be able to pick it (that would pick their reviewer):
-   *   - a run proposal's work item came from the run's frozen brief (the POST ignores the body's), so it stands;
-   *   - a person's work item counts only on an initiative the proposer owns or contributes to
-   *     (lib/initiative-scope.ts, the one "mine" rule); otherwise the proposal has no area and
-   *     only an org-leader (or admin) decides it.
-   */
-  async function proposalArea(p: RunbookProposal): Promise<string | null> {
-    if (!p.source.work_item_id) return null;
-    let initiative: string | null = null;
-    try {
-      const { getWorkItem } = await import('../providers/work-items.js');
-      initiative = (await getWorkItem(p.source.work_item_id))?.projectId ?? null;
-    } catch { return null; }
-    if (!initiative) return null;
-    if (p.source.kind === 'run') return initiative;
-    return (await personOnInitiative(p.source.person_id, initiative)) ? initiative : null;
-  }
-
-  async function newProposalScope(p: RunbookProposal): Promise<RunbookScope> {
-    if (p.proposed_files?.length) return { kind: 'org', ref: null };
-    const area = await proposalArea(p);
-    return area ? { kind: 'initiative', ref: area } : { kind: 'org', ref: null };
-  }
 
   router.post('/proposals/:pid/merge', ...reviewGate, handler(async (req, res) => {
     const s = await store();

@@ -184,6 +184,7 @@ export async function fileRetire(s: RunbookStore, due: RetireDue, at: string): P
     retire_evidence: { rule: due.rule, run_refs: due.runRefs, model: due.model },
   };
   await s.putProposal(proposal);
+  await (await import('./notices.js')).notifyFiled(s, proposal);
   return proposal;
 }
 
@@ -192,6 +193,11 @@ export async function afterReportSaved(report: RunReport, deps: UpkeepDeps): Pro
   const at = deps.nowIso();
   const nowMs = Date.parse(at);
   const expired = await expireStaleProposals(deps.runbooks, at);
+  // Three days before the rest expire, their reviewers hear about it once. Best effort.
+  try {
+    const { notifyExpiring } = await import('./notices.js');
+    await notifyExpiring(deps.runbooks, await allProposals(deps.runbooks, { status: ['open'] }), at);
+  } catch { /* the sweep never fails over a notice */ }
   const { allReports } = await import('../run-reports/record.js');
   const reports = await allReports(deps.reports);
   // Debrief requests whose worker never came back free their place in the queue (and their hold).

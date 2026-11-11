@@ -233,6 +233,8 @@ export interface RunbookProposal {
   scripts_read?: { by: string; at: string; files: Array<{ path: string; sha256: string }> };
   /** Lane C: accepted by the run's own dispatcher because nobody else could review it (decision 11). */
   decided_as?: 'sole-reviewer-dispatcher' | null;
+  /** When the one three-days-before-expiry notice went to the reviewers; its presence is the de-duplication mark. */
+  expiry_notice_at?: string;
 }
 
 export type HealthStatus = 'proven' | 'drifting' | 'unproven';
