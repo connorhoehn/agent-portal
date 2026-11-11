@@ -859,3 +859,32 @@ Open:
 
 - Nothing seeds local compute ledger entries, so Lines shows $0 reported until a worker runs.
 - At 1280 wide and on phones the initiatives table shows in its card form (under 40rem of width beside three rails). The mark is there, but the page needs scrolling to find a highlighted row; the row is not scrolled into view.
+
+### Lane D: giving runbooks to a run
+
+Built on branch `learning-loop-lane-d`, not merged.
+
+- **Brief v3** (`middleware/src/lib/runbooks/brief.ts`, assembler version 3). Up to two runbooks chosen at freeze go into the brief as text, whole or not at all, inside the 6,000-token budget, each with its reason in words ("labels decom, runbook; shares tenant, cutover; on this initiative") and, when its health is drifting, the one-line warning. The task is never cut to make room. Earlier runs of the same work item that failed, were cancelled or were sent back by a reviewer are shown newest first, at most two, with outcome, failure code, summary, obstacles and what the reviewer asked for. The report section is the `lab-report` ask alone; `liveBundleSkills`, "Skills on this box" and the local framing's `lab` line are gone. The pointer at the installed library stays.
+- **Untrusted text.** The work item, the project line, decisions, previous attempts, runbook text and health warnings sit inside the middleware's fence (`lib/untrusted-text.ts`), with a token drawn at random per freeze and per preview and one note at the top saying what the fenced text is.
+- **The offer** is stored on the frozen brief as `offer: { runbooks: [{ id, version, title, reason, pinned, health, warning }], none_reason }`; an empty list is a stored result with its reason. `offeredFromBrief` reads it unchanged.
+- **One function.** `planRunBrief` (`lib/run-brief.ts`) loads the work item, its pins and its previous attempts, selects and assembles. The freeze and `GET /api/work-items/:id/brief-preview` both call it; the preview adds `offer`, `pins` and `previous_attempts` to its response. A test holds that preview and freeze agree.
+- **Pins.** `work_items.runbook_pins` (ordered `TEXT[]`), `PUT /api/graph/work-items/:id/runbook-pins` under the board's write gate and the item's initiative scope (in the scope matrix). Each id must be a published runbook whose scope admits the item.
+- **Evidence.** `GET /api/runbooks/evidence` and `GET /api/runbooks/:id/evidence` (`lib/runbooks/evidence.ts`), counted from run reports over 30 days at read time with sample sizes; a comparison against runs given nothing only when both sides have five runs of work sharing a label.
+- **Contract briefs.** Three composed briefs are pinned in `middleware/src/lib/runbooks/__tests__/fixtures/briefs/` (two runbooks given, none given, a previous attempt). A change to what a run is told fails `brief-contract.test.ts` until it is re-recorded and the diff reviewed.
+- **Acceptance.** 4, 5, 6 and 8 run on the mock in `routes/__tests__/learning-loop-offer-mock.test.ts`; 14 runs in `scripts/learning-loop/local-report-e2e.mjs` against the real worker and a stub `claude`.
+
+Decided where the design was silent:
+
+- A repo trigger alone no longer gives a runbook: the design gives nothing without a label hit or a shared term, and a repo trigger would hand every task in a repository the same runbook.
+- Decisions are capped at 1,500 tokens so a long decision log cannot crowd out attempts and runbooks; they are still dropped whole, oldest first.
+- The drift warning is printed for `drifting` only, not for an unproven runbook whose last run failed.
+- At most five pins per item; two are given and the rest wait.
+- A job with no work item is matched on its title and prompt, without pins or previous attempts.
+- The evidence's "followed" is what the run said in its report's `runbooks` entry (lane C adds it); until then every run is "unsaid", and the session's observed load is counted separately as `loaded`. Proposal counts are by stored status; "expired" waits for lane C's expiry.
+
+Left:
+
+- The work item page's pin control and the "Runbooks this run will get" panel, the run's Runbooks section and the evidence line (lane E).
+- Debrief cost on the evidence line (lane C).
+- The pins write has no entry in the wire capture's write policy, so its response shape is not captured.
+- The seeded scheduled run's brief (`mock/runbooks.seed.ts`) is assembled directly and gives no runbook; its offer reads "No runbook matched this work."
