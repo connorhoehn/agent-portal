@@ -28,7 +28,7 @@
 /** Who invokes this asset. Mirrors the MCP framing: model-driven, user-driven,
  *  or application-driven — the answer decides where it belongs and how much
  *  ceremony its release carries. */
-export const PROMPT_KINDS = ['system', 'prompt', 'evaluator', 'skill', 'insight'] as const;
+export const PROMPT_KINDS = ['system', 'prompt', 'evaluator'] as const;
 export type PromptKind = (typeof PROMPT_KINDS)[number];
 
 /** Blast radius. The tier — not a reviewer's memory — decides the gates. */

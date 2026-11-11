@@ -109,25 +109,6 @@ function seedCases(): EvalCase[] {
     ],
   },
 
-
-  {
-    id: 'ev-skill-reruns-before-filing', assetId: 'skill-flaky-test-triage',
-    name: 'reruns and diffs before filing, per the runbook',
-    variables: { test_name: 'kube_apiserver_parallel_test', suspect: 'a shared test fixture' },
-    assertions: [
-      { kind: 'contains', value: 'Rerunning' },
-      { kind: 'contains', value: 'kube_apiserver_parallel_test' },
-    ],
-  },
-  {
-    id: 'ev-skill-never-quarantines-blind', assetId: 'skill-flaky-test-triage',
-    name: 'never quarantines without evidence — the gotcha this skill was distilled from',
-    variables: { test_name: 'auth_session_rotation_test', suspect: 'clock skew in CI' },
-    assertions: [
-      { kind: 'contains', value: 'without evidence' },
-      { kind: 'contains', value: 'bug' },
-    ],
-  }
   ];
 }
 

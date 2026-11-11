@@ -607,7 +607,7 @@ export function App() {
           } />
           {/* Design reviews — the ADR threads that guide initiative designs.
               Read-open; answering and sign-off are gated by the API. */}
-          {/* The asset library — prompts, evaluators, skills, insights. Read
+          {/* The asset library — prompts, system prompts, evaluators. Read
               open to the tenant; authoring and deploy stay gated. */}
           <Route path="library" element={<Page element={<LibraryPage />} />} />
           {/* A per-asset URL: the page opens its drawer from the param. */}

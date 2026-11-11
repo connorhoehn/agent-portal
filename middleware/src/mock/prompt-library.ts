@@ -15,7 +15,7 @@
 //   2. IMPORT-TIME TIMESTAMPS (#3). `ago(h)` was
 //      `new Date(Date.now() - h * 3_600_000)` evaluated inside an array
 //      literal, so `updated 2h ago` meant two hours before the PROCESS
-//      BOOTED. A dev server up for a day showed a skill "updated 2h ago"
+//      BOOTED. A dev server up for a day showed an asset "updated 2h ago"
 //      that the corpus had aged 26 hours past.
 //
 // AGE IS THE CLAIM, NOT THE DAY, so nothing below uses `keepWithinToday`:
@@ -143,64 +143,16 @@ function seedAssets(): LibraryAssetRow[] {
         { name: 'document', type: 'longtext', required: true, source: 'untrusted' },
       ]),
     }),
-
-    // ── skill: the model discovers and loads it ──
-    asset({
-      id: 'skill-flaky-test-triage', name: 'Triage a flaky test',
-      description: 'Use when a test passes and fails without a code change. Reruns, diffs the outcomes, and files a bug with both logs.',
-      kind: 'skill', tier: 'internal', roles: ['sme'], tags: ['testing', 'runbook'],
-      ownerName: 'Layla Hassan', version: '3', lifecycleStatus: 'published', evalPassRate: 0.89,
-      usedBy: ['devbox', 'bot:obs-nightly-maintenance'], updatedAt: hoursAgo(14),
-    }),
-    asset({
-      id: 'skill-cold-start-aurora', name: 'Recover a cold Aurora Data API',
-      description: 'Use when the first Data API call after idle fails with HttpEndpointNotEnabled. Warms the endpoint and retries with backoff.',
-      kind: 'skill', tier: 'internal', roles: ['sme', 'hr-admin'], tags: ['aurora', 'runbook', 'infra'],
-      ownerName: 'Eli Garcia', version: '2', lifecycleStatus: 'published', evalPassRate: 0.97,
-      usedBy: ['devbox'], updatedAt: hoursAgo(26),
-    }),
-    // Two more skill assets, so the Skill filter lists more than one row.
-    asset({
-      id: 'skill-sso-origin-bringup', name: 'Bring SSO up on a new origin',
-      description: 'Use when standing Cognito SSO up on a new origin. Keeps the picker working until an HTTPS front door exists, then sets the callback in the order Cognito accepts.',
-      kind: 'skill', tier: 'internal', roles: ['sme', 'hr-admin'], tags: ['auth', 'cognito', 'runbook'],
-      ownerName: 'Mia Singh', version: '1', lifecycleStatus: 'published', evalPassRate: 0.91,
-      usedBy: ['devbox'], updatedAt: hoursAgo(8),
-    }),
-    asset({
-      id: 'skill-teardown-proposal', name: 'Propose an idle-capacity teardown',
-      description: 'Use when proposing a teardown of idle capacity. Attributes the spend to the owning initiative and names the floor removed, so the case is approvable in one meeting.',
-      kind: 'skill', tier: 'internal', roles: ['sme', 'org-leader'], tags: ['finops', 'runbook'],
-      ownerName: 'Nora DaSilva', version: '1', lifecycleStatus: 'published', evalPassRate: 0.88,
-      usedBy: ['devbox'], updatedAt: hoursAgo(6),
-    }),
-    asset({
-      id: 'skill-pr-review-scoped', name: 'Review a PR diff-scoped',
-      description: 'Use when reviewing a pull request. Comments only on changed lines and posts one risk summary.',
-      kind: 'skill', tier: 'internal', roles: ['sme', 'program-owner'], tags: ['review', 'runbook'],
-      ownerName: 'Caleb Turner', version: '1', lifecycleStatus: 'draft', evalPassRate: null,
-      usedBy: [], updatedAt: hoursAgo(2), signoffs: 0,
-      template: 'Review the pull request. Comment only on changed lines.',
-    }),
-
-    // ── insight: a fact injected, never run ──
-    asset({
-      id: 'insight-arm64-fargate', name: 'Fargate tasks here are ARM64',
-      description: 'The middleware image is built on Apple Silicon; x86 tasks die with exec format error.',
-      kind: 'insight', tier: 'internal', roles: ['sme', 'hr-admin'], tags: ['infra', 'gotcha'],
-      ownerName: 'Eli Garcia', version: '1', lifecycleStatus: 'published',
-      usedBy: ['devbox:SessionStart'], updatedAt: hoursAgo(96),
-    }),
   ];
 }
 
 /**
  * The catalog.
  *
- * `default` — the ten-asset demo corpus above.
+ * `default` — the six-asset demo corpus above.
  * `empty`   — nothing published. Declared explicitly: an undeclared scenario
  *             falls back to `default`, and "the library is empty" is the one
- *             state a ten-asset seed can never show. It is also the world
+ *             state a six-asset seed can never show. It is also the world
  *             that proves the facets render from an empty catalog rather
  *             than throwing.
  * `error`   — the catalog is unreadable. Throwing here is the POINT: live,

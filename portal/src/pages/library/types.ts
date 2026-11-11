@@ -1,6 +1,6 @@
 // Wire contracts for /api/library — the one catalog.
 
-export type AssetKind = 'system' | 'prompt' | 'evaluator' | 'skill' | 'insight';
+export type AssetKind = 'system' | 'prompt' | 'evaluator';
 export type AssetTier = 'sandbox' | 'internal' | 'endpoint';
 export type VarSource = 'literal' | 'caller' | 'retrieved' | 'untrusted';
 

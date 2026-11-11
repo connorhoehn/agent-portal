@@ -61,7 +61,7 @@ describe('deriveDefinitions — every source row yields exactly one definition',
     expect(defs.filter((d) => d.kind === 'assessment-command').every((d) => d.contextTenant === 'assessment')).toBe(true);
   });
 
-  it('each candidate on the RUNBOOK rung is exactly one runbook definition; an insight is none', () => {
+  it('each candidate on the RUNBOOK rung is exactly one runbook definition; any other candidate is none', () => {
     const rung = src.runbooks.filter(isRunbookCandidate);
     for (const c of rung) expect(ids.filter((i) => i === definitionIdFor.runbook(c.id))).toHaveLength(1);
     expect(defs.filter((d) => d.kind === 'runbook')).toHaveLength(rung.length);

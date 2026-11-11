@@ -140,10 +140,9 @@ describe('gateVerdict', () => {
 });
 
 describe('runEvals — the mock flow end-to-end', () => {
-  it('lists eval sets for the three seeded library assets', async () => {
+  it('lists eval sets for the two seeded library assets', async () => {
     expect((await listEvalSets('lib-csrf-check')).length).toBeGreaterThanOrEqual(3);
     expect((await listEvalSets('lib-stakeholder-email')).length).toBeGreaterThanOrEqual(2);
-    expect((await listEvalSets('skill-flaky-test-triage')).length).toBeGreaterThanOrEqual(2);
   });
 
   it('an asset with no eval set runs to an empty, null-pass-rate run', async () => {
@@ -177,9 +176,9 @@ describe('runEvals — the mock flow end-to-end', () => {
   });
 
   it('runs are retrievable by id and listed newest-first per asset', async () => {
-    const first = await runEvals('skill-flaky-test-triage', '1', 'a');
-    const second = await runEvals('skill-flaky-test-triage', '2', 'b');
-    const runs = await listRuns('skill-flaky-test-triage');
+    const first = await runEvals('lib-stakeholder-email', '1', 'a');
+    const second = await runEvals('lib-stakeholder-email', '2', 'b');
+    const runs = await listRuns('lib-stakeholder-email');
     expect(runs[0]?.id).toBe(second.id);
     expect(runs.some((r) => r.id === first.id)).toBe(true);
     expect(await getEvalRun(second.id)).toEqual(second);

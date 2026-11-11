@@ -1,8 +1,8 @@
 // The asset library — /api/library.
 //
 // One catalog for every kind of instruction the fleet runs on: agent system
-// prompts, prompts a person invokes, evaluators a pipeline calls, skills the
-// model discovers, and insights that are injected as fact. Reads are open to
+// prompts, prompts a person invokes, evaluators a pipeline calls. Runbooks, not this catalog, are the only place
+// procedures live. Reads are open to
 // the tenant, because knowing what the org's agents can be asked to do is not
 // privileged — authoring and deploying are (routes/prompt-history.ts,
 // canary-library.ts).

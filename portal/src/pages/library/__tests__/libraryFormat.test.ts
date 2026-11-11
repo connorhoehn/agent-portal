@@ -47,8 +47,8 @@ test('evalLabel distinguishes never-evaluated from zero', () => {
 });
 
 test('facetOptions offers only kinds present in the catalog, in canonical order', () => {
-  const opts = facetOptions({ skill: 2, prompt: 1, insight: 0 }, KIND_ORDER);
-  assert.deepEqual(opts, [{ value: 'prompt', count: 1 }, { value: 'skill', count: 2 }]);
+  const opts = facetOptions({ evaluator: 2, prompt: 1, system: 0 }, KIND_ORDER);
+  assert.deepEqual(opts, [{ value: 'prompt', count: 1 }, { value: 'evaluator', count: 2 }]);
 });
 
 import { readinessRows } from '../libraryFormat.ts';

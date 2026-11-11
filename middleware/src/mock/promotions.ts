@@ -89,34 +89,6 @@ function seedCandidates(): SeededCandidate[] {
       }),
     ],
   },
-  {
-    id: 'promo-adot-configurator',
-    proposedKind: 'insight',
-    title: 'Every source feed needs a pinned schema version',
-    rationale: 'A pure fact about how feeds change: no procedure to run, nothing to retry, just something every ingestion definition must declare. That makes it an insight for the review checklist, not a runbook to execute.',
-    dryRunRunId: null,
-    status: 'candidate',
-    observations: [
-      obs({
-        id: 'obs-adot-1', kind: 'gotcha', sessionId: 'sess-552', repo: 'orgiq-data-platform/transforms',
-        title: 'A vendor added a column mid-feed and the transform silently shifted every later column',
-        body: 'The events feed gained a nullable column on a Tuesday. The transform selected columns by position, so everything after it moved by one and nothing raised an error.',
-        initiativeId: 'p-data-lake', createdAt: ago(27),
-      }),
-      obs({
-        id: 'obs-adot-2', kind: 'gotcha', sessionId: 'sess-552', repo: 'orgiq-data-platform/transforms',
-        title: 'The shifted columns reached the dashboards before anyone noticed',
-        body: 'It took four days to notice: revenue by region looked plausible, just wrong. Nothing in the load report pointed at the feed.',
-        initiativeId: 'p-data-lake', createdAt: ago(27),
-      }),
-      obs({
-        id: 'obs-adot-3', kind: 'convention', sessionId: 'sess-670', repo: 'orgiq-data-platform/transforms',
-        title: 'Every ingestion definition must declare the schema version it expects',
-        body: 'Confirmed the same silent shift on a second feed that had copied an older transform. Checking the declared version at load time is now a standing review check.',
-        initiativeId: 'p-data-lake', createdAt: ago(9),
-      }),
-    ],
-  },
   // `driftedFrom: 'skl-custodian-sg-allowlist'` below is left as is: it points
   // at a skill that was demoted back to runbook (see the rationale), so the id
   // legitimately no longer resolves in mock/prompt-library.ts; it's a

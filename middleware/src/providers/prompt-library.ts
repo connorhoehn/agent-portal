@@ -10,11 +10,10 @@
 // So the catalog is keyed on two declared properties rather than on which
 // agent happens to consume it:
 //
-//   KIND  — who invokes it (system | prompt | evaluator | skill | insight)
+//   KIND  — who invokes it (system | prompt | evaluator)
 //   TIER  — how far the blast radius reaches (sandbox | internal | endpoint)
 //
-// A skill browser is therefore not a separate product: it is this list
-// filtered to kind='skill'. Same for evaluators. One index, one search, one
+// Evaluators are this list filtered to kind='evaluator'. One index, one search, one
 // set of facets — which is also what an AGENT needs, because progressive
 // disclosure is the same question ("which of these matches what I'm doing?")
 // asked by a model instead of a person.

@@ -1,10 +1,9 @@
 // Design → Library. One catalog for everything the fleet is instructed by.
 //
 // This replaces "Overview" as the front door, and it is deliberately ONE page
-// rather than a prompt browser plus a skill browser: a skill and a prompt
-// differ in who invokes them, which is a facet, not a separate product. Filter
-// to kind=skill and this IS the skill browser — same search, same detail, same
-// provenance panel.
+// rather than a prompt browser plus an evaluator browser: they differ in who
+// invokes them, which is a facet, not a separate product. Runbooks, not this
+// page, are the catalogue of procedures.
 //
 // Selecting an asset opens the next pane beside the catalog rails. URL state
 // restores both the selection and its filters through breadcrumbs and Back.
@@ -124,7 +123,7 @@ export default function LibraryPage() {
       // focusable and open on Enter/Space, so no text Button sits in the cell.
       render: (a) => (
         <Inline gap="sm" wrap={false} align="center" className="min-w-0" title={a.description ? `${a.name} — ${a.description}` : a.name}>
-          <FileKindMark kind={a.kind === 'skill' || a.kind === 'evaluator' ? 'workflow' : 'page'} size="md" variant="glyph" />
+          <FileKindMark kind={a.kind === 'evaluator' ? 'workflow' : 'page'} size="md" variant="glyph" />
           <T as="div" size="sm" tone="primary" className="block min-w-0 truncate">{a.name}</T>
           {a.lifecycleStatus === 'draft' && <Chip tone="neutral" size="xs">draft</Chip>}
         </Inline>
@@ -212,7 +211,7 @@ export default function LibraryPage() {
       ) : !(isLoading && !data) && emptyKind === 'catalog-empty' ? (
         <EmptyState
           title="Agent library has no assets yet"
-          description="Reusable assets include manually authored prompts, system prompts, evaluators and skills, plus skills promoted from runbooks."
+          description="Reusable assets include manually authored prompts, system prompts and evaluators. Procedures live in Runbooks."
           action={(
             <Link to="/iq/runbooks" className="text-xs font-semibold text-primary no-underline hover:underline">
               Open Runbooks →

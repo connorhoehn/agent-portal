@@ -14,10 +14,10 @@
 
 ALTER TABLE observability.prompt_version_meta
   -- Who invokes this asset: an agent's identity ('system'), a person
-  -- ('prompt'), a pipeline with no human in it ('evaluator'), the model
-  -- itself ('skill'), or nothing — a fact injected rather than run ('insight').
+  -- ('prompt') or a pipeline with no human in it ('evaluator'). Runbooks are
+  -- the only catalogue of procedures, so there is no skill or insight kind.
   ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'prompt'
-    CHECK (kind IN ('system','prompt','evaluator','skill','insight')),
+    CHECK (kind IN ('system','prompt','evaluator')),
 
   -- Blast radius, which is what decides the release gates. 'sandbox' answers
   -- to nobody; 'internal' is callable by the fleet; 'endpoint' is reachable

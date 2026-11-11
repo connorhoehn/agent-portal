@@ -31,7 +31,6 @@ import { voiceRouter } from './routes/voice.js';
 import { voiceLogRouter } from './routes/voice-log.js';
 import { designsRouter } from './routes/designs.js';
 import { libraryRouter } from './routes/library.js';
-import { sessionBundleRouter } from './routes/session-bundle.js';
 import { promptEvalsRouter } from './routes/prompt-evals.js';
 import { knowledgeBaseRouter } from './routes/knowledge-base.js';
 import { assessmentRouter } from './routes/assessment.js';
@@ -270,12 +269,9 @@ app.use('/api/me/spend', requireSession('MySpend'), meSpendRouter);
 // Design reviews — the ADR threads that gate initiative designs. Session
 // floor: readable by every signed-in orgiq role, writes gated per-route.
 app.use('/api/designs', requireTenant('orgiq'), requireSession('ViewDesigns'), designsRouter);
-// The asset library — prompts, evaluators, skills and insights in one
+// The asset library — prompts, system prompts and evaluators in one
 // catalog. Read-open to the tenant; authoring/deploy stay gated elsewhere.
 app.use('/api/library', requireTenant('orgiq'), requireSession('ViewLibrary'), libraryRouter);
-// What every Claude Code devbox session is configured with — hooks, bundled
-// skills, settings. Read-only.
-app.use('/api/session-bundle', requireTenant('orgiq'), requireSession('ViewSessionConfig'), sessionBundleRouter);
 // Per-asset eval sets — the thing that produces the pass rate decideDeploy
 // gates on. Until this existed the gate judged a number nothing computed.
 app.use('/api/library/evals', requireTenant('orgiq'), requireSession('ViewLibrary'), promptEvalsRouter);

@@ -6,8 +6,6 @@ export const KIND_LABEL: Record<AssetKind, string> = {
   system: 'System prompt',
   prompt: 'Prompt',
   evaluator: 'Evaluator',
-  skill: 'Skill',
-  insight: 'Insight',
 };
 
 /** What each kind means, in the terms that decide where it belongs: who
@@ -16,12 +14,10 @@ export const KIND_HINT: Record<AssetKind, string> = {
   system: 'an agent’s identity',
   prompt: 'a person runs it with inputs',
   evaluator: 'a pipeline runs it, no human',
-  skill: 'the model discovers and loads it',
-  insight: 'a fact injected, never run',
 };
 
-export const KIND_TONE: Record<AssetKind, 'neutral' | 'info' | 'warning' | 'purple' | 'success'> = {
-  system: 'neutral', prompt: 'info', evaluator: 'warning', skill: 'purple', insight: 'success',
+export const KIND_TONE: Record<AssetKind, 'neutral' | 'info' | 'warning'> = {
+  system: 'neutral', prompt: 'info', evaluator: 'warning',
 };
 
 export const TIER_LABEL: Record<AssetTier, string> = {
@@ -86,7 +82,7 @@ export function facetOptions<T extends string>(
   return order.filter((k) => (counts[k] ?? 0) > 0).map((k) => ({ value: k, count: counts[k] ?? 0 }));
 }
 
-export const KIND_ORDER: readonly AssetKind[] = ['system', 'prompt', 'evaluator', 'skill', 'insight'];
+export const KIND_ORDER: readonly AssetKind[] = ['system', 'prompt', 'evaluator'];
 export const TIER_ORDER: readonly AssetTier[] = ['sandbox', 'internal', 'endpoint'];
 
 /**

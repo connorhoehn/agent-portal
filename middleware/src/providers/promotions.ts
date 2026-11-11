@@ -20,7 +20,7 @@ export interface Observation {
   createdAt: string;
 }
 
-export type ProposedKind = 'insight' | 'runbook' | 'skill';
+export type ProposedKind = 'runbook' | 'skill';
 export type PromotionStatus = 'candidate' | 'approved' | 'dismissed' | 'promoted';
 
 export interface PromotionCandidate {

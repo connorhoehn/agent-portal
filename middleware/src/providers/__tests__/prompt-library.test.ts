@@ -163,14 +163,14 @@ describe('live mode — degrade', () => {
     bedrockSend.mockRejectedValueOnce(new Error('AccessDeniedException'));
     auroraExec.mockResolvedValueOnce([
       metaRow({ prompt_id: 'lib-a' }),
-      metaRow({ prompt_id: 'lib-b', kind: 'skill', tier: 'internal' }),
+      metaRow({ prompt_id: 'lib-b', kind: 'evaluator', tier: 'internal' }),
     ]);
 
     const { assets } = await listAssets();
     const ids = assets.map((a) => a.id).sort();
     expect(ids).toEqual(['lib-a', 'lib-b']);
     const b = assets.find((a) => a.id === 'lib-b');
-    expect(b?.kind).toBe('skill');
+    expect(b?.kind).toBe('evaluator');
     expect(b?.tier).toBe('internal');
   });
 

@@ -208,17 +208,10 @@ function simulateEmailOutput(vars: Record<string, string>): string {
   return `Subject: ${initiative} update for ${audience}\n\nHi ${audience},\n\n${boardState}\n\nTone: ${tone}.\n\nBest,\nOrgIQ`;
 }
 
-function simulateSkillOutput(vars: Record<string, string>): string {
-  const test = vars['test_name'] ?? 'the flaky test';
-  const suspect = vars['suspect'] ?? 'test setup';
-  return `Rerunning ${test} twice to isolate the flake. Diffing outcomes — nondeterminism traced to ${suspect}. Filing a bug with both run logs attached. Not quarantining without evidence.`;
-}
-
 function simulateOutput(assetId: string, vars: Record<string, string>): string {
   switch (assetId) {
     case 'lib-csrf-check': return simulateCsrfOutput(vars['diff'] ?? '');
     case 'lib-stakeholder-email': return simulateEmailOutput(vars);
-    case 'skill-flaky-test-triage': return simulateSkillOutput(vars);
     default: return '';
   }
 }

@@ -39,16 +39,15 @@ describe('timestamps come from the clock, not from import', () => {
       // Rebuild under the frozen clock — the factory samples at build time.
       libraryAssets.reset();
       const byId = new Map(libraryAssets.rows().map((a) => [a.id, a.updatedAt]));
-      // `skill-pr-review-scoped` is the 2-hours-ago row: 00:05 UTC minus two
+      // `lib-csrf-check` is the 3-hours-ago row: 00:05 UTC minus three
       // hours lands YESTERDAY, and that is correct here. Age is the claim —
       // both the table column and the drawer render it through relativeTime —
       // so nothing in this catalog uses `keepWithinToday`, and a clamp would
-      // make a two-hour-old asset read as five minutes old.
-      expect(byId.get('skill-pr-review-scoped')).toBe('2026-09-05T22:05:00.000Z');
+      // make a three-hour-old asset read as five minutes old.
       expect(byId.get('lib-csrf-check')).toBe('2026-09-05T21:05:00.000Z');
       expect(byId.get('orgiq-supervisor-system-prompt')).toBe('2026-09-04T18:05:00.000Z');
-      // 96 hours — the oldest row in the catalog.
-      expect(byId.get('insight-arm64-fargate')).toBe('2026-09-02T00:05:00.000Z');
+      // 72 hours — the oldest row in the catalog.
+      expect(byId.get('orgiq-search-system-prompt')).toBe('2026-09-03T00:05:00.000Z');
     } finally {
       restore();
       libraryAssets.reset();

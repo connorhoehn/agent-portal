@@ -5,7 +5,7 @@ import type { CollectionGrammar } from '../../components/collections/collectionC
 import { KIND_LABEL, KIND_ORDER } from './libraryFormat.ts';
 import type { LibraryAsset } from './types';
 
-/** `show skill assets`, `filter evaluator`, `show system prompt assets` … — the Kind select's options. */
+/** `show prompt assets`, `filter evaluator`, `show system prompt assets` … — the Kind select's options. */
 export const LIBRARY_GRAMMAR: CollectionGrammar = {
   noun: 'assets',
   filters: Object.fromEntries(KIND_ORDER.map((kind) => [KIND_LABEL[kind].toLowerCase(), kind])),

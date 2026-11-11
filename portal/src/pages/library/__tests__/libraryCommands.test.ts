@@ -5,7 +5,7 @@ import { LIBRARY_GRAMMAR, libraryTargets } from '../libraryCommands.ts';
 import type { LibraryAsset } from '../types';
 
 const asset = (id: string, name: string) => ({ id, name } as LibraryAsset);
-const assets = [asset('skill-pr-review', 'PR review'), asset('prompt-triage', 'Triage'), asset('eval-triage', 'Triage')];
+const assets = [asset('eval-pr-review', 'PR review'), asset('prompt-triage', 'Triage'), asset('eval-triage', 'Triage')];
 
 test('library: Kind phrases, search, reset and refresh drive the URL-backed state', async () => {
   const state = { q: 'x', kind: 'all', refreshes: 0, opened: '' };
@@ -15,13 +15,13 @@ test('library: Kind phrases, search, reset and refresh drive the URL-backed stat
   });
   for (const example of adapter.examples.filter((e) => !e.startsWith('open <'))) await adapter.execute(example);
   await adapter.execute('show system prompt assets'); assert.equal(state.kind, 'system');
-  await adapter.execute('filter skill'); assert.equal(state.kind, 'skill');
-  await adapter.execute('search assets for review'); assert.equal(state.q, 'review'); assert.equal(state.kind, 'skill');
-  for (const bad of ['delete PR review', 'promote all assets', 'show endpoint assets', 'retire skill-pr-review', 'open all']) {
+  await adapter.execute('filter evaluator'); assert.equal(state.kind, 'evaluator');
+  await adapter.execute('search assets for review'); assert.equal(state.q, 'review'); assert.equal(state.kind, 'evaluator');
+  for (const bad of ['delete PR review', 'promote all assets', 'show endpoint assets', 'retire eval-pr-review', 'open all']) {
     await assert.rejects(() => Promise.resolve(adapter.execute(bad)), bad);
   }
-  assert.equal(state.kind, 'skill'); assert.equal(state.q, 'review'); assert.equal(state.opened, '');
-  await adapter.execute('open pr review'); assert.equal(state.opened, 'skill-pr-review');
+  assert.equal(state.kind, 'evaluator'); assert.equal(state.q, 'review'); assert.equal(state.opened, '');
+  await adapter.execute('open pr review'); assert.equal(state.opened, 'eval-pr-review');
   await assert.rejects(() => Promise.resolve(adapter.execute('open Triage')), /multiple/);
   await adapter.execute('open eval-triage'); assert.equal(state.opened, 'eval-triage');
   await adapter.execute('clear filters'); assert.equal(state.kind, 'all'); assert.equal(state.q, '');
