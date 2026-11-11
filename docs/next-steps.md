@@ -1031,3 +1031,13 @@ The owner asked for a sweep for high-value software around initiatives, runs and
 Cleanup alongside: ~~the `local:distill` job kind~~. Nothing enqueued it; the kind, its mock cycle and its seed rows are gone, and an old worker that still advertises it is treated as offering an unknown kind.
 
 The first six packages are walked by their own journey, `npm run journey:value-sweep` in `portal/` (`scripts/journeys/learning-loop-value-sweep.mjs`), on the default mock world.
+
+All fourteen are built and walked: `npm run journey:value-sweep` covers each on the default mock world at 1440 and 1280. Left after the sweep, none blocking:
+
+- My work is empty for an account with no linked person (the default admin persona in the mock). Link the persona or say so on the page.
+- The spend report cannot filter to one bot; the bot page's link opens the whole bot grouping.
+- Global search lists runs and proposals under All results only; the component library's record types are a fixed list, so they have no tab of their own.
+- Ledger entries show a raw model id; the bot page's runs table clips its last column at 1280 (an older custom table).
+- No demo ledger entry has an unknown cost, and the default world has fewer runs than one page, so the walk asserts "unknown" and "Load older runs" only when present.
+- Retry sits behind the Findings requeue's capability, which an org leader does not hold. Left as is; say if leaders should retry.
+- No notice on a proposal's merge or withdrawal.
