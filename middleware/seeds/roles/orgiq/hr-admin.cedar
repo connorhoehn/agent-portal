@@ -30,6 +30,9 @@ permit (
     OrgIQ::Action::"ManageCanary",
     OrgIQ::Action::"ManageKB",
     OrgIQ::Action::"ManageDevbox",
+    // The lab's drive (start, rename, stop, remove a computer), split out of
+    // ManageDevbox on 11 Nov 2026; hr-admin held it through ManageDevbox and keeps it.
+    OrgIQ::Action::"OperateDevbox",
     OrgIQ::Action::"ManageBots",
     OrgIQ::Action::"ManageUsers",
     // Dispatch agent runs against initiatives (bots, marketplace authorize).

@@ -693,12 +693,12 @@ export function navigatePageIds(tenant: string | null, role?: string): string[] 
 /**
  * What `computer` may do and the Cedar action of the button each stands in
  * for (catalogue v2, V2-8): the Computer Lab's + Computer and its remove
- * (ManageDevbox), the shell tab and the safe-mode command (OpenDevboxShell),
+ * (OperateDevbox, the lab's drive), the shell tab and the safe-mode command (OpenDevboxShell),
  * and Local compute's "Hand it work" (ConnectLocalCompute). The dock checks
  * the action with can() before any request; every route checks it again.
  */
 export const COMPUTER_ACTIONS: Readonly<Record<string, CapabilityAction>> = {
-  start: 'ManageDevbox', stop: 'ManageDevbox', 'open-shell': 'OpenDevboxShell', run: 'OpenDevboxShell', 'hand-work': 'ConnectLocalCompute',
+  start: 'OperateDevbox', stop: 'OperateDevbox', 'open-shell': 'OpenDevboxShell', run: 'OpenDevboxShell', 'hand-work': 'ConnectLocalCompute',
 };
 
 export const VOICE_TOOLS: readonly VoiceTool[] = [
@@ -798,7 +798,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     kind: 'machine', backing: 'work', confirm: true, confirmBy: 'click', sayToConfirm: 'go ahead', action: null,
     noConfirm: { action: ['open-shell'] },
     actionBy: { arg: 'action', actions: COMPUTER_ACTIONS },
-    gate: "per action (COMPUTER_ACTIONS): start ManageDevbox + stewardship of the initiative; stop ManageDevbox and only a box the caller started (ownerId, checked by the dock; the route's own visibility check again); open-shell and run OpenDevboxShell, run in mode 'safe' only; hand-work ConnectLocalCompute on the caller's own machine, a work item grant-scoped and a bot ManageBots (server-side)",
+    gate: "per action (COMPUTER_ACTIONS): start OperateDevbox + stewardship of the initiative; stop OperateDevbox and only a box the caller started (ownerId, checked by the dock; the route's own visibility check again); open-shell and run OpenDevboxShell, run in mode 'safe' only; hand-work ConnectLocalCompute on the caller's own machine, a work item grant-scoped and a bot ManageBots (server-side)",
     spend: 'devbox', idempotent: false, says: 'Starting a computer for Alpha.', tenants: ['orgiq'],
     mapsTo: "start: GET /api/graph/projects, then useCompute().create({ label, projectId }) -> POST /api/devbox/boxes; stop: GET /api/devbox/boxes, then useCompute().remove(id) -> DELETE /api/devbox/boxes/:boxId; open-shell: openShell({ id, label, sessionId, cwd }) -> POST /api/devbox/:sessionId/shell-url; run: GET /api/devbox/allowlist, then POST /api/devbox/:sessionId/command { command, mode: 'safe', cwd }; hand-work: GET /api/local-compute/nodes, GET /api/work/suggestions, GET /api/bots, then POST /api/local-compute/nodes/:nodeId/work { workItemId | botId, requiresReview: true }",
   },

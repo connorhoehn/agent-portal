@@ -30,6 +30,9 @@ export type Action =
   // 409 self-approval), so a `true` here is "may ever", not "may this one".
   | 'OpenDevboxShell'
   | 'RunDevboxTask'
+  // The lab's drive — start, rename, stop and remove a computer — split out of
+  // ManageDevbox (11 Nov 2026) so a leader can drive the lab without configuring it.
+  | 'OperateDevbox'
   | 'DecideAgentChange'
   | 'DeliverAgentChange'
   | 'ManageSdlcPolicies'

@@ -155,7 +155,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // and lib/devbox-visibility.ts then scopes the fleet to this SME's own
       // computers plus the ones shared on initiatives they are attached to.
       // Granting the capability is not granting the fleet.
-      'DispatchAgentRun', 'ManageSprints', 'ManageDevbox', 'EnterEnvironment',
+      'DispatchAgentRun', 'ManageSprints', 'ManageDevbox', 'OperateDevbox', 'EnterEnvironment',
       // Standing up template bots / loop crons for mundane work is the SME's
       // own job — the dispatch pipeline's money brakes still govern the spend.
       'ManageBots', 'ConnectLocalCompute',
@@ -189,6 +189,10 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       'ManageCanary', 'DispatchAgentRun', 'ManageBudgets', 'ManageSprints', 'ManageBots',
       'ApproveTransaction', 'EnterEnvironment', 'ManageEnvironments', 'ConnectLocalCompute',
       'ViewSessionBrief', 'ReviewRunbook',
+      // The lab's drive (11 Nov 2026): a leader who dispatches runs can start, rename,
+      // stop and hand work to a lab computer. The lab's configuration (ManageDevbox)
+      // and the shell (OpenDevboxShell) stay with the operators.
+      'OperateDevbox', 'RunDevboxTask',
       // §9 items 8b and 8c: the SDLC policy editor and the guardrail editor.
       'ManageSdlcPolicies', 'EditGuardrail', 'VoiceNavigate', 'DecideDecision',
     ],
@@ -199,7 +203,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       'Search', 'ViewOrgChart', 'ViewLeaderboard', 'ViewSalary', 'ViewPerformance',
       'EditGuardrail', 'EditPolicy', 'EditSchema', 'ViewIdentityAdmin', 'ViewObservability',
       'LabelFeedback', 'ViewWorkItems', 'ManageIngest', 'ManageCanary', 'ManageKB', 'ManageDevbox',
-      'ManageBots', 'ManageUsers', 'DispatchAgentRun', 'ManageBudgets', 'ManageEnvironments',
+      'OperateDevbox', 'ManageBots', 'ManageUsers', 'DispatchAgentRun', 'ManageBudgets', 'ManageEnvironments',
       'ConnectLocalCompute', 'ViewSessionBrief',
       // DE-42: hr-admin held all of these through ManageDevbox and keeps them
       // (losing shell/task is an open decision). It no longer edits SDLC
@@ -663,6 +667,9 @@ describe('schema completeness (AVP rejects undeclared actions)', () => {
 // held ManageDevbox (sme, hr-admin, admin) hold the new actions. Policy
 // editing is ManageSdlcPolicies (§9 item 8b): org-leader and admin only, never
 // a role that holds ManageDevbox (the gated do not move the gates, DE-43).
+// Since the lab drive (11 Nov 2026) org-leader also holds RunDevboxTask: handing
+// work to a lab computer by hand is the DispatchAgentRun authority the role
+// already has, in the lab's form — still without ManageDevbox or the shell.
 // ---------------------------------------------------------------------------
 describe('DE-42 box and agent-change actions', () => {
   const BOX = ['OpenDevboxShell', 'RunDevboxTask', 'DecideAgentChange', 'DeliverAgentChange'];
@@ -670,7 +677,7 @@ describe('DE-42 box and agent-change actions', () => {
   const EXPECTED: Record<string, string[]> = {
     'orgiq/sme': BOX,
     'orgiq/hr-admin': BOX,
-    'orgiq/org-leader': ['ManageSdlcPolicies'],
+    'orgiq/org-leader': ['ManageSdlcPolicies', 'RunDevboxTask'],
   };
 
   test.each(NEW)('%s is granted to exactly the expected roles, and to none in the other four tenants', (action) => {
@@ -699,11 +706,12 @@ describe('DE-42 box and agent-change actions', () => {
     }
   });
 
-  test('program-owner and member hold none of them; org-leader holds only the policy editor', () => {
+  test('program-owner and member hold none of them; org-leader holds only the policy editor and, since the lab drive, the task', () => {
     for (const key of ['orgiq/program-owner', 'orgiq/member']) {
       for (const a of NEW) expect(role(key).granted).not.toContain(a);
     }
-    for (const a of BOX) expect(role('orgiq/org-leader').granted).not.toContain(a);
+    for (const a of BOX.filter((a) => a !== 'RunDevboxTask')) expect(role('orgiq/org-leader').granted).not.toContain(a);
+    expect(role('orgiq/org-leader').granted).toContain('RunDevboxTask');
   });
 });
 
@@ -730,5 +738,46 @@ describe('§9 item 8: guardrail editor, comments, program-owner budgets', () => 
     expect(role('orgiq/program-owner').granted).toContain('ManageBudgets');
     expect(role('orgiq/program-owner').forbidden).toContain('ManageBudgets');
     for (const key of ['orgiq/org-leader', 'orgiq/hr-admin']) expect(role(key).forbidden).not.toContain('ManageBudgets');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The lab's drive (11 Nov 2026). OperateDevbox — start, rename, stop and remove a
+// computer — split out of ManageDevbox so a role can hold it without the lab's
+// configuration authority. sme and hr-admin held it through ManageDevbox and
+// keep it; org-leader gains it (and RunDevboxTask) because a leader who
+// dispatches runs already starts microVMs and hands them work through the
+// governed path. program-owner stays on the lab's read tier, and the DE-43
+// line holds: no ManageDevbox role edits the SDLC policies, and org-leader
+// still holds neither ManageDevbox nor the shell.
+// ---------------------------------------------------------------------------
+describe('OperateDevbox: the lab drive', () => {
+  test('exactly sme, hr-admin and org-leader hold OperateDevbox, all in orgiq', () => {
+    const holders = [...roles.entries()]
+      .filter(([key, r]) => key !== '*/admin' && r.granted.includes('OperateDevbox'))
+      .map(([key]) => key).sort();
+    expect(holders).toEqual(['orgiq/hr-admin', 'orgiq/org-leader', 'orgiq/sme']);
+    for (const key of holders) expect(role(key).tenant).toBe('orgiq');
+  });
+
+  test('every role that holds ManageDevbox holds OperateDevbox — the split narrowed nobody', () => {
+    for (const [key, r] of roles) {
+      if (key === '*/admin' || !r.granted.includes('ManageDevbox')) continue;
+      expect([key, r.granted.includes('OperateDevbox')]).toEqual([key, true]);
+    }
+  });
+
+  test('org-leader drives the lab without configuring it: OperateDevbox and RunDevboxTask, not ManageDevbox or the shell', () => {
+    const leader = role('orgiq/org-leader').granted;
+    expect(leader).toEqual(expect.arrayContaining(['OperateDevbox', 'RunDevboxTask', 'DispatchAgentRun']));
+    expect(leader).not.toContain('ManageDevbox');
+    expect(leader).not.toContain('OpenDevboxShell');
+  });
+
+  test('program-owner and member stay on the read tier', () => {
+    for (const key of ['orgiq/program-owner', 'orgiq/member']) {
+      expect(role(key).granted).not.toContain('OperateDevbox');
+      expect(role(key).granted).not.toContain('RunDevboxTask');
+    }
   });
 });

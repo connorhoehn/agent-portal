@@ -37,6 +37,17 @@ permit (
     // Pair their own machine as a local presence node (see member.cedar for
     // why this is personal, not fleet, authority).
     OrgIQ::Action::"ConnectLocalCompute",
+    // Drive a lab computer by hand: start, rename, stop and remove one
+    // (OperateDevbox) and hand it work (RunDevboxTask). A leader who dispatches
+    // agent runs (DispatchAgentRun) already starts microVMs and hands them work
+    // through the governed path; the lab is the by-hand form of that authority.
+    // The lab's CONFIGURATION — linking codebases, capability writes, session
+    // bundles — is ManageDevbox, which this role does not hold: DE-43 keeps the
+    // policy editor (ManageSdlcPolicies, below) out of every ManageDevbox role,
+    // and the shell (OpenDevboxShell) stays with the operators. Decided 11 Nov
+    // 2026 (docs/next-steps.md, "Lane E5").
+    OrgIQ::Action::"OperateDevbox",
+    OrgIQ::Action::"RunDevboxTask",
     // Read the session brief a run was given (GET /api/runs/:ref/brief, the work-item
     // brief preview). Every role that can see work can see what a box was told.
     OrgIQ::Action::"ViewSessionBrief",

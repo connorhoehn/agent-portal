@@ -625,6 +625,16 @@
           ]
         }
       },
+      "OperateDevbox": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
       "RunDevboxTask": {
         "appliesTo": {
           "principalTypes": [

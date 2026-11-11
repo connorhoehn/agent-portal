@@ -31,6 +31,11 @@ permit (
     // shell those runs happen in, which is the contradiction this grant
     // removes.
     OrgIQ::Action::"ManageDevbox",
+    // The lab's drive — start, rename, stop and remove a computer — split out of
+    // ManageDevbox (11 Nov 2026) so a role can hold it without the lab's
+    // configuration authority. Role-wide for the same reason as ManageDevbox:
+    // the route layer scopes WHICH computers (own, and the initiative's).
+    OrgIQ::Action::"OperateDevbox",
     // Sprints have a steward — the SME accountable for that iteration creates
     // it and moves work into it. Cedar grants the capability role-wide; the
     // route layer (routes/sprints.ts requireInitiativeSteward) then scopes an

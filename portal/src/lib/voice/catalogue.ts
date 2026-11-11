@@ -463,7 +463,7 @@ export function queueWorkKinds(tenant: string | null): string[] {
 
 /** What `computer` may do and the Cedar action of the button each stands in for (the middleware's COMPUTER_ACTIONS, V2-8). */
 export const COMPUTER_ACTIONS: Readonly<Record<string, Action>> = {
-  start: 'ManageDevbox', stop: 'ManageDevbox', 'open-shell': 'OpenDevboxShell', run: 'OpenDevboxShell', 'hand-work': 'ConnectLocalCompute',
+  start: 'OperateDevbox', stop: 'OperateDevbox', 'open-shell': 'OpenDevboxShell', run: 'OpenDevboxShell', 'hand-work': 'ConnectLocalCompute',
 };
 export type ComputerAction = 'start' | 'stop' | 'open-shell' | 'run' | 'hand-work';
 

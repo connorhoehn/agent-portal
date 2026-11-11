@@ -41,6 +41,9 @@ import {
 
 import { canSee, visibleBoxes, FLEET_WIDE_ROLES, requireBoxAccess } from '../lib/devbox-visibility.js';
 import { requireAgentCapability, requireBoxAction } from '../lib/agent-actions.js';
+// Type-only: authz.ts drags config.ts (import.meta) into the graph, which the
+// suites that import this router cannot load (see lib/agent-actions.ts).
+import type { CapabilityAction } from '../lib/authz.js';
 import { stewardsInitiative } from '../lib/initiative-scope.js';
 import { asyncHandler } from '../lib/async-handler.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
@@ -378,6 +381,43 @@ export async function requireArn(res: Response): Promise<string | null> {
     return null;
   }
   return arn;
+}
+
+// ─── What a write to the lab asks Cedar for ─────────────────────────────────
+//
+// The `/api/devbox` mount (index.ts) lets every role that directs agent work
+// READ the fleet and asks this table before any write, instead of one action
+// for every write. Three answers:
+//
+//   OperateDevbox   start, rename, stop and remove a computer — the lab's
+//                   drive, split out of ManageDevbox (11 Nov 2026) so a leader
+//                   who dispatches runs can also drive a lab computer by hand.
+//                   Which computers stays the route's business (canSee,
+//                   stewardsInitiative), as it does for every other write.
+//   null            POST /:sessionId/task gates itself: requireBoxAction asks
+//                   RunDevboxTask with the box's attributes, which the sme
+//                   grant is conditioned on — a bare mount-level ask would
+//                   refuse an SME on their own computer.
+//   ManageDevbox    everything else: the shell (OpenDevboxShell at the route,
+//                   on top), codebases, capabilities, session bundles.
+//
+// A route not listed here is ManageDevbox — the table can only widen a route
+// by naming it, so a new write is gated the old way until someone decides
+// otherwise. devbox-lab-drive.test.ts walks the router and pins the table.
+
+const LAB_DRIVE: ReadonlyArray<{ method: string; path: RegExp; action: CapabilityAction | null }> = [
+  { method: 'POST', path: /^\/sessions\/?$/, action: 'OperateDevbox' },
+  { method: 'POST', path: /^\/boxes\/?$/, action: 'OperateDevbox' },
+  { method: 'PATCH', path: /^\/boxes\/[^/]+\/?$/, action: 'OperateDevbox' },
+  { method: 'DELETE', path: /^\/boxes\/[^/]+\/?$/, action: 'OperateDevbox' },
+  { method: 'DELETE', path: /^\/[^/]+\/?$/, action: 'OperateDevbox' },   // DELETE /:sessionId
+  { method: 'POST', path: /^\/[^/]+\/task\/?$/, action: null },           // its own RunDevboxTask gate
+];
+
+/** The Cedar action the `/api/devbox` mount asks for a write; null when the route gates itself. */
+export function devboxWriteAction(req: { method: string; path: string }): CapabilityAction | null {
+  const row = LAB_DRIVE.find((r) => r.method === req.method && r.path.test(req.path));
+  return row ? row.action : 'ManageDevbox';
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────

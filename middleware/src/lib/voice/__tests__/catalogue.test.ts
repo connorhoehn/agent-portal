@@ -126,7 +126,7 @@ describe('the §4 catalogue', () => {
   });
 
   it('computer gates each action on the button it stands in for (V2-8)', () => {
-    expect(COMPUTER_ACTIONS).toEqual({ start: 'ManageDevbox', stop: 'ManageDevbox', 'open-shell': 'OpenDevboxShell', run: 'OpenDevboxShell', 'hand-work': 'ConnectLocalCompute' });
+    expect(COMPUTER_ACTIONS).toEqual({ start: 'OperateDevbox', stop: 'OperateDevbox', 'open-shell': 'OpenDevboxShell', run: 'OpenDevboxShell', 'hand-work': 'ConnectLocalCompute' });
     expect(voiceTool('computer')).toMatchObject({ action: null, actionBy: { arg: 'action', actions: COMPUTER_ACTIONS }, tenants: ['orgiq'] });
     for (const a of Object.values(COMPUTER_ACTIONS)) expect(CAPABILITY_ACTIONS).toContain(a);
     expect(mockCallFor('orgiq', 'sme')).toMatchObject({ name: 'computer', arguments: { action: 'stop', computer: 'auth-migration-1' } });

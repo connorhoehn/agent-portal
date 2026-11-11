@@ -423,6 +423,22 @@ describe('§9 item 8: the program-owner budget forbid and the new org-leader gra
     expect(whenBody(general)).toBe('principal.role == "org-leader" && principal has tenant && principal.tenant == "orgiq"');
     expect(forbids(role('orgiq/org-leader')).some((s) => /ManageSdlcPolicies|EditGuardrail/.test(s))).toBe(false);
   });
+
+  test('the lab drive (11 Nov 2026): org-leader grants OperateDevbox and RunDevboxTask on the same general permit, and still not ManageDevbox or the shell', () => {
+    const general = permits(role('orgiq/org-leader'))[0]!;
+    for (const a of ['OperateDevbox', 'RunDevboxTask']) expect(general).toContain(`OrgIQ::Action::"${a}"`);
+    for (const a of ['ManageDevbox', 'OpenDevboxShell']) expect(general).not.toContain(`OrgIQ::Action::"${a}"`);
+    expect(Object.keys(schema.OrgIQ.actions)).toContain('OperateDevbox');
+  });
+
+  test('the lab drive: sme and hr-admin carry OperateDevbox on their general permit, unconditioned, beside ManageDevbox', () => {
+    for (const key of ['orgiq/sme', 'orgiq/hr-admin']) {
+      const general = permits(role(key))[0]!;
+      expect(general).toContain('OrgIQ::Action::"ManageDevbox"');
+      expect(general).toContain('OrgIQ::Action::"OperateDevbox"');
+      expect(whenBody(general)).not.toMatch(/onInitiative|ownsBox/);
+    }
+  });
 });
 
 // ===========================================================================

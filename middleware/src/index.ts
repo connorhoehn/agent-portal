@@ -102,7 +102,7 @@ import { workDocumentsRouter } from './routes/work-documents.js';
 import { workGraphRouter } from './routes/work-graph.js';
 import { kbAdminRouter } from './routes/kb-admin.js';
 import { gatewayProxyRouter } from './routes/gateway-proxy.js';
-import { devboxRouter, devboxReaperDeps } from './routes/devbox.js';
+import { devboxRouter, devboxReaperDeps, devboxWriteAction } from './routes/devbox.js';
 import { startReaper } from './lib/devbox-reaper.js';
 import { replicaId } from './lib/replica-fleet.js';
 import { attachSharedFleet } from './lib/devbox-fleet.js';
@@ -536,9 +536,12 @@ app.use('/api/sessions', requireTenant('orgiq'), requireSession('ViewSessions'),
 // a future portal page (no UI ships yet). Cedar-gated: the ManageDevbox
 // action must be allowed for the caller's role (open mode when no policy
 // store is configured, matching every other requireAction guard).
-// Reads for every role that directs agent work; writes still need
-// ManageDevbox (readForRolesElseAction fast-paths GET only, so POST /task,
-// /command and DELETE stay gated). This closes a contradiction: devbox-visibility.ts
+// Reads for every role that directs agent work (readForRolesElseAction
+// fast-paths GET only); a write asks the action routes/devbox.ts's
+// devboxWriteAction names for its route — OperateDevbox for the lab's drive
+// (start, rename, stop, remove a computer), the route's own RunDevboxTask gate
+// for handing work, ManageDevbox for everything else (the shell, codebases,
+// capabilities, session bundles). This closes a contradiction: devbox-visibility.ts
 // already lists org-leader in FLEET_WIDE_ROLES — it had decided what a leader
 // should SEE on the fleet — while this mount refused them the router outright,
 // making that visibility branch dead code and the nav item a door onto a wall.
@@ -552,7 +555,7 @@ app.use(
   '/api/devbox',
   // The tenant boundary used to be only the Cedar `when` (DE-42).
   requireTenant('orgiq'),
-  readForRolesElseAction(['org-leader', 'hr-admin', 'program-owner'], 'ManageDevbox'),
+  readForRolesElseAction(['org-leader', 'hr-admin', 'program-owner'], devboxWriteAction),
   devboxRouter,
 );
 // Local compute — developers' own machines announcing presence (and later,

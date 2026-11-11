@@ -43,6 +43,13 @@ export const CAPABILITY_ACTIONS = [
   'EditSchema',          // identity.ts — Cedar schema
   'EditGuardrail',       // capabilities.ts — guardrail config
   'ManageDevbox',        // box lifecycle, codebases, work queue, capabilities, session bundles (index.ts, work.ts, bots.ts, capabilities.ts)
+  // The lab's drive, split out of ManageDevbox the way DE-42 split the agent-code
+  // authorities: start, rename, stop and remove a computer (devbox.ts POST /sessions,
+  // POST + PATCH + DELETE /boxes, DELETE /:sid; the /api/devbox mount asks it through
+  // devboxWriteAction). Held by sme, hr-admin and org-leader: a leader who dispatches
+  // runs can drive a lab computer by hand without the lab's configuration authority
+  // (codebases, capability writes and session bundles stay ManageDevbox).
+  'OperateDevbox',
   // The agent-code authorities split out of ManageDevbox (DE-42). Conditioned
   // on `onInitiative` / `ownsBox` for sme, so session.ts probes them with a
   // representative resource (CAPABILITY_PROBE_ATTRS).
@@ -448,8 +455,17 @@ export async function isAllowed(principal: PrincipalRef, action: string, resourc
  * Use where a surface should be *viewable* more broadly than it is *writable* —
  * e.g. the knowledge-base registry, which org-leaders read but only hr-admins
  * change. `admin` always passes, matching requireAction's future bypass.
+ *
+ * `action` may also be a function of the request, for a router whose writes do
+ * not all carry one authority (routes/devbox.ts devboxWriteAction): it names the
+ * action to ask for this write, or returns null for a route that carries its
+ * own Cedar gate (one that needs the resource's attributes, which a mount-level
+ * ask cannot supply). The function is the router's own, so the table of what
+ * gates what sits next to the routes it describes, and its test walks them.
  */
-export function readForRolesElseAction(readRoles: Role[], action: string) {
+export type WriteAction = (req: Request) => string | null;
+
+export function readForRolesElseAction(readRoles: Role[], action: string | WriteAction) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const session = resolveSession(req);
     const role = (session?.role ?? DEFAULT_ROLE) as Role;
@@ -458,7 +474,13 @@ export function readForRolesElseAction(readRoles: Role[], action: string) {
       next();
       return;
     }
-    void requireAction(action)(req, res, next);
+    const asked = typeof action === 'function' ? action(req) : action;
+    if (asked === null) {
+      // The route gates itself; an unauthenticated caller still meets its gate.
+      next();
+      return;
+    }
+    void requireAction(asked)(req, res, next);
   };
 }
 
