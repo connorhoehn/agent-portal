@@ -1,5 +1,5 @@
-// Build → Runbooks: one module frame over three destinations
-// — Library, Proposals (with the open count) and Briefs. The section rail is a SubNavLayout; each
+// Build → Runbooks: one module frame over two destinations
+// — Library and Proposals (with the open count). The section rail is a SubNavLayout; each
 // destination draws ListRailLayout (a flush list rail beside it, then trail → title → record,
 // docs/layout-cascade.md). The Proposals count is polled (no gateway channel is needed to be correct).
 import { Link, Outlet, useLocation } from 'react-router';
@@ -9,7 +9,7 @@ import {
 } from '@connorhoehn/ui-components/shared';
 import { useShellBreadcrumbItems } from '../../components/shell/Breadcrumbs';
 import { useFetch } from '../../hooks/useFetch';
-import { briefsHref, proposalsHref, RUNBOOKS } from './runbooksModel';
+import { proposalsHref, RUNBOOKS } from './runbooksModel';
 import type { Proposal } from './types';
 
 /** What the module hands its destinations through the route outlet. */
@@ -20,7 +20,7 @@ export interface RunbooksOutletContext {
   refreshProposals: () => void;
 }
 
-type NavId = 'library' | 'proposals' | 'briefs';
+type NavId = 'library' | 'proposals';
 
 export default function RunbooksModule() {
   const { pathname } = useLocation();
@@ -28,11 +28,10 @@ export default function RunbooksModule() {
   const open = useFetch<{ proposals: Proposal[] }>('/api/runbooks/proposals?status=open&limit=200', 30_000);
   const openCount = open.data ? open.data.proposals.length : null;
 
-  const active: NavId = pathname.startsWith(proposalsHref()) ? 'proposals' : pathname.startsWith(briefsHref()) ? 'briefs' : 'library';
+  const active: NavId = pathname.startsWith(proposalsHref()) ? 'proposals' : 'library';
   const entries: Array<{ id: NavId; label: string; path: string; hint: string; count?: number; accent?: 'warning' }> = [
     { id: 'library', label: 'Library', path: RUNBOOKS, hint: 'Every runbook, by scope' },
     { id: 'proposals', label: 'Proposals', path: proposalsHref(), hint: 'Edits and new runbooks waiting for a reviewer', ...(openCount != null ? { count: openCount } : {}) },
-    { id: 'briefs', label: 'Briefs', path: briefsHref(), hint: 'What each run was told when it started' },
   ];
   const items: SubNavItem[] = entries.map((e) => ({ path: e.path, label: e.label, ...(e.count != null ? { count: e.count } : {}) }));
 

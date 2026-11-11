@@ -115,7 +115,6 @@ const LibraryPage = lazy(() => import('./pages/library/LibraryPage'));
 const RunbooksModule = lazy(() => import('./pages/runbooks/RunbooksModule'));
 const RunbooksLibraryTab = lazy(() => import('./pages/runbooks/LibraryTab'));
 const RunbooksProposalsTab = lazy(() => import('./pages/runbooks/ProposalsTab'));
-const RunbooksBriefsTab = lazy(() => import('./pages/runbooks/BriefsTab'));
 const WorkFindingsPage = lazy(() => import('./pages/work/FindingsPage'));
 const JobDetailPage = lazy(() => import('./pages/work/JobDetailPage'));
 const GraphChangesPage = lazy(() => import('./pages/work/GraphChangesPage'));
@@ -613,16 +612,13 @@ export function App() {
           {/* A per-asset URL: the page opens its drawer from the param. */}
           <Route path="library/:assetId" element={<Page element={<LibraryPage />} />} />
           {/* Runbooks: the fleet's procedural
-              memory. One module frame, three destinations — Library (a runbook
-              opens as a page: /iq/runbooks/:id), Proposals (/iq/runbooks/proposals/:pid
-              is the review page) and Briefs (/iq/runbooks/briefs/:ref is a run's frozen
-              brief). */}
+              memory. One module frame, two destinations — Library (a runbook
+              opens as a page: /iq/runbooks/:id) and Proposals (/iq/runbooks/proposals/:pid
+              is the review page); a run's frozen brief is on the run's page. */}
           <Route path="runbooks" element={<Page element={<RunbooksModule />} />}>
             <Route index element={<Page element={<RunbooksLibraryTab />} />} />
             <Route path="proposals" element={<Page element={<RunbooksProposalsTab />} />} />
             <Route path="proposals/:pid" element={<Page element={<RunbooksProposalsTab />} />} />
-            <Route path="briefs" element={<Page element={<RunbooksBriefsTab />} />} />
-            <Route path="briefs/:ref" element={<Page element={<RunbooksBriefsTab />} />} />
             <Route path=":id" element={<Page element={<RunbooksLibraryTab />} />} />
           </Route>
           <Route path="local-compute" element={<Page element={<LocalComputePage />} />} />

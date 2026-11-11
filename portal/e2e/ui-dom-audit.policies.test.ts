@@ -96,8 +96,8 @@ test('tenant policy: dashboards stay exempt unless their table is searchable; li
   assert.equal(tenantComposerPolicy({ tenant: 'orgiq', path: '/iq/prompt-ops', kind: 'page' }, { table: true })?.mode, 'required');
 });
 
-test('runbooks policy: the library, proposals, briefs and their records require the composer, whatever the evidence', () => {
-  for (const path of ['/iq/runbooks', '/iq/runbooks/proposals', '/iq/runbooks/briefs', '/iq/runbooks/rb-tenant-cutover', '/iq/runbooks/proposals/prop-0002', '/iq/runbooks/briefs/job-0002']) {
+test('runbooks policy: the library, proposals and their records require the composer, whatever the evidence', () => {
+  for (const path of ['/iq/runbooks', '/iq/runbooks/proposals', '/iq/runbooks/rb-tenant-cutover', '/iq/runbooks/proposals/prop-0002']) {
     assert.deepEqual(tenantComposerPolicy({ tenant: 'orgiq', path, kind: 'record' }, {}), { mode: 'required' }, path);
     assert.deepEqual(tenantComposerPolicy({ tenant: 'orgiq', path, kind: 'record' }, { missingRecord: true, form: true, placeholder: true }), { mode: 'required' }, path);
   }

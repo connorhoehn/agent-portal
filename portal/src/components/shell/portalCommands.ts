@@ -153,8 +153,6 @@ export const PAGES: readonly PageEntry[] = [
     keywords: ['runbook', 'procedure', 'playbook', 'how to', 'steps', 'rollback', 'library', 'knowledge', 'guide', 'distillation', 'learned'] },
   { label: 'Runbook proposals',        hint: 'Edits and new runbooks waiting for a reviewer', path: '/iq/runbooks/proposals', tenant: 'orgiq',  group: 'Build', pageId: 'runbook-proposals',
     keywords: ['runbook', 'proposal', 'review', 'accept', 'reject', 'merge', 'diff', 'edit'] },
-  { label: 'Session briefs',           hint: 'The exact text a run was given when it started', path: '/iq/runbooks/briefs',    tenant: 'orgiq',  group: 'Build', pageId: 'session-briefs',
-    keywords: ['brief', 'session brief', 'frozen', 'context', 'sha', 'injection', 'run'] },
   // ── Org — organizational intelligence ──
   { label: 'Search', hint: 'Find records, ask questions, explore connections', path: '/iq/search', tenant: 'orgiq', group: 'Engage', pageId: 'search',
     keywords: ['ask', 'search', 'chat', 'agent', 'help', 'explore', 'graph', 'connections'] },

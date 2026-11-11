@@ -1,6 +1,6 @@
 import { runbookDisplayTitle } from './runbookTitles.ts';
 // Pure model of the Runbooks destination:
-// hrefs, list grouping, health, proposal rows, brief rows, the step markers
+// hrefs, list grouping, health, proposal rows, evidence sentences, the step markers
 // derived from applications, the honest messages for the API's refusals, the
 // markdown guard and the redirect from the retired /iq/distillation tree.
 // No React; relative imports carry their `.ts` so `node --test` runs it.
@@ -8,15 +8,13 @@ import { collectionCommandAdapter, resolveCollectionTarget } from '../../compone
 import type { CollectionCommandAdapter } from '../../components/collections/CollectionCommandHost.tsx';
 import { NO_NAMES, type Names } from './runbookNames.ts';
 import type {
-  BriefSummary, HealthStatus, LintFinding, Proposal, RunbookApplication, RunbookRow, RunbookScope, ScopeKind,
+  HealthStatus, LintFinding, LoopEvidence, Proposal, RunbookApplication, RunbookEvidence, RunbookRow, RunbookScope, ScopeKind,
 } from './types.ts';
 
 export const RUNBOOKS = '/iq/runbooks';
 export const runbookHref = (id: string, tab?: RecordTab | null) => `${RUNBOOKS}/${encodeURIComponent(id)}${tab && tab !== 'read' ? `?tab=${tab}` : ''}`;
 export const proposalsHref = () => `${RUNBOOKS}/proposals`;
 export const proposalHref = (id: string) => `${RUNBOOKS}/proposals/${encodeURIComponent(id)}`;
-export const briefsHref = () => `${RUNBOOKS}/briefs`;
-export const briefHref = (runRef: string) => `${RUNBOOKS}/briefs/${encodeURIComponent(runRef)}`;
 
 export type RecordTab = 'read' | 'history' | 'runs' | 'suggest';
 export const RECORD_TABS: readonly RecordTab[] = ['read', 'history', 'runs', 'suggest'];
@@ -123,8 +121,18 @@ export function briefRefOfRun(runId: string | undefined): string | null {
 // ── Proposals ────────────────────────────────────────────────────────────────
 
 export const KIND_LABEL: Record<Proposal['kind'], string> = { new: 'New runbook', edit: 'Edit', retire: 'Retire' };
-export const PROPOSAL_STATUS_LABEL: Record<Proposal['status'], string> = { open: 'Open', accepted: 'Accepted', rejected: 'Rejected', merged: 'Merged' };
-export const PROPOSAL_STATUS_TONE: Record<Proposal['status'], 'info' | 'success' | 'error' | 'neutral'> = { open: 'info', accepted: 'success', rejected: 'error', merged: 'neutral' };
+export const PROPOSAL_STATUS_LABEL: Record<Proposal['status'], string> = { open: 'Open', accepted: 'Accepted', rejected: 'Rejected', merged: 'Merged', withdrawn: 'Withdrawn' };
+export const PROPOSAL_STATUS_TONE: Record<Proposal['status'], 'info' | 'success' | 'error' | 'neutral'> = { open: 'info', accepted: 'success', rejected: 'error', merged: 'neutral', withdrawn: 'neutral' };
+
+/** The status a person reads: a proposal that sat open past its fourteen days, or was withdrawn for it, is "Expired". */
+export function proposalStatusLabel(p: Pick<Proposal, 'status' | 'expired' | 'closed_reason'>): string {
+  if (p.status === 'open' && p.expired) return 'Expired';
+  if (p.status === 'withdrawn' && p.closed_reason === 'expired') return 'Expired';
+  return PROPOSAL_STATUS_LABEL[p.status];
+}
+
+/** Where a proposal came from, in words. */
+export const SOURCE_LABEL: Record<Proposal['source']['kind'], string> = { run: 'A run', person: 'A person', system: 'The library' };
 
 export function proposalTitle(p: Proposal, titles: ReadonlyMap<string, string>): string {
   const title = p.kind === 'new' ? p.proposed?.title ?? 'New runbook'
@@ -133,6 +141,7 @@ export function proposalTitle(p: Proposal, titles: ReadonlyMap<string, string>):
 }
 
 export function proposalAuthor(p: Proposal, names: Names = NO_NAMES): { name: string; kind: 'human' | 'agent' } {
+  if (p.source.kind === 'system') return { name: 'The library', kind: 'agent' };
   return p.source.kind === 'run'
     ? { name: names.run(p.source.run_ref), kind: 'agent' }
     : { name: names.person(p.source.person_id), kind: 'human' };
@@ -146,7 +155,7 @@ export function proposalRows(proposals: readonly Proposal[], titles: ReadonlyMap
     .map((p): ProposalRow => ({
       id: p.id, kind: p.kind, status: p.status, groupId: p.status === 'open' ? 'open' : 'decided',
       title: proposalTitle(p, titles),
-      subline: `${KIND_LABEL[p.kind]} · ${proposalAuthor(p, names).name}${p.status !== 'open' ? ` · ${PROPOSAL_STATUS_LABEL[p.status].toLowerCase()}` : ''}${p.lint.some((f) => f.severity === 'error') ? ' · lint errors' : ''}`,
+      subline: `${KIND_LABEL[p.kind]}${p.kind === 'retire' && p.retire_evidence ? ` (${p.retire_evidence.run_refs.length} ${p.retire_evidence.run_refs.length === 1 ? 'run' : 'runs'})` : ''} · ${proposalAuthor(p, names).name}${p.status !== 'open' || p.expired ? ` · ${proposalStatusLabel(p).toLowerCase()}` : ''}${p.lint.some((f) => f.severity === 'error') ? ' · lint errors' : ''}`,
     }))
     .filter((r) => terms.every((t) => `${r.id} ${r.title} ${r.subline}`.toLowerCase().includes(t)));
 }
@@ -156,7 +165,14 @@ export function proposalGroups(rows: readonly ProposalRow[]) {
     .map((g) => ({ ...g, count: rows.filter((r) => r.groupId === g.id).length })).filter((g) => g.count > 0);
 }
 
-export const PROPOSAL_STATUS_FILTERS: Record<string, string> = { open: 'open', accepted: 'accepted', rejected: 'rejected', merged: 'merged' };
+export const PROPOSAL_STATUS_FILTERS: Record<string, string> = { open: 'open', accepted: 'accepted', rejected: 'rejected', merged: 'merged', withdrawn: 'withdrawn' };
+export const PROPOSAL_KIND_FILTERS: Record<string, Proposal['kind']> = { new: 'new', edit: 'edit', retire: 'retire' };
+export const PROPOSAL_SOURCE_FILTERS: Record<string, Proposal['source']['kind']> = { run: 'run', person: 'person', system: 'system' };
+
+/** The proposals tab's three filters; null means "any". */
+export function filterProposals(proposals: readonly Proposal[], f: { kind: string | null; source: string | null; status: string | null }): Proposal[] {
+  return proposals.filter((p) => (!f.kind || p.kind === f.kind) && (!f.source || p.source.kind === f.source) && (!f.status || p.status === f.status));
+}
 
 export function proposalsCommandAdapter(rows: readonly { id: string; title: string }[], controls: {
   setQuery(v: string): void; setStatus(v: string | null): void; refresh(): void; open(id: string): void;
@@ -167,6 +183,52 @@ export function proposalsCommandAdapter(rows: readonly { id: string; title: stri
     scopeNote: 'Search matches proposal titles and authors; status filters the list. Open uses one exact proposal ID or title. Commands never accept, reject or merge a proposal.',
     open(target) { const row = resolveCollectionTarget(target, rows); controls.open(row.id); return `Opened ${row.title}.`; },
   });
+}
+
+/** Who a runbook will be given to, in words ("This runbook will be given to runs in repository X"). */
+export function scopeInWords(scope: RunbookScope, names: Names = NO_NAMES): string {
+  switch (scope.kind) {
+    case 'org': return 'This runbook will be given to runs anywhere in the organisation.';
+    case 'initiative': return `This runbook will be given to runs on the initiative ${names.initiative(scope.ref)}.`;
+    case 'repo': return `This runbook will be given to runs in the repository ${scope.ref ?? 'it names'}.`;
+    case 'tool': return `This runbook will be given to runs that use ${scope.ref ?? 'the tool'}.`;
+  }
+}
+
+export const sameScope = (a: RunbookScope, b: RunbookScope) => a.kind === b.kind && (a.ref ?? null) === (b.ref ?? null);
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** The evidence line at the top of Library: every figure with its count, none as a bare percentage. */
+export function evidenceSentences(e: LoopEvidence): string[] {
+  const out: string[] = [];
+  if (e.runs === 0) out.push(`In the last ${e.windowDays} days no run has reported.`);
+  else if (e.runsGiven === 0) out.push(`In the last ${e.windowDays} days ${plural(e.runs, 'run')} reported and none was given a runbook.`);
+  else {
+    out.push(`In the last ${e.windowDays} days ${e.runsGiven} of ${plural(e.runs, 'run')} ${e.runsGiven === 1 ? 'was' : 'were'} given a runbook.`);
+    out.push(`${e.runsSaidFollowed} of those ${e.runsGiven} said they followed one${e.runsSaidFollowed > 0 ? `, and ${e.runsSaidFollowedDone} of those ${e.runsSaidFollowed} finished done` : ''}.`);
+  }
+  const p = e.proposalsFromRuns;
+  out.push(`Proposals from runs: ${p.open} open, ${p.accepted} accepted, ${p.rejected} rejected, ${p.withdrawn} withdrawn or expired (${p.total} filed).`);
+  return out;
+}
+
+const minutes = (s: number | null) => (s == null ? 'no recorded time' : `${Math.round(s / 60)} min`);
+const dollars = (n: number | null, runs: number) => (n == null ? 'no cost figure' : `$${n.toFixed(2)} over ${plural(runs, 'run')}`);
+
+/** One runbook's evidence in sentences; the comparison only when the read returned one (five runs on each side). */
+export function runbookEvidenceSentences(e: RunbookEvidence): string[] {
+  if (e.given === 0) return [`No run in the last ${e.windowDays} days was given this runbook.`];
+  const f = e.followed;
+  const out = [
+    `In the last ${e.windowDays} days ${plural(e.given, 'run')} ${e.given === 1 ? 'was' : 'were'} given it: ${f.yes} said they followed it, ${f.partly} partly, ${f.no} did not, ${f.unsaid} did not say.`,
+    `${e.followedDone} of the ${f.yes + f.partly} that followed it finished done.`,
+  ];
+  const c = e.comparison;
+  if (c.available) {
+    out.push(`Against ${plural(c.withoutRunbook.runs, 'similar run')} given no runbook: median time ${minutes(c.withRunbook.medianDurationS)} with it (${plural(c.withRunbook.runs, 'run')}) and ${minutes(c.withoutRunbook.medianDurationS)} without it; mean cost ${dollars(c.withRunbook.meanCostUsd, c.withRunbook.costRuns)} with it and ${dollars(c.withoutRunbook.meanCostUsd, c.withoutRunbook.costRuns)} without it.`);
+  }
+  return out;
 }
 
 /** The diff text in the shape DiffViewer parses (a `diff --git` header over the API's ---/+++ hunks). */
@@ -188,12 +250,15 @@ export function refusalMessage(status: number, code: string | undefined, fallbac
   if (code === 'PROPOSAL_CLOSED') return 'Someone already decided this proposal. Reload to see the decision.';
   if (code === 'SELF_ACCEPT') return 'You cannot decide your own proposal; another reviewer has to.';
   if (code === 'OUT_OF_SCOPE') return fallback ?? 'You are not a reviewer for this runbook’s scope.';
+  if (code === 'EXPIRED') return 'This proposal expired: nobody decided it in fourteen days. Ask for a fresh one.';
+  if (code === 'SCRIPTS_UNREAD') return 'Tick each script to say you read it before accepting.';
+  if (code === 'WIDEN_UNCONFIRMED') return 'Giving this runbook a wider scope than its run needs a separate confirmation.';
   if (code === 'LINT') return 'The proposal has lint errors, so it cannot be accepted until they are fixed.';
   if (status === 403) return fallback ?? 'You do not have permission for this action.';
   return fallback ?? `The request failed (HTTP ${status}).`;
 }
 
-// ── Briefs ───────────────────────────────────────────────────────────────────
+// ── Files ────────────────────────────────────────────────────────────────────
 
 export const shortSha = (sha: string) => sha.slice(0, 12);
 
@@ -224,48 +289,6 @@ export function filesDiffSummary(d: { added: number; removed: number; files: Rea
   const n = [...by.values()].reduce((a, b) => a + b, 0);
   const parts = [...by.entries()].map(([k, c]) => `${c} ${k}`).join(', ');
   return `+${d.added} −${d.removed} · ${n} ${n === 1 ? 'file' : 'files'}${parts ? ` (${parts})` : ''}`;
-}
-
-/**
- * A brief's readable name: the task it set ("Tenant-by-tenant cutover"), else its run's name, and the
- * day it was frozen ("· Nov 9"). The sha is the row's secondary mono text, never its name (walk, 9 November).
- */
-export function briefTitle(b: Pick<BriefSummary, 'run_ref' | 'assembled_at' | 'task_title'>, names: Names = NO_NAMES): string {
-  const day = new Date(b.assembled_at);
-  const when = Number.isNaN(day.getTime()) ? '' : ` · ${day.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}`;
-  return `${b.task_title?.trim() || names.run(b.run_ref)}${when}`;
-}
-
-export interface BriefRow { id: string; groupId: string; title: string; subline: string; sha: string }
-export function briefRows(briefs: readonly BriefSummary[], q = '', names: Names = NO_NAMES): BriefRow[] {
-  const terms = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  return briefs
-    .map((b): BriefRow => {
-      const n = b.sections.filter((s) => s.kind === 'runbook').length;
-      return {
-        id: b.run_ref, groupId: b.assembled_at.slice(0, 10),
-        title: briefTitle(b, names),
-        subline: `${b.initiative_id ? `${names.initiative(b.initiative_id)} · ` : ''}${n} ${n === 1 ? 'runbook' : 'runbooks'}`,
-        sha: shortSha(b.sha256),
-      };
-    })
-    // The ids stay searchable (a run reference or a sha pasted from a log finds its brief) even though they are not the name.
-    .filter((r, i) => terms.every((t) => `${r.id} ${briefs[i]!.work_item_id ?? ''} ${r.title} ${r.subline} ${r.sha}`.toLowerCase().includes(t)));
-}
-export function briefGroups(rows: readonly BriefRow[]) {
-  const days = [...new Set(rows.map((r) => r.groupId))].sort().reverse();
-  return days.map((d) => ({ id: d, title: d, count: rows.filter((r) => r.groupId === d).length }));
-}
-
-export function briefsCommandAdapter(rows: readonly { id: string; title: string }[], controls: {
-  setQuery(v: string): void; refresh(): void; open(id: string): void;
-}): CollectionCommandAdapter {
-  return collectionCommandAdapter({ noun: 'briefs' }, {
-    id: 'runbooks-briefs-commands', label: 'Briefs',
-    setQuery: controls.setQuery, refresh: controls.refresh,
-    scopeNote: 'Search matches work items, run references and shas. Open uses one exact run reference or work item. Commands never change a frozen brief.',
-    open(target) { const row = resolveCollectionTarget(target, rows); controls.open(row.id); return `Opened the brief for ${row.title}.`; },
-  });
 }
 
 export const SECTION_KIND_LABEL: Record<string, string> = {

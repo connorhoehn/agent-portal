@@ -1,9 +1,9 @@
-// One runbook as a page: Read (the canonical markdown a box
-// receives, readably), History (versions and the diff between any two), Runs (each step with the last
+// One runbook as a page: Read (the canonical markdown a run
+// is given, readably), History (versions and the diff between any two), Runs (each step with the last
 // run's outcome, and every run that was given it) and Suggest an edit. Drifting and retired runbooks
 // say so above the text.
 import { useEffect, useMemo, useState } from 'react';
-import { useLocation, useSearchParams } from 'react-router';
+import { Link, useLocation, useSearchParams } from 'react-router';
 import { usePublishPageTabs } from '../../lib/voice/pageContext';
 import { ProcedureSteps, SourceList } from '@connorhoehn/ui-components';
 import { EditorShell } from '@connorhoehn/ui-components/doc-editor';
@@ -22,10 +22,10 @@ import { useRunbookNames } from './useRunbookNames';
 import type { Names } from './runbookNames';
 import { RunbookFiles } from './RunbookFiles';
 import {
-  HEALTH_LABEL, HEALTH_TONE, OUTCOME_LABEL, RECORD_TABS, briefHref, parseTab, proposalHref, refusalMessage, runPageHref,
-  runbookHref, scopeLabel, shortSha, stepMarkers, viewerDiff, type RecordTab,
+  HEALTH_LABEL, HEALTH_TONE, OUTCOME_LABEL, RECORD_TABS, parseTab, proposalHref, refusalMessage, runPageHref,
+  runbookHref, runbookEvidenceSentences, scopeLabel, stepMarkers, viewerDiff, type RecordTab,
 } from './runbooksModel';
-import type { LintFinding, RunbookApplication, RunbookRow, RunbookVersion } from './types';
+import type { LintFinding, RunbookApplication, RunbookEvidence, RunbookRow, RunbookVersion } from './types';
 
 const TAB_LABEL: Record<RecordTab, string> = { read: 'Read', history: 'History', runs: 'Runs', suggest: 'Suggest an edit' };
 
@@ -41,6 +41,7 @@ export function RunbookRecord({ id, summary, onOpen, onChanged }: {
   const tab = parseTab(params.get('tab'));
   const record = useFetch<RecordResponse>(`/api/runbooks/${encodeURIComponent(id)}`, 0);
   const applications = useFetch<{ applications: RunbookApplication[] }>(tab === 'runs' ? `/api/runbooks/${encodeURIComponent(id)}/applications` : null, 0);
+  const evidence = useFetch<{ evidence: RunbookEvidence }>(tab === 'runs' ? `/api/runbooks/${encodeURIComponent(id)}/evidence` : null, 0);
   const names = useRunbookNames();
   const title = record.data?.runbook.title ?? summary?.title;
   useCrumbLabel(id, title ? runbookDisplayTitle(title) : undefined);
@@ -91,7 +92,7 @@ export function RunbookRecord({ id, summary, onOpen, onChanged }: {
       <Stack gap="md" className={tab === 'read' ? 'h-full min-h-0 w-full px-6 py-4' : 'w-full max-w-4xl px-6 py-4'}>
         {tab === 'read' && <ReadTab runbook={runbook} version={current} names={names} onOpen={onOpen} />}
         {tab === 'history' && <HistoryTab runbook={runbook} names={names} />}
-        {tab === 'runs' && <RunsTab runbook={runbook} version={current} names={names} applications={applications.data?.applications ?? null} error={applications.error} onOpen={onOpen} />}
+        {tab === 'runs' && <RunsTab runbook={runbook} version={current} names={names} applications={applications.data?.applications ?? null} evidence={evidence.data?.evidence ?? null} error={applications.error ?? evidence.error} onOpen={onOpen} />}
         {tab === 'suggest' && <SuggestTab runbook={runbook} version={current} onOpen={onOpen} onChanged={() => { record.refresh(); onChanged(); }} />}
       </Stack>
     </EditorShell>
@@ -131,7 +132,7 @@ function ReadTab({ runbook, version, names, onOpen }: { runbook: RunbookRow; ver
         </Banner>
       )}
       {runbook.area && <T size="xs" tone="tertiary" data-testid="runbook-area">{`Area: ${names.initiative(runbook.area)}`}</T>}
-      <T size="xs" tone="tertiary" data-testid="runbook-health">{runbook.health.reason}</T>
+      <T size="xs" tone="tertiary" data-testid="runbook-health">{`${HEALTH_LABEL[runbook.health.status]}: ${runbook.health.reason} Health is derived from what runs said of this runbook, not from whether they finished.`}</T>
       <Stack gap="xs" className="shrink-0">
           <T size="sm" tone="secondary" wrap>{version.doc?.summary ?? runbook.summary}</T>
           {version.doc && <T size="xs" tone="secondary">{`${version.doc.steps.length} steps · ${version.doc.verify.length} checks · ${version.doc.rollback.length} rollback steps`}</T>}
@@ -141,16 +142,16 @@ function ReadTab({ runbook, version, names, onOpen }: { runbook: RunbookRow; ver
       <Disclosure summary="Files and provenance" variant="plain" density="compact" summaryClassName="px-0">
         <Stack gap="lg">
         {version.files && version.files.length > 0 && (
-          <DetailSection as="h2" variant="heading" title="Files" hint={`${version.files.length}`} description={`Skill name: ${runbook.id}. Every box receives this runbook as a skill in ~/.claude/skills.`}>
+          <DetailSection as="h2" variant="heading" title="Files" hint={`${version.files.length}`} description="Files that travel with this runbook. Every computer that can take one has it installed as a skill.">
             <Stack gap="sm">
-              <T size="xs" tone="tertiary" className="font-mono" data-testid="runbook-bundle-sha">{`bundle sha256 ${version.bundle_sha256 ? shortSha(version.bundle_sha256) : 'not recorded'}`}</T>
               <RunbookFiles files={version.files} />
             </Stack>
           </DetailSection>
         )}
         <DetailSection as="h2" variant="heading" title="Where it came from" hint={`v${version.version}`}>
           <Stack gap="sm">
-            <T size="xs" tone="tertiary" className="font-mono">{`sha256 ${shortSha(version.sha256)}${version.accepted_at ? ` · accepted ${relativeTime(version.accepted_at)}${version.accepted_by ? ` by ${names.person(version.accepted_by)}` : ''}` : ''}`}</T>
+            <T size="xs" tone="tertiary">{version.accepted_at ? `Accepted ${relativeTime(version.accepted_at)}${version.accepted_by ? ` by ${names.person(version.accepted_by)}` : ''}` : 'Seeded with the library'}</T>
+            {version.demo_data && <Chip tone="warning" size="xs" data-testid="runbook-demo-data">Demo data</Chip>}
             <SourceList aria-label="Provenance" emptyLabel="Written by hand; no run is cited." items={sources} data-testid="runbook-provenance" />
           </Stack>
         </DetailSection>
@@ -177,9 +178,13 @@ function HistoryTab({ runbook, names }: { runbook: RunbookRow; names: Names }) {
   const options = list.map((v) => ({ value: String(v.version), label: `v${v.version}` }));
   const columns: DataTableColumn<RunbookVersion>[] = [
     { key: 'version', header: 'Version', render: (v) => `v${v.version}`, numeric: true },
-    { key: 'author', header: 'Written by', render: (v) => (v.author.kind === 'run' ? names.run(v.author.id) : v.author.kind === 'migration' ? 'Migration' : names.person(v.author.id)) },
+    {
+      key: 'author', header: 'Written by',
+      render: (v) => (v.author.kind === 'run'
+        ? <Inline gap="xs" align="center" wrap><Link to={runPageHref(v.author.id)} onClick={(e) => e.stopPropagation()} data-testid={`version-run-${v.version}`}>{`From ${names.run(v.author.id)}`}</Link>{v.demo_data && <Chip tone="warning" size="xs">Demo data</Chip>}</Inline>
+        : v.author.kind === 'migration' ? 'Migrated from an earlier guide' : names.person(v.author.id)),
+    },
     { key: 'accepted', header: 'Accepted', render: (v) => (v.accepted_at ? `${relativeTime(v.accepted_at)}${v.accepted_by ? ` by ${names.person(v.accepted_by)}` : ''}` : 'Seeded') },
-    { key: 'sha', header: 'sha256', render: (v) => shortSha(v.sha256) },
   ];
   if (versions.error) return <UnavailableNotice error={versions.error} what="the version history" source="Versions are read from the runbook store" onRetry={versions.refresh} />;
   if (!versions.data) return <LoadingState label="Loading versions…" />;
@@ -210,28 +215,43 @@ function HistoryTab({ runbook, names }: { runbook: RunbookRow; names: Names }) {
   );
 }
 
-function RunsTab({ runbook, version, names, applications, error, onOpen }: {
+function RunsTab({ runbook, version, names, applications, evidence, error, onOpen }: {
   runbook: RunbookRow;
   names: Names;
   version: RunbookVersion;
   applications: RunbookApplication[] | null;
+  evidence: RunbookEvidence | null;
   error: string | null;
   onOpen: (href: string) => void;
 }) {
-  if (error) return <UnavailableNotice error={error} what="the runs that used this runbook" source="Applications are read from the runbook store" />;
-  if (!applications) return <LoadingState label="Loading runs…" />;
+  if (error) return <UnavailableNotice error={error} what="the runs that used this runbook" source="Runs are read from run reports" />;
+  if (!applications || !evidence) return <LoadingState label="Loading runs…" />;
   const steps = version.doc?.steps ?? [];
   const markers = stepMarkers(steps, applications, runbook.current_version);
-  const columns: DataTableColumn<RunbookApplication>[] = [
-    { key: 'run', header: 'Run', render: (a) => <T title={a.run_ref}>{`${names.run(a.run_ref)} · v${a.version}`}</T> },
-    { key: 'outcome', header: 'Outcome', render: (a) => `${OUTCOME_LABEL[a.outcome]}${a.failed_at_step ? ` at step ${a.failed_at_step}` : ''}` },
-    { key: 'note', header: 'Note', render: (a) => a.note ?? '' },
-    { key: 'at', header: 'When', render: (a) => relativeTime(a.at) },
+  const note = new Map(applications.map((a) => [a.run_ref, a.note ?? '']));
+  const SAID: Record<string, string> = { yes: 'Followed it', partly: 'Followed it in part', no: 'Did not follow it', unsaid: 'Did not say' };
+  const OUT: Record<string, string> = { done: 'Finished', failed: 'Failed', cancelled: 'Cancelled', 'needs-review': 'Waiting for review' };
+  type Row = { id: string; runRef: string; version: number | null; said: string; outcome: string; note: string; at: string };
+  const rows: Row[] = evidence.runs.map((r) => ({ id: r.runRef, runRef: r.runRef, version: r.version, said: SAID[r.followed] ?? r.followed, outcome: OUT[r.outcome] ?? r.outcome, note: note.get(r.runRef) ?? '', at: r.endedAt }));
+  for (const a of applications) {
+    if (rows.some((r) => r.runRef === a.run_ref)) continue;
+    rows.push({ id: a.id, runRef: a.run_ref, version: a.version, said: OUTCOME_LABEL[a.outcome], outcome: a.failed_at_step ? `Failed at step ${a.failed_at_step}` : '', note: a.note ?? '', at: a.at });
+  }
+  rows.sort((x, y) => y.at.localeCompare(x.at));
+  const columns: DataTableColumn<Row>[] = [
+    { key: 'run', header: 'Run', render: (r) => `${names.run(r.runRef)}${r.version ? ` · v${r.version}` : ''}` },
+    { key: 'said', header: 'What it said', render: (r) => r.said },
+    { key: 'outcome', header: 'Ended', render: (r) => r.outcome },
+    { key: 'note', header: 'Note', render: (r) => r.note },
+    { key: 'at', header: 'When', render: (r) => relativeTime(r.at) },
   ];
   return (
     <>
-      <DetailSection as="h2" variant="heading" first title="Runs that were given it" hint={`${applications.length} · open one to read its brief`}>
-        <DataTable data={[...applications].sort((a, b) => b.at.localeCompare(a.at))} columns={columns} keyField={(a) => a.id} frameless emptyMessage="No run has reported on this runbook yet. Open a row to read the brief that run was given." onRowClick={(a) => onOpen(briefHref(a.run_ref))} data-testid="runbook-applications" />
+      <DetailSection as="h2" variant="heading" first title="The last 30 days" data-testid="runbook-evidence">
+        <Stack gap="xs">{runbookEvidenceSentences(evidence).map((l) => <T key={l} size="sm" tone="secondary" wrap>{l}</T>)}</Stack>
+      </DetailSection>
+      <DetailSection as="h2" variant="heading" title="Runs that were given it" hint={`${rows.length} · open one to read its page`}>
+        <DataTable data={rows} columns={columns} keyField={(r) => r.id} frameless emptyMessage="No run has been given this runbook yet." onRowClick={(r) => onOpen(runPageHref(r.runRef))} data-testid="runbook-applications" />
       </DetailSection>
       <DetailSection as="h2" variant="heading" title="The steps" hint={applications.some((a) => a.version === runbook.current_version) ? `as the last run of v${runbook.current_version} went` : `no run of v${runbook.current_version} yet`}>
         <ProcedureSteps

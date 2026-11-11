@@ -84,7 +84,6 @@ export const NAVIGATE_PAGE_IDS: ReadonlyArray<{ id: string; tenants: readonly st
   { id: 'local-compute', tenants: ['orgiq'] },
   { id: 'runbooks', tenants: ['orgiq'] },
   { id: 'runbook-proposals', tenants: ['orgiq'] },
-  { id: 'session-briefs', tenants: ['orgiq'] },
   { id: 'search', tenants: ['orgiq'] },
   { id: 'communication', tenants: ['orgiq'] },
   { id: 'scores', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
@@ -214,7 +213,7 @@ export const ACTIVITY_SCOPES: Readonly<Record<string, readonly string[]>> = {
  * this list to the table).
  */
 export const LIST_KINDS: Readonly<Record<string, readonly string[]>> = {
-  orgiq: ['initiative', 'work-item', 'decision', 'design', 'job', 'finding', 'proposal', 'hitl-approval', 'consult', 'bot', 'run', 'computer', 'environment', 'runbook', 'runbook-proposal', 'change', 'sprint', 'deck', 'codebase', 'person', 'saved-search', 'library', 'brief', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
+  orgiq: ['initiative', 'work-item', 'decision', 'design', 'job', 'finding', 'proposal', 'hitl-approval', 'consult', 'bot', 'run', 'computer', 'environment', 'runbook', 'runbook-proposal', 'change', 'sprint', 'deck', 'codebase', 'person', 'saved-search', 'library', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
   social: ['channel', 'team', 'dm', 'room', 'recording', 'call', 'person'],
   assessment: ['team', 'run', 'feedback', 'submission', 'deck', 'recommendation', 'channel', 'social-team', 'dm', 'room', 'recording', 'call'],
   pipelines: ['run', 'definition', 'runbook', 'approval', 'artifact', 'deck', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
@@ -270,7 +269,7 @@ export function summaryKinds(tenant: string | null): string[] {
  * kind's href built from the id, never taken from the model).
  */
 export const OPEN_KINDS: Readonly<Record<string, readonly string[]>> = {
-  orgiq: ['initiative', 'work-item', 'decision', 'design', 'job', 'finding', 'proposal', 'hitl-approval', 'consult', 'bot', 'run', 'computer', 'runbook', 'runbook-proposal', 'change', 'sprint', 'deck', 'codebase', 'person', 'saved-search', 'library', 'brief', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
+  orgiq: ['initiative', 'work-item', 'decision', 'design', 'job', 'finding', 'proposal', 'hitl-approval', 'consult', 'bot', 'run', 'computer', 'runbook', 'runbook-proposal', 'change', 'sprint', 'deck', 'codebase', 'person', 'saved-search', 'library', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
   social: ['channel', 'team', 'dm', 'room', 'recording', 'call', 'person'],
   assessment: ['team', 'run', 'feedback', 'submission', 'deck', 'recommendation', 'channel', 'social-team', 'dm', 'room', 'recording', 'call'],
   pipelines: ['run', 'definition', 'runbook', 'approval', 'artifact', 'deck', 'channel', 'team', 'dm', 'room', 'recording', 'call'],

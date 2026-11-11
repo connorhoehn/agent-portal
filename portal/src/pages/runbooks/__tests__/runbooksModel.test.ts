@@ -2,11 +2,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  briefGroups, briefRefOfRun, briefRows, distillationRedirect, libraryCommandAdapter, libraryGroups, libraryRows, parseTab,
+  briefRefOfRun, distillationRedirect, evidenceSentences, filterProposals, proposalStatusLabel, runbookEvidenceSentences, sameScope, scopeInWords, libraryCommandAdapter, libraryGroups, libraryRows, parseTab,
   proposalGroups, proposalRows, fileLanguageLabel, fileModeLabel, filesDiffSummary, formatBytes, shortSha, SECTION_KIND_LABEL, refusalMessage, stepMarkers, viewerDiff,
 } from '../runbooksModel.ts';
 import { briefTaskTitle, buildNames } from '../runbookNames.ts';
-import type { BriefSummary, Proposal, RunbookApplication, RunbookRow } from '../types.ts';
+import type { Proposal, RunbookApplication, RunbookRow } from '../types.ts';
 
 const health = { status: 'proven' as const, reason: '', warning: null };
 const rb = (id: string, kind: RunbookRow['scope']['kind'], ref: string | null, over: Partial<RunbookRow> = {}): RunbookRow => ({
@@ -50,10 +50,7 @@ test('proposals group into open and decided, newest wording from the source', ()
   assert.equal(rows[1]!.title, 'Cut over');
 });
 
-test('briefs list newest day first; a run page maps to its brief ref only for jobs', () => {
-  const b = (run: string, at: string): BriefSummary => ({ id: `brief-${run}`, run_ref: run, work_item_id: 'wi-1', initiative_id: null, repo: null, assembled_at: at, assembler_version: '1', budget_tokens: 6000, used_tokens: 10, sections: [{ kind: 'runbook', ref: 'rb-a', tokens: 5, reason: '' }], omitted: [], sha256: 'b'.repeat(64) });
-  const rows = briefRows([b('job-1', '2026-10-12T00:00:00Z'), b('job-2', '2026-10-13T00:00:00Z')]);
-  assert.deepEqual(briefGroups(rows).map((g) => g.id), ['2026-10-13', '2026-10-12']);
+test('a run page maps to its brief ref only for jobs', () => {
   assert.equal(briefRefOfRun('job:job-0002'), 'job-0002');
   assert.equal(briefRefOfRun('agent-run:x'), null);
 });
@@ -113,24 +110,6 @@ test('ids resolve to names; what nothing resolves reads as a plain description, 
   assert.equal(proposalRows([p], new Map(), '', names)[0]!.subline, 'Edit · Eli Garcia');
 });
 
-test('a brief row is titled by its run, grouped by day, and still found by its run reference', () => {
-  const names = buildNames({ initiatives: [{ id: 'p-auth-migration', name: 'Auth Migration' }], jobs: [{ id: 'job-auth-maint-2', title: 'auth-dep-watch' }] });
-  const b: BriefSummary = {
-    id: 'brief-job-auth-maint-2', run_ref: 'job-auth-maint-2', work_item_id: null, initiative_id: 'p-auth-migration', repo: null,
-    assembled_at: '2026-10-11T08:00:00.000Z', assembler_version: '1', budget_tokens: 6000, used_tokens: 900,
-    sections: [{ kind: 'runbook', ref: 'rb-a', version: 1, tokens: 300, reason: 'x' }], omitted: [], sha256: 'ab'.repeat(32),
-  };
-  const [row] = briefRows([b], '', names);
-  // No task line: the run's name and the day it was frozen; the sha is secondary, not the name.
-  assert.equal(row!.title, 'auth-dep-watch run · Oct 11');
-  assert.equal(row!.subline, 'Auth Migration · 1 runbook');
-  assert.equal(row!.sha, 'abababababab');
-  assert.equal(briefRows([b], 'job-auth-maint-2', names).length, 1);
-  assert.equal(briefRows([b], 'abababab', names).length, 1);
-  // With a task line, the task names the brief.
-  assert.equal(briefRows([{ ...b, task_title: 'Tenant-by-tenant cutover' }], '', names)[0]!.title, 'Tenant-by-tenant cutover · Oct 11');
-});
-
 test('the task title comes from the brief markdown', () => {
   assert.equal(briefTaskTitle('# Brief\n\n## Your task\n**Tenant-by-tenant cutover** (story, 3 pts)\nbody'), 'Tenant-by-tenant cutover');
   assert.equal(briefTaskTitle('## The project\n**Auth**'), null);
@@ -153,4 +132,42 @@ test('file helpers format sizes, modes, languages and the diff summary', () => {
   assert.equal(SECTION_KIND_LABEL['skill_library'], 'Org skills');
   assert.equal(filesDiffSummary({ added: 12, removed: 3, files: [{ status: 'added' }, { status: 'modified' }, { status: 'unchanged' }] }), '+12 −3 · 2 files (1 added, 1 modified)');
   assert.equal(filesDiffSummary({ added: 1, removed: 0, files: [{ status: 'added' }] }), '+1 −0 · 1 file (1 added)');
+});
+
+test('the evidence line gives every figure with its count', () => {
+  const e = { windowDays: 30, since: '', runs: 13, runsGiven: 12, runsSaidFollowed: 4, runsSaidFollowedDone: 3,
+    proposalsFromRuns: { total: 6, open: 2, accepted: 3, rejected: 0, merged: 0, withdrawn: 1 }, runbooks: [] };
+  const lines = evidenceSentences(e);
+  assert.equal(lines[0], 'In the last 30 days 12 of 13 runs were given a runbook.');
+  assert.equal(lines[1], '4 of those 12 said they followed one, and 3 of those 4 finished done.');
+  assert.match(lines[2]!, /2 open, 3 accepted, 0 rejected, 1 withdrawn or expired \(6 filed\)/);
+  assert.deepEqual(evidenceSentences({ ...e, runs: 0, runsGiven: 0, runsSaidFollowed: 0, runsSaidFollowedDone: 0 })[0], 'In the last 30 days no run has reported.');
+});
+
+test('a runbook\'s evidence adds the comparison only when the read returned one', () => {
+  const base = { runbookId: 'rb-a', windowDays: 30, since: '', given: 2, followed: { yes: 1, partly: 0, no: 1, unsaid: 0 }, loaded: 1,
+    outcomes: { done: 2, failed: 0, cancelled: 0, 'needs-review': 0 }, followedDone: 1, runs: [],
+    comparison: { available: false as const, reason: 'x', withRunbookRuns: 2, withoutRunbookRuns: 0 } };
+  assert.equal(runbookEvidenceSentences(base).length, 2);
+  const side = { runs: 5, medianDurationS: 600, meanCostUsd: 0.5, costRuns: 5 };
+  const withComparison = runbookEvidenceSentences({ ...base, comparison: { available: true, withRunbook: side, withoutRunbook: { ...side, medianDurationS: 1200 }, sharedLabels: [] } });
+  assert.equal(withComparison.length, 3);
+  assert.match(withComparison[2]!, /median time 10 min with it \(5 runs\) and 20 min without it/);
+  assert.equal(runbookEvidenceSentences({ ...base, given: 0 })[0], 'No run in the last 30 days was given this runbook.');
+});
+
+test('scope in words, widening, expiry and the proposal filters', () => {
+  const names = buildNames({ initiatives: [{ id: 'p-a', name: 'Auth Migration' }] });
+  assert.equal(scopeInWords({ kind: 'repo', ref: 'acme/auth' }, names), 'This runbook will be given to runs in the repository acme/auth.');
+  assert.equal(scopeInWords({ kind: 'initiative', ref: 'p-a' }, names), 'This runbook will be given to runs on the initiative Auth Migration.');
+  assert.equal(sameScope({ kind: 'org', ref: null }, { kind: 'org', ref: null }), true);
+  assert.equal(sameScope({ kind: 'repo', ref: 'a/b' }, { kind: 'org', ref: null }), false);
+  assert.equal(proposalStatusLabel({ status: 'open', expired: true }), 'Expired');
+  assert.equal(proposalStatusLabel({ status: 'withdrawn', expired: false, closed_reason: 'expired' }), 'Expired');
+  assert.equal(proposalStatusLabel({ status: 'accepted', expired: false }), 'Accepted');
+  const mk = (id: string, kind: Proposal['kind'], source: Proposal['source']['kind'], status: Proposal['status']) => ({ id, kind, source: { kind: source, lab_experience_ids: [] }, status }) as unknown as Proposal;
+  const all = [mk('1', 'new', 'run', 'open'), mk('2', 'retire', 'system', 'open'), mk('3', 'edit', 'person', 'accepted')];
+  assert.deepEqual(filterProposals(all, { kind: 'retire', source: null, status: null }).map((p) => p.id), ['2']);
+  assert.deepEqual(filterProposals(all, { kind: null, source: 'run', status: 'open' }).map((p) => p.id), ['1']);
+  assert.equal(filterProposals(all, { kind: null, source: null, status: null }).length, 3);
 });

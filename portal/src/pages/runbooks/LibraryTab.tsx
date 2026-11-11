@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate, useOutletContext, useParams } from 'react-router';
 import { WorkListFilters } from '@connorhoehn/ui-components';
 import { EmptyState, FilterPopover, Stack } from '@connorhoehn/ui-components/shared';
+import { EvidenceLine } from './EvidenceLine';
 import { RunbookRecord } from './RunbookRecord';
 import { RunbooksListFrame } from './RunbooksListFrame';
 import type { RunbooksOutletContext } from './RunbooksModule';
@@ -73,9 +74,10 @@ export default function LibraryTab() {
         <RunbookRecord key={id} id={id} summary={byId.get(id) ?? null} onChanged={feed.refresh} onOpen={(href) => navigate(href)} />
       ) : (
         <Stack gap="md" className="w-full max-w-3xl px-6 pb-6">
+          <EvidenceLine />
           <EmptyState
             title={feed.isLoading ? 'Loading…' : 'Choose a runbook'}
-            description="Pick one from the list to read it. Reviewers decide proposals under Proposals; each run’s frozen brief is under Briefs."
+            description="Pick one from the list to read it. Reviewers decide proposals under Proposals."
           />
         </Stack>
       )}

@@ -1,6 +1,5 @@
 // The session brief over HTTP.
 //
-//   GET /api/briefs                         frozen briefs, newest first, WITHOUT their markdown (the Briefs list)
 //   GET /api/runs/:ref/brief                the FROZEN brief a run was given
 //   GET /api/runs/:ref/runbooks/:id         a runbook that brief named (`lab runbook <id>`), as markdown
 //   GET /api/work-items/:id/brief-preview   what a run would be given now (assembled, never stored)
@@ -92,22 +91,6 @@ function refuseRunToken(res: Response): void {
 
 export function createSessionBriefsRouter(deps: SessionBriefDeps): Router {
   const router = Router();
-
-  // The Briefs list (portal /iq/runbooks/briefs): people only, summaries only. The bytes stay behind
-  // /runs/:ref/brief so the sha a row shows is read against the markdown a person opens.
-  router.get('/briefs', briefLimit, requireTenant('orgiq'), requireAction('ViewSessionBrief'),
-    asyncHandler(async (req, res) => {
-      const rawLimit = Number(req.query['limit']);
-      const cursor = typeof req.query['cursor'] === 'string' && req.query['cursor'] ? req.query['cursor'] : undefined;
-      const page = await (await deps.store()).listBriefs({
-        ...(cursor ? { cursor } : {}),
-        ...(Number.isInteger(rawLimit) && rawLimit > 0 ? { limit: Math.min(rawLimit, 200) } : {}),
-      });
-      res.json({
-        briefs: page.items.map(({ markdown, ...summary }) => ({ ...summary, task_title: briefTaskTitle(markdown) })),
-        next: page.next,
-      });
-    }));
 
   router.get('/runs/:ref/brief', briefLimit, machineMark,
     unlessMachine(requireTenant('orgiq')), unlessMachine(requireAction('ViewSessionBrief')),
@@ -253,14 +236,3 @@ export function createSessionBriefsRouter(deps: SessionBriefDeps): Router {
 export const sessionBriefsRouter: Router = createSessionBriefsRouter({
   store: async () => (await import('../lib/runbooks/store-select.js')).runbookStore(),
 });
-
-/**
- * The task title a brief's "Your task" section opens with (`**Title** (story, 3 pts, …)`), or null.
- * The Briefs list names each row by it (`task_title`), read off the markdown the list does not
- * carry, so a row is never just a run reference and a sha (walk, 9 November). From assembler v3
- * the title sits inside the task's untrusted-text fence, one tag line below the heading.
- */
-export function briefTaskTitle(markdown: string | null | undefined): string | null {
-  const m = /^## Your task\s*\n(?:<untrusted-[0-9a-f]+[^>\n]*>\n)?\*\*(.+?)\*\*/m.exec(markdown ?? '');
-  return m ? m[1]!.trim().slice(0, 200) : null;
-}

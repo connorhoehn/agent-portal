@@ -1037,11 +1037,6 @@
     },
     {
       "method": "GET",
-      "path": "/api/briefs",
-      "source": "src/routes/session-briefs.ts:98"
-    },
-    {
-      "method": "GET",
       "path": "/api/budgets",
       "source": "src/routes/budgets.ts:62"
     },
@@ -2173,7 +2168,7 @@
     {
       "method": "GET",
       "path": "/api/initiatives/:id/run-reports",
-      "source": "src/routes/session-briefs.ts:213"
+      "source": "src/routes/session-briefs.ts:196"
     },
     {
       "method": "POST",
@@ -3243,22 +3238,22 @@
     {
       "method": "GET",
       "path": "/api/runs/:ref/brief",
-      "source": "src/routes/session-briefs.ts:112"
+      "source": "src/routes/session-briefs.ts:95"
     },
     {
       "method": "GET",
       "path": "/api/runs/:ref/report",
-      "source": "src/routes/session-briefs.ts:196"
+      "source": "src/routes/session-briefs.ts:179"
     },
     {
       "method": "GET",
       "path": "/api/runs/:ref/runbooks/:id",
-      "source": "src/routes/session-briefs.ts:136"
+      "source": "src/routes/session-briefs.ts:119"
     },
     {
       "method": "GET",
       "path": "/api/runs/:ref/skills",
-      "source": "src/routes/session-briefs.ts:167"
+      "source": "src/routes/session-briefs.ts:150"
     },
     {
       "method": "GET",
@@ -3493,7 +3488,7 @@
     {
       "method": "GET",
       "path": "/api/skill-library",
-      "source": "src/routes/session-briefs.ts:219"
+      "source": "src/routes/session-briefs.ts:202"
     },
     {
       "method": "DELETE",
@@ -3968,12 +3963,12 @@
     {
       "method": "GET",
       "path": "/api/work-items/:id/brief-preview",
-      "source": "src/routes/session-briefs.ts:232"
+      "source": "src/routes/session-briefs.ts:215"
     },
     {
       "method": "GET",
       "path": "/api/work-items/:id/run-reports",
-      "source": "src/routes/session-briefs.ts:207"
+      "source": "src/routes/session-briefs.ts:190"
     },
     {
       "method": "GET",

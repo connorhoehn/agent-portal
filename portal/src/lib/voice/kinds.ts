@@ -401,12 +401,6 @@ const ORGIQ: readonly KindSpec[] = [
     list: { path: '/api/library', key: 'assets' }, get: { path: '/api/library/:id', record: 'asset' },
     subtitle: 'ownerName', href: (id) => `/iq/library/${enc(id)}`,
   },
-  {
-    kind: 'brief', label: 'session briefs', action: 'ViewSessionBrief',
-    list: { path: '/api/briefs', key: 'briefs' }, get: { path: '/api/runs/:ref/brief', record: 'brief' },
-    id: 'run_ref', title: 'run_ref', subtitle: 'repo', at: 'assembled_at',
-    href: (id) => `/iq/runbooks/briefs/${enc(id)}`,
-  },
   ...socialKinds('/api/social/plane', '/iq/communication', false),
 ];
 

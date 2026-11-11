@@ -10,19 +10,22 @@ import {
 } from '@connorhoehn/ui-components/shared';
 import { UnavailableNotice, isNotFoundError } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
+import { useSession } from '../../lib/auth';
 import { useCrumbLabel } from '../../lib/crumbLabels';
 import { relativeTime } from '../../lib/relativeTime';
 import { writeJson } from '../../lib/writeJson';
 import { runbookDisplayTitle } from './runbookTitles';
 import { RunbookDocView } from './RunbookDocView';
 import { RunbookFiles } from './RunbookFiles';
+import { ProposalAccept, type ScriptToRead } from './ProposalAccept';
+import { RunSaid } from './RunSaid';
 import { useRunbookNames } from './useRunbookNames';
 import { diffWithNames, type Names } from './runbookNames';
 import {
-  KIND_LABEL, PROPOSAL_STATUS_LABEL, PROPOSAL_STATUS_TONE, filesDiffSummary, lintCounts, proposalAuthor, proposalTitle, refusalMessage, runPageHref, runbookHref,
-  viewerDiff,
+  KIND_LABEL, PROPOSAL_STATUS_TONE, filesDiffSummary, lintCounts, proposalAuthor, proposalStatusLabel, proposalTitle, refusalMessage, runPageHref, runbookHref,
+  sameScope, scopeInWords, scopeLabel, viewerDiff,
 } from './runbooksModel';
-import type { FilesDiff, LintFinding, Proposal, RunbookFile, RunbookRow, ScopeKind } from './types';
+import type { FilesDiff, LintFinding, Proposal, RunbookFile, RunbookRow, RunbookScope, ScopeKind } from './types';
 
 /**
  * A diff with its account ids read as names (`diffWithNames`: the directory, else the name the diff
@@ -55,7 +58,19 @@ interface ProposalResponse {
   diff: { text: string; added: number; removed: number } | null;
   proposed_files?: RunbookFile[];
   files_diff?: FilesDiff | null;
+  /** The scripts the reviewer must confirm reading: path and the hash of the bytes shown. */
+  scripts_to_read?: ScriptToRead[];
   can_review: boolean;
+}
+
+/** A retire proposal's reason in words: the stored sentence quotes run references, which belong on the run pages, not here. */
+function retireRationale(p: Proposal, title: string): string {
+  const ev = p.retire_evidence;
+  if (p.kind !== 'retire' || !ev) return p.rationale;
+  const n = ev.run_refs.length;
+  if (ev.rule === 'unfollowed') return `The last ${n} successful runs that were given ${title} each said they did not follow it. The model may no longer need it.`;
+  if (ev.rule === 'disuse-unfollowed') return `${title} was given to ${n} runs recently and none followed it.`;
+  return `No run has been given ${title} in the last ninety days.`;
 }
 
 export function ProposalReview({ pid, published, publishedLoading = false, onOpen, onDecided }: {
@@ -75,6 +90,10 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
   const [scopeRef, setScopeRef] = useState('');
   const [mergeInto, setMergeInto] = useState('');
   const [busy, setBusy] = useState(false);
+  const [accepting, setAccepting] = useState(false);
+  const [unread, setUnread] = useState<string[]>([]);
+  const scopeSeeded = useRef(false);
+  const { session } = useSession();
   const names = useRunbookNames();
   const data = detail.data;
   const titles = new Map(published.map((r) => [r.id, r.title]));
@@ -93,6 +112,12 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
     scroller.addEventListener('scroll', schedule, { passive: true });
     return () => { clearTimeout(timer); scroller.removeEventListener('scroll', schedule); };
   }, [data, publishedLoading]);
+  useEffect(() => {
+    const proposed = data?.proposal.proposed_scope;
+    if (!data || scopeSeeded.current || !proposed) return;
+    scopeSeeded.current = true;
+    setScopeKind(proposed.kind); setScopeRef(proposed.ref ?? '');
+  }, [data]);
   useCrumbLabel(pid, data ? runbookDisplayTitle(proposalTitle(data.proposal, titles)) : undefined);
 
   if (detail.error && !data) {
@@ -115,6 +140,8 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
   const stale = open && runbook != null && p.base_version != null && p.base_version !== runbook.current_version;
   const retired = runbook?.status === 'retired';
   const needsScope = p.kind === 'new';
+  const demo = p.debrief?.simulated === true;
+  const dispatchedByMe = !!session && !!p.source.dispatched_by && p.source.dispatched_by === session.sub;
   const mergeTargets = published.filter((r) => r.status === 'published' && r.id !== p.runbook_id).map((r) => ({ value: r.id, label: runbookDisplayTitle(r.title) }));
 
   // The card's summary pair; the real change is the diff beneath it.
@@ -124,18 +151,27 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
       ? [{ before: 'No such runbook yet', after: p.proposed?.summary ?? title }]
       : [{ before: `Version ${p.base_version ?? ''} of ${title}`, after: `${data.diff ? `+${data.diff.added} lines, −${data.diff.removed} lines` : 'No textual change'}; the full diff is below` }];
   const done = () => { detail.refresh(); onDecided(); };
-  const accept = async () => {
-    setRefusal(null);
+  const chosenScope: RunbookScope | null = needsScope ? (scopeKind === 'org' ? { kind: 'org', ref: null } : { kind: scopeKind, ref: scopeRef.trim() }) : (runbook ? runbook.scope : null);
+  const proposedScope = p.proposed_scope ?? null;
+  const widening = needsScope && proposedScope && chosenScope && !sameScope(chosenScope, proposedScope)
+    ? { from: scopeLabel(proposedScope, names), to: scopeLabel(chosenScope, names) } : null;
+  const accept = async (scriptsRead: ScriptToRead[], widen: boolean) => {
+    setRefusal(null); setUnread([]);
     const body: Record<string, unknown> = { expected_version: runbook?.current_version };
-    if (needsScope) body['scope'] = scopeKind === 'org' ? { kind: 'org' } : { kind: scopeKind, ref: scopeRef.trim() };
-    const res = await writeJson<{ code?: string }>(`/api/runbooks/proposals/${encodeURIComponent(p.id)}/accept`, 'POST', body);
+    if (needsScope && chosenScope) body['scope'] = chosenScope.kind === 'org' ? { kind: 'org' } : { kind: chosenScope.kind, ref: chosenScope.ref };
+    if (scriptsRead.length) body['scripts_read'] = scriptsRead;
+    if (widen) body['widen_scope'] = true;
+    const res = await writeJson<{ code?: string; scripts?: ScriptToRead[]; other_reviewers?: number }>(`/api/runbooks/proposals/${encodeURIComponent(p.id)}/accept`, 'POST', body);
     if (!res.ok) {
-      const message = refusalMessage(res.status, res.data?.code, res.error);
-      setRefusal(message);
-      return { ok: false, message, ...(res.status === 409 && res.data?.code === 'VERSION_CONFLICT' ? { stale: { expected: p.base_version, actual: runbook?.current_version } } : {}) };
+      if (res.data?.code === 'SCRIPTS_UNREAD') setUnread((res.data.scripts ?? []).map((x) => x.path));
+      else setAccepting(false);
+      setRefusal(res.data?.code === 'SELF_ACCEPT' && res.data.other_reviewers
+        ? `You dispatched the run that proposed this, and ${res.data.other_reviewers === 1 ? 'one other person' : `${res.data.other_reviewers} other people`} can review it, so one of them decides it.`
+        : refusalMessage(res.status, res.data?.code, res.error));
+      return;
     }
+    setAccepting(false);
     done();
-    return { ok: true };
   };
   const reject = (note: string) => {
     setRefusal(null);
@@ -164,6 +200,8 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
     ...(p.kind !== 'retire' ? [{ id: 'changes', title: 'Document changes' }] : []),
     ...(data.files_diff?.text || data.proposed_files?.length ? [{ id: 'files', title: 'File changes' }] : []),
     { id: 'checks', title: 'Review checks' },
+    ...(p.source.kind === 'run' && p.source.run_ref ? [{ id: 'said', title: 'What the run said' }] : []),
+    ...(p.kind === 'retire' && p.retire_evidence ? [{ id: 'runs', title: 'Runs it names' }] : []),
     ...(p.proposed ? [{ id: 'preview', title: 'Proposed runbook' }] : []),
     ...(sources.length ? [{ id: 'sources', title: 'Sources' }] : []),
     ...(open && canReview && p.kind !== 'retire' && mergeTargets.length ? [{ id: 'merge', title: 'Merge proposal' }] : []),
@@ -187,7 +225,7 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
     <EditorShell
       headerInset="page" titleSize="md" titleAs="h1" titleOverflow="wrap"
       title={title}
-      statusPill={<Inline gap="sm"><Chip tone="neutral" size="md">Runbook proposal</Chip><StatusPill tone={PROPOSAL_STATUS_TONE[p.status]} label={PROPOSAL_STATUS_LABEL[p.status]} size="sm" /></Inline>}
+      statusPill={<Inline gap="sm"><Chip tone="neutral" size="md">Runbook proposal</Chip><StatusPill tone={PROPOSAL_STATUS_TONE[p.status]} label={proposalStatusLabel(p)} size="sm" />{demo && <Chip tone="warning" size="md" data-testid="proposal-demo-data">Demo data</Chip>}</Inline>}
       subtitle={<T size="xs" tone="tertiary">{`${KIND_LABEL[p.kind]} · ${author.name} · ${relativeTime(p.created_at)}${p.base_version != null ? ` · against v${p.base_version}` : ''}`}</T>}
       surface="plain"
       label="Proposal"
@@ -202,7 +240,7 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
             activeId={activeSection} onSelect={goToSection} wrap data-testid="proposal-contents" />
         </DetailSection>
         {!open && (
-          <Banner variant={p.status === 'accepted' ? 'success' : 'info'} layout="callout" icon title={`${PROPOSAL_STATUS_LABEL[p.status]}${p.decided_by ? ` by ${names.person(p.decided_by)}` : ''}${p.decided_at ? ` ${relativeTime(p.decided_at)}` : ''}`} data-testid="proposal-decided">
+          <Banner variant={p.status === 'accepted' ? 'success' : 'info'} layout="callout" icon title={`${proposalStatusLabel(p)}${p.decided_by ? ` by ${names.person(p.decided_by)}` : ''}${p.decided_at ? ` ${relativeTime(p.decided_at)}` : ''}`} data-testid="proposal-decided">
             {p.note ?? (p.merged_into ? 'Merged into another proposal for review.' : 'No note was left.')}
           </Banner>
         )}
@@ -229,6 +267,17 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
           </Banner>
         )}
         {refusal && <Banner variant="error" layout="callout" icon title="Not done" data-testid="proposal-refusal">{refusal}</Banner>}
+        {p.expired && open && (
+          <Banner variant="warning" layout="callout" icon title="Expired" data-testid="proposal-expired">Nobody decided this proposal in fourteen days, so it can no longer be accepted. Ask for a fresh one.</Banner>
+        )}
+        {dispatchedByMe && open && (
+          <Banner variant="info" layout="callout" icon title="You dispatched the run that proposed this" data-testid="proposal-dispatcher">
+            Someone else decides it when another reviewer can. If nobody else can review this scope, you may, and the record says you decided it as the person who dispatched the run.
+          </Banner>
+        )}
+        {p.decided_as === 'sole-reviewer-dispatcher' && (
+          <Banner variant="info" layout="callout" icon title="Decided by the person who dispatched the run" data-testid="proposal-sole-reviewer">Nobody else could review this scope, so the sole-reviewer rule applied and the record says so.</Banner>
+        )}
 
         <DetailSection as="h2" variant="heading" title={sectionTitle('summary')} className="border-b border-border pb-6" data-testid="proposal-section-summary">
         <Stack gap="md">
@@ -236,9 +285,10 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
           category={KIND_LABEL[p.kind]}
           author={{ name: author.name, kind: author.kind }}
           pairs={cardPairs}
-          rationale={p.rationale}
+          rationale={retireRationale(p, title)}
           status={p.status === 'open' ? 'pending' : p.status === 'accepted' ? 'applied' : 'rejected'}
-          {...(open && canReview && !retired ? { onAccept: accept, onReject: reject } : open && canReview ? { onReject: reject } : {})}
+          {...(open && canReview ? { onReject: reject } : {})}
+          {...(open && canReview && !retired && !p.expired ? { actions: <Button variant="primary" size="sm" onClick={() => setAccepting(true)} data-testid="proposal-accept">{p.kind === 'retire' ? 'Retire this runbook…' : 'Accept…'}</Button> } : {})}
           data-testid="proposal-card"
         />
 
@@ -298,6 +348,23 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
           </DetailSection>
         )}
 
+        {p.source.kind === 'run' && p.source.run_ref && (
+          <DetailSection as="h2" variant="heading" title={sectionTitle('said')} data-testid="proposal-section-said">
+            <RunSaid runRef={p.source.run_ref} runName={names.run(p.source.run_ref)} />
+          </DetailSection>
+        )}
+
+        {p.kind === 'retire' && p.retire_evidence && (
+          <DetailSection as="h2" variant="heading" title={sectionTitle('runs')} hint={`${p.retire_evidence.run_refs.length}`} data-testid="proposal-section-runs">
+            <Stack gap="xs">
+              {p.retire_evidence.run_refs.map((r) => (
+                <Button key={r} variant="link" size="sm" onClick={() => onOpen(runPageHref(r))} data-testid="retire-run">{names.run(r)}</Button>
+              ))}
+              <T size="xs" tone="tertiary" wrap>{p.rationale}</T>
+            </Stack>
+          </DetailSection>
+        )}
+
         <DetailSection as="h2" variant="heading" title={sectionTitle('checks')} data-testid="proposal-section-checks" hint={`${counts.errors} errors · ${counts.warnings} warnings`}>
           <Stack gap="xs" data-testid="proposal-lint">
             {p.lint.length ? p.lint.map((f: LintFinding, i) => (
@@ -327,6 +394,16 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
           </DetailSection>
         )}
       </Stack>
+      <ProposalAccept
+        open={accepting}
+        title={p.kind === 'retire' ? 'Retire this runbook?' : 'Accept this proposal?'}
+        scopeSentence={p.kind === 'retire' ? `${title} will no longer be given to any run.${runbook ? ` ${scopeInWords(runbook.scope, names)}` : ''}` : chosenScope ? scopeInWords(chosenScope, names) : 'This runbook will be given to runs it applies to.'}
+        scripts={data.scripts_to_read ?? []}
+        widening={widening}
+        unread={unread}
+        onCancel={() => setAccepting(false)}
+        onAccept={accept}
+      />
     </EditorShell>
   );
 }

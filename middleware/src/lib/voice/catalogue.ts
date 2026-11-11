@@ -148,7 +148,6 @@ export const NAVIGATE_PAGES: ReadonlyArray<{ id: string; path: string; tenants: 
   { id: 'local-compute', path: '/iq/local-compute', tenants: ['orgiq'] },
   { id: 'runbooks', path: '/iq/runbooks', tenants: ['orgiq'] },
   { id: 'runbook-proposals', path: '/iq/runbooks/proposals', tenants: ['orgiq'] },
-  { id: 'session-briefs', path: '/iq/runbooks/briefs', tenants: ['orgiq'] },
   { id: 'search', path: '/iq/search', tenants: ['orgiq'] },
   { id: 'communication', path: '/iq/communication', tenants: ['orgiq'] },
   { id: 'scores', path: '/iq/scores', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
@@ -361,7 +360,7 @@ export const ACTIVITY_SCOPES: Readonly<Record<string, readonly string[]>> = {
  * this list to the table).
  */
 export const LIST_KINDS: Readonly<Record<string, readonly string[]>> = {
-  orgiq: ['initiative', 'work-item', 'decision', 'design', 'job', 'finding', 'proposal', 'hitl-approval', 'consult', 'bot', 'run', 'computer', 'environment', 'runbook', 'runbook-proposal', 'change', 'sprint', 'deck', 'codebase', 'person', 'saved-search', 'library', 'brief', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
+  orgiq: ['initiative', 'work-item', 'decision', 'design', 'job', 'finding', 'proposal', 'hitl-approval', 'consult', 'bot', 'run', 'computer', 'environment', 'runbook', 'runbook-proposal', 'change', 'sprint', 'deck', 'codebase', 'person', 'saved-search', 'library', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
   social: ['channel', 'team', 'dm', 'room', 'recording', 'call', 'person'],
   assessment: ['team', 'run', 'feedback', 'submission', 'deck', 'recommendation', 'channel', 'social-team', 'dm', 'room', 'recording', 'call'],
   pipelines: ['run', 'definition', 'runbook', 'approval', 'artifact', 'deck', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
@@ -426,7 +425,7 @@ export function summaryKinds(tenant: string | null): string[] {
  * kind's href built from the id, never taken from the model).
  */
 export const OPEN_KINDS: Readonly<Record<string, readonly string[]>> = {
-  orgiq: ['initiative', 'work-item', 'decision', 'design', 'job', 'finding', 'proposal', 'hitl-approval', 'consult', 'bot', 'run', 'computer', 'runbook', 'runbook-proposal', 'change', 'sprint', 'deck', 'codebase', 'person', 'saved-search', 'library', 'brief', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
+  orgiq: ['initiative', 'work-item', 'decision', 'design', 'job', 'finding', 'proposal', 'hitl-approval', 'consult', 'bot', 'run', 'computer', 'runbook', 'runbook-proposal', 'change', 'sprint', 'deck', 'codebase', 'person', 'saved-search', 'library', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
   social: ['channel', 'team', 'dm', 'room', 'recording', 'call', 'person'],
   assessment: ['team', 'run', 'feedback', 'submission', 'deck', 'recommendation', 'channel', 'social-team', 'dm', 'room', 'recording', 'call'],
   pipelines: ['run', 'definition', 'runbook', 'approval', 'artifact', 'deck', 'channel', 'team', 'dm', 'room', 'recording', 'call'],
@@ -765,7 +764,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
     kind: 'read', backing: 'search', confirm: false, action: null,
     gate: "per kind, the page's own gate: the route's Cedar action or its read tier (portal lib/voice/kinds.ts); Social kinds the Social grant", spend: 'none', idempotent: true,
     says: 'Looking up your initiatives.', tenants: VOICE_TENANTS,
-    mapsTo: 'GET /api/graph/projects, GET /api/graph/work, GET /api/graph/decisions, GET /api/designs, GET /api/work/jobs, GET /api/work/findings, GET /api/work/proposals, GET /api/observability/approvals, GET /api/lab/consults, GET /api/bots, GET /api/runs, GET /api/devbox/boxes, GET /api/environments, GET /api/runbooks, GET /api/runbooks/proposals, GET /api/sdlc/changes, GET /api/sprints, GET /api/initiative-decks, GET /api/agent-projects, GET /api/roster, GET /api/saved-searches, GET /api/library, GET /api/briefs, GET /api/social/plane/channels, GET /api/social/plane/teams, GET /api/social/plane/dms, GET /api/social/plane/rooms, GET /api/social/plane/recordings, GET /api/social/plane/calls, GET /api/social/channels, GET /api/social/teams, GET /api/social/dms, GET /api/social/rooms, GET /api/social/recordings, GET /api/social/calls, GET /api/social/people, GET /api/assessment/teams, GET /api/assessment/runs, GET /api/assessment/feedback, GET /api/assessment/submissions, GET /api/assessment/decks, GET /api/assessment/recommendations, GET /api/pipelines/runs, GET /api/pipelines/definitions, GET /api/pipelines/runbooks, GET /api/pipelines/approvals, GET /api/pipelines/artifacts, GET /api/pipelines/decks, GET /api/access/requests, GET /api/access/approvals, GET /api/access/catalog, GET /api/access/reviews, GET /api/access/delegations, GET /api/access/policies, GET /api/access/audit',
+    mapsTo: 'GET /api/graph/projects, GET /api/graph/work, GET /api/graph/decisions, GET /api/designs, GET /api/work/jobs, GET /api/work/findings, GET /api/work/proposals, GET /api/observability/approvals, GET /api/lab/consults, GET /api/bots, GET /api/runs, GET /api/devbox/boxes, GET /api/environments, GET /api/runbooks, GET /api/runbooks/proposals, GET /api/sdlc/changes, GET /api/sprints, GET /api/initiative-decks, GET /api/agent-projects, GET /api/roster, GET /api/saved-searches, GET /api/library, GET /api/social/plane/channels, GET /api/social/plane/teams, GET /api/social/plane/dms, GET /api/social/plane/rooms, GET /api/social/plane/recordings, GET /api/social/plane/calls, GET /api/social/channels, GET /api/social/teams, GET /api/social/dms, GET /api/social/rooms, GET /api/social/recordings, GET /api/social/calls, GET /api/social/people, GET /api/assessment/teams, GET /api/assessment/runs, GET /api/assessment/feedback, GET /api/assessment/submissions, GET /api/assessment/decks, GET /api/assessment/recommendations, GET /api/pipelines/runs, GET /api/pipelines/definitions, GET /api/pipelines/runbooks, GET /api/pipelines/approvals, GET /api/pipelines/artifacts, GET /api/pipelines/decks, GET /api/access/requests, GET /api/access/approvals, GET /api/access/catalog, GET /api/access/reviews, GET /api/access/delegations, GET /api/access/policies, GET /api/access/audit',
   },
   {
     name: 'get',

@@ -1,4 +1,4 @@
-// Wire shapes of /api/runbooks and /api/briefs (middleware/src/lib/runbooks/types.ts,
+// Wire shapes of /api/runbooks and the brief reads (middleware/src/lib/runbooks/types.ts,
 // routes/runbooks.ts, routes/session-briefs.ts). Declarations only.
 
 export type ScopeKind = 'org' | 'initiative' | 'repo' | 'tool';
@@ -65,6 +65,8 @@ export interface RunbookVersion {
   accepted_by: string | null;
   accepted_at: string | null;
   provenance: RunbookProvenance;
+  /** Set on a version a simulated run produced (the mock's hand-written runbook); pages say "Demo data". */
+  demo_data?: boolean;
   doc?: RunbookDoc;
   files?: RunbookFile[];
   bundle_sha256?: string;
@@ -95,10 +97,23 @@ export interface Proposal {
   proposed_files?: RunbookFileManifestEntry[];
   proposed_id?: string;
   rationale: string;
-  source: { kind: 'run' | 'person'; run_ref?: string; session_id?: string; work_item_id?: string; person_id?: string; lab_experience_ids: string[] };
+  /** `system` is the library's own upkeep (a retire proposal filed when a report was saved). `dispatched_by` is a run proposal's accountable person. */
+  source: { kind: 'run' | 'person' | 'system'; run_ref?: string; session_id?: string; work_item_id?: string; person_id?: string; dispatched_by?: string; lab_experience_ids: string[] };
+  /** A run's new runbook is scoped to the run's repository or initiative, never the organisation. */
+  proposed_scope?: RunbookScope;
+  /** A run proposal nobody decided in fourteen days reads as expired until the next report withdraws it. */
+  expired?: boolean;
+  /** Set when the debrief behind it was simulated (the mock). */
+  debrief?: { simulated?: boolean; converted_from_new?: boolean };
+  /** A retire proposal's evidence: the rule, the runs that made it due and the model they ran on. */
+  retire_evidence?: { rule: 'unfollowed' | 'disuse-unfollowed' | 'disuse-ungiven'; run_refs: string[]; model: string | null };
+  /** Why a withdrawn proposal closed: nobody decided it in time, or the change it carried was rejected. */
+  closed_reason?: 'expired' | 'change-rejected' | null;
+  /** Set when the run's own dispatcher decided it because nobody else could (decision 11). */
+  decided_as?: 'sole-reviewer-dispatcher' | null;
   lint: LintFinding[];
   similar: Array<{ runbook_id: string; score: number; reason: string }>;
-  status: 'open' | 'accepted' | 'rejected' | 'merged';
+  status: 'open' | 'accepted' | 'rejected' | 'merged' | 'withdrawn';
   decided_by: string | null;
   decided_at: string | null;
   note: string | null;
@@ -148,3 +163,44 @@ export interface BriefPreviewResponse {
 }
 /** R8: one skill a brief's run received, at the version it received (GET /api/runs/:ref/brief `skills`). */
 export interface BriefSkillDetail { name: string; version: number; title: string | null; description: string | null; current_version: number | null }
+
+/** GET /api/runbooks/evidence (middleware lib/runbooks/evidence.ts LoopEvidence): the loop over 30 days, counted from run reports. */
+export interface LoopEvidence {
+  windowDays: number;
+  since: string;
+  runs: number;
+  runsGiven: number;
+  runsSaidFollowed: number;
+  runsSaidFollowedDone: number;
+  proposalsFromRuns: { total: number; open: number; accepted: number; rejected: number; merged: number; withdrawn: number };
+  runbooks: Array<{ runbookId: string; given: number; saidFollowed: number; followedDone: number }>;
+}
+
+export type Followed = 'yes' | 'partly' | 'no' | 'unsaid';
+export type RunOutcome = 'done' | 'failed' | 'cancelled' | 'needs-review';
+export interface SideFigures { runs: number; medianDurationS: number | null; meanCostUsd: number | null; costRuns: number }
+export type EvidenceComparison =
+  | { available: true; withRunbook: SideFigures; withoutRunbook: SideFigures; sharedLabels: string[] }
+  | { available: false; reason: string; withRunbookRuns: number; withoutRunbookRuns: number };
+/** GET /api/runbooks/:id/evidence: one runbook over 30 days. */
+export interface RunbookEvidence {
+  runbookId: string;
+  windowDays: number;
+  since: string;
+  given: number;
+  followed: Record<Followed, number>;
+  loaded: number;
+  outcomes: Record<RunOutcome, number>;
+  followedDone: number;
+  runs: Array<{ runRef: string; workItemId: string | null; endedAt: string; outcome: RunOutcome; version: number | null; followed: Followed; loaded: boolean }>;
+  comparison: EvidenceComparison;
+}
+/** GET /api/runs/:ref/report, the part a proposal's review shows beside the runbook. */
+export interface RunReportLite {
+  runRef: string;
+  summary: string;
+  obstacles: string[];
+  learned: string;
+  outcome: RunOutcome;
+  debrief?: { simulated?: boolean } | null;
+}

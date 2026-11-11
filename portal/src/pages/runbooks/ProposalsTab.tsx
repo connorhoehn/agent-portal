@@ -11,7 +11,7 @@ import { RunbooksListFrame } from './RunbooksListFrame';
 import { proposalsEmpty } from './emptyPick';
 import type { RunbooksOutletContext } from './RunbooksModule';
 import {
-  PROPOSAL_STATUS_FILTERS, proposalGroups, proposalHref, proposalRows, proposalsCommandAdapter,
+  KIND_LABEL, PROPOSAL_KIND_FILTERS, PROPOSAL_SOURCE_FILTERS, PROPOSAL_STATUS_FILTERS, SOURCE_LABEL, filterProposals, proposalGroups, proposalHref, proposalRows, proposalsCommandAdapter,
 } from './runbooksModel';
 import type { Proposal, RunbookRow } from './types';
 
@@ -21,14 +21,16 @@ export default function ProposalsTab() {
   const { breadcrumbs, refreshProposals } = useOutletContext<RunbooksOutletContext>();
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<string | null>(null);
+  const [kind, setKind] = useState<string | null>(null);
+  const [source, setSource] = useState<string | null>(null);
   const feed = useFetch<{ proposals: Proposal[] }>('/api/runbooks/proposals?limit=200', 0);
   const library = useFetch<{ runbooks: RunbookRow[] }>('/api/runbooks?status=draft,published,retired&limit=200', 0);
   const titles = useMemo(() => new Map((library.data?.runbooks ?? []).map((r) => [r.id, r.title])), [library.data]);
   const names = useRunbookNames();
   const all = feed.data?.proposals ?? [];
   const rows = useMemo(
-    () => proposalRows(status ? all.filter((p) => p.status === status) : all, titles, query, names),
-    [all, titles, query, status, names],
+    () => proposalRows(filterProposals(all, { kind, source, status }), titles, query, names),
+    [all, titles, query, status, kind, source, names],
   );
   const commands = proposalsCommandAdapter(rows, {
     setQuery, setStatus, refresh: feed.refresh, open: (id) => navigate(proposalHref(id)),
@@ -47,15 +49,29 @@ export default function ProposalsTab() {
       onQuery={setQuery}
       searchLabel="Search proposals"
       filter={(
-        <FilterPopover trigger="icon" size="sm" label="Filter" activeCount={status ? 1 : 0} onClear={() => setStatus(null)} panelLabel="Filter proposals">
+        <FilterPopover trigger="icon" size="sm" label="Filter" activeCount={(status ? 1 : 0) + (kind ? 1 : 0) + (source ? 1 : 0)} onClear={() => { setStatus(null); setKind(null); setSource(null); }} panelLabel="Filter proposals">
           <WorkListFilters
             data-testid="proposals-filters"
-            facets={[{
-              id: 'status', label: 'Status',
-              options: Object.keys(PROPOSAL_STATUS_FILTERS).map((v) => ({ value: v, label: v.charAt(0).toUpperCase() + v.slice(1) })),
-              selected: status ? [status] : [],
-              onChange: (sel) => setStatus(sel.length ? sel[sel.length - 1]! : null),
-            }]}
+            facets={[
+              {
+                id: 'kind', label: 'Kind',
+                options: Object.keys(PROPOSAL_KIND_FILTERS).map((v) => ({ value: v, label: KIND_LABEL[v as keyof typeof KIND_LABEL] })),
+                selected: kind ? [kind] : [],
+                onChange: (sel) => setKind(sel.length ? sel[sel.length - 1]! : null),
+              },
+              {
+                id: 'source', label: 'Source',
+                options: Object.keys(PROPOSAL_SOURCE_FILTERS).map((v) => ({ value: v, label: SOURCE_LABEL[v as keyof typeof SOURCE_LABEL] })),
+                selected: source ? [source] : [],
+                onChange: (sel) => setSource(sel.length ? sel[sel.length - 1]! : null),
+              },
+              {
+                id: 'status', label: 'Status',
+                options: Object.keys(PROPOSAL_STATUS_FILTERS).map((v) => ({ value: v, label: v.charAt(0).toUpperCase() + v.slice(1) })),
+                selected: status ? [status] : [],
+                onChange: (sel) => setStatus(sel.length ? sel[sel.length - 1]! : null),
+              },
+            ]}
           />
         </FilterPopover>
       )}

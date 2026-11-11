@@ -7,7 +7,7 @@ import { resolveBreadcrumbs } from '../breadcrumbResolve.ts';
 // header rhythm (title 16px under the trail) breaks on that page alone.
 const RAIL_PATHS = [
   '/iq/projects', '/iq/projects/p-observability', '/iq/sprints', '/iq/work', '/iq/work/findings', '/iq/work/queue',
-  '/iq/runbooks', '/iq/runbooks/proposals', '/iq/runbooks/briefs', '/iq/runbooks/rb-tenant-cutover', '/iq/local-compute', '/iq/invoke', '/iq/explore', '/iq/scores', '/iq/scores/cohorts',
+  '/iq/runbooks', '/iq/runbooks/proposals', '/iq/runbooks/rb-tenant-cutover', '/iq/local-compute', '/iq/invoke', '/iq/explore', '/iq/scores', '/iq/scores/cohorts',
   '/iq/library', '/iq/library/lib-stakeholder-email', '/iq/designs', '/iq/designs/dr-1',
   '/iq/agents', '/iq/prompts', '/iq/history', '/iq/diff', '/iq/evaluations', '/iq/canary', '/iq/prompt-ops',
   '/admin/budgets', '/admin/projects', '/admin/devbox', '/admin/observability', '/admin/observability/invocations',
@@ -107,7 +107,6 @@ test('Runbooks trails: Library, a runbook, Proposals and a proposal, Briefs and 
   assert.equal(record[3]?.id, 'rb-tenant-cutover');
   assert.deepEqual(resolveBreadcrumbs('/iq/runbooks/proposals').map((c) => c.label), ['Build', 'Runbooks', 'Proposals']);
   assert.equal(resolveBreadcrumbs('/iq/runbooks/proposals/prop-1')[2]?.path, '/iq/runbooks/proposals');
-  assert.deepEqual(resolveBreadcrumbs('/iq/runbooks/briefs/job-0002').map((c) => c.label), ['Build', 'Runbooks', 'Briefs', 'job-0002']);
 });
 
 

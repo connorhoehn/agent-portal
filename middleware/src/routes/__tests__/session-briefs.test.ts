@@ -35,7 +35,7 @@ import { randomBytes } from 'node:crypto';
 import request from '../../test-support/http.js';
 import { SERVICE_AUTH_HEADER, signServiceRequest } from '@connorhoehn/service-runtime';
 import { LAB_CALLBACK_SERVICE_AUTH, SERVICE_NONCE_HEADER, captureRawBody, resetServiceNonceCache } from '../../lib/service-auth.js';
-import { briefTaskTitle, createSessionBriefsRouter } from '../session-briefs.js';
+import { createSessionBriefsRouter } from '../session-briefs.js';
 import { RUN_TOKEN_HEADER, mintRunToken } from '../../lib/run-token.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { briefLibraryOf, loadSkillLibrary, assembleBrief, type RunbookStore } from '../../lib/runbooks/index.js';
@@ -167,24 +167,6 @@ describe('GET /api/runs/:ref/brief', () => {
   });
 });
 
-describe('GET /api/briefs', () => {
-  it('lists frozen briefs newest first without their markdown, for people only', async () => {
-    const brief = await freeze('job-1');
-    const res = await request(appAs(USERS.member!)).get('/api/briefs');
-    expect(res.status).toBe(200);
-    const row = res.body.briefs.find((b: { run_ref: string }) => b.run_ref === 'job-1');
-    expect(row.sha256).toBe(brief.sha256);
-    expect(row.markdown).toBeUndefined();
-    // The row is named by its task, read off the markdown it no longer carries.
-    expect(row.task_title).toBe(briefTaskTitle(brief.markdown));
-    expect(Array.isArray(row.sections)).toBe(true);
-    expect((await request(appAs(USERS.strayAssessor!)).get('/api/briefs')).status).toBe(403);
-    expect((await request(appAs(null)).get('/api/briefs')).status).toBe(401);
-    const target = '/api/briefs';
-    expect((await request(appAs(null)).get(target).set(boxHeaders('GET', target))).status).toBe(401);
-  });
-});
-
 describe('GET /api/work-items/:id/brief-preview', () => {
   it('assembles what a box would get, without storing it', async () => {
     const res = await request(appAs(USERS.member!)).get('/api/work-items/wi-auth-1/brief-preview');
@@ -263,12 +245,3 @@ describe('GET /api/work-items/:id/brief-preview', () => {
   });
 });
 
-describe('briefTaskTitle', () => {
-  it('reads the task line, or says there is none', () => {
-    expect(briefTaskTitle('# Brief\n\n## Your task\n**Tenant-by-tenant cutover** (story, 3 pts)\nbody')).toBe('Tenant-by-tenant cutover');
-    // Assembler v3: the task sits inside the fence, one tag line below the heading.
-    expect(briefTaskTitle(`# Brief\n\n## Your task\n<untrusted-${'a'.repeat(32)} kind="work-item" source="wi-1">\n**Tenant-by-tenant cutover** (story, 3 pts)\nbody`)).toBe('Tenant-by-tenant cutover');
-    expect(briefTaskTitle('# Brief\n\nno task')).toBeNull();
-    expect(briefTaskTitle(null)).toBeNull();
-  });
-});

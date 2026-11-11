@@ -32,7 +32,6 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
             "person",
             "saved-search",
             "library",
-            "brief",
             "channel",
             "team",
             "dm",
@@ -74,7 +73,6 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
             "local-compute",
             "runbooks",
             "runbook-proposals",
-            "session-briefs",
             "search",
             "communication",
             "scores",
@@ -285,7 +283,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "List one kind of record through the same read its page uses, optionally filtered by words, status, scope or a time. The kinds here: initiative, work-item, decision, design, job, finding, proposal, hitl-approval, consult, bot, run, computer, environment, runbook, runbook-proposal, change, sprint, deck, codebase, person, saved-search, library, brief, channel, team, dm, room, recording, call.",
+    "description": "List one kind of record through the same read its page uses, optionally filtered by words, status, scope or a time. The kinds here: initiative, work-item, decision, design, job, finding, proposal, hitl-approval, consult, bot, run, computer, environment, runbook, runbook-proposal, change, sprint, deck, codebase, person, saved-search, library, channel, team, dm, room, recording, call.",
     "name": "list",
     "parameters": {
       "additionalProperties": false,
@@ -387,7 +385,6 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
             "person",
             "saved-search",
             "library",
-            "brief",
             "channel",
             "team",
             "dm",
