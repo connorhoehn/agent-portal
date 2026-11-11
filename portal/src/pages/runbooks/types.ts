@@ -125,6 +125,26 @@ export interface BriefSummary {
   task_title?: string | null;
 }
 export interface SkillLibrary { sha256: string; dir: string | null; skills: Array<{ name: string; version: number }> }
-export interface Brief extends BriefSummary { markdown: string; skill_library?: SkillLibrary }
+/** Assembler v3: one runbook a run was given as text, with the reason it was chosen (middleware lib/runbooks/types.ts BriefOfferedRunbook). */
+export interface BriefOfferedRunbook {
+  id: string; version: number; title: string; reason: string; pinned: boolean;
+  health: 'proven' | 'drifting' | 'unproven'; warning: string | null;
+}
+/** What a run was offered; `runbooks` empty is a result, and `none_reason` says why. */
+export interface BriefOffer { runbooks: BriefOfferedRunbook[]; none_reason: string | null }
+export interface BriefAttemptRef { run_ref: string; outcome: 'done' | 'failed' | 'cancelled' | 'needs-review'; failure_code: string | null; ended_at: string }
+/** An earlier attempt in full, as the brief preview returns it (`previous_attempts`). */
+export interface BriefPreviousAttempt extends BriefAttemptRef { summary: string; obstacles: string[]; requested_changes: string | null }
+export interface Brief extends BriefSummary {
+  markdown: string; skill_library?: SkillLibrary;
+  /** v3 briefs only. */
+  offer?: BriefOffer;
+  previous_attempts?: BriefAttemptRef[];
+}
+/** GET /api/work-items/:id/brief-preview. */
+export interface BriefPreviewResponse {
+  brief: Brief; stored: false; skills?: BriefSkillDetail[];
+  offer: BriefOffer; pins: string[]; previous_attempts: BriefPreviousAttempt[];
+}
 /** R8: one skill a brief's run received, at the version it received (GET /api/runs/:ref/brief `skills`). */
 export interface BriefSkillDetail { name: string; version: number; title: string | null; description: string | null; current_version: number | null }

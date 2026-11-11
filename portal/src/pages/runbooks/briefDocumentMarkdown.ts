@@ -28,7 +28,7 @@ export function briefDocumentMarkdown(brief: Brief, options: {
     return `- **${text(options.sectionLabel(section))}**${label ? ` · ${label}` : ''} · _${count(section.tokens)} tokens_\n  ${text(section.reason)}`;
   }).join('\n') : 'No sources were recorded.');
   if (brief.omitted.length) {
-    parts.push('### Sources left out', brief.omitted.map(item => `- ${runbookLink(item.runbook_id, options.runbookLabel(item.runbook_id))} · _${item.reason === 'budget' ? 'Over the token budget' : item.reason === 'scope' ? 'Outside the scope' : 'Excluded because recent runs drifted from it'}_`).join('\n'));
+    parts.push('### Sources left out', brief.omitted.map(item => `- ${runbookLink(item.runbook_id, options.runbookLabel(item.runbook_id))} · _${item.reason === 'budget' ? 'Over the token budget' : item.reason === 'limit' ? 'Two runbooks were already given' : item.reason === 'scope' ? 'Outside the scope' : 'Excluded because recent runs drifted from it'}_`).join('\n'));
   }
   if (brief.skill_library) {
     const library = brief.skill_library;

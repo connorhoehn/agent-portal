@@ -52,9 +52,12 @@ export function buildNames(src: NameSources = {}): Names {
 /** Names with nothing loaded: every lookup falls back to its plain description. */
 export const NO_NAMES: Names = buildNames();
 
-/** The task title a brief's markdown opens its "Your task" section with (`**Title** (story, 3 pts, …)`), or null. */
+/**
+ * The task title a brief's markdown opens its "Your task" section with (`**Title** (story, 3 pts, …)`), or null.
+ * From assembler v3 the title sits inside the task's untrusted-text fence, one tag line below the heading.
+ */
 export function briefTaskTitle(markdown: string): string | null {
-  const m = /^## Your task\s*\n\*\*(.+?)\*\*/m.exec(markdown);
+  const m = /^## Your task\s*\n(?:<untrusted-[0-9a-f]+[^>\n]*>\n)?\*\*(.+?)\*\*/m.exec(markdown);
   return m ? m[1]!.trim() : null;
 }
 

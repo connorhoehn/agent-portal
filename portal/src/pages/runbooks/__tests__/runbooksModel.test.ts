@@ -134,6 +134,8 @@ test('a brief row is titled by its run, grouped by day, and still found by its r
 test('the task title comes from the brief markdown', () => {
   assert.equal(briefTaskTitle('# Brief\n\n## Your task\n**Tenant-by-tenant cutover** (story, 3 pts)\nbody'), 'Tenant-by-tenant cutover');
   assert.equal(briefTaskTitle('## The project\n**Auth**'), null);
+  // Assembler v3: the task sits inside the untrusted-text fence, one tag line below the heading.
+  assert.equal(briefTaskTitle(`## Your task\n<untrusted-${'a'.repeat(32)} kind="work-item" source="wi-1">\n**Tenant-by-tenant cutover** (story, 3 pts)\nbody`), 'Tenant-by-tenant cutover');
 });
 
 test('file helpers format sizes, modes, languages and the diff summary', () => {
