@@ -30,10 +30,15 @@ function audit() {
   }
   visit(main);
   requireContract(densityWrapsApp, 'The real App must inherit compact DensityProvider in main.tsx, not only in fixtures.');
-  for (const area of ['pipelines', 'iq', 'assessment']) {
+  for (const area of ['pipelines', 'assessment']) {
     const file = `portal/src/pages/${area}/RunsPage.tsx`;
     requireContract(/<RunsLedger[\s/>]/.test(read(file)), `${file}: use the shared RunsLedger.`);
   }
+  // The orgiq Runs page (lane E2, docs/learning-loop-design.md § Pages) lists run reports across
+  // every executor, not the bot-run projection RunsLedger reads, so its contract is the shared
+  // collection composition rather than the ledger.
+  requireContract(/<Collection(?:Command)?Page[\s/>]/.test(read('portal/src/pages/iq/RunsPage.tsx')),
+    'portal/src/pages/iq/RunsPage.tsx: collection layout belongs in CollectionPage.');
   const collectionFiles = ['Definitions', 'Artifacts', 'Approvals', 'Workflows', 'Sources', 'Queues', 'Runs'].map(name => `portal/src/pages/pipelines/${name}Page.tsx`);
   for (const file of collectionFiles) {
     // CollectionCommandPage is the app's adapter over CollectionPage (components/collections); it owns the same composition.
