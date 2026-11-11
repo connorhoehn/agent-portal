@@ -292,6 +292,16 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
           data-testid="proposal-card"
         />
 
+        <ProposalAccept
+          open={accepting}
+          title={p.kind === 'retire' ? 'Retire this runbook?' : 'Accept this proposal?'}
+          scopeSentence={p.kind === 'retire' ? `${title} will no longer be given to any run.${runbook ? ` ${scopeInWords(runbook.scope, names)}` : ''}` : chosenScope ? scopeInWords(chosenScope, names) : 'This runbook will be given to runs it applies to.'}
+          scripts={data.scripts_to_read ?? []}
+          widening={widening}
+          unread={unread}
+          onCancel={() => setAccepting(false)}
+          onAccept={accept}
+        />
         {open && !canReview && (
           <AccessNotice tone="info" title="You can read this proposal, not decide it"
             body="Accepting, rejecting and merging belong to the runbook’s owner or an SME on its initiative, and nobody decides their own proposal." data-testid="proposal-access" />
@@ -394,16 +404,6 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
           </DetailSection>
         )}
       </Stack>
-      <ProposalAccept
-        open={accepting}
-        title={p.kind === 'retire' ? 'Retire this runbook?' : 'Accept this proposal?'}
-        scopeSentence={p.kind === 'retire' ? `${title} will no longer be given to any run.${runbook ? ` ${scopeInWords(runbook.scope, names)}` : ''}` : chosenScope ? scopeInWords(chosenScope, names) : 'This runbook will be given to runs it applies to.'}
-        scripts={data.scripts_to_read ?? []}
-        widening={widening}
-        unread={unread}
-        onCancel={() => setAccepting(false)}
-        onAccept={accept}
-      />
     </EditorShell>
   );
 }

@@ -207,12 +207,12 @@ async function main() {
       await go(page, `/iq/runbooks/proposals/${firstProposalId}`);
       await page.locator('[data-testid="proposal-accept"]').waitFor({ state: 'visible', timeout: 20000 });
       await page.locator('[data-testid="proposal-accept"]').click();
-      const dialog = page.locator('[role="dialog"]').last();
+      const dialog = page.locator('[data-testid="accept-panel"]');
       await dialog.waitFor({ state: 'visible', timeout: 10000 });
       const said = (await dialog.innerText()).replace(/\s+/g, ' ');
       check(said.includes(`the repository ${REPO}`), `the confirmation does not state the repository: "${said.slice(0, 200)}"`);
       await shots(page, 'l3-confirm');
-      await dialog.getByRole('button', { name: 'Accept', exact: true }).click();
+      await dialog.locator('[data-testid="accept-confirm"]').click();
       await page.locator('[data-testid="proposal-decided"]').waitFor({ state: 'visible', timeout: 15000 });
       await go(page, `/iq/runbooks/${LOGOUT_RUNBOOK}?tab=history`);
       const link = page.locator('[data-testid="version-run-1"]');
@@ -299,9 +299,9 @@ async function main() {
       await go(page, `/iq/runbooks/proposals/${proposal.id}`);
       await page.locator('[data-testid="proposal-accept"]').waitFor({ state: 'visible', timeout: 20000 });
       await page.locator('[data-testid="proposal-accept"]').click();
-      const dialog = page.locator('[role="dialog"]').last();
+      const dialog = page.locator('[data-testid="accept-panel"]');
       await dialog.waitFor({ state: 'visible', timeout: 10000 });
-      const confirm = dialog.getByRole('button', { name: 'Accept', exact: true });
+      const confirm = dialog.locator('[data-testid="accept-confirm"]');
       check(await confirm.isDisabled(), 'Accept is enabled before the script is ticked');
       check(/scripts\/walk-plan\.mjs/.test(await dialog.innerText()), 'the dialog does not list the script by path');
       await shots(page, 'l12-unticked');
