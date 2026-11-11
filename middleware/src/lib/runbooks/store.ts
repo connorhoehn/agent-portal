@@ -210,6 +210,12 @@ export function planAccept(
   }
 
   if (!runbook) throw new NotFoundError(`runbook ${proposal.runbook_id}`);
+  // A restore is the one decision a retired runbook takes: it goes back to published at the version it was retired at.
+  if (proposal.kind === 'restore') {
+    if (runbook.status !== 'retired') throw new InvalidWriteError(`${runbook.id} is not retired, so there is nothing to restore`);
+    const { retired: _gone, ...rest } = clone(runbook);
+    return { proposal: decided, version: null, runbook: { ...rest, status: 'published', updated_at: input.at } };
+  }
   // A retired runbook takes no more versions and no second retirement, whatever route the caller came by.
   if (runbook.status === 'retired') throw new RetiredRunbookError(runbook.id);
   if (proposal.base_version !== null && proposal.base_version !== runbook.current_version) {

@@ -10,6 +10,7 @@
 //   GET  /api/runbooks/:id                     the runbook, its current version, derived health
 //   GET  /api/runbooks/:id/versions            every version (markdown + sha + who accepted it)
 //   GET  /api/runbooks/:id/diff                unified diff of canonical markdown, ?from=&to=
+//   POST /api/runbooks/proposals {kind:'restore'}  a retired runbook comes back only through review
 //   POST /api/runbooks/:id/retire              ReviewRunbook + scope; names what superseded it
 //   GET  /api/runbooks/:id/applications        runs that were given it and reported (?version=)
 //   GET  /api/runbooks/evidence                the loop over 30 days, counted from run reports (lib/runbooks/evidence.ts)
@@ -288,20 +289,26 @@ export interface ProposeResult { status: number; body: Record<string, unknown>; 
 export async function fileProposal(
   s: RunbookStore, body: Record<string, unknown>, source: RunbookProposal['source'], runAuthored?: RunAuthoredOptions,
 ): Promise<ProposeResult> {
-  let kind = oneOf(['new', 'edit', 'retire'] as const, body['kind'], 'kind');
-  if (!kind) throw new ValidationError('`kind` is required: new | edit | retire');
+  let kind = oneOf(['new', 'edit', 'retire', 'restore'] as const, body['kind'], 'kind');
+  if (!kind) throw new ValidationError('`kind` is required: new | edit | retire | restore');
   const rationale = str(body['rationale']);
   if (!rationale) throw new ValidationError('`rationale` is required');
+  // Bringing a retired runbook back is a person's call; a run or a box never files one.
+  if (kind === 'restore' && source.kind !== 'person') {
+    return { status: 403, body: { error: 'only a person proposes restoring a retired runbook', code: 'PERSON_ONLY' } };
+  }
 
   let runbookId: string | null = null;
   let baseVersion: number | null = null;
   let target: Runbook | null = null;
   if (kind !== 'new') {
     runbookId = str(body['runbook_id']) ?? null;
-    if (!runbookId) throw new ValidationError('`runbook_id` is required for an edit or a retire');
+    if (!runbookId) throw new ValidationError('`runbook_id` is required for an edit, a retire or a restore');
     target = await s.getRunbook(runbookId);
     if (!target) return { status: 404, body: { error: 'runbook not found' } };
-    if (target.status === 'retired') return { status: 409, body: { error: `${target.id} is retired`, code: 'RETIRED' } };
+    if (kind === 'restore') {
+      if (target.status !== 'retired') return { status: 409, body: { error: `${target.id} is not retired`, code: 'NOT_RETIRED' } };
+    } else if (target.status === 'retired') return { status: 409, body: { error: `${target.id} is retired`, code: 'RETIRED' } };
     baseVersion = int(body['base_version']) ?? target.current_version;
     if (baseVersion < 1 || baseVersion > target.current_version) throw new ValidationError(`base_version must be between 1 and ${target.current_version}`);
   } else if (body['runbook_id'] !== undefined && body['runbook_id'] !== null) {
@@ -313,7 +320,7 @@ export async function fileProposal(
   let proposedId: string | undefined;
   let frontmatterKeys: string[] = [];
   let convertedFrom: string | null = null;
-  if (kind !== 'retire') {
+  if (kind === 'new' || kind === 'edit') {
     // Either canonical runbook markdown (`lab propose`) or a SKILL.md-shaped draft (`lab keep`, R8):
     // frontmatter name + description, then the same canonical body.
     // Files first, before any parsing — they are untrusted input: safe paths only, text only, capped per file and per bundle (lib/runbooks/files.ts).
@@ -490,7 +497,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
   router.get('/proposals', ...readGate, handler(async (req, res) => {
     const s = await store();
     const status = csv(PROPOSAL_STATUSES, req.query['status'], 'status');
-    const kind = oneOf(['new', 'edit', 'retire'] as const, req.query['kind'], 'kind');
+    const kind = oneOf(['new', 'edit', 'retire', 'restore'] as const, req.query['kind'], 'kind');
     const runbookId = str(req.query['runbook_id']);
     const cursor = str(req.query['cursor']);
     const limit = pageLimit(req.query['limit']);
@@ -536,7 +543,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const target = await proposalTarget(s, p);
     const base = target && p.base_version !== null ? await s.getVersion(target.id, p.base_version) : null;
     const proposedMd = p.proposed ? versionOf({ runbook_id: p.runbook_id ?? 'new', version: 0, doc: p.proposed, author: { kind: 'person', id: '-' } }).markdown : '';
-    const diff = p.kind === 'retire' ? null
+    const diff = (p.kind === 'retire' || p.kind === 'restore') ? null
       : unifiedDiff(base?.markdown ?? '', proposedMd, { from: base ? `${target!.id} v${base.version}` : '/dev/null', to: 'proposed' });
     const s0 = session(req);
     const verdict = await mayReviewRunbook(s0, target?.scope ?? (p.kind === 'new' ? await newProposalScope(p) : { kind: 'org', ref: null }), target?.owner_person_id ?? null, target ? (target.area ?? null) : await proposalArea(p));
@@ -544,18 +551,18 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const mine = p.source.person_id !== undefined && (p.source.person_id === actor || p.source.person_id === personId);
     // R8: what the proposal does to the files the runbook carries, as text (the portal never executes it).
     const baseFiles = base?.files ?? [];
-    const proposedFiles = p.proposed_files ?? (p.kind === 'retire' ? [] : baseFiles);
-    const fd = p.kind === 'retire' ? null : filesUnifiedDiff(baseFiles, proposedFiles);
+    const proposedFiles = p.proposed_files ?? ((p.kind === 'retire' || p.kind === 'restore') ? [] : baseFiles);
+    const fd = (p.kind === 'retire' || p.kind === 'restore') ? null : filesUnifiedDiff(baseFiles, proposedFiles);
     res.json({
       proposal: proposalView(p),
       runbook: target,
       base_markdown: base?.markdown ?? null,
       proposed_markdown: p.proposed ? proposedMd : null,
       diff,
-      proposed_files: p.kind === 'retire' ? [] : proposedFiles,
+      proposed_files: (p.kind === 'retire' || p.kind === 'restore') ? [] : proposedFiles,
       files_diff: fd,
       // Lane C: the scripts the reviewer must confirm reading (accept's `scripts_read`), by path and sha256.
-      scripts_to_read: p.kind === 'retire' ? [] : scriptsToRead(proposedFiles, baseFiles).map((f) => ({ path: f.path, sha256: f.sha256 })),
+      scripts_to_read: (p.kind === 'retire' || p.kind === 'restore') ? [] : scriptsToRead(proposedFiles, baseFiles).map((f) => ({ path: f.path, sha256: f.sha256 })),
       can_review: verdict.ok && !mine && p.status === 'open' && (await isAllowed(s0, 'ReviewRunbook')),
     });
   }));
@@ -652,8 +659,8 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const machine = res.locals['machine'] === true;
     const body = (req.body ?? {}) as Record<string, unknown>;
     // Shape errors before attribution, as before: an unknown kind or no rationale is a 400 for anyone.
-    const kind = oneOf(['new', 'edit', 'retire'] as const, body['kind'], 'kind');
-    if (!kind) throw new ValidationError('`kind` is required: new | edit | retire');
+    const kind = oneOf(['new', 'edit', 'retire', 'restore'] as const, body['kind'], 'kind');
+    if (!kind) throw new ValidationError('`kind` is required: new | edit | retire | restore');
     if (!str(body['rationale'])) throw new ValidationError('`rationale` is required');
     const src = (body['source'] && typeof body['source'] === 'object' ? body['source'] : {}) as Record<string, unknown>;
     const labIds = Array.isArray(src['lab_experience_ids']) ? src['lab_experience_ids'].filter((x): x is string => typeof x === 'string') : [];
@@ -818,6 +825,15 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
       ? { kind: 'person', id: p.source.person_id ?? 'unknown' }
       : { kind: 'run', id: p.source.run_ref ?? 'unknown' };
 
+    if (p.kind === 'restore') {
+      if (!target || target.status !== 'retired') { res.status(409).json({ error: `${p.runbook_id} is not retired`, code: 'NOT_RETIRED' }); return; }
+      const result = await s.acceptProposal({ proposal_id: p.id, decided_by: actor, at, note });
+      noteSearchWriteSoon({ type: 'knowledge', id: result.runbook.id });
+      await notifyDecided(result.proposal, 'accepted', [actor, d.sess.sub]);
+      res.json({ proposal: result.proposal, runbook: result.runbook, version: null });
+      return;
+    }
+
     // A runbook retired after this proposal was opened takes no more versions and no second retirement.
     if (target && target.status === 'retired') {
       res.status(409).json({ error: `${target.id} is retired`, code: 'RETIRED' });
@@ -969,7 +985,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
       const v = await mayReviewRunbook(d.sess, source.scope, source.owner_person_id, source.area ?? null);
       if (!v.ok) { deny(res, v); return; }
     }
-    if (p.kind === 'retire' || !p.proposed) { res.status(409).json({ error: 'a retire proposal cannot be merged', code: 'NOT_MERGEABLE' }); return; }
+    if (p.kind === 'retire' || p.kind === 'restore' || !p.proposed) { res.status(409).json({ error: 'a retire proposal cannot be merged', code: 'NOT_MERGEABLE' }); return; }
     if (p.runbook_id === dest.id) { res.status(409).json({ error: 'this proposal already targets that runbook; accept it instead', code: 'SAME_TARGET' }); return; }
 
     const at = now();

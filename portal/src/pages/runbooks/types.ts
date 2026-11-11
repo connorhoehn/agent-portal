@@ -89,7 +89,7 @@ export interface LintFinding { rule: string; severity: 'error' | 'warning'; path
 
 export interface Proposal {
   id: string;
-  kind: 'new' | 'edit' | 'retire';
+  kind: 'new' | 'edit' | 'retire' | 'restore';
   runbook_id: string | null;
   base_version: number | null;
   proposed: RunbookDoc | null;

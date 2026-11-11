@@ -174,12 +174,12 @@ export interface LintFinding {
 
 export interface RunbookProposal {
   id: string;
-  kind: 'new' | 'edit' | 'retire';
+  kind: 'new' | 'edit' | 'retire' | 'restore';
   /** null for kind 'new'. */
   runbook_id: string | null;
   /** The version the diff was taken against. */
   base_version: number | null;
-  /** null for 'retire'. */
+  /** null for 'retire' and 'restore'. */
   proposed: RunbookDoc | null;
   /**
    * R8: the files the proposed version carries (the WHOLE set, not a delta:

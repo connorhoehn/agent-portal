@@ -357,6 +357,26 @@ describe('deciding: who may accept', () => {
     // A retired runbook takes no more proposals.
     expect((await request(appAs(USERS.member!)).post('/api/runbooks/proposals').send({ kind: 'edit', runbook_id: 'rb-tenant-cutover', markdown: EDIT_MD, rationale: 'x' })).status).toBe(409);
   });
+
+  it('a retired runbook comes back only by an accepted restore proposal', async () => {
+    const file = (u: TestUser, id = 'rb-tenant-cutover') => request(appAs(u)).post('/api/runbooks/proposals').send({ kind: 'restore', runbook_id: id, rationale: 'It proved needed after all.' });
+    // Nothing to restore while it is published.
+    expect((await file(USERS.member!)).status).toBe(409);
+    const retire = await request(appAs(USERS.member!)).post('/api/runbooks/proposals').send({ kind: 'retire', runbook_id: 'rb-tenant-cutover', rationale: 'The shim is gone.' });
+    await accept(USERS.owner!, retire.body.proposal.id, {});
+    const res = await file(USERS.member!);
+    expect(res.status).toBe(201);
+    expect(res.body.proposal).toEqual(expect.objectContaining({ kind: 'restore', proposed: null, status: 'open' }));
+    // A restore is not mergeable, and still waits for a reviewer.
+    expect((await request(appAs(USERS.member!)).get('/api/runbooks/rb-tenant-cutover')).body.runbook.status).toBe('retired');
+    const accepted = await accept(USERS.owner!, res.body.proposal.id, {});
+    expect(accepted.status).toBe(200);
+    expect(accepted.body.runbook.status).toBe('published');
+    expect(accepted.body.runbook.retired).toBeUndefined();
+    // Restoring a published runbook again is refused, and a second accept of the closed proposal too.
+    expect((await file(USERS.member!)).status).toBe(409);
+    expect((await accept(USERS.owner!, res.body.proposal.id, {})).status).toBe(409);
+  });
 });
 
 describe('reject and merge', () => {

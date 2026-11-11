@@ -109,6 +109,7 @@ export async function notifyFiled(s: RunbookStore, p: RunbookProposal): Promise<
     return await send(reviewers, {
       id: `runbook-proposal:${p.id}:filed`, type: 'approval-requested',
       title: p.kind === 'retire' ? `A runbook is proposed for retirement: ${nameOf(p)}`
+        : p.kind === 'restore' ? `A retired runbook is proposed for restoring: ${nameOf(p)}`
         : p.kind === 'edit' ? `A change to ${nameOf(p)} is waiting for review` : `A new runbook is waiting for review: ${nameOf(p)}`,
       body: p.rationale,
       payload: { tenant: 'orgiq', kind: 'runbook-proposal', event: 'filed', proposalId: p.id, proposalKind: p.kind, ...(p.runbook_id ? { runbookId: p.runbook_id } : {}) },

@@ -147,6 +147,8 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
   // The card's summary pair; the real change is the diff beneath it.
   const cardPairs = p.kind === 'retire'
     ? [{ before: title, after: 'Retired' }]
+    : p.kind === 'restore'
+      ? [{ before: `${title}, retired`, after: 'Published again, at the version it was retired at' }]
     : p.kind === 'new'
       ? [{ before: 'No such runbook yet', after: p.proposed?.summary ?? title }]
       : [{ before: `Version ${p.base_version ?? ''} of ${title}`, after: `${data.diff ? `+${data.diff.added} lines, −${data.diff.removed} lines` : 'No textual change'}; the full diff is below` }];
@@ -197,14 +199,14 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
 
   const sections = [
     { id: 'summary', title: 'Change summary' },
-    ...(p.kind !== 'retire' ? [{ id: 'changes', title: 'Document changes' }] : []),
+    ...(p.kind !== 'retire' && p.kind !== 'restore' ? [{ id: 'changes', title: 'Document changes' }] : []),
     ...(data.files_diff?.text || data.proposed_files?.length ? [{ id: 'files', title: 'File changes' }] : []),
     { id: 'checks', title: 'Review checks' },
     ...(p.source.kind === 'run' && p.source.run_ref ? [{ id: 'said', title: 'What the run said' }] : []),
     ...(p.kind === 'retire' && p.retire_evidence ? [{ id: 'runs', title: 'Runs it names' }] : []),
     ...(p.proposed ? [{ id: 'preview', title: 'Proposed runbook' }] : []),
     ...(sources.length ? [{ id: 'sources', title: 'Sources' }] : []),
-    ...(open && canReview && p.kind !== 'retire' && mergeTargets.length ? [{ id: 'merge', title: 'Merge proposal' }] : []),
+    ...(open && canReview && p.kind !== 'retire' && p.kind !== 'restore' && mergeTargets.length ? [{ id: 'merge', title: 'Merge proposal' }] : []),
   ];
   const sectionTitle = (id: string) => {
     const index = sections.findIndex(section => section.id === id);
@@ -249,7 +251,7 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
             {`The proposal was written against v${p.base_version}; ${title} is at v${runbook!.current_version}. Accepting is refused until a fresh proposal is made against the current version.`}
           </Banner>
         )}
-        {retired && open && (
+        {retired && open && p.kind !== 'restore' && (
           <Banner variant="warning" layout="callout" icon title="The target runbook is retired" data-testid="proposal-retired">
             Nothing can be accepted onto a retired runbook. Reject this proposal, or merge it into a published runbook.
           </Banner>
@@ -288,14 +290,14 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
           rationale={retireRationale(p, title)}
           status={p.status === 'open' ? 'pending' : p.status === 'accepted' ? 'applied' : 'rejected'}
           {...(open && canReview ? { onReject: reject } : {})}
-          {...(open && canReview && !retired && !p.expired ? { actions: <Button variant="primary" size="sm" onClick={() => setAccepting(true)} data-testid="proposal-accept">{p.kind === 'retire' ? 'Retire this runbook…' : 'Accept…'}</Button> } : {})}
+          {...(open && canReview && (p.kind === 'restore' ? retired : !retired) && !p.expired ? { actions: <Button variant="primary" size="sm" onClick={() => setAccepting(true)} data-testid="proposal-accept">{p.kind === 'retire' ? 'Retire this runbook…' : p.kind === 'restore' ? 'Restore this runbook…' : 'Accept…'}</Button> } : {})}
           data-testid="proposal-card"
         />
 
         <ProposalAccept
           open={accepting}
-          title={p.kind === 'retire' ? 'Retire this runbook?' : 'Accept this proposal?'}
-          scopeSentence={p.kind === 'retire' ? `${title} will no longer be given to any run.${runbook ? ` ${scopeInWords(runbook.scope, names)}` : ''}` : chosenScope ? scopeInWords(chosenScope, names) : 'This runbook will be given to runs it applies to.'}
+          title={p.kind === 'retire' ? 'Retire this runbook?' : p.kind === 'restore' ? 'Restore this runbook?' : 'Accept this proposal?'}
+          scopeSentence={p.kind === 'restore' ? `${title} will be given to runs it applies to again.${runbook ? ` ${scopeInWords(runbook.scope, names)}` : ''}` : p.kind === 'retire' ? `${title} will no longer be given to any run.${runbook ? ` ${scopeInWords(runbook.scope, names)}` : ''}` : chosenScope ? scopeInWords(chosenScope, names) : 'This runbook will be given to runs it applies to.'}
           scripts={data.scripts_to_read ?? []}
           widening={widening}
           unread={unread}
@@ -338,7 +340,7 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
         </Stack>
         </DetailSection>
 
-        {p.kind !== 'retire' && (
+        {p.kind !== 'retire' && p.kind !== 'restore' && (
           <DetailSection as="h2" variant="heading" first title={sectionTitle('changes')} data-testid="proposal-section-changes" hint={data.diff ? `+${data.diff.added} −${data.diff.removed}` : undefined}>
             {data.diff?.text
               ? <NamedDiff diff={viewerDiff(data.diff.text, `${title}.md`)} names={names} testId="proposal-diff" />
@@ -395,7 +397,7 @@ export function ProposalReview({ pid, published, publishedLoading = false, onOpe
           </DetailSection>
         )}
 
-        {open && canReview && p.kind !== 'retire' && mergeTargets.length > 0 && (
+        {open && canReview && p.kind !== 'retire' && p.kind !== 'restore' && mergeTargets.length > 0 && (
           <DetailSection as="h2" variant="heading" title={sectionTitle('merge')} data-testid="proposal-section-merge" description="Re-aim this proposal as an edit of another runbook; it stays open there for review.">
             <Inline gap="sm" align="center">
               <Select size="sm" aria-label="Merge into" className="w-auto min-w-64" value={mergeInto} placeholder="Choose a runbook…" options={mergeTargets} onChange={(e) => setMergeInto(e.target.value)} />

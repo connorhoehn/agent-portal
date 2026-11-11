@@ -24,6 +24,7 @@ import { ReadOnlyDocument } from '../../components/documents/ReadOnlyDocument';
 import { useRunbookNames } from './useRunbookNames';
 import type { Names } from './runbookNames';
 import { RunbookFiles } from './RunbookFiles';
+import { RestoreRunbook } from './RestoreRunbook';
 import {
   HEALTH_LABEL, HEALTH_TONE, OUTCOME_LABEL, RECORD_TABS, parseTab, proposalHref, refusalMessage, runPageHref,
   runbookHref, runbookEvidenceSentences, scopeLabel, stepMarkers, viewerDiff, type RecordTab,
@@ -101,7 +102,7 @@ export function RunbookRecord({ id, summary, onOpen, onChanged }: {
       data-testid="runbook-record"
     >
       <Stack gap="md" className={tab === 'read' ? 'h-full min-h-0 w-full px-6 py-4' : 'w-full max-w-4xl px-6 py-4'}>
-        {tab === 'read' && <ReadTab runbook={runbook} version={current} names={names} onOpen={onOpen} />}
+        {tab === 'read' && <ReadTab runbook={runbook} version={current} names={names} onOpen={onOpen} onChanged={onChanged} />}
         {tab === 'history' && <HistoryTab runbook={runbook} names={names} />}
         {tab === 'runs' && <RunsTab runbook={runbook} version={current} names={names} applications={applications.data?.applications ?? null} evidence={evidence.data?.evidence ?? null} error={applications.error ?? evidence.error} onOpen={onOpen} />}
         {tab === 'suggest' && <SuggestTab runbook={runbook} version={current} onOpen={onOpen} onChanged={() => { record.refresh(); onChanged(); }} />}
@@ -121,7 +122,7 @@ function CopyMarkdown({ markdown }: { markdown: string }) {
   );
 }
 
-function ReadTab({ runbook, version, names, onOpen }: { runbook: RunbookRow; version: RunbookVersion; names: Names; onOpen: (href: string) => void }) {
+function ReadTab({ runbook, version, names, onOpen, onChanged }: { runbook: RunbookRow; version: RunbookVersion; names: Names; onOpen: (href: string) => void; onChanged: () => void }) {
   const prov = version.provenance;
   const sources = [
     ...prov.run_refs.map((r) => ({ id: `run:${r}`, title: names.run(r), kind: 'transcript' as const, meta: 'Proposed this version', onOpen: () => onOpen(runPageHref(r)) })),
@@ -135,6 +136,7 @@ function ReadTab({ runbook, version, names, onOpen }: { runbook: RunbookRow; ver
         <Banner variant="warning" layout="callout" icon title="This runbook is retired" data-testid="runbook-retired"
           action={runbook.retired.superseded_by ? <Button variant="link" size="sm" onClick={() => onOpen(runbookHref(runbook.retired!.superseded_by!))}>Open its replacement</Button> : undefined}>
           {runbook.retired.reason}
+          <RestoreRunbook runbookId={runbook.id} onOpen={onOpen} onChanged={onChanged} />
         </Banner>
       )}
       {/* Drifting, or unproven after a failed run: whenever health carries a warning (decision 23). */}

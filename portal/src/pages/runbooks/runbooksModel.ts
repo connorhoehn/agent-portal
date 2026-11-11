@@ -120,7 +120,7 @@ export function briefRefOfRun(runId: string | undefined): string | null {
 
 // ── Proposals ────────────────────────────────────────────────────────────────
 
-export const KIND_LABEL: Record<Proposal['kind'], string> = { new: 'New runbook', edit: 'Edit', retire: 'Retire' };
+export const KIND_LABEL: Record<Proposal['kind'], string> = { new: 'New runbook', edit: 'Edit', retire: 'Retire', restore: 'Restore' };
 export const PROPOSAL_STATUS_LABEL: Record<Proposal['status'], string> = { open: 'Open', accepted: 'Accepted', rejected: 'Rejected', merged: 'Merged', withdrawn: 'Withdrawn' };
 export const PROPOSAL_STATUS_TONE: Record<Proposal['status'], 'info' | 'success' | 'error' | 'neutral'> = { open: 'info', accepted: 'success', rejected: 'error', merged: 'neutral', withdrawn: 'neutral' };
 
@@ -166,7 +166,7 @@ export function proposalGroups(rows: readonly ProposalRow[]) {
 }
 
 export const PROPOSAL_STATUS_FILTERS: Record<string, string> = { open: 'open', accepted: 'accepted', rejected: 'rejected', merged: 'merged', withdrawn: 'withdrawn' };
-export const PROPOSAL_KIND_FILTERS: Record<string, Proposal['kind']> = { new: 'new', edit: 'edit', retire: 'retire' };
+export const PROPOSAL_KIND_FILTERS: Record<string, Proposal['kind']> = { new: 'new', edit: 'edit', retire: 'retire', restore: 'restore' };
 export const PROPOSAL_SOURCE_FILTERS: Record<string, Proposal['source']['kind']> = { run: 'run', person: 'person', system: 'system' };
 
 /** The proposals tab's three filters; null means "any". */
