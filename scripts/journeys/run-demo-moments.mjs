@@ -79,10 +79,16 @@ for (const [port, what] of [[MW_PORT, 'middleware'], [PORTAL_PORT, 'portal']]) {
   }
 }
 
+// The learning-loop-runbooks walk dispatches work items and reads the run reports and debriefs the mock's
+// fixtures hand back; dev:mock's mock devbox runtime would otherwise take those dispatches (middleware
+// lib/bot-runner.ts, MOCK_SIMULATED_DISPATCH_STEP_MS). Every other journey keeps dev:mock's behaviour.
+const journeyArg = process.argv.indexOf('--journey');
+const simulatedDispatch = journeyArg >= 0 && process.argv[journeyArg + 1] === 'learning-loop-runbooks' ? { MOCK_SIMULATED_DISPATCH_STEP_MS: '0' } : {};
+
 const mwLog = path.join(work, 'middleware.log');
 const portalLog = path.join(work, 'portal.log');
 start('middleware', process.execPath, [path.join(ROOT, 'middleware', 'node_modules', '.bin', 'tsx'), 'src/index.ts'], path.join(ROOT, 'middleware'), {
-  ...devMockEnv(), PORT: String(MW_PORT), MOCK_VOICE: '1', VOICE_LOG_DIR: path.join(work, 'voice-log'), MOCK_PERSIST_PAIRINGS: '0',
+  ...devMockEnv(), PORT: String(MW_PORT), MOCK_VOICE: '1', VOICE_LOG_DIR: path.join(work, 'voice-log'), MOCK_PERSIST_PAIRINGS: '0', ...simulatedDispatch,
 }, mwLog);
 // The portal without its HMR socket and with its own dependency cache (journey-vite.mjs says why).
 start('portal', process.execPath, [path.join(ROOT, 'scripts', 'journeys', 'journey-vite.mjs'), '--port', String(PORTAL_PORT)], path.join(ROOT, 'portal'), {

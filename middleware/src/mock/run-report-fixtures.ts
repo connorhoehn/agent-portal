@@ -33,6 +33,8 @@ export interface SimulatedRunFixture {
   runbooks: Array<{ id: string; followed: 'yes' | 'partly' | 'no'; wrongStep?: number; note?: string }>;
 }
 
+const LOGOUT_RUNBOOK = 'rb-logout-shim-cookie';
+
 interface ItemLike { title: string; labels: readonly string[]; projectId?: string | null; type?: string | null }
 
 const FIXTURES: Array<{ when: (w: ItemLike) => boolean; build: (w: ItemLike) => SimulatedRunFixture }> = [
@@ -80,6 +82,20 @@ const FIXTURES: Array<{ when: (w: ItemLike) => boolean; build: (w: ItemLike) => 
  * to runs that never use it comes up for retirement).
  */
 export function simulatedRunFixture(item: ItemLike, given: readonly string[] = []): SimulatedRunFixture {
+  // Lane E4: a session-cookie item whose brief gave the runbook the logout run wrote follows it, and
+  // learns nothing new (so it earns no second debrief). Another runbook it was given is not followed.
+  if (item.labels.includes('session') && given.includes(LOGOUT_RUNBOOK)) {
+    return {
+      key: 'used', outcome: 'done', failureCode: null, skillsLoaded: [LOGOUT_RUNBOOK],
+      summary: 'Revoking a grant now clears the session cookie on the app domain and on the legacy shim domain, using the logout runbook: the shim cookie is deleted with the same Domain and Path it was set with.',
+      verification: [{ command: 'npm test', passed: true }, { command: 'npx playwright test refresh', passed: true }],
+      obstacles: [],
+      learned: '',
+      runbooks: given.map((id) => (id === LOGOUT_RUNBOOK
+        ? { id, followed: 'yes' as const }
+        : { id, followed: 'no' as const, note: 'The change did not need it.' })),
+    };
+  }
   for (const f of FIXTURES) if (f.when(item)) return f.build(item);
   return {
     key: 'nothing', outcome: 'done', failureCode: null, skillsLoaded: [],
@@ -107,8 +123,13 @@ export function simulatedRunTexts(): Array<{ key: string; text: string }> {
     { title: 'Tenant-by-tenant cutover runbook with rollback', labels: ['decom', 'runbook', 'blocked'], projectId: 'p-auth-migration' },
     { title: 'Error-budget dashboard per team', labels: ['slo'] },
   ];
-  return samples.flatMap((w) => {
+  const withLogout: Array<{ w: ItemLike; given: string[] }> = [{ w: { title: 'Refresh loop when a grant is revoked mid-session', labels: ['session'] }, given: [LOGOUT_RUNBOOK] }];
+  const more = withLogout.flatMap(({ w, given }) => {
+    const f = simulatedRunFixture(w, given);
+    return [f.summary, ...f.obstacles, ...f.verification.map((v) => v.command)].map((text) => ({ key: 'used-logout', text }));
+  });
+  return [...more, ...samples.flatMap((w) => {
     const f = simulatedRunFixture(w);
     return [f.summary, ...f.obstacles, ...f.verification.map((v) => v.command), ...(f.learned ? [f.learned] : [])].map((text) => ({ key: f.key, text }));
-  });
+  })];
 }

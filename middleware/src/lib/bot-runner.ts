@@ -1469,7 +1469,7 @@ export async function dispatchWorkItem(input: {
   // Also whenever the request runs inside a scoped mock world: the real path
   // below mints a computer in the fleet registry, which no scope forks, and
   // computers are ephemeral — a walk must neither create nor depend on one.
-  if (currentMockScope() !== undefined || !await resolveDevboxArn()) {
+  if (currentMockScope() !== undefined || simulatedDispatchForced || !await resolveDevboxArn()) {
     return simulateMarketplaceDispatch({
       item, project, prompt, model: input.model, revertClaim, holdId,
       ...(input.budgetPerRunUsd != null ? { budgetPerRunUsd: input.budgetPerRunUsd } : {}),
@@ -1579,6 +1579,15 @@ const SIMULATED_RESULT = { costUsd: 0.0341, turns: 6, toolCalls: 5 } as const;
  * answers, which is the test seam (`__setMockDispatchStepMs` below).
  */
 let mockDispatchStepMs = 2_000;
+/**
+ * A journey seam, off unless the environment names it: `MOCK_SIMULATED_DISPATCH_STEP_MS=<ms>` sends
+ * every marketplace dispatch down the simulated path (so a browser walk gets the run report and the
+ * debrief the fixtures hand back, which `dev:mock`'s mock devbox runtime otherwise bypasses) at that
+ * pace. `dev:mock` does not set it, so nothing changes for anyone who has not asked.
+ */
+const SIMULATED_DISPATCH_ENV = process.env['MOCK_SIMULATED_DISPATCH_STEP_MS'];
+const simulatedDispatchForced = SIMULATED_DISPATCH_ENV !== undefined && SIMULATED_DISPATCH_ENV !== '' && Number.isFinite(Number(SIMULATED_DISPATCH_ENV));
+if (simulatedDispatchForced) mockDispatchStepMs = Math.max(0, Number(SIMULATED_DISPATCH_ENV));
 export function __setMockDispatchStepMs(ms: number): void { mockDispatchStepMs = ms; }
 
 /**
