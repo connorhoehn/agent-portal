@@ -85,4 +85,10 @@ describe('DE-42 actions in GET /api/session/capabilities', () => {
   it('EditSdlcPolicy is gone from the capability list', () => {
     expect(CAPABILITY_ACTIONS).not.toContain('EditSdlcPolicy');
   });
+
+  it.each([['org-leader', true], ['program-owner', true], ['member', false], ['sme', false], ['hr-admin', false]] as const)(
+    '%s: CreateInitiative is %s', async (role, want) => {
+      expect(CAPABILITY_ACTIONS).toContain('CreateInitiative');
+      expect((await caps(role))['CreateInitiative']).toBe(want);
+    });
 });

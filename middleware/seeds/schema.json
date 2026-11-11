@@ -625,6 +625,16 @@
           ]
         }
       },
+      "CreateInitiative": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
       "OperateDevbox": {
         "appliesTo": {
           "principalTypes": [

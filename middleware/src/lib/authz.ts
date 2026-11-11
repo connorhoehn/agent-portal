@@ -50,6 +50,7 @@ export const CAPABILITY_ACTIONS = [
   // runs can drive a lab computer by hand without the lab's configuration authority
   // (codebases, capability writes and session bundles stay ManageDevbox).
   'OperateDevbox',
+  'CreateInitiative',    // projects.ts POST /api/graph/projects — start an initiative by hand (org-leader and program-owner; admin overrides)
   // The agent-code authorities split out of ManageDevbox (DE-42). Conditioned
   // on `onInitiative` / `ownsBox` for sme, so session.ts probes them with a
   // representative resource (CAPABILITY_PROBE_ATTRS).

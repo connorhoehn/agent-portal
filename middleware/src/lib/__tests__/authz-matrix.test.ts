@@ -179,7 +179,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // ManageBudgets only on initiatives they own (a forbid, §9 item 8a).
       'Search', 'ViewOrgChart', 'ViewObservability', 'LabelFeedback', 'ViewWorkItems',
       'DispatchAgentRun', 'ManageSprints', 'ManageBots', 'ManageBudgets',
-      'ViewSessionBrief', 'ReviewRunbook', 'VoiceNavigate', 'DecideDecision',
+      'ViewSessionBrief', 'ReviewRunbook', 'VoiceNavigate', 'DecideDecision', 'CreateInitiative',
     ],
   },
   'orgiq/org-leader': {
@@ -193,6 +193,8 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // stop and hand work to a lab computer. The lab's configuration (ManageDevbox)
       // and the shell (OpenDevboxShell) stay with the operators.
       'OperateDevbox', 'RunDevboxTask',
+      // Start an initiative by hand (package 14 of the value sweep).
+      'CreateInitiative',
       // §9 items 8b and 8c: the SDLC policy editor and the guardrail editor.
       'ManageSdlcPolicies', 'EditGuardrail', 'VoiceNavigate', 'DecideDecision',
     ],
@@ -778,6 +780,25 @@ describe('OperateDevbox: the lab drive', () => {
     for (const key of ['orgiq/program-owner', 'orgiq/member']) {
       expect(role(key).granted).not.toContain('OperateDevbox');
       expect(role(key).granted).not.toContain('RunDevboxTask');
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Creating an initiative by hand (docs/create-initiative-design.md, decision 1).
+// ---------------------------------------------------------------------------
+describe('CreateInitiative', () => {
+  test('exactly org-leader and program-owner hold it, both in orgiq; admin passes as an override', () => {
+    const holders = [...roles.entries()]
+      .filter(([key, r]) => key !== '*/admin' && r.granted.includes('CreateInitiative'))
+      .map(([key]) => key).sort();
+    expect(holders).toEqual(['orgiq/org-leader', 'orgiq/program-owner']);
+    for (const key of holders) expect(role(key).tenant).toBe('orgiq');
+  });
+
+  test('member, sme and hr-admin do not hold it', () => {
+    for (const key of ['orgiq/member', 'orgiq/sme', 'orgiq/hr-admin']) {
+      expect(role(key).granted).not.toContain('CreateInitiative');
     }
   });
 });

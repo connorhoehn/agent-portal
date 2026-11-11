@@ -45,7 +45,10 @@ permit (
     OrgIQ::Action::"DecideDecision",
     // Mint a voice navigator session (docs/voice-navigator-spec.md §6). Each tool the
     // voice runs is then gated by the action of the button it stands in for.
-    OrgIQ::Action::"VoiceNavigate"
+    OrgIQ::Action::"VoiceNavigate",
+    // Start an initiative by hand (POST /api/graph/projects); the creator owns it
+    // unless they name another person from the directory.
+    OrgIQ::Action::"CreateInitiative"
   ],
   resource
 )

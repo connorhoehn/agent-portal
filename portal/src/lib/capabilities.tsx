@@ -33,6 +33,7 @@ export type Action =
   // The lab's drive — start, rename, stop and remove a computer — split out of
   // ManageDevbox (11 Nov 2026) so a leader can drive the lab without configuring it.
   | 'OperateDevbox'
+  | 'CreateInitiative'
   | 'DecideAgentChange'
   | 'DeliverAgentChange'
   | 'ManageSdlcPolicies'

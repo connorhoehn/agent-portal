@@ -48,6 +48,9 @@ permit (
     // 2026 (docs/next-steps.md, "Lane E5").
     OrgIQ::Action::"OperateDevbox",
     OrgIQ::Action::"RunDevboxTask",
+    // Start an initiative by hand (POST /api/graph/projects). Naming the work the
+    // program runs is a leader's act, distinct from governing its runs or budget.
+    OrgIQ::Action::"CreateInitiative",
     // Read the session brief a run was given (GET /api/runs/:ref/brief, the work-item
     // brief preview). Every role that can see work can see what a box was told.
     OrgIQ::Action::"ViewSessionBrief",
