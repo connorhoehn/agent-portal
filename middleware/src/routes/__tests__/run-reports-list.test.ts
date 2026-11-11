@@ -107,3 +107,40 @@ describe('GET /api/run-reports', () => {
     expect((await request(await appAs({ role: 'assessor', tenant: 'assessment', sub: 'u-asha' })).get('/api/run-reports')).status).toBe(403);
   });
 });
+
+describe('GET /api/run-reports/recurring-obstacles', () => {
+  const recent = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+  async function obstacleApp(who: { role: Role; tenant: Tenant; sub: string }) {
+    const store = new RowsRunReportStore(privateRunReportSources());
+    const wall = ['The CSRF check failed on the pull request.'];
+    await store.putReport(report('o1', { workItemId: 'wi-1', outcome: 'failed', obstacles: wall, endedAt: recent(30) }));
+    await store.putReport(report('o2', { workItemId: 'wi-2', obstacles: ['the csrf check failed on the pull request'], endedAt: recent(5) }));
+    await store.putReport(report('o3', { workItemId: 'wi-3', initiativeId: 'p-other', obstacles: wall, endedAt: recent(4) }));
+    await store.putReport(report('old1', { obstacles: ['Ancient wall.'], endedAt: '2020-01-01T00:00:00.000Z' }));
+    await store.putReport(report('old2', { obstacles: ['Ancient wall.'], endedAt: '2020-01-02T00:00:00.000Z' }));
+    const app = express();
+    app.use((req, _res, next) => { req.session = { sub: who.sub, iat: 0, grants: {}, role: who.role, tenant: who.tenant } as Session; next(); });
+    app.use('/api/run-reports', requireTenant('orgiq'), createRunReportsRouter({ reports: () => store, repoOf: async (id) => (id === 'p-auth-migration' ? 'org/auth' : null) }));
+    app.use(errorHandler);
+    return app;
+  }
+
+  it('groups what two different runs hit, inside the window, and filters by initiative and repository', async () => {
+    const app = await obstacleApp(mia);
+    const res = await request(app).get('/api/run-reports/recurring-obstacles');
+    expect(res.status).toBe(200);
+    expect(res.body.windowDays).toBe(30);
+    expect(res.body.obstacles).toHaveLength(1);   // p-other has one run only; the 2020 pair is outside the window
+    expect(res.body.obstacles[0]).toMatchObject({ runs: 2, workItems: 2, failedRuns: 1, runRefs: ['o2', 'o1'], scope: { kind: 'repo', ref: 'org/auth' } });
+    expect((await request(app).get('/api/run-reports/recurring-obstacles?repo=auth')).body.obstacles).toHaveLength(1);
+    expect((await request(app).get('/api/run-reports/recurring-obstacles?repo=billing')).body.obstacles).toEqual([]);
+    expect((await request(app).get('/api/run-reports/recurring-obstacles?initiative=p-other')).body.obstacles).toEqual([]);
+    expect((await request(app).get('/api/run-reports/recurring-obstacles?days=36500')).status).toBe(400);
+  });
+
+  it('has the list route’s gate: ManageBots reads, a member and another tenant do not', async () => {
+    expect((await request(await obstacleApp({ role: 'sme', tenant: 'orgiq', sub: 'u-nora' })).get('/api/run-reports/recurring-obstacles')).status).toBe(200);
+    expect((await request(await obstacleApp({ role: 'member', tenant: 'orgiq', sub: 'u-theo' })).get('/api/run-reports/recurring-obstacles')).status).toBe(403);
+    expect((await request(await obstacleApp({ role: 'assessor', tenant: 'assessment', sub: 'u-asha' })).get('/api/run-reports/recurring-obstacles')).status).toBe(403);
+  });
+});

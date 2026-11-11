@@ -12,9 +12,9 @@ import type { LintFinding } from './types';
 const EMPTY: NewRunbookDraft = { name: '', description: '', scopeKind: 'initiative', scopeRef: '', body: NEW_RUNBOOK_BODY_STARTER, rationale: '' };
 
 /** The form, in the Library's content column (a page, never a modal). */
-export function NewRunbookForm({ onClose }: { onClose: () => void }) {
+export function NewRunbookForm({ onClose, initial }: { onClose: () => void; initial?: Partial<NewRunbookDraft> | null }) {
   const navigate = useNavigate();
-  const [draft, setDraft] = useState<NewRunbookDraft>(EMPTY);
+  const [draft, setDraft] = useState<NewRunbookDraft>({ ...EMPTY, ...initial });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [problems, setProblems] = useState<string[]>([]);

@@ -147,6 +147,7 @@ export const NAVIGATE_PAGES: ReadonlyArray<{ id: string; path: string; tenants: 
   { id: 'computers', path: '/iq/computers', tenants: ['orgiq'] },
   { id: 'runbooks', path: '/iq/runbooks', tenants: ['orgiq'] },
   { id: 'runbook-proposals', path: '/iq/runbooks/proposals', tenants: ['orgiq'] },
+  { id: 'runbook-obstacles', path: '/iq/runbooks/obstacles', tenants: ['orgiq'], roles: ['sme', 'program-owner', 'org-leader', 'hr-admin'] },
   { id: 'search', path: '/iq/search', tenants: ['orgiq'] },
   { id: 'communication', path: '/iq/communication', tenants: ['orgiq'] },
   { id: 'scores', path: '/iq/scores', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },

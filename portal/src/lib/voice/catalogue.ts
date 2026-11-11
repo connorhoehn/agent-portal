@@ -83,6 +83,7 @@ export const NAVIGATE_PAGE_IDS: ReadonlyArray<{ id: string; tenants: readonly st
   { id: 'computers', tenants: ['orgiq'] },
   { id: 'runbooks', tenants: ['orgiq'] },
   { id: 'runbook-proposals', tenants: ['orgiq'] },
+  { id: 'runbook-obstacles', tenants: ['orgiq'], roles: ['sme', 'program-owner', 'org-leader', 'hr-admin'] },
   { id: 'search', tenants: ['orgiq'] },
   { id: 'communication', tenants: ['orgiq'] },
   { id: 'scores', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },

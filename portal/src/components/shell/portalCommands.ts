@@ -147,6 +147,8 @@ export const PAGES: readonly PageEntry[] = [
     keywords: ['runbook', 'procedure', 'playbook', 'how to', 'steps', 'rollback', 'library', 'knowledge', 'guide', 'distillation', 'learned'] },
   { label: 'Runbook proposals',        hint: 'Edits and new runbooks waiting for a reviewer', path: '/iq/runbooks/proposals', tenant: 'orgiq',  group: 'Build', pageId: 'runbook-proposals',
     keywords: ['runbook', 'proposal', 'review', 'accept', 'reject', 'merge', 'diff', 'edit'] },
+  { label: 'Recurring obstacles',      hint: 'Walls different runs keep hitting, with a runbook to write for each', path: '/iq/runbooks/obstacles', tenant: 'orgiq',  group: 'Build', pageId: 'runbook-obstacles', roles: BOTS,
+    keywords: ['runbook', 'obstacle', 'blocked', 'wall', 'repeat', 'recurring', 'failed', 'run', 'learning'] },
   // ── Org — organizational intelligence ──
   { label: 'Search', hint: 'Find records, ask questions, explore connections', path: '/iq/search', tenant: 'orgiq', group: 'Engage', pageId: 'search',
     keywords: ['ask', 'search', 'chat', 'agent', 'help', 'explore', 'graph', 'connections'] },

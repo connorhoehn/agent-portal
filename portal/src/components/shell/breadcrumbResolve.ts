@@ -142,11 +142,12 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
       // Prompt management is the Library's rail (Design); the rail lights
       // Library on these pages, so the crumb says the same.
       case 'prompt-ops': return [{ label: 'Build' }, { label: 'Agent library', path: '/iq/library' }, { label: 'What is deployed' }];
-      // Runbooks: Library (the bare page and a runbook), Proposals. The retired
+      // Runbooks: Library (the bare page and a runbook), Proposals, Recurring obstacles. The retired
       // /iq/distillation tree redirects before it renders.
       case 'runbooks': {
         const home = [{ label: 'Build' }, { label: 'Runbooks', path: '/iq/runbooks' }];
         if (b === 'proposals') return [...home, ...(c ? [{ label: 'Proposals', path: '/iq/runbooks/proposals' }, { label: shortId(c), id: c }] : [{ label: 'Proposals' }])];
+        if (b === 'obstacles') return [...home, { label: 'Recurring obstacles' }];
         if (!b) return [...home, { label: 'Library' }];
         return [...home, { label: 'Library', path: '/iq/runbooks' }, { label: shortId(b), id: b }];
       }

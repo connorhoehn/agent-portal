@@ -1,5 +1,5 @@
-// Build → Runbooks: one module frame over two destinations
-// — Library and Proposals (with the open count). The section rail is a SubNavLayout; each
+// Build → Runbooks: one module frame over three destinations
+// — Library, Proposals (with the open count) and, for those who may read the Runs list, Recurring obstacles. The section rail is a SubNavLayout; each
 // destination draws ListRailLayout (a flush list rail beside it, then trail → title → record,
 // docs/layout-cascade.md). The Proposals count is polled (no gateway channel is needed to be correct).
 import { Link, Outlet, useLocation } from 'react-router';
@@ -9,7 +9,9 @@ import {
 } from '@connorhoehn/ui-components/shared';
 import { useShellBreadcrumbItems } from '../../components/shell/Breadcrumbs';
 import { useFetch } from '../../hooks/useFetch';
+import { useSession } from '../../lib/auth';
 import { proposalsHref, RUNBOOKS } from './runbooksModel';
+import { obstaclesHref } from './obstaclesModel';
 import type { Proposal } from './types';
 
 /** What the module hands its destinations through the route outlet. */
@@ -20,18 +22,23 @@ export interface RunbooksOutletContext {
   refreshProposals: () => void;
 }
 
-type NavId = 'library' | 'proposals';
+type NavId = 'library' | 'proposals' | 'obstacles';
+
+/** Who the Runs list admits (the bots read gate); the obstacles are read from the same list. */
+const OBSTACLE_ROLES: readonly string[] = ['admin', 'hr-admin', 'sme', 'program-owner', 'org-leader'];
 
 export default function RunbooksModule() {
   const { pathname } = useLocation();
   const crumbs = useShellBreadcrumbItems();
+  const { session } = useSession();
   const open = useFetch<{ proposals: Proposal[] }>('/api/runbooks/proposals?status=open&limit=200', 30_000);
   const openCount = open.data ? open.data.proposals.length : null;
 
-  const active: NavId = pathname.startsWith(proposalsHref()) ? 'proposals' : 'library';
+  const active: NavId = pathname.startsWith(proposalsHref()) ? 'proposals' : pathname.startsWith(obstaclesHref()) ? 'obstacles' : 'library';
   const entries: Array<{ id: NavId; label: string; path: string; hint: string; count?: number; accent?: 'warning' }> = [
     { id: 'library', label: 'Library', path: RUNBOOKS, hint: 'Every runbook, by scope' },
     { id: 'proposals', label: 'Proposals', path: proposalsHref(), hint: 'Edits and new runbooks waiting for a reviewer', ...(openCount != null ? { count: openCount } : {}) },
+    ...(session && OBSTACLE_ROLES.includes(session.role) ? [{ id: 'obstacles' as const, label: 'Recurring obstacles', path: obstaclesHref(), hint: 'Walls different runs keep hitting' }] : []),
   ];
   const items: SubNavItem[] = entries.map((e) => ({ path: e.path, label: e.label, ...(e.count != null ? { count: e.count } : {}) }));
 

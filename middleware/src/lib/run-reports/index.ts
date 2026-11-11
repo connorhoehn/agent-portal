@@ -11,3 +11,4 @@ export {
   recordRunEnd, onRunReportSaved, outcomeOfJobStatus, failureCodeOf, numstatFromDiff, normalizeWorkerPart, offeredFromBrief, applicationId,
   type RunEndInput, type RecordDeps,
 } from './record.js';
+export { groupRecurringObstacles, normaliseObstacle, type RecurringObstacle, type RecurringObstacleOptions } from './recurring-obstacles.js';

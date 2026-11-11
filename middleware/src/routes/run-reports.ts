@@ -8,6 +8,10 @@
 //   outcome     done, failed, cancelled or needs-review
 //   debrief     a debrief state (skipped, requested, filed, nothing-to-keep, lint-failed, refused,
 //               expired) or `none` for a run with no debrief record
+//   GET /api/run-reports/recurring-obstacles?initiative=&repo=&days=
+//               obstacles two or more different runs hit, grouped by plain normalised text within a
+//               repository or initiative (lib/run-reports/recurring-obstacles.ts); `days` defaults to 30.
+//
 //   cursor/limit  the store's page (limit capped at 200)
 //
 // Answers `{ reports: RunReport[], next: string | null }`: the stored rows as they are, filtered and
@@ -23,13 +27,23 @@ import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { readForRolesElseAction } from '../lib/authz.js';
 import { RUN_EXECUTORS, RUN_OUTCOMES, type DebriefState, type RunExecutor, type RunOutcome } from '../lib/run-reports/types.js';
 import type { ListRunReportsQuery, RunReportStore } from '../lib/run-reports/store.js';
+import { groupRecurringObstacles } from '../lib/run-reports/recurring-obstacles.js';
+import type { RunReport } from '../lib/run-reports/types.js';
+import { clock } from '../mock/core/clock.js';
 
 const DEBRIEF_STATES: readonly string[] = ['none', 'skipped', 'requested', 'filed', 'nothing-to-keep', 'lint-failed', 'refused', 'expired'];
 
 export interface RunReportsDeps {
   /** The run report store (lib/run-reports/store-select.ts); injected by suites. */
   reports?: () => RunReportStore | Promise<RunReportStore>;
+  /** The repository an initiative works in (providers/projects.ts by default); injected by suites. */
+  repoOf?: (initiativeId: string) => Promise<string | null>;
 }
+
+const DEFAULT_WINDOW_DAYS = 30;
+const MAX_WINDOW_DAYS = 365;
+/** Most reports read for one grouping: 200 a page, so ten pages. */
+const MAX_REPORTS_GROUPED = 2000;
 
 const text = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
 
@@ -75,6 +89,32 @@ export function createRunReportsRouter(deps: RunReportsDeps = {}): Router {
   router.get('/', gate, asyncHandler(async (req, res) => {
     const page = await (await store()).listReports(parseRunReportsQuery(req.query));
     res.json({ reports: page.items, next: page.next });
+  }));
+
+  router.get('/recurring-obstacles', gate, asyncHandler(async (req, res) => {
+    const initiative = text(req.query['initiative']);
+    const repo = text(req.query['repo']);
+    const rawDays = req.query['days'];
+    const days = rawDays === undefined || rawDays === '' ? DEFAULT_WINDOW_DAYS : Number(rawDays);
+    if (!Number.isInteger(days) || days < 1 || days > MAX_WINDOW_DAYS) throw new ValidationError(`days must be a whole number from 1 to ${MAX_WINDOW_DAYS}`);
+    const since = new Date(clock.now().getTime() - days * 86_400_000).toISOString();
+    const s = await store();
+    const reports: RunReport[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await s.listReports({ ...(initiative ? { initiativeId: initiative } : {}), limit: 200, ...(cursor ? { cursor } : {}) });
+      let older = false;
+      for (const r of page.items) { if (r.endedAt >= since) reports.push(r); else older = true; }
+      cursor = older ? undefined : (page.next ?? undefined);   // newest first: past the window, stop reading
+    } while (cursor && reports.length < MAX_REPORTS_GROUPED);
+    const repoOf = deps.repoOf ?? (async (id: string) => (await (await import('../providers/projects.js')).getProject(id))?.repoFullName ?? null);
+    const repos = new Map<string, string | null>();
+    for (const id of new Set(reports.map((r) => r.initiativeId).filter((x): x is string => !!x))) repos.set(id, await repoOf(id));
+    const obstacles = groupRecurringObstacles(reports, {
+      repoOf: (id) => repos.get(id) ?? null,
+      ...(initiative ? { initiativeId: initiative } : {}), ...(repo ? { repo } : {}),
+    });
+    res.json({ obstacles, windowDays: days, since, runsRead: reports.length });
   }));
   return router;
 }

@@ -1,7 +1,7 @@
 // Runbooks → Library: the list rail grouped by scope (Org / Initiatives / Repositories / Tools) and the
 // runbook beside it as a page (/iq/runbooks/:id). The composer docks under the column.
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useOutletContext, useParams } from 'react-router';
+import { useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router';
 import { WorkListFilters } from '@connorhoehn/ui-components';
 import { Button, EmptyState, FilterPopover, Stack } from '@connorhoehn/ui-components/shared';
 import { EvidenceLine } from './EvidenceLine';
@@ -11,6 +11,7 @@ import type { RunbooksOutletContext } from './RunbooksModule';
 import { STATUS_FILTERS, libraryCommandAdapter, libraryGroups, libraryRows, runbookHref } from './runbooksModel';
 import type { RunbookRow } from './types';
 import { NewRunbookForm } from './NewRunbookForm';
+import { draftFromParams } from './obstaclesModel';
 import { useFetch } from '../../hooks/useFetch';
 import { useRunbookNames } from './useRunbookNames';
 
@@ -22,8 +23,12 @@ export default function LibraryTab() {
   const [status, setStatus] = useState<string | null>(null);
   const feed = useFetch<{ runbooks: RunbookRow[] }>('/api/runbooks?status=draft,published,retired&limit=200', 0);
   const all = feed.data?.runbooks ?? [];
-  const [writing, setWriting] = useState(false);
-  useEffect(() => { setWriting(false); }, [id]);
+  // "Write a runbook for this" on the obstacles tab arrives as /iq/runbooks?new=1&description=…&scopeKind=…&scopeRef=….
+  const [search, setSearch] = useSearchParams();
+  const initial = useMemo(() => draftFromParams(search), [search]);
+  const [writing, setWriting] = useState(initial !== null);
+  useEffect(() => { setWriting(initial !== null); }, [id, initial]);
+  const closeForm = () => { setWriting(false); if (initial) setSearch({}, { replace: true }); };
   const names = useRunbookNames();
   const rows = useMemo(() => libraryRows(all, query, status, names), [all, query, status, names]);
   const byId = new Map(all.map((r) => [r.id, r]));
@@ -77,7 +82,7 @@ export default function LibraryTab() {
       data-testid="runbooks-library"
     >
       {writing ? (
-        <NewRunbookForm onClose={() => setWriting(false)} />
+        <NewRunbookForm key={search.toString()} onClose={closeForm} initial={initial} />
       ) : id ? (
         <RunbookRecord key={id} id={id} summary={byId.get(id) ?? null} onChanged={feed.refresh} onOpen={(href) => navigate(href)} />
       ) : (
