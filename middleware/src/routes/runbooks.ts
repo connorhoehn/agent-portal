@@ -223,16 +223,10 @@ function lintFor(
   return { ...(lintCtx() ?? {}), files: files ?? [], skill: { name, ...(others ? { others } : {}) }, ...(frontmatter ? { frontmatter } : {}) };
 }
 
-/** Every skill a new one must not collide with: the library's (published runbooks) and the box's own (the live session bundle). */
+/** Every skill a new one must not collide with: the library's (published runbooks). Runbook ids carry the `rb-` prefix, which no other skill on a box does. */
 async function otherSkills(s: RunbookStore): Promise<Array<{ name: string; description: string }>> {
   const lib = (await loadCandidates(s, Date.parse(clock.nowIso()))).map((c) => ({ name: c.runbook.id, description: skillDescription(c.version.doc) }));
-  let box: Array<{ name: string; description: string }> = [];
-  try {
-    // Read from the bundle itself: briefs no longer list its skills (learning loop, lane D).
-    const { getLiveBundle } = await import('../providers/session-bundle.js');
-    box = ((await getLiveBundle())?.skills ?? []).map((k) => ({ name: k.id, description: k.description }));
-  } catch { box = []; }
-  return [...lib, ...box];
+  return lib;
 }
 
 /** A proposal's list view: files as a manifest, lint re-run. */

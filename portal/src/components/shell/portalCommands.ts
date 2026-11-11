@@ -136,8 +136,6 @@ export const PAGES: readonly PageEntry[] = [
   // capability gate), so every orgiq role sees it, like Initiatives.
   { label: 'Work graph',         hint: 'The day as a graph, not the run ledger', path: '/iq/activity',                                tenant: 'orgiq',  group: 'Operate', pageId: 'work-graph',
     keywords: ['work graph', 'activity', 'graph', 'today', 'day', 'runs', 'work'] },
-  { label: 'Local compute configuration', hint: 'Session settings and bundled skill versions', path: '/iq/local-compute/configuration', tenant: 'orgiq', group: 'Build', pageId: 'local-compute-configuration',
-    keywords: ['release', 'session', 'config', 'skill bundle', 'hooks'] },
   { label: 'Budgets',            hint: 'Agent spend vs allocation',           path: '/admin/budgets',                              tenant: 'admin',  group: 'Plan', pageId: 'budgets',    roles: BUDGETS,
     keywords: ['budget', 'spend', 'allocation', 'money', 'grant', 'envelope'] },
   { label: 'Bots',               hint: 'Mission-configured cron bots',        path: '/admin/bots',                                 tenant: 'admin',  group: 'Build', pageId: 'bots',   roles: BOTS,

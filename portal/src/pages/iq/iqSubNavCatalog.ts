@@ -90,7 +90,6 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
     title: 'Local compute', storageKey: 'local-compute-nav', items: [
       { path: '/iq/local-compute?view=machines', label: 'Machines' },
       { path: '/iq/local-compute?view=runs', label: 'Runs' },
-      { path: '/iq/local-compute/configuration', label: 'Configuration' },
     ],
   };
 

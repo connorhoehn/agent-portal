@@ -2,7 +2,7 @@
 // state each table shows (search, one filter, refresh, reset) and `open` by
 // exact ID or name over the CURRENT rows. Nothing here pairs, unpairs,
 // pauses, dispatches or edits configuration; those stay explicit controls.
-import type { CollectionCommandAdapter, CollectionCommandResult } from '../../components/collections/CollectionCommandHost.tsx';
+import type { CollectionCommandAdapter } from '../../components/collections/CollectionCommandHost.tsx';
 import { collectionCommandAdapter, resolveCollectionTarget } from '../../components/collections/collectionCommands.ts';
 
 /** Presence phrases of the machines filter. */
@@ -49,31 +49,6 @@ export function localRunsCommandAdapter(rows: ReadonlyArray<{ id: string; title:
       const run = resolveCollectionTarget(target, rows);
       controls.openRun(run.id);
       return `Opened the log for ${run.title}.`;
-    },
-  });
-}
-
-/** Availability phrases of the bundled-skills filter (SkillStatus). */
-export const SKILL_AVAILABILITY_FILTERS: Record<string, string> = { 'up to date': 'current', 'update available': 'stale', 'not in library': 'missing' };
-export const CONFIGURATION_VIEWS = ['show skills', 'show hooks', 'show settings'] as const;
-
-export function configurationCommandAdapter(controls: {
-  setQuery(value: string): void;
-  setAvailability(value: string): void;
-  refresh(): void;
-  showView(view: 'skills' | 'hooks' | 'settings'): void;
-}): CollectionCommandAdapter {
-  return collectionCommandAdapter({ noun: 'skills', filters: SKILL_AVAILABILITY_FILTERS, extra: CONFIGURATION_VIEWS }, {
-    id: 'local-compute-configuration-commands',
-    label: 'Bundled skills',
-    setQuery: controls.setQuery,
-    setFilter: controls.setAvailability,
-    refresh: controls.refresh,
-    scopeNote: 'Search and availability narrow the bundled skills table; show hooks/settings switches the contents tab. This preview is read-only: commands never publish, update or restart anything.',
-    extra(phrase): CollectionCommandResult {
-      const view = phrase.replace(/^show /, '') as 'skills' | 'hooks' | 'settings';
-      controls.showView(view);
-      return { message: `Showing ${view}.` };
     },
   });
 }

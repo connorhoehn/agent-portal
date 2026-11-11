@@ -23,7 +23,7 @@
 // lowercase letters, digits and hyphens, without "anthropic" or "claude";
 // `description` non-empty, ≤ 1024 characters, no XML tags. Runbook ids already
 // carry the `rb-` prefix, which keeps them clear of every other skill on a box
-// (session-bundle skills, the user's own) in the one flat ~/.claude/skills/.
+// (the user's own) in the one flat ~/.claude/skills/.
 import type { RunbookDoc } from './types.js';
 import { renderRunbook } from './render.js';
 import { tryParseRunbook, type ParseError } from './parse.js';

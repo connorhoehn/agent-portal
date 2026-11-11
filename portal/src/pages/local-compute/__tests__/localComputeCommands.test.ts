@@ -1,7 +1,7 @@
 // Run with:  cd portal && node --test 'src/pages/local-compute/__tests__/localComputeCommands.test.ts'
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { configurationCommandAdapter, localRunsCommandAdapter, machinesCommandAdapter } from '../localComputeCommands.ts';
+import { localRunsCommandAdapter, machinesCommandAdapter } from '../localComputeCommands.ts';
 
 test('machines: search, presence, refresh and exact select', async () => {
   const calls: string[] = [];
@@ -33,22 +33,4 @@ test('runs: status phrases map to job statuses; open shows one log', async () =>
   for (const text of ['retry job-1', 'cancel all runs', 'queue Fix lint']) await assert.rejects(async () => adapter.execute(text));
   await assert.rejects(async () => adapter.execute('open job-2'), /No matching/);
   assert.equal(calls.length, 3);
-});
-
-test('configuration: skills search/availability and tab switching; read-only', async () => {
-  const calls: string[] = [];
-  const adapter = configurationCommandAdapter({
-    setQuery: (v) => calls.push(`query:${v}`), setAvailability: (v) => calls.push(`availability:${v}`),
-    refresh: () => calls.push('refresh'), showView: (v) => calls.push(`view:${v}`),
-  });
-  await adapter.execute('show update available skills');
-  await adapter.execute('show hooks');
-  await adapter.execute('show settings');
-  await adapter.execute('show skills');
-  await adapter.execute('reset');
-  assert.deepEqual(calls, ['availability:stale', 'view:hooks', 'view:settings', 'view:skills', 'query:', 'availability:']);
-  for (const text of ['publish configuration', 'update all skills', 'restart sessions', 'open skill-1']) {
-    await assert.rejects(async () => adapter.execute(text));
-  }
-  assert.equal(calls.length, 6);
 });

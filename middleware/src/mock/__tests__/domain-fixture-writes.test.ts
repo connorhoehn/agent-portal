@@ -1,5 +1,5 @@
 // Five provider domains that held their mock rows in bare module-level arrays:
-// work-items, promotions, session-bundle, lab and prompt-evals.
+// work-items, promotions, lab and prompt-evals.
 //
 // A bare array is not merely untidy — it is the reason the wire capture's
 // write policy could not replay these routes honestly: `PATCH /api/graph/work-items/
@@ -36,7 +36,6 @@ import { promptEvalCases, promptEvalRuns } from '../prompt-evals.js';
 
 import { createWorkItem, getWorkItem, updateWorkItem, searchWorkItems } from '../../providers/work-items.js';
 import { listCandidates } from '../../providers/promotions.js';
-import { getLiveBundle } from '../../providers/session-bundle.js';
 import {
   answerConsult, getConsult, listConsults, listExperiences, openConsult, recordExperience,
 } from '../../providers/lab.js';
@@ -146,24 +145,6 @@ describe('the promotions fixture', () => {
     expect(await listCandidates()).toEqual([]);
     fixtureRegistry.resetAll('default');
     expect((await listCandidates()).length).toBe(4);
-  });
-});
-
-// ─── session bundles ─────────────────────────────────────────────────────────
-
-describe('session bundles', () => {
-  it('derives each skill status against the library rather than storing it', async () => {
-    const live = (await getLiveBundle())!;
-    // The one deliberate gap: bundled at v2, the library is on v3.
-    expect(live.skills.find((s) => s.id === 'skill-flaky-test-triage')).toMatchObject({
-      version: '2', status: 'stale',
-    });
-    expect(live.skills.find((s) => s.id === 'skill-cold-start-aurora')!.status).toBe('current');
-  });
-
-  it('leaves the fleet with no bundle at all under `empty`', async () => {
-    fixtureRegistry.resetAll('empty');
-    expect(await getLiveBundle()).toBeNull();
   });
 });
 

@@ -76,7 +76,6 @@ export const NAVIGATE_PAGE_IDS: ReadonlyArray<{ id: string; tenants: readonly st
   { id: 'designs', tenants: ['orgiq'] },
   { id: 'workspace-runs', tenants: ['orgiq'], roles: ['sme', 'program-owner', 'org-leader', 'hr-admin'] },
   { id: 'work-graph', tenants: ['orgiq'] },
-  { id: 'local-compute-configuration', tenants: ['orgiq'] },
   { id: 'budgets', tenants: ['orgiq'], roles: ['program-owner', 'org-leader', 'hr-admin'] },
   { id: 'bots', tenants: ['orgiq'], roles: ['sme', 'program-owner', 'org-leader', 'hr-admin'] },
   { id: 'codebases', tenants: ['orgiq'], roles: ['hr-admin'] },

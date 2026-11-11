@@ -2,7 +2,7 @@
 
 Every palette page (`PAGES` in `portal/src/components/shell/portalCommands.ts`) has a stable, tenant-unique `pageId`. The voice `open` tool names pages by these ids. Ids are kebab-case, derived from the label and section, not the path. Role gates still apply: a page a role cannot see is not opened.
 
-## orgiq (23)
+## orgiq (22)
 
 - `automate` → /iq/work (Build: Automate)
 - `graph-updates` → /iq/work/changes (Build: Graph updates)
@@ -14,7 +14,6 @@ Every palette page (`PAGES` in `portal/src/components/shell/portalCommands.ts`) 
 - `designs` → /iq/designs (Design: Designs)
 - `workspace-runs` → /iq/runs (Operate: Workspace runs)
 - `work-graph` → /iq/activity (Operate: Work graph)
-- `local-compute-configuration` → /iq/local-compute/configuration (Build: Local compute configuration)
 - `local-compute` → /iq/local-compute (Build: Local compute)
 - `runbooks` → /iq/runbooks (Build: Runbooks)
 - `runbook-proposals` → /iq/runbooks/proposals (Build: Runbook proposals)

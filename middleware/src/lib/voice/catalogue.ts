@@ -140,7 +140,6 @@ export const NAVIGATE_PAGES: ReadonlyArray<{ id: string; path: string; tenants: 
   { id: 'designs', path: '/iq/designs', tenants: ['orgiq'] },
   { id: 'workspace-runs', path: '/iq/runs', tenants: ['orgiq'], roles: ['sme', 'program-owner', 'org-leader', 'hr-admin'] },
   { id: 'work-graph', path: '/iq/activity', tenants: ['orgiq'] },
-  { id: 'local-compute-configuration', path: '/iq/local-compute/configuration', tenants: ['orgiq'] },
   { id: 'budgets', path: '/admin/budgets', tenants: ['orgiq'], roles: ['program-owner', 'org-leader', 'hr-admin'] },
   { id: 'bots', path: '/admin/bots', tenants: ['orgiq'], roles: ['sme', 'program-owner', 'org-leader', 'hr-admin'] },
   { id: 'codebases', path: '/admin/projects', tenants: ['orgiq'], roles: ['hr-admin'] },

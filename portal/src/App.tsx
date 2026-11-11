@@ -112,8 +112,6 @@ const WorkQueuePage = lazy(() => import('./pages/work/QueuePage'));
 const DesignsPage = lazy(() => import('./pages/designs/DesignsPage'));
 const DecisionsPage = lazy(() => import('./pages/decisions/DecisionsPage'));
 const LibraryPage = lazy(() => import('./pages/library/LibraryPage'));
-const PromotionsLegacyRedirect = lazy(() => import('./pages/promotions/LegacyRedirect'));
-const SessionConfigPage = lazy(() => import('./pages/local-compute/ConfigurationPage'));
 const RunbooksModule = lazy(() => import('./pages/runbooks/RunbooksModule'));
 const RunbooksLibraryTab = lazy(() => import('./pages/runbooks/LibraryTab'));
 const RunbooksProposalsTab = lazy(() => import('./pages/runbooks/ProposalsTab'));
@@ -612,12 +610,6 @@ export function App() {
           <Route path="library" element={<Page element={<LibraryPage />} />} />
           {/* A per-asset URL: the page opens its drawer from the param. */}
           <Route path="library/:assetId" element={<Page element={<LibraryPage />} />} />
-          {/* Old Promotions URLs land on Runbooks › Proposals. */}
-          <Route path="promotions" element={<Page element={<PromotionsLegacyRedirect />} />} />
-          <Route path="promotions/:candidateId" element={<Page element={<PromotionsLegacyRedirect />} />} />
-          {/* Release: what the Claude Code sessions themselves are shipped —
-              hooks, bundled skills, config. */}
-          <Route path="release" element={<Navigate to="/iq/local-compute/configuration" replace />} />
           {/* Runbooks: the fleet's procedural
               memory. One module frame, three destinations — Library (a runbook
               opens as a page: /iq/runbooks/:id), Proposals (/iq/runbooks/proposals/:pid
@@ -634,7 +626,6 @@ export function App() {
           <Route path="distillation" element={<Navigate to="/iq/runbooks" replace />} />
           <Route path="distillation/*" element={<RunbooksDistillationRedirect />} />
           <Route path="local-compute" element={<Page element={<LocalComputePage />} />} />
-          <Route path="local-compute/configuration" element={<Page element={<SessionConfigPage />} />} />
           <Route path="designs" element={<Page element={<DesignsPage />} />} />
           <Route path="designs/:id" element={<Page element={<DesignsPage />} />} />
           <Route path="work" element={<Page element={<WorkHomePage />} />} />
