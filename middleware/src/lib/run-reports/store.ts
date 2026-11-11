@@ -25,8 +25,21 @@ export interface ListRunReportsQuery {
   debrief?: DebriefState | 'none';
   /** Only these runs (`?runRefs=a,b`). */
   runRefs?: readonly string[];
+  /** Text search (`?q=`): every whitespace-separated term must appear, case-insensitively, in the summary, obstacles, learned text, failure code or run ref. */
+  q?: string;
   cursor?: string;
   limit?: number;
+}
+
+/** The longest search text a request may carry. */
+export const MAX_REPORT_SEARCH_CHARS = 200;
+
+/** True when every term of `q` is a substring of one of the report's searchable texts. Plain substrings, no index. */
+export function reportMatchesText(r: RunReport, q: string): boolean {
+  const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!terms.length) return true;
+  const hay = [r.summary, ...(r.obstacles ?? []), r.learned ?? '', r.failureCode ?? '', r.runRef].join('\n').toLowerCase();
+  return terms.every((t) => hay.includes(t));
 }
 
 export interface RunReportStore {
@@ -52,6 +65,7 @@ export function filterReports(rows: readonly RunReport[], q: ListRunReportsQuery
     && (!q?.workItemId || r.workItemId === q.workItemId)
     && (!q?.initiativeId || r.initiativeId === q.initiativeId)
     && (!q?.runbookId || r.runbooksOffered.some((x) => x.id === q.runbookId) || r.runbooksUsed.some((x) => x.id === q.runbookId))
+    && (!q?.q || reportMatchesText(r, q.q))
     && (!q?.executors?.length || q.executors.includes(r.executor))
     && (!q?.outcome || r.outcome === q.outcome)
     && (!q?.debrief || (q.debrief === 'none' ? debriefStateOf(r) === null : debriefStateOf(r) === q.debrief)));

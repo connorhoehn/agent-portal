@@ -10,10 +10,11 @@
 // (docs/nav-server-tier-decisions.md).
 
 import { useNavigate, useSearchParams } from 'react-router';
-import { Banner, DataTable } from '@connorhoehn/ui-components/shared';
+import { Banner, Button, DataTable } from '@connorhoehn/ui-components/shared';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { collectionCommandAdapter, resolveCollectionTarget } from '../../components/collections/collectionCommands';
+import { useDebouncedSearch } from '../../hooks/useDebouncedSearch';
 import { showingLabel } from '../../lib/format';
 import { DEBRIEF_FILTERS, EXECUTOR_FILTERS, OUTCOME_FILTERS } from './runsModel';
 import { useRunbookNames } from '../runbooks/useRunbookNames';
@@ -27,19 +28,21 @@ export default function IqRunsPage() {
   const query = params.get('q') ?? '';
   const set = (key: typeof RUN_REPORT_FILTER_KEYS[number] | 'q', value: string) => setParams((prev) => { const p = new URLSearchParams(prev); if (value) p.set(key, value); else p.delete(key); return p; }, { replace: true });
 
-  const { reports, rows, initiatives, work } = useRunRows(filters);
+  // The text goes to the server as ?q= a moment after typing stops; the box itself updates at once.
+  const { searchText, onSearchChange } = useDebouncedSearch(query, (value) => set('q', value), 250);
+  const { reports, rows, initiatives, work, loadMore, loadingMore, moreError } = useRunRows({ ...filters, q: query });
   const names = useRunbookNames();
   // The eight the list has room for at 1440; Failure and Debrief are on the run's page and the initiative's Learning tab.
   const columns = runColumns(['when', 'what', 'initiative', 'who', 'outcome', 'runbooks', 'learned', 'cost']);
 
-  const visible = rows.filter(r => r.what.toLowerCase().includes(query.trim().toLowerCase()));
+  const visible = rows;
   const filtered = RUN_REPORT_FILTER_KEYS.some((k) => filters[k]) || !!query.trim();
   const commands = collectionCommandAdapter(RUN_REPORT_GRAMMAR, {
     id: 'run-reports-commands', label: 'Runs',
     setQuery: value => set('q', value),
     setFilter: value => setParams(previous => runReportCommandFilter(previous, value), { replace: true }),
     refresh: reports.refresh,
-    scopeNote: 'Filter run reports, search loaded titles and open one report. Commands do not start, cancel or retry runs.',
+    scopeNote: 'Filter run reports, search run text and open one report. Commands do not start, cancel or retry runs.',
     open: target => {
       if (!reports.data || reports.isLoading || reports.error) throw new Error('Wait for the run reports to load before opening one.');
       const run = resolveCollectionTarget(target, visible.map(r => ({ id: r.runRef, title: r.what })));
@@ -59,7 +62,7 @@ export default function IqRunsPage() {
       description="Everything that ran work for this workspace: your machines, bots and the queue."
       toolbar={{
         label: 'Run filters',
-        search: { value: query, onChange: value => set('q', value), placeholder: 'Search loaded run titles', 'aria-label': 'Search loaded run titles' },
+        search: { value: searchText, onChange: onSearchChange, placeholder: 'Search run summaries, obstacles and failures', 'aria-label': 'Search runs by text' },
         filters: [
           { id: 'executor', label: 'Ran on', value: filters.executor, onChange: (v) => set('executor', v), options: [...EXECUTOR_FILTERS] },
           { id: 'initiative', label: 'Initiative', value: filters.initiative, onChange: (v) => set('initiative', v), options: projectOptions },
@@ -75,7 +78,7 @@ export default function IqRunsPage() {
       gutter="page"
       {...(reports.error ? { error: reports.error, onRetry: reports.refresh } : {})}
     >
-      {reports.data?.next && <Banner variant="info">Showing the newest 200 runs. Narrow the filters to see older ones.</Banner>}
+      {moreError && <Banner variant="error">Could not load older runs: {moreError}</Banner>}
       <DataTable
         narrow
         responsiveColumns
@@ -89,6 +92,7 @@ export default function IqRunsPage() {
         data-testid="iq-runs-table"
         emptyMessage={filtered ? 'No run matches these filters.' : 'No runs recorded yet.'}
       />
+      {reports.data?.next && <Button variant="secondary" size="sm" className="self-start" disabled={loadingMore} onClick={() => void loadMore()} data-testid="iq-runs-load-more">{loadingMore ? 'Loading…' : 'Load older runs'}</Button>}
       <CollectionCommandHost adapter={commands} />
     </CollectionCommandPage>
   );

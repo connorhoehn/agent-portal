@@ -1,7 +1,7 @@
 // The Runs list's rows and cells, shared by /iq/runs and an initiative's Learning tab so both read a run
 // report the same way: the report list joined to names the portal already reads (the queue's job title, the
 // façade's bot name, a governed run's work item, the initiative's name), and the columns that print it.
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Chip, StatusDot, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { usd } from '../../lib/format';
@@ -12,12 +12,39 @@ import { OUTCOME_LABEL, OUTCOME_TONE, costWords, debriefWords, failureWords, isS
 
 export interface RunRow extends RunReportRow { what: string; who: string; initiativeName: string | null }
 
-export interface RunFilters { executor: string; initiative: string; outcome: string; debrief: string; workItem?: string; runbook?: string }
+export interface RunFilters { executor: string; initiative: string; outcome: string; debrief: string; workItem?: string; runbook?: string; q?: string }
+
+/** A refreshed first page can overlap an older page already loaded; keep each run once. */
+const dedupeRuns = (rows: RunReportRow[]): RunReportRow[] => { const seen = new Set<string>(); return rows.filter((r) => !seen.has(r.runRef) && !!seen.add(r.runRef)); };
 
 export const runHref = (runRef: string) => `/iq/runs/${encodeURIComponent(runRef)}`;
 
 export function useRunRows(filters: RunFilters) {
-  const reports = useFetch<{ reports: RunReportRow[]; next: string | null }>(`/api/run-reports${reportsQuery({ ...filters }).replace('limit=100', 'limit=200')}`, 15_000);
+  const firstUrl = `/api/run-reports${reportsQuery({ ...filters }).replace('limit=100', 'limit=200')}`;
+  const first = useFetch<{ reports: RunReportRow[]; next: string | null }>(firstUrl, 15_000);
+  // Older pages are read by cursor and kept beside the first page; a new filter or search starts over.
+  const [older, setOlder] = useState<{ url: string; rows: RunReportRow[]; next: string | null | undefined }>({ url: firstUrl, rows: [], next: undefined });
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState<string | null>(null);
+  useEffect(() => { setOlder({ url: firstUrl, rows: [], next: undefined }); setMoreError(null); }, [firstUrl]);
+  const current = older.url === firstUrl ? older : { url: firstUrl, rows: [] as RunReportRow[], next: undefined };
+  const next = current.next === undefined ? first.data?.next ?? null : current.next;
+  const loadMore = useCallback(async () => {
+    if (!next || loadingMore) return;
+    setLoadingMore(true); setMoreError(null);
+    try {
+      const sep = firstUrl.includes('?') ? '&' : '?';
+      const res = await fetch(`${firstUrl}${sep}cursor=${encodeURIComponent(next)}`, { credentials: 'include' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const page = await res.json() as { reports: RunReportRow[]; next: string | null };
+      setOlder((o) => ({ url: firstUrl, rows: [...(o.url === firstUrl ? o.rows : []), ...page.reports], next: page.next }));
+    } catch (e) { setMoreError(e instanceof Error ? e.message : 'Could not load more runs.'); }
+    finally { setLoadingMore(false); }
+  }, [next, loadingMore, firstUrl]);
+  const reports = useMemo(() => ({
+    ...first,
+    data: first.data ? { reports: dedupeRuns([...first.data.reports, ...current.rows]), next } : first.data,
+  }), [first, current.rows, next]);
   const jobs = useFetch<{ jobs: Array<{ id: string; title: string }> }>('/api/work/jobs?limit=200', 0, { share: true });
   const facade = useFetch<RunListResponse>('/api/runs?limit=200', 0, { share: true });
   const initiatives = useFetch<Array<{ id: string; name: string }>>('/api/graph/projects?limit=200', 0, { share: true });
@@ -37,7 +64,7 @@ export function useRunRows(filters: RunFilters) {
     });
   }, [reports.data, jobs.data, facade.data, initiatives.data, work.data]);
 
-  return { reports, rows, initiatives, work };
+  return { reports, rows, initiatives, work, loadMore, loadingMore, moreError };
 }
 
 /** The Runs table's columns. `only` keeps a subset, in the table's own order (the Learning tab drops Initiative, which is its filter). */

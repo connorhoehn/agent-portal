@@ -131,8 +131,9 @@ export const learnedDot = (r: Pick<RunReportRow, 'debrief'>): boolean => r.debri
 
 /** The query string a Runs list filter state makes (`executor`, `initiative`, `outcome`, `debrief`, and the
  * work item and runbook a link can carry). */
-export function reportsQuery(f: { executor: string; initiative: string; outcome: string; debrief: string; workItem?: string; runbook?: string }, cursor?: string): string {
+export function reportsQuery(f: { executor: string; initiative: string; outcome: string; debrief: string; workItem?: string; runbook?: string; q?: string }, cursor?: string): string {
   const p = new URLSearchParams();
+  if (f.q?.trim()) p.set('q', f.q.trim().slice(0, 200));
   if (f.workItem) p.set('workItem', f.workItem);
   if (f.runbook) p.set('runbook', f.runbook);
   if (f.executor) p.set('executor', f.executor);

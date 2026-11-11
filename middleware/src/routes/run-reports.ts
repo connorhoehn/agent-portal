@@ -12,6 +12,9 @@
 //               obstacles two or more different runs hit, grouped by plain normalised text within a
 //               repository or initiative (lib/run-reports/recurring-obstacles.ts); `days` defaults to 30.
 //
+//   q           text: every term appears in the summary, obstacles, learned text, failure code or run ref
+//               (case-insensitive substrings, at most 200 characters)
+//
 //   cursor/limit  the store's page (limit capped at 200)
 //
 // Answers `{ reports: RunReport[], next: string | null }`: the stored rows as they are, filtered and
@@ -25,8 +28,8 @@
 import { Router } from 'express';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { readForRolesElseAction } from '../lib/authz.js';
-import { RUN_EXECUTORS, RUN_OUTCOMES, type DebriefState, type RunExecutor, type RunOutcome } from '../lib/run-reports/types.js';
-import type { ListRunReportsQuery, RunReportStore } from '../lib/run-reports/store.js';
+import { RUN_EXECUTORS, RUN_OUTCOMES, RUN_REPORT_READ_ACTION, RUN_REPORT_READ_ROLES, type DebriefState, type RunExecutor, type RunOutcome } from '../lib/run-reports/types.js';
+import { MAX_REPORT_SEARCH_CHARS, type ListRunReportsQuery, RunReportStore } from '../lib/run-reports/store.js';
 import { groupRecurringObstacles } from '../lib/run-reports/recurring-obstacles.js';
 import type { RunReport } from '../lib/run-reports/types.js';
 import { clock } from '../mock/core/clock.js';
@@ -76,6 +79,11 @@ export function parseRunReportsQuery(q: Record<string, unknown>): ListRunReports
   // A bot page asks for the reports of its own firings: a comma list of run refs (a bot run's job id).
   const runRefs = text(q['runRefs']);
   if (runRefs) out.runRefs = runRefs.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 200);
+  const search = text(q['q'])?.trim();
+  if (search) {
+    if (search.length > MAX_REPORT_SEARCH_CHARS) throw new ValidationError(`q is at most ${MAX_REPORT_SEARCH_CHARS} characters`);
+    out.q = search;
+  }
   const cursor = text(q['cursor']);
   if (cursor) out.cursor = cursor;
   const n = Number(q['limit']);
@@ -85,7 +93,7 @@ export function parseRunReportsQuery(q: Record<string, unknown>): ListRunReports
 
 export function createRunReportsRouter(deps: RunReportsDeps = {}): Router {
   const router = Router();
-  const gate = readForRolesElseAction(['org-leader', 'hr-admin', 'program-owner'], 'ManageBots');
+  const gate = readForRolesElseAction([...RUN_REPORT_READ_ROLES], RUN_REPORT_READ_ACTION);
   const store = async (): Promise<RunReportStore> =>
     deps.reports ? deps.reports() : (await import('../lib/run-reports/store-select.js')).runReportStore();
 

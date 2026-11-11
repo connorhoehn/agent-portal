@@ -104,6 +104,27 @@ describe('GET /api/run-reports', () => {
     expect(await refs('executor=microvm&initiative=p-other')).toEqual([]);
   });
 
+  it('searches text: every term, any case, across summary, obstacles, learned, failure code and run ref, and pages with the filter on', async () => {
+    const extra = [
+      report('csrf-1', { summary: 'Fixed the CSRF token check', endedAt: '2026-11-10T12:00:00.000Z' }),
+      report('csrf-2', { obstacles: ['csrf cookie missing on login'], endedAt: '2026-11-10T13:00:00.000Z' }),
+      report('csrf-3', { learned: 'Always rotate the Csrf secret', endedAt: '2026-11-10T14:00:00.000Z' }),
+      report('f1', { failureCode: 'timeout-hit', summary: 'csrf only', endedAt: '2026-11-10T15:00:00.000Z' }),
+    ];
+    const app = await appAs(mia, extra);
+    const get = async (q: string) => (await request(app).get(`/api/run-reports${q}`)).body;
+    expect((await get('?q=CSRF')).reports.map((r: RunReport) => r.runRef)).toEqual(['f1', 'csrf-3', 'csrf-2', 'csrf-1']);
+    expect((await get('?q=csrf%20TIMEOUT')).reports.map((r: RunReport) => r.runRef)).toEqual(['f1']);
+    expect((await get('?q=csrf%20nomatch')).reports).toEqual([]);
+    const p1 = await get('?q=csrf&limit=3');
+    expect(p1.reports.map((r: RunReport) => r.runRef)).toEqual(['f1', 'csrf-3', 'csrf-2']);
+    expect(p1.next).not.toBeNull();
+    const p2 = await get(`?q=csrf&limit=3&cursor=${encodeURIComponent(p1.next)}`);
+    expect(p2.reports.map((r: RunReport) => r.runRef)).toEqual(['csrf-1']);
+    expect(p2.next).toBeNull();
+    expect((await request(app).get(`/api/run-reports?q=${'x'.repeat(201)}`)).status).toBe(400);
+  });
+
   it('answers 400 for a filter value that is not one, never an empty list', async () => {
     const app = await appAs(mia);
     for (const q of ['executor=box', 'outcome=ok', 'debrief=maybe']) expect((await request(app).get(`/api/run-reports?${q}`)).status).toBe(400);
