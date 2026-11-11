@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // The learning loop, walked in a browser on dev:mock with no model (docs/learning-loop-design.md, "Acceptance" items
-// 1 to 12). Every run is a real dispatch through the UI's normal path: the governed run against the fake microVM, which
+// 1 to 12). Every acceptance run is a real dispatch through the UI's normal path: the governed run against the fake microVM, which
 // ends with the hand-written fixture for its work item (middleware/src/mock/run-report-fixtures.ts) and, for the run
 // that taught something, the hand-written debrief (debrief-fixtures.ts). Each step asserts on the page, saves a screenshot
 // at 1440 and 1280 wide, and uses the stored sentences (a report's own text, a debrief's reasonText), never its own.
@@ -19,7 +19,8 @@
 //      it, and five of them make its retirement due by the disuse rule; item 9 is about the three-run rule, so it is
 //      walked while only three such runs exist.
 // After the acceptance items: R1 (a run that sent no report block), R2 (the Runs list and its filters) and R3 (the
-// rails that lead to it). The two acceptance items that need the real local worker (13, 14) are
+// rails that lead to it), then R4 (browser-only fixtures for the MicroVM filter; no cloud dispatch).
+// The two acceptance items that need the real local worker (13, 14) are
 // scripts/learning-loop/debrief-e2e.mjs and local-report-e2e.mjs; the judge runs them.
 //
 // The runner (scripts/journeys/run-demo-moments.mjs) boots the stack with no pacing in the fake microVM and a short
@@ -31,6 +32,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { verifyMicrovmFilter } from './learning-loop-microvm.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const req = createRequire(path.join(ROOT, 'portal', 'package.json'));
@@ -593,6 +595,12 @@ async function main() {
       await page.getByTestId('local-runs-link').first().waitFor({ timeout: 10000 });
       await go(page, '/iq/local-compute?view=runs');
       await page.waitForURL(/\/iq\/runs\?executor=local/, { timeout: 10000 });
+    });
+    // R4 is deliberately a browser fixture: the default mock has no microVM executor.
+    // It covers the control, URL persistence and Demo data mark, not a cloud dispatch.
+    await step('R4: MicroVM filter: labelled browser fixtures, selection, reload and clearing', async () => {
+      await verifyMicrovmFilter(page, PORTAL, shots);
+      return 'browser-only fixture; real microVM execution remains unverified';
     });
   } finally {
     await browser.close();

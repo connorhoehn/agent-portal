@@ -12,6 +12,12 @@ Everything this work order asked for is on main (11 November 2026): lanes A (run
 
 The package sections below are kept as the as-built record: the file paths, contracts and acceptance each names are what was built. What remains open is in [next-steps.md](next-steps.md) under "Learning loop" (each lane's note) and in the decisions file.
 
+Pickup on 11 November: the MicroVM filter now has browser coverage in journey step R4, using two hand-written, clearly marked browser fixtures. It checks selection through the filter control, keeping another filter, reload, clearing, and the Demo data mark. The API suite separately checks real filtering over microVM and other executor reports. This does not prove a microVM dispatch: the default mock still produces governed runs, and real AWS execution remains unverified. The Budgets selection gap is now explicitly recorded in [ui-components-queue.md](ui-components-queue.md).
+
+Component discipline retains main's known baseline of nine failing checks, confirmed in the preceding handoff: raw elements and inline styles exceed several area budgets, and card-stat and density-size rules fail in `ReferenceSheet.tsx` and `BotDetailPage.tsx`. This pickup changes no portal implementation. The loop's 61 middleware suites pass; the wider middleware run was stopped when the baseline was initially mistaken for a new merge blocker, so that run is not claimed as passing.
+
+Pickup verification: all fourteen acceptance items and R1–R4 pass (`validate-learning-loop.sh --skip-suites`); separately, the loop's middleware suites pass 1,046 tests, the portal passes 2,448 tests with one skipped, and the devbox Python suite passes 65 tests. Both TypeScript checks, voice inventory, documentation links and story checks pass. All four journeys (learning loop, demo moments, voice coverage and leftovers) finish without failures. R4's screenshots were checked at 1280 and 1440 px; its reports remain browser-only fixtures.
+
 ## Rules that bind this work
 
 These are not preferences; a change that breaks one is not merged.

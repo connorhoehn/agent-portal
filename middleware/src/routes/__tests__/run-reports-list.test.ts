@@ -34,11 +34,12 @@ const report = (runRef: string, over: Partial<RunReport> = {}): RunReport => ({
   selfReport: 'ok', briefId: null, createdAt: '2026-11-10T10:00:00.000Z', ...over,
 });
 
-async function appAs(who: { role: Role; tenant: Tenant; sub: string }) {
+async function appAs(who: { role: Role; tenant: Tenant; sub: string }, extra: RunReport[] = []) {
   const store = new RowsRunReportStore(privateRunReportSources());
   await store.putReport(report('a', { endedAt: '2026-11-10T09:00:00.000Z' }));
   await store.putReport(report('b', { executor: 'local', outcome: 'failed', endedAt: '2026-11-10T10:00:00.000Z' }));
   await store.putReport(report('c', { executor: 'mock', initiativeId: 'p-other', endedAt: '2026-11-10T11:00:00.000Z' }));
+  for (const row of extra) await store.putReport(row);
   const app = express();
   app.use((req, _res, next) => { req.session = { sub: who.sub, iat: 0, grants: {}, role: who.role, tenant: who.tenant } as Session; next(); });
   app.use('/api/run-reports', requireTenant('orgiq'), createRunReportsRouter({ reports: () => store }));
@@ -67,6 +68,22 @@ describe('GET /api/run-reports', () => {
     const rest = await request(app).get(`/api/run-reports?limit=2&cursor=${encodeURIComponent(first.body.next)}`);
     expect(rest.body.reports.map((r: RunReport) => r.runRef)).toEqual(['a']);
     expect(rest.body.next).toBeNull();
+  });
+
+  it('keeps microVM reports distinct from bots and combines executor and outcome filters', async () => {
+    const app = await appAs(mia, [
+      report('vm-done', { executor: 'microvm', endedAt: '2026-11-10T12:00:00.000Z' }),
+      report('vm-failed', { executor: 'microvm', outcome: 'failed', endedAt: '2026-11-10T13:00:00.000Z' }),
+    ]);
+    const refs = async (q: string) => {
+      const res = await request(app).get(`/api/run-reports?${q}`);
+      expect(res.status).toBe(200);
+      return res.body.reports.map((r: RunReport) => r.runRef);
+    };
+    expect(await refs('executor=microvm')).toEqual(['vm-failed', 'vm-done']);
+    expect(await refs('executor=microvm&outcome=done')).toEqual(['vm-done']);
+    expect(await refs('executor=governed,mock')).toEqual(['c']);
+    expect(await refs('executor=microvm&initiative=p-other')).toEqual([]);
   });
 
   it('answers 400 for a filter value that is not one, never an empty list', async () => {

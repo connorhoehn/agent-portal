@@ -71,7 +71,7 @@ for n in 1 2 3 4 5 6 7 8 9 10 11 12; do
   fi
 done
 # The steps after the acceptance items belong to the journey too.
-for s in R1 R2 R3; do
+for s in R1 R2 R3 R4; do
   if grep -q "^PASS ${s}:" "$JOURNEY_LOG" && ! grep -q "^FAIL ${s}:" "$JOURNEY_LOG"; then
     pass "journey step $s"
   else

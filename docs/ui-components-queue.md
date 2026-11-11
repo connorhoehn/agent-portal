@@ -4,6 +4,7 @@ Gaps found while building pages. Each row is a workaround in this repository and
 
 | Found in | Gap | Worked round with |
 |---|---|---|
+| `portal/src/pages/budgets/InitiativesReport.tsx` (lane B follow-up) | At 1280 px, the initiatives table uses cards and the row selected by a budget bell link can remain outside the scroll viewport. `DataTable` receives `selectedKey` but only styles the row. The library needs an opt-in way to reveal the selected row after data loads, including its page and card layout, without moving keyboard focus. Verify a bell link to an initially offscreen initiative at 1280 and 1440 px. | No local workaround; the existing selection highlight stays. Waiting on the component library. |
 | `portal/src/pages/iq/RunPage.tsx` (lane E1) | A "Demo data" mark: a small labelled badge for rows and sections that come from a hand-written fixture. | A neutral `Chip` reading "Demo data". |
 | `portal/src/pages/iq/RunPage.tsx` (lane E1) | `DataTable` cells do not wrap long prose; a column of sentences runs off the table at 1280 wide. A column option such as `wrap` (with a max width) would do it. | `T` with `block max-w-[26rem] whitespace-normal` in the cell. |
 | `portal/src/pages/iq/RunsPage.tsx` (lane E2) | `CollectionPage`'s `table` prop loses its row type through `ComponentProps` in the app's `CollectionCommandPage`, so a typed table cannot be passed. The page passes a `DataTable` as the body instead. | `DataTable` as `children`. |

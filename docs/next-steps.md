@@ -960,7 +960,7 @@ Left:
 
 - ~~The mock's fixtures are unreachable from a browser dispatch (above); making the fake microVM's final message carry a fixture report would make the Demo data path walkable. Not done: middleware behaviour.~~ *Lane E8: done.*
 - ~~The Demo data mark and the Runs filters are covered by unit tests and the URL-driven journey only; no browser walk reaches a simulated run.~~ *Lane E8: the journey now reaches simulated runs; the Demo data mark and the Runs filters are walked in a browser.*
-- The microVM executor has no run in the mock, so the MicroVM filter is untested in a browser.
+- The default mock has no microVM run. Pickup on 11 November adds browser-only fixture coverage for the MicroVM filter (journey R4), with real API filtering checked separately; a microVM dispatch remains unproven in a browser.
 
 ### Lane E3 + E4 (and E6 item 1): the work item's runbooks, Library, Proposals, evidence
 
@@ -990,7 +990,7 @@ Left:
 
 **Left.**
 - The Runs list used to name a governed run "Run" (names came from the queue's jobs and bots, and a governed run has neither); the list now also reads the work board and names such a run by its work item's title.
-- The microVM executor still has no run on the mock, so its Runs filter is untested in a browser.
+- The default mock still has no microVM run. Pickup on 11 November adds journey R4: two hand-written browser fixtures exercise selecting MicroVM, preserving the outcome filter, reloading, clearing and the Demo data mark. The run-reports API suite checks microVM filtering separately. This covers the page control, not a microVM dispatch.
 - Real governed runs still cannot be debriefed (their devbox path reports no Claude session id).
 
 ### Lane E5 (and the E7 leftover): Bots and Computers
