@@ -74,6 +74,7 @@ const SCOPED = [
 
 /** Not scoped yet, each with why. Fixing one moves it to SCOPED. */
 const OPEN: Record<string, string> = {
+  'budgets PUT /learning': 'learning loop: the learning cap is the whole organisation\'s, with no initiative; ManageBudgets plus an org-wide role (a program-owner is refused in the handler)',
   'prompt-pointers POST /:agent/candidate': 'DE-4: prompts are org-wide, keyed by agent, with no initiative; ManageCanary (org-leader / hr-admin) is the gate',
   'prompt-pointers POST /:agent/promote': 'DE-4: same as candidate: org-wide, ManageCanary',
   'prompt-pointers POST /:agent/rollback': 'DE-4: same as candidate: org-wide, ManageCanary',

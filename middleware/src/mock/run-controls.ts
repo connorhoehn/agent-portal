@@ -62,6 +62,20 @@ export const budgetThresholds = defineFixture<BudgetThresholdRow>({
   scenarios: { default: () => [], empty: () => [], error: unavailable('initiative_budgets') },
 });
 
+/** One budget threshold crossed for one subject in one period (lib/budget-thresholds.ts). */
+export interface BudgetThresholdMarkRow {
+  subjectKind: 'initiative' | 'user' | 'grant';
+  subjectId: string;
+  threshold: number;
+  periodKey: string;
+  crossedAt: string;
+}
+
+export const budgetThresholdMarks = defineFixture<BudgetThresholdMarkRow>({
+  key: 'budget-threshold-marks',
+  scenarios: { default: () => [], empty: () => [], error: unavailable('budget_threshold_marks') },
+});
+
 export const fleetSwitchLog = defineFixture<FleetSwitchRow>({
   key: 'fleet-switch-log',
   scenarios: { default: () => [], empty: () => [], error: unavailable('fleet_switch_log') },

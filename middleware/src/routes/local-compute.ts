@@ -100,6 +100,7 @@ import {
   heartbeatJob,
   markRunning,
   completeJob,
+  unclaimJob,
   jobEvents,
   type AgentJob,
   type JobChangeEvent,
@@ -121,6 +122,9 @@ import {
 import { STALE_MINUTES } from '../lib/job-dispatcher.js';
 import { parseReportedCost, resolveRunCost } from '../lib/run-cost.js';
 import { recordSpend } from '../providers/spend-ledger.js';
+import { HOLD_GRACE_MS, reserveSpend, type ReserveSpendResult } from '../lib/spend-holds.js';
+import { spendRefusalResponse } from '../lib/spend-refusal.js';
+import { pauseFor, pauseMessage } from '../lib/fleet-switches.js';
 import { DEMO_NODE_ID, demoPresenceSessions, demoMetrics } from '../mock/local-compute.js';
 import {
   emitLocalAnnounce,
@@ -500,6 +504,45 @@ async function fencedJob(
   return { job, claimToken };
 }
 
+/**
+ * Local compute inside the run controls (docs/learning-loop-design.md "Budgets").
+ *
+ * WHAT IS ENFORCED for a local run, at claim: the kill switches (the fleet and
+ * the job's initiative, DE-50) and the run limits (concurrency, runs per day
+ * and dollars per hour at the initiative, tenant and global scopes, DE-37) —
+ * through `reserveSpend` with `zeroBilled`, so the judgement and the $0 hold
+ * that carries the run's concurrency slot are exactly every other executor's.
+ * The hold is keyed like the job dispatcher's (`<job>:<attempt>`), so the run's
+ * ledger entry at completion settles it and frees the slot.
+ *
+ * WHAT IS NOT: money. The operator's own login pays (lib/run-cost.ts), so no
+ * allocation, envelope, user budget or hard cap judges a local run, and its
+ * ledger entry bills $0 with the worker's figure kept beside it as
+ * `reportedUsd` ("reported, not billed" on the Budgets page, never counted
+ * toward a cap). There is no per-user kill switch in the system to consult.
+ *
+ * A job a bot run owns took its hold (and met these limits) when the bot fired,
+ * so only its pause is checked here, as the job dispatcher does.
+ */
+async function localRunGate(job: AgentJob): Promise<ReserveSpendResult> {
+  const initiative = typeof job.payload['initiativeId'] === 'string' && job.payload['initiativeId'] ? job.payload['initiativeId'] : null;
+  if (job.botId) {
+    const hit = await pauseFor(initiative).catch(() => null);
+    return hit
+      ? { kind: 'paused', scope: hit.scope, reason: pauseMessage(hit) }
+      : { kind: 'held', holdId: null, initiativeId: initiative, grantId: null, amountUsd: 0 };
+  }
+  return reserveSpend({
+    initiativeId: initiative,
+    actorId: job.createdBy ?? null,
+    source: 'job',
+    sourceId: `${job.id}:${job.attempts}`,
+    forecast: { costUsdP75: 0 },
+    zeroBilled: true,
+    expiresInMs: STALE_MINUTES * 60_000 + HOLD_GRACE_MS,
+  });
+}
+
 localComputeRouter.post('/claim', workLoopLimit, requireNodeToken(async (req, res, node) => {
   const boxId = localBoxId(node.id);
   // Counted against the DATABASE, not against what the worker thinks it holds —
@@ -541,6 +584,19 @@ localComputeRouter.post('/claim', workLoopLimit, requireNodeToken(async (req, re
     // quiet queue all day. 204 keeps that out of the error logs and out of the
     // worker's error path.
     res.status(204).end();
+    return;
+  }
+
+  // The same run limits and kill switches every other executor meets
+  // (localRunGate). A refusal hands the job back to the queue unburned, like the
+  // job dispatcher's, and answers with reserveSpend's own closed codes: 423
+  // `paused`, 429 `run-limit` (with Retry-After), 503 `budget-state`/`spend-hold`.
+  const gate = await localRunGate(claim.job);
+  if (gate.kind !== 'held') {
+    await unclaimJob(claim.job.id, claim.claimToken);
+    const refusal = spendRefusalResponse(gate);
+    for (const [k, v] of Object.entries(refusal.headers ?? {})) res.setHeader(k, v);
+    res.status(refusal.status).json(refusal.body);
     return;
   }
 
@@ -720,7 +776,9 @@ localComputeRouter.post('/jobs/:jobId/complete', workLoopLimit, requireNodeToken
   // The ledger entry (DE-33): a confident $0 with `provider = 'local'`, so
   // local work is metered (not absent) and never mistaken for a Bedrock run
   // that reported $0. A job a bot run owns books nothing here: that run's
-  // settle writes its money. No hold was taken for it (local runs cost $0).
+  // settle writes its money. This entry settles the $0 hold the claim took
+  // (localRunGate), which frees the run's concurrency slot; the worker's own
+  // figure rides along as `reportedUsd`, reported and never billed.
   if (!held.job.botId) {
     const initiative = held.job.payload['initiativeId'];
     await recordSpend({
@@ -733,6 +791,7 @@ localComputeRouter.post('/jobs/:jobId/complete', workLoopLimit, requireNodeToken
       costUsd: cost.costUsd,
       costBasis: 'reported',
       provider: cost.provider,
+      reportedUsd: reported,
       inputTokens: Number.isFinite(Number(body.tokensIn)) ? Number(body.tokensIn) : null,
       outputTokens: Number.isFinite(Number(body.tokensOut)) ? Number(body.tokensOut) : null,
     }, { unlessBotRunOwnsJob: held.job.id });

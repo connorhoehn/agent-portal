@@ -81,7 +81,9 @@ describe('GET /api/budgets', () => {
     });
     const res = await request(buildApp()).get('/api/budgets');
     expect(res.status).toBe(200);
-    expect(res.body.budgets).toEqual([BUDGET]);
+    // Each row carries its threshold mark (learning loop, lane B): $42.50 of $250 is 17 %, under 50.
+    expect(res.body.budgets).toEqual([{ ...BUDGET, threshold: { percent: 17, reached: 0 } }]);
+    expect(res.body.thresholds).toEqual([50, 80, 100]);
     expect(res.body.summary.totalAllocatedUsd).toBe(250);
   });
 });

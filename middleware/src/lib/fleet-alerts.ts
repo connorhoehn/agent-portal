@@ -18,8 +18,14 @@
 //   fleet-switch        { scope, paused, ActorId }                      every flip
 //
 // ── Decisions this encodes (recorded in the goal doc) ────────────────────────
-// - Thresholds 50/80/100 % of the allocation, each announced once per period
-//   (the highest crossed is remembered on initiative_budgets).
+// - Thresholds 50/80/100 % of the allocation (BUDGET_THRESHOLDS), each announced
+//   once per period. Since the learning loop (lane B) the announcement itself —
+//   mark, metric line, bell to the owner and at 100 % the org leaders — is
+//   lib/budget-thresholds.ts, which reserveSpend and the ledger also call, so
+//   whichever sees a crossing first says it and the other finds the mark. This
+//   sweep is the backstop for spend that reaches the ledger some other way; the
+//   highest crossing it has seen is still remembered on initiative_budgets,
+//   because that memory is what auto-pause keys on.
 // - Auto-pause at 100 % is OFF (`BUDGET_AUTO_PAUSE=on` pauses the initiative
 //   with reason 'budget'); a user decision.
 
@@ -31,6 +37,16 @@ import type { SqlParameter } from '@aws-sdk/client-rds-data';
 
 export { fleetAlerts, fleetMetricLine, emitFleetMetric, emitSpendMetric, type FleetMetric } from './fleet-metrics.js';
 import { emitFleetMetric } from './fleet-metrics.js';
+import { announceCrossing, thresholdState } from './budget-thresholds.js';
+
+async function initiativeOwner(orgProjectId: string): Promise<string | null> {
+  try {
+    const { getProject } = await import('../providers/projects.js');
+    return (await getProject(orgProjectId))?.ownerId ?? null;
+  } catch {
+    return null;
+  }
+}
 
 // ─── Budget thresholds ───────────────────────────────────────────────────────
 
@@ -127,7 +143,7 @@ export async function sweepBudgetThresholds(now = new Date()): Promise<Threshold
     if (allocatedUsd == null) continue;
     const period = row.periodKey ?? month;
     try {
-      const crossed = crossedThreshold(row.spentThisPeriodUsd, allocatedUsd);
+      const crossed = thresholdState(row.spentThisPeriodUsd, allocatedUsd).reached;
       const announce = thresholdToAnnounce(crossed, period, await lastAnnounced(row.orgProjectId));
       if (announce == null) continue;
       await recordAnnounced(row.orgProjectId, announce, period);
@@ -136,14 +152,14 @@ export async function sweepBudgetThresholds(now = new Date()): Promise<Threshold
         allocatedUsd, period,
       };
       out.push(c);
-      emitFleetMetric('budget-threshold', {
-        InitiativeId: c.orgProjectId, threshold: c.threshold, spentUsd: c.spentUsd, allocatedUsd: c.allocatedUsd, period,
+      // The mark, the metric line and the bell, once per threshold per period
+      // however many paths see it (lib/budget-thresholds.ts).
+      await announceCrossing({
+        subject: { kind: 'initiative', id: c.orgProjectId },
+        label: row.orgProjectName ?? 'An initiative',
+        ownerPersonId: await initiativeOwner(c.orgProjectId), initiativeId: c.orgProjectId,
+        usedUsd: c.spentUsd, budgetUsd: allocatedUsd, periodKey: period,
       });
-      await notifyBudgetHolders(
-        `${row.orgProjectName ?? row.orgProjectId} has spent ${announce}% of its allocation`,
-        `$${c.spentUsd.toFixed(2)} of $${c.allocatedUsd.toFixed(2)} this period.`,
-        { initiativeId: c.orgProjectId, threshold: announce },
-      );
       if (announce >= 100 && budgetAutoPauseEnabled()) {
         const { setSwitch, initiativeScope } = await import('./fleet-switches.js');
         await setSwitch(initiativeScope(c.orgProjectId), true, 'budget', 'budget-sweep');

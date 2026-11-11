@@ -21,11 +21,13 @@ import { settleHold, SETTLE_HOLD_SQL } from './spend-holds.js';
 import { emitSpendMetric } from '../lib/fleet-metrics.js';
 import { estimateUsageCost } from '../lib/model-prices.js';
 import { randomUUID } from 'node:crypto';
+import { checkBudgetThresholdsLater } from '../lib/budget-thresholds.js';
 
 // 'agent_invoke' (work item 16): a chat invoke or a /summarize run, keyed by its run id (lib/agent-invoke-spend.ts).
 // 'microvm': one microVM runner attempt, keyed `<job>:<attempt>` (lib/microvm-dispatcher.ts).
 // 'voice_session': one voice navigator session, keyed by its `vs_…` id (routes/voice.ts).
-export type SpendSource = 'bot_run' | 'job' | 'box_task' | 'agent_loop' | 'agent_project_run' | 'bff_call' | 'agent_invoke' | 'microvm' | 'voice_session';
+// 'learning': one server-side distillation of a finished run, keyed `learning:<runRef>` (lib/learning-budget.ts).
+export type SpendSource = 'bot_run' | 'job' | 'box_task' | 'agent_loop' | 'agent_project_run' | 'bff_call' | 'agent_invoke' | 'microvm' | 'voice_session' | 'learning';
 /** Who served the spend: a model provider (lib/run-cost.ts), or OpenAI for a voice session. */
 export type LedgerProvider = ModelProvider | 'openai';
 export type { CostBasis };
@@ -65,9 +67,16 @@ export interface SpendEntry {
   computeSeconds?: number | null;
   computeUsd?: number | null;
   sessionId?: string | null;
+  /**
+   * Local compute only: what the worker said the run cost, kept beside the $0
+   * that is billed (`costUsd`). Never spend: no brake, cap or total reads it;
+   * the Budgets page shows it as "reported, not billed". Null elsewhere.
+   */
+  reportedUsd?: number | null;
 }
 
-export type SpendInput = Omit<SpendEntry, 'costBasis' | 'occurredAt' | 'grantId' | 'trigger' | 'inputTokens' | 'outputTokens' | 'estimatedCostUsd' | 'provider' | 'computeSeconds' | 'computeUsd' | 'sessionId'> & {
+export type SpendInput = Omit<SpendEntry, 'costBasis' | 'occurredAt' | 'grantId' | 'trigger' | 'inputTokens' | 'outputTokens' | 'estimatedCostUsd' | 'provider' | 'computeSeconds' | 'computeUsd' | 'sessionId' | 'reportedUsd'> & {
+  reportedUsd?: number | null;
   computeSeconds?: number | null;
   computeUsd?: number | null;
   sessionId?: string | null;
@@ -134,6 +143,7 @@ export async function recordSpend(input: SpendInput, opts: { unlessBotRunOwnsJob
     ...(input.computeSeconds != null || input.computeUsd != null || input.sessionId
       ? { computeSeconds: input.computeSeconds ?? null, computeUsd: input.computeUsd ?? null, sessionId: input.sessionId ?? null }
       : {}),
+    ...(input.reportedUsd != null && Number.isFinite(input.reportedUsd) ? { reportedUsd: input.reportedUsd } : {}),
   };
   // DE-50: the spend-rate metric line, with InitiativeId/ActorId dimensions.
   emitSpendMetric(entry);
@@ -143,6 +153,8 @@ export async function recordSpend(input: SpendInput, opts: { unlessBotRunOwnsJob
     try {
       const rows = spendEntries.rows();
       const prior = rows.find((r) => r.source === entry.source && r.sourceId === entry.sourceId);
+      // Only a write that added money moves a threshold; a retried one changes nothing.
+      const added = !prior || (prior.costBasis === 'unknown' && entry.costBasis !== 'unknown');
       if (!prior) rows.push(entry);
       else if (prior.costBasis === 'unknown' && entry.costBasis !== 'unknown') {
         prior.costUsd = entry.costUsd;
@@ -152,6 +164,7 @@ export async function recordSpend(input: SpendInput, opts: { unlessBotRunOwnsJob
       const stored = prior ?? entry;
       // The hold for the same attempt settles with the entry (DE-34).
       await settleHold(entry.source, entry.sourceId, exec, stored.costUsd != null);
+      if (added) thresholdsAfterSettle(stored);
     } catch (err) {
       console.warn(`[spend-ledger] mock write failed: ${(err as Error).message}`);
     }
@@ -165,11 +178,13 @@ export async function recordSpend(input: SpendInput, opts: { unlessBotRunOwnsJob
     // The microVM runner's compute columns (schema/microvm_sessions.sql), only when given.
     const withCompute = (entry.computeSeconds != null || entry.computeUsd != null || !!entry.sessionId)
       && await hasColumns('spend_entries', ['compute_seconds', 'compute_usd', 'session_id']).catch(() => false);
+    // Local compute's reported figure (schema/budget_lines_schema.sql), only when given.
+    const withReported = entry.reportedUsd != null && await hasColumns('spend_entries', ['reported_usd']).catch(() => false);
     const insert = `INSERT INTO spend_entries
          (source, source_id, initiative_id, grant_id, box_id, actor_id, trigger, model,
-          cost_usd, cost_basis, input_tokens, output_tokens, occurred_at${withEstimate ? ', estimated_cost_usd' : ''}${withProvider ? ', provider' : ''}${withCompute ? ', compute_seconds, compute_usd, session_id' : ''})
+          cost_usd, cost_basis, input_tokens, output_tokens, occurred_at${withEstimate ? ', estimated_cost_usd' : ''}${withProvider ? ', provider' : ''}${withCompute ? ', compute_seconds, compute_usd, session_id' : ''}${withReported ? ', reported_usd' : ''})
        SELECT :source, :sid, :init, :grant, :box, :actor, :trigger, :model,
-              :cost::numeric, :basis, :itok::bigint, :otok::bigint, :at::timestamptz${withEstimate ? ', :est::numeric' : ''}${withProvider ? ', :provider' : ''}${withCompute ? ', :csec::int, :cusd::numeric, :csid' : ''}
+              :cost::numeric, :basis, :itok::bigint, :otok::bigint, :at::timestamptz${withEstimate ? ', :est::numeric' : ''}${withProvider ? ', :provider' : ''}${withCompute ? ', :csec::int, :cusd::numeric, :csid' : ''}${withReported ? ', :rep::numeric' : ''}
        ${opts.unlessBotRunOwnsJob ? 'WHERE NOT EXISTS (SELECT 1 FROM bot_runs WHERE job_id = :ownedjob)' : ''}${withEstimate ? UPSERT_TAIL_WITH_ESTIMATE : UPSERT_TAIL}`;
     const params: SqlParameter[] = [
       s('source', entry.source), s('sid', entry.sourceId), maybe('init', entry.initiativeId),
@@ -180,9 +195,11 @@ export async function recordSpend(input: SpendInput, opts: { unlessBotRunOwnsJob
       ...(withEstimate ? [maybeNum('est', entry.estimatedCostUsd)] : []),
       ...(withProvider ? [s('provider', entry.provider!)] : []),
       ...(withCompute ? [maybeNum('csec', entry.computeSeconds), maybeNum('cusd', entry.computeUsd), maybe('csid', entry.sessionId)] : []),
+      ...(withReported ? [maybeNum('rep', entry.reportedUsd)] : []),
       ...(opts.unlessBotRunOwnsJob ? [s('ownedjob', opts.unlessBotRunOwnsJob)] : []),
     ];
     await writeAndSettle(entry.source, entry.sourceId, (run) => run(insert, params));
+    thresholdsAfterSettle(entry);
   } catch (err) {
     if (missingTable(err)) return;
     console.warn(`[spend-ledger] write failed for ${entry.source}:${entry.sourceId}: ${(err as Error).message}`);
@@ -303,6 +320,30 @@ async function writeAndSettle(source: SpendSource, sourceId: string, write: (run
   });
 }
 
+/**
+ * Budget thresholds after money settles (lib/budget-thresholds.ts): the held
+ * figure became a spent one, possibly larger, so a budget may have crossed.
+ * In the background and never able to fail the write. A $0 or unknown-cost
+ * entry moves nothing, and the learning line has no threshold.
+ */
+function thresholdsAfterSettle(e: Pick<SpendEntry, 'source' | 'costUsd' | 'initiativeId' | 'actorId' | 'trigger'>): void {
+  if (e.source === 'learning' || e.costUsd == null || !(e.costUsd > 0)) return;
+  try {
+    checkBudgetThresholdsLater({ initiativeId: e.initiativeId, actorId: e.actorId, essential: e.trigger === 'cron' });
+  } catch { /* a threshold check must never fail the ledger write */ }
+}
+
+function thresholdsAfterSqlSettle(rows: Record<string, any>[]): void {
+  const r = rows[0];
+  if (!r) return;
+  const cost = r['cost_usd'] == null ? null : Number(r['cost_usd']);
+  thresholdsAfterSettle({
+    source: 'bot_run', costUsd: cost != null && Number.isFinite(cost) ? cost : null,
+    initiativeId: r['initiative_id'] == null ? null : String(r['initiative_id']),
+    actorId: r['actor_id'] == null ? null : String(r['actor_id']), trigger: null,
+  });
+}
+
 /** The columns the SQL ledger writers hand back, for the spend-rate metric. */
 const SPEND_RETURNING = ' RETURNING cost_usd, initiative_id, actor_id';
 
@@ -336,6 +377,7 @@ export async function recordBotRunSpend(runId: string): Promise<void> {
     const withProvider = await hasColumns('spend_entries', ['provider']) && await hasColumns('bot_runs', ['model_provider']);
     const rows = await writeAndSettle('bot_run', runId, (run) => run(botRunSpendSql(withBy, undefined, withEstimate, withProvider) + SPEND_RETURNING + (withProvider ? ', provider' : ''), [s('id', runId)]));
     emitSqlSpendMetric('bot_run', rows);
+    thresholdsAfterSqlSettle(rows);
   } catch (err) {
     if (missingTable(err)) return;
     console.warn(`[spend-ledger] bot run ${runId} not recorded: ${(err as Error).message}`);
@@ -381,6 +423,7 @@ export async function recordAgentProjectRunSpend(runId: string): Promise<void> {
     const withEstimate = await hasColumns('spend_entries', ['estimated_cost_usd']);
     const rows = await writeAndSettle('agent_project_run', runId, (run) => run(agentProjectRunSpendSql(withBy, withEstimate) + SPEND_RETURNING, [s('id', runId)]));
     emitSqlSpendMetric('agent_project_run', rows);
+    thresholdsAfterSqlSettle(rows);
   } catch (err) {
     if (missingTable(err)) return;
     console.warn(`[spend-ledger] agent-project run ${runId} not recorded: ${(err as Error).message}`);

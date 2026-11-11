@@ -233,6 +233,12 @@
       "why": "Run controls (DE-35/37/50): agent_project_runs.cutoff, run_limits + run_slots, agent_jobs.initiative_id (backfilled from payload), fleet_switches, initiative_budgets threshold memory. ALTERs agent_project_runs, agent_jobs and initiative_budgets, so it loads after maintenance_reserve_schema.sql."
     },
     {
+      "id": "budget_lines_schema",
+      "file": "budget_lines_schema.sql",
+      "kind": "repeatable",
+      "why": "The learning loop's budget pieces (docs/learning-loop-design.md, Budgets): budget_threshold_marks (one row per budget, threshold and period announced), learning_budget (the organisation's monthly learning cap) and spend_entries.reported_usd (local compute's reported, never billed, figure). ALTERs spend_entries, so it loads after spend_ledger_schema.sql and the other money files."
+    },
+    {
       "id": "budget_periods_schema",
       "file": "budget_periods_schema.sql",
       "kind": "repeatable",

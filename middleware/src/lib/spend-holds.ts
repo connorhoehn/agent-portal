@@ -6,6 +6,11 @@
 // dispatcher (between claimNextJob and markRunning), an ad-hoc box task
 // (routes/devbox.ts runTaskAndForward, before InvokeRuntime) and a governed run
 // started directly (lib/sdlc-pipeline.ts dispatchGovernedRun, before startRun).
+// Since the learning loop it also judges a local compute claim
+// (routes/local-compute.ts localRunGate, `zeroBilled`: run limits and kill
+// switches only, a $0 hold) and the learning line (lib/learning-budget.ts,
+// source `learning`: the organisation's monthly learning cap only), and after
+// every hold it checks the budget thresholds (lib/budget-thresholds.ts).
 // It takes the initiative lock, then the grant lock, reads the allocation, the
 // ledger spend, the unknown-cost count and the money already held, judges the
 // forecast with the existing pure decisions, and writes the hold — one
@@ -99,6 +104,14 @@ export interface ReserveSpendInput {
   basis?: 'topup';
   /** The tenant charged for run limits (DE-37). Default 'orgiq', the only tenant that dispatches devbox work. */
   tenant?: string;
+  /**
+   * The run bills nothing (local compute: the operator's own login). Judged by
+   * the kill switches and the run limits like every other run, never by a money
+   * gate (allocation, envelope, user budget, any hard cap, the unattributed
+   * rule), and held at $0 so the hold carries its concurrency slot until the
+   * run's ledger entry settles it. The forecast is ignored.
+   */
+  zeroBilled?: boolean;
 }
 
 export interface AllocationGateBody {
@@ -155,7 +168,8 @@ export interface UserBudgetGateBody {
   unknownCostCount: number;
 }
 
-export type CapGate = 'allocation-cap' | 'envelope-cap' | 'user-cap' | 'maintenance-reserve';
+/** `learning-cap`: the organisation's monthly cap for server-side distillation (lib/learning-budget.ts). */
+export type CapGate = 'allocation-cap' | 'envelope-cap' | 'user-cap' | 'maintenance-reserve' | 'learning-cap';
 
 export type ReserveSpendResult =
   /** The money is held (or holds are off / the spend is unattributed and unbudgeted: holdId null). */
@@ -287,7 +301,26 @@ function missingTable(err: unknown): boolean {
  * maintenance reserve; envelope; user budget), then the hold.
  */
 export async function reserveSpend(input: ReserveSpendInput): Promise<ReserveSpendResult> {
+  const result = await judgeAndHold(input);
+  // Budget thresholds (lib/budget-thresholds.ts): spent + held just went up, so
+  // a budget this spend touches may have crossed 50/80/100 %. After the lock is
+  // released, and never able to refuse or fail the reservation it follows.
+  if (result.kind === 'held' && result.amountUsd > 0 && input.source !== 'learning') {
+    try {
+      const { checkBudgetThresholds } = await import('./budget-thresholds.js');
+      await checkBudgetThresholds({ initiativeId: input.initiativeId, actorId: input.actorId, essential: input.essential === true });
+    } catch (err) {
+      console.warn(`[spend-holds] budget threshold check failed: ${(err as Error).message}`);
+    }
+  }
+  return result;
+}
+
+async function judgeAndHold(input: ReserveSpendInput): Promise<ReserveSpendResult> {
   const judge = input.judge !== false;
+  // Local compute (zeroBilled): run limits and kill switches only, at $0.
+  const zero = input.zeroBilled === true;
+  const money = judge && !zero;
   const essential = input.essential === true;
   const unknownOpts = { unknownCostTrips: input.unknownCostTrips === true };
   const confirmed = {
@@ -295,7 +328,7 @@ export async function reserveSpend(input: ReserveSpendInput): Promise<ReserveSpe
     envelope: input.confirmed?.envelope === true,
     userBudget: input.confirmed?.userBudget === true,
   };
-  const amountUsd = Math.max(0, input.forecast.costUsdP75);
+  const amountUsd = zero ? 0 : Math.max(0, input.forecast.costUsdP75);
   const failClosed = budgetFailClosed();
   // Cron spend never charges a user (DE-54): an essential firing carries no
   // actor for budgeting even if one were passed.
@@ -312,7 +345,13 @@ export async function reserveSpend(input: ReserveSpendInput): Promise<ReserveSpe
     console.warn(`[spend-holds] could not read the kill switches: ${(err as Error).message}`);
   }
 
+  // The learning line: its own monthly organisation cap, nothing else (lib/learning-budget.ts).
+  if (input.source === 'learning') return reserveLearning(input, amountUsd, failClosed);
+
   if (!pid) {
+    // A $0 run charged to no initiative answers to no money rule and, like any
+    // unattributed spend with no user budget, to no run limit.
+    if (zero) return { kind: 'held', holdId: null, initiativeId: null, grantId: null, amountUsd };
     const rule = unattributedRule();
     if (rule === 'refuse') {
       return { kind: 'refused', reason: 'this spend is charged to no initiative, and unattributed spend is refused here' };
@@ -331,7 +370,7 @@ export async function reserveSpend(input: ReserveSpendInput): Promise<ReserveSpe
     // A hold that may not refuse (judge: false) reads no budget at all.
     let row: BudgetRow | null = null;
     let held = { floorUsd: 0, discretionaryUsd: 0 };
-    if (pid && judge) {
+    if (pid && money) {
       const g = await readBudgetGate(pid);
       if (g.kind === 'unavailable') {
         if (failClosed) return { kind: 'unavailable', gate: 'budget-state', reason: BUDGET_STATE_REASON };
@@ -345,7 +384,7 @@ export async function reserveSpend(input: ReserveSpendInput): Promise<ReserveSpe
     // The grant lock is taken AFTER the initiative lock, always.
     let envelope: ResolvedEnvelope | null = null;
     let grantHeld = 0;
-    if (pid && actor) {
+    if (pid && actor && !zero) {
       const eg = await loadEnvelopeGate(pid, actor);
       if (eg.kind === 'unavailable') {
         if (judge && failClosed) return { kind: 'unavailable', gate: 'budget-state', reason: BUDGET_STATE_REASON };
@@ -360,7 +399,7 @@ export async function reserveSpend(input: ReserveSpendInput): Promise<ReserveSpe
     // ── 3. The spender's user budget (DE-54), third lock ────────────────────
     let ub: { row: UserBudgetRow; spend: UserSpend } | null = null;
     let userHeld = 0;
-    if (judgeUser) {
+    if (judgeUser && !zero) {
       // Unattributed spend took this key as its first (and only) lock.
       if (tx && pid) await tx.lock(`user:${actor}`);
       const u = await readUserBudgetGate(actor);
@@ -417,7 +456,7 @@ export async function reserveSpend(input: ReserveSpendInput): Promise<ReserveSpe
 
     let basis: HoldBasis = input.basis === 'topup' ? 'topup' : 'p75';
     let spill = false;
-    if (judge) {
+    if (money) {
       // ── 4. Hard caps (DE-36): before the soft brakes, no confirm flag ─────
       if (pid) {
         const cap = effectiveHardCap(allocated, row?.hardCapUsd ?? null, { unbudgeted: true });
@@ -536,6 +575,54 @@ export async function reserveSpend(input: ReserveSpendInput): Promise<ReserveSpe
       if (!warnedMissing) {
         warnedMissing = true;
         console.warn('[spend-holds] spend_holds is not applied here; brakes judge settled spend only until it is');
+      }
+      return body(null);
+    }
+    throw err;
+  }
+}
+
+/**
+ * The learning line (lib/learning-budget.ts): server-side distillation, judged
+ * against the organisation's monthly learning cap and nothing else — it is
+ * charged to no initiative and no user, so no envelope, user budget or run
+ * limit applies, and the kill switch was checked before this was reached. One
+ * lock key for the whole line, so two distillations cannot both take the last
+ * dollar. At the cap it refuses as `capped` / `learning-cap`, which the
+ * distiller records as `skipped: learning-budget`.
+ */
+async function reserveLearning(input: ReserveSpendInput, amountUsd: number, failClosed: boolean): Promise<ReserveSpendResult> {
+  const lines = await import('../providers/budget-lines.js');
+  const body = async (tx: SpendLockTx | null): Promise<ReserveSpendResult> => {
+    let cap: number;
+    let spentUsd: number;
+    let heldUsd: number;
+    try {
+      cap = (await lines.getLearningCap()).capUsd;
+      spentUsd = (await lines.learningSpentThisMonth()).spentUsd;
+      heldUsd = tx ? await lines.learningHeldUsd() : 0;
+    } catch (err) {
+      if (failClosed) return { kind: 'unavailable', gate: 'budget-state', reason: BUDGET_STATE_REASON };
+      console.warn(`[spend-holds] the learning line could not be read: ${(err as Error).message}`);
+      return { kind: 'held', holdId: null, initiativeId: null, grantId: null, amountUsd };
+    }
+    const d = decideHardCap({ capUsd: cap, spentUsd, heldUsd, amountUsd }, 'the learning line');
+    if (d.kind === 'refuse') return { kind: 'capped', gate: 'learning-cap', reason: d.reason, capUsd: cap, spentUsd, heldUsd, amountUsd };
+    if (!tx) return { kind: 'held', holdId: null, initiativeId: null, grantId: null, amountUsd };
+    const expiresAt = new Date(clock.now().getTime() + input.expiresInMs).toISOString();
+    const hold = await tx.insertHold({
+      initiativeId: null, grantId: null, actorId: null, source: 'learning',
+      sourceId: input.sourceId ?? null, amountUsd, basis: 'p75', essential: false, expiresAt,
+    });
+    return { kind: 'held', holdId: hold.id, initiativeId: null, grantId: null, amountUsd };
+  };
+  if (!spendHoldsEnabled()) return body(null);
+  try {
+    return await withSpendLock(['learning:org'], body);
+  } catch (err) {
+    if (missingHoldsTable(err)) {
+      if (spendHoldsFailClosed()) {
+        return { kind: 'unavailable', gate: 'spend-hold', reason: 'Spend holds could not be recorded, so nothing was started. Apply schema/spend_holds_schema.sql or set SPEND_HOLDS=off.' };
       }
       return body(null);
     }

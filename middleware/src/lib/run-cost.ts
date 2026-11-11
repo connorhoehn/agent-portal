@@ -45,6 +45,16 @@
 // what it reported or **null**, and the provider is always recorded so a wrong
 // number is selectable later. (1) and (2) are opposite errors and both are fixed
 // by refusing to let the executor be the pricing authority.
+//
+// What that $0 does and does not exempt a local run from (docs/learning-loop-design.md
+// "Budgets"). ENFORCED, at claim (routes/local-compute.ts `localRunGate`, through
+// lib/spend-holds.ts `reserveSpend` with `zeroBilled`): the kill switches (fleet
+// and initiative) and the run limits (concurrent runs, runs per day, dollars per
+// hour), with the same refusal codes every other executor gets, and a $0 hold
+// that carries the run's concurrency slot. NOT ENFORCED: any money gate — the
+// allocation, the sprint envelope, the user budget and every hard cap — because
+// nothing is billed. The worker's own figure is kept as the ledger entry's
+// `reportedUsd` and shown as "reported, not billed"; it never counts toward a cap.
 
 /**
  * Where the model that served a run actually ran.

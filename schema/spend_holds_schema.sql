@@ -38,10 +38,11 @@ CREATE TABLE IF NOT EXISTS spend_holds (
 -- The source list as a named constraint, so adding a path is a re-apply of
 -- this file (agent_invoke: a chat invoke or a /summarize run, work item 16;
 -- microvm: one microVM runner attempt, docs/microvm-runner-design.md §6;
--- voice_session: one voice navigator session, docs/voice-navigator-spec.md §7).
+-- voice_session: one voice navigator session, docs/voice-navigator-spec.md §7;
+-- learning: one server-side distillation, docs/learning-loop-design.md).
 ALTER TABLE spend_holds DROP CONSTRAINT IF EXISTS spend_holds_source_check;
 ALTER TABLE spend_holds ADD CONSTRAINT spend_holds_source_check
-  CHECK (source IN ('bot_run', 'job', 'box_task', 'agent_loop', 'agent_project_run', 'agent_invoke', 'microvm', 'voice_session'));
+  CHECK (source IN ('bot_run', 'job', 'box_task', 'agent_loop', 'agent_project_run', 'agent_invoke', 'microvm', 'voice_session', 'learning'));
 
 CREATE INDEX IF NOT EXISTS spend_holds_open_idx ON spend_holds (initiative_id) WHERE status = 'held';
 CREATE INDEX IF NOT EXISTS spend_holds_grant_open_idx ON spend_holds (grant_id) WHERE status = 'held';

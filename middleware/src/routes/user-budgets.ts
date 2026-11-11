@@ -20,6 +20,7 @@ import {
   userBudgetView, userSpendThisPeriod,
 } from '../providers/user-budgets.js';
 import { openHeldUsdForActor, missingHoldsTable } from '../providers/spend-holds.js';
+import { configuredThresholds, thresholdState } from '../lib/budget-threshold-rules.js';
 
 export const userBudgetsRouter: Router = Router();
 
@@ -62,8 +63,13 @@ userBudgetsRouter.get('/', readGate, asyncHandler(async (_req, res) => {
   }));
   // Blind spots (spending, no budget) first, then by spend.
   budgets.sort((a, b) => Number(a.allocatedUsd != null) - Number(b.allocatedUsd != null) || b.spentUsd - a.spentUsd || a.userId.localeCompare(b.userId));
+  // The threshold the bell announces by (lib/budget-thresholds.ts): spent + held against the monthly budget.
+  const thresholds = configuredThresholds();
   res.set('Cache-Control', 'no-store');
-  res.json({ budgets });
+  res.json({
+    budgets: budgets.map((b) => ({ ...b, threshold: thresholdState(b.spentUsd + b.heldUsd, b.allocatedUsd, thresholds) })),
+    thresholds,
+  });
 }));
 
 userBudgetsRouter.get('/:userId', readGate, asyncHandler(async (req, res) => {

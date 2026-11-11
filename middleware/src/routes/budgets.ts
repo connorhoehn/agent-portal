@@ -12,10 +12,22 @@
 //   writes — allocating agent spend is program management: ManageBudgets.
 //            A program-owner only on initiatives they own (lib/budget-scope.ts,
 //            docs/next-steps.md §9 item 8a).
+//
+// Every row carries `threshold` ({ percent, reached }: spent + held against the
+// budget, and the highest of BUDGET_THRESHOLDS reached; lib/budget-thresholds.ts),
+// and the list carries the configured `thresholds`, so the page marks a row near
+// or at its cap by the same rule the bell announces it.
+//
+// The organisation's lines (docs/learning-loop-design.md "Budgets"):
+//   GET /api/budgets/lines      the learning line (spent and held of its monthly
+//                               cap) and local compute (reported, not billed)
+//   PUT /api/budgets/learning   { monthlyCapUsd: number | null } — the learning
+//                               cap; ManageBudgets AND an org-wide role, since
+//                               it is the whole organisation's money
 
 import { Router } from 'express';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
-import { readForRolesElseAction, requireAction } from '../lib/authz.js';
+import { readForRolesElseAction, requireAction, resolveSession } from '../lib/authz.js';
 import { requireBudgetScope } from '../lib/budget-scope.js';
 import type { RunLimitPatch } from '../providers/run-limits.js';
 // Loaded on first use (DE-37): the route's tests mock providers/budgets, not this.
@@ -25,8 +37,14 @@ import {
   listGrants, getBudget, periodsSupported, type AllocationExtras,
 } from '../providers/budgets.js';
 import {
-  BUDGET_PERIODS, CARRY_OVER_POLICIES, MAX_ROLLING_DAYS, MIN_ROLLING_DAYS, isBudgetPeriod, isCarryOver,
+  BUDGET_PERIODS, CARRY_OVER_POLICIES, MAX_ROLLING_DAYS, MIN_ROLLING_DAYS, budgetedAllocation, isBudgetPeriod, isCarryOver,
 } from '../lib/budget-periods.js';
+import { configuredThresholds, thresholdState } from '../lib/budget-threshold-rules.js';
+// Loaded on first use, like run limits: each reads config, which this route's
+// CommonJS test build (budgets.test.ts mocks providers/budgets only) must not load.
+const budgetLines = () => import('../providers/budget-lines.js');
+/** The roles that act for the whole organisation (lib/initiative-scope.ts ORG_WIDE_INITIATIVE_ROLES). */
+const ORG_WIDE_ROLES = ['org-leader', 'hr-admin', 'admin'];
 
 /** A money field that may be absent (leave alone), null (back to the default) or a finite number >= 0. */
 function optionalMoney(raw: unknown, name: string): number | null | undefined {
@@ -43,7 +61,57 @@ const manageGate = requireAction('ManageBudgets');
 
 budgetsRouter.get('/', readGate, asyncHandler(async (_req, res) => {
   const [budgets, summary] = await Promise.all([listBudgets(), orgSummary()]);
-  res.json({ budgets, summary });
+  const thresholds = configuredThresholds();
+  res.json({
+    budgets: budgets.map((b) => ({
+      ...b,
+      threshold: thresholdState(b.spentThisPeriodUsd + (b.floorHeldUsd ?? 0) + (b.discretionaryHeldUsd ?? 0), budgetedAllocation(b), thresholds),
+    })),
+    summary,
+    thresholds,
+  });
+}));
+
+// The organisation's lines this calendar month. Declared before '/:orgProjectId'.
+budgetsRouter.get('/lines', readGate, asyncHandler(async (_req, res) => {
+  const { getLearningCap, learningHeldUsd, learningSpentThisMonth, lineMonth, localReportedThisMonth } = await budgetLines();
+  const [cap, spent, held, local] = await Promise.all([
+    getLearningCap(), learningSpentThisMonth(), learningHeldUsd(), localReportedThisMonth(),
+  ]);
+  res.set('Cache-Control', 'no-store');
+  res.json({
+    month: lineMonth().key,
+    learning: {
+      capUsd: cap.capUsd,
+      capSource: cap.source,
+      spentUsd: spent.spentUsd,
+      entries: spent.entries,
+      heldUsd: held,
+      remainingUsd: Math.round((cap.capUsd - spent.spentUsd - held) * 10_000) / 10_000,
+      threshold: thresholdState(spent.spentUsd + held, cap.capUsd),
+      updatedBy: cap.updatedBy,
+      updatedAt: cap.updatedAt,
+    },
+    local,
+  });
+}));
+
+// The learning cap: the whole organisation's money, so a program-owner (who
+// holds ManageBudgets only within their own initiatives) may not set it.
+budgetsRouter.put('/learning', manageGate, asyncHandler(async (req, res) => {
+  const session = resolveSession(req);
+  if (!session || !ORG_WIDE_ROLES.includes(session.role)) {
+    res.status(403).json({
+      error: 'the learning budget is the whole organisation\'s: only an org leader sets it',
+      code: 'NOT_ORG_WIDE', action: 'ManageBudgets', role: session?.role ?? null,
+    });
+    return;
+  }
+  const raw = ((req.body ?? {}) as { monthlyCapUsd?: unknown }).monthlyCapUsd;
+  if (raw === undefined) throw new ValidationError('monthlyCapUsd is required: a finite number >= 0, or null for the default');
+  const cap = optionalMoney(raw, 'monthlyCapUsd');
+  const after = await (await budgetLines()).setLearningCap(cap ?? null, session.sub ?? null);
+  res.json({ learning: { capUsd: after.capUsd, capSource: after.source, updatedBy: after.updatedBy, updatedAt: after.updatedAt } });
 }));
 
 // A silent clamp, applied to the RESPONSE only — never inside listGrants()
@@ -62,8 +130,14 @@ function clampGrantsLimit(raw: unknown): number {
 budgetsRouter.get('/grants', readGate, asyncHandler(async (req, res) => {
   const orgProjectId = String(req.query['orgProjectId'] ?? '').trim();
   const limit = clampGrantsLimit(req.query['limit']);
-  const grants = await listGrants(orgProjectId || undefined);
-  res.json({ grants: grants.slice(0, limit) });
+  const grants = (await listGrants(orgProjectId || undefined)).slice(0, limit);
+  // The row's mark is the spend in the sprint window against the grant. The bell
+  // (lib/budget-thresholds.ts) also counts the envelope's money in flight, so a
+  // row can read one step under the item that announced it while runs are open.
+  const thresholds = configuredThresholds();
+  res.json({
+    grants: grants.map((g) => ({ ...g, threshold: thresholdState(g.initiativeSpendInWindowUsd, g.allocatedUsd, thresholds) })),
+  });
 }));
 
 // ── Run limits (DE-37) ─────────────────────────────────────────────────────
