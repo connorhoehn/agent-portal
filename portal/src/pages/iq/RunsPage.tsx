@@ -16,6 +16,7 @@ import { CollectionCommandHost } from '../../components/collections/CollectionCo
 import { collectionCommandAdapter, resolveCollectionTarget } from '../../components/collections/collectionCommands';
 import { showingLabel } from '../../lib/format';
 import { DEBRIEF_FILTERS, EXECUTOR_FILTERS, OUTCOME_FILTERS } from './runsModel';
+import { useRunbookNames } from '../runbooks/useRunbookNames';
 import { runColumns, runHref, useRunRows } from './runRows';
 import { RUN_REPORT_FILTER_KEYS, RUN_REPORT_GRAMMAR, runReportCommandFilter } from './runReportCommands';
 
@@ -27,6 +28,7 @@ export default function IqRunsPage() {
   const set = (key: typeof RUN_REPORT_FILTER_KEYS[number] | 'q', value: string) => setParams((prev) => { const p = new URLSearchParams(prev); if (value) p.set(key, value); else p.delete(key); return p; }, { replace: true });
 
   const { reports, rows, initiatives, work } = useRunRows(filters);
+  const names = useRunbookNames();
   const columns = runColumns();
 
   const visible = rows.filter(r => r.what.toLowerCase().includes(query.trim().toLowerCase()));
@@ -48,7 +50,7 @@ export default function IqRunsPage() {
   // A work item or runbook link carries the id; the filter shows it as the one choice beside "All" so it clears the way the initiative one does.
   const workItemTitle = (Array.isArray(work.data) ? work.data : []).find((w) => w.id === filters.workItem)?.title;
   const workItemOptions = [{ value: '', label: 'All' }, ...(filters.workItem ? [{ value: filters.workItem, label: workItemTitle ?? filters.workItem }] : [])];
-  const runbookOptions = [{ value: '', label: 'All' }, ...(filters.runbook ? [{ value: filters.runbook, label: filters.runbook }] : [])];
+  const runbookOptions = [{ value: '', label: 'All' }, ...(filters.runbook ? [{ value: filters.runbook, label: names.runbook(filters.runbook) }] : [])];
   return (
     <CollectionCommandPage
       data-testid="iq-runs"
@@ -65,7 +67,7 @@ export default function IqRunsPage() {
           { id: 'outcome', label: 'Outcome', value: filters.outcome, onChange: (v) => set('outcome', v), options: [...OUTCOME_FILTERS] },
           { id: 'debrief', label: 'Debriefed', value: filters.debrief, onChange: (v) => set('debrief', v), options: [...DEBRIEF_FILTERS] },
         ],
-        summary: reports.data ? showingLabel(visible.length, reports.data.next ? null : rows.length, 'runs') : undefined,
+        summary: reports.data ? showingLabel(visible.length, reports.data.next ? null : rows.length, (reports.data.next ? visible.length : rows.length) === 1 ? 'run' : 'runs') : undefined,
         onRefresh: reports.refresh,
         refreshing: reports.isLoading,
       }}

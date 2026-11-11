@@ -41,6 +41,9 @@ export default function RunPage() {
   const ref = runRefOf(id);
   const facadeId = id ? facadeIdOf(id) : null;
   const names = useRunbookNames();
+  // The work board names a work item; the bare id is only the fallback for one the board does not hold.
+  const board = useFetch<Array<{ id: string; title: string }>>('/api/graph/work?limit=200', 0, { share: true });
+  const workItemName = (itemId: string): string => (Array.isArray(board.data) ? board.data : []).find((w) => w.id === itemId)?.title ?? itemId;
   const reportFeed = useFetch<{ report: RunReportRow }>(ref ? `/api/runs/${encodeURIComponent(ref)}/report` : null, 0);
   const briefFeed = useFetch<{ brief: Brief }>(ref ? `/api/runs/${encodeURIComponent(ref)}/brief` : null, 0);
   const facade = usePipelineRun('/api/runs', facadeId);
@@ -91,11 +94,11 @@ export default function RunPage() {
         <Stack gap="xs">
           <MetaLine size="xs" tone="tertiary" items={[whoRan(report.executor, botName), `ended ${relativeTime(report.endedAt)}`]} />
           <Inline gap="md" align="center" wrap data-testid="run-links">
-            {report.initiativeId && <RecordLink to={`/iq/projects/${encodeURIComponent(report.initiativeId)}`} data-testid="run-initiative-link">{names.initiative(report.initiativeId)}</RecordLink>}
-            {report.workItemId && report.initiativeId && <RecordLink to={workItemHref(report.initiativeId, report.workItemId)} data-testid="run-work-item-link">{`Work item ${report.workItemId}`}</RecordLink>}
-            {report.workItemId && !report.initiativeId && <T size="xs" tone="tertiary">{`Work item ${report.workItemId}`}</T>}
-            {report.changes.changeRequestId && <RecordLink to={`/iq/changes/${encodeURIComponent(report.changes.changeRequestId)}`} data-testid="run-change-link">{`Change ${report.changes.changeRequestId}`}</RecordLink>}
-            {report.workItemId && <RecordLink to={runsListHref({ workItem: report.workItemId })} data-testid="run-item-runs-link">Other runs of this work item</RecordLink>}
+            {report.initiativeId && <RecordLink to={`/iq/projects/${encodeURIComponent(report.initiativeId)}`} data-testid="run-initiative-link"><T size="xs">{names.initiative(report.initiativeId)}</T></RecordLink>}
+            {report.workItemId && report.initiativeId && <RecordLink to={workItemHref(report.initiativeId, report.workItemId)} data-testid="run-work-item-link"><T size="xs">{`Work item: ${workItemName(report.workItemId)}`}</T></RecordLink>}
+            {report.workItemId && !report.initiativeId && <T size="xs" tone="tertiary">{`Work item: ${workItemName(report.workItemId)}`}</T>}
+            {report.changes.changeRequestId && <RecordLink to={`/iq/changes/${encodeURIComponent(report.changes.changeRequestId)}`} data-testid="run-change-link"><T size="xs">{`Change ${report.changes.changeRequestId}`}</T></RecordLink>}
+            {report.workItemId && <RecordLink to={runsListHref({ workItem: report.workItemId })} data-testid="run-item-runs-link"><T size="xs">Other runs of this work item</T></RecordLink>}
           </Inline>
         </Stack>
       ) : undefined}

@@ -4,6 +4,7 @@
 // freeze uses), written with PUT /api/graph/work-items/:id/runbook-pins.
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
+import { RecordLink } from '../decisions/RecordLink';
 import {
   Banner, Button, Chip, DetailSection, Inline, InlineAlert, PickerDialog, Stack, StatusPill, T,
 } from '@connorhoehn/ui-components/shared';
@@ -118,10 +119,10 @@ export function WorkItemRunbooks({ workItemId, preview, onChanged }: { workItemI
                 {a.summary && <T size="xs" tone="secondary" wrap>{a.summary}</T>}
                 {a.obstacles.map((o) => <T key={o} size="xs" tone="secondary" wrap>{`In the way: ${o}`}</T>)}
                 {a.requested_changes && <T size="xs" tone="secondary" wrap>{`The reviewer asked for: ${a.requested_changes}`}</T>}
-                <Link to={runPageHref(a.run_ref)} data-testid="previous-attempt-run">Open this run</Link>
+                <RecordLink to={runPageHref(a.run_ref)} data-testid="previous-attempt-run"><T size="xs">Open this run</T></RecordLink>
               </Stack>
             ))}
-            <Link to={runsListHref({ workItem: workItemId })} data-testid="all-runs-of-item">All runs of this item</Link>
+            <RecordLink to={runsListHref({ workItem: workItemId })} data-testid="all-runs-of-item"><T size="xs">All runs of this item</T></RecordLink>
           </Stack>
         )}
       </DetailSection>

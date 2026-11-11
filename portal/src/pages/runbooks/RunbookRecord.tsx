@@ -2,6 +2,7 @@
 // is given, readably), History (versions and the diff between any two), Runs (each step with the last
 // run's outcome, and every run that was given it) and Suggest an edit. Drifting and retired runbooks
 // say so above the text.
+import { RecordLink } from '../decisions/RecordLink';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router';
 import { usePublishPageTabs } from '../../lib/voice/pageContext';
@@ -88,7 +89,7 @@ export function RunbookRecord({ id, summary, onOpen, onChanged }: {
             ? <><T size="xs" tone="tertiary">Initiative</T><Link to={`/iq/projects/${encodeURIComponent(runbook.scope.ref)}`} data-testid="runbook-scope-link">{names.initiative(runbook.scope.ref)}</Link></>
             : <T size="xs" tone="tertiary">{scopeLabel(runbook.scope, names)}</T>}
           <T size="xs" tone="tertiary">{`owner ${names.person(runbook.owner_person_id)} · v${runbook.current_version} · updated ${relativeTime(runbook.updated_at)}`}</T>
-          <Link to={runsListHref({ runbook: runbook.id })} data-testid="runbook-runs-link">Runs given this runbook</Link>
+          <RecordLink to={runsListHref({ runbook: runbook.id })} data-testid="runbook-runs-link"><T size="xs">Runs given this runbook</T></RecordLink>
         </Inline>
       )}
       tabs={tabs}
