@@ -373,6 +373,8 @@ describe('deciding: who may accept', () => {
     expect(accepted.status).toBe(200);
     expect(accepted.body.runbook.status).toBe('published');
     expect(accepted.body.runbook.retired).toBeUndefined();
+    // The restore is on the record, and it is where the retirement rules start counting again.
+    expect(accepted.body.runbook.restored).toEqual(expect.objectContaining({ by: expect.any(String), reason: expect.any(String), at: expect.any(String) }));
     // Restoring a published runbook again is refused, and a second accept of the closed proposal too.
     expect((await file(USERS.member!)).status).toBe(409);
     expect((await accept(USERS.owner!, res.body.proposal.id, {})).status).toBe(409);

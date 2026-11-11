@@ -75,6 +75,8 @@ export interface Runbook {
    */
   area?: string | null;
   retired?: { at: string; by: string; reason: string; superseded_by: string | null };
+  /** Set when a restore proposal is accepted. The retirement rules count only what happened after it. */
+  restored?: { at: string; by: string; reason: string };
   created_at: string;
   updated_at: string;
 }

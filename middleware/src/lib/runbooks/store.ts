@@ -214,7 +214,7 @@ export function planAccept(
   if (proposal.kind === 'restore') {
     if (runbook.status !== 'retired') throw new InvalidWriteError(`${runbook.id} is not retired, so there is nothing to restore`);
     const { retired: _gone, ...rest } = clone(runbook);
-    return { proposal: decided, version: null, runbook: { ...rest, status: 'published', updated_at: input.at } };
+    return { proposal: decided, version: null, runbook: { ...rest, status: 'published', updated_at: input.at, restored: { at: input.at, by: input.decided_by, reason: proposal.rationale } } };
   }
   // A retired runbook takes no more versions and no second retirement, whatever route the caller came by.
   if (runbook.status === 'retired') throw new RetiredRunbookError(runbook.id);

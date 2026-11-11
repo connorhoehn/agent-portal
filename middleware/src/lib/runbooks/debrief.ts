@@ -154,7 +154,7 @@ export function executorBilled(executor: RunExecutor): boolean {
 
 /** A run-authored proposal that occupies the review queue: from a run, a new runbook or an edit, still open. */
 export function occupiesQueue(p: RunbookProposal): boolean {
-  return p.status === 'open' && p.source.kind === 'run' && p.kind === 'new' || p.kind === 'edit';
+  return p.status === 'open' && p.source.kind === 'run' && (p.kind === 'new' || p.kind === 'edit');
 }
 
 export interface DebriefContext {

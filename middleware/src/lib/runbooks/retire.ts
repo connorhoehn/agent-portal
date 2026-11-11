@@ -209,15 +209,24 @@ export async function afterReportSaved(report: RunReport, deps: UpkeepDeps): Pro
   const retired: string[] = [];
 
   // Unfollowed: only the runbooks this run said it did not follow can have just become due.
+  // A restored runbook starts again: runs that ended before its restore do not count against it,
+  // or a runbook people just brought back would be proposed for retirement by the next sweep.
+  const published = await allRunbooks(deps.runbooks);
+  const restoredAt = new Map(published.filter((rb) => rb.restored).map((rb) => [rb.id, rb.restored!.at]));
+  const since = (id: string): readonly RunReport[] => {
+    const at = restoredAt.get(id);
+    return at ? reports.filter((r) => r.endedAt > at) : reports;
+  };
   for (const a of report.runbookAccounts ?? []) {
     if (a.followed !== 'no' || !succeeded(report)) continue;
-    const due = unfollowedDue(a.id, reports, model);
+    const due = unfollowedDue(a.id, since(a.id), model);
     if (due) { const p = await fileRetire(deps.runbooks, due, at); if (p) retired.push(p.id); }
   }
   // Disuse: any published runbook.
-  for (const rb of await allRunbooks(deps.runbooks)) {
-    const applied = (await deps.runbooks.listApplications(rb.id)).map((x) => x.at);
-    const due = disuseDue(rb, reports, applied, nowMs);
+  for (const rb of published) {
+    const from = rb.restored?.at;
+    const applied = (await deps.runbooks.listApplications(rb.id)).map((x) => x.at).filter((x) => !from || x > from);
+    const due = disuseDue(from ? { ...rb, created_at: from } : rb, since(rb.id), applied, nowMs);
     if (due) { const p = await fileRetire(deps.runbooks, due, at); if (p) retired.push(p.id); }
   }
   return { expired, retired };
