@@ -49,7 +49,7 @@ Shapes are in TypeScript; line numbers are as of this writing (re-grep if they d
 | What | Where |
 |---|---|
 | `GET /api/work-items/:id/brief-preview` | `session-briefs.ts:232` — the exact brief a dispatch would freeze now, plus `offer`, `pins`, `previous_attempts` |
-| `PUT /api/graph/work-items/:id/runbook-pins` | `middleware/src/routes/work-items.ts:913` — body `{ runbookPins: string[] }` (ordered, at most five, each a published runbook whose scope admits the item); the board's write gate and the item's initiative scope |
+| `PUT /api/graph/work-items/:id/runbook-pins` | `middleware/src/routes/work-items.ts:913` — body `{ runbookIds: string[] }` (ordered, at most five, each a published runbook whose scope admits the item; `[]` clears), response `{ workItemId, runbookPins }`; the board's write gate and the item's initiative scope |
 | `planRunBrief` (one function for preview and freeze) | `middleware/src/lib/run-brief.ts:175`; selection in `middleware/src/lib/runbooks/select.ts:126` (`MAX_GIVEN_RUNBOOKS = 2`, pins first) |
 
 ### Runbooks, proposals, evidence
@@ -147,7 +147,7 @@ Acceptance: `node scripts/docs/check-links.mjs` green (the removed-doc baseline 
 
 ### E7. Rename
 
-The pipelines tenant's "Runbooks" (`/pipelines/runbooks`, `portal/src/pages/pipelines/RunbooksPage.tsx`, nav at `Layout.tsx:206`) becomes **Workflows** at `/pipelines/workflows`, with the old path redirecting. They are a different thing and keep their behaviour; the API path `/api/pipelines/runbooks` may stay (note it in the page's header comment) or move with a compatibility route — your call, say which.
+Done. The pipelines tenant's "Runbooks" is **Workflows** at `/pipelines/workflows` (`portal/src/pages/pipelines/WorkflowsPage.tsx`), with `/pipelines/runbooks` redirecting; behaviour unchanged, and the API path `/api/pipelines/runbooks` stays (noted in the page's header comment). E6 items 2 to 6 are done with it; the removed `/iq/promotions`, `/iq/distillation`, `/iq/release` and `/iq/local-compute/configuration` paths now land on "Page not found", which is what decision 20 asks for (nothing links to them). Left from E6: the Definitions page still filters by a `runbook` kind and its rung label still says "skill".
 
 ### E8. The journey and the validator
 
