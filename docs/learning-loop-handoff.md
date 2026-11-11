@@ -71,7 +71,7 @@ Shapes are in TypeScript; line numbers are as of this writing (re-grep if they d
 
 ### The mock
 
-- Four simulated runs (`middleware/src/mock/run-report-fixtures.ts`): the logout cookie bug (teaches something), the tenant cutover (follows `rb-tenant-cutover`), a dashboard item (needs nothing), the cold-start bug (fails). Dispatching a work item on the mock plays the matching fixture (`middleware/src/mock/bot-runner.ts`, `simulateMarketplaceDispatch`).
+- Four simulated runs (`middleware/src/mock/run-report-fixtures.ts`): the logout cookie bug (teaches something), the tenant cutover (follows `rb-tenant-cutover`), a dashboard item (needs nothing), the cold-start bug (fails). Dispatching a work item on the mock plays the matching fixture through the governed path: the fake microVM's final message carries the fixture's `lab-report` block (`middleware/src/mock/devbox-shell.ts`) and its `debrief` op answers with the hand-written folder (lane E8).
 - The one hand-written runbook a debrief files: `rb-logout-shim-cookie` (`middleware/src/mock/debrief-fixtures.ts`), marked `demo_data`.
 - Personas and seeded data are the Halyard story in `docs/demo-script.md`; `node scripts/content/check-story.mjs` must stay green.
 
@@ -151,8 +151,7 @@ Done. The pipelines tenant's "Runbooks" is **Workflows** at `/pipelines/workflow
 
 ### E8. The journey and the validator
 
-- Extend `scripts/journeys/learning-loop.mjs` from acceptance 11 to 1–12, one step per item, in the order the design lists them, each step asserting on the page (not only the API) and saving a screenshot. The runner is `scripts/journeys/run-demo-moments.mjs --journey learning-loop` (`npm run journey:learning-loop` in `portal/`); it boots its own middleware and Vite from `JOURNEY_MIDDLEWARE_PORT` and `JOURNEY_PORTAL_PORT`, needs `PLAYWRIGHT_BROWSERS_PATH` where Playwright's browsers are installed, and takes `VOICE_LOG_DIR` for the middleware's voice log.
-- Write `scripts/validate-learning-loop.sh`: runs the journey, `scripts/learning-loop/debrief-e2e.mjs` (13), `scripts/learning-loop/local-report-e2e.mjs` (14), the middleware suites touched by the loop (`run-reports`, `runbooks`, `learning-loop-offer-mock`, `brief-contract`, `local-compute-routes`, the wire, parity, guard and scope suites) and the portal suite, and prints one PASS/FAIL line per item. The existing validators in `scripts/validate-*.sh` are the shape to copy. It is the judge: lane E is done when it is green.
+Done. `scripts/journeys/learning-loop.mjs` walks acceptance 1 to 12 through real dispatches on `dev:mock` (`npm run journey:learning-loop`, which boots its own middleware and Vite from `JOURNEY_MIDDLEWARE_PORT` and `JOURNEY_PORTAL_PORT`; `PLAYWRIGHT_BROWSERS_PATH` must name Playwright's browsers). `scripts/validate-learning-loop.sh` is the judge: the journey, `scripts/learning-loop/debrief-e2e.mjs` (13), `scripts/learning-loop/local-report-e2e.mjs` (14, ports `LL_DEBRIEF_PORT` and `LL_E2E_PORT`), the loop's middleware suites and the portal suite, one PASS or FAIL line per item. Lane E is done when it is green. What was built and decided is in `docs/next-steps.md`, "Lane E8".
 
 ## Verification before any merge
 
