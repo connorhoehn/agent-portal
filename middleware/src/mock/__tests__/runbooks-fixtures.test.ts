@@ -36,6 +36,20 @@ describe('runbook fixtures', () => {
     expect(brief!.initiative_id).toBe('p-auth-migration');
     // The brief records the org's skill library its box synced, the CSRF-gate skill in it.
     expect(brief!.skill_library?.skills.some((k) => k.name === 'rb-auth-pr-csrf-gate')).toBe(true);
+    // The brief carries the runbook the run then followed — chosen by the real selector for the bot's
+    // mission in the auth-service repo — not "No runbook matched this work." beside an application
+    // that says it was followed (the gap lane D left).
+    const given = brief!.sections.filter((s) => s.kind === 'runbook');
+    expect(given.map((s) => s.ref)).toEqual(['rb-auth-pr-csrf-gate', 'rb-tenant-cutover']);
+    expect(given[0]!.reason).toMatch(/repo orgiq-auth-service/);
+    expect(brief!.markdown).not.toContain('No runbook matched this work.');
+    expect(brief!.markdown).toContain('Get an auth-service pull request through the CSRF check');
+    // And the run's application rows agree with the brief: the first followed, the second not used.
+    const applied = runbookApplicationsFixture.rows().filter((a) => a.run_ref === 'job-auth-maint-1');
+    expect(applied.map((a) => [a.runbook_id, a.outcome, a.brief_id]).sort()).toEqual([
+      ['rb-auth-pr-csrf-gate', 'followed', brief!.id],
+      ['rb-tenant-cutover', 'not_used', brief!.id],
+    ]);
     const app = runbookApplicationsFixture.rows().find((a) => a.run_ref === 'job-auth-maint-1');
     expect(app?.brief_id).toBe(brief!.id);
     expect(Date.parse(app!.at)).toBeGreaterThan(Date.parse(brief!.assembled_at));

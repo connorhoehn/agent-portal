@@ -50,7 +50,9 @@ Navigation parity's source interpretation is repaired (11 November; finished fro
 
 A job the stale sweep fails for good now has a run report (11 November). `reapStaleJobs` hands back the ids it failed, and the dispatcher writes each one's report after the periodic sweep and after the boot-time recovery: outcome failed, code `worker_lost`, the executor read from the box the job held (a paired machine, a microVM, else the fleet), cost unknown because the worker may have spent before it vanished, and no debrief since there is no session to resume. A requeued job gets nothing, a report that already exists is kept, and a report that cannot be written never stops the sweep. `job-dispatcher-stale-reports.test.ts` pins the four cases; the provider suites pin the new return shape. The mock never reaps (its sweep returns nothing), so this is proven by the suites, not a journey.
 
-Next actionable work, in order: the seeded scheduled run's brief is assembled directly and offers no runbook; the drift warning is printed for `drifting` only, not for an unproven runbook whose last run failed; nothing rejects a non-portable frontmatter key in a runbook (the parser drops unknown keys).
+The seeded scheduled run's brief now carries the runbooks it was given (11 November). `mock/runbooks.seed.ts` chooses them the way the dispatcher does for a scheduled job, through the real `selectRunbooks` with the bot's mission standing for the task in the auth-service repo on Auth Migration, each runbook's health as it was when the brief was frozen. Two are in scope and share words with the mission: the CSRF-gate runbook first, the tenant cutover runbook second; the run's application rows say it followed the first and did not use the second (a new `not_used` row), so the brief, the Runbooks section of the run page and the evidence agree. The fixture test pins the pick, the reasons and the rows.
+
+Next actionable work, in order: the drift warning is printed for `drifting` only, not for an unproven runbook whose last run failed; nothing rejects a non-portable frontmatter key in a runbook (the parser drops unknown keys).
 
 ## Rules that bind this work
 

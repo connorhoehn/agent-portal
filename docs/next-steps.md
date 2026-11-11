@@ -887,7 +887,7 @@ Left:
 - The work item page's pin control and the "Runbooks this run will get" panel, the run's Runbooks section and the evidence line (lane E).
 - Debrief cost on the evidence line (lane C).
 - ~~The pins write has no entry in the wire capture's write policy, so its response shape is not captured.~~ *Done, lane C follow-up: write-policy entries.*
-- The seeded scheduled run's brief (`mock/runbooks.seed.ts`) is assembled directly and gives no runbook; its offer reads "No runbook matched this work."
+- ~~The seeded scheduled run's brief (`mock/runbooks.seed.ts`) is assembled directly and gives no runbook; its offer reads "No runbook matched this work."~~ *Done 11 November: the seed chooses through the real selector; the brief carries the CSRF-gate and tenant-cutover runbooks, and the run's application rows say followed and not used.*
 
 ### Lane C: the debrief and proposals from runs
 

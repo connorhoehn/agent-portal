@@ -18,6 +18,8 @@ import type {
 } from '../lib/runbooks/index.js';
 import { findSimilar, lintRunbook, versionOf } from '../lib/runbooks/index.js';
 import { assembleBrief, type BriefSkillLibrary } from '../lib/runbooks/brief.js';
+import { selectRunbooks } from '../lib/runbooks/select.js';
+import { runbookHealth } from '../lib/runbooks/health.js';
 import { BOX_SKILLS_DIR } from '../lib/runbooks/library.js';
 import { clock } from './core/clock.js';
 
@@ -321,6 +323,9 @@ function specs(): Spec[] {
       runs: [
         ['sess-auth-05', 6, 'followed', null, null],
         ['sess-auth-06', 2, 'failed', 2, 'flag flipped but the hosted-UI redirect still resolved to the old domain'],
+        // Given to the auth-dep-watch run beside the CSRF-gate runbook (both are in scope on this
+        // initiative's repo); a dependency bump needed no cutover, so the run did not use it.
+        [FROZEN_RUN.runRef, 3, 'not_used', null, null],
       ],
       story: 'Written from the run notes of session sess-auth-02. Run sess-auth-06 failed at step 2, the flip.',
     },
@@ -348,19 +353,45 @@ const frozenRunFinishedAt = () => new Date(Math.min(frozenRunStartMs() + FROZEN_
  * published runbook, tools included); without one, this module's own runbooks stand in.
  */
 export function seedBriefs(library?: BriefSkillLibrary | null): SessionBrief[] {
+  const seeds = seedRunbooks();
   const lib = library ?? {
     sha256: '0'.repeat(64), dir: BOX_SKILLS_DIR,
-    skills: seedRunbooks().filter((x) => x.runbook.status === 'published').map((x) => ({ name: x.runbook.id, version: x.runbook.current_version })).sort((p, q) => (p.name < q.name ? -1 : 1)),
+    skills: seeds.filter((x) => x.runbook.status === 'published').map((x) => ({ name: x.runbook.id, version: x.runbook.current_version })).sort((p, q) => (p.name < q.name ? -1 : 1)),
   };
+  const assembledAt = new Date(frozenRunStartMs() - 20_000).toISOString();
+  const assembledMs = Date.parse(assembledAt);
+  // The runbooks are chosen the way the dispatcher chooses them for a scheduled job (lib/run-brief.ts
+  // → selectRunbooks): no work item, so the bot's own mission stands for the task, in the auth-service
+  // repo on Auth Migration. Each runbook's health is what it was when the brief was frozen — the
+  // applications before that moment; this run's own came after. Two are in scope and share words
+  // with the mission: the CSRF-gate runbook (repo scope, "auth", "service") first, the tenant
+  // cutover runbook (initiative scope, "auth") second; the run followed the first and did not use
+  // the second, which is what their application rows say.
+  const candidates = seeds.map((s) => ({
+    runbook: s.runbook,
+    version: s.versions.find((v) => v.version === s.runbook.current_version) ?? s.versions[s.versions.length - 1]!,
+    health: runbookHealth(s.applications.filter((a) => Date.parse(a.at) < assembledMs), s.runbook.current_version, assembledMs),
+  }));
+  const selection = selectRunbooks({
+    id: FROZEN_RUN.runRef,
+    title: 'auth-dep-watch',
+    // The bot's mission, as mock/bots.ts seeds it (one string in two places; the fixture test pins the pick).
+    description: 'Weekday dependency and CVE watch for the auth service: bump patch versions, flag security advisories as critical.',
+    labels: [],
+    repo: REPO.AUTH,
+    initiative_id: 'p-auth-migration',
+    pinned_runbook_ids: [],
+  }, candidates);
   return [assembleBrief({
     run_ref: FROZEN_RUN.runRef,
     brief_id: FROZEN_RUN.briefId,
-    assembled_at: new Date(frozenRunStartMs() - 20_000).toISOString(),
+    assembled_at: assembledAt,
     framing: 'You are running unattended as the auth-dep-watch bot. Nobody can answer a question: do the task, say what you did, and stop.',
     work_item: null,
     initiative: { id: 'p-auth-migration', name: 'Auth Migration', repo: REPO.AUTH },
     repo: REPO.AUTH,
     decisions: [],
+    runbooks: selection.selected,
     skill_library: lib,
   })];
 }
