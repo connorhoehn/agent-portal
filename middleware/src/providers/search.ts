@@ -11,14 +11,15 @@ import { getRunbookSearchEntry, type RunbookSearchEntry } from '../lib/runbooks/
 import { getAsset } from './prompt-library.js';
 import { listRecordingSearchRecords, recordingsAreASource, resolveRecordingSearchRecord, type RecordingSearchRecord } from './recording-search.js';
 import { ensureIndexed } from '../lib/search-index/registry.js';
-import { PEOPLE_ACL, projectOrgiqRecord } from '../lib/search-index/orgiq.js';
+import { PEOPLE_ACL, PROPOSAL_ACL, RUN_REPORT_ACL, projectOrgiqRecord } from '../lib/search-index/orgiq.js';
+import { RUN_REPORT_READ_ACTION, RUN_REPORT_READ_ROLES } from '../lib/run-reports/types.js';
 import { parseQuestion, STOPWORDS, type ParsedQuestion } from '../lib/search-index/question.js';
 import { resolveQuestion, vocabulary, type AnswerReason, type ResolveContext } from '../lib/search-index/resolve.js';
 import type { SearchDoc } from '../lib/search-index/types.js';
 import { mineViewer } from '../lib/mine.js';
 import type { Session } from '../lib/session.js';
 
-export const SEARCH_TYPES = ['person', 'team', 'initiative', 'work', 'decision', 'knowledge', 'asset', 'recording'] as const;
+export const SEARCH_TYPES = ['person', 'team', 'initiative', 'work', 'decision', 'knowledge', 'asset', 'recording', 'run', 'proposal'] as const;
 export type SearchRecordType = typeof SEARCH_TYPES[number];
 export interface SearchRef { type: SearchRecordType; id: string }
 export interface SearchRecord extends SearchRef {
@@ -115,6 +116,8 @@ export function partialSourceTypes(source: string): readonly SearchRecordType[] 
   if (/^Work\b/.test(source)) return ['work'];
   if (/^Decision|design decision/i.test(source)) return ['decision'];
   if (/^Runbooks\b/.test(source)) return ['knowledge'];
+  if (/^Run reports\b/.test(source)) return ['run'];
+  if (/^Runbook proposals\b/.test(source)) return ['proposal'];
   if (/^Agent library\b/.test(source)) return ['asset'];
   if (/^Recording/.test(source)) return ['recording'];
   return SEARCH_TYPES;
@@ -144,11 +147,17 @@ function isoOrUndefined(raw: unknown): string | undefined {
   const d = new Date(hasZone ? isoish : `${isoish}Z`);
   return Number.isFinite(d.getTime()) ? d.toISOString() : undefined;
 }
-async function permissions(principal: PrincipalRef): Promise<{ people: boolean }> {
+async function permissions(principal: PrincipalRef): Promise<{ people: boolean; runs: boolean; proposals: boolean }> {
   if ((principal.tenant !== 'orgiq' && principal.role !== 'admin') || !(await isAllowed(principal, 'Search'))) {
     throw new AppError(403, 'Search is not permitted');
   }
-  return { people: await isAllowed(principal, 'ViewOrgChart') };
+  // Run reports and proposals answer to the gates of their list routes, so a result never shows what the list would refuse.
+  const runs = principal.role === 'admin' || (RUN_REPORT_READ_ROLES as readonly string[]).includes(principal.role) || await isAllowed(principal, RUN_REPORT_READ_ACTION);
+  return { people: await isAllowed(principal, 'ViewOrgChart'), runs, proposals: await isAllowed(principal, PROPOSAL_ACL) };
+}
+/** The doc `acl` values a reader holds. */
+function aclsOf(allowed: { people: boolean; runs: boolean; proposals: boolean }): string[] {
+  return [...(allowed.people ? [PEOPLE_ACL] : []), ...(allowed.runs ? [RUN_REPORT_ACL] : []), ...(allowed.proposals ? [PROPOSAL_ACL] : [])];
 }
 function knowledgeRecord(rb: RunbookSearchEntry): SearchRecord {
   return { id: rb.id, type: 'knowledge', title: rb.title, description: rb.summary,
@@ -166,7 +175,7 @@ function designRecord(d: DesignReview): SearchRecord {
 
 export async function searchRecords(principal: PrincipalRef, opts: SearchOptions = {}): Promise<SearchResponse> {
   const allowed = await permissions(principal);
-  const allowedAcls = allowed.people ? [PEOPLE_ACL] : [];
+  const allowedAcls = aclsOf(allowed);
   const partial: string[] = [];
   // The projection (lib/search-index) holds every orgiq record type but one:
   // recordings are participant-private and resolved per reader, so they are

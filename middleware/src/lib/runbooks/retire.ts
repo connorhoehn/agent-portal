@@ -18,6 +18,7 @@
 // turned down is not a procedure that worked.
 import { randomUUID } from 'node:crypto';
 import type { RunReport } from '../run-reports/types.js';
+import { noteSearchWriteSoon } from '../search-index/writes.js';
 import type { RunReportStore } from '../run-reports/store.js';
 import type { RunbookStore } from './store.js';
 import type { Runbook, RunbookProposal } from './types.js';
@@ -184,6 +185,7 @@ export async function fileRetire(s: RunbookStore, due: RetireDue, at: string): P
     retire_evidence: { rule: due.rule, run_refs: due.runRefs, model: due.model },
   };
   await s.putProposal(proposal);
+  noteSearchWriteSoon({ type: 'proposal', id: proposal.id });
   await (await import('./notices.js')).notifyFiled(s, proposal);
   return proposal;
 }

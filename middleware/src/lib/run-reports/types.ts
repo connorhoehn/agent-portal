@@ -229,3 +229,11 @@ export const RUN_REPORT_LIMITS = {
   debriefReason: 300,
   debriefProblems: 8,
 } as const;
+
+/**
+ * Who may list run reports (routes/run-reports.ts): these roles, or anyone holding the action. The
+ * search index applies the same two rules to a run result (providers/search.ts), so a search never
+ * shows a person a report the list would refuse them.
+ */
+export const RUN_REPORT_READ_ROLES = ['org-leader', 'hr-admin', 'program-owner'] as const;
+export const RUN_REPORT_READ_ACTION = 'ManageBots';

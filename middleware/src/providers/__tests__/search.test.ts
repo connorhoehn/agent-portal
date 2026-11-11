@@ -287,13 +287,15 @@ test('sort=recent orders by source updatedAt, undated rows last, relevance as th
   mock(listRunbookSearchEntries).mockResolvedValue([]);
   mock(listAssets).mockResolvedValue({ assets: [], total: 0 });
   const r = await searchRecords(principal, { q: 'Auth Migration', sort: 'recent' });
-  const ids = r.results.map(x => x.id);
+  // Run reports and proposals are indexed too; this test is about the original record types.
+  const rows = r.results.filter(x => x.type !== 'run' && x.type !== 'proposal');
+  const ids = rows.map(x => x.id);
   expect(ids.slice(0, 2)).toEqual(['cutover', 'auth']);
   // A zone-less Aurora timestamp is UTC, not local time.
-  expect(r.results[1]?.updatedAt).toBe('2026-09-01T10:00:00.000Z');
+  expect(rows[1]?.updatedAt).toBe('2026-09-01T10:00:00.000Z');
   // Undated rows (people, the undecided decision) follow, in relevance order: owner before SME.
   expect(ids.slice(2)).toEqual(['vera', 'nora', 'order']);
-  expect(r.results.slice(2).every(x => x.updatedAt === undefined)).toBe(true);
+  expect(rows.slice(2).every(x => x.updatedAt === undefined)).toBe(true);
   const relevance = await searchRecords(principal, { q: 'Auth Migration' });
   expect(relevance.results[0]?.id).toBe('auth');
 });

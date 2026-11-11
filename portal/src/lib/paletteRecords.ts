@@ -12,7 +12,7 @@ interface Row { type: string; id: string; title: string; subtitle?: string; href
 /** orgiq's /api/search rows carry no chip label. Teams link to their members until the library palette has a team record page. */
 const ORGIQ_KIND: Record<string, string> = {
   person: 'Person', team: 'Team', initiative: 'Initiative', work: 'Work item', decision: 'Decision',
-  knowledge: 'Knowledge', asset: 'Library', recording: 'Recording',
+  knowledge: 'Knowledge', asset: 'Library', recording: 'Recording', run: 'Run', proposal: 'Proposal',
 };
 
 export function paletteSearchUrl(tenant: PaletteTenant, query: string): string {

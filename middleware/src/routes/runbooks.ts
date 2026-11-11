@@ -405,6 +405,7 @@ export async function fileProposal(
     ...(runAuthored?.debrief ? { debrief: { ...runAuthored.debrief, converted_from_new: convertedFrom !== null } } : {}),
   };
   await s.putProposal(proposal);
+  noteSearchWriteSoon({ type: 'proposal', id: proposal.id });
   // Tell the people who may review it; best effort, never part of the filing's outcome.
   await notifyFiled(s, proposal);
   return { status: 201, body: { proposal: proposalView(proposal), ...(convertedFrom ? { converted_from_new: convertedFrom } : {}) }, proposal };
@@ -828,7 +829,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     if (p.kind === 'restore') {
       if (!target || target.status !== 'retired') { res.status(409).json({ error: `${p.runbook_id} is not retired`, code: 'NOT_RETIRED' }); return; }
       const result = await s.acceptProposal({ proposal_id: p.id, decided_by: actor, at, note });
-      noteSearchWriteSoon({ type: 'knowledge', id: result.runbook.id });
+      noteSearchWriteSoon({ type: 'knowledge', id: result.runbook.id }, { type: 'proposal', id: p.id });
       await notifyDecided(result.proposal, 'accepted', [actor, d.sess.sub]);
       res.json({ proposal: result.proposal, runbook: result.runbook, version: null });
       return;
@@ -851,7 +852,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
         proposal_id: p.id, decided_by: actor, at, note,
         retire: { reason, superseded_by: supersededBy },
       });
-      noteSearchWriteSoon({ type: 'knowledge', id: result.runbook.id });
+      noteSearchWriteSoon({ type: 'knowledge', id: result.runbook.id }, { type: 'proposal', id: p.id });
       await notifyDecided(result.proposal, 'accepted', [actor, d.sess.sub]);
       res.json({ proposal: result.proposal, runbook: result.runbook, version: null });
       return;
@@ -906,7 +907,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     if (p.kind === 'edit') {
       const version = { ...versionOf({ runbook_id: target!.id, version: target!.current_version + 1, doc, author, provenance, files }), ...stamp };
       const result = await s.acceptProposal({ proposal_id: p.id, decided_by: actor, at, note, version });
-      noteSearchWriteSoon({ type: 'knowledge', id: result.runbook.id });
+      noteSearchWriteSoon({ type: 'knowledge', id: result.runbook.id }, { type: 'proposal', id: p.id });
       await notifyDecided(result.proposal, 'accepted', [actor, d.sess.sub]);
       res.json({ proposal: result.proposal, runbook: result.runbook, version: result.version });
       return;
@@ -923,7 +924,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     };
     const version = { ...versionOf({ runbook_id: id, version: 1, doc, author, provenance, files }), ...stamp };
     const result = await s.acceptProposal({ proposal_id: p.id, decided_by: actor, at, note, runbook, version });
-    noteSearchWriteSoon({ type: 'knowledge', id: result.runbook.id });
+    noteSearchWriteSoon({ type: 'knowledge', id: result.runbook.id }, { type: 'proposal', id: p.id });
     await notifyDecided(result.proposal, 'accepted', [actor, d.sess.sub]);
     res.status(201).json({ proposal: result.proposal, runbook: result.runbook, version: result.version });
   }));
@@ -940,6 +941,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     if (!d) return;
     if (d.soleReviewer) await s.putProposal({ ...d.p, decided_as: 'sole-reviewer-dispatcher' });
     const proposal = await s.decideProposal({ proposal_id: d.p.id, decision: 'rejected', decided_by: d.actor, at: now(), note });
+    noteSearchWriteSoon({ type: 'proposal', id: proposal.id });
     await notifyDecided(proposal, 'rejected', [d.actor, d.sess.sub]);
     res.json({ proposal });
   }));
@@ -963,6 +965,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     }
     const note = str((req.body as Record<string, unknown> | undefined)?.['note']) ?? null;
     const proposal = await s.decideProposal({ proposal_id: p.id, decision: 'withdrawn', decided_by: actor, at: now(), note });
+    noteSearchWriteSoon({ type: 'proposal', id: proposal.id });
     res.json({ proposal });
   }));
 
@@ -1001,6 +1004,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
       proposal_id: p.id, decision: 'merged', decided_by: actor, at, note: str(body['note']) ?? null, merged_into: edit.id,
     });
     await s.putProposal(edit);
+    noteSearchWriteSoon({ type: 'proposal', id: p.id }, { type: 'proposal', id: edit.id });
     res.status(201).json({ merged, proposal: proposalView(edit) });
   }));
 

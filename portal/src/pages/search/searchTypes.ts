@@ -44,3 +44,12 @@ export function parseRecordKeys(value: string | null): SearchRef[] {
     return colon > 0 && SEARCH_TYPES.includes(type) && id ? [{ type, id }] : [];
   }).slice(0, 30);
 }
+
+/**
+ * The server also answers `run` (a run report) and `proposal` (a runbook proposal) rows. The shared record
+ * components know the seven types above, so these two are drawn as documents: their subtitle ("Run · failed ·
+ * fleet", "Runbook proposal · edit · open") and their own link say what they are.
+ */
+export function asKnownRecord<R extends { type: string }>(row: R): R {
+  return row.type === 'run' || row.type === 'proposal' ? { ...row, type: 'knowledge' } : row;
+}

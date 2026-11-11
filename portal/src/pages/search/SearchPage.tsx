@@ -29,7 +29,7 @@ import {
   assistantStripText, nextQueryAfterSend, nextTabAfterSend, parseRecordKeys, readSearchEvidence, readSearchEdges, searchTitle,
 } from './searchModel';
 import { countIsLowerBound, countedLabel, groupResults, parseSort, partialSourcesTitle, resultsFooter, searchResultType } from './resultsModel';
-import { recordKey, SEARCH_LABELS, SEARCH_TYPES, type SearchRecord, type SearchRecordType, type SearchResponse, type SearchTab } from './searchTypes';
+import { asKnownRecord, recordKey, SEARCH_LABELS, SEARCH_TYPES, type SearchRecord, type SearchRecordType, type SearchResponse, type SearchTab } from './searchTypes';
 import { SearchControls, searchControlsMenu, type SearchControlsProps } from './SearchControls';
 import { SearchResults } from './SearchResults';
 
@@ -136,7 +136,8 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
     const next=new URLSearchParams(previous);for(const [key,value] of Object.entries(values)) value ? next.set(key,value):next.delete(key);return next;
   },{replace}),[setParams]);
   const queryString=new URLSearchParams({q:query,type,limit:String(PAGE_SIZE),offset:String(offset),sort,...(scope?{scope}:{})});
-  const {data,error,isLoading,refresh}=useFetch<SearchResponse>(`/api/search?${queryString}`);
+  const {data:rawData,error,isLoading,refresh}=useFetch<SearchResponse>(`/api/search?${queryString}`);
+  const data=useMemo(()=>rawData?{...rawData,results:rawData.results.map(asKnownRecord),...(rawData.related?{related:rawData.related.map(asKnownRecord)}:{})}:rawData,[rawData]);
   const {data:saved,error:savedError,refresh:refreshSaved}=useFetch<{searches:SavedSearch[]}>('/api/saved-searches');
   const {data:scopes}=useFetch<SearchResponse>('/api/search?type=initiative&limit=100');
   const requestedKeys=[...new Set([...selected,...attached.map(recordKey)])].slice(0,30);

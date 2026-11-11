@@ -186,7 +186,8 @@ describe('tenant scoping (§6)', () => {
 
   it('search names exactly the types each tenant\'s backend search indexes, people included in orgiq (v2)', async () => {
     expect(Object.keys(SEARCH_RECORD_TYPES).sort()).toEqual([...TENANTS_SEARCH_INDEXED].sort());
-    expect(searchRecordTypes('orgiq')).toEqual([...SEARCH_TYPES]);
+    // Run reports and proposals are indexed but not yet offered as a voice type filter; they still answer under "all".
+    expect(searchRecordTypes('orgiq')).toEqual(SEARCH_TYPES.filter((t) => t !== 'run' && t !== 'proposal'));
     for (const tenant of ['social', 'assessment', 'pipelines', 'access'] as const) {
       expect(searchRecordTypes(tenant)).toEqual([...(await tenantSpec(tenant)).types]);
     }

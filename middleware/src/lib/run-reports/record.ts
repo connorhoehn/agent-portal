@@ -33,6 +33,7 @@ import {
   type RunReportRunbookRef, type RunReportUse, type WorkerReportPart, type RunDebrief, type RunReportRunbookAccount,
 } from './types.js';
 import type { ApplicationOutcome } from '../runbooks/types.js';
+import { noteSearchWriteSoon } from '../search-index/writes.js';
 
 export interface RunEndInput {
   runRef: string;
@@ -307,6 +308,7 @@ export async function recordRunEnd(input: RunEndInput, deps: RecordDeps = {}): P
 
     const { report: stored, created } = await reports.putReport(report);
     if (!created) return stored;
+    noteSearchWriteSoon({ type: 'run', id: stored.runRef });
 
     // Evidence (decision 22): one application row per runbook the run was GIVEN, from the run's
     // OWN account of it. What the run says it did with a runbook is what is written; a successful
