@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-11T16:30:37.731Z",
-  "serverHandlerSha": "f9b2cafbb27991d8a449c95adde540f20ecfd17ef07749f97c0d1ed270dec390",
+  "capturedAt": "2026-11-11T17:01:49.400Z",
+  "serverHandlerSha": "e52befc7f762344b3e2e997ff3c97e467d0a1ab7cb4d1d2e1c8df19e8f9726f2",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -6037,7 +6037,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "number",
+        "points[].judgeP50": "null|number",
         "windowHours": "number"
       },
       "values": {}
@@ -8198,6 +8198,15 @@
           "published"
         ]
       }
+    },
+    "GET /api/runbooks/proposals/review-count": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "count": "number"
+      },
+      "values": {}
     },
     "GET /api/runs": {
       "persona": "orgiq/admin",

@@ -1013,9 +1013,9 @@ Codex picked the handoff up at 9807261a and ran five cycles on local main (Micro
 
 The owner asked for a sweep for high-value software around initiatives, runs and runbooks, with no phone, tablet or cloud work. The findings, evidence and order are in [value-sweep-2026-11-11.md](value-sweep-2026-11-11.md). The loop builds them in this order; a struck line has merged.
 
-1. Threads between records: work item to runs, run to work item, initiative and change request, runbook to runs; work-item and runbook filters on Runs.
-2. Proposal notices: the bell and the rail count at filing and decision, and a notice before expiry.
-3. Write a runbook by hand from the Library, through the same review.
+1. ~~Threads between records: work item to runs, run to work item, initiative and change request, runbook to runs; work-item and runbook filters on Runs.~~ Built: `GET /api/run-reports` takes `workItem` and `runbook` (a report matches a runbook its brief offered or its run used); the Runs page shows them as filters; the pages link to each other.
+2. ~~Proposal notices: the bell and the rail count at filing and decision, and a notice before expiry.~~ Built in `lib/runbooks/notices.ts`: reviewers by the accept route's own rule are told at filing (never the author; the dispatcher only when nobody else can review), the author or dispatcher at the decision, the reviewers once three days before expiry (`expiry_notice_at`). The rail counts from `GET /api/runbooks/proposals/review-count`. Every notice is best effort. No notice on merge or withdraw.
+3. ~~Write a runbook by hand from the Library, through the same review.~~ Built: New runbook in the Library files a `new` proposal and opens it. A person may request a repository or initiative scope; it is a request the reviewer confirms, it never chooses the reviewers, and an initiative the proposer's work item does not prove still needs an org leader to place.
 4. The initiative's Learning tab: runs with outcomes, scoped runbooks, open proposals; attention signals on the overview.
 5. Why a runbook was not chosen, beside the pin.
 6. Obstacles hit more than once, with "write a runbook for this".

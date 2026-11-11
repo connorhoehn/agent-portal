@@ -3133,22 +3133,22 @@
     {
       "method": "GET",
       "path": "/api/run-reports",
-      "source": "src/routes/run-reports.ts:71"
+      "source": "src/routes/run-reports.ts:75"
     },
     {
       "method": "GET",
       "path": "/api/runbooks",
-      "source": "src/routes/runbooks.ts:453"
+      "source": "src/routes/runbooks.ts:468"
     },
     {
       "method": "GET",
       "path": "/api/runbooks/:id",
-      "source": "src/routes/runbooks.ts:562"
+      "source": "src/routes/runbooks.ts:584"
     },
     {
       "method": "GET",
       "path": "/api/runbooks/:id/applications",
-      "source": "src/routes/runbooks.ts:598"
+      "source": "src/routes/runbooks.ts:620"
     },
     {
       "method": "POST",
@@ -3158,12 +3158,12 @@
     {
       "method": "GET",
       "path": "/api/runbooks/:id/diff",
-      "source": "src/routes/runbooks.ts:585"
+      "source": "src/routes/runbooks.ts:607"
     },
     {
       "method": "GET",
       "path": "/api/runbooks/:id/evidence",
-      "source": "src/routes/runbooks.ts:546"
+      "source": "src/routes/runbooks.ts:568"
     },
     {
       "method": "POST",
@@ -3173,32 +3173,32 @@
     {
       "method": "GET",
       "path": "/api/runbooks/:id/versions",
-      "source": "src/routes/runbooks.ts:577"
+      "source": "src/routes/runbooks.ts:599"
     },
     {
       "method": "GET",
       "path": "/api/runbooks/evidence",
-      "source": "src/routes/runbooks.ts:532"
+      "source": "src/routes/runbooks.ts:554"
     },
     {
       "method": "GET",
       "path": "/api/runbooks/proposals",
-      "source": "src/routes/runbooks.ts:475"
-    },
-    {
-      "method": "POST",
-      "path": "/api/runbooks/proposals",
-      "source": "src/routes/runbooks.ts:608"
-    },
-    {
-      "method": "GET",
-      "path": "/api/runbooks/proposals/:pid",
       "source": "src/routes/runbooks.ts:490"
     },
     {
       "method": "POST",
+      "path": "/api/runbooks/proposals",
+      "source": "src/routes/runbooks.ts:630"
+    },
+    {
+      "method": "GET",
+      "path": "/api/runbooks/proposals/:pid",
+      "source": "src/routes/runbooks.ts:512"
+    },
+    {
+      "method": "POST",
       "path": "/api/runbooks/proposals/:pid/accept",
-      "source": "src/routes/runbooks.ts:711"
+      "source": "src/routes/runbooks.ts:733"
     },
     {
       "method": "POST",
@@ -3208,12 +3208,17 @@
     {
       "method": "POST",
       "path": "/api/runbooks/proposals/:pid/reject",
-      "source": "src/routes/runbooks.ts:870"
+      "source": "src/routes/runbooks.ts:895"
     },
     {
       "method": "POST",
       "path": "/api/runbooks/proposals/:pid/withdraw",
-      "source": "src/routes/runbooks.ts:887"
+      "source": "src/routes/runbooks.ts:913"
+    },
+    {
+      "method": "GET",
+      "path": "/api/runbooks/proposals/review-count",
+      "source": "src/routes/runbooks.ts:506"
     },
     {
       "method": "GET",
