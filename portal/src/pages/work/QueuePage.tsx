@@ -327,7 +327,7 @@ export default function QueuePage() {
 
   return (
     <PageSection
-      title="Runs"
+      title="Queue"
       actions={(
         <Inline gap="sm" align="center">
           <GraphUpdatesLink />

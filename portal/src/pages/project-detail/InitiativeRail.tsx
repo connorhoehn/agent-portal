@@ -36,6 +36,7 @@ import { EnvironmentsRailCard } from '../../components/marketplace/InitiativeEnv
 import { TEMPLATE_TONE, triggerSummary, type BotRun } from '../bots/BotsPage';
 import { RANGE_DAYS, runTableRows, type RunTableRow } from './agentRunsModel';
 import { flattenWorkItems } from './projectFormat';
+import { runsListHref } from '../iq/runsModel';
 import type { Codebase, WorkItemTree } from './types';
 
 type AgentActivity = ReturnType<typeof useInitiativeAgentActivity>;
@@ -203,6 +204,7 @@ export function InitiativeRail({
         </Inline>
         <Inline gap="sm" align="center" wrap className="min-w-0">
           {meta.some(Boolean) && <MetaLine size="sm" tone="secondary" items={meta} data-testid="initiative-agents-meta" />}
+          {view === 'runs' && initiativeId && <Button variant="link" onClick={() => navigate(runsListHref({ initiative: initiativeId }))} data-testid="initiative-runs-link">All runs for this initiative</Button>}
           {view === 'bots' && canManageBots && <Button variant="link" onClick={() => navigate('/admin/bots')}>New bot</Button>}
         </Inline>
       </Inline>

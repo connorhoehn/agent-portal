@@ -89,7 +89,7 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
   if (pathname.startsWith('/iq/local-compute')) return {
     title: 'Local compute', storageKey: 'local-compute-nav', items: [
       { path: '/iq/local-compute?view=machines', label: 'Machines' },
-      { path: '/iq/local-compute?view=runs', label: 'Runs' },
+      { path: '/iq/runs?executor=local', label: 'Runs' },
     ],
   };
 

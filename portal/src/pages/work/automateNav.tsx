@@ -20,7 +20,8 @@ export interface AutomateSpec {
 
 const RUN_ITEMS: SubNavItem[] = [
   { path: '/iq/work', label: 'Inbox' },
-  { path: '/iq/work/queue', label: 'Runs' },
+  { path: '/iq/work/queue', label: 'Queue' },
+  { path: '/iq/runs?executor=fleet', label: 'Runs' },
   { path: '/iq/work/findings', label: 'Findings' },
   { path: '/iq/work/changes', label: 'Changes' },
 ];

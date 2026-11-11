@@ -13,6 +13,7 @@ import {
 } from '@connorhoehn/ui-components/shared';
 import { LogStream, type LogLine } from '@connorhoehn/ui-components/shared';
 import { Link as RouterLink, useSearchParams } from 'react-router';
+import { runsListHref } from '../iq/runsModel';
 import { RunLog } from './RunLog';
 import { CapabilityBrief, ModelChips } from './ModelCapability';
 import { NoSuggestions } from './SuggestedWork';
@@ -581,7 +582,7 @@ export default function LocalComputePage() {
     },
   ];
 
-  if (view === 'runs') return <PageSection title="Runs" description="Work handed to your paired machines.">
+  if (view === 'runs') return <PageSection title="Runs" description="Work handed to your paired machines." actions={<RouterLink to={runsListHref({ executor: 'local' })} className="text-sm text-primary hover:underline" data-testid="local-runs-link">Open in Runs →</RouterLink>}>
     {runsFailure ? <UnavailableNotice error={runsFailure} what="run history" source="Runs on your machines are read from the job queue in Aurora" onRetry={refreshRuns} /> : (
       <Stack gap="sm" className="min-w-0">
         <CollectionToolbar

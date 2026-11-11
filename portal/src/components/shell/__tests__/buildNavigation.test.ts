@@ -11,7 +11,7 @@ test('run deep links select Runs without lighting Inbox or adjacent work views',
   }
   for (const path of ['/iq/work/findings', '/iq/work/changes', '/iq/work']) assert.equal(isBuildNavActive('/iq/work/queue', path), false);
   assert.equal(isBuildNavActive('/iq/work', '/iq/work/'), true);
-  assert.deepEqual(resolveBreadcrumbs('/iq/work/job-123').map((c) => c.label), ['Build', 'Automate', 'Runs', 'Run job-123']);
+  assert.deepEqual(resolveBreadcrumbs('/iq/work/job-123').map((c) => c.label), ['Build', 'Automate', 'Queue', 'Run job-123']);
 });
 
 test('local compute menu follows view while preserving deeper selection', () => {
