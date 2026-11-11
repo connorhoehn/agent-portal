@@ -51,6 +51,8 @@ const SCOPED = [
   // Sweep 11 (M1): every field of a work item, and creating one, is the
   // initiative's own people's call, checked at the handler's top level.
   'work-items PATCH /work-items/:id', 'work-items POST /work-items',
+  // The learning loop (stage 4): which runbooks a run on the item is given first is the item's people's call.
+  'work-items PUT /work-items/:id/runbook-pins',
   // Sweep 11: who runs an initiative and its contributors' roles are its own
   // people's call (naming the owner also needs the owner or an org-wide role).
   'projects PATCH /:id', 'projects PATCH /:id/contributors/:personId', 'projects PATCH /:id/devbox-profile',

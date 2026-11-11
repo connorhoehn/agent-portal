@@ -72,6 +72,15 @@ ALTER TABLE work_items
 ALTER TABLE work_items
   ADD COLUMN IF NOT EXISTS blocked_by_decision_id TEXT;
 
+-- The runbooks a person pinned to the item, in order (docs/learning-loop-design.md
+-- stage 4): a run's brief gives a pinned runbook first, whatever the selector
+-- scores it. Runbook ids (rb-…) live in the runbook store, not here, so there is
+-- no foreign key; the route checks each id is a published runbook the item's
+-- scope admits. The middleware reads it through to_jsonb (null without the
+-- column) and probes for it before a write.
+ALTER TABLE work_items
+  ADD COLUMN IF NOT EXISTS runbook_pins TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Upgrade decisions: add status, escalation, and project link
 -- ─────────────────────────────────────────────────────────────────────────────

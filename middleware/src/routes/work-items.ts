@@ -16,6 +16,7 @@
 //   POST  /api/graph/work-items/:id/comments         — post on the thread (never the comments table)
 //   PUT    /api/graph/work-items/:id/decisions/:decisionId — link a decision to this item
 //   DELETE /api/graph/work-items/:id/decisions/:decisionId — unlink it
+//   PUT    /api/graph/work-items/:id/runbook-pins         — the runbooks pinned to it, in order
 //
 // House rule for this surface: an input this API accepts is an input it acts
 // on. A parameter it cannot honour is a 400, never a silent no-op — the old
@@ -56,6 +57,7 @@ import {
   addWorkItemComment,
   linkDecisionToWorkItem,
   unlinkDecisionFromWorkItem,
+  setWorkItemRunbookPins,
   type CreateWorkItemInput,
   type UpdateWorkItemPatch,
   type WorkItemType,
@@ -891,3 +893,76 @@ workItemsRouter.delete(
     res.status(204).end();
   }),
 );
+
+// ── Runbook pins ──────────────────────────────────────────────────────────────
+// PUT /api/graph/work-items/:id/runbook-pins   { runbookIds: ["rb-…", …] }
+//
+// The runbooks a person pins to this item (docs/learning-loop-design.md stage
+// 4): a run's brief gives a pinned runbook first, whatever the selector scores
+// it. The whole list is replaced, in order; [] clears it. Same writeGate and
+// initiative scope as every other board write. Each id must be a PUBLISHED
+// runbook whose scope admits this item (org-wide, this initiative, this
+// initiative's repository, or a tool the item names): a pin never reaches a
+// runbook another initiative keeps to itself.
+
+/** At most this many pins: two are given, the rest wait for a pinned one to be retired or unpinned. */
+export const MAX_RUNBOOK_PINS = 5;
+const RUNBOOK_ID_RE = /^rb-[a-z0-9][a-z0-9-]{1,58}$/;
+
+workItemsRouter.put(
+  '/work-items/:id/runbook-pins',
+  writeGate,
+  asyncHandler(async (req, res) => {
+    const id = req.params['id'] as string;
+    if (!id) { res.status(400).json({ error: 'Missing work item id' }); return; }
+    const item = await itemInScope(req, res, id, 'pin runbooks');
+    if (!item) return;
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const stray = unknownKeys(body, ['runbookIds']);
+    if (stray.length > 0) {
+      res.status(400).json({ error: `unrecognised field${stray.length === 1 ? '' : 's'}: ${stray.join(', ')}` });
+      return;
+    }
+    const raw = body['runbookIds'];
+    if (!Array.isArray(raw) || raw.some((x) => typeof x !== 'string' || !RUNBOOK_ID_RE.test(x))) {
+      res.status(400).json({ error: '`runbookIds` must be an array of runbook ids (rb-…); [] clears the pins' });
+      return;
+    }
+    const ids = raw as string[];
+    if (new Set(ids).size !== ids.length) { res.status(400).json({ error: 'a runbook can be pinned once' }); return; }
+    if (ids.length > MAX_RUNBOOK_PINS) { res.status(400).json({ error: `at most ${MAX_RUNBOOK_PINS} runbooks can be pinned to one item` }); return; }
+
+    const refusal = await pinRefusal(item, ids);
+    if (refusal) { res.status(400).json(refusal); return; }
+
+    const result = await setWorkItemRunbookPins(item.id, ids);
+    if (result.kind === 'not-found') { res.status(404).json({ error: 'Work item not found' }); return; }
+    if (result.kind === 'unavailable') { res.status(503).json({ error: result.error }); return; }
+    res.json({ workItemId: item.id, runbookPins: result.runbookPins });
+  }),
+);
+
+/** Why one of `ids` cannot be pinned to `item`, or null when every one can. */
+async function pinRefusal(
+  item: NonNullable<Awaited<ReturnType<typeof getWorkItem>>>, ids: string[],
+): Promise<{ error: string; code: string; runbookId: string } | null> {
+  if (ids.length === 0) return null;
+  const store = (await import('../lib/runbooks/store-select.js')).runbookStore();
+  const { getProject } = await import('../providers/projects.js');
+  const { scopeMatch } = await import('../lib/runbooks/select.js');
+  const project = await getProject(item.projectId);
+  const work = {
+    title: item.title, description: item.description ?? '', labels: item.labels,
+    repo: project?.repoFullName ?? null, initiative_id: item.projectId,
+  };
+  for (const runbookId of ids) {
+    const rb = await store.getRunbook(runbookId);
+    if (!rb) return { error: `no runbook ${runbookId}`, code: 'UNKNOWN_RUNBOOK', runbookId };
+    if (rb.status !== 'published') return { error: `${runbookId} is ${rb.status}; only a published runbook can be pinned`, code: 'NOT_PUBLISHED', runbookId };
+    if (!scopeMatch(rb.scope, work)) {
+      return { error: `${runbookId} is scoped to another ${rb.scope.kind}; it does not apply to this item`, code: 'OUT_OF_SCOPE', runbookId };
+    }
+  }
+  return null;
+}

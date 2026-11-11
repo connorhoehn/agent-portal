@@ -99,8 +99,8 @@ type EstimateFields =
 // rows would be noise, not parity.
 type BriefFields = 'summary' | 'blockedReason' | 'nextStep' | 'nextStepDetail' | 'blockedByDecisionId';
 
-type MockSeed = Omit<WorkItem, 'projectName' | 'sprintId' | 'estimatedCostUsd' | 'childCount' | 'childDoneCount' | EstimateFields | BriefFields>
-  & Partial<Pick<WorkItem, 'sprintId' | 'estimatedCostUsd' | EstimateFields | BriefFields>>;
+type MockSeed = Omit<WorkItem, 'projectName' | 'sprintId' | 'estimatedCostUsd' | 'childCount' | 'childDoneCount' | 'runbookPins' | EstimateFields | BriefFields>
+  & Partial<Pick<WorkItem, 'sprintId' | 'estimatedCostUsd' | 'runbookPins' | EstimateFields | BriefFields>>;
 
 const MOCK_WORK_ITEM_SEEDS: MockSeed[] = [
   // The "Kubernetes Cluster Upgrade" family that used to open here (wi-k8s-*,
@@ -658,6 +658,8 @@ function buildSeed(seed: MockSeed, idOverride?: { id: string; parentId: string |
     nextStep: null,
     nextStepDetail: null,
     blockedByDecisionId: SEEDED_BLOCKED_BY_DECISION[seed.id] ?? null,
+    // No item is seeded with pins: a person sets them from the brief preview (PUT …/runbook-pins).
+    runbookPins: [],
     ...seed,
     ...SEEDED_BRIEFS[seed.id],
     ...MOCK_PROGRAM_FIELDS[seed.id],

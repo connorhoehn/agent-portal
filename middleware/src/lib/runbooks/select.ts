@@ -14,8 +14,9 @@
 //      Dropped: keyword Jaccard 0 with no pin and no label hit.
 //   4. Order: pinned, then score descending, then id.
 //
-// The budget (whole runbooks, at most four) is assembleBrief's job; this
-// returns every eligible runbook in order.
+// The budget (whole runbooks, at most MAX_GIVEN_RUNBOOKS) is assembleBrief's
+// job; this returns every eligible runbook in order. lib/run-brief.ts calls it
+// once per brief, with the work item's pins (docs/learning-loop-design.md stage 4).
 import type { Runbook, RunbookHealth, RunbookVersion } from './types.js';
 import { round4, sharedTokens, similarity, tokens } from './similarity.js';
 
@@ -57,16 +58,69 @@ export interface Selection {
 }
 
 export const SCOPE_WEIGHT = { repo: 3, initiative: 2, tool: 2, org: 1 } as const;
+
+/** At most this many runbooks are given to a run as text (docs/learning-loop-design.md stage 4). */
+export const MAX_GIVEN_RUNBOOKS = 2;
+
+/**
+ * The selector's reasons as one phrase a person reads on the brief and its preview: the
+ * strongest signal first, no record ids ("labels decom, runbook; shares tenant, cutover; on
+ * this initiative"). Pure.
+ */
+export function readableReason(reasons: readonly string[]): string {
+  const rank = (r: string): number =>
+    r === 'pinned on the work item' ? 0 : r.startsWith('labels ') ? 1 : r.startsWith('keywords ') ? 2
+      : r.startsWith('triggers on repo ') ? 3 : 4;
+  const phrase = (r: string): string => {
+    if (r.startsWith('keywords ')) return `shares ${r.slice('keywords '.length)}`;
+    if (r.startsWith('triggers on repo ')) return `written for repo ${r.slice('triggers on repo '.length)}`;
+    if (r.startsWith('initiative ')) return 'on this initiative';
+    if (r.startsWith('repo ')) return `scoped to repo ${r.slice('repo '.length)}`;
+    if (r.startsWith('tool ')) return `the work names ${r.slice('tool '.length)}`;
+    if (r === 'org-wide') return 'org-wide';
+    return r;
+  };
+  // "written for repo X" already says what "scoped to repo X" would.
+  const triggered = new Set(reasons.filter((r) => r.startsWith('triggers on repo ')).map((r) => r.slice('triggers on repo '.length)));
+  return [...reasons].filter((r) => !(r.startsWith('repo ') && triggered.has(r.slice('repo '.length))))
+    .sort((a, b) => rank(a) - rank(b)).map(phrase).join('; ');
+}
+
+/**
+ * Why a selection gave nothing, in words. `considered` is how many published runbooks were
+ * candidates at all. Pure.
+ */
+export function noneReason(selection: Selection, considered: number): string {
+  if (considered === 0) return 'The library has no published runbooks yet.';
+  const inScope = selection.excluded.filter((e) => e.reason === 'no_match').length;
+  if (inScope === 1) return "The one runbook in this work's scope shares no label and no term with it.";
+  if (inScope > 1) return `None of the ${inScope} runbooks in this work's scope shares a label or a term with it.`;
+  return 'No published runbook is scoped to this work (its repository, its initiative, a tool it names, or the whole org).';
+}
 const HEALTH_WEIGHT = { proven: 1, unproven: 0, drifting: -1 } as const;
 
 const base = (repo: string | null | undefined) => (repo ? repo.replace(/\.git$/, '').split('/').pop()!.toLowerCase() : '');
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
-function toolNamed(tool: string, work: WorkItemContext): boolean {
+function toolNamed(tool: string, work: Pick<WorkItemContext, 'title' | 'description' | 'labels'>): boolean {
   const t = tool.toLowerCase();
   if (work.labels.some((l) => l.toLowerCase() === t)) return true;
   const words = new Set(`${work.title} ${work.description}`.toLowerCase().split(/[^a-z0-9-]+/));
   return words.has(t);
+}
+
+/**
+ * Does a runbook's scope admit this work? The reason in the selector's words ("org-wide",
+ * "repo orgiq-auth-service", "initiative p-auth-migration", "tool jest"), or null. The pins
+ * route asks the same question before it stores a pin.
+ */
+export function scopeMatch(scope: Runbook['scope'], work: Pick<WorkItemContext, 'title' | 'description' | 'labels' | 'repo' | 'initiative_id'>): string | null {
+  const { kind, ref } = scope;
+  if (kind === 'org') return 'org-wide';
+  if (kind === 'repo' && ref && work.repo && base(ref) === base(work.repo)) return `repo ${base(ref)}`;
+  if (kind === 'initiative' && ref && ref === work.initiative_id) return `initiative ${ref}`;
+  if (kind === 'tool' && ref && toolNamed(ref, work)) return `tool ${ref}`;
+  return null;
 }
 
 export function selectRunbooks(work: WorkItemContext, candidates: readonly RunbookCandidate[]): Selection {
@@ -83,12 +137,9 @@ export function selectRunbooks(work: WorkItemContext, candidates: readonly Runbo
     const reasons: string[] = [];
     if (pinned) reasons.push('pinned on the work item');
 
-    let scopeScore = 0;
-    const { kind, ref } = rb.scope;
-    if (kind === 'org') { scopeScore = SCOPE_WEIGHT.org; reasons.push('org-wide'); }
-    else if (kind === 'repo' && ref && base(ref) === base(work.repo)) { scopeScore = SCOPE_WEIGHT.repo; reasons.push(`repo ${base(ref)}`); }
-    else if (kind === 'initiative' && ref && ref === work.initiative_id) { scopeScore = SCOPE_WEIGHT.initiative; reasons.push(`initiative ${ref}`); }
-    else if (kind === 'tool' && ref && toolNamed(ref, work)) { scopeScore = SCOPE_WEIGHT.tool; reasons.push(`tool ${ref}`); }
+    const scope = scopeMatch(rb.scope, work);
+    const scopeScore = scope ? SCOPE_WEIGHT[rb.scope.kind] : 0;
+    if (scope) reasons.push(scope);
     if (scopeScore === 0 && !pinned) { excluded.push({ runbook_id: rb.id, reason: 'scope' }); continue; }
 
     const doc = c.version.doc;
@@ -102,7 +153,9 @@ export function selectRunbooks(work: WorkItemContext, candidates: readonly Runbo
     if (jac > 0) reasons.push(`keywords ${sharedTokens(workTerms, rbTerms).slice(0, 5).join(', ')}`);
 
     const hits = labelHits.length + (repoHit ? 1 : 0);
-    if (jac === 0 && !pinned && hits === 0) { excluded.push({ runbook_id: rb.id, reason: 'no_match' }); continue; }
+    // No label hit and no shared term: not given (docs/learning-loop-design.md stage 4). A repo
+    // trigger alone is not a reason — it would hand every task in that repo the same runbook.
+    if (jac === 0 && !pinned && labelHits.length === 0) { excluded.push({ runbook_id: rb.id, reason: 'no_match' }); continue; }
 
     const score = round4(scopeScore + 2 * hits + 3 * jac + HEALTH_WEIGHT[c.health.status]);
     picked.push({

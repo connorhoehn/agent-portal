@@ -84,6 +84,12 @@ export interface WorkItem {
    */
   blockedByDecisionId: string | null;
   /**
+   * Runbooks a person pinned to this item (`work_items.runbook_pins`), in order: a run's
+   * brief gives a pinned runbook first, whatever the selector scores it
+   * (docs/learning-loop-design.md stage 4). [] when none, and on a cluster without the column.
+   */
+  runbookPins: string[];
+  /**
    * Sprint membership (`work_items.sprint_id`) and the dollar estimate
    * (`work_items.estimated_cost_usd`) — the two axes the program operating
    * model plans against (docs/program-operating-model.md). Both columns have
@@ -286,6 +292,7 @@ const ITEM_COLUMNS = `
 
       wi.pr_url, wi.pr_status,
       to_jsonb(wi)->>'blocked_by_decision_id' AS blocked_by_decision_id,
+      to_jsonb(wi)->'runbook_pins' AS runbook_pins,
       wi.created_at, wi.updated_at, wi.completed_at,
       a.id AS assignee_id, a.name AS assignee_name, a.team AS assignee_dept,
       (SELECT COUNT(*)::int FROM work_items c WHERE c.parent_id = wi.id) AS child_count,
@@ -568,6 +575,19 @@ function labelsLiteral(labels: string[]): string {
     : 'ARRAY[]::TEXT[]';
 }
 
+/**
+ * `work_items.runbook_pins` as the read projects it (`to_jsonb(wi)->'runbook_pins'`): a JSON
+ * array (or its text, from the Data API), or null on a row without pins or a cluster without
+ * the column. Anything else reads as no pins.
+ */
+function parsePins(raw: unknown): string[] {
+  let v: unknown = raw;
+  if (typeof v === 'string') {
+    try { v = JSON.parse(v); } catch { return []; }
+  }
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+}
+
 async function dbCreateWorkItem(data: CreateWorkItemInput): Promise<WorkItem> {
   const parentClause = data.parentId ? `:parent_id` : 'NULL';
   const assigneeClause = data.assigneeId ? `:assignee_id` : 'NULL';
@@ -614,7 +634,7 @@ async function dbCreateWorkItem(data: CreateWorkItemInput): Promise<WorkItem> {
       assigneeId: data.assigneeId ?? null, assigneeName: null, assigneeDept: null,
       labels: data.labels ?? [], storyPoints: data.storyPoints ?? null,
       // A new item has no brief until someone writes one.
-      summary: null, blockedReason: null, nextStep: null, nextStepDetail: null, blockedByDecisionId: null,
+      summary: null, blockedReason: null, nextStep: null, nextStepDetail: null, blockedByDecisionId: null, runbookPins: [],
       sprintId: data.sprintId ?? null, estimatedCostUsd: data.estimatedCostUsd ?? null,
       // A just-created item has no authorized estimate. Nobody has dispatched
       // it, so nobody has stood behind a forecast for it.
@@ -775,6 +795,7 @@ function rowToWorkItem(r: Record<string, unknown>): WorkItem {
     nextStep: r['next_step'] != null ? String(r['next_step']) : null,
     nextStepDetail: r['next_step_detail'] != null ? String(r['next_step_detail']) : null,
     blockedByDecisionId: r['blocked_by_decision_id'] != null ? String(r['blocked_by_decision_id']) : null,
+    runbookPins: parsePins(r['runbook_pins']),
     sprintId: r['sprint_id'] != null ? String(r['sprint_id']) : null,
     // NUMERIC arrives from the Data API as a string; Number() is the same
     // treatment story_points already gets.
@@ -1155,6 +1176,63 @@ export async function linkDecisionToWorkItem(
   return decision ? { kind: 'ok', decision } : { kind: 'not-found' };
 }
 
+// ─── Runbook pins ─────────────────────────────────────────────────────────────
+//
+// `work_items.runbook_pins` (schema/orgiq_work_items_schema.sql): the runbooks a
+// person pinned to an item, in order. The route (PUT …/runbook-pins) validates
+// the ids; this stores them. The read needs no probe (`to_jsonb(wi)->'runbook_pins'`
+// is null on a cluster without the column); the write does, because an UPDATE of
+// a missing column is an error, not a missing relation.
+
+let _pinsColumn: boolean | null = null;
+
+async function pinsColumnAvailable(): Promise<boolean> {
+  if (config.mock.aurora) return true;
+  if (_pinsColumn !== null) return _pinsColumn;
+  try {
+    const rows = await exec(
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'work_items' AND column_name = 'runbook_pins'`,
+    );
+    _pinsColumn = rows.length > 0;
+  } catch {
+    _pinsColumn = false;
+  }
+  return _pinsColumn;
+}
+
+/** Test seam: forget the probe so the next call re-asks. */
+export function resetRunbookPinsProbe(): void { _pinsColumn = null; }
+
+export type SetRunbookPinsResult =
+  | { kind: 'ok'; runbookPins: string[] }
+  | { kind: 'not-found' }
+  | { kind: 'unavailable'; error: string };
+
+/** Replace the item's pins with `ids` (already validated), in order. */
+export async function setWorkItemRunbookPins(id: string, ids: readonly string[]): Promise<SetRunbookPinsResult> {
+  const pins = [...ids];
+  if (config.mock.aurora) {
+    // The registered `work-items` fixture's own row: POST /api/__mock/reset puts it back.
+    const row = mockWorkItems().find((i) => i.id === id);
+    if (!row) return { kind: 'not-found' };
+    row.runbookPins = pins;
+    row.updatedAt = clock.nowIso();
+    return { kind: 'ok', runbookPins: [...pins] };
+  }
+  if (!(await pinsColumnAvailable())) {
+    return { kind: 'unavailable', error: 'this cluster has not applied the runbook_pins column (schema/orgiq_work_items_schema.sql)' };
+  }
+  const rows = await safeExec(
+    `UPDATE work_items SET runbook_pins = ${labelsLiteral(pins)}, updated_at = NOW()
+      WHERE id = :id
+      RETURNING to_jsonb(work_items)->'runbook_pins' AS runbook_pins`,
+    [strParam('id', id)],
+  );
+  if (rows.length === 0) return { kind: 'not-found' };
+  return { kind: 'ok', runbookPins: parsePins(rows[0]!['runbook_pins']) };
+}
+
 /**
  * Clear the link, but only when `decisionId` is linked to THIS item — a DELETE
  * addressed through one item must never unlink a decision from another.
@@ -1383,6 +1461,7 @@ export async function createWorkItem(data: CreateWorkItemInput): Promise<WorkIte
     nextStep: null,
     nextStepDetail: null,
     blockedByDecisionId: null,
+    runbookPins: [],
     sprintId: data.sprintId ?? null,
     estimatedCostUsd: data.estimatedCostUsd ?? null,
     // Same as the Aurora path: a new item has no estimator.
