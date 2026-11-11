@@ -37,6 +37,7 @@ export function WorkItemRunbooks({ workItemId, preview, onChanged }: { workItemI
   const [refusal, setRefusal] = useState<string | null>(null);
   const library = useFetch<{ runbooks: RunbookRow[] }>(picking ? '/api/runbooks?status=published&limit=200' : null, 0);
   const { offer, pins, previous_attempts: attempts } = preview;
+  const passedOver = (preview.passed_over ?? []).filter((r) => !pins.includes(r.id));
 
   const item = useMemo(() => ({ initiativeId: preview.brief.initiative_id, repo: preview.brief.repo, labels: [] as string[] }), [preview.brief.initiative_id, preview.brief.repo]);
   const options = useMemo(() => (library.data?.runbooks ?? [])
@@ -83,6 +84,26 @@ export function WorkItemRunbooks({ workItemId, preview, onChanged }: { workItemI
           {refusal && <InlineAlert tone="error" data-testid="pin-refusal">{refusal}</InlineAlert>}
         </Stack>
       </DetailSection>
+
+      {passedOver.length > 0 && (
+        <DetailSection as="h2" variant="heading" title="Passed over" hint={`${passedOver.length}`}
+          description="Runbooks in this item’s scope that were not chosen, and why. Pin one to give it to the next run."
+          data-testid="passed-over-runbooks">
+          <Stack gap="sm">
+            {passedOver.map((r) => (
+              <Stack key={r.id} gap="xs" data-testid={`passed-over-${r.id}`}>
+                <Inline gap="sm" align="center" wrap>
+                  <Link to={runbookHref(r.id)}><T size="sm" weight="semibold">{runbookDisplayTitle(r.name)}</T></Link>
+                  {canPin && pins.length < 5 && (
+                    <Button variant="link" size="sm" disabled={busy} onClick={() => { void write([...pins, r.id]); }} data-testid={`pin-passed-over-${r.id}`}>Pin</Button>
+                  )}
+                </Inline>
+                <T size="xs" tone="secondary" wrap>{r.reason}</T>
+              </Stack>
+            ))}
+          </Stack>
+        </DetailSection>
+      )}
 
       <DetailSection as="h2" variant="heading" title="Previous attempts" hint={`${attempts.length}`} data-testid="previous-attempts">
         {attempts.length === 0 ? <T size="sm" tone="secondary">Nobody has run this item yet.</T> : (

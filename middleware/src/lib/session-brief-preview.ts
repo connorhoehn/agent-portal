@@ -71,7 +71,52 @@ function selectionContext(input: {
   return null;
 }
 
-export async function previewBrief(input: {
+/** An in-scope runbook the selector or the brief's budget passed over, with a reason a person reads. */
+export interface PassedOverRunbook {
+  id: string;
+  name: string;
+  kind: 'no_match' | 'limit' | 'budget' | 'drifting_excluded';
+  reason: string;
+}
+
+const PASSED_OVER_REASON: Record<PassedOverRunbook['kind'], string> = {
+  no_match: 'In scope for this work, but it shares no label and no term with it.',
+  limit: 'It matched, but two other runbooks ranked higher and at most two are given.',
+  budget: 'It matched, but it did not fit whole in the brief’s token budget.',
+  drifting_excluded: 'It matched, but recent runs have stumbled on it, so it was left out.',
+};
+
+/**
+ * The in-scope runbooks that were not given: those that shared nothing with the work, and those
+ * that matched but lost on the two-runbook limit or the budget. Out-of-scope runbooks are never
+ * listed. Pure; ordered with the near misses (matched, then lost) first, then by name.
+ */
+export function passedOverRunbooks(
+  selection: { excluded: ReadonlyArray<{ runbook_id: string; reason: string }> },
+  omitted: ReadonlyArray<{ runbook_id: string; reason: string }>,
+  candidates: readonly RunbookCandidate[],
+): PassedOverRunbook[] {
+  const names = new Map(candidates.map((c) => [c.runbook.id, c.version.doc.title]));
+  const out: PassedOverRunbook[] = [];
+  const seen = new Set<string>();
+  const push = (id: string, kind: PassedOverRunbook['kind']) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    out.push({ id, name: names.get(id) ?? id, kind, reason: PASSED_OVER_REASON[kind] });
+  };
+  for (const o of omitted) {
+    if (o.reason === 'limit' || o.reason === 'budget' || o.reason === 'drifting_excluded') push(o.runbook_id, o.reason);
+  }
+  const lost = out.length;
+  for (const e of selection.excluded) if (e.reason === 'no_match') push(e.runbook_id, 'no_match');
+  return [...out.slice(0, lost), ...out.slice(lost).sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))];
+}
+
+export async function previewBrief(input: Parameters<typeof previewBriefWithPassedOver>[0]): Promise<SessionBrief> {
+  return (await previewBriefWithPassedOver(input)).brief;
+}
+
+export async function previewBriefWithPassedOver(input: {
   store: RunbookStore;
   work: PreviewWork | null;
   parent: { title: string } | null;
@@ -96,14 +141,14 @@ export async function previewBrief(input: {
   previousAttempts?: BriefPreviousAttempt[];
   /** The fence token for this brief (random per freeze and per preview). */
   fenceToken?: string;
-}): Promise<SessionBrief> {
+}): Promise<{ brief: SessionBrief; passedOver: PassedOverRunbook[] }> {
   const { work, project } = input;
   const runRef = input.run_ref ?? `preview-${work?.id ?? 'task'}`;
   const repo = input.repo ?? project?.repoFullName ?? null;
   const candidates = await loadCandidates(input.store, Date.parse(input.nowIso));
   const ctx = selectionContext({ run_ref: runRef, work, project, repo, pinned: input.pinned, task: input.task ?? null });
   const selection = ctx ? selectRunbooks(ctx, candidates) : { selected: [], excluded: [] };
-  return assembleBrief({
+  const brief = await assembleBrief({
     run_ref: runRef,
     assembled_at: input.nowIso,
     framing: '',
@@ -124,4 +169,5 @@ export async function previewBrief(input: {
     budget_tokens: briefBudget(input.env ?? process.env),
     ...(input.fenceToken ? { fence_token: input.fenceToken } : {}),
   });
+  return { brief, passedOver: passedOverRunbooks(selection, brief.omitted, candidates) };
 }

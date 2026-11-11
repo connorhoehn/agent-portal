@@ -160,7 +160,10 @@ export interface Brief extends BriefSummary {
 export interface BriefPreviewResponse {
   brief: Brief; stored: false; skills?: BriefSkillDetail[];
   offer: BriefOffer; pins: string[]; previous_attempts: BriefPreviousAttempt[];
+  /** In-scope runbooks the selector or the brief's limits passed over, each with a reason in words. */
+  passed_over?: PassedOverRunbook[];
 }
+export interface PassedOverRunbook { id: string; name: string; kind: 'no_match' | 'limit' | 'budget' | 'drifting_excluded'; reason: string }
 /** R8: one skill a brief's run received, at the version it received (GET /api/runs/:ref/brief `skills`). */
 export interface BriefSkillDetail { name: string; version: number; title: string | null; description: string | null; current_version: number | null }
 

@@ -30,7 +30,7 @@
 import { randomBytes } from 'node:crypto';
 import type { AgentJob } from '../providers/agent-jobs.js';
 import { BriefExistsError, MAX_PREVIOUS_ATTEMPTS, type BriefPreviousAttempt, type RunbookStore, type SessionBrief } from './runbooks/index.js';
-import { previewBrief, type PreviewDecision, type PreviewProject, type PreviewWork } from './session-brief-preview.js';
+import { previewBriefWithPassedOver, type PassedOverRunbook, type PreviewDecision, type PreviewProject, type PreviewWork } from './session-brief-preview.js';
 import type { RunReport } from './run-reports/types.js';
 import type { RunReportStore } from './run-reports/store.js';
 import { mintRunToken } from './run-token.js';
@@ -166,6 +166,8 @@ export async function previousAttempts(
 export interface RunBriefPlan {
   brief: SessionBrief;
   previousAttempts: BriefPreviousAttempt[];
+  /** In-scope runbooks that were not given, each with the reason (preview only; never frozen). */
+  passedOver: PassedOverRunbook[];
 }
 
 /**
@@ -182,7 +184,7 @@ export async function planRunBrief(target: RunTarget, opts: PlanOptions = {}): P
     project = p ? { id: p.id, name: p.name, repoFullName: p.repoFullName } : null;
   }
   const attempts = ctx ? await previousAttempts(ctx.work.id, target.run_ref, opts) : [];
-  const brief = await previewBrief({
+  const { brief, passedOver } = await previewBriefWithPassedOver({
     store,
     run_ref: target.run_ref,
     work: ctx?.work ?? null,
@@ -200,7 +202,7 @@ export async function planRunBrief(target: RunTarget, opts: PlanOptions = {}): P
     fenceToken: opts.fenceToken ?? randomBytes(16).toString('hex'),
   });
   const shown = new Set((brief.previous_attempts ?? []).map((a) => a.run_ref));
-  return { brief: { ...brief, dispatched_by: target.dispatched_by ?? null }, previousAttempts: attempts.filter((a) => shown.has(a.run_ref)) };
+  return { brief: { ...brief, dispatched_by: target.dispatched_by ?? null }, previousAttempts: attempts.filter((a) => shown.has(a.run_ref)), passedOver };
 }
 
 /** Assemble the brief for a run without storing it. */

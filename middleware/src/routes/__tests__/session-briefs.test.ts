@@ -195,6 +195,16 @@ describe('GET /api/work-items/:id/brief-preview', () => {
     expect(again.body.brief.markdown.match(/untrusted-([0-9a-f]{32})/)![1]).not.toBe(brief.markdown.match(/untrusted-([0-9a-f]{32})/)![1]);
   });
 
+  it('lists in-scope runbooks that were passed over, never the ones given', async () => {
+    const res = await request(appAs(USERS.member!)).get('/api/work-items/wi-auth-1/brief-preview');
+    const given = res.body.offer.runbooks.map((r: { id: string }) => r.id);
+    expect(Array.isArray(res.body.passed_over)).toBe(true);
+    for (const p of res.body.passed_over) {
+      expect(given).not.toContain(p.id);
+      expect(p).toEqual({ id: expect.any(String), name: expect.any(String), kind: expect.stringMatching(/^(no_match|limit|budget|drifting_excluded)$/), reason: expect.stringMatching(/\.$/) });
+    }
+  });
+
   it("a person's pin comes first, ahead of the selector's own choice", async () => {
     const res = await request(appAs(USERS.member!)).get('/api/work-items/wi-auth-2/brief-preview');
     expect(res.body.pins).toEqual(['rb-flaky-test-rerun-diff']);

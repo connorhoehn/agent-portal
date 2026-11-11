@@ -218,7 +218,7 @@ export function createSessionBriefsRouter(deps: SessionBriefDeps): Router {
       const ctx = await loadWorkContext(id);
       if (!ctx) { res.status(404).json({ error: 'work item not found' }); return; }
       const store = await deps.store();
-      const { brief, previousAttempts } = await planRunBrief(
+      const { brief, previousAttempts, passedOver } = await planRunBrief(
         { run_ref: `preview-${id}`, box: 'devbox', work_item_id: id },
         { store, ...(deps.reports ? { reports: await deps.reports() } : {}) },
       );
@@ -227,6 +227,9 @@ export function createSessionBriefsRouter(deps: SessionBriefDeps): Router {
         offer: brief.offer ?? { runbooks: [], none_reason: null },
         pins: ctx.work.runbookPins ?? [],
         previous_attempts: previousAttempts,
+        // Names only for people who may already list runbooks (any signed-in orgiq session; this
+        // route's gate is the same or stricter), so the list widens nobody's view.
+        passed_over: passedOver,
       });
     }));
 
