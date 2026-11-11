@@ -44,6 +44,11 @@ describe('runbookEvidence', () => {
     expect(followedOf({ ...report({ runRef: 'b' }), runbooks: 'nope' } as unknown as RunReport, 'rb-x')).toBe('unsaid');
     expect(followedOf(report({ runRef: 'c' }), 'rb-x')).toBe('unsaid');
   });
+
+  it("reads the account where the report stores it, `runbookAccounts`", () => {
+    const r = { ...report({ runRef: 'd' }), runbookAccounts: [{ id: 'rb-x', followed: 'partly' }] } as unknown as RunReport;
+    expect(followedOf(r, 'rb-x')).toBe('partly');
+  });
 });
 
 describe('compareRuns', () => {

@@ -25,7 +25,8 @@ export type Followed = 'yes' | 'partly' | 'no' | 'unsaid';
 
 /** The run's own account of one runbook it was given (lane C's `runbooks` field), read tolerantly. */
 export function followedOf(r: RunReport, runbookId: string): Followed {
-  const entries = (r as RunReport & { runbooks?: unknown }).runbooks;
+  // The report stores the run's account as `runbookAccounts`; `runbooks` is the older spelling suites still build.
+  const entries = r.runbookAccounts?.length ? r.runbookAccounts : (r as RunReport & { runbooks?: unknown }).runbooks;
   if (!Array.isArray(entries)) return 'unsaid';
   for (const e of entries) {
     if (!e || typeof e !== 'object') continue;
