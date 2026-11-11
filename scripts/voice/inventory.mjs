@@ -516,7 +516,7 @@ export const V2_RULES = [
   [/^POST \/api\/graph\/work-items$/, 'not-yet', 'create', 'work item (DispatchAgentRun)'],
   [/^PATCH \/api\/graph\/work-items\/:[^/]+$/, 'not-yet', 'update', 'status, assignee, sprint'],
   [/^POST \/api\/graph\/(work-items\/:[^/]+|projects\/:[^/]+\/discussion)\/comments$/, 'not-yet', 'create', 'a comment (ViewWorkItems)'],
-  [/^(POST|PUT|PATCH|DELETE) \/api\/graph\/work-items\/:[^/]+\/(criteria|decisions|documents)/, 'never', null, 'acceptance criteria, decisions and document links are edited on the item'],
+  [/^(POST|PUT|PATCH|DELETE) \/api\/graph\/work-items\/:[^/]+\/(criteria|decisions|documents|runbook-pins)/, 'never', null, 'acceptance criteria, decisions, document links and runbook pins are edited on the item'],
   // G55: creating a blank page or whiteboard (a title, no content) is `create`; what is written in it stays in the editor.
   [/^(PUT|PATCH|DELETE) \/api\/graph\/projects\/:[^/]+\/workspace-documents|^(POST|PUT|PATCH|DELETE) \/api\/graph\/documents/, 'never', null, 'document content'],
   [/^PATCH \/api\/graph\/projects\/:[^/]+(\/contributors\/:[^/]+)?$/, 'never', null, 'initiative governance edits'],
