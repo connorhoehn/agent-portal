@@ -83,8 +83,15 @@ afterEach(() => { delete process.env['SPEND_LEDGER']; restoreClock(); });
 describe('nothing moves until an initiative opts in', () => {
   it('every seeded allocation is monthly, keyed to this month, carries nothing and writes no close', async () => {
     delete process.env['SPEND_LEDGER']; // the default read mode, over the seeded run history
-    const rows = await listBudgets();
-    expect(rows.length).toBeGreaterThan(10);
+    const all = await listBudgets();
+    expect(all.length).toBeGreaterThan(10);
+    // The one seeded opt-in (learning loop, lane B): Cost Optimization's
+    // allocation is per sprint, so the Halyard story has an initiative just
+    // over 80% whatever the day of the month (mock/budgets.ts says why). It
+    // carries nothing and closes nothing either.
+    const optedIn = all.filter((r) => r.orgProjectId === 'p-cost-opt');
+    expect(optedIn.map((r) => [r.period, r.carryOver, r.carryInUsd])).toEqual([['sprint', 'none', 0]]);
+    const rows = all.filter((r) => r.orgProjectId !== 'p-cost-opt');
     for (const r of rows) {
       expect(r.period === null || r.period === 'monthly').toBe(true);
       expect(r.periodKey).toBe('2026-10');

@@ -53,8 +53,11 @@ describe('the mock ledger sums its own bot_runs', () => {
     const rows = await listBudgets();
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) {
+      // The row's own window: the calendar month, or the sprint for the one
+      // seeded per-sprint allocation (p-cost-opt, mock/budgets.ts).
+      const from = row.periodStart ? Date.parse(row.periodStart) : monthStartMs();
       const period = runsFor(row.orgProjectId)
-        .filter((r) => r.costUsd != null && Date.parse(r.startedAt) >= monthStartMs());
+        .filter((r) => r.costUsd != null && Date.parse(r.startedAt) >= from);
       expect(row.spentThisPeriodUsd).toBe(scale(period.reduce((n, r) => n + (r.costUsd ?? 0), 0)));
       expect(row.runCountThisPeriod).toBe(period.length);
       expect(row.maintenanceUsd).toBe(
