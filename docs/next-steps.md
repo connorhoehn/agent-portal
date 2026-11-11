@@ -808,3 +808,32 @@ Waiting on the owner:
 - A fresh clone cannot install the portal or the middleware without access to two private dependency repositories. Either make them public or vendor their tarballs.
 - Account ids in tracked environment files.
 - The history rewrite, the CI token, the registry default in `scripts/build.sh`, and back-publishing older library versions.
+
+## 15. Learning loop (10 November 2026)
+
+The design is `docs/learning-loop-design.md`. Lane A (the run report) is built on branch `worktree-agent-ae7563918c2da3d1e`, not merged.
+
+### What Lane A built
+
+- **The run report.** One per run, write-once and idempotent on the run reference, the same shape from every executor (`middleware/src/lib/run-reports/types.ts`). Every free-text field is capped; what a worker sends is cleaned of control and direction-override characters, stored as data and never put into a prompt.
+- **The store.** In-memory fixtures by default; the runbook store's own DynamoDB table when `RUNBOOK_DYNAMODB_ENDPOINT`, `RUNBOOK_TABLE` or `RUNBOOK_STORE=dynamo` says so, under its own key prefix. One contract suite runs both (the Dynamo leg when the endpoint is set; it passed against DynamoDB Local).
+- **One function at every run end.** `recordRunEnd` (`lib/run-reports/record.ts`) is called by fleet jobs, microVM jobs, governed runs (after the capture, so the report names the change request), local compute completions and the mock's simulated dispatch. A bot run is one of these underneath, so its report is that run's.
+- **The self-report.** The brief's "How to report back" and the local framing (when no brief froze) ask in three lines for a fenced `lab-report` block at the end of the final message. The parser is tolerant: a missing block is `missing`, an unreadable one `malformed`, and the report is saved either way.
+- **Observed use.** A skill load is a `Skill` tool call, or a read of a skill's own `SKILL.md`, in Claude Code's stream-json events. The local worker reads its own stdout; the devbox and microVM paths read the stream the runner already sends to the middleware. The transcript file is never read. From the used runbooks the run was given, the server writes one application row each, with the same id `lab applied` writes, so runbook health moves for local runs. `lab applied` still counts as a second signal.
+- **The local return path.** `tools/local-compute-worker.mjs` posts the final message, the observed skill loads and the checkout's `.lab/keep/` folders (the `lab keep` shape) with its completion. Kept folders go through the proposals route's own code (`fileProposal`), attributed from the frozen brief. The worker's cost is stored as reported and never billed.
+- **The mock.** A simulated dispatch ends with a real report from a fixture picked by the work item's labels: one that teaches something (the logout cookie), one that used a runbook it was given, one that needed nothing, and one that stops failed (the inference cold start). `scripts/content/check-story.mjs` scans their text.
+- **Routes.** `GET /api/runs/:ref/report` (the brief's access rule), `GET /api/work-items/:id/run-reports` and `GET /api/initiatives/:id/run-reports`.
+- **Acceptance item 10.** `node scripts/learning-loop/local-report-e2e.mjs` boots its own middleware, pairs a throwaway worker into a temporary presence file, runs the real worker with a stub `claude` on `PATH`, and checks the stored report, the reported cost and the application row.
+
+### Decided differently from the design
+
+- **No `lab report` and no `SessionEnd` change.** `SessionEnd` has about 1.5 seconds and cannot block, and the devbox runner already streams every event to the middleware, so the server reads the final message and the skill loads from that stream. Nothing new runs on the box.
+- **Offered runbooks.** `runbooksOffered` reads the brief's offer when lane D stores one (`offer.runbooks`), else the runbooks a version 1 brief inlined, else nothing (`offeredFromBrief`).
+- **Summary.** It comes only from the self-report; a run without a block has an empty summary, as the design says, even when the executor had a final message.
+
+### Left for later lanes
+
+- A job the stale reaper fails has no report (the reaper is a SQL update with no hook).
+- The run page does not show the report yet (lane E).
+- `lib/runbooks/skill.ts` writes only `name` and `description`; its parser accepts and drops any other frontmatter key, so nothing yet rejects a non-portable key (lane C owns the lint).
+- `M3 voice` of the demo-moments journey failed on a sprint date one day off (the run started just after midnight UTC); `voice-coverage` passed.
