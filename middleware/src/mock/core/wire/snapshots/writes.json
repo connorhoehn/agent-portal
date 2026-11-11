@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-11T02:01:20.924Z",
-  "serverHandlerSha": "a805d13551da50bb428820a36db23b9d094b854efc2b92117ab1122745bdae97",
-  "baseUrl": "http://127.0.0.1:3915",
+  "capturedAt": "2026-11-11T03:22:03.166Z",
+  "serverHandlerSha": "9429825216c28e0068777d7c6e26ce9e9539e857749b3dfc7cd2ee54cbac63ef",
+  "baseUrl": "http://127.0.0.1:3909",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -567,6 +567,7 @@
         "priority": "string",
         "projectId": "string",
         "projectName": "string",
+        "runbookPins": "array",
         "sprintId": "string",
         "status": "string",
         "storyPoints": "number",
@@ -738,6 +739,7 @@
         "workItem.priority": "string",
         "workItem.projectId": "string",
         "workItem.projectName": "string",
+        "workItem.runbookPins": "array",
         "workItem.sprintId": "string",
         "workItem.status": "string",
         "workItem.storyPoints": "null",
@@ -2705,6 +2707,7 @@
         "priority": "string",
         "projectId": "string",
         "projectName": "string",
+        "runbookPins": "array",
         "sprintId": "null",
         "status": "string",
         "storyPoints": "null",
@@ -4774,6 +4777,12 @@
       "sent": []
     },
     "PUT /api/graph/work-items/:id/documents/:documentId": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "PUT /api/graph/work-items/:id/runbook-pins": {
       "refused": {
         "rule": "unclassified",
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."

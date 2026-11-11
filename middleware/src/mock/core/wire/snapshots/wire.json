@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-11T02:01:16.067Z",
-  "serverHandlerSha": "a805d13551da50bb428820a36db23b9d094b854efc2b92117ab1122745bdae97",
-  "baseUrl": "http://127.0.0.1:3915",
+  "capturedAt": "2026-11-11T03:21:58.304Z",
+  "serverHandlerSha": "9429825216c28e0068777d7c6e26ce9e9539e857749b3dfc7cd2ee54cbac63ef",
+  "baseUrl": "http://127.0.0.1:3909",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -2285,7 +2285,11 @@
         "briefs[].budget_tokens": "number",
         "briefs[].id": "string",
         "briefs[].initiative_id": "string",
+        "briefs[].offer": "object",
+        "briefs[].offer.none_reason": "string",
+        "briefs[].offer.runbooks": "array",
         "briefs[].omitted": "array",
+        "briefs[].previous_attempts": "array",
         "briefs[].repo": "string",
         "briefs[].run_ref": "string",
         "briefs[].sections": "array",
@@ -3518,6 +3522,7 @@
         "$[].priority": "string",
         "$[].projectId": "string",
         "$[].projectName": "string",
+        "$[].runbookPins": "array",
         "$[].sprintId": "null|string",
         "$[].status": "string",
         "$[].storyPoints": "null|number",
@@ -3793,6 +3798,7 @@
         "$[].children[].priority": "string",
         "$[].children[].projectId": "string",
         "$[].children[].projectName": "string",
+        "$[].children[].runbookPins": "array",
         "$[].children[].sprintId": "null|string",
         "$[].children[].status": "string",
         "$[].children[].storyPoints": "number",
@@ -3824,6 +3830,7 @@
         "$[].priority": "string",
         "$[].projectId": "string",
         "$[].projectName": "string",
+        "$[].runbookPins": "array",
         "$[].sprintId": "null",
         "$[].status": "string",
         "$[].storyPoints": "null",
@@ -3954,6 +3961,7 @@
         "$[].priority": "string",
         "$[].projectId": "string",
         "$[].projectName": "string",
+        "$[].runbookPins": "array",
         "$[].sprintId": "null|string",
         "$[].status": "string",
         "$[].storyPoints": "null|number",
@@ -6046,7 +6054,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "null|number",
+        "points[].judgeP50": "number",
         "windowHours": "number"
       },
       "values": {}
@@ -7897,6 +7905,45 @@
     "GET /api/runbooks/:id/diff": {
       "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 400 (anonymous)"
     },
+    "GET /api/runbooks/:id/evidence": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "evidence": "object",
+        "evidence.comparison": "object",
+        "evidence.comparison.available": "boolean",
+        "evidence.comparison.reason": "string",
+        "evidence.comparison.withRunbookRuns": "number",
+        "evidence.comparison.withoutRunbookRuns": "number",
+        "evidence.followed": "object",
+        "evidence.followed.no": "number",
+        "evidence.followed.partly": "number",
+        "evidence.followed.unsaid": "number",
+        "evidence.followed.yes": "number",
+        "evidence.followedDone": "number",
+        "evidence.given": "number",
+        "evidence.loaded": "number",
+        "evidence.outcomes": "object",
+        "evidence.outcomes.cancelled": "number",
+        "evidence.outcomes.done": "number",
+        "evidence.outcomes.failed": "number",
+        "evidence.outcomes.needs-review": "number",
+        "evidence.runbookId": "string",
+        "evidence.runs": "array",
+        "evidence.since": "string",
+        "evidence.windowDays": "number",
+        "health": "object",
+        "health.reason": "string",
+        "health.status": "string",
+        "health.warning": "null"
+      },
+      "values": {
+        "health.status": [
+          "proven"
+        ]
+      }
+    },
     "GET /api/runbooks/:id/versions": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -7926,6 +7973,29 @@
           "person"
         ]
       }
+    },
+    "GET /api/runbooks/evidence": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "evidence": "object",
+        "evidence.proposalsFromRuns": "object",
+        "evidence.proposalsFromRuns.accepted": "number",
+        "evidence.proposalsFromRuns.merged": "number",
+        "evidence.proposalsFromRuns.open": "number",
+        "evidence.proposalsFromRuns.rejected": "number",
+        "evidence.proposalsFromRuns.total": "number",
+        "evidence.proposalsFromRuns.withdrawn": "number",
+        "evidence.runbooks": "array",
+        "evidence.runs": "number",
+        "evidence.runsGiven": "number",
+        "evidence.runsSaidFollowed": "number",
+        "evidence.runsSaidFollowedDone": "number",
+        "evidence.since": "string",
+        "evidence.windowDays": "number"
+      },
+      "values": {}
     },
     "GET /api/runbooks/proposals": {
       "persona": "orgiq/admin",
