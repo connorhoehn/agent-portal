@@ -1328,6 +1328,19 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     },
   },
   {
+    route: 'PUT /api/budgets/learning',
+    persona: 'orgiq/admin',
+    safe: 'Writes the one row of the registered `learning-budget` fixture (mock/budget-lines.ts); reset empties it, so the cap reads as the deployment default again. No spend, hold or notification moves: the cap is only read by the next learning reservation.',
+    bodyFrom: 'routes/budgets.ts: `monthlyCapUsd` a finite number >= 0, or null for the default. The number is the cap GET /api/budgets/lines already reports (`learning.capUsd`), so nothing is invented; storing it turns the default into a set cap, which is a real write.',
+    build: async (ctx) => {
+      const lines = await ctx.get('/api/budgets/lines');
+      const learning = lines && typeof lines === 'object' ? (lines as Record<string, unknown>)['learning'] : null;
+      const cap = learning && typeof learning === 'object' ? (learning as Record<string, unknown>)['capUsd'] : null;
+      if (typeof cap !== 'number') return unsynthesisable('GET /api/budgets/lines reported no learning cap');
+      return { monthlyCapUsd: cap };
+    },
+  },
+  {
     route: 'PUT /api/budgets/:orgProjectId',
     persona: 'orgiq/admin',
     safe: 'A REAL allocation write. The old reason here — "`upsertAllocation` is mock-branched and returns null, so the route answers 503 without writing" — has been false since providers/budgets.ts gave the mock branch a body: it evaluates the same upsert against the registered `initiative-budgets` fixture and answers 200. That is fine to replay precisely because the fixture is registered: reset puts the seeded allocation back.',
