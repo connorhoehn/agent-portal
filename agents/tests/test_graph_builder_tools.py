@@ -166,6 +166,21 @@ class MergeOtherNodeTests(_Base):
         self.assertEqual(out["id"], "project_atlas")
         self.assertEqual(self.rds.params["status"], "active")
 
+    def test_merge_project_meets_a_hand_made_initiative_of_the_same_name(self):
+        # A person made "Atlas" by hand as p-atlas. Ingestion must not add a second row.
+        self.rds.response = {"records": [[{"stringValue": "p-atlas"}]]}
+        gb._project_alias.clear()
+        out = json.loads(gb.merge_project(project_id="Project Atlas", name="ATLAS", status="active"))
+        self.assertEqual(out, {"merged": "Project", "id": "p-atlas", "matched_by": "name"})
+        self.assertNotIn("INSERT INTO projects", " ".join(c["sql"] for c in self.rds.calls))
+        self.assertIn("UPDATE projects SET status", self.rds.sql)
+        self.assertEqual(self.rds.params["id"], "p-atlas")
+        # Relationships that name either id reach the stored row, hyphens intact.
+        self.assertEqual(gb._project_id("Project", gb._safe_id("Project Atlas")), "p-atlas")
+        self.assertEqual(gb._project_id("Project", gb._safe_id("p-atlas")), "p-atlas")
+        self.assertEqual(gb._project_id("Person", "p_atlas"), "p_atlas")
+        gb._project_alias.clear()
+
 
 # ── merge_relationship: the allow-listed table name ──────────────────────────
 

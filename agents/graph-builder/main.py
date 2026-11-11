@@ -124,6 +124,29 @@ def _safe_id(value: str) -> str:
     return re.sub(r"[^a-z0-9_]", "_", value.lower().strip())
 
 
+# Ids this process has redirected to an existing project of the same name
+# (merge_project). Keyed by the safe form of the id a caller used; the value is
+# the stored id, verbatim, which may hold characters `_safe_id` would rewrite.
+_project_alias: dict[str, str] = {}
+
+
+def _project_named(name: str, other_than: str) -> str | None:
+    """The id of a project with this name (any letter case) under another id."""
+    resp = _exec_sql(
+        "SELECT id FROM projects WHERE lower(name) = lower(:name) AND id <> :id ORDER BY id LIMIT 1",
+        parameters=[_p("name", name.strip()), _p("id", other_than)],
+    )
+    records = (resp or {}).get("records") or []
+    if not records or not records[0]:
+        return None
+    return records[0][0].get("stringValue") or None
+
+
+def _project_id(label: str, safe: str) -> str:
+    """A relationship's project end, redirected when merge_project matched by name."""
+    return _project_alias.get(safe, safe) if label.strip().lower() == "project" else safe
+
+
 def _converse_text(resp: dict) -> str:
     """Concatenate the text blocks of a Bedrock Converse response.
 
@@ -239,11 +262,27 @@ def merge_team(team_id: str, name: str) -> str:
 
 @instrumented_tool(_current_ctx.get)
 def merge_project(project_id: str, name: str, status: str = "") -> str:
-    """Upsert a Project row."""
+    """Upsert a Project row.
+
+    An initiative a person made by hand already has an id of its own. When a
+    project of the same name exists under another id, this merges into that
+    row and returns ITS id, and later relationships that name either id reach
+    it (see `_project_id`). Without this, ingestion would add a second row
+    beside the hand-made one.
+    """
     why = check_node("Project", project_id, name, _caller_auth.get())
     if why:
         return _refused("Project", why)
     safe = _safe_id(project_id)
+    existing = _project_named(name, safe)
+    if existing:
+        _project_alias[safe] = existing
+        _project_alias[_safe_id(existing)] = existing
+        _exec_sql(
+            "UPDATE projects SET status = COALESCE(NULLIF(:status, ''), status) WHERE id = :id",
+            parameters=[_p("id", existing), _p("status", status or "")],
+        )
+        return json.dumps({"merged": "Project", "id": existing, "matched_by": "name"})
     _exec_sql(
         "INSERT INTO projects (id, name, status) VALUES (:id, :name, :status) "
         "ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, "
@@ -283,8 +322,8 @@ def merge_relationship(
     why = check_edge(rel_type, from_label, to_label, _caller_auth.get())
     if why:
         return _refused("relationship", why)
-    from_safe = _safe_id(from_id)
-    to_safe = _safe_id(to_id)
+    from_safe = _project_id(from_label, _safe_id(from_id))
+    to_safe = _project_id(to_label, _safe_id(to_id))
     rel = rel_type.upper().strip()
 
     if rel == "WORKED_WITH":
