@@ -1393,7 +1393,7 @@ describe('POST /api/local-compute/register', () => {
   it('records what the machine advertised and echoes back the owner\'s switch', async () => {
     const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
     const res = await request(anon()).post(`${BASE}/register`).set(bearer(node.nodeToken)).send({
-      localModels: ['qwen3.6-35b', 'nomic-embed'], jobKinds: ['local:task', 'local:distill'], maxConcurrency: 2,
+      localModels: ['qwen3.6-35b', 'nomic-embed'], jobKinds: ['local:task'], maxConcurrency: 2,
     });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
@@ -1404,7 +1404,7 @@ describe('POST /api/local-compute/register', () => {
       // here the machine cannot write, and it is the owner's switch.
       acceptJobs: false,
       localModels: ['qwen3.6-35b', 'nomic-embed'],
-      jobKinds: ['local:task', 'local:distill'],
+      jobKinds: ['local:task'],
       maxConcurrency: 2,
       // Quoted to the worker rather than left for it to guess: this is the
       // deadline its heartbeat is racing, and the reaper reads the same env var.
@@ -1424,14 +1424,14 @@ describe('POST /api/local-compute/register', () => {
     // conclude there was no work. `devbox:task` is the one that matters — it is
     // the kind almost everything enqueues today.
     expect(res.body.rejectedKinds).toEqual(['devbox:task', 'sudo:make-me-a-sandwich']);
-    expect(res.body.runnableKinds).toEqual(['local:task', 'local:distill']);
+    expect(res.body.runnableKinds).toEqual(['local:task']);
   });
 
   it('orders kinds by the SERVER\'s list, so a node cannot choose what it is offered first', async () => {
     const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
     const res = await request(anon()).post(`${BASE}/register`).set(bearer(node.nodeToken))
-      .send({ jobKinds: ['local:distill', 'local:task', 'local:distill'] });
-    expect(res.body.jobKinds).toEqual(['local:task', 'local:distill']);
+      .send({ jobKinds: ['local:distill', 'local:task', 'local:task'] });
+    expect(res.body.jobKinds).toEqual(['local:task']);
   });
 
   it('caps maxConcurrency at the server ceiling and floors nonsense at 1', async () => {
@@ -1572,10 +1572,10 @@ describe('POST /api/local-compute/claim', () => {
     expect(res.body).toEqual({});
   });
 
-  it('never offers a kind the node did not advertise, even when it is the only work queued', async () => {
+  it('offers nothing to a node whose only advertised kind was retired (local:distill), even with work queued', async () => {
     const node = await readyWorker({ kinds: ['local:distill'] });
-    await queueLocal(node, 'a repo task');       // local:task — advertised by nobody here
-    expect((await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({})).status).toBe(204);
+    await queueLocal(node, 'a repo task');       // local:task — this node's only advertised kind is a retired one
+    expect((await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({})).status).toBe(409);
   });
 
   it('never offers devbox:task — the queue is full of them and a laptop cannot run one', async () => {
@@ -2008,12 +2008,12 @@ describe('handing a machine work', () => {
       expect((await request(as('member', 'u-mia')).get(`${BASE}/runs`)).body.runs).toEqual([]);
     });
 
-    it('409s a kind the machine never registered for, and names what it does run', async () => {
+    it('409s work for a machine that advertises no runnable kind (an old worker still asking for local:distill)', async () => {
       const node = await readyWorker({ kinds: ['local:distill'] });
       const res = await hand(as('member', 'u-mia'), node.nodeId, { kind: 'local:task' });
       expect(res.status).toBe(409);
       expect(res.body.gate).toBe('kinds');
-      expect(res.body.error).toMatch(/runs local:distill/);
+      expect(res.body.error).toMatch(/registered no runnable kinds/);
     });
 
     it('queues the job TARGETED at that machine, with the repo and the review flag', async () => {

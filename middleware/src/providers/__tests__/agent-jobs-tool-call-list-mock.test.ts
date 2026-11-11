@@ -67,11 +67,6 @@ describe('deriveToolCallList — mock mode', () => {
     ]);
   });
 
-  it('uses a different cycle for a local:distill job', () => {
-    const j = job({ kind: 'local:distill', result: { toolCalls: 2, transcript: [] } });
-    expect(deriveToolCallList(j)?.map((c) => c.name)).toEqual(['read_file', 'grep']);
-  });
-
   it('reports no list when toolCalls is absent, zero, or not a number', () => {
     expect(deriveToolCallList(job({ result: { summary: 'done' } }))).toBeUndefined();
     expect(deriveToolCallList(job({ result: { toolCalls: 0 } }))).toBeUndefined();

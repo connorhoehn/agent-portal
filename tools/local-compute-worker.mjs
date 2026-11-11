@@ -55,7 +55,7 @@
 //   LOCAL_MODELS           comma-separated model list the machine advertises
 //                          (default: ANTHROPIC_MODEL, else "claude-code" in
 //                          anthropic mode; "qwen3.6-35b" in loopback mode)
-//   JOB_KINDS              comma-separated, e.g. "local:task,local:distill"
+//   JOB_KINDS              comma-separated, e.g. "local:task"
 //   MAX_CONCURRENCY        how many jobs to hold at once (default: 2, the reference
 //                          workstation's real slot count)
 //   ANTHROPIC_BASE_URL     set it to run in loopback mode (e.g. http://127.0.0.1:8080)

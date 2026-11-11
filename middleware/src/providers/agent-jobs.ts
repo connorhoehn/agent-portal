@@ -133,7 +133,6 @@ export interface ToolCallSummary { name: string; done: boolean }
 const MOCK_TOOL_CYCLE: Record<string, readonly string[]> = {
   'devbox:task': ['read_file', 'edit_file', 'run_tests', 'git_commit'],
   'local:task': ['read_file', 'edit_file', 'run_tests', 'git_commit'],
-  'local:distill': ['read_file', 'grep', 'write_file'],
 };
 const DEFAULT_MOCK_TOOL_CYCLE: readonly string[] = ['read_file', 'edit_file', 'run_tests'];
 

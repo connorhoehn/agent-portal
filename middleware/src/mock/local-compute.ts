@@ -216,7 +216,7 @@ function seededNodes(): ComputeNodeRow[] {
       // The one machine that has actually registered a worker, so the claim
       // path has a node it can legitimately hand work to. Two slots, matching
       // the reference workstation's llama-server (2 slots, kv_unified).
-      jobKinds: ['local:distill'],
+      jobKinds: ['local:task'],
       maxConcurrency: 2,
       // Paired earlier today — this one IS a day claim, so it takes the clamp
       // that keeps it inside today at 00:05 UTC.
@@ -390,7 +390,7 @@ function largeNodes(): ComputeNodeRow[] {
       platform: n % 3 === 0 ? 'linux/x64' : 'darwin/arm64',
       acceptJobs: n % 4 === 0,
       localModels: n % 4 === 0 ? ['llama3.1:8b'] : [],
-      jobKinds: n % 4 === 0 ? ['local:distill'] : [],
+      jobKinds: n % 4 === 0 ? ['local:task'] : [],
       maxConcurrency: n % 4 === 0 ? 2 : 1,
       createdAt: clock.daysAgo(LARGE_FLEET - i),
       lastSeenAt: minutesAgo(fleetAgeMinutes(n)),

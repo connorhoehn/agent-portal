@@ -245,8 +245,8 @@ describe('allowedKinds — the intersection is the trust boundary', () => {
   it('orders by the SERVER\'s list and deduplicates', () => {
     // So a node cannot influence which kind it is offered first by reordering or
     // repeating its advertisement.
-    expect(allowedKinds(['local:distill', 'local:task', 'local:distill']))
-      .toEqual(['local:task', 'local:distill']);
+    expect(allowedKinds(['local:distill', 'local:task', 'local:task']))
+      .toEqual(['local:task']);
     expect(allowedKinds([...LOCAL_JOB_KINDS])).toEqual([...LOCAL_JOB_KINDS]);
   });
 });

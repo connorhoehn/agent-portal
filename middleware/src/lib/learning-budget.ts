@@ -15,8 +15,8 @@
 // monthly cap (providers/budget-lines.ts: LEARNING_BUDGET_USD, default $5,
 // until an org leader sets one on the Budgets page) and nothing else.
 //
-// Local distillation (job kind `local:distill`) does NOT call this: it bills
-// nothing and draws nothing from the line.
+// Local work (job kinds `local:*`) does NOT call this: it bills nothing and
+// draws nothing from the line.
 
 import { reserveSpend, HOLD_GRACE_MS, type ReserveSpendResult } from './spend-holds.js';
 import { releaseHold } from '../providers/spend-holds.js';

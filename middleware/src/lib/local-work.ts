@@ -40,8 +40,6 @@ import { LAB_REPORT_ASK } from './run-reports/self-report.js';
 export const LOCAL_JOB_KINDS = [
   /** A repo task: clone or update the checkout, run the harness, report back. */
   'local:task',
-  /** The learning loop's distiller, run on a paired machine (docs/learning-loop-design.md §2). */
-  'local:distill',
 ] as const;
 
 export type LocalJobKind = typeof LOCAL_JOB_KINDS[number];
