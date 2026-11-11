@@ -41,7 +41,7 @@ export function currentCallPage(pathname: string, search = ''): CallPageDescript
   const params = new URLSearchParams(search);
   const itemId = params.get('item');
   const tab = params.get('tab');
-  const explicitTab = ['overview', 'work', 'decisions', 'agents', 'contributors'].includes(tab ?? '') ? tab : null;
+  const explicitTab = ['overview', 'work', 'decisions', 'agents', 'learning', 'contributors'].includes(tab ?? '') ? tab : null;
   if (itemId && (explicitTab === null || explicitTab === 'work')) {
     return id(itemId) ? { kind: 'work-item', id: itemId } : null;
   }

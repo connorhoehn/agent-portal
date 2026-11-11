@@ -84,6 +84,13 @@ export const OUTCOME_TONE: Record<RunOutcome, 'success' | 'danger' | 'neutral' |
   done: 'success', failed: 'danger', cancelled: 'neutral', 'needs-review': 'warning',
 };
 
+/** Where a run's debrief stands, in a few words for a table cell; '' when none was decided. */
+export const DEBRIEF_WORD: Record<DebriefState, string> = {
+  skipped: 'Skipped', requested: 'Asked', filed: 'Filed a runbook', 'nothing-to-keep': 'Nothing to keep',
+  'lint-failed': 'Failed lint', refused: 'Refused', expired: 'Expired',
+};
+export const debriefWords = (r: Pick<RunReportRow, 'debrief'>): string => (r.debrief ? DEBRIEF_WORD[r.debrief.state] : '');
+
 /** Who ran it: the bot's name when the façade knows one, else "Your machine" or the executor's word. */
 export function whoRan(executor: RunExecutor, botName: string | null | undefined): string {
   if (executor === 'local') return EXECUTOR_WORD.local;

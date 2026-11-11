@@ -170,6 +170,30 @@ function upNextOf(projectId: string, row: FlatWorkItem, avatarUrl: string | null
 
 export const UP_NEXT_LIMIT = 3;
 
+// ─── What the learning loop wants from this initiative ───────────────────────
+
+/** One more line under "Needs attention": a count from the learning loop and the Learning tab it opens. */
+export interface LearningAttention { id: 'failed-runs' | 'proposals'; text: string; href: string }
+
+const WEEK_MS = 7 * 86_400_000;
+
+/** The reports that ended failed in the seven days before `now`. A report with no readable end time is not counted. */
+export function failedLastWeek(reports: ReadonlyArray<{ outcome: string; endedAt: string }>, now: number): number {
+  return reports.filter((r) => {
+    const ended = Date.parse(r.endedAt);
+    return r.outcome === 'failed' && Number.isFinite(ended) && ended <= now && now - ended < WEEK_MS;
+  }).length;
+}
+
+/** The learning lines for the attention list; a count of 0 or an unreadable one (null) adds none. */
+export function learningAttention(projectId: string, counts: { failedRuns: number | null; proposals: number | null }): LearningAttention[] {
+  const href = `/iq/projects/${encodeURIComponent(projectId)}?tab=learning`;
+  const out: LearningAttention[] = [];
+  if (counts.failedRuns) out.push({ id: 'failed-runs', text: `${plural(counts.failedRuns, 'run')} failed in the last seven days`, href });
+  if (counts.proposals) out.push({ id: 'proposals', text: `${plural(counts.proposals, 'runbook proposal')} awaiting review`, href });
+  return out;
+}
+
 // ─── The whole tab ───────────────────────────────────────────────────────────
 
 /** The /work read as the page holds it. */

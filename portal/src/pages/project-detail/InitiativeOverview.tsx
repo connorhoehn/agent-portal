@@ -29,7 +29,7 @@ import {
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { relativeTime } from '../../lib/relativeTime';
 import { RecordLink } from '../decisions/RecordLink';
-import { ATTENTION_NONE, type OverviewModel, type OverviewStat } from './overviewModel';
+import { ATTENTION_NONE, type LearningAttention, type OverviewModel, type OverviewStat } from './overviewModel';
 import { DECISION_TONE } from './projectFormat';
 import type { ProjectDecision } from './types';
 
@@ -61,8 +61,11 @@ export function InitiativeOverview({
   onRetry,
   recent,
   decisions,
+  learning = [],
 }: {
   model: OverviewModel;
+  /** Lines from the learning loop (failed runs this week, proposals awaiting review), each opening the Learning tab. */
+  learning?: LearningAttention[];
   /** The initiative's decisions; the ones still waiting are listed, each opening its record. */
   decisions?: ProjectDecision[] | null;
   /** The Recent activity list (a compact `RecentWorkActivity`); the canvas lives on the Activity tab. */
@@ -105,16 +108,16 @@ export function InitiativeOverview({
       )}
       {model.state === 'ready' && (
         <>
-          {model.attention.length > 0 && <PageSection size="sm"
+          {(model.attention.length > 0 || learning.length > 0) && <PageSection size="sm"
             title="Needs attention"
             // The count is the rows below it, never a stored total. It reads
             // as the pale-indigo pill of the mockup (ui-components 2.396.0).
-            count={model.attention.length}
+            count={model.attention.length + learning.length}
             countTone="primary"
             data-testid="overview-attention-section"
           >
-            {
-              <ActionRowList
+            <Stack gap="sm">
+              {model.attention.length > 0 && <ActionRowList
                 aria-label="Needs attention"
                 tone="warning"
                 columns={COLUMNS}
@@ -133,8 +136,15 @@ export function InitiativeOverview({
                 }))}
                 onOpen={hrefOf(model.attention)}
                 data-testid="overview-attention"
-              />
-            }
+              />}
+              {learning.length > 0 && <ActionRowList
+                aria-label="Needs attention from the learning loop"
+                tone="warning"
+                items={learning.map((l) => ({ id: l.id, title: l.text }))}
+                onOpen={hrefOf(learning)}
+                data-testid="overview-learning-attention"
+              />}
+            </Stack>
           </PageSection>}
 
           {waiting.length > 0 && <PageSection size="sm" title="Waiting on a decision" count={waiting.length} data-testid="overview-decisions">

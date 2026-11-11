@@ -36,7 +36,9 @@ import { EnvironmentsRailCard } from '../../components/marketplace/InitiativeEnv
 import { TEMPLATE_TONE, triggerSummary, type BotRun } from '../bots/BotsPage';
 import { RANGE_DAYS, runTableRows, type RunTableRow } from './agentRunsModel';
 import { flattenWorkItems } from './projectFormat';
-import { runsListHref } from '../iq/runsModel';
+import { OUTCOME_LABEL, OUTCOME_TONE, runsListHref, type RunReportRow } from '../iq/runsModel';
+import { runHref } from '../iq/runRows';
+import { RecordLink } from '../decisions/RecordLink';
 import type { Codebase, WorkItemTree } from './types';
 
 type AgentActivity = ReturnType<typeof useInitiativeAgentActivity>;
@@ -71,10 +73,13 @@ export function InitiativeRail({
   codebases,
   workTree,
   onOpenLog,
+  onOpenLearning,
 }: {
   initiativeId: string | undefined;
   /** Opens the run's log in the right pane; the link keeps its page href for a new tab. */
   onOpenLog?: (jobId: string) => void;
+  /** Opens the initiative's Learning tab, where the runs show what each one learned. */
+  onOpenLearning?: () => void;
   /** The bot roster for the Bots view (gated; `botsError` says when not readable). */
   activity: AgentActivity;
   codebases: Codebase[];
@@ -94,6 +99,15 @@ export function InitiativeRail({
   const { data, error, isLoading } = useFetch<InitiativeRunsResponse>(
     initiativeId ? `/api/bots/initiative-runs?orgProjectId=${encodeURIComponent(initiativeId)}` : null,
     15_000,
+  );
+  // A bot run's outcome is its run report's: joined by the queue job id, which is the report's run ref. The read is
+  // gated to the roles that read run reports, so for anyone else it fails quietly and the table keeps its own status.
+  const reportsRead = useFetch<{ reports: RunReportRow[] }>(
+    initiativeId ? `/api/run-reports?initiative=${encodeURIComponent(initiativeId)}&limit=200` : null, 15_000,
+  );
+  const reportByJob = useMemo(
+    () => new Map((reportsRead.error ? [] : reportsRead.data?.reports ?? []).map((r) => [r.runRef, r] as const)),
+    [reportsRead.data, reportsRead.error],
   );
   const runsError = error ?? (data?.degraded ? data.error ?? 'degraded' : null);
   const workTitles = useMemo(
@@ -138,6 +152,11 @@ export function InitiativeRail({
       render: (r) => (
         <Inline gap="xs" wrap>
           <StatusPill variant="text" tone={pillTone(runStateChip(r.run.status).tone)} label={r.run.status} className="shrink-0" />
+          {r.run.jobId && reportByJob.get(r.run.jobId) && (
+            <RecordLink to={runHref(r.run.jobId)} data-testid="agents-run-report">
+              <Chip tone={OUTCOME_TONE[reportByJob.get(r.run.jobId)!.outcome]} size="xs">{OUTCOME_LABEL[reportByJob.get(r.run.jobId)!.outcome]}</Chip>
+            </RecordLink>
+          )}
           {r.outcome && <T size="xs" tone="secondary" className="block max-w-[280px] truncate" title={r.outcome}>{r.outcome}</T>}
           {r.run.outcome?.prUrl && <ExternalLink href={r.run.outcome.prUrl} external>PR</ExternalLink>}
         </Inline>
@@ -204,6 +223,7 @@ export function InitiativeRail({
         </Inline>
         <Inline gap="sm" align="center" wrap className="min-w-0">
           {meta.some(Boolean) && <MetaLine size="sm" tone="secondary" items={meta} data-testid="initiative-agents-meta" />}
+          {view === 'runs' && onOpenLearning && <Button variant="link" onClick={onOpenLearning} data-testid="initiative-learning-link">What these runs learned</Button>}
           {view === 'runs' && initiativeId && <Button variant="link" onClick={() => navigate(runsListHref({ initiative: initiativeId }))} data-testid="initiative-runs-link">All runs for this initiative</Button>}
         </Inline>
       </Inline>

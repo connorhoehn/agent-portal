@@ -46,7 +46,7 @@ import { LAB_CALLBACK_SERVICE_AUTH, hasServiceAuth, requireServiceAuth } from '.
 import { RUN_TOKEN_HEADER, runTokenMatches } from '../lib/run-token.js';
 import type { Session } from '../lib/session.js';
 import { REVIEW_OVERRIDE_ROLES, actorId, mayReviewRunbook, type ReviewVerdict } from '../lib/runbook-review.js';
-import { notifyDecided, notifyFiled, newProposalScope, proposalArea, reviewableOpenCount } from '../lib/runbooks/notices.js';
+import { notifyDecided, notifyFiled, newProposalScope, proposalArea, reviewableOpenCount, reviewScopeOf } from '../lib/runbooks/notices.js';
 import { unifiedDiff } from '../lib/unified-diff.js';
 import { loadCandidates } from '../lib/session-brief-preview.js';
 import { clock } from '../mock/core/clock.js';
@@ -494,6 +494,24 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const runbookId = str(req.query['runbook_id']);
     const cursor = str(req.query['cursor']);
     const limit = pageLimit(req.query['limit']);
+    // An initiative narrows the same list the caller may already read: a proposal belongs to it when its
+    // proposed scope, its target runbook's scope or its area resolves to that initiative.
+    const initiative = str(req.query['initiative']);
+    if (initiative) {
+      const mine: RunbookProposal[] = [];
+      let next: string | undefined;
+      do {
+        const part = await s.listProposals({ ...(status ? { status } : {}), ...(runbookId ? { runbook_id: runbookId } : {}), ...(next ? { cursor: next } : {}) });
+        for (const p of part.items) {
+          if (kind && p.kind !== kind) continue;
+          const rs = await reviewScopeOf(s, p);
+          if (rs && ((rs.scope.kind === 'initiative' && rs.scope.ref === initiative) || rs.area === initiative)) mine.push(p);
+        }
+        next = part.next ?? undefined;
+      } while (next);
+      res.json({ proposals: mine.slice(0, limit ?? 200).map((p) => proposalView(p)), next: null });
+      return;
+    }
     const page = await s.listProposals({
       ...(status ? { status } : {}), ...(runbookId ? { runbook_id: runbookId } : {}),
       ...(cursor ? { cursor } : {}), ...(limit ? { limit } : {}),

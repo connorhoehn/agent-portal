@@ -135,3 +135,28 @@ describe('expiry notice', () => {
     expect(notifyMock.mock.calls[0][1].title).toContain('expires in');
   });
 });
+
+describe('the proposal list narrowed to an initiative', () => {
+  it('keeps an edit of that initiative\'s runbook and drops another initiative\'s', async () => {
+    const mine = (await file(USERS.proposer!)).body.proposal.id;
+    const other = await request(appAs(USERS.proposer!)).post('/api/runbooks/proposals')
+      .send({ kind: 'edit', runbook_id: 'rb-sso-new-origin', markdown: EDIT_MD, rationale: 'A different initiative.' });
+    expect(other.status).toBeLessThan(500);
+    const ids = async (initiative: string, user = USERS.leader!) =>
+      ((await request(appAs(user)).get(`/api/runbooks/proposals?initiative=${initiative}`)).body.proposals as Array<{ id: string }>).map((p) => p.id);
+    expect(await ids('p-auth')).toEqual([mine]);
+    expect(await ids('p-nowhere')).toEqual([]);
+  });
+
+  it('is open to the same readers as the unfiltered list and refuses the same callers', async () => {
+    await file(USERS.proposer!);
+    const asReader = await request(appAs(USERS.smeOther!)).get('/api/runbooks/proposals?initiative=p-auth');
+    expect(asReader.status).toBe(200);
+    expect(asReader.body.proposals).toHaveLength(1);
+    const app = express();
+    app.use('/api/runbooks', createRunbooksRouter({ store: () => store }));
+    app.use(errorHandler);
+    const plain = (await request(app).get('/api/runbooks/proposals')).status;
+    expect((await request(app).get('/api/runbooks/proposals?initiative=p-auth')).status).toBe(plain);
+  });
+});

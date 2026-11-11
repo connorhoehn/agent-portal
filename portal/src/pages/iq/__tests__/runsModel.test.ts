@@ -60,3 +60,12 @@ describe('runsModel', () => {
     assert.equal(reportsQuery({ executor: '', initiative: '', outcome: '', debrief: '', workItem: 'wi-1', runbook: 'rb-a' }), '?workItem=wi-1&runbook=rb-a&limit=100');
   });
 });
+
+describe('debriefWords', () => {
+  it('names where a debrief stands, and nothing when none was decided', async () => {
+    const { debriefWords } = await import('../runsModel.ts');
+    assert.equal(debriefWords({ debrief: null }), '');
+    assert.equal(debriefWords({ debrief: { state: 'filed' } as never }), 'Filed a runbook');
+    assert.equal(debriefWords({ debrief: { state: 'nothing-to-keep' } as never }), 'Nothing to keep');
+  });
+});

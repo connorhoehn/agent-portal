@@ -76,7 +76,8 @@ import { DecisionQueue } from './project-detail/DecisionQueue';
 import { InitiativeOverview } from './project-detail/InitiativeOverview';
 import { InitiativeRail } from './project-detail/InitiativeRail';
 import { NewItemForm, type NewItemDraft } from './project-detail/NewItemForm';
-import { buildOverview } from './project-detail/overviewModel';
+import { buildOverview, failedLastWeek, learningAttention } from './project-detail/overviewModel';
+import { InitiativeLearning } from './project-detail/InitiativeLearning';
 import {
   flattenWorkItems,
   hasActiveGrantOnInitiative,
@@ -138,8 +139,8 @@ import type { WorkThread } from './projects/workThread';
 // off this module keeps working; the implementation now lives in projectFormat.
 export { hasActiveGrantOnInitiative };
 
-type InitiativeTab = 'overview' | 'work' | 'docs' | 'decisions' | 'agents' | 'contributors' | 'activity';
-const TABS: readonly InitiativeTab[] = ['overview', 'work', 'docs', 'decisions', 'agents', 'contributors', 'activity'];
+type InitiativeTab = 'overview' | 'work' | 'docs' | 'decisions' | 'agents' | 'learning' | 'contributors' | 'activity';
+const TABS: readonly InitiativeTab[] = ['overview', 'work', 'docs', 'decisions', 'agents', 'learning', 'contributors', 'activity'];
 
 /** Client-side navigation back to the list — a `window.location` assignment on
  *  an error card would drop the SPA and reload the whole bundle. */
@@ -562,6 +563,17 @@ function ProjectDetailPage() {
   // per device.
   const headerDensity = useHeaderDensity({ contentKind: 'detail', headerId: 'initiative' });
 
+  // What the learning loop wants from this initiative, for the overview's "Needs attention": read only while
+  // the Overview is showing, and an unreadable count (a role the route refuses) adds no line.
+  const learningRuns = useFetch<{ reports: Array<{ outcome: string; endedAt: string }> }>(
+    tab === 'overview' && id ? `/api/run-reports?initiative=${encodeURIComponent(id)}&outcome=failed&limit=200` : '');
+  const learningProposals = useFetch<{ proposals: Array<{ status: string; expired?: boolean }> }>(
+    tab === 'overview' && id ? `/api/runbooks/proposals?initiative=${encodeURIComponent(id)}&status=open&limit=200` : '');
+  const learningLines = useMemo(() => learningAttention(id ?? '', {
+    failedRuns: learningRuns.error || !learningRuns.data ? null : failedLastWeek(learningRuns.data.reports, Date.now()),
+    proposals: learningProposals.error || !learningProposals.data ? null : learningProposals.data.proposals.filter((p) => p.status === 'open' && !p.expired).length,
+  }), [id, learningRuns.data, learningRuns.error, learningProposals.data, learningProposals.error]);
+
   if (projLoading) {
     return <PageSection title="Initiative" size="lg"><LoadingState label="Loading initiative…" /></PageSection>;
   }
@@ -716,6 +728,7 @@ function ProjectDetailPage() {
         // A count only when the roster was readable — "0" for a role that
         // cannot read bots would claim there are none.
         { id: 'agents', label: 'Agents', count: mayReadAgentWork && !agentActivity.botsError ? agentActivity.bots?.length : undefined },
+        { id: 'learning', label: 'Learning' },
         { id: 'contributors', label: 'Contributors', count: contributors.length },
         { id: 'activity', label: 'Activity' },
       ]}
@@ -848,6 +861,7 @@ function ProjectDetailPage() {
       <DropdownMenu trigger={<MoreIcon size={16} />} triggerLabel="More initiative views" triggerVariant="link" sections={[{ items: [
         { label: 'Overview', onSelect: () => setTab('overview') },
         { label: 'Agents', onSelect: () => setTab('agents') },
+        { label: 'Learning', onSelect: () => setTab('learning') },
         { label: 'Contributors', onSelect: () => setTab('contributors') },
       ] }]} />
     </Inline>
@@ -924,6 +938,7 @@ function ProjectDetailPage() {
         {tab === 'overview' && (
           <InitiativeOverview
             model={overview}
+            learning={learningLines}
             decisions={decisions ?? null}
             onOpen={(href) => {
               const [path, childSearch] = href.split('?');
@@ -959,6 +974,7 @@ function ProjectDetailPage() {
               {searchParams.has('recording') ? <InitiativeRecordings projectId={project.id} projectName={project.name} onOpen={openRecording} />
                 : <InitiativeFiles projectId={project.id} projectName={project.name} itemIds={treeRead && !workFailure ? [...new Set([...workTree.map(epic => epic.id), ...allRows.map(row => row.id)])] : null} workspaceHref={workspaceHref} onOpenRecording={openRecording} />}
             </>}
+            {tab === 'learning' && <InitiativeLearning initiativeId={project.id} />}
             {tab === 'agents' && (
               <InitiativeRail
                 initiativeId={id}
@@ -967,6 +983,7 @@ function ProjectDetailPage() {
                 runs={marketplaceRuns}
                 workTree={workTree}
                 onOpenLog={(jobId) => paneControl.open('log', jobId)}
+                onOpenLearning={() => setTab('learning')}
               />
             )}
             {tab === 'contributors' && (

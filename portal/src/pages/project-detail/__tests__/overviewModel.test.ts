@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildOverview, headerStatsLine, money, overviewStats, peopleGroups } from '../overviewModel.ts';
+import { buildOverview, failedLastWeek, headerStatsLine, learningAttention, money, overviewStats, peopleGroups } from '../overviewModel.ts';
 import { OBS_PROJECT, OBS_TREE, node } from './obsFixture.ts';
 
 test('stats line: "18 / 52 points delivered", "2 agents running", "$1.73 of $95 spent"', () => {
@@ -119,4 +119,25 @@ test('both overview lists preserve contributor portraits by id, including missin
   const missing = buildOverview(project, { tree });
   if (missing.state !== 'ready') throw new Error(missing.state);
   assert.ok(missing.upNext.every(row => row.assigneeAvatarUrl === null));
+});
+
+test('failedLastWeek counts failed reports ended in the last seven days only', () => {
+  const now = Date.parse('2026-11-11T12:00:00Z');
+  const day = 86_400_000;
+  const at = (ago: number) => new Date(now - ago).toISOString();
+  assert.equal(failedLastWeek([
+    { outcome: 'failed', endedAt: at(day) },
+    { outcome: 'failed', endedAt: at(6.9 * day) },
+    { outcome: 'failed', endedAt: at(8 * day) },
+    { outcome: 'done', endedAt: at(day) },
+    { outcome: 'failed', endedAt: 'not a date' },
+    { outcome: 'failed', endedAt: at(-day) },
+  ], now), 2);
+});
+
+test('learningAttention adds a line per non-zero count, each linking to the Learning tab', () => {
+  assert.deepEqual(learningAttention('p-1', { failedRuns: 0, proposals: null }), []);
+  const lines = learningAttention('p 1', { failedRuns: 1, proposals: 2 });
+  assert.deepEqual(lines.map((l) => l.text), ['1 run failed in the last seven days', '2 runbook proposals awaiting review']);
+  assert.ok(lines.every((l) => l.href === '/iq/projects/p%201?tab=learning'));
 });
