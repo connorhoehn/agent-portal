@@ -836,3 +836,26 @@ The design is `docs/learning-loop-design.md`. Lane A (the run report) is built o
 - A job the stale reaper fails has no report (the reaper is a SQL update with no hook).
 - The run page does not show the report yet (lane E).
 - `lib/runbooks/skill.ts` writes only `name` and `description`; its parser accepts and drops any other frontmatter key, so nothing yet rejects a non-portable key (lane C owns the lint).
+
+### Lane B: budgets (branch `lane-b-budgets`)
+
+Built:
+
+- **Threshold bells.** Initiative allocations, personal monthly budgets and sprint envelopes announce 50, 80 and 100 percent (`BUDGET_THRESHOLDS` changes the list). One bell item per subject, threshold and period, kept by a stored mark (`budget_threshold_marks`), so replicas, restarts and a refund followed by a re-cross never send a second. The owner hears it; org leaders also hear 100. Evaluated after every reservation and every settle, and by the reaper sweep, which now shares the same marks. A failed mark or bell never fails a reservation, and the hard cap is unchanged. Code: `middleware/src/lib/budget-thresholds.ts`, `budget-threshold-rules.ts`.
+- **Budgets page.** Each initiative, envelope and person row shows its mark; "Show: Near or at cap" (`?show=near`) filters to rows at 80 percent or more; a bell item opens its row (`?row=`). New reports: People (personal budgets) and Lines (the learning line and local compute).
+- **Local compute claim.** The claim path consults the fleet and initiative kill switches and the run limits, and refuses with the same reason codes as every other dispatch. It takes a zero-dollar hold: nothing is billed and nothing counts toward a cap. The worker's own cost figure is stored as `reported_usd` and shown on Lines as "Reported, not billed".
+- **Learning line.** A monthly organisation cap for server-side distillation (`LEARNING_BUDGET_USD`, default $5; org leaders change it on Lines). `reserveLearningSpend({ runRef, estimate })` in `middleware/src/lib/learning-budget.ts` returns `{ ok: true, holdId }` or `{ ok: false, reason: 'learning-budget' | 'paused' | 'unavailable' | 'refused' | 'limited', message }`; `settleLearningSpend` and `releaseLearningSpend` close it. Local distillation does not draw on it.
+- **Journey.** `npm run journey:learning-loop` proves acceptance item 9: Auth Migration crosses 80 percent, Vera gets one bell item, and it opens the Budgets row with the 80 percent mark.
+
+Decided differently from the design, and why:
+
+- The percentage is of the allocation, not the hard cap: the allocation is what owners plan against, and the hard cap already refuses at its own line.
+- A reservation that crosses two thresholds sends two items (50 and 80), one per mark, rather than only the higher one.
+- Sprint envelope marks count the window's spend only, not money still held, because the envelope read has no held figure without loading the full ledger.
+- In the Halyard story Cost Optimization's allocation is per sprint ($2.20, 81 percent spent), because monthly mock spend moves with the day of the month and could not stay just over 80. Two budget tests name that one exception.
+- A refused local claim puts the job back in the queue, so a paused initiative's job can sit at the head of the queue and be refused on every poll.
+
+Open:
+
+- Nothing seeds local compute ledger entries, so Lines shows $0 reported until a worker runs.
+- At 1280 wide and on phones the initiatives table shows in its card form (under 40rem of width beside three rails). The mark is there, but the page needs scrolling to find a highlighted row; the row is not scrolled into view.
