@@ -126,7 +126,8 @@ function ReadTab({ runbook, version, names, onOpen }: { runbook: RunbookRow; ver
           {runbook.retired.reason}
         </Banner>
       )}
-      {!runbook.retired && runbook.health.status === 'drifting' && (
+      {/* Drifting, or unproven after a failed run: whenever health carries a warning (decision 23). */}
+      {!runbook.retired && runbook.health.status !== 'proven' && runbook.health.warning && (
         <Banner variant="warning" layout="callout" icon title="Recent runs have stumbled on this runbook" data-testid="runbook-drifting">
           {runbook.health.warning ?? runbook.health.reason}
         </Banner>

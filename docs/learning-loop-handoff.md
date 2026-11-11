@@ -52,7 +52,9 @@ A job the stale sweep fails for good now has a run report (11 November). `reapSt
 
 The seeded scheduled run's brief now carries the runbooks it was given (11 November). `mock/runbooks.seed.ts` chooses them the way the dispatcher does for a scheduled job, through the real `selectRunbooks` with the bot's mission standing for the task in the auth-service repo on Auth Migration, each runbook's health as it was when the brief was frozen. Two are in scope and share words with the mission: the CSRF-gate runbook first, the tenant cutover runbook second; the run's application rows say it followed the first and did not use the second (a new `not_used` row), so the brief, the Runbooks section of the run page and the evidence agree. The fixture test pins the pick, the reasons and the rows.
 
-Next actionable work, in order: the drift warning is printed for `drifting` only, not for an unproven runbook whose last run failed; nothing rejects a non-portable frontmatter key in a runbook (the parser drops unknown keys).
+The brief's health warning now covers an unproven runbook whose last run failed, not only a drifting one (11 November, decision 23): `brief.ts` prints the line whenever health carries a warning ("Health: unproven." or "Health: drifting."), the brief preview's `warning` follows, and the runbook's record shows the same callout; a runbook never run still carries none. `health.ts` already wrote the text, so nothing new is derived.
+
+Next actionable work: nothing rejects a non-portable frontmatter key in a runbook (the parser drops unknown keys).
 
 ## Rules that bind this work
 

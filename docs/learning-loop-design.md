@@ -126,7 +126,7 @@ How the two are chosen (`selectRunbooks`, as it stands):
 - Then by score: scope, label overlap, token similarity between the work item and the runbook's title and when-to-use lines, health.
 - A runbook with no label hit and no shared terms is not given. Giving nothing is a valid result and is shown as such.
 
-Each given runbook appears in the brief under its title with the reason it was chosen ("pinned", "labels auth, cutover"), and with one warning line when its health is drifting (the warning text already exists, `middleware/src/lib/runbooks/health.ts`). The choice is stored on the frozen brief as `offer.runbooks`, the shape the report reader already expects (`record.ts`, `offeredFromBrief`). The work item's brief preview shows the same thing before dispatch.
+Each given runbook appears in the brief under its title with the reason it was chosen ("pinned", "labels auth, cutover"), and with one warning line when its health carries one: drifting, or unproven after a failed run (the warning text already exists, `middleware/src/lib/runbooks/health.ts`; decision 23). The choice is stored on the frozen brief as `offer.runbooks`, the shape the report reader already expects (`record.ts`, `offeredFromBrief`). The work item's brief preview shows the same thing before dispatch.
 
 Embeddings are not used. The library is small, the lexical score is explainable in a phrase a reviewer can read, and it runs with no model.
 

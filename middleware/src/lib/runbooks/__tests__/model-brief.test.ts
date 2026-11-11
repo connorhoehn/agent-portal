@@ -191,6 +191,22 @@ describe('assembleBrief (v3)', () => {
     expect(sso).not.toContain('Health:');
   });
 
+  it('an unproven runbook whose last run failed carries its warning line too; one never run carries none (decision 23)', () => {
+    const failedOnce: RunbookHealth = {
+      status: 'unproven', reason: 'v1: 1 run, none followed it to the end.',
+      warning: 'Last run failed at step 3: the callback URL was still the old domain — check that step before relying on it.',
+    };
+    const given = [TWO[0]!, { ...TWO[1]!, health: failedOnce }];
+    const b = assembleBrief(briefInput({ runbooks: given }));
+    expect(b.markdown).toContain(`Health: unproven. <untrusted-${TOKEN} kind="health-warning">${failedOnce.warning}${CLOSE}`);
+    expect(b.offer!.runbooks[1]).toMatchObject({ id: 'rb-tenant-cutover', health: 'unproven', warning: failedOnce.warning });
+
+    const neverRun = assembleBrief(briefInput({ runbooks: [TWO[0]!, { ...TWO[1]!, health: UNPROVEN }] }));
+    const block = neverRun.markdown.slice(neverRun.markdown.indexOf('### 2.'));
+    expect(block).not.toContain('Health:');
+    expect(neverRun.offer!.runbooks[1]).toMatchObject({ health: 'unproven', warning: null });
+  });
+
   it('gives at most two; the rest are omitted for the limit, not printed', () => {
     const three = selectRunbooks({ ...WI, pinned_runbook_ids: ['rb-sso-new-origin', 'rb-flaky-test-rerun-diff'] }, CANDIDATES).selected;
     expect(three).toHaveLength(3);

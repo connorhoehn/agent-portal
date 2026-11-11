@@ -877,7 +877,7 @@ Decided where the design was silent:
 
 - A repo trigger alone no longer gives a runbook: the design gives nothing without a label hit or a shared term, and a repo trigger would hand every task in a repository the same runbook.
 - Decisions are capped at 1,500 tokens so a long decision log cannot crowd out attempts and runbooks; they are still dropped whole, oldest first.
-- The drift warning is printed for `drifting` only, not for an unproven runbook whose last run failed.
+- ~~The drift warning is printed for `drifting` only, not for an unproven runbook whose last run failed.~~ *Done 11 November (decision 23): the brief, the preview and the runbook record print the warning whenever health carries one.*
 - At most five pins per item; two are given and the rest wait.
 - A job with no work item is matched on its title and prompt, without pins or previous attempts.
 - The evidence's "followed" is what the run said in its report's `runbooks` entry (lane C adds it); until then every run is "unsaid", and the session's observed load is counted separately as `loaded`. Proposal counts are by stored status; "expired" waits for lane C's expiry.

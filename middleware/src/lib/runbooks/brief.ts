@@ -208,15 +208,21 @@ function attemptsSection(f: Fence, as: BriefPreviousAttempt[]): string {
   ].join('\n\n');
 }
 
-/** The drift warning a brief prints beside a runbook, or null (drifting only, per the design). */
-export function driftWarning(r: Pick<SelectedRunbook, 'health'>): string | null {
-  return r.health.status === 'drifting' && r.health.warning ? r.health.warning : null;
+/**
+ * The health warning a brief prints beside a runbook, or null. A drifting runbook (followed once,
+ * then a run failed or deviated, or long unfollowed) and an unproven one whose last run failed
+ * both carry one; a proven runbook never does. The unproven case was left out at first ("drifting
+ * only"): an unproven runbook whose only run failed is the riskier of the two, and health.ts
+ * already wrote its warning, so the brief prints it too (decision 23).
+ */
+export function healthWarning(r: Pick<SelectedRunbook, 'health'>): string | null {
+  return r.health.status !== 'proven' && r.health.warning ? r.health.warning : null;
 }
 
 function runbookBlock(f: Fence, r: SelectedRunbook, n: number): string {
   const lines = [`### ${n}. ${r.title} (${r.runbook_id} v${r.version})`, `Given because: ${readableReason(r.reasons)}.`];
-  const warning = driftWarning(r);
-  if (warning) lines.push(`Health: drifting. ${f.wrap(warning, { kind: 'health-warning', inline: true, maxChars: WHOLE })}`);
+  const warning = healthWarning(r);
+  if (warning) lines.push(`Health: ${r.health.status}. ${f.wrap(warning, { kind: 'health-warning', inline: true, maxChars: WHOLE })}`);
   lines.push(f.wrap(r.markdown.trimEnd(), { kind: 'runbook', source: `${r.runbook_id} v${r.version}`, maxChars: WHOLE }));
   return lines.join('\n');
 }
@@ -355,7 +361,7 @@ export function assembleBrief(input: AssembleBriefInput): SessionBrief {
 
   const offered: BriefOfferedRunbook[] = given.map((r) => ({
     id: r.runbook_id, version: r.version, title: r.title, reason: readableReason(r.reasons),
-    pinned: r.pinned, health: r.health.status, warning: driftWarning(r),
+    pinned: r.pinned, health: r.health.status, warning: healthWarning(r),
   }));
   const offer: BriefOffer = {
     runbooks: offered,

@@ -13,7 +13,7 @@ export { lintRunbook, lintErrors, bundlePaths, declaresRuntime, SKILL_COLLISION_
 export { similarity, tokens, sharedTokens, runbookTerms, scopesOverlap, findSimilar, DEDUPE_THRESHOLD, type SimilarRunbook } from './similarity.js';
 export { selectRunbooks, scopeMatch, readableReason, noneReason, SCOPE_WEIGHT, MAX_GIVEN_RUNBOOKS, type WorkItemContext, type RunbookCandidate, type SelectedRunbook, type Selection } from './select.js';
 export {
-  assembleBrief, briefBudget, skillsPointer, fenceNote, driftWarning, derivedFenceToken, ASSEMBLER_VERSION, DEFAULT_BRIEF_BUDGET,
+  assembleBrief, briefBudget, skillsPointer, fenceNote, healthWarning, derivedFenceToken, ASSEMBLER_VERSION, DEFAULT_BRIEF_BUDGET,
   DECISIONS_CAP_TOKENS, MAX_PREVIOUS_ATTEMPTS, ATTEMPT_LIMITS,
   type AssembleBriefInput, type BriefPreviousAttempt, type BriefSkillLibrary, type BriefWorkItem, type BriefInitiative, type BriefDecision, type BriefSkill,
 } from './brief.js';
