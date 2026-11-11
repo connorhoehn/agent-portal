@@ -111,8 +111,6 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
       case 'library':
         if (!b) return [{ label: 'Build' }, { label: 'Agent library' }];
         return [{ label: 'Build' }, { label: 'Agent library', path: '/iq/library' }, { label: shortId(b), id: b }];
-      case 'promotions': return [{ label: 'Build' }, { label: 'Runbooks', path: '/iq/runbooks' }, { label: 'Proposals' }];
-      case 'release': return [{ label: 'Build' }, { label: 'Local compute', path: '/iq/local-compute' }, { label: 'Configuration' }];
       case 'activity': return [{ label: 'Operate' }, { label: 'Work graph' }];
       // The rail's groups (Layout.tsx NAV_ITEMS): Runs under Operate,
       // Communication under Org. A document opens from Search; a status deck from its
@@ -153,10 +151,7 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
         if (!b) return [...home, { label: 'Library' }];
         return [...home, { label: 'Library', path: '/iq/runbooks' }, { label: shortId(b), id: b }];
       }
-      case 'distillation': return [{ label: 'Build' }, { label: 'Runbooks', path: '/iq/runbooks' }];
-      case 'local-compute': return b === 'configuration'
-        ? [{ label: 'Build' }, { label: 'Local compute', path: '/iq/local-compute' }, { label: 'Configuration' }]
-        : [{ label: 'Build' }, { label: 'Local compute' }];
+      case 'local-compute': return [{ label: 'Build' }, { label: 'Local compute' }];
       default:
         if (a && PROMPT_PAGES[a]) {
           return [{ label: 'Build' }, { label: 'Agent library', path: '/iq/library' }, { label: 'Prompts', path: '/iq/prompt-ops' }, { label: PROMPT_PAGES[a] }];

@@ -10,7 +10,6 @@ import type { Tenant } from './lib/tenants.generated';
 import { OptionalGatewayProvider } from './components/OptionalGatewayProvider';
 import { SharedNotificationsProvider } from './components/shell/SharedNotifications';
 // Eager: a redirect has nothing to lazy-load and must not flash a spinner.
-import RunbooksDistillationRedirect from './pages/runbooks/DistillationRedirect';
 import LegacyVoiceLogRedirect from './pages/logging/LegacyVoiceLogRedirect';
 import { ComputeHost } from './components/compute/ComputeHost';
 import { LoadingState } from '@connorhoehn/ui-components/shared';
@@ -614,7 +613,7 @@ export function App() {
               memory. One module frame, three destinations — Library (a runbook
               opens as a page: /iq/runbooks/:id), Proposals (/iq/runbooks/proposals/:pid
               is the review page) and Briefs (/iq/runbooks/briefs/:ref is a run's frozen
-              brief). Old /iq/distillation URLs redirect here. */}
+              brief). */}
           <Route path="runbooks" element={<Page element={<RunbooksModule />} />}>
             <Route index element={<Page element={<RunbooksLibraryTab />} />} />
             <Route path="proposals" element={<Page element={<RunbooksProposalsTab />} />} />
@@ -623,8 +622,6 @@ export function App() {
             <Route path="briefs/:ref" element={<Page element={<RunbooksBriefsTab />} />} />
             <Route path=":id" element={<Page element={<RunbooksLibraryTab />} />} />
           </Route>
-          <Route path="distillation" element={<Navigate to="/iq/runbooks" replace />} />
-          <Route path="distillation/*" element={<RunbooksDistillationRedirect />} />
           <Route path="local-compute" element={<Page element={<LocalComputePage />} />} />
           <Route path="designs" element={<Page element={<DesignsPage />} />} />
           <Route path="designs/:id" element={<Page element={<DesignsPage />} />} />

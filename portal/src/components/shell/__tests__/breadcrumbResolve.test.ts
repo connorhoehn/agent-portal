@@ -7,9 +7,9 @@ import { resolveBreadcrumbs } from '../breadcrumbResolve.ts';
 // header rhythm (title 16px under the trail) breaks on that page alone.
 const RAIL_PATHS = [
   '/iq/projects', '/iq/projects/p-observability', '/iq/sprints', '/iq/work', '/iq/work/findings', '/iq/work/queue',
-  '/iq/runbooks', '/iq/runbooks/proposals', '/iq/runbooks/briefs', '/iq/runbooks/rb-tenant-cutover', '/iq/distillation', '/iq/distillation/overview', '/iq/local-compute', '/iq/invoke', '/iq/explore', '/iq/scores', '/iq/scores/cohorts',
-  '/iq/library', '/iq/library/lib-stakeholder-email', '/iq/promotions', '/iq/designs', '/iq/designs/dr-1',
-  '/iq/release', '/iq/agents', '/iq/prompts', '/iq/history', '/iq/diff', '/iq/evaluations', '/iq/canary', '/iq/prompt-ops',
+  '/iq/runbooks', '/iq/runbooks/proposals', '/iq/runbooks/briefs', '/iq/runbooks/rb-tenant-cutover', '/iq/local-compute', '/iq/invoke', '/iq/explore', '/iq/scores', '/iq/scores/cohorts',
+  '/iq/library', '/iq/library/lib-stakeholder-email', '/iq/designs', '/iq/designs/dr-1',
+  '/iq/agents', '/iq/prompts', '/iq/history', '/iq/diff', '/iq/evaluations', '/iq/canary', '/iq/prompt-ops',
   '/admin/budgets', '/admin/projects', '/admin/devbox', '/admin/observability', '/admin/observability/invocations',
   '/admin/knowledge', '/admin/capabilities', '/admin/identity', '/admin/identity/users', '/admin/bots', '/admin/changes',
   '/assessment/teams', '/assessment/teams/t-1', '/assessment/submissions', '/assessment/reports', '/assessment/feedback',
@@ -61,16 +61,8 @@ test('a Work presentation trail names its files location and resolved entity wit
   ]);
 });
 
-test('configuration lives beneath Local compute, including its legacy address', () => {
-  for (const path of ['/iq/local-compute/configuration', '/iq/release']) {
-    assert.deepEqual(resolveBreadcrumbs(path).map((c) => c.label), ['Build', 'Local compute', 'Configuration']);
-    assert.equal(resolveBreadcrumbs(path)[1]?.path, '/iq/local-compute');
-  }
-});
-
 test('the Design rail pages sit under Design, and a library asset gets a third crumb', () => {
   assert.deepEqual(resolveBreadcrumbs('/iq/library').map((c) => c.label), ['Build', 'Agent library']);
-  assert.deepEqual(resolveBreadcrumbs('/iq/promotions').map((c) => c.label), ['Build', 'Runbooks', 'Proposals']);
   assert.equal(resolveBreadcrumbs('/iq/library/lib-stakeholder-email')[1]!.path, '/iq/library');
 });
 
