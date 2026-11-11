@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-11T17:01:49.400Z",
-  "serverHandlerSha": "e52befc7f762344b3e2e997ff3c97e467d0a1ab7cb4d1d2e1c8df19e8f9726f2",
+  "capturedAt": "2026-11-11T17:51:20.323Z",
+  "serverHandlerSha": "1db525f296bbfdfa0edc1f8696f64e2525594eb9a07371bb58f4d5cebc6312f6",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -7726,9 +7726,87 @@
       "shape": {
         "$": "object",
         "next": "null",
-        "reports": "array"
+        "reports": "array",
+        "reports[]": "object",
+        "reports[].briefId": "null|string",
+        "reports[].changes": "object",
+        "reports[].changes.changeRequestId": "null",
+        "reports[].changes.files": "array",
+        "reports[].cost": "object",
+        "reports[].cost.basis": "string",
+        "reports[].cost.billedUsd": "null|number",
+        "reports[].cost.reportedUsd": "null",
+        "reports[].createdAt": "string",
+        "reports[].endedAt": "string",
+        "reports[].executor": "string",
+        "reports[].failureCode": "null|string",
+        "reports[].initiativeId": "string",
+        "reports[].kept": "array",
+        "reports[].learned": "string",
+        "reports[].model": "null",
+        "reports[].obstacles": "array",
+        "reports[].obstacles[]": "string",
+        "reports[].outcome": "string",
+        "reports[].runRef": "string",
+        "reports[].runbooksOffered": "array",
+        "reports[].runbooksOffered[]": "object",
+        "reports[].runbooksOffered[].id": "string",
+        "reports[].runbooksOffered[].version": "number",
+        "reports[].runbooksUsed": "array",
+        "reports[].runbooksUsed[]": "object",
+        "reports[].runbooksUsed[].id": "string",
+        "reports[].runbooksUsed[].source": "string",
+        "reports[].runbooksUsed[].version": "number",
+        "reports[].selfReport": "string",
+        "reports[].startedAt": "string",
+        "reports[].summary": "string",
+        "reports[].verification": "array",
+        "reports[].verification[]": "object",
+        "reports[].verification[].command": "string",
+        "reports[].verification[].passed": "boolean",
+        "reports[].workItemId": "null|string"
       },
-      "values": {}
+      "values": {
+        "reports[].outcome": [
+          "done",
+          "failed"
+        ]
+      }
+    },
+    "GET /api/run-reports/recurring-obstacles": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "obstacles": "array",
+        "obstacles[]": "object",
+        "obstacles[].failedRuns": "number",
+        "obstacles[].firstSeen": "string",
+        "obstacles[].initiativeIds": "array",
+        "obstacles[].initiativeIds[]": "string",
+        "obstacles[].key": "string",
+        "obstacles[].lastSeen": "string",
+        "obstacles[].runRefs": "array",
+        "obstacles[].runRefs[]": "string",
+        "obstacles[].runs": "number",
+        "obstacles[].scope": "object",
+        "obstacles[].scope.kind": "string",
+        "obstacles[].scope.ref": "string",
+        "obstacles[].text": "string",
+        "obstacles[].workItems": "number",
+        "runsRead": "number",
+        "since": "string",
+        "windowDays": "number"
+      },
+      "values": {
+        "obstacles[].key": [
+          "repo:orgiq-auth-service:the required csrf check failed on the pull request and the evaluator named the lines it judged as weakening the check",
+          "repo:orgiq-auth-service:the tenant s origin was missing from its cognito app client s callback list so the hosted ui redirect still resolved to the old domain"
+        ],
+        "obstacles[].scope.kind": [
+          "repo"
+        ]
+      }
     },
     "GET /api/runbooks": {
       "persona": "orgiq/admin",
@@ -7981,6 +8059,11 @@
         "evidence.proposalsFromRuns.total": "number",
         "evidence.proposalsFromRuns.withdrawn": "number",
         "evidence.runbooks": "array",
+        "evidence.runbooks[]": "object",
+        "evidence.runbooks[].followedDone": "number",
+        "evidence.runbooks[].given": "number",
+        "evidence.runbooks[].runbookId": "string",
+        "evidence.runbooks[].saidFollowed": "number",
         "evidence.runs": "number",
         "evidence.runsGiven": "number",
         "evidence.runsSaidFollowed": "number",
@@ -10836,6 +10919,8 @@
     "outcome": {
       "open": false,
       "values": [
+        "done",
+        "failed",
         "followed",
         "pass",
         "requires_approval"
