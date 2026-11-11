@@ -931,3 +931,11 @@ Decided:
 Left:
 - Budgets at 1280 px: the highlighted row is selected inside the library's table (`selectedKey` is passed straight through in `InitiativesReport.tsx`), so scrolling it into view in card form belongs in ui-components, not a one-line change in the page. Not done.
 - The microVM debrief is proven against the fake devbox and the Python suite only; no real machine was started.
+
+### Lane E6+E7: removals and the Workflows rename
+
+**Removed** (decision 20). The Agent library's Skills and Insights kinds with their filters, seeded rows, eval sets and the `skill`/`insight` values in the prompt contract (and its SQL check); the seeded `insight` proposal (`promo-adot-configurator`). The initiative's lab memory rail (the `/api/lab/experiences` read and `lab remember`/`lab recall` stay). Local compute › Configuration, `pages/release/`, the `/iq/release` redirect, the session-bundle routes, provider and mock, and the palette, voice page and rail entries for them. The `/iq/promotions` and `/iq/distillation` redirects and their breadcrumb cases. The Changes entry in the Automate rail (`/admin/changes` stays).
+
+**Decided.** The pipelines "Runbooks" page is now Workflows at `/pipelines/workflows`; `/pipelines/runbooks` redirects. The API path `/api/pipelines/runbooks`, the `runbook` definition kind and the `runbook:<id>` ids stay: renaming them would move wire data and stored ids for no gain (the page's header comment says so). The runbook collision check no longer reads the session bundle: runbook ids carry the `rb-` prefix, which no bundle skill could collide with. The removed URLs are not redirected; they reach the not-found page and nothing links to them.
+
+**Left.** The Definitions page still filters by a `runbook` definition kind and the promotion helpers (`rungLabel`, `promotionVerdict`) still say "skill"; `runbooksModel.distillationRedirect` and its test stay in `pages/runbooks/` (another lane's folder). The Automate rail still frames `/admin/changes`.

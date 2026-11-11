@@ -50,11 +50,11 @@
 //      quoted in middleware/src/mock/core/contract.ts.
 //
 //      WHAT CHANGED. This paragraph used to name eight provider domains (bots,
-//      sprints, grants, work-items, promotions, session-bundle, lab,
+//      sprints, grants, work-items, promotions, lab,
 //      prompt-evals) as holding their rows in arrays that register no fixture.
 //      All eight register one now — `bots`/`bot-runs`, `sprints`,
 //      `budget-grants`/`initiative-budgets`, `work-items`,
-//      `promotion-candidates`, `session-bundles`, `lab-experiences`/
+//      `promotion-candidates`, `lab-experiences`/
 //      `lab-consults`, `prompt-eval-cases`/`prompt-eval-runs` — so reset puts
 //      each of them back and the echo-back workaround is no longer needed
 //      there. `defineFixture` is what moved those routes onto the allowlist,
