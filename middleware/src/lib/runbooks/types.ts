@@ -127,6 +127,10 @@ export interface RunbookVersion {
   proposal_id: string | null;
   accepted_by: string | null;
   accepted_at: string | null;
+  /** Lane C: "accepted by its dispatcher, sole reviewer" — set only when nobody else could review it. */
+  accepted_as?: 'sole-reviewer-dispatcher' | null;
+  /** Lane C: written by a simulated run's hand-written fixture; every page marks it "Demo data". */
+  demo_data?: boolean;
   provenance: RunbookProvenance;
 }
 
@@ -156,7 +160,9 @@ export type LintRuleId =
   | 'R-rollback' | 'R-single-subject' | 'R-command-real' | 'R-length' | 'R-secrets'
   // R8 — bundles (files) and the skill each runbook becomes.
   | 'R-file-path' | 'R-file-size' | 'R-file-unreferenced' | 'R-file-missing' | 'R-script-header' | 'R-bundle-verify'
-  | 'R-skill-description' | 'R-skill-collision';
+  | 'R-skill-description' | 'R-skill-collision'
+  // Lane C — a runbook a run wrote: portable frontmatter only, never `allowed-tools`, no text aimed at its reader.
+  | 'R-frontmatter' | 'R-allowed-tools' | 'R-injection';
 
 export interface LintFinding {
   rule: LintRuleId;
@@ -184,8 +190,14 @@ export interface RunbookProposal {
   /** R8: a 'new' proposal's skill name from its SKILL.md draft (`.lab/keep/<name>`); the accept uses it as the id unless the reviewer names one. */
   proposed_id?: string;
   rationale: string;
+  /**
+   * Lane C: who wrote the proposal.
+   *   run     — a run's kept folder or its debrief (untrusted; reviewed before any run sees it);
+   *   person  — someone in the organisation;
+   *   system  — the library's own upkeep (a retire proposal filed when a report was saved).
+   */
   source: {
-    kind: 'run' | 'person';
+    kind: 'run' | 'person' | 'system';
     run_ref?: string; session_id?: string; work_item_id?: string; person_id?: string;
     /**
      * A `run` proposal's accountable person: who dispatched or claimed the run,
@@ -204,6 +216,23 @@ export interface RunbookProposal {
   note: string | null;
   merged_into: string | null;
   created_at: string;
+  /**
+   * Lane C: a run-authored runbook's default scope — the run's repository, else its initiative,
+   * never organisation-wide. Accepting at any other scope is a separate, confirmed widening.
+   */
+  proposed_scope?: RunbookScope;
+  /** Lane C: the frontmatter keys the SKILL.md draft carried, so lint can refuse non-portable ones at accept too. */
+  proposed_frontmatter_keys?: string[];
+  /** Lane C: the run's debrief wrote it (as opposed to a voluntary keep or `lab propose`). */
+  debrief?: { run_ref: string; prompt_version: string; answer_kind: 'new' | 'revise'; converted_from_new: boolean; simulated: boolean };
+  /** Lane C: why a proposal nobody decided was closed: no decision in fourteen days, or its run's change was rejected. */
+  closed_reason?: 'expired' | 'change-rejected' | null;
+  /** Lane C: a retire proposal's evidence — the rule, the runs that made it due, the model they ran on. */
+  retire_evidence?: { rule: 'unfollowed' | 'disuse-unfollowed' | 'disuse-ungiven'; run_refs: string[]; model: string | null };
+  /** Lane C: the reviewer's confirmation that they read every script the version carries (path + sha256), recorded at accept. */
+  scripts_read?: { by: string; at: string; files: Array<{ path: string; sha256: string }> };
+  /** Lane C: accepted by the run's own dispatcher because nobody else could review it (decision 11). */
+  decided_as?: 'sole-reviewer-dispatcher' | null;
 }
 
 export type HealthStatus = 'proven' | 'drifting' | 'unproven';

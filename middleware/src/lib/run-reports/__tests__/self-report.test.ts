@@ -18,7 +18,7 @@ describe('parseLabReport', () => {
     expect(r).toEqual({
       state: 'ok', summary: 'Moved the checkout service off StatsD.',
       verification: [{ command: 'npm test', passed: true }, { command: 'npm run lint', passed: false }],
-      obstacles: ['The collector rejected the first config; fixed the receiver port.'],
+      obstacles: ['The collector rejected the first config; fixed the receiver port.'], learned: '', runbooks: [],
     });
   });
 
@@ -29,7 +29,7 @@ describe('parseLabReport', () => {
 
   it('missing: no message, an empty one, or no block and no JSON', () => {
     for (const m of [undefined, null, '', '   ', 'All done, nothing to report.', 42, { summary: 'x' }]) {
-      expect(parseLabReport(m)).toEqual({ state: 'missing', summary: '', verification: [], obstacles: [] });
+      expect(parseLabReport(m)).toEqual({ state: 'missing', summary: '', verification: [], obstacles: [], learned: '', runbooks: [] });
     }
   });
 
@@ -117,10 +117,11 @@ describe('extractLabReportBlock and cleanText', () => {
     const s = cleanText('a'.repeat(9) + '😀😀', 10);
     expect(s).toBe('a'.repeat(9));
   });
-  it('the ask is three lines and names the fence and the three fields', () => {
-    expect(LAB_REPORT_ASK).toHaveLength(3);
+  it('the ask names the fence and the five fields, and asks the design\'s learned question', () => {
+    expect(LAB_REPORT_ASK).toHaveLength(5);
     const text = LAB_REPORT_ASK.join('\n');
-    for (const w of ['lab-report', 'summary', 'verification', 'obstacles']) expect(text).toContain(w);
+    for (const w of ['lab-report', 'summary', 'verification', 'obstacles', 'learned', 'runbooks', 'wrongStep']) expect(text).toContain(w);
+    expect(text).toContain('name one thing that cost you time in this run that a written procedure would have saved the next run on this kind of work');
   });
 });
 

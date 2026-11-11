@@ -70,6 +70,83 @@ export interface RunReportKept {
   problems: string[];
 }
 
+/** What the run said of a runbook it was given (its `lab-report` block's `runbooks` list). */
+export type RunbookFollowed = 'yes' | 'partly' | 'no';
+export const RUNBOOK_FOLLOWED: readonly RunbookFollowed[] = ['yes', 'partly', 'no'];
+
+export interface RunReportRunbookAccount {
+  /** The runbook id the run names. Only an id the run was GIVEN moves anything (record.ts). */
+  id: string;
+  followed: RunbookFollowed;
+  /** The step the runbook had wrong (1-based), or null. */
+  wrongStep: number | null;
+  note: string | null;
+}
+
+/**
+ * Why a run was not debriefed (docs/learning-loop-design.md, Stage 2). A closed list: the run's
+ * page prints `DEBRIEF_SKIP_TEXT[reason]` (lib/runbooks/debrief.ts), never free text.
+ */
+export const DEBRIEF_SKIP_REASONS = [
+  'not-successful', 'nothing-learned', 'no-obstacle', 'review-queue-full', 'daily-limit', 'learning-budget',
+  'session-unavailable', 'no-checkout', 'executor-unsupported',
+] as const;
+export type DebriefSkipReason = typeof DEBRIEF_SKIP_REASONS[number];
+
+/**
+ * Where a run's debrief stands.
+ *   skipped          never asked; `reason` says why.
+ *   requested        the server asked the worker for one and is waiting (until `expiresAt`).
+ *   filed            the kept folder became a proposal (`proposalId`).
+ *   nothing-to-keep  the session answered `none` (`answer.reason`).
+ *   lint-failed      the folder failed lint; `lint` holds the errors and nothing entered the queue.
+ *   refused          the folder was refused before lint (`problems`: size, path, shape).
+ *   expired          nothing came back before `expiresAt`.
+ */
+export type DebriefState = 'skipped' | 'requested' | 'filed' | 'nothing-to-keep' | 'lint-failed' | 'refused' | 'expired';
+
+export interface RunDebriefAnswer {
+  kind: 'none' | 'new' | 'revise';
+  /** The session's one line (for none) or its rationale; untrusted, capped, shown as text. */
+  reason: string;
+  /** revise: the runbook it rewrote. */
+  runbookId: string | null;
+  /** new/revise: the `.lab/keep/<name>` folder it wrote. */
+  folder: string | null;
+}
+
+export interface RunDebrief {
+  state: DebriefState;
+  /** Set when state is `skipped`, or when a request ended `session-unavailable`. */
+  reason: DebriefSkipReason | null;
+  /** The plain sentence for `reason` (DEBRIEF_SKIP_TEXT), stored so every page prints the same words. */
+  reasonText: string | null;
+  /** The debrief prompt's version (lib/runbooks/debrief.ts DEBRIEF_PROMPT_VERSION) when one was asked. */
+  promptVersion: string | null;
+  decidedAt: string;
+  expiresAt: string | null;
+  settledAt: string | null;
+  /** Binds the one-shot debrief token to this request (not a secret: the token is signed). */
+  nonce: string | null;
+  /** The learning line's hold for a billed executor (lib/learning-budget.ts), else null. */
+  holdId: string | null;
+  /** The dollar ceiling the turn was given (`--max-budget-usd`). */
+  ceilingUsd: number | null;
+  answer: RunDebriefAnswer | null;
+  proposalId: string | null;
+  /** `edit` when a new runbook was filed as an edit of a near duplicate (or the session revised one). */
+  proposalKind: 'new' | 'edit' | null;
+  /** The runbook a near-duplicate `new` was converted into an edit of. */
+  convertedFrom: string | null;
+  problems: string[];
+  /** Lint errors when state is `lint-failed` (the same LintFinding shape as a proposal's). */
+  lint: Array<{ rule: string; severity: 'error' | 'warning'; path: string; message: string }>;
+  /** What the turn cost: billed (learning line) or reported (local compute, never billed). */
+  cost: { billedUsd: number | null; reportedUsd: number | null };
+  /** The mock: a hand-written fixture played the debrief (shown as "Demo data"). */
+  simulated: boolean;
+}
+
 export interface RunReport {
   runRef: string;
   workItemId: string | null;
@@ -93,6 +170,15 @@ export interface RunReport {
   cost: RunReportCost;
   kept: RunReportKept[];
   selfReport: SelfReportState;
+  /**
+   * Lane C: the run's one sentence of what a written procedure would have saved it ('' for
+   * nothing). Optional on reports stored before lane C.
+   */
+  learned?: string;
+  /** Lane C: what the run said of each runbook it was given. Optional on older reports. */
+  runbookAccounts?: RunReportRunbookAccount[];
+  /** Lane C: whether the run was debriefed and how that ended. null/absent: not decided (older reports). */
+  debrief?: RunDebrief | null;
   /** The frozen brief this run was given, or null when none froze. */
   briefId: string | null;
   /** When the report was stored. */
@@ -133,4 +219,9 @@ export const RUN_REPORT_LIMITS = {
   keptProblem: 200,
   /** The raw `lab-report` text a worker may send; anything longer is refused unread as malformed. */
   block: 16_384,
+  learned: 300,
+  runbookAccounts: 10,
+  runbookNote: 300,
+  debriefReason: 300,
+  debriefProblems: 8,
 } as const;

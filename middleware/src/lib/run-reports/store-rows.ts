@@ -3,9 +3,9 @@
 // `POST /api/__mock/reset` takes back every report and scenarios apply. Every
 // method is synchronous inside, so the write-once check is atomic.
 import { clone, type Page } from '../runbooks/store.js';
-import type { RunReport } from './types.js';
+import type { DebriefState, RunDebrief, RunReport } from './types.js';
 import {
-  checkReport, filterReports, pageReports,
+  checkReport, debriefStateOf, filterReports, pageReports,
   type ListRunReportsQuery, type RunReportStore,
 } from './store.js';
 
@@ -33,6 +33,13 @@ export class RowsRunReportStore implements RunReportStore {
   async getReport(runRef: string): Promise<RunReport | null> {
     const r = this.src.reports().find((x) => x.runRef === runRef);
     return r ? clone(r) : null;
+  }
+
+  async setDebrief(runRef: string, debrief: RunDebrief, expect: DebriefState | null): Promise<RunReport | null> {
+    const r = this.src.reports().find((x) => x.runRef === runRef);
+    if (!r || debriefStateOf(r) !== expect) return null;
+    r.debrief = clone(debrief);
+    return clone(r);
   }
 
   async listReports(q?: ListRunReportsQuery): Promise<Page<RunReport>> {

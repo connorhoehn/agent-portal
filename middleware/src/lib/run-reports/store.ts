@@ -10,7 +10,7 @@
 //    report that is already there, unchanged, with `created: false`.
 //  * Reads return copies.
 //  * Lists are newest `endedAt` first, then runRef.
-import type { RunReport } from './types.js';
+import type { DebriefState, RunDebrief, RunReport } from './types.js';
 import { InvalidWriteError, paginate, type Page } from '../runbooks/store.js';
 
 export interface ListRunReportsQuery {
@@ -25,6 +25,13 @@ export interface RunReportStore {
   /** Store once per runRef. The second and later puts change nothing and return the stored report. */
   putReport(r: RunReport): Promise<{ report: RunReport; created: boolean }>;
   getReport(runRef: string): Promise<RunReport | null>;
+  /**
+   * Lane C: the one field of a stored report that changes after it is written — its debrief, as
+   * the request moves to an end. Conditional: `expect` is the state the debrief must be in now
+   * (null: not decided yet), so a token is spent once and two posts cannot both win. Returns the
+   * updated report, or null when the report is missing or the condition failed.
+   */
+  setDebrief(runRef: string, debrief: RunDebrief, expect: DebriefState | null): Promise<RunReport | null>;
   listReports(q?: ListRunReportsQuery): Promise<Page<RunReport>>;
 }
 
@@ -38,6 +45,9 @@ export function filterReports(rows: readonly RunReport[], q: ListRunReportsQuery
 export function pageReports(rows: RunReport[], q: ListRunReportsQuery | undefined): Page<RunReport> {
   return paginate(rows.sort(byEndedDesc), q?.cursor, q?.limit);
 }
+
+/** The debrief state a stored report is in (null: none decided). */
+export const debriefStateOf = (r: RunReport): DebriefState | null => r.debrief?.state ?? null;
 
 export function checkReport(r: RunReport): void {
   if (!r.runRef || typeof r.runRef !== 'string') throw new InvalidWriteError('a run report needs a runRef');

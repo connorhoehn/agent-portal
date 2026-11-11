@@ -8,9 +8,9 @@
 // The index prefixes never meet the runbook rows' (SCOPE#…, PROPSTATUS#…).
 // Write-once is a ConditionExpression; a lost race reads the winner back.
 import type { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import type { Page } from '../runbooks/store.js';
-import type { RunReport } from './types.js';
+import type { DebriefState, RunDebrief, RunReport } from './types.js';
 import {
   checkReport, filterReports, pageReports,
   type ListRunReportsQuery, type RunReportStore,
@@ -56,6 +56,27 @@ export class DynamoRunReportStore implements RunReportStore {
   }
 
   getReport(runRef: string): Promise<RunReport | null> { return this.get<RunReport>(reportKey(runRef)); }
+
+  async setDebrief(runRef: string, debrief: RunDebrief, expect: DebriefState | null): Promise<RunReport | null> {
+    // A report stored before lane C has no `debrief` key at all; `null` covers both that and an explicit null.
+    const cond = expect === null
+      ? 'attribute_exists(PK) AND (attribute_not_exists(#d.#db) OR #d.#db = :null)'
+      : 'attribute_exists(PK) AND #d.#db.#st = :expect';
+    try {
+      const out = await this.doc.send(new UpdateCommand({
+        TableName: this.table, Key: reportKey(runRef),
+        UpdateExpression: 'SET #d.#db = :v',
+        ConditionExpression: cond,
+        ExpressionAttributeNames: { '#d': 'data', '#db': 'debrief', ...(expect === null ? {} : { '#st': 'state' }) },
+        ExpressionAttributeValues: { ':v': debrief, ...(expect === null ? { ':null': null } : { ':expect': expect }) },
+        ReturnValues: 'ALL_NEW',
+      }));
+      return (out.Attributes?.['data'] as RunReport | undefined) ?? null;
+    } catch (e) {
+      if (errName(e) === 'ConditionalCheckFailedException') return null;
+      throw e;
+    }
+  }
 
   async listReports(q?: ListRunReportsQuery): Promise<Page<RunReport>> {
     let items: Item[];

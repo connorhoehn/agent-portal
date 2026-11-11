@@ -1,8 +1,9 @@
 // The worker's self-report (docs/learning-loop-design.md §1): a fenced
 // `lab-report` JSON block at the end of a run's final message, carrying the
 // three things only the run knows — what it did, how it checked, what got in
-// the way. The run framing asks for it in three lines (LAB_REPORT_ASK); this
-// module reads it back.
+// the way — plus, since lane C, what a written procedure would have saved it
+// (`learned`) and what it did with each runbook it was given (`runbooks`). The
+// run framing asks for it (LAB_REPORT_ASK); this module reads it back.
 //
 // The reader is tolerant by contract: whatever a model (or anything that got
 // into its context) wrote, the answer is a report with those fields filled or
@@ -11,12 +12,19 @@
 // string is cleaned (control and direction-override characters dropped) and
 // capped (RUN_REPORT_LIMITS) before it is returned. The text is data: it is
 // stored and shown, and this lane never puts it into a prompt.
-import { RUN_REPORT_LIMITS as L, type RunReportVerification, type SelfReportState } from './types.js';
+import {
+  RUN_REPORT_LIMITS as L, type RunReportRunbookAccount, type RunReportVerification, type RunbookFollowed, type SelfReportState,
+} from './types.js';
 
-/** The three lines the run framing and the brief's "How to report back" carry. */
+/**
+ * The lines the run framing and the brief's "How to report back" carry. Lane C added `learned`
+ * (the design's question, word for word) and `runbooks` (what the run did with each one it was given).
+ */
 export const LAB_REPORT_ASK: readonly string[] = [
   'When you finish, end your final message with a fenced block tagged `lab-report` holding one JSON object, and put nothing after it.',
   'Its fields: `summary` (what you did, under 1,200 characters), `verification` (each command you ran to check the work, as `{"command": "npm test", "passed": true}`), `obstacles` (up to 8 short lines: what went wrong and how you got round it).',
+  '`learned`: name one thing that cost you time in this run that a written procedure would have saved the next run on this kind of work, in one sentence. If nothing did, leave it empty (`"learned": ""`).',
+  '`runbooks`: for each runbook this brief gave you, `{"id": "rb-…", "followed": "yes" | "partly" | "no", "wrongStep": 3, "note": "…"}`; `wrongStep` only when a step was wrong, `[]` when you were given none.',
   'Send the block even when nothing went wrong (`"obstacles": []`); a run without one reports nothing back.',
 ];
 
@@ -25,9 +33,46 @@ export interface ParsedSelfReport {
   summary: string;
   verification: RunReportVerification[];
   obstacles: string[];
+  /** '' when the run named nothing (or the field was missing). */
+  learned: string;
+  runbooks: RunReportRunbookAccount[];
 }
 
-const EMPTY = (state: SelfReportState): ParsedSelfReport => ({ state, summary: '', verification: [], obstacles: [] });
+const EMPTY = (state: SelfReportState): ParsedSelfReport => ({ state, summary: '', verification: [], obstacles: [], learned: '', runbooks: [] });
+
+const RUNBOOK_ID = /^rb-[a-z0-9][a-z0-9-]{1,60}$/;
+
+function followedOf(v: unknown): RunbookFollowed | null {
+  if (v === true) return 'yes';
+  if (v === false) return 'no';
+  if (typeof v !== 'string') return null;
+  const k = v.trim().toLowerCase();
+  if (['yes', 'y', 'followed', 'full', 'fully', 'true'].includes(k)) return 'yes';
+  if (['partly', 'partial', 'partially', 'some', 'deviated'].includes(k)) return 'partly';
+  if (['no', 'n', 'not', 'none', 'false', 'unused', 'not used'].includes(k)) return 'no';
+  return null;
+}
+
+/** The `runbooks` list, tolerant: unknown shapes are dropped, ids validated, one entry per id, capped. */
+export function parseRunbookAccounts(v: unknown): RunReportRunbookAccount[] {
+  if (!Array.isArray(v)) return [];
+  const out: RunReportRunbookAccount[] = [];
+  for (const e of v) {
+    if (out.length >= L.runbookAccounts) break;
+    if (!e || typeof e !== 'object' || Array.isArray(e)) continue;
+    const o = e as Record<string, unknown>;
+    const id = typeof o['id'] === 'string' ? o['id'].trim().toLowerCase() : '';
+    if (!RUNBOOK_ID.test(id) || out.some((x) => x.id === id)) continue;
+    const followed = followedOf(o['followed']);
+    if (!followed) continue;
+    const ws = o['wrongStep'] ?? o['wrong_step'];
+    const wrongStep = typeof ws === 'number' && Number.isInteger(ws) && ws >= 1 && ws <= 200 ? ws
+      : typeof ws === 'string' && /^\d{1,3}$/.test(ws.trim()) && Number(ws) >= 1 ? Number(ws) : null;
+    const note = cleanText(o['note'], L.runbookNote, { singleLine: true }) || null;
+    out.push({ id, followed, wrongStep, note });
+  }
+  return out;
+}
 
 // C0 controls except \t \n, DEL, C1 controls, and the bidi embedding/override/isolate marks
 // (a reader must see the text in the order it was written).
@@ -131,8 +176,11 @@ export function parseLabReport(input: unknown): ParsedSelfReport {
     }
   }
 
-  const usable = summary !== '' || verification.length > 0 || obstacles.length > 0
+  const learned = cleanText(o['learned'], L.learned, { singleLine: true });
+  const runbooks = parseRunbookAccounts(o['runbooks']);
+
+  const usable = summary !== '' || verification.length > 0 || obstacles.length > 0 || learned !== '' || runbooks.length > 0
     // An honest "nothing to say": the fields are there with the right shapes, just empty.
     || (typeof o['summary'] === 'string' && Array.isArray(o['verification']) && Array.isArray(o['obstacles']));
-  return usable ? { state: 'ok', summary, verification, obstacles } : EMPTY('malformed');
+  return usable ? { state: 'ok', summary, verification, obstacles, learned, runbooks } : EMPTY('malformed');
 }

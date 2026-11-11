@@ -13,8 +13,11 @@
 // brief, the job row, the change request), take the worker's part (the local
 // worker's completion body, or a devbox runner's own stream: its final message
 // and the skills it loaded), parse and cap it, store the report
-// write-once, then write one application row per runbook the run was given
-// and observed loading, so lib/runbooks/health.ts moves.
+// write-once, then write one application row per runbook the run was given,
+// from the run's OWN account of it (lane C, decision 22), so
+// lib/runbooks/health.ts moves; then decide the debrief
+// (lib/runbooks/debrief.ts) and do the library upkeep a saved report can make
+// due (lib/runbooks/retire.ts: expiry, retire proposals).
 //
 // It never throws: a run's end must not fail because its report could not be
 // written. A failure is logged and answered with null.
@@ -27,8 +30,9 @@ import type { RunReportStore } from './store.js';
 import {
   RUN_REPORT_LIMITS as L,
   type RunExecutor, type RunOutcome, type RunReport, type RunReportChangedFile, type RunReportCost, type RunReportKept,
-  type RunReportRunbookRef, type RunReportUse, type WorkerReportPart,
+  type RunReportRunbookRef, type RunReportUse, type WorkerReportPart, type RunDebrief, type RunReportRunbookAccount,
 } from './types.js';
+import type { ApplicationOutcome } from '../runbooks/types.js';
 
 export interface RunEndInput {
   runRef: string;
@@ -51,6 +55,10 @@ export interface RunEndInput {
   changedFiles?: RunReportChangedFile[];
   /** The worker's own account (untrusted). null/omitted: the run said nothing (selfReport 'missing'). */
   worker?: WorkerReportPart | null;
+  /** Local compute: whether the run had a checkout of its own to write a debrief folder in. */
+  hasCheckout?: boolean;
+  /** Skip the debrief decision (a caller that has none to make, or a test). */
+  noDebrief?: boolean;
 }
 
 export interface RecordDeps {
@@ -172,6 +180,8 @@ export function offeredFromBrief(brief: SessionBrief | null): RunReportRunbookRe
 /** The version of `id` the run was given, or undefined when the brief did not give it. */
 function givenVersion(brief: SessionBrief | null, id: string): number | undefined {
   if (!brief) return undefined;
+  const offered = offeredFromBrief(brief).find((r) => r.id === id);
+  if (offered && offered.version !== null) return offered.version;
   if (brief.skill_library) return brief.skill_library.skills.find((k) => k.name === id)?.version;
   return brief.sections.find((s) => s.kind === 'runbook' && s.ref === id)?.version;
 }
@@ -224,6 +234,24 @@ function costOf(input: RunEndInput, reportedUsd: number | null): RunReportCost {
   return { billedUsd: billed, reportedUsd: null, basis: billed === null ? 'unknown' : 'billed' };
 }
 
+/** A run's account of one runbook, as an application row: a wrong step is a failure at that step. */
+export function applicationOf(a: RunReportRunbookAccount): { outcome: ApplicationOutcome; step: number | null; note: string | null } {
+  if (a.wrongStep !== null) return { outcome: 'failed', step: a.wrongStep, note: a.note };
+  return { outcome: a.followed === 'yes' ? 'followed' : a.followed === 'partly' ? 'followed_with_deviation' : 'not_used', step: null, note: a.note };
+}
+
+/** Every stored report, all pages. */
+export async function allReports(reports: RunReportStore): Promise<RunReport[]> {
+  const out: RunReport[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await reports.listReports({ limit: 200, ...(cursor ? { cursor } : {}) });
+    out.push(...page.items);
+    cursor = page.next ?? undefined;
+  } while (cursor);
+  return out;
+}
+
 /** Assemble, store (write-once) and announce a run's report; write its application rows. Never throws. */
 export async function recordRunEnd(input: RunEndInput, deps: RecordDeps = {}): Promise<RunReport | null> {
   try {
@@ -267,6 +295,9 @@ export async function recordRunEnd(input: RunEndInput, deps: RecordDeps = {}): P
       cost: costOf(input, worker.reportedCostUsd),
       kept: worker.kept,
       selfReport: self.state,
+      learned: self.learned,
+      runbookAccounts: self.runbooks,
+      debrief: null,
       briefId: brief?.id ?? null,
       createdAt: now(),
     };
@@ -274,29 +305,57 @@ export async function recordRunEnd(input: RunEndInput, deps: RecordDeps = {}): P
     const { report: stored, created } = await reports.putReport(report);
     if (!created) return stored;
 
-    // Evidence: one application row per runbook the run was GIVEN and was SEEN loading. The id is
-    // the one `lab applied` writes (routes/runbooks.ts), so the two signals never double-count.
-    const appOutcome = stored.outcome === 'failed' ? 'failed' : stored.outcome === 'cancelled' ? null : 'followed';
-    if (brief && appOutcome) {
-      for (const use of observed) {
-        const version = givenVersion(brief, use.id);
+    // Evidence (decision 22): one application row per runbook the run was GIVEN, from the run's
+    // OWN account of it. What the run says it did with a runbook is what is written; a successful
+    // run that loaded one and said nothing counts as having followed it; a failed run that says
+    // nothing about a runbook writes no row for it (a run fails for many reasons, and health must
+    // not drift by association). The id is the one `lab applied` writes (routes/runbooks.ts), so
+    // the signals never double-count.
+    if (brief && stored.outcome !== 'cancelled') {
+      const succeeded = stored.outcome === 'done' || stored.outcome === 'needs-review';
+      const rows = new Map<string, { outcome: ApplicationOutcome; step: number | null; note: string | null }>();
+      for (const a of stored.runbookAccounts ?? []) rows.set(a.id, applicationOf(a));
+      if (succeeded) for (const use of observed) if (!rows.has(use.id)) rows.set(use.id, { outcome: 'followed', step: null, note: null });
+      for (const [id, row] of rows) {
+        const version = givenVersion(brief, id);
         if (version === undefined) continue;
         try {
           await runbooks.appendApplication({
-            id: applicationId(stored.runRef, use.id), runbook_id: use.id, version, run_ref: stored.runRef,
-            brief_id: brief.id, outcome: appOutcome, failed_at_step: null,
-            note: appOutcome === 'failed' ? `The run ended failed${stored.failureCode ? ` (${stored.failureCode})` : ''}.` : null,
-            at: stored.endedAt,
+            id: applicationId(stored.runRef, id), runbook_id: id, version, run_ref: stored.runRef,
+            brief_id: brief.id, outcome: row.outcome, failed_at_step: row.step, note: row.note, at: stored.endedAt,
           });
         } catch (e) {
-          if (!(e instanceof AlreadyExistsError)) console.warn(`[run-reports] application for ${use.id} on ${stored.runRef}:`, (e as Error).message);
+          if (!(e instanceof AlreadyExistsError)) console.warn(`[run-reports] application for ${id} on ${stored.runRef}:`, (e as Error).message);
         }
       }
     }
-    for (const fn of listeners) {
-      try { void Promise.resolve(fn(stored)).catch((e: unknown) => console.warn('[run-reports] listener failed:', (e as Error).message)); } catch { /* never the run's problem */ }
+
+    // Lane C: the debrief decision, stored on the run (its page says why there was none), then
+    // the library upkeep a saved report can make due. Neither ever fails the run.
+    let final = stored;
+    if (!input.noDebrief) {
+      try {
+        const { decideDebrief } = await import('../runbooks/debrief.js');
+        const decision: RunDebrief = await decideDebrief(stored, {
+          runbooks, nowIso: now, reports: () => allReports(reports),
+          ...(input.hasCheckout !== undefined ? { hasCheckout: input.hasCheckout } : {}),
+        });
+        final = (await reports.setDebrief(stored.runRef, decision, null)) ?? stored;
+      } catch (e) {
+        console.warn(`[run-reports] debrief decision for ${stored.runRef}:`, (e as Error).message);
+      }
     }
-    return stored;
+    try {
+      const { afterReportSaved } = await import('../runbooks/retire.js');
+      await afterReportSaved(final, { runbooks, reports, nowIso: now });
+    } catch (e) {
+      console.warn(`[run-reports] library upkeep after ${stored.runRef}:`, (e as Error).message);
+    }
+
+    for (const fn of listeners) {
+      try { void Promise.resolve(fn(final)).catch((e: unknown) => console.warn('[run-reports] listener failed:', (e as Error).message)); } catch { /* never the run's problem */ }
+    }
+    return final;
   } catch (err) {
     console.warn(`[run-reports] could not record the report for ${input.runRef}:`, (err as Error).message);
     return null;

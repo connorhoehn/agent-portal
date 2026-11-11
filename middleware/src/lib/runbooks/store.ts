@@ -68,6 +68,8 @@ export interface DecideProposalInput {
   note?: string | null;
   /** merged: the proposal this one was folded into. */
   merged_into?: string | null;
+  /** withdrawn by the system: expired (fourteen days undecided) or its run's change was rejected. */
+  closed_reason?: 'expired' | 'change-rejected' | null;
 }
 
 export interface RunbookStore {
@@ -236,6 +238,7 @@ export function planDecision(proposal: RunbookProposal | null, input: DecideProp
   return {
     ...clone(proposal), status: input.decision, decided_by: input.decided_by, decided_at: input.at,
     note: input.note ?? null, merged_into: input.decision === 'merged' ? (input.merged_into ?? null) : null,
+    ...(input.closed_reason ? { closed_reason: input.closed_reason } : {}),
   };
 }
 

@@ -55,9 +55,13 @@ const PASSING: Partial<Record<LintRuleId, RunbookDoc>> = {
   'R-secrets': tenantCutoverV2,
 };
 
+// Lane C's rules (a run-authored draft) have their failing and passing cases in
+// routes/__tests__/runbook-debrief.test.ts, where a kept folder is filed.
+const LANE_C_RULES: readonly LintRuleId[] = ['R-frontmatter', 'R-allowed-tools', 'R-injection'];
+
 describe('each rule has a failing and a passing fixture', () => {
   it('covers exactly the design table (with the R8 rules in model-bundle.test.ts)', () => {
-    expect(LINT_RULES.map((r) => r.id).filter((id) => !BUNDLE_RULES.includes(id)).sort()).toEqual(Object.keys(FAILING).sort());
+    expect(LINT_RULES.map((r) => r.id).filter((id) => !BUNDLE_RULES.includes(id) && !LANE_C_RULES.includes(id)).sort()).toEqual(Object.keys(FAILING).sort());
   });
   for (const id of Object.keys(FAILING) as LintRuleId[]) {
     it(`lint rule ${id}: fails its bad fixture`, () => expect(rulesOf(FAILING[id]!)).toContain(id));
