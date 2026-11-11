@@ -88,7 +88,7 @@ export default function RunPage() {
       ) : undefined}
       meta={report ? <MetaLine size="xs" tone="tertiary" items={[
         whoRan(report.executor, botName),
-        names.initiative(report.initiativeId),
+        report.initiativeId ? names.initiative(report.initiativeId) : null,
         `ended ${relativeTime(report.endedAt)}`,
       ]} /> : undefined}
       tabs={tabs}
