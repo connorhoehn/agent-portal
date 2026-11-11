@@ -386,7 +386,7 @@ export function WorkItemDetail({
                 <KeyValue layout="row" divided responsive labelWidth="w-52" items={briefItems} aria-label={BRIEF_TITLE} />
               </DetailSection>
             )}
-            <WorkItemBriefPreview open={briefOpen} onToggle={onOpenBrief} />
+            <WorkItemBriefPreview open={briefOpen} onToggle={onOpenBrief} workItemId={item.id} />
           </>
         )}
         {tab === 'docs' && <WorkDocumentLinks workItemId={item.id} canEdit={canEdit} />}
