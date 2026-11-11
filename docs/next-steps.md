@@ -1019,9 +1019,9 @@ The owner asked for a sweep for high-value software around initiatives, runs and
 4. ~~The initiative's Learning tab: runs with outcomes, scoped runbooks, open proposals; attention signals on the overview.~~ Built: `?tab=learning` on the initiative, three tables sharing the Runs, Library and Proposals row models; `GET /api/runbooks/proposals?initiative=`; the Agents tab's runs show their outcome and open the run (a bot run's job id is the report's run ref); Needs attention counts failed runs of the last seven days and proposals awaiting review.
 5. ~~Why a runbook was not chosen, beside the pin.~~ Built: the brief preview carries the in-scope runbooks the selector passed over, each with one sentence of reason (no shared term, the two-runbook limit, the token budget, drifting); the work item's panel lists them with the pin.
 6. ~~Obstacles hit more than once, with "write a runbook for this".~~ Built: `GET /api/run-reports/recurring-obstacles` groups by plain normalised text within a repository or initiative, two different runs or more, thirty days by default; a Recurring obstacles tab in Runbooks whose row opens the New runbook form filled in. The mock's default world now holds six demo reports so these views are not empty.
-7. Retry a failed run from its own page.
-8. A bot's firings open the run record; outcomes, cost and proposals per bot.
-9. Restore a retired runbook by proposal.
+7. ~~Retry a failed run from its own page.~~ Built: a failed or cancelled queue job's run page has Retry, through the Findings requeue route and its capability; other kinds of run show no button.
+8. ~~A bot's firings open the run record; outcomes, cost and proposals per bot.~~ Built: each firing with a report shows its outcome and opens the run; a thirty-day line gives firings, done, failed, billed (a dash when unknown) and proposals filed. `GET /api/run-reports` takes `runRefs`.
+9. ~~Restore a retired runbook by proposal.~~ Built: a person files a `restore` proposal with a reason from the retired runbook's page; the usual reviewers decide it and nobody accepts their own; on accept the runbook is published again at the version it had, the restore is on its record, and the retirement rules count only what happens after it.
 10. Search runs by text; runs, proposals and runbook bodies in the org index.
 11. Who would receive this proposal.
 12. My work across initiatives.
@@ -1029,3 +1029,5 @@ The owner asked for a sweep for high-value software around initiatives, runs and
 14. Create an initiative (design first).
 
 Cleanup alongside: the `local:distill` job kind, if nothing enqueues it.
+
+The first six packages are walked by their own journey, `npm run journey:value-sweep` in `portal/` (`scripts/journeys/learning-loop-value-sweep.mjs`), on the default mock world.
