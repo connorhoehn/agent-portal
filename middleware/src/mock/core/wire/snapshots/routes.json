@@ -1898,7 +1898,7 @@
     {
       "method": "GET",
       "path": "/api/health",
-      "source": "src/index.ts:232"
+      "source": "src/index.ts:233"
     },
     {
       "method": "GET",
@@ -3137,6 +3137,11 @@
     },
     {
       "method": "GET",
+      "path": "/api/run-reports",
+      "source": "src/routes/run-reports.ts:71"
+    },
+    {
+      "method": "GET",
       "path": "/api/runbooks",
       "source": "src/routes/runbooks.ts:453"
     },
@@ -4093,7 +4098,7 @@
     {
       "method": "GET",
       "path": "/health",
-      "source": "src/index.ts:231"
+      "source": "src/index.ts:232"
     },
     {
       "method": "DELETE",
@@ -4178,7 +4183,7 @@
     {
       "method": "GET",
       "path": "/livez",
-      "source": "src/index.ts:233"
+      "source": "src/index.ts:234"
     }
   ],
   "unresolved": []

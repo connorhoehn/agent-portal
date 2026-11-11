@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-11T06:26:13.944Z",
-  "serverHandlerSha": "57f7891796d170784891517fdfa73df2abfd24347b9b2602c70d602dea31d525",
-  "baseUrl": "http://127.0.0.1:3924",
+  "capturedAt": "2026-11-11T06:46:56.415Z",
+  "serverHandlerSha": "b04acc6a7fb29443bbb31573b4ddc98d2ee517119eda646979fa854f2263287a",
+  "baseUrl": "http://127.0.0.1:3921",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -7758,6 +7758,16 @@
         "$": "object",
         "unlinked": "array",
         "users": "array"
+      },
+      "values": {}
+    },
+    "GET /api/run-reports": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "next": "null",
+        "reports": "array"
       },
       "values": {}
     },
