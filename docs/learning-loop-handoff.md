@@ -177,12 +177,12 @@ Merge: rebase onto main, re-run the list above, fast-forward only. If the owner'
 
 Small, separate changes; each needs its own test.
 
-1. **MicroVM debrief.** `middleware/src/lib/microvm-dispatcher.ts:818` records the run end but stops the machine before any debrief. It must call the devbox `debrief` op (`agents/devbox/main.py`, `_debrief_cmd` at line 1433) with the request `debriefRequestFor` (`middleware/src/lib/runbooks/debrief.ts:285`) builds, post the folder through the same settle path the local route uses (`routes/local-compute.ts:852`), and pass `hasCheckout: true` to `recordRunEnd`. Until then microVM runs record `skipped: executor-unsupported`.
-2. **Fleet and governed runs are not debriefed** (`executorDebriefs`, `debrief.ts:146`). Decide per executor whether a session can be resumed there; where it cannot, the skip stands (decision 1's last column).
-3. **Write-policy entries** for `PUT /api/graph/work-items/:id/runbook-pins` and `POST /api/local-compute/jobs/:jobId/debrief` in `mock/core/wire/write-policy.ts`, each with the six-rule note the file asks for, so the capture records their response shapes.
-4. **Scope matrix coverage.** `middleware/src/routes/__tests__/initiative-scope-matrix.test.ts` does not yet cover the runbooks routes or the local compute claim; add rows.
-5. **Seeded ledger rows for local compute**, so the Budgets › Lines report shows a reported figure on the mock instead of $0 until a worker runs.
-6. **Budgets at 1280 px**: the initiatives table shows its card form and a highlighted row is not scrolled into view (lane B's note).
+1. [done, lane C follow-up] **MicroVM debrief.** `middleware/src/lib/microvm-dispatcher.ts:818` records the run end but stops the machine before any debrief. It must call the devbox `debrief` op (`agents/devbox/main.py`, `_debrief_cmd` at line 1433) with the request `debriefRequestFor` (`middleware/src/lib/runbooks/debrief.ts:285`) builds, post the folder through the same settle path the local route uses (`routes/local-compute.ts:852`), and pass `hasCheckout: true` to `recordRunEnd`. Until then microVM runs record `skipped: executor-unsupported`.
+2. [done, lane C follow-up] **Fleet and governed runs are not debriefed** (`executorDebriefs`, `debrief.ts:146`). Decide per executor whether a session can be resumed there; where it cannot, the skip stands (decision 1's last column).
+3. [done, lane C follow-up] **Write-policy entries** for `PUT /api/graph/work-items/:id/runbook-pins` and `POST /api/local-compute/jobs/:jobId/debrief` in `mock/core/wire/write-policy.ts`, each with the six-rule note the file asks for, so the capture records their response shapes.
+4. [done, lane C follow-up] **Scope matrix coverage.** `middleware/src/routes/__tests__/initiative-scope-matrix.test.ts` does not yet cover the runbooks routes or the local compute claim; add rows.
+5. [done, lane C follow-up] **Seeded ledger rows for local compute**, so the Budgets › Lines report shows a reported figure on the mock instead of $0 until a worker runs.
+6. [not done: the row selection lives in the ui-components table] **Budgets at 1280 px**: the initiatives table shows its card form and a highlighted row is not scrolled into view (lane B's note).
 
 ## Open decisions the owner may overrule
 

@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-11T03:36:36.674Z",
-  "serverHandlerSha": "256ccc5bba3f28950f5f32f1775608357c90a5db092c5eaf0df2edc82cd6d29e",
-  "baseUrl": "http://127.0.0.1:3996",
+  "capturedAt": "2026-11-11T05:14:11.736Z",
+  "serverHandlerSha": "989303f537c6a9ec5fb1ca885836ca615c3fdeaea42a9bdf8bfca662e5db70fa",
+  "baseUrl": "http://127.0.0.1:3923",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -3050,10 +3050,7 @@
       "skipped": "no body: a live claimToken only exists once POST /claim actually claims a row for this node, and this harness's BodyContext exposes GET only — it cannot chain a prior WRITE's response into this one, and every route is captured against an independently-reset world, so no claim from another spec's replay survives to be reused here"
     },
     "POST /api/local-compute/jobs/:jobId/debrief": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
+      "skipped": "no body: the route needs a node token for the machine whose box ran the job AND a debrief token that only exists in the answer to that run's POST /complete (signed with the session key; GET exposes none, and a seeded report has no open request), and this harness's BodyContext exposes GET only — it cannot chain a prior WRITE's response into this one, and every route is captured against an independently-reset world. routes/__tests__/runbook-debrief.test.ts and scripts/learning-loop/debrief-e2e.mjs cover the write."
     },
     "POST /api/local-compute/jobs/:jobId/heartbeat": {
       "skipped": "no body: a live claimToken only exists once POST /claim actually claims a row for this node, and this harness's BodyContext exposes GET only — it cannot chain a prior WRITE's response into this one, and every route is captured against an independently-reset world, so no claim from another spec's replay survives to be reused here"
@@ -4791,10 +4788,18 @@
       }
     },
     "PUT /api/graph/work-items/:id/runbook-pins": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "runbookPins": "array",
+        "runbookPins[]": "string",
+        "workItemId": "string"
+      },
+      "values": {},
+      "sent": [
+        "runbookIds"
+      ]
     },
     "PUT /api/identity/policies/:id": {
       "skipped": "no value found for :id under /api/identity/policies (orgiq/admin)"

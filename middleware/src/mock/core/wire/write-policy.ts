@@ -1198,6 +1198,20 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     },
   },
   {
+    route: 'PUT /api/graph/work-items/:id/runbook-pins',
+    persona: 'orgiq/admin',
+    safe: 'Replaces `runbookPins` on one row of the registered `work-items` fixture (mock/work-items.ts), which `POST /api/__mock/reset` puts back to the seeded empty list; setWorkItemRunbookPins takes its `config.mock.aurora` branch above the UPDATE. The pin check only READS the runbook store. No AWS, no model, no fs, no timer, no row added or removed.',
+    bodyFrom: 'routes/work-items.ts: `runbookIds` is the only key (any other is a 400) and must be an array of `rb-` ids, each a PUBLISHED runbook whose scope admits the item. The id is read off GET /api/runbooks as a published, org-wide runbook (scopeMatch admits an org-wide scope for every item), so the 200 shape carries a real pin; `:id` is a board item the persona may write to.',
+    intercepts: ['aurora'],
+    alsoAccept: [400, 403, 404],
+    build: async (ctx) => {
+      const pick = objectsWith(await ctx.get('/api/runbooks'), 'id', 'status', 'scope')
+        .find((r) => r['status'] === 'published' && (r['scope'] as Record<string, Json>)?.['kind'] === 'org');
+      const id = str(pick?.['id']);
+      return id === null ? unsynthesisable('GET /api/runbooks lists no published org-wide runbook to pin') : { runbookIds: [id] };
+    },
+  },
+  {
     // Both ids come from PARAM_RESOLVERS in http.ts: `:id` is the first item on
     // the board whose initiative has a free decision, `:decisionId` that
     // decision, so this pins the 200, not a 409 or a skip.
@@ -2266,6 +2280,15 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     intercepts: ['aurora'],
     headers: { authorization: `Bearer ${MOCK_NODE_TOKENS['node-operator-thinkpad']}` },
     build: async () => unsynthesisable("a live claimToken only exists once POST /claim actually claims a row for this node, and this harness's BodyContext exposes GET only — it cannot chain a prior WRITE's response into this one, and every route is captured against an independently-reset world, so no claim from another spec's replay survives to be reused here"),
+  },
+  {
+    route: 'POST /api/local-compute/jobs/:jobId/debrief',
+    persona: 'anonymous',
+    safe: 'Would settle the run\'s debrief: it moves one row of the registered run-report fixture off `requested` and, for a kept folder, files one proposal in the registered `runbook-proposals` fixture, so reset restores both. No AWS and no model (the folder is data a worker posts; the server only parses, lints and files it), no outbound call, no timer, nothing removed. A billed executor would also settle a learning-line hold, but a local run bills nothing. It is on the allowlist for the entry to be read, not because this harness can replay it: see `build`.',
+    bodyFrom: 'routes/local-compute.ts `DEBRIEF_FIELDS`: `token` (the one-use debrief token the run\'s completion answer handed the worker, signed under the session key and bound to the run and the request\'s nonce), then `answer` and `folder` or `sessionUnavailable`; any other key is a 400. The node must be the one whose box ran the job.',
+    intercepts: ['aurora'],
+    headers: { authorization: `Bearer ${MOCK_NODE_TOKENS['node-operator-thinkpad']}` },
+    build: async () => unsynthesisable("the route needs a node token for the machine whose box ran the job AND a debrief token that only exists in the answer to that run's POST /complete (signed with the session key; GET exposes none, and a seeded report has no open request), and this harness's BodyContext exposes GET only — it cannot chain a prior WRITE's response into this one, and every route is captured against an independently-reset world. routes/__tests__/runbook-debrief.test.ts and scripts/learning-loop/debrief-e2e.mjs cover the write."),
   },
   {
     route: 'POST /api/local-compute/nodes/:nodeId/work',

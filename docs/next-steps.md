@@ -915,3 +915,19 @@ Rebased onto lane D before merging: the evidence read's proposal row admits `sou
 ### Lane E and the follow-ups: handed off
 
 The pages, the journey for acceptance 1–12, `scripts/validate-learning-loop.sh` and the middleware follow-ups (microVM debrief, write-policy entries, scope-matrix rows, seeded ledger rows, Budgets at 1280) are specified for pickup in [learning-loop-handoff.md](learning-loop-handoff.md): eight packages with routes, shapes, file and line pointers, acceptance per package, the verification list and the rules that bind the work.
+
+### Lane C follow-ups: the middleware items
+
+Built:
+- MicroVM debrief. For a run that ended well, `lib/microvm-dispatcher.ts` records the run report before it stops the machine (`hasCheckout: true`, the work session id kept on the report), and when the decision asks for a debrief it sends the devbox `debrief` op the request `debriefRequestFor` builds. The answer and kept folder go through `settleDebrief`, the function the local debrief route already used (nothing needed extracting). A session that cannot be resumed, a failed invoke or a broken step settles as `session-unavailable`; the machine is still stopped and the job still completes. The devbox op is unchanged. Compute seconds now include the debrief. The report's billed figure is the one at the end of the work turn.
+- Write-policy entries for the runbook pins and the local debrief, with the wire snapshots recaptured. The pins write replays and pins a published org-wide runbook. The debrief write cannot be replayed (it needs a node token and a one-use debrief token that only a run's completion answer carries), so its entry says so and the snapshot row reads "skipped" with that reason.
+- Scope-matrix rows for the runbooks routes and every local compute write, including the claim (scoped to the authenticated node's own box). The matrix now reads `router.` as well as `xRouter.` and ends a handler's source at the next function declaration.
+- Three seeded local compute ledger rows (provider local, billed $0, reported $0.46, $0.31 and $0.18) for the logout cookie, cutover plan and error-budget dashboard runs, so Budgets > Lines opens on a reported figure. They are booked to the operator, so the operator's own spend report lists them at $0.
+
+Decided:
+- Fleet and governed runs stay skipped as `executor-unsupported`. Their boxes are long-lived workspaces other runs reuse, the runner records no per-run session id (a resume would continue whatever the workspace last held), and the `debrief` op exists only on the microVM runner. No resume path was built that could not be tested here. Revisit when a fleet run records its session id.
+- The microVM report is recorded before the job completes, so a claim lost in between could leave a report for a run another attempt now owns; the dispatcher checks the claim just before.
+
+Left:
+- Budgets at 1280 px: the highlighted row is selected inside the library's table (`selectedKey` is passed straight through in `InitiativesReport.tsx`), so scrolling it into view in card form belongs in ui-components, not a one-line change in the page. Not done.
+- The microVM debrief is proven against the fake devbox and the Python suite only; no real machine was started.
