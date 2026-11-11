@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-10T23:53:48.838Z",
-  "serverHandlerSha": "b4c4d0e58b99cb8e2acb806d9f1c6b65e659e0060647a926eed09de533953417",
-  "baseUrl": "http://127.0.0.1:3913",
+  "capturedAt": "2026-11-11T00:28:33.454Z",
+  "serverHandlerSha": "46a31a9bf5ac53dd7a14448b8126667d59490de52543c429958a8966d41390e2",
+  "baseUrl": "http://127.0.0.1:3919",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -3950,8 +3950,8 @@
           "ORG-DSAPI-4",
           "ORG-FS-1",
           "ORG-FS-3",
-          "ORG-FS-4",
           "ORG-INF-1",
+          "ORG-INF-3",
           "ORG-LAKE-2",
           "ORG-LAKE-3",
           "ORG-LAKE-4",
@@ -4944,6 +4944,9 @@
     },
     "GET /api/initiative-decks/:id/revisions/:rid/spec": {
       "skipped": "no value found for :id under /api/initiative-decks (orgiq/admin); no value found for :id under /api/initiative-decks (assessment/admin); no value found for :id under /api/initiative-decks (anonymous)"
+    },
+    "GET /api/initiatives/:id/run-reports": {
+      "skipped": "no value found for :id under /api/initiatives (orgiq/admin); no value found for :id under /api/initiatives (assessment/admin); no value found for :id under /api/initiatives (anonymous)"
     },
     "GET /api/iq/prompts/:agent/pointers": {
       "skipped": "no value found for :agent under /api/iq/prompts (orgiq/admin); no value found for :agent under /api/iq/prompts (assessment/admin); no value found for :agent under /api/iq/prompts (anonymous)"
@@ -8287,6 +8290,9 @@
     "GET /api/runs/:ref/brief": {
       "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :ref under /api/runs (anonymous)"
     },
+    "GET /api/runs/:ref/report": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); no value found for :ref under /api/runs (anonymous)"
+    },
     "GET /api/runs/:ref/runbooks/:id": {
       "skipped": "no value found for :id under /api/runs/agent-run%3A79eed77e-7aee-4911-a7ee-d45878eed5eb/runbooks (orgiq/admin); no value found for :id under /api/runs/agent-run%3A79eed77e-7aee-4911-a7ee-d45878eed5eb/runbooks (assessment/admin); no value found for :ref under /api/runs (anonymous)"
     },
@@ -10126,6 +10132,9 @@
       }
     },
     "GET /api/work-items/:id/brief-preview": {
+      "skipped": "no value found for :id under /api/work-items (orgiq/admin); no value found for :id under /api/work-items (assessment/admin); no value found for :id under /api/work-items (anonymous)"
+    },
+    "GET /api/work-items/:id/run-reports": {
       "skipped": "no value found for :id under /api/work-items (orgiq/admin); no value found for :id under /api/work-items (assessment/admin); no value found for :id under /api/work-items (anonymous)"
     },
     "GET /api/work/ask-suggestions": {

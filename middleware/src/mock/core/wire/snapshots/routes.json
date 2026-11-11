@@ -1038,7 +1038,7 @@
     {
       "method": "GET",
       "path": "/api/briefs",
-      "source": "src/routes/session-briefs.ts:94"
+      "source": "src/routes/session-briefs.ts:100"
     },
     {
       "method": "GET",
@@ -2156,6 +2156,11 @@
       "source": "src/routes/initiative-decks.ts:60"
     },
     {
+      "method": "GET",
+      "path": "/api/initiatives/:id/run-reports",
+      "source": "src/routes/session-briefs.ts:215"
+    },
+    {
       "method": "POST",
       "path": "/api/iq/prompts/:agent/candidate",
       "source": "src/routes/prompt-pointers.ts:39"
@@ -2293,7 +2298,7 @@
     {
       "method": "GET",
       "path": "/api/local-compute/events",
-      "source": "src/routes/local-compute.ts:1105"
+      "source": "src/routes/local-compute.ts:1166"
     },
     {
       "method": "POST",
@@ -2313,17 +2318,17 @@
     {
       "method": "GET",
       "path": "/api/local-compute/jobs/:jobId/log",
-      "source": "src/routes/local-compute.ts:789"
+      "source": "src/routes/local-compute.ts:850"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/jobs/:jobId/log",
-      "source": "src/routes/local-compute.ts:749"
+      "source": "src/routes/local-compute.ts:810"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/jobs/:jobId/log/stream",
-      "source": "src/routes/local-compute.ts:807"
+      "source": "src/routes/local-compute.ts:868"
     },
     {
       "method": "POST",
@@ -2338,42 +2343,42 @@
     {
       "method": "POST",
       "path": "/api/local-compute/log",
-      "source": "src/routes/local-compute.ts:867"
+      "source": "src/routes/local-compute.ts:928"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/nodes",
-      "source": "src/routes/local-compute.ts:984"
+      "source": "src/routes/local-compute.ts:1045"
     },
     {
       "method": "DELETE",
       "path": "/api/local-compute/nodes/:id",
-      "source": "src/routes/local-compute.ts:1182"
+      "source": "src/routes/local-compute.ts:1243"
     },
     {
       "method": "PATCH",
       "path": "/api/local-compute/nodes/:id",
-      "source": "src/routes/local-compute.ts:1160"
+      "source": "src/routes/local-compute.ts:1221"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/nodes/:nodeId/log",
-      "source": "src/routes/local-compute.ts:913"
+      "source": "src/routes/local-compute.ts:974"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/nodes/:nodeId/log/stream",
-      "source": "src/routes/local-compute.ts:931"
+      "source": "src/routes/local-compute.ts:992"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/nodes/:nodeId/work",
-      "source": "src/routes/local-compute.ts:1237"
+      "source": "src/routes/local-compute.ts:1298"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/nodes/all",
-      "source": "src/routes/local-compute.ts:996"
+      "source": "src/routes/local-compute.ts:1057"
     },
     {
       "method": "GET",
@@ -2393,7 +2398,7 @@
     {
       "method": "GET",
       "path": "/api/local-compute/presence/repos",
-      "source": "src/routes/local-compute.ts:1031"
+      "source": "src/routes/local-compute.ts:1092"
     },
     {
       "method": "POST",
@@ -2403,7 +2408,7 @@
     {
       "method": "GET",
       "path": "/api/local-compute/runs",
-      "source": "src/routes/local-compute.ts:1378"
+      "source": "src/routes/local-compute.ts:1439"
     },
     {
       "method": "POST",
@@ -2413,7 +2418,7 @@
     {
       "method": "GET",
       "path": "/api/local-compute/stream",
-      "source": "src/routes/local-compute.ts:1077"
+      "source": "src/routes/local-compute.ts:1138"
     },
     {
       "method": "GET",
@@ -3113,72 +3118,72 @@
     {
       "method": "GET",
       "path": "/api/runbooks",
-      "source": "src/routes/runbooks.ts:268"
+      "source": "src/routes/runbooks.ts:363"
     },
     {
       "method": "GET",
       "path": "/api/runbooks/:id",
-      "source": "src/routes/runbooks.ts:334"
+      "source": "src/routes/runbooks.ts:429"
     },
     {
       "method": "GET",
       "path": "/api/runbooks/:id/applications",
-      "source": "src/routes/runbooks.ts:370"
+      "source": "src/routes/runbooks.ts:465"
     },
     {
       "method": "POST",
       "path": "/api/runbooks/:id/applications",
-      "source": "src/routes/runbooks.ts:773"
+      "source": "src/routes/runbooks.ts:800"
     },
     {
       "method": "GET",
       "path": "/api/runbooks/:id/diff",
-      "source": "src/routes/runbooks.ts:357"
+      "source": "src/routes/runbooks.ts:452"
     },
     {
       "method": "POST",
       "path": "/api/runbooks/:id/retire",
-      "source": "src/routes/runbooks.ts:746"
+      "source": "src/routes/runbooks.ts:773"
     },
     {
       "method": "GET",
       "path": "/api/runbooks/:id/versions",
-      "source": "src/routes/runbooks.ts:349"
+      "source": "src/routes/runbooks.ts:444"
     },
     {
       "method": "GET",
       "path": "/api/runbooks/proposals",
-      "source": "src/routes/runbooks.ts:290"
+      "source": "src/routes/runbooks.ts:385"
     },
     {
       "method": "POST",
       "path": "/api/runbooks/proposals",
-      "source": "src/routes/runbooks.ts:380"
+      "source": "src/routes/runbooks.ts:475"
     },
     {
       "method": "GET",
       "path": "/api/runbooks/proposals/:pid",
-      "source": "src/routes/runbooks.ts:305"
+      "source": "src/routes/runbooks.ts:400"
     },
     {
       "method": "POST",
       "path": "/api/runbooks/proposals/:pid/accept",
-      "source": "src/routes/runbooks.ts:536"
+      "source": "src/routes/runbooks.ts:563"
     },
     {
       "method": "POST",
       "path": "/api/runbooks/proposals/:pid/merge",
-      "source": "src/routes/runbooks.ts:706"
+      "source": "src/routes/runbooks.ts:733"
     },
     {
       "method": "POST",
       "path": "/api/runbooks/proposals/:pid/reject",
-      "source": "src/routes/runbooks.ts:644"
+      "source": "src/routes/runbooks.ts:671"
     },
     {
       "method": "POST",
       "path": "/api/runbooks/proposals/:pid/withdraw",
-      "source": "src/routes/runbooks.ts:660"
+      "source": "src/routes/runbooks.ts:687"
     },
     {
       "method": "GET",
@@ -3203,17 +3208,22 @@
     {
       "method": "GET",
       "path": "/api/runs/:ref/brief",
-      "source": "src/routes/session-briefs.ts:108"
+      "source": "src/routes/session-briefs.ts:114"
+    },
+    {
+      "method": "GET",
+      "path": "/api/runs/:ref/report",
+      "source": "src/routes/session-briefs.ts:198"
     },
     {
       "method": "GET",
       "path": "/api/runs/:ref/runbooks/:id",
-      "source": "src/routes/session-briefs.ts:132"
+      "source": "src/routes/session-briefs.ts:138"
     },
     {
       "method": "GET",
       "path": "/api/runs/:ref/skills",
-      "source": "src/routes/session-briefs.ts:163"
+      "source": "src/routes/session-briefs.ts:169"
     },
     {
       "method": "GET",
@@ -3453,7 +3463,7 @@
     {
       "method": "GET",
       "path": "/api/skill-library",
-      "source": "src/routes/session-briefs.ts:179"
+      "source": "src/routes/session-briefs.ts:221"
     },
     {
       "method": "DELETE",
@@ -3928,7 +3938,12 @@
     {
       "method": "GET",
       "path": "/api/work-items/:id/brief-preview",
-      "source": "src/routes/session-briefs.ts:188"
+      "source": "src/routes/session-briefs.ts:230"
+    },
+    {
+      "method": "GET",
+      "path": "/api/work-items/:id/run-reports",
+      "source": "src/routes/session-briefs.ts:209"
     },
     {
       "method": "GET",
