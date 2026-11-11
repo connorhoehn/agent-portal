@@ -6,7 +6,7 @@
 // providers on their offline (MOCK_AURORA) stores, so "the hold settled" and
 // "every mint wrote a row" are read back from the tables, not from a spy.
 
-jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: true, agentcore: true } } }));
+jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', auth: { sessionSigningSecretArn: '', policyStoreId: undefined, cognito: null }, mock: { aurora: true, agentcore: true } } }));
 
 import { TextEncoder } from 'node:util';
 import { recordSpend, mockStoredEntries } from '../../providers/spend-ledger.js';
@@ -34,6 +34,11 @@ import type { ClaimedAgentJob, AgentJob } from '../../providers/agent-jobs.js';
 import type { SpendHold } from '../../providers/spend-holds.js';
 import type { DevboxProfile } from '../devbox-profile.js';
 import type { AgentProject } from '../../providers/agent-projects.js';
+import { recordRunEnd } from '../run-reports/record.js';
+import { RowsRunReportStore, privateRunReportSources } from '../run-reports/index.js';
+import { settleDebrief } from '../runbooks/debrief-file.js';
+import { seededStore } from '../../routes/__tests__/runbook-world.js';
+import { LOGOUT_SHIM_COOKIE_SKILL_MD, LOGOUT_SHIM_COOKIE_ANSWER } from '../../mock/debrief-fixtures.js';
 
 const ARN = 'arn:aws:bedrock-agentcore:us-east-1:111122223333:runtime/orgiq_microvm-abc';
 const AP_ID = '3f2a9c1e-7b4d-4e8a-9c0f-1a2b3c4d5e6f';
@@ -94,14 +99,14 @@ const TASK_EVENTS: Array<Record<string, unknown>> = [
 
 type Answer = unknown | ((payload: Record<string, unknown>, nth: number) => unknown);
 
-function fakeAgentCore(answers: Partial<Record<'boot' | 'task' | 'push', Answer>> = {}) {
+function fakeAgentCore(answers: Partial<Record<'boot' | 'task' | 'push' | 'debrief', Answer>> = {}) {
   const seen: Record<string, number> = {};
   const invokes: Invoke[] = [];
   const client = {
     send: jest.fn(async (cmd: { input: { runtimeSessionId: string; agentRuntimeArn: string; payload: Uint8Array } }) => {
       const payload = JSON.parse(Buffer.from(cmd.input.payload).toString('utf8')) as Record<string, unknown>;
       invokes.push({ sessionId: cmd.input.runtimeSessionId, arn: cmd.input.agentRuntimeArn, payload });
-      const op = payload['op'] as 'boot' | 'task' | 'push';
+      const op = payload['op'] as 'boot' | 'task' | 'push' | 'debrief';
       seen[op] = (seen[op] ?? 0) + 1;
       const given = answers[op];
       const answer = (typeof given === 'function' ? (given as (p: Record<string, unknown>, n: number) => unknown)(payload, seen[op]!) : given) ?? (op === 'boot'
@@ -767,5 +772,87 @@ describe('the overrun sweep (§7)', () => {
     expect(microvmSessions.rows().find((r) => r.session_id.startsWith('mvm1-old'))).toMatchObject({ status: 'stopped', stop_reason: 'overrun' });
     expect(microvmSessions.rows().find((r) => r.session_id.startsWith('mvm1-new'))!.status).toBe('running');
     expect(h.deps.removeBox).toHaveBeenCalledWith('mvm:mvm1-old-session-aaaaaaaaaaaaaaaaaaaaaaaa-1');
+  });
+});
+
+// ─── The debrief, before the stop (docs/learning-loop-design.md, Stage 2) ─────
+
+describe('the debrief on the box', () => {
+  const block = (o: object) => `Retry added.\n\n\`\`\`lab-report\n${JSON.stringify({ summary: 'Retry added.', verification: [], obstacles: [], ...o })}\n\`\`\``;
+  const taskWith = (o: object) => [TASK_EVENTS[0]!, TASK_EVENTS[1]!, { ...RESULT, result: block(o) }, END];
+  const LEARNED = { learned: 'A 401 from the identity provider hides the real cause until the clock skew is checked.', obstacles: ['The first retry masked the skew.'] };
+  const SAME_NOW = '2026-11-10T12:00:00.000Z';
+  let reports: RowsRunReportStore;
+  let withStores: Partial<MicrovmDeps>;
+  const settleCost = jest.fn(async () => undefined);
+
+  beforeEach(() => {
+    reports = new RowsRunReportStore(privateRunReportSources());
+    const runbooks = seededStore();
+    const nowIso = () => SAME_NOW;
+    settleCost.mockClear();
+    withStores = {
+      recordRunEnd: (i) => recordRunEnd(i, { reports, runbooks, nowIso }),
+      settleDebrief: (i) => settleDebrief(i, { reports, runbooks, nowIso, settle: settleCost, release: jest.fn(async () => undefined) }),
+    };
+    process.env['LEARNING_DEBRIEF_QUEUE_LIMIT'] = '10';
+  });
+  afterEach(() => { delete process.env['LEARNING_DEBRIEF_QUEUE_LIMIT']; });
+
+  it('debriefed: the report asks for it, the op runs before the stop, and the kept folder is filed as a proposal', async () => {
+    const h = harness(withStores, {
+      task: taskWith(LEARNED),
+      debrief: { ok: true, answer: LOGOUT_SHIM_COOKIE_ANSWER, folder: { name: 'rb-logout-shim-cookie', skill_md: LOGOUT_SHIM_COOKIE_SKILL_MD, files: [] }, cost_usd: 0.07 },
+    });
+    await judgeAndRun(h);
+    const sid = h.invokes[0]!.sessionId;
+    const ops = h.invokes.map((i) => i.payload['op']);
+    expect(ops).toEqual(['boot', 'task', 'push', 'debrief']);
+    // Before the stop, and the stop is still the last thing done to the box.
+    expect(h.order.indexOf('invoke:debrief')).toBeLessThan(h.order.indexOf(`stop:${sid}`));
+    const d = h.invokes[3]!.payload;
+    expect(d).toMatchObject({ runner: 'microvm', claude_session_id: CLAUDE_SID, model: PROFILE.models[0] });
+    expect(d['request']).toMatchObject({ runRef: job().id, keepDir: '.lab/keep', tools: ['Read', 'Glob', 'Grep', 'Write', 'Edit'] });
+    expect((d['request'] as { disallowedTools: string[] }).disallowedTools).toContain('Bash');
+
+    const report = (await reports.getReport(job().id))!;
+    expect(report.executor).toBe('microvm');
+    expect(report.claudeSessionId).toBe(CLAUDE_SID);
+    expect(report.debrief).toMatchObject({ state: 'filed', proposalKind: 'new', nonce: null });
+    expect(report.debrief!.proposalId).toBeTruthy();
+    expect(settleCost).toHaveBeenCalledWith({ runRef: job().id, costUsd: 0.07 });
+    // The job still completes, once, and the report is the one recorded before the stop.
+    expect(h.calls.completeJob).toHaveBeenCalledTimes(1);
+  });
+
+  it('skipped: a run that learned nothing never invokes the op and says why on the report', async () => {
+    const h = harness(withStores, { task: taskWith({ learned: '', obstacles: [] }) });
+    await judgeAndRun(h);
+    expect(h.invokes.map((i) => i.payload['op'])).toEqual(['boot', 'task', 'push']);
+    const report = (await reports.getReport(job().id))!;
+    expect(report.debrief).toMatchObject({ state: 'skipped', reason: 'nothing-learned' });
+    expect(h.calls.stopSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('skipped: a failed run is recorded where it always was and is not debriefed', async () => {
+    const h = harness(withStores, { task: [TASK_EVENTS[0]!, { ...RESULT, is_error: true, subtype: 'error_during_execution', result: block(LEARNED) }, { ...END, exit_code: 1 }] });
+    await judgeAndRun(h);
+    expect(h.invokes.map((i) => i.payload['op'])).not.toContain('debrief');
+    expect((await reports.getReport(job().id))!.debrief).toMatchObject({ state: 'skipped', reason: 'not-successful' });
+  });
+
+  it('resume failed: the box cannot resume the session, the debrief settles as session-unavailable and the run still ends', async () => {
+    const h = harness(withStores, { task: taskWith(LEARNED), debrief: { ok: false, error: 'session-unavailable', detail: 'exit 1' } });
+    await judgeAndRun(h);
+    expect((await reports.getReport(job().id))!.debrief).toMatchObject({ state: 'skipped', reason: 'session-unavailable', nonce: null });
+    expect(h.calls.stopSession).toHaveBeenCalledTimes(1);
+    expect(h.calls.completeJob).toHaveBeenCalledWith(job().id, expect.objectContaining({ status: 'awaiting_review' }));
+  });
+
+  it('resume failed: an invoke that throws is the same, and the box is still stopped', async () => {
+    const h = harness(withStores, { task: taskWith(LEARNED), debrief: () => { throw new Error('boom'); } });
+    await judgeAndRun(h);
+    expect((await reports.getReport(job().id))!.debrief).toMatchObject({ state: 'skipped', reason: 'session-unavailable' });
+    expect(h.calls.stopSession).toHaveBeenCalledTimes(1);
   });
 });

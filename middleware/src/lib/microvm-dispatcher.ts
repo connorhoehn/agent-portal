@@ -53,7 +53,9 @@ import { lifetimePolicy } from './devbox-lifetime.js';
 import { loadMicrovmParameters, microvmConfig, type MicrovmConfig, type ParameterReader } from './microvm-config.js';
 import { microvmBoxId, microvmBranch, microvmSessionId, transcriptKey } from './microvm-ids.js';
 import { skillsLoadedByEvent } from './run-reports/use-detection.js';
-import { failureCodeOf, outcomeOfJobStatus } from './run-reports/record.js';
+import { failureCodeOf, outcomeOfJobStatus, type RunEndInput } from './run-reports/record.js';
+import { debriefRequestFor, givenIds } from './runbooks/debrief.js';
+import type { RunReport } from './run-reports/types.js';
 import {
   invokeMicrovmJson, invokeMicrovmStream, PRESIGN_EXPIRES_S, type AgentCoreSend, type PresignInput,
 } from './microvm-invoke.js';
@@ -76,6 +78,12 @@ export interface MicrovmDeps {
   completeJob: (id: string, opts: { claimToken: string; status: 'awaiting_review' | 'done' | 'failed'; result?: Record<string, unknown>; error?: string }) => Promise<boolean>;
   /** The run report (lib/run-reports/record.ts recordRunEnd). Optional so a test's deps may leave it out. */
   recordRunEnd?: (input: import('./run-reports/record.js').RunEndInput) => Promise<unknown>;
+  /**
+   * Settle the run's debrief with what the devbox `debrief` op returned: the same function the
+   * local compute debrief route calls (lib/runbooks/debrief-file.ts settleDebrief). Optional so a
+   * test's deps may leave it out; without it a requested debrief is left to expire.
+   */
+  settleDebrief?: (input: import('./runbooks/debrief-file.js').SettleDebriefInput) => Promise<unknown>;
   getJobFacts: (id: string) => Promise<AgentJob | null>;
   maintainAttempt: (id: string, claimToken: string, staleMs: number) => Promise<JobAttempt>;
 
@@ -525,6 +533,29 @@ export async function runMicrovmAttempt(job: ClaimedAgentJob, plan: Plan, deps: 
   const record = (e: ActivityEntry): void => { if (transcript.length < TRANSCRIPT_MAX_ENTRIES) transcript.push(e); };
   let slotHolder: string | null = holdId;
   let projectRunId: string | null = null;
+  let claudeSession: string | null = null;
+
+  // What the run cost at `atMs`: token cost from devbox_end plus compute up to then.
+  const priceAt = (atMs: number) => {
+    const cost = tokenCostFromEnd(end, plan.model, deps.estimateCost);
+    if (cost.costBasis === 'unknown' && cutoff && cutoff.meteredUsd > 0 && !end) {
+      cost.costUsd = cutoff.meteredUsd; cost.costBasis = 'estimated'; cost.estimatedCostUsd = cutoff.meteredUsd;
+    }
+    const seconds = invoked ? computeSeconds(bootedAtMs, atMs) : null;
+    const computeUsd = seconds !== null ? round4(seconds * cfg.computeUsdPerSecond) : null;
+    // cost_usd is the run's whole price — tokens plus compute — when the
+    // token cost is known; unknown tokens keep the entry unknown, never 0.
+    const totalUsd = cost.costUsd !== null ? round4(cost.costUsd + (computeUsd ?? 0)) : null;
+    const estimatedUsd = cost.estimatedCostUsd !== null ? round4(cost.estimatedCostUsd + (computeUsd ?? 0)) : null;
+    return { cost, seconds, computeUsd, totalUsd, estimatedUsd };
+  };
+  // The run report's input. A microVM run always has a checkout (the boot cloned it), so a debrief may write in it.
+  const runEndInput = (outcomeStatus: 'failed' | 'awaiting_review' | 'done', billedUsd: number | null): RunEndInput => ({
+    runRef: job.id, executor: 'microvm', outcome: outcomeOfJobStatus(outcomeStatus),
+    failureCode: error ? (cutoff ? 'budget' : failureCodeOf(error)) : null,
+    model: plan.model, billedUsd, hasCheckout: true,
+    worker: invoked ? { block: summary, skillsLoaded, claudeSessionId: claudeSession } : null,
+  });
 
   try {
     await deps.insertSession({
@@ -687,7 +718,7 @@ export async function runMicrovmAttempt(job: ClaimedAgentJob, plan: Plan, deps: 
               : (resultEv ? resultEventError(resultEv) : undefined) ?? 'the task reported no result';
       if (error) record({ t: 'error', detail: clip(error), ts: iso(deps.now()) });
     }
-    const claudeSession = typeof endEv?.['claude_session_id'] === 'string' ? endEv['claude_session_id'] as string : null;
+    claudeSession = typeof endEv?.['claude_session_id'] === 'string' ? endEv['claude_session_id'] as string : null;
     await deps.updateSession(sessionId, {
       // head_sha is the PUSHED head (the next attempt's lease): written after the push, not here.
       ended_at: iso(deps.now()), exit_code: exitCode, claude_session_id: claudeSession,
@@ -753,6 +784,22 @@ export async function runMicrovmAttempt(job: ClaimedAgentJob, plan: Plan, deps: 
     // ── stop: the session, always, once it was invoked (§7) ──
     let stopReason = cutoff ? 'cutoff' : error ? 'failed' : 'completed';
     if (lost) stopReason = 'attempt-lost';
+
+    // ── debrief (docs/learning-loop-design.md, Stage 2): the report is recorded now, while the
+    // box is still up, so the decision can ask the work session one more question before the stop.
+    // A run that did not end well is recorded where it always was, after the job completes. ──
+    if (invoked && !lost && !error && !cutoff && deps.recordRunEnd) {
+      try {
+        const status = job.payload['requiresReview'] !== false ? 'awaiting_review' : 'done';
+        const report = await deps.recordRunEnd(runEndInput(status, priceAt(deps.now()).totalUsd)) as RunReport | null;
+        if (report?.debrief?.state === 'requested') {
+          await debriefOnBox(report, { deps, plan, sessionId, repo, claudeSession, say });
+        }
+      } catch (err) {
+        say('debrief_failed', { error: (err as Error).message });
+      }
+    }
+
     let stopped = false;
     const stoppedAtMs = deps.now();
     if (invoked) {
@@ -767,16 +814,7 @@ export async function runMicrovmAttempt(job: ClaimedAgentJob, plan: Plan, deps: 
     deps.removeBox(boxId);
 
     // ── settlement (§6): token cost from devbox_end, plus compute ──
-    const cost = tokenCostFromEnd(end, plan.model, deps.estimateCost);
-    if (cost.costBasis === 'unknown' && cutoff && cutoff.meteredUsd > 0 && !end) {
-      cost.costUsd = cutoff.meteredUsd; cost.costBasis = 'estimated'; cost.estimatedCostUsd = cutoff.meteredUsd;
-    }
-    const seconds = invoked ? computeSeconds(bootedAtMs, stoppedAtMs) : null;
-    const computeUsd = seconds !== null ? round4(seconds * cfg.computeUsdPerSecond) : null;
-    // cost_usd is the run's whole price — tokens plus compute — when the
-    // token cost is known; unknown tokens keep the entry unknown, never 0.
-    const totalUsd = cost.costUsd !== null ? round4(cost.costUsd + (computeUsd ?? 0)) : null;
-    const estimatedUsd = cost.estimatedCostUsd !== null ? round4(cost.estimatedCostUsd + (computeUsd ?? 0)) : null;
+    const { cost, seconds, computeUsd, totalUsd, estimatedUsd } = priceAt(stoppedAtMs);
     await deps.updateSession(sessionId, {
       ...(stopped || !invoked ? { status: error ? 'failed' as const : 'stopped' as const, stopped_at: iso(stoppedAtMs), stop_reason: stopReason } : {}),
       cost_usd: totalUsd, cost_basis: cost.costBasis, compute_seconds: seconds, compute_usd: computeUsd,
@@ -814,12 +852,8 @@ export async function runMicrovmAttempt(job: ClaimedAgentJob, plan: Plan, deps: 
       }).catch(() => false);
       heldBackSaid.delete(job.id);
       if (committed) {
-        await deps.recordRunEnd?.({
-          runRef: job.id, executor: 'microvm', outcome: outcomeOfJobStatus(status),
-          failureCode: error ? (cutoff ? 'budget' : failureCodeOf(error)) : null,
-          model: plan.model, billedUsd: totalUsd,
-          worker: invoked ? { block: summary, skillsLoaded } : null,
-        }).catch(() => undefined);
+        // Write-once: when the debrief step above already recorded this run's report, this returns it.
+        await deps.recordRunEnd?.(runEndInput(status, totalUsd)).catch(() => undefined);
         deps.appendEvent(boxId, { type: 'job_finished', jobId: job.id, ok: !error, ts: iso(deps.now()) });
         deps.emitJob(status, job.id, { boxId, runner: 'microvm' });
       }
@@ -830,6 +864,51 @@ export async function runMicrovmAttempt(job: ClaimedAgentJob, plan: Plan, deps: 
 }
 
 class StepFailed extends Error {}
+
+/**
+ * Ask the work session for its debrief on the box that ran it: the devbox `debrief` op with the
+ * request `debriefRequestFor` builds (the box may only narrow it), then the answer and the kept
+ * folder through the same `settleDebrief` the local compute route uses. A request that cannot be
+ * made, a session that cannot be resumed, or an invoke that fails settles as `session-unavailable`;
+ * the run is never failed by its debrief, and this never throws.
+ */
+async function debriefOnBox(
+  report: RunReport,
+  ctx: { deps: MicrovmDeps; plan: Plan; sessionId: string; repo: string; claudeSession: string | null; say: (event: string, fields?: Record<string, unknown>) => void },
+): Promise<void> {
+  const { deps, plan, sessionId, repo, claudeSession, say } = ctx;
+  if (!deps.settleDebrief) return;
+  const settle = async (input: Omit<import('./runbooks/debrief-file.js').SettleDebriefInput, 'runRef' | 'repo'>): Promise<void> => {
+    await deps.settleDebrief!({ runRef: report.runRef, repo, ...input });
+  };
+  try {
+    const request = claudeSession ? await debriefRequestFor(report, givenIds(report)) : null;
+    if (!request) { await settle({ sessionUnavailable: true }); say('debrief', { phase: 'end', state: 'session-unavailable', reason: claudeSession ? 'no-request' : 'no-session-id' }); return; }
+    say('debrief', { phase: 'start', timeoutS: request.timeoutS });
+    let out: Record<string, unknown> | null = null;
+    try {
+      out = await invokeMicrovmJson(deps.client(), plan.runtimeArn, sessionId, {
+        op: 'debrief', runner: 'microvm', claude_session_id: claudeSession, model: plan.model, request,
+      }, AbortSignal.timeout((request.timeoutS + 60) * 1000));
+    } catch (err) {
+      say('debrief', { phase: 'invoke_failed', error: (err as Error).message });
+    }
+    if (!out || out['ok'] !== true) {
+      await settle({ sessionUnavailable: true });
+      say('debrief', { phase: 'end', state: 'session-unavailable', reason: String(out?.['error'] ?? 'invoke-failed') });
+      return;
+    }
+    await settle({
+      answer: out['answer'], folder: out['folder'], problems: out['problems'],
+      costUsd: typeof out['cost_usd'] === 'number' ? out['cost_usd'] : null,
+    });
+    say('debrief', { phase: 'end', state: 'settled' });
+  } catch (err) {
+    say('debrief', { phase: 'failed', error: (err as Error).message });
+    // Never leave the request open (and a learning-line hold held) for the sweeper when the step itself broke.
+    await settle({ sessionUnavailable: true }).catch(() => undefined);
+  }
+}
 
 // ─── The overrun sweep (§7) ───────────────────────────────────────────────────
 
@@ -946,6 +1025,7 @@ export async function defaultMicrovmDeps(): Promise<MicrovmDeps> {
     markRunning: (id, t) => jobs.markRunning(id, t),
     completeJob: (id, o) => jobs.completeJob(id, o),
     recordRunEnd: async (input) => (await import('./run-reports/record.js')).recordRunEnd(input),
+    settleDebrief: async (input) => (await import('./runbooks/debrief-file.js')).settleDebrief(input),
     getJobFacts: (id) => jobs.getMicrovmJobFacts(id),
     maintainAttempt: (id, t, ms) => attempt.maintainJobAttempt(id, t, ms),
     getUser: async (sub) => {
