@@ -505,7 +505,9 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
         for (const p of part.items) {
           if (kind && p.kind !== kind) continue;
           const rs = await reviewScopeOf(s, p);
-          if (rs && ((rs.scope.kind === 'initiative' && rs.scope.ref === initiative) || rs.area === initiative)) mine.push(p);
+          // A person's requested initiative lists here too, though it does not choose the reviewers.
+          const asked = p.proposed_scope?.kind === 'initiative' && p.proposed_scope.ref === initiative;
+          if (asked || (rs && ((rs.scope.kind === 'initiative' && rs.scope.ref === initiative) || rs.area === initiative))) mine.push(p);
         }
         next = part.next ?? undefined;
       } while (next);
