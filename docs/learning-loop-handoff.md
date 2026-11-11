@@ -56,7 +56,9 @@ The brief's health warning now covers an unproven runbook whose last run failed,
 
 The last recorded gap was already closed by lane C and only the note was stale: a run-authored draft whose frontmatter carries a key outside the portable set (`name`, `description`, `license`, `compatibility`, `metadata`) fails lint `R-frontmatter`, `allowed-tools` fails `R-allowed-tools`, and `routes/runbooks.ts` applies both before a proposal is filed (`lib/runbooks/lint.ts`, `skill.ts` `PORTABLE_FRONTMATTER_KEYS`; `model-lint.test.ts`).
 
-No actionable recorded gap is left in this loop. What remains is outside it: a microVM dispatch proven in a browser needs a real machine; real governed runs are not debriefed by decision 1; the component-library release behind the vendored 2.522.x tarballs is the library's (next-steps.md, "Library versions"); and the owner's decisions listed in next-steps.md stand as they were.
+The loop has new work (11 November, owner's direction: high-value software for initiatives, runs and runbooks; no phone or tablet work, no cloud). A read-only sweep found fourteen packages, each confirmed against the code, ranked in [value-sweep-2026-11-11.md](value-sweep-2026-11-11.md). Take them in that order, one cycle each, under the rules below; strike a package in next-steps.md ("Value sweep") when it merges. The first three are small: links between work item, run, initiative and runbook; a notice when a runbook proposal waits; writing a runbook by hand.
+
+Before the sweep no actionable recorded gap was left. What remains outside the loop: a microVM dispatch proven in a browser needs a real machine; real governed runs are not debriefed by decision 1; the component-library release behind the vendored 2.522.x tarballs is the library's (next-steps.md, "Library versions"); and the owner's decisions listed in next-steps.md stand as they were.
 
 ## Rules that bind this work
 
