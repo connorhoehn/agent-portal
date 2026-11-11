@@ -117,7 +117,8 @@ describe('GET /api/budgets/lines and PUT /api/budgets/learning', () => {
     expect(res.body.learning).toMatchObject({
       capUsd: 5, capSource: 'default', spentUsd: 1.5, heldUsd: 0.25, remainingUsd: 3.25, threshold: { percent: 35, reached: 0 },
     });
-    expect(res.body.local).toEqual({ reportedUsd: 3.75, runs: 1, billedUsd: 0 });
+    // The run recorded here, plus the three the mock seeds (0.46 + 0.31 + 0.18, mock/spend-ledger.ts).
+    expect(res.body.local).toEqual({ reportedUsd: 4.7, runs: 4, billedUsd: 0 });
     expect(res.body.month).toMatch(/^\d{4}-\d{2}$/);
   });
 
