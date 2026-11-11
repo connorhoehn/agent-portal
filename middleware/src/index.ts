@@ -53,6 +53,7 @@ import { pipelinesRouter } from './routes/pipelines.js';
 import { accessRouter } from './routes/access.js';
 import { accessQuickRouter } from './routes/access-requests-quick.js';
 import { runsFacadeRouter } from './routes/runs.js';
+import { runReportsRouter } from './routes/run-reports.js';
 import { initiativeDecksRouter } from './routes/initiative-decks.js';
 import { ingestRouter } from './routes/ingest.js';
 import { observabilityRouter } from './routes/observability.js';
@@ -385,6 +386,8 @@ app.use('/api/access-requests', accessQuickRouter);
 // both guarded per route inside the router (routes/session-briefs.ts).
 app.use('/api', sessionBriefsRouter);
 app.use('/api/runs', requireTenant('orgiq'), runsFacadeRouter);
+// One filtered page of run reports across every executor (the Runs list, routes/run-reports.ts): the façade's door.
+app.use('/api/run-reports', requireTenant('orgiq'), runReportsRouter);
 // Initiative status decks (docs/agentic-flows-migration.md slice 6); a deck built
 // with budget figures is visible only at the budgets read tier (routes/initiative-decks.ts).
 app.use('/api/initiative-decks', requireTenant('orgiq'), initiativeDecksRouter);

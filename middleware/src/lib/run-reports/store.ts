@@ -10,12 +10,17 @@
 //    report that is already there, unchanged, with `created: false`.
 //  * Reads return copies.
 //  * Lists are newest `endedAt` first, then runRef.
-import type { DebriefState, RunDebrief, RunReport } from './types.js';
+import type { DebriefState, RunDebrief, RunExecutor, RunOutcome, RunReport } from './types.js';
 import { InvalidWriteError, paginate, type Page } from '../runbooks/store.js';
 
 export interface ListRunReportsQuery {
   workItemId?: string;
   initiativeId?: string;
+  /** One or more executors (`GET /api/run-reports?executor=fleet,mock`). */
+  executors?: readonly RunExecutor[];
+  outcome?: RunOutcome;
+  /** A debrief state, or `none`: the run has no debrief record. */
+  debrief?: DebriefState | 'none';
   cursor?: string;
   limit?: number;
 }
@@ -39,7 +44,11 @@ export const byEndedDesc = (a: RunReport, b: RunReport): number =>
   b.endedAt.localeCompare(a.endedAt) || a.runRef.localeCompare(b.runRef);
 
 export function filterReports(rows: readonly RunReport[], q: ListRunReportsQuery | undefined): RunReport[] {
-  return rows.filter((r) => (!q?.workItemId || r.workItemId === q.workItemId) && (!q?.initiativeId || r.initiativeId === q.initiativeId));
+  return rows.filter((r) => (!q?.workItemId || r.workItemId === q.workItemId)
+    && (!q?.initiativeId || r.initiativeId === q.initiativeId)
+    && (!q?.executors?.length || q.executors.includes(r.executor))
+    && (!q?.outcome || r.outcome === q.outcome)
+    && (!q?.debrief || (q.debrief === 'none' ? debriefStateOf(r) === null : debriefStateOf(r) === q.debrief)));
 }
 
 export function pageReports(rows: RunReport[], q: ListRunReportsQuery | undefined): Page<RunReport> {

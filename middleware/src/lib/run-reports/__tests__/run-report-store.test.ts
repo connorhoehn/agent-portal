@@ -75,6 +75,27 @@ describe.each(backends)('$name (RunReportStore contract)', ({ open }) => {
     expect(page.next).not.toBeNull();
   });
 
+  it('lists a filtered page across executors: executor, outcome, debrief, initiative, newest first', async () => {
+    const debrief = (state: 'filed' | 'skipped') => ({ state, reason: null, reasonText: null, promptVersion: null, decidedAt: '2026-11-10T10:00:00.000Z',
+      expiresAt: null, settledAt: null, nonce: null, holdId: null, ceilingUsd: null, answer: null, proposalId: null, proposalKind: null,
+      convertedFrom: null, problems: [], lint: [], cost: { billedUsd: null, reportedUsd: null }, simulated: true });
+    await store.putReport(report('q1', { executor: 'fleet', endedAt: '2026-11-10T08:00:00.000Z' }));
+    await store.putReport(report('l1', { executor: 'local', outcome: 'failed', endedAt: '2026-11-10T09:00:00.000Z' }));
+    await store.putReport(report('m1', { executor: 'mock', debrief: debrief('filed'), endedAt: '2026-11-10T10:00:00.000Z' }));
+    await store.putReport(report('m2', { executor: 'mock', debrief: debrief('skipped'), initiativeId: 'p-other', endedAt: '2026-11-10T11:00:00.000Z' }));
+    const refs = async (q: Parameters<RunReportStore['listReports']>[0]) => (await store.listReports(q)).items.map((r) => r.runRef);
+    expect(await refs({ executors: ['fleet', 'mock'] })).toEqual(['m2', 'm1', 'q1']);
+    expect(await refs({ executors: ['local'] })).toEqual(['l1']);
+    expect(await refs({ outcome: 'failed' })).toEqual(['l1']);
+    expect(await refs({ debrief: 'filed' })).toEqual(['m1']);
+    expect(await refs({ debrief: 'skipped' })).toEqual(['m2']);
+    expect(await refs({ debrief: 'none' })).toEqual(['l1', 'q1']);
+    expect(await refs({ initiativeId: 'p-other', executors: ['mock'] })).toEqual(['m2']);
+    const page = await store.listReports({ executors: ['fleet', 'mock'], limit: 2 });
+    expect(page.items.map((r) => r.runRef)).toEqual(['m2', 'm1']);
+    expect((await store.listReports({ executors: ['fleet', 'mock'], limit: 2, cursor: page.next! })).items.map((r) => r.runRef)).toEqual(['q1']);
+  });
+
   it('refuses a report without a runRef', async () => {
     await expect(store.putReport(report(''))).rejects.toThrow(/runRef/);
   });
