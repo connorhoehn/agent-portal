@@ -126,6 +126,8 @@ const NAV_ITEMS: NavItem[] = [
   // Plan's front door. Sprints are a lens on this page (?lens=sprints), not a
   // sibling item — a sprint is one initiative's iteration.
   { path: '/iq/projects',   label: 'Initiatives', tenant: 'orgiq',     group: 'Plan' },
+  // Your own open work across every initiative: a flat table, so no section rail.
+  { path: '/iq/my-work',    label: 'My work',     tenant: 'orgiq',     group: 'Plan' },
   { path: '/iq/decisions',  label: 'Decisions',   tenant: 'orgiq',     group: 'Plan' },
   // ONE Build door for the whole agentic loop. "Automate" opens on the
   // overview; its sub-rail carries Queue, Findings (DLQ), Bots and Changes —

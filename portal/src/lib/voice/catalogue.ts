@@ -71,6 +71,7 @@ export const NAVIGATE_PAGE_IDS: ReadonlyArray<{ id: string; tenants: readonly st
   { id: 'work-queue', tenants: ['orgiq'] },
   { id: 'findings', tenants: ['orgiq'] },
   { id: 'initiatives', tenants: ['orgiq'] },
+  { id: 'my-work', tenants: ['orgiq'] },
   { id: 'decisions', tenants: ['orgiq'] },
   { id: 'agent-library', tenants: ['orgiq'] },
   { id: 'designs', tenants: ['orgiq'] },

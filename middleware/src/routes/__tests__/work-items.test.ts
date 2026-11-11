@@ -163,6 +163,35 @@ describe('GET /api/graph/work', () => {
     }));
   });
 
+  it('assignee=me is the caller\'s own person from the directory, never a query value', async () => {
+    resolveSessionMock.mockReturnValue({ sub: 'u-mia', role: 'sme', tenant: 'orgiq' });
+    getUserMock.mockResolvedValue({ personId: 'p-020' });
+    const res = await request(buildApp()).get('/api/graph/work?assignee=me&status=open,in_progress,in_review');
+    expect(res.status).toBe(200);
+    expect(searchMock).toHaveBeenCalledWith(expect.objectContaining({ assigneeId: 'p-020', status: 'open,in_progress,in_review' }));
+  });
+
+  it('assignee=me with no linked person is an empty list, not everyone\'s work', async () => {
+    resolveSessionMock.mockReturnValue({ sub: 'u-nobody', role: 'sme', tenant: 'orgiq' });
+    getUserMock.mockResolvedValue({ personId: null });
+    const res = await request(buildApp()).get('/api/graph/work?assignee=me');
+    expect(res.body).toEqual([]);
+    expect(searchMock).not.toHaveBeenCalled();
+  });
+
+  it('another person\'s id is allowed, as GET /people/:id/work already allows it, and an unknown one is 404', async () => {
+    const res = await request(buildApp()).get('/api/graph/work?assignee=p-008');
+    expect(res.status).toBe(200);
+    expect(searchMock).toHaveBeenCalledWith(expect.objectContaining({ assigneeId: 'p-008' }));
+    personExistsMock.mockResolvedValue(false);
+    expect((await request(buildApp()).get('/api/graph/work?assignee=p-nope')).status).toBe(404);
+  });
+
+  it('with no assignee nothing narrows to a person', async () => {
+    await request(buildApp()).get('/api/graph/work');
+    expect(searchMock).toHaveBeenCalledWith(expect.objectContaining({ assigneeId: undefined }));
+  });
+
   it.each(['today', 'week'])('accepts period=%s', async (period) => {
     const res = await request(buildApp()).get(`/api/graph/work?period=${period}`);
     expect(res.status).toBe(200);

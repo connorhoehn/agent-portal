@@ -110,6 +110,7 @@ const PromptOpsHomePage = lazy(() => import('./pages/iq/PromptOpsHomePage'));
 const WorkHomePage = lazy(() => import('./pages/work/WorkHomePage'));
 const WorkQueuePage = lazy(() => import('./pages/work/QueuePage'));
 const DesignsPage = lazy(() => import('./pages/designs/DesignsPage'));
+const MyWorkPage = lazy(() => import('./pages/iq/MyWorkPage'));
 const DecisionsPage = lazy(() => import('./pages/decisions/DecisionsPage'));
 const LibraryPage = lazy(() => import('./pages/library/LibraryPage'));
 const RunbooksModule = lazy(() => import('./pages/runbooks/RunbooksModule'));
@@ -582,6 +583,7 @@ export function App() {
               <Page element={<ScoresComparePage />} />
             </Gate>
           } />
+          <Route path="my-work" element={<Page element={<MyWorkPage />} />} />
           <Route path="decisions" element={<Page element={<DecisionsPage />} />} />
           <Route path="decisions/:id" element={<Page element={<DecisionsPage />} />} />
           <Route path="projects" element={<Page element={<ProjectsPage />} />} />

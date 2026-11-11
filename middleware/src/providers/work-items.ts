@@ -149,7 +149,10 @@ export interface SearchWorkItemsOpts {
   team?: string;
   projectId?: string;
   sprintId?: string;
+  /** One status, or several joined by commas (`open,in_progress,in_review`). */
   status?: string;
+  /** Only items assigned to this person. */
+  assigneeId?: string;
   period?: string;
   limit?: number;
 }
@@ -415,6 +418,11 @@ async function safeExec(sql: string, params: SqlParameter[] = []): Promise<Recor
 
 // ─── Aurora queries ───────────────────────────────────────────────────────────
 
+/** A status filter as a list: one status, or several joined by commas. */
+function statusList(status: string): string[] {
+  return status.split(',').map((x) => x.trim()).filter(Boolean);
+}
+
 async function dbSearchWorkItems(opts: SearchWorkItemsOpts): Promise<WorkItem[]> {
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
   const params: SqlParameter[] = [intParam('lim', limit)];
@@ -433,8 +441,13 @@ async function dbSearchWorkItems(opts: SearchWorkItemsOpts): Promise<WorkItem[]>
     params.push(strParam('team', opts.team));
   }
   if (opts.status) {
-    clauses.push(`wi.status = :status`);
-    params.push(strParam('status', opts.status));
+    const statuses = statusList(opts.status);
+    clauses.push(`wi.status IN (${statuses.map((_, n) => `:status_${n}`).join(', ')})`);
+    statuses.forEach((st, n) => params.push(strParam(`status_${n}`, st)));
+  }
+  if (opts.assigneeId) {
+    clauses.push(`wi.assignee_id = :assignee_id`);
+    params.push(strParam('assignee_id', opts.assigneeId));
   }
   if (opts.sprintId) {
     clauses.push(`wi.sprint_id = :sprint_id`);
@@ -1020,7 +1033,11 @@ export async function searchWorkItems(opts: SearchWorkItemsOpts): Promise<WorkIt
     items = items.filter((i) => i.projectId === opts.projectId);
   }
   if (opts.status) {
-    items = items.filter((i) => i.status === opts.status);
+    const statuses = statusList(opts.status);
+    items = items.filter((i) => statuses.includes(i.status));
+  }
+  if (opts.assigneeId) {
+    items = items.filter((i) => i.assigneeId === opts.assigneeId);
   }
   if (opts.sprintId) {
     items = items.filter((i) => i.sprintId === opts.sprintId);

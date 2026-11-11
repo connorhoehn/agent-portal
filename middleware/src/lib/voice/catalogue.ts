@@ -135,6 +135,7 @@ export const NAVIGATE_PAGES: ReadonlyArray<{ id: string; path: string; tenants: 
   { id: 'work-queue', path: '/iq/work/queue', tenants: ['orgiq'] },
   { id: 'findings', path: '/iq/work/findings', tenants: ['orgiq'] },
   { id: 'initiatives', path: '/iq/projects', tenants: ['orgiq'] },
+  { id: 'my-work', path: '/iq/my-work', tenants: ['orgiq'] },
   { id: 'decisions', path: '/iq/decisions', tenants: ['orgiq'] },
   { id: 'agent-library', path: '/iq/library', tenants: ['orgiq'] },
   { id: 'designs', path: '/iq/designs', tenants: ['orgiq'] },

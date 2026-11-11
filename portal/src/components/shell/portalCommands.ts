@@ -117,6 +117,8 @@ export const PAGES: readonly PageEntry[] = [
     keywords: ['finding', 'sweep', 'signal', 'dlq', 'dead letter', 'failure'] },
   { label: 'Initiatives',        hint: 'Epics, decisions, contributors',      path: '/iq/projects',                                tenant: 'orgiq',  group: 'Plan', pageId: 'initiatives',
     keywords: ['initiative', 'project', 'program', 'sprint', 'epic'] },
+  { label: 'My work',            hint: 'Your open work items across every initiative', path: '/iq/my-work',                          tenant: 'orgiq',  group: 'Plan', pageId: 'my-work',
+    keywords: ['my work', 'assigned', 'mine', 'my tasks', 'my items', 'todo', 'work items', 'story', 'bug'] },
   { label: 'Decisions',          hint: 'Calls made and calls waiting',        path: '/iq/decisions',                               tenant: 'orgiq',  group: 'Plan', pageId: 'decisions',
     keywords: ['decision', 'decide', 'escalated', 'adr', 'call', 'rationale', 'decider'] },
   { label: 'Agent library',            hint: 'Every prompt, system prompt and evaluator', path: '/iq/library',                          tenant: 'orgiq',  group: 'Build', pageId: 'agent-library',

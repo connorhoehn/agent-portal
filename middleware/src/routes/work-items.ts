@@ -292,7 +292,9 @@ function toClientError(err: Error): { status: number; error: string } | null {
 }
 
 // ── Cross-project work search ─────────────────────────────────────────────────
-// GET /api/graph/work?label=kubernetes&team=Platform+Engineering&sprint=spr-obs-s3&status=in_progress&period=today&limit=50
+// GET /api/graph/work?label=kubernetes&team=Platform+Engineering&sprint=spr-obs-s3&status=in_progress&assignee=me&period=today&limit=50
+//
+// `status` may be several, comma-separated (`open,in_progress,in_review`). `assignee` is `me` or a person id.
 //
 // `team` is a real filter on both paths now. It was documented here, honoured
 // by the mock path and ignored by Aurora, so `?team=NoSuchTeam` returned the
@@ -310,6 +312,7 @@ workItemsRouter.get(
     const sprintId = (req.query['sprint']  as string | undefined) || undefined;
     const status   = (req.query['status']  as string | undefined) || undefined;
     const period   = (req.query['period']  as string | undefined) || undefined;
+    const assignee = (req.query['assignee'] as string | undefined) || undefined;
     const rawLimit = parseInt(req.query['limit'] as string ?? '50', 10);
     const limit    = Number.isNaN(rawLimit) ? 50 : Math.min(Math.max(rawLimit, 1), 200);
 
@@ -318,7 +321,21 @@ workItemsRouter.get(
       return;
     }
 
-    const items = await searchWorkItems({ label, team, sprintId, status, period, limit });
+    // `assignee=me` is the caller's own person (the directory link, never a query value); another person's
+    // id is allowed because GET /people/:id/work already shows any orgiq member everyone's items. A caller
+    // with no linked person has no work of their own: an honest empty list, not everyone's.
+    let assigneeId: string | undefined;
+    if (assignee === 'me') {
+      const session = resolveSession(req);
+      const personId = session ? (await getUser(session.sub))?.personId ?? null : null;
+      if (!personId) { res.json([]); return; }
+      assigneeId = personId;
+    } else if (assignee) {
+      if (await parentMissing(res, 'person', assignee)) return;
+      assigneeId = assignee;
+    }
+
+    const items = await searchWorkItems({ label, team, sprintId, status, assigneeId, period, limit });
     res.json(items);
   }),
 );
