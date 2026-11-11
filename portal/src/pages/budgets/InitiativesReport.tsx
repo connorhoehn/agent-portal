@@ -30,6 +30,8 @@ import type { BudgetAccessLock, BudgetRow, InitiativeOption } from './types';
 import { LockedFigure } from '../projects/BudgetAccess';
 import { SpendFigureCell } from './SpendGroupTable';
 import { discretionaryBudget, floorFigure, moneyOrDash, remainingTone, type InitiativeLedgerRow } from './spendReportModel';
+import { ThresholdCell } from './ThresholdCell';
+import { passesThresholdFilter, type ThresholdFilter } from './thresholdModel';
 
 async function putAllocation(orgProjectId: string, allocatedUsd: number): Promise<boolean> {
   const res = await writeJson(`/api/budgets/${encodeURIComponent(orgProjectId)}`, 'PUT', { allocatedUsd });
@@ -242,10 +244,17 @@ export interface InitiativesReportProps {
   initiatives: InitiativeOption[] | null;
   /** The page's controlled search; narrows the table, never the empty state. */
   query?: string;
+  /** The configured thresholds (GET /api/budgets `thresholds`). */
+  thresholds?: readonly number[];
+  /** "Near or at cap" keeps only rows at or past the near line. */
+  thresholdFilter?: ThresholdFilter;
+  /** The row a bell item opened (`?row=`), highlighted. */
+  selectedKey?: string | null;
 }
 
 export function InitiativesReport({
   budgets, reportHref, lock, error, hasData, canManage, refresh, initiatives, query = '',
+  thresholds, thresholdFilter = 'all', selectedKey = null,
 }: InitiativesReportProps) {
   const [confirmDelete, setConfirmDelete] = useState<BudgetRow | null>(null);
   const [showFirstBudget, setShowFirstBudget] = useState(false);
@@ -399,6 +408,15 @@ export function InitiativesReport({
         );
       },
     },
+    {
+      // The threshold mark (learning loop): spent + held against the allocation,
+      // by the rule the bell announces 50 / 80 / 100 % with.
+      key: 'threshold',
+      header: 'Threshold',
+      sortable: true,
+      compare: (a, b) => (a.threshold?.percent ?? -1) - (b.threshold?.percent ?? -1),
+      render: (row) => <ThresholdCell mark={row.threshold} thresholds={thresholds} what="allocation" />,
+    },
     ...(showHeld ? [{
       key: 'held',
       header: 'Held',
@@ -440,10 +458,11 @@ export function InitiativesReport({
         responsiveColumns
         // One "+N columns" control in the header, a chevron per row (ui-components 2.519.0).
         hiddenColumnsControl="header"
-        data={budgets.filter((row) => matchesBudget(row, query))}
-        emptyMessage="No initiative matches this search."
+        data={budgets.filter((row) => matchesBudget(row, query) && passesThresholdFilter(row.threshold, thresholdFilter, thresholds))}
+        emptyMessage={thresholdFilter === 'near' ? 'No initiative is near or at its cap.' : 'No initiative matches this search.'}
         columns={columns}
         keyField={(row) => row.orgProjectId}
+        selectedKey={selectedKey}
       />
 
       <ConfirmDialog

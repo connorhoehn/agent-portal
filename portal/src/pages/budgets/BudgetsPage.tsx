@@ -19,6 +19,13 @@
 // (or its name in the ledger) drills into that initiative's report:
 // allocation → floor vs discretionary → people and envelopes → open work with
 // fit. State lives in the URL (?group=&period=&initiative=) so a view links.
+//
+// Learning loop (lane B): two more reports — People (each person's own monthly
+// budget) and Lines (the learning line and local compute, reported not billed) —
+// and on every table a threshold mark per row with a "Show: Near or at cap"
+// filter (?show=near). A bell item for a crossed threshold opens its row:
+// `?row=<id>` (with `report=people|sprints` where it is not an initiative)
+// highlights it.
 
 import { useMemo, useState } from 'react';
 import { NavLink, useSearchParams } from 'react-router';
@@ -45,6 +52,10 @@ import { SprintsReport } from './SprintsReport';
 import { SpendGroupTable } from './SpendGroupTable';
 import { InitiativeSpendReport } from './InitiativeSpendReport';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { useSession } from '../../lib/auth';
+import { PeopleReport, matchesPerson } from './PeopleReport';
+import { LinesReport } from './LinesReport';
+import { DEFAULT_THRESHOLDS, THRESHOLD_FILTER_OPTIONS, parseThresholdFilter, passesThresholdFilter } from './thresholdModel';
 import { initiativeBudgetsCommandAdapter, matchesBudget, matchesGrant, sprintEnvelopesCommandAdapter } from './budgetsCommands';
 import {
   maintenanceStats, maintenanceTitle, mergeInitiativesWithBudgets, remainingHint, remainingTitle, usd,
@@ -53,7 +64,12 @@ import {
   GROUP_OPTIONS, OVERVIEW_ROW_ID, PERIOD_OPTIONS, budgetRailRows, mergeInitiativeLedger, parseGroupBy, parsePeriod,
   spendFigure, spendReportUrl,
 } from './spendReportModel';
-import type { BudgetRow, BudgetSummary, GrantRow, InitiativeOption, SpendGroupBy, SpendPeriod, SpendReport } from './types';
+import type { BudgetLines, BudgetRow, BudgetSummary, GrantRow, InitiativeOption, SpendGroupBy, SpendPeriod, SpendReport, UserBudgetRow } from './types';
+
+type Report = 'initiatives' | 'sprints' | 'people' | 'lines';
+const REPORTS: readonly Report[] = ['initiatives', 'sprints', 'people', 'lines'];
+/** The roles that act for the whole organisation: only they set the learning cap. */
+const ORG_WIDE_ROLES = ['org-leader', 'hr-admin', 'admin'];
 
 const MONTH_LABEL = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
@@ -67,15 +83,26 @@ export default function BudgetsPage() {
   // gated. program-owner now holds ManageBudgets — a program owner runs the
   // delivery program, so setting its ceiling is theirs.
   const canManage = ready && can('ManageBudgets');
+  const { session } = useSession();
+  const canEditLearning = canManage && ORG_WIDE_ROLES.includes(session?.role ?? '');
 
   const [params, setParams] = useSearchParams();
-  const report = params.get('report') === 'sprints' ? 'sprints' : 'initiatives';
+  const report: Report = (REPORTS as readonly string[]).includes(params.get('report') ?? '') ? params.get('report') as Report : 'initiatives';
+  const thresholdFilter = parseThresholdFilter(params.get('show'));
+  const selectedRow = params.get('row');
   const groupBy = parseGroupBy(params.get('group'));
   const period = parsePeriod(params.get('period'));
   const initiativeId = report === 'initiatives' ? params.get('initiative') : null;
 
   const { data, error, degraded, refresh } =
-    useFetch<{ budgets: BudgetRow[]; summary: BudgetSummary }>('/api/budgets', 30_000);
+    useFetch<{ budgets: BudgetRow[]; summary: BudgetSummary; thresholds?: number[] }>('/api/budgets', 30_000);
+  const thresholds = data?.thresholds ?? DEFAULT_THRESHOLDS;
+  // People and Lines read only while on screen.
+  const { data: peopleData, error: peopleError, refresh: refreshPeople } =
+    useFetch<{ budgets: UserBudgetRow[] }>(report === 'people' ? '/api/user-budgets' : null, 60_000);
+  const { data: lines, error: linesError, refresh: refreshLines } =
+    useFetch<BudgetLines>(report === 'lines' ? '/api/budgets/lines' : null, 60_000);
+  const people = useMemo(() => peopleData?.budgets ?? [], [peopleData]);
   const budgetsFailure = error ?? degraded;
   const { data: grantData, error: grantError, refresh: refreshGrants } =
     useFetch<{ grants: GrantRow[] }>('/api/budgets/grants', 60_000);
@@ -108,8 +135,9 @@ export default function BudgetsPage() {
   // One controlled search shared by the toolbar and the composer; switching
   // report clears it so a sprint query never silently narrows the ledger.
   const [query, setQuery] = useState('');
-  const shownBudgets = budgets.filter((row) => matchesBudget(row, query));
-  const shownGrants = grants.filter((row) => matchesGrant(row, query));
+  const shownBudgets = budgets.filter((row) => matchesBudget(row, query) && passesThresholdFilter(row.threshold, thresholdFilter, thresholds));
+  const shownGrants = grants.filter((row) => matchesGrant(row, query) && passesThresholdFilter(row.threshold, thresholdFilter, thresholds));
+  const shownPeople = people.filter((row) => matchesPerson(row, query) && passesThresholdFilter(row.threshold, thresholdFilter, thresholds));
 
   // The phone form (under 40rem of the frame): the report or one initiative's report fills the
   // width under "‹ All initiatives"; that control shows the rail as the list, and choosing a row
@@ -151,6 +179,8 @@ export default function BudgetsPage() {
       label: 'Sprints',
       ...(grants.length > 0 ? { count: grants.length } : {}),
     },
+    { path: '/admin/budgets?report=people', label: 'People', ...(people.length > 0 ? { count: people.length } : {}) },
+    { path: '/admin/budgets?report=lines', label: 'Lines' },
   ];
 
   // ── The list rail (Initiatives report only) ──
@@ -211,27 +241,37 @@ export default function BudgetsPage() {
       />
     ));
 
+  // "Show: Near or at cap" (learning loop): every table whose rows carry a threshold mark.
+  const showFilter = {
+    id: 'show', label: 'Show', value: thresholdFilter, emptyValue: 'all',
+    options: THRESHOLD_FILTER_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+    onChange: (v: string) => setView({ show: v === 'near' ? 'near' : null }),
+  };
   const toolbar = (
     <CollectionToolbar
-      label={report === 'sprints' ? 'Sprint envelope filters' : 'Spend filters'}
+      label={report === 'sprints' ? 'Sprint envelope filters' : report === 'people' ? 'People filters' : 'Spend filters'}
       search={report === 'sprints'
         ? { value: query, onChange: setQuery, placeholder: 'Search initiative, sprint or SME', 'aria-label': 'Search sprint envelopes' }
-        : { value: query, onChange: setQuery, placeholder: `Search ${GROUP_NOUN[groupBy]}`, 'aria-label': `Search ${GROUP_NOUN[groupBy]}` }}
-      {...(report === 'initiatives' ? {
-        filters: [
+        : report === 'people'
+          ? { value: query, onChange: setQuery, placeholder: 'Search people', 'aria-label': 'Search people' }
+          : { value: query, onChange: setQuery, placeholder: `Search ${GROUP_NOUN[groupBy]}`, 'aria-label': `Search ${GROUP_NOUN[groupBy]}` }}
+      filters={report === 'initiatives'
+        ? [
           { id: 'group', label: 'Group by', value: groupBy, options: GROUP_OPTIONS.map((o) => ({ value: o.value, label: o.label })), emptyValue: 'initiative',
             onChange: (v: string) => setView({ group: v === 'initiative' ? null : v }) },
           // The initiative ledger is the budget period by definition; only the other cuts take a window.
-          ...(groupBy === 'initiative' ? [] : [{ id: 'period', label: 'Period', value: period, options: PERIOD_OPTIONS.map((o) => ({ value: o.value, label: o.label })), emptyValue: 'month',
+          ...(groupBy === 'initiative' ? [showFilter] : [{ id: 'period', label: 'Period', value: period, options: PERIOD_OPTIONS.map((o) => ({ value: o.value, label: o.label })), emptyValue: 'month',
             onChange: (v: string) => setView({ period: v === 'month' ? null : (v as SpendPeriod) }) }]),
-        ],
-      } : {})}
+        ]
+        : [showFilter]}
       summary={report === 'sprints'
         ? `${shownGrants.length} of ${grants.length} envelopes`
-        : groupBy === 'initiative'
-          ? `${shownBudgets.length} of ${budgets.length} initiatives`
-          : `${spend?.groups.length ?? 0} ${GROUP_NOUN[groupBy]}`}
-      onRefresh={report === 'sprints' ? refreshGrants : () => { refresh(); refreshSpend(); }}
+        : report === 'people'
+          ? `${shownPeople.length} of ${people.length} people`
+          : groupBy === 'initiative'
+            ? `${shownBudgets.length} of ${budgets.length} initiatives`
+            : `${spend?.groups.length ?? 0} ${GROUP_NOUN[groupBy]}`}
+      onRefresh={report === 'sprints' ? refreshGrants : report === 'people' ? refreshPeople : () => { refresh(); refreshSpend(); }}
     />
   );
 
@@ -246,6 +286,9 @@ export default function BudgetsPage() {
       refresh={() => { refresh(); refreshSpend(); }}
       initiatives={initiativesData}
       query={query}
+      thresholds={thresholds}
+      thresholdFilter={thresholdFilter}
+      selectedKey={selectedRow}
     />
   ) : spendError && !spend ? (
     <UnavailableNotice error={spendError} what="the spend report" source="Spend is read from the spend ledger" onRetry={refreshSpend} />
@@ -284,9 +327,42 @@ export default function BudgetsPage() {
       <Stack gap="md" className="min-w-0">
         {toolbar}
         <Stack gap="none">
-          <SprintsReport grants={grants} error={grantError} hasData={grantData != null} canManage={canManage} refresh={refreshGrants} query={query} />
+          <SprintsReport
+            grants={grants} error={grantError} hasData={grantData != null} canManage={canManage} refresh={refreshGrants} query={query}
+            thresholds={thresholds} thresholdFilter={thresholdFilter} selectedKey={selectedRow}
+          />
         </Stack>
         <CollectionCommandHost key={report} adapter={adapter} />
+      </Stack>
+    </PageSection>
+  );
+
+  const peopleBody = (
+    <PageSection
+      title="People"
+      description="Each person's own monthly agent budget, across every initiative. A person never sets their own."
+    >
+      <Stack gap="md" className="min-w-0">
+        {toolbar}
+        <Stack gap="none">
+          {!peopleData && !peopleError ? <LoadingState label="Loading people's budgets…" /> : (
+            <PeopleReport
+              people={people} error={peopleError} hasData={peopleData != null} refresh={refreshPeople} query={query}
+              thresholds={thresholds} thresholdFilter={thresholdFilter} selectedKey={selectedRow}
+            />
+          )}
+        </Stack>
+      </Stack>
+    </PageSection>
+  );
+
+  const linesBody = (
+    <PageSection
+      title="Lines"
+      description="Money that belongs to no initiative this month: the learning line under its own cap, and local compute as reported, not billed."
+    >
+      <Stack gap="none" className="min-w-0">
+        <LinesReport lines={lines ?? null} error={linesError} refresh={refreshLines} canEditLearning={canEditLearning} selectedKey={selectedRow} />
       </Stack>
     </PageSection>
   );
@@ -335,10 +411,10 @@ export default function BudgetsPage() {
         },
       } : {})}
       renderNavItem={(item, children) => {
-        // Both reports live at the same path and differ only by ?report=, so
-        // an exact-path match would light both. Compare the search instead.
-        const wantsSprints = item.path.includes('report=sprints');
-        const isActive = wantsSprints === (report === 'sprints');
+        // Every report lives at the same path and differs only by ?report=, so
+        // an exact-path match would light them all. Compare the search instead.
+        const wants: Report = (REPORTS.find((r) => item.path.includes(`report=${r}`)) ?? 'initiatives');
+        const isActive = wants === report;
         return (
           <NavLink
             to={item.path}
@@ -347,8 +423,9 @@ export default function BudgetsPage() {
               // fetches above are not remounted every time you switch report.
               e.preventDefault();
               const next = new URLSearchParams(params);
-              if (wantsSprints) { next.set('report', 'sprints'); next.delete('initiative'); } else next.delete('report');
-              if (wantsSprints !== (report === 'sprints')) setQuery('');
+              if (wants !== 'initiatives') { next.set('report', wants); next.delete('initiative'); } else next.delete('report');
+              // A row picked from the bell belongs to the report it opened in.
+              if (wants !== report) { setQuery(''); next.delete('row'); }
               setParams(next, { replace: true });
             }}
             className={isActive ? activeNavItemClassName : inactiveNavItemClassName}
@@ -358,7 +435,7 @@ export default function BudgetsPage() {
         );
       }}
     >
-      {report === 'sprints' ? sprintsBody : initiativesBody}
+      {report === 'sprints' ? sprintsBody : report === 'people' ? peopleBody : report === 'lines' ? linesBody : initiativesBody}
     </BuildSectionLayout>
   );
 }

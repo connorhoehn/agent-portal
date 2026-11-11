@@ -43,6 +43,8 @@ import {
 } from '@connorhoehn/ui-components/shared';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { usd } from './budgetsFormat';
+import { ThresholdCell } from './ThresholdCell';
+import { passesThresholdFilter, type ThresholdFilter } from './thresholdModel';
 import type { GrantRow } from './types';
 
 const CLOSED_PREVIEW = 4;
@@ -56,6 +58,11 @@ export interface SprintsReportProps {
   refresh?: () => void;
   /** The page's controlled search; narrows the table, never the empty state. */
   query?: string;
+  thresholds?: readonly number[];
+  /** "Near or at cap" keeps only envelopes at or past the near line. */
+  thresholdFilter?: ThresholdFilter;
+  /** The envelope a bell item opened (`?row=`), highlighted. */
+  selectedKey?: string | null;
 }
 
 /** Points a ManageBudgets holder at where granting actually happens today.
@@ -77,7 +84,7 @@ function GrantEnvelopeLink() {
 
 // One line per envelope at the 44px list step. The sprint window used to be
 // a second line under the sprint name; it is its own column now.
-const GRANT_COLUMNS: DataTableColumn<GrantRow>[] = [
+const grantColumns = (thresholds?: readonly number[]): DataTableColumn<GrantRow>[] => [
   { key: 'sme', header: 'SME', render: (g) => <T>{g.granteeName ?? g.granteePersonId}</T> },
   {
     key: 'initiative',
@@ -114,9 +121,17 @@ const GRANT_COLUMNS: DataTableColumn<GrantRow>[] = [
     numeric: true,
     render: (g) => <T tone="secondary" tabular>{usd(g.initiativeSpendInWindowUsd)}</T>,
   },
+  {
+    // The threshold mark (learning loop): the window's spend against the envelope.
+    key: 'threshold',
+    header: 'Threshold',
+    render: (g) => <ThresholdCell mark={g.threshold} thresholds={thresholds} what="envelope" />,
+  },
 ];
 
-export function SprintsReport({ grants: allGrants, error, hasData, canManage, refresh, query = '' }: SprintsReportProps) {
+export function SprintsReport({
+  grants: allGrants, error, hasData, canManage, refresh, query = '', thresholds, thresholdFilter = 'all', selectedKey = null,
+}: SprintsReportProps) {
   const navigate = useNavigate();
   const [showAll, setShowAll] = useState(false);
 
@@ -141,7 +156,7 @@ export function SprintsReport({ grants: allGrants, error, hasData, canManage, re
     );
   }
 
-  const grants = allGrants.filter((g) => matchesGrant(g, query));
+  const grants = allGrants.filter((g) => matchesGrant(g, query) && passesThresholdFilter(g.threshold, thresholdFilter, thresholds));
   const active = grants.filter((g) => g.sprintStatus === 'active');
   const rest = grants.filter((g) => g.sprintStatus !== 'active');
   const shownRest = showAll ? rest : rest.slice(0, CLOSED_PREVIEW);
@@ -168,9 +183,10 @@ export function SprintsReport({ grants: allGrants, error, hasData, canManage, re
         data-testid="budgets-sprints-table"
         frameless
         data={ordered}
-        columns={GRANT_COLUMNS}
+        columns={grantColumns(thresholds)}
         keyField={(g) => g.id}
-        emptyMessage="No sprint envelope matches this search."
+        selectedKey={selectedKey}
+        emptyMessage={thresholdFilter === 'near' ? 'No sprint envelope is near or at its cap.' : 'No sprint envelope matches this search.'}
       />
       {(hidden > 0 || showAll) && (
         <Stack gap="none" className="px-3 py-2 border-t border-border">

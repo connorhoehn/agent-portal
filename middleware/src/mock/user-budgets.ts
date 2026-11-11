@@ -27,6 +27,10 @@ export interface MockUserBudget {
 function seeded(): MockUserBudget[] {
   return [
     { userId: 'u-nora', allocatedUsd: 25, hardCapUsd: null, note: 'SME on Auth Migration: agent spend across every initiative', setBy: 'u-release' },
+    // The Budgets page's "at cap" person (learning loop, lane B): Eli Garcia's
+    // $0.53 box task this month (mock/spend-ledger.ts, minutes old, so it holds
+    // all month) against a $0.50 budget. His cap is the deployment default.
+    { userId: 'u-eli', allocatedUsd: 0.5, hardCapUsd: null, note: 'SME on Observability: a trial budget, already spent', setBy: 'u-release' },
   ];
 }
 

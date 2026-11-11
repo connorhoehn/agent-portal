@@ -42,7 +42,16 @@ function seededAllocations(): MockBudget[] {
     // Vera Green (u-vera, org-leader) owns this initiative and set its
     // allocation herself, so hers is the name on it.
     { id: 'p-auth-migration',    name: 'Auth Migration',           allocated: 75, updatedBy: 'u-vera' },
-    { id: 'p-cost-opt',          name: 'Cost Optimization',        allocated: 50 },
+    // DELIBERATE DIVERGENCE (learning loop, lane B): the Budgets page's "near
+    // cap" example. schema/seed_program.sql allocates $50 a month; offline this
+    // initiative is budgeted per SPRINT, tightly, at $2.20 against the $1.79 its
+    // bots spent in Sprint 10 so far (81 %, the 80 % mark). A sprint window is
+    // relative to now in the mock (mock/sprints.ts), so the figure holds every
+    // day; a monthly one drifts with the day of the month, because the mock's
+    // run history is relative to now and the month start is not. Its 50 and 80
+    // % bells reach its owner (Layla Hassan) on the reaper's first sweep.
+    // Declared as knownDrift on the parity entity.
+    { id: 'p-cost-opt',          name: 'Cost Optimization',        allocated: 2.2, period: 'sprint' },
     // p-soc2 / p-feature-store / p-mobile-redesign used to derive $0: they hold
     // an allocation, but the mock fleet mirrored only 5 of the seed's 12 bots, so
     // there were no rows to sum. Honest, and useless — an allocation judged

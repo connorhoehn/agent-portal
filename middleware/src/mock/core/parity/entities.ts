@@ -653,12 +653,14 @@ export const PARITY_ENTITIES: Array<ParityEntity<any>> = [
         normalize: num,
         knownDrift: {
           'p-inference-platform': 'DELIBERATE: an initiative spending with no allocation is the blind spot /admin/budgets exists to surface, so the ledger row carries null on purpose.',
+          'p-cost-opt': 'DELIBERATE (learning loop, lane B): the near-cap example /admin/budgets marks at 80 %. Offline it is a $2.20 SPRINT budget, because the mock\'s run history is relative to now: only a now-relative window (the sprint) keeps a spent/allocated ratio steady through the month. The seed keeps $50 monthly, where Aurora\'s own run history decides the ratio.',
         },
       },
       {
         seed: 'period',
         mock: (b: { period: string | null }) => b.period,
         knownDrift: {
+          'p-cost-opt': 'follows from the deliberate sprint budget above (allocated_usd).',
           'p-inference-platform': 'A period is the window an allocation covers, and this initiative deliberately has no allocation (see allocated_usd above). Carrying the seed\'s `monthly` beside a null amount would render on /admin/budgets as a monthly budget that happens to be empty — which is the opposite of the finding the null is there to make: this initiative is spending and nobody has budgeted it at all.',
         },
       },

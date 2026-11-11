@@ -36,6 +36,19 @@ export interface BudgetRow {
   periodKey?: string | null;
   /** 'between-sprints': a sprint-period allocation with no sprint open, so it is not in force. */
   periodState?: 'open' | 'between-sprints';
+  /** Where spent + held stands against the budget (absent on an older BFF). */
+  threshold?: ThresholdMark;
+}
+
+/**
+ * A budget's threshold mark (middleware lib/budget-threshold-rules.ts): the
+ * percentage of the budget spent or held (null: no budget to measure), and the
+ * highest configured threshold reached (0: under the first). The bell
+ * announces each threshold once per period by the same rule.
+ */
+export interface ThresholdMark {
+  percent: number | null;
+  reached: number;
 }
 
 export interface BudgetSummary {
@@ -63,6 +76,46 @@ export interface GrantRow {
   sprintStatus: string | null;
   allocatedUsd: number;
   initiativeSpendInWindowUsd: number;
+  /** Spend in the sprint window against the envelope (absent on an older BFF). */
+  threshold?: ThresholdMark;
+}
+
+// ─── GET /api/user-budgets (routes/user-budgets.ts) ─────────────────────────
+
+export interface UserBudgetRow {
+  userId: string;
+  displayName: string | null;
+  since: string;
+  /** Null: no budget, the user is unbraked (a blind spot). */
+  allocatedUsd: number | null;
+  effectiveHardCapUsd: number | null;
+  spentUsd: number;
+  unknownCount: number;
+  heldUsd: number;
+  remainingUsd: number | null;
+  note: string | null;
+  threshold?: ThresholdMark;
+}
+
+// ─── GET /api/budgets/lines (routes/budgets.ts) ─────────────────────────────
+
+export interface BudgetLines {
+  /** 'YYYY-MM': both lines are this calendar month. */
+  month: string;
+  /** Server-side distillation, under the organisation's monthly learning cap. */
+  learning: {
+    capUsd: number;
+    capSource: 'set' | 'default';
+    spentUsd: number;
+    entries: number;
+    heldUsd: number;
+    remainingUsd: number;
+    threshold: ThresholdMark;
+    updatedBy: string | null;
+    updatedAt: string | null;
+  };
+  /** Local compute: billed $0; what the workers reported, never counted toward a cap. */
+  local: { reportedUsd: number; runs: number; billedUsd: number };
 }
 
 // ─── GET /api/spend/report (routes/spend-report.ts) ────────────────────────
