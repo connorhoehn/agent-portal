@@ -33,7 +33,6 @@ import { botStatusChip, runStateChip } from '../../lib/statusTone';
 import type { useInitiativeAgentActivity } from '../../components/marketplace/InitiativeAgentRail';
 import { ComputersRailCard } from '../../components/marketplace/InitiativeComputeRail';
 import { EnvironmentsRailCard } from '../../components/marketplace/InitiativeEnvironmentsRail';
-import { LabMemoryRailCard } from '../../components/marketplace/InitiativeLabMemoryRail';
 import { TEMPLATE_TONE, triggerSummary, type BotRun } from '../bots/BotsPage';
 import { RANGE_DAYS, runTableRows, type RunTableRow } from './agentRunsModel';
 import { flattenWorkItems } from './projectFormat';
@@ -257,7 +256,6 @@ export function InitiativeRail({
           <Stack gap="sm">
             <ComputersRailCard initiativeId={initiativeId} />
             <EnvironmentsRailCard initiativeId={initiativeId} />
-            <LabMemoryRailCard initiativeId={initiativeId} />
           </Stack>
         )}
     </Stack>
