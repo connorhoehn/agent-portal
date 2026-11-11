@@ -54,7 +54,9 @@ The seeded scheduled run's brief now carries the runbooks it was given (11 Novem
 
 The brief's health warning now covers an unproven runbook whose last run failed, not only a drifting one (11 November, decision 23): `brief.ts` prints the line whenever health carries a warning ("Health: unproven." or "Health: drifting."), the brief preview's `warning` follows, and the runbook's record shows the same callout; a runbook never run still carries none. `health.ts` already wrote the text, so nothing new is derived.
 
-Next actionable work: nothing rejects a non-portable frontmatter key in a runbook (the parser drops unknown keys).
+The last recorded gap was already closed by lane C and only the note was stale: a run-authored draft whose frontmatter carries a key outside the portable set (`name`, `description`, `license`, `compatibility`, `metadata`) fails lint `R-frontmatter`, `allowed-tools` fails `R-allowed-tools`, and `routes/runbooks.ts` applies both before a proposal is filed (`lib/runbooks/lint.ts`, `skill.ts` `PORTABLE_FRONTMATTER_KEYS`; `model-lint.test.ts`).
+
+No actionable recorded gap is left in this loop. What remains is outside it: a microVM dispatch proven in a browser needs a real machine; real governed runs are not debriefed by decision 1; the component-library release behind the vendored 2.522.x tarballs is the library's (next-steps.md, "Library versions"); and the owner's decisions listed in next-steps.md stand as they were.
 
 ## Rules that bind this work
 
