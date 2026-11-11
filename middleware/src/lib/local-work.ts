@@ -232,14 +232,12 @@ export const BRIEF_END = '----- END SESSION BRIEF -----';
  * framing still opens the prompt (nobody is listening) and the task still
  * closes it, verbatim. The markdown between the markers is the frozen brief's
  * bytes exactly — the sha printed above it is the sha a person sees on the
- * run's Brief tab. There is no `lab` command on a workstation, so the report
- * lines the brief asks for go in the final message, where the reviewer reads
- * them.
+ * run's Brief tab. The brief asks for one thing at the end, the `lab-report`
+ * block, which needs no command (docs/learning-loop-design.md stage 4).
  */
 function briefBlock(b: FramedBrief): string[] {
   return [
-    `Below is the session brief for this run (${b.id}, sha256 ${b.sha256}): the project context, the decisions that bind the work, and where the org's skills are. Follow a skill where it fits the task.`,
-    'This machine has no `lab` command. Where the brief says to run one, write that line, as written, near the end of your final message instead, before the `lab-report` block.',
+    `Below is the session brief for this run (${b.id}, sha256 ${b.sha256}): the project context, the decisions that bind the work, what earlier attempts ran into, and the runbooks chosen for it. Follow a runbook where it fits the task.`,
     '',
     BRIEF_BEGIN,
     b.markdown.replace(/\n$/, ''),

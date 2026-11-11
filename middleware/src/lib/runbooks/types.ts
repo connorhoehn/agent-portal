@@ -216,8 +216,12 @@ export interface RunbookHealth {
   warning: string | null;
 }
 
-/** 'runbook' only in briefs frozen before R8 (assembler v1); v2 briefs carry 'skill_library' instead. */
-export type BriefSectionKind = 'framing' | 'work_item' | 'initiative' | 'decisions' | 'skills' | 'runbook' | 'skill_library' | 'how_to_report';
+/**
+ * 'runbook' in briefs of assembler v1 and v3 (a runbook given as text); 'skills' only in v1/v2
+ * briefs (a session bundle's skills, removed in v3); 'previous_attempts' from v3.
+ */
+export type BriefSectionKind =
+  | 'framing' | 'work_item' | 'initiative' | 'decisions' | 'skills' | 'previous_attempts' | 'runbook' | 'skill_library' | 'how_to_report';
 
 export interface BriefSection {
   kind: BriefSectionKind;
@@ -229,7 +233,41 @@ export interface BriefSection {
 
 export interface BriefOmission {
   runbook_id: string;
-  reason: 'budget' | 'drifting_excluded' | 'scope';
+  /** budget: it did not fit whole; limit: two were already given (v3). */
+  reason: 'budget' | 'limit' | 'drifting_excluded' | 'scope';
+}
+
+/** One runbook a run was given as text (assembler v3), in the order the brief prints them. */
+export interface BriefOfferedRunbook {
+  id: string;
+  version: number;
+  title: string;
+  /** Why it was chosen, in words a person reads: "pinned on the work item", "labels decom, runbook; keywords tenant, cutover". */
+  reason: string;
+  pinned: boolean;
+  health: HealthStatus;
+  /** The one-line warning the brief printed beside it (health drifting), else null. */
+  warning: string | null;
+  /** Never written: `offeredFromBrief` (lib/run-reports/record.ts) also accepts this older key, so the type admits it as absent. */
+  runbook_id?: undefined;
+}
+
+/**
+ * What a run was offered (docs/learning-loop-design.md stage 4), frozen with the brief.
+ * `runbooks` empty is a valid result; `none_reason` then says why, in words.
+ * lib/run-reports/record.ts `offeredFromBrief` reads `runbooks[].id` and `.version`.
+ */
+export interface BriefOffer {
+  runbooks: BriefOfferedRunbook[];
+  none_reason: string | null;
+}
+
+/** An earlier run of the same work item that did not finish cleanly, as the brief recorded it (v3). */
+export interface BriefAttemptRef {
+  run_ref: string;
+  outcome: 'done' | 'failed' | 'cancelled' | 'needs-review';
+  failure_code: string | null;
+  ended_at: string;
 }
 
 /** What a run was told, frozen at claim/dispatch (design §3.1). */
@@ -262,4 +300,8 @@ export interface SessionBrief {
    * one-line pointer; `lab applied` / `lab runbook` are checked against it.
    */
   skill_library?: { sha256: string; dir: string | null; skills: Array<{ name: string; version: number }> };
+  /** v3: the runbooks given as text, with reasons; absent on older briefs. */
+  offer?: BriefOffer;
+  /** v3: the earlier attempts the brief showed, newest first; absent on older briefs. */
+  previous_attempts?: BriefAttemptRef[];
 }

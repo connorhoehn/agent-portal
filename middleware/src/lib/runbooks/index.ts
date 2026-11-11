@@ -2,7 +2,7 @@
 // Pure modules only; the stores (R1), routes (R3) and injection (R4) build on
 // these exports. repo-context.ts is the one file here that reads the disk.
 export type {
-  ApplicationOutcome, BriefOmission, BriefSection, BriefSectionKind, CommandLang, HealthStatus, LintFinding, LintRuleId,
+  ApplicationOutcome, BriefAttemptRef, BriefOffer, BriefOfferedRunbook, BriefOmission, BriefSection, BriefSectionKind, CommandLang, HealthStatus, LintFinding, LintRuleId,
   Runbook, RunbookApplication, RunbookCommand, RunbookDoc, RunbookHealth, RunbookProposal, RunbookProvenance, RunbookScope,
   RunbookFile, RunbookScopeKind, RunbookStatus, RunbookStep, RunbookTriggers, RunbookVersion, SessionBrief,
 } from './types.js';
@@ -11,10 +11,11 @@ export { renderRunbook, formatProblems, RunbookFormatError, HEADINGS, type Runbo
 export { parseRunbook, tryParseRunbook, RunbookParseError, type ParseError, type ParseResult } from './parse.js';
 export { lintRunbook, lintErrors, bundlePaths, declaresRuntime, SKILL_COLLISION_THRESHOLD, LINT_RULES, LIMITS, IMPERATIVE_VERBS, MUTATING_VERBS, changesState, type LintContext, type LintRule } from './lint.js';
 export { similarity, tokens, sharedTokens, runbookTerms, scopesOverlap, findSimilar, DEDUPE_THRESHOLD, type SimilarRunbook } from './similarity.js';
-export { selectRunbooks, SCOPE_WEIGHT, type WorkItemContext, type RunbookCandidate, type SelectedRunbook, type Selection } from './select.js';
+export { selectRunbooks, scopeMatch, readableReason, noneReason, SCOPE_WEIGHT, MAX_GIVEN_RUNBOOKS, type WorkItemContext, type RunbookCandidate, type SelectedRunbook, type Selection } from './select.js';
 export {
-  assembleBrief, briefBudget, skillsPointer, ASSEMBLER_VERSION, DEFAULT_BRIEF_BUDGET,
-  type AssembleBriefInput, type BriefSkillLibrary, type BriefWorkItem, type BriefInitiative, type BriefDecision, type BriefSkill,
+  assembleBrief, briefBudget, skillsPointer, fenceNote, driftWarning, derivedFenceToken, ASSEMBLER_VERSION, DEFAULT_BRIEF_BUDGET,
+  DECISIONS_CAP_TOKENS, MAX_PREVIOUS_ATTEMPTS, ATTEMPT_LIMITS,
+  type AssembleBriefInput, type BriefPreviousAttempt, type BriefSkillLibrary, type BriefWorkItem, type BriefInitiative, type BriefDecision, type BriefSkill,
 } from './brief.js';
 export { estimateTokens, sha256Hex } from './tokens.js';
 export { runbookHealth, PROVEN_TTL_DAYS } from './health.js';

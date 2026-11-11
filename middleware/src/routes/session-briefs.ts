@@ -29,11 +29,9 @@ import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { requireAction, requireTenant } from '../lib/authz.js';
 import { rateLimit } from '../lib/rate-limit.js';
 import { LAB_CALLBACK_SERVICE_AUTH, hasServiceAuth } from '../lib/service-auth.js';
-import { previewBrief } from '../lib/session-brief-preview.js';
-import { liveBundleSkills, loadWorkContext } from '../lib/run-brief.js';
+import { loadWorkContext, planRunBrief } from '../lib/run-brief.js';
 import { RUN_TOKEN_HEADER, runTokenMatches } from '../lib/run-token.js';
 import { loadSkillLibrary, skillDescription, skillLibraryForRun, type RunbookStore, type SessionBrief } from '../lib/runbooks/index.js';
-import { clock } from '../mock/core/clock.js';
 import type { RunReportStore } from '../lib/run-reports/store.js';
 
 export interface SessionBriefDeps {
@@ -227,21 +225,26 @@ export function createSessionBriefsRouter(deps: SessionBriefDeps): Router {
       });
     }));
 
+  // What a run would be given if this item were dispatched now, computed by the function the
+  // freeze uses (lib/run-brief.ts planRunBrief, as a devbox run): the brief, its offer (the
+  // runbooks given, each with its reason, or why none), the item's pins, and the previous
+  // attempts in full. Never stored.
   router.get('/work-items/:id/brief-preview', briefLimit, requireTenant('orgiq'), requireAction('ViewSessionBrief'),
     asyncHandler(async (req, res) => {
       const id = String(req.params['id']);
-      // The same context reading and the same skills a dispatched devbox run gets (lib/run-brief.ts).
       const ctx = await loadWorkContext(id);
       if (!ctx) { res.status(404).json({ error: 'work item not found' }); return; }
       const store = await deps.store();
-      const brief = await previewBrief({
-        store,
-        ...ctx,
-        pinned: [],
-        nowIso: clock.nowIso(),
-        skills: await liveBundleSkills(),
+      const { brief, previousAttempts } = await planRunBrief(
+        { run_ref: `preview-${id}`, box: 'devbox', work_item_id: id },
+        { store, ...(deps.reports ? { reports: await deps.reports() } : {}) },
+      );
+      res.json({
+        brief, stored: false, skills: await briefSkillDetails(store, brief),
+        offer: brief.offer ?? { runbooks: [], none_reason: null },
+        pins: ctx.work.runbookPins ?? [],
+        previous_attempts: previousAttempts,
       });
-      res.json({ brief, stored: false, skills: await briefSkillDetails(store, brief) });
     }));
 
   return router;
@@ -254,9 +257,10 @@ export const sessionBriefsRouter: Router = createSessionBriefsRouter({
 /**
  * The task title a brief's "Your task" section opens with (`**Title** (story, 3 pts, …)`), or null.
  * The Briefs list names each row by it (`task_title`), read off the markdown the list does not
- * carry, so a row is never just a run reference and a sha (walk, 9 November).
+ * carry, so a row is never just a run reference and a sha (walk, 9 November). From assembler v3
+ * the title sits inside the task's untrusted-text fence, one tag line below the heading.
  */
 export function briefTaskTitle(markdown: string | null | undefined): string | null {
-  const m = /^## Your task\s*\n\*\*(.+?)\*\*/m.exec(markdown ?? '');
+  const m = /^## Your task\s*\n(?:<untrusted-[0-9a-f]+[^>\n]*>\n)?\*\*(.+?)\*\*/m.exec(markdown ?? '');
   return m ? m[1]!.trim().slice(0, 200) : null;
 }

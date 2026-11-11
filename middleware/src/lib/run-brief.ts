@@ -13,24 +13,32 @@
 // the per-run token (lib/run-token.ts) that binds the box to this run and no
 // other. A local worker receives it inside the non-interactive framing.
 //
-// The brief replaced session bundles as the one thing a box receives (decision
-// 4, 2026-10-14): a devbox brief lists the live bundle's skills in "Skills on
-// this box", and the bundle's SessionStart hook is `lab brief`.
+// What a brief gives a run (docs/learning-loop-design.md stage 4): up to two
+// runbooks as text, chosen by `selectRunbooks` with the work item's pins first
+// (`work_items.runbook_pins`), and the outcome and obstacles of earlier runs of
+// the same work item that failed, were cancelled or were sent back
+// (`previousAttempts`, read from run reports and the change request). Both are
+// computed here, once, by `planRunBrief`: the freeze and the work item's brief
+// preview (GET /api/work-items/:id/brief-preview) call the same function.
+// The offer is stored on the frozen brief as `offer.runbooks`.
 //
 // Frozen means frozen: a second freeze for the same run_ref (a reaped job
 // re-dispatched, a retried claim) returns the stored brief untouched, even if
 // a runbook moved on in between. That is what makes "what was this run told?"
 // answerable after the fact.
 
+import { randomBytes } from 'node:crypto';
 import type { AgentJob } from '../providers/agent-jobs.js';
-import { BriefExistsError, type BriefSkill, type RunbookStore, type SessionBrief } from './runbooks/index.js';
+import { BriefExistsError, MAX_PREVIOUS_ATTEMPTS, type BriefPreviousAttempt, type RunbookStore, type SessionBrief } from './runbooks/index.js';
 import { previewBrief, type PreviewDecision, type PreviewProject, type PreviewWork } from './session-brief-preview.js';
+import type { RunReport } from './run-reports/types.js';
+import type { RunReportStore } from './run-reports/store.js';
 import { mintRunToken } from './run-token.js';
 import { clock } from '../mock/core/clock.js';
 
 export interface RunTarget {
   run_ref: string;
-  /** devbox runs carry the live bundle's skills; a local machine does not have them. */
+  /** Where the org's skill library is installed: a devbox's `~/.claude/skills`, or a local run's checkout (`skills_dir`). */
   box: 'devbox' | 'local';
   /**
    * R8, local runs only: where the worker installs the org's skill library for this run
@@ -73,6 +81,7 @@ export async function loadWorkContext(workItemId: string): Promise<WorkContext |
     work: {
       id: work.id, title: work.title, description: work.description, type: work.type,
       storyPoints: work.storyPoints, labels: work.labels, parentId: work.parentId,
+      runbookPins: work.runbookPins ?? [],
     },
     parent: parent ? { title: parent.title } : null,
     project: project ? { id: project.id, name: project.name, repoFullName: project.repoFullName } : null,
@@ -80,19 +89,90 @@ export async function loadWorkContext(workItemId: string): Promise<WorkContext |
   };
 }
 
-/** What the live session bundle installs on a devbox, as brief lines. [] when no bundle is live. */
-export async function liveBundleSkills(): Promise<BriefSkill[]> {
-  const { getLiveBundle } = await import('../providers/session-bundle.js');
-  const live = await getLiveBundle();
-  return (live?.skills ?? []).map((k) => ({ id: k.id, name: k.name, description: k.description, version: k.version }));
-}
-
 async function defaultStore(): Promise<RunbookStore> {
   return (await import('./runbooks/store-select.js')).runbookStore();
 }
 
-/** Assemble the brief for a run without storing it. */
-export async function composeRunBrief(target: RunTarget, opts: { store?: RunbookStore; nowIso?: string } = {}): Promise<SessionBrief> {
+async function defaultReports(): Promise<RunReportStore> {
+  return (await import('./run-reports/store-select.js')).runReportStore();
+}
+
+/** What a change request says about a run's change: whether a reviewer sent it back, and what they asked for. */
+export interface ChangeVerdict { sentBack: boolean; requested: string | null }
+
+/** The default reading of a change request (providers/sdlc.ts), null when there is none. */
+async function changeVerdictOf(changeRequestId: string): Promise<ChangeVerdict | null> {
+  const { getChangeRequest } = await import('../providers/sdlc.js');
+  const cr = await getChangeRequest(changeRequestId).catch(() => null);
+  if (!cr) return null;
+  const sentBack = cr.status === 'rejected' || cr.status === 'changes_requested';
+  if (!sentBack) return { sentBack, requested: null };
+  const review = [...cr.reviews].reverse().find((r) => r.verdict !== 'approve');
+  const fromReview = review ? [review.summary ?? '', ...review.findings.map((f) => f.note)].filter((x) => x.trim()).join(' ') : '';
+  return { sentBack, requested: cr.decisionNote?.trim() || fromReview || null };
+}
+
+export interface PlanOptions {
+  store?: RunbookStore;
+  nowIso?: string;
+  /** The run report store (lib/run-reports/store-select.ts); injected by suites. */
+  reports?: RunReportStore;
+  /** How a change request is read; injected by suites. */
+  changeVerdict?: (changeRequestId: string) => Promise<ChangeVerdict | null>;
+  /** The brief's fence token; a fresh random one when omitted (suites pass one to compare bytes). */
+  fenceToken?: string;
+}
+
+/** How many of a work item's newest reports `previousAttempts` reads looking for ones that did not finish. */
+const ATTEMPT_SCAN = 20;
+
+/**
+ * Earlier runs of `workItemId` that failed, were cancelled, or whose change a reviewer sent
+ * back, newest first, at most MAX_PREVIOUS_ATTEMPTS, never `excludeRunRef` itself. Read from
+ * run reports (lib/run-reports) and, for a run with a change request, from that request.
+ * A store that cannot be read gives no attempts rather than no brief.
+ */
+export async function previousAttempts(
+  workItemId: string, excludeRunRef: string, opts: Pick<PlanOptions, 'reports' | 'changeVerdict'> = {},
+): Promise<BriefPreviousAttempt[]> {
+  let reports: RunReport[];
+  try {
+    reports = (await (opts.reports ?? await defaultReports()).listReports({ workItemId, limit: ATTEMPT_SCAN })).items;
+  } catch (err) {
+    console.warn(`[run-brief] could not read run reports for ${workItemId}:`, (err as Error).message);
+    return [];
+  }
+  const verdictOf = opts.changeVerdict ?? changeVerdictOf;
+  const out: BriefPreviousAttempt[] = [];
+  for (const r of reports) {
+    if (out.length >= MAX_PREVIOUS_ATTEMPTS) break;
+    if (r.runRef === excludeRunRef) continue;
+    let requested: string | null = null;
+    if (r.outcome !== 'failed' && r.outcome !== 'cancelled') {
+      if (!r.changes.changeRequestId) continue;
+      const v = await verdictOf(r.changes.changeRequestId);
+      if (!v?.sentBack) continue;
+      requested = v.requested;
+    }
+    out.push({
+      run_ref: r.runRef, outcome: r.outcome, failure_code: r.failureCode, ended_at: r.endedAt,
+      summary: r.summary, obstacles: [...r.obstacles], requested_changes: requested,
+    });
+  }
+  return out;
+}
+
+/** A brief, and the earlier attempts it was given in full (the preview route returns both). */
+export interface RunBriefPlan {
+  brief: SessionBrief;
+  previousAttempts: BriefPreviousAttempt[];
+}
+
+/**
+ * Assemble the brief for a run without storing it: the work item's context, its pins, the
+ * selection, its previous attempts. The ONE function the freeze and the brief preview share.
+ */
+export async function planRunBrief(target: RunTarget, opts: PlanOptions = {}): Promise<RunBriefPlan> {
   const store = opts.store ?? await defaultStore();
   const ctx = target.work_item_id ? await loadWorkContext(target.work_item_id) : null;
   let project: PreviewProject | null = ctx?.project ?? null;
@@ -101,6 +181,7 @@ export async function composeRunBrief(target: RunTarget, opts: { store?: Runbook
     const p = await getProject(target.initiative_id);
     project = p ? { id: p.id, name: p.name, repoFullName: p.repoFullName } : null;
   }
+  const attempts = ctx ? await previousAttempts(ctx.work.id, target.run_ref, opts) : [];
   const brief = await previewBrief({
     store,
     run_ref: target.run_ref,
@@ -108,15 +189,23 @@ export async function composeRunBrief(target: RunTarget, opts: { store?: Runbook
     parent: ctx?.parent ?? null,
     project,
     decisions: ctx?.decisions ?? [],
-    pinned: [],
+    pinned: ctx?.work.runbookPins ?? [],
     nowIso: opts.nowIso ?? clock.nowIso(),
     // R8: a devbox syncs the org's skill library into ~/.claude/skills at boot; a local worker
     // installs it as project skills in the run's checkout when it says it will (skills_dir).
-    ...(target.box === 'devbox' ? { skills: await liveBundleSkills() } : { skillsDir: target.skills_dir ?? null }),
+    ...(target.box === 'local' ? { skillsDir: target.skills_dir ?? null } : {}),
     ...(!ctx && target.task ? { task: target.task } : {}),
     ...(!ctx && target.repo ? { repo: target.repo } : {}),
+    previousAttempts: attempts,
+    fenceToken: opts.fenceToken ?? randomBytes(16).toString('hex'),
   });
-  return { ...brief, dispatched_by: target.dispatched_by ?? null };
+  const shown = new Set((brief.previous_attempts ?? []).map((a) => a.run_ref));
+  return { brief: { ...brief, dispatched_by: target.dispatched_by ?? null }, previousAttempts: attempts.filter((a) => shown.has(a.run_ref)) };
+}
+
+/** Assemble the brief for a run without storing it. */
+export async function composeRunBrief(target: RunTarget, opts: PlanOptions = {}): Promise<SessionBrief> {
+  return (await planRunBrief(target, opts)).brief;
 }
 
 /**
@@ -124,7 +213,7 @@ export async function composeRunBrief(target: RunTarget, opts: { store?: Runbook
  * one, else assembled now and stored write-once. Two concurrent freezes of one
  * run both return the brief that won.
  */
-export async function freezeBrief(target: RunTarget, opts: { store?: RunbookStore; nowIso?: string } = {}): Promise<SessionBrief> {
+export async function freezeBrief(target: RunTarget, opts: PlanOptions = {}): Promise<SessionBrief> {
   const store = opts.store ?? await defaultStore();
   const existing = await store.getBrief(target.run_ref);
   if (existing) return existing;

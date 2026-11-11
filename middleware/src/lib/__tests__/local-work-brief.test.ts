@@ -21,8 +21,10 @@ describe('frameLocalPrompt with a brief', () => {
     expect(frameLocalPrompt(task, true, brief)).toContain(`(brief-job-1, sha256 ${'a'.repeat(64)})`);
   });
 
-  it('tells the run there is no lab command here, and where the report lines go instead', () => {
-    expect(frameLocalPrompt(task, false, brief)).toContain('This machine has no `lab` command');
+  it('asks for nothing but the report block: no `lab` lines (docs/learning-loop-design.md stage 4)', () => {
+    const out = frameLocalPrompt(task, false, brief);
+    expect(out).not.toMatch(/`lab\b|lab command/);
+    expect(out).toContain('Follow a runbook where it fits the task.');
   });
 
   it('without a brief the framing is exactly what it was', () => {

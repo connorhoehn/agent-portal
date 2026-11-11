@@ -13,6 +13,10 @@ jest.mock('../../providers/work-items.js', () => {
       description: 'Move the Acme tenant sign-in to Cognito: tenant cutover from the saml shim.', labels: ['cutover'], storyPoints: 3,
     },
     'wi-epic': { id: 'wi-epic', projectId: 'p-auth', parentId: null, type: 'epic', title: 'Retire the SAML shim', description: null, labels: [], storyPoints: null },
+    'wi-auth-2': {
+      id: 'wi-auth-2', projectId: 'p-auth', parentId: 'wi-epic', type: 'story', title: 'Cut the second tenant over',
+      description: 'Tenant cutover for Globex from the saml shim.', labels: ['cutover'], storyPoints: 2, runbookPins: ['rb-flaky-test-rerun-diff'],
+    },
   };
   return {
     getWorkItem: jest.fn(async (id: string) => items[id] ?? null),
@@ -36,9 +40,22 @@ import { RUN_TOKEN_HEADER, mintRunToken } from '../../lib/run-token.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { briefLibraryOf, loadSkillLibrary, assembleBrief, type RunbookStore } from '../../lib/runbooks/index.js';
 import { USERS, seededStore, type TestUser } from './runbook-world.js';
+import { RowsRunReportStore, privateRunReportSources, type RunReport, type RunReportStore } from '../../lib/run-reports/index.js';
+import { freezeBrief } from '../../lib/run-brief.js';
 
 const SECRET = 'lab-secret';
 let store: RunbookStore;
+let reports: RunReportStore;
+
+/** A stored report of an earlier run of a work item. */
+function report(over: Partial<RunReport> & Pick<RunReport, 'runRef' | 'outcome' | 'endedAt'>): RunReport {
+  return {
+    workItemId: 'wi-auth-1', initiativeId: 'p-auth', executor: 'local', model: null, startedAt: null,
+    failureCode: null, summary: '', changes: { files: [], changeRequestId: null }, verification: [], obstacles: [],
+    runbooksOffered: [], runbooksUsed: [], cost: { billedUsd: 0, reportedUsd: null, basis: 'unknown' }, kept: [],
+    selfReport: 'ok', briefId: null, createdAt: over.endedAt, ...over,
+  };
+}
 
 function appAs(user: TestUser | null) {
   const app = express();
@@ -48,7 +65,7 @@ function appAs(user: TestUser | null) {
     else (req as unknown as { sessionInvalid: boolean }).sessionInvalid = true;
     next();
   });
-  app.use('/api', createSessionBriefsRouter({ store: () => store }));
+  app.use('/api', createSessionBriefsRouter({ store: () => store, reports: () => reports }));
   app.use(errorHandler);
   return app;
 }
@@ -74,6 +91,7 @@ async function freeze(runRef: string) {
 
 beforeEach(() => {
   store = seededStore();
+  reports = new RowsRunReportStore(privateRunReportSources());
   process.env[LAB_CALLBACK_SERVICE_AUTH.envVar] = SECRET;
   resetServiceNonceCache();
 });
@@ -178,14 +196,56 @@ describe('GET /api/work-items/:id/brief-preview', () => {
     expect(brief.markdown).toContain('Cutover order'); // the settled project decision binds
     expect(brief.markdown).not.toContain('Unrelated'); // another work item's open decision does not
     expect(brief.markdown).toContain('Retire the SAML shim'); // the parent epic
-    // R8: no procedure text — one pointer at the org's skill library, which the brief records.
-    expect(brief.sections.some((s: { kind: string }) => s.kind === 'runbook')).toBe(false);
+    // Stage 4: the chosen runbook is given as text, with its reason; the library is still installed.
+    expect(res.body.offer.runbooks).toEqual([expect.objectContaining({ id: 'rb-tenant-cutover', version: 1, pinned: false, reason: expect.stringMatching(/^labels cutover; shares .*tenant/) })]);
+    expect(brief.offer).toEqual(res.body.offer);
+    expect(brief.sections.filter((s: { kind: string }) => s.kind === 'runbook').map((s: { ref: string }) => s.ref)).toEqual(['rb-tenant-cutover']);
+    expect(brief.markdown).toMatch(/<untrusted-[0-9a-f]{32} kind="runbook" source="rb-tenant-cutover v1">\n# Cut one tenant over from SAML to Cognito/);
     expect(brief.markdown).toContain('installed in `~/.claude/skills`');
     expect(brief.skill_library.skills.map((k: { name: string }) => k.name)).toContain('rb-tenant-cutover');
+    expect(res.body.pins).toEqual([]);
+    expect(res.body.previous_attempts).toEqual([]);
     expect(await store.getBrief('preview-wi-auth-1')).toBeNull();
-    // Deterministic for the same world.
+    // The same bytes for the same world, but for the fence token, which every preview draws afresh.
     const again = await request(appAs(USERS.member!)).get('/api/work-items/wi-auth-1/brief-preview');
-    expect(again.body.brief.sha256).toBe(brief.sha256);
+    const untokened = (md: string) => md.replace(/untrusted-[0-9a-f]{32}/g, 'untrusted-T');
+    expect(untokened(again.body.brief.markdown)).toBe(untokened(brief.markdown));
+    expect(again.body.brief.markdown.match(/untrusted-([0-9a-f]{32})/)![1]).not.toBe(brief.markdown.match(/untrusted-([0-9a-f]{32})/)![1]);
+  });
+
+  it("a person's pin comes first, ahead of the selector's own choice", async () => {
+    const res = await request(appAs(USERS.member!)).get('/api/work-items/wi-auth-2/brief-preview');
+    expect(res.body.pins).toEqual(['rb-flaky-test-rerun-diff']);
+    expect(res.body.offer.runbooks.map((r: { id: string; pinned: boolean }) => [r.id, r.pinned])).toEqual([['rb-flaky-test-rerun-diff', true], ['rb-tenant-cutover', false]]);
+    expect(res.body.offer.runbooks[0].reason).toMatch(/^pinned on the work item/);
+  });
+
+  it('carries the previous attempts that failed, were cancelled or were sent back, newest first, fenced in the markdown', async () => {
+    await reports.putReport(report({ runRef: 'job-a', outcome: 'failed', failureCode: 'exit_1', endedAt: '2026-10-10T00:00:00.000Z', summary: 'Stopped at the flip.', obstacles: ['The callback URL was missing from the app client.'] }));
+    await reports.putReport(report({ runRef: 'job-b', outcome: 'done', endedAt: '2026-10-11T00:00:00.000Z', summary: 'Done.' }));
+    await reports.putReport(report({ runRef: 'job-c', outcome: 'cancelled', failureCode: 'claim_lost', endedAt: '2026-10-12T00:00:00.000Z' }));
+    await reports.putReport(report({ runRef: 'job-z', workItemId: 'wi-other', outcome: 'failed', endedAt: '2026-10-13T00:00:00.000Z' }));
+    const res = await request(appAs(USERS.member!)).get('/api/work-items/wi-auth-1/brief-preview');
+    expect(res.body.previous_attempts.map((a: { run_ref: string; outcome: string }) => [a.run_ref, a.outcome])).toEqual([['job-c', 'cancelled'], ['job-a', 'failed']]);
+    expect(res.body.previous_attempts[1]).toEqual({
+      run_ref: 'job-a', outcome: 'failed', failure_code: 'exit_1', ended_at: '2026-10-10T00:00:00.000Z',
+      summary: 'Stopped at the flip.', obstacles: ['The callback URL was missing from the app client.'], requested_changes: null,
+    });
+    expect(res.body.brief.previous_attempts.map((a: { run_ref: string }) => a.run_ref)).toEqual(['job-c', 'job-a']);
+    expect(res.body.brief.markdown).toMatch(/### 2\. Failed, 2026-10-10 \(run job-a\)\n<untrusted-[0-9a-f]{32} kind="previous-attempt" source="job-a">\nFailure code: exit_1\nSummary: Stopped at the flip\.\nObstacles:\n- The callback URL was missing/);
+  });
+
+  it('preview and freeze agree: one function computes both (the offer, the attempts, the bytes)', async () => {
+    await reports.putReport(report({ runRef: 'job-a', outcome: 'failed', endedAt: '2026-10-10T00:00:00.000Z', obstacles: ['Sign-in failed on the shim.'] }));
+    const preview = (await request(appAs(USERS.member!)).get('/api/work-items/wi-auth-2/brief-preview')).body;
+    const frozen = await freezeBrief({ run_ref: 'job-new', box: 'devbox', work_item_id: 'wi-auth-2' }, { store, reports });
+    expect(frozen.offer).toEqual(preview.offer);
+    expect(frozen.previous_attempts).toEqual(preview.brief.previous_attempts);
+    expect(frozen.omitted).toEqual(preview.brief.omitted);
+    const norm = (md: string, ref: string) => md.replace(/untrusted-[0-9a-f]{32}/g, 'untrusted-T').split(ref).join('RUN')
+      .replace(/ · [\d,]+ of /, ' · N of ');
+    expect(norm(frozen.markdown, 'job-new')).toBe(norm(preview.brief.markdown, 'preview-wi-auth-2'));
+    expect(await store.getBrief('job-new')).toEqual(frozen);
   });
 
   it('every published skill reaches every box: the preview records the whole library, whatever the work item', async () => {
@@ -206,6 +266,8 @@ describe('GET /api/work-items/:id/brief-preview', () => {
 describe('briefTaskTitle', () => {
   it('reads the task line, or says there is none', () => {
     expect(briefTaskTitle('# Brief\n\n## Your task\n**Tenant-by-tenant cutover** (story, 3 pts)\nbody')).toBe('Tenant-by-tenant cutover');
+    // Assembler v3: the task sits inside the fence, one tag line below the heading.
+    expect(briefTaskTitle(`# Brief\n\n## Your task\n<untrusted-${'a'.repeat(32)} kind="work-item" source="wi-1">\n**Tenant-by-tenant cutover** (story, 3 pts)\nbody`)).toBe('Tenant-by-tenant cutover');
     expect(briefTaskTitle('# Brief\n\nno task')).toBeNull();
     expect(briefTaskTitle(null)).toBeNull();
   });

@@ -198,8 +198,9 @@ async function otherSkills(s: RunbookStore): Promise<Array<{ name: string; descr
   const lib = (await loadCandidates(s, Date.parse(clock.nowIso()))).map((c) => ({ name: c.runbook.id, description: skillDescription(c.version.doc) }));
   let box: Array<{ name: string; description: string }> = [];
   try {
-    const { liveBundleSkills } = await import('../lib/run-brief.js');
-    box = (await liveBundleSkills()).map((k) => ({ name: k.id, description: k.description }));
+    // Read from the bundle itself: briefs no longer list its skills (learning loop, lane D).
+    const { getLiveBundle } = await import('../providers/session-bundle.js');
+    box = ((await getLiveBundle())?.skills ?? []).map((k) => ({ name: k.id, description: k.description }));
   } catch { box = []; }
   return [...lib, ...box];
 }
