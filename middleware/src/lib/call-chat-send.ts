@@ -45,6 +45,16 @@ const samePage = (a: unknown, b: CallPageDescriptor | null) => {
   return left === null ? b === null : !!b && left.kind === b.kind && left.id === b.id;
 };
 
+/** A stored message may address the assistant; the module is loaded only when the feature is on (it imports this file's neighbours). */
+async function typedToAssistant(callId: string, userId: string, text: string): Promise<void> {
+  try {
+    const { meetingAssistantEnabled } = await import('./meeting-assistant/index.js');
+    if (!meetingAssistantEnabled()) return;
+    const { assistantRuntime } = await import('./meeting-assistant/orchestrator.js');
+    await assistantRuntime().onTypedMessage(callId, userId, text);
+  } catch (error) { console.warn('[meeting-assistant] typed request not handled', (error as Error).message); }
+}
+
 /**
  * Compose around the public chat service for the huddle namespace; every
  * other channel is untouched. The library keeps storage, history floors,
@@ -129,6 +139,8 @@ export function withHuddleChat(feature: RealtimeFeature, current: () => CallChat
             await owner.messages.updateMessage(channel, stored.id, { message: '', metadata: { deleted: true }, deletedAt: new Date().toISOString() });
           }
           if (stored) acknowledged.delete(`${clientId}\0${stored.id}`);
+          // Nova hears typed requests only through this hook, after the message is stored; it never delays or fails the send.
+          if (stored) void typedToAssistant(callId, userId, input.text);
         } catch (error) {
           if (context.router.getClientData?.(clientId)?.userContext !== captured) return;
           const status = error instanceof AppError ? error.status : 503;

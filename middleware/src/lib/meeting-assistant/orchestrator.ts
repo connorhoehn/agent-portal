@@ -42,6 +42,9 @@ export const WRITE_TURN_TTL_MS = 10 * 60_000;
 export const ASKER_WINDOW_MS = 20_000;
 /** Tool calls one addressed request may make; the next is refused with "too many steps". */
 export const MAX_CALLS_PER_REQUEST = 3;
+export const TYPED_UNSUPPORTED_REPLY = 'I can only hear spoken requests in this call. Say my name and ask aloud.';
+/** A call chat message that addresses Nova: it starts with the name and a comma, colon or space, or mentions @Nova. */
+export const addressesNova = (text: string): boolean => /^\s*@?nova(?:[,:\s]|$)/i.test(text) || /(^|[^\w])@nova\b/i.test(text);
 export const MAX_REPLACEMENTS = 3;
 /** The voice speaks a short acknowledgement the moment it delegates; output this soon after a delegation is not posted. */
 export const ACK_WINDOW_MS = 3000;
@@ -104,6 +107,8 @@ interface CallRun {
   turnCalls: Map<string, string>;
   /** Tool calls made so far for each addressed request, keyed by asker and the line that addressed Nova (decision: a cap on chained calls). */
   requestCalls: Map<string, number>;
+  /** People already told that typed requests are not heard in this call. */
+  typedNoticed: Set<string>;
   holding: Set<string>;
   reply: ReplyContext;
   delegationAt: number;
@@ -180,7 +185,7 @@ export class AssistantRuntime {
     this.watchIntake();
     const run: CallRun = {
       ctx, session: null, unsubscribers: [], sessionStartedAt: 0, sessionNo: 0, pieceNo: 0, timeline: new VoicedTimeline(),
-      calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), holding: new Set(), reply: { asker: null, private: false, mute: false },
+      calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), holding: new Set(), reply: { asker: null, private: false, mute: false },
       delegationAt: -Infinity, answeredSinceDelegation: true, intentionalClose: false, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, sessionKind: 'scripted', chain: Promise.resolve(), finished: false,
     };
@@ -460,6 +465,25 @@ export class AssistantRuntime {
         else if (record.state === 'left') await this.stop(callId);
       }
     }
+  }
+
+  // -------------------------------------------------------------------------------------------------------------
+  // A typed request in the call chat (after the message is stored; the caller never waits for this)
+
+  /**
+   * A seated person typed a message to Nova. A session that takes text (the scripted one) gets it as the person's own
+   * line, so the detector and the name lock treat it like speech; one that cannot (the real one) is told once per person
+   * per call, in chat, that only spoken requests are heard.
+   */
+  async onTypedMessage(callId: string, userId: string, text: string): Promise<void> {
+    const run = this.runs.get(callId);
+    if (!run?.session || run.finished || !addressesNova(text)) return;
+    const record = await this.store.get(callId);
+    if (!record || record.state !== 'listening') return;
+    if (run.session.acceptsText) { await this.deps.intake().handle(callId, { userId, text, at: this.now() }); return; }
+    if (run.typedNoticed.has(userId)) return;
+    run.typedNoticed.add(userId);
+    await postReply(callId, { text: TYPED_UNSUPPORTED_REPLY, askedBy: userId, askedByName: await nameOf(userId) });
   }
 
   // -------------------------------------------------------------------------------------------------------------

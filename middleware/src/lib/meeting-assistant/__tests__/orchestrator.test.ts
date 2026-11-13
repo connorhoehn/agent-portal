@@ -30,7 +30,7 @@ jest.mock('../chat.js', () => {
 import { LineIntake } from '../intake.js';
 import { MemoryAssistantStore } from '../store.js';
 import { MockTranscriptSource } from '../transcript-source.js';
-import { AssistantRuntime, READ_TURN_TTL_MS, WRITE_TURN_TTL_MS, classifyCall, describeCall, type StartContext } from '../orchestrator.js';
+import { AssistantRuntime, TYPED_UNSUPPORTED_REPLY, READ_TURN_TTL_MS, WRITE_TURN_TTL_MS, classifyCall, describeCall, type StartContext } from '../orchestrator.js';
 import { ScriptedSession } from '../scripted-session.js';
 import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type SessionStartInput } from '../session.js';
 import { newAssistantSession, sessionOf, type AssistantRecord } from '../types.js';
@@ -331,6 +331,27 @@ describe('the refusals', () => {
     expect(await store.listTurns(CALL)).toEqual([]);
     expect(mockPosts.replies).toEqual([]);
     expect(sessionOf((await store.get(CALL))!).refusedCalls).toBe(3);
+  });
+});
+
+describe('typed requests in the call chat', () => {
+  it('a session that cannot take text answers a typed request once per person, and ignores messages that do not address Nova', async () => {
+    factory = () => { const s = new FakeSession(); sessions.push(s); return s; };
+    await runtime.stop(CALL); await store.transition(CALL, { from: ['listening'], to: 'listening', by: 'x', at: now });
+    runtime = new AssistantRuntime({ store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [] }, { tickMs: 0 });
+    await runtime.start(ctx);
+    await runtime.onTypedMessage(CALL, ALICE, 'we should ship on Friday');
+    await runtime.onTypedMessage(CALL, ALICE, 'I like the nova scotia plan');
+    expect(mockPosts.replies).toEqual([]);
+    await runtime.onTypedMessage(CALL, ALICE, 'Nova, find the login bug');
+    await runtime.onTypedMessage(CALL, ALICE, '@Nova what is my budget');
+    await runtime.onTypedMessage(CALL, BOB, 'hey @nova search for x');
+    expect(mockPosts.replies.map((r) => r.text)).toEqual([TYPED_UNSUPPORTED_REPLY, TYPED_UNSUPPORTED_REPLY]);
+  });
+  it('the scripted session takes the typed text as the person\'s own line', async () => {
+    await runtime.onTypedMessage(CALL, ALICE, 'Nova, what is two plus two');
+    now += 5000; await intake.tick(); await flush();
+    expect(mockPosts.replies.map((r) => r.text)).toEqual(['Four.']);
   });
 });
 
