@@ -14,6 +14,9 @@ export interface AssistantView {
   leftBy: string | null;
   /** True when this person has not yet acknowledged the transcription notice. */
   youMustAck: boolean;
+  /** Seconds Nova has listened, and the ceiling it leaves at; null while the server has not said. */
+  listeningSeconds: number | null;
+  ceilingSeconds: number | null;
 }
 
 /** The state is refreshed this often while a call is live (docs: keep any poll at 5 s or slower). */
@@ -23,6 +26,7 @@ export const ASSISTANT_NAME = 'Nova';
 export const ASSISTANT_LABEL = 'Assistant';
 
 const PHASES: readonly AssistantPhase[] = ['none', 'invited', 'listening', 'paused', 'left'];
+const seconds = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null);
 const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null);
 
 /** Reads one `GET …/assistant/state` (or an action's) body; anything unrecognised reads as "no assistant". */
@@ -34,6 +38,7 @@ export function parseAssistantState(callId: string, body: unknown): AssistantVie
     invitedBy: text(b['invitedBy']), invitedByName: text(b['invitedByName']),
     pausedBy: text(b['pausedBy']), leftBy: text(b['leftBy']),
     youMustAck: phase !== 'none' && phase !== 'left' && b['youMustAck'] === true,
+    listeningSeconds: seconds(b['listeningSeconds']), ceilingSeconds: seconds(b['ceilingSeconds']),
   };
 }
 
@@ -57,13 +62,17 @@ export interface AssistantControls {
   pause: boolean;
   resume: boolean;
   dismiss: boolean;
+  /** This person has not acknowledged yet: Nova cannot hear them, and the mark says so and offers the acknowledgement. */
+  acknowledge: boolean;
+  /** Add time to the ceiling: people who may invite Nova, while it is in the call. */
+  extend: boolean;
   /** Nova left this call; the server refuses a re-invite, so the bar says so instead of offering Invite. */
   left: boolean;
 }
 
 /** What the call bar offers. Invite needs the capability; pause, resume and dismiss are for everyone in the call. */
 export function assistantControls(input: { enabled: boolean; inCall: boolean; canInvite: boolean; view: AssistantView }): AssistantControls {
-  const off: AssistantControls = { hidden: true, invite: false, pause: false, resume: false, dismiss: false, left: false };
+  const off: AssistantControls = { hidden: true, invite: false, pause: false, resume: false, dismiss: false, acknowledge: false, extend: false, left: false };
   if (!input.enabled || !input.inCall) return off;
   const { phase } = input.view;
   return {
@@ -72,6 +81,8 @@ export function assistantControls(input: { enabled: boolean; inCall: boolean; ca
     pause: phase === 'listening' || phase === 'invited',
     resume: phase === 'paused',
     dismiss: assistantPresent(input.view),
+    acknowledge: assistantPresent(input.view) && input.view.youMustAck,
+    extend: (phase === 'listening' || phase === 'paused') && input.canInvite,
     left: phase === 'left',
   };
 }
@@ -92,4 +103,26 @@ export function noticeText(v: AssistantView): { title: string; body: string } {
 export function rosterEntry(v: AssistantView): string | null {
   if (!assistantPresent(v)) return null;
   return `${ASSISTANT_NAME} (${ASSISTANT_LABEL}, ${v.phase === 'paused' ? 'paused' : 'listening'})`;
+}
+
+/** Minutes before Nova leaves (rounded up), or null when the server has not said. Never negative. */
+export function minutesLeft(v: AssistantView): number | null {
+  if (v.listeningSeconds === null || v.ceilingSeconds === null) return null;
+  return Math.max(0, Math.ceil((v.ceilingSeconds - v.listeningSeconds) / 60));
+}
+
+/** The warning is shown from this many minutes before Nova leaves. */
+export const LEFT_WARNING_MINUTES = 10;
+
+/** "8 min left" while Nova is listening and the end is near; null otherwise. */
+export function timeLeftWords(v: AssistantView): string | null {
+  if (v.phase !== 'listening' && v.phase !== 'invited') return null;
+  const m = minutesLeft(v);
+  return m !== null && m < LEFT_WARNING_MINUTES ? `${m} min left` : null;
+}
+
+/** What the mark says: the state, or that Nova cannot hear this person yet (the notice's close mark only hides it). */
+export function markWords(v: AssistantView): string | null {
+  if (assistantPresent(v) && v.youMustAck) return `${ASSISTANT_NAME} cannot hear you yet`;
+  return assistantStateWords(v);
 }

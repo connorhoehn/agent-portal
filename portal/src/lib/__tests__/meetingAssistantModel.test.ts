@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ASSISTANT_POLL_MS, assistantControls, assistantPresent, assistantStateWords, noticeText, noticeVisible, NO_ASSISTANT, parseAssistantState, rosterEntry,
+  ASSISTANT_POLL_MS, assistantControls, assistantPresent, assistantStateWords, noticeText, noticeVisible, NO_ASSISTANT, parseAssistantState, rosterEntry, markWords, timeLeftWords,
 } from '../meetingAssistantModel.ts';
 
 const view = (state: string, extra: Record<string, unknown> = {}) => parseAssistantState('c1', { state, invitedBy: 'u-a', invitedByName: 'Vera Lindqvist', youMustAck: false, ...extra });
@@ -63,4 +63,24 @@ test('the roster entry is a non-human line with its label and state', () => {
   assert.equal(rosterEntry(view('paused')), 'Nova (Assistant, paused)');
   assert.equal(rosterEntry(view('left')), null);
   assert.equal(assistantPresent(NO_ASSISTANT('c1')), false);
+});
+
+test('time left shows under ten minutes while listening, rounded up, never negative', () => {
+  assert.equal(timeLeftWords(view('listening', { listeningSeconds: 100, ceilingSeconds: 3600 })), null);
+  assert.equal(timeLeftWords(view('listening', { listeningSeconds: 3000, ceilingSeconds: 3600 })), null);
+  assert.equal(timeLeftWords(view('listening', { listeningSeconds: 3061, ceilingSeconds: 3600 })), '9 min left');
+  assert.equal(timeLeftWords(view('listening', { listeningSeconds: 3700, ceilingSeconds: 3600 })), '0 min left');
+  assert.equal(timeLeftWords(view('paused', { listeningSeconds: 3500, ceilingSeconds: 3600 })), null);
+  assert.equal(timeLeftWords(view('listening')), null);
+});
+
+test('the mark says Nova cannot hear you until you acknowledge, and the menu offers it', () => {
+  const owing = view('listening', { youMustAck: true });
+  assert.equal(markWords(owing), 'Nova cannot hear you yet');
+  const controls = assistantControls({ enabled: true, inCall: true, canInvite: false, view: owing });
+  assert.equal(controls.acknowledge, true);
+  assert.equal(controls.extend, false);
+  assert.equal(markWords(view('listening')), 'Nova is listening');
+  assert.equal(assistantControls({ enabled: true, inCall: true, canInvite: true, view: view('listening') }).extend, true);
+  assert.equal(assistantControls({ enabled: true, inCall: true, canInvite: true, view: view('left') }).extend, false);
 });

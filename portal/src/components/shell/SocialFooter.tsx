@@ -34,6 +34,7 @@ import { HuddleReactionBar, useHuddleChat, useHuddleChatToggle, useHuddleReact }
 import { useMeetingBarItems } from './CallMeeting';
 import { NovaBarControls, NovaNotice } from './MeetingAssistantBar';
 import { MeetingTurnRunner } from './MeetingTurnRunner';
+import { NovaPrivateAnswers } from './NovaPrivateAnswers';
 import { ShellCallMedia } from './ShellCallHost';
 import { callScopeKey, hasJoinedCall, idleHuddleControls } from './callShellModel';
 import { VoiceFooterSlot } from './VoiceFooterPane';
@@ -244,6 +245,7 @@ export function SocialFooter() {
     <ShellCallMedia id={mediaId} />
     <NovaNotice />
     <MeetingTurnRunner />
+    <NovaPrivateAnswers />
     {/* The HuddleBar is a size container, so it has no intrinsic width: `basis-[14rem]` is what makes the row wrap it onto its own line. Wide: one row. Narrow: whole slots wrap onto a second line (none shrinks over its neighbour); the measured floor follows the row's height. */}
     {/* A slot that starts a wrapped line drops its left rule (markLineStarts). */}
     <Inline ref={row} gap="sm" align="center" justify="between" className="min-h-11 min-w-0 px-4 py-1 [&>[data-line-start]]:border-l-0 [&>[data-line-start]]:pl-0" data-testid="shell-footer-row">

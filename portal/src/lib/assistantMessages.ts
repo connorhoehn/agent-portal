@@ -67,7 +67,7 @@ export function actionCardView(action: AssistantAction, viewerId: string | null)
   const asker = viewerId !== null && viewerId === action.askedBy;
   const waiting = action.status === 'waiting';
   const label: Record<AssistantActionStatus, [string, ActionCardView['tone']]> = {
-    waiting: ['Waiting for confirmation', 'pending'], confirmed: ['Confirmed', 'info'], declined: ['Declined', 'neutral'],
+    waiting: ['Waiting for confirmation', 'pending'], confirmed: ['Confirmed, running', 'info'], declined: ['Declined', 'neutral'],
     expired: ['Expired', 'warning'], done: ['Done', 'success'], failed: ['Failed', 'error'],
   };
   const [statusLabel, tone] = label[action.status];

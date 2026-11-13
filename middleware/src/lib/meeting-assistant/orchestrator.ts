@@ -704,7 +704,11 @@ export class AssistantRuntime {
     if (!moved) return;
     const askerName = await nameOf(turn.askedBy);
     if (turn.kind === 'write') {
-      if (turn.actionId) await moveAction(run.ctx.callId, turn.actionId, { from: ['waiting', 'confirmed'], to: 'expired', by: 'system' }).catch(() => null);
+      if (turn.actionId) {
+        // Confirmed but never run: the asker's browser was not there. Never confirmed: nobody decided in time.
+        const resultText = turn.status === 'running' ? `${askerName} confirmed this, but their browser was not available to run it.` : `${askerName} did not confirm this in time.`;
+        await moveAction(run.ctx.callId, turn.actionId, { from: ['waiting', 'confirmed'], to: 'expired', by: 'system', resultText }).catch(() => null);
+      }
       run.session?.appendContext(`The action offered to ${askerName} expired without being done.`);
       return;
     }

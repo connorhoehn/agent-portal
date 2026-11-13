@@ -11,7 +11,7 @@ import {
   ASSISTANT_POLL_MS, assistantControls, NO_ASSISTANT, parseAssistantState, type AssistantControls, type AssistantView,
 } from './meetingAssistantModel';
 
-export type AssistantAction = 'invite' | 'pause' | 'resume' | 'dismiss' | 'ack';
+export type AssistantAction = 'invite' | 'pause' | 'resume' | 'dismiss' | 'ack' | 'extend';
 
 interface Slot { view: AssistantView; error: string | null; busy: boolean; watchers: number; timer: ReturnType<typeof setInterval> | null; listeners: Set<() => void> }
 const slots = new Map<string, Slot>();
@@ -60,6 +60,7 @@ export interface MeetingAssistantHandle {
   resume(): Promise<boolean>;
   dismiss(): Promise<boolean>;
   acknowledge(): Promise<boolean>;
+  extend(): Promise<boolean>;
 }
 
 const cache = new WeakMap<Slot, { key: string; value: Pick<MeetingAssistantHandle, 'view' | 'busy' | 'error'> }>();
@@ -100,6 +101,6 @@ export function useMeetingAssistant(callId: string | null): MeetingAssistantHand
     enabled, view, busy: snap.busy, error: active ? snap.error : null,
     controls: assistantControls({ enabled, inCall: !!callId, canInvite: can('InviteMeetingAssistant'), view }),
     invite: () => run('invite'), pause: () => run('pause'), resume: () => run('resume'),
-    dismiss: () => run('dismiss'), acknowledge: () => run('ack'),
+    dismiss: () => run('dismiss'), acknowledge: () => run('ack'), extend: () => run('extend'),
   };
 }
