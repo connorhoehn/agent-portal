@@ -6,6 +6,8 @@
 //   POST dismiss     a seat. Final: the assistant leaves.
 //   POST ack         a seat. Acknowledges the transcription notice; until then your lines are not stored.
 //   POST actions/:actionId/decision  a seat, and ONLY the person the action was offered to. { decision: 'confirm' | 'decline' }.
+//   POST extend       InviteMeetingAssistant + a seat. Adds the default minutes to the call's listening ceiling, up to the hard maximum,
+//                      and holds the money for them against the inviter. { confirmOverUserBudget? }
 //   GET  turns?mine=1  a seat. The tool calls waiting for MY browser: pending reads, and writes I confirmed (running). Only mine, ever.
 //   POST turns/:turnId/result  a seat, and ONLY the person the turn was made for (404 for anyone else). { ok, output?, error? }:
 //                      the browser's result of running the tool as that person. The server hands it to the live session as data.
@@ -27,7 +29,9 @@ import {
 import { moveAction, nameOf, noticeText, postNoticeQuietly } from '../lib/meeting-assistant/chat.js';
 import { assistantRuntime, MAX_RESULT_BYTES, type StartContext } from '../lib/meeting-assistant/orchestrator.js';
 import { sessionAvailable } from '../lib/meeting-assistant/session-select.js';
-import { sessionOf as recordSession } from '../lib/meeting-assistant/types.js';
+import { newAssistantSession, sessionOf as recordSession } from '../lib/meeting-assistant/types.js';
+import { assistantLimits } from '../lib/meeting-assistant/limits.js';
+import { assistantSpend, listeningSecondsOf } from '../lib/meeting-assistant/spend.js';
 import { getProject } from '../providers/projects.js';
 import { config } from '../config.js';
 
@@ -84,6 +88,8 @@ async function view(record: AssistantRecord | null, callId: string, session: Ses
     mustAck: owing, youMustAck: owing.includes(session.sub),
     counters: { requests: record.requests, linesStored: record.linesStored },
     refusedCalls: recordSession(record).refusedCalls,
+    listeningSeconds: Math.floor(listeningSecondsOf(record, assistantRuntime().deps.clock())),
+    ceilingSeconds: recordSession(record, assistantLimits().maxSeconds).ceilingSeconds,
     pendingRequests: record.pendingRequests,
   };
 }
@@ -127,20 +133,42 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
   const present = (await runtime.seatedUsers(callId)).filter((u) => u.active).map((u) => u.userId);
   if (!present.includes(session.sub)) present.push(session.sub);
   startListening();
-  const names = await Promise.all([...new Set(present)].map((u) => nameOf(u)));
-  const startCtx: StartContext = { callId, tenant: session.tenant, inviterId: session.sub, roster: names, recordName: await recordNameOf(initiativeOfLobby(lobby)) };
-  try { await assistantRuntime().start(startCtx); } catch (e) {
+  // Money first (decision 10): the ceiling's minutes are held against the inviter. A refusal ends the invite here, in the shape
+  // the voice mint gives, and Nova never joins.
+  const initiativeId = initiativeOfLobby(lobby);
+  const ceilingSeconds = assistantLimits().maxSeconds;
+  const spend = assistantSpend();
+  const held = await spend.reserve({
+    callId, tenant: session.tenant, inviterId: session.sub, initiativeId, seconds: ceilingSeconds, part: 0,
+    ...((req.body as { confirmOverUserBudget?: unknown } | undefined)?.confirmOverUserBudget === true ? { confirmOverUserBudget: true } : {}),
+  });
+  if (!held.ok) {
     assistantIntake().stop(callId);
+    if (held.refusal.headers) res.set(held.refusal.headers);
+    res.status(held.refusal.status).json(held.refusal.body);
+    return;
+  }
+  const names = await Promise.all([...new Set(present)].map((u) => nameOf(u)));
+  const startCtx: StartContext = { callId, tenant: session.tenant, inviterId: session.sub, roster: names, recordName: await recordNameOf(initiativeId) };
+  const giveBack = async () => { assistantIntake().stop(callId); await spend.release(held.holdId ? [held.holdId] : []); };
+  try { await assistantRuntime().start(startCtx); } catch (e) {
+    await giveBack();
     console.warn('[meeting-assistant] the live session did not start', (e as Error).message);
     throw new AppError(503, 'The live assistant could not start. Try again shortly.');
   }
   // `invited` is the moment of the invite; the inviter acknowledges by inviting, so listening starts at once.
-  const { record } = await store.create({
-    callId, tenant: session.tenant, lobby, initiativeId: initiativeOfLobby(lobby), state: 'invited',
-    invitedBy: session.sub, invitedAt: Date.now(), pausedBy: null, leftAt: null, leftBy: null,
-    acked: [session.sub], attendees: [...new Set(present)], presentAtInvite: [...new Set(present)],
-    requests: 0, linesStored: 0, nextSeq: 1, pendingRequests: [],
-  });
+  const invitedAt = assistantRuntime().deps.clock();
+  let created: Awaited<ReturnType<typeof store.create>>;
+  try {
+    created = await store.create({
+      callId, tenant: session.tenant, lobby, initiativeId, state: 'invited',
+      invitedBy: session.sub, invitedAt, pausedBy: null, leftAt: null, leftBy: null,
+      acked: [session.sub], attendees: [...new Set(present)], presentAtInvite: [...new Set(present)],
+      requests: 0, linesStored: 0, nextSeq: 1, pendingRequests: [],
+      session: { ...newAssistantSession(ceilingSeconds), listeningSince: invitedAt },
+    });
+  } catch (e) { await assistantRuntime().stop(callId); await giveBack(); throw e; }
+  const { record } = created;
   const listening = await store.transition(callId, { from: ['invited'], to: 'listening', by: session.sub, at: Date.now() });
   await postNoticeQuietly(callId, noticeText.joined(await nameOf(session.sub, session.name), config.meetingAssistant.transcriptRetentionDays));
   res.status(201).json(await view(listening ?? record, callId, session));
@@ -196,6 +224,22 @@ meetingAssistantRouter.post('/ack', asyncHandler(async (req, res) => {
   if (!current) throw new NotFoundError('The assistant is not in this call');
   if (current.state === 'left') throw new AppError(409, 'The assistant already left this call');
   res.json(await view(await store.ack(callId, session.sub), callId, session));
+}));
+
+/** Anyone who may invite Nova may extend her time (decision 10): the default minutes, once per request, up to the hard maximum. */
+meetingAssistantRouter.post('/extend', requireAction('InviteMeetingAssistant'), asyncHandler(async (req, res) => {
+  const { session, callId } = await seatOf(req);
+  await noteSeat(callId, session);
+  const out = await assistantRuntime().extend(callId, session, (req.body as { confirmOverUserBudget?: unknown } | undefined)?.confirmOverUserBudget === true);
+  if (out.ok) { res.json(await view(await assistantStore().get(callId), callId, session)); return; }
+  if (out.why === 'refused') {
+    if (out.refusal.headers) res.set(out.refusal.headers);
+    res.status(out.refusal.status).json(out.refusal.body);
+    return;
+  }
+  if (out.why === 'no-assistant') throw new NotFoundError('The assistant is not in this call');
+  if (out.why === 'left') throw new AppError(409, 'The assistant already left this call');
+  throw new AppError(409, `This call is already at its longest (${Math.round(assistantLimits().hardMaxSeconds / 60)} minutes)`);
 }));
 
 /** Only the person an action was offered to decides it (decision 5). Everyone else, and anyone with no such action: no. */

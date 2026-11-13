@@ -26,12 +26,15 @@ import { VoicedTimeline, attribute } from './attribution.js';
 import { findAddress, nameLock, type DetectorEvent } from './detector.js';
 import { assistantIntake } from './intake-select.js';
 import { assistantStore } from './store-select.js';
+import { callChatRuntime } from '../call-chat.js';
+import { CEILING_WARNING_SECONDS, assistantLimits } from './limits.js';
+import { assistantSpend, listeningSecondsOf, settleFinished, type ReserveOutcome } from './spend.js';
 import type { AssistantStore } from './store.js';
 import type { LineIntake } from './intake.js';
 import { canSpeakOnRecord } from './intake.js';
 import { makeSession } from './session-select.js';
 import type { LiveMeetingSession, SessionEvents } from './session.js';
-import type { AssistantTurn, TurnKind, TurnStatus } from './types.js';
+import { sessionOf, type AssistantRecord, type AssistantTurn, type TurnKind, type TurnStatus } from './types.js';
 
 export const READ_TURN_TTL_MS = 90_000;
 export const WRITE_TURN_TTL_MS = 10 * 60_000;
@@ -62,13 +65,17 @@ export interface RuntimeDeps {
   makeSession: (clock: () => number) => LiveMeetingSession | null;
   /** The asker's roles in `tenant` (their grants), for the per-asker catalogue check. */
   rolesOf: (userId: string, tenant: string) => Promise<string[]>;
-  /** Called when a call's run ends (dismissed, left or abandoned), with what the session cost. Package 4a's spend settles here. */
+  /** Called when a call's run ends (dismissed, left or abandoned), with what the sessions reported. Spend settles here. */
   onFinished?: (event: FinishedEvent) => Promise<void>;
-  /** Called when a listening period starts or stops, so the ceiling is counted. */
-  random?: () => string;
 }
 
-export interface FinishedEvent { callId: string; usageSeconds: number; tokens: { input: number; output: number; cached: number } }
+export interface FinishedEvent {
+  callId: string;
+  usageSeconds: number;
+  tokens: { input: number; output: number; cached: number };
+  /** Which session ran; only the provider's own figures are `reported` in the ledger. */
+  sessionKind: 'openai' | 'scripted';
+}
 
 type CallState = 'open' | 'answered' | 'dropped';
 
@@ -103,6 +110,7 @@ interface CallRun {
   tokens: { input: number; output: number; cached: number };
   totals: { seconds: number; input: number; output: number; cached: number };
   replacements: number;
+  sessionKind: 'openai' | 'scripted';
   /** Serialises session changes (pause, resume, replacement) so two never overlap. */
   chain: Promise<void>;
   finished: boolean;
@@ -170,17 +178,34 @@ export class AssistantRuntime {
       ctx, session: null, unsubscribers: [], sessionStartedAt: 0, sessionNo: 0, pieceNo: 0, timeline: new VoicedTimeline(),
       calls: new Map(), turnCalls: new Map(), holding: new Set(), reply: { asker: null, private: false, mute: false },
       delegationAt: -Infinity, answeredSinceDelegation: true, intentionalClose: false, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
-      totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, chain: Promise.resolve(), finished: false,
+      totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, sessionKind: 'scripted', chain: Promise.resolve(), finished: false,
     };
     this.runs.set(ctx.callId, run);
     try { await this.openSession(run, []); } catch (e) { this.runs.delete(ctx.callId); throw e; }
+    await this.openListening(ctx.callId);
     this.armTimer();
+  }
+
+  /** A listening period begins (a no-op when one is open, or when there is no record yet: the invite writes it with the period open). */
+  private async openListening(callId: string): Promise<void> {
+    const record = await this.store.get(callId);
+    if (record && record.state === 'listening' && sessionOf(record).listeningSince == null) await this.store.patchSession(callId, { listeningSince: this.now() });
+  }
+
+  /** The open listening period ends: its seconds join the total. */
+  private async closeListening(callId: string): Promise<void> {
+    const record = await this.store.get(callId);
+    if (!record) return;
+    const s = sessionOf(record);
+    if (s.listeningSince == null) return;
+    await this.store.patchSession(callId, { listeningSeconds: listeningSecondsOf(record, this.now()), listeningSince: null });
   }
 
   async pause(callId: string): Promise<void> {
     const run = this.runs.get(callId);
     if (!run || run.finished) return;
     await this.serial(run, async () => { await this.closeSession(run, 'pause'); run.reply = { asker: null, private: false, mute: false }; });
+    await this.closeListening(callId);
   }
 
   async resume(callId: string): Promise<void> {
@@ -190,6 +215,7 @@ export class AssistantRuntime {
       if (run.session) return;
       await this.openSession(run, await this.recentLines(callId));
     });
+    await this.openListening(callId);
   }
 
   /** Dismissed or left: close the session, expire what is open, tell the spend settlement. Idempotent. */
@@ -199,9 +225,12 @@ export class AssistantRuntime {
     run.finished = true;
     await this.serial(run, async () => { await this.closeSession(run, 'stop'); });
     await this.expireOpenTurns(run, false);
+    await this.closeListening(callId);
     this.runs.delete(callId);
     if (!this.runs.size) this.disarmTimer();
-    await this.deps.onFinished?.({ callId, usageSeconds: run.totals.seconds, tokens: { input: run.totals.input, output: run.totals.output, cached: run.totals.cached } });
+    await this.deps.onFinished?.({
+      callId, usageSeconds: run.totals.seconds, tokens: { input: run.totals.input, output: run.totals.output, cached: run.totals.cached }, sessionKind: run.sessionKind,
+    });
   }
 
   async dispose(): Promise<void> {
@@ -258,6 +287,7 @@ export class AssistantRuntime {
     run.calls = new Map(); run.turnCalls = new Map(); run.holding = new Set(); run.intentionalClose = false;
     run.delegationAt = -Infinity; run.answeredSinceDelegation = true;
     this.wire(run, session);
+    run.sessionKind = session.kind;
     await session.start({
       instructions: meetingInstructions({ tenant: run.ctx.tenant, roster: run.ctx.roster, recordName: run.ctx.recordName, recent }),
       tools: meetingFunctionTools(run.ctx.tenant),
@@ -403,6 +433,16 @@ export class AssistantRuntime {
     if (!run) return;
     for (const e of events) {
       if (e.type === 'request') {
+        // Past the per-call cap Nova says so once and ignores further requests (the cap counts what the detector found).
+        const record = await this.store.get(callId);
+        if (record && record.requests > assistantLimits().maxRequests) {
+          run.reply = { asker: null, private: false, mute: true };
+          if (!sessionOf(record).limitNoticed) {
+            await this.store.patchSession(callId, { limitNoticed: true });
+            await postNoticeQuietly(callId, `${NOVA_NAME} has reached its limit of ${assistantLimits().maxRequests} requests for this call and will not answer more.`);
+          }
+          continue;
+        }
         run.reply = { asker: e.askedBy, private: false, mute: false };
         // The scripted session answers typed text; the real one hears the same request in the audio and needs nothing.
         const session = run.session;
@@ -456,6 +496,7 @@ export class AssistantRuntime {
     const { callId, tenant } = run.ctx;
     const record = await this.store.get(callId);
     if (!record || record.state !== 'listening') { this.answer(run, e.callId, { refused: 'not listening' }); return; }
+    if (record.requests > assistantLimits().maxRequests) { await this.refuse(run, e.callId, 'request limit reached'); return; }
     const atMs = run.session?.kind === 'scripted' ? this.now() : run.sessionStartedAt + e.atMs;
     // (a) The asker: the server's own record of who spoke.
     const asker = e.askedBy ?? await this.recentAsker(callId, atMs, false);
@@ -565,9 +606,55 @@ export class AssistantRuntime {
     const now = this.now();
     for (const run of [...this.runs.values()]) {
       if (run.finished) continue;
+      await this.checkCeiling(run);
+      if (run.finished) continue;
       const due = (await this.store.listTurns(run.ctx.callId, { statuses: ['pending', 'running'] })).filter((t) => t.expiresAt <= now);
       for (const t of due) await this.expireTurn(run, t);
     }
+  }
+
+  /** Five minutes before the ceiling, say so once; at the ceiling, leave with a notice (the listening time counts, a pause does not). */
+  private async checkCeiling(run: CallRun): Promise<void> {
+    const callId = run.ctx.callId;
+    const record = await this.store.get(callId);
+    if (!record || record.state !== 'listening') return;
+    const s = sessionOf(record, assistantLimits().maxSeconds);
+    const left = s.ceilingSeconds - listeningSecondsOf(record, this.now());
+    if (left <= 0) {
+      const done = await this.store.transition(callId, { from: ['listening'], to: 'left', by: 'system', at: this.now() });
+      if (!done) return;
+      await postNoticeQuietly(callId, `${NOVA_NAME} left because this call reached its ${Math.round(s.ceilingSeconds / 60)}-minute limit. Anyone who can invite ${NOVA_NAME} can invite again.`, { leaving: true });
+      for (const u of await callChatRuntime().seatedUsers(callId).catch(() => [])) await this.store.attend(callId, u.userId);
+      this.deps.intake().stop(callId);
+      await this.stop(callId);
+    } else if (left <= CEILING_WARNING_SECONDS && !s.warned) {
+      await this.store.patchSession(callId, { warned: true });
+      await postNoticeQuietly(callId, `${NOVA_NAME} leaves in 5 minutes. Anyone who can invite ${NOVA_NAME} can extend.`);
+    }
+  }
+
+  /**
+   * Add the default minutes to the call's ceiling, up to the hard maximum, and hold the money for them. Returns the new
+   * ceiling, or why not: the call is over, the maximum is reached, or the inviter's budget refused the hold.
+   */
+  async extend(callId: string, by: { sub: string }, confirmOverUserBudget = false):
+    Promise<{ ok: true; ceilingSeconds: number; addedSeconds: number } | { ok: false; why: 'no-assistant' | 'left' | 'at-maximum' } | { ok: false; why: 'refused'; refusal: Extract<ReserveOutcome, { ok: false }>['refusal'] }> {
+    const record = await this.store.get(callId);
+    if (!record) return { ok: false, why: 'no-assistant' };
+    if (record.state === 'left') return { ok: false, why: 'left' };
+    const limits = assistantLimits();
+    const s = sessionOf(record, limits.maxSeconds);
+    const next = Math.min(limits.hardMaxSeconds, s.ceilingSeconds + limits.maxSeconds);
+    const added = next - s.ceilingSeconds;
+    if (added <= 0) return { ok: false, why: 'at-maximum' };
+    const held = await assistantSpend().reserve({
+      callId, tenant: record.tenant, inviterId: record.invitedBy, initiativeId: record.initiativeId, seconds: added, part: s.extensions + 1,
+      ...(confirmOverUserBudget ? { confirmOverUserBudget: true } : {}),
+    });
+    if (!held.ok) return { ok: false, why: 'refused', refusal: held.refusal };
+    await this.store.patchSession(callId, { ceilingSeconds: next, warned: false, extensions: s.extensions + 1, holds: held.holdId ? [...s.holds, held.holdId] : s.holds });
+    await postNoticeQuietly(callId, `${await nameOf(by.sub)} extended ${NOVA_NAME}'s time by ${Math.round(added / 60)} minutes.`);
+    return { ok: true, ceilingSeconds: next, addedSeconds: added };
   }
 
   private async expireOpenTurns(run: CallRun, readsOnly: boolean): Promise<void> {
@@ -611,7 +698,7 @@ export async function defaultRolesOf(userId: string, tenant: string): Promise<st
 let runtime: AssistantRuntime | null = null;
 export function assistantRuntime(): AssistantRuntime {
   return (runtime ??= new AssistantRuntime({
-    store: assistantStore, intake: assistantIntake, clock: Date.now, makeSession, rolesOf: defaultRolesOf,
+    store: assistantStore, intake: assistantIntake, clock: Date.now, makeSession, rolesOf: defaultRolesOf, onFinished: (e) => settleFinished(e),
   }));
 }
 export function setAssistantRuntime(next: AssistantRuntime | null): void { void runtime?.dispose(); runtime = next; }

@@ -72,7 +72,7 @@ let runtime: AssistantRuntime;
 let sessions: LiveMeetingSession[];
 let factory: () => LiveMeetingSession;
 let roles: Record<string, string[]>;
-let finished: Array<{ callId: string; usageSeconds: number }>;
+let finished: Array<{ callId: string; usageSeconds: number; tokens: { input: number; output: number; cached: number }; sessionKind: string }>;
 
 const ctx: StartContext = { callId: CALL, tenant: 'orgiq', inviterId: ALICE, roster: ['Alice', 'Bob', 'Carol'], recordName: 'Auth Migration' };
 
@@ -422,7 +422,7 @@ describe('pause, resume, replacement and stop', () => {
     await say(BOB, 'Nova, find the runbooks');
     now += 61_000;
     await runtime.stop(CALL); await runtime.stop(CALL);
-    expect(finished).toEqual([{ callId: CALL, usageSeconds: 66, tokens: { input: 0, output: 0, cached: 0 } }]);
+    expect(finished).toEqual([{ callId: CALL, usageSeconds: 66, tokens: { input: 0, output: 0, cached: 0 }, sessionKind: 'scripted' }]);
     expect((await store.listTurns(CALL))[0]!.status).toBe('expired');
     expect(runtime.isRunning(CALL)).toBe(false);
   });

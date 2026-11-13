@@ -78,8 +78,10 @@ export interface AssistantSession {
   limitNoticed: boolean;
   /** Sessions started after the first because one closed unexpectedly or Nova resumed. */
   replacements: number;
-  /** Spend hold ids: the first is the invite's, the rest are extensions'. */
+  /** Spend hold ids of the extensions (the invite's own hold is settled by the ledger row and needs no id here). */
   holds: string[];
+  /** How many times the ceiling was extended; names the next extension's hold. */
+  extensions: number;
   /** Provider seconds and backend tokens from finished sessions, for the settlement. */
   usageSeconds: number;
   tokensIn: number;
@@ -91,7 +93,7 @@ export interface AssistantSession {
 
 export const newAssistantSession = (ceilingSeconds: number): AssistantSession => ({
   refusedCalls: 0, listeningSeconds: 0, listeningSince: null, ceilingSeconds, warned: false, limitNoticed: false, replacements: 0,
-  holds: [], usageSeconds: 0, tokensIn: 0, tokensOut: 0, tokensCached: 0, settled: false,
+  holds: [], extensions: 0, usageSeconds: 0, tokensIn: 0, tokensOut: 0, tokensCached: 0, settled: false,
 });
 
 /** The record's session bookkeeping with defaults for anything missing. */

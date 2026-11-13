@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS spend_holds (
   -- for a cron firing. A per-user lock and budget (goal row "user budgets")
   -- will read this column; the lock order is initiative, grant, then user.
   actor_id       TEXT,
-  source         TEXT NOT NULL CHECK (source IN ('bot_run', 'job', 'box_task', 'agent_loop', 'agent_project_run', 'agent_invoke', 'microvm', 'voice_session')),
+  source         TEXT NOT NULL CHECK (source IN ('bot_run', 'job', 'box_task', 'agent_loop', 'agent_project_run', 'agent_invoke', 'microvm', 'voice_session', 'meeting_assistant')),
   -- The key spend_entries uses for the same attempt; set once the row exists.
   source_id      TEXT,
   amount_usd     NUMERIC(10,4) NOT NULL CHECK (amount_usd >= 0),
@@ -39,10 +39,11 @@ CREATE TABLE IF NOT EXISTS spend_holds (
 -- this file (agent_invoke: a chat invoke or a /summarize run, work item 16;
 -- microvm: one microVM runner attempt, docs/microvm-runner-design.md §6;
 -- voice_session: one voice navigator session, docs/voice-navigator-spec.md §7;
+-- meeting_assistant: one call's Nova listening, docs/meeting-assistant-design.md decision 10;
 -- learning: one server-side distillation, docs/learning-loop-design.md).
 ALTER TABLE spend_holds DROP CONSTRAINT IF EXISTS spend_holds_source_check;
 ALTER TABLE spend_holds ADD CONSTRAINT spend_holds_source_check
-  CHECK (source IN ('bot_run', 'job', 'box_task', 'agent_loop', 'agent_project_run', 'agent_invoke', 'microvm', 'voice_session', 'learning'));
+  CHECK (source IN ('bot_run', 'job', 'box_task', 'agent_loop', 'agent_project_run', 'agent_invoke', 'microvm', 'voice_session', 'meeting_assistant', 'learning'));
 
 CREATE INDEX IF NOT EXISTS spend_holds_open_idx ON spend_holds (initiative_id) WHERE status = 'held';
 CREATE INDEX IF NOT EXISTS spend_holds_grant_open_idx ON spend_holds (grant_id) WHERE status = 'held';

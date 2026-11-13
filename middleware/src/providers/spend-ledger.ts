@@ -26,8 +26,9 @@ import { checkBudgetThresholdsLater } from '../lib/budget-thresholds.js';
 // 'agent_invoke' (work item 16): a chat invoke or a /summarize run, keyed by its run id (lib/agent-invoke-spend.ts).
 // 'microvm': one microVM runner attempt, keyed `<job>:<attempt>` (lib/microvm-dispatcher.ts).
 // 'voice_session': one voice navigator session, keyed by its `vs_…` id (routes/voice.ts).
+// 'meeting_assistant': one call's Nova listening, keyed `ma:<callId>` (lib/meeting-assistant/spend.ts).
 // 'learning': one server-side distillation of a finished run, keyed `learning:<runRef>` (lib/learning-budget.ts).
-export type SpendSource = 'bot_run' | 'job' | 'box_task' | 'agent_loop' | 'agent_project_run' | 'bff_call' | 'agent_invoke' | 'microvm' | 'voice_session' | 'learning';
+export type SpendSource = 'bot_run' | 'job' | 'box_task' | 'agent_loop' | 'agent_project_run' | 'bff_call' | 'agent_invoke' | 'microvm' | 'voice_session' | 'meeting_assistant' | 'learning';
 /** Who served the spend: a model provider (lib/run-cost.ts), or OpenAI for a voice session. */
 export type LedgerProvider = ModelProvider | 'openai';
 export type { CostBasis };
