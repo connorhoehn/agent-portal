@@ -35,6 +35,7 @@ import { demoModeEnabled, ssoAvailable } from '../lib/session.js';
 import { listUsers, getUser, bumpSessionEpoch } from '../providers/identity.js';
 import { userAvatars } from '../providers/user-avatars.js';
 import { insecureDevMode } from '../lib/insecure-dev-mode.js';
+import { meetingAssistantEnabled } from '../lib/meeting-assistant/index.js';
 
 export const sessionRouter = Router();
 
@@ -75,6 +76,8 @@ function publicView(session: Session) {
     availableRoles: rolesForTenant(session.grants, session.tenant),
     availableTenants: TENANTS.filter(t => rolesForTenant(session.grants, t).length > 0),
     masquerading: session.act ? { asUser: session.sub, actor: session.act.sub } : null,
+    /** Server flag for the call assistant; the portal hides every Nova control when false. */
+    meetingAssistant: meetingAssistantEnabled(),
   };
 }
 

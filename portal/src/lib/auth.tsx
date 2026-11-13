@@ -31,6 +31,8 @@ export interface Session {
   availableRoles: string[];
   availableTenants: Tenant[];
   masquerading: { asUser: string; actor: string } | null;
+  /** The server's MEETING_ASSISTANT_ENABLED, advertised on /api/session/me; every Nova control hides when false. */
+  meetingAssistant?: boolean;
 }
 
 export interface DirectoryUser {
@@ -195,6 +197,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         availableRoles: raw.availableRoles ?? [],
         availableTenants: raw.availableTenants ?? ['orgiq'],
         masquerading: raw.masquerading ?? null,
+        meetingAssistant: raw.meetingAssistant === true,
       });
     } catch {
       if (!current()) return;

@@ -17,6 +17,7 @@ import { AppError, asyncHandler, NotFoundError, ValidationError } from '../lib/a
 import { requireAction, requireTenant, resolveSession } from '../lib/authz.js';
 import { callChatRuntime } from '../lib/call-chat.js';
 import type { Session } from '../lib/session.js';
+import { getUser } from '../providers/identity.js';
 import {
   assistantIntake, assistantStore, initiativeOfLobby, meetingAssistantEnabled, TranscriptSourceNotConfigured,
   type AssistantRecord,
@@ -71,9 +72,11 @@ async function mustAck(record: AssistantRecord, callId: string): Promise<string[
 async function view(record: AssistantRecord | null, callId: string, session: Session) {
   if (!record) return { callId, state: 'none' as const };
   const owing = await mustAck(record, callId);
+  // The notice names who invited; a person who has gone from the directory reads as null and the portal says "a participant".
+  const invitedByName = (await getUser(record.invitedBy).catch(() => null))?.displayName ?? null;
   return {
     callId, state: record.state, lobby: record.lobby, initiativeId: record.initiativeId,
-    invitedBy: record.invitedBy, invitedAt: record.invitedAt, pausedBy: record.pausedBy, leftAt: record.leftAt, leftBy: record.leftBy,
+    invitedBy: record.invitedBy, invitedByName, invitedAt: record.invitedAt, pausedBy: record.pausedBy, leftAt: record.leftAt, leftBy: record.leftBy,
     mustAck: owing, youMustAck: owing.includes(session.sub),
     counters: { requests: record.requests, linesStored: record.linesStored },
     pendingRequests: record.pendingRequests,

@@ -32,6 +32,7 @@ import { CallPageSharing } from './CallPageSharing';
 import { EmbeddedSocialEntry } from './EmbeddedSocial';
 import { HuddleReactionBar, useHuddleChat, useHuddleChatToggle, useHuddleReact } from './HuddleChat';
 import { useMeetingBarItems } from './CallMeeting';
+import { NovaBarControls, NovaNotice } from './MeetingAssistantBar';
 import { ShellCallMedia } from './ShellCallHost';
 import { callScopeKey, hasJoinedCall, idleHuddleControls } from './callShellModel';
 import { VoiceFooterSlot } from './VoiceFooterPane';
@@ -119,6 +120,7 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
     extras={<>
       {failureMessage && <span role="alert" title={failureMessage} className="max-w-[180px] truncate text-xs text-danger" data-testid="shell-call-error">{failureMessage}</span>}
       {joined && !over && !meetingItems && <HuddleReactionBar />}
+      {joined && !over && <NovaBarControls />}
       
       {call.phase === 'failed' && <Button variant="secondary" size="sm" onClick={() => void call.rejoin()} data-testid="shell-footer-rejoin">Rejoin</Button>}
       {!barShown && <DeviceSettings onClick={host.checkDevices} />}
@@ -240,6 +242,7 @@ export function SocialFooter() {
   return <Stack as="footer" ref={footer} gap="none" aria-label="Social and huddle" className="shell-social-footer shrink-0 border-t border-border bg-surface"
     data-testid="shell-footer">
     <ShellCallMedia id={mediaId} />
+    <NovaNotice />
     {/* The HuddleBar is a size container, so it has no intrinsic width: `basis-[14rem]` is what makes the row wrap it onto its own line. Wide: one row. Narrow: whole slots wrap onto a second line (none shrinks over its neighbour); the measured floor follows the row's height. */}
     {/* A slot that starts a wrapped line drops its left rule (markLineStarts). */}
     <Inline ref={row} gap="sm" align="center" justify="between" className="min-h-11 min-w-0 px-4 py-1 [&>[data-line-start]]:border-l-0 [&>[data-line-start]]:pl-0" data-testid="shell-footer-row">
