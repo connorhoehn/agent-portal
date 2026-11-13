@@ -27,6 +27,7 @@
     "journey:learning-loop": "node ../scripts/journeys/run-demo-moments.mjs --journey learning-loop",
     "journey:value-sweep": "node ../scripts/journeys/run-demo-moments.mjs --journey learning-loop-value-sweep",
     "journey:leftovers2": "node ../scripts/journeys/run-demo-moments.mjs --journey leftovers2-walk",
+    "journey:meeting-assistant": "node ../scripts/journeys/run-demo-moments.mjs --journey meeting-assistant",
     "journey:budgets-selection": "node ../scripts/journeys/run-demo-moments.mjs --journey budgets-selection",
     "journey:budgets-audit": "node ../scripts/journeys/run-demo-moments.mjs --journey budgets-audit"
   },

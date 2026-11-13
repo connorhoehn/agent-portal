@@ -4,7 +4,7 @@
 //   useNovaRosterEntry  the "Nova (Assistant, listening)" line for the call's people lists
 // Everything renders nothing unless the server advertises the feature (session.meetingAssistant) and a call is live.
 
-import { Banner, Button, Chip, Inline, T, Tooltip } from '@connorhoehn/ui-components/shared';
+import { Banner, Button, Chip, CloseIcon, DropdownMenu, Inline, PauseCircleIcon, PlayCircleIcon, T, Tooltip } from '@connorhoehn/ui-components/shared';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import { assistantPresent, assistantStateWords, noticeText, noticeVisible, rosterEntry } from '../../lib/meetingAssistantModel';
 import { useCallHost } from '../../lib/conversationCall';
@@ -23,17 +23,21 @@ export function NovaBarControls() {
   const { controls, view, busy } = nova;
   if (controls.hidden) return null;
   const words = assistantStateWords(view);
-  return <Inline gap="xs" align="center" wrap={false} className="shrink-0" data-testid="nova-bar">
+  return <Inline gap="xs" align="center" wrap={false} className="shrink-0 border-l border-border pl-2" data-testid="nova-bar">
     {controls.invite && <Tooltip content="Nova listens to this call and answers when asked by name" placement="top">
       <Button variant="secondary" size="sm" disabled={busy} onClick={() => void nova.invite()} data-testid="nova-invite">Invite Nova</Button>
     </Tooltip>}
-    {words && <Chip size="sm" tone={view.phase === 'paused' ? 'neutral' : controls.left ? 'neutral' : 'info'} data-testid={controls.left ? 'nova-left' : 'nova-mark'}
-      data-phase={view.phase}>{words}</Chip>}
-    {controls.pause && <Button variant="ghost" size="sm" disabled={busy} onClick={() => void nova.pause()} data-testid="nova-pause">Pause Nova</Button>}
-    {controls.resume && <Button variant="ghost" size="sm" disabled={busy} onClick={() => void nova.resume()} data-testid="nova-resume">Resume Nova</Button>}
-    {controls.dismiss && <Button variant="ghost" size="sm" disabled={busy} onClick={() => void nova.dismiss()} data-testid="nova-dismiss">Dismiss Nova</Button>}
+    {/* One compact control keeps the dense bar on a line: the state in words is the trigger, Pause/Resume and Dismiss are its menu. */}
+    {words && controls.left && <Chip size="xs" tone="neutral" data-testid="nova-left">{words}</Chip>}
+    {words && !controls.left && <DropdownMenu align="end" triggerVariant="secondary" triggerClassName="px-2" triggerLabel={`${words}. Pause, resume or dismiss Nova`} triggerTestId="nova-mark"
+      triggerAttributes={{ 'data-phase': view.phase }} disabled={busy} data-testid="nova-menu"
+      trigger={<T size="xs" weight="medium" className="whitespace-nowrap">{words}</T>}
+      sections={[{ items: [
+        ...(controls.pause ? [{ label: 'Pause Nova', icon: <PauseCircleIcon size={14} />, onSelect: () => void nova.pause() }] : []),
+        ...(controls.resume ? [{ label: 'Resume Nova', icon: <PlayCircleIcon size={14} />, onSelect: () => void nova.resume() }] : []),
+        ...(controls.dismiss ? [{ label: 'Dismiss Nova', icon: <CloseIcon size={14} />, danger: true, onSelect: () => void nova.dismiss() }] : []),
+      ] }]} />}
     {/* Package 4: the minutes ceiling line ("Nova leaves in 12 min") goes here. */}
-    <span hidden data-testid="nova-ceiling-slot" />
     {nova.error && <T size="xs" tone="danger" role="alert" className="max-w-[12rem] truncate" title={nova.error} data-testid="nova-error">{nova.error}</T>}
   </Inline>;
 }

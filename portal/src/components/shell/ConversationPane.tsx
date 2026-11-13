@@ -3,6 +3,7 @@ import { useSidePane, useSidePaneHost } from '@connorhoehn/ui-components';
 import { Button, Inline, Stack, T } from '@connorhoehn/ui-components/shared';
 import { useComposerFocus, useComposerFocusReveal } from '@connorhoehn/ui-components/social/rich-composer';
 import { HuddleChatBody, useHuddleChat } from './HuddleChat';
+import { useNovaRosterEntry } from './MeetingAssistantBar';
 
 /** One page pane owns both transcripts; opening either never ends the call or edits a draft. */
 export function useConversationPane({ enabled = true, onReveal, onHide, visible }: { enabled?: boolean; onReveal?: () => void; onHide?: () => void; visible?: boolean } = {}) {
@@ -42,9 +43,12 @@ export function useConversationPane({ enabled = true, onReveal, onHide, visible 
 export function ConversationPaneBody({ pane, pageLabel, children }: {
   pane: ReturnType<typeof useConversationPane>; pageLabel: string; children: ReactNode;
 }) {
+  const nova = useNovaRosterEntry(pane.huddle?.callId ?? null);
   return <Stack gap="none" className="min-h-0 flex-1">
     {pane.huddle?.callId && <Inline gap="sm" align="center" justify="between" className="shrink-0 border-b border-border px-4 py-2" data-testid="conversation-pane-destination">
       <T size="xs" tone="secondary">{pane.inHuddle ? 'Current huddle' : pageLabel}</T>
+      {/* Nova is not a media participant, so the call's tiles never list it; the pane's destination row does. */}
+      {nova && <T size="xs" tone="secondary" className="min-w-0 flex-1 truncate" data-testid="nova-roster-entry">{nova}</T>}
       <Button size="sm" variant="ghost" onClick={pane.inHuddle ? pane.showDiscussion : pane.showHuddle}>
         {pane.inHuddle ? pageLabel : 'Huddle chat'}
       </Button>

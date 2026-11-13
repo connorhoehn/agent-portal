@@ -120,7 +120,6 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
     extras={<>
       {failureMessage && <span role="alert" title={failureMessage} className="max-w-[180px] truncate text-xs text-danger" data-testid="shell-call-error">{failureMessage}</span>}
       {joined && !over && !meetingItems && <HuddleReactionBar />}
-      {joined && !over && <NovaBarControls />}
       
       {call.phase === 'failed' && <Button variant="secondary" size="sm" onClick={() => void call.rejoin()} data-testid="shell-footer-rejoin">Rejoin</Button>}
       {!barShown && <DeviceSettings onClick={host.checkDevices} />}
@@ -250,6 +249,8 @@ export function SocialFooter() {
       <TodayStripSlot placement="footer" activeCall={drawn} />
       {/* The voice navigator (docs/voice-navigator-spec.md §5): renders nothing unless features.voiceNavigator and can('VoiceNavigate'). */}
       <VoiceFooterSlot />
+      {/* Nova's mark and controls sit beside the call bar, not inside it: the bar's own extras slot has no room at 1280 and a wrapped second line would make the bar taller. */}
+      {drawn && <NovaBarControls />}
       {drawn
         ? <FooterCall mediaOpen={!!media?.open} onToggleMedia={() => media?.toggle()} />
         : <FooterIdle />}
