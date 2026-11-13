@@ -5,6 +5,9 @@
 //   3 the notice shows to the second person only      4 nothing stored before the acknowledgement, lines after it
 //   5 pause and resume from the second person         7 nothing clipped or scrolling in the call bar at 1280 (run before 6)
 //   6 dismiss: the mark goes, Invite does not return, "Nova has left this call"
+//   8 to 11 (package 4a, API level: the scripted session answers, no model): a spoken read lands in the call chat labelled with
+//     the asker; a write is a card only the asker confirms and shows as a running turn only after that; a tool call from someone
+//     who never said the name is refused and counted; after dismissal the inviter's spend has a meeting_assistant entry.
 //
 // Two people share one call without media the way portal/e2e/work-huddle-navigation.spec.ts does: one starts a call on an
 // initiative page, the other accepts the ring, and the SFU session metadata is the only thing stubbed (the realtime token
@@ -187,6 +190,24 @@ async function main() {
     return false;
   };
 
+  const asApi = (p, p2) => `${PORTAL}/api/calls/${encodeURIComponent(callId)}/assistant/${p2}`;
+  const chatMessages = async (p) => {
+    const res = await p.api.get(`${PORTAL}/api/calls/${encodeURIComponent(callId)}/chat?limit=100`);
+    check(res.status() === 200, `GET the call chat answered ${res.status()}`);
+    return (await res.json()).messages;
+  };
+  const novaOf = async (p, kind) => (await chatMessages(p)).filter((m) => m.metadata?.kind === kind);
+  const waitFor = async (fn, ms, what) => {
+    const end = Date.now() + ms;
+    for (;;) { const v = await fn(); if (v) return v; if (Date.now() > end) throw new StepFailure(`${what} never happened`); await sleep(400); }
+  };
+  const myTurns = async (p) => {
+    const res = await p.api.get(asApi(p, 'turns?mine=1'));
+    check(res.status() === 200, `GET turns answered ${res.status()}`);
+    return (await res.json()).turns;
+  };
+  const stateOf = async (p) => (await (await p.api.get(asApi(p, 'state'))).json());
+
   let vera, nora;
   try {
     // ── Setup: two people in one call, no media ──
@@ -288,6 +309,55 @@ async function main() {
       return 'paused: both see it, nothing stored; resumed: stored';
     });
 
+    // ── 8. A spoken read is answered in the call chat, labelled with who asked (the scripted session: no model) ──
+    await step('8: "Nova, what is two plus two?" from the inviter lands in the call chat as Nova\'s reply to that person; nothing else was asked of the browser', async () => {
+      await inject(VERA.userId, 'Nova, what is two plus two?');
+      const reply = await waitFor(async () => (await novaOf(vera, 'assistant-reply')).find((m) => m.message === 'Four.'), 20000, 'the reply "Four."');
+      check(reply.metadata.askedBy === VERA.userId, `the reply is labelled for ${reply.metadata.askedBy}, not ${VERA.userId}`);
+      check(typeof reply.metadata.askedByName === 'string' && reply.metadata.askedByName.length > 0 && reply.metadata.askedByName !== VERA.userId, `the label has no display name: ${reply.metadata.askedByName}`);
+      check((await myTurns(vera)).length === 0, 'a plain answer left a turn for the browser');
+      check((await myTurns(nora)).length === 0, 'a plain answer left a turn for the other person');
+      return `reply "Four." labelled "${reply.metadata.askedByName}"`;
+    });
+
+    // ── 9. A write is a card; only the asker confirms; the browser's turn exists only after that ──
+    await step('9: "Nova, create a work item ..." is an action card waiting for the asker; nothing for the browser until the asker confirms; another person cannot confirm', async () => {
+      await inject(VERA.userId, 'Nova, create a work item for the login cookie bug.');
+      const card = await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.tool?.name === 'create'), 20000, 'the action card');
+      check(card.metadata.askedBy === VERA.userId && card.metadata.status === 'waiting', `the card is ${card.metadata.status} for ${card.metadata.askedBy}`);
+      check(/login cookie bug/.test(card.metadata.summary), `the card does not say what it creates: "${card.metadata.summary}"`);
+      check((await myTurns(vera)).length === 0, 'a turn reached the asker\'s browser before they confirmed');
+      const stranger = await nora.api.post(asApi(nora, `actions/${encodeURIComponent(card.metadata.actionId)}/decision`), { data: { decision: 'confirm' } });
+      check(stranger.status() === 403, `another person confirming answered ${stranger.status()}, not 403`);
+      check((await myTurns(vera)).length === 0, 'another person\'s confirm made a turn');
+      const mine = await vera.api.post(asApi(vera, `actions/${encodeURIComponent(card.metadata.actionId)}/decision`), { data: { decision: 'confirm' } });
+      check(mine.status() === 200, `the asker confirming answered ${mine.status()}`);
+      const turns = await myTurns(vera);
+      check(turns.length === 1 && turns[0].status === 'running' && turns[0].kind === 'write' && turns[0].tool.name === 'create', `after confirming the asker has ${JSON.stringify(turns)}`);
+      check((await myTurns(nora)).length === 0, 'the other person sees the asker\'s turn');
+      const hers = await nora.api.post(asApi(nora, `turns/${turns[0].turnId}/result`), { data: { ok: true } });
+      check(hers.status() === 404, `another person posting the result answered ${hers.status()}, not 404`);
+      const done = await vera.api.post(asApi(vera, `turns/${turns[0].turnId}/result`), { data: { ok: true, output: { say: 'Created.' } } });
+      check(done.status() === 200, `the asker's result answered ${done.status()}`);
+      await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === card.metadata.actionId && m.metadata.status === 'done'), 10000, 'the card going to done');
+      return `card waiting, 403 for the other person, one running turn after the asker confirmed, then done`;
+    });
+
+    // ── 10. A tool call with no name in the asker's recent words is refused ──
+    await step('10: a tool call attributed to someone who never said the name is refused, counted and posts nothing', async () => {
+      const before = (await stateOf(vera)).refusedCalls ?? 0;
+      const messages = (await chatMessages(vera)).length;
+      const res = await fetch(`${MIDDLEWARE}/api/dev/calls/${encodeURIComponent(callId)}/assistant-tool-call`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ askedBy: NORA.userId, name: 'search', args: { query: 'canary' } }),
+      });
+      check(res.status === 202, `the dev tool call answered ${res.status}`);
+      await waitFor(async () => ((await stateOf(vera)).refusedCalls ?? 0) > before, 10000, 'the refused-call counter rising');
+      await sleep(1500);
+      check((await chatMessages(vera)).length === messages, 'a refused call posted something in the chat');
+      check((await myTurns(nora)).length === 0, 'a refused call made a turn');
+      return `refusedCalls ${before} -> ${(await stateOf(vera)).refusedCalls}`;
+    });
+
     // ── 7. The bar at both widths with Nova's controls present ──
     await step('7: with Nova listening and its controls present the call bar and Nova controls neither scroll sideways nor clip at 1440 and 1280, and the footer keeps its height', async () => {
       const out = [];
@@ -332,6 +402,18 @@ async function main() {
       await barFits(vera.page, 'the bar after dismissal', 1280);
       await shot(vera.page, '6-left');
       return 'left; re-invite 409';
+    });
+
+    // ── 11. The inviter's spend ──
+    await step('11: after the dismissal the inviter\'s spend has a meeting_assistant entry, and the state shows the listening time', async () => {
+      const entry = await waitFor(async () => {
+        const spend = await (await vera.api.get(`${PORTAL}/api/me/spend?period=month`)).json();
+        return spend.byInitiative?.find((r) => r.bySource && 'meeting_assistant' in r.bySource);
+      }, 15000, 'a meeting_assistant ledger entry for the inviter');
+      const st = await stateOf(vera);
+      check(st.state === 'left' && st.listeningSeconds > 0, `the state after leaving: ${JSON.stringify({ state: st.state, listeningSeconds: st.listeningSeconds })}`);
+      check(st.ceilingSeconds >= 60, `the state has no ceiling: ${st.ceilingSeconds}`);
+      return `entry ${JSON.stringify(entry.bySource)}; listened ${st.listeningSeconds} s of ${st.ceilingSeconds} s`;
     });
   } finally {
     for (const p of [vera, nora]) {
