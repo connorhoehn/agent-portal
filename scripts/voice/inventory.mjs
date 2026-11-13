@@ -523,6 +523,7 @@ export const V2_RULES = [
   [/^PATCH \/api\/graph\/projects\/:[^/]+(\/contributors\/:[^/]+)?$/, 'never', null, 'initiative governance edits'],
   [/^POST \/api\/graph\/projects$/, 'never', null, 'creating an initiative is a form on the page (CreateInitiative)'],
   [/^(POST|GET) \/api\/calls\/:[^/]+\/assistant\/(invite|pause|resume|dismiss|ack|state|transcript)$/, 'never', null, 'the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)'],
+  [/^POST \/api\/calls\/:[^/]+\/assistant\/actions\/:[^/]+\/decision$/, 'never', null, 'a confirmation is the asking person clicking Confirm or Decline on the card in the call chat; the server accepts it only from the person the action was offered to, and a spoken yes confirms nothing (design decision 5)'],
   [/^POST \/api\/sprints$/, 'not-yet', 'create', 'sprint (ManageSprints)'],
   [/^(PATCH|DELETE) \/api\/sprints\/:[^/]+\/items/, 'not-yet', 'update', 'move work between sprints (ManageSprints)'],
   [/^POST \/api\/designs\/:[^/]+\/(answer|signoff)$/, 'not-yet', 'decide', 'a design question or sign-off (DispatchAgentRun)'],

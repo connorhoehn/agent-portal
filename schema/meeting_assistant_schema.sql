@@ -55,3 +55,21 @@ CREATE TABLE IF NOT EXISTS meeting_transcript_lines (
   UNIQUE (call_id, caption_id)
 );
 CREATE INDEX IF NOT EXISTS meeting_transcript_lines_at_idx ON meeting_transcript_lines (at);
+
+-- Actions Nova offered in the call chat (package 2). One row per card; only the asker decides it
+-- (the route checks), and a decision moves `waiting` once. Running the tool is package 4.
+CREATE TABLE IF NOT EXISTS meeting_assistant_actions (
+  call_id      TEXT        NOT NULL REFERENCES meeting_assistants (call_id) ON DELETE CASCADE,
+  action_id    TEXT        NOT NULL CHECK (action_id ~ '^[a-zA-Z0-9:_-]{1,128}$'),
+  tenant       TEXT        NOT NULL,
+  message_id   TEXT        NOT NULL,
+  asked_by     TEXT        NOT NULL,
+  tool_name    TEXT        NOT NULL,
+  args_digest  TEXT        NOT NULL DEFAULT '',
+  status       TEXT        NOT NULL DEFAULT 'waiting' CHECK (status IN ('waiting', 'confirmed', 'declined', 'expired', 'done', 'failed')),
+  created_at   TIMESTAMPTZ NOT NULL,
+  decided_by   TEXT,
+  decided_at   TIMESTAMPTZ,
+  result_text  TEXT,
+  PRIMARY KEY (call_id, action_id)
+);

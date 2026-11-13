@@ -9,7 +9,9 @@
 //  * `appendLine` stores a line only while the state is `listening`, assigns the next `seq` and
 //    bumps `linesStored` in one step, and stores a repeated `captionId` once (returns null).
 //  * Reads return copies. `left` is final.
-import type { AssistantRecord, AssistantState, PendingRequest, TranscriptLine } from './types.js';
+//  * An action is created once per (call, actionId); `decideAction` moves it only from the statuses
+//    named in `from` and returns null otherwise, so two clicks decide once.
+import type { AssistantAction, AssistantRecord, AssistantState, PendingRequest, TranscriptLine } from './types.js';
 
 export const MAX_PENDING_REQUESTS = 20;
 export const MAX_LINE_CHARS = 2000;
@@ -20,6 +22,14 @@ export interface StateChange {
   to: AssistantState;
   by: string;
   at: number;
+}
+
+export interface ActionChange {
+  from: readonly AssistantAction['status'][];
+  to: AssistantAction['status'];
+  by: string;
+  at: number;
+  resultText?: string;
 }
 
 export interface AssistantStore {
@@ -33,6 +43,11 @@ export interface AssistantStore {
   appendLine(line: Omit<TranscriptLine, 'seq'>): Promise<TranscriptLine | null>;
   addRequest(callId: string, request: PendingRequest): Promise<void>;
   lines(callId: string, after: number, limit: number): Promise<TranscriptLine[]>;
+  /** Record an action card; an existing (call, actionId) is returned as it is with `created: false`. */
+  createAction(action: AssistantAction): Promise<{ action: AssistantAction; created: boolean }>;
+  getAction(callId: string, actionId: string): Promise<AssistantAction | null>;
+  /** Move an action; null when it is unknown or not in one of `change.from`. */
+  decideAction(callId: string, actionId: string, change: ActionChange): Promise<AssistantAction | null>;
   /** Delete lines at or before `cutoffMs` (epoch). Returns how many went. */
   sweepLines(cutoffMs: number): Promise<number>;
 }
@@ -43,6 +58,7 @@ const addTo = (list: string[], id: string): void => { if (!list.includes(id)) li
 export class MemoryAssistantStore implements AssistantStore {
   private readonly records = new Map<string, AssistantRecord>();
   private readonly transcript = new Map<string, TranscriptLine[]>();
+  private readonly actions = new Map<string, AssistantAction>();
 
   async get(callId: string) { const r = this.records.get(callId); return r ? copy(r) : null; }
 
@@ -97,6 +113,24 @@ export class MemoryAssistantStore implements AssistantStore {
 
   async lines(callId: string, after: number, limit: number) {
     return copy((this.transcript.get(callId) ?? []).filter((l) => l.seq > after).slice(0, limit));
+  }
+
+  async createAction(action: AssistantAction) {
+    const key = `${action.callId}\0${action.actionId}`;
+    const existing = this.actions.get(key);
+    if (existing) return { action: copy(existing), created: false };
+    this.actions.set(key, copy(action));
+    return { action: copy(action), created: true };
+  }
+
+  async getAction(callId: string, actionId: string) { const a = this.actions.get(`${callId}\0${actionId}`); return a ? copy(a) : null; }
+
+  async decideAction(callId: string, actionId: string, change: ActionChange) {
+    const a = this.actions.get(`${callId}\0${actionId}`);
+    if (!a || !change.from.includes(a.status)) return null;
+    a.status = change.to; a.decidedBy = change.by; a.decidedAt = change.at;
+    if (change.resultText !== undefined) a.resultText = change.resultText;
+    return copy(a);
   }
 
   async sweepLines(cutoffMs: number) {

@@ -70,7 +70,7 @@ import { MemoryCallChatStateStore, RedisCallChatStateStore } from './call-chat-s
 import { createRedisStore, type GatewayRedisStore } from './redis-store.js';
 import { createGatewayNotificationStore, releaseGatewayNotificationStore, seedMockNotifications } from './notification-store.js';
 import { admitTenantNotification, setNotificationSink } from './social-notify.js';
-import { createSocialChatBackend, setSocialChatBackend, setThreadLiveAppend, type SocialChatBackend } from './social-chat.js';
+import { createSocialChatBackend, setSocialChatBackend, setThreadLiveAppend, setThreadLiveUpdate, type SocialChatBackend } from './social-chat.js';
 import { createReactionStore, gatewayUploadConfig, uploadFeatureOptions } from './gateway-attachments.js';
 import { tenantActivity, tenantPipeline } from './gateway-run-feed.js';
 import { directRecipientFilter } from './direct-recipient.js';
@@ -448,6 +448,8 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
   setThreadLiveAppend(async (message) => {
     await handle.services.chat?.appendServerMessage(message.channel, message);
   });
+  // The matching live edit (a meeting assistant card changing status): persisted by the service, then `messageUpdated`.
+  setThreadLiveUpdate(async (channel, messageId, patch) => (await handle.services.chat?.updateSystemMessage(channel, messageId, patch)) ?? null);
   if (inbox.memory) void seedMockNotifications().catch(() => undefined);
   status = { gateway: 'on', store, chatStore: chatBackend.kind };
   ready = clusterRouter ? () => clusterRouter.isReady() : null;
@@ -482,6 +484,7 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
         setNotificationSink(null);
         setSocialChatBackend(null);
         setThreadLiveAppend(null);
+        setThreadLiveUpdate(null);
         releaseGatewayNotificationStore();
         handleRef = null;
         await redis?.quit();

@@ -5,6 +5,7 @@
 //   POST resume      a seat.
 //   POST dismiss     a seat. Final: the assistant leaves.
 //   POST ack         a seat. Acknowledges the transcription notice; until then your lines are not stored.
+//   POST actions/:actionId/decision  a seat, and ONLY the person the action was offered to. { decision: 'confirm' | 'decline' }.
 //   GET  state       a seat. State, who invited, who still owes an ack, counters, pending requests.
 //   GET  transcript  people who hold or held a seat in this call, nobody else (admins included).
 //
@@ -20,6 +21,8 @@ import {
   assistantIntake, assistantStore, initiativeOfLobby, meetingAssistantEnabled, TranscriptSourceNotConfigured,
   type AssistantRecord,
 } from '../lib/meeting-assistant/index.js';
+import { moveAction, nameOf, noticeText, postNoticeQuietly } from '../lib/meeting-assistant/chat.js';
+import { config } from '../config.js';
 
 export const meetingAssistantRouter = Router({ mergeParams: true });
 
@@ -106,6 +109,7 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
     requests: 0, linesStored: 0, nextSeq: 1, pendingRequests: [],
   });
   const listening = await store.transition(callId, { from: ['invited'], to: 'listening', by: session.sub, at: Date.now() });
+  await postNoticeQuietly(callId, noticeText.joined(await nameOf(session.sub, session.name), config.meetingAssistant.transcriptRetentionDays));
   res.status(201).json(await view(listening ?? record, callId, session));
 }));
 
@@ -117,6 +121,10 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
     await noteSeat(callId, session);
     const done = await store.transition(callId, { from, to, by: session.sub, at: Date.now() });
     if (done) {
+      const who = await nameOf(session.sub, session.name);
+      if (to === 'paused') await postNoticeQuietly(callId, noticeText.paused(who));
+      if (to === 'listening') await postNoticeQuietly(callId, noticeText.resumed(who));
+      if (to === 'left') await postNoticeQuietly(callId, noticeText.dismissed(who), { leaving: true });
       if (to === 'left') {
         // Snapshot who was seated so they can still read the transcript after the call ends.
         for (const u of await callChatRuntime().seatedUsers(callId).catch(() => [])) await store.attend(callId, u.userId);
@@ -142,6 +150,30 @@ meetingAssistantRouter.post('/ack', asyncHandler(async (req, res) => {
   if (!current) throw new NotFoundError('The assistant is not in this call');
   if (current.state === 'left') throw new AppError(409, 'The assistant already left this call');
   res.json(await view(await store.ack(callId, session.sub), callId, session));
+}));
+
+/** Only the person an action was offered to decides it (decision 5). Everyone else, and anyone with no such action: no. */
+meetingAssistantRouter.post('/actions/:actionId/decision', asyncHandler(async (req, res) => {
+  const { session, callId } = await seatOf(req);
+  const actionId = req.params['actionId'];
+  if (typeof actionId !== 'string' || !/^[a-zA-Z0-9:_-]{1,128}$/.test(actionId)) throw new ValidationError('Invalid action id');
+  const decision = (req.body as { decision?: unknown } | undefined)?.decision;
+  if (decision !== 'confirm' && decision !== 'decline') throw new ValidationError("decision must be 'confirm' or 'decline'");
+  const store = assistantStore();
+  const record = await store.get(callId);
+  if (!record) throw new NotFoundError('The assistant is not in this call');
+  if (record.state === 'left') throw new AppError(409, 'The assistant already left this call');
+  const action = await store.getAction(callId, actionId);
+  if (!action) throw new NotFoundError('No such action');
+  if (action.askedBy !== session.sub) throw new AppError(403, 'Only the person who asked can decide this action');
+  const to = decision === 'confirm' ? 'confirmed' : 'declined';
+  const moved = await moveAction(callId, actionId, { from: ['waiting'], to, by: session.sub });
+  if (!moved) {
+    // Already decided: the same decision again is a success, a different one is a conflict.
+    if (action.status === to) { res.json({ actionId, status: action.status, decidedBy: action.decidedBy, decidedAt: action.decidedAt }); return; }
+    throw new AppError(409, `This action is already ${action.status}`);
+  }
+  res.json({ actionId, status: moved.status, decidedBy: moved.decidedBy, decidedAt: moved.decidedAt });
 }));
 
 meetingAssistantRouter.get('/state', asyncHandler(async (req, res) => {

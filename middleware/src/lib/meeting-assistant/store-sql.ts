@@ -6,8 +6,8 @@
 // bumps `next_seq`, guarded by `state = 'listening'` and by the caption not being stored yet, and
 // the INSERT reads the claimed seq from it. No transaction needed, no lost or doubled line numbers.
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
-import type { AssistantRecord, AssistantState, PendingRequest, TranscriptLine } from './types.js';
-import { MAX_PENDING_REQUESTS, type AssistantStore, type StateChange } from './store.js';
+import type { AssistantAction, AssistantRecord, AssistantState, PendingRequest, TranscriptLine } from './types.js';
+import { MAX_PENDING_REQUESTS, type ActionChange, type AssistantStore, type StateChange } from './store.js';
 
 export type SqlExec = (sql: string, params?: SqlParameter[]) => Promise<Record<string, unknown>[]>;
 
@@ -16,6 +16,7 @@ const sOrNull = (name: string, value: string | null): SqlParameter => (value ===
 const n = (name: string, value: number): SqlParameter => ({ name, value: { longValue: Math.trunc(value) } });
 const nOrNull = (name: string, value: number | null): SqlParameter => (value === null ? { name, value: { isNull: true } } : n(name, value));
 const LINE_COLUMNS = 'call_id, seq, user_id, participant_id, speaker_name, text, at, caption_id, start_ms, end_ms, speakers';
+const ACTION_COLUMNS = 'call_id, action_id, message_id, asked_by, tool_name, args_digest, status, created_at, decided_by, decided_at, result_text';
 const iso = (ms: number): string => new Date(ms).toISOString();
 
 const COLUMNS = `call_id, tenant, lobby, initiative_id, state, invited_by, invited_at, paused_by, left_at, left_by,
@@ -50,8 +51,14 @@ export function lineFromRow(r: Record<string, unknown>): TranscriptLine {
     ...(r['speakers'] != null ? { speakers: json<string[]>(r['speakers'], []) } : {}) };
 }
 
+export function actionFromRow(r: Record<string, unknown>): AssistantAction {
+  return { callId: str(r['call_id']), actionId: str(r['action_id']), messageId: str(r['message_id']), askedBy: str(r['asked_by']),
+    toolName: str(r['tool_name']), argsDigest: str(r['args_digest']), status: str(r['status']) as AssistantAction['status'],
+    createdAt: ms(r['created_at']), decidedBy: strOrNull(r['decided_by']), decidedAt: msOrNull(r['decided_at']), resultText: strOrNull(r['result_text']) };
+}
+
 /** The states a column list may name: constants only, never request input. */
-const list = (states: readonly AssistantState[]): string => states.map((x) => `'${x}'`).join(', ');
+const list = (states: readonly string[]): string => states.map((x) => `'${x}'`).join(', ');
 
 export class SqlAssistantStore implements AssistantStore {
   constructor(private readonly exec: SqlExec) {}
@@ -151,6 +158,39 @@ export class SqlAssistantStore implements AssistantStore {
       [s('call', callId), n('after', after), n('limit', limit)],
     );
     return rows.map(lineFromRow);
+  }
+
+  async createAction(action: AssistantAction) {
+    const rows = await this.exec(
+      `INSERT INTO meeting_assistant_actions (call_id, action_id, tenant, message_id, asked_by, tool_name, args_digest, status, created_at)
+       SELECT :call, :action, tenant, :message, :asked, :tool, :digest, :status, :at::timestamptz FROM meeting_assistants WHERE call_id = :call
+       ON CONFLICT (call_id, action_id) DO NOTHING
+       RETURNING ${ACTION_COLUMNS}`,
+      [s('call', action.callId), s('action', action.actionId), s('message', action.messageId), s('asked', action.askedBy),
+        s('tool', action.toolName), s('digest', action.argsDigest), s('status', action.status), s('at', iso(action.createdAt))],
+    );
+    if (rows[0]) return { action: actionFromRow(rows[0]), created: true };
+    const existing = await this.getAction(action.callId, action.actionId);
+    if (!existing) throw new Error('meeting assistant action vanished between insert and read (or the call has no assistant)');
+    return { action: existing, created: false };
+  }
+
+  async getAction(callId: string, actionId: string) {
+    const rows = await this.exec(`SELECT ${ACTION_COLUMNS} FROM meeting_assistant_actions WHERE call_id = :call AND action_id = :action`,
+      [s('call', callId), s('action', actionId)]);
+    return rows[0] ? actionFromRow(rows[0]) : null;
+  }
+
+  async decideAction(callId: string, actionId: string, change: ActionChange) {
+    const rows = await this.exec(
+      `UPDATE meeting_assistant_actions SET status = :to, decided_by = :by, decided_at = :at::timestamptz,
+         result_text = COALESCE(:result, result_text)
+       WHERE call_id = :call AND action_id = :action AND status IN (${list(change.from)})
+       RETURNING ${ACTION_COLUMNS}`,
+      [s('call', callId), s('action', actionId), s('to', change.to), s('by', change.by), s('at', iso(change.at)),
+        sOrNull('result', change.resultText ?? null)],
+    );
+    return rows[0] ? actionFromRow(rows[0]) : null;
   }
 
   async sweepLines(cutoffMs: number) {

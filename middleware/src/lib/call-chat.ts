@@ -28,6 +28,7 @@ import type { RealtimeRouter } from '@connorhoehn/realtime-modules/server';
 import { canonicalCallPage, type CallPageDescriptor, type CanonicalCallPage, type CallLifecycleObserver } from './call-pages.js';
 import { dmPageDescriptor } from './dm-page-references.js';
 import { huddleCallId } from './live-principal.js';
+import { NOVA_USER_ID, parseAssistantMetadata } from './meeting-assistant/chat-types.js';
 import type { Session } from './session.js';
 import type { CallChatStateStore, CallChatState, CallChatMember } from './call-chat-state.js';
 import { invalidateChannel } from './gateway/authority-invalidation.js';
@@ -356,6 +357,11 @@ export class CallChatRuntime implements CallLifecycleObserver {
     channel = callChatChannel(callId)): Promise<ChatMessage> {
     const metadata: Record<string, unknown> = {};
     for (const key of METADATA_KEYS) if (message.metadata?.[key] !== undefined) metadata[key] = clone(message.metadata[key]);
+    // The meeting assistant's kinds are shown only on a message its fixed identity authored: a person's message
+    // that carries `assistant` or `assistant-…` keys never reaches a reader with them (call-chat-send.ts refuses
+    // them on the way in; this is the second lock, on the way out).
+    const assistant = message.userId === NOVA_USER_ID ? parseAssistantMetadata(message.metadata) : null;
+    if (assistant) Object.assign(metadata, clone(assistant));
     const page = dmPageDescriptor(message.metadata?.['pageReference']);
     if (page) {
       const key = `${page.kind}:${page.id}`;

@@ -71,3 +71,20 @@ export interface RawLine {
   endMs?: number;
   speakers?: string[];
 }
+
+/** An action Nova offered in the call chat (package 2 records the decision; running the tool is package 4). */
+export interface AssistantAction {
+  callId: string;
+  actionId: string;
+  /** The chat message that carries the card; status changes update that message. */
+  messageId: string;
+  askedBy: string;
+  toolName: string;
+  argsDigest: string;
+  status: 'waiting' | 'confirmed' | 'declined' | 'expired' | 'done' | 'failed';
+  createdAt: number;
+  /** Who moved it out of `waiting`, and when (the asker, for confirm and decline). */
+  decidedBy: string | null;
+  decidedAt: number | null;
+  resultText: string | null;
+}

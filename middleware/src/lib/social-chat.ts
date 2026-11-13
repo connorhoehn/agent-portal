@@ -591,10 +591,38 @@ export function setThreadLiveAppend(next: ((message: ChatMessage) => Promise<voi
  * the gateway so connected readers and the ChatService's per-channel cache see
  * it. A failed live hand-off is logged; the reload reads the stored row.
  */
-export async function postThreadMessage(message: ChatMessage): Promise<void> {
-  const chat = socialChat(); await chat.ready;
-  await chat.chatStore.putMessage(message);
+export async function postThreadMessage(message: ChatMessage, store?: ChatStore): Promise<void> {
+  if (store) await store.putMessage(message);
+  else { const chat = socialChat(); await chat.ready; await chat.chatStore.putMessage(message); }
   try { await liveAppend?.(message); } catch (error) { console.warn('[social-chat] live thread append failed', error); }
+}
+
+let liveUpdate: ((channel: string, messageId: string, patch: { message?: string; metadata?: Record<string, unknown> }) => Promise<ChatMessage | null>) | null = null;
+
+/** The gateway's live half of a server-side EDIT (the ChatService's `updateSystemMessage`: persist, then `messageUpdated`); null when the gateway is off. */
+export function setThreadLiveUpdate(next: typeof liveUpdate): void {
+  liveUpdate = next;
+}
+
+/**
+ * Change a message the server posted (a card going from waiting to confirmed): the metadata is MERGED
+ * (a key set to `undefined` is dropped), the text replaced only when given. With the gateway on, the service
+ * persists it and tells every reader (`messageUpdated`, the frame an edit makes); without it the store row is
+ * rewritten and the reload reads it. `store` is the one the call chat reads, as for `postThreadMessage`.
+ */
+export async function updateThreadMessage(channel: string, messageId: string,
+  patch: { message?: string; metadata?: Record<string, unknown> }, store?: ChatStore): Promise<ChatMessage | null> {
+  try {
+    const live = await liveUpdate?.(channel, messageId, patch);
+    if (live) return live;
+  } catch (error) { console.warn('[social-chat] live thread update failed', error); }
+  let target = store;
+  if (!target) { const chat = socialChat(); await chat.ready; target = chat.chatStore; }
+  const existing = (await target.listMessages(channel, 200)).find((m) => m.id === messageId);
+  if (!existing || existing.deletedAt) return null;
+  const merged: Record<string, unknown> = { ...(existing.metadata ?? {}) };
+  for (const [k, v] of Object.entries(patch.metadata ?? {})) { if (v === undefined) delete merged[k]; else merged[k] = v; }
+  return target.updateMessage(channel, messageId, { metadata: merged, ...(patch.message ? { message: patch.message } : {}) });
 }
 
 /**
