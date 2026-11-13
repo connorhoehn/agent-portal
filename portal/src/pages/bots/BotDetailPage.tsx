@@ -177,7 +177,9 @@ export default function BotDetailPage() {
 
   // The firing history's columns. The outcome wraps (two lines at most, the whole text in the
   // title) and its links keep their width: a one-line truncate cut the sentence mid-word and
-  // pushed "job →" past the edge (walk, 9 November).
+  // pushed "job →" past the edge (walk, 9 November). The links wrap under the reason when the
+  // cell is full, so the cell is never wider than its cap and the last column stays inside the
+  // table at 1280 (it was a no-wrap row of up to six items).
   const runColumns: DataTableColumn<BotRun>[] = [
     { key: 'trigger', header: 'Trigger', className: 'text-text-secondary', render: (r) => r.trigger },
     {
@@ -198,7 +200,7 @@ export default function BotDetailPage() {
       render: (r) => <T as="span" size="sm" tone="inherit" title={new Date(r.startedAt).toLocaleString()}>{relativeTime(r.startedAt)}</T>,
     },
     {
-      key: 'outcome', header: 'Outcome', className: 'max-w-[26rem]',
+      key: 'outcome', header: 'Outcome', className: 'max-w-[22rem]',
       render: (r) => {
         // What this run left behind. The reason is rendered for every status, not just skipped:
         // a `done` run whose only record is "scheduled maintenance" has an outcome.
@@ -208,14 +210,14 @@ export default function BotDetailPage() {
         const report = r.jobId ? reportByJob.get(r.jobId) : undefined;
         const hasOutcome = Boolean(report || o.reason || o.changeId || o.prUrl || o.filesChanged != null || r.jobId || canLinkRun);
         return (
-          <Inline gap="sm" wrap={false} align="start" className="min-w-0" title={o.summary ?? o.reason}>
+          <Inline gap="sm" wrap align="start" className="min-w-0" title={o.summary ?? o.reason}>
             {report && (
               <RecordLink to={runHref(report.runRef)} data-testid="bot-run-report">
                 <Chip tone={OUTCOME_TONE[report.outcome]} size="xs">{OUTCOME_LABEL[report.outcome]}</Chip>
               </RecordLink>
             )}
             {o.reason && (
-              <T as="span" size="sm" tone={r.status === 'failed' ? 'danger' : 'inherit'} wrap className="min-w-0 flex-1 line-clamp-2">{o.reason}</T>
+              <T as="span" size="sm" tone={r.status === 'failed' ? 'danger' : 'inherit'} wrap className="min-w-[10rem] flex-1 line-clamp-2">{o.reason}</T>
             )}
             {o.changeId && (
               <Link to="/admin/changes" title="Open the change this firing recorded" className="shrink-0 whitespace-nowrap text-primary no-underline hover:underline">
