@@ -116,7 +116,7 @@ describe('invite, pause, resume, dismiss', () => {
     await post('invite');
     expect((await post('invite', 'bob')).status).toBe(200);
     const s = (await get('state', 'bob')).body;
-    expect(s).toMatchObject({ state: 'listening', invitedBy: 'alice', mustAck: ['bob'], youMustAck: true });
+    expect(s).toMatchObject({ state: 'listening', invitedBy: 'alice', invitedByName: 'alice', mustAck: ['bob'], youMustAck: true });
     expect((await post('ack', 'bob')).body).toMatchObject({ mustAck: [], youMustAck: false });
   });
 
