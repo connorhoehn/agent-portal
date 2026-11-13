@@ -35,7 +35,7 @@ import { errorHandler } from '../../lib/async-handler.js';
 import type { RunbookStore } from '../../lib/runbooks/index.js';
 import { notifyExpiring } from '../../lib/runbooks/notices.js';
 import { notify } from '../../lib/social-notify.js';
-import { EDIT_MD, USERS, seededStore, type TestUser } from './runbook-world.js';
+import { EDIT_MD, NEW_MD, USERS, seededStore, type TestUser } from './runbook-world.js';
 
 const notifyMock = notify as unknown as jest.Mock;
 let store: RunbookStore;
@@ -104,6 +104,40 @@ describe('deciding', () => {
     notifyMock.mockRejectedValue(new Error('gateway down'));
     const again = await request(appAs(USERS.leader!)).post(`/api/runbooks/proposals/${second}/reject`).send({ note: 'No.' });
     expect(again.status).toBe(200);
+  });
+});
+
+describe('merging and withdrawing', () => {
+  it('tells the filer about a merge, not the person who merged', async () => {
+    const created = await request(appAs(USERS.member!)).post('/api/runbooks/proposals').send({ kind: 'new', markdown: NEW_MD, rationale: 'Looks new.' });
+    const id = created.body.proposal.id;
+    notifyMock.mockClear();
+    const res = await request(appAs(USERS.leader!)).post(`/api/runbooks/proposals/${id}/merge`).send({ into: 'rb-flaky-test-rerun-diff' });
+    expect(res.status).toBe(201);
+    expect(notifyMock).toHaveBeenCalledTimes(1);
+    expect(notifyMock.mock.calls[0][0]).toEqual(['u-mem']);
+    expect(notifyMock.mock.calls[0][1].title).toContain('merged into rb-flaky-test-rerun-diff');
+    expect(notifyMock.mock.calls[0][1].payload.event).toBe('merged');
+  });
+
+  it('tells the reviewers about a withdrawal, never the proposer who withdrew', async () => {
+    const id = (await file(USERS.proposer!)).body.proposal.id;
+    notifyMock.mockClear();
+    const res = await request(appAs(USERS.proposer!)).post(`/api/runbooks/proposals/${id}/withdraw`).send({});
+    expect(res.status).toBe(200);
+    const [recipients, input] = notifyMock.mock.calls[0]!;
+    expect([...recipients].sort()).toEqual(['u-admin', 'u-lead', 'u-own', 'u-sme-a']);
+    expect(recipients).not.toContain('u-prop');
+    expect(input.payload.event).toBe('withdrawn');
+    expect(input.id).toBe(`runbook-proposal:${id}:withdrawn`);
+  });
+
+  it('still withdraws when the notice throws', async () => {
+    const id = (await file(USERS.proposer!)).body.proposal.id;
+    notifyMock.mockRejectedValue(new Error('gateway down'));
+    const res = await request(appAs(USERS.proposer!)).post(`/api/runbooks/proposals/${id}/withdraw`).send({});
+    expect(res.status).toBe(200);
+    expect((await store.getProposal(id))?.status).toBe('withdrawn');
   });
 });
 

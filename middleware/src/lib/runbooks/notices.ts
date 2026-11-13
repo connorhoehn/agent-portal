@@ -4,6 +4,8 @@
 //              accept and reject routes use (lib/runbook-review.ts), never the author;
 //   decided    the person who filed it, or the person who dispatched the run that did, never the
 //              person who just decided;
+//   merged     the person who filed it (or the dispatcher of the run that did), never the person who merged;
+//   withdrawn  the reviewers who were told it was filed, never the person who withdrew it;
 //   expiring   one notice to the reviewers three days before a run's proposal would be withdrawn.
 //
 // Every function here is best effort and never throws: a failed notice must not fail the filing,
@@ -143,6 +145,53 @@ export async function notifyDecided(p: RunbookProposal, decision: 'accepted' | '
     });
   } catch (err) {
     console.warn(`[runbook-notices] decision notice for ${p.id} failed: ${(err as Error).message}`);
+    return [];
+  }
+}
+
+/**
+ * A proposal was merged into another runbook: tell its author, or the dispatcher of the run that wrote it.
+ * `decidedBy` are the ids the merger acts under; they are never told about their own merge.
+ */
+export async function notifyMerged(p: RunbookProposal, intoRunbookId: string, decidedBy: ReadonlyArray<string | null | undefined>): Promise<string[]> {
+  try {
+    const who = p.source.kind === 'person' ? p.source.person_id : p.source.kind === 'run' ? p.source.dispatched_by : undefined;
+    if (!who) return [];
+    const skip = new Set(decidedBy.filter((x): x is string => typeof x === 'string' && x.length > 0));
+    const user = await accountOf(who);
+    if (skip.has(who) || skip.has(user)) return [];
+    const note = p.note ? ` ${p.note}` : '';
+    return await send([user], {
+      id: `runbook-proposal:${p.id}:merged`, type: 'system',
+      title: `Your proposal for ${nameOf(p)} was merged into ${intoRunbookId}`,
+      body: `A reviewer folded it into another runbook's change; it is no longer open on its own.${note}`.trim(),
+      payload: { tenant: 'orgiq', kind: 'runbook-proposal', event: 'merged', proposalId: p.id, proposalKind: p.kind, runbookId: intoRunbookId },
+      action: { label: 'Open the proposal', href: proposalReviewHref(p.id) },
+    });
+  } catch (err) {
+    console.warn(`[runbook-notices] merge notice for ${p.id} failed: ${(err as Error).message}`);
+    return [];
+  }
+}
+
+/**
+ * A proposal was withdrawn: tell the reviewers who were told it was filed, so it leaves their queue knowingly.
+ * `withdrawnBy` are the ids the withdrawer acts under; they are never told about their own withdrawal. A
+ * system withdrawal (expiry, a rejected change) passes none.
+ */
+export async function notifyWithdrawn(s: RunbookStore, p: RunbookProposal, withdrawnBy: ReadonlyArray<string | null | undefined> = []): Promise<string[]> {
+  try {
+    const reviewers = await proposalReviewers(s, p, withdrawnBy);
+    const skip = new Set(withdrawnBy.filter((x): x is string => typeof x === 'string' && x.length > 0));
+    return await send(reviewers.filter((id) => !skip.has(id)), {
+      id: `runbook-proposal:${p.id}:withdrawn`, type: 'system',
+      title: `A proposal for ${nameOf(p)} was withdrawn`,
+      body: 'It no longer needs a decision.',
+      payload: { tenant: 'orgiq', kind: 'runbook-proposal', event: 'withdrawn', proposalId: p.id, proposalKind: p.kind, ...(p.runbook_id ? { runbookId: p.runbook_id } : {}) },
+      action: { label: 'Open the proposal', href: proposalReviewHref(p.id) },
+    });
+  } catch (err) {
+    console.warn(`[runbook-notices] withdrawal notice for ${p.id} failed: ${(err as Error).message}`);
     return [];
   }
 }

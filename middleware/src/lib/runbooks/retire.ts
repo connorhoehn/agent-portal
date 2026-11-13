@@ -71,10 +71,11 @@ export async function expireStaleProposals(s: RunbookStore, at: string): Promise
   for (const p of await allProposals(s, { status: ['open'] })) {
     if (!isExpired(p, nowMs)) continue;
     try {
-      await s.decideProposal({
+      const closed = await s.decideProposal({
         proposal_id: p.id, decision: 'withdrawn', decided_by: 'system', at, closed_reason: 'expired',
         note: `Expired: nobody decided it in ${PROPOSAL_EXPIRY_DAYS} days.`,
       });
+      await (await import('./notices.js')).notifyWithdrawn(s, closed);
       out.push(p.id);
     } catch { /* decided meanwhile */ }
   }
@@ -93,10 +94,11 @@ export async function withdrawForRejectedChange(changeRequestId: string, deps: P
   for (const p of await allProposals(runbooks, { status: ['open'] })) {
     if (p.source.kind !== 'run' || !p.source.run_ref || !runs.has(p.source.run_ref)) continue;
     try {
-      await runbooks.decideProposal({
+      const closed = await runbooks.decideProposal({
         proposal_id: p.id, decision: 'withdrawn', decided_by: 'system', at, closed_reason: 'change-rejected',
         note: 'Withdrawn: the change this run made was rejected.',
       });
+      await (await import('./notices.js')).notifyWithdrawn(runbooks, closed);
       out.push(p.id);
     } catch { /* decided meanwhile */ }
   }

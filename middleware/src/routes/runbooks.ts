@@ -47,7 +47,7 @@ import { LAB_CALLBACK_SERVICE_AUTH, hasServiceAuth, requireServiceAuth } from '.
 import { RUN_TOKEN_HEADER, runTokenMatches } from '../lib/run-token.js';
 import type { Session } from '../lib/session.js';
 import { REVIEW_OVERRIDE_ROLES, actorId, mayReviewRunbook, type ReviewVerdict } from '../lib/runbook-review.js';
-import { notifyDecided, notifyFiled, newProposalScope, proposalArea, reviewableOpenCount, reviewScopeOf } from '../lib/runbooks/notices.js';
+import { notifyDecided, notifyFiled, notifyMerged, notifyWithdrawn, newProposalScope, proposalArea, reviewableOpenCount, reviewScopeOf } from '../lib/runbooks/notices.js';
 import { unifiedDiff } from '../lib/unified-diff.js';
 import { loadCandidates } from '../lib/session-brief-preview.js';
 import { proposalReach, providerReachSource, type ReachSource } from '../lib/runbooks/reach.js';
@@ -988,6 +988,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     const note = str((req.body as Record<string, unknown> | undefined)?.['note']) ?? null;
     const proposal = await s.decideProposal({ proposal_id: p.id, decision: 'withdrawn', decided_by: actor, at: now(), note });
     noteSearchWriteSoon({ type: 'proposal', id: proposal.id });
+    await notifyWithdrawn(s, proposal, [actor, personId, sess.sub]);
     res.json({ proposal });
   }));
 
@@ -1027,6 +1028,7 @@ export function createRunbooksRouter(deps: RunbooksDeps): Router {
     });
     await s.putProposal(edit);
     noteSearchWriteSoon({ type: 'proposal', id: p.id }, { type: 'proposal', id: edit.id });
+    await notifyMerged(merged, dest.id, [actor, d.sess.sub]);
     res.status(201).json({ merged, proposal: proposalView(edit) });
   }));
 
