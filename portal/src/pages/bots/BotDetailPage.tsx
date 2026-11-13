@@ -530,7 +530,7 @@ export default function BotDetailPage() {
                 ? <RecordLink to={proposalsHref()} data-testid="bot-run-proposals"><T size="xs">{`${summary.proposals} ${summary.proposals === 1 ? 'proposal' : 'proposals'} filed`}</T></RecordLink>
                 : <T size="xs" tone="tertiary">No proposals filed</T>}
               {canOpenSpend && (
-                <RecordLink to={spendReportPageHref('bot', '30d')} data-testid="bot-run-spend-report" title="Spend by bot, last 30 days: every bot's ledger entries"><T size="xs">Spend by bot, 30 days</T></RecordLink>
+                <RecordLink to={spendReportPageHref('bot', '30d', id)} data-testid="bot-run-spend-report" title="This bot's spend ledger, last 30 days"><T size="xs">This bot's spend, 30 days</T></RecordLink>
               )}
             </Inline>
           )}

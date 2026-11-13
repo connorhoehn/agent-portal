@@ -1,4 +1,4 @@
-// GET /api/spend/report?groupBy=initiative|actor|model|source|trigger|bot&period=month|7d|30d[&initiativeId=]
+// GET /api/spend/report?groupBy=initiative|actor|model|source|trigger|bot&period=month|7d|30d[&initiativeId=][&botId=]
 //
 // One grouped read over the spend ledger and open spend holds
 // (docs/budget-system-analysis-2026-10-28.md §3; DE-53; DE-31's per-person
@@ -86,8 +86,11 @@ spendReportRouter.get('/report', asyncHandler(async (req, res) => {
   const rawId = req.query['initiativeId'];
   const initiativeId = rawId == null || rawId === '' ? null : String(rawId).trim();
   if (initiativeId != null && !ID_RE.test(initiativeId)) throw new ValidationError('initiativeId is not a valid id');
+  const rawBot = req.query['botId'];
+  const botId = rawBot == null || rawBot === '' ? null : String(rawBot).trim();
+  if (botId != null && !ID_RE.test(botId)) throw new ValidationError('botId is not a valid id');
 
-  const report = await getSpendReport({ groupBy, period, initiativeId });
+  const report = await getSpendReport({ groupBy, period, initiativeId, botId });
   res.set('Cache-Control', 'no-store');
   if (await canReadBudgets(session)) { res.json(report); return; }
   res.json(await shapeBelowTier(report, session.sub));
@@ -127,10 +130,13 @@ spendReportRouter.get('/entries', asyncHandler(async (req, res) => {
   const rawId = req.query['initiativeId'];
   const initiativeId = rawId == null || rawId === '' ? null : String(rawId).trim();
   if (initiativeId != null && !ID_RE.test(initiativeId)) throw new ValidationError('initiativeId is not a valid id');
+  const rawBot = req.query['botId'];
+  const botId = rawBot == null || rawBot === '' ? null : String(rawBot).trim();
+  if (botId != null && !ID_RE.test(botId)) throw new ValidationError('botId is not a valid id');
   const limit = intParam(req.query['limit'], 'limit', 1);
   const offset = intParam(req.query['offset'], 'offset', 0);
 
-  const page = await listSpendEntries({ groupBy, key, period, initiativeId, limit, offset });
+  const page = await listSpendEntries({ groupBy, key, period, initiativeId, botId, limit, offset });
   res.set('Cache-Control', 'no-store');
   if (await canReadBudgets(session)) { res.json(page); return; }
   res.json(shapeEntriesBelowTier(page, session.sub));

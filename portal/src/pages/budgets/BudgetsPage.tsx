@@ -92,6 +92,8 @@ export default function BudgetsPage() {
   const selectedRow = params.get('row');
   const groupBy = parseGroupBy(params.get('group'));
   const period = parsePeriod(params.get('period'));
+  // One bot's ledger: the bot page's spend link sets it; the toolbar's Bot filter clears it.
+  const botId = report === 'initiatives' && groupBy !== 'initiative' ? params.get('bot') || null : null;
   const initiativeId = report === 'initiatives' ? params.get('initiative') : null;
 
   const { data, error, degraded, refresh } =
@@ -116,7 +118,7 @@ export default function BudgetsPage() {
   // The spend ledger, grouped — only while the overview is on screen; the
   // drill-in reads its own initiative-scoped report.
   const { data: spend, error: spendError, refresh: refreshSpend } = useFetch<SpendReport>(
-    report === 'initiatives' && !initiativeId ? spendReportUrl(groupBy, period) : null,
+    report === 'initiatives' && !initiativeId ? spendReportUrl(groupBy, period, null, botId) : null,
     30_000,
   );
 
@@ -259,6 +261,8 @@ export default function BudgetsPage() {
         ? [
           { id: 'group', label: 'Group by', value: groupBy, options: GROUP_OPTIONS.map((o) => ({ value: o.value, label: o.label })), emptyValue: 'initiative',
             onChange: (v: string) => setView({ group: v === 'initiative' ? null : v }) },
+          ...(botId ? [{ id: 'bot', label: 'Bot', value: botId, emptyValue: '', options: [{ value: '', label: 'All bots' }, { value: botId, label: spend?.groups[0]?.label ?? botId }],
+            onChange: (v: string) => setView({ bot: v || null }) }] : []),
           // The initiative ledger is the budget period by definition; only the other cuts take a window.
           ...(groupBy === 'initiative' ? [showFilter] : [{ id: 'period', label: 'Period', value: period, options: PERIOD_OPTIONS.map((o) => ({ value: o.value, label: o.label })), emptyValue: 'month',
             onChange: (v: string) => setView({ period: v === 'month' ? null : (v as SpendPeriod) }) }]),
@@ -295,7 +299,7 @@ export default function BudgetsPage() {
   ) : !spend ? (
     <LoadingState label="Loading spend…" />
   ) : (
-    <SpendGroupTable groups={spend.groups} groupBy={groupBy} period={period} lock={spend.budgetAccess} query={query} />
+    <SpendGroupTable groups={spend.groups} groupBy={groupBy} period={period} lock={spend.budgetAccess} query={query} botId={botId} />
   );
 
   const loadingOrFailed = !data && !budgetsFailure ? (

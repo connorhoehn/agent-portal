@@ -41,12 +41,13 @@ function Money({ value, lock, tone }: { value: number | null | undefined; lock: 
   return <T tabular tone={value == null ? 'tertiary' : undefined} className={tone === 'danger' ? 'text-danger' : tone === 'warning' ? 'text-warning' : undefined}>{moneyOrDash(value)}</T>;
 }
 
-export function SpendGroupTable({ groups, groupBy, period, lock, query }: {
+export function SpendGroupTable({ groups, groupBy, period, lock, query, botId }: {
   groups: SpendGroup[];
   groupBy: SpendGroupBy;
   period: SpendPeriod;
   lock: BudgetAccessLock | undefined;
   query: string;
+  botId?: string | null;
 }) {
   // The group whose entries are open below the table. Tied to the view, so changing the
   // grouping or the period closes it instead of showing another group's rows under it.
@@ -152,7 +153,7 @@ export function SpendGroupTable({ groups, groupBy, period, lock, query }: {
           count={openGroup.entries}
           data-testid="spend-entries-section"
         >
-          <SpendEntriesTable groupBy={groupBy} groupKey={openGroup.key} period={period} lock={lock} />
+          <SpendEntriesTable groupBy={groupBy} groupKey={openGroup.key} period={period} botId={botId} lock={lock} />
         </PageSection>
       )}
     </Stack>

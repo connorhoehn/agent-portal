@@ -28,16 +28,18 @@ import type { BudgetAccessLock, SpendEntriesPage, SpendEntryRow, SpendGroupBy, S
 
 const PAGE_SIZE = 25;
 
-export function SpendEntriesTable({ groupBy, groupKey, period, initiativeId, lock }: {
+export function SpendEntriesTable({ groupBy, groupKey, period, initiativeId, botId, lock }: {
   groupBy: SpendGroupBy;
   /** Null = the group with no key. */
   groupKey: string | null;
   period: SpendPeriod;
   initiativeId?: string | null;
+  /** Narrow the group's entries to one bot (the report page's `bot` filter). */
+  botId?: string | null;
   lock: BudgetAccessLock | undefined;
 }) {
   const [limit, setLimit] = useState(PAGE_SIZE);
-  const { data, error, refresh } = useFetch<SpendEntriesPage>(spendEntriesUrl(groupBy, groupKey, period, limit, initiativeId), 30_000);
+  const { data, error, refresh } = useFetch<SpendEntriesPage>(spendEntriesUrl(groupBy, groupKey, period, limit, initiativeId, botId), 30_000);
   // Showing more refetches a longer page; keep the rows already on screen meanwhile.
   const last = useRef<SpendEntriesPage | null>(null);
   if (data) last.current = data;

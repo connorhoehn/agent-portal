@@ -243,6 +243,26 @@ describe('GET /api/spend/report — groupBy=bot', () => {
   });
 });
 
+describe('GET /api/spend/report and /entries — botId', () => {
+  it('narrows the grouped report and the entries to one bot, and refuses a malformed id', async () => {
+    const all = await leader({ groupBy: 'bot' });
+    const g = all.body.groups.find((x: { key: string | null; entries: number }) => x.key != null && x.entries > 0);
+    const one = await leader({ groupBy: 'bot', botId: g.key });
+    expect(one.status).toBe(200);
+    expect(one.body.botId).toBe(g.key);
+    expect(one.body.groups.map((x: { key: string | null }) => x.key)).toEqual([g.key]);
+    expect(one.body.totals.entries).toBe(g.entries);
+    const byModel = await leader({ groupBy: 'model', botId: g.key });
+    expect(byModel.body.totals.entries).toBe(g.entries);
+    const e = await request(app).get('/api/spend/entries').query({ groupBy: 'model', key: '', botId: g.key, limit: '100' })
+      .set('x-user', 'u-release').set('x-role', 'org-leader');
+    expect(e.status).toBe(200);
+    expect(e.body.botId).toBe(g.key);
+    for (const row of e.body.entries) expect(row.botId).toBe(g.key);
+    expect((await leader({ groupBy: 'bot', botId: 'bad id;' })).status).toBe(400);
+  });
+});
+
 describe('GET /api/spend/entries', () => {
   const entries = (q: Record<string, string>, sub = 'u-release', role = 'org-leader') =>
     request(app).get('/api/spend/entries').query(q).set('x-user', sub).set('x-role', role);

@@ -161,6 +161,8 @@ export interface SpendReport {
   ledgerMode: SpendLedgerMode;
   holdsTracked: boolean;
   initiativeId: string | null;
+  /** The one bot the read was narrowed to, or null. */
+  botId: string | null;
   totals: SpendTotals;
   groups: SpendGroup[];
   initiative?: InitiativeReport;
@@ -177,7 +179,7 @@ interface LedgerRow extends ReportEntry {
 }
 
 /** Offline: stored entries plus bot_run entries derived from the run fixture. */
-function mockLedgerEntries(w: ReportWindow, initiativeId: string | null): LedgerRow[] {
+function mockLedgerEntries(w: ReportWindow, initiativeId: string | null, botId: string | null = null): LedgerRow[] {
   const from = w.readFrom.getTime();
   const runs = allMockRuns();
   // The bot-run join, offline: a bot_run entry is its run's id, a job entry is
@@ -214,7 +216,8 @@ function mockLedgerEntries(w: ReportWindow, initiativeId: string | null): Ledger
       costBasis: r.costUsd == null ? 'unknown' as const : 'reported' as const,
       runRef: r.jobId,
     }));
-  return [...stored, ...derived].filter((e) => Date.parse(e.occurredAt) >= from && (initiativeId == null || e.initiativeId === initiativeId));
+  return [...stored, ...derived].filter((e) => Date.parse(e.occurredAt) >= from && (initiativeId == null || e.initiativeId === initiativeId)
+    && (botId == null || e.botId === botId));
 }
 
 /**
@@ -241,7 +244,7 @@ const KEY_SQL: Readonly<Record<SpendGroupBy, string>> = {
 };
 
 /** The grouped ledger read — the raw sums lib/spend-report-model.ts finishes. */
-export function groupedLedgerSql(by: SpendGroupBy, scoped: boolean): string {
+export function groupedLedgerSql(by: SpendGroupBy, scoped: boolean, botScoped = false): string {
   return `
     SELECT ${KEY_SQL[by]} AS k,
            COALESCE(SUM(cost_usd) FILTER (WHERE occurred_at >= :since::timestamptz), 0)::float8 AS known,
@@ -252,18 +255,20 @@ export function groupedLedgerSql(by: SpendGroupBy, scoped: boolean): string {
       FROM spend_entries
      WHERE occurred_at >= :from::timestamptz AND occurred_at <= :now::timestamptz
        ${scoped ? 'AND initiative_id = :pid' : ''}
+       ${botScoped ? `AND ${BOT_KEY_SQL} = :bot` : ''}
      GROUP BY 1`;
 }
 
-async function rawGroups(by: SpendGroupBy, w: ReportWindow, initiativeId: string | null): Promise<RawGroup[]> {
-  if (config.mock.aurora) return aggregateEntries(mockLedgerEntries(w, initiativeId), by, w);
+async function rawGroups(by: SpendGroupBy, w: ReportWindow, initiativeId: string | null, botId: string | null = null): Promise<RawGroup[]> {
+  if (config.mock.aurora) return aggregateEntries(mockLedgerEntries(w, initiativeId, botId), by, w);
   const params = [
     s('since', w.since.toISOString()), s('month', w.monthStart.toISOString()), s('burn', w.burnFrom.toISOString()),
     s('from', w.readFrom.toISOString()), s('now', w.now.toISOString()),
     ...(initiativeId ? [s('pid', initiativeId)] : []),
+    ...(botId ? [s('bot', botId)] : []),
   ];
   try {
-    const rows = await exec(groupedLedgerSql(by, initiativeId != null), params);
+    const rows = await exec(groupedLedgerSql(by, initiativeId != null, botId != null), params);
     return rows.map((r) => ({
       key: r['k'] == null ? null : toStr(r['k']),
       knownUsd: round4(toNum(r['known'])), unknownCount: toNum(r['unknown']), entries: toNum(r['n']),
@@ -376,9 +381,13 @@ async function allocationsFor(by: SpendGroupBy, keys: ReadonlyArray<string | nul
 // ─── The grouped report ──────────────────────────────────────────────────────
 
 async function buildGroups(
-  by: SpendGroupBy, w: ReportWindow, initiativeId: string | null, budgets: readonly BudgetRow[] | null,
+  by: SpendGroupBy, w: ReportWindow, initiativeId: string | null, budgets: readonly BudgetRow[] | null, botId: string | null = null,
 ): Promise<{ groups: SpendGroup[]; totals: SpendTotals; holdsTracked: boolean }> {
-  const [raw, held] = await Promise.all([rawGroups(by, w, initiativeId), heldByGroup(by, initiativeId)]);
+  // Holds are not tied to a bot, so a one-bot view cannot honestly show them: report them as not tracked.
+  const [raw, held] = await Promise.all([
+    rawGroups(by, w, initiativeId, botId),
+    botId ? Promise.resolve({ tracked: false, byKey: null }) : heldByGroup(by, initiativeId),
+  ]);
   // Initiatives with an allocation but no entries still belong in an
   // initiative grouping: an allocated, idle initiative is a row, not a gap.
   const keys = new Set<string | null>(raw.map((g) => g.key));
@@ -543,8 +552,9 @@ async function initiativeBlocks(initiativeId: string, w: ReportWindow, budget: B
  * DE-53 blocks. Throws only on a real read failure; a missing table reads as
  * no rows (holds as `holdsTracked: false`).
  */
-export async function getSpendReport(opts: { groupBy: SpendGroupBy; period: ReportPeriod; initiativeId?: string | null; now?: Date }): Promise<SpendReport> {
+export async function getSpendReport(opts: { groupBy: SpendGroupBy; period: ReportPeriod; initiativeId?: string | null; botId?: string | null; now?: Date }): Promise<SpendReport> {
   const initiativeId = opts.initiativeId ?? null;
+  const botId = opts.botId ?? null;
   const budgets: BudgetRow[] | null = initiativeId
     ? await getBudget(initiativeId).then((b) => (b ? [b] : []))
     : opts.groupBy === 'initiative' ? await listBudgets() : null;
@@ -554,7 +564,7 @@ export async function getSpendReport(opts: { groupBy: SpendGroupBy; period: Repo
   const scoped = initiativeId ? budgets?.[0] : null;
   const w = reportWindow(opts.period, opts.now ?? clock.now(),
     scoped?.periodStart && scoped.periodEnd ? { start: new Date(scoped.periodStart), end: new Date(scoped.periodEnd) } : null);
-  const { groups, totals, holdsTracked } = await buildGroups(opts.groupBy, w, initiativeId, budgets);
+  const { groups, totals, holdsTracked } = await buildGroups(opts.groupBy, w, initiativeId, budgets, botId);
   const report: SpendReport = {
     groupBy: opts.groupBy,
     period: opts.period,
@@ -566,6 +576,7 @@ export async function getSpendReport(opts: { groupBy: SpendGroupBy; period: Repo
     ledgerMode: spendLedgerMode(),
     holdsTracked,
     initiativeId,
+    botId,
     totals,
     groups,
   };
@@ -605,6 +616,8 @@ export interface SpendEntriesPage {
   since: string;
   asOf: string;
   initiativeId: string | null;
+  /** The one bot the read was narrowed to, or null. */
+  botId: string | null;
   total: number;
   limit: number;
   offset: number;
@@ -619,10 +632,11 @@ export const ENTRIES_MAX_LIMIT = 100;
  * the grouping uses, so the rows always add up to the group's entry count.
  */
 export async function listSpendEntries(opts: {
-  groupBy: SpendGroupBy; key: string | null; period: ReportPeriod; initiativeId?: string | null;
+  groupBy: SpendGroupBy; key: string | null; period: ReportPeriod; initiativeId?: string | null; botId?: string | null;
   limit?: number; offset?: number; now?: Date;
 }): Promise<SpendEntriesPage> {
   const initiativeId = opts.initiativeId ?? null;
+  const botId = opts.botId ?? null;
   const limit = Math.min(Math.max(Math.trunc(opts.limit ?? 25), 1), ENTRIES_MAX_LIMIT);
   const offset = Math.max(Math.trunc(opts.offset ?? 0), 0);
   const budgets: BudgetRow[] | null = initiativeId ? await getBudget(initiativeId).then((b) => (b ? [b] : [])) : null;
@@ -636,7 +650,7 @@ export async function listSpendEntries(opts: {
   if (config.mock.aurora) {
     const since = w.since.getTime();
     const now = w.now.getTime();
-    const all = mockLedgerEntries(w, initiativeId)
+    const all = mockLedgerEntries(w, initiativeId, botId)
       .filter((e) => { const at = Date.parse(e.occurredAt); return Number.isFinite(at) && at >= since && at <= now && groupKeyOf(e, opts.groupBy) === opts.key; })
       .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt) || b.sourceId.localeCompare(a.sourceId));
     total = all.length;
@@ -647,10 +661,12 @@ export async function listSpendEntries(opts: {
   } else {
     const where = `occurred_at >= :since::timestamptz AND occurred_at <= :now::timestamptz
        ${initiativeId ? 'AND initiative_id = :pid' : ''}
+       ${botId ? `AND ${BOT_KEY_SQL} = :bot` : ''}
        AND ${KEY_SQL[opts.groupBy]} IS NOT DISTINCT FROM ${opts.key == null ? 'NULL::text' : ':key'}`;
     const base = [
       s('since', w.since.toISOString()), s('now', w.now.toISOString()),
       ...(initiativeId ? [s('pid', initiativeId)] : []),
+      ...(botId ? [s('bot', botId)] : []),
       ...(opts.key == null ? [] : [s('key', opts.key)]),
     ];
     try {
@@ -696,6 +712,6 @@ export async function listSpendEntries(opts: {
   });
   return {
     groupBy: opts.groupBy, key: opts.key, period: opts.period, since: w.since.toISOString(), asOf: w.now.toISOString(),
-    initiativeId, total, limit, offset, entries,
+    initiativeId, botId, total, limit, offset, entries,
   };
 }

@@ -165,3 +165,10 @@ test('an entry cost is unknown, never $0; withheld is null; an estimate says so'
   assert.deepEqual(entryCost(0.0123, 'estimated'), { text: '$0.0123', note: 'estimated' });
   assert.deepEqual(entryCost(0, 'reported'), { text: '$0.0000', note: null });
 });
+
+test('one bot is carried on the report read, the entries read and the page URL', () => {
+  assert.equal(spendReportUrl('bot', '30d', null, 'bot-1'), '/api/spend/report?groupBy=bot&period=30d&botId=bot-1');
+  assert.equal(spendEntriesUrl('bot', 'bot-1', '7d', 25, null, 'bot-1'), '/api/spend/entries?groupBy=bot&key=bot-1&period=7d&limit=25&botId=bot-1');
+  assert.equal(spendReportPageHref('bot', '30d', 'bot-1'), '/admin/budgets?group=bot&period=30d&bot=bot-1');
+  assert.equal(spendReportPageHref('bot', '30d'), '/admin/budgets?group=bot&period=30d');
+});

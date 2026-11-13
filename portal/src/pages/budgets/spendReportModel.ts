@@ -32,9 +32,10 @@ export function parsePeriod(raw: string | null): SpendPeriod {
 }
 
 /** The report's URL for one view. Initiative grouping is the budget period by definition, so it carries no period. */
-export function spendReportUrl(groupBy: SpendGroupBy, period: SpendPeriod, initiativeId?: string | null): string {
+export function spendReportUrl(groupBy: SpendGroupBy, period: SpendPeriod, initiativeId?: string | null, botId?: string | null): string {
   const q = new URLSearchParams({ groupBy, period: groupBy === 'initiative' || initiativeId ? 'month' : period });
   if (initiativeId) q.set('initiativeId', initiativeId);
+  if (botId) q.set('botId', botId);
   return `/api/spend/report?${q}`;
 }
 
@@ -43,18 +44,20 @@ export function spendReportUrl(groupBy: SpendGroupBy, period: SpendPeriod, initi
  * "Not from a bot"). Initiative grouping is the budget period, so it carries none.
  */
 export function spendEntriesUrl(
-  groupBy: SpendGroupBy, key: string | null, period: SpendPeriod, limit: number, initiativeId?: string | null,
+  groupBy: SpendGroupBy, key: string | null, period: SpendPeriod, limit: number, initiativeId?: string | null, botId?: string | null,
 ): string {
   const q = new URLSearchParams({ groupBy, key: key ?? '', period: groupBy === 'initiative' || initiativeId ? 'month' : period, limit: String(limit) });
   if (initiativeId) q.set('initiativeId', initiativeId);
+  if (botId) q.set('botId', botId);
   return `/api/spend/entries?${q}`;
 }
 
 /** The Budgets page's own URL for one grouped view of the spend report. */
-export function spendReportPageHref(groupBy: SpendGroupBy, period: SpendPeriod): string {
+export function spendReportPageHref(groupBy: SpendGroupBy, period: SpendPeriod, botId?: string | null): string {
   const q = new URLSearchParams();
   if (groupBy !== 'initiative') q.set('group', groupBy);
   if (period !== 'month') q.set('period', period);
+  if (botId) q.set('bot', botId);
   const s = q.toString();
   return `/admin/budgets${s ? `?${s}` : ''}`;
 }
