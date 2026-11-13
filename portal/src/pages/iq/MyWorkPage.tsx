@@ -13,7 +13,7 @@ import { RecordLink } from '../decisions/RecordLink';
 import { workItemHref } from '../project-detail/overviewModel';
 import type { Sprint } from '../sprints/types';
 import {
-  MY_WORK_URL, STATUS_OPTIONS, TYPE_OPTIONS, initiativeHref, initiativeOptions, myWorkRows, statusLabel, typeLabel,
+  MY_WORK_URL, STATUS_OPTIONS, TYPE_OPTIONS, initiativeHref, initiativeOptions, myWorkEmptyMessage, myWorkRows, statusLabel, typeLabel,
   type MyWorkItem,
 } from './myWorkModel';
 
@@ -29,6 +29,8 @@ export default function MyWorkPage() {
   const all = Array.isArray(feed.data) ? feed.data : [];
   const rows = useMemo(() => myWorkRows(all, filters), [all, filters.status, filters.initiative, filters.type]); // eslint-disable-line react-hooks/exhaustive-deps
   const filtered = Boolean(filters.status || filters.initiative || filters.type);
+  // An empty feed reads the same for "no linked person" and "linked, nothing open"; only the session knows which.
+  const person = useFetch<{ linked: boolean }>(feed.data && all.length === 0 ? '/api/session/person' : null, undefined, { share: true });
 
   const columns: DataTableColumn<MyWorkItem>[] = [
     { key: 'key', header: 'Key', width: '112px', render: (i) => <T size="sm">{i.key ?? '—'}</T> },
@@ -72,7 +74,7 @@ export default function MyWorkPage() {
         pageSize={25}
         onRowClick={(i) => navigate(workItemHref(i.projectId, i.id))}
         data-testid="iq-my-work-table"
-        emptyMessage={filtered ? 'No open work item matches these filters.' : 'Nothing is assigned to you right now.'}
+        emptyMessage={myWorkEmptyMessage(filtered, person.data ? person.data.linked : null)}
       />
     </CollectionCommandPage>
   );

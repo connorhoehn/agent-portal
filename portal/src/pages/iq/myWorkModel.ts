@@ -53,3 +53,16 @@ export function myWorkRows(items: readonly MyWorkItem[], f: MyWorkFilters): MyWo
 
 /** The initiative page a row's initiative cell opens. */
 export const initiativeHref = (projectId: string): string => `/iq/projects/${encodeURIComponent(projectId)}`;
+
+/**
+ * The empty-table sentence. `GET /api/graph/work?assignee=me` answers [] both for a linked person with nothing
+ * open and for an account with no linked person, so the page asks /api/session/person and passes the answer
+ * here. `linked` is null while that read is unknown or failed: then the generic sentence is the honest one.
+ */
+export function myWorkEmptyMessage(filtered: boolean, linked: boolean | null): string {
+  if (filtered) return 'No open work item matches these filters.';
+  if (linked === false) {
+    return 'Your account is not linked to a person in the org directory, so no work can be assigned to you here. A workspace admin links it in Identity, under Users.';
+  }
+  return 'Nothing is assigned to you right now.';
+}
