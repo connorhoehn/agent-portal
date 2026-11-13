@@ -147,3 +147,9 @@ describe('SqlAssistantStore statements', () => {
     expect(lineFromRow({ call_id: 'c', seq: 1, user_id: 'u', text: 't', at: '2026-11-13T10:00:00Z', caption_id: 'x', speakers: '["u","v"]' }).speakers).toEqual(['u', 'v']);
   });
 });
+
+import { initiativeOfLobby } from '../store.js';
+it('reads the initiative out of an initiative lobby and nothing else', () => {
+  expect(initiativeOfLobby('orgiq:initiative:p-auth')).toBe('p-auth');
+  for (const l of ['orgiq:dm:a:b', 'assessment:team:T-1', 'orgiq:initiative:', 'orgiq:initiative:a/b']) expect(initiativeOfLobby(l)).toBeNull();
+});

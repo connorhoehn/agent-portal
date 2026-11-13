@@ -4,10 +4,11 @@
 import { config } from '../../config.js';
 import { LineIntake } from './intake.js';
 import { assistantStore } from './store-select.js';
+export { assistantStore };
 
 export * from './types.js';
 export * from './detector.js';
-export { assistantStore, setAssistantStore } from './store-select.js';
+export { setAssistantStore } from './store-select.js';
 export { transcriptSource, setTranscriptSource, theMockTranscriptSource, mockTranscriptEnabled, TranscriptSourceNotConfigured } from './transcript-source.js';
 export { sweepTranscripts, startRetentionSweep } from './retention.js';
 
@@ -17,3 +18,7 @@ export function meetingAssistantEnabled(): boolean { return config.meetingAssist
 let intake: LineIntake | null = null;
 export function assistantIntake(): LineIntake { return (intake ??= new LineIntake(assistantStore())); }
 export function setAssistantIntake(next: LineIntake | null): void { intake?.dispose(); intake = next; }
+export { LineIntake } from './intake.js';
+export { MemoryAssistantStore, type AssistantStore } from './store.js';
+export { MockTranscriptSource, notConfiguredTranscriptSource, type TranscriptSource } from './transcript-source.js';
+export { initiativeOfLobby } from './store.js';

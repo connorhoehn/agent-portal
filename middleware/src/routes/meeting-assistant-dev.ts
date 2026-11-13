@@ -11,7 +11,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { MOCK_CONTROL_SERVICE_AUTH, requireServiceAuth } from '../lib/service-auth.js';
-import { meetingAssistantEnabled, mockTranscriptEnabled, theMockTranscriptSource, type RawLine } from '../lib/meeting-assistant/index.js';
+import { meetingAssistantEnabled, MockTranscriptSource, mockTranscriptEnabled, transcriptSource, type RawLine } from '../lib/meeting-assistant/index.js';
 
 export const meetingAssistantDevRouter = Router();
 
@@ -61,6 +61,8 @@ meetingAssistantDevRouter.post('/api/dev/calls/:callId/transcript-lines', gate,
     if (!items.length || items.length > MAX_BATCH) throw new ValidationError(`send between 1 and ${MAX_BATCH} lines`);
     const lines = items.map(parseLine);
     let listeners = 0;
-    for (const line of lines) listeners = await theMockTranscriptSource().inject(callId, line);
+    const target = transcriptSource();
+    if (!(target instanceof MockTranscriptSource)) { res.status(404).json({ error: 'Not found' }); return; }
+    for (const line of lines) listeners = await target.inject(callId, line);
     res.status(202).json({ accepted: lines.length, listeners });
   }));

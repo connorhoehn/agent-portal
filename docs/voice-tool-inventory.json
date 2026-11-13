@@ -15,16 +15,16 @@
   "serverHandlerSha": "882bfdbb24fb83ae7db6112af08712f402e14228648e474a34f3a4d4d0d66a47"
  },
  "summary": {
-  "routes": 850,
+  "routes": 858,
   "routesInSnapshot": 840,
   "snapshotDuplicates": 0,
-  "routesDeclaredNotInSnapshot": 10,
+  "routesDeclaredNotInSnapshot": 18,
   "pages": 108,
   "byKind": {
    "dev": 13,
-   "write": 360,
-   "read": 447,
-   "internal": 30,
+   "write": 365,
+   "read": 449,
+   "internal": 31,
    "navigate": 108
   },
   "byFamily": {
@@ -188,17 +188,17 @@
     }
    },
    "social.calls": {
-    "total": 30,
-    "read": 18,
-    "write": 10,
+    "total": 38,
+    "read": 20,
+    "write": 15,
     "navigate": 0,
-    "internal": 2,
+    "internal": 3,
     "dev": 0,
     "covered": 13,
     "v2": {
      "not-yet": 7,
-     "never": 8,
-     "n/a": 2,
+     "never": 15,
+     "n/a": 3,
      "read": 12,
      "confirm": 1
     }
@@ -376,15 +376,15 @@
   "byTenant": {
    "any": 152,
    "access": 27,
-   "orgiq": 421,
+   "orgiq": 428,
    "assessment": 112,
    "pipelines": 30,
    "social": 32,
    "orgiq+assessment+pipelines": 33
   },
-  "peopleRoutes": 807,
-  "peopleReads": 447,
-  "peopleWrites": 360,
+  "peopleRoutes": 814,
+  "peopleReads": 449,
+  "peopleWrites": 365,
   "coveredRoutes": 235,
   "coveredReads": 161,
   "coveredWrites": 74,
@@ -395,7 +395,7 @@
   "v2Decisions": {
    "not-yet": 180,
    "read": 161,
-   "never": 363,
+   "never": 370,
    "confirm": 73,
    "n/a": 29,
    "open": 1
@@ -428,24 +428,36 @@
   },
   "undecided": [],
   "contradictions": [],
-  "staleSnapshotLines": 0,
+  "staleSnapshotLines": 3,
   "unresolvedDeclarations": [],
   "missingFromSnapshot": [
+   "POST /api/dev/calls/:callId/transcript-lines (src/routes/meeting-assistant-dev.ts:54)",
+   "POST /api/calls/:callId/assistant/invite (src/routes/meeting-assistant.ts:82)",
+   "POST /api/calls/:callId/assistant/pause (src/routes/meeting-assistant.ts:134)",
+   "POST /api/calls/:callId/assistant/resume (src/routes/meeting-assistant.ts:135)",
+   "POST /api/calls/:callId/assistant/dismiss (src/routes/meeting-assistant.ts:136)",
+   "POST /api/calls/:callId/assistant/ack (src/routes/meeting-assistant.ts:138)",
+   "GET /api/calls/:callId/assistant/state (src/routes/meeting-assistant.ts:147)",
+   "GET /api/calls/:callId/assistant/transcript (src/routes/meeting-assistant.ts:161)",
    "GET /api/social/plane/search (src/routes/tenant-search.ts:127)",
    "GET /api/social/plane/search/answer (src/routes/tenant-search.ts:127)",
-   "GET /api/assessment/search (src/index.ts:322)",
-   "GET /api/assessment/search/answer (src/index.ts:322)",
-   "GET /api/social/search (src/index.ts:335)",
-   "GET /api/social/search/answer (src/index.ts:335)",
-   "GET /api/pipelines/search (src/index.ts:369)",
-   "GET /api/pipelines/search/answer (src/index.ts:369)",
-   "GET /api/access/search (src/index.ts:373)",
-   "GET /api/access/search/answer (src/index.ts:373)"
+   "GET /api/assessment/search (src/index.ts:327)",
+   "GET /api/assessment/search/answer (src/index.ts:327)",
+   "GET /api/social/search (src/index.ts:340)",
+   "GET /api/social/search/answer (src/index.ts:340)",
+   "GET /api/pipelines/search (src/index.ts:377)",
+   "GET /api/pipelines/search/answer (src/index.ts:377)",
+   "GET /api/access/search (src/index.ts:381)",
+   "GET /api/access/search/answer (src/index.ts:381)"
   ],
   "unresolvedGateNames": [
    "requireAgentTenant",
    "requireAgentCapability",
-   "forBackground"
+   "forBackground",
+   "gate",
+   "flagGate",
+   "refuseMasquerade",
+   "move"
   ],
   "actionsNotInSchema": [],
   "capabilityActionsNotInSchema": [],
@@ -561,6 +573,7 @@
    "ViewSessionBrief",
    "DecideDecision",
    "VoiceNavigate",
+   "InviteMeetingAssistant",
    "OpenDevboxShell",
    "RunDevboxTask",
    "DecideAgentChange",
@@ -575,7 +588,8 @@
    "ConnectLocalCompute",
    "ViewSessionBrief",
    "DecideDecision",
-   "VoiceNavigate"
+   "VoiceNavigate",
+   "InviteMeetingAssistant"
   ],
   "orgiq/org-leader": [
    "Search",
@@ -601,6 +615,7 @@
    "EditGuardrail",
    "DecideDecision",
    "VoiceNavigate",
+   "InviteMeetingAssistant",
    "ApproveTransaction"
   ],
   "orgiq/program-owner": [
@@ -617,7 +632,8 @@
    "ReviewRunbook",
    "DecideDecision",
    "VoiceNavigate",
-   "CreateInitiative"
+   "CreateInitiative",
+   "InviteMeetingAssistant"
   ],
   "orgiq/sme": [
    "Search",
@@ -636,6 +652,7 @@
    "ReviewRunbook",
    "DecideDecision",
    "VoiceNavigate",
+   "InviteMeetingAssistant",
    "OpenDevboxShell",
    "RunDevboxTask",
    "DecideAgentChange",
@@ -3120,6 +3137,12 @@
    "note": "dev-only mock control plane"
   },
   {
+   "pattern": "^\\w+ \\/api\\/dev\\/calls\\/:[^/]+\\/transcript-lines$",
+   "decision": "n/a",
+   "tool": null,
+   "note": "dev-only transcript-line injector (mock world and flag only)"
+  },
+  {
    "pattern": "^\\w+ \\/api\\/observability\\/test-fixtures\\/",
    "decision": "n/a",
    "tool": null,
@@ -3472,6 +3495,12 @@
    "decision": "never",
    "tool": null,
    "note": "creating an initiative is a form on the page (CreateInitiative)"
+  },
+  {
+   "pattern": "^(POST|GET) \\/api\\/calls\\/:[^/]+\\/assistant\\/(invite|pause|resume|dismiss|ack|state|transcript)$",
+   "decision": "never",
+   "tool": null,
+   "note": "the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"
   },
   {
    "pattern": "^POST \\/api\\/sprints$",
@@ -4268,7 +4297,7 @@
   {"method":"PUT","path":"/api/graph/work-items/:id/documents/:documentId","source":"src/routes/work-documents.ts:144","declaredAt":"src/routes/work-documents.ts:144","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"documents","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"acceptance criteria, decisions, document links and runbook pins are edited on the item"}},
   {"method":"GET","path":"/api/graph/work-items/:id/documents/candidates","source":"src/routes/work-documents.ts:135","declaredAt":"src/routes/work-documents.ts:135","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"documents","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"PUT","path":"/api/graph/work-items/:id/runbook-pins","source":"src/routes/work-items.ts:929","declaredAt":"src/routes/work-items.ts:929","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"DispatchAgentRun","actions":["DispatchAgentRun"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"acceptance criteria, decisions, document links and runbook pins are edited on the item"}},
-  {"method":"GET","path":"/api/health","source":"src/index.ts:233","declaredAt":"src/index.ts:233","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"health","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
+  {"method":"GET","path":"/api/health","source":"src/index.ts:233","declaredAt":"src/index.ts:236","stale":true,"snapshot":true,"tenants":["any"],"kind":"internal","family":"health","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
   {"method":"GET","path":"/api/identity/policies","source":"src/routes/identity.ts:355","declaredAt":"src/routes/identity.ts:355","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"identity","cedarAction":"ViewIdentityAdmin","actions":["ViewIdentityAdmin"],"holders":["orgiq/hr-admin"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"users, grants, Cedar policies and schema"}},
   {"method":"POST","path":"/api/identity/policies","source":"src/routes/identity.ts:373","declaredAt":"src/routes/identity.ts:373","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"identity","cedarAction":"ViewIdentityAdmin","actions":["ViewIdentityAdmin","EditPolicy"],"holders":["orgiq/hr-admin"],"writePolicy":"skipped","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"users, grants, Cedar policies and schema"}},
   {"method":"DELETE","path":"/api/identity/policies/:id","source":"src/routes/identity.ts:415","declaredAt":"src/routes/identity.ts:415","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"identity","cedarAction":"ViewIdentityAdmin","actions":["ViewIdentityAdmin","EditPolicy"],"holders":["orgiq/hr-admin"],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"users, grants, Cedar policies and schema"}},
@@ -4711,7 +4740,7 @@
   {"method":"GET","path":"/api/work/sweeps/jobs/:id","source":"src/routes/work.ts:461","declaredAt":"src/routes/work.ts:461","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"bots","cedarAction":null,"actions":[],"floor":["ViewWork"],"writePolicy":null,"pageId":null,"coveredBy":["queue_work"],"v2":{"decision":"read","tool":"queue_work","note":"mapsTo"}},
   {"method":"POST","path":"/api/work/sweeps/run","source":"src/routes/work.ts:429","declaredAt":"src/routes/work.ts:429","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"bots","cedarAction":null,"actions":[],"floor":["RunSweeps","ViewWork"],"unresolvedGates":["forBackground"],"writePolicy":"allowed","pageId":null,"coveredBy":["queue_work"],"v2":{"decision":"confirm","tool":"queue_work","note":"mapsTo"}},
   {"method":"GET","path":"/api/work/sweeps/runs","source":"src/routes/work.ts:486","declaredAt":"src/routes/work.ts:486","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"bots","cedarAction":"ManageBots","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageBots","floor":["ViewWork"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":["summary"],"v2":{"decision":"read","tool":"summary","note":"mapsTo"}},
-  {"method":"GET","path":"/health","source":"src/index.ts:232","declaredAt":"src/index.ts:232","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"health","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
+  {"method":"GET","path":"/health","source":"src/index.ts:232","declaredAt":"src/index.ts:235","stale":true,"snapshot":true,"tenants":["any"],"kind":"internal","family":"health","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
   {"method":"DELETE","path":"/internal/devbox/:sessionId","source":"src/routes/internal-devbox.ts:381","declaredAt":"src/routes/internal-devbox.ts:381","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"compute","cedarAction":null,"actions":[],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
   {"method":"GET","path":"/internal/devbox/:sessionId/files","source":"src/routes/internal-devbox.ts:330","declaredAt":"src/routes/internal-devbox.ts:330","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"compute","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
   {"method":"GET","path":"/internal/devbox/:sessionId/files/:fileId","source":"src/routes/internal-devbox.ts:352","declaredAt":"src/routes/internal-devbox.ts:352","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"compute","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
@@ -4728,17 +4757,25 @@
   {"method":"POST","path":"/internal/work-graph/compute-capabilities/open","source":"src/routes/internal-work-graph-compute.ts:114","declaredAt":"src/routes/internal-work-graph-compute.ts:114","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"compute","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
   {"method":"POST","path":"/internal/work-graph/compute-capabilities/revalidate","source":"src/routes/internal-work-graph-compute.ts:165","declaredAt":"src/routes/internal-work-graph-compute.ts:165","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"compute","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
   {"method":"POST","path":"/internal/work-graph/compute-capabilities/use","source":"src/routes/internal-work-graph-compute.ts:173","declaredAt":"src/routes/internal-work-graph-compute.ts:173","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"compute","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
-  {"method":"GET","path":"/livez","source":"src/index.ts:234","declaredAt":"src/index.ts:234","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"health","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
+  {"method":"GET","path":"/livez","source":"src/index.ts:234","declaredAt":"src/index.ts:237","stale":true,"snapshot":true,"tenants":["any"],"kind":"internal","family":"health","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
+  {"method":"POST","path":"/api/dev/calls/:callId/transcript-lines","source":"src/routes/meeting-assistant-dev.ts:54","declaredAt":"src/routes/meeting-assistant-dev.ts:54","stale":false,"snapshot":false,"tenants":["any"],"kind":"internal","family":"social.calls","cedarAction":null,"actions":[],"machineAuth":true,"unresolvedGates":["gate"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
+  {"method":"POST","path":"/api/calls/:callId/assistant/invite","source":"src/routes/meeting-assistant.ts:82","declaredAt":"src/routes/meeting-assistant.ts:82","stale":false,"snapshot":false,"tenants":["orgiq"],"kind":"write","family":"social.calls","cedarAction":"InviteMeetingAssistant","actions":["InviteMeetingAssistant"],"unresolvedGates":["flagGate","refuseMasquerade"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
+  {"method":"POST","path":"/api/calls/:callId/assistant/pause","source":"src/routes/meeting-assistant.ts:134","declaredAt":"src/routes/meeting-assistant.ts:134","stale":false,"snapshot":false,"tenants":["orgiq"],"kind":"write","family":"social.calls","cedarAction":null,"actions":[],"unresolvedGates":["move","flagGate","refuseMasquerade"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
+  {"method":"POST","path":"/api/calls/:callId/assistant/resume","source":"src/routes/meeting-assistant.ts:135","declaredAt":"src/routes/meeting-assistant.ts:135","stale":false,"snapshot":false,"tenants":["orgiq"],"kind":"write","family":"social.calls","cedarAction":null,"actions":[],"unresolvedGates":["move","flagGate","refuseMasquerade"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
+  {"method":"POST","path":"/api/calls/:callId/assistant/dismiss","source":"src/routes/meeting-assistant.ts:136","declaredAt":"src/routes/meeting-assistant.ts:136","stale":false,"snapshot":false,"tenants":["orgiq"],"kind":"write","family":"social.calls","cedarAction":null,"actions":[],"unresolvedGates":["move","flagGate","refuseMasquerade"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
+  {"method":"POST","path":"/api/calls/:callId/assistant/ack","source":"src/routes/meeting-assistant.ts:138","declaredAt":"src/routes/meeting-assistant.ts:138","stale":false,"snapshot":false,"tenants":["orgiq"],"kind":"write","family":"social.calls","cedarAction":null,"actions":[],"unresolvedGates":["flagGate","refuseMasquerade"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
+  {"method":"GET","path":"/api/calls/:callId/assistant/state","source":"src/routes/meeting-assistant.ts:147","declaredAt":"src/routes/meeting-assistant.ts:147","stale":false,"snapshot":false,"tenants":["orgiq"],"kind":"read","family":"social.calls","cedarAction":null,"actions":[],"unresolvedGates":["flagGate","refuseMasquerade"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
+  {"method":"GET","path":"/api/calls/:callId/assistant/transcript","source":"src/routes/meeting-assistant.ts:161","declaredAt":"src/routes/meeting-assistant.ts:161","stale":false,"snapshot":false,"tenants":["orgiq"],"kind":"read","family":"social.calls","cedarAction":null,"actions":[],"unresolvedGates":["flagGate","refuseMasquerade"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
   {"method":"GET","path":"/api/social/plane/search","source":"src/routes/tenant-search.ts:127","declaredAt":"src/routes/tenant-search.ts:127","stale":false,"snapshot":false,"tenants":["orgiq","assessment","pipelines"],"kind":"read","family":"search","cedarAction":"ViewSocial","actions":["ViewSocial"],"socialGate":true,"holders":["social/community-admin","social/moderator","social/participant"],"writePolicy":null,"pageId":null,"coveredBy":["activity","call"],"v2":{"decision":"read","tool":"activity","note":"mapsTo"}},
   {"method":"GET","path":"/api/social/plane/search/answer","source":"src/routes/tenant-search.ts:127","declaredAt":"src/routes/tenant-search.ts:127","stale":false,"snapshot":false,"tenants":["orgiq","assessment","pipelines"],"kind":"read","family":"search","cedarAction":"ViewSocial","actions":["ViewSocial"],"socialGate":true,"holders":["social/community-admin","social/moderator","social/participant"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"search","note":"the tenant index"}},
-  {"method":"GET","path":"/api/assessment/search","source":"src/index.ts:322","declaredAt":"src/index.ts:322","stale":false,"snapshot":false,"tenants":["assessment"],"kind":"read","family":"search","cedarAction":"ViewAssessment","actions":["ViewAssessment"],"holders":["assessment/assessor","assessment/lead-assessor","assessment/program-lead"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
-  {"method":"GET","path":"/api/assessment/search/answer","source":"src/index.ts:322","declaredAt":"src/index.ts:322","stale":false,"snapshot":false,"tenants":["assessment"],"kind":"read","family":"search","cedarAction":"ViewAssessment","actions":["ViewAssessment"],"holders":["assessment/assessor","assessment/lead-assessor","assessment/program-lead"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
-  {"method":"GET","path":"/api/social/search","source":"src/index.ts:335","declaredAt":"src/index.ts:335","stale":false,"snapshot":false,"tenants":["social"],"kind":"read","family":"search","cedarAction":"ViewSocial","actions":["ViewSocial"],"socialGate":true,"holders":["social/community-admin","social/moderator","social/participant"],"writePolicy":null,"pageId":null,"coveredBy":["search","activity","call"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
-  {"method":"GET","path":"/api/social/search/answer","source":"src/index.ts:335","declaredAt":"src/index.ts:335","stale":false,"snapshot":false,"tenants":["social"],"kind":"read","family":"search","cedarAction":"ViewSocial","actions":["ViewSocial"],"socialGate":true,"holders":["social/community-admin","social/moderator","social/participant"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
-  {"method":"GET","path":"/api/pipelines/search","source":"src/index.ts:369","declaredAt":"src/index.ts:369","stale":false,"snapshot":false,"tenants":["pipelines"],"kind":"read","family":"search","cedarAction":"ViewPipelines","actions":["ViewPipelines"],"holders":["pipelines/author","pipelines/operator","pipelines/pipeline-admin"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
-  {"method":"GET","path":"/api/pipelines/search/answer","source":"src/index.ts:369","declaredAt":"src/index.ts:369","stale":false,"snapshot":false,"tenants":["pipelines"],"kind":"read","family":"search","cedarAction":"ViewPipelines","actions":["ViewPipelines"],"holders":["pipelines/author","pipelines/operator","pipelines/pipeline-admin"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
-  {"method":"GET","path":"/api/access/search","source":"src/index.ts:373","declaredAt":"src/index.ts:373","stale":false,"snapshot":false,"tenants":["access"],"kind":"read","family":"search","cedarAction":"ViewAccess","actions":["ViewAccess"],"holders":["access/access-admin","access/approver","access/requester"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
-  {"method":"GET","path":"/api/access/search/answer","source":"src/index.ts:373","declaredAt":"src/index.ts:373","stale":false,"snapshot":false,"tenants":["access"],"kind":"read","family":"search","cedarAction":"ViewAccess","actions":["ViewAccess"],"holders":["access/access-admin","access/approver","access/requester"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
+  {"method":"GET","path":"/api/assessment/search","source":"src/index.ts:327","declaredAt":"src/index.ts:327","stale":false,"snapshot":false,"tenants":["assessment"],"kind":"read","family":"search","cedarAction":"ViewAssessment","actions":["ViewAssessment"],"holders":["assessment/assessor","assessment/lead-assessor","assessment/program-lead"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
+  {"method":"GET","path":"/api/assessment/search/answer","source":"src/index.ts:327","declaredAt":"src/index.ts:327","stale":false,"snapshot":false,"tenants":["assessment"],"kind":"read","family":"search","cedarAction":"ViewAssessment","actions":["ViewAssessment"],"holders":["assessment/assessor","assessment/lead-assessor","assessment/program-lead"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
+  {"method":"GET","path":"/api/social/search","source":"src/index.ts:340","declaredAt":"src/index.ts:340","stale":false,"snapshot":false,"tenants":["social"],"kind":"read","family":"search","cedarAction":"ViewSocial","actions":["ViewSocial"],"socialGate":true,"holders":["social/community-admin","social/moderator","social/participant"],"writePolicy":null,"pageId":null,"coveredBy":["search","activity","call"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
+  {"method":"GET","path":"/api/social/search/answer","source":"src/index.ts:340","declaredAt":"src/index.ts:340","stale":false,"snapshot":false,"tenants":["social"],"kind":"read","family":"search","cedarAction":"ViewSocial","actions":["ViewSocial"],"socialGate":true,"holders":["social/community-admin","social/moderator","social/participant"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
+  {"method":"GET","path":"/api/pipelines/search","source":"src/index.ts:377","declaredAt":"src/index.ts:377","stale":false,"snapshot":false,"tenants":["pipelines"],"kind":"read","family":"search","cedarAction":"ViewPipelines","actions":["ViewPipelines"],"holders":["pipelines/author","pipelines/operator","pipelines/pipeline-admin"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
+  {"method":"GET","path":"/api/pipelines/search/answer","source":"src/index.ts:377","declaredAt":"src/index.ts:377","stale":false,"snapshot":false,"tenants":["pipelines"],"kind":"read","family":"search","cedarAction":"ViewPipelines","actions":["ViewPipelines"],"holders":["pipelines/author","pipelines/operator","pipelines/pipeline-admin"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
+  {"method":"GET","path":"/api/access/search","source":"src/index.ts:381","declaredAt":"src/index.ts:381","stale":false,"snapshot":false,"tenants":["access"],"kind":"read","family":"search","cedarAction":"ViewAccess","actions":["ViewAccess"],"holders":["access/access-admin","access/approver","access/requester"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
+  {"method":"GET","path":"/api/access/search/answer","source":"src/index.ts:381","declaredAt":"src/index.ts:381","stale":false,"snapshot":false,"tenants":["access"],"kind":"read","family":"search","cedarAction":"ViewAccess","actions":["ViewAccess"],"holders":["access/access-admin","access/approver","access/requester"],"writePolicy":null,"pageId":null,"coveredBy":["search"],"v2":{"decision":"read","tool":"search","note":"mapsTo"}},
   {"method":"PAGE","path":"/iq/work","source":"portal/src/components/shell/portalCommands.ts:108","tenants":["orgiq"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Automate","group":"Build","roles":null,"pageId":"automate","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
   {"method":"PAGE","path":"/iq/work/changes","source":"portal/src/components/shell/portalCommands.ts:111","tenants":["orgiq"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Graph updates","group":"Build","roles":null,"pageId":"graph-updates","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},
   {"method":"PAGE","path":"/iq/work/queue","source":"portal/src/components/shell/portalCommands.ts:113","tenants":["orgiq"],"kind":"navigate","family":"navigate","cedarAction":null,"label":"Work Queue","group":"Build","roles":null,"pageId":"work-queue","coveredBy":["open"],"v2":{"decision":"open","tool":"open","note":"a page id"}},

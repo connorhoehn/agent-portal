@@ -109,3 +109,8 @@ export class MemoryAssistantStore implements AssistantStore {
     return gone;
   }
 }
+
+/** The initiative a call lobby belongs to (`orgiq:initiative:<id>`), or null. */
+export function initiativeOfLobby(lobby: string): string | null {
+  return /^orgiq:initiative:([A-Za-z0-9:_-]{1,200})$/.exec(lobby)?.[1] ?? null;
+}

@@ -17,13 +17,12 @@ import { requireAction, requireTenant, resolveSession } from '../lib/authz.js';
 import { callChatRuntime } from '../lib/call-chat.js';
 import type { Session } from '../lib/session.js';
 import {
-  assistantIntake, assistantStore, meetingAssistantEnabled, TranscriptSourceNotConfigured,
+  assistantIntake, assistantStore, initiativeOfLobby, meetingAssistantEnabled, TranscriptSourceNotConfigured,
   type AssistantRecord,
 } from '../lib/meeting-assistant/index.js';
 
 export const meetingAssistantRouter = Router({ mergeParams: true });
 
-const INITIATIVE_LOBBY = /^orgiq:initiative:([A-Za-z0-9:_-]{1,200})$/;
 
 function sessionOf(req: Request): Session {
   const s = resolveSession(req);
@@ -101,7 +100,7 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
   startListening();
   // `invited` is the moment of the invite; the inviter acknowledges by inviting, so listening starts at once.
   const { record } = await store.create({
-    callId, tenant: session.tenant, lobby, initiativeId: INITIATIVE_LOBBY.exec(lobby)?.[1] ?? null, state: 'invited',
+    callId, tenant: session.tenant, lobby, initiativeId: initiativeOfLobby(lobby), state: 'invited',
     invitedBy: session.sub, invitedAt: Date.now(), pausedBy: null, leftAt: null, leftBy: null,
     acked: [session.sub], attendees: [...new Set(present)], presentAtInvite: [...new Set(present)],
     requests: 0, linesStored: 0, nextSeq: 1, pendingRequests: [],
