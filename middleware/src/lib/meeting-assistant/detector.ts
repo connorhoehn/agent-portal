@@ -73,7 +73,10 @@ const IMPERATIVES = new Set([
   'open', 'list', 'remind', 'schedule', 'send', 'give', 'set', 'update', 'check', 'look', 'pull', 'file', 'log',
   'post', 'share', 'put', 'take', 'note', 'what', 'whats', "what's", 'who', 'when', 'where', 'how', 'why', 'which',
 ]);
-/** Whisper's known silence hallucinations, matched whole and only on a caption of two words or fewer. */
+/**
+ * Whisper's known silence hallucinations, matched whole and only on a caption of two words or fewer.
+ * PROVISIONAL: the words now come from a live session's transcript, which may not produce these.
+ */
 export const WHISPER_FILLERS = new Set([
   'thank you', 'thanks', 'you', 'bye', 'bye bye', 'goodbye', 'thanks for watching', 'okay', 'ok', 'uh', 'um', 'hmm', 'mm', 'mhm', 'the end',
 ]);
@@ -229,4 +232,15 @@ export class RequestDetector {
     if (!text) return [{ type: 'cancel', callId: this.callId, askedBy: o.askedBy, lines: o.lines, reason: 'empty' }];
     return [{ type: 'request', callId: this.callId, askedBy: o.askedBy, text, lines: o.lines, startedAt: o.startedAt, endedAt: o.endedAt }];
   }
+}
+
+/**
+ * Name lock: did `userId` say the name in the `windowMs` before `atMs`? True when any line attributed to
+ * that person (as `userId` or listed in `speakers`, so an overlapped line counts for each of them) ending in
+ * [atMs - windowMs, atMs] contains an addressing mention of the name by `findAddress`. A line's end is
+ * `at`. Pure; the audio side of the gate is a later package.
+ */
+export function nameLock(lines: readonly TranscriptLine[], userId: string, atMs: number, windowMs = 20_000): boolean {
+  return lines.some((l) => (l.userId === userId || l.speakers?.includes(userId) === true)
+    && l.at <= atMs && l.at >= atMs - windowMs && findAddress(l.text) !== null);
 }

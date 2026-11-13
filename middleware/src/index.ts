@@ -49,6 +49,9 @@ import { conversationAgentRouter, socialAgentRouter } from './routes/agent-loop.
 import { socialDeckRouter } from './routes/social-deck.js';
 import { callPagesRouter } from './routes/call-pages.js';
 import { callChatRouter } from './routes/call-chat.js';
+import { meetingAssistantRouter } from './routes/meeting-assistant.js';
+import { meetingAssistantDevRouter } from './routes/meeting-assistant-dev.js';
+import { assistantStore, meetingAssistantEnabled, startRetentionSweep as startTranscriptRetentionSweep } from './lib/meeting-assistant/index.js';
 import { pipelinesRouter } from './routes/pipelines.js';
 import { accessRouter } from './routes/access.js';
 import { accessQuickRouter } from './routes/access-requests-quick.js';
@@ -237,6 +240,8 @@ app.get('/livez', livezHandler);
 // stamp X-Mock-Scenario on every response; 404s every route, and stamps
 // nothing, unless the mock providers are on and NODE_ENV !== 'production'.
 app.use(mockControlRouter);
+// Mock-only transcript-line injector for the meeting assistant (404 unless mocks + flag are on).
+app.use(meetingAssistantDevRouter);
 
 app.use('/api/session', sessionRouter);
 // The voice navigator: mint, tool-call rows, close (docs/voice-navigator-spec.md §6, §7),
@@ -365,6 +370,9 @@ app.use('/api/uploads', createUploadsRouter(
   }));
 app.use('/api/calls', callPagesRouter);
 app.use('/api/calls', callChatRouter);
+// The meeting assistant (Nova): flag-gated, a call seat required (routes/meeting-assistant.ts).
+app.use('/api/calls/:callId/assistant', meetingAssistantRouter);
+if (meetingAssistantEnabled()) startTranscriptRetentionSweep(assistantStore());
 app.use('/api/social', requireTenant('social'), socialRouter);
 app.use('/api/pipelines/search', requireTenant('pipelines'), requireAction('ViewPipelines'), tenantSearchRouter('pipelines'));
 app.use('/api/pipelines', requireTenant('pipelines'), pipelinesRouter);

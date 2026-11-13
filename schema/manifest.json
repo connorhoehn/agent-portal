@@ -341,6 +341,12 @@
       "why": "The voice navigator's sessions, tool-call rows and per-session event log (docs/voice-navigator-spec.md §7, §9): one row per minted session, one per reported tool call and one per structured event (at most 500 per session, kept 30 days), never audio, transcripts or arguments. FKs spend_holds, so it loads after spend_holds_schema.sql. Tenant tables, so row_level_security.sql lists all three."
     },
     {
+      "id": "meeting_assistant_schema",
+      "file": "meeting_assistant_schema.sql",
+      "kind": "repeatable",
+      "why": "The meeting assistant's per-call state and its transcript lines (docs/meeting-assistant-design.md): words kept 30 days by default, never audio. Standalone, no FK outside its own two tables. Tenant tables, so row_level_security.sql lists both."
+    },
+    {
       "id": "pipeline_schema",
       "file": "pipeline_schema.sql",
       "kind": "repeatable",

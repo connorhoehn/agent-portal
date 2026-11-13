@@ -1,7 +1,7 @@
 // The detector, built from captions observed in the 13 November measurement run
 // (docs/meeting-assistant-design.md, "Spike result"). Time is a hand-driven clock: no sleeping.
 import {
-  RequestDetector, DETECTOR_LIMITS, findAddress, isFillerSliver, looksCut, parseCommand, appendText,
+  RequestDetector, DETECTOR_LIMITS, nameLock, findAddress, isFillerSliver, looksCut, parseCommand, appendText,
   type DetectorEvent,
 } from '../detector.js';
 import type { TranscriptLine } from '../types.js';
@@ -263,5 +263,30 @@ describe('caps', () => {
     for (let i = 0; i < 6 && !closed.length; i++) closed = say('u-vera', `and then step ${i} and`, 10_000 - 1);
     expect(requests(closed)).toHaveLength(1);
     expect(d.hasOpen('u-vera')).toBe(false);
+  });
+});
+
+describe('nameLock', () => {
+  const l = (userId: string, text: string, at: number, speakers?: string[]): TranscriptLine =>
+    ({ callId: 'call-1', seq: 1, userId, participantId: '', speakerName: userId, text, at, captionId: `c${at}`, ...(speakers ? { speakers } : {}) });
+
+  it('true when the person addressed the name inside the window, false outside it or for someone else', () => {
+    const lines = [l('u-vera', 'Nova, list the open items.', 100_000)];
+    expect(nameLock(lines, 'u-vera', 110_000)).toBe(true);
+    expect(nameLock(lines, 'u-vera', 120_000)).toBe(true);
+    expect(nameLock(lines, 'u-vera', 120_001)).toBe(false);
+    expect(nameLock(lines, 'u-vera', 99_999)).toBe(false);
+    expect(nameLock(lines, 'u-release', 110_000)).toBe(false);
+  });
+  it('a line without an addressing mention does not lock', () => {
+    expect(nameLock([l('u-vera', 'I think Nova could help with that budget question', 100_000)], 'u-vera', 101_000)).toBe(false);
+    expect(nameLock([l('u-vera', 'plain chatter', 100_000)], 'u-vera', 101_000)).toBe(false);
+  });
+  it('an overlapped line counts for each speaker listed, and a custom window applies', () => {
+    const lines = [l('u-vera', 'Nova, what is blocking the release?', 100_000, ['u-vera', 'u-release'])];
+    expect(nameLock(lines, 'u-release', 105_000)).toBe(true);
+    expect(nameLock(lines, 'u-vera', 105_000)).toBe(true);
+    expect(nameLock(lines, 'u-release', 105_000, 1000)).toBe(false);
+    expect(nameLock(lines, 'u-other', 105_000)).toBe(false);
   });
 });

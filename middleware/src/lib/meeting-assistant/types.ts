@@ -16,6 +16,11 @@ export interface TranscriptLine {
   /** Epoch milliseconds the caption ended (or arrived, when the source gave no time). */
   at: number;
   captionId: string;
+  /** Offsets in ms within the call session, when the source knows them. */
+  startMs?: number;
+  endMs?: number;
+  /** Everyone heard in this line when speech overlapped; `userId` is the primary speaker. Absent: just `userId`. */
+  speakers?: string[];
 }
 
 /** A request the detector found, waiting for the brain (package 4). */
@@ -54,12 +59,15 @@ export interface AssistantRecord {
   pendingRequests: PendingRequest[];
 }
 
-/** What a caption source hands the intake. `userId` is already a person; `participantId` may be empty. */
-export interface RawCaption {
+/** What a transcript source hands the intake. `userId` is already a person; `participantId` may be empty. */
+export interface RawLine {
   userId: string;
   text: string;
   at?: number;
   captionId?: string;
   participantId?: string;
   speakerName?: string;
+  startMs?: number;
+  endMs?: number;
+  speakers?: string[];
 }

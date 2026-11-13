@@ -433,6 +433,17 @@ export class CallChatRuntime implements CallLifecycleObserver {
       return rows.length ? rows : [closedRow(channel)];
     } catch { return [closedRow(channel)]; }
   }
+  /** The call's lobby name from the call store, or null when the call is gone (the meeting assistant records it). */
+  async lobbyOf(callId: string): Promise<string | null> {
+    return (await this.opts.calls.getCall(callId))?.lobbyName ?? null;
+  }
+  /**
+   * People who hold or held a seat in this call while it lives: the chat roster, active or departed.
+   * Empty once the call has ended (the roster is cleared with it).
+   */
+  async seatedUsers(callId: string): Promise<{ userId: string; active: boolean }[]> {
+    return (await this.memberRows(callId)).filter(row => row.userId !== '').map(row => ({ userId: row.userId, active: row.removedAt == null }));
+  }
   /**
    * A room chat's membership rows: the huddle's active members who are in
    * that room now, under the room's channel name. The huddle's join boundary
