@@ -150,3 +150,39 @@ export interface AssistantAction {
   decidedAt: number | null;
   resultText: string | null;
 }
+
+/** An action item in the minutes. The owner is set only when the SERVER matched a roster display name exactly. */
+export interface MinutesActionItem {
+  text: string;
+  ownerUserId?: string;
+  ownerName?: string;
+}
+
+/** Who wrote the minutes: the scripted rules (mock world), the provider's text model, or nobody (transcript only). */
+export type MinutesWriterKind = 'scripted' | 'openai' | 'none';
+
+/**
+ * The notes left behind when the assistant leaves (package 5). One per call. `deleted` marks a tombstone: the inviter
+ * deleted the record, its content is gone, and the call is never summarised again. Same retention as transcript lines.
+ */
+export interface MinutesRecord {
+  callId: string;
+  tenant: string;
+  lobby: string;
+  initiativeId: string | null;
+  callName: string;
+  startedAt: number;
+  endedAt: number;
+  invitedBy: string;
+  attendees: string[];
+  summary: string;
+  decisions: string[];
+  actionItems: MinutesActionItem[];
+  topics: string[];
+  lineCount: number;
+  /** The writer saw only part of the transcript (said plainly in the summary too). */
+  truncated: boolean;
+  writer: MinutesWriterKind;
+  createdAt: number;
+  deleted?: { at: number; by: string };
+}

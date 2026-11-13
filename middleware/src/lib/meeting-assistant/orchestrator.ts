@@ -28,6 +28,7 @@ import { assistantIntake } from './intake-select.js';
 import { assistantStore } from './store-select.js';
 import { callChatRuntime } from '../call-chat.js';
 import { CEILING_WARNING_SECONDS, assistantLimits } from './limits.js';
+import { finishMinutes } from './minutes-service.js';
 import { assistantSpend, listeningSecondsOf, settleFinished, type ReserveOutcome } from './spend.js';
 import type { AssistantStore } from './store.js';
 import type { LineIntake } from './intake.js';
@@ -738,7 +739,7 @@ export async function defaultRolesOf(userId: string, tenant: string): Promise<st
 let runtime: AssistantRuntime | null = null;
 export function assistantRuntime(): AssistantRuntime {
   return (runtime ??= new AssistantRuntime({
-    store: assistantStore, intake: assistantIntake, clock: Date.now, makeSession, rolesOf: defaultRolesOf, onFinished: (e) => settleFinished(e),
+    store: assistantStore, intake: assistantIntake, clock: Date.now, makeSession, rolesOf: defaultRolesOf, onFinished: async (e) => { await settleFinished(e); void finishMinutes(e.callId); },
   }));
 }
 export function setAssistantRuntime(next: AssistantRuntime | null): void { void runtime?.dispose(); runtime = next; }

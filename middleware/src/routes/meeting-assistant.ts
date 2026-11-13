@@ -13,6 +13,10 @@
 //                      the browser's result of running the tool as that person. The server hands it to the live session as data.
 //   GET  state       a seat. State, who invited, who still owes an ack, counters, pending requests.
 //   GET  transcript  people who hold or held a seat in this call, nobody else (admins included).
+//   GET  minutes     the same rule (`attendeeOf`): the notes the assistant left. 404 for everyone else, and while there are none.
+//   DELETE minutes | transcript   the INVITER only (an attendee who is not gets 403; anyone else 404): deletes the minutes AND the
+//                    transcript lines and leaves a tombstone, so they are never written again. Only after the assistant has left.
+//   (This file also exports `meetingsRouter`, mounted at /api/meetings: the caller's own attended meetings.)
 //
 // Every route needs: the flag on (else 404), the orgiq tenant, and a currently connected seat of THIS call
 // (lib/call-chat.ts assertMember) — except the transcript, which also serves people who have left or after
@@ -20,7 +24,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { AppError, asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
 import { requireAction, requireTenant, resolveSession } from '../lib/authz.js';
-import { callChatRuntime } from '../lib/call-chat.js';
+import { callChatRuntime, onCallChatFinished } from '../lib/call-chat.js';
 import type { Session } from '../lib/session.js'; import { getUser } from '../providers/identity.js';
 import {
   assistantIntake, assistantStore, initiativeOfLobby, meetingAssistantEnabled, TranscriptSourceNotConfigured,
@@ -28,6 +32,7 @@ import {
 } from '../lib/meeting-assistant/index.js';
 import { moveAction, nameOf, noticeText, postNoticeQuietly } from '../lib/meeting-assistant/chat.js';
 import { assistantRuntime, MAX_RESULT_BYTES, type StartContext } from '../lib/meeting-assistant/orchestrator.js';
+import { onCallEnded, trackMinutes } from '../lib/meeting-assistant/minutes-service.js';
 import { sessionAvailable } from '../lib/meeting-assistant/session-select.js';
 import { newAssistantSession, sessionOf as recordSession } from '../lib/meeting-assistant/types.js';
 import { assistantLimits } from '../lib/meeting-assistant/limits.js';
@@ -197,7 +202,7 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
       const who = await nameOf(session.sub, session.name);
       if (to === 'paused') await postNoticeQuietly(callId, noticeText.paused(who));
       if (to === 'listening') await postNoticeQuietly(callId, noticeText.resumed(who));
-      if (to === 'left') await postNoticeQuietly(callId, noticeText.dismissed(who), { leaving: true });
+      if (to === 'left') await postNoticeQuietly(callId, noticeText.dismissed(who, done.linesStored === 0), { leaving: true });
       if (to === 'left') {
         // Snapshot who was seated so they can still read the transcript after the call ends.
         for (const u of await callChatRuntime().seatedUsers(callId).catch(() => [])) await store.attend(callId, u.userId);
@@ -252,7 +257,8 @@ meetingAssistantRouter.post('/actions/:actionId/decision', asyncHandler(async (r
   const store = assistantStore();
   const record = await store.get(callId);
   if (!record) throw new NotFoundError('The assistant is not in this call');
-  if (record.state === 'left') throw new AppError(409, 'The assistant already left this call');
+  // The minutes' "Create a work item" cards (ids `m-...`) are offered after the assistant has left; every other card ends with it.
+  if (record.state === 'left' && !actionId.startsWith('m-')) throw new AppError(409, 'The assistant already left this call');
   const action = await store.getAction(callId, actionId);
   if (!action) throw new NotFoundError('No such action');
   if (action.askedBy !== session.sub) throw new AppError(403, 'Only the person who asked can decide this action');
@@ -310,15 +316,100 @@ function intParam(raw: unknown, name: string, min: number, max: number, fallback
   return Number(raw);
 }
 
+/**
+ * THE attendee rule, applied by every read of a call's words (transcript and minutes; the meeting list asks the store for
+ * the same test): the assistant has a record for this call in the caller's tenant, and the caller held a seat while it was
+ * there or holds one now. Same answer for "no assistant", "another tenant's call" and "you were not there": 404.
+ * Admins get no exception.
+ */
+export async function attendeeOf(session: Session, callId: string): Promise<AssistantRecord> {
+  const record = await assistantStore().get(callId);
+  const seated = (await callChatRuntime().seatedUsers(callId).catch(() => [])).some((u) => u.userId === session.sub);
+  if (!record || record.tenant !== session.tenant || !(record.attendees.includes(session.sub) || seated)) throw new NotFoundError('Not found');
+  return record;
+}
+
+/** A deleted record is gone for everyone, its transcript included. */
+async function liveRecordOf(session: Session, callId: string): Promise<AssistantRecord> {
+  const record = await attendeeOf(session, callId);
+  if ((await assistantStore().getMinutes(callId))?.deleted) throw new NotFoundError('Not found');
+  return record;
+}
+
 meetingAssistantRouter.get('/transcript', asyncHandler(async (req, res) => {
   const session = sessionOf(req); const callId = callIdOf(req);
   const after = intParam(req.query['after'], 'after', 0, 1_000_000_000, 0);
   const limit = intParam(req.query['limit'], 'limit', 1, 500, 100);
-  const store = assistantStore();
-  const record = await store.get(callId);
-  const seated = (await callChatRuntime().seatedUsers(callId).catch(() => [])).some((u) => u.userId === session.sub);
-  // Same answer for "no assistant", "another tenant's call" and "you were not there": nothing, 404.
-  if (!record || record.tenant !== session.tenant || !(record.attendees.includes(session.sub) || seated)) throw new NotFoundError('No transcript');
-  const lines = await store.lines(callId, after, limit);
+  await liveRecordOf(session, callId);
+  const lines = await assistantStore().lines(callId, after, limit);
   res.json({ callId, after, lines, next: lines.length ? lines[lines.length - 1]!.seq : after });
+}));
+
+/** Notes and transcript are personal data: reading them is attributed to the person who was there, so no masquerade. */
+function refuseMasqueradeRead(req: Request, res: Response, next: NextFunction): void {
+  if (resolveSession(req)?.act) { res.status(403).json({ error: 'stop masquerading to read meeting records; they belong to the people who were there', code: 'MASQUERADING' }); return; }
+  next();
+}
+
+async function namesOf(ids: readonly string[]): Promise<Array<{ userId: string; name: string }>> {
+  return Promise.all(ids.map(async (userId) => ({ userId, name: await nameOf(userId) })));
+}
+
+meetingAssistantRouter.get('/minutes', refuseMasqueradeRead, asyncHandler(async (req, res) => {
+  const session = sessionOf(req); const callId = callIdOf(req);
+  await liveRecordOf(session, callId);
+  const m = await assistantStore().getMinutes(callId);
+  if (!m || m.deleted) throw new NotFoundError('No minutes');
+  res.json({
+    callId, callName: m.callName, lobby: m.lobby, initiativeId: m.initiativeId, startedAt: m.startedAt, endedAt: m.endedAt,
+    invitedBy: m.invitedBy, invitedByName: await nameOf(m.invitedBy), attendees: await namesOf(m.attendees), summary: m.summary, decisions: m.decisions,
+    actionItems: m.actionItems, topics: m.topics, lineCount: m.lineCount, truncated: m.truncated, writer: m.writer, createdAt: m.createdAt,
+    youAreInviter: m.invitedBy === session.sub,
+  });
+}));
+
+/** The inviter's delete: minutes and transcript go, a tombstone stays. A second delete is a 404, like everyone else's. */
+const deleteRecord = asyncHandler(async (req, res) => {
+  const session = sessionOf(req); const callId = callIdOf(req);
+  const record = await liveRecordOf(session, callId);
+  if (record.invitedBy !== session.sub) throw new AppError(403, 'Only the person who invited the assistant can delete this record');
+  if (record.state !== 'left') throw new AppError(409, 'Dismiss the assistant before deleting its record');
+  const lines = await assistantStore().tombstoneMinutes(callId, session.sub, Date.now());
+  res.json({ callId, deleted: true, linesRemoved: lines });
+});
+meetingAssistantRouter.delete('/minutes', refuseMasqueradeRead, deleteRecord);
+meetingAssistantRouter.delete('/transcript', refuseMasqueradeRead, deleteRecord);
+
+// The call ended with the assistant still in it: it leaves with the call and the minutes are written. One subscription per process.
+let watchingCallEnd = false;
+function watchCallEnd(): void {
+  if (watchingCallEnd) return;
+  watchingCallEnd = true;
+  onCallChatFinished((callId, seated) => trackMinutes((async () => {
+    if (!meetingAssistantEnabled()) return;
+    const store = assistantStore();
+    if (!(await store.get(callId))) return;
+    for (const userId of seated) await store.attend(callId, userId);
+    await onCallEnded(callId, { stop: (id) => assistantRuntime().stop(id), stopIntake: (id) => assistantIntake().stop(id) });
+  })()));
+}
+watchCallEnd();
+
+/** `GET /api/meetings`: the meetings the caller attended with the assistant present, newest first. Never anyone else's. */
+export const meetingsRouter = Router();
+meetingsRouter.use(flagGate, requireTenant('orgiq'), refuseMasqueradeRead);
+meetingsRouter.get('/', asyncHandler(async (req, res) => {
+  const session = sessionOf(req);
+  const limit = intParam(req.query['limit'], 'limit', 1, 100, 25);
+  const rawBefore = req.query['before'];
+  if (rawBefore !== undefined && (typeof rawBefore !== 'string' || !/^\d{1,14}$/.test(rawBefore) || Number(rawBefore) < 1)) throw new ValidationError('before must be an epoch in milliseconds');
+  const before = rawBefore === undefined ? undefined : Number(rawBefore);
+  const initiative = req.query['initiative'];
+  if (initiative !== undefined && (typeof initiative !== 'string' || !/^[A-Za-z0-9:_-]{1,200}$/.test(initiative))) throw new ValidationError('Invalid initiative');
+  const rows = await assistantStore().listMinutes({ tenant: session.tenant, userId: session.sub, limit, ...(initiative ? { initiativeId: initiative } : {}), ...(before ? { before } : {}) });
+  const meetings = await Promise.all(rows.map(async (m) => ({
+    callId: m.callId, callName: m.callName, lobby: m.lobby, initiativeId: m.initiativeId, startedAt: m.startedAt, endedAt: m.endedAt,
+    attendees: (await namesOf(m.attendees)).map((a) => a.name), summary: m.summary, decisionCount: m.decisions.length, actionItemCount: m.actionItems.length,
+  })));
+  res.json({ meetings, next: rows.length === limit ? rows[rows.length - 1]!.endedAt : null });
 }));

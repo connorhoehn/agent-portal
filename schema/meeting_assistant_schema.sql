@@ -98,3 +98,29 @@ CREATE TABLE IF NOT EXISTS meeting_assistant_turns (
   PRIMARY KEY (call_id, turn_id)
 );
 CREATE INDEX IF NOT EXISTS meeting_assistant_turns_asker_idx ON meeting_assistant_turns (call_id, asked_by) WHERE status IN ('pending', 'running');
+
+-- Package 5: the minutes. One row per call, written once when the assistant leaves. `deleted_at` marks a tombstone (the inviter
+-- deleted the record: content gone, never written again). The same retention as transcript lines (created_at).
+CREATE TABLE IF NOT EXISTS meeting_minutes (
+  call_id       TEXT        PRIMARY KEY REFERENCES meeting_assistants (call_id) ON DELETE CASCADE,
+  tenant        TEXT        NOT NULL,
+  lobby         TEXT        NOT NULL,
+  initiative_id TEXT,
+  call_name     TEXT        NOT NULL DEFAULT '',
+  started_at    TIMESTAMPTZ NOT NULL,
+  ended_at      TIMESTAMPTZ NOT NULL,
+  invited_by    TEXT        NOT NULL,
+  attendees     JSONB       NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(attendees) = 'array'),
+  summary       TEXT        NOT NULL DEFAULT '',
+  decisions     JSONB       NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(decisions) = 'array'),
+  action_items  JSONB       NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(action_items) = 'array'),
+  topics        JSONB       NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(topics) = 'array'),
+  line_count    INTEGER     NOT NULL DEFAULT 0,
+  truncated     BOOLEAN     NOT NULL DEFAULT false,
+  writer        TEXT        NOT NULL CHECK (writer IN ('scripted', 'openai', 'none')),
+  created_at    TIMESTAMPTZ NOT NULL,
+  deleted_at    TIMESTAMPTZ,
+  deleted_by    TEXT
+);
+CREATE INDEX IF NOT EXISTS meeting_minutes_tenant_idx ON meeting_minutes (tenant, ended_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS meeting_minutes_created_idx ON meeting_minutes (created_at);

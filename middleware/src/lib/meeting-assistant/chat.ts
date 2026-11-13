@@ -40,8 +40,10 @@ export async function nameOf(userId: string, fallback?: string): Promise<string>
 }
 
 export interface PostOptions {
-  /** The dismiss notice is the one message allowed once the assistant has left. */
+  /** The dismiss notice is a message allowed once the assistant has left. */
   leaving?: boolean;
+  /** So is the minutes message after it (and the action cards that message offers): minutes.ts is the only caller. */
+  minutes?: boolean;
 }
 
 /** Is Nova in this call (a record that has not left)? */
@@ -56,7 +58,7 @@ export async function assistantPresent(callId: string): Promise<boolean> {
  */
 export async function postAsAssistant(callId: string, message: { text: string; metadata: AssistantMetadata }, opts: PostOptions = {}): Promise<ChatMessage | null> {
   const record = await assistantStore().get(callId);
-  if (!record || (record.state === 'left' && !opts.leaving)) return null;
+  if (!record || (record.state === 'left' && !opts.leaving && !opts.minutes)) return null;
   const at = new Date().toISOString();
   const row: ChatMessage = {
     id: messageId(at), clientId: 'server:assistant', userId: NOVA_USER_ID, channel: callChatChannel(callId),
@@ -74,7 +76,8 @@ export const noticeText = {
     `${NOVA_NAME} joined at ${inviterName}'s invitation. While ${NOVA_NAME} is listening, what you say in this call is sent to the speech provider and kept as text for ${retentionDays} days. Anyone here can pause or dismiss ${NOVA_NAME}.`,
   paused: (name: string): string => `${name} paused ${NOVA_NAME}. Nothing is being heard or stored.`,
   resumed: (name: string): string => `${name} resumed ${NOVA_NAME}. ${NOVA_NAME} is listening again.`,
-  dismissed: (name: string): string => `${name} dismissed ${NOVA_NAME}.`,
+  dismissed: (name: string, recordedNothing = false): string => `${name} dismissed ${NOVA_NAME}.${recordedNothing ? ' Nothing was recorded, so there are no minutes.' : ''}`,
+  nothingRecorded: `${NOVA_NAME} left. Nothing was recorded, so there are no minutes.`,
 };
 
 export function postNotice(callId: string, text: string, opts: PostOptions = {}): Promise<ChatMessage | null> {
@@ -103,7 +106,7 @@ export interface PostedAction { message: ChatMessage; created: boolean }
  * Offer an action as a card. The store keeps who asked and the decision; the chat message carries the card. The same
  * `actionId` twice posts one card (the second call returns the first). Null when the assistant is not in the call.
  */
-export async function postAction(callId: string, input: ActionInput): Promise<PostedAction | null> {
+export async function postAction(callId: string, input: ActionInput, opts: PostOptions = {}): Promise<PostedAction | null> {
   const store = assistantStore();
   const prior = await store.getAction(callId, input.actionId);
   if (prior) {
@@ -116,7 +119,7 @@ export async function postAction(callId: string, input: ActionInput): Promise<Po
     summary: input.summary, ...(input.detail?.length ? { detail: input.detail } : {}), tool: input.tool, status,
     ...(input.resultText ? { resultText: input.resultText } : {}),
   };
-  const message = await postAsAssistant(callId, { text: input.summary, metadata });
+  const message = await postAsAssistant(callId, { text: input.summary, metadata }, opts);
   if (!message) return null;
   const { created } = await store.createAction({
     callId, actionId: input.actionId, messageId: message.id, askedBy: input.askedBy, toolName: input.tool.name, argsDigest: input.tool.argsDigest,

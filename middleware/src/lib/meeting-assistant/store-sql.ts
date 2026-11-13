@@ -6,8 +6,8 @@
 // bumps `next_seq`, guarded by `state = 'listening'` and by the caption not being stored yet, and
 // the INSERT reads the claimed seq from it. No transaction needed, no lost or doubled line numbers.
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
-import type { AssistantAction, AssistantRecord, AssistantSession, AssistantState, AssistantTurn, PendingRequest, TranscriptLine, TurnKind, TurnStatus } from './types.js';
-import { MAX_PENDING_REQUESTS, type ActionChange, type AssistantStore, type StateChange, type TurnChange, type TurnFilter } from './store.js';
+import type { AssistantAction, AssistantRecord, MinutesActionItem, MinutesRecord, MinutesWriterKind, AssistantSession, AssistantState, AssistantTurn, PendingRequest, TranscriptLine, TurnKind, TurnStatus } from './types.js';
+import { MAX_PENDING_REQUESTS, type ActionChange, type AssistantStore, type MinutesFilter, type StateChange, type TurnChange, type TurnFilter } from './store.js';
 
 export type SqlExec = (sql: string, params?: SqlParameter[]) => Promise<Record<string, unknown>[]>;
 
@@ -74,6 +74,18 @@ export function actionFromRow(r: Record<string, unknown>): AssistantAction {
   return { callId: str(r['call_id']), actionId: str(r['action_id']), messageId: str(r['message_id']), askedBy: str(r['asked_by']),
     toolName: str(r['tool_name']), argsDigest: str(r['args_digest']), status: str(r['status']) as AssistantAction['status'],
     createdAt: ms(r['created_at']), decidedBy: strOrNull(r['decided_by']), decidedAt: msOrNull(r['decided_at']), resultText: strOrNull(r['result_text']) };
+}
+
+const MINUTES_COLUMNS = 'call_id, tenant, lobby, initiative_id, call_name, started_at, ended_at, invited_by, attendees, summary, decisions, action_items, topics, line_count, truncated, writer, created_at, deleted_at, deleted_by';
+
+export function minutesFromRow(r: Record<string, unknown>): MinutesRecord {
+  return {
+    callId: str(r['call_id']), tenant: str(r['tenant']), lobby: str(r['lobby']), initiativeId: strOrNull(r['initiative_id']), callName: str(r['call_name']),
+    startedAt: ms(r['started_at']), endedAt: ms(r['ended_at']), invitedBy: str(r['invited_by']), attendees: json<string[]>(r['attendees'], []),
+    summary: str(r['summary']), decisions: json<string[]>(r['decisions'], []), actionItems: json<MinutesActionItem[]>(r['action_items'], []), topics: json<string[]>(r['topics'], []),
+    lineCount: Number(r['line_count'] ?? 0), truncated: r['truncated'] === true || r['truncated'] === 't', writer: str(r['writer']) as MinutesWriterKind, createdAt: ms(r['created_at']),
+    ...(r['deleted_at'] != null ? { deleted: { at: ms(r['deleted_at']), by: str(r['deleted_by']) } } : {}),
+  };
 }
 
 /** The states a column list may name: constants only, never request input. */
@@ -275,6 +287,61 @@ export class SqlAssistantStore implements AssistantStore {
   async sweepLines(cutoffMs: number) {
     const rows = await this.exec(
       `WITH gone AS (DELETE FROM meeting_transcript_lines WHERE at <= :cutoff::timestamptz RETURNING 1) SELECT count(*) AS removed FROM gone`,
+      [s('cutoff', iso(cutoffMs))],
+    );
+    return Number(rows[0]?.['removed'] ?? 0);
+  }
+  async getMinutes(callId: string) {
+    const rows = await this.exec(`SELECT ${MINUTES_COLUMNS} FROM meeting_minutes WHERE call_id = :call`, [s('call', callId)]);
+    return rows[0] ? minutesFromRow(rows[0]) : null;
+  }
+
+  async putMinutes(m: MinutesRecord) {
+    const rows = await this.exec(
+      `INSERT INTO meeting_minutes (call_id, tenant, lobby, initiative_id, call_name, started_at, ended_at, invited_by, attendees, summary, decisions, action_items, topics, line_count, truncated, writer, created_at)
+       VALUES (:call, :tenant, :lobby, :initiative, :name, :started::timestamptz, :ended::timestamptz, :by, :attendees::jsonb, :summary, :decisions::jsonb, :items::jsonb, :topics::jsonb, :lines, :truncated, :writer, :created::timestamptz)
+       ON CONFLICT (call_id) DO NOTHING
+       RETURNING ${MINUTES_COLUMNS}`,
+      [s('call', m.callId), s('tenant', m.tenant), s('lobby', m.lobby), sOrNull('initiative', m.initiativeId), s('name', m.callName), s('started', iso(m.startedAt)), s('ended', iso(m.endedAt)),
+        s('by', m.invitedBy), s('attendees', JSON.stringify(m.attendees)), s('summary', m.summary), s('decisions', JSON.stringify(m.decisions)), s('items', JSON.stringify(m.actionItems)),
+        s('topics', JSON.stringify(m.topics)), n('lines', m.lineCount), { name: 'truncated', value: { booleanValue: m.truncated } }, s('writer', m.writer), s('created', iso(m.createdAt))],
+    );
+    if (rows[0]) return { minutes: minutesFromRow(rows[0]), created: true };
+    const existing = await this.getMinutes(m.callId);
+    if (!existing) throw new Error('meeting minutes vanished between insert and read (or the call has no assistant)');
+    return { minutes: existing, created: false };
+  }
+
+  async listMinutes(f: MinutesFilter) {
+    const rows = await this.exec(
+      `SELECT ${MINUTES_COLUMNS} FROM meeting_minutes
+       WHERE tenant = :tenant AND deleted_at IS NULL AND attendees ? :user${f.initiativeId ? ' AND initiative_id = :initiative' : ''}${f.before !== undefined ? ' AND ended_at < :before::timestamptz' : ''}
+       ORDER BY ended_at DESC, call_id ASC LIMIT :limit`,
+      [s('tenant', f.tenant), s('user', f.userId), ...(f.initiativeId ? [s('initiative', f.initiativeId)] : []), ...(f.before !== undefined ? [s('before', iso(f.before))] : []), n('limit', f.limit)],
+    );
+    return rows.map(minutesFromRow);
+  }
+
+  async tombstoneMinutes(callId: string, by: string, at: number) {
+    // One statement: the lines go, and the minutes row is written or blanked as a tombstone. A call with no assistant record has nothing to hold the row.
+    const rows = await this.exec(
+      `WITH gone AS (DELETE FROM meeting_transcript_lines WHERE call_id = :call RETURNING 1),
+            marked AS (
+              INSERT INTO meeting_minutes (call_id, tenant, lobby, initiative_id, started_at, ended_at, invited_by, writer, created_at, deleted_at, deleted_by)
+              SELECT call_id, tenant, lobby, initiative_id, invited_at, COALESCE(left_at, invited_at), invited_by, 'none', :at::timestamptz, :at::timestamptz, :by
+              FROM meeting_assistants WHERE call_id = :call
+              ON CONFLICT (call_id) DO UPDATE SET call_name = '', attendees = '[]'::jsonb, summary = '', decisions = '[]'::jsonb, action_items = '[]'::jsonb, topics = '[]'::jsonb,
+                line_count = 0, truncated = false, writer = 'none', deleted_at = :at::timestamptz, deleted_by = :by
+              RETURNING 1)
+       SELECT (SELECT count(*) FROM gone) AS removed`,
+      [s('call', callId), s('at', iso(at)), s('by', by)],
+    );
+    return Number(rows[0]?.['removed'] ?? 0);
+  }
+
+  async sweepMinutes(cutoffMs: number) {
+    const rows = await this.exec(
+      `WITH gone AS (DELETE FROM meeting_minutes WHERE created_at <= :cutoff::timestamptz RETURNING 1) SELECT count(*) AS removed FROM gone`,
       [s('cutoff', iso(cutoffMs))],
     );
     return Number(rows[0]?.['removed'] ?? 0);

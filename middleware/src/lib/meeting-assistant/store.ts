@@ -12,7 +12,7 @@
 //  * An action is created once per (call, actionId); `decideAction` moves it only from the statuses
 //    named in `from` and returns null otherwise, so two clicks decide once. A turn (a tool call waiting on the asker's
 //    browser) is the same: created once per (call, turnId), `moveTurn` moves it only from the statuses named.
-import type { AssistantAction, AssistantRecord, AssistantSession, AssistantState, AssistantTurn, PendingRequest, TranscriptLine, TurnStatus } from './types.js';
+import type { AssistantAction, AssistantRecord, MinutesRecord, AssistantSession, AssistantState, AssistantTurn, PendingRequest, TranscriptLine, TurnStatus } from './types.js';
 import { sessionOf } from './types.js';
 
 export const MAX_PENDING_REQUESTS = 20;
@@ -70,7 +70,19 @@ export interface AssistantStore {
   moveTurn(callId: string, turnId: string, change: TurnChange): Promise<AssistantTurn | null>;
   /** Delete lines at or before `cutoffMs` (epoch). Returns how many went. */
   sweepLines(cutoffMs: number): Promise<number>;
+  /** The call's minutes, or its tombstone (`deleted` set); null when none were written. */
+  getMinutes(callId: string): Promise<MinutesRecord | null>;
+  /** Write the call's minutes once; an existing row (minutes or tombstone) is returned with `created: false`. */
+  putMinutes(minutes: MinutesRecord): Promise<{ minutes: MinutesRecord; created: boolean }>;
+  /** Live minutes (not tombstones) for calls `userId` attended in `tenant`, newest `endedAt` first, strictly before `before` when given. */
+  listMinutes(filter: MinutesFilter): Promise<MinutesRecord[]>;
+  /** Delete the call's lines and replace its minutes with a tombstone (created when none exist), so they are not written again. Returns the lines removed. */
+  tombstoneMinutes(callId: string, by: string, at: number): Promise<number>;
+  /** Delete minutes and tombstones created at or before `cutoffMs`. Returns how many went. */
+  sweepMinutes(cutoffMs: number): Promise<number>;
 }
+
+export interface MinutesFilter { tenant: string; userId: string; initiativeId?: string; before?: number; limit: number }
 
 const copy = <T>(v: T): T => structuredClone(v);
 const addTo = (list: string[], id: string): void => { if (!list.includes(id)) list.push(id); };
@@ -80,6 +92,7 @@ export class MemoryAssistantStore implements AssistantStore {
   private readonly transcript = new Map<string, TranscriptLine[]>();
   private readonly actions = new Map<string, AssistantAction>();
   private readonly turns = new Map<string, AssistantTurn>();
+  private readonly minutes = new Map<string, MinutesRecord>();
 
   async get(callId: string) { const r = this.records.get(callId); return r ? copy(r) : null; }
 
@@ -203,6 +216,45 @@ export class MemoryAssistantStore implements AssistantStore {
     }
     return gone;
   }
+
+  async getMinutes(callId: string) { const m = this.minutes.get(callId); return m ? copy(m) : null; }
+
+  async putMinutes(minutes: MinutesRecord) {
+    const existing = this.minutes.get(minutes.callId);
+    if (existing) return { minutes: copy(existing), created: false };
+    this.minutes.set(minutes.callId, copy(minutes));
+    return { minutes: copy(minutes), created: true };
+  }
+
+  async listMinutes(f: MinutesFilter) {
+    return [...this.minutes.values()]
+      .filter((m) => !m.deleted && m.tenant === f.tenant && m.attendees.includes(f.userId) && (!f.initiativeId || m.initiativeId === f.initiativeId) && (f.before === undefined || m.endedAt < f.before))
+      .sort((a, b) => b.endedAt - a.endedAt || a.callId.localeCompare(b.callId)).slice(0, f.limit).map(copy);
+  }
+
+  async tombstoneMinutes(callId: string, by: string, at: number) {
+    const rows = this.transcript.get(callId) ?? [];
+    this.transcript.delete(callId);
+    const r = this.records.get(callId);
+    const old = this.minutes.get(callId);
+    this.minutes.set(callId, tombstone(callId, old, r, by, at));
+    return rows.length;
+  }
+
+  async sweepMinutes(cutoffMs: number) {
+    let gone = 0;
+    for (const [id, m] of this.minutes) if (m.createdAt <= cutoffMs) { this.minutes.delete(id); gone += 1; }
+    return gone;
+  }
+}
+
+/** What stays after a delete: who and when, nothing of the content. */
+export function tombstone(callId: string, old: MinutesRecord | undefined, record: AssistantRecord | undefined, by: string, at: number): MinutesRecord {
+  return {
+    callId, tenant: old?.tenant ?? record?.tenant ?? '', lobby: old?.lobby ?? record?.lobby ?? '', initiativeId: old?.initiativeId ?? record?.initiativeId ?? null,
+    callName: '', startedAt: old?.startedAt ?? 0, endedAt: old?.endedAt ?? 0, invitedBy: old?.invitedBy ?? record?.invitedBy ?? '', attendees: [],
+    summary: '', decisions: [], actionItems: [], topics: [], lineCount: 0, truncated: false, writer: 'none', createdAt: old?.createdAt ?? at, deleted: { at, by },
+  };
 }
 
 /** The initiative a call lobby belongs to (`orgiq:initiative:<id>`), or null. */

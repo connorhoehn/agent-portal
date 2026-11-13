@@ -7,9 +7,15 @@ const DAY_MS = 86_400_000;
 
 export function retentionDays(): number { return config.meetingAssistant?.transcriptRetentionDays ?? 30; }
 
-/** Delete every line older than the retention window. Returns how many were removed. */
+/**
+ * Delete every line, and every set of minutes (or tombstone), older than the retention window: minutes obey the
+ * transcript's retention. Returns how many LINES were removed.
+ */
 export async function sweepTranscripts(store: AssistantStore, nowMs: number = Date.now(), days: number = retentionDays()): Promise<number> {
-  return store.sweepLines(nowMs - days * DAY_MS);
+  const cutoff = nowMs - days * DAY_MS;
+  const lines = await store.sweepLines(cutoff);
+  await store.sweepMinutes(cutoff);
+  return lines;
 }
 
 /** Hourly sweep for a running server; unref'd so it never holds the process open. Returns the stopper. */

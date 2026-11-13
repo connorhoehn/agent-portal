@@ -98,7 +98,7 @@ describe('notices', () => {
     await post('resume', 'carol'); await post('resume', 'carol');
     await post('dismiss', 'alice'); await post('dismiss', 'alice'); await post('pause', 'bob');
     expect((await texts()).slice(1)).toEqual([
-      noticeText.paused('Bob Baker'), noticeText.resumed('carol'), noticeText.dismissed('Alice Ames'),
+      noticeText.paused('Bob Baker'), noticeText.resumed('carol'), noticeText.dismissed('Alice Ames', true),
     ]);
     expect((await texts())[1]).toBe('Bob Baker paused Nova. Nothing is being heard or stored.');
     expect((await texts())[3]).toBe('Alice Ames dismissed Nova.');
