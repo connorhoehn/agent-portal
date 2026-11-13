@@ -254,6 +254,26 @@ describe('the refusals', () => {
     expect(sessionOf((await store.get(CALL))!).refusedCalls).toBe(1);
   });
 
+  it('refuses the fourth tool call of one addressed request as "too many steps", counts it, and a new request starts fresh', async () => {
+    factory = () => { const s = new FakeSession(); sessions.push(s); return s; };
+    await runtime.stop(CALL); await store.transition(CALL, { from: ['listening'], to: 'listening', by: 'x', at: now });
+    runtime = new AssistantRuntime({ store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [] }, { tickMs: 0 });
+    await runtime.start(ctx);
+    const s = fake();
+    await store.appendLine({ callId: CALL, userId: ALICE, participantId: '', speakerName: 'Alice', text: 'Nova, find everything about logins', at: now - 3000, captionId: 'c1' });
+    for (const n of [1, 2, 3, 4]) { s.call(`call_${n}`, 'search', { query: `q${n}` }, 0); await flush(); }
+    expect(s.answersFor('call_4').map(([, o]) => o)).toEqual(['{"refused":"too many steps"}']);
+    expect(s.answersFor('call_1')).toEqual([]);
+    expect(sessionOf((await store.get(CALL))!).refusedCalls).toBe(1);
+    expect((await store.listTurns(CALL)).length).toBe(3);
+    // A second addressed request is its own window.
+    now += 1000;
+    await store.appendLine({ callId: CALL, userId: ALICE, participantId: '', speakerName: 'Alice', text: 'Nova, one more thing', at: now - 500, captionId: 'c2' });
+    s.call('call_5', 'search', { query: 'q5' }, 1000); await flush();
+    expect(s.answersFor('call_5')).toEqual([]);
+    expect((await store.listTurns(CALL)).length).toBe(4);
+  });
+
   it('with no attributed line in the window there is no asker: refused, nothing posted', async () => {
     await runtime.stop(CALL);
     factory = () => { const s = new FakeSession(); sessions.push(s); return s; };

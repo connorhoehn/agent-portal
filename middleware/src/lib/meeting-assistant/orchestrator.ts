@@ -40,6 +40,8 @@ export const READ_TURN_TTL_MS = 90_000;
 export const WRITE_TURN_TTL_MS = 10 * 60_000;
 /** How far back from a tool call the asker is looked for and the name lock reads (decision 3). */
 export const ASKER_WINDOW_MS = 20_000;
+/** Tool calls one addressed request may make; the next is refused with "too many steps". */
+export const MAX_CALLS_PER_REQUEST = 3;
 export const MAX_REPLACEMENTS = 3;
 /** The voice speaks a short acknowledgement the moment it delegates; output this soon after a delegation is not posted. */
 export const ACK_WINDOW_MS = 3000;
@@ -100,6 +102,8 @@ interface CallRun {
   calls: Map<string, CallState>;
   /** The model's call id behind each turn that is waiting on the asker's browser. */
   turnCalls: Map<string, string>;
+  /** Tool calls made so far for each addressed request, keyed by asker and the line that addressed Nova (decision: a cap on chained calls). */
+  requestCalls: Map<string, number>;
   holding: Set<string>;
   reply: ReplyContext;
   delegationAt: number;
@@ -176,7 +180,7 @@ export class AssistantRuntime {
     this.watchIntake();
     const run: CallRun = {
       ctx, session: null, unsubscribers: [], sessionStartedAt: 0, sessionNo: 0, pieceNo: 0, timeline: new VoicedTimeline(),
-      calls: new Map(), turnCalls: new Map(), holding: new Set(), reply: { asker: null, private: false, mute: false },
+      calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), holding: new Set(), reply: { asker: null, private: false, mute: false },
       delegationAt: -Infinity, answeredSinceDelegation: true, intentionalClose: false, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, sessionKind: 'scripted', chain: Promise.resolve(), finished: false,
     };
@@ -505,6 +509,14 @@ export class AssistantRuntime {
     // (b) The name lock: the asker said the name in the window before the call.
     const lines = await this.store.lines(callId, Math.max(0, record.nextSeq - 1 - 100), 100);
     if (!nameLock(lines, asker, atMs, ASKER_WINDOW_MS)) { await this.refuse(run, e.callId, 'not addressed'); return; }
+    // (b2) At most MAX_CALLS_PER_REQUEST calls per addressed request: text inside a record must not be able to lead the
+    // model into an open-ended chain of reads. A request is the asker plus the line that addressed Nova in the window.
+    const addressing = [...lines].reverse().find((l) => (l.userId === asker || l.speakers?.includes(asker) === true) && l.at <= atMs && l.at >= atMs - ASKER_WINDOW_MS && findAddress(l.text) !== null);
+    const requestKey = `${asker}|${addressing?.seq ?? 0}`;
+    const made = (run.requestCalls.get(requestKey) ?? 0) + 1;
+    run.requestCalls.set(requestKey, made);
+    if (run.requestCalls.size > 200) run.requestCalls.delete(run.requestCalls.keys().next().value as string);
+    if (made > MAX_CALLS_PER_REQUEST) { await this.refuse(run, e.callId, 'too many steps'); return; }
     const askerName = await nameOf(asker);
     const name = e.name;
     if (!voiceTool(name)) { await this.refuse(run, e.callId, 'unknown tool'); return; }

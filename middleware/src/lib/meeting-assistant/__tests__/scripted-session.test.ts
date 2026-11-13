@@ -1,5 +1,9 @@
 import { SCRIPT_FALLBACK, SCRIPT_RULES, ScriptedSession, scriptedSpeech, scriptFor } from '../scripted-session.js';
 import type { SessionEvents } from '../session.js';
+import AjvImport from 'ajv';
+import { meetingTools } from '../instructions.js';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const Ajv: any = (AjvImport as any).default ?? AjvImport;
 
 const flush = () => new Promise<void>((r) => setImmediate(r));
 
@@ -9,7 +13,7 @@ describe('the rule table', () => {
     ["What's 2 plus 2?", { say: 'Four.' }],
     ['please what is two plus two.', { say: 'Four.' }],
     ['create a work item for the login cookie bug', { call: { name: 'create', args: { kind: 'work-item', fields: { title: 'the login cookie bug' } } } }],
-    ['Create a work item for the login cookie bug and assign it to Priya.', { call: { name: 'create', args: { kind: 'work-item', fields: { title: 'the login cookie bug', assignee: 'Priya' } } } }],
+    ['Create a work item for the login cookie bug and assign it to Priya.', { call: { name: 'create', args: { kind: 'work-item', fields: { title: 'the login cookie bug' } } } }],
     ['how much budget do I have', { call: { name: 'budget', args: { scope: 'me' } } }],
     ["what's my budget?", { call: { name: 'budget', args: { scope: 'me' } } }],
     ['find the Kubernetes experts', { call: { name: 'search', args: { query: 'the Kubernetes experts' } } }],
@@ -66,5 +70,30 @@ describe('ScriptedSession', () => {
     expect(seen.usage).toEqual([{ seconds: 125 }]);
     expect(seen.closed).toEqual([{ reason: 'close_requested' }]);
     expect(s.appendContext('late')).toBe(false);
+  });
+});
+
+describe('scripted calls against the catalogue', () => {
+  // The scripted session must raise calls the real executor accepts, so the mock walk exercises the real path.
+  const phrases = [
+    'create a work item for the login cookie bug', 'create a work item for the login cookie bug and assign it to Priya',
+    'how much budget do I have', 'find the Kubernetes experts', 'search for runbooks about outages',
+  ];
+  it.each(phrases)('%s validates against the tenant tool schema', (text) => {
+    const step = scriptFor(text);
+    if (!('call' in step)) throw new Error('expected a call');
+    const tool = meetingTools('orgiq').find((t) => t.name === step.call.name);
+    expect(tool).toBeDefined();
+    const validate = new Ajv({ strict: false }).compile(tool!.parameters);
+    const ok = validate(step.call.args);
+    expect(validate.errors ?? []).toEqual([]);
+    expect(ok).toBe(true);
+  });
+  it('every rule that makes a call is covered by a phrase above', () => {
+    const covered = new Set(phrases.map((p) => SCRIPT_RULES.find((r) => r.match.test(p.replace(/[.!?\s]+$/, '')))?.id));
+    for (const r of SCRIPT_RULES) {
+      const step = r.run(r.match.exec('x') ?? ([ 'x', 'x' ] as unknown as RegExpMatchArray));
+      if ('call' in step) expect(covered.has(r.id)).toBe(true);
+    }
   });
 });

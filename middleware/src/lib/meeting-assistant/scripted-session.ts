@@ -23,14 +23,16 @@ export const SCRIPT_FALLBACK = 'I can help with work items, search and budgets i
 export const SCRIPT_RULES: readonly ScriptRule[] = [
   { id: 'arithmetic', match: /^what(?:'s| is) (?:two|2) plus (?:two|2)$/i, run: () => ({ say: 'Four.' }) },
   {
+    // The catalogue's work-item form takes a title, an initiative and a type; there is no assignee field, so a spoken
+    // "assign it to …" is dropped here the way the real model would have to drop it.
     id: 'create-work-item', match: /^create a work item for (.+?)(?: and assign it to (.+))?$/i,
-    run: (m) => ({ call: { name: 'create', args: { kind: 'work-item', fields: { title: m[1]!.trim(), ...(m[2] ? { assignee: m[2].trim() } : {}) } } } }),
+    run: (m) => ({ call: { name: 'create', args: { kind: 'work-item', fields: { title: m[1]!.trim().slice(0, 200) } } } }),
   },
   {
     id: 'budget', match: /^(?:how much (?:budget|money) do i have(?: left)?|what(?:'s| is) my budget|how much (?:have i|did i) spen[dt](?: this month)?)$/i,
     run: () => ({ call: { name: 'budget', args: { scope: 'me' } } }),
   },
-  { id: 'search', match: /^(?:find|search for|search) (.+)$/i, run: (m) => ({ call: { name: 'search', args: { query: m[1]!.trim() } } }) },
+  { id: 'search', match: /^(?:find|search for|search) (.+)$/i, run: (m) => ({ call: { name: 'search', args: { query: m[1]!.trim().slice(0, 200) } } }) },
 ];
 
 export function scriptFor(text: string): ScriptStep {
