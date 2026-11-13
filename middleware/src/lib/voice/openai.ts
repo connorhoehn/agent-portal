@@ -155,6 +155,37 @@ export class VoiceProviderError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
 }
 
+/** A plain text request failed before an answer (network, timeout). Never carries the key or the request body. */
+export class TextRequestError extends Error {
+  constructor(message: string, readonly kind: 'network' | 'timeout') { super(message); }
+}
+
+/**
+ * ONE plain Responses request (POST <base>/responses) for server-side text work such as the meeting minutes. The key is
+ * added here and goes nowhere else; the answer is the provider's JSON text. Retries once on a network error (not on a
+ * timeout or an HTTP status). Throws VoiceProviderError for a missing key, TextRequestError for a transport failure.
+ */
+export async function postTextResponse(body: unknown, opts: { timeoutMs: number }): Promise<{ status: number; text: string }> {
+  const key = apiKey();
+  if (!key) throw new VoiceProviderError(503, 'no OpenAI key configured');
+  const payload = JSON.stringify(body);
+  let lastError: TextRequestError | null = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), opts.timeoutMs);
+    try {
+      const res = await fetch(`${apiBase()}/responses`, {
+        method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: payload, signal: controller.signal,
+      });
+      return { status: res.status, text: await res.text() };
+    } catch (e) {
+      if (controller.signal.aborted) throw new TextRequestError('the text request timed out', 'timeout');
+      lastError = new TextRequestError(`the text request failed (${(e as { code?: string; cause?: { code?: string } }).cause?.code ?? 'network'})`, 'network');
+    } finally { clearTimeout(timer); }
+  }
+  throw lastError ?? new TextRequestError('the text request failed', 'network');
+}
+
 /**
  * The `session` object of `session.start` over the primary WebSocket (spec §1, "Endpoint" and "Session shape for
  * tools"): the WebRTC body without `client` (`client.data_channel` is refused on a socket) and with the PCM audio

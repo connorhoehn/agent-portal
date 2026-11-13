@@ -130,3 +130,48 @@ export async function settleFinished(e: { callId: string; usageSeconds: number; 
     console.warn('[meeting-assistant] spend settlement failed', (err as Error).message);
   }
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// The minutes (package 5): one text request, booked under `ma:<callId>:minutes` against the INVITER and the call's
+// initiative, through the same chokepoints as listening (reserveSpend, then a ledger row that settles its hold).
+
+export const minutesSourceId = (callId: string): string => `${sourceIdFor(callId)}:minutes`;
+
+export interface MinutesSpend {
+  /** Hold the estimated cost; a refusal means no model minutes (the record then carries a plain note). */
+  reserve(input: { callId: string; tenant: string; inviterId: string; initiativeId: string | null; estimateUsd: number }): Promise<ReserveOutcome>;
+  release(holdIds: readonly string[]): Promise<void>;
+  /** Book what the minutes cost. `reported` only when the provider's own token counts priced it. */
+  record(input: { callId: string; inviterId: string; initiativeId: string | null; tenant: string; model: string; costUsd: number | null; basis: 'reported' | 'estimated' | 'unknown'; tokensIn?: number; tokensOut?: number }): Promise<void>;
+}
+
+/** What a scripted (mock-world) minutes entry books: a small estimate, so the mock ledger shows the line. */
+export const SCRIPTED_MINUTES_USD = 0.001;
+
+export const realMinutesSpend: MinutesSpend = {
+  async reserve(i) {
+    const { reserveSpend, HOLD_GRACE_MS, spendRefusalResponse } = await import('../spend-holds.js');
+    const forecast = { costUsdP75: i.estimateUsd, costUsdP25: Math.round((i.estimateUsd / 4) * 10_000) / 10_000, confidence: 'prior' as const };
+    const held = await reserveSpend({
+      initiativeId: i.initiativeId, actorId: i.inviterId, source: 'meeting_assistant', sourceId: minutesSourceId(i.callId), forecast,
+      expiresInMs: 10 * 60_000 + HOLD_GRACE_MS, tenant: i.tenant,
+    });
+    if (held.kind === 'held') return { ok: true, holdId: held.holdId };
+    const out = spendRefusalResponse(held, { reason: 'budget', estimateUsd: i.estimateUsd });
+    return { ok: false, refusal: { status: out.status, body: out.body, ...(out.headers ? { headers: out.headers as Record<string, string> } : {}) } };
+  },
+  release: (ids) => realSpend.release(ids),
+  async record(i) {
+    const { recordSpend } = await import('../../providers/spend-ledger.js');
+    await recordSpend({
+      source: 'meeting_assistant', sourceId: minutesSourceId(i.callId), initiativeId: i.initiativeId, boxId: null, actorId: i.inviterId,
+      trigger: 'meeting-assistant-minutes', model: i.model, costUsd: i.costUsd, costBasis: i.basis, provider: 'openai',
+      ...(i.tokensIn !== undefined ? { inputTokens: i.tokensIn } : {}), ...(i.tokensOut !== undefined ? { outputTokens: i.tokensOut } : {}),
+      ...(i.costUsd !== null ? { estimatedCostUsd: i.costUsd } : {}),
+    });
+  },
+};
+
+let minutesSpendImpl: MinutesSpend = realMinutesSpend;
+export function minutesSpend(): MinutesSpend { return minutesSpendImpl; }
+export function setMinutesSpend(next: MinutesSpend | null): void { minutesSpendImpl = next ?? realMinutesSpend; }
