@@ -1034,10 +1034,12 @@ The first six packages are walked by their own journey, `npm run journey:value-s
 
 All fourteen are built and walked: `npm run journey:value-sweep` covers each on the default mock world at 1440 and 1280. Left after the sweep, none blocking:
 
-- My work is empty for an account with no linked person (the default admin persona in the mock). Link the persona or say so on the page.
-- The spend report cannot filter to one bot; the bot page's link opens the whole bot grouping.
+- ~~My work is empty for an account with no linked person.~~ Done (13 November): the page says the account is not linked and where an admin links it, using the session's person read.
+- ~~The spend report cannot filter to one bot.~~ Done (13 November): `botId` on `GET /api/spend/report` and `/api/spend/entries`, carried as `bot` in the Budgets URL with a Bot filter; the bot page's link opens the report for that bot. Holds are reported as not tracked in a one-bot view, because a hold is not tied to a bot. The SQL clause is exercised in mock mode only.
 - Global search lists runs and proposals under All results only; the component library's record types are a fixed list, so they have no tab of their own.
-- Ledger entries show a raw model id; the bot page's runs table clips its last column at 1280 (an older custom table).
+- ~~Ledger entries show a raw model id; the bot page's runs table clips at 1280.~~ Done (13 November): entries and the model grouping show a readable name and keep an unknown id as it is; the firings table's outcome text wraps to two lines instead of being cut mid-word.
 - No demo ledger entry has an unknown cost, and the default world has fewer runs than one page, so the walk asserts "unknown" and "Load older runs" only when present.
 - Retry sits behind the Findings requeue's capability, which an org leader does not hold. Left as is; say if leaders should retry.
-- No notice on a proposal's merge or withdrawal.
+- ~~No notice on a proposal's merge or withdrawal.~~ Done (13 November): the filer is told on a merge, and the reviewers who were told of the filing are told on a withdrawal, including the automatic ones (expiry, a rejected change); never the person who acted.
+
+The value-sweep journey's steps 8, 12 and 13 assert the four portal changes at 1440 and 1280.
