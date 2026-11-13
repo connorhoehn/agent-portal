@@ -1,6 +1,6 @@
 # Meeting assistant: design and plan
 
-13 November 2026, revised the same day. Status: packages 1 to 3 merged (13 November); package 4 next.
+13 November 2026, revised the same day. Status: packages 1 to 3 and 4a merged (13 November); package 4b next.
 
 **Revision.** The first draft listened with the media server's local Whisper captions service. The owner's instruction is to listen with the OpenAI live model the voice navigator already uses. This version does that. The captions service is not used.
 
@@ -110,7 +110,8 @@ Each package is one branch, verified by the full chain, merged on its own.
 | 1 | Core: flag, policy action, state and transcript stores, acknowledgement, mock line injector, invite/pause/dismiss routes, detector | this one | Done |
 | 2 | Nova in chat: server-side post as Nova, join and state notices, message and action card kinds | this one, `ui-components` | Done; three library gaps open (below) |
 | 3 | Call UI: Invite Nova, roster entry, listening mark, transcription notice and acknowledgement, pause and dismiss | this one | Done; the ceiling line moves to package 4 |
-| 4 | Session and turns: the live session over the WebSocket with the scripted stand-in, attribution, the name lock, the turn exchange, read tools in the asker's browser, write cards, typed mentions, spend source and ceilings | this one | Large |
+| 4a | Session and turns on the server: the live session over the WebSocket (run against a fake server only), the scripted stand-in, attribution, the name lock, turns, spend source, hold on the inviter, ceiling and extend | this one | Done |
+| 4b | Turns in the asker's browser: reads run, confirmed writes run, results return; a cap on tool calls per request; the ceiling line and extend control; acknowledgement stays offered after the notice is hidden; a plain reply when a typed request cannot be heard | this one | Medium |
 | 5 | Minutes: end-of-call notes and action items, the meeting page, the call log entry, search over past meetings | this one | Medium |
 | 6 | Real audio: the tap sink, mixer and voiced timeline; arming the tap on invite; the join-record lookup from per-join id to person; a paid end-to-end run | this one, `platform-api` | Medium |
 | 7 | Nova's voice: relay of the output audio to participants' browsers, a speaking mark, a mute-Nova control per person | this one, `realtime-modules`, `ui-components` | Medium |
@@ -120,7 +121,7 @@ Packages 1 to 5 run entirely on the mock world. Package 6 needs the social stack
 
 Order: 1, then 2 and 3 in parallel, then 4, then 5, then 6, then 7.
 
-Library gaps found by packages 2 and 3, to close in one `ui-components` release: the chat panel cannot draw a custom message kind as a system line (Nova's notices show as a bubble); the consent notice has fixed wording and no acknowledge action (a banner is used); the call roster cannot show a non-media entry (Nova's line sits in the conversation pane's header).
+Library gaps found by packages 2 and 3, closed in `ui-components` 2.526.0 and adopted (13 November): the chat panel cannot draw a custom message kind as a system line (Nova's notices show as a bubble); the consent notice has fixed wording and no acknowledge action (a banner is used); the call roster cannot show a non-media entry (Nova's line sits in the conversation pane's header).
 
 ## How it is judged
 
@@ -136,6 +137,9 @@ Library gaps found by packages 2 and 3, to close in one `ui-components` release:
 - **Attribution in overlap.** Two people talking at once give one transcript piece; the timeline can only say both were speaking.
 - **Cost is continuous.** About $3 per hour of meeting, whether or not anyone addresses Nova. The ceiling and the pause control bound it.
 - **Audio leaves the machine.** Every acknowledged participant's speech goes to the provider while Nova listens. The notice must say so in plain words.
+- **Typed requests on the real session.** The Live API documents no text input, so a typed mention reaches only the scripted session. Until that changes, Nova says in chat that it hears spoken requests only.
+- **A restart drops the live session.** A listening call has no session after the server restarts until someone invites again; the hold then expires on its own.
+- **Chained reads.** Text inside a record could lead the model to ask for more reads inside the name window; package 4b caps tool calls per request.
 - **The asker's browser must be open.** If the asker leaves mid-turn, the turn expires, the model is told, and the chat says so.
 - **Shared answers.** Decision 6 makes an asker responsible for what they ask in front of others. The private-tool list must be reviewed whenever a tool is added.
 - **Echo.** With package 7, Nova's voice plays on speakers and can re-enter microphones. The browser's echo cancellation should remove it; package 7 measures it.

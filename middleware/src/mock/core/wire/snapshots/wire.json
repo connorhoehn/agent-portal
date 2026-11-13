@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-13T20:38:14.019Z",
-  "serverHandlerSha": "fe84ec8a7d4ca1c8a1bc4500ec68e54108369636c68701274a01d363112fa91a",
+  "capturedAt": "2026-11-13T22:01:49.424Z",
+  "serverHandlerSha": "98ff0fa76529ca3fe9bd96f75dba01028a3b3a650db118750d6d6c3eaafd9d5b",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -2426,6 +2426,9 @@
       "skipped": "no value found for :callId under /api/calls (orgiq/admin); no value found for :callId under /api/calls (assessment/admin); no value found for :callId under /api/calls (anonymous)"
     },
     "GET /api/calls/:callId/assistant/transcript": {
+      "skipped": "no value found for :callId under /api/calls (orgiq/admin); no value found for :callId under /api/calls (assessment/admin); no value found for :callId under /api/calls (anonymous)"
+    },
+    "GET /api/calls/:callId/assistant/turns": {
       "skipped": "no value found for :callId under /api/calls (orgiq/admin); no value found for :callId under /api/calls (assessment/admin); no value found for :callId under /api/calls (anonymous)"
     },
     "GET /api/calls/:callId/chat": {
@@ -6055,7 +6058,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "number",
+        "points[].judgeP50": "null|number",
         "windowHours": "number"
       },
       "values": {}
