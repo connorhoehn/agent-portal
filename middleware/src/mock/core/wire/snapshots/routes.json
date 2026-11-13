@@ -3163,7 +3163,7 @@
     {
       "method": "POST",
       "path": "/api/runbooks/:id/applications",
-      "source": "src/routes/runbooks.ts:1062"
+      "source": "src/routes/runbooks.ts:1064"
     },
     {
       "method": "GET",
@@ -3178,7 +3178,7 @@
     {
       "method": "POST",
       "path": "/api/runbooks/:id/retire",
-      "source": "src/routes/runbooks.ts:1035"
+      "source": "src/routes/runbooks.ts:1037"
     },
     {
       "method": "GET",
@@ -3213,7 +3213,7 @@
     {
       "method": "POST",
       "path": "/api/runbooks/proposals/:pid/merge",
-      "source": "src/routes/runbooks.ts:994"
+      "source": "src/routes/runbooks.ts:995"
     },
     {
       "method": "POST",
@@ -3848,7 +3848,7 @@
     {
       "method": "GET",
       "path": "/api/spend/entries",
-      "source": "src/routes/spend-report.ts:117"
+      "source": "src/routes/spend-report.ts:120"
     },
     {
       "method": "GET",
