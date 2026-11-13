@@ -5,6 +5,8 @@
 // (lib/call-chat.ts `render`), and refuses them from a person on the way in, so a message that carries them here
 // is Nova's. This file still validates the shape so a malformed row renders as an ordinary message, not a broken card.
 
+import { pokeTurns } from './meetingTurnsPoke.ts';
+
 export type AssistantActionStatus = 'waiting' | 'confirmed' | 'declined' | 'expired' | 'done' | 'failed';
 const STATUSES: readonly AssistantActionStatus[] = ['waiting', 'confirmed', 'declined', 'expired', 'done', 'failed'];
 
@@ -79,7 +81,7 @@ export async function decideAssistantAction(callId: string, actionId: string, de
   const response = await request(`/api/calls/${encodeURIComponent(callId)}/assistant/actions/${encodeURIComponent(actionId)}/decision`, {
     method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision }),
   });
-  if (response.ok) return;
+  if (response.ok) { pokeTurns(callId); return; }
   const json: unknown = await response.json().catch(() => null);
   const message = json && typeof json === 'object' && typeof (json as Record<string, unknown>)['error'] === 'string' ? String((json as Record<string, unknown>)['error']) : '';
   throw new Error(message || `The decision could not be saved (${response.status}).`);

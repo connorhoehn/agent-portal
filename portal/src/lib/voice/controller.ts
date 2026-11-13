@@ -145,10 +145,11 @@ import {
 import { VOICE_PLANNERS, VOICE_RUNNERS } from './actions.ts';
 import { DEFAULT_TOAST_SECONDS } from './work.ts';
 import { VoiceEventLog, argShape, refusalCode, resultSummary, type DockEvent } from './sessionEvents.ts';
+import { wireOutput } from './runCore.ts';
 import { FAILED_TWICE_NEXT, FailureGuard, RETRY_NEXT, RefusalGuard, STOP_NEXT, withFailure, withNext } from './refusals.ts';
 import { inboundLine, inboundNote, type InboundItem } from './inbound.ts';
 import { SessionDiagnostics } from './diagnostics.ts';
-import { DelegationContext, PAGE_NOTE_REPLACES, briefOutput, modelOutput, summaryLine, verbosityNote, withSay, type Verbosity } from './contextWindow.ts';
+import { DelegationContext, PAGE_NOTE_REPLACES, summaryLine, verbosityNote, type Verbosity } from './contextWindow.ts';
 
 export const TICK_MS = 100;
 export const COMPLETION_GRACE_MS = 1500;
@@ -1181,7 +1182,7 @@ export class VoiceController {
     if (res.outcome === 'failed' && res.output['stop'] === true) this.delegation(delegationId).stopped = true;
     // G31: the model gets the compact form (no links, lists cut to fit); the strip, the log and the kept rows the full one.
     // G33: list, search and get hand the model the count, three rows, `more` and a ready `say` line, unless `detail`.
-    const wire = JSON.stringify(modelOutput(briefOutput(name, args, withSay(name, res.outcome, res.output, res.summary))));
+    const wire = JSON.stringify(wireOutput(name, args, res));
     client.sendToolOutput(callId, wire);
     this.diag.resultSent();
     this.context.result(wire.length, summaryLine(name, res.summary));

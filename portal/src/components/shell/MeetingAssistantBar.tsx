@@ -12,7 +12,7 @@ import { assistantPresent, assistantStateWords, noticeText, noticeVisible, roste
 import { useCallHost } from '../../lib/conversationCall';
 
 /** The live call's id, or null while there is no joined call to listen to. */
-function useLiveCallId(): string | null {
+export function useLiveCallId(): string | null {
   const host = useCallHost();
   const call = host?.call;
   const joined = !!call && (call.phase === 'live' || call.phase === 'connecting' || call.phase === 'reconnecting');
