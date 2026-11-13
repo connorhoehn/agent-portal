@@ -441,6 +441,13 @@ describe('§9 item 8: the program-owner budget forbid and the new org-leader gra
     expect(Object.keys(schema.OrgIQ.actions)).toContain('CreateInitiative');
   });
 
+  test('InviteMeetingAssistant sits on the general permit of every orgiq role and nowhere else, and is in the schema', () => {
+    for (const key of ['orgiq/member', 'orgiq/sme', 'orgiq/hr-admin', 'orgiq/org-leader', 'orgiq/program-owner']) {
+      expect(permits(role(key))[0]!).toContain('OrgIQ::Action::"InviteMeetingAssistant"');
+    }
+    expect(Object.keys(schema.OrgIQ.actions)).toContain('InviteMeetingAssistant');
+  });
+
   test('the lab drive: sme and hr-admin carry OperateDevbox on their general permit, unconditioned, beside ManageDevbox', () => {
     for (const key of ['orgiq/sme', 'orgiq/hr-admin']) {
       const general = permits(role(key))[0]!;

@@ -34,6 +34,7 @@ export type Action =
   // ManageDevbox (11 Nov 2026) so a leader can drive the lab without configuring it.
   | 'OperateDevbox'
   | 'CreateInitiative'
+  | 'InviteMeetingAssistant'
   | 'DecideAgentChange'
   | 'DeliverAgentChange'
   | 'ManageSdlcPolicies'

@@ -91,4 +91,9 @@ describe('DE-42 actions in GET /api/session/capabilities', () => {
       expect(CAPABILITY_ACTIONS).toContain('CreateInitiative');
       expect((await caps(role))['CreateInitiative']).toBe(want);
     });
+
+  it.each(['member', 'sme', 'hr-admin', 'org-leader', 'program-owner'])('%s: InviteMeetingAssistant is true', async (role) => {
+    expect(CAPABILITY_ACTIONS).toContain('InviteMeetingAssistant');
+    expect((await caps(role))['InviteMeetingAssistant']).toBe(true);
+  });
 });

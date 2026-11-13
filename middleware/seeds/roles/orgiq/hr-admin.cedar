@@ -58,7 +58,10 @@ permit (
     OrgIQ::Action::"DecideDecision",
     // Mint a voice navigator session (docs/voice-navigator-spec.md §6). Each tool the
     // voice runs is then gated by the action of the button it stands in for.
-    OrgIQ::Action::"VoiceNavigate"
+    OrgIQ::Action::"VoiceNavigate",
+    // Invite the call assistant (Nova) into a call you hold a seat in (POST /api/calls/:callId/assistant/invite).
+    // Held by every orgiq role that may join a call; the route also needs the seat.
+    OrgIQ::Action::"InviteMeetingAssistant"
   ],
   resource
 )
