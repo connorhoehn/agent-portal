@@ -164,3 +164,13 @@ test('budgetPeriodLabel: between sprints is flagged, the key names an open windo
   assert.deepEqual(budgetPeriodLabel({ periodKey: '2026-Q4', periodState: 'open' }), { betweenSprints: false, key: '2026-Q4' });
   assert.deepEqual(budgetPeriodLabel({}), { betweenSprints: false, key: null });
 });
+
+test('modelLabelFor reads full and short ledger ids as one readable name, and keeps an unknown id as it is', () => {
+  assert.equal(modelLabelFor('us.amazon.nova-lite-v1:0'), 'Nova Lite');
+  assert.equal(modelLabelFor('amazon.nova-pro-v1:0'), 'Nova Pro');
+  assert.equal(modelLabelFor('nova-pro-v1'), 'Nova Pro');
+  assert.equal(modelLabelFor('amazon.titan-embed-text-v2:0'), 'Titan Text Embeddings V2');
+  assert.equal(modelLabelFor('claude-sonnet-5'), modelLabelFor('us.anthropic.claude-sonnet-5'));
+  assert.notEqual(modelLabelFor('claude-haiku-4-5'), 'claude-haiku-4-5');
+  assert.equal(modelLabelFor('some-unlisted-model'), 'some-unlisted-model');
+});

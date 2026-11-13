@@ -12,9 +12,22 @@ import { usd } from '../../lib/format.ts';
 import { relativeTime } from '../../lib/relativeTime.ts';
 export { usd };
 
-/** Bedrock inference-profile id → the short label the rest of the app uses. */
+/** The family an id names, whatever its wrapping: no region prefix, vendor prefix, `:0` tail, `-v1` or build date. */
+export function modelFamily(id: string): string {
+  let f = id.trim().toLowerCase().replace(/^(us|eu|apac|global)\./, '').replace(/^(amazon|anthropic)\./, '');
+  for (let i = 0; i < 3; i += 1) f = f.replace(/:\d+$/, '').replace(/-v1$/, '').replace(/-\d{8}$/, '');
+  return f;
+}
+
+const MODEL_LABELS: ReadonlyMap<string, string> = new Map([
+  ...DEVBOX_MODELS.map((m) => [modelFamily(m.id), m.label] as const),
+  ['nova-pro', 'Nova Pro'], ['nova-lite', 'Nova Lite'], ['nova-micro', 'Nova Micro'],
+  ['titan-embed-text-v2', 'Titan Text Embeddings V2'],
+]);
+
+/** A ledger entry's model id → a readable name. Ids come as full Bedrock profile ids and as short forms; an unknown id passes through. */
 export function modelLabelFor(id: string): string {
-  return DEVBOX_MODELS.find((m) => m.id === id)?.label ?? id;
+  return MODEL_LABELS.get(modelFamily(id)) ?? id;
 }
 
 /** Aurora stamps carry a `+00` offset ISO 8601 does not allow — shared parser. */
