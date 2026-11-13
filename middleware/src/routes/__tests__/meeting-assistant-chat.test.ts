@@ -22,6 +22,7 @@ import { InMemoryCallStateStore } from '@connorhoehn/realtime-modules/call';
 import { InMemoryChatStore } from '@connorhoehn/realtime-modules/chat';
 import type { RealtimeRouter } from '@connorhoehn/realtime-modules/server';
 import { meetingAssistantRouter } from '../meeting-assistant.js';
+import { setAssistantRuntime } from '../../lib/meeting-assistant/orchestrator.js';
 import { meetingAssistantDevRouter } from '../meeting-assistant-dev.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { CallChatRuntime, callChatChannel, setCallChatRuntime } from '../../lib/call-chat.js';
@@ -72,7 +73,7 @@ beforeEach(async () => {
   source = new MockTranscriptSource(); setTranscriptSource(source);
   setAssistantIntake(new LineIntake(assistantStore(), { clock: () => clock, tickMs: 0, source: () => source }));
 });
-afterEach(() => { setAssistantIntake(null); setAssistantStore(null); setTranscriptSource(null); setNotificationSink(null); runtime.dispose(); setCallChatRuntime(null); });
+afterEach(() => { setAssistantRuntime(null); setAssistantIntake(null); setAssistantStore(null); setTranscriptSource(null); setNotificationSink(null); runtime.dispose(); setCallChatRuntime(null); });
 
 describe('notices', () => {
   it('invite posts the join notice once, with the inviter\'s name and the configured retention; a repeat invite posts nothing', async () => {

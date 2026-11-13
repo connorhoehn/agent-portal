@@ -6,8 +6,8 @@
 // bumps `next_seq`, guarded by `state = 'listening'` and by the caption not being stored yet, and
 // the INSERT reads the claimed seq from it. No transaction needed, no lost or doubled line numbers.
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
-import type { AssistantAction, AssistantRecord, AssistantState, PendingRequest, TranscriptLine } from './types.js';
-import { MAX_PENDING_REQUESTS, type ActionChange, type AssistantStore, type StateChange } from './store.js';
+import type { AssistantAction, AssistantRecord, AssistantSession, AssistantState, AssistantTurn, PendingRequest, TranscriptLine, TurnKind, TurnStatus } from './types.js';
+import { MAX_PENDING_REQUESTS, type ActionChange, type AssistantStore, type StateChange, type TurnChange, type TurnFilter } from './store.js';
 
 export type SqlExec = (sql: string, params?: SqlParameter[]) => Promise<Record<string, unknown>[]>;
 
@@ -17,10 +17,11 @@ const n = (name: string, value: number): SqlParameter => ({ name, value: { longV
 const nOrNull = (name: string, value: number | null): SqlParameter => (value === null ? { name, value: { isNull: true } } : n(name, value));
 const LINE_COLUMNS = 'call_id, seq, user_id, participant_id, speaker_name, text, at, caption_id, start_ms, end_ms, speakers';
 const ACTION_COLUMNS = 'call_id, action_id, message_id, asked_by, tool_name, args_digest, status, created_at, decided_by, decided_at, result_text';
+const TURN_COLUMNS = 'call_id, turn_id, asked_by, tool_name, tool_args, kind, status, action_id, created_at, expires_at';
 const iso = (ms: number): string => new Date(ms).toISOString();
 
 const COLUMNS = `call_id, tenant, lobby, initiative_id, state, invited_by, invited_at, paused_by, left_at, left_by,
-  acked, attendees, present_at_invite, requests, lines_stored, next_seq, pending_requests`;
+  acked, attendees, present_at_invite, requests, lines_stored, next_seq, pending_requests, session`;
 
 const json = <T>(v: unknown, fallback: T): T => {
   if (Array.isArray(v)) return v as T;
@@ -41,11 +42,29 @@ export function recordFromRow(r: Record<string, unknown>): AssistantRecord {
     presentAtInvite: json<string[]>(r['present_at_invite'], []),
     requests: Number(r['requests'] ?? 0), linesStored: Number(r['lines_stored'] ?? 0), nextSeq: Number(r['next_seq'] ?? 1),
     pendingRequests: json<PendingRequest[]>(r['pending_requests'], []),
+    ...(r['session'] != null ? { session: jsonObject<Partial<AssistantSession>>(r['session']) as AssistantSession } : {}),
   };
 }
 
+const jsonObject = <T>(v: unknown): T => {
+  if (v && typeof v === 'object' && !Array.isArray(v)) return v as T;
+  if (typeof v === 'string' && v) { try { const p: unknown = JSON.parse(v); if (p && typeof p === 'object') return p as T; } catch { /* below */ } }
+  return {} as T;
+};
+
+const jsonValue = (v: unknown): unknown => {
+  if (typeof v !== 'string') return v ?? null;
+  try { return JSON.parse(v) as unknown; } catch { return null; }
+};
+
+export function turnFromRow(r: Record<string, unknown>): AssistantTurn {
+  return { turnId: str(r['turn_id']), callId: str(r['call_id']), askedBy: str(r['asked_by']), tool: { name: str(r['tool_name']), args: jsonValue(r['tool_args']) },
+    kind: str(r['kind']) as TurnKind, status: str(r['status']) as TurnStatus, ...(r['action_id'] != null ? { actionId: str(r['action_id']) } : {}),
+    createdAt: ms(r['created_at']), expiresAt: ms(r['expires_at']) };
+}
+
 export function lineFromRow(r: Record<string, unknown>): TranscriptLine {
-  return { callId: str(r['call_id']), seq: Number(r['seq']), userId: str(r['user_id']), participantId: str(r['participant_id']),
+  return { callId: str(r['call_id']), seq: Number(r['seq']), userId: strOrNull(r['user_id']), participantId: str(r['participant_id']),
     speakerName: str(r['speaker_name']), text: str(r['text']), at: ms(r['at']), captionId: str(r['caption_id']),
     ...(r['start_ms'] != null ? { startMs: Number(r['start_ms']) } : {}), ...(r['end_ms'] != null ? { endMs: Number(r['end_ms']) } : {}),
     ...(r['speakers'] != null ? { speakers: json<string[]>(r['speakers'], []) } : {}) };
@@ -70,13 +89,14 @@ export class SqlAssistantStore implements AssistantStore {
 
   async create(record: AssistantRecord) {
     const rows = await this.exec(
-      `INSERT INTO meeting_assistants (call_id, tenant, lobby, initiative_id, state, invited_by, invited_at, acked, attendees, present_at_invite)
-       VALUES (:call, :tenant, :lobby, :initiative, :state, :by, :at::timestamptz, :acked::jsonb, :attendees::jsonb, :present::jsonb)
+      `INSERT INTO meeting_assistants (call_id, tenant, lobby, initiative_id, state, invited_by, invited_at, acked, attendees, present_at_invite, session)
+       VALUES (:call, :tenant, :lobby, :initiative, :state, :by, :at::timestamptz, :acked::jsonb, :attendees::jsonb, :present::jsonb, :session::jsonb)
        ON CONFLICT (call_id) DO NOTHING
        RETURNING ${COLUMNS}`,
       [s('call', record.callId), s('tenant', record.tenant), s('lobby', record.lobby), sOrNull('initiative', record.initiativeId),
         s('state', record.state), s('by', record.invitedBy), s('at', iso(record.invitedAt)), s('acked', JSON.stringify(record.acked)),
-        s('attendees', JSON.stringify(record.attendees)), s('present', JSON.stringify(record.presentAtInvite))],
+        s('attendees', JSON.stringify(record.attendees)), s('present', JSON.stringify(record.presentAtInvite)),
+        s('session', JSON.stringify(record.session ?? {}))],
     );
     if (rows[0]) return { record: recordFromRow(rows[0]), created: true };
     const existing = await this.get(record.callId);
@@ -129,7 +149,7 @@ export class SqlAssistantStore implements AssistantStore {
        INSERT INTO meeting_transcript_lines (call_id, seq, tenant, user_id, participant_id, speaker_name, text, at, caption_id, start_ms, end_ms, speakers)
        SELECT call_id, seq, tenant, :user, :participant, :speaker, :text, :at::timestamptz, :caption, :start, :end, :speakers::jsonb FROM claimed
        RETURNING ${LINE_COLUMNS}`,
-      [s('call', line.callId), s('caption', line.captionId), s('user', line.userId), s('participant', line.participantId),
+      [s('call', line.callId), s('caption', line.captionId), sOrNull('user', line.userId), s('participant', line.participantId),
         s('speaker', line.speakerName), s('text', line.text), s('at', iso(line.at)),
         nOrNull('start', line.startMs ?? null), nOrNull('end', line.endMs ?? null),
         sOrNull('speakers', line.speakers ? JSON.stringify(line.speakers) : null)],
@@ -191,6 +211,65 @@ export class SqlAssistantStore implements AssistantStore {
         sOrNull('result', change.resultText ?? null)],
     );
     return rows[0] ? actionFromRow(rows[0]) : null;
+  }
+
+  async patchSession(callId: string, patch: Partial<AssistantSession>) {
+    const rows = await this.exec(
+      `UPDATE meeting_assistants SET session = session || :patch::jsonb, updated_at = now() WHERE call_id = :call RETURNING ${COLUMNS}`,
+      [s('call', callId), s('patch', JSON.stringify(patch))],
+    );
+    return rows[0] ? recordFromRow(rows[0]) : null;
+  }
+
+  async bumpRefused(callId: string) {
+    const rows = await this.exec(
+      `UPDATE meeting_assistants SET
+         session = jsonb_set(session, '{refusedCalls}', to_jsonb(COALESCE((session->>'refusedCalls')::int, 0) + 1)), updated_at = now()
+       WHERE call_id = :call RETURNING (session->>'refusedCalls')::int AS refused`,
+      [s('call', callId)],
+    );
+    return Number(rows[0]?.['refused'] ?? 0);
+  }
+
+  async createTurn(turn: AssistantTurn) {
+    const rows = await this.exec(
+      `INSERT INTO meeting_assistant_turns (call_id, turn_id, tenant, asked_by, tool_name, tool_args, kind, status, action_id, created_at, expires_at)
+       SELECT :call, :turn, tenant, :asked, :tool, :args::jsonb, :kind, :status, :action, :at::timestamptz, :expires::timestamptz
+       FROM meeting_assistants WHERE call_id = :call
+       ON CONFLICT (call_id, turn_id) DO NOTHING
+       RETURNING ${TURN_COLUMNS}`,
+      [s('call', turn.callId), s('turn', turn.turnId), s('asked', turn.askedBy), s('tool', turn.tool.name), s('args', JSON.stringify(turn.tool.args ?? null)),
+        s('kind', turn.kind), s('status', turn.status), sOrNull('action', turn.actionId ?? null), s('at', iso(turn.createdAt)), s('expires', iso(turn.expiresAt))],
+    );
+    if (rows[0]) return { turn: turnFromRow(rows[0]), created: true };
+    const existing = await this.getTurn(turn.callId, turn.turnId);
+    if (!existing) throw new Error('meeting assistant turn vanished between insert and read (or the call has no assistant)');
+    return { turn: existing, created: false };
+  }
+
+  async getTurn(callId: string, turnId: string) {
+    const rows = await this.exec(`SELECT ${TURN_COLUMNS} FROM meeting_assistant_turns WHERE call_id = :call AND turn_id = :turn`, [s('call', callId), s('turn', turnId)]);
+    return rows[0] ? turnFromRow(rows[0]) : null;
+  }
+
+  async listTurns(callId: string, filter: TurnFilter = {}) {
+    const rows = await this.exec(
+      `SELECT ${TURN_COLUMNS} FROM meeting_assistant_turns
+       WHERE call_id = :call${filter.askedBy ? ' AND asked_by = :asked' : ''}${filter.statuses ? ` AND status IN (${list(filter.statuses)})` : ''}
+       ORDER BY created_at ASC, turn_id ASC`,
+      [s('call', callId), ...(filter.askedBy ? [s('asked', filter.askedBy)] : [])],
+    );
+    return rows.map(turnFromRow);
+  }
+
+  async moveTurn(callId: string, turnId: string, change: TurnChange) {
+    const rows = await this.exec(
+      `UPDATE meeting_assistant_turns SET status = :to, action_id = COALESCE(:action, action_id)
+       WHERE call_id = :call AND turn_id = :turn AND status IN (${list(change.from)})
+       RETURNING ${TURN_COLUMNS}`,
+      [s('call', callId), s('turn', turnId), s('to', change.to), sOrNull('action', change.actionId ?? null)],
+    );
+    return rows[0] ? turnFromRow(rows[0]) : null;
   }
 
   async sweepLines(cutoffMs: number) {

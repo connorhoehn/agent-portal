@@ -12,6 +12,12 @@
 //   Calls the posting functions of lib/meeting-assistant/chat.ts, so tests and walks see exactly what the real
 //   brain's output will look like. Answers 409 when the assistant is not in the call (nothing is posted then).
 //
+//   POST /api/dev/calls/:callId/assistant-tool-call
+//   body: { askedBy, name, args }
+//   Makes the scripted live session raise a tool call attributed to `askedBy`, exactly as the scripted rule table does for a
+//   request, so a walk can send one that the rules would not (a call from someone who never said the name). It goes through
+//   every server check (asker, name lock, role, turn); it is not a shortcut around them. 409 with no scripted session.
+//
 // It exists only when the mock providers are on AND NODE_ENV is not production AND the assistant flag is on
 // (lib/meeting-assistant/transcript-source.ts mockTranscriptEnabled); otherwise it answers 404, not 403, like
 // the mock control plane (routes/mock-control.ts). Mounted at the root with no session, like that plane, and under
@@ -21,6 +27,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { MOCK_CONTROL_SERVICE_AUTH, requireServiceAuth } from '../lib/service-auth.js';
 import { moveAction, postAction, postNotice, postPrivately, postReply } from '../lib/meeting-assistant/chat.js';
+import { assistantRuntime } from '../lib/meeting-assistant/orchestrator.js';
 import { meetingAssistantEnabled, MockTranscriptSource, mockTranscriptEnabled, transcriptSource, type RawLine } from '../lib/meeting-assistant/index.js';
 
 export const meetingAssistantDevRouter = Router();
@@ -127,4 +134,15 @@ meetingAssistantDevRouter.post('/api/dev/calls/:callId/assistant-messages', gate
       }
       default: throw new ValidationError('kind must be notice, reply, action, action-status or private');
     }
+  }));
+
+meetingAssistantDevRouter.post('/api/dev/calls/:callId/assistant-tool-call', gate,
+  requireServiceAuth(MOCK_CONTROL_SERVICE_AUTH, 'mock control authentication required'),
+  asyncHandler(async (req, res) => {
+    const callId = req.params['callId'];
+    if (typeof callId !== 'string' || !/^[a-zA-Z0-9:_-]{1,256}$/.test(callId)) throw new ValidationError('Invalid call id');
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const id = assistantRuntime().devToolCall(callId, need(b['askedBy'], 'askedBy', 128), need(b['name'], 'name', 64), b['args'] ?? {});
+    if (!id) { res.status(409).json({ error: 'No scripted assistant session in this call' }); return; }
+    res.status(202).json({ callId: id });
   }));

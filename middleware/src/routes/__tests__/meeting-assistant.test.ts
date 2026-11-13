@@ -22,6 +22,7 @@ import { InMemoryCallStateStore } from '@connorhoehn/realtime-modules/call';
 import { InMemoryChatStore } from '@connorhoehn/realtime-modules/chat';
 import type { RealtimeRouter } from '@connorhoehn/realtime-modules/server';
 import { meetingAssistantRouter } from '../meeting-assistant.js';
+import { setAssistantRuntime } from '../../lib/meeting-assistant/orchestrator.js';
 import { meetingAssistantDevRouter } from '../meeting-assistant-dev.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { CallChatRuntime, setCallChatRuntime } from '../../lib/call-chat.js';
@@ -67,7 +68,7 @@ beforeEach(async () => {
   source = new MockTranscriptSource(); setTranscriptSource(source);
   setAssistantIntake(new LineIntake(assistantStore(), { clock: () => clock, tickMs: 0, source: () => source }));
 });
-afterEach(() => { setAssistantIntake(null); setAssistantStore(null); setTranscriptSource(null); runtime.dispose(); setCallChatRuntime(null); });
+afterEach(() => { setAssistantRuntime(null); setAssistantIntake(null); setAssistantStore(null); setTranscriptSource(null); runtime.dispose(); setCallChatRuntime(null); });
 
 describe('the flag and the gates', () => {
   it('with the flag off every route answers 404, injector included', async () => {

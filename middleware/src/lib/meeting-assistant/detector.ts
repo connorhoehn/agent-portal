@@ -167,6 +167,9 @@ export class RequestDetector {
 
   push(line: TranscriptLine): DetectorEvent[] {
     const events = this.expire();
+    // A piece nobody's audio was voiced for has no speaker to ask anything: it is stored but never a request or a command.
+    const userId = line.userId;
+    if (userId === null) return events;
     const now = this.clock();
     const text = line.text.trim();
     if (!text) return events;
@@ -176,28 +179,28 @@ export class RequestDetector {
     if (hit) {
       const command = parseCommand(hit.rest);
       if (command === 'pause' || command === 'dismiss') {
-        events.push({ type: 'command', callId: this.callId, command, by: line.userId, line: line.seq });
+        events.push({ type: 'command', callId: this.callId, command, by: userId, line: line.seq });
         return events;
       }
       if (command === 'cancel') {
-        const o = this.open.get(line.userId);
+        const o = this.open.get(userId);
         if (o) {
-          this.open.delete(line.userId);
-          events.push({ type: 'cancel', callId: this.callId, askedBy: line.userId, lines: [...o.lines, line.seq], reason: 'cancelled' });
+          this.open.delete(userId);
+          events.push({ type: 'cancel', callId: this.callId, askedBy: userId, lines: [...o.lines, line.seq], reason: 'cancelled' });
         }
         return events;
       }
       // A fresh mention closes the same speaker's earlier request first.
-      const previous = this.open.get(line.userId);
+      const previous = this.open.get(userId);
       if (previous) events.push(...this.close(previous));
-      const o: Open = { askedBy: line.userId, parts: [], lines: [line.seq], startedAt: line.at, endedAt: line.at,
+      const o: Open = { askedBy: userId, parts: [], lines: [line.seq], startedAt: line.at, endedAt: line.at,
         startedClock: now, lastClock: now, lastLooksCut: true, captions: 1 };
       if (hit.rest) { appendText(o.parts, hit.rest); o.lastLooksCut = looksCut(hit.rest); }
-      this.open.set(line.userId, o);
+      this.open.set(userId, o);
       return this.capped(o, events, now);
     }
 
-    const o = this.open.get(line.userId);
+    const o = this.open.get(userId);
     if (!o || sliver) return events;
     appendText(o.parts, text);
     o.lines.push(line.seq);

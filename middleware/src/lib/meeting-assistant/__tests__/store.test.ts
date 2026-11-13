@@ -4,7 +4,8 @@ jest.mock('../../../config.js', () => ({ config: { mock: { aurora: true }, meeti
 import { MemoryAssistantStore, MAX_PENDING_REQUESTS } from '../store.js';
 import { SqlAssistantStore, recordFromRow, lineFromRow } from '../store-sql.js';
 import { sweepTranscripts } from '../retention.js';
-import type { AssistantRecord } from '../types.js';
+import { sessionOf, type AssistantRecord, type AssistantTurn } from '../types.js';
+import { turnFromRow } from '../store-sql.js';
 
 const record = (over: Partial<AssistantRecord> = {}): AssistantRecord => ({
   callId: 'call-1', tenant: 'orgiq', lobby: 'orgiq:initiative:p-auth', initiativeId: 'p-auth', state: 'listening', invitedBy: 'u-vera',
@@ -152,4 +153,85 @@ import { initiativeOfLobby } from '../store.js';
 it('reads the initiative out of an initiative lobby and nothing else', () => {
   expect(initiativeOfLobby('orgiq:initiative:p-auth')).toBe('p-auth');
   for (const l of ['orgiq:dm:a:b', 'assessment:team:T-1', 'orgiq:initiative:', 'orgiq:initiative:a/b']) expect(initiativeOfLobby(l)).toBeNull();
+});
+
+const turn = (over: Partial<AssistantTurn> = {}): AssistantTurn => ({
+  turnId: 't-1', callId: 'call-1', askedBy: 'u-vera', tool: { name: 'search', args: { query: 'x' } }, kind: 'read', status: 'pending', createdAt: 1000, expiresAt: 91_000, ...over,
+});
+
+describe('turns and the session bookkeeping (package 4a)', () => {
+  let s: MemoryAssistantStore;
+  beforeEach(async () => { s = new MemoryAssistantStore(); await s.create(record()); });
+
+  it('creates a turn once per (call, turnId), lists them by asker and status in order, and returns copies', async () => {
+    expect((await s.createTurn(turn())).created).toBe(true);
+    expect((await s.createTurn(turn({ tool: { name: 'other', args: null } }))).created).toBe(false);
+    await s.createTurn(turn({ turnId: 't-2', askedBy: 'u-bob', createdAt: 2000 }));
+    await s.createTurn(turn({ turnId: 't-3', createdAt: 3000, status: 'done' }));
+    expect((await s.listTurns('call-1')).map((t) => t.turnId)).toEqual(['t-1', 't-2', 't-3']);
+    expect((await s.listTurns('call-1', { askedBy: 'u-vera', statuses: ['pending', 'running'] })).map((t) => t.turnId)).toEqual(['t-1']);
+    expect((await s.listTurns('call-2'))).toEqual([]);
+    const got = (await s.getTurn('call-1', 't-1'))!; got.status = 'failed';
+    expect((await s.getTurn('call-1', 't-1'))!.status).toBe('pending');
+  });
+
+  it('moves a turn only from the statuses named, so two results settle once', async () => {
+    await s.createTurn(turn());
+    expect(await s.moveTurn('call-1', 't-1', { from: ['running'], to: 'done' })).toBeNull();
+    expect((await s.moveTurn('call-1', 't-1', { from: ['pending'], to: 'running', actionId: 'a-1' }))).toMatchObject({ status: 'running', actionId: 'a-1' });
+    expect((await s.moveTurn('call-1', 't-1', { from: ['pending', 'running'], to: 'done' }))!.status).toBe('done');
+    expect(await s.moveTurn('call-1', 't-1', { from: ['pending', 'running'], to: 'expired' })).toBeNull();
+    expect(await s.moveTurn('call-1', 'nope', { from: ['pending'], to: 'done' })).toBeNull();
+  });
+
+  it('merges session fields, counts refusals, and reads defaults for a record that has no session', async () => {
+    expect(sessionOf((await s.get('call-1'))!).refusedCalls).toBe(0);
+    expect(await s.bumpRefused('call-1')).toBe(1);
+    expect(await s.bumpRefused('call-1')).toBe(2);
+    await s.patchSession('call-1', { ceilingSeconds: 7200, holds: ['h-1'] });
+    expect(sessionOf((await s.get('call-1'))!)).toMatchObject({ refusedCalls: 2, ceilingSeconds: 7200, holds: ['h-1'], warned: false });
+    expect(await s.bumpRefused('nope')).toBe(0);
+    expect(await s.patchSession('nope', { warned: true })).toBeNull();
+  });
+
+  it('stores a line with no person, and the name lock never counts it', async () => {
+    const stored = await s.appendLine(line({ userId: null, captionId: 'u1' }));
+    expect(stored).toMatchObject({ userId: null });
+  });
+});
+
+describe('SqlAssistantStore turn statements', () => {
+  const calls: Array<{ sql: string; params: Array<{ name: string; value: Record<string, unknown> }> }> = [];
+  let rows: Record<string, unknown>[] = [];
+  const store = () => new SqlAssistantStore(async (sql, params = []) => { calls.push({ sql, params: params as never }); return rows; });
+  beforeEach(() => { calls.length = 0; rows = []; });
+
+  it('creates a turn from the call\'s own row (so it carries the tenant) and ignores a repeat', async () => {
+    rows = [{ call_id: 'call-1', turn_id: 't-1', asked_by: 'u-vera', tool_name: 'search', tool_args: '{"query":"x"}', kind: 'read', status: 'pending', action_id: null, created_at: '1970-01-01T00:00:01Z', expires_at: '1970-01-01T00:01:31Z' }];
+    const out = await store().createTurn(turn());
+    expect(calls[0]!.sql).toMatch(/INSERT INTO meeting_assistant_turns[\s\S]*SELECT :call, :turn, tenant[\s\S]*FROM meeting_assistants WHERE call_id = :call[\s\S]*ON CONFLICT \(call_id, turn_id\) DO NOTHING/);
+    expect(out).toEqual({ turn: turn(), created: true });
+  });
+
+  it('moves a turn in one guarded statement and lists with a status list built from constants', async () => {
+    await store().moveTurn('call-1', 't-1', { from: ['pending', 'running'], to: 'done' });
+    expect(calls[0]!.sql).toMatch(/UPDATE meeting_assistant_turns SET status = :to[\s\S]*AND status IN \('pending', 'running'\)/);
+    await store().listTurns('call-1', { askedBy: 'u-vera', statuses: ['pending'] });
+    expect(calls[1]!.sql).toMatch(/asked_by = :asked AND status IN \('pending'\)/);
+  });
+
+  it('counts a refusal and merges the session in single statements', async () => {
+    rows = [{ refused: 3 }];
+    expect(await store().bumpRefused('call-1')).toBe(3);
+    expect(calls[0]!.sql).toMatch(/jsonb_set\(session, '\{refusedCalls\}'/);
+    await store().patchSession('call-1', { warned: true });
+    expect(calls[1]!.sql).toMatch(/session = session \|\| :patch::jsonb/);
+  });
+
+  it('maps a row with string or object JSON, and a line row with no person', () => {
+    expect(turnFromRow({ call_id: 'c', turn_id: 't', asked_by: 'u', tool_name: 'x', tool_args: { a: 1 }, kind: 'write', status: 'running', action_id: 'a-1', created_at: 1000, expires_at: 2000 }))
+      .toMatchObject({ tool: { name: 'x', args: { a: 1 } }, actionId: 'a-1', createdAt: 1000 });
+    expect(lineFromRow({ call_id: 'c', seq: 1, user_id: null, participant_id: '', speaker_name: '', text: 'hi', at: 1000, caption_id: 'x', start_ms: null, end_ms: null, speakers: null }).userId).toBeNull();
+    expect(recordFromRow({ call_id: 'c', tenant: 't', lobby: 'l', state: 'listening', invited_by: 'u', invited_at: 1000, session: '{"refusedCalls":2}' }).session).toEqual({ refusedCalls: 2 });
+  });
 });

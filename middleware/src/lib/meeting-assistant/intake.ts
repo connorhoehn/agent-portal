@@ -42,6 +42,7 @@ export class LineIntake {
   private timer: ReturnType<typeof setInterval> | null = null;
   private readonly tickMs: number;
   private readonly source: () => TranscriptSource;
+  private readonly listeners = new Set<(callId: string, events: DetectorEvent[]) => void | Promise<void>>();
 
   constructor(private readonly store: AssistantStore, opts: IntakeOptions = {}) {
     this.clock = opts.clock ?? Date.now;
@@ -74,7 +75,8 @@ export class LineIntake {
     const record = await this.store.get(callId);
     if (!record) return { stored: null, reason: 'no-assistant', events: [] };
     if (record.state !== 'listening') return { stored: null, reason: 'not-listening', events: [] };
-    if (!canSpeakOnRecord(record, raw.userId)) {
+    // A piece nobody was voiced for (userId null) has no one to hold an acknowledgement; only acknowledged audio is mixed in.
+    if (raw.userId !== null && !canSpeakOnRecord(record, raw.userId)) {
       await this.store.attend(callId, raw.userId);
       return { stored: null, reason: 'not-acknowledged', events: [] };
     }
@@ -82,7 +84,7 @@ export class LineIntake {
     if (!text) return { stored: null, reason: 'empty', events: [] };
     const at = Number.isFinite(raw.at) ? Number(raw.at) : this.clock();
     const stored = await this.store.appendLine({
-      callId, userId: raw.userId, participantId: raw.participantId ?? '', speakerName: raw.speakerName?.trim() || raw.userId,
+      callId, userId: raw.userId, participantId: raw.participantId ?? '', speakerName: raw.speakerName?.trim() || raw.userId || '',
       text, at, captionId: captionIdFor(callId, { ...raw, text }, at),
       ...(Number.isFinite(raw.startMs) ? { startMs: Number(raw.startMs) } : {}),
       ...(Number.isFinite(raw.endMs) ? { endMs: Number(raw.endMs) } : {}),
@@ -111,7 +113,21 @@ export class LineIntake {
     return d;
   }
 
+  /** Hear what the detector decided, after the intake has applied it (requests queued, pause and dismiss done). */
+  onEvents(listener: (callId: string, events: DetectorEvent[]) => void | Promise<void>): () => void {
+    this.listeners.add(listener);
+    return () => { this.listeners.delete(listener); };
+  }
+
   private async apply(callId: string, events: DetectorEvent[]): Promise<void> {
+    await this.applyEvents(callId, events);
+    if (!events.length) return;
+    for (const l of [...this.listeners]) {
+      try { await l(callId, events); } catch (e) { console.warn('[meeting-assistant] intake listener failed', (e as Error).message); }
+    }
+  }
+
+  private async applyEvents(callId: string, events: DetectorEvent[]): Promise<void> {
     for (const e of events) {
       if (e.type === 'request') {
         await this.store.addRequest(callId, { id: `rq-${e.lines[0]}-${e.lines[e.lines.length - 1]}`, askedBy: e.askedBy, text: e.text,

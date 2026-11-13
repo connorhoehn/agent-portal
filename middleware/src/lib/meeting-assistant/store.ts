@@ -10,8 +10,10 @@
 //    bumps `linesStored` in one step, and stores a repeated `captionId` once (returns null).
 //  * Reads return copies. `left` is final.
 //  * An action is created once per (call, actionId); `decideAction` moves it only from the statuses
-//    named in `from` and returns null otherwise, so two clicks decide once.
-import type { AssistantAction, AssistantRecord, AssistantState, PendingRequest, TranscriptLine } from './types.js';
+//    named in `from` and returns null otherwise, so two clicks decide once. A turn (a tool call waiting on the asker's
+//    browser) is the same: created once per (call, turnId), `moveTurn` moves it only from the statuses named.
+import type { AssistantAction, AssistantRecord, AssistantSession, AssistantState, AssistantTurn, PendingRequest, TranscriptLine, TurnStatus } from './types.js';
+import { sessionOf } from './types.js';
 
 export const MAX_PENDING_REQUESTS = 20;
 export const MAX_LINE_CHARS = 2000;
@@ -32,6 +34,14 @@ export interface ActionChange {
   resultText?: string;
 }
 
+export interface TurnChange {
+  from: readonly TurnStatus[];
+  to: TurnStatus;
+  actionId?: string;
+}
+
+export interface TurnFilter { askedBy?: string; statuses?: readonly TurnStatus[] }
+
 export interface AssistantStore {
   get(callId: string): Promise<AssistantRecord | null>;
   create(record: AssistantRecord): Promise<{ record: AssistantRecord; created: boolean }>;
@@ -48,6 +58,16 @@ export interface AssistantStore {
   getAction(callId: string, actionId: string): Promise<AssistantAction | null>;
   /** Move an action; null when it is unknown or not in one of `change.from`. */
   decideAction(callId: string, actionId: string, change: ActionChange): Promise<AssistantAction | null>;
+  /** Merge fields into the record's session bookkeeping; null when there is no record. */
+  patchSession(callId: string, patch: Partial<AssistantSession>): Promise<AssistantRecord | null>;
+  /** Add one to the refused-call counter; the new count, or 0 when there is no record. */
+  bumpRefused(callId: string): Promise<number>;
+  /** Record a turn; an existing (call, turnId) is returned as it is with `created: false`. */
+  createTurn(turn: AssistantTurn): Promise<{ turn: AssistantTurn; created: boolean }>;
+  getTurn(callId: string, turnId: string): Promise<AssistantTurn | null>;
+  listTurns(callId: string, filter?: TurnFilter): Promise<AssistantTurn[]>;
+  /** Move a turn; null when it is unknown or not in one of `change.from` (two results settle once). */
+  moveTurn(callId: string, turnId: string, change: TurnChange): Promise<AssistantTurn | null>;
   /** Delete lines at or before `cutoffMs` (epoch). Returns how many went. */
   sweepLines(cutoffMs: number): Promise<number>;
 }
@@ -59,6 +79,7 @@ export class MemoryAssistantStore implements AssistantStore {
   private readonly records = new Map<string, AssistantRecord>();
   private readonly transcript = new Map<string, TranscriptLine[]>();
   private readonly actions = new Map<string, AssistantAction>();
+  private readonly turns = new Map<string, AssistantTurn>();
 
   async get(callId: string) { const r = this.records.get(callId); return r ? copy(r) : null; }
 
@@ -131,6 +152,46 @@ export class MemoryAssistantStore implements AssistantStore {
     a.status = change.to; a.decidedBy = change.by; a.decidedAt = change.at;
     if (change.resultText !== undefined) a.resultText = change.resultText;
     return copy(a);
+  }
+
+  async patchSession(callId: string, patch: Partial<AssistantSession>) {
+    const r = this.records.get(callId);
+    if (!r) return null;
+    r.session = { ...sessionOf(r), ...copy(patch) };
+    return copy(r);
+  }
+
+  async bumpRefused(callId: string) {
+    const r = this.records.get(callId);
+    if (!r) return 0;
+    const session = sessionOf(r);
+    session.refusedCalls += 1;
+    r.session = session;
+    return session.refusedCalls;
+  }
+
+  async createTurn(turn: AssistantTurn) {
+    const key = `${turn.callId}\0${turn.turnId}`;
+    const existing = this.turns.get(key);
+    if (existing) return { turn: copy(existing), created: false };
+    this.turns.set(key, copy(turn));
+    return { turn: copy(turn), created: true };
+  }
+
+  async getTurn(callId: string, turnId: string) { const t = this.turns.get(`${callId}\0${turnId}`); return t ? copy(t) : null; }
+
+  async listTurns(callId: string, filter: TurnFilter = {}) {
+    return [...this.turns.values()]
+      .filter((t) => t.callId === callId && (!filter.askedBy || t.askedBy === filter.askedBy) && (!filter.statuses || filter.statuses.includes(t.status)))
+      .sort((a, b) => a.createdAt - b.createdAt || a.turnId.localeCompare(b.turnId)).map(copy);
+  }
+
+  async moveTurn(callId: string, turnId: string, change: TurnChange) {
+    const t = this.turns.get(`${callId}\0${turnId}`);
+    if (!t || !change.from.includes(t.status)) return null;
+    t.status = change.to;
+    if (change.actionId !== undefined) t.actionId = change.actionId;
+    return copy(t);
   }
 
   async sweepLines(cutoffMs: number) {

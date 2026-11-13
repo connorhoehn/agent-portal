@@ -73,3 +73,28 @@ CREATE TABLE IF NOT EXISTS meeting_assistant_actions (
   result_text  TEXT,
   PRIMARY KEY (call_id, action_id)
 );
+
+-- Package 4a: the live session's bookkeeping, unattributed lines, and the turns that carry a tool call to the asker's browser.
+-- `session` holds refused calls, listening seconds, the ceiling, the spend hold ids and the usage to settle (types.ts AssistantSession).
+ALTER TABLE meeting_assistants ADD COLUMN IF NOT EXISTS session JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(session) = 'object');
+-- A piece nobody's audio was voiced for is stored with no person; the name lock never counts it.
+ALTER TABLE meeting_transcript_lines ALTER COLUMN user_id DROP NOT NULL;
+
+-- One row per tool call the assistant turned into work for the person who asked. Reads run in that person's browser at once
+-- (status pending); a write waits behind its card in the chat (pending) and runs after the asker confirms (running).
+-- Reads expire after 90 seconds, writes after 10 minutes.
+CREATE TABLE IF NOT EXISTS meeting_assistant_turns (
+  call_id     TEXT        NOT NULL REFERENCES meeting_assistants (call_id) ON DELETE CASCADE,
+  turn_id     TEXT        NOT NULL CHECK (turn_id ~ '^[a-zA-Z0-9:_-]{1,128}$'),
+  tenant      TEXT        NOT NULL,
+  asked_by    TEXT        NOT NULL,
+  tool_name   TEXT        NOT NULL,
+  tool_args   JSONB,
+  kind        TEXT        NOT NULL CHECK (kind IN ('read', 'write', 'private-read')),
+  status      TEXT        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'done', 'failed', 'declined', 'expired')),
+  action_id   TEXT,
+  created_at  TIMESTAMPTZ NOT NULL,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (call_id, turn_id)
+);
+CREATE INDEX IF NOT EXISTS meeting_assistant_turns_asker_idx ON meeting_assistant_turns (call_id, asked_by) WHERE status IN ('pending', 'running');

@@ -6,6 +6,9 @@
 //   POST dismiss     a seat. Final: the assistant leaves.
 //   POST ack         a seat. Acknowledges the transcription notice; until then your lines are not stored.
 //   POST actions/:actionId/decision  a seat, and ONLY the person the action was offered to. { decision: 'confirm' | 'decline' }.
+//   GET  turns?mine=1  a seat. The tool calls waiting for MY browser: pending reads, and writes I confirmed (running). Only mine, ever.
+//   POST turns/:turnId/result  a seat, and ONLY the person the turn was made for (404 for anyone else). { ok, output?, error? }:
+//                      the browser's result of running the tool as that person. The server hands it to the live session as data.
 //   GET  state       a seat. State, who invited, who still owes an ack, counters, pending requests.
 //   GET  transcript  people who hold or held a seat in this call, nobody else (admins included).
 //
@@ -22,6 +25,10 @@ import {
   type AssistantRecord,
 } from '../lib/meeting-assistant/index.js';
 import { moveAction, nameOf, noticeText, postNoticeQuietly } from '../lib/meeting-assistant/chat.js';
+import { assistantRuntime, MAX_RESULT_BYTES, type StartContext } from '../lib/meeting-assistant/orchestrator.js';
+import { sessionAvailable } from '../lib/meeting-assistant/session-select.js';
+import { sessionOf as recordSession } from '../lib/meeting-assistant/types.js';
+import { getProject } from '../providers/projects.js';
 import { config } from '../config.js';
 
 export const meetingAssistantRouter = Router({ mergeParams: true });
@@ -76,8 +83,21 @@ async function view(record: AssistantRecord | null, callId: string, session: Ses
     invitedBy: record.invitedBy, invitedByName, invitedAt: record.invitedAt, pausedBy: record.pausedBy, leftAt: record.leftAt, leftBy: record.leftBy,
     mustAck: owing, youMustAck: owing.includes(session.sub),
     counters: { requests: record.requests, linesStored: record.linesStored },
+    refusedCalls: recordSession(record).refusedCalls,
     pendingRequests: record.pendingRequests,
   };
+}
+
+/** The call's record name for Nova's instructions: the initiative's name, or null. */
+async function recordNameOf(initiativeId: string | null): Promise<string | null> {
+  if (!initiativeId) return null;
+  try { return (await getProject(initiativeId))?.name ?? null; } catch { return null; }
+}
+
+/** Start (or restart) the live session for a record that already exists. */
+async function startSession(callId: string, record: AssistantRecord, session: Session): Promise<void> {
+  const names = await Promise.all([...new Set([...record.presentAtInvite, session.sub])].map((u) => nameOf(u)));
+  await assistantRuntime().start({ callId, tenant: record.tenant, inviterId: record.invitedBy, roster: names, recordName: await recordNameOf(record.initiativeId) });
 }
 
 const noteSeat = async (callId: string, session: Session) => { await assistantStore().attend(callId, session.sub); };
@@ -93,7 +113,13 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
   };
   const existing = await store.get(callId);
   if (existing?.state === 'left') throw new AppError(409, 'The assistant already left this call');
-  if (existing) { startListening(); await noteSeat(callId, session); res.json(await view((await store.get(callId)) ?? existing, callId, session)); return; }
+  if (existing) {
+    startListening(); await noteSeat(callId, session);
+    // After a restart a listening record has no live session in this process: start one again on a repeated invite.
+    if (existing.state === 'listening' && !assistantRuntime().isRunning(callId)) await startSession(callId, existing, session).catch(() => undefined);
+    res.json(await view((await store.get(callId)) ?? existing, callId, session)); return;
+  }
+  if (!sessionAvailable()) throw new AppError(503, 'The live assistant is not configured for this deployment');
 
   const runtime = callChatRuntime();
   const lobby = await runtime.lobbyOf(callId);
@@ -101,6 +127,13 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
   const present = (await runtime.seatedUsers(callId)).filter((u) => u.active).map((u) => u.userId);
   if (!present.includes(session.sub)) present.push(session.sub);
   startListening();
+  const names = await Promise.all([...new Set(present)].map((u) => nameOf(u)));
+  const startCtx: StartContext = { callId, tenant: session.tenant, inviterId: session.sub, roster: names, recordName: await recordNameOf(initiativeOfLobby(lobby)) };
+  try { await assistantRuntime().start(startCtx); } catch (e) {
+    assistantIntake().stop(callId);
+    console.warn('[meeting-assistant] the live session did not start', (e as Error).message);
+    throw new AppError(503, 'The live assistant could not start. Try again shortly.');
+  }
   // `invited` is the moment of the invite; the inviter acknowledges by inviting, so listening starts at once.
   const { record } = await store.create({
     callId, tenant: session.tenant, lobby, initiativeId: initiativeOfLobby(lobby), state: 'invited',
@@ -119,8 +152,20 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
     const { session, callId } = await seatOf(req);
     const store = assistantStore();
     await noteSeat(callId, session);
+    const before = await store.get(callId);
+    if (to === 'listening' && before?.state === 'paused' && !sessionAvailable()) throw new AppError(503, 'The live assistant is not configured for this deployment');
     const done = await store.transition(callId, { from, to, by: session.sub, at: Date.now() });
     if (done) {
+      const runtime = assistantRuntime();
+      if (to === 'paused') await runtime.pause(callId);
+      if (to === 'listening') {
+        try { if (runtime.isRunning(callId)) await runtime.resume(callId); else await startSession(callId, done, session); } catch (e) {
+          // No session to listen with: back to paused, and say so.
+          await store.transition(callId, { from: ['listening'], to: 'paused', by: session.sub, at: Date.now() });
+          console.warn('[meeting-assistant] resume failed', (e as Error).message);
+          throw new AppError(503, 'The live assistant could not start. Try again shortly.');
+        }
+      }
       const who = await nameOf(session.sub, session.name);
       if (to === 'paused') await postNoticeQuietly(callId, noticeText.paused(who));
       if (to === 'listening') await postNoticeQuietly(callId, noticeText.resumed(who));
@@ -129,6 +174,7 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
         // Snapshot who was seated so they can still read the transcript after the call ends.
         for (const u of await callChatRuntime().seatedUsers(callId).catch(() => [])) await store.attend(callId, u.userId);
         assistantIntake().stop(callId);
+        await assistantRuntime().stop(callId);
       }
       res.json(await view(await store.get(callId), callId, session));
       return;
@@ -173,7 +219,37 @@ meetingAssistantRouter.post('/actions/:actionId/decision', asyncHandler(async (r
     if (action.status === to) { res.json({ actionId, status: action.status, decidedBy: action.decidedBy, decidedAt: action.decidedAt }); return; }
     throw new AppError(409, `This action is already ${action.status}`);
   }
+  await assistantRuntime().onDecision(callId, actionId, decision);
   res.json({ actionId, status: moved.status, decidedBy: moved.decidedBy, decidedAt: moved.decidedAt });
+}));
+
+/** The turns waiting for MY browser. Never anyone else's: the list is filtered by the caller's own id. */
+meetingAssistantRouter.get('/turns', asyncHandler(async (req, res) => {
+  const { session, callId } = await seatOf(req);
+  const turns = await assistantRuntime().turnsFor(callId, session.sub);
+  res.json({ callId, turns: turns.map((t) => ({ turnId: t.turnId, kind: t.kind, status: t.status, tool: t.tool, actionId: t.actionId ?? null, createdAt: t.createdAt, expiresAt: t.expiresAt })) });
+}));
+
+const turnIdOf = (req: Request): string => {
+  const id = req.params['turnId'];
+  if (typeof id !== 'string' || !/^[a-zA-Z0-9:_-]{1,128}$/.test(id)) throw new NotFoundError('No such turn');
+  return id;
+};
+
+/** The browser's result of a turn. A caller who is not the asker, or an unknown turn, gets the same 404. */
+meetingAssistantRouter.post('/turns/:turnId/result', asyncHandler(async (req, res) => {
+  const { session, callId } = await seatOf(req);
+  const turnId = turnIdOf(req);
+  const body = (req.body ?? {}) as { ok?: unknown; output?: unknown; error?: unknown };
+  if (typeof body.ok !== 'boolean') throw new ValidationError('ok must be true or false');
+  if (body.error !== undefined && typeof body.error !== 'string') throw new ValidationError('error must be a string');
+  let size = 0;
+  try { size = Buffer.byteLength(JSON.stringify(body.output ?? null)); } catch { throw new ValidationError('output must be JSON'); }
+  if (size > MAX_RESULT_BYTES) throw new AppError(413, `output may be at most ${MAX_RESULT_BYTES} bytes`);
+  const out = await assistantRuntime().submitResult(callId, turnId, session.sub, { ok: body.ok, output: body.output, ...(typeof body.error === 'string' ? { error: body.error } : {}) });
+  if (!out) throw new NotFoundError('No such turn');
+  if ('conflict' in out) throw new AppError(409, `This turn is ${out.conflict}`);
+  res.json({ turnId, status: out.turn.status });
 }));
 
 meetingAssistantRouter.get('/state', asyncHandler(async (req, res) => {
