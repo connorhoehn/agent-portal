@@ -76,6 +76,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
             "runbook-obstacles",
             "search",
             "communication",
+            "meetings",
             "scores",
             "score-cohorts",
             "score-compare",

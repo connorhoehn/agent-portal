@@ -156,6 +156,8 @@ export const PAGES: readonly PageEntry[] = [
     keywords: ['ask', 'search', 'chat', 'agent', 'help', 'explore', 'graph', 'connections'] },
   { label: 'Communication',      hint: 'Social channels and direct messages here, and the huddles you joined on initiative pages', path: '/iq/communication', tenant: 'orgiq', group: 'Engage', pageId: 'communication',
     keywords: ['communication', 'social', 'chat', 'message', 'dm', 'channel', 'mention', 'call', 'calls', 'huddle', 'missed', 'meeting', 'history'] },
+  { label: 'Meetings',           hint: 'Minutes and transcripts of calls Nova listened to', path: '/iq/meetings',                                  tenant: 'orgiq',  group: 'Engage', pageId: 'meetings',
+    keywords: ['meeting', 'meetings', 'minutes', 'transcript', 'nova', 'notes', 'action items', 'summary', 'call notes'] },
   { label: 'Scores',             hint: 'Per-person influence leaderboard',    path: '/iq/scores',                                  tenant: 'orgiq',  group: 'Engage', pageId: 'scores', roles: PLATFORM,
     keywords: ['score', 'leaderboard', 'influence'] },
   { label: 'Score cohorts',      hint: 'Scores grouped by team',              path: '/iq/scores/cohorts',                          tenant: 'orgiq',  group: 'Engage', pageId: 'score-cohorts', roles: PLATFORM,

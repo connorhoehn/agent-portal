@@ -156,6 +156,8 @@ export interface MinutesActionItem {
   text: string;
   ownerUserId?: string;
   ownerName?: string;
+  /** Already done in the call (a write the owner confirmed and ran), so nothing is offered for it. */
+  done?: boolean;
 }
 
 /** Who wrote the minutes: the scripted rules (mock world), the provider's text model, or nobody (transcript only). */

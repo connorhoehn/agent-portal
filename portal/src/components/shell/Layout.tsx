@@ -144,6 +144,8 @@ const NAV_ITEMS: NavItem[] = [
   // Communication: the Social plane embedded in orgiq, with the call log as its Calls shelf. Every orgiq role
   // (Social reads gate on the Social grant at the BFF; no grant → the plane's own denied state).
   { path: '/iq/communication', label: 'Communication', tenant: 'orgiq',  group: 'Engage' },
+  // The minutes and transcripts of calls Nova listened to; a flat table of the viewer's own meetings, so no section rail.
+  { path: '/iq/meetings',   label: 'Meetings',    tenant: 'orgiq',     group: 'Engage' },
   // Ask is also the "find help" surface: its empty state offers questions
   // from your own work, and answers grow an evidence rail (people + matched
   // skills + documents, score-free) via /api/graph/help. Scores stays the

@@ -151,6 +151,7 @@ export const NAVIGATE_PAGES: ReadonlyArray<{ id: string; path: string; tenants: 
   { id: 'runbook-obstacles', path: '/iq/runbooks/obstacles', tenants: ['orgiq'], roles: ['sme', 'program-owner', 'org-leader', 'hr-admin'] },
   { id: 'search', path: '/iq/search', tenants: ['orgiq'] },
   { id: 'communication', path: '/iq/communication', tenants: ['orgiq'] },
+  { id: 'meetings', path: '/iq/meetings', tenants: ['orgiq'] },
   { id: 'scores', path: '/iq/scores', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
   { id: 'score-cohorts', path: '/iq/scores/cohorts', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
   { id: 'score-compare', path: '/iq/scores/compare', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },

@@ -129,7 +129,7 @@ async function offerCards(record: AssistantRecord, minutes: MinutesRecord, initi
   for (const [i, item] of minutes.actionItems.entries()) {
     if (cards >= MAX_CARDS) break;
     const owner = item.ownerUserId;
-    if (!owner || !seated.has(owner) || !minutes.attendees.includes(owner)) continue;
+    if (item.done || !owner || !seated.has(owner) || !minutes.attendees.includes(owner)) continue;
     const roles = await import('./orchestrator.js').then((m) => m.defaultRolesOf(owner, record.tenant)).catch(() => [] as string[]);
     if (!roles.some((role) => meetingTools(record.tenant, role).some((t) => t.name === 'create'))) continue;
     const args = createWorkItemArgs(item.text, initiativeName);

@@ -111,6 +111,8 @@ const WorkHomePage = lazy(() => import('./pages/work/WorkHomePage'));
 const WorkQueuePage = lazy(() => import('./pages/work/QueuePage'));
 const DesignsPage = lazy(() => import('./pages/designs/DesignsPage'));
 const MyWorkPage = lazy(() => import('./pages/iq/MyWorkPage'));
+const MeetingsPage = lazy(() => import('./pages/meetings/MeetingsPage'));
+const MeetingPage = lazy(() => import('./pages/meetings/MeetingPage'));
 const DecisionsPage = lazy(() => import('./pages/decisions/DecisionsPage'));
 const LibraryPage = lazy(() => import('./pages/library/LibraryPage'));
 const RunbooksModule = lazy(() => import('./pages/runbooks/RunbooksModule'));
@@ -584,6 +586,9 @@ export function App() {
             </Gate>
           } />
           <Route path="my-work" element={<Page element={<MyWorkPage />} />} />
+          {/* Meetings: what the meeting assistant left behind, readable only by the people who were in the call (the server decides). */}
+          <Route path="meetings" element={<Page element={<MeetingsPage />} />} />
+          <Route path="meetings/:callId" element={<Page element={<MeetingPage />} />} />
           <Route path="decisions" element={<Page element={<DecisionsPage />} />} />
           <Route path="decisions/:id" element={<Page element={<DecisionsPage />} />} />
           <Route path="projects" element={<Page element={<ProjectsPage />} />} />

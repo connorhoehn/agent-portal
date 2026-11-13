@@ -87,6 +87,7 @@ export const NAVIGATE_PAGE_IDS: ReadonlyArray<{ id: string; tenants: readonly st
   { id: 'runbook-obstacles', tenants: ['orgiq'], roles: ['sme', 'program-owner', 'org-leader', 'hr-admin'] },
   { id: 'search', tenants: ['orgiq'] },
   { id: 'communication', tenants: ['orgiq'] },
+  { id: 'meetings', tenants: ['orgiq'] },
   { id: 'scores', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
   { id: 'score-cohorts', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },
   { id: 'score-compare', tenants: ['orgiq'], roles: ['org-leader', 'hr-admin'] },

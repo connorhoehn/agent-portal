@@ -101,7 +101,7 @@ describe('notices', () => {
       noticeText.paused('Bob Baker'), noticeText.resumed('carol'), noticeText.dismissed('Alice Ames', true),
     ]);
     expect((await texts())[1]).toBe('Bob Baker paused Nova. Nothing is being heard or stored.');
-    expect((await texts())[3]).toBe('Alice Ames dismissed Nova.');
+    expect((await texts())[3]).toBe('Alice Ames dismissed Nova. Nothing was recorded, so there are no minutes.');
     // The invite after dismissal is refused and posts nothing.
     expect((await post('invite')).status).toBe(409);
     expect(await chat()).toHaveLength(4);

@@ -114,11 +114,11 @@ export class ScriptedMinutesWriter implements MinutesWriter {
     const decisions: string[] = [];
     const items: MinutesActionItem[] = [];
     const seen = new Set<string>();
-    const addItem = (text: string, owner: RosterEntry | null): void => {
+    const addItem = (text: string, owner: RosterEntry | null, done = false): void => {
       const t = clip(text, MAX_ITEM_CHARS);
       if (!t || seen.has(t.toLowerCase()) || items.length >= MAX_ITEMS) return;
       seen.add(t.toLowerCase());
-      items.push(owner ? { text: t, ownerUserId: owner.userId, ownerName: owner.name } : { text: t });
+      items.push({ text: t, ...(owner ? { ownerUserId: owner.userId, ownerName: owner.name } : {}), ...(done ? { done: true } : {}) });
     };
     const firstBySpeaker = new Map<string, string>();
     const words = new Map<string, number>();
@@ -140,7 +140,7 @@ export class ScriptedMinutesWriter implements MinutesWriter {
       else if (self) addItem(self[1]!, (line.userId ? input.roster.find((r) => r.userId === line.userId) : null) ?? null);
       for (const w of text.toLowerCase().match(/[a-z]{5,}/g) ?? []) if (!STOPWORDS.has(w)) words.set(w, (words.get(w) ?? 0) + 1);
     }
-    for (const done of input.doneActions ?? []) addItem(done.text, input.roster.find((r) => r.userId === done.ownerUserId) ?? null);
+    for (const done of input.doneActions ?? []) addItem(done.text, input.roster.find((r) => r.userId === done.ownerUserId) ?? null, true);
 
     const speakers = [...firstBySpeaker.entries()].slice(0, 4);
     let summary = speakers.length ? speakers.map(([name, first]) => `${name} said: ${first}`).join(' ') : '';

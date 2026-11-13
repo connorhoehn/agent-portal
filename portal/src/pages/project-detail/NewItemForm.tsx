@@ -18,16 +18,19 @@ export interface NewItemDraft {
 export function NewItemForm({
   defaultType,
   typeOptions,
+  defaultTitle = '',
   onSave,
   onCancel,
 }: {
   defaultType: WorkItemType;
+  /** The title the form opens with (a meeting's action item); the person still reads and saves it. */
+  defaultTitle?: string;
   /** Which types the select offers — inside an epic that's story/bug only. */
   typeOptions?: WorkItemType[];
   onSave: (draft: NewItemDraft) => void;
   onCancel: () => void;
 }) {
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState(defaultTitle);
   const [type, setType] = useState<WorkItemType>(defaultType);
   const [priority, setPriority] = useState<WorkItemPriority>('medium');
   // Optional points at creation — without this, UI-created stories/bugs could

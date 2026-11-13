@@ -46,7 +46,7 @@ describe('the scripted writer', () => {
 
   it('turns each confirmed and done write action into an item for the person who confirmed it, once', async () => {
     const out = await write([line('u-vera', 'Fine.')], [{ text: 'Created work item: Fix the login cookie', ownerUserId: 'u-nora' }, { text: 'Created work item: Fix the login cookie', ownerUserId: 'u-nora' }]);
-    expect(out.actionItems).toEqual([{ text: 'Created work item: Fix the login cookie', ownerUserId: 'u-nora', ownerName: 'Nora Diaz' }]);
+    expect(out.actionItems).toEqual([{ text: 'Created work item: Fix the login cookie', ownerUserId: 'u-nora', ownerName: 'Nora Diaz', done: true }]);
   });
 
   it('records a decision for "we decided", "decision:" and "agreed"', async () => {

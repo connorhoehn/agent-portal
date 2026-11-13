@@ -8,6 +8,8 @@
 //   8 to 11 (package 4a, API level: the scripted session answers, no model): a spoken read lands in the call chat labelled with
 //     the asker; a write is a card only the asker confirms and shows as a running turn only after that; a tool call from someone
 //     who never said the name is refused and counted; after dismissal the inviter's spend has a meeting_assistant entry.
+//   12 to 17 (package 5, the minutes; the scripted writer): the leaving message in the call chat, the meeting page at 1440 and 1280,
+//     a person who was not there gets 404 and a not-found page, the Meetings list, the :minutes ledger entry, the inviter's delete.
 //
 // Two people share one call without media the way portal/e2e/work-huddle-navigation.spec.ts does: one starts a call on an
 // initiative page, the other accepts the ring, and the SFU session metadata is the only thing stubbed (the realtime token
@@ -515,6 +517,138 @@ async function main() {
       check(st.state === 'left' && st.listeningSeconds > 0, `the state after leaving: ${JSON.stringify({ state: st.state, listeningSeconds: st.listeningSeconds })}`);
       check(st.ceilingSeconds >= 60, `the state has no ceiling: ${st.ceilingSeconds}`);
       return `entry ${JSON.stringify(entry.bySource)}; listened ${st.listeningSeconds} s of ${st.ceilingSeconds} s`;
+    });
+    // ── Package 5: the minutes (steps 12 to 17 run after the dismissal; the scripted writer, no model) ──
+    const MEETING = () => `${PORTAL}/iq/meetings/${encodeURIComponent(callId)}`;
+    const LAYLA = { userId: 'u-layla', role: 'sme' };
+    /** A person who was not in the call: logged in, no call, no initiative page needed. */
+    const outsider = async () => {
+      const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      contexts.push(context);
+      const login = await context.request.post(`${PORTAL}/api/session/login`, { data: { userId: LAYLA.userId } });
+      check(login.status() === 200, `login ${LAYLA.userId}: ${login.status()}`);
+      const role = await context.request.post(`${PORTAL}/api/session/role`, { data: { tenant: 'orgiq', role: LAYLA.role } });
+      check(role.status() === 200, `role ${LAYLA.role}: ${role.status()}`);
+      const page = await context.newPage();
+      page.on('pageerror', (e) => errors.push(`${LAYLA.userId}: ${e.message}`));
+      return { who: LAYLA, context, page, api: context.request };
+    };
+    /** No sideways scroll and no element running past the right edge of the page. */
+    const fitsWidth = async (page, label, width) => {
+      await page.setViewportSize({ width, height: 900 });
+      await sleep(600);
+      const out = await page.evaluate(() => ({ over: document.documentElement.scrollWidth - document.documentElement.clientWidth }));
+      check(out.over <= 1, `${label} scrolls sideways at ${width} by ${out.over}px`);
+    };
+    let layla;
+
+    await step('12: after the dismissal Nova leaves one message in the call chat: the summary, the decision and action item counts, and a link to the meeting page', async () => {
+      const msg = await waitFor(async () => (await chatMessages(vera)).find((m) => /Nova's minutes/.test(m.message ?? '')), 20000, 'the minutes message in the call chat');
+      check(msg.userId === 'agent:nova' || msg.metadata?.assistant === true, 'the minutes message is not Nova\'s');
+      check(/\d+ decisions? and \d+ action items?/.test(msg.message), `no counts in "${msg.message}"`);
+      check(msg.message.includes(`/iq/meetings/${callId}`), `no link to the meeting page in "${msg.message}"`);
+      check(/ said: /.test(msg.message), `no summary in "${msg.message}"`);
+      const all = (await chatMessages(vera)).filter((m) => /Nova's minutes/.test(m.message ?? ''));
+      check(all.length === 1, `${all.length} minutes messages were posted`);
+      return `"${msg.message.slice(0, 220)}"`;
+    });
+
+    await step('13: the meeting page renders for an attendee at 1440 and 1280 with the summary, an action item and the transcript with speaker names', async () => {
+      await vera.page.goto(MEETING(), { waitUntil: 'domcontentloaded', timeout: 40000 });
+      await seen(vera.page, 'meeting-page', 30000);
+      await seen(vera.page, 'meeting-summary');
+      await seen(vera.page, 'meeting-action-items');
+      const out = [];
+      for (const width of [1440, 1280]) {
+        await fitsWidth(vera.page, 'the meeting page', width);
+        const text = await bodyText(vera.page);
+        check(/Nova invited by /.test(text), 'the header does not say who invited Nova');
+        check(/Summary/.test(text) && /Decisions/.test(text) && /Action items/.test(text) && /Transcript/.test(text), `a section is missing at ${width}`);
+        const summary = (await vera.page.getByTestId('meeting-summary').innerText()).trim();
+        check(summary.length > 10, 'the summary is empty');
+        const items = (await vera.page.getByTestId('meeting-action-items').innerText()).replace(/\s+/g, ' ');
+        check(/work item/i.test(items), `the action items do not hold the work item created in the call: "${items}"`);
+        // Speaker names, not ids: the transcript lines were injected for u-nora and u-vera.
+        check(/Nora/.test(text), 'Nora is not named in the transcript');
+        check(!/\bu-nora\b|\bu-vera\b/.test(text), 'a raw user id shows on the page');
+        check(text.includes('After resume: kept again.'), 'a transcript line is missing');
+        out.push(`${width}: ok`);
+      }
+      await vera.page.setViewportSize({ width: 1280, height: 900 });
+      await vera.page.evaluate(() => window.scrollTo(0, 0));
+      await sleep(400);
+      await vera.page.screenshot({ path: path.join(SHOTS, '13-meeting-page-1280.png'), fullPage: false });
+      return out.join(', ');
+    });
+
+    await step('14: a person who was not in the call gets a not-found page and a 404 from both API routes', async () => {
+      layla = await outsider();
+      const min = await layla.api.get(asApi(layla, 'minutes'));
+      const tr = await layla.api.get(asApi(layla, 'transcript'));
+      check(min.status() === 404, `minutes answered ${min.status()} to an outsider`);
+      check(tr.status() === 404, `transcript answered ${tr.status()} to an outsider`);
+      check(!/login cookie|canary|resume/i.test(await min.text() + await tr.text()), 'the 404 body carries meeting words');
+      await layla.page.goto(MEETING(), { waitUntil: 'domcontentloaded', timeout: 40000 });
+      await seen(layla.page, 'meeting-not-found', 30000);
+      const text = await bodyText(layla.page);
+      check(!/login cookie|canary|rollout|resumes/i.test(text), 'the not-found page shows meeting words');
+      return 'API 404 x2; "Meeting not found" page';
+    });
+
+    await step('15: the Meetings list shows the meeting to an attendee, table first, and not to the outsider', async () => {
+      await vera.page.goto(`${PORTAL}/iq/meetings`, { waitUntil: 'domcontentloaded', timeout: 40000 });
+      await seen(vera.page, 'iq-meetings-table', 30000);
+      const row = vera.page.getByTestId('iq-meetings-table').getByText(/call/i).first();
+      await row.waitFor({ state: 'visible', timeout: 15000 }).catch(() => { throw new StepFailure('the meeting is not in the list'); });
+      for (const width of [1440, 1280]) {
+        await fitsWidth(vera.page, 'the Meetings list', width);
+        const top = await vera.page.getByTestId('iq-meetings-table').locator('tbody tr, [role="row"]').nth(1).evaluate((el) => el.getBoundingClientRect().top).catch(() => null);
+        check(top !== null && top < 600, `the first row starts at ${top}px: the table is not above the fold at ${width}`);
+      }
+      const text = await bodyText(vera.page);
+      check(/Nora/.test(text), 'the list does not name the people');
+      await vera.page.setViewportSize({ width: 1280, height: 900 });
+      await sleep(400);
+      await vera.page.screenshot({ path: path.join(SHOTS, '15-meetings-list-1280.png'), fullPage: false });
+      const mine = await (await vera.api.get(`${PORTAL}/api/meetings`)).json();
+      check(mine.meetings.some((m) => m.callId === callId && m.actionItemCount >= 1), `the API list lacks the meeting: ${JSON.stringify(mine).slice(0, 200)}`);
+      const theirs = await (await layla.api.get(`${PORTAL}/api/meetings`)).json();
+      check(Array.isArray(theirs.meetings) && theirs.meetings.length === 0, `the outsider's list is ${JSON.stringify(theirs).slice(0, 200)}`);
+      await layla.page.goto(`${PORTAL}/iq/meetings`, { waitUntil: 'domcontentloaded', timeout: 40000 });
+      await seen(layla.page, 'iq-meetings-table', 30000);
+      check(!/Nova|said:/.test(await layla.page.getByTestId('iq-meetings-table').innerText()), 'the outsider\'s table shows a meeting');
+      return `attendee: ${mine.meetings.length} meeting(s); outsider: none`;
+    });
+
+    await step('16: a ledger entry for the minutes exists, booked to the inviter (source id ending :minutes)', async () => {
+      const res = await vera.api.get(`${PORTAL}/api/spend/entries?groupBy=source&key=meeting_assistant&period=month&limit=50`);
+      check(res.status() === 200, `the spend entries answered ${res.status()}`);
+      const body = await res.json();
+      const ids = (body.entries ?? []).map((e) => e.sourceId);
+      check(ids.some((id) => id === `ma:${callId}:minutes`), `no :minutes entry among ${JSON.stringify(ids)}`);
+      return `entries ${JSON.stringify(ids)}`;
+    });
+
+    await step('17: only the inviter sees Delete; deleting (after the confirm step) makes the page and the transcript route 404 for everyone', async () => {
+      await nora.page.goto(MEETING(), { waitUntil: 'domcontentloaded', timeout: 40000 });
+      await seen(nora.page, 'meeting-page', 30000);
+      check(await nora.page.getByTestId('meeting-delete').count() === 0, 'a person who did not invite Nova is offered Delete');
+      const refused = await nora.api.delete(asApi(nora, 'minutes'));
+      check(refused.status() === 403, `a non-inviter deleting answered ${refused.status()}`);
+      await vera.page.goto(MEETING(), { waitUntil: 'domcontentloaded', timeout: 40000 });
+      await seen(vera.page, 'meeting-delete', 30000);
+      await vera.page.getByTestId('meeting-delete').click();
+      await vera.page.getByRole('button', { name: 'Delete record' }).click();
+      await vera.page.waitForURL(/\/iq\/meetings$/, { timeout: 20000 }).catch(() => { throw new StepFailure('deleting did not return to the Meetings list'); });
+      for (const p of [vera, nora]) {
+        const a = await p.api.get(asApi(p, 'minutes')); const b = await p.api.get(asApi(p, 'transcript'));
+        check(a.status() === 404 && b.status() === 404, `${p.who.userId}: minutes ${a.status()}, transcript ${b.status()} after the delete`);
+      }
+      await vera.page.goto(MEETING(), { waitUntil: 'domcontentloaded', timeout: 40000 });
+      await seen(vera.page, 'meeting-not-found', 30000);
+      const list = await (await vera.api.get(`${PORTAL}/api/meetings`)).json();
+      check(!list.meetings.some((m) => m.callId === callId), 'the deleted meeting is still listed');
+      return 'non-inviter: no button, 403; inviter: confirm, then 404 on the page and both routes, gone from the list';
     });
   } finally {
     for (const p of [vera, nora]) {
