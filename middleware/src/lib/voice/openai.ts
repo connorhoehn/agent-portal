@@ -155,6 +155,36 @@ export class VoiceProviderError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
 }
 
+/**
+ * The `session` object of `session.start` over the primary WebSocket (spec §1, "Endpoint" and "Session shape for
+ * tools"): the WebRTC body without `client` (`client.data_channel` is refused on a socket) and with the PCM audio
+ * format the socket takes. The meeting assistant's session uses it; the voice navigator's WebRTC mint does not.
+ */
+export function liveSocketSessionBody(input: LiveSessionInput, rate = 24_000): Record<string, unknown> {
+  const { client: _client, ...body } = liveSessionBody(input);
+  const audio = (body['audio'] ?? {}) as Record<string, unknown>;
+  return { ...body, audio: { ...audio, format: { type: 'audio/pcm', rate } } };
+}
+
+/** A client socket: the sideband's read side plus `send`. Node's built-in WebSocket, the `ws` package and a test's fake fit. */
+export interface LiveSocket extends SidebandSocket {
+  send(data: string): void;
+  readonly readyState: number;
+}
+export const LIVE_SOCKET_OPEN = 1;
+
+/**
+ * Open the primary Live WebSocket (`{base}/live/sessions`, bearer key, no query, no beta header). The key stays in this
+ * module: it is in the constructor's header and nowhere else. Throws VoiceProviderError(503) with no key or no WebSocket.
+ */
+export function openLiveSocket(): LiveSocket {
+  const key = apiKey();
+  const Ctor = socketCtor();
+  if (!key || !Ctor) throw new VoiceProviderError(503, 'no OpenAI key or WebSocket available');
+  const url = `${apiBase().replace(/^http/, 'ws')}/live/sessions`;
+  return new Ctor(url, { headers: { Authorization: `Bearer ${key}` } }) as unknown as LiveSocket;
+}
+
 /** Mint one session: forward the browser's SDP offer, return the answer and the provider's session id. */
 export async function createLiveSession(sdp: string, input: LiveSessionInput): Promise<{ providerSessionId: string | null; sdp: string }> {
   const key = apiKey();
