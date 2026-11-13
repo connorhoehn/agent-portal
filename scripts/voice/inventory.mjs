@@ -454,7 +454,7 @@ export const V2_RULES = [
   // Not for people
   [/^\w+ \/internal\//, 'n/a', null, 'service-auth plane'],
   [/^\w+ \/api\/__mock\//, 'n/a', null, 'dev-only mock control plane'],
-  [/^\w+ \/api\/dev\/calls\/:[^/]+\/transcript-lines$/, 'n/a', null, 'dev-only transcript-line injector (mock world and flag only)'],
+  [/^\w+ \/api\/dev\/calls\/:[^/]+\/(transcript-lines|assistant-messages|assistant-tool-call)$/, 'n/a', null, 'dev-only injectors for the meeting assistant (transcript lines, Nova messages, a scripted tool call; mock world and flag only)'],
   [/^\w+ \/api\/observability\/test-fixtures\//, 'n/a', null, 'E2E fixtures'],
   [/^GET \/(api\/)?(health|livez)$/, 'n/a', null, 'load-balancer probe'],
   [/^\w+ \/api\/realtime\//, 'n/a', null, 'realtime token admission'],
@@ -522,7 +522,8 @@ export const V2_RULES = [
   [/^(PUT|PATCH|DELETE) \/api\/graph\/projects\/:[^/]+\/workspace-documents|^(POST|PUT|PATCH|DELETE) \/api\/graph\/documents/, 'never', null, 'document content'],
   [/^PATCH \/api\/graph\/projects\/:[^/]+(\/contributors\/:[^/]+)?$/, 'never', null, 'initiative governance edits'],
   [/^POST \/api\/graph\/projects$/, 'never', null, 'creating an initiative is a form on the page (CreateInitiative)'],
-  [/^(POST|GET) \/api\/calls\/:[^/]+\/assistant\/(invite|pause|resume|dismiss|ack|state|transcript)$/, 'never', null, 'the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)'],
+  [/^(POST|GET) \/api\/calls\/:[^/]+\/assistant\/(invite|extend|pause|resume|dismiss|ack|state|transcript)$/, 'never', null, 'the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, extend (it holds money against the inviter), pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)'],
+  [/^(POST|GET) \/api\/calls\/:[^/]+\/assistant\/turns(\/:[^/]+\/result)?$/, 'never', null, 'the exchange between the meeting assistant and the asking person\'s own browser: the server lists the tool calls made for that person and takes the result they ran (never anyone else\'s); it is the transport of a tool call, not a tool of its own'],
   [/^POST \/api\/calls\/:[^/]+\/assistant\/actions\/:[^/]+\/decision$/, 'never', null, 'a confirmation is the asking person clicking Confirm or Decline on the card in the call chat; the server accepts it only from the person the action was offered to, and a spoken yes confirms nothing (design decision 5)'],
   [/^POST \/api\/sprints$/, 'not-yet', 'create', 'sprint (ManageSprints)'],
   [/^(PATCH|DELETE) \/api\/sprints\/:[^/]+\/items/, 'not-yet', 'update', 'move work between sprints (ManageSprints)'],
