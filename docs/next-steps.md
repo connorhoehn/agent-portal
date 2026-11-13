@@ -1043,3 +1043,7 @@ All fourteen are built and walked: `npm run journey:value-sweep` covers each on 
 - ~~No notice on a proposal's merge or withdrawal.~~ Done (13 November): the filer is told on a merge, and the reviewers who were told of the filing are told on a withdrawal, including the automatic ones (expiry, a rejected change); never the person who acted.
 
 The value-sweep journey's steps 8, 12 and 13 assert the four portal changes at 1440 and 1280.
+
+### Meeting assistant (13 November 2026)
+
+Plan: `docs/meeting-assistant-design.md`. An assistant, shown as Nova, that a person invites into a call: it hears each speaker through the media server's taps and the captions service, answers in the call chat when addressed by name, offers actions to the person who asked (run in that person's browser, writes behind a card), and leaves minutes. Eight packages; 1 to 5 run on the mock world. A spike on 13 November measured the captions service at 0.8 s (base) and 1.45 s (small.en) median delay with the name heard 9 times of 9 on synthetic voices; real microphones are unmeasured. Nothing built yet.
