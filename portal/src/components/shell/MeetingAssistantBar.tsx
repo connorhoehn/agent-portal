@@ -4,9 +4,11 @@
 //   useNovaRosterEntry  the "Nova (Assistant, listening)" line for the call's people lists
 // Everything renders nothing unless the server advertises the feature (session.meetingAssistant) and a call is live.
 
-import { Banner, Button, Chip, CloseIcon, DropdownMenu, Inline, PauseCircleIcon, PlayCircleIcon, T, Tooltip } from '@connorhoehn/ui-components/shared';
+import { Button, Chip, CloseIcon, DropdownMenu, Inline, PauseCircleIcon, PlayCircleIcon, T, Tooltip } from '@connorhoehn/ui-components/shared';
+import { useState } from 'react';
+import { RecordingConsentNotice, type RosterExtraEntry } from '@connorhoehn/ui-components/video';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
-import { assistantPresent, assistantStateWords, noticeText, noticeVisible, rosterEntry } from '../../lib/meetingAssistantModel';
+import { assistantPresent, assistantStateWords, noticeText, noticeVisible, rosterEntry, ASSISTANT_LABEL, ASSISTANT_NAME } from '../../lib/meetingAssistantModel';
 import { useCallHost } from '../../lib/conversationCall';
 
 /** The live call's id, or null while there is no joined call to listen to. */
@@ -42,23 +44,30 @@ export function NovaBarControls() {
   </Inline>;
 }
 
-/** The notice. RecordingConsentNotice cannot carry this text or a second action (see the package report), so it is a library Banner. */
+/** The notice, on the library's RecordingConsentNotice with its own wording and two actions. Its close mark only hides it here; nothing is acknowledged or dismissed by it. */
 export function NovaNotice() {
   const callId = useLiveCallId();
   const nova = useMeetingAssistant(callId);
-  if (!noticeVisible(nova.enabled, nova.view)) return null;
+  const [hidden, setHidden] = useState(false);
+  if (hidden || !noticeVisible(nova.enabled, nova.view)) return null;
   const text = noticeText(nova.view);
-  return <Banner variant="info" layout="callout" icon title={text.title} className="mx-4 my-1" data-testid="nova-notice"
-    action={<Inline gap="xs" wrap={false}>
-      <Button variant="primary" size="sm" disabled={nova.busy} onClick={() => void nova.acknowledge()} data-testid="nova-ack">I understand</Button>
-      <Button variant="secondary" size="sm" disabled={nova.busy} onClick={() => void nova.dismiss()} data-testid="nova-notice-dismiss">Dismiss Nova</Button>
-    </Inline>}>
-    {text.body}
-  </Banner>;
+  return <RecordingConsentNotice open kind="transcription" placement="inline" className="mx-4 my-1" data-testid="nova-notice"
+    title={text.title} description={text.body}
+    acknowledgeLabel="I understand" onAcknowledge={nova.busy ? () => {} : () => void nova.acknowledge()}
+    secondaryLabel="Dismiss Nova" onSecondary={nova.busy ? () => {} : () => void nova.dismiss()}
+    onDismiss={() => setHidden(true)} />;
 }
 
 /** Nova as a non-media entry for the call's people lists; null when it is not in this call. */
 export function useNovaRosterEntry(callId: string | null): string | null {
   const nova = useMeetingAssistant(callId);
   return nova.enabled && assistantPresent(nova.view) ? rosterEntry(nova.view) : null;
+}
+
+/** Nova as the library roster's non-media entry (`RosterPanel extraEntries`); empty when it is not in this call. */
+export function useNovaRosterEntries(): RosterExtraEntry[] {
+  const callId = useLiveCallId();
+  const nova = useMeetingAssistant(callId);
+  return nova.enabled && assistantPresent(nova.view)
+    ? [{ id: 'assistant-nova', name: ASSISTANT_NAME, label: ASSISTANT_LABEL, status: nova.view.phase === 'paused' ? 'paused' : 'listening' }] : [];
 }

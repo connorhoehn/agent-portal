@@ -9,6 +9,7 @@ import type { NameOf, SocialRoom } from './socialPlatform';
 import type { SocialCall } from './useSocialCall';
 import { CallBlock, useCallHost, useCallMediaPanel } from '../../lib/conversationCall';
 import { useCallMeeting } from '../../components/shell/CallMeeting';
+import { useNovaRosterEntries } from '../../components/shell/MeetingAssistantBar';
 import { HuddleChatBody, useHuddleChat } from '../../components/shell/HuddleChat';
 import RoomConfiguration from './RoomConfiguration';
 import RoomActivity from './RoomActivity';
@@ -48,6 +49,7 @@ export default function RoomPane({ selected, room, nameOf, call, onBrowse, inset
   const meeting = useCallMeeting();
   const here = !!room && call.activeLobby === room.lobbyName;
   const live = here ? meeting : null;
+  const novaEntries = useNovaRosterEntries();
   const currentRoomName = live?.meeting.myRoom?.name ?? 'Main call';
   const registerPane = chat?.registerPaneOwner;
   const hideConversation = useCallback(() => setCallPane(null), []);
@@ -92,7 +94,7 @@ export default function RoomPane({ selected, room, nameOf, call, onBrowse, inset
         conversation={<HuddleChatBody showCall={false} />}
         people={<RosterPanel {...(live ? meetingRosterProps(live.meeting, live.roster) : {
           participants: active.map(p => ({ id: p.userId, displayName: label(p.userId), avatarUrl: p.avatarUrl, isLocal: p.isLocal, isMuted: !p.audioOn, isScreenSharing: p.screenSharing })),
-        })} title="Participants" className="w-full border-l-0" />} />
+        })} extraEntries={novaEntries} title="Participants" className="w-full border-l-0" />} />
         : <EmptyState align="start" title="Ready when you are" description="Join the call to meet here. Check your camera and microphone before entering." />}
     </TabPanel>
     <TabPanel id="overview" when={view} idPrefix="hangout-view"><Stack gap="lg">

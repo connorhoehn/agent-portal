@@ -1,14 +1,14 @@
 // What sits under a Nova message in the call chat (docs/meeting-assistant-design.md, decisions 5 and 6).
-// The thread draws Nova's message as an ordinary bubble (author "Nova", the sentence as its text); this adds the
-// kind's own part, through the thread's `renderMessageReferences` slot:
-//   assistant-notice  a quiet "Notice" line
-//   assistant-reply   "Asked by <name>"
-//   assistant-action  a card: detail lines, a status, and Confirm and Decline for the asker only; everyone else
+// The thread draws Nova's message through three slots:
+//   assistant-notice  a system line (`renderSystemMessage`): no avatar, author or bubble
+//   assistant-reply   an ordinary bubble, with "Asked by <name>" under it (`renderMessageReferences`)
+//   assistant-action  a card that stands in for the bubble's text (`renderMessageBody`): detail lines, a status, and Confirm and Decline for the asker only; everyone else
 //                     reads it with "Waiting for <name>". A decision updates the same message (the server edits it),
 //                     so the card changes in place for every reader.
+// The card's own sentence is its summary, so the bubble does not repeat it.
 // Library components only.
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Button, Card, Inline, InlineAlert, Stack, StatusPill, T } from '@connorhoehn/ui-components/shared';
 import { actionCardView, askedByLine, decideAssistantAction, readAssistantMessage, type ActionDecision, type AssistantAction } from '../../lib/assistantMessages';
 
@@ -67,11 +67,21 @@ export interface AssistantMessageExtrasProps {
   decide?: typeof decideAssistantAction;
 }
 
-/** The kind's own part under a Nova message; null for any other message. */
-export function AssistantMessageExtras({ metadata, viewerId, callId, decide }: AssistantMessageExtrasProps) {
+/** The part under a Nova reply ("Asked by <name>"); null for any other message. */
+export function AssistantMessageExtras({ metadata }: Pick<AssistantMessageExtrasProps, 'metadata'>) {
   const message = readAssistantMessage(metadata);
-  if (!message) return null;
-  if (message.kind === 'assistant-notice') return <T size="xs" tone="tertiary" data-testid="assistant-notice-note">Notice from Nova</T>;
-  if (message.kind === 'assistant-reply') return <T size="xs" tone="tertiary" data-testid="assistant-reply-asked-by">{askedByLine(message)}</T>;
-  return <AssistantActionCard action={message} viewerId={viewerId} callId={callId} decide={decide} />;
+  if (message?.kind !== 'assistant-reply') return null;
+  return <T size="xs" tone="tertiary" data-testid="assistant-reply-asked-by">{askedByLine(message)}</T>;
+}
+
+/** A Nova notice as a system line (the message's own sentence); null for any other message, so the thread draws it as usual. */
+export function assistantSystemLine(message: { content: string; metadata?: Record<string, unknown> }): ReactNode | null {
+  return readAssistantMessage(message.metadata)?.kind === 'assistant-notice'
+    ? <span data-testid="assistant-notice-line">{message.content}</span> : null;
+}
+
+/** The action card standing in for the bubble's text; null for any other message. */
+export function assistantBody(message: { metadata?: Record<string, unknown> }, viewerId: string | null, callId: string | null, decide?: typeof decideAssistantAction): ReactNode | null {
+  const read = readAssistantMessage(message.metadata);
+  return read?.kind === 'assistant-action' ? <AssistantActionCard action={read} viewerId={viewerId} callId={callId} decide={decide} /> : null;
 }

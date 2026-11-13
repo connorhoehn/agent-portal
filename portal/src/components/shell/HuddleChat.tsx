@@ -19,7 +19,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { useGatewayOptional, type useReactions } from '@connorhoehn/realtime-modules/client';
 import { composerDraftOf, useComposerFocus, useComposerFocusReveal, useThreadInput, type MentionCandidate, type RichChatComposerHandle, type RichChatDraft } from '@connorhoehn/ui-components/social/rich-composer';
 import { PageReferenceCard } from '../chat/PageReferenceCard';
-import { AssistantMessageExtras } from '../chat/AssistantMessageExtras';
+import { AssistantMessageExtras, assistantBody, assistantSystemLine } from '../chat/AssistantMessageExtras';
 import { ConversationThread, useConversation, type ConversationRuntime } from '../chat/ConversationThread';
 import { ChatSidePanelFrame, ReactionOverlay, ReactionPicker, SidePaneSplit, useSidePaneHost } from '@connorhoehn/ui-components';
 import { AtIcon, Button, DocumentAddIcon, FloatingPanel, IconButton, Inline, InlineAlert, InlinePopover, Stack, T } from '@connorhoehn/ui-components/shared';
@@ -491,9 +491,10 @@ export function HuddleChatBody({ showCall = true }: { showCall?: boolean } = {})
     const reference = readCallChatPageReference(message.metadata?.['pageReference']);
     const page = reference && !isCallContextReference(reference, callLobby) ? <PageReferenceCard reference={reference} onOpen={target => navigate(target.href)}
       openTestId="huddle-chat-reference-open" unavailableTestId="huddle-chat-reference-unavailable" /> : null;
-    const assistant = <AssistantMessageExtras metadata={message.metadata} viewerId={viewerId} callId={huddleCallId} />;
-    return <>{assistant}{page}</>;
-  }, [navigate, callLobby, viewerId, huddleCallId]);
+    return <><AssistantMessageExtras metadata={message.metadata} />{page}</>;
+  }, [navigate, callLobby]);
+  // Nova's notice is a system line; its action card stands in for the bubble's text (the card carries the summary).
+  const assistantCard = useCallback((message: { metadata?: Record<string, unknown> }) => assistantBody(message, viewerId, huddleCallId), [viewerId, huddleCallId]);
   if (!chat?.callId) return null;
   const { state } = chat;
   const inRoom = isBreakoutChat(chat.callId, runtime?.channel ?? chat.channel);
@@ -543,6 +544,7 @@ export function HuddleChatBody({ showCall = true }: { showCall?: boolean } = {})
       // A room's chat is gateway-only: pins and files (REST on the call's channel) stay with the main huddle.
       reactions={!chat.unavailableReason} {...(inRoom ? {} : { pins: { canPin: !chat.unavailableReason } })} attachments={!chat.unavailableReason && !inRoom}
       readOnlyReason={chat.unavailableReason} placeholder={announcing ? 'Announce to every room…' : 'Message this huddle…'} typingUsers={runtime.conversation.chat.typingUsers}
+      renderSystemMessage={assistantSystemLine} renderMessageBody={assistantCard}
       renderMessageReferences={meetingChat ? (message => meetingChat.renderMessageReferences(message) ?? references(message)) : references}
       {...(meetingChat ? { transformMessages: meetingChat.withAnnouncements, ...(meetingChat.dock ? { dock: meetingChat.dock } : {}) } : {})}
       composer={{

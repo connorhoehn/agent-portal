@@ -264,8 +264,8 @@ async function main() {
       check(/speech provider/.test(text), `the notice does not say speech goes to a provider: "${text}"`);
       check(/30 days/.test(text), `the notice does not say how long it is kept: "${text}"`);
       check(/Nothing you say is kept until you acknowledge/.test(text), `the notice does not say nothing is kept before acknowledging: "${text}"`);
-      check(await nora.page.getByTestId('nova-ack').isVisible(), 'no acknowledge control');
-      check(await nora.page.getByTestId('nova-notice-dismiss').isVisible(), 'no way to dismiss Nova from the notice');
+      check(await nora.page.getByTestId('nova-notice-acknowledge').isVisible(), 'no acknowledge control');
+      check(await nora.page.getByTestId('nova-notice-secondary').isVisible(), 'no way to dismiss Nova from the notice');
       check(await vera.page.getByTestId('nova-notice').count() === 0, 'the inviter sees the notice');
       await barFits(nora.page, 'the bar under the notice', 1280);
       await shot(nora.page, '3-notice');
@@ -278,7 +278,7 @@ async function main() {
       const after = 'After ack: the canary rollout resumes on Friday.';
       await inject(NORA.userId, before);
       check(!(await stored(vera, before, 3500)), 'a line from a person who had not acknowledged was stored');
-      await nora.page.getByTestId('nova-ack').click();
+      await nora.page.getByTestId('nova-notice-acknowledge').click();
       await gone(nora.page, 'nova-notice');
       await inject(NORA.userId, after);
       check(await stored(vera, after, 10000), 'a line after the acknowledgement was not stored');

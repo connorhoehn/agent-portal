@@ -18,6 +18,7 @@ import { MeetingToolbar, RosterPanel, type MeetingToolbarItem, type RosterPartic
 import {
   meetingRosterProps, meetingToolbarItems, WrappedBreakoutRoomBanner, WrappedBreakoutRoomsPanel, type RMMeetingPerson,
 } from '@connorhoehn/ui-components/integrations/realtime';
+import { useNovaRosterEntries } from './MeetingAssistantBar';
 import { callCounts, useCallBlockPlacement, useCallHost, type CallHostMeeting } from '../../lib/conversationCall';
 import { meetingBarItems, meetingPeople, meetingStageItems, roomsAllowed, stageHoldsMeeting } from '../../lib/meetingRooms';
 
@@ -103,6 +104,7 @@ export function useMeetingBarItems(react: { send(emoji: string): void; emojis: s
 /** The open meeting pane, stacked above the conversation in the shell's right column. */
 export function MeetingPane() {
   const call = useCallMeeting();
+  const novaEntries = useNovaRosterEntries();
   if (!call?.pane) return null;
   if (call.pane === 'rooms') {
     if (!call.rooms) return null;
@@ -114,7 +116,7 @@ export function MeetingPane() {
   return <Stack gap="none" className="max-h-[60%] min-h-0 shrink-0" data-testid="huddle-meeting-pane" data-pane="people">
     <ChatSidePanelFrame title="People" subtitle={`${call.people.length} in the huddle`} onClose={call.close}
       className="border-b border-l border-border bg-surface" data-testid="huddle-meeting-people">
-      <RosterPanel {...meetingRosterProps(call.meeting, call.roster)} title="In this huddle" />
+      <RosterPanel {...meetingRosterProps(call.meeting, call.roster)} extraEntries={novaEntries} title="In this huddle" />
     </ChatSidePanelFrame>
   </Stack>;
 }
