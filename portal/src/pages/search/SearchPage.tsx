@@ -29,7 +29,7 @@ import {
   assistantStripText, nextQueryAfterSend, nextTabAfterSend, parseRecordKeys, readSearchEvidence, readSearchEdges, searchTitle,
 } from './searchModel';
 import { countIsLowerBound, countedLabel, groupResults, parseSort, partialSourcesTitle, resultsFooter, searchResultType } from './resultsModel';
-import { asKnownRecord, recordKey, SEARCH_LABELS, SEARCH_TYPES, type SearchRecord, type SearchRecordType, type SearchResponse, type SearchTab } from './searchTypes';
+import { recordKey, SEARCH_LABELS, SEARCH_TYPES, type SearchRecord, type SearchRecordType, type SearchResponse, type SearchTab } from './searchTypes';
 import { SearchControls, searchControlsMenu, type SearchControlsProps } from './SearchControls';
 import { SearchResults } from './SearchResults';
 
@@ -44,7 +44,7 @@ async function readJSON<T>(url: string, init?: RequestInit): Promise<T> {
   return response.status===204 ? undefined as T : response.json();
 }
 const PAGE_SIZE = 25;
-const MAIN_TYPES: Array<SearchRecordType | 'all'> = ['all', 'person', 'initiative', 'work', 'decision', 'knowledge', 'recording'];
+const MAIN_TYPES: Array<SearchRecordType | 'all'> = ['all', 'person', 'initiative', 'work', 'decision', 'knowledge', 'recording', 'run', 'proposal'];
 const isPlainClick = (event: MouseEvent) => !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0);
 
 /** Search's right pane (the library pane contract): the conversation, and a person as a record tab beside it. */
@@ -136,8 +136,7 @@ function SearchWorkspace({ api }: {api: SearchConversationAPI}) {
     const next=new URLSearchParams(previous);for(const [key,value] of Object.entries(values)) value ? next.set(key,value):next.delete(key);return next;
   },{replace}),[setParams]);
   const queryString=new URLSearchParams({q:query,type,limit:String(PAGE_SIZE),offset:String(offset),sort,...(scope?{scope}:{})});
-  const {data:rawData,error,isLoading,refresh}=useFetch<SearchResponse>(`/api/search?${queryString}`);
-  const data=useMemo(()=>rawData?{...rawData,results:rawData.results.map(asKnownRecord),...(rawData.related?{related:rawData.related.map(asKnownRecord)}:{})}:rawData,[rawData]);
+  const {data,error,isLoading,refresh}=useFetch<SearchResponse>(`/api/search?${queryString}`);
   const {data:saved,error:savedError,refresh:refreshSaved}=useFetch<{searches:SavedSearch[]}>('/api/saved-searches');
   const {data:scopes}=useFetch<SearchResponse>('/api/search?type=initiative&limit=100');
   const requestedKeys=[...new Set([...selected,...attached.map(recordKey)])].slice(0,30);

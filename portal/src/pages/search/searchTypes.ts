@@ -1,4 +1,4 @@
-export type SearchRecordType = 'person' | 'initiative' | 'work' | 'decision' | 'knowledge' | 'asset' | 'recording';
+export type SearchRecordType = 'person' | 'initiative' | 'work' | 'decision' | 'knowledge' | 'asset' | 'recording' | 'run' | 'proposal';
 export interface SearchRef { type: SearchRecordType; id: string }
 export interface SearchRecord extends SearchRef {
   title: string;
@@ -31,9 +31,9 @@ export interface SearchResponse {
 }
 export type SearchTab = 'results' | 'answer' | 'connections';
 export type SearchSort = 'relevance' | 'recent';
-export const SEARCH_TYPES: SearchRecordType[] = ['person', 'initiative', 'work', 'decision', 'knowledge', 'recording', 'asset'];
+export const SEARCH_TYPES: SearchRecordType[] = ['person', 'initiative', 'work', 'decision', 'knowledge', 'recording', 'asset', 'run', 'proposal'];
 export const SEARCH_LABELS: Record<SearchRecordType | 'all', string> = {
-  all: 'All results', person: 'People', initiative: 'Initiatives', work: 'Work', decision: 'Decisions', knowledge: 'Documents', asset: 'Agent library', recording: 'Recordings',
+  all: 'All results', person: 'People', initiative: 'Initiatives', work: 'Work', decision: 'Decisions', knowledge: 'Documents', asset: 'Agent library', recording: 'Recordings', run: 'Runs', proposal: 'Runbook proposals',
 };
 export const recordKey = (record: SearchRef) => `${record.type}:${record.id}`;
 export function parseRecordKeys(value: string | null): SearchRef[] {
@@ -43,13 +43,4 @@ export function parseRecordKeys(value: string | null): SearchRef[] {
     const id = key.slice(colon + 1);
     return colon > 0 && SEARCH_TYPES.includes(type) && id ? [{ type, id }] : [];
   }).slice(0, 30);
-}
-
-/**
- * The server also answers `run` (a run report) and `proposal` (a runbook proposal) rows. The shared record
- * components know the seven types above, so these two are drawn as documents: their subtitle ("Run · failed ·
- * fleet", "Runbook proposal · edit · open") and their own link say what they are.
- */
-export function asKnownRecord<R extends { type: string }>(row: R): R {
-  return row.type === 'run' || row.type === 'proposal' ? { ...row, type: 'knowledge' } : row;
 }

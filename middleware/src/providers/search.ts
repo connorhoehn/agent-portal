@@ -153,7 +153,9 @@ async function permissions(principal: PrincipalRef): Promise<{ people: boolean; 
   }
   // Run reports and proposals answer to the gates of their list routes, so a result never shows what the list would refuse.
   const runs = principal.role === 'admin' || (RUN_REPORT_READ_ROLES as readonly string[]).includes(principal.role) || await isAllowed(principal, RUN_REPORT_READ_ACTION);
-  return { people: await isAllowed(principal, 'ViewOrgChart'), runs, proposals: await isAllowed(principal, PROPOSAL_ACL) };
+  // The proposals list route (routes/runbooks.ts readGate) is open to any orgiq session: 'ViewRunbooks' there is a log
+  // label, not a Cedar action, so asking the policy engine for it would deny every reader and hide every proposal.
+  return { people: await isAllowed(principal, 'ViewOrgChart'), runs, proposals: principal.tenant === 'orgiq' };
 }
 /** The doc `acl` values a reader holds. */
 function aclsOf(allowed: { people: boolean; runs: boolean; proposals: boolean }): string[] {

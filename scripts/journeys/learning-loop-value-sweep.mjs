@@ -536,6 +536,26 @@ async function main() {
       await hit.click();
       await landed(page, /^\/iq\/runs\/[^/]+/, 15000);
       await page.getByTestId('run-page').waitFor({ timeout: 15000 });
+      // The rail gives runs and runbook proposals their own entries, with a count, and choosing one lists only that type.
+      const openProposal = ((await getJson('/api/runbooks/proposals?status=open&limit=20')).proposals ?? []).find((x) => /[A-Za-z]{6,}/.test(x.rationale ?? ''));
+      check(!!openProposal, 'no open proposal with a rationale to search for');
+      for (const [kind, label, q, shot] of [['run', 'Runs', 'CSRF', '10-search-type-run'], ['proposal', 'Runbook proposals', openProposal.rationale.match(/[A-Za-z]{6,}/)[0], '10-search-type-proposal']]) {
+        const body = await getJson(`/api/search?q=${encodeURIComponent(q)}&limit=50`);
+        check(body.counts[kind] >= 1, `global search for "${q}" counts no ${kind}: ${JSON.stringify(body.counts)}`);
+        await go(page, `/iq/search?q=${encodeURIComponent(q)}`);
+        const entry = page.getByRole('link', { name: new RegExp(`^${label}\\b.*\\d`) }).first();
+        await entry.waitFor({ timeout: 20000 });
+        check(new RegExp(`\\b${body.counts[kind]}\\b`).test(await entry.innerText()), `the ${label} rail entry does not show its count ${body.counts[kind]}: "${await entry.innerText()}"`);
+        await entry.click();
+        await landed(page, new RegExp(`[?&]type=${kind}\\b`));
+        const scoped = (await getJson(`/api/search?q=${encodeURIComponent(q)}&type=${kind}&limit=50`)).results;
+        check(scoped.length >= 1 && scoped.every((r) => r.type === kind), `the ${kind} filter lists other types`);
+        await page.getByTestId('search-results').getByText(new RegExp(escapeRe(scoped[0].title))).first().waitFor({ timeout: 20000 });
+        const rows = await page.locator('[data-record-mark]').evaluateAll((els) => els.map((e) => e.getAttribute('data-record-mark')));
+        check(rows.length >= 1 && rows.every((m) => m === kind), `the ${label} tab draws marks other than ${kind}: ${[...new Set(rows)].join(',')}`);
+        await noGarbage(page, `the ${label} search tab`);
+        await shotPair(page, shot);
+      }
       // A persona who cannot list runs.
       await signIn(THEO);
       const none = (await getJson('/api/search?q=CSRF&limit=50')).results.filter((r) => r.type === 'run');

@@ -5,7 +5,6 @@ jest.mock('../../../config.js', () => ({ config: { region: 'us-east-1', mock: { 
 jest.mock('../../authz.js', () => ({
   isAllowed: jest.fn(async (p: { role: string }, action: string) => {
     if (action === 'Search' || action === 'ViewOrgChart') return true;
-    if (action === 'ViewRunbooks') return p.role !== 'nobody';
     if (action === 'ManageBots') return p.role === 'sme';
     return false;
   }),
@@ -38,15 +37,16 @@ test('a run report is found by text for the roles that can list run reports, and
   }
 });
 
-test('a runbook proposal is found by its rationale only by a reader who may list proposals', async () => {
+test('a runbook proposal is found by its rationale by any orgiq reader, and the count matches', async () => {
   const [first] = (await runbookStore().listProposals({ limit: 1 })).items;
   expect(first).toBeDefined();
   const word = (first!.rationale.match(/[A-Za-z]{6,}/) ?? [])[0]!;
   const rows = await found('member', word, 'proposal');
   expect(rows.map((r) => r.id)).toContain(first!.id);
   expect(rows.find((r) => r.id === first!.id)!.href).toBe(`/iq/runbooks/proposals/${encodeURIComponent(first!.id)}`);
-  expect(await found('nobody', word, 'proposal')).toEqual([]);
-  expect((await searchRecords(as('nobody'), { q: word })).results.some((r) => r.type === 'proposal')).toBe(false);
+  // The list route is open to any orgiq session, so search is too; a session from another tenant is refused outright.
+  expect((await searchRecords(as('member'), { q: word })).counts['proposal']).toBeGreaterThan(0);
+  await expect(searchRecords({ sub: 'u-x', tenant: 'assessment', role: 'member' }, { q: word })).rejects.toThrow();
 });
 
 test('a runbook is found by a word that is only in its body', async () => {
