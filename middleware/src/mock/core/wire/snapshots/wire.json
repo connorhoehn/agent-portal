@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-13T19:26:29.616Z",
-  "serverHandlerSha": "a85c86eb1e5c867b5f9cde67f939e585ed633083f941f1fad5da6f0f0396ab11",
+  "capturedAt": "2026-11-13T20:38:14.019Z",
+  "serverHandlerSha": "fe84ec8a7d4ca1c8a1bc4500ec68e54108369636c68701274a01d363112fa91a",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -9109,6 +9109,7 @@
         "grants.social": "array",
         "grants.social[]": "string",
         "masquerading": "null",
+        "meetingAssistant": "boolean",
         "name": "string",
         "role": "string",
         "sub": "string",

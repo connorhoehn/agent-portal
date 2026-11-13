@@ -11,20 +11,20 @@
   "pages": "portal/src/components/shell/portalCommands.ts",
   "catalogue": "middleware/src/lib/voice/catalogue.ts",
   "out": "docs/voice-tool-inventory.json",
-  "capturedAt": "2026-11-13T19:26:40.722Z",
-  "serverHandlerSha": "a85c86eb1e5c867b5f9cde67f939e585ed633083f941f1fad5da6f0f0396ab11"
+  "capturedAt": "2026-11-13T20:38:25.604Z",
+  "serverHandlerSha": "fe84ec8a7d4ca1c8a1bc4500ec68e54108369636c68701274a01d363112fa91a"
  },
  "summary": {
-  "routes": 858,
-  "routesInSnapshot": 848,
+  "routes": 860,
+  "routesInSnapshot": 850,
   "snapshotDuplicates": 0,
   "routesDeclaredNotInSnapshot": 10,
   "pages": 108,
   "byKind": {
    "dev": 13,
-   "write": 365,
+   "write": 366,
    "read": 449,
-   "internal": 31,
+   "internal": 32,
    "navigate": 108
   },
   "byFamily": {
@@ -188,17 +188,17 @@
     }
    },
    "social.calls": {
-    "total": 38,
+    "total": 40,
     "read": 20,
-    "write": 15,
+    "write": 16,
     "navigate": 0,
-    "internal": 3,
+    "internal": 4,
     "dev": 0,
     "covered": 13,
     "v2": {
      "not-yet": 7,
-     "never": 15,
-     "n/a": 3,
+     "never": 16,
+     "n/a": 4,
      "read": 12,
      "confirm": 1
     }
@@ -376,15 +376,15 @@
   "byTenant": {
    "any": 152,
    "access": 27,
-   "orgiq": 428,
+   "orgiq": 429,
    "assessment": 112,
    "pipelines": 30,
    "social": 32,
    "orgiq+assessment+pipelines": 33
   },
-  "peopleRoutes": 814,
+  "peopleRoutes": 815,
   "peopleReads": 449,
-  "peopleWrites": 365,
+  "peopleWrites": 366,
   "coveredRoutes": 235,
   "coveredReads": 161,
   "coveredWrites": 74,
@@ -395,7 +395,7 @@
   "v2Decisions": {
    "not-yet": 180,
    "read": 161,
-   "never": 370,
+   "never": 371,
    "confirm": 73,
    "n/a": 29,
    "open": 1
@@ -461,7 +461,7 @@
    "refused:control-plane": 3,
    "refused:destructive": 43,
    "allowed": 124,
-   "refused:unclassified": 81,
+   "refused:unclassified": 83,
    "refused:spends": 25,
    "refused:fires": 26,
    "skipped": 31,
@@ -3495,6 +3495,12 @@
    "note": "the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"
   },
   {
+   "pattern": "^POST \\/api\\/calls\\/:[^/]+\\/assistant\\/actions\\/:[^/]+\\/decision$",
+   "decision": "never",
+   "tool": null,
+   "note": "a confirmation is the asking person clicking Confirm or Decline on the card in the call chat; the server accepts it only from the person the action was offered to, and a spoken yes confirms nothing (design decision 5)"
+  },
+  {
    "pattern": "^POST \\/api\\/sprints$",
    "decision": "not-yet",
    "tool": "create",
@@ -4126,13 +4132,14 @@
   {"method":"PUT","path":"/api/budgets/learning","source":"src/routes/budgets.ts:101","declaredAt":"src/routes/budgets.ts:101","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"budgets","cedarAction":"ManageBudgets","actions":["ManageBudgets"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"allocations, caps, grants, kill switches, policy profiles"}},
   {"method":"GET","path":"/api/budgets/lines","source":"src/routes/budgets.ts:76","declaredAt":"src/routes/budgets.ts:76","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"budgets","cedarAction":"ManageBudgets","actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"readElseAction":"ManageBudgets","holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"budget","note":"the budgets read tier"}},
   {"method":"GET","path":"/api/calls","source":"src/routes/page-calls.ts:40","declaredAt":"src/routes/page-calls.ts:40","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"social.calls","cedarAction":null,"actions":[],"floor":["ReadPageCalls"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"list","note":"a collection"}},
-  {"method":"POST","path":"/api/calls/:callId/assistant/ack","source":"src/routes/meeting-assistant.ts:138","declaredAt":"src/routes/meeting-assistant.ts:138","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"social.calls","cedarAction":null,"actions":[],"unresolvedGates":["flagGate","refuseMasquerade"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
-  {"method":"POST","path":"/api/calls/:callId/assistant/dismiss","source":"src/routes/meeting-assistant.ts:136","declaredAt":"src/routes/meeting-assistant.ts:136","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"social.calls","cedarAction":null,"actions":[],"unresolvedGates":["move","flagGate","refuseMasquerade"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
-  {"method":"POST","path":"/api/calls/:callId/assistant/invite","source":"src/routes/meeting-assistant.ts:82","declaredAt":"src/routes/meeting-assistant.ts:82","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"social.calls","cedarAction":"InviteMeetingAssistant","actions":["InviteMeetingAssistant"],"unresolvedGates":["flagGate","refuseMasquerade"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
-  {"method":"POST","path":"/api/calls/:callId/assistant/pause","source":"src/routes/meeting-assistant.ts:134","declaredAt":"src/routes/meeting-assistant.ts:134","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"social.calls","cedarAction":null,"actions":[],"unresolvedGates":["move","flagGate","refuseMasquerade"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
-  {"method":"POST","path":"/api/calls/:callId/assistant/resume","source":"src/routes/meeting-assistant.ts:135","declaredAt":"src/routes/meeting-assistant.ts:135","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"social.calls","cedarAction":null,"actions":[],"unresolvedGates":["move","flagGate","refuseMasquerade"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
-  {"method":"GET","path":"/api/calls/:callId/assistant/state","source":"src/routes/meeting-assistant.ts:147","declaredAt":"src/routes/meeting-assistant.ts:147","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"social.calls","cedarAction":null,"actions":[],"unresolvedGates":["flagGate","refuseMasquerade"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
-  {"method":"GET","path":"/api/calls/:callId/assistant/transcript","source":"src/routes/meeting-assistant.ts:161","declaredAt":"src/routes/meeting-assistant.ts:161","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"social.calls","cedarAction":null,"actions":[],"unresolvedGates":["flagGate","refuseMasquerade"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
+  {"method":"POST","path":"/api/calls/:callId/assistant/ack","source":"src/routes/meeting-assistant.ts:146","declaredAt":"src/routes/meeting-assistant.ts:146","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"social.calls","cedarAction":null,"actions":[],"unresolvedGates":["flagGate","refuseMasquerade"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
+  {"method":"POST","path":"/api/calls/:callId/assistant/actions/:actionId/decision","source":"src/routes/meeting-assistant.ts:156","declaredAt":"src/routes/meeting-assistant.ts:156","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"social.calls","cedarAction":null,"actions":[],"unresolvedGates":["flagGate","refuseMasquerade"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"a confirmation is the asking person clicking Confirm or Decline on the card in the call chat; the server accepts it only from the person the action was offered to, and a spoken yes confirms nothing (design decision 5)"}},
+  {"method":"POST","path":"/api/calls/:callId/assistant/dismiss","source":"src/routes/meeting-assistant.ts:144","declaredAt":"src/routes/meeting-assistant.ts:144","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"social.calls","cedarAction":null,"actions":[],"unresolvedGates":["move","flagGate","refuseMasquerade"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
+  {"method":"POST","path":"/api/calls/:callId/assistant/invite","source":"src/routes/meeting-assistant.ts:85","declaredAt":"src/routes/meeting-assistant.ts:85","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"social.calls","cedarAction":"InviteMeetingAssistant","actions":["InviteMeetingAssistant"],"unresolvedGates":["flagGate","refuseMasquerade"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
+  {"method":"POST","path":"/api/calls/:callId/assistant/pause","source":"src/routes/meeting-assistant.ts:142","declaredAt":"src/routes/meeting-assistant.ts:142","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"social.calls","cedarAction":null,"actions":[],"unresolvedGates":["move","flagGate","refuseMasquerade"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
+  {"method":"POST","path":"/api/calls/:callId/assistant/resume","source":"src/routes/meeting-assistant.ts:143","declaredAt":"src/routes/meeting-assistant.ts:143","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"social.calls","cedarAction":null,"actions":[],"unresolvedGates":["move","flagGate","refuseMasquerade"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
+  {"method":"GET","path":"/api/calls/:callId/assistant/state","source":"src/routes/meeting-assistant.ts:179","declaredAt":"src/routes/meeting-assistant.ts:179","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"social.calls","cedarAction":null,"actions":[],"unresolvedGates":["flagGate","refuseMasquerade"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
+  {"method":"GET","path":"/api/calls/:callId/assistant/transcript","source":"src/routes/meeting-assistant.ts:193","declaredAt":"src/routes/meeting-assistant.ts:193","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"social.calls","cedarAction":null,"actions":[],"unresolvedGates":["flagGate","refuseMasquerade"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)"}},
   {"method":"GET","path":"/api/calls/:callId/chat","source":"src/routes/call-chat.ts:21","declaredAt":"src/routes/call-chat.ts:21","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"social.calls","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
   {"method":"DELETE","path":"/api/calls/:callId/page","source":"src/routes/call-pages.ts:52","declaredAt":"src/routes/call-pages.ts:52","stale":false,"snapshot":true,"tenants":["any"],"kind":"write","family":"social.calls","cedarAction":null,"actions":[],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"page sharing is the live call's own control"}},
   {"method":"GET","path":"/api/calls/:callId/page","source":"src/routes/call-pages.ts:34","declaredAt":"src/routes/call-pages.ts:34","stale":false,"snapshot":true,"tenants":["any"],"kind":"read","family":"social.calls","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"get","note":"one record"}},
@@ -4219,7 +4226,8 @@
   {"method":"GET","path":"/api/designs/:id","source":"src/routes/designs.ts:42","declaredAt":"src/routes/designs.ts:42","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"floor":["ViewDesigns"],"writePolicy":null,"pageId":null,"coveredBy":["get","decide"],"v2":{"decision":"read","tool":"get","note":"mapsTo"}},
   {"method":"POST","path":"/api/designs/:id/answer","source":"src/routes/designs.ts:59","declaredAt":"src/routes/designs.ts:59","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"DispatchAgentRun","actions":["DispatchAgentRun"],"floor":["ViewDesigns"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"not-yet","tool":"decide","note":"a design question or sign-off (DispatchAgentRun)"}},
   {"method":"POST","path":"/api/designs/:id/signoff","source":"src/routes/designs.ts:83","declaredAt":"src/routes/designs.ts:83","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"DispatchAgentRun","actions":["DispatchAgentRun"],"floor":["ViewDesigns"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":["decide"],"v2":{"decision":"confirm","tool":"decide","note":"mapsTo"}},
-  {"method":"POST","path":"/api/dev/calls/:callId/transcript-lines","source":"src/routes/meeting-assistant-dev.ts:54","declaredAt":"src/routes/meeting-assistant-dev.ts:54","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"social.calls","cedarAction":null,"actions":[],"machineAuth":true,"unresolvedGates":["gate"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
+  {"method":"POST","path":"/api/dev/calls/:callId/assistant-messages","source":"src/routes/meeting-assistant-dev.ts:85","declaredAt":"src/routes/meeting-assistant-dev.ts:85","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"social.calls","cedarAction":null,"actions":[],"machineAuth":true,"unresolvedGates":["gate"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
+  {"method":"POST","path":"/api/dev/calls/:callId/transcript-lines","source":"src/routes/meeting-assistant-dev.ts:64","declaredAt":"src/routes/meeting-assistant-dev.ts:64","stale":false,"snapshot":true,"tenants":["any"],"kind":"internal","family":"social.calls","cedarAction":null,"actions":[],"machineAuth":true,"unresolvedGates":["gate"],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"n/a","tool":null,"note":"internal"}},
   {"method":"DELETE","path":"/api/devbox/:sessionId","source":"src/routes/devbox.ts:1263","declaredAt":"src/routes/devbox.ts:1263","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"compute","cedarAction":null,"actions":[],"readRoles":["org-leader","hr-admin","program-owner"],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"raw sessions, free-text tasks, box edits"}},
   {"method":"POST","path":"/api/devbox/:sessionId/command","source":"src/routes/devbox.ts:1012","declaredAt":"src/routes/devbox.ts:1012","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"compute","cedarAction":"OpenDevboxShell","actions":["OpenDevboxShell"],"readRoles":["org-leader","hr-admin","program-owner"],"holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"skipped","pageId":null,"coveredBy":["computer"],"v2":{"decision":"confirm","tool":"computer","note":"mapsTo"}},
   {"method":"POST","path":"/api/devbox/:sessionId/shell-url","source":"src/routes/devbox.ts:1190","declaredAt":"src/routes/devbox.ts:1190","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"compute","cedarAction":"OpenDevboxShell","actions":["OpenDevboxShell"],"readRoles":["org-leader","hr-admin","program-owner"],"holders":["orgiq/hr-admin","orgiq/sme"],"writePolicy":"skipped","pageId":null,"coveredBy":["computer"],"v2":{"decision":"open","tool":"computer","note":"mapsTo, no card"}},

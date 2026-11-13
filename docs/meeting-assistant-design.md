@@ -1,6 +1,6 @@
 # Meeting assistant: design and plan
 
-13 November 2026, revised the same day. Status: plan accepted; package 1 in progress.
+13 November 2026, revised the same day. Status: packages 1 to 3 merged (13 November); package 4 next.
 
 **Revision.** The first draft listened with the media server's local Whisper captions service. The owner's instruction is to listen with the OpenAI live model the voice navigator already uses. This version does that. The captions service is not used.
 
@@ -107,9 +107,9 @@ Each package is one branch, verified by the full chain, merged on its own.
 
 | # | Package | Repositories | Size |
 |---|---|---|---|
-| 1 | Core: flag, policy action, state and transcript stores, acknowledgement, mock line injector, invite/pause/dismiss routes, detector | this one | Medium, in progress |
-| 2 | Nova in chat: server-side post as Nova, join and state notices, message and action card kinds | this one, `ui-components` | Medium |
-| 3 | Call UI: Invite Nova, roster entry, listening mark, transcription notice and acknowledgement, pause and dismiss, minutes ceiling | this one | Medium |
+| 1 | Core: flag, policy action, state and transcript stores, acknowledgement, mock line injector, invite/pause/dismiss routes, detector | this one | Done |
+| 2 | Nova in chat: server-side post as Nova, join and state notices, message and action card kinds | this one, `ui-components` | Done; three library gaps open (below) |
+| 3 | Call UI: Invite Nova, roster entry, listening mark, transcription notice and acknowledgement, pause and dismiss | this one | Done; the ceiling line moves to package 4 |
 | 4 | Session and turns: the live session over the WebSocket with the scripted stand-in, attribution, the name lock, the turn exchange, read tools in the asker's browser, write cards, typed mentions, spend source and ceilings | this one | Large |
 | 5 | Minutes: end-of-call notes and action items, the meeting page, the call log entry, search over past meetings | this one | Medium |
 | 6 | Real audio: the tap sink, mixer and voiced timeline; arming the tap on invite; the join-record lookup from per-join id to person; a paid end-to-end run | this one, `platform-api` | Medium |
@@ -119,6 +119,8 @@ Each package is one branch, verified by the full chain, merged on its own.
 Packages 1 to 5 run entirely on the mock world. Package 6 needs the social stack, and a real call or a headless browser with a fake audio file, on its own ports.
 
 Order: 1, then 2 and 3 in parallel, then 4, then 5, then 6, then 7.
+
+Library gaps found by packages 2 and 3, to close in one `ui-components` release: the chat panel cannot draw a custom message kind as a system line (Nova's notices show as a bubble); the consent notice has fixed wording and no acknowledge action (a banner is used); the call roster cannot show a non-media entry (Nova's line sits in the conversation pane's header).
 
 ## How it is judged
 

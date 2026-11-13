@@ -1083,37 +1083,42 @@
     {
       "method": "POST",
       "path": "/api/calls/:callId/assistant/ack",
-      "source": "src/routes/meeting-assistant.ts:138"
+      "source": "src/routes/meeting-assistant.ts:146"
+    },
+    {
+      "method": "POST",
+      "path": "/api/calls/:callId/assistant/actions/:actionId/decision",
+      "source": "src/routes/meeting-assistant.ts:156"
     },
     {
       "method": "POST",
       "path": "/api/calls/:callId/assistant/dismiss",
-      "source": "src/routes/meeting-assistant.ts:136"
+      "source": "src/routes/meeting-assistant.ts:144"
     },
     {
       "method": "POST",
       "path": "/api/calls/:callId/assistant/invite",
-      "source": "src/routes/meeting-assistant.ts:82"
+      "source": "src/routes/meeting-assistant.ts:85"
     },
     {
       "method": "POST",
       "path": "/api/calls/:callId/assistant/pause",
-      "source": "src/routes/meeting-assistant.ts:134"
+      "source": "src/routes/meeting-assistant.ts:142"
     },
     {
       "method": "POST",
       "path": "/api/calls/:callId/assistant/resume",
-      "source": "src/routes/meeting-assistant.ts:135"
+      "source": "src/routes/meeting-assistant.ts:143"
     },
     {
       "method": "GET",
       "path": "/api/calls/:callId/assistant/state",
-      "source": "src/routes/meeting-assistant.ts:147"
+      "source": "src/routes/meeting-assistant.ts:179"
     },
     {
       "method": "GET",
       "path": "/api/calls/:callId/assistant/transcript",
-      "source": "src/routes/meeting-assistant.ts:161"
+      "source": "src/routes/meeting-assistant.ts:193"
     },
     {
       "method": "GET",
@@ -1547,8 +1552,13 @@
     },
     {
       "method": "POST",
+      "path": "/api/dev/calls/:callId/assistant-messages",
+      "source": "src/routes/meeting-assistant-dev.ts:85"
+    },
+    {
+      "method": "POST",
       "path": "/api/dev/calls/:callId/transcript-lines",
-      "source": "src/routes/meeting-assistant-dev.ts:54"
+      "source": "src/routes/meeting-assistant-dev.ts:64"
     },
     {
       "method": "DELETE",
