@@ -94,6 +94,14 @@ export const config = {
     cloudwatch: flag('MOCK_CLOUDWATCH'),
   },
 
+  // The meeting assistant (Nova; docs/meeting-assistant-design.md). Off by default: with the flag
+  // off every /api/calls/:callId/assistant route and the dev caption injector answer 404.
+  // Transcript lines are kept `transcriptRetentionDays` days (30 unless MEETING_TRANSCRIPT_RETENTION_DAYS says otherwise).
+  meetingAssistant: {
+    enabled: flag('MEETING_ASSISTANT_ENABLED'),
+    transcriptRetentionDays: Math.max(1, parseInt(env('MEETING_TRANSCRIPT_RETENTION_DAYS', '30'), 10) || 30),
+  },
+
   // The message-queue service (~/projects/message-queue) that carries the
   // pipeline queues (lib/pipeline-queues.ts). `url` is the bare origin (the /api/v1 prefix
   // lives in lib/mq-client.ts). `mock` (MOCK_QUEUE=true, on under dev:mock)
