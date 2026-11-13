@@ -1081,6 +1081,41 @@
       "source": "src/routes/page-calls.ts:40"
     },
     {
+      "method": "POST",
+      "path": "/api/calls/:callId/assistant/ack",
+      "source": "src/routes/meeting-assistant.ts:138"
+    },
+    {
+      "method": "POST",
+      "path": "/api/calls/:callId/assistant/dismiss",
+      "source": "src/routes/meeting-assistant.ts:136"
+    },
+    {
+      "method": "POST",
+      "path": "/api/calls/:callId/assistant/invite",
+      "source": "src/routes/meeting-assistant.ts:82"
+    },
+    {
+      "method": "POST",
+      "path": "/api/calls/:callId/assistant/pause",
+      "source": "src/routes/meeting-assistant.ts:134"
+    },
+    {
+      "method": "POST",
+      "path": "/api/calls/:callId/assistant/resume",
+      "source": "src/routes/meeting-assistant.ts:135"
+    },
+    {
+      "method": "GET",
+      "path": "/api/calls/:callId/assistant/state",
+      "source": "src/routes/meeting-assistant.ts:147"
+    },
+    {
+      "method": "GET",
+      "path": "/api/calls/:callId/assistant/transcript",
+      "source": "src/routes/meeting-assistant.ts:161"
+    },
+    {
       "method": "GET",
       "path": "/api/calls/:callId/chat",
       "source": "src/routes/call-chat.ts:21"
@@ -1511,6 +1546,11 @@
       "source": "src/routes/designs.ts:83"
     },
     {
+      "method": "POST",
+      "path": "/api/dev/calls/:callId/transcript-lines",
+      "source": "src/routes/meeting-assistant-dev.ts:54"
+    },
+    {
       "method": "DELETE",
       "path": "/api/devbox/:sessionId",
       "source": "src/routes/devbox.ts:1263"
@@ -1898,7 +1938,7 @@
     {
       "method": "GET",
       "path": "/api/health",
-      "source": "src/index.ts:233"
+      "source": "src/index.ts:236"
     },
     {
       "method": "GET",
@@ -4113,7 +4153,7 @@
     {
       "method": "GET",
       "path": "/health",
-      "source": "src/index.ts:232"
+      "source": "src/index.ts:235"
     },
     {
       "method": "DELETE",
@@ -4198,7 +4238,7 @@
     {
       "method": "GET",
       "path": "/livez",
-      "source": "src/index.ts:234"
+      "source": "src/index.ts:237"
     }
   ],
   "unresolved": []

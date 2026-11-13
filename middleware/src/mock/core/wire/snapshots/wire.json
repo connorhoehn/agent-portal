@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-13T17:15:22.291Z",
-  "serverHandlerSha": "882bfdbb24fb83ae7db6112af08712f402e14228648e474a34f3a4d4d0d66a47",
+  "capturedAt": "2026-11-13T19:26:29.616Z",
+  "serverHandlerSha": "a85c86eb1e5c867b5f9cde67f939e585ed633083f941f1fad5da6f0f0396ab11",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -2422,6 +2422,12 @@
       },
       "values": {}
     },
+    "GET /api/calls/:callId/assistant/state": {
+      "skipped": "no value found for :callId under /api/calls (orgiq/admin); no value found for :callId under /api/calls (assessment/admin); no value found for :callId under /api/calls (anonymous)"
+    },
+    "GET /api/calls/:callId/assistant/transcript": {
+      "skipped": "no value found for :callId under /api/calls (orgiq/admin); no value found for :callId under /api/calls (assessment/admin); no value found for :callId under /api/calls (anonymous)"
+    },
     "GET /api/calls/:callId/chat": {
       "skipped": "no value found for :callId under /api/calls (orgiq/admin); no value found for :callId under /api/calls (assessment/admin); no value found for :callId under /api/calls (anonymous)"
     },
@@ -4216,6 +4222,12 @@
         "schema.OrgIQ.actions.EnterEnvironment.appliesTo.principalTypes[]": "string",
         "schema.OrgIQ.actions.EnterEnvironment.appliesTo.resourceTypes": "array",
         "schema.OrgIQ.actions.EnterEnvironment.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.InviteMeetingAssistant": "object",
+        "schema.OrgIQ.actions.InviteMeetingAssistant.appliesTo": "object",
+        "schema.OrgIQ.actions.InviteMeetingAssistant.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.InviteMeetingAssistant.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.InviteMeetingAssistant.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.InviteMeetingAssistant.appliesTo.resourceTypes[]": "string",
         "schema.OrgIQ.actions.LabelFeedback": "object",
         "schema.OrgIQ.actions.LabelFeedback.appliesTo": "object",
         "schema.OrgIQ.actions.LabelFeedback.appliesTo.principalTypes": "array",
@@ -9020,6 +9032,7 @@
           "EditPolicy",
           "EditSchema",
           "EnterEnvironment",
+          "InviteMeetingAssistant",
           "LabelFeedback",
           "ManageAccessCatalog",
           "ManageAccessPolicy",
@@ -10821,6 +10834,7 @@
         "EditPolicy",
         "EditSchema",
         "EnterEnvironment",
+        "InviteMeetingAssistant",
         "LabelFeedback",
         "ManageAccessCatalog",
         "ManageAccessPolicy",
