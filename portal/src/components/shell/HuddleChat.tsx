@@ -19,6 +19,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { useGatewayOptional, type useReactions } from '@connorhoehn/realtime-modules/client';
 import { composerDraftOf, useComposerFocus, useComposerFocusReveal, useThreadInput, type MentionCandidate, type RichChatComposerHandle, type RichChatDraft } from '@connorhoehn/ui-components/social/rich-composer';
 import { PageReferenceCard } from '../chat/PageReferenceCard';
+import { AssistantMessageExtras } from '../chat/AssistantMessageExtras';
 import { ConversationThread, useConversation, type ConversationRuntime } from '../chat/ConversationThread';
 import { ChatSidePanelFrame, ReactionOverlay, ReactionPicker, SidePaneSplit, useSidePaneHost } from '@connorhoehn/ui-components';
 import { AtIcon, Button, DocumentAddIcon, FloatingPanel, IconButton, Inline, InlineAlert, InlinePopover, Stack, T } from '@connorhoehn/ui-components/shared';
@@ -482,11 +483,16 @@ export function HuddleChatBody({ showCall = true }: { showCall?: boolean } = {})
   // Each message's reference arrives resolved by the BFF for this reader.
   const host = useCallHost();
   const callLobby = host?.lobby?.lobbyName ?? null;
+  // Nova's messages (notice, reply, action card) carry their own part under the bubble; the BFF shows those keys only on
+  // a message the assistant authored (middleware lib/call-chat.ts `render`).
+  const viewerId = chat?.actorId ?? null; const huddleCallId = chat?.callId ?? null;
   const references = useCallback((message: { metadata?: Record<string, unknown> }) => {
     const reference = readCallChatPageReference(message.metadata?.['pageReference']);
-    return reference && !isCallContextReference(reference, callLobby) ? <PageReferenceCard reference={reference} onOpen={target => navigate(target.href)}
+    const page = reference && !isCallContextReference(reference, callLobby) ? <PageReferenceCard reference={reference} onOpen={target => navigate(target.href)}
       openTestId="huddle-chat-reference-open" unavailableTestId="huddle-chat-reference-unavailable" /> : null;
-  }, [navigate, callLobby]);
+    const assistant = <AssistantMessageExtras metadata={message.metadata} viewerId={viewerId} callId={huddleCallId} />;
+    return <>{assistant}{page}</>;
+  }, [navigate, callLobby, viewerId, huddleCallId]);
   if (!chat?.callId) return null;
   const { state } = chat;
   const inRoom = isBreakoutChat(chat.callId, runtime?.channel ?? chat.channel);
