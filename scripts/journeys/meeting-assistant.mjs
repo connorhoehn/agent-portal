@@ -206,6 +206,13 @@ async function main() {
     check(res.status() === 200, `GET turns answered ${res.status()}`);
     return (await res.json()).turns;
   };
+  const chatPanel = (p) => p.page.getByTestId('huddle-thread');
+  const workTitles = async (p) => {
+    const res = await p.api.get(`${PORTAL}/api/graph/work`);
+    check(res.status() === 200, `GET the work list answered ${res.status()}`);
+    const rows = JSON.stringify(await res.json());
+    return rows;
+  };
   const stateOf = async (p) => (await (await p.api.get(asApi(p, 'state'))).json());
 
   let vera, nora;
@@ -272,14 +279,33 @@ async function main() {
       return `"${text.slice(0, 200)}"`;
     });
 
+    // ── 3b. Hiding the notice does not acknowledge; the mark keeps offering it ──
+    await step('3b: the second person closes the notice with its own mark: nothing is acknowledged, and the Nova mark says Nova cannot hear them with Acknowledge one click away', async () => {
+      await nora.page.getByTestId('nova-notice-dismiss').click();
+      await gone(nora.page, 'nova-notice');
+      await waitMark(nora.page, /^Nova cannot hear you yet$/);
+      check((await stateOf(nora)).youMustAck === true, 'closing the notice acknowledged for the person');
+      check(await vera.page.getByTestId('nova-mark').innerText().then((t) => /Nova is listening/.test(t)), 'the inviter\'s mark changed');
+      await nora.page.getByTestId('nova-mark').click();
+      const item = nora.page.getByRole('menuitem', { name: /Acknowledge/ });
+      check(await item.isVisible(), 'no Acknowledge in the Nova menu');
+      check(/cannot hear you until you do/i.test(await item.innerText()), 'the Acknowledge item does not say why');
+      await barFits(nora.page, 'the bar with the mark prompting', 1280);
+      await shot(nora.page, '3b-notice-hidden-mark-menu');
+      await barFits(nora.page, 'the bar with the mark prompting', 1440);
+      await nora.page.keyboard.press('Escape');
+      return 'notice hidden; mark "Nova cannot hear you yet"; menu offers Acknowledge';
+    });
+
     // ── 4. Nothing kept before the acknowledgement ──
     await step('4: a line for the second person is not stored before they acknowledge; after they do, a new one is', async () => {
       const before = 'Before ack: the canary rollout is on hold until Thursday.';
       const after = 'After ack: the canary rollout resumes on Friday.';
       await inject(NORA.userId, before);
       check(!(await stored(vera, before, 3500)), 'a line from a person who had not acknowledged was stored');
-      await nora.page.getByTestId('nova-notice-acknowledge').click();
-      await gone(nora.page, 'nova-notice');
+      await novaMenu(nora, /Acknowledge/);
+      await waitMark(nora.page, /^Nova is listening$/);
+      check((await stateOf(nora)).youMustAck === false, 'the menu\'s Acknowledge did not acknowledge');
       await inject(NORA.userId, after);
       check(await stored(vera, after, 10000), 'a line after the acknowledgement was not stored');
       check(!(await transcript(vera)).includes(before), 'the line from before the acknowledgement appeared later');
@@ -320,27 +346,82 @@ async function main() {
       return `reply "Four." labelled "${reply.metadata.askedByName}"`;
     });
 
-    // ── 9. A write is a card; only the asker confirms; the browser's turn exists only after that ──
-    await step('9: "Nova, create a work item ..." is an action card waiting for the asker; nothing for the browser until the asker confirms; another person cannot confirm', async () => {
+    // ── 8a. A spoken read runs in the asker's own browser ──
+    await step('8a: "Nova, search for login" from the inviter: the inviter\'s browser runs the read and posts the result, and Nova\'s reply appears in the chat labelled with the asker', async () => {
+      const beforeReplies = (await novaOf(vera, 'assistant-reply')).length;
+      const refusedBefore = (await stateOf(vera)).refusedCalls ?? 0;
+      await inject(VERA.userId, 'Nova, search for login');
+      const reply = await waitFor(async () => (await novaOf(vera, 'assistant-reply')).slice(beforeReplies).find((m) => m.message === 'Here is the result.'), 25000, 'the reply to the search');
+      check(reply.metadata.askedBy === VERA.userId, `the reply is labelled for ${reply.metadata.askedBy}`);
+      check((await myTurns(vera)).length === 0, 'the read is still waiting for the browser');
+      check(((await stateOf(vera)).refusedCalls ?? 0) === refusedBefore, 'the read was refused');
+      await seen(vera.page, 'huddle-thread');
+      const label = await waitFor(async () => /Here is the result\.[\s\S]*Asked by Vera/.test(await chatPanel(vera).innerText()), 15000, 'the reply and its "Asked by" line on the inviter\'s screen');
+      await shot(vera.page, '8a-read-reply-labelled');
+      await shot(vera.page, '8a-read-reply-labelled', 1440);
+      return `reply "${reply.message}" labelled "${reply.metadata.askedByName}"; shown with "Asked by"`;
+    });
+
+    // ── 9. A write is a card; only the asker confirms; the asker's browser then runs it ──
+    await step('9: "Nova, create a work item ..." is a card both people see, controls for the asker only; the asker confirms in the chat, the browser creates it, the card reads done, and it exists', async () => {
       await inject(VERA.userId, 'Nova, create a work item for the login cookie bug.');
-      const card = await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.tool?.name === 'create'), 20000, 'the action card');
+      const card = await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.tool?.name === 'create' && /login cookie bug/.test(m.metadata.summary)), 20000, 'the action card');
       check(card.metadata.askedBy === VERA.userId && card.metadata.status === 'waiting', `the card is ${card.metadata.status} for ${card.metadata.askedBy}`);
-      check(/login cookie bug/.test(card.metadata.summary), `the card does not say what it creates: "${card.metadata.summary}"`);
       check((await myTurns(vera)).length === 0, 'a turn reached the asker\'s browser before they confirmed');
+      check(!(await workTitles(vera)).includes('login cookie bug'), 'the work item existed before the card was confirmed');
+      // Both people see the card; only the asker has controls.
+      const veraCard = vera.page.getByTestId('assistant-action-card').filter({ hasText: /login cookie bug/ }).last();
+      const noraCard = nora.page.getByTestId('assistant-action-card').filter({ hasText: /login cookie bug/ }).last();
+      await veraCard.waitFor({ timeout: 20000 }); await noraCard.waitFor({ timeout: 20000 });
+      check(await veraCard.getByTestId('assistant-action-confirm').isVisible(), 'the asker has no Confirm');
+      check(await noraCard.getByTestId('assistant-action-confirm').count() === 0 && await noraCard.getByTestId('assistant-action-decline').count() === 0, 'the other person has controls on the card');
+      check(/Waiting for Vera/.test(await noraCard.innerText()), `the other person's card does not say who it waits for: "${await noraCard.innerText()}"`);
+      await shot(vera.page, '9-card-waiting-asker'); await shot(nora.page, '9-card-waiting-other');
       const stranger = await nora.api.post(asApi(nora, `actions/${encodeURIComponent(card.metadata.actionId)}/decision`), { data: { decision: 'confirm' } });
       check(stranger.status() === 403, `another person confirming answered ${stranger.status()}, not 403`);
       check((await myTurns(vera)).length === 0, 'another person\'s confirm made a turn');
-      const mine = await vera.api.post(asApi(vera, `actions/${encodeURIComponent(card.metadata.actionId)}/decision`), { data: { decision: 'confirm' } });
-      check(mine.status() === 200, `the asker confirming answered ${mine.status()}`);
-      const turns = await myTurns(vera);
-      check(turns.length === 1 && turns[0].status === 'running' && turns[0].kind === 'write' && turns[0].tool.name === 'create', `after confirming the asker has ${JSON.stringify(turns)}`);
-      check((await myTurns(nora)).length === 0, 'the other person sees the asker\'s turn');
-      const hers = await nora.api.post(asApi(nora, `turns/${turns[0].turnId}/result`), { data: { ok: true } });
-      check(hers.status() === 404, `another person posting the result answered ${hers.status()}, not 404`);
-      const done = await vera.api.post(asApi(vera, `turns/${turns[0].turnId}/result`), { data: { ok: true, output: { say: 'Created.' } } });
-      check(done.status() === 200, `the asker's result answered ${done.status()}`);
-      await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === card.metadata.actionId && m.metadata.status === 'done'), 10000, 'the card going to done');
-      return `card waiting, 403 for the other person, one running turn after the asker confirmed, then done`;
+      await veraCard.getByTestId('assistant-action-confirm').click();
+      await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === card.metadata.actionId && m.metadata.status === 'done'), 25000, 'the card going to done');
+      check((await workTitles(vera)).includes('login cookie bug'), 'the work item does not exist after the card read done');
+      check((await myTurns(vera)).length === 0, 'the confirmed turn is still waiting');
+      await waitFor(async () => /Done/.test(await noraCard.getByTestId('assistant-action-status').innerText()) && (await noraCard.getByTestId('assistant-action-result').count()) > 0, 15000, 'the other person\'s card reading done with a result sentence');
+      const resultLine = await noraCard.getByTestId('assistant-action-result').innerText();
+      await shot(nora.page, '9-card-done-other'); await shot(vera.page, '9-card-done-asker');
+      await shot(vera.page, '9-card-done-asker', 1440);
+      return `card waiting (controls: asker only), 403 for the other person, confirmed in the UI, done: "${resultLine}"; the work item exists`;
+    });
+
+    // ── 9c. A declined card creates nothing ──
+    await step('9c: a second card is declined by the asker: it reads declined for both, nothing is created, no turn reaches the browser', async () => {
+      await inject(VERA.userId, 'Nova, create a work item for the nightly export audit.');
+      const card = await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => /nightly export audit/.test(m.metadata.summary)), 20000, 'the second card');
+      const veraCard = vera.page.getByTestId('assistant-action-card').filter({ hasText: /nightly export audit/ }).last();
+      await veraCard.waitFor({ timeout: 20000 });
+      await veraCard.getByTestId('assistant-action-decline').click();
+      await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === card.metadata.actionId && m.metadata.status === 'declined'), 15000, 'the card going to declined');
+      const noraCard = nora.page.getByTestId('assistant-action-card').filter({ hasText: /nightly export audit/ }).last();
+      await waitFor(async () => /Declined/.test(await noraCard.getByTestId('assistant-action-status').innerText()), 15000, 'the other person seeing declined');
+      await sleep(3500);
+      check(!(await workTitles(vera)).includes('nightly export audit'), 'a declined card created the work item');
+      check((await myTurns(vera)).length === 0, 'a declined card left a turn');
+      await shot(vera.page, '9c-card-declined');
+      return 'declined for both; nothing created';
+    });
+
+    // ── 9d. A private answer reaches only the asker ──
+    await step('9d: "Nova, how much budget do I have" is answered privately: the asker sees a toast marked "only you can see this", the other person\'s chat and screen show nothing', async () => {
+      const noraBefore = (await chatMessages(nora)).length;
+      const asks = (await novaOf(vera, 'assistant-reply')).length;
+      await inject(VERA.userId, 'Nova, how much budget do I have?');
+      const toast = vera.page.getByText(/only you can see this/i).first();
+      await toast.waitFor({ timeout: 25000 });
+      await shot(vera.page, '9d-private-toast');
+      const toastBox = await toast.evaluate((el) => (el.closest('[role="status"],[role="alert"],[data-testid*="toast"]') ?? el.parentElement).innerText.replace(/\s+/g, ' '));
+      await sleep(1500);
+      check((await novaOf(vera, 'assistant-reply')).length === asks, 'the private answer was posted in the call chat');
+      check((await chatMessages(nora)).length === noraBefore, 'the other person\'s chat changed');
+      check(await nora.page.getByText(/only you can see this/i).count() === 0, 'the other person sees the private toast');
+      return `toast: "${toastBox.slice(0, 120)}"; chat unchanged for the other person`;
     });
 
     // ── 10. A tool call with no name in the asker's recent words is refused ──
@@ -356,6 +437,26 @@ async function main() {
       check((await chatMessages(vera)).length === messages, 'a refused call posted something in the chat');
       check((await myTurns(nora)).length === 0, 'a refused call made a turn');
       return `refusedCalls ${before} -> ${(await stateOf(vera)).refusedCalls}`;
+    });
+
+    // ── 9e. At most three tool calls per addressed request ──
+    await step('9e: the fourth tool call inside one addressed request is refused ("too many steps") and counted; the first three ran', async () => {
+      await inject(VERA.userId, 'Nova, I need a hand with something.');
+      await sleep(1500);
+      const before = (await stateOf(vera)).refusedCalls ?? 0;
+      for (const n of [1, 2, 3, 4]) {
+        const res = await fetch(`${MIDDLEWARE}/api/dev/calls/${encodeURIComponent(callId)}/assistant-tool-call`, {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ askedBy: VERA.userId, name: 'search', args: { query: `chain ${n}` } }),
+        });
+        check(res.status === 202, `dev tool call ${n} answered ${res.status}`);
+        await sleep(300);
+      }
+      await waitFor(async () => ((await stateOf(vera)).refusedCalls ?? 0) > before, 15000, 'the fourth call being refused');
+      await sleep(2500);
+      const after = (await stateOf(vera)).refusedCalls ?? 0;
+      check(after === before + 1, `refusedCalls went ${before} -> ${after}, not by exactly one`);
+      check((await myTurns(vera)).length === 0, 'a turn is still waiting');
+      return `refusedCalls ${before} -> ${after} after four chained calls`;
     });
 
     // ── 7. The bar at both widths with Nova's controls present ──

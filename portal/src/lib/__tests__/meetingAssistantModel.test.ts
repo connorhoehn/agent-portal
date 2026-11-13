@@ -76,11 +76,12 @@ test('time left shows under ten minutes while listening, rounded up, never negat
 
 test('the mark says Nova cannot hear you until you acknowledge, and the menu offers it', () => {
   const owing = view('listening', { youMustAck: true });
-  assert.equal(markWords(owing), 'Nova cannot hear you yet');
+  assert.equal(markWords(owing, true), 'Nova cannot hear you yet');
   const controls = assistantControls({ enabled: true, inCall: true, canInvite: false, view: owing });
   assert.equal(controls.acknowledge, true);
   assert.equal(controls.extend, false);
-  assert.equal(markWords(view('listening')), 'Nova is listening');
+  assert.equal(markWords(owing, false), 'Nova is listening');
+  assert.equal(markWords(view('listening'), true), 'Nova is listening');
   assert.equal(assistantControls({ enabled: true, inCall: true, canInvite: true, view: view('listening') }).extend, true);
   assert.equal(assistantControls({ enabled: true, inCall: true, canInvite: true, view: view('left') }).extend, false);
 });

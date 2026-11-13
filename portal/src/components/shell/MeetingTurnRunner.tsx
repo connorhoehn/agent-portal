@@ -12,6 +12,7 @@ import { onTurnsPoke } from '../../lib/meetingTurnsPoke';
 import { SeenTurns, parseTurns, processTurns } from '../../lib/meetingTurns';
 import { writeJson } from '../../lib/writeJson';
 import { runCallTool } from '../../lib/voice/runCore';
+import { pageContextFor, pageTabsFor } from '../../lib/voice/pageContext';
 import { ResultMemory, type DeliveryRecord, type ToolContext } from '../../lib/voice/tools';
 import { PAGES, isPageVisible } from './portalCommands';
 import { useLiveCallId } from './MeetingAssistantBar';
@@ -44,6 +45,8 @@ export function MeetingTurnRunner() {
         tenant: s?.tenant ?? 'orgiq', role: s?.role ?? 'member', switchable: s?.switchable?.[s.tenant] ?? null, userId, userName: s?.name ?? null,
         ledger, results, palette: { pages: PAGES, visible: isPageVisible },
         can: live.current.can, fetch: (url, init) => fetch(url, init), navigate: () => undefined, now: () => new Date(),
+        // The page in view, as the voice navigator reads it: a work item made from the call's initiative page lands on that initiative.
+        page: () => pageContextFor(window.location.pathname), tabs: () => pageTabsFor(window.location.pathname),
       };
     };
     const poll = async (): Promise<void> => {

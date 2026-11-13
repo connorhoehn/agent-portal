@@ -121,8 +121,8 @@ export function timeLeftWords(v: AssistantView): string | null {
   return m !== null && m < LEFT_WARNING_MINUTES ? `${m} min left` : null;
 }
 
-/** What the mark says: the state, or that Nova cannot hear this person yet (the notice's close mark only hides it). */
-export function markWords(v: AssistantView): string | null {
-  if (assistantPresent(v) && v.youMustAck) return `${ASSISTANT_NAME} cannot hear you yet`;
+/** What the mark says: the state, or, once the notice was closed without acknowledging, that Nova cannot hear this person yet. */
+export function markWords(v: AssistantView, noticeClosed: boolean): string | null {
+  if (noticeClosed && assistantPresent(v) && v.youMustAck) return `${ASSISTANT_NAME} cannot hear you yet`;
   return assistantStateWords(v);
 }

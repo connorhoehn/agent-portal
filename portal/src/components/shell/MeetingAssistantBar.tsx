@@ -5,11 +5,11 @@
 // Everything renders nothing unless the server advertises the feature (session.meetingAssistant) and a call is live.
 
 import { Button, CheckIcon, Chip, CloseIcon, DropdownMenu, Inline, PauseCircleIcon, PlayCircleIcon, PlusCircleIcon, T, Tooltip } from '@connorhoehn/ui-components/shared';
-import { useState } from 'react';
 import { RecordingConsentNotice, type RosterExtraEntry } from '@connorhoehn/ui-components/video';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import { assistantPresent, assistantStateWords, markWords, timeLeftWords, noticeText, noticeVisible, rosterEntry, ASSISTANT_LABEL, ASSISTANT_NAME } from '../../lib/meetingAssistantModel';
 import { useCallHost } from '../../lib/conversationCall';
+import { hideNovaNotice, useNovaNoticeHidden } from '../../lib/novaNoticeHidden';
 
 /** The live call's id, or null while there is no joined call to listen to. */
 export function useLiveCallId(): string | null {
@@ -25,7 +25,8 @@ export function NovaBarControls() {
   const { controls, view, busy } = nova;
   if (controls.hidden) return null;
   const state = assistantStateWords(view);
-  const words = markWords(view);
+  const noticeClosed = useNovaNoticeHidden(callId);
+  const words = markWords(view, noticeClosed);
   const left = timeLeftWords(view);
   return <Inline gap="xs" align="center" wrap={false} className="shrink-0 border-l border-border pl-2" data-testid="nova-bar">
     {controls.invite && <Tooltip content="Nova listens to this call and answers when asked by name" placement="top">
@@ -51,14 +52,14 @@ export function NovaBarControls() {
 export function NovaNotice() {
   const callId = useLiveCallId();
   const nova = useMeetingAssistant(callId);
-  const [hidden, setHidden] = useState(false);
+  const hidden = useNovaNoticeHidden(callId);
   if (hidden || !noticeVisible(nova.enabled, nova.view)) return null;
   const text = noticeText(nova.view);
   return <RecordingConsentNotice open kind="transcription" placement="inline" className="mx-4 my-1" data-testid="nova-notice"
     title={text.title} description={text.body}
     acknowledgeLabel="I understand" onAcknowledge={nova.busy ? () => {} : () => void nova.acknowledge()}
     secondaryLabel="Dismiss Nova" onSecondary={nova.busy ? () => {} : () => void nova.dismiss()}
-    onDismiss={() => setHidden(true)} />;
+    onDismiss={() => { if (callId) hideNovaNotice(callId); }} />;
 }
 
 /** Nova as a non-media entry for the call's people lists; null when it is not in this call. */
