@@ -91,7 +91,7 @@ async function shotPair(page, name) {
 async function noGarbage(page, label) {
   const t = await bodyText(page);
   check(!/\bundefined\b|\bNaN\b|\[object Object\]|\bnull\b/.test(t), `${label} shows a leaked value: ${/(.{20}(undefined|NaN|\[object Object\]|\bnull\b).{20})/.exec(t)?.[0]}`);
-  check(!/\b1 (runs|firings|entries|proposals|work items|initiatives)\b/.test(t), `${label} has a plural error: ${/\b1 (runs|firings|entries|proposals|work items|initiatives)\b/.exec(t)?.[0]}`);
+  check(!/\b1 (runs|firings|entries|proposals|work items|initiatives|bots)\b/.test(t), `${label} has a plural error: ${/\b1 (runs|firings|entries|proposals|work items|initiatives|bots)\b/.exec(t)?.[0]}`);
   check(!/something went wrong|unexpected error/i.test(t), `${label} shows an error boundary`);
 }
 /** No table (or the page itself) may run past its box at 1440 or 1280 wide. */
@@ -109,6 +109,25 @@ async function noOverflow(page, label) {
       return out;
     });
     check(bad.length === 0, `${label} overflows at ${width}: ${bad.join(', ')}`);
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+}
+/** The firings table's header cells must all sit inside the table's box, and the page must not scroll sideways. */
+async function noClip(page, label, selector) {
+  for (const width of [1440, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await sleep(500);
+    const r = await page.evaluate((sel) => {
+      const root = document.querySelector(sel);
+      if (!root) return { missing: true };
+      const box = (root.tagName === 'TABLE' ? root.parentElement : root).getBoundingClientRect();
+      const heads = [...root.querySelectorAll('th')];
+      const worst = Math.max(...heads.map((h) => h.getBoundingClientRect().right));
+      return { cols: heads.length, boxRight: box.right, worst, scrollX: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+    }, selector);
+    check(!r.missing, `${label}: nothing matches ${selector}`);
+    check(r.worst <= r.boxRight + 1, `${label} clips at ${width}: a header ends at ${Math.round(r.worst)}, the table at ${Math.round(r.boxRight)}`);
+    check(r.scrollX <= 1, `${label} scrolls sideways at ${width} by ${r.scrollX}px`);
   }
   await page.setViewportSize({ width: 1440, height: 900 });
 }
@@ -410,6 +429,23 @@ async function main() {
       await noGarbage(page, 'the bot page');
       await noOverflow(page, 'the bot page');
       await shotPair(page, '8-bot-page');
+      // The firings table keeps every column inside its box, on the bot whose outcome cell is the widest.
+      const botList = await getJson('/api/bots');
+      let widest = { id: BOT, score: -1 };
+      for (const b of botList.bots ?? botList) {
+        const runs = (await getJson(`/api/bots/${b.id}/runs`)).runs ?? [];
+        for (const r of runs) {
+          const o = r.outcome ?? {};
+          const score = (o.reason?.length ?? 0) + 40 * [o.changeId, o.prUrl, r.jobId, r.runId && b.agentProjectId].filter(Boolean).length;
+          if (score > widest.score) widest = { id: b.id, score };
+        }
+      }
+      await go(page, `/admin/bots/${widest.id}`);
+      await page.locator('[aria-label="Firings"]').first().waitFor({ timeout: 20000 });
+      await noClip(page, 'the firings table', '[aria-label="Firings"]');
+      await shotPair(page, '8-bot-firings-widest-outcome');
+      await go(page, `/admin/bots/${BOT}`);
+      await page.getByTestId('bot-run-report').first().waitFor({ timeout: 20000 });
       await chip.click();
       await landed(page, new RegExp(`^/iq/runs/(job%3A|job:)?${BOT_JOB}`));
       await go(page, `/admin/bots/${BOT}`);
@@ -564,6 +600,35 @@ async function main() {
       await noGarbage(page, 'My work');
       await noOverflow(page, 'My work');
       await shotPair(page, '12-my-work');
+      // Unlinked versus linked: the empty state names the missing link only for an account with no linked person.
+      // The default persona is the cookie-less one (demo-user): a fresh context, no sign-in.
+      const fresh = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      const freshPage = await fresh.newPage();
+      const who0 = await (await fresh.request.get(`${PORTAL}/api/session/person`)).json();
+      check(who0.linked === false, `the default persona reads as linked: ${JSON.stringify(who0)}`);
+      await go(freshPage, '/iq/my-work');
+      await waitText(freshPage, /not linked to a person/);
+      check(!/Nothing is assigned to you right now/.test(await bodyText(freshPage)), 'the unlinked account also sees the generic empty text');
+      await shotPair(freshPage, '12-my-work-unlinked');
+      await fresh.close();
+      let linkedEmpty = null;
+      for (const c of [VERA, SIENNA, NORA, THEO]) {
+        await signIn(c);
+        const who = await getJson('/api/session/person');
+        const work = await getJson('/api/graph/work?assignee=me&status=in_progress,in_review,open&limit=200');
+        if (who.linked && work.length === 0) { linkedEmpty = c; break; }
+      }
+      if (linkedEmpty) {
+        await signIn(linkedEmpty);
+        await go(page, '/iq/my-work');
+        await waitText(page, /Nothing is assigned to you right now/);
+        check(!/not linked to a person/.test(await bodyText(page)), 'a linked account sees the not-linked message');
+        await shotPair(page, '12-my-work-linked-empty');
+      }
+      await signIn(NORA);
+      await go(page, '/iq/my-work');
+      await page.getByTestId('iq-my-work-table').locator('tbody tr').first().waitFor({ timeout: 15000 });
+      check(!/not linked to a person/.test(await bodyText(page)), 'a linked SME with work sees the not-linked message');
       // The rail: Initiatives, My work, Decisions in that order.
       const labels = await page.evaluate(() => [...document.querySelectorAll('nav a, nav button, aside a, aside button, [role="navigation"] a')].map((e) => (e.textContent ?? '').trim().replace(/\s*\d+$/, '')).filter(Boolean));
       const at = (l) => labels.findIndex((x) => x === l);
@@ -607,7 +672,39 @@ async function main() {
       const unknown = listed.entries.filter((e) => e.costUsd == null);
       const eText = await entries.innerText();
       if (unknown.length > 0) check(/unknown/.test(eText) && !/\$0\.0+(\s|$)/.test(eText), 'an unknown cost does not read "unknown"');
-      await entries.getByTestId('spend-entry-run').first().click();
+      // A readable model name, never a raw id.
+      const modelCells = await entries.locator('tbody tr').evaluateAll((trs) => trs.map((tr) => tr.innerText));
+      check(modelCells.every((t) => !/:\d\b|\b(us|eu|apac|global)\.[a-z]|\bamazon\.|\banthropic\./i.test(t)), `an entry shows a raw model id: ${modelCells.find((t) => /:\d\b|\b(us|eu|apac|global)\./i.test(t))?.slice(0, 120)}`);
+      // One bot: the bot page's spend link carries it, the toolbar shows it, the table lists only it, clearing returns all.
+      await go(page, `/admin/bots/${BOT}`);
+      await page.getByTestId('bot-run-spend-report').waitFor({ timeout: 20000 });
+      await page.getByTestId('bot-run-spend-report').click();
+      await landed(page, new RegExp(`^/admin/budgets\\?.*bot=${BOT}`));
+      await table.waitFor({ timeout: 20000 });
+      await waitText(page, /Bot\b/);
+      await sleep(800);
+      const oneRows = await table.locator('tbody tr').count();
+      check(oneRows === 1, `the bot-filtered table lists ${oneRows} rows`);
+      check(new RegExp(escapeRe(authBot.name)).test(await table.innerText()), 'the filtered table does not name the bot');
+      await noGarbage(page, 'Budgets for one bot');
+      await noOverflow(page, 'Budgets for one bot');
+      await shotPair(page, '13-budgets-one-bot');
+      // The toolbar keeps its filters behind the funnel button.
+      await page.getByRole('button', { name: /filters?/i }).first().click();
+      await page.getByRole('combobox', { name: 'Bot', exact: true }).click();
+      await page.getByRole('option', { name: /All bots/ }).first().click();
+      await landed(page, /^\/admin\/budgets\?(?!.*bot=)/);
+      await sleep(800);
+      const allRows = await table.locator('tbody tr').count();
+      check(allRows > 1, `clearing the Bot filter leaves ${allRows} rows`);
+      await shotPair(page, '13-budgets-bot-cleared');
+      await entries.getByTestId('spend-entry-run').first().click().catch(async () => {
+        await go(page, '/admin/budgets?group=bot&period=30d');
+        await table.waitFor({ timeout: 20000 });
+        await table.locator('tbody tr').filter({ hasText: new RegExp(escapeRe(authBot.name)) }).first().locator('td').nth(1).click();
+        await entries.waitFor({ timeout: 15000 });
+        await entries.getByTestId('spend-entry-run').first().click();
+      });
       await landed(page, /^\/iq\/runs\/(job%3A|job:)?job-/);
       return `total ${bot.knownUsd.toFixed(2)} over ${bot.entries} entries; ${unknown.length ? `${unknown.length} unknown cost(s) read unknown` : 'the default world holds no unknown-cost entry to read'}`;
     });

@@ -77,6 +77,10 @@ const GROUP_NOUN: Readonly<Record<SpendGroupBy, string>> = {
   initiative: 'initiatives', actor: 'people', model: 'models', source: 'sources', trigger: 'triggers', bot: 'bots',
 };
 
+const GROUP_ONE: Readonly<Record<SpendGroupBy, string>> = {
+  initiative: 'initiative', actor: 'person', model: 'model', source: 'source', trigger: 'trigger', bot: 'bot',
+};
+
 export default function BudgetsPage() {
   const { can, ready } = useCapabilities();
   // Reads are open to the leadership tier; only the allocation writes are
@@ -274,7 +278,7 @@ export default function BudgetsPage() {
           ? `${shownPeople.length} of ${people.length} people`
           : groupBy === 'initiative'
             ? `${shownBudgets.length} of ${budgets.length} initiatives`
-            : `${spend?.groups.length ?? 0} ${GROUP_NOUN[groupBy]}`}
+            : `${spend?.groups.length ?? 0} ${spend?.groups.length === 1 ? GROUP_ONE[groupBy] : GROUP_NOUN[groupBy]}`}
       onRefresh={report === 'sprints' ? refreshGrants : report === 'people' ? refreshPeople : () => { refresh(); refreshSpend(); }}
     />
   );

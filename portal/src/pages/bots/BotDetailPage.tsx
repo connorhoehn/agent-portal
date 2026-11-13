@@ -217,7 +217,7 @@ export default function BotDetailPage() {
               </RecordLink>
             )}
             {o.reason && (
-              <T as="span" size="sm" tone={r.status === 'failed' ? 'danger' : 'inherit'} wrap className="min-w-[10rem] flex-1 line-clamp-2">{o.reason}</T>
+              <T as="span" size="sm" tone={r.status === 'failed' ? 'danger' : 'inherit'} clamp={2} className="min-w-[10rem] flex-1 whitespace-normal">{o.reason}</T>
             )}
             {o.changeId && (
               <Link to="/admin/changes" title="Open the change this firing recorded" className="shrink-0 whitespace-nowrap text-primary no-underline hover:underline">
