@@ -142,6 +142,7 @@ export function standaloneRooms(rows: SocialRoomRow[]): SocialRoomRow[] {
 
 // ── platform-api ────────────────────────────────────────────────────────────
 
+export async function platformBearer(session: Session): Promise<string> { return bearer(session); }
 async function bearer(session: Session): Promise<string> {
   const secret = realtimeSigningSecret();
   if (!secret) throw new AppError(503, 'realtime token signing unavailable, so platform-api cannot be reached');

@@ -12,7 +12,7 @@ export type TranscriptHandler = (callId: string, caption: RawLine) => void | Pro
 export type Unsubscribe = () => void;
 
 export interface TranscriptSource {
-  readonly kind: 'mock' | 'not-configured';
+  readonly kind: 'mock' | 'not-configured' | 'live-audio';
   subscribe(callId: string, handler: TranscriptHandler): Unsubscribe;
 }
 
@@ -52,6 +52,19 @@ export class MockTranscriptSource implements TranscriptSource {
   }
 }
 
+/**
+ * Real audio: the words come from the live session listening to the call's audio (orchestrator.ts feeds the intake directly), so
+ * there is no caption stream to subscribe to; subscribing succeeds and delivers nothing. Used when the media settings are present.
+ */
+export function liveAudioTranscriptSource(): TranscriptSource {
+  return { kind: 'live-audio', subscribe() { return () => undefined; } };
+}
+
+function mediaSettingsPresent(): boolean {
+  const m = (config as { meetingAssistant?: { media?: { url?: string; adminToken?: string; sinkBaseUrl?: string } } }).meetingAssistant?.media;
+  return !!(m?.url?.trim() && m.adminToken?.trim() && m.sinkBaseUrl?.trim());
+}
+
 export function notConfiguredTranscriptSource(): TranscriptSource {
   return { kind: 'not-configured', subscribe() { throw new TranscriptSourceNotConfigured(); } };
 }
@@ -64,5 +77,6 @@ export function theMockTranscriptSource(): MockTranscriptSource { return (mockSo
 export function setTranscriptSource(next: TranscriptSource | null): void { override = next; }
 export function transcriptSource(): TranscriptSource {
   if (override) return override;
-  return mockTranscriptEnabled() ? theMockTranscriptSource() : notConfiguredTranscriptSource();
+  if (mockTranscriptEnabled()) return theMockTranscriptSource();
+  return mediaSettingsPresent() ? liveAudioTranscriptSource() : notConfiguredTranscriptSource();
 }

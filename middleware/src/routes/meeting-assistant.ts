@@ -35,6 +35,7 @@ import {
 import { moveAction, nameOf, noticeText, postNoticeQuietly } from '../lib/meeting-assistant/chat.js';
 import { assistantRuntime, MAX_RESULT_BYTES, type StartContext } from '../lib/meeting-assistant/orchestrator.js';
 import { assistantAudio } from '../lib/meeting-assistant/audio-select.js';
+import { preflightAudio, tapArmer, type Preflight } from '../lib/meeting-assistant/media.js';
 import { onCallEnded, trackMinutes } from '../lib/meeting-assistant/minutes-service.js';
 import { sessionAvailable } from '../lib/meeting-assistant/session-select.js';
 import { newAssistantSession, sessionOf as recordSession } from '../lib/meeting-assistant/types.js';
@@ -114,6 +115,12 @@ async function startSession(callId: string, record: AssistantRecord, session: Se
   await assistantRuntime().start({ callId, tenant: record.tenant, inviterId: record.invitedBy, roster: names, recordName: await recordNameOf(record.initiativeId) });
 }
 
+/** Arm the media server's tap for a call that is listening now. A failure here never undoes the listening: the call chat says so when the tap cannot be made. */
+async function armAudio(callId: string, pre: Preflight | null): Promise<void> {
+  if (!pre) return;
+  try { await tapArmer().arm(callId, pre.channelArn); } catch (e) { console.warn('[meeting-assistant] arming the audio failed', (e as Error).message); }
+}
+
 const noteSeat = async (callId: string, session: Session) => { await assistantStore().attend(callId, session.sub); };
 
 meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), asyncHandler(async (req, res) => {
@@ -130,7 +137,11 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
   if (existing) {
     startListening(); await noteSeat(callId, session);
     // After a restart a listening record has no live session in this process: start one again on a repeated invite.
-    if (existing.state === 'listening' && !assistantRuntime().isRunning(callId)) await startSession(callId, existing, session).catch(() => undefined);
+    if (existing.state === 'listening' && !assistantRuntime().isRunning(callId)) {
+      const pre = await preflightAudio(session, callId, existing.lobby);
+      const started = await startSession(callId, existing, session).then(() => true, () => false);
+      if (started) await armAudio(callId, pre);
+    }
     res.json(await view((await store.get(callId)) ?? existing, callId, session)); return;
   }
   if (!sessionAvailable()) throw new AppError(503, 'The live assistant is not configured for this deployment');
@@ -140,6 +151,8 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
   if (!lobby) throw new NotFoundError('Call is no longer active');
   const present = (await runtime.seatedUsers(callId)).filter((u) => u.active).map((u) => u.userId);
   if (!present.includes(session.sub)) present.push(session.sub);
+  // Real audio: the three media settings and the call's channel, found by the server from the call, or a 503 here and nothing started.
+  const pre = await preflightAudio(session, callId, lobby);
   startListening();
   // Money first (decision 10): the ceiling's minutes are held against the inviter. A refusal ends the invite here, in the shape
   // the voice mint gives, and Nova never joins.
@@ -178,6 +191,7 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
   } catch (e) { await assistantRuntime().stop(callId); await giveBack(); throw e; }
   const { record } = created;
   const listening = await store.transition(callId, { from: ['invited'], to: 'listening', by: session.sub, at: Date.now() });
+  await armAudio(callId, pre);
   await postNoticeQuietly(callId, noticeText.joined(await nameOf(session.sub, session.name), config.meetingAssistant.transcriptRetentionDays));
   res.status(201).json(await view(listening ?? record, callId, session));
 }));
@@ -190,6 +204,8 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
     await noteSeat(callId, session);
     const before = await store.get(callId);
     if (to === 'listening' && before?.state === 'paused' && !sessionAvailable()) throw new AppError(503, 'The live assistant is not configured for this deployment');
+    // Resuming listens again: a new token and a new tap, so the channel is looked up again first (503, still paused, when it cannot be).
+    const pre = to === 'listening' && before?.state === 'paused' ? await preflightAudio(session, callId, before.lobby) : null;
     const done = await store.transition(callId, { from, to, by: session.sub, at: Date.now() });
     if (done) {
       const runtime = assistantRuntime();
@@ -201,6 +217,7 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
           console.warn('[meeting-assistant] resume failed', (e as Error).message);
           throw new AppError(503, 'The live assistant could not start. Try again shortly.');
         }
+        await armAudio(callId, pre);
       }
       const who = await nameOf(session.sub, session.name);
       if (to === 'paused') await postNoticeQuietly(callId, noticeText.paused(who));
@@ -211,6 +228,7 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
         for (const u of await callChatRuntime().seatedUsers(callId).catch(() => [])) await store.attend(callId, u.userId);
         assistantIntake().stop(callId);
         await assistantRuntime().stop(callId);
+        assistantAudio().forget(callId);
       }
       res.json(await view(await store.get(callId), callId, session));
       return;

@@ -24,6 +24,8 @@ import type { RealtimeRouter } from '@connorhoehn/realtime-modules/server';
 import { meetingAssistantRouter } from '../meeting-assistant.js';
 import { meetingAssistantSinkRouter } from '../meeting-assistant-sink.js';
 import { AudioIntake } from '../../lib/meeting-assistant/audio-intake.js';
+import { TapArmer, setTapArmer, setChannelResolver, type MediaClient } from '../../lib/meeting-assistant/media.js';
+import { setSessionFactory } from '../../lib/meeting-assistant/session-select.js';
 import { assistantIntake } from '../../lib/meeting-assistant/intake-select.js';
 import { setAssistantAudio, assistantAudio } from '../../lib/meeting-assistant/audio-select.js';
 import { ScriptedSession } from '../../lib/meeting-assistant/scripted-session.js';
@@ -183,5 +185,75 @@ describe('POST /api/internal/meeting-assistant/pcm/:sinkToken', () => {
     const token = await audio.arm(CALL, ARN);
     expect((await sink(token, pcm())).status).toBe(204);
     expect(audio.countersOf(CALL)).toMatchObject({ unackedChunks: 1, mixedChunks: 0 });
+  });
+});
+
+describe('arming the tap from invite, pause and resume (the real audio path)', () => {
+  const calls: string[] = [];
+  const client: MediaClient = {
+    list: async () => [],
+    create: async (arn, url) => { calls.push(`create ${arn} ${url.slice(url.lastIndexOf('/') + 1).length}`); return { kind: 'created', tapId: `tap-${calls.length}` }; },
+    delete: async (arn, id) => { calls.push(`delete ${arn} ${id}`); return 'removed'; },
+  };
+  let channel: string | null;
+  const asked: string[] = [];
+  beforeEach(() => {
+    calls.length = 0; asked.length = 0; channel = ARN;
+    process.env['MEETING_ASSISTANT_LIVE'] = '1'; // the mock world with the forced-live flag: real audio is the path, budgets stay mock
+    (mockConfig.meetingAssistant as unknown as { media: object }).media = { url: 'http://media.local', adminToken: 'admin-token', sinkBaseUrl: 'http://host.docker.internal:3953' };
+    setSessionFactory(() => new ScriptedSession(() => clock));
+    setChannelResolver({ channelOf: async (_s, callId, lobby) => { asked.push(`${callId}|${lobby}`); return channel; } });
+    setTapArmer(new TapArmer({ client, audio: () => audio, clock: () => clock, sleep: async () => undefined, notify: async () => undefined }));
+  });
+  afterEach(() => { setTapArmer(null); setChannelResolver(null); setSessionFactory(null); delete process.env['MEETING_ASSISTANT_LIVE']; });
+
+  it('invite derives the channel from the call on the server (a channel in the body is ignored), arms one tap, and pause deletes it', async () => {
+    const res = await post('invite', 'alice', { channelArn: 'arn:evil' });
+    expect([res.status, res.body.error]).toEqual([201, undefined]);
+    await new Promise<void>((r) => setImmediate(r));
+    expect(asked).toEqual([`${CALL}|${LOBBY}`]);
+    expect(calls).toEqual([`create ${ARN} 43`]);
+    expect((await post('pause', 'bob')).status).toBe(200);
+    await new Promise<void>((r) => setImmediate(r));
+    expect(calls).toEqual([`create ${ARN} 43`, `delete ${ARN} tap-1`]);
+  });
+
+  it('invite answers 503 with a plain reason and starts nothing when the settings are missing or the channel cannot be found', async () => {
+    (mockConfig.meetingAssistant as unknown as { media: { adminToken: string } }).media.adminToken = '';
+    mockConfig.mock.aurora = false; // a real deployment: the three settings are required
+    const missing = await post('invite');
+    mockConfig.mock.aurora = true;
+    expect(missing.status).toBe(503);
+    expect(missing.body.error).toMatch(/MEETING_ASSISTANT_MEDIA_ADMIN_TOKEN/);
+    expect(JSON.stringify(missing.body)).not.toMatch(/admin-token|media\.local/);
+    (mockConfig.meetingAssistant as unknown as { media: { adminToken: string } }).media.adminToken = 'admin-token';
+    channel = null;
+    const none = await post('invite');
+    expect(none.status).toBe(503);
+    expect(await assistantStore().get(CALL)).toBeNull();
+    expect(assistantIntake().isListening(CALL)).toBe(false);
+    expect(calls).toEqual([]);
+  });
+
+  it('resume looks the channel up again and arms a new tap; when it cannot, the call stays paused', async () => {
+    await post('invite'); await post('pause');
+    calls.length = 0;
+    channel = null;
+    expect((await post('resume')).status).toBe(503);
+    expect((await assistantStore().get(CALL))!.state).toBe('paused');
+    channel = ARN;
+    expect((await post('resume')).status).toBe(200);
+    await new Promise<void>((r) => setImmediate(r));
+    expect(calls.filter((c) => c.startsWith('create'))).toHaveLength(1);
+    expect((await assistantStore().get(CALL))!.state).toBe('listening');
+  });
+
+  it('dismiss deletes the tap and forgets who was who', async () => {
+    await post('invite');
+    await post('participant', 'bob', { participantId: 'bob-lq1' });
+    await post('dismiss');
+    await new Promise<void>((r) => setImmediate(r));
+    expect(calls.some((c) => c.startsWith('delete'))).toBe(true);
+    expect(assistantAudio().userOf(CALL, 'bob-lq1')).toBeNull();
   });
 });

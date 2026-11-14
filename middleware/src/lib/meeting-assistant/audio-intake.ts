@@ -137,7 +137,12 @@ export class AudioIntake {
     this.byCall.delete(callId);
     void this.flush(armed);
     void this.store().patchSession(callId, { sinkTokenHash: null }).catch(() => undefined);
+    for (const l of [...this.deadListeners]) { try { l(callId); } catch (e) { console.warn('[meeting-assistant] audio listener failed', (e as Error).message); } }
   }
+
+  /** Be told when a call's token dies (paused, left, ceiling, call end). The tap armer deletes the tap then. */
+  onDead(listener: (callId: string) => void): () => void { this.deadListeners.add(listener); return () => { this.deadListeners.delete(listener); }; }
+  private readonly deadListeners = new Set<(callId: string) => void>();
 
   /**
    * A live session opened for the call: a mixer on a fresh time base starts. (Replacing a session is detach then attach,

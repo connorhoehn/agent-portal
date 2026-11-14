@@ -100,6 +100,14 @@ export const config = {
   meetingAssistant: {
     enabled: flag('MEETING_ASSISTANT_ENABLED'),
     transcriptRetentionDays: Math.max(1, parseInt(env('MEETING_TRANSCRIPT_RETENTION_DAYS', '30'), 10) || 30),
+    // Real audio (lib/meeting-assistant/media.ts): the media server's address and admin token, used to arm one per-participant tap per
+    // listening call, and the address the media server reaches THIS server at (the tap's POST target). All three, or the real
+    // session path answers an invite with 503. The token is never logged.
+    media: {
+      url: env('MEETING_ASSISTANT_MEDIA_URL'),
+      adminToken: env('MEETING_ASSISTANT_MEDIA_ADMIN_TOKEN'),
+      sinkBaseUrl: env('MEETING_ASSISTANT_SINK_BASE_URL'),
+    },
   },
 
   // The message-queue service (~/projects/message-queue) that carries the
