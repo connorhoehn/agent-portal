@@ -22,7 +22,7 @@
 //
 // Every route needs: the flag on (else 404), the orgiq tenant, and a currently connected seat of THIS call
 // (lib/call-chat.ts assertMember) — except the transcript, which also serves people who have left or after
-// the call ended, by attendance. Writes are refused under a masquerade: they are attributed to a person.
+// the call ended, by attendance. Every route is refused under a masquerade, reads included: they show a person's own turns and the call's words.
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { AppError, asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
 import { requireAction, requireTenant, resolveSession } from '../lib/authz.js';
@@ -64,10 +64,13 @@ function flagGate(_req: Request, res: Response, next: NextFunction): void {
   next();
 }
 
-/** Writes are attributed to a person; a masquerade splits that identity, so refuse (routes/runbooks.ts does the same). */
+/**
+ * Every route here is about one person: writes are attributed to them, and reads (state, the transcript, their turns, the minutes)
+ * show what was said while they were there. A masquerade splits that identity, so every method is refused (audit B5).
+ */
 function refuseMasquerade(req: Request, res: Response, next: NextFunction): void {
-  if (req.method !== 'GET' && resolveSession(req)?.act) {
-    res.status(403).json({ error: 'stop masquerading to use the meeting assistant; these writes are attributed to a person', code: 'MASQUERADING' });
+  if (resolveSession(req)?.act) {
+    res.status(403).json({ error: 'stop masquerading to use the meeting assistant; it acts for, and shows words to, the person who was there', code: 'MASQUERADING' });
     return;
   }
   next();

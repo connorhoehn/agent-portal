@@ -96,11 +96,20 @@ describe('the flag and the gates', () => {
     expect(r.status).toBe(200);
   });
 
-  it('writes under a masquerade are refused, reads are not', async () => {
-    expect((await post('invite', 'masked')).status).toBe(403);
-    expect((await post('invite', 'masked')).body.code).toBe('MASQUERADING');
-    expect((await post('pause', 'masked')).body.code).toBe('MASQUERADING');
-    expect((await get('state', 'masked')).body.code).not.toBe('MASQUERADING');
+  it('every route is refused under a masquerade, reads included (B5)', async () => {
+    await post('invite');
+    await inject({ userId: 'alice', text: 'private words' });
+    for (const p of ['invite', 'pause', 'resume', 'dismiss', 'ack', 'extend', 'participant', 'actions/a-1/decision', 'turns/t-1/result']) {
+      const r = await post(p, 'masked');
+      expect([r.status, r.body.code]).toEqual([403, 'MASQUERADING']);
+    }
+    for (const p of ['state', 'transcript', 'turns?mine=1', 'minutes']) {
+      const r = await get(p, 'masked');
+      expect([p, r.status, r.body.code]).toEqual([p, 403, 'MASQUERADING']);
+      expect(JSON.stringify(r.body)).not.toContain('private words');
+    }
+    expect((await request(app).delete(url('minutes')).set('x-user', 'masked')).body.code).toBe('MASQUERADING');
+    expect((await request(app).delete(url('transcript')).set('x-user', 'masked')).body.code).toBe('MASQUERADING');
   });
 });
 
