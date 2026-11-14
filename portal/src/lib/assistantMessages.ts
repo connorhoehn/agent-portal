@@ -6,6 +6,7 @@
 // is Nova's. This file still validates the shape so a malformed row renders as an ordinary message, not a broken card.
 
 import { pokeTurns } from './meetingTurnsPoke.ts';
+import { PROPOSAL_STATES, type ProposalState } from './meetingProposals.ts';
 
 export type AssistantActionStatus = 'waiting' | 'confirmed' | 'declined' | 'expired' | 'done' | 'failed';
 const STATUSES: readonly AssistantActionStatus[] = ['waiting', 'confirmed', 'declined', 'expired', 'done', 'failed'];
@@ -23,7 +24,9 @@ export interface AssistantAction {
   status: AssistantActionStatus;
   resultText?: string;
 }
-export type AssistantMessage = AssistantNotice | AssistantReply | AssistantAction;
+/** A proposal card: only its id and state ride on the message (the statement is the text); the rest is read from the proposals route. */
+export interface AssistantProposalCard { kind: 'assistant-proposal'; proposalId: string; state: ProposalState }
+export type AssistantMessage = AssistantNotice | AssistantReply | AssistantAction | AssistantProposalCard;
 
 const text = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
 
@@ -46,6 +49,10 @@ export function readAssistantMessage(metadata: Record<string, unknown> | undefin
       tool: { name: String((tool as Record<string, unknown>)['name']), argsDigest: String((tool as Record<string, unknown>)['argsDigest'] ?? '') },
       status: status as AssistantActionStatus, ...(text(metadata['resultText']) ? { resultText: metadata['resultText'] } : {}),
     };
+  }
+  if (metadata['kind'] === 'assistant-proposal') {
+    return text(metadata['proposalId']) && PROPOSAL_STATES.includes(metadata['state'] as ProposalState)
+      ? { kind: 'assistant-proposal', proposalId: metadata['proposalId'], state: metadata['state'] as ProposalState } : null;
   }
   return null;
 }

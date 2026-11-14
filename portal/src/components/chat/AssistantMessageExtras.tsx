@@ -6,15 +6,20 @@
 //                     reads it with "Waiting for <name>". A decision updates the same message (the server edits it),
 //                     so the card changes in place for every reader.
 // The card's first line is its summary sentence (the bubble does not repeat it), then every detail line, then the status and the controls.
+//   assistant-proposal  a read-only card (docs/meeting-consent-design.md): "Proposal", the statement (the message's text), what it will
+//                     do, who it still needs, one chip per involved person with their answer, and how it ended. It has no buttons:
+//                     answers are given in the deck above the footer row. Names and reasons come from the proposals route, so a reader
+//                     who may not see the proposal sees the statement and its state only.
 // Library components only.
 
 import { useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { Button, Card, Inline, InlineAlert, Link, Stack, StatusPill, T } from '@connorhoehn/ui-components/shared';
+import { Button, Card, Chip, Inline, InlineAlert, Link, Stack, StatusPill, T } from '@connorhoehn/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { meetingHref } from '../../pages/meetings/meetingsModel';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
-import { actionCardView, askedByLine, namesNoInitiative, decideAssistantAction, readAssistantMessage, type ActionDecision, type AssistantAction } from '../../lib/assistantMessages';
+import { needsLine, outcomeLine, personChips, stateLine, type ProposalState } from '../../lib/meetingProposals';
+import { actionCardView, askedByLine, namesNoInitiative, decideAssistantAction, readAssistantMessage, type ActionDecision, type AssistantAction, type AssistantProposalCard } from '../../lib/assistantMessages';
 
 export interface AssistantActionCardProps {
   action: AssistantAction;
@@ -75,6 +80,59 @@ export function AssistantActionCard({ action, viewerId, callId, decide = decideA
   );
 }
 
+const PROPOSAL_PILL: Record<ProposalState, [string, 'info' | 'success' | 'warning' | 'error' | 'neutral' | 'pending']> = {
+  open: ['Waiting for consent', 'pending'], consented: ['Consented', 'info'], running: ['Running', 'info'], done: ['Done', 'success'],
+  failed: ['Failed', 'error'], objected: ['Objected', 'warning'], dismissed: ['Not a decision', 'neutral'], expired: ['Expired', 'neutral'],
+};
+
+/** The initiative's name for "Record as a decision on <name>"; null until known. */
+function useInitiativeName(id: string | null): string | null {
+  const named = useFetch<{ name?: string }>(id ? `/api/graph/projects/${encodeURIComponent(id)}` : null);
+  return named.data?.name?.trim() || null;
+}
+
+export function AssistantProposalCardView({ card, statement, callId }: { card: AssistantProposalCard; statement: string; callId: string | null }) {
+  const navigate = useNavigate();
+  const nova = useMeetingAssistant(callId);
+  const view = nova.proposals.find((p) => p.id === card.proposalId) ?? null;
+  // The message's state moves with every change; the route's view may lag a poll behind, so the pill follows the message.
+  const state = card.state;
+  const initiativeName = useInitiativeName(view?.outcome.kind === 'decision' ? view.outcome.initiativeId : null);
+  const [label, tone] = PROPOSAL_PILL[state];
+  const live = view ? { ...view, state } : null;
+  const needs = live && (state === 'open' || state === 'objected') ? needsLine(live) : null;
+  const closing = live ? stateLine(live) : null;
+  const href = live?.state === 'done' ? live.result?.href ?? null : null;
+  return (
+    <Card padding="sm" className="mt-1 max-w-md" data-testid="assistant-proposal-card" data-proposal-id={card.proposalId} data-state={state}>
+      <Stack gap="sm">
+        <Inline gap="sm" align="center" wrap>
+          <T size="xs" weight="medium" tone="secondary">Proposal</T>
+          <StatusPill tone={tone} label={label} size="sm" data-testid="assistant-proposal-status" />
+        </Inline>
+        <T size="sm" weight="medium" wrap data-testid="assistant-proposal-statement">{statement}</T>
+        {live && <T size="xs" tone="secondary" wrap data-testid="assistant-proposal-outcome">{outcomeLine(live.outcome, initiativeName)}</T>}
+        {needs && <T size="xs" tone="tertiary" wrap data-testid="assistant-proposal-needs">{needs}</T>}
+        {live && (
+          <Inline gap="xs" align="center" wrap data-testid="assistant-proposal-people">
+            {personChips(live).map((chip) => (
+              <Chip key={chip.userId} size="xs" tone={chip.tone} dot="static" data-testid="assistant-proposal-person" data-person={chip.userId} data-person-state={chip.state}>
+                {chip.runsIt ? `${chip.label} · runs it` : chip.label}
+              </Chip>
+            ))}
+          </Inline>
+        )}
+        {closing && <T size="xs" tone={state === 'failed' ? 'danger' : 'secondary'} wrap data-testid="assistant-proposal-closing">{closing}</T>}
+        {href && (
+          <Link href={href} data-testid="assistant-proposal-result-link" onClick={(e) => { if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); navigate(href); } }}>
+            Open the record
+          </Link>
+        )}
+      </Stack>
+    </Card>
+  );
+}
+
 export interface AssistantMessageExtrasProps {
   metadata: Record<string, unknown> | undefined;
   viewerId: string | null;
@@ -114,8 +172,9 @@ export function assistantSystemLine(message: { content: string; metadata?: Recor
   return read?.kind === 'assistant-notice' ? <NoticeLine content={message.content} callId={read.meetingCallId} /> : null;
 }
 
-/** The action card standing in for the bubble's text; null for any other message. */
-export function assistantBody(message: { metadata?: Record<string, unknown> }, viewerId: string | null, callId: string | null, decide?: typeof decideAssistantAction): ReactNode | null {
+/** The action or proposal card standing in for the bubble's text; null for any other message. */
+export function assistantBody(message: { content?: string; metadata?: Record<string, unknown> }, viewerId: string | null, callId: string | null, decide?: typeof decideAssistantAction): ReactNode | null {
   const read = readAssistantMessage(message.metadata);
+  if (read?.kind === 'assistant-proposal') return <AssistantProposalCardView card={read} statement={message.content ?? ''} callId={callId} />;
   return read?.kind === 'assistant-action' ? <AssistantActionCard action={read} viewerId={viewerId} callId={callId} decide={decide} /> : null;
 }

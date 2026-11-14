@@ -2,6 +2,8 @@
 // transcription notice and the roster line all read it), refreshed every
 // ASSISTANT_POLL_MS while something is watching and straight after each action.
 // Nothing here talks while the server flag is off (`useSession().session.meetingAssistant`).
+// The call's proposals (docs/meeting-consent-design.md) ride the same tick: they are read only while Nova is in the call or a proposal
+// can still be answered, so a call without either costs no extra request.
 
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { useSession } from '../lib/auth';
@@ -9,8 +11,9 @@ import { useCapabilities } from '../lib/capabilities';
 import { writeJson } from './writeJson';
 import { budgetConfirmOf } from './voice/client';
 import { budgetConfirmText } from './voice/controller';
+import { isAnswerable, parseProposals, type ProposalAnswer, type ProposalView } from './meetingProposals';
 import {
-  ASSISTANT_POLL_MS, assistantControls, NO_ASSISTANT, parseAssistantState, type AssistantControls, type AssistantView,
+  assistantPresent, ASSISTANT_POLL_MS, assistantControls, NO_ASSISTANT, parseAssistantState, type AssistantControls, type AssistantView,
 } from './meetingAssistantModel';
 
 export type AssistantAction = 'invite' | 'pause' | 'resume' | 'dismiss' | 'ack' | 'extend';
@@ -18,15 +21,15 @@ export type AssistantAction = 'invite' | 'pause' | 'resume' | 'dismiss' | 'ack' 
 /** An over-budget refusal the person may confirm past: the action to send again and the sentence that asks. */
 export interface BudgetAsk { action: 'invite' | 'extend'; title: string; detail: string }
 
-interface Slot { view: AssistantView; error: string | null; ask: BudgetAsk | null; busy: boolean; watchers: number; timer: ReturnType<typeof setInterval> | null; listeners: Set<() => void> }
+interface Slot { view: AssistantView; error: string | null; ask: BudgetAsk | null; busy: boolean; proposals: ProposalView[]; watchers: number; timer: ReturnType<typeof setInterval> | null; listeners: Set<() => void> }
 const slots = new Map<string, Slot>();
 
 const slotOf = (callId: string): Slot => {
   let slot = slots.get(callId);
-  if (!slot) { slot = { view: NO_ASSISTANT(callId), error: null, ask: null, busy: false, watchers: 0, timer: null, listeners: new Set() }; slots.set(callId, slot); }
+  if (!slot) { slot = { view: NO_ASSISTANT(callId), error: null, ask: null, busy: false, proposals: [], watchers: 0, timer: null, listeners: new Set() }; slots.set(callId, slot); }
   return slot;
 };
-const publish = (slot: Slot, patch: Partial<Pick<Slot, 'view' | 'error' | 'ask' | 'busy'>>) => {
+const publish = (slot: Slot, patch: Partial<Pick<Slot, 'view' | 'error' | 'ask' | 'busy' | 'proposals'>>) => {
   Object.assign(slot, patch);
   for (const l of slot.listeners) l();
 };
@@ -41,6 +44,25 @@ export async function refreshAssistant(callId: string): Promise<void> {
     if (!res.ok) return;
     publish(slot, { view: parseAssistantState(callId, await res.json().catch(() => null)) });
   } catch { /* offline: keep the last view */ }
+  if (assistantPresent(slot.view) || slot.proposals.some(isAnswerable)) await refreshProposals(callId);
+}
+
+/** One read of the call's proposals; a 404 means none this person may see. A failure keeps the last list. */
+export async function refreshProposals(callId: string): Promise<void> {
+  const slot = slotOf(callId);
+  try {
+    const res = await fetch(`${base(callId)}/proposals`, { credentials: 'include', cache: 'no-store' });
+    if (res.status === 404) { publish(slot, { proposals: [] }); return; }
+    if (!res.ok) return;
+    publish(slot, { proposals: parseProposals(await res.json().catch(() => null)) });
+  } catch { /* offline: keep the last list */ }
+}
+
+/** One answer to a proposal. The server judges it; the list is read again either way. Resolves to the refusal sentence, or null. */
+export async function answerProposal(callId: string, proposalId: string, answer: ProposalAnswer, reason?: string): Promise<string | null> {
+  const result = await writeJson<unknown>(`${base(callId)}/proposals/${encodeURIComponent(proposalId)}/response`, 'POST', reason ? { response: answer, reason } : { response: answer });
+  await refreshProposals(callId);
+  return result.ok ? null : (result.error ?? 'That answer was not saved.');
 }
 
 /**
@@ -90,21 +112,25 @@ export interface MeetingAssistantHandle {
   dismiss(): Promise<boolean>;
   acknowledge(): Promise<boolean>;
   extend(): Promise<boolean>;
+  /** The call's proposals this person may see, oldest first. */
+  proposals: ProposalView[];
   /** The inviter's switch: Nova speaks aloud in this call, or stops. */
   setVoice(on: boolean): Promise<boolean>;
   /** This person may use the voice switch. */
   canSetVoice: boolean;
 }
 
-const cache = new WeakMap<Slot, { key: string; value: Pick<MeetingAssistantHandle, 'view' | 'busy' | 'error' | 'ask'> }>();
+const cache = new WeakMap<Slot, { key: string; value: Pick<MeetingAssistantHandle, 'view' | 'busy' | 'error' | 'ask' | 'proposals'> }>();
 const snapshotOf = (slot: Slot) => {
-  const key = `${slot.busy}|${slot.error}|${JSON.stringify(slot.ask)}|${JSON.stringify(slot.view)}`;
+  const key = `${slot.busy}|${slot.error}|${JSON.stringify(slot.ask)}|${JSON.stringify(slot.view)}|${JSON.stringify(slot.proposals)}`;
   const hit = cache.get(slot);
   if (hit && hit.key === key) return hit.value;
-  const value = { view: slot.view, busy: slot.busy, error: slot.error, ask: slot.ask };
+  const value = { view: slot.view, busy: slot.busy, error: slot.error, ask: slot.ask, proposals: slot.proposals };
   cache.set(slot, { key, value });
   return value;
 };
+
+const NO_PROPOSALS: ProposalView[] = [];
 
 /** `callId` null (no live call) or the flag off: nothing is read and every control is hidden. */
 export function useMeetingAssistant(callId: string | null): MeetingAssistantHandle {
@@ -132,7 +158,7 @@ export function useMeetingAssistant(callId: string | null): MeetingAssistantHand
   const run = (action: AssistantAction) => (callId && enabled ? actOnAssistant(callId, action, { mayConfirm: action === 'invite' || mayConfirm }) : Promise.resolve(false));
   const view = active ? snap.view : NO_ASSISTANT(callId ?? '');
   return {
-    enabled, view, busy: snap.busy, error: active ? snap.error : null, ask: active ? snap.ask : null,
+    enabled, view, busy: snap.busy, error: active ? snap.error : null, ask: active ? snap.ask : null, proposals: active ? snap.proposals : NO_PROPOSALS,
     answerAsk: (yes) => {
       const ask = snap.ask;
       if (!yes || !ask || !callId) { publish(slot, { ask: null }); return Promise.resolve(false); }

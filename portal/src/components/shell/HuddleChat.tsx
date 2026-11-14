@@ -494,7 +494,7 @@ export function HuddleChatBody({ showCall = true }: { showCall?: boolean } = {})
     return <><AssistantMessageExtras metadata={message.metadata} />{page}</>;
   }, [navigate, callLobby]);
   // Nova's notice is a system line; its action card stands in for the bubble's text (the card carries the summary).
-  const assistantCard = useCallback((message: { metadata?: Record<string, unknown> }) => assistantBody(message, viewerId, huddleCallId), [viewerId, huddleCallId]);
+  const assistantCard = useCallback((message: { content?: string; metadata?: Record<string, unknown> }) => assistantBody(message, viewerId, huddleCallId), [viewerId, huddleCallId]);
   if (!chat?.callId) return null;
   const { state } = chat;
   const inRoom = isBreakoutChat(chat.callId, runtime?.channel ?? chat.channel);
