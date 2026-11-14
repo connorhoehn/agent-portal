@@ -8,6 +8,8 @@ export interface AssistantView {
   callId: string;
   phase: AssistantPhase;
   invitedBy: string | null;
+  /** The initiative the call was started from (a work item made from a card lands on it), or null. */
+  initiativeId: string | null;
   /** Display name of the inviter, when the directory has one. */
   invitedByName: string | null;
   pausedBy: string | null;
@@ -35,7 +37,7 @@ export function parseAssistantState(callId: string, body: unknown): AssistantVie
   const phase = PHASES.find((p) => p === b['state']) ?? 'none';
   return {
     callId, phase,
-    invitedBy: text(b['invitedBy']), invitedByName: text(b['invitedByName']),
+    invitedBy: text(b['invitedBy']), initiativeId: text(b['initiativeId']), invitedByName: text(b['invitedByName']),
     pausedBy: text(b['pausedBy']), leftBy: text(b['leftBy']),
     youMustAck: phase !== 'none' && phase !== 'left' && b['youMustAck'] === true,
     listeningSeconds: seconds(b['listeningSeconds']), ceilingSeconds: seconds(b['ceilingSeconds']),

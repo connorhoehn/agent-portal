@@ -4,8 +4,9 @@
 //   useNovaRosterEntry  the "Nova (Assistant, listening)" line for the call's people lists
 // Everything renders nothing unless the server advertises the feature (session.meetingAssistant) and a call is live.
 
-import { Button, CheckIcon, Chip, CloseIcon, DropdownMenu, Inline, PauseCircleIcon, PlayCircleIcon, PlusCircleIcon, T, Tooltip } from '@connorhoehn/ui-components/shared';
+import { Button, CheckIcon, Chip, CloseIcon, ConfirmDialog, DropdownMenu, InlinePopover, Inline, PauseCircleIcon, PlayCircleIcon, PlusCircleIcon, T, Tooltip } from '@connorhoehn/ui-components/shared';
 import { RecordingConsentNotice, type RosterExtraEntry } from '@connorhoehn/ui-components/video';
+import { useRef, useState } from 'react';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import { assistantPresent, assistantStateWords, markWords, timeLeftWords, noticeText, noticeVisible, rosterEntry, ASSISTANT_LABEL, ASSISTANT_NAME } from '../../lib/meetingAssistantModel';
 import { useCallHost } from '../../lib/conversationCall';
@@ -24,6 +25,8 @@ export function NovaBarControls() {
   const nova = useMeetingAssistant(callId);
   const { controls, view, busy } = nova;
   const noticeClosed = useNovaNoticeHidden(callId);
+  const errorRef = useRef<HTMLButtonElement | null>(null);
+  const [errorOpen, setErrorOpen] = useState(false);
   if (controls.hidden) return null;
   const state = assistantStateWords(view);
   const words = markWords(view, noticeClosed);
@@ -44,7 +47,15 @@ export function NovaBarControls() {
         ...(controls.extend ? [{ label: 'Extend time', ...(left ? { description: left } : {}), icon: <PlusCircleIcon size={14} />, onSelect: () => void nova.extend() }] : []),
         ...(controls.dismiss ? [{ label: 'Dismiss Nova', icon: <CloseIcon size={14} />, danger: true, onSelect: () => void nova.dismiss() }] : []),
       ] }]} />}
-    {nova.error && <T size="xs" tone="danger" role="alert" className="max-w-[12rem] truncate" title={nova.error} data-testid="nova-error">{nova.error}</T>}
+    {/* The refusal sentence is read in full in a popover; the row keeps one short line. */}
+    {nova.error && <>
+      <Button ref={errorRef} variant="ghost" size="sm" className="max-w-[12rem] truncate text-danger" onClick={() => setErrorOpen((v) => !v)} aria-expanded={errorOpen} title={nova.error} data-testid="nova-error">{nova.error}</Button>
+      <InlinePopover trigger={errorRef} open={errorOpen} onClose={() => setErrorOpen(false)} placement="top-end" className="max-w-sm p-3" aria-label="Why Nova could not do that" data-testid="nova-error-full">
+        <T size="sm" tone="danger" wrap role="alert" data-testid="nova-error-text">{nova.error}</T>
+      </InlinePopover>
+    </>}
+    <ConfirmDialog open={!!nova.ask} tone="caution" title={nova.ask?.title ?? ''} body={nova.ask?.detail ?? ''} confirmLabel="Go ahead" cancelLabel="Cancel"
+      onConfirm={() => void nova.answerAsk(true)} onCancel={() => void nova.answerAsk(false)} />
   </Inline>;
 }
 

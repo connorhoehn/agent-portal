@@ -85,3 +85,8 @@ test('the mark says Nova cannot hear you until you acknowledge, and the menu off
   assert.equal(assistantControls({ enabled: true, inCall: true, canInvite: true, view: view('listening') }).extend, true);
   assert.equal(assistantControls({ enabled: true, inCall: true, canInvite: true, view: view('left') }).extend, false);
 });
+
+test('the call state carries the call initiative', () => {
+  assert.equal(parseAssistantState('c1', { state: 'listening', initiativeId: 'p-1' }).initiativeId, 'p-1');
+  assert.equal(parseAssistantState('c1', { state: 'listening' }).initiativeId, null);
+});
