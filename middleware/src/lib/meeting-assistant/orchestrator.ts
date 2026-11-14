@@ -572,7 +572,15 @@ export class AssistantRuntime {
     const atMs = run.session?.kind === 'scripted' ? this.now() : run.sessionStartedAt + e.atMs;
     // (a) The asker: the server's own record of who spoke.
     const asker = e.askedBy ?? await this.findAsker(callId, atMs).then((f) => (f.ok ? f.userId : null));
-    if (!asker) { await this.refuse(run, e.callId, 'no asker'); return; }
+    if (!asker) {
+      // No line addressed Nova, or the one that did has no single speaker: nobody is asked to confirm anything.
+      await this.refuse(run, e.callId, 'could not tell who asked');
+      if (this.now() - run.lastUnaskedNoticeAt >= UNASKED_NOTICE_EVERY_MS) {
+        run.lastUnaskedNoticeAt = this.now();
+        await postReply(callId, { text: UNASKED_REPLY, askedBy: 'unknown', askedByName: 'the call' }).catch(() => null);
+      }
+      return;
+    }
     if (!canSpeakOnRecord(record, asker)) { await this.refuse(run, e.callId, 'not addressed'); return; }
     // (b) The name lock: the asker said the name in the window before the call.
     const lines = await this.store.lines(callId, Math.max(0, record.nextSeq - 1 - 100), 100);

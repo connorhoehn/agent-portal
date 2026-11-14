@@ -247,9 +247,9 @@ describe('the refusals', () => {
     s.call('call_1', 'search', { query: 'experts' }, 0);
     await flush();
     answers.push(...s.answersFor('call_1').map(([, o]) => o));
-    expect(answers).toEqual(['{"refused":"no asker"}']);
+    expect(answers).toEqual(['{"refused":"could not tell who asked"}']);
     s.say('Sorry, I cannot do that.'); await flush();
-    expect(mockPosts.replies).toEqual([]);
+    expect(mockPosts.replies.map((r) => r.text)).toEqual(['I could not tell who asked. Please ask again.']); // only the fixed line; the follow-up is muted
     expect(sessionOf((await store.get(CALL))!).refusedCalls).toBe(1);
   });
 
@@ -273,7 +273,7 @@ describe('the refusals', () => {
     expect((await store.listTurns(CALL)).length).toBe(4);
   });
 
-  it('with no attributed line in the window there is no asker: refused, nothing posted', async () => {
+  it('with no attributed line in the window there is no asker: refused, one public reply, no turn', async () => {
     await runtime.stop(CALL);
     factory = () => { const s = new FakeSession(); sessions.push(s); return s; };
     runtime = new AssistantRuntime({ store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [] }, { tickMs: 0 });
@@ -282,8 +282,9 @@ describe('the refusals', () => {
     await store.appendLine({ callId: CALL, userId: null, participantId: '', speakerName: '', text: 'Nova, find the experts', at: now - 1000, captionId: 'u1' });
     s.call('call_9', 'search', { query: 'x' }, 0);
     await flush();
-    expect(s.answersFor('call_9').map(([, o]) => o)).toEqual(['{"refused":"no asker"}']);
+    expect(s.answersFor('call_9').map(([, o]) => o)).toEqual(['{"refused":"could not tell who asked"}']);
     expect(await store.listTurns(CALL)).toEqual([]);
+    expect(mockPosts.replies.map((r) => r.text)).toEqual(['I could not tell who asked. Please ask again.']);
   });
 
   it('the real session asker is the latest attributed speaker, and when it is the person who said the name the call goes ahead', async () => {
@@ -534,12 +535,13 @@ describe('a reply belongs to its tool call (B1)', () => {
     await line(ALICE, 'find the experts', now - 2000); // nobody addressed Nova: refused
     s.call('call_r', 'search', { query: 'x' });
     await flush();
-    expect(s.answersFor('call_r').map(([, o]) => o)).toEqual(['{"refused":"no asker"}']);
+    expect(s.answersFor('call_r').map(([, o]) => o)).toEqual(['{"refused":"could not tell who asked"}']);
     await line(BOB, 'Nova, find the Kubernetes experts.', now - 500);
     s.call('call_b', 'search', { query: 'Kubernetes experts' });
     await flush();
     const [turn] = await runtime.turnsFor(CALL, BOB);
     await runtime.submitResult(CALL, turn!.turnId, BOB, { ok: true, output: { rows: [] } });
+    mockPosts.replies.length = 0; // (the refusal's own fixed "could not tell who asked" line)
     s.say('Sorry, I cannot do that.'); await flush(); // the refused call's continuation
     expect(mockPosts.replies).toEqual([]);
     s.say('Two experts.'); await flush(); // Bob's
@@ -593,5 +595,49 @@ describe('a reply belongs to its tool call (B1)', () => {
     await flush();
     expect(seen).toEqual(['sc_1']);
     expect(mockPosts.replies).toEqual([{ text: 'Here is the result.', askedBy: ALICE, askedByName: 'Alice' }]);
+  });
+});
+
+describe('the asker is the person who addressed Nova (B3), on the real path', () => {
+  it('A asks, B chatters before the call arrives: A is the asker', async () => {
+    const s = await realRuntime();
+    await line(ALICE, 'Nova, find the Kubernetes experts.', now - 6000);
+    await line(BOB, 'yeah that makes sense', now - 2000);
+    s.call('call_1', 'search', { query: 'k8s' }); await flush();
+    expect((await store.listTurns(CALL)).map((t) => t.askedBy)).toEqual([ALICE]);
+    expect(s.answersFor('call_1')).toEqual([]);
+  });
+
+  it('B asked ten seconds earlier and A asks now, then B chatters: A', async () => {
+    const s = await realRuntime();
+    await line(BOB, 'Nova, what is the plan?', now - 10_000);
+    await line(ALICE, 'Nova, find the Kubernetes experts.', now - 4000);
+    await line(BOB, 'right', now - 1000);
+    s.call('call_1', 'search', { query: 'k8s' }); await flush();
+    expect((await store.listTurns(CALL)).map((t) => t.askedBy)).toEqual([ALICE]);
+  });
+
+  it('an unattributed request line is refused, counted, and answered with one public reply (once per 30 seconds)', async () => {
+    const s = await realRuntime();
+    await line(null, 'Nova, find the experts.', now - 1000);
+    s.call('call_1', 'search', { query: 'x' }); await flush();
+    s.call('call_2', 'search', { query: 'x' }); await flush();
+    expect(s.answersFor('call_1').map(([, o]) => o)).toEqual(['{"refused":"could not tell who asked"}']);
+    expect(await store.listTurns(CALL)).toEqual([]);
+    expect(sessionOf((await store.get(CALL))!).refusedCalls).toBe(2);
+    expect(mockPosts.replies.map((r) => r.text)).toEqual(['I could not tell who asked. Please ask again.']);
+    now += 31_000;
+    await line(null, 'Nova, find the experts again.', now - 500);
+    s.call('call_3', 'search', { query: 'x' }); await flush();
+    expect(mockPosts.replies).toHaveLength(2);
+  });
+
+  it('overlap on the request line (two speakers) is refused', async () => {
+    const s = await realRuntime();
+    await line(ALICE, 'Nova, find the experts.', now - 1000, { speakers: [ALICE, BOB] });
+    s.call('call_1', 'search', { query: 'x' }); await flush();
+    expect(s.answersFor('call_1').map(([, o]) => o)).toEqual(['{"refused":"could not tell who asked"}']);
+    expect(await store.listTurns(CALL)).toEqual([]);
+    expect(mockPosts.replies.map((r) => r.text)).toEqual(['I could not tell who asked. Please ask again.']);
   });
 });
