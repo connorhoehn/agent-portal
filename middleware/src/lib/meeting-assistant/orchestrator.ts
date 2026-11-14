@@ -121,6 +121,8 @@ export const REPLY_CONTEXT_TTL_MS = 20_000;
 export const MUTED_CONTEXT_TTL_MS = 8_000;
 /** An utterance is the short acknowledgement of an open call only when it starts this soon after the call's delegation moment. */
 export const ACKNOWLEDGEMENT_WINDOW_MS = 6_000;
+/** A line must end this long after a delegation to count as spoken after it (a line's reported end can run a little late). */
+const ACKNOWLEDGEMENT_LINE_MARGIN_MS = 1_000;
 /** The "could not tell who asked" reply is posted at most this often per call. */
 export const UNASKED_NOTICE_EVERY_MS = 30_000;
 /** How often the seat roster is read to record who is present while Nova is. */
@@ -651,10 +653,13 @@ export class AssistantRuntime {
    * Is this utterance the short acknowledgement of an open call? Only when it starts within the window after the call's delegation
    * moment, the call is still open, and no acknowledgement was taken for it yet. Taking one marks it (one per call at most).
    */
-  private takeAcknowledgement(run: CallRun, from: number, to: number): boolean {
+  private takeAcknowledgement(run: CallRun, from: number, to: number, addressing: TranscriptLine[]): boolean {
     for (const t of run.callTimes.values()) {
       if (t.acknowledged || t.openedAt > to || (t.answeredAt !== null && t.answeredAt <= from)) continue;
       if (from - t.openedAt >= ACKNOWLEDGEMENT_WINDOW_MS) continue;
+      // An acknowledgement is spoken as the work is handed over. Once someone has addressed Nova after that moment (their line
+      // ends clearly later than the delegation, and no call has taken it), what Nova says next answers them.
+      if (addressing.some((l) => l.at > t.openedAt + ACKNOWLEDGEMENT_LINE_MARGIN_MS && l.at <= from && !run.claimedLines.has(l.seq))) continue;
       t.acknowledged = true;
       return true;
     }
@@ -717,8 +722,8 @@ export class AssistantRuntime {
       asker = c.asker;
     } else {
       // The short acknowledgement the voice speaks as it delegates: not an answer; changes nothing.
-      if (this.takeAcknowledgement(run, t, tEnd)) return;
       await run.lineChain;
+      if (this.takeAcknowledgement(run, t, tEnd, await this.addressingLines(run))) return;
       const c = run.reply;
       if (c && this.contextLive(c, t) && !(await this.contextEnded(run, c))) {
         if (c.visibility === 'muted' || !c.asker) return;

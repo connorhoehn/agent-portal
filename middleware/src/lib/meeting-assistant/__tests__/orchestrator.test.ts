@@ -1357,6 +1357,18 @@ describe('who a spoken answer is posted for, and which speech is only an acknowl
     expect(mockPosts.replies).toEqual([{ text: 'Still working on it.', askedBy: ALICE, askedByName: 'Alice' }]);
   });
 
+  it('an utterance after another person addressed Nova is that person\'s answer, not the acknowledgement of the read still open', async () => {
+    const s = await realRuntime();
+    await line(ALICE, 'Nova, find the Kubernetes experts.', T0 + 1000);
+    now = T0 + 1500;
+    s.call('call_a', 'search', { query: 'Kubernetes experts' }, 1500);
+    await flush();
+    await line(BOB, 'Nova, what is two plus two?', T0 + 4000); // inside the acknowledgement window of Alice's call
+    now = T0 + 5000;
+    s.sayAt('Four.', 4800); await flush();
+    expect(mockPosts.replies).toEqual([{ text: 'Four.', askedBy: BOB, askedByName: 'Bob' }]);
+  });
+
   it('a reply after its context\'s time window falls to the asker of the latest unanswered line', async () => {
     const s = await realRuntime();
     await line(ALICE, 'Nova, find the experts.', T0 + 1000);
