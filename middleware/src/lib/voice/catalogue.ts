@@ -613,7 +613,9 @@ export const CREATE_ACTIONS: Readonly<Record<string, Readonly<Record<string, Cap
   // document, whiteboard (G55/G56): a page or a board in an initiative, the Docs tab's New menu; no dock action of their own:
   // the route checks ViewWorkItems and the initiative's own people, and its list read's canWrite says so before the card.
   // deck: queue_work's deck by another name.
-  orgiq: { 'work-item': 'DispatchAgentRun', comment: null, 'saved-search': 'Search', sprint: 'ManageSprints', meeting: null, 'access-request': null, document: null, whiteboard: null, deck: 'DispatchAgentRun' },
+  // decision (meeting consent): a statement agreed on an initiative, raised for its owner (RaiseDecision) or recorded as
+  // decided (the route also asks the decide rule); the call's proposal runs it in the confirming person's browser.
+  orgiq: { 'work-item': 'DispatchAgentRun', comment: null, 'saved-search': 'Search', sprint: 'ManageSprints', meeting: null, 'access-request': null, document: null, whiteboard: null, deck: 'DispatchAgentRun', decision: 'RaiseDecision' },
   social: { channel: 'ManageChannels', team: 'ManageTeams', room: 'ManageChannels' },
   access: { 'access-request': 'RequestAccess', delegation: 'DecideAccess' },
 };
@@ -633,6 +635,7 @@ export const CREATE_FIELDS: Readonly<Record<string, readonly [readonly string[],
   document: [[], ['initiative', 'title']],
   whiteboard: [[], ['initiative', 'title']],
   deck: [[], ['initiative', 'focus']],
+  decision: [['initiative', 'statement', 'state'], ['participants', 'call']],
 };
 
 /**
@@ -965,12 +968,20 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
         delegate: str('Who decides for the user.', { minLength: 1, maxLength: 120 }),
         window: str('For how long.', { enum: ['1d', '3d', '7d', '14d'] }),
         reason: str('Why (at least 10 characters).', { minLength: 1, maxLength: 2000 }),
+        statement: str('What was agreed, one sentence; it is the decision\'s title and its one option.', { minLength: 1, maxLength: 280 }),
+        state: str('resolved: record it as decided, with the user as decider (only the initiative\'s owner or an org-leader); waiting: raise it for the initiative\'s owner to decide.', { enum: ['resolved', 'waiting'] }),
+        participants: {
+          type: 'array', minItems: 1, maxItems: 25,
+          description: 'The user ids of the people who agreed (a call\'s roster gives them); left out, only the user is named.',
+          items: str('A user id.', { minLength: 1, maxLength: 200 }),
+        },
+        call: str('The id of the call it was agreed in; left out, it was agreed by hand.', { minLength: 1, maxLength: 200 }),
       }),
     }, ['kind', 'fields']),
-    kind: 'action', backing: 'work', confirm: true, confirmBy: 'voice', clickFor: { kind: ['access-request'] }, sayToConfirm: 'create it', action: null,
-    gate: "per tenant and kind, the form's submit action (CREATE_ACTIONS): DispatchAgentRun for a work item and a deck, ViewWorkItems + the initiative's own people (owner, contributor, org-wide role; the route) for a document or a whiteboard, the initiative's own conversation for a comment (the route checks ViewWorkItems and the initiative), Search for a saved search, ManageSprints + stewardship for a sprint, ManageChannels / ManageTeams in Social, RequestAccess for an access request, DecideAccess for a delegation",
+    kind: 'action', backing: 'work', confirm: true, confirmBy: 'voice', clickFor: { kind: ['access-request', 'decision'] }, sayToConfirm: 'create it', action: null,
+    gate: "per tenant and kind, the form's submit action (CREATE_ACTIONS): DispatchAgentRun for a work item and a deck, ViewWorkItems + the initiative's own people (owner, contributor, org-wide role; the route) for a document or a whiteboard, the initiative's own conversation for a comment (the route checks ViewWorkItems and the initiative), Search for a saved search, ManageSprints + stewardship for a sprint, ManageChannels / ManageTeams in Social, RequestAccess for an access request, DecideAccess for a delegation, RaiseDecision + the initiative's own people for a decision (recording one as decided also takes the decide rule: the initiative's owner, an org-leader or admin; the route)",
     spend: 'none', idempotent: false, says: 'Creating that once you confirm.', tenants: ['orgiq', 'social', 'access'],
-    mapsTo: "work-item: GET /api/graph/projects (or the initiative in view), POST /api/graph/work-items { projectId, type, title, priority }; document and whiteboard: GET /api/graph/projects/:projectId/workspace-documents (canWrite), POST /api/graph/projects/:projectId/workspace-documents { title, kind: page | whiteboard }, then the editor opens; deck: as queue_work's deck, POST /api/initiative-decks/projects/:projectId { narrative, brief }; comment: GET /api/graph/work, POST /api/graph/work-items/:id/comments { body }; saved-search: POST /api/saved-searches { name, query, scope }; sprint: POST /api/sprints { initiativeId, name, startsOn, endsOn }; channel, team, room: POST /api/social/channels, POST /api/social/teams, POST /api/social/rooms; access-request: GET /api/access/catalog, POST /api/access/requests/preview, POST /api/access/requests { itemId, justification, duration }; delegation: GET /api/access/delegates, POST /api/access/delegations { delegateId, startsAt, endsAt, reason }",
+    mapsTo: "work-item: GET /api/graph/projects (or the initiative in view), POST /api/graph/work-items { projectId, type, title, priority }; document and whiteboard: GET /api/graph/projects/:projectId/workspace-documents (canWrite), POST /api/graph/projects/:projectId/workspace-documents { title, kind: page | whiteboard }, then the editor opens; deck: as queue_work's deck, POST /api/initiative-decks/projects/:projectId { narrative, brief }; comment: GET /api/graph/work, POST /api/graph/work-items/:id/comments { body }; saved-search: POST /api/saved-searches { name, query, scope }; sprint: POST /api/sprints { initiativeId, name, startsOn, endsOn }; channel, team, room: POST /api/social/channels, POST /api/social/teams, POST /api/social/rooms; access-request: GET /api/access/catalog, POST /api/access/requests/preview, POST /api/access/requests { itemId, justification, duration }; delegation: GET /api/access/delegates, POST /api/access/delegations { delegateId, startsAt, endsAt, reason }; decision: GET /api/graph/projects (or the initiative in view), POST /api/graph/decisions { initiativeId, statement, state: resolved | waiting, participants?, source: call | manual, callId? }",
   },
   {
     name: 'update',
@@ -1044,7 +1055,7 @@ export const MOCK_CALLS: Readonly<Record<string, { name: string; arguments: Reco
   'pipelines/author': { name: 'list', arguments: { kind: 'run', filter: { q: null, status: 'failed', scope: null, since: null }, limit: null, detail: null }, said: 'List the failed runs.' },
   'social/community-admin': { name: 'list', arguments: { kind: 'channel', filter: null, limit: null, detail: null }, said: 'Which channels are there?' },
   // V2-11: a requester files a request from the catalogue (the card is the route's own preview of who approves).
-  'access/requester': { name: 'create', arguments: { kind: 'access-request', fields: { item: 'Operator in Pipelines', justification: 'I cover the nightly pipeline runs while the operators are out.', duration: '7d', initiative: null, title: null, type: null, on: null, text: null, name: null, query: null, startsOn: null, endsOn: null, description: null, privacy: null, delegate: null, window: null, reason: null } }, said: 'Request the pipelines operator role for a week: I cover the nightly runs while the operators are out.' },
+  'access/requester': { name: 'create', arguments: { kind: 'access-request', fields: { item: 'Operator in Pipelines', justification: 'I cover the nightly pipeline runs while the operators are out.', duration: '7d', initiative: null, title: null, type: null, on: null, text: null, name: null, query: null, startsOn: null, endsOn: null, description: null, privacy: null, delegate: null, window: null, reason: null, statement: null, state: null, participants: null, call: null } }, said: 'Request the pipelines operator role for a week: I cover the nightly runs while the operators are out.' },
   // V2-6: the aggregates. An org leader asks about the sweeps, an HR admin whether the fleet is healthy, a pipeline admin what failed.
   'orgiq/org-leader': { name: 'summary', arguments: { kind: 'sweeps', since: 'yesterday' }, said: 'Any issues with the sweeps since yesterday?' },
   // V2-7: an HR admin asks what the org spent (at the budgets tier). A member's own spend and the tier's offer

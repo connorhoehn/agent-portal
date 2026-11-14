@@ -358,7 +358,7 @@ describe('tenant scoping (§6)', () => {
   it('create and update (V2-11) ask first, take one field set per kind, and gate each on its form\'s or button\'s action', () => {
     expect(voiceTool('create')).toMatchObject({ confirm: true, action: null, kind: 'action', backing: 'work', tenants: ['orgiq', 'social', 'access'] });
     expect(voiceTool('update')).toMatchObject({ confirm: true, action: null, kind: 'action', backing: 'work', tenants: ['orgiq', 'social', 'assessment', 'pipelines', 'access'] });
-    expect(createKinds('orgiq')).toEqual(['work-item', 'comment', 'saved-search', 'sprint', 'meeting', 'access-request', 'document', 'whiteboard', 'deck']);
+    expect(createKinds('orgiq')).toEqual(['work-item', 'comment', 'saved-search', 'sprint', 'meeting', 'access-request', 'document', 'whiteboard', 'deck', 'decision']);
     expect(createKinds('social')).toEqual(['channel', 'team', 'room']);
     expect(createKinds('access')).toEqual(['access-request', 'delegation']);
     for (const t of ['assessment', 'pipelines']) expect(toolsForTenant(t).some((x) => x.name === 'create')).toBe(false);
@@ -372,6 +372,13 @@ describe('tenant scoping (§6)', () => {
     expect(c({ kind: 'work-item', fields: { initiative: 'Alpha', title: 'Rotate keys' } })).toBe(true);
     expect(c({ kind: 'work-item', fields: { initiative: 'Alpha', title: 'Rotate keys', projectId: 'p1' } })).toBe(false);
     expect(c({ kind: 'access-request', fields: { item: 'SME', justification: 'x', duration: 'standing' } })).toBe(false);
+    // Meeting consent: a decision is a statement on an initiative, raised or recorded, and always a click (a card nobody answers aloud).
+    expect(c({ kind: 'decision', fields: { initiative: 'p-auth-migration', statement: 'Cut over the smallest tenants first', state: 'waiting', participants: ['u-1', 'u-2'], call: 'call-7' } })).toBe(true);
+    expect(c({ kind: 'decision', fields: { initiative: 'p-auth-migration', statement: 'x', state: 'agreed' } })).toBe(false);
+    expect(c({ kind: 'decision', fields: { initiative: 'p-auth-migration', statement: 'x'.repeat(281), state: 'waiting' } })).toBe(false);
+    expect(CREATE_ACTIONS['orgiq']!['decision']).toBe('RaiseDecision');
+    expect(CREATE_FIELDS['decision']).toEqual([['initiative', 'statement', 'state'], ['participants', 'call']]);
+    expect(voiceTool('create')!.clickFor).toEqual({ kind: ['access-request', 'decision'] });
     const u = new Ajv({ strict: true }).compile(voiceTool('update')!.parameters);
     expect(u({ ref: 'work-item:w-1', fields: { status: 'in_progress' } })).toBe(true);
     expect(u({ ref: 'work-item:w-1', fields: { assigneeId: 'u-1' } })).toBe(false);

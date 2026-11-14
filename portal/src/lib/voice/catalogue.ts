@@ -401,7 +401,9 @@ export const CREATE_ACTIONS: Readonly<Record<string, Readonly<Record<string, Act
   // document, whiteboard (G55/G56): a page or a board in an initiative, the Docs tab's New menu; no dock action of their own:
   // the route checks ViewWorkItems and the initiative's own people, and its list read's canWrite says so before the card.
   // deck: queue_work's deck by another name.
-  orgiq: { 'work-item': 'DispatchAgentRun', comment: null, 'saved-search': 'Search', sprint: 'ManageSprints', meeting: null, 'access-request': null, document: null, whiteboard: null, deck: 'DispatchAgentRun' },
+  // decision (meeting consent): a statement agreed on an initiative, raised for its owner (RaiseDecision) or recorded as
+  // decided (the route also asks the decide rule); the call's proposal runs it in the confirming person's browser.
+  orgiq: { 'work-item': 'DispatchAgentRun', comment: null, 'saved-search': 'Search', sprint: 'ManageSprints', meeting: null, 'access-request': null, document: null, whiteboard: null, deck: 'DispatchAgentRun', decision: 'RaiseDecision' },
   social: { channel: 'ManageChannels', team: 'ManageTeams', room: 'ManageChannels' },
   access: { 'access-request': 'RequestAccess', delegation: 'DecideAccess' },
 };
@@ -421,6 +423,7 @@ export const CREATE_FIELDS: Readonly<Record<string, readonly [readonly string[],
   document: [[], ['initiative', 'title']],
   whiteboard: [[], ['initiative', 'title']],
   deck: [[], ['initiative', 'focus']],
+  decision: [['initiative', 'statement', 'state'], ['participants', 'call']],
 };
 
 /**
@@ -683,9 +686,17 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
         delegate: str('Who decides for the user.', { minLength: 1, maxLength: 120 }),
         window: str('For how long.', { enum: ['1d', '3d', '7d', '14d'] }),
         reason: str('Why (at least 10 characters).', { minLength: 1, maxLength: 2000 }),
+        statement: str('What was agreed, one sentence; it is the decision\'s title and its one option.', { minLength: 1, maxLength: 280 }),
+        state: str('resolved: record it as decided, with the user as decider (only the initiative\'s owner or an org-leader); waiting: raise it for the initiative\'s owner to decide.', { enum: ['resolved', 'waiting'] }),
+        participants: {
+          type: 'array', minItems: 1, maxItems: 25,
+          description: 'The user ids of the people who agreed (a call\'s roster gives them); left out, only the user is named.',
+          items: str('A user id.', { minLength: 1, maxLength: 200 }),
+        },
+        call: str('The id of the call it was agreed in; left out, it was agreed by hand.', { minLength: 1, maxLength: 200 }),
       }),
     }, ['kind', 'fields']),
-    kind: 'action', backing: 'work', confirm: true, confirmBy: 'voice', clickFor: { kind: ['access-request'] }, sayToConfirm: 'create it', action: null, says: 'Creating that once you confirm.', tenants: ['orgiq', 'social', 'access'],
+    kind: 'action', backing: 'work', confirm: true, confirmBy: 'voice', clickFor: { kind: ['access-request', 'decision'] }, sayToConfirm: 'create it', action: null, says: 'Creating that once you confirm.', tenants: ['orgiq', 'social', 'access'],
   },
   {
     name: 'update',

@@ -523,6 +523,11 @@ interface ActPlan {
   meeting?: MeetingPlan;
   /** Where the route's answer names the page of what it made (a document's `document.href`): opened on success (G55). */
   openAt?: string;
+  /**
+   * Where the route's answer names the id of what it made, and the page path it goes after (a decision's record):
+   * the result links that record without navigating, since the card may be answered in the middle of a call.
+   */
+  recordAt?: { at: string; base: string };
 }
 
 /** "this-page", "this initiative", "here", or nothing: the initiative whose page is open (G55). */
@@ -644,6 +649,28 @@ async function planCreateKind(kind: string, f: Rec, ctx: ToolContext): Promise<{
       const planned = await WORK_PLANNERS['queue_work']!({ kind: 'deck', target: here ? 'this initiative' : initiative!, ...(here ? { scope: 'this-page' } : {}), ...(focus ? { focus } : {}) }, ctx);
       return planned ?? { result: refused('Nothing was planned for that deck.') };
     }
+    case 'decision': {
+      // Meeting consent: a statement agreed on an initiative. Waiting, it is raised for the initiative's owner to decide;
+      // resolved, it is recorded as decided by the user, which the route allows only to someone who may decide there.
+      const where = await initiativeOf(ctx, f['initiative']);
+      if ('result' in where) return where;
+      const off = await offInitiative(ctx, where.id, where.title);
+      if (off) return off;
+      const resolved = f['state'] === 'resolved';
+      if (f['state'] !== 'resolved' && f['state'] !== 'waiting') return { result: refused('Say whether it is decided (resolved) or waits on the owner (waiting).') };
+      if (resolved && !ctx.can('DecideDecision')) return { result: refused(`I can't record decisions as decided with your role; raise it for the owner of ${where.title} instead.`) };
+      const statement = String(f['statement']).replace(/\s+/g, ' ').trim();
+      if (!statement) return { result: refused('Say what was agreed.') };
+      const participants = Array.isArray(f['participants']) ? (f['participants'] as unknown[]).filter((p): p is string => typeof p === 'string' && !!p.trim()) : [];
+      const callId = str(f['call']);
+      const body = { initiativeId: where.id, statement, state: resolved ? 'resolved' : 'waiting', source: callId ? 'call' : 'manual', ...(callId ? { callId } : {}), ...(participants.length ? { participants } : {}) };
+      const agreed = participants.length ? `Agreed by ${participants.length} ${participants.length === 1 ? 'person' : 'people'}${callId ? ' in the call' : ''}.` : null;
+      return card(resolved ? `Record the decision on ${where.title}` : `Raise a decision on ${where.title}`, [
+        `"${statement}"`,
+        resolved ? 'It is recorded as decided, with you as the decider.' : `It waits on the owner of ${where.title} to decide.`,
+        ...(agreed ? [agreed] : []),
+      ], { key: `POST /api/graph/decisions ${JSON.stringify(body)}`, send: { method: 'POST', url: '/api/graph/decisions', body }, done: resolved ? `Recorded the decision "${statement}"` : `Raised "${statement}" for the owner of ${where.title}`, result: { kind: 'decision', statement, state: body.state, initiative: where.title }, href: '/iq/decisions', recordAt: { at: 'id', base: '/iq/decisions/' } });
+    }
     case 'channel':
     case 'team':
     case 'room': {
@@ -764,6 +791,8 @@ async function act(ctx: ToolContext, plan: ActPlan, verb: string): Promise<ToolR
       ctx.navigate(opened);
       return done('created', { ...plan.result, href: opened, opened: true, stop: true, say: `${plan.done}; it is open.` }, `${plan.done}; opened`);
     }
+    const record = plan.recordAt ? str(dig(body, plan.recordAt.at)) : undefined;
+    if (record) return done('created', { ...plan.result, id: record, href: `${plan.recordAt!.base}${enc(record)}` }, plan.done);
     return done(verb === 'created' ? 'created' : 'updated', { ...plan.result, ...(plan.href ? { href: plan.href } : {}), ...(id ? { id, say: `${plan.done}: request ${id}. I'll tell you when it is decided.` } : {}) },
       id ? `${plan.done} (${id})` : plan.done);
   }, () => done(verb === 'created' ? 'created' : 'updated', { ...plan.result, already: true }, `${plan.done} already; nothing was sent again`));

@@ -15,14 +15,14 @@
   "serverHandlerSha": "d5c7e963d91dcfb554cdd2ad2852f868594636460fed7191e8e974f05c6fd61b"
  },
  "summary": {
-  "routes": 876,
-  "routesInSnapshot": 866,
+  "routes": 877,
+  "routesInSnapshot": 867,
   "snapshotDuplicates": 0,
   "routesDeclaredNotInSnapshot": 10,
   "pages": 109,
   "byKind": {
    "dev": 13,
-   "write": 375,
+   "write": 376,
    "read": 453,
    "internal": 35,
    "navigate": 109
@@ -85,18 +85,18 @@
     }
    },
    "work": {
-    "total": 81,
+    "total": 82,
     "read": 40,
-    "write": 38,
+    "write": 39,
     "navigate": 0,
     "internal": 3,
     "dev": 0,
-    "covered": 46,
+    "covered": 47,
     "v2": {
      "read": 30,
      "never": 20,
      "not-yet": 12,
-     "confirm": 16,
+     "confirm": 17,
      "n/a": 3
     }
    },
@@ -377,18 +377,18 @@
   "byTenant": {
    "any": 153,
    "access": 27,
-   "orgiq": 441,
+   "orgiq": 442,
    "assessment": 112,
    "pipelines": 30,
    "social": 32,
    "orgiq+assessment+pipelines": 33
   },
-  "peopleRoutes": 828,
+  "peopleRoutes": 829,
   "peopleReads": 453,
-  "peopleWrites": 375,
-  "coveredRoutes": 235,
+  "peopleWrites": 376,
+  "coveredRoutes": 236,
   "coveredReads": 161,
-  "coveredWrites": 74,
+  "coveredWrites": 75,
   "coveredPages": 109,
   "pagesWithPageId": 109,
   "v1Tools": 16,
@@ -397,14 +397,14 @@
    "not-yet": 180,
    "read": 161,
    "never": 383,
-   "confirm": 73,
+   "confirm": 74,
    "n/a": 30,
    "open": 1
   },
   "v2ToolRoutes": {
    "access_request_status": 1,
    "list": 54,
-   "create": 12,
+   "create": 13,
    "update": 20,
    "get": 56,
    "decide": 14,
@@ -463,7 +463,7 @@
   "writePolicy": {
    "refused:control-plane": 3,
    "refused:destructive": 45,
-   "allowed": 124,
+   "allowed": 125,
    "refused:unclassified": 92,
    "refused:spends": 25,
    "refused:fires": 26,
@@ -567,6 +567,7 @@
    "ConnectLocalCompute",
    "ViewSessionBrief",
    "DecideDecision",
+   "RaiseDecision",
    "VoiceNavigate",
    "InviteMeetingAssistant",
    "OpenDevboxShell",
@@ -583,6 +584,7 @@
    "ConnectLocalCompute",
    "ViewSessionBrief",
    "DecideDecision",
+   "RaiseDecision",
    "VoiceNavigate",
    "InviteMeetingAssistant"
   ],
@@ -609,6 +611,7 @@
    "ManageSdlcPolicies",
    "EditGuardrail",
    "DecideDecision",
+   "RaiseDecision",
    "VoiceNavigate",
    "InviteMeetingAssistant",
    "ApproveTransaction"
@@ -626,6 +629,7 @@
    "ViewSessionBrief",
    "ReviewRunbook",
    "DecideDecision",
+   "RaiseDecision",
    "VoiceNavigate",
    "CreateInitiative",
    "InviteMeetingAssistant"
@@ -646,6 +650,7 @@
    "ViewSessionBrief",
    "ReviewRunbook",
    "DecideDecision",
+   "RaiseDecision",
    "VoiceNavigate",
    "InviteMeetingAssistant",
    "OpenDevboxShell",
@@ -784,7 +789,7 @@
    ],
    "mapsTo": "useNavigate() to the palette entry's path, the kept row's href, or the kind's href built from a typed ref; a name through the kind's list read (list's routes)",
    "routes": [],
-   "line": 708
+   "line": 711
   },
   {
    "name": "search",
@@ -838,7 +843,7 @@
      "path": "/api/access/search/answer"
     }
    ],
-   "line": 730
+   "line": 733
   },
   {
    "name": "list",
@@ -1072,7 +1077,7 @@
      "path": "/api/access/audit"
     }
    ],
-   "line": 748
+   "line": 751
   },
   {
    "name": "get",
@@ -1314,7 +1319,7 @@
      "path": "/api/access/reviews/:id"
     }
    ],
-   "line": 771
+   "line": 774
   },
   {
    "name": "computer",
@@ -1373,7 +1378,7 @@
      "path": "/api/local-compute/nodes/:nodeId/work"
     }
    ],
-   "line": 784
+   "line": 787
   },
   {
    "name": "summary",
@@ -1491,7 +1496,7 @@
      "path": "/api/access/summary"
     }
    ],
-   "line": 808
+   "line": 811
   },
   {
    "name": "budget",
@@ -1545,7 +1550,7 @@
      "path": "/api/observability/cost/summary"
     }
    ],
-   "line": 822
+   "line": 825
   },
   {
    "name": "activity",
@@ -1574,7 +1579,7 @@
      "path": "/api/search"
     }
    ],
-   "line": 839
+   "line": 842
   },
   {
    "name": "message",
@@ -1605,7 +1610,7 @@
      "path": "/api/social/plane/work-sharing"
     }
    ],
-   "line": 853
+   "line": 856
   },
   {
    "name": "call",
@@ -1636,7 +1641,7 @@
      "path": "/api/social/plane/search"
     }
    ],
-   "line": 870
+   "line": 873
   },
   {
    "name": "set_status",
@@ -1652,7 +1657,7 @@
    ],
    "mapsTo": "usePresence('<tenant>:lobby') (the shell's tenant lobby, manifest presenceLobby) then usePresence('social:lobby') with a Social grant: setStatus(status) and updateMetadata({ statusMessage })",
    "routes": [],
-   "line": 886
+   "line": 889
   },
   {
    "name": "queue_work",
@@ -1869,7 +1874,7 @@
      "path": "/api/pipelines/runs/:id/events"
     }
    ],
-   "line": 898
+   "line": 901
   },
   {
    "name": "decide",
@@ -1986,7 +1991,7 @@
      "path": "/api/assessment/drafts/:runId/discard"
     }
    ],
-   "line": 921
+   "line": 924
   },
   {
    "name": "create",
@@ -1999,7 +2004,7 @@
     "social",
     "access"
    ],
-   "mapsTo": "work-item: GET /api/graph/projects (or the initiative in view), POST /api/graph/work-items { projectId, type, title, priority }; document and whiteboard: GET /api/graph/projects/:projectId/workspace-documents (canWrite), POST /api/graph/projects/:projectId/workspace-documents { title, kind: page | whiteboard }, then the editor opens; deck: as queue_work's deck, POST /api/initiative-decks/projects/:projectId { narrative, brief }; comment: GET /api/graph/work, POST /api/graph/work-items/:id/comments { body }; saved-search: POST /api/saved-searches { name, query, scope }; sprint: POST /api/sprints { initiativeId, name, startsOn, endsOn }; channel, team, room: POST /api/social/channels, POST /api/social/teams, POST /api/social/rooms; access-request: GET /api/access/catalog, POST /api/access/requests/preview, POST /api/access/requests { itemId, justification, duration }; delegation: GET /api/access/delegates, POST /api/access/delegations { delegateId, startsAt, endsAt, reason }",
+   "mapsTo": "work-item: GET /api/graph/projects (or the initiative in view), POST /api/graph/work-items { projectId, type, title, priority }; document and whiteboard: GET /api/graph/projects/:projectId/workspace-documents (canWrite), POST /api/graph/projects/:projectId/workspace-documents { title, kind: page | whiteboard }, then the editor opens; deck: as queue_work's deck, POST /api/initiative-decks/projects/:projectId { narrative, brief }; comment: GET /api/graph/work, POST /api/graph/work-items/:id/comments { body }; saved-search: POST /api/saved-searches { name, query, scope }; sprint: POST /api/sprints { initiativeId, name, startsOn, endsOn }; channel, team, room: POST /api/social/channels, POST /api/social/teams, POST /api/social/rooms; access-request: GET /api/access/catalog, POST /api/access/requests/preview, POST /api/access/requests { itemId, justification, duration }; delegation: GET /api/access/delegates, POST /api/access/delegations { delegateId, startsAt, endsAt, reason }; decision: GET /api/graph/projects (or the initiative in view), POST /api/graph/decisions { initiativeId, statement, state: resolved | waiting, participants?, source: call | manual, callId? }",
    "routes": [
     {
      "method": "GET",
@@ -2068,9 +2073,17 @@
     {
      "method": "POST",
      "path": "/api/access/delegations"
+    },
+    {
+     "method": "GET",
+     "path": "/api/graph/projects"
+    },
+    {
+     "method": "POST",
+     "path": "/api/graph/decisions"
     }
    ],
-   "line": 938
+   "line": 941
   },
   {
    "name": "update",
@@ -2228,7 +2241,7 @@
      "path": "/api/access/delegations/:id/end"
     }
    ],
-   "line": 975
+   "line": 986
   },
   {
    "name": "access_request_status",
@@ -2258,7 +2271,7 @@
      "path": "/api/access/approvals"
     }
    ],
-   "line": 1000
+   "line": 1011
   }
  ],
  "navigatePages": [
@@ -4316,9 +4329,10 @@
   {"method":"POST","path":"/api/grants","source":"src/routes/grants.ts:70","declaredAt":"src/routes/grants.ts:70","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"budgets","cedarAction":"ManageBudgets","actions":["ManageBudgets"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"allocations, caps, grants, kill switches, policy profiles"}},
   {"method":"DELETE","path":"/api/grants/:id","source":"src/routes/grants.ts:148","declaredAt":"src/routes/grants.ts:148","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"budgets","cedarAction":"ManageBudgets","actions":["ManageBudgets"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner"],"writePolicy":"refused:destructive","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"allocations, caps, grants, kill switches, policy profiles"}},
   {"method":"PATCH","path":"/api/grants/:id","source":"src/routes/grants.ts:114","declaredAt":"src/routes/grants.ts:114","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"budgets","cedarAction":"ManageBudgets","actions":["ManageBudgets"],"holders":["orgiq/hr-admin","orgiq/org-leader","orgiq/program-owner"],"writePolicy":"allowed","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"allocations, caps, grants, kill switches, policy profiles"}},
-  {"method":"GET","path":"/api/graph/decisions","source":"src/routes/decisions.ts:51","declaredAt":"src/routes/decisions.ts:51","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":["list"],"v2":{"decision":"read","tool":"list","note":"mapsTo"}},
-  {"method":"GET","path":"/api/graph/decisions/:id","source":"src/routes/decisions.ts:73","declaredAt":"src/routes/decisions.ts:73","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":["get","decide"],"v2":{"decision":"read","tool":"get","note":"mapsTo"}},
-  {"method":"POST","path":"/api/graph/decisions/:id/decide","source":"src/routes/decisions.ts:104","declaredAt":"src/routes/decisions.ts:104","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"DecideDecision","actions":["DecideDecision"],"bodyActions":["DecideDecision"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":["decide"],"v2":{"decision":"confirm","tool":"decide","note":"mapsTo"}},
+  {"method":"GET","path":"/api/graph/decisions","source":"src/routes/decisions.ts:66","declaredAt":"src/routes/decisions.ts:66","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":["list"],"v2":{"decision":"read","tool":"list","note":"mapsTo"}},
+  {"method":"GET","path":"/api/graph/decisions/:id","source":"src/routes/decisions.ts:199","declaredAt":"src/routes/decisions.ts:199","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"work","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":["get","decide"],"v2":{"decision":"read","tool":"get","note":"mapsTo"}},
+  {"method":"POST","path":"/api/graph/decisions","source":"src/routes/decisions.ts:127","declaredAt":"src/routes/decisions.ts:127","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"RaiseDecision","actions":["RaiseDecision"],"bodyActions":["DecideDecision"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":["create"],"v2":{"decision":"confirm","tool":"create","note":"mapsTo"}},
+  {"method":"POST","path":"/api/graph/decisions/:id/decide","source":"src/routes/decisions.ts:230","declaredAt":"src/routes/decisions.ts:230","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"work","cedarAction":"DecideDecision","actions":["DecideDecision"],"bodyActions":["DecideDecision"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":"allowed","pageId":null,"coveredBy":["decide"],"v2":{"decision":"confirm","tool":"decide","note":"mapsTo"}},
   {"method":"GET","path":"/api/graph/documents/:documentId","source":"src/routes/work-documents.ts:75","declaredAt":"src/routes/work-documents.ts:75","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"documents","cedarAction":null,"actions":[],"writePolicy":null,"pageId":null,"coveredBy":["get"],"v2":{"decision":"read","tool":"get","note":"mapsTo"}},
   {"method":"PUT","path":"/api/graph/documents/:documentId","source":"src/routes/work-documents.ts:88","declaredAt":"src/routes/work-documents.ts:88","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"write","family":"documents","cedarAction":null,"actions":[],"writePolicy":"refused:unclassified","pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"document content"}},
   {"method":"GET","path":"/api/graph/entities","source":"src/routes/graph.ts:8","declaredAt":"src/routes/graph.ts:8","stale":false,"snapshot":true,"tenants":["orgiq"],"kind":"read","family":"org","cedarAction":"ViewOrgChart","actions":["ViewOrgChart"],"holders":["orgiq/hr-admin","orgiq/member","orgiq/org-leader","orgiq/program-owner","orgiq/sme"],"writePolicy":null,"pageId":null,"coveredBy":[],"v2":{"decision":"never","tool":null,"note":"operator consoles, agent-facing reads and leadership data: the page, not the voice"}},
