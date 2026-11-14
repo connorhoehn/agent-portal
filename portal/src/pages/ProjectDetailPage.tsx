@@ -126,7 +126,7 @@ import { DiscussionElsewhereNotice } from './projects/DiscussionElsewhereNotice'
 import { InitiativeFiles } from './projects/InitiativeFiles';
 import { WORK_EDIT_DENIED_HINT } from './projects/initiativeFilesModel';
 import { useInitiativeListRail } from './projects/InitiativeListRail';
-import { initiativeBreadcrumbs, initiativeHref } from './projects/initiativeNavigation';
+import { initiativeBreadcrumbs, initiativeHref, newItemTitleParam } from './projects/initiativeNavigation';
 import { InitiativeRecordings } from './projects/InitiativeRecordings.tsx';
 import { InitiativesExplorer } from './projects/InitiativesExplorer';
 import { InitiativeSidePane, useInitiativePane } from './projects/InitiativeSidePane';
@@ -287,7 +287,7 @@ function ProjectDetailPage() {
   const [composerSeed, setComposerSeed] = useState<{ itemId: string; text: string; n: number } | null>(null);
   const [briefDialog, setBriefDialog] = useState<'note' | 'context' | null>(null);
   // What "New work item" creates: a story under an epic, or a new epic.
-  const [creating, setCreating] = useState<{ parentId: string | null; parentTitle: string | null } | null>(null);
+  const [creating, setCreating] = useState<{ parentId: string | null; parentTitle: string | null; title?: string } | null>(null);
 
   // Browsing views use initiative rows; a selected Work item uses work rows.
   const listRail = useInitiativeListRail({ currentId: id ?? null, defaultScope: 'all' });
@@ -305,6 +305,14 @@ function ProjectDetailPage() {
   // controls read-only with that reason rather than a 403 after the click.
   const offInitiative = canDispatch && project?.canWriteWork === false;
   const canEditWork = canDispatch && !offInitiative;
+  // A link from a meeting's action item (`?newItem=<title>`, tab=work) opens the new-work form with that title; the link's
+  // parameter is consumed so a reload does not ask again. Someone who cannot edit work here just lands on the Work tab.
+  const newItemTitle = newItemTitleParam(searchParams);
+  useEffect(() => {
+    if (newItemTitle === null || !project || !capsReady) return;
+    if (canEditWork) setCreating({ parentId: null, parentTitle: null, title: newItemTitle });
+    setSearchParams((prev) => { const p = new URLSearchParams(prev); p.delete('newItem'); return p; }, { replace: true });
+  }, [newItemTitle, project?.id, capsReady, canEditWork]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: decisions, error: decisionsError, degraded: decisionsDegraded, refresh: refreshDecisions } =
     useFetch<ProjectDecision[]>(id ? `/api/graph/projects/${encodeURIComponent(id)}/decisions` : '');
@@ -1075,8 +1083,9 @@ function ProjectDetailPage() {
           maxWidth={560}
         >
           <NewItemForm
-            defaultType={creating.parentId ? 'story' : 'epic'}
-            typeOptions={creating.parentId ? ['story', 'bug'] : ['epic']}
+            defaultType={creating.parentId || creating.title ? 'story' : 'epic'}
+            typeOptions={creating.parentId || creating.title ? ['story', 'bug'] : ['epic']}
+            {...(creating.title ? { defaultTitle: creating.title } : {})}
             onSave={(draft) => { createItem(creating.parentId, draft); setCreating(null); }}
             onCancel={() => setCreating(null)}
           />

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultInitiativeScope, initiativeBreadcrumbs, initiativeHref, initiativeListHref, landingScope } from '../initiativeNavigation.ts';
+import { defaultInitiativeScope, initiativeBreadcrumbs, initiativeHref, initiativeListHref, landingScope, newItemTitleParam, newWorkItemHref } from '../initiativeNavigation.ts';
 
 const search = new URLSearchParams('scope=all&q=auth&status=active&sort=name&tab=work&item=work-1&view=history&wq=fix');
 
@@ -56,4 +56,13 @@ test('the default scope: leaders everyone, a linked viewer their own, an unlinke
   assert.equal(defaultInitiativeScope({ isLeader: false, linked: false }), 'all');
   // Still reading the link: no default yet, so the list never flashes an empty Mine.
   assert.equal(defaultInitiativeScope({ isLeader: false, linked: null }), null);
+});
+
+test('a new-item link carries the title to the Work tab and reads back the same words', () => {
+  const href = newWorkItemHref('proj 1', 'Fix the "login" page & retry?');
+  assert.equal(href.startsWith('/iq/projects/proj%201?tab=work&newItem='), true);
+  assert.equal(newItemTitleParam(new URLSearchParams(href.split('?')[1])), 'Fix the "login" page & retry?');
+  assert.equal(newItemTitleParam(new URLSearchParams('newItem=%20%20')), null);
+  assert.equal(newItemTitleParam(new URLSearchParams('tab=work')), null);
+  assert.equal(newItemTitleParam(new URLSearchParams(`newItem=${'x'.repeat(400)}`))?.length, 300);
 });

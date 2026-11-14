@@ -26,6 +26,15 @@ export function initiativeHref(id: string, search: URLSearchParams, scope: 'all'
   return `/iq/projects/${encodeURIComponent(id)}?${params}`;
 }
 
+/** The initiative's Work tab with the new-item form asking for this title (a meeting's action item): `?newItem=<title>`. */
+export const newWorkItemHref = (id: string, title: string): string => `/iq/projects/${encodeURIComponent(id)}?tab=work&newItem=${encodeURIComponent(title)}`;
+
+/** The title a `?newItem=` link carries, trimmed and capped; null when there is none worth opening the form for. */
+export function newItemTitleParam(search: URLSearchParams, max = 300): string | null {
+  const title = (search.get('newItem') ?? '').trim().slice(0, max);
+  return title || null;
+}
+
 export interface InitiativeCrumb { label: string; href?: string }
 
 export function initiativeBreadcrumbs({ search, scope, sprints = false, project, tab = 'overview', item, sprint }: {
