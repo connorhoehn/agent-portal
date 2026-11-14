@@ -677,3 +677,48 @@ describe('a private read never passes through the shared session (B2)', () => {
     expect(mockPosts.privates[0]!.text).not.toMatch(/[\u0000-\u001f]/);
   });
 });
+
+describe('a failed replacement retries, then leaves (B9)', () => {
+  class FailingStart extends FakeSession { async start(): Promise<void> { throw new Error('provider unavailable'); } }
+  const withWaits = async () => {
+    await runtime.stop(CALL); finished.length = 0;
+    const waits: number[] = [];
+    runtime = new AssistantRuntime({
+      store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [],
+      onFinished: async (e) => { finished.push(e); }, wait: async (ms) => { waits.push(ms); },
+    }, { tickMs: 0 });
+    return waits;
+  };
+
+  it('every attempt fails: retried after 1, 3 and 9 seconds, then the record is left, the notice is posted once, and spend settles', async () => {
+    factory = () => { const s = new FakeSession(); sessions.push(s); return s; };
+    const waits = await withWaits();
+    await runtime.start(ctx);
+    const first = fake();
+    factory = () => new FailingStart();
+    await first.close(); await flush();
+    expect(waits).toEqual([1000, 3000, 9000]);
+    expect(runtime.isRunning(CALL)).toBe(false);
+    expect((await store.get(CALL))!.state).toBe('left');
+    expect(mockPosts.notices.filter((n) => /lost its connection/.test(n))).toHaveLength(1);
+    expect(finished).toHaveLength(1);
+    expect(finished[0]!.usageSeconds).toBe(90);
+  });
+
+  it('the second attempt succeeds: listening continues and the dropped session usage is folded once', async () => {
+    factory = () => { const s = new FakeSession(); sessions.push(s); return s; };
+    const waits = await withWaits();
+    await runtime.start(ctx);
+    const first = fake();
+    let tries = 0;
+    factory = () => { tries += 1; const s = tries === 1 ? new FailingStart() : new FakeSession(); sessions.push(s); return s; };
+    await first.close(); await flush();
+    expect(waits).toEqual([1000]);
+    expect(runtime.hasSession(CALL)).toBe(true);
+    expect((await store.get(CALL))!.state).toBe('listening');
+    expect(mockPosts.notices.filter((n) => /lost its connection/.test(n))).toHaveLength(0);
+    await runtime.stop(CALL);
+    expect(finished).toHaveLength(1);
+    expect(finished[0]!.usageSeconds).toBe(180); // 90 from the dropped session once, 90 from the replacement
+  });
+});

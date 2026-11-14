@@ -50,6 +50,8 @@ export const TYPED_UNSUPPORTED_REPLY = 'I can only hear spoken requests in this 
 /** A call chat message that addresses Nova: it starts with the name and a comma, colon or space, or mentions @Nova. */
 export const addressesNova = (text: string): boolean => /^\s*@?nova(?:[,:\s]|$)/i.test(text) || /(^|[^\w])@nova\b/i.test(text);
 export const MAX_REPLACEMENTS = 3;
+/** A failed replacement is retried after each of these delays; when they are spent Nova leaves (audit B9). */
+export const REPLACEMENT_RETRY_MS: readonly number[] = [1000, 3000, 9000];
 /** The voice speaks a short acknowledgement the moment it delegates; output this soon after a delegation is not posted. */
 export const ACK_WINDOW_MS = 3000;
 export const MAX_ARGS_BYTES = 4096;
@@ -78,6 +80,8 @@ export interface RuntimeDeps {
   onFinished?: (event: FinishedEvent) => Promise<void>;
   /** The audio side (audio-intake.ts): told when a session opens and closes. Absent in tests that do not care. */
   audio?: Pick<AudioIntake, 'attach' | 'suspend' | 'detach'>;
+  /** Sleep for `ms` (replacement retries, the turn sweep's tests); injectable so tests never wait. */
+  wait?: (ms: number) => Promise<void>;
 }
 
 export interface FinishedEvent {
@@ -193,6 +197,9 @@ export class AssistantRuntime {
 
   private get store(): AssistantStore { return this.deps.store(); }
   private now(): number { return this.deps.clock(); }
+  private wait(ms: number): Promise<void> {
+    return this.deps.wait ? this.deps.wait(ms) : new Promise<void>((resolve) => { const t = setTimeout(resolve, ms); t.unref?.(); });
+  }
 
   isRunning(callId: string): boolean { const r = this.runs.get(callId); return !!r && !r.finished; }
   hasSession(callId: string): boolean { return !!this.runs.get(callId)?.session; }
@@ -383,23 +390,40 @@ export class AssistantRuntime {
     await this.expireOpenTurns(run, true);
     const record = await this.store.get(run.ctx.callId);
     if (!record || record.state !== 'listening') return;
-    if (run.replacements >= MAX_REPLACEMENTS) {
-      await this.store.transition(run.ctx.callId, { from: ['listening'], to: 'left', by: 'system', at: this.now() });
-      await postNoticeQuietly(run.ctx.callId, `${NOVA_NAME} lost its connection and has left the call. Anyone can invite ${NOVA_NAME} again.`, { leaving: true });
-      this.deps.intake().stop(run.ctx.callId);
-      await this.stop(run.ctx.callId);
-      return;
-    }
+    if (run.replacements >= MAX_REPLACEMENTS) { await this.giveUp(run); return; }
     run.replacements += 1;
     await this.store.patchSession(run.ctx.callId, { replacements: run.replacements });
     console.warn(`[meeting-assistant] replacing session for ${run.ctx.callId} (${reason}), replacement ${run.replacements}`);
-    await this.serial(run, async () => {
-      if (run.session || run.finished) return;
-      try { await this.openSession(run, await this.recentLines(run.ctx.callId)); } catch (e) {
-        console.warn('[meeting-assistant] replacement failed', (e as Error).message);
-        await this.onClosed(run, session, 'replacement-failed');
-      }
-    });
+    // The first attempt is at once; a failed one is retried after 1, 3 and 9 seconds (audit B9). The waits run OUTSIDE the
+    // serial chain, so a pause or a dismiss is never held up behind them, and each attempt re-checks that it is still wanted.
+    for (let attempt = 0; attempt <= REPLACEMENT_RETRY_MS.length; attempt += 1) {
+      if (attempt > 0) await this.wait(REPLACEMENT_RETRY_MS[attempt - 1]!);
+      if (run.finished || run.session) return;
+      const now = await this.store.get(run.ctx.callId);
+      if (!now || now.state !== 'listening') return;
+      let opened = false;
+      await this.serial(run, async () => {
+        if (run.finished) return;
+        if (run.session) { opened = true; return; }
+        try { await this.openSession(run, await this.recentLines(run.ctx.callId)); opened = true; } catch (e) {
+          for (const off of run.unsubscribers.splice(0)) off();
+          console.warn('[meeting-assistant] replacement failed', (e as Error).message);
+        }
+      });
+      if (opened || run.finished) return;
+    }
+    await this.giveUp(run);
+  }
+
+  /** Nova has no session and cannot get one: leave with a notice, stop intake and audio, settle spend and write the minutes (once). */
+  private async giveUp(run: CallRun): Promise<void> {
+    const callId = run.ctx.callId;
+    const done = await this.store.transition(callId, { from: ['listening'], to: 'left', by: 'system', at: this.now() });
+    if (!done) return;
+    await postNoticeQuietly(callId, `${NOVA_NAME} lost its connection and has left the call. Anyone can invite ${NOVA_NAME} again.`, { leaving: true });
+    this.deps.intake().stop(callId);
+    this.deps.audio?.detach(callId);
+    await this.stop(callId);
   }
 
   // -------------------------------------------------------------------------------------------------------------
