@@ -1,6 +1,6 @@
 # Meeting assistant: design and plan
 
-13 November 2026, revised the same day. Status: packages 1 to 6a merged (13 November), all run on the mock world only. An audit the same day (`docs/meeting-assistant-audit.md`) found nine defects that block a real call; they are repaired before the paid run, before 6b and before package 7.
+13 November 2026, revised the same day. Status (14 November): packages 1 to 7 are built and merged, behind a flag that is off by default. The audit's nine blocking defects are repaired and a second audit found them closed (`docs/meeting-assistant-audit.md`). One paid run of the whole server chain against the real provider passed. What is left needs the owner: a real call through the media server (6b), then package 8.
 
 **Revision.** The first draft listened with the media server's local Whisper captions service. The owner's instruction is to listen with the OpenAI live model the voice navigator already uses. This version does that. The captions service is not used.
 
@@ -63,7 +63,7 @@ Not determined: the longest a session may run, whether a quiet session bills les
 8. **Consent is explicit and visible.** Inviting Nova posts a notice in the chat, shows the transcription notice to every participant, and marks the call bar. Anyone in the call can pause listening or dismiss Nova. A participant's audio is not mixed in, and nothing they say is stored, until they have acknowledged the notice. While paused, no audio is sent to the provider.
 9. **Words are stored, audio is not.** Transcript lines are kept 30 days by default, readable only by people who were in the call. Audio passes through memory to the provider and is never written. The voice log's no-words rule does not change.
 10. **Spend.** Listening costs money for every minute Nova is in the call. The session reserves against the inviter's budget, on the call's initiative when it has one, under a new spend source `meeting_assistant`. A call has a ceiling in minutes (default 60); Nova says so in the chat five minutes before, and anyone who may invite can extend it. Tool-call tokens settle as the voice navigator's do.
-11. **Session length.** The longest session is unknown, so the server can replace a session mid-call, starting the new one with a short summary of the call so far.
+11. **Session length.** The provider's session carries an expiry about two hours after it starts (read from its own events on 13 November). The server replaces the session five minutes before that, and after an unexpected close, starting the new one with a short summary of the call so far.
 12. **Mock first.** The default mock world gets an injector for attributed transcript lines and a scripted stand-in for the live session, so every behaviour is walked headlessly without media, a microphone or a paid session.
 13. **Off by default.** One server flag and one portal flag. A new policy action, `InviteMeetingAssistant`, decides who may invite.
 14. **Outside guests.** Calls in this product have no guests today. If a lobby type later admits them, Nova leaves when one joins.
@@ -113,8 +113,9 @@ Each package is one branch, verified by the full chain, merged on its own.
 | 4a | Session and turns on the server: the live session over the WebSocket (run against a fake server only), the scripted stand-in, attribution, the name lock, turns, spend source, hold on the inviter, ceiling and extend | this one | Done |
 | 4b | Turns in the asker's browser: reads run, confirmed writes run, results return; three tool calls per request; time left and extend; acknowledgement stays offered; a plain reply when a typed request cannot be heard | this one | Done |
 | 5 | Minutes: notes, decisions and action items when Nova leaves; the meeting page and the Meetings list under `/iq/meetings`; delete by the inviter. Not searchable: the search index cannot limit a record to named people | this one | Done; the provider request for minutes has run against a fake server only |
-| 6 | Real audio. 6a, built: the tap sink, mixer and voiced timeline, arming the tap on invite, the participant binding route, the tap simulator and a dry end-to-end run. 6b: the portal binds its own participant id; the paid run | this one | Medium |
-| 7 | Nova's voice: relay of the output audio to participants' browsers, a speaking mark, a mute-Nova control per person | this one, `realtime-modules`, `ui-components` | Medium |
+| 6a | Real audio on the server: the guarded sink with a second secret, binding a media id to a person, the mixer and voiced timeline, arming the tap, a forced-live mode, a tap simulator and its dry run | this one | Done; one paid run against the provider passed (below) |
+| 6b | A real call: two people in a call through the media server with the secret configured there; measure quiet behaviour, attribution on real microphones and echo | this one, the media stack | Needs the owner |
+| 7 | Nova's voice: off by default per call; the server relays the provider's voiced frames to the seats of the call over the call chat's socket, never stored; the browser plays them, shows a speaking mark, and each person can mute Nova; an echo guard keeps Nova's own words from counting as a request | this one | Done on the mock world and in the paid run's relay count; real sound and echo are unmeasured |
 | 8 | Later: joining scheduled rooms on its own, a real media participant, minutes from the recorded transcript when a call was recorded | several | Large |
 
 Packages 1 to 5 run entirely on the mock world. Package 6 needs the social stack, and a real call or a headless browser with a fake audio file, on its own ports.
@@ -149,6 +150,10 @@ Package 6a is the server side. The media server's per-participant taps post each
 
 What the audio is and is not. It passes through memory only: the sink, the mixer and the session write no file and log no audio. The mixer sends the provider one frame per 100 ms of wall time, silence included, so the provider's timeline matches wall time, and the voiced timeline is fed on that same timeline. A replaced session starts both again from zero while the tap and its token carry on.
 
+**The paid run (14 November).** `node scripts/meeting-assistant/live-e2e.mjs --yes`, once, at `b420ddcf`: 28 checks passed. Two synthetic speakers, six utterances, 39 seconds of call audio in 104 chunks, all mixed, none late or unmapped. Every utterance was stored under the person who spoke it. Nova posted nothing during the chatter or when its name was used without a request. "Nova, what is two plus two?" was answered in the call chat, labelled with the asker. "Nova, create a work item for the login cookie bug." became a card for the person who asked, with that title; only that person could confirm it, the turn was claimed once, and a result needed the claim. No tool call was refused. With the voice on, 57 frames of Nova's speech were relayed and none dropped. The provider sent no error events. Billed: 45 seconds, $0.0367, plus $0.0008 of tool-call tokens.
+
+What that run does not show: the media server's own taps (the simulator stood in for them), real microphones, noise, accents, overlapping speech, a long meeting, and sound in a browser.
+
 ## How it is judged
 
 - A journey, `meeting-assistant`, on the default mock world at 1440 and 1280: invite, notice shown to a second participant, nothing stored for a participant who has not acknowledged, a read answer lands in chat labelled with the asker, a write shows a card that only the asker can confirm, a second person's "yes" does nothing, a tool call with no name in the asker's recent words is refused, pause stops storing lines, the ceiling warning appears, dismiss posts minutes, the meeting page shows them, a person who was not in the call is refused.
@@ -159,7 +164,7 @@ What the audio is and is not. It passes through memory only: the sink, the mixer
 
 ## Risks
 
-- **Quiet behaviour is instructed, not guaranteed.** The probe was 46 seconds of synthetic voices. Decision 3's name lock stops actions, but an unprompted spoken remark is possible; package 6 measures it and package 7 gives each person a mute.
+- **Quiet behaviour is instructed, not guaranteed.** The probe was 46 seconds of synthetic voices and the paid run 45; in both Nova stayed quiet until addressed. The name lock stops actions, but an unprompted remark is possible over a long real meeting; the voice is off by default and each person has a mute.
 - **Attribution in overlap.** Two people talking at once give one transcript piece; the timeline can only say both were speaking.
 - **Cost is continuous.** About $3 per hour of meeting, whether or not anyone addresses Nova. The ceiling and the pause control bound it.
 - **Audio leaves the machine.** Every acknowledged participant's speech goes to the provider while Nova listens. The notice must say so in plain words.

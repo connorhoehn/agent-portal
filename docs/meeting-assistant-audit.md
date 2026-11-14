@@ -2,6 +2,8 @@
 
 13 November 2026. Audited at `eb6cff56`, after packages 1 to 6a (`docs/meeting-assistant-design.md`).
 
+**Status, 14 November.** The nine blocking findings and the medium ones are repaired and merged; a second audit found the blockers closed (see "After the repairs" at the end). The verdict below is the first audit's and is kept as written.
+
 ## Verdict
 
 The feature must not be turned on for a real call yet. Nine defects are serious enough to block that: four can show one person's words or data to others, two can attribute or run an action wrongly, and three break the feature in normal use. None has touched real data. The flag is off by default, and the product code has only run on the mock world.
@@ -91,4 +93,5 @@ Still open:
 
 - The media server still lists tap destinations to a holder of a publisher-level credential for the channel. The per-call token in the address is therefore not enough on its own, which is why the second secret exists; the listing itself is not changed.
 - The SQL stores have never run against a real database. Their statements are checked as text only.
-- No real call has been made. The product code has run only on the mock world and against a fake provider.
+- No real call has been made. One paid run on 14 November put the real provider behind the whole server chain with a simulator in place of the media server's taps, and passed (`docs/meeting-assistant-design.md`, "The paid run"). The media server's own taps, real microphones and sound in a browser are still unproven.
+- The component-discipline check rose from 9 failing checks to 11 with this feature (three decisions asked in dialogs, one control off the table scale). They were converted the same night; the check is now part of the verification chain.
