@@ -98,7 +98,7 @@ test('create: "add a bug: …" on an initiative\'s page files it there; elsewher
 test('create: "a bug for Nora" files it owned by the initiative\'s own contributor; a stranger is refused before any write', async () => {
   const { ctx, log } = ctxFor({ extra: [route('POST', '/api/graph/work-items', 201, { id: 'wi-x' })] });
   const r = await plan('create', { kind: 'work-item', fields: { title: 'Cutover runbook', type: 'story', assignee: 'Nora' } }, ctx);
-  assert.match(r.card!.detail.join(' '), /owned by Nora DaSilva/);
+  assert.match([r.card?.detail ?? []].flat().join(' '), /owned by Nora DaSilva/);
   assert.equal((await r.run()).outcome, 'done');
   assert.deepEqual(writes(log), [['POST', '/api/graph/work-items', { projectId: P, type: 'story', title: 'Cutover runbook', priority: 'medium', assigneeId: 'p-004' }]]);
   const { ctx: c2, log: l2 } = ctxFor();

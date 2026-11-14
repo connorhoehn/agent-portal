@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-14T20:26:42.779Z",
-  "serverHandlerSha": "d5c7e963d91dcfb554cdd2ad2852f868594636460fed7191e8e974f05c6fd61b",
+  "capturedAt": "2026-11-14T21:59:58.111Z",
+  "serverHandlerSha": "8d109d71477c469f0a67055441f7d71da088c221c01f3ec0e3164adf2ca1d3a2",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -4396,6 +4396,12 @@
         "schema.OrgIQ.actions.PublishReport.appliesTo.principalTypes[]": "string",
         "schema.OrgIQ.actions.PublishReport.appliesTo.resourceTypes": "array",
         "schema.OrgIQ.actions.PublishReport.appliesTo.resourceTypes[]": "string",
+        "schema.OrgIQ.actions.RaiseDecision": "object",
+        "schema.OrgIQ.actions.RaiseDecision.appliesTo": "object",
+        "schema.OrgIQ.actions.RaiseDecision.appliesTo.principalTypes": "array",
+        "schema.OrgIQ.actions.RaiseDecision.appliesTo.principalTypes[]": "string",
+        "schema.OrgIQ.actions.RaiseDecision.appliesTo.resourceTypes": "array",
+        "schema.OrgIQ.actions.RaiseDecision.appliesTo.resourceTypes[]": "string",
         "schema.OrgIQ.actions.RequestAccess": "object",
         "schema.OrgIQ.actions.RequestAccess.appliesTo": "object",
         "schema.OrgIQ.actions.RequestAccess.appliesTo.principalTypes": "array",
@@ -6070,7 +6076,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "number",
+        "points[].judgeP50": "null|number",
         "windowHours": "number"
       },
       "values": {}
@@ -9075,6 +9081,7 @@
           "PostMessage",
           "ProvisionAccess",
           "PublishReport",
+          "RaiseDecision",
           "RequestAccess",
           "ReviewRunbook",
           "RunAssessmentAgent",
@@ -10878,6 +10885,7 @@
         "PostMessage",
         "ProvisionAccess",
         "PublishReport",
+        "RaiseDecision",
         "RequestAccess",
         "ReviewRunbook",
         "RunAssessmentAgent",
