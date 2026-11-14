@@ -7,10 +7,9 @@ import {
   Button, ConfirmDialog, DataTable, DetailPage, DetailSection, EmptyState, Inline, LoadingState, MetaLine, Modal, Stack, T,
   type DataTableColumn,
 } from '@connorhoehn/ui-components/shared';
-import { SummaryPanel, TranscriptPanel } from '@connorhoehn/ui-components/video';
+import { TranscriptPanel } from '@connorhoehn/ui-components/video';
 import { useSession } from '../../lib/auth';
 import { useFetch } from '../../hooks/useFetch';
-import { useFlushTrailItems } from '../../components/shell/FlushPage';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { sendJson } from '../../lib/writeJson';
 import { NewItemForm, type NewItemDraft } from '../project-detail/NewItemForm';
@@ -25,7 +24,6 @@ export default function MeetingPage() {
   const { callId = '' } = useParams();
   const navigate = useNavigate();
   const { session } = useSession();
-  const trail = useFlushTrailItems();
   const minutes = useFetch<MinutesView>(callId ? minutesUrl(callId) : null);
   const transcript = useMeetingTranscript(minutes.data ? callId : null);
   const [drafting, setDrafting] = useState<MinutesActionItem | null>(null);
@@ -35,7 +33,7 @@ export default function MeetingPage() {
   if (minutes.isLoading && !minutes.data) return <LoadingState label="Loading the meeting…" />;
   const m = minutes.data;
   if (!m) {
-    return <EmptyState data-testid="meeting-not-found" title="Meeting not found"
+    return <EmptyState testId="meeting-not-found" title="Meeting not found"
       description="There is no meeting record here, or you were not in that call. Only the people who were in a call can read its minutes." />;
   }
 
@@ -71,14 +69,14 @@ export default function MeetingPage() {
       <DetailPage
         data-testid="meeting-page"
         title={m.callName}
-        {...(trail ? { breadcrumbs: trail } : {})}
         meta={<MetaLine size="sm" items={[whenLabel(m.startedAt), durationLabel(m.startedAt, m.endedAt), peopleLabel(names), `Nova invited by ${m.invitedByName}`]} />}
         actions={m.youAreInviter
           ? <Button variant="danger" size="sm" data-testid="meeting-delete" onClick={() => setConfirmDelete(true)}>Delete this record</Button> : undefined}
       >
-        <Stack gap="md" className="px-[var(--ui-page-gutter)] pb-6">
-          <SummaryPanel status="ready" markdown={m.summary} renderMarkdown={(md) => <T size="sm" data-testid="meeting-summary">{md}</T>} />
-          {m.truncated && <T size="sm" tone="secondary">Only the most recent part of this call was summarised.</T>}
+        <Stack gap="md" className="pb-6">
+          <DetailSection title="Summary" as="h2" first>
+            <T size="sm" data-testid="meeting-summary">{m.summary}</T>
+          </DetailSection>
           <DetailSection title="Decisions" as="h2" hint={String(m.decisions.length)}>
             {m.decisions.length
               ? <Stack gap="xs" data-testid="meeting-decisions">{m.decisions.map((d, i) => <T key={i} size="sm">{d}</T>)}</Stack>
@@ -91,7 +89,7 @@ export default function MeetingPage() {
           </DetailSection>
           <DetailSection title="Transcript" as="h2" hint={`${m.lineCount} ${m.lineCount === 1 ? 'line' : 'lines'}`}>
             <TranscriptPanel
-              title="Transcript"
+              title="By speaker"
               status={transcript.error ? 'failed' : transcript.lines.length || !transcript.loading ? 'ready' : 'processing'}
               segments={transcriptSegments(transcript.lines, m.attendees, m.startedAt)}
               {...(transcript.error ? { errorMessage: transcript.error } : {})}

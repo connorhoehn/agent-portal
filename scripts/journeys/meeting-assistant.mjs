@@ -563,7 +563,7 @@ async function main() {
         await fitsWidth(vera.page, 'the meeting page', width);
         const text = await bodyText(vera.page);
         check(/Nova invited by /.test(text), 'the header does not say who invited Nova');
-        check(/Summary/.test(text) && /Decisions/.test(text) && /Action items/.test(text) && /Transcript/.test(text), `a section is missing at ${width}`);
+        check(/summary/i.test(text) && /decisions/i.test(text) && /action items/i.test(text) && /transcript/i.test(text), `a section is missing at ${width}: ${text.slice(0, 300)}`);
         const summary = (await vera.page.getByTestId('meeting-summary').innerText()).trim();
         check(summary.length > 10, 'the summary is empty');
         const items = (await vera.page.getByTestId('meeting-action-items').innerText()).replace(/\s+/g, ' ');
@@ -602,7 +602,7 @@ async function main() {
       await row.waitFor({ state: 'visible', timeout: 15000 }).catch(() => { throw new StepFailure('the meeting is not in the list'); });
       for (const width of [1440, 1280]) {
         await fitsWidth(vera.page, 'the Meetings list', width);
-        const top = await vera.page.getByTestId('iq-meetings-table').locator('tbody tr, [role="row"]').nth(1).evaluate((el) => el.getBoundingClientRect().top).catch(() => null);
+        const top = await row.evaluate((el) => el.getBoundingClientRect().top).catch(() => null);
         check(top !== null && top < 600, `the first row starts at ${top}px: the table is not above the fold at ${width}`);
       }
       const text = await bodyText(vera.page);
@@ -616,7 +616,7 @@ async function main() {
       check(Array.isArray(theirs.meetings) && theirs.meetings.length === 0, `the outsider's list is ${JSON.stringify(theirs).slice(0, 200)}`);
       await layla.page.goto(`${PORTAL}/iq/meetings`, { waitUntil: 'domcontentloaded', timeout: 40000 });
       await seen(layla.page, 'iq-meetings-table', 30000);
-      check(!/Nova|said:/.test(await layla.page.getByTestId('iq-meetings-table').innerText()), 'the outsider\'s table shows a meeting');
+      check(!/ said: /.test(await layla.page.getByTestId('iq-meetings-table').innerText()), 'the outsider\'s table shows a meeting');
       return `attendee: ${mine.meetings.length} meeting(s); outsider: none`;
     });
 

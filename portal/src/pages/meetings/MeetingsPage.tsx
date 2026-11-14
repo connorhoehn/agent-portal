@@ -13,11 +13,10 @@ export default function MeetingsPage() {
   const rows = feed.data?.meetings ?? [];
 
   const columns: DataTableColumn<MeetingListRow>[] = [
-    { key: 'name', header: 'Meeting', width: '240px', render: (r) => <T size="sm" className="block max-w-[14rem] truncate" title={r.callName}>{r.callName}</T> },
-    { key: 'when', header: 'When', width: '128px', numeric: true, render: (r) => <T size="sm" title={new Date(r.endedAt).toLocaleString()}>{relativeTime(new Date(r.endedAt).toISOString())}</T> },
-    { key: 'people', header: 'People', width: '256px', priority: 3, render: (r) => <T size="sm" className="block max-w-[16rem] truncate" title={r.attendees.join(', ')}>{peopleLabel(r.attendees)}</T> },
+    { key: 'name', header: 'Meeting', width: '208px', render: (r) => <T size="sm" className="block max-w-[14rem] truncate" title={r.callName}>{r.callName}</T> },
+    { key: 'when', header: 'When', width: '112px', numeric: true, render: (r) => <T size="sm" title={new Date(r.endedAt).toLocaleString()}>{relativeTime(new Date(r.endedAt).toISOString())}</T> },
+    { key: 'people', header: 'People', width: '192px', priority: 1, render: (r) => <T size="sm" className="block max-w-[12rem] truncate" title={r.attendees.join(', ')}>{peopleLabel(r.attendees)}</T> },
     { key: 'summary', header: 'Summary', render: (r) => <T size="sm" className="block max-w-[40rem] truncate" title={r.summary}>{summaryLine(r.summary)}</T> },
-    { key: 'items', header: 'Decisions · actions', width: '152px', priority: 2, render: (r) => <T size="sm">{r.decisionCount} · {r.actionItemCount}</T> },
   ];
 
   return (
