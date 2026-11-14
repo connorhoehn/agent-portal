@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-14T03:21:40.585Z",
-  "serverHandlerSha": "21f32cb298fe20a343cb0abe4de57e704d13ebadb1aeb2858648a238b6227925",
+  "capturedAt": "2026-11-14T07:22:55.511Z",
+  "serverHandlerSha": "570cb71dac17a415f0722d31cdf4bdd5fdc4eeaa6aa885b2e47bbfab4c52e2d2",
   "baseUrl": "http://127.0.0.1:3961",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -2136,7 +2136,19 @@
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
     },
+    "POST /api/calls/:callId/assistant/turns/:turnId/claim": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "POST /api/calls/:callId/assistant/turns/:turnId/result": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/calls/:callId/assistant/voice": {
       "refused": {
         "rule": "unclassified",
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
