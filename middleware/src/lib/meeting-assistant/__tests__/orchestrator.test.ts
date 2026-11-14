@@ -1448,6 +1448,42 @@ describe('the real provider\'s event order (paid runs, 14 November)', () => {
     expect(mockPosts.replies).toEqual([{ text: 'Lisbon.', askedBy: ALICE, askedByName: 'Alice' }]);
   });
 
+  it('two people in the one turn the model heard before it began: its call is the first one\'s, and what it says next answers the second', async () => {
+    const base = now;
+    const s = await realRuntime();
+    audioTap.sink!.placed(ALICE, loud(2_200), 22_800);
+    audioTap.sink!.placed(BOB, loud(3_000), 25_300);
+    now = base + 28_595;
+    s.fire('inputTranscript', { text: 'Nova, find the Kubernetes experts. Nova, what is two plus two', startMs: 22_800, endMs: 28_400, parts: [
+      { text: ' Nova, find the', startMs: 22_800, endMs: 24_000 }, { text: ' Kubernetes experts', startMs: 24_000, endMs: 25_000 },
+      { text: '. Nova, what is', startMs: 25_400, endMs: 27_000 }, { text: ' two plus two', startMs: 27_000, endMs: 28_200 },
+    ] });
+    s.fire('delegation', { atMs: 28_595 });
+    await flush();
+    now = base + 29_963; s.sayAt('One moment.', 28_692, 29_062); await flush();
+    now = base + 30_852; s.fire('delegationReady', { atMs: 30_852, item: 'function_call' });
+    now = base + 31_519; s.call('call_k', 'search', { query: 'Kubernetes experts' }, 31_519); await flush();
+    expect((await runtime.turnsFor(CALL, ALICE)).map((t) => t.askedBy)).toEqual([ALICE]);
+    expect(await runtime.turnsFor(CALL, BOB)).toEqual([]);
+    now = base + 34_000; s.sayAt('Two plus two is four.', 32_500, 33_200); await flush();
+    expect(mockPosts.replies).toEqual([{ text: 'Two plus two is four.', askedBy: BOB, askedByName: 'Bob' }]);
+  });
+
+  it('a question whose line ends a little after Nova\'s first word (the two clocks apart) is the one that utterance answers', async () => {
+    const base = now;
+    const s = await realRuntime();
+    await line(ALICE, 'Nova, find the Kubernetes experts.', base + 1_000);
+    now = base + 1_500; s.call('call_a', 'search', { query: 'Kubernetes experts' }, 1_500); await flush(); // still open
+    audioTap.sink!.placed(BOB, loud(1_800), 8_600);
+    now = base + 10_361;
+    s.hear('Nova, what is seven times eight', 8_600, 10_400); // flushed by Nova's first word, which the server saw at 10 361
+    await flush();
+    now = base + 12_517;
+    s.fire('outputTranscript', { text: 'Fifty six.', final: true, startedAt: 10_361, endedAt: 11_617, inputsBefore: 1 });
+    await flush();
+    expect(mockPosts.replies).toEqual([{ text: 'Fifty six.', askedBy: BOB, askedByName: 'Bob' }]);
+  });
+
   it('one heard turn holding two people (a request spoken right after someone else\'s sentence) is stored as one line each', async () => {
     const s = await realRuntime();
     audioTap.sink!.placed(BOB, loud(1_000), 0);

@@ -172,7 +172,7 @@ describe('transcripts', () => {
     expect(seen.outputTranscript.map((o) => [o.text, o.final])).toEqual([['No problem', false], ['No problem.', false]]);
     expect(timers.size).toBe(1); // one output timer, re-armed by each delta
     for (const fn of [...timers.values()]) fn(); // 900 ms of output quiet
-    expect(seen.outputTranscript.at(-1)).toEqual({ text: 'No problem.', final: true, startedAt: 500, endedAt: 900 });
+    expect(seen.outputTranscript.at(-1)).toEqual({ text: 'No problem.', final: true, startedAt: 500, endedAt: 900, inputsBefore: 0 });
     expect(seen.outputTranscript.filter((o) => o.final)).toHaveLength(1);
     frame({ type: 'session.delegation.created', offset_ms: 4400, delegation: { id: 'item_1', type: 'delegation', target: 'responses' } });
     await tick();

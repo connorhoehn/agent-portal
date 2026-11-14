@@ -71,7 +71,7 @@ const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v)
 interface Part { text: string; startMs: number; endMs: number }
 interface Piece { text: string; startMs: number; endMs: number; parts: Part[] }
 /** One thing Nova said: from its first output delta to 900 ms of output quiet. Times are on the session timeline (ms since `session.started`). */
-interface Utterance { text: string; startedAt: number; endedAt: number }
+interface Utterance { text: string; startedAt: number; endedAt: number; inputsBefore: number }
 
 export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSession {
   readonly kind = 'openai' as const;
@@ -95,6 +95,8 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   private outputTimer: unknown = null;
   /** A delegation began and its work has not produced its first message or function call yet. */
   private awaitingItem = false;
+  /** Input transcripts emitted so far. */
+  private inputCount = 0;
   private idle: ReturnType<typeof setTimeout> | null = null;
   /** Output audio: silent frames still owed after the last voiced one, and the frame counter. Audio is never kept. */
   private tailLeft = 0;
@@ -335,7 +337,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       // Nova beginning to speak means the turn it answers is over: what was heard so far is a line now, stored before this
       // utterance is judged (the provider's input deltas come in small pieces, and its idle flush would land after a short answer).
       if (!this.output) this.flushInput('output');
-      this.output = this.output ? { text: this.output.text + delta, startedAt: this.output.startedAt, endedAt: at } : { text: delta, startedAt: at, endedAt: at };
+      this.output = this.output ? { ...this.output, text: this.output.text + delta, endedAt: at } : { text: delta, startedAt: at, endedAt: at, inputsBefore: this.inputCount };
       this.emit('outputTranscript', { text: this.output.text.trim(), final: false });
       this.armOutput();
     }
@@ -369,6 +371,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     const text = p?.text.replace(/\s+/g, ' ').trim();
     if (p && text) {
       trace('input.flush', { t: this.sinceStart(), startMs: p.startMs, endMs: p.endMs, why, parts: p.parts.length });
+      this.inputCount += 1;
       this.emit('inputTranscript', { text, startMs: p.startMs, endMs: p.endMs, ...(p.parts.length > 1 ? { parts: p.parts } : {}) });
     }
   }
@@ -377,7 +380,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     this.clearOutputTimer();
     const p = this.output; this.output = null;
     const text = p?.text.replace(/\s+/g, ' ').trim();
-    if (p && text) { trace('output.flush', { t: this.sinceStart(), startedAt: p.startedAt, endedAt: p.endedAt }); this.emit('outputTranscript', { text, final: true, startedAt: p.startedAt, endedAt: p.endedAt }); }
+    if (p && text) { trace('output.flush', { t: this.sinceStart(), startedAt: p.startedAt, endedAt: p.endedAt }); this.emit('outputTranscript', { text, final: true, startedAt: p.startedAt, endedAt: p.endedAt, inputsBefore: p.inputsBefore }); }
   }
 
   private onResponseEvent(raw: unknown): void {
