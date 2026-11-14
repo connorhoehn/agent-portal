@@ -111,6 +111,8 @@ export const REPLY_CONTEXT_TTL_MS = 20_000;
 export const UNASKED_NOTICE_EVERY_MS = 30_000;
 /** How often the seat roster is read to record who is present while Nova is. */
 export const ATTENDANCE_EVERY_MS = 15_000;
+/** The process writes "still alive" on each listening record this often (audit M5); a restart closes the listening period there. */
+export const HEARTBEAT_EVERY_MS = 30_000;
 export const UNASKED_REPLY = 'I could not tell who asked. Please ask again.';
 
 /** One call's live state. Plain data plus the session; every behaviour is a method of the runtime. */
@@ -135,6 +137,8 @@ interface CallRun {
   replies: ReplyContext[];
   lastUnaskedNoticeAt: number;
   attendanceAt: number;
+  /** When the heartbeat (session.lastAliveAt, and the figures to settle) was last written. */
+  heartbeatAt: number;
   delegationAt: number;
   answeredSinceDelegation: boolean;
   intentionalClose: boolean;
@@ -218,7 +222,7 @@ export class AssistantRuntime {
     this.watchIntake();
     const run: CallRun = {
       ctx, session: null, unsubscribers: [], sessionStartedAt: 0, sessionNo: 0, pieceNo: 0, timeline: new VoicedTimeline(),
-      calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), holding: new Set(), replies: [], lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity,
+      calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), holding: new Set(), replies: [], lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity, heartbeatAt: -Infinity,
       delegationAt: -Infinity, answeredSinceDelegation: true, intentionalClose: false, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, sessionKind: 'scripted', chain: Promise.resolve(), finished: false,
     };
@@ -337,6 +341,7 @@ export class AssistantRuntime {
     });
     run.session = session;
     run.sessionStartedAt = this.now();
+    run.heartbeatAt = -Infinity; // the first tick writes one at once
     // The mixer's clock starts with the session's: its frames are the provider's audio timeline, and the timeline below is fed on it.
     this.deps.audio?.attach(run.ctx.callId, {
       append: (pcm) => { try { run.session?.appendAudio(pcm); } catch { /* the close handler reports it */ } },
@@ -362,7 +367,7 @@ export class AssistantRuntime {
   private foldUsage(run: CallRun): void {
     run.totals.seconds += run.usageSeconds; run.totals.input += run.tokens.input; run.totals.output += run.tokens.output; run.totals.cached += run.tokens.cached;
     run.usageSeconds = 0; run.tokens = { input: 0, output: 0, cached: 0 };
-    void this.store.patchSession(run.ctx.callId, { usageSeconds: run.totals.seconds, tokensIn: run.totals.input, tokensOut: run.totals.output, tokensCached: run.totals.cached }).catch(() => undefined);
+    void this.store.patchSession(run.ctx.callId, { sessionKind: run.sessionKind, usageSeconds: run.totals.seconds, tokensIn: run.totals.input, tokensOut: run.totals.output, tokensCached: run.totals.cached }).catch(() => undefined);
   }
 
   private wire(run: CallRun, session: LiveMeetingSession): void {
@@ -764,12 +769,32 @@ export class AssistantRuntime {
     for (const run of [...this.runs.values()]) {
       if (run.finished) continue;
       if (now - run.attendanceAt >= ATTENDANCE_EVERY_MS) { run.attendanceAt = now; await this.snapshotAttendance(run.ctx.callId); }
+      if (now - run.heartbeatAt >= HEARTBEAT_EVERY_MS) await this.heartbeat(run);
       await this.checkCeiling(run);
       if (run.finished) continue;
       const due = (await this.store.listTurns(run.ctx.callId, { statuses: ['pending', 'running'] })).filter((t) => t.expiresAt <= now);
       for (const t of due) await this.expireTurn(run, t);
     }
   }
+
+  /**
+   * Write "this process was alive now" on the call's record, with the usage so far (the open session's included), so a boot that finds
+   * the record still `listening` can close the listening period here and settle what was spent (audit M5). Best effort.
+   */
+  private async heartbeat(run: CallRun): Promise<void> {
+    run.heartbeatAt = this.now();
+    try {
+      await this.store.patchSession(run.ctx.callId, {
+        lastAliveAt: run.heartbeatAt, sessionKind: run.sessionKind,
+        usageSeconds: run.totals.seconds + run.usageSeconds, tokensIn: run.totals.input + run.tokens.input,
+        tokensOut: run.totals.output + run.tokens.output, tokensCached: run.totals.cached + run.tokens.cached,
+      });
+    } catch (e) { console.warn('[meeting-assistant] heartbeat failed', (e as Error).message); }
+  }
+
+  /** Shutdown: one last heartbeat for every live run, so the reconcile that follows closes each period at this moment. */
+  async heartbeatAll(): Promise<void> { for (const run of [...this.runs.values()]) if (!run.finished) await this.heartbeat(run); }
+  hasRuns(): boolean { return this.runs.size > 0; }
 
   /** Everyone who holds an ACTIVE seat right now was present while Nova was (audit M1); departed rows are never counted. */
   private async snapshotAttendance(callId: string): Promise<void> {
@@ -888,4 +913,6 @@ export function startTurnSweep(everyMs = 30_000, runtimeOf: () => AssistantRunti
   (timer as { unref?: () => void }).unref?.();
   return () => timers.clear(timer);
 }
+/** The process's runtime if one was ever made; never makes one (shutdown must not create what it is about to stop). */
+export function peekAssistantRuntime(): AssistantRuntime | null { return runtime; }
 export function setAssistantRuntime(next: AssistantRuntime | null): void { void runtime?.dispose(); runtime = next; }

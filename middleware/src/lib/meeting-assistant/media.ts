@@ -310,6 +310,23 @@ export class TapArmer {
     for (const id of state.tapIds) void this.client.delete(state.channelArn, id).catch(() => undefined);
   }
 
+  /**
+   * Delete every tap on `channelArn` that points at THIS server's sink (a tap an earlier process left behind posts to a token that no
+   * longer exists). True when the channel was listed and every such tap is gone; false (nothing thrown) when the media server could not be
+   * asked or a delete failed, so the caller retries on the next boot.
+   */
+  async deleteStale(channelArn: string): Promise<boolean> {
+    if (!this.cfg()) return false;
+    const taps = await this.client.list(channelArn).catch(() => null);
+    if (!taps) return false;
+    let ok = true;
+    for (const tap of taps) {
+      if (!this.isOurs(tap.url)) continue;
+      if ((await this.client.delete(channelArn, tap.tapId).catch(() => 'failed' as const)) !== 'removed') ok = false;
+    }
+    return ok;
+  }
+
   /** The mock world's token for the tap simulator (dev route only). Never available outside the mock world. */
   localToken(callId: string): string | null { return mockTranscriptEnabled() ? this.localTokens.get(callId) ?? null : null; }
   tapsOf(callId: string): string[] { return [...(this.calls.get(callId)?.tapIds ?? [])]; }

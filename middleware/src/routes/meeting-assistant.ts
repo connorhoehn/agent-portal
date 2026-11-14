@@ -42,7 +42,7 @@ import { assistantAudio } from '../lib/meeting-assistant/audio-select.js';
 import { preflightAudio, tapArmer, type Preflight } from '../lib/meeting-assistant/media.js';
 import { onCallEnded, trackMinutes } from '../lib/meeting-assistant/minutes-service.js';
 import { sessionAvailable } from '../lib/meeting-assistant/session-select.js';
-import { newAssistantSession, sessionOf as recordSession } from '../lib/meeting-assistant/types.js';
+import { newAssistantSession, sessionOf as recordSession, type AssistantSession } from '../lib/meeting-assistant/types.js';
 import { assistantLimits } from '../lib/meeting-assistant/limits.js';
 import { assistantSpend, listeningSecondsOf } from '../lib/meeting-assistant/spend.js';
 import { getProject } from '../providers/projects.js';
@@ -127,6 +127,8 @@ async function startSession(callId: string, record: AssistantRecord, session: Se
 /** Arm the media server's tap for a call that is listening now. A failure here never undoes the listening: the call chat says so when the tap cannot be made. */
 async function armAudio(callId: string, pre: Preflight | null): Promise<void> {
   if (!pre) return;
+  // The channel goes on the record first, so a later boot can delete a tap this process leaves behind (audit M5).
+  if (pre.channelArn) await assistantStore().patchSession(callId, { channelArn: pre.channelArn }).catch(() => null);
   try { await tapArmer().arm(callId, pre.channelArn); } catch (e) { console.warn('[meeting-assistant] arming the audio failed', (e as Error).message); }
 }
 
@@ -217,14 +219,37 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
     const pre = to === 'listening' && before?.state === 'paused' ? await preflightAudio(session, callId, before.lobby) : null;
     // Leaving: whoever holds a seat right now was there while Nova was (read before the record becomes `left`, which closes attendance).
     if (to === 'left') for (const u of await callChatRuntime().seatedUsers(callId).catch(() => [])) if (u.active) await store.attend(callId, u.userId);
+    // A resume after a settlement (the reconcile after a restart booked the spend and released the hold) starts a fresh period: a fresh
+    // hold first, so a refusal ends the resume here with the record still paused (audit M5).
+    let fresh: { holdId: string | null; patch: Partial<AssistantSession> } | null = null;
+    if (to === 'listening' && before?.state === 'paused' && recordSession(before).settled) {
+      const prior = recordSession(before); const limits = assistantLimits();
+      const part = Math.max(prior.extensions, prior.ledgerPart ?? 0) + 1;
+      const held = await assistantSpend().reserve({ callId, tenant: before.tenant, inviterId: before.invitedBy, initiativeId: before.initiativeId, seconds: limits.maxSeconds, part });
+      if (!held.ok) { if (held.refusal.headers) res.set(held.refusal.headers); res.status(held.refusal.status).json(held.refusal.body); return; }
+      fresh = { holdId: held.holdId, patch: {
+        settled: false, ledgerPart: part, extensions: part, holds: [], listeningSeconds: 0, listeningSince: null, ceilingSeconds: limits.maxSeconds, warned: false, limitNoticed: false,
+        replacements: 0, usageSeconds: 0, tokensIn: 0, tokensOut: 0, tokensCached: 0,
+      } };
+    }
+    const giveBackFresh = async () => { if (fresh) await assistantSpend().release(fresh.holdId ? [fresh.holdId] : []); };
     const done = await store.transition(callId, { from, to, by: session.sub, at: Date.now() });
+    if (!done) await giveBackFresh();
     if (done) {
       const runtime = assistantRuntime();
       if (to === 'paused') await runtime.pause(callId);
       if (to === 'listening') {
-        try { if (runtime.isRunning(callId)) await runtime.resume(callId); else await startSession(callId, done, session); } catch (e) {
-          // No session to listen with: back to paused, and say so.
+        try {
+          if (fresh) await store.patchSession(callId, fresh.patch);
+          // After a restart nothing in this process is hearing the call's captions: start the intake again (a no-op when it is running).
+          try { assistantIntake().start(callId); } catch (e) { if (e instanceof TranscriptSourceNotConfigured) throw new AppError(503, 'Live transcripts are not configured for this deployment'); throw e; }
+          if (runtime.isRunning(callId)) await runtime.resume(callId); else await startSession(callId, (await store.get(callId)) ?? done, session);
+        } catch (e) {
+          // No session to listen with: back to paused, and say so. A fresh hold is given back and the period stays settled.
+          await giveBackFresh();
+          if (fresh) await store.patchSession(callId, { settled: true }).catch(() => null);
           await store.transition(callId, { from: ['listening'], to: 'paused', by: session.sub, at: Date.now() });
+          if (e instanceof AppError) throw e;
           console.warn('[meeting-assistant] resume failed', (e as Error).message);
           throw new AppError(503, 'The live assistant could not start. Try again shortly.');
         }

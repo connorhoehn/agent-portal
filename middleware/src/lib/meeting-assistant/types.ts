@@ -91,6 +91,14 @@ export interface AssistantSession {
   settled: boolean;
   /** SHA-256 (base64url) of the live audio sink token while one is valid; null when dead. The plain token is never stored. */
   sinkTokenHash?: string | null;
+  /** The last moment this process was known to be alive while the call listened (the orchestrator's tick, at most every 30 s); the boot reconcile closes an open listening period here (audit M5). */
+  lastAliveAt?: number;
+  /** The media channel the call's tap was armed on, so a later boot can delete a tap that outlived the process. Empty once deleted. */
+  channelArn?: string;
+  /** Which ledger part the current settlement books under: 0 for the invite's own hold, then the part of the fresh hold a resume after a settlement reserved. */
+  ledgerPart?: number;
+  /** Which kind of session ran, persisted so a settlement after a restart prices the figures the way the live one would. */
+  sessionKind?: 'openai' | 'scripted';
   /** Media participant ids people bound to themselves (id -> user id). */
   participants?: Record<string, string>;
   /** Audio chunks dropped because their participant id is bound to nobody, or their person had not acknowledged, or arrived late. */

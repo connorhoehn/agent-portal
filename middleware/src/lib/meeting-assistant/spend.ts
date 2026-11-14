@@ -39,6 +39,8 @@ export interface SettleInput {
   sessionKind: 'openai' | 'scripted';
   /** What Nova was listening for, as the server counted it. */
   listeningSeconds: number;
+  /** The ledger part to book under (0, or the part of the fresh hold a resume after a settlement reserved). */
+  part?: number;
 }
 
 export interface AssistantSpend {
@@ -84,7 +86,7 @@ export const realSpend: AssistantSpend = {
     const reported = known && i.sessionKind === 'openai';
     const r = i.record;
     await recordSpend({
-      source: 'meeting_assistant', sourceId: sourceIdFor(r.callId), initiativeId: r.initiativeId, boxId: null, actorId: r.invitedBy,
+      source: 'meeting_assistant', sourceId: sourceIdFor(r.callId, i.part ?? 0), initiativeId: r.initiativeId, boxId: null, actorId: r.invitedBy,
       trigger: `meeting-assistant:${r.tenant}`, model: cfg.model, costUsd: voiceCostUsd(seconds, cfg.usdPerMinute),
       costBasis: reported ? 'reported' : 'estimated', provider: 'openai',
     });
@@ -92,7 +94,7 @@ export const realSpend: AssistantSpend = {
       const model = delegationModel();
       const costUsd = await delegationCostUsd(model, { inputTokens: i.tokens.input, outputTokens: i.tokens.output, cachedTokens: Math.min(i.tokens.cached, i.tokens.input), responses: 0 });
       await recordSpend({
-        source: 'meeting_assistant', sourceId: `${sourceIdFor(r.callId)}:tokens`, initiativeId: r.initiativeId, boxId: null, actorId: r.invitedBy,
+        source: 'meeting_assistant', sourceId: `${sourceIdFor(r.callId, i.part ?? 0)}:tokens`, initiativeId: r.initiativeId, boxId: null, actorId: r.invitedBy,
         trigger: 'meeting-assistant-delegation', model, costUsd, costBasis: costUsd == null ? 'unknown' : reported ? 'reported' : 'estimated', provider: 'openai',
         inputTokens: i.tokens.input, outputTokens: i.tokens.output, estimatedCostUsd: costUsd,
       });
@@ -123,7 +125,7 @@ export async function settleFinished(e: { callId: string; usageSeconds: number; 
   // Claim the settlement first so two stops cannot book twice; give it back if the ledger write fails.
   await store.patchSession(e.callId, { settled: true });
   try {
-    await assistantSpend().settle({ record, usageSeconds: e.usageSeconds, tokens: e.tokens, sessionKind: e.sessionKind, listeningSeconds: listeningSecondsOf(record, now) });
+    await assistantSpend().settle({ record, usageSeconds: e.usageSeconds, tokens: e.tokens, sessionKind: e.sessionKind, listeningSeconds: listeningSecondsOf(record, now), part: s.ledgerPart ?? 0 });
     await assistantSpend().release(s.holds);
   } catch (err) {
     await store.patchSession(e.callId, { settled: false });

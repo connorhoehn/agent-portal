@@ -54,6 +54,7 @@ import { meetingAssistantDevRouter } from './routes/meeting-assistant-dev.js';
 import { meetingAssistantSinkRouter } from './routes/meeting-assistant-sink.js';
 import { announceSinkSecret } from './lib/meeting-assistant/sink-secret.js';
 import { startMeetingAssistantSweeps } from './lib/meeting-assistant/sweeps.js';
+import { reconcileAfterRestart, settleAtShutdown } from './lib/meeting-assistant/reconcile.js';
 import { assertLiveFlagAllowed } from './lib/meeting-assistant/live-flag.js';
 import { meetingAssistantEnabled } from './lib/meeting-assistant/index.js';
 import { pipelinesRouter } from './routes/pipelines.js';
@@ -732,12 +733,15 @@ server.listen(config.port, bindHost, () => {
   const mockedDomains = Object.entries(config.mock).filter(([, v]) => v).map(([k]) => k);
   const mockSuffix = mockedDomains.length > 0 ? `mock=${mockedDomains.join(',')}` : 'mocks=off';
   console.log(`orgiq-middleware listening on ${bindHost}:${config.port} (${mockSuffix})`);
+  // Runs live in memory: a record a dead process left `listening` is settled and paused once, at start (audit M5).
+  void reconcileAfterRestart().catch((e: unknown) => console.warn('[meeting-assistant] reconcile at start failed', (e as Error).message));
 });
 let closing = false;
 const shutdown = async () => {
   if (closing) return; closing = true;
   const deadline = setTimeout(() => process.exit(1), 10000); deadline.unref();
   try {
+    await settleAtShutdown(); // live assistant runs are settled the way a restart would find them (bounded by the deadline above)
     await nodeLeases.release();
     await gatewayHandle?.dispose();
     await new Promise<void>(resolve => server.close(() => resolve()));
