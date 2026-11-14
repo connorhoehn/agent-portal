@@ -60,6 +60,8 @@ export interface AssistantStore {
   getAction(callId: string, actionId: string): Promise<AssistantAction | null>;
   /** Move an action; null when it is unknown or not in one of `change.from`. */
   decideAction(callId: string, actionId: string, change: ActionChange): Promise<AssistantAction | null>;
+  /** Turn Nova's voice on or off for the call; the record, or null when there is none. */
+  setVoice(callId: string, on: boolean): Promise<AssistantRecord | null>;
   /** Merge fields into the record's session bookkeeping; null when there is no record. */
   patchSession(callId: string, patch: Partial<AssistantSession>): Promise<AssistantRecord | null>;
   /** Add one to the refused-call counter; the new count, or 0 when there is no record. */
@@ -117,8 +119,9 @@ export class MemoryAssistantStore implements AssistantStore {
   async create(record: AssistantRecord) {
     const existing = this.records.get(record.callId);
     if (existing) return { record: copy(existing), created: false };
-    this.records.set(record.callId, copy(record));
-    return { record: copy(record), created: true };
+    const stored = copy(record); stored.voice = record.voice === true;
+    this.records.set(record.callId, stored);
+    return { record: copy(stored), created: true };
   }
 
   async transition(callId: string, change: StateChange) {
@@ -183,6 +186,13 @@ export class MemoryAssistantStore implements AssistantStore {
     a.status = change.to; a.decidedBy = change.by; a.decidedAt = change.at;
     if (change.resultText !== undefined) a.resultText = change.resultText;
     return copy(a);
+  }
+
+  async setVoice(callId: string, on: boolean) {
+    const r = this.records.get(callId);
+    if (!r) return null;
+    r.voice = on;
+    return copy(r);
   }
 
   async patchSession(callId: string, patch: Partial<AssistantSession>) {

@@ -86,6 +86,18 @@ describe('MemoryAssistantStore', () => {
   });
 });
 
+describe('the memory store voice switch', () => {
+  it('defaults to off, turns on and off, and is null for an unknown call', async () => {
+    const m = new MemoryAssistantStore();
+    expect(await m.setVoice('nope', true)).toBeNull();
+    const { record } = await m.create({ callId: 'c1', tenant: 'orgiq', lobby: 'l', initiativeId: null, state: 'listening', invitedBy: 'u', invitedAt: 1, pausedBy: null, leftAt: null, leftBy: null, acked: [], attendees: [], presentAtInvite: [], requests: 0, linesStored: 0, nextSeq: 1, pendingRequests: [] });
+    expect(record.voice).toBe(false);
+    expect((await m.setVoice('c1', true))!.voice).toBe(true);
+    expect((await m.get('c1'))!.voice).toBe(true);
+    expect((await m.setVoice('c1', false))!.voice).toBe(false);
+  });
+});
+
 describe('SqlAssistantStore statements', () => {
   const calls: { sql: string; params: { name?: string; value?: unknown }[] }[] = [];
   let rows: Record<string, unknown>[];
@@ -105,6 +117,15 @@ describe('SqlAssistantStore statements', () => {
     expect(out).toMatchObject({ seq: 4, userId: 'u-vera', at: Date.parse('2026-11-13T10:00:00Z') });
     // Every value goes through a named parameter, never into the text.
     expect(sql).not.toContain('hello');
+  });
+
+  it('setVoice is one parameterised update; a row reads voice back, and a row without the column reads as off', async () => {
+    rows = [{ call_id: 'call-1', tenant: 'orgiq', lobby: 'l', state: 'listening', invited_by: 'u', invited_at: '2026-11-13 10:00:00', voice: true }];
+    const out = await store().setVoice('call-1', true);
+    expect(norm(calls[0]!.sql)).toContain('UPDATE meeting_assistants SET voice = :on::boolean');
+    expect(calls[0]!.params.find((p) => p.name === 'on')).toMatchObject({ value: { stringValue: 'true' } });
+    expect(out!.voice).toBe(true);
+    expect(recordFromRow({ call_id: 'c', tenant: 't', lobby: 'l', state: 'listening', invited_by: 'u', invited_at: '2026-11-13 10:00:00' }).voice).toBe(false);
   });
 
   it('appendLine returns null when the guard stopped the insert', async () => {

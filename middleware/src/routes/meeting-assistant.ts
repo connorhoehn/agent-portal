@@ -5,6 +5,7 @@
 //   POST resume      a seat.
 //   POST dismiss     a seat. Final: the assistant leaves.
 //   POST ack         a seat. Acknowledges the transcription notice; until then your lines are not stored.
+//   POST voice       InviteMeetingAssistant + a seat. { on: boolean }: Nova speaks aloud in this call (off by default) or stops. One notice in the call chat.
 //   POST participant a seat. { participantId }: bind YOUR media participant id (the per-join id the media server minted for your seat)
 //                    to yourself, so audio the taps send under that id is yours. The id must be `<your user id>-<base36 stamp>`.
 //   POST actions/:actionId/decision  a seat, and ONLY the person the action was offered to. { decision: 'confirm' | 'decline' }.
@@ -109,6 +110,8 @@ async function view(record: AssistantRecord | null, callId: string, session: Ses
     listeningSeconds: Math.floor(listeningSecondsOf(record, assistantRuntime().deps.clock())),
     ceilingSeconds: recordSession(record, assistantLimits().maxSeconds).ceilingSeconds,
     pendingRequests: record.pendingRequests,
+    voice: record.voice === true,
+    ...assistantRuntime().voiceStats(callId),
   };
 }
 
@@ -293,6 +296,24 @@ meetingAssistantRouter.post('/ack', asyncHandler(async (req, res) => {
   const acked = await store.ack(callId, session.sub);
   await assistantAudio().refresh(callId); // this person's audio is admitted from now on, not at the next gate refresh
   res.json(await view(acked, callId, session));
+}));
+
+/** Nova speaking aloud is a per-call switch (decision 4), off until someone with the invite right turns it on; the call is told either way. */
+meetingAssistantRouter.post('/voice', requireAction('InviteMeetingAssistant'), asyncHandler(async (req, res) => {
+  const { session, callId } = await seatOf(req);
+  const on = (req.body as { on?: unknown } | undefined)?.on;
+  if (typeof on !== 'boolean') throw new ValidationError('on must be true or false');
+  const store = assistantStore();
+  const current = await store.get(callId);
+  if (!current) throw new NotFoundError('The assistant is not in this call');
+  if (current.state === 'left') throw new AppError(409, 'The assistant already left this call');
+  if (current.voice === true === on) { res.json(await view(current, callId, session)); return; }
+  const updated = await store.setVoice(callId, on);
+  if (!updated) throw new NotFoundError('The assistant is not in this call');
+  assistantRuntime().setVoice(callId, on);
+  const who = await nameOf(session.sub, session.name);
+  await postNoticeQuietly(callId, on ? noticeText.voiceOn(who) : noticeText.voiceOff(who));
+  res.json(await view(updated, callId, session));
 }));
 
 /**

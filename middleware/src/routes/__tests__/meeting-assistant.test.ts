@@ -99,7 +99,7 @@ describe('the flag and the gates', () => {
   it('every route is refused under a masquerade, reads included (B5)', async () => {
     await post('invite');
     await inject({ userId: 'alice', text: 'private words' });
-    for (const p of ['invite', 'pause', 'resume', 'dismiss', 'ack', 'extend', 'participant', 'actions/a-1/decision', 'turns/t-1/result']) {
+    for (const p of ['invite', 'pause', 'resume', 'dismiss', 'ack', 'extend', 'voice', 'participant', 'actions/a-1/decision', 'turns/t-1/result']) {
       const r = await post(p, 'masked');
       expect([r.status, r.body.code]).toEqual([403, 'MASQUERADING']);
     }
@@ -154,6 +154,31 @@ describe('invite, pause, resume, dismiss', () => {
     const res = await post('invite');
     expect(res.status).toBe(503);
     expect(await assistantStore().get(CALL)).toBeNull();
+  });
+});
+
+describe('Nova\'s voice switch (package 7a)', () => {
+  const notices = async () => (await runtime.messages.listMessages(`orgiq:huddle:${CALL}`, 50)).map((m) => String(m.message)).filter((t) => /voice/.test(t));
+  it('is off by default; an inviter turns it on and off, each with one notice in the call chat; a repeat is a quiet success', async () => {
+    await post('invite');
+    expect((await get('state')).body).toMatchObject({ voice: false, voiceFramesRelayed: 0, voiceFramesDropped: 0 });
+    expect((await post('voice', 'alice', { on: true })).body).toMatchObject({ voice: true });
+    expect((await post('voice', 'alice', { on: true })).status).toBe(200);
+    expect((await get('state', 'bob')).body).toMatchObject({ voice: true });
+    expect((await assistantStore().get(CALL))!.voice).toBe(true);
+    expect((await post('voice', 'bob', { on: false })).body).toMatchObject({ voice: false });
+    expect(await notices()).toEqual(["alice turned Nova's voice on. Each person can mute it for themselves.", "bob turned Nova's voice off."]);
+  });
+  it('needs the invite right and a seat, a boolean, and an assistant that has not left', async () => {
+    expect((await post('voice', 'alice', { on: true })).status).toBe(404); // no assistant yet
+    await post('invite');
+    expect((await post('voice', 'carol', { on: true })).status).toBe(403); // a seat, but not InviteMeetingAssistant
+    expect((await post('voice', 'dave', { on: true })).status).not.toBe(200); // no seat
+    expect((await post('voice', 'alice', { on: 'yes' })).status).toBe(400);
+    expect((await post('voice', 'alice', {})).status).toBe(400);
+    await post('dismiss');
+    expect((await post('voice', 'alice', { on: true })).status).toBe(409);
+    expect((await assistantStore().get(CALL))!.voice).toBe(false);
   });
 });
 

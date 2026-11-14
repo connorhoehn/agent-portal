@@ -77,6 +77,8 @@ export const noticeText = {
   paused: (name: string): string => `${name} paused ${NOVA_NAME}. Nothing is being heard or stored.`,
   resumed: (name: string): string => `${name} resumed ${NOVA_NAME}. ${NOVA_NAME} is listening again.`,
   dismissed: (name: string, recordedNothing = false): string => `${name} dismissed ${NOVA_NAME}.${recordedNothing ? ' Nothing was recorded, so there are no minutes.' : ''}`,
+  voiceOn: (name: string): string => `${name} turned ${NOVA_NAME}'s voice on. Each person can mute it for themselves.`,
+  voiceOff: (name: string): string => `${name} turned ${NOVA_NAME}'s voice off.`,
   nothingRecorded: `${NOVA_NAME} left. Nothing was recorded, so there are no minutes.`,
 };
 

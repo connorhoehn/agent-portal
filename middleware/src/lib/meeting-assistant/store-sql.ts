@@ -21,7 +21,7 @@ const TURN_COLUMNS = 'call_id, turn_id, asked_by, tool_name, tool_args, kind, st
 const iso = (ms: number): string => new Date(ms).toISOString();
 
 const COLUMNS = `call_id, tenant, lobby, initiative_id, state, invited_by, invited_at, paused_by, left_at, left_by,
-  acked, attendees, present_at_invite, requests, lines_stored, next_seq, pending_requests, session`;
+  acked, attendees, present_at_invite, requests, lines_stored, next_seq, pending_requests, voice, session`;
 
 const json = <T>(v: unknown, fallback: T): T => {
   if (Array.isArray(v)) return v as T;
@@ -41,7 +41,7 @@ export function recordFromRow(r: Record<string, unknown>): AssistantRecord {
     acked: json<string[]>(r['acked'], []), attendees: json<string[]>(r['attendees'], []),
     presentAtInvite: json<string[]>(r['present_at_invite'], []),
     requests: Number(r['requests'] ?? 0), linesStored: Number(r['lines_stored'] ?? 0), nextSeq: Number(r['next_seq'] ?? 1),
-    pendingRequests: json<PendingRequest[]>(r['pending_requests'], []),
+    pendingRequests: json<PendingRequest[]>(r['pending_requests'], []), voice: r['voice'] === true || r['voice'] === 't' || r['voice'] === 'true',
     ...(r['session'] != null ? { session: jsonObject<Partial<AssistantSession>>(r['session']) as AssistantSession } : {}),
   };
 }
@@ -224,6 +224,14 @@ export class SqlAssistantStore implements AssistantStore {
         sOrNull('result', change.resultText ?? null)],
     );
     return rows[0] ? actionFromRow(rows[0]) : null;
+  }
+
+  async setVoice(callId: string, on: boolean) {
+    const rows = await this.exec(
+      `UPDATE meeting_assistants SET voice = :on::boolean, updated_at = now() WHERE call_id = :call RETURNING ${COLUMNS}`,
+      [s('call', callId), s('on', on ? 'true' : 'false')],
+    );
+    return rows[0] ? recordFromRow(rows[0]) : null;
   }
 
   async patchSession(callId: string, patch: Partial<AssistantSession>) {

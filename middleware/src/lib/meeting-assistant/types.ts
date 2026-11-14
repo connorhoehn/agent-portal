@@ -58,6 +58,8 @@ export interface AssistantRecord {
   /** The next transcript line number. */
   nextSeq: number;
   pendingRequests: PendingRequest[];
+  /** Nova speaks aloud in this call (package 7a). Off by default; a record written before it reads as off. */
+  voice?: boolean;
   /** The live session's bookkeeping (package 4a); absent on a record written before it, read as the defaults. */
   session?: AssistantSession;
 }

@@ -127,3 +127,6 @@ CREATE TABLE IF NOT EXISTS meeting_minutes (
 );
 CREATE INDEX IF NOT EXISTS meeting_minutes_tenant_idx ON meeting_minutes (tenant, ended_at DESC) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS meeting_minutes_created_idx ON meeting_minutes (created_at);
+
+-- Package 7a: Nova speaking aloud is a per-call switch, off by default. Audio itself is never stored; this is only the flag.
+ALTER TABLE meeting_assistants ADD COLUMN IF NOT EXISTS voice BOOLEAN NOT NULL DEFAULT false;
