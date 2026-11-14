@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-14T01:57:57.648Z",
-  "serverHandlerSha": "c41de5d445507f0a925312275468e076314d1c698377168c6b42e01608c499e7",
+  "capturedAt": "2026-11-14T03:21:29.097Z",
+  "serverHandlerSha": "21f32cb298fe20a343cb0abe4de57e704d13ebadb1aeb2858648a238b6227925",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -2964,6 +2964,9 @@
           "awaiting_input"
         ]
       }
+    },
+    "GET /api/dev/calls/:callId/assistant-audio": {
+      "skipped": "no value found for :callId under /api/dev/calls (orgiq/admin); no value found for :callId under /api/dev/calls (assessment/admin); no value found for :callId under /api/dev/calls (anonymous)"
     },
     "GET /api/devbox/allowlist": {
       "persona": "orgiq/admin",
@@ -6064,7 +6067,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "null|number",
+        "points[].judgeP50": "number",
         "windowHours": "number"
       },
       "values": {}
