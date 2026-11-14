@@ -492,10 +492,15 @@ meetingAssistantRouter.get('/minutes', refuseMasqueradeRead, asyncHandler(async 
   });
 }));
 
-/** The inviter's delete: minutes and transcript go, a tombstone stays. A second delete is a 404, like everyone else's. */
+/**
+ * The inviter's delete: minutes and transcript go, a tombstone stays. The inviter may repeat it: every step is safe to run again, so a
+ * failed chat step is finished by the next attempt. Anyone else gets a 404 once the record is deleted.
+ */
 const deleteRecord = asyncHandler(async (req, res) => {
   const session = sessionOf(req); const callId = callIdOf(req);
-  const record = await liveRecordOf(session, callId);
+  const record = await attendeeOf(session, callId);
+  const deleted = !!(await assistantStore().getMinutes(callId))?.deleted;
+  if (deleted && record.invitedBy !== session.sub) throw new NotFoundError('Not found');
   if (record.invitedBy !== session.sub) throw new AppError(403, 'Only the person who invited the assistant can delete this record');
   if (record.state !== 'left') throw new AppError(409, 'Dismiss the assistant before deleting its record');
   const lines = await eraseCall(assistantStore(), callId, session.sub, Date.now());

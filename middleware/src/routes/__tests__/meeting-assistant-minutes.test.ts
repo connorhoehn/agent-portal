@@ -33,6 +33,7 @@ import { assistantStore, setAssistantStore, setAssistantIntake, LineIntake, Memo
 import { minutesIdle, setMinutesWriterFactory } from '../../lib/meeting-assistant/minutes-service.js';
 import { MinutesWriterError, ScriptedMinutesWriter } from '../../lib/meeting-assistant/minutes.js';
 import { setMinutesSpend } from '../../lib/meeting-assistant/spend.js';
+import { DELETED_RECORD_LINE } from '../../lib/meeting-assistant/chat-types.js';
 import { getUser } from '../../providers/identity.js';
 import { getProject } from '../../providers/projects.js';
 import type { Session } from '../../lib/session.js';
@@ -258,7 +259,21 @@ describe('deleting', () => {
     expect(tomb).toMatchObject({ deleted: { by: 'alice' }, summary: '', attendees: [], decisions: [] });
     await runtime.finish(CALL); await minutesIdle();
     expect((await assistantStore().getMinutes(CALL))!.deleted).toBeTruthy();
-    expect((await del('minutes', 'alice')).status).toBe(404);
+    for (const user of ['bob', 'carol', 'root']) expect((await del('minutes', user)).status).toBe(404);
+  });
+
+  it('a delete whose chat step failed can be repeated by the inviter, and blanks the messages the second time', async () => {
+    const novaText = async () => (await chatStore.listMessages(callChatChannel(CALL), 100)).filter((m) => m.userId === 'agent:nova').map((m) => m.message);
+    const before = await novaText();
+    expect(before.length).toBeGreaterThan(0);
+    const spy = jest.spyOn(chatStore, 'listMessages').mockRejectedValueOnce(new Error('chat unavailable'));
+    expect((await del('minutes', 'alice')).status).toBe(500);
+    spy.mockRestore();
+    expect(await novaText()).toEqual(before);
+    expect((await del('minutes', 'alice')).status).toBe(200);
+    for (const text of await novaText()) expect(text).toBe(DELETED_RECORD_LINE);
+    expect(await novaText()).not.toEqual(before);
+    expect((await del('minutes', 'carol')).status).toBe(404);
   });
 
   it('DELETE transcript is the same delete', async () => {
