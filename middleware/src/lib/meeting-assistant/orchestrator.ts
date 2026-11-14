@@ -834,7 +834,8 @@ export class AssistantRuntime {
     if (turn.kind === 'write') {
       const text = result.ok ? capText((result.output as { say?: unknown } | null)?.say ?? 'Done.', 300) : capText(result.error ?? 'It did not work.', 300);
       if (turn.actionId) await moveAction(callId, turn.actionId, { from: ['waiting', 'confirmed'], to: result.ok ? 'done' : 'failed', by: userId, resultText: text }).catch(() => null);
-      run?.session?.appendContext(`The action you offered ${result.ok ? 'was done' : 'did not work'}: ${text}`);
+      // The card keeps the asker's own sentence; the shared session only ever gets a fixed one (low finding: the browser's words are not model input).
+      run?.session?.appendContext(result.ok ? 'The action you offered was done.' : 'The action you offered did not work.');
       return { turn: moved };
     }
     const modelCallId = run?.turnCalls.get(turnId);
