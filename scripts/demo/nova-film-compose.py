@@ -29,16 +29,21 @@ INK = (241, 245, 249)
 MUTED = (148, 163, 184)
 ACCENT = (245, 158, 11)
 FONT = '/System/Library/Fonts/Helvetica.ttc'
-TITLE_SECS = 3.0
-OPEN_SECS = 4.0
+TITLE_SECS = 2.4
+OPEN_SECS = 3.6
 GUTTER = 14
 
 # Regions of a 1440x900 recording, by name (x, y, w, h). The recorder names them per view; tuned against its screenshots.
 CROPS = {
-    'chat': (960, 44, 480, 812),
-    'chat-tall': (960, 44, 480, 812),
-    'bottom': (0, 580, 1440, 320),
-    'bottom-right': (560, 44, 880, 856),
+    'chat-top': (960, 44, 480, 520),     # the call chat's first messages, with the toast corner above it
+    'chat-mid': (960, 150, 480, 560),    # the call chat while it still fits the pane
+    'chat-end': (960, 300, 480, 556),    # the newest messages of a full call chat
+    'chat-deck': (960, 190, 480, 490),   # the newest messages while a deck prompt shortens the pane
+    'deck': (0, 646, 1440, 254),         # the deck prompt above the footer row
+    'bottom': (0, 580, 1440, 320),       # the transcription notice and the footer row
+    'corner': (520, 400, 920, 500),      # Nova's mark, its menu, and the lower call chat
+    'lower': (0, 330, 1440, 570),        # the call card, the deck prompt and the footer
+    'meeting': (60, 60, 980, 515),       # the meeting page's content, above the call card
 }
 
 # Cells of the picture area per layout (x, y, w, h).
@@ -95,13 +100,13 @@ def caption_png(path, n, title, caption):
 
 
 def label_png(path, text):
-    f = font(24, True)
+    f = font(21, True)
     tmp = ImageDraw.Draw(Image.new('RGBA', (10, 10)))
     tw = int(tmp.textlength(text, font=f))
-    img = Image.new('RGBA', (tw + 32, 42), (0, 0, 0, 0))
+    img = Image.new('RGBA', (tw + 28, 36), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    d.rounded_rectangle([0, 0, tw + 31, 41], radius=10, fill=(15, 23, 42, 225), outline=ACCENT, width=2)
-    d.text((16, 8), text, font=f, fill=INK)
+    d.rounded_rectangle([0, 0, tw + 27, 35], radius=9, fill=(15, 23, 42, 230), outline=ACCENT, width=2)
+    d.text((14, 7), text, font=f, fill=INK)
     img.save(path)
 
 
@@ -191,7 +196,7 @@ def encode_shot(tl, out_dir, shot, scene, idx, tmp):
             who = tl['videos'][view['v']]['who']
             label_png(lbl, tl['cast'][who]['label'])
         inputs += ['-i', lbl]
-        filters.append(f'[{last}][{k}:v]overlay={px + 14}:{py + 14}[l{k}]')
+        filters.append(f'[{last}][{k}:v]overlay={px + 8}:{py + 8}[l{k}]')
         last = f'l{k}'
         k += 1
     # Rings: each click on a shown view, from its hover until just after the click, mapped through the crop and scale.

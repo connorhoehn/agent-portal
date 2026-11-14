@@ -14,8 +14,8 @@
 // <dir>/nova-in-the-meeting.mp4. Nothing is injected into the product pages: captions, labels and click rings exist
 // only in the edited video.
 //
-// Options: --record-only (no compose), --compose-only (reuse <dir>/timeline.json), --max-minutes <n> (Nova's ceiling, so
-// the "min left" mark shows near scene 11; default 21). Env: FILM_OUT may stand in for --out.
+// Options: --record-only (no compose), --compose-only (reuse <dir>/timeline.json), --check (one frame per scene in <dir>/check), --max-minutes <n> (Nova's ceiling, so
+// the "min left" mark shows from about scene 10; default 14.8). Env: FILM_OUT may stand in for --out.
 //
 // What the mock world cannot say for itself: the scripted stand-in for the live model answers only fixed phrases
 // (middleware/src/lib/meeting-assistant/scripted-session.ts). So the one spoken question with a free answer (scene 4)
@@ -39,7 +39,7 @@ fs.mkdirSync(OUT, { recursive: true });
 const COMPOSE = path.join(ROOT, 'scripts', 'demo', 'nova-film-compose.py');
 
 function compose() {
-  const r = spawn('python3', [COMPOSE, '--out', OUT], { stdio: 'inherit' });
+  const r = spawn('python3', [COMPOSE, '--out', OUT, ...(args.includes('--check') ? ['--check'] : [])], { stdio: 'inherit' });
   return new Promise((resolve) => r.on('exit', (c) => resolve(c ?? 1)));
 }
 if (args.includes('--compose-only')) process.exit(await compose());
@@ -48,7 +48,7 @@ const MW_PORT = 3945;
 const PORTAL_PORT = 5145;
 const PORTAL = `http://localhost:${PORTAL_PORT}`;
 const MIDDLEWARE = `http://127.0.0.1:${MW_PORT}`;
-const MAX_MINUTES = Number(flag('--max-minutes') ?? 21);
+const MAX_MINUTES = Number(flag('--max-minutes') ?? 14.8);
 const INITIATIVE = '/iq/projects/p-observability';
 const PRE_JOIN_KEY = 'orgiq.call-prejoin.v1';
 const STAND_IN_SFU = 'http://meeting-assistant.test';
@@ -236,7 +236,7 @@ async function devPost(route, body) {
 const inject = (userId, text) => devPost('transcript-lines', { userId, text });
 
 /** A person speaks: the speech starts now and lasts its clip; the line is "heard" (injected) when it ends. */
-async function speak(p, id, { heard = true, after = 900 } = {}) {
+async function speak(p, id, { heard = true, after = 700 } = {}) {
   const c = CLIPS[id];
   must(c && c.who === p.key, `line ${id} is not ${p.key}'s`);
   timeline.speech.push({ who: p.key, text: c.text, file: c.file, atMs: Date.now(), durMs: c.durMs, heard });
@@ -274,11 +274,26 @@ const proposalCard = (p, id) => p.page.locator(`[data-testid="assistant-proposal
 const cardState = (p, id, state) => waitFor(async () => (await proposalCard(p, id).getAttribute('data-state')) === state, 25000, `${p.key}: the proposal card reading ${state}`);
 const deckOf = (p) => p.page.getByTestId('nova-proposal-ask');
 const deckButton = (p, re) => deckOf(p).getByRole('button', { name: re });
+/** Scrolls the call chat to its newest message, as a person following the conversation would. */
 async function scrollChatToEnd(p) {
-  await p.page.getByTestId('huddle-thread').evaluate((el) => {
-    const scroller = [el, ...el.querySelectorAll('*')].find((n) => n.scrollHeight > n.clientHeight + 4 && /(auto|scroll)/.test(getComputedStyle(n).overflowY));
-    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+  await p.page.evaluate(() => {
+    const el = document.querySelector('[data-testid="huddle-thread"]');
+    if (!el) return;
+    const up = []; for (let n = el.parentElement, i = 0; n && i < 3; n = n.parentElement, i += 1) up.push(n);
+    for (const n of [el, ...el.querySelectorAll('*'), ...up]) {
+      if (n.scrollHeight > n.clientHeight + 4 && /(auto|scroll)/.test(getComputedStyle(n).overflowY)) n.scrollTop = n.scrollHeight;
+    }
   }).catch(() => undefined);
+}
+/** While the call runs, every seated person keeps their chat at the newest message (a deck prompt opening shrinks the pane). */
+const following = new Set();
+const follower = setInterval(() => { for (const p of following) void scrollChatToEnd(p); }, 700);
+/** Puts away a deck prompt the person does not answer now (its Hide control, else Esc inside it). */
+async function hidePrompt(p) {
+  const hide = p.page.getByRole('button', { name: /^Hide$/ }).first();
+  if (await hide.isVisible().catch(() => false)) { await hide.click().catch(() => undefined); await sleep(600); return; }
+  const deck = p.page.getByTestId('nova-proposal-ask');
+  if (await deck.isVisible().catch(() => false)) { await deck.getByRole('button').first().focus().catch(() => undefined); await p.page.keyboard.press('Escape'); await sleep(600); }
 }
 async function shotPng(p, name) { await p.page.screenshot({ path: path.join(OUT, 'shots', `${name}-${p.video}.png`) }).catch(() => undefined); }
 fs.mkdirSync(path.join(OUT, 'shots'), { recursive: true });
@@ -304,7 +319,7 @@ try {
   // ── 1. The call ──
   beginScene(1, 'The call', 'Vera, Nora and Eli meet in a call on the Observability Platform initiative. Vera invites Nova from the call bar.');
   cut('full', [V('vera')]);
-  await hold(3000);
+  await hold(2500);
   await press(vera, vera.page.getByTestId('initiative-start-call'));
   await nora.page.getByRole('button', { name: 'Accept', exact: true }).click({ timeout: 30000 });
   await vera.page.getByTestId('shell-call-dock').waitFor({ timeout: 30000 });
@@ -317,14 +332,16 @@ try {
   await eli.page.getByTestId('shell-footer-context').getByRole('button', { name: 'Huddle' }).click({ timeout: 30000 });
   await eli.page.getByTestId('shell-call-dock').waitFor({ timeout: 30000 });
   await openChat(nora); await openChat(eli);
-  await sleep(2500);
+  following.add(nora); following.add(eli);
+  await sleep(2000);
   cut('full', [V('vera')]);
   await openChat(vera);
-  await hold(2000);
-  await speak(vera, 'greet', { heard: false });
+  following.add(vera);
+  await hold(1500);
+  await speak(vera, 'greet', { heard: false, after: 500 });
   await press(vera, vera.page.getByTestId('nova-invite'));
   await waitMark(vera, /^Nova is listening/);
-  await hold(4000);
+  await hold(3500);
   await shotPng(vera, 's01');
   endScene();
 
@@ -333,138 +350,129 @@ try {
   await nora.page.getByTestId('nova-notice').waitFor({ timeout: 20000 });
   await eli.page.getByTestId('nova-notice').waitFor({ timeout: 20000 });
   cut('rows2', [V('nora', 'bottom'), V('eli', 'bottom')]);
-  await shotPng(nora, 's02'); await shotPng(eli, 's02');
-  await hold(5000);
+  await hold(4500);
   await press(nora, nora.page.getByTestId('nova-notice-acknowledge'));
   await waitMark(nora, /^Nova is listening/);
-  await hold(1500);
+  await hold(1200);
   await press(eli, eli.page.getByTestId('nova-notice-acknowledge'));
   await waitMark(eli, /^Nova is listening/);
-  await hold(3500);
+  await hold(3000);
   endScene();
 
   // ── 3. Nova listens ──
   beginScene(3, 'Nova listens', 'The team talks. Nova keeps a transcript with each speaker\'s name, and stays quiet because nobody has asked it anything.');
   cut('full', [V('eli')]);
-  await hold(1500);
+  await hold(1000);
   await speak(vera, 's3a');
   await speak(nora, 's3b');
   await speak(eli, 's3c');
   await speak(vera, 's3d', { after: 1500 });
-  await shotPng(eli, 's03');
   endScene();
 
   // ── 4. A question, answered in the call chat ──
   beginScene(4, 'Ask Nova', 'Vera asks Nova a question aloud. The answer appears in the call chat for everyone, labelled with who asked.');
-  cut('split', [V('vera', 'chat'), V('nora', 'chat')]);
-  await hold(1000);
+  cut('split', [V('vera', 'chat-top'), V('nora', 'chat-top')]);
+  await hold(800);
   await speak(vera, 's4q', { after: 0 });
-  const asked4 = Date.now();
   await sleep(1800);
   await devPost('assistant-messages', { kind: 'reply', text: ANSWER_4, askedBy: CAST.vera.userId, askedByName: CAST.vera.name });
   await waitFor(async () => /Asked by Vera/.test(await nora.page.getByTestId('huddle-thread').innerText()), 15000, 'the answer on Nora\'s screen');
-  await scrollChatToEnd(vera); await scrollChatToEnd(nora);
-  await hold(Math.max(0, 5000 - (Date.now() - asked4)));
-  await hold(3000);
-  await speak(nora, 's4r', { after: 2500 });
-  await shotPng(vera, 's04'); await shotPng(nora, 's04');
+  await hold(4500);
+  await speak(nora, 's4r', { after: 2000 });
+  await shotPng(nora, 's04');
   endScene();
 
   // ── 5. A private answer ──
   beginScene(5, 'Only for the asker', 'Nora asks about her own budget. Only Nora sees the answer; the others see that it was answered privately.');
-  cut('full', [V('nora')]);
-  await hold(800);
+  cut('full', [V('nora', 'chat-top')]);
+  await hold(600);
   await speak(nora, 's5q', { after: 0 });
-  const toast = nora.page.getByText(/only you can see this/i).first();
-  await toast.waitFor({ timeout: 30000 });
-  await hold(5000);
+  await nora.page.getByText(/only you can see this/i).first().waitFor({ timeout: 30000 });
+  await hold(800);
   await shotPng(nora, 's05');
+  await hold(3400);
   await waitFor(async () => /Answered privately for Nora/.test(await vera.page.getByTestId('huddle-thread').innerText()), 15000, 'the fixed line on Vera\'s screen');
-  await scrollChatToEnd(vera); await scrollChatToEnd(nora);
-  cut('split', [V('nora', 'chat'), V('vera', 'chat')]);
-  await hold(4500);
-  await speak(nora, 's5r', { after: 1500 });
-  await shotPng(vera, 's05');
+  cut('split', [V('nora', 'chat-top'), V('vera', 'chat-top')]);
+  await hold(3500);
+  await speak(nora, 's5r', { after: 1200 });
   endScene();
 
   // ── 6. An action only the asker confirms ──
   beginScene(6, 'An action card', 'Vera asks for a work item. Nova shows a card that only Vera can confirm; Nora sees it waiting, with no buttons.');
-  cut('split', [V('vera', 'chat'), V('nora', 'chat')]);
-  await hold(800);
+  cut('split', [V('vera', 'chat-mid'), V('nora', 'chat-mid')]);
+  await hold(600);
   await speak(vera, 's6q', { after: 0 });
   const card6 = await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => /deploy latency/.test(m.metadata.summary ?? '')), 25000, 'the action card');
   const veraCard6 = vera.page.getByTestId('assistant-action-card').filter({ hasText: /deploy latency/ }).last();
   const noraCard6 = nora.page.getByTestId('assistant-action-card').filter({ hasText: /deploy latency/ }).last();
   await veraCard6.waitFor({ timeout: 20000 }); await noraCard6.waitFor({ timeout: 20000 });
-  await scrollChatToEnd(vera); await scrollChatToEnd(nora);
-  await hold(5000);
-  await shotPng(vera, 's06a'); await shotPng(nora, 's06a');
+  await hold(4500);
+  await shotPng(vera, 's06a');
   await press(vera, veraCard6.getByTestId('assistant-action-confirm'));
   await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === card6.metadata.actionId && m.metadata.status === 'done'), 30000, 'the card going to done');
   await waitFor(async () => /Done/.test(await noraCard6.getByTestId('assistant-action-status').innerText()), 15000, 'Nora\'s card reading done');
-  await scrollChatToEnd(vera); await scrollChatToEnd(nora);
-  await hold(5000);
+  await hold(4000);
   await shotPng(vera, 's06b');
   endScene();
 
   // ── 7. A write that names someone else ──
   beginScene(7, 'A write that needs Nora', 'Vera asks for a work item assigned to Nora. It becomes a proposal that needs Nora\'s consent; once she gives it, Vera\'s browser runs it.');
-  cut('split', [V('vera', 'chat'), V('nora', 'chat')]);
-  await hold(800);
+  cut('split', [V('vera', 'chat-end'), V('nora', 'chat-end')]);
+  await hold(600);
   await speak(vera, 's7q', { after: 0 });
   const p7 = await waitFor(async () => (await proposalsOf(vera)).find((p) => p.source === 'asked' && /paging runbook/i.test(p.statement)), 25000, 'the asked proposal');
   await proposalCard(nora, p7.id).waitFor({ timeout: 20000 });
-  await scrollChatToEnd(vera); await scrollChatToEnd(nora);
-  await hold(4500);
-  await deckOf(nora).filter({ hasText: /paging runbook/i }).waitFor({ timeout: 20000 });
-  cut('full', [V('nora')]);
-  await hold(3500);
+  for (const p of [vera, nora]) await deckOf(p).filter({ hasText: /paging runbook/i }).waitFor({ timeout: 20000 });
+  cut('split', [V('vera', 'chat-deck'), V('nora', 'chat-deck')]);
+  await hold(4000);
+  cut('full', [V('nora', 'lower')]);
+  await hold(2500);
   await shotPng(nora, 's07a');
   await speak(nora, 's7r', { after: 300 });
   await press(nora, deckButton(nora, /^\s*1?\s*Consent\b/));
   await waitFor(async () => (await proposalsOf(nora)).find((p) => p.id === p7.id)?.responses?.length >= 1, 15000, 'Nora\'s consent');
-  await hold(1500);
-  cut('full', [V('vera')]);
+  await hold(1200);
+  cut('full', [V('vera', 'lower')]);
   await deckOf(vera).filter({ hasText: /paging runbook/i }).waitFor({ timeout: 20000 });
-  await hold(2500);
+  await hold(2200);
   await shotPng(vera, 's07b');
   await press(vera, deckButton(vera, /^\s*1?\s*Consent\b/));
   await cardState(vera, p7.id, 'done');
-  await scrollChatToEnd(vera); await scrollChatToEnd(nora);
-  cut('split', [V('vera', 'chat'), V('nora', 'chat')]);
-  await hold(5000);
+  await sleep(800);
+  cut('split', [V('vera', 'chat-end'), V('nora', 'chat-end')]);
+  await hold(4000);
   await shotPng(vera, 's07c');
   endScene();
 
   // ── 8. Nova notices a decision ──
   beginScene(8, 'A decision, noticed', 'Nobody asks Nova anything. When the team agrees, a silent proposal appears at the next pause, and each person is asked in their own prompt.');
-  cut('split', [V('vera', 'chat'), V('eli', 'chat')]);
-  await hold(800);
+  cut('split', [V('vera', 'chat-end'), V('eli', 'chat-end')]);
+  await hold(600);
   await speak(nora, 's8a');
   await speak(eli, 's8b', { after: 0 });
   const p8 = await waitFor(async () => (await proposalsOf(vera)).find((p) => p.source === 'watcher' && p.state === 'open'), 45000, 'the watcher\'s proposal');
   const p8At = Date.now();
   await proposalCard(vera, p8.id).waitFor({ timeout: 20000 });
-  await scrollChatToEnd(vera); await scrollChatToEnd(eli);
-  await hold(4000);
   for (const p of [vera, nora, eli]) await deckOf(p).filter({ hasText: p8.statement }).waitFor({ timeout: 20000 });
-  cut('rows3', [V('vera', 'bottom'), V('nora', 'bottom'), V('eli', 'bottom')]);
-  await hold(5000);
+  cut('split', [V('vera', 'chat-deck'), V('eli', 'chat-deck')]);
+  await hold(3500);
+  cut('rows3', [V('vera', 'deck'), V('nora', 'deck'), V('eli', 'deck')]);
+  await hold(4000);
   await shotPng(vera, 's08a'); await shotPng(nora, 's08a'); await shotPng(eli, 's08a');
   await press(vera, deckButton(vera, /^\s*1?\s*Consent\b/));
   await waitFor(async () => (await proposalsOf(vera)).find((p) => p.id === p8.id)?.responses?.length >= 1, 15000, 'Vera\'s consent');
-  await hold(2000);
+  await hold(1500);
   await press(nora, deckButton(nora, /Consent and record/));
   await cardState(nora, p8.id, 'done');
-  await scrollChatToEnd(vera); await scrollChatToEnd(nora);
-  cut('split', [V('vera', 'chat'), V('nora', 'chat')]);
   await waitFor(async () => (await proposalCard(nora, p8.id).getByTestId('assistant-proposal-result-link').count()) > 0, 15000, 'the link to the decision');
-  await hold(5000);
+  await sleep(800);
+  cut('split', [V('vera', 'chat-end'), V('nora', 'chat-end')]);
+  await hold(4000);
   cut('full', [V('nora')]);
   await press(nora, proposalCard(nora, p8.id).getByTestId('assistant-proposal-result-link'));
   await waitFor(async () => /Agreed in a call by/.test(await nora.page.locator('body').innerText()), 30000, 'the decision page saying "Agreed in a call by"');
   await nora.page.getByText(/Agreed in a call by/).first().scrollIntoViewIfNeeded().catch(() => undefined);
-  await hold(6000);
+  await hold(5000);
   await shotPng(nora, 's08b');
   endScene();
   await nora.page.goBack({ waitUntil: 'domcontentloaded' });
@@ -474,115 +482,129 @@ try {
   // ── 9. An objection (the watcher posts at most one proposal in two minutes: wait out of frame) ──
   while (Date.now() - p8At < 2 * 60_000 + 3000) await sleep(1000);
   beginScene(9, 'An objection', 'A second proposal. Eli objects with a reason everyone in the call can see, and the proposal stops.');
-  cut('split', [V('vera', 'chat'), V('eli', 'chat')]);
-  await hold(800);
+  cut('split', [V('vera', 'chat-end'), V('eli', 'chat-end')]);
+  await hold(600);
   await speak(vera, 's9a');
   await speak(nora, 's9b', { after: 0 });
   const p9 = await waitFor(async () => (await proposalsOf(vera)).find((p) => p.source === 'watcher' && p.state === 'open' && p.id !== p8.id), 45000, 'the second proposal');
   await proposalCard(eli, p9.id).waitFor({ timeout: 20000 });
-  await scrollChatToEnd(vera); await scrollChatToEnd(eli);
-  await hold(4000);
-  await deckOf(eli).filter({ hasText: p9.statement }).waitFor({ timeout: 20000 });
-  cut('full', [V('eli')]);
-  await hold(2500);
+  for (const p of [vera, eli]) await deckOf(p).filter({ hasText: p9.statement }).waitFor({ timeout: 20000 });
+  cut('split', [V('vera', 'chat-deck'), V('eli', 'chat-deck')]);
+  await hold(3500);
+  cut('full', [V('eli', 'lower')]);
+  await hold(1500);
   await speak(eli, 's9c', { after: 300 });
   await press(eli, deckButton(eli, /Object/));
   const input = deckOf(eli).getByRole('textbox');
   await input.waitFor({ timeout: 10000 });
+  await hold(1200);
+  await input.pressSequentially(OBJECTION_9, { delay: 40 });
   await hold(1500);
-  await input.pressSequentially(OBJECTION_9, { delay: 45 });
-  await hold(2000);
   await shotPng(eli, 's09a');
   await input.press('Enter');
   for (const p of [vera, nora, eli]) await cardState(p, p9.id, 'objected');
-  await scrollChatToEnd(vera); await scrollChatToEnd(nora);
-  cut('split', [V('vera', 'chat'), V('nora', 'chat')]);
-  await hold(6000);
+  await sleep(800);
+  cut('split', [V('vera', 'chat-deck'), V('nora', 'chat-deck')]);
+  await hold(5000);
   await shotPng(nora, 's09b');
   endScene();
   // Nobody else answers the objected proposal: its deck prompt is put away for everyone (Esc), so the footer is quiet again.
   for (const p of [vera, nora, eli]) {
     if (await deckOf(p).isVisible().catch(() => false)) { await deckOf(p).getByRole('button').first().focus().catch(() => undefined); await p.page.keyboard.press('Escape'); }
   }
+  await sleep(1000);
 
   // ── 10. Nova's voice ──
   beginScene(10, 'Nova\'s voice', 'Vera turns Nova\'s voice on for the call. Nora mutes it for herself; for everyone else, Nova now answers aloud.');
-  cut('split', [V('vera', 'bottom-right'), V('nora', 'bottom-right')]);
-  await hold(1500);
+  cut('full', [V('vera', 'corner')]);
+  await hold(1200);
   await menu(vera, "Turn Nova's voice on");
   await waitFor(async () => (await vera.page.getByTestId('nova-mark').first().getAttribute('data-voice')) === 'true', 15000, 'voice on');
-  await hold(3500);
+  await hold(3000);
+  await waitFor(async () => (await nora.page.getByTestId('nova-mark').first().getAttribute('data-voice')) === 'true', 15000, 'voice on for Nora');
+  cut('full', [V('nora', 'corner')]);
+  await hold(800);
   await menu(nora, 'Mute Nova for me');
   await waitFor(async () => (await nora.page.getByTestId('nova-mark').first().getAttribute('data-voice-muted')) === 'true', 8000, 'Nora\'s mute');
-  await hold(3000);
+  await hold(2500);
   await shotPng(nora, 's10a');
+  cut('split', [V('vera', 'corner'), V('nora', 'corner')]);
+  await hold(800);
   const repliesBefore = (await novaOf(vera, 'assistant-reply')).length;
   await speak(vera, 's10q', { after: 0 });
   const reply10 = await waitFor(async () => (await novaOf(vera, 'assistant-reply')).slice(repliesBefore).find((m) => /confirm/i.test(m.message)), 25000, 'Nova\'s spoken reply');
   const spoken = novaSpeaks(reply10.message, Date.now());
-  await shotPng(vera, 's10b'); await shotPng(nora, 's10b');
-  await scrollChatToEnd(vera); await scrollChatToEnd(nora);
-  await hold(Math.max(4000, spoken + 1500));
+  await shotPng(vera, 's10b');
+  await hold(Math.max(3500, spoken + 1200));
   const card10 = vera.page.getByTestId('assistant-action-card').filter({ hasText: /on-call rota/ }).last();
   await press(vera, card10.getByTestId('assistant-action-confirm'));
   await waitFor(async () => /Done/.test(await card10.getByTestId('assistant-action-status').innerText()), 30000, 'the rota card going to done');
-  await hold(4000);
+  await hold(3000);
   endScene();
 
   // ── 11. Pause, resume, time left ──
   beginScene(11, 'Pause and time left', 'Anyone can pause Nova; nothing is heard or kept while it is paused. Near its time limit the mark shows the time left, and Vera extends it.');
-  cut('split', [V('eli', 'bottom-right'), V('vera', 'bottom-right')]);
-  await hold(1500);
+  cut('full', [V('eli', 'corner')]);
+  await hold(1000);
   await menu(eli, 'Pause Nova');
   await waitMark(eli, /^Nova is paused/); await waitMark(vera, /^Nova is paused/);
-  await hold(2500);
-  await speak(eli, 's11a', { after: 1500 });
+  await hold(2000);
+  await speak(eli, 's11a', { after: 1200 });
   await shotPng(eli, 's11a');
   await menu(eli, 'Resume Nova');
   await waitMark(eli, /^Nova is listening/); await waitMark(vera, /^Nova is listening/);
-  await hold(1500);
-  await speak(eli, 's11b', { after: 1500 });
+  await hold(1000);
+  await speak(eli, 's11b', { after: 1200 });
   const state11 = await stateOf(vera);
-  console.log(`  scene 11 state: ${JSON.stringify(Object.fromEntries(Object.entries(state11).filter(([k]) => /second|minute|ceiling|left|max|listen/i.test(k))))}`);
-  const left = await waitFor(async () => /min left/.test(await markText(vera)), 15000, 'the time-left mark').catch(() => null);
+  console.log(`  scene 11 state: listening ${state11.listeningSeconds}s of ${state11.ceilingSeconds}s`);
+  cut('full', [V('vera', 'corner')]);
+  const left = await waitFor(async () => /min left/.test(await markText(vera)), 20000, 'the time-left mark').catch(() => null);
   if (!left) console.log('  WARN: the mark shows no time left; adjust --max-minutes');
-  await hold(3500);
+  await hold(3000);
   await shotPng(vera, 's11b');
   await menu(vera, 'Extend time');
   await waitFor(async () => !/min left/.test(await markText(vera)), 15000, 'the extension').catch(() => console.log('  WARN: the mark still shows time left after the extension'));
-  await hold(4000);
+  await hold(3500);
   endScene();
 
   // ── 12. The minutes ──
   beginScene(12, 'The minutes', 'Vera dismisses Nova. Nova leaves its minutes: a summary, the proposals, the action items, and the transcript by speaker.');
   cut('full', [V('vera')]);
-  await hold(1000);
-  await speak(vera, 's12a', { after: 500 });
+  await hold(800);
+  await speak(vera, 's12a', { after: 400 });
   await menu(vera, 'Dismiss Nova');
   await vera.page.getByTestId('nova-left').waitFor({ timeout: 20000 });
   const link = vera.page.getByTestId('assistant-notice-meeting-link').last();
   await link.waitFor({ state: 'visible', timeout: 30000 });
-  await scrollChatToEnd(vera);
-  await hold(5000);
+  await hold(4000);
   await shotPng(vera, 's12a');
   await press(vera, link);
   await vera.page.getByTestId('meeting-page').waitFor({ timeout: 30000 });
   await vera.page.getByTestId('meeting-summary').waitFor({ timeout: 30000 });
-  await hold(5000);
+  // The objected proposal still asks Vera on this page; she puts the prompt away before reading (out of frame).
+  skip();
+  following.delete(vera);
+  await sleep(1500);
+  await hidePrompt(vera);
+  cut('full', [V('vera', 'meeting')]);
+  await hold(4500);
   await shotPng(vera, 's12b');
-  // Read down the page slowly: proposals, action items, then the transcript with names.
   for (const id of ['meeting-proposals', 'meeting-action-items']) {
     const el = vera.page.getByTestId(id).first();
-    if (await el.count()) { await el.evaluate((n) => n.scrollIntoView({ behavior: 'smooth', block: 'center' })); await hold(4500); }
+    if (await el.count()) { await el.evaluate((n) => n.scrollIntoView({ behavior: 'smooth', block: 'start' })); await hold(4000); }
   }
   await vera.page.getByText('By speaker').first().evaluate((n) => n.scrollIntoView({ behavior: 'smooth', block: 'start' })).catch(() => undefined);
-  await hold(6000);
+  await hold(5000);
   await shotPng(vera, 's12c');
-  await vera.page.mouse.wheel(0, 500);
-  await hold(4500);
+  await vera.page.mouse.move(500, 300);
+  await vera.page.mouse.wheel(0, 300);
+  await hold(3500);
+  skip();
   await vera.page.goto(`${PORTAL}/iq/meetings`, { waitUntil: 'domcontentloaded', timeout: 40000 });
   await vera.page.getByTestId('iq-meetings-table').waitFor({ timeout: 30000 });
-  await hold(5000);
+  await sleep(1200);
+  cut('full', [V('vera')]);
+  await hold(4000);
   await shotPng(vera, 's12d');
   endScene();
 
@@ -592,25 +614,25 @@ try {
   cut('full', [V('layla')]);
   await layla.page.goto(`${PORTAL}/iq/meetings/${encodeURIComponent(callId)}`, { waitUntil: 'domcontentloaded', timeout: 40000 });
   await layla.page.getByTestId('meeting-not-found').waitFor({ timeout: 30000 });
-  await hold(5000);
+  await hold(4500);
   await shotPng(layla, 's13a');
   await vera.page.goto(`${PORTAL}/iq/meetings/${encodeURIComponent(callId)}`, { waitUntil: 'domcontentloaded', timeout: 40000 });
   await vera.page.getByTestId('meeting-delete').waitFor({ timeout: 30000 });
   await sleep(1500);
+  await hidePrompt(vera);
   cut('full', [V('vera')]);
-  await hold(1500);
+  await hold(1200);
   await press(vera, vera.page.getByTestId('meeting-delete'));
   const confirmDelete = vera.page.getByRole('button', { name: /Delete the record/ }).last();
   await confirmDelete.waitFor({ timeout: 15000 });
-  await hold(3500);
+  await hold(3000);
   await shotPng(vera, 's13b');
   await press(vera, confirmDelete);
   await vera.page.waitForURL(/\/iq\/meetings$/, { timeout: 20000 });
-  await hold(3500);
+  await hold(3000);
   await waitFor(async () => !/Answered privately|deploy latency/.test(await nora.page.getByTestId('huddle-thread').innerText()), 30000, 'Nova\'s words leaving Nora\'s chat');
-  await scrollChatToEnd(nora);
-  cut('full', [V('nora', 'chat-tall')]);
-  await hold(6500);
+  cut('full', [V('nora', 'chat-end')]);
+  await hold(6000);
   await shotPng(nora, 's13c');
   endScene();
 
@@ -622,6 +644,7 @@ try {
   console.error(`film: ${e instanceof FilmFailure ? e.message : e.stack}`);
   if (scene) { skip(); console.error(`  (in scene ${scene.n})`); }
 } finally {
+  clearInterval(follower);
   for (const p of [vera, nora, eli, layla].filter(Boolean)) {
     await p.context.close().catch(() => undefined);
     timeline.videos[p.video].file = p.videoPath ? path.relative(OUT, await p.videoPath) : null;
