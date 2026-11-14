@@ -49,10 +49,40 @@ describe('retention by the call age (memory store, injected clock)', () => {
     const s = new MemoryAssistantStore(); const erased: string[] = [];
     await fill(s, rec('live', 'listening', { invitedAt: NOW - 90 * DAY }));
     await fill(s, rec('held', 'paused', { invitedAt: NOW - 90 * DAY }));
+    for (const id of ['live', 'held']) await s.patchSession(id, { lastAliveAt: NOW - 60_000 }); // a heartbeat a minute ago: something serves them
     await sweepTranscripts(s, NOW, 30, { eraseChat: async (id) => { erased.push(id); } });
     expect(erased).toEqual([]);
     for (const id of ['live', 'held']) expect(await present(s, id)).toMatchObject({ record: true, lines: 1, turns: 1, action: true });
     expect(await s.purgeCall('live')).toBe(false);
+  });
+
+  it('ends a listening or paused record whose heartbeat is older than the hard maximum plus 30 minutes, then applies the ordinary rule', async () => {
+    const hardMs = 180 * 60_000; const margin = 30 * 60_000;
+    const s = new MemoryAssistantStore(); const erased: string[] = [];
+    await fill(s, rec('quiet', 'listening', { invitedAt: NOW - 90 * DAY }));                      // no heartbeat ever: judged by invitedAt
+    await fill(s, rec('quiet-paused', 'paused', { invitedAt: NOW - 90 * DAY }));
+    await fill(s, rec('just-inside', 'listening', { invitedAt: NOW - 90 * DAY }));
+    await fill(s, rec('just-outside', 'listening', { invitedAt: NOW - 90 * DAY }));
+    await s.patchSession('just-inside', { lastAliveAt: NOW - hardMs - margin + 1000 });
+    await s.patchSession('just-outside', { lastAliveAt: NOW - hardMs - margin - 1000 });
+    const ended: string[] = [];
+    const endAbandoned = async (id: string, at: number) => { ended.push(id); await s.patchSession(id, { settled: true }); await s.transition(id, { from: ['listening', 'paused'], to: 'left', by: 'system', at }); };
+    await sweepTranscripts(s, NOW, 30, { eraseChat: async (id) => { erased.push(id); }, endAbandoned });
+    expect(ended.sort()).toEqual(['just-outside', 'quiet', 'quiet-paused']);
+    // The two with no heartbeat ended 90 days ago, so the 30-day rule removes them in the same sweep; the others stay.
+    expect(erased.sort()).toEqual(['quiet', 'quiet-paused']);
+    expect(await s.get('just-outside')).toMatchObject({ state: 'left' });
+    expect(await s.get('quiet')).toBeNull();
+    expect(await present(s, 'just-inside')).toMatchObject({ record: true, lines: 1 });
+  });
+
+  it('a recently abandoned record is left (state left, settled) and kept until it is 30 days old', async () => {
+    const s = new MemoryAssistantStore();
+    const hb = NOW - 5 * 3600_000;
+    await fill(s, rec('gone', 'listening', { invitedAt: hb - 1000 })); await s.patchSession('gone', { lastAliveAt: hb });
+    await sweepTranscripts(s, NOW, 30, { eraseChat: async () => undefined, endAbandoned: async (id, at) => { await s.patchSession(id, { settled: true }); await s.transition(id, { from: ['listening'], to: 'left', by: 'system', at }); } });
+    expect(await s.get('gone')).toMatchObject({ state: 'left', leftBy: 'system', leftAt: hb });
+    expect(await present(s, 'gone')).toMatchObject({ record: true, lines: 1 });
   });
 
   it('keeps a call whose chat messages could not be replaced, so the next sweep tries again', async () => {

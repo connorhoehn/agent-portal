@@ -141,6 +141,19 @@ export async function settleFromRecord(callId: string, overrides: Partial<Pick<R
   } catch (e) { console.warn('[meeting-assistant] settling a call from its record failed', (e as Error).message); }
 }
 
+/**
+ * The retention sweep's end for a record nothing has served for longer than any call can last: settle it from the record, then move it to
+ * `left` as of its last heartbeat, so the ordinary retention rule counts from when it really stopped. A record that could not be settled
+ * stays as it is and the next sweep tries again. Returns whether the record now has `left`.
+ */
+export async function endAbandonedCall(callId: string, at: number, overrides: Partial<Pick<ReconcileDeps, 'store' | 'clock' | 'settle'>> = {}): Promise<boolean> {
+  const store = (overrides.store ?? assistantStore)();
+  await settleFromRecord(callId, overrides);
+  const record = await store.get(callId);
+  if (!record || !sessionOf(record).settled) return false;
+  return !!(await store.transition(callId, { from: ['invited', 'listening', 'paused'], to: 'left', by: 'system', at }));
+}
+
 /** How often a running server looks for records no process is serving. */
 export const RECONCILE_EVERY_MS = 120_000;
 

@@ -2,20 +2,29 @@
 // older than MEETING_TRANSCRIPT_RETENTION_DAYS (30 by default), counted from when it ended (`leftAt`, else `invitedAt`), loses its
 // lines, minutes (or tombstone), turns, actions and its assistant record, and Nova's own chat messages for it are replaced with the
 // fixed line (the call chat's own message store keeps its own age limit: the Dynamo adapter's 90-day TTL, none in memory; this sweep does not change it). A call that
-// is still `listening` or `paused` is never swept. No audio exists to delete.
+// is still `listening` or `paused` is not swept, unless nothing has served it for longer than the hard maximum plus a margin (it is then
+// ended first, as of its last heartbeat). No audio exists to delete.
 import { config } from '../../config.js';
 import type { AssistantStore } from './store.js';
+import { assistantLimits } from './limits.js';
+import { sessionOf } from './types.js';
 
 const DAY_MS = 86_400_000;
 /** How many expired calls one sweep removes; the next hourly sweep takes the rest. */
 export const SWEEP_CALLS_PER_RUN = 200;
+/** A listening or paused record this much past the hard maximum with no heartbeat is orphaned for good. */
+export const ABANDONED_MARGIN_MS = 30 * 60_000;
 
 export function retentionDays(): number { return config.meetingAssistant?.transcriptRetentionDays ?? 30; }
 
 export interface SweepOptions {
   /** Replace Nova's chat messages for a call; defaults to chat.ts (loaded on demand, so the store tests never pull the chat stack in). */
   eraseChat?: (callId: string) => Promise<unknown>;
+  /** End an abandoned listening or paused record as of `at`; defaults to the reconcile's (loaded on demand). */
+  endAbandoned?: (callId: string, at: number) => Promise<unknown>;
 }
+
+const defaultEndAbandoned = async (callId: string, at: number): Promise<unknown> => (await import('./reconcile.js')).endAbandonedCall(callId, at);
 
 const defaultEraseChat = async (callId: string): Promise<unknown> => (await import('./chat.js')).eraseAssistantMessages(callId);
 
@@ -26,6 +35,14 @@ const defaultEraseChat = async (callId: string): Promise<unknown> => (await impo
  */
 export async function sweepTranscripts(store: AssistantStore, nowMs: number = Date.now(), days: number = retentionDays(), opts: SweepOptions = {}): Promise<number> {
   const cutoff = nowMs - days * DAY_MS;
+  // First, end what nothing serves any more, so the age rules below can see it.
+  const abandonedBefore = nowMs - assistantLimits().hardMaxSeconds * 1000 - ABANDONED_MARGIN_MS;
+  const endAbandoned = opts.endAbandoned ?? defaultEndAbandoned;
+  for (const record of await store.listByState(['listening', 'paused'], SWEEP_CALLS_PER_RUN)) {
+    const heartbeat = sessionOf(record).lastAliveAt ?? record.invitedAt;
+    if (heartbeat >= abandonedBefore) continue;
+    try { await endAbandoned(record.callId, Math.max(heartbeat, record.invitedAt)); } catch (e) { console.warn('[meeting-assistant] retention could not end an abandoned call', (e as Error).message); }
+  }
   const lines = await store.sweepLines(cutoff);
   await store.sweepMinutes(cutoff);
   const eraseChat = opts.eraseChat ?? defaultEraseChat;

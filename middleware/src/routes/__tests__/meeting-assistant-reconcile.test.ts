@@ -329,3 +329,17 @@ describe('the periodic reconcile', () => {
     expect(await reconcileAfterRestart({ clock: () => clock, ...noTaps })).toMatchObject({ paused: 1, settled: 1 });
   });
 });
+
+describe('a call that ends while the feature is off', () => {
+  it('still ends the record and books its minutes, without writing minutes', async () => {
+    budget('alice');
+    await post('invite'); clock += 60_000; await runtime.tick();
+    freshRuntime(); clock += 3600_000;
+    mockConfig.meetingAssistant.enabled = false;
+    try { await rt.finish(CALL); await minutesIdle(); await flush(); } finally { mockConfig.meetingAssistant.enabled = true; }
+    expect(await assistantStore().get(CALL)).toMatchObject({ state: 'left', leftBy: 'system' });
+    expect((await assistantStore().get(CALL))!.session).toMatchObject({ settled: true, listeningSeconds: 60 });
+    expect(entries().map((e) => e.sourceId)).toEqual(['ma:call-1']);
+    expect(await assistantStore().getMinutes(CALL)).toBeNull();
+  });
+});

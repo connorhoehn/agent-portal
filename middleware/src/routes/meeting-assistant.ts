@@ -42,7 +42,7 @@ import { assistantRuntime, MAX_RESULT_BYTES, type StartContext } from '../lib/me
 import { assistantAudio } from '../lib/meeting-assistant/audio-select.js';
 import { preflightAudio, tapArmer, type Preflight } from '../lib/meeting-assistant/media.js';
 import { onCallEnded, trackMinutes } from '../lib/meeting-assistant/minutes-service.js';
-import { settleFromRecord } from '../lib/meeting-assistant/reconcile.js';
+import { endAbandonedCall, settleFromRecord } from '../lib/meeting-assistant/reconcile.js';
 import { sessionAvailable } from '../lib/meeting-assistant/session-select.js';
 import { newAssistantSession, sessionOf as recordSession, type AssistantSession } from '../lib/meeting-assistant/types.js';
 import { assistantLimits } from '../lib/meeting-assistant/limits.js';
@@ -517,9 +517,10 @@ function watchCallEnd(): void {
   if (watchingCallEnd) return;
   watchingCallEnd = true;
   onCallChatFinished((callId, seated) => trackMinutes((async () => {
-    if (!meetingAssistantEnabled()) return;
     const store = assistantStore();
     if (!(await store.get(callId))) return;
+    // With the feature off a call that ends still settles its spend and leaves; no run or minutes are started for it.
+    if (!meetingAssistantEnabled()) { await endAbandonedCall(callId, Date.now()); return; }
     for (const userId of seated) await store.attend(callId, userId);
     await onCallEnded(callId, { stop: (id) => assistantRuntime().stop(id), stopIntake: (id) => assistantIntake().stop(id) });
   })()));
