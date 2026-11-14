@@ -39,6 +39,7 @@ import type { LineIntake } from './intake.js';
 import { canSpeakOnRecord } from './intake.js';
 import { makeSession } from './session-select.js';
 import { onProposalConsented } from './proposals.js';
+import { hookProposalNotices } from './proposal-notify.js';
 import { checkBeforeClaim, expireProposalTurn, finishProposal, startProposal, type ProposalRunDeps } from './proposal-run.js';
 import { DecisionWatcher, defaultWatcherDeps } from './decision-watcher.js';
 import { MAX_PROVIDER_ERRORS, type LiveMeetingSession, type ProviderErrorInfo, type SessionEvents } from './session.js';
@@ -1242,6 +1243,7 @@ let proposalHook: (() => void) | null = null;
 /** Consented proposals run through the process's runtime, whichever it is now; subscribed once, when a runtime first exists. */
 function hookProposals(): void {
   proposalHook ??= onProposalConsented(async (p) => { await runtime?.startProposal(p.callId, p.id); });
+  hookProposalNotices();
 }
 export function assistantRuntime(): AssistantRuntime {
   hookProposals();

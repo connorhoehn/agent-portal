@@ -17,6 +17,8 @@
 //   POST turns/:turnId/result  a seat, and ONLY the person the turn was made for (404 for anyone else). { claimId, ok, output?, error? }:
 //                      the browser's result of running the tool as that person (400 without claimId, 409 when it is not the claim). The server
 //                      hands it to the live session as data, except a private read's `output.say`, which only the asker is shown.
+//   (The three turn routes also serve, without a seat, the executor of one of the call's proposals by the proposals' rule, and then
+//    only proposal turns: a consent given on the meeting page after the call runs in that browser.)
 //   GET  proposals   a seat, a recorded attendee, or a person a proposal names or makes its executor (who sees only those): the call's
 //                    proposals (docs/meeting-consent-design.md) with each person's answer and who is still needed. Anyone else 404.
 //   POST proposals/:id/response  the same people. { response: 'consent' | 'object' | 'withdraw' | 'not-a-decision', reason? }: the
@@ -54,6 +56,7 @@ import { sessionAvailable } from '../lib/meeting-assistant/session-select.js';
 import { newAssistantSession, sessionOf as recordSession, type AssistantSession } from '../lib/meeting-assistant/types.js';
 import { assistantLimits } from '../lib/meeting-assistant/limits.js';
 import { assistantSpend, listeningSecondsOf } from '../lib/meeting-assistant/spend.js';
+import { notifyOpenProposals } from '../lib/meeting-assistant/proposal-notify.js';
 import { cleanReason, closeProposals, listProposalsFor, ProposalInputError, respondToProposal, whatIsMissing, type ResponseKind } from '../lib/meeting-assistant/proposals.js';
 import type { Proposal } from '../lib/meeting-assistant/types.js';
 import { getProject } from '../providers/projects.js';
@@ -299,6 +302,7 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
       if (to === 'left') await postNoticeQuietly(callId, noticeText.dismissed(who, done.linesStored === 0), { leaving: true });
       if (to === 'left') {
         await closeProposals(store, callId, done.leftAt ?? Date.now()).catch(() => 0); // open proposals wait 72 hours on the meeting page
+        await notifyOpenProposals(store, callId); // the people they still need who are not in the call are told, without the statement
         assistantIntake().stop(callId);
         await assistantRuntime().stop(callId);
         await settleFromRecord(callId); // no run in this process (it died): the used minutes are booked from the record
@@ -410,10 +414,29 @@ meetingAssistantRouter.post('/actions/:actionId/decision', asyncHandler(async (r
   res.json({ actionId, status: moved.status, decidedBy: moved.decidedBy, decidedAt: moved.decidedAt });
 }));
 
+/**
+ * Who may use the turn routes: a seat in the call, or, without one, the executor of one of the call's proposals by the proposals'
+ * own rule (they may consent on the meeting page after the call, and their consent runs it in their browser there). Without a seat
+ * only proposal turns are served; anyone else gets the seat's own refusal.
+ */
+async function turnCallerOf(req: Request): Promise<{ session: Session; callId: string; proposalsOnly: boolean }> {
+  try { return { ...(await seatOf(req)), proposalsOnly: false }; } catch (e) {
+    if (!(e instanceof AppError)) throw e;
+    const v = await proposalViewer(req).catch(() => null);
+    if (!v || !(await assistantStore().listProposals(v.callId)).some((p) => p.executor === v.session.sub && visibleTo(v, p))) throw e;
+    return { session: v.session, callId: v.callId, proposalsOnly: true };
+  }
+}
+
+/** Without a seat, a turn that is not a proposal's is the same 404 as an unknown one. */
+async function assertTurnServed(callId: string, turnId: string, proposalsOnly: boolean): Promise<void> {
+  if (proposalsOnly && !(await assistantStore().getTurn(callId, turnId))?.proposalId) throw new NotFoundError('No such turn');
+}
+
 /** The turns waiting for MY browser. Never anyone else's: the list is filtered by the caller's own id. */
 meetingAssistantRouter.get('/turns', asyncHandler(async (req, res) => {
-  const { session, callId } = await seatOf(req);
-  const turns = await assistantRuntime().turnsFor(callId, session.sub);
+  const { session, callId, proposalsOnly } = await turnCallerOf(req);
+  const turns = (await assistantRuntime().turnsFor(callId, session.sub)).filter((t) => !proposalsOnly || !!t.proposalId);
   res.json({ callId, turns: turns.map((t) => ({ turnId: t.turnId, kind: t.kind, status: t.status, tool: t.tool, actionId: t.actionId ?? null, createdAt: t.createdAt, expiresAt: t.expiresAt })) });
 }));
 
@@ -428,8 +451,9 @@ const turnIdOf = (req: Request): string => {
  * Answers { turnId, claimId, tool: { name, args }, kind }; a second claim, an expired or not-yet-runnable turn answers 409.
  */
 meetingAssistantRouter.post('/turns/:turnId/claim', asyncHandler(async (req, res) => {
-  const { session, callId } = await seatOf(req);
+  const { session, callId, proposalsOnly } = await turnCallerOf(req);
   const turnId = turnIdOf(req);
+  await assertTurnServed(callId, turnId, proposalsOnly);
   const out = await assistantRuntime().claimTurn(callId, turnId, session.sub);
   if (!out) throw new NotFoundError('No such turn');
   if ('conflict' in out) throw new AppError(409, `This turn cannot be claimed: ${out.conflict}`);
@@ -439,8 +463,9 @@ meetingAssistantRouter.post('/turns/:turnId/claim', asyncHandler(async (req, res
 
 /** The browser's result of a turn, with the claim id its claim returned (400 without it, 409 when it is not the claim). A caller who is not the asker, or an unknown turn, gets the 404. */
 meetingAssistantRouter.post('/turns/:turnId/result', asyncHandler(async (req, res) => {
-  const { session, callId } = await seatOf(req);
+  const { session, callId, proposalsOnly } = await turnCallerOf(req);
   const turnId = turnIdOf(req);
+  await assertTurnServed(callId, turnId, proposalsOnly);
   const body = (req.body ?? {}) as { ok?: unknown; claimId?: unknown; output?: unknown; error?: unknown };
   if (typeof body.ok !== 'boolean') throw new ValidationError('ok must be true or false');
   if (typeof body.claimId !== 'string' || !/^[0-9a-f]{8,64}$/.test(body.claimId)) throw new ValidationError('claimId is required: claim the turn first');
@@ -587,12 +612,26 @@ async function namesOf(ids: readonly string[]): Promise<Array<{ userId: string; 
   return Promise.all(ids.map(async (userId) => ({ userId, name: await nameOf(userId) })));
 }
 
+/**
+ * The call's proposals as the minutes list them, read live (a consent on the meeting page after the call shows): the statement, its
+ * state, and who consented or objected by NAME only. Reasons stay on the proposal itself, where the people it concerns read them.
+ */
+async function minutesProposals(callId: string, ended: number | null) {
+  const all = await listProposalsFor(assistantStore(), callId, Date.now(), ended);
+  return Promise.all(all.map(async (p) => ({
+    id: p.id, statement: p.statement, state: p.state, outcome: p.outcome.kind,
+    consentedBy: (await namesOf(p.responses.filter((r) => r.response === 'consent').map((r) => r.userId))).map((x) => x.name),
+    objectedBy: (await namesOf(p.responses.filter((r) => r.response === 'object').map((r) => r.userId))).map((x) => x.name),
+  })));
+}
+
 meetingAssistantRouter.get('/minutes', refuseMasqueradeRead, asyncHandler(async (req, res) => {
   const session = sessionOf(req); const callId = callIdOf(req);
-  await liveRecordOf(session, callId);
+  const record = await liveRecordOf(session, callId);
   const m = await assistantStore().getMinutes(callId);
   if (!m || m.deleted) throw new NotFoundError('No minutes');
   res.json({
+    proposals: await minutesProposals(callId, endedAt(record)),
     callId, callName: m.callName, lobby: m.lobby, initiativeId: m.initiativeId, startedAt: m.startedAt, endedAt: m.endedAt,
     invitedBy: m.invitedBy, invitedByName: await nameOf(m.invitedBy), attendees: await namesOf(m.attendees), summary: m.summary, decisions: m.decisions,
     actionItems: m.actionItems, topics: m.topics, lineCount: m.lineCount, truncated: m.truncated, writer: m.writer, createdAt: m.createdAt,
@@ -630,7 +669,10 @@ function watchCallEnd(): void {
     for (const userId of seated) await attendOnce(callId, userId);
     await onCallEnded(callId, { stop: (id) => assistantRuntime().stop(id), stopIntake: (id) => assistantIntake().stop(id) });
     const ended = await store.get(callId);
-    if (ended?.state === 'left') await closeProposals(store, callId, ended.leftAt ?? Date.now()).catch(() => 0);
+    if (ended?.state === 'left') {
+      await closeProposals(store, callId, ended.leftAt ?? Date.now()).catch(() => 0);
+      await notifyOpenProposals(store, callId);
+    }
   })()));
 }
 watchCallEnd();

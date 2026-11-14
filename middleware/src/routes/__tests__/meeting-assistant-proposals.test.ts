@@ -33,6 +33,9 @@ import { ScriptedSession } from '../../lib/meeting-assistant/scripted-session.js
 import { setSessionFactory } from '../../lib/meeting-assistant/session-select.js';
 import { onProposalConsented, PROPOSAL_AFTER_CALL_MS } from '../../lib/meeting-assistant/proposals.js';
 import { getUser } from '../../providers/identity.js';
+import { callChatChannel } from '../../lib/call-chat.js';
+import { DELETED_RECORD_LINE } from '../../lib/meeting-assistant/chat-types.js';
+import { forgetProposalNotices } from '../../lib/meeting-assistant/proposal-notify.js';
 import type { Session } from '../../lib/session.js';
 
 const CALL = 'call-1'; const LOBBY = 'orgiq:dm:lee:priya:sam';
@@ -58,7 +61,7 @@ beforeEach(async () => {
   contexts = new Map([['a', ctx(mk('priya'))], ['b', ctx(mk('sam'))], ['c', ctx(mk('lee'))]]);
   jest.mocked(getUser).mockImplementation(async (id: string) => ({ id, displayName: NAMES[id] ?? id, email: null, personId: null, epoch: 0, grants: mk(id).grants }) as never);
   const calls = new InMemoryCallStateStore();
-  setNotificationSink({ notifyUser: async () => undefined });
+  setNotificationSink({ notifyUser: async () => undefined }); forgetProposalNotices();
   const router = { sendToClient: jest.fn(), sendToChannel: jest.fn(), isClientLive: (id: string) => contexts.has(id), getClientData: (id: string) => ({ userContext: contexts.get(id) }), unsubscribeFromChannel: jest.fn() } as unknown as RealtimeRouter;
   rt = new CallChatRuntime({ calls, state: new MemoryCallChatStateStore(), messages: new InMemoryChatStore(), router, maintenanceIntervalMs: 0, now: () => clock, lobbyAllowed: (_a, lobby) => lobby.startsWith('orgiq:') });
   setCallChatRuntime(rt);
@@ -212,5 +215,65 @@ describe('after the call', () => {
     expect((await request(app).delete(url('minutes')).set('x-user', 'priya')).status).toBe(200);
     expect(await assistantStore().listProposals(CALL)).toEqual([]);
     expect((await get('proposals', 'sam')).status).toBe(404);
+  });
+
+  it('the inviter\'s delete also blanks the proposal card in the call chat', async () => {
+    await post('dismiss', 'priya');
+    expect((await request(app).delete(url('minutes')).set('x-user', 'priya')).status).toBe(200);
+    const cards = (await rt.messages.listMessages(callChatChannel(CALL), 100)).filter((m) => m.metadata?.['kind'] === 'assistant-proposal');
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.message).toBe(DELETED_RECORD_LINE);
+    expect(JSON.stringify(cards[0])).not.toContain('smallest tenants');
+  });
+});
+
+describe('a late consent on the meeting page', () => {
+  const TOOL = { kind: 'tool', name: 'create', args: { kind: 'work-item', fields: { title: 'Cutover runbook' } } };
+
+  it('by a named person who was never in the call runs it in the executor\'s browser, without a seat, and only proposal turns are served', async () => {
+    const sent: Array<{ userId: string; title: string; body?: string; href?: string; payload?: unknown }> = [];
+    setNotificationSink({ notifyUser: async (userId, n) => { sent.push({ userId, title: n.title, ...(n.body ? { body: n.body } : {}), ...(n.action?.href ? { href: n.action.href } : {}), payload: n.payload }); } });
+    expect((await propose({ id: 'p-late', outcome: TOOL, executor: 'dave', named: ['dave'] })).status).toBe(201);
+    // Dave is not in the call: told at once, with no words of the proposal.
+    await new Promise<void>((r) => setImmediate(r));
+    expect(sent.filter((n) => n.userId === 'dave')).toEqual([{ userId: 'dave', title: 'A proposal from this meeting needs you', href: `/iq/meetings/${CALL}`, payload: expect.objectContaining({ callId: CALL }) }]);
+    expect(JSON.stringify(sent)).not.toMatch(/smallest|Cutover/);
+    expect((await respond('sam', 'consent', undefined, 'p-late')).body.state).toBe('open');
+    expect((await post('dismiss', 'priya')).status).toBe(200);
+    // The call has ended for the assistant: nobody is told twice.
+    expect(sent.filter((n) => n.userId === 'dave')).toHaveLength(1);
+    // Without a seat Dave has no turns route until a proposal makes him the executor of a running one; erin, uninvolved, never.
+    expect((await get('turns?mine=1', 'erin')).status).not.toBe(200);
+    const late = await respond('dave', 'consent', undefined, 'p-late');
+    expect(late.status).toBe(200);
+    for (let i = 0; i < 8; i += 1) await new Promise<void>((r) => setImmediate(r));
+    const mine = await get('turns?mine=1', 'dave');
+    expect(mine.status).toBe(200);
+    expect(mine.body.turns).toHaveLength(1);
+    const turnId = mine.body.turns[0].turnId as string;
+    expect((await get('turns?mine=1', 'sam')).body.turns).toEqual([]);
+    const claim = await post(`turns/${turnId}/claim`, 'dave');
+    expect(claim.status).toBe(200);
+    expect(claim.body.tool).toEqual({ name: 'create', args: TOOL.args });
+    const done = await post(`turns/${turnId}/result`, 'dave', { claimId: claim.body.claimId, ok: true, output: { say: 'Created the work item Cutover runbook.' } });
+    expect(done.status).toBe(200);
+    const [p] = (await get('proposals', 'dave')).body.proposals;
+    expect(p).toMatchObject({ state: 'done', run: { by: { userId: 'dave' }, title: 'Created the work item Cutover runbook.' } });
+  });
+
+  it('the minutes list each proposal with its state and the names of who consented or objected, and no reasons', async () => {
+    expect((await propose()).status).toBe(201);
+    expect((await propose({ id: 'p-2', statement: 'Lee owns the runbook', named: ['lee'] })).status).toBe(201);
+    await respond('sam', 'consent');
+    await respond('lee', 'object', "I'm out next week", 'p-2');
+    await assistantStore().putMinutes({ callId: CALL, tenant: 'orgiq', lobby: LOBBY, initiativeId: null, callName: 'Call', startedAt: clock, endedAt: clock + 1, invitedBy: 'priya',
+      attendees: ['priya', 'sam', 'lee'], summary: 's', decisions: [], actionItems: [], topics: [], lineCount: 1, truncated: false, writer: 'scripted', createdAt: clock });
+    const m = await get('minutes', 'sam');
+    expect(m.status).toBe(200);
+    expect(m.body.proposals).toEqual([
+      { id: 'p-1', statement: 'Cut over the smallest tenants first', state: 'open', outcome: 'decision', consentedBy: ['Sam Song'], objectedBy: [] },
+      { id: 'p-2', statement: 'Lee owns the runbook', state: 'objected', outcome: 'decision', consentedBy: [], objectedBy: ['Lee Lin'] },
+    ]);
+    expect(JSON.stringify(m.body.proposals)).not.toContain('out next week');
   });
 });
