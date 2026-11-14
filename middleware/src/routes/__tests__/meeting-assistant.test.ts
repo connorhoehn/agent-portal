@@ -144,6 +144,17 @@ describe('invite, pause, resume, dismiss', () => {
     expect(await joined()).toBe(1);
   });
 
+  it('a poll from someone already on the record writes no attendance', async () => {
+    await post('invite');
+    const attend = jest.spyOn(assistantStore(), 'attend');
+    try {
+      for (let i = 0; i < 3; i += 1) expect((await get('state', 'alice')).status).toBe(200);
+      expect(attend).not.toHaveBeenCalled();
+      expect((await get('state', 'bob')).status).toBe(200);          // bob was in the call at the invite, so he is on the record already
+      expect(attend).not.toHaveBeenCalled();
+    } finally { attend.mockRestore(); }
+  });
+
   it('anyone with a seat can pause, resume and dismiss; repeats succeed; a dismissed assistant stays gone', async () => {
     await post('invite');
     expect((await post('pause', 'bob')).body).toMatchObject({ state: 'paused', pausedBy: 'bob' });

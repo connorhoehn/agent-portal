@@ -84,11 +84,19 @@ function refuseMasquerade(req: Request, res: Response, next: NextFunction): void
 
 meetingAssistantRouter.use(flagGate, requireTenant('orgiq'), refuseMasquerade);
 
+/** Attendance is written only for someone not yet on the record, so a poll from a known attendee reads and writes nothing more. */
+async function attendOnce(callId: string, userId: string): Promise<void> {
+  const store = assistantStore();
+  const record = await store.get(callId);
+  if (!record || record.state === 'left' || record.attendees.includes(userId)) return;
+  await store.attend(callId, userId);
+}
+
 const seatOf = async (req: Request): Promise<{ session: Session; callId: string }> => {
   const session = sessionOf(req); const callId = callIdOf(req);
   await callChatRuntime().assertMember(callId, session, false);
   // A connected seat while the assistant is in the call is attendance (the store ignores it once the assistant has left, audit M1).
-  await assistantStore().attend(callId, session.sub).catch(() => undefined);
+  await attendOnce(callId, session.sub).catch(() => undefined);
   return { session, callId };
 };
 
@@ -137,7 +145,7 @@ async function armAudio(callId: string, pre: Preflight | null): Promise<void> {
   try { await tapArmer().arm(callId, pre.channelArn); } catch (e) { console.warn('[meeting-assistant] arming the audio failed', (e as Error).message); }
 }
 
-const noteSeat = async (callId: string, session: Session) => { await assistantStore().attend(callId, session.sub); };
+const noteSeat = async (callId: string, session: Session) => { await attendOnce(callId, session.sub); };
 
 meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), asyncHandler(async (req, res) => {
   const { session, callId } = await seatOf(req);
@@ -237,7 +245,7 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
     // Resuming listens again: a new token and a new tap, so the channel is looked up again first (503, still paused, when it cannot be).
     const pre = to === 'listening' && before?.state === 'paused' ? await preflightAudio(session, callId, before.lobby) : null;
     // Leaving: whoever holds a seat right now was there while Nova was (read before the record becomes `left`, which closes attendance).
-    if (to === 'left') for (const u of await callChatRuntime().seatedUsers(callId).catch(() => [])) if (u.active) await store.attend(callId, u.userId);
+    if (to === 'left') for (const u of await callChatRuntime().seatedUsers(callId).catch(() => [])) if (u.active) await attendOnce(callId, u.userId);
     // A resume after a settlement (the reconcile after a restart booked the spend and released the hold) starts a fresh period: a fresh
     // hold first, so a refusal ends the resume here with the record still paused (audit M5).
     let fresh: { holdId: string | null; patch: Partial<AssistantSession> } | null = null;
@@ -528,7 +536,7 @@ function watchCallEnd(): void {
     if (!(await store.get(callId))) return;
     // With the feature off a call that ends still settles its spend and leaves; no run or minutes are started for it.
     if (!meetingAssistantEnabled()) { await endAbandonedCall(callId, Date.now()); return; }
-    for (const userId of seated) await store.attend(callId, userId);
+    for (const userId of seated) await attendOnce(callId, userId);
     await onCallEnded(callId, { stop: (id) => assistantRuntime().stop(id), stopIntake: (id) => assistantIntake().stop(id) });
   })()));
 }
