@@ -184,6 +184,18 @@ describe('the model writer against a local fake server', () => {
     expect(seen).toHaveLength(1);
   });
 
+  it('says whether the request went out: a timeout and an answer that is not JSON did, a missing key did not; usage rides along when the body had it', async () => {
+    behaviour = () => { /* never answers */ };
+    const timedOut = await new OpenAiMinutesWriter({ model: 'm', timeoutMs: 150 }).write({ lines: [line('u-vera', 'x')], roster: ROSTER, callName: 'c' }).catch((e: unknown) => e);
+    expect((timedOut as MinutesWriterError).requestSent).toBe(true);
+    let bad: unknown;
+    try { parseMinutesResponse(JSON.stringify({ output: [{ type: 'message', content: [{ type: 'output_text', text: 'not json' }] }], usage: { input_tokens: 90, output_tokens: 7 } }), ROSTER); } catch (e) { bad = e; }
+    expect(bad).toMatchObject({ requestSent: true, usage: { inputTokens: 90, outputTokens: 7, cachedTokens: 0 } });
+    delete process.env['OPENAI_API_KEY'];
+    const noKey = await new OpenAiMinutesWriter({ model: 'm' }).write({ lines: [line('u-vera', 'x')], roster: ROSTER, callName: 'c' }).catch((e: unknown) => e);
+    expect((noKey as MinutesWriterError).requestSent).toBe(false);
+  });
+
   it('never puts the key in an error, and refuses without one', async () => {
     delete process.env['OPENAI_API_KEY'];
     const err = await new OpenAiMinutesWriter({ model: 'm' }).write({ lines: [line('u-vera', 'x')], roster: ROSTER, callName: 'c' }).catch((e: Error) => e);

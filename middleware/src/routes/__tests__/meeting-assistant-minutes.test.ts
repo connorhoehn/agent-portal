@@ -156,6 +156,36 @@ describe('writing the minutes', () => {
     expect((await get('transcript')).body.lines).toHaveLength(3);
   });
 
+  const failAfterSend = async (usage?: { inputTokens: number; outputTokens: number; cachedTokens: number }) => {
+    setMinutesWriterFactory(() => ({ kind: 'openai', write: async () => { throw new MinutesWriterError('the minutes were not valid JSON', { requestSent: true, ...(usage ? { usage } : {}) }); } }));
+    const released: string[][] = []; const booked: Array<Record<string, unknown>> = [];
+    setMinutesSpend({ reserve: async () => ({ ok: true, holdId: 'h1' }), release: async (ids) => { released.push([...ids]); }, record: async (i) => { booked.push(i as unknown as Record<string, unknown>); } });
+    await talk(); await finish();
+    return { released, booked };
+  };
+  it('a failure after the request went out books the usage the provider reported, and releases the hold', async () => {
+    const { released, booked } = await failAfterSend({ inputTokens: 1200, outputTokens: 300, cachedTokens: 0 });
+    expect(booked).toHaveLength(1);
+    expect(booked[0]).toMatchObject({ basis: 'reported', tokensIn: 1200, tokensOut: 300 });
+    expect(released).toEqual([['h1']]);
+  });
+
+  it('a failure after the request went out with no usage reported books an estimate', async () => {
+    const { released, booked } = await failAfterSend();
+    expect(booked).toHaveLength(1);
+    expect(booked[0]).toMatchObject({ basis: 'estimated' });
+    expect(released).toEqual([['h1']]);
+  });
+
+  it('a failure before any request was sent releases the hold and books nothing', async () => {
+    setMinutesWriterFactory(() => ({ kind: 'openai', write: async () => { throw new MinutesWriterError('no delegation model is configured'); } }));
+    const released: string[][] = []; const booked: unknown[] = [];
+    setMinutesSpend({ reserve: async () => ({ ok: true, holdId: 'h1' }), release: async (ids) => { released.push([...ids]); }, record: async (i) => { booked.push(i); } });
+    await talk(); await finish();
+    expect(booked).toEqual([]);
+    expect(released).toEqual([['h1']]);
+  });
+
   it('a refused spend hold means no model minutes, a plain note, and no model request', async () => {
     const write = jest.fn();
     setMinutesWriterFactory(() => ({ kind: 'openai', write }));

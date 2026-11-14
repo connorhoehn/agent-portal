@@ -15,7 +15,7 @@ import { nameOf, postAction, postAsAssistant, postNoticeQuietly, noticeText } fr
 import { NOVA_NAME } from './chat-types.js';
 import { meetingTools } from './instructions.js';
 import {
-  capTranscript, MINUTES_TIMEOUT_MS, OpenAiMinutesWriter, ScriptedMinutesWriter, type MinutesDraft, type MinutesWriter, type RosterEntry,
+  capTranscript, MINUTES_TIMEOUT_MS, MinutesWriterError, OpenAiMinutesWriter, ScriptedMinutesWriter, type MinutesDraft, type MinutesWriter, type RosterEntry,
 } from './minutes.js';
 import { assistantStore } from './store-select.js';
 import { minutesSpend, SCRIPTED_MINUTES_USD } from './spend.js';
@@ -115,6 +115,15 @@ async function writeDraft(record: AssistantRecord, writer: MinutesWriter, input:
     return { draft, note: null, writer: 'openai' };
   } catch (e) {
     console.warn('[meeting-assistant] minutes writer failed', (e as Error).message);
+    // A failure after the request went out still cost something: book the reported usage, or an estimate. Before that, nothing.
+    if (e instanceof MinutesWriterError && e.requestSent) {
+      const u = e.usage;
+      const cost = u ? await delegationCostUsd(model, { inputTokens: u.inputTokens, outputTokens: u.outputTokens, cachedTokens: Math.min(u.cachedTokens, u.inputTokens), responses: 1 }).catch(() => null) : null;
+      await spend.record({
+        ...common, model, costUsd: cost ?? estimate, basis: cost != null ? 'reported' : estimate != null ? 'estimated' : 'unknown',
+        ...(u ? { tokensIn: u.inputTokens, tokensOut: u.outputTokens } : {}),
+      }).catch((err: unknown) => console.warn('[meeting-assistant] minutes spend not booked', (err as Error).message));
+    }
     await spend.release(held.holdId ? [held.holdId] : []);
     return { draft: null, note: NOTES.failed, writer: 'none' };
   }

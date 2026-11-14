@@ -205,20 +205,35 @@ export function buildMinutesRequest(model: string, input: { lines: readonly Tran
   };
 }
 
-export class MinutesWriterError extends Error {}
+/**
+ * `requestSent` is true once the request left for the provider, so the failure may still have cost something; `usage` is what the
+ * provider reported, when its answer got as far as saying (then the ledger books it, otherwise an estimate).
+ */
+export class MinutesWriterError extends Error {
+  readonly requestSent: boolean;
+  readonly usage?: { inputTokens: number; outputTokens: number; cachedTokens: number };
+  constructor(message: string, opts: { requestSent?: boolean; usage?: { inputTokens: number; outputTokens: number; cachedTokens: number } } = {}) {
+    super(message);
+    this.requestSent = opts.requestSent ?? false;
+    if (opts.usage) this.usage = opts.usage;
+  }
+}
 
 /** Pull the model's text out of a Responses body and parse it; every field is bounded and typed again here. */
 export function parseMinutesResponse(raw: string, roster: readonly RosterEntry[]): Omit<MinutesDraft, 'truncated'> {
   let body: { output?: unknown; usage?: { input_tokens?: unknown; output_tokens?: unknown; input_tokens_details?: { cached_tokens?: unknown } } };
-  try { body = JSON.parse(raw) as typeof body; } catch { throw new MinutesWriterError('the provider answered with something that is not JSON'); }
+  try { body = JSON.parse(raw) as typeof body; } catch { throw new MinutesWriterError('the provider answered with something that is not JSON', { requestSent: true }); }
+  const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
+  const usage = body && typeof body === 'object' && body.usage ? { inputTokens: num(body.usage.input_tokens), outputTokens: num(body.usage.output_tokens), cachedTokens: num(body.usage.input_tokens_details?.cached_tokens) } : undefined;
+  const sent = { requestSent: true, ...(usage ? { usage } : {}) };
   let text = '';
   for (const item of Array.isArray(body.output) ? body.output as Array<{ type?: unknown; content?: unknown }> : []) {
     if (item?.type !== 'message' || !Array.isArray(item.content)) continue;
     for (const c of item.content as Array<{ type?: unknown; text?: unknown }>) if (c?.type === 'output_text' && typeof c.text === 'string') text += c.text;
   }
-  if (!text) throw new MinutesWriterError('the provider answered with no text');
+  if (!text) throw new MinutesWriterError('the provider answered with no text', sent);
   let out: { summary?: unknown; decisions?: unknown; actionItems?: unknown; topics?: unknown };
-  try { out = JSON.parse(text) as typeof out; } catch { throw new MinutesWriterError('the minutes were not valid JSON'); }
+  try { out = JSON.parse(text) as typeof out; } catch { throw new MinutesWriterError('the minutes were not valid JSON', sent); }
   const strings = (v: unknown, n: number): string[] => (Array.isArray(v) ? v : []).map((x) => clip(x, MAX_ITEM_CHARS)).filter(Boolean).slice(0, n);
   const actionItems: MinutesActionItem[] = [];
   for (const it of (Array.isArray(out.actionItems) ? out.actionItems : []).slice(0, MAX_ITEMS) as Array<{ text?: unknown; owner?: unknown }>) {
@@ -227,8 +242,6 @@ export function parseMinutesResponse(raw: string, roster: readonly RosterEntry[]
     const owner = resolveOwner(it.owner, roster);
     actionItems.push(owner ? { text: t, ownerUserId: owner.userId, ownerName: owner.name } : { text: t });
   }
-  const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
-  const usage = body.usage ? { inputTokens: num(body.usage.input_tokens), outputTokens: num(body.usage.output_tokens), cachedTokens: num(body.usage.input_tokens_details?.cached_tokens) } : undefined;
   return {
     summary: clip(out.summary, MAX_SUMMARY_CHARS), decisions: strings(out.decisions, MAX_ITEMS), actionItems, topics: strings(out.topics, MAX_TOPICS),
     ...(usage ? { usage } : {}),
@@ -246,10 +259,12 @@ export class OpenAiMinutesWriter implements MinutesWriter {
     const request = buildMinutesRequest(model, { lines: capped.lines, roster: input.roster, callName: input.callName, truncated: capped.truncated });
     let res: { status: number; text: string };
     try { res = await postTextResponse(request, { timeoutMs: this.opts.timeoutMs ?? MINUTES_TIMEOUT_MS }); } catch (e) {
-      if (e instanceof TextRequestError || e instanceof VoiceProviderError) throw new MinutesWriterError(e.message);
+      // A timeout happened after the request went out; a network error or a missing key means nothing was accepted.
+      if (e instanceof TextRequestError) throw new MinutesWriterError(e.message, { requestSent: e.kind === 'timeout' });
+      if (e instanceof VoiceProviderError) throw new MinutesWriterError(e.message);
       throw e;
     }
-    if (res.status < 200 || res.status >= 300) throw new MinutesWriterError(`the provider answered ${res.status}`);
+    if (res.status < 200 || res.status >= 300) throw new MinutesWriterError(`the provider answered ${res.status}`, { requestSent: true });
     const parsed = parseMinutesResponse(res.text, input.roster);
     const summary = capped.truncated ? `${parsed.summary} Only the most recent part of a long call was summarised.`.trim() : parsed.summary;
     return { ...parsed, summary: clip(summary, MAX_SUMMARY_CHARS + 80), truncated: capped.truncated };
