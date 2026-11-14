@@ -132,6 +132,27 @@ export interface ReplyContext {
   answeredAt: number;
 }
 /** A public reply context covers speech this long after its answer; a muted one only the short continuation (counted from `answeredAt`). */
+/** How soon after a bare "Nova?" the same person's next line is the request it announced. */
+export const BARE_NAME_FOLLOW_MS = 8_000;
+const BARE_NAME = new RegExp(`^\\s*((hey|hi|ok|okay)[\\s,]+)?${NOVA_NAME}[\\s.,!?…]*$`, 'i');
+
+/**
+ * The lines a spoken answer can be for, oldest first. A bare "Nova?" asks nothing yet: what Nova says to it ("Yes?") answers nobody,
+ * and the same person's next line, a few seconds later, is the request even without the name.
+ */
+export function replyAddressing(lines: readonly TranscriptLine[]): TranscriptLine[] {
+  const out: TranscriptLine[] = [];
+  const bareAt = new Map<string, number>();
+  for (const l of lines) {
+    const bare = BARE_NAME.test(l.text);
+    const announced = l.userId !== null && (bareAt.get(l.userId) ?? -Infinity) >= l.at - (l.endMs !== undefined && l.startMs !== undefined ? l.endMs - l.startMs : 0) - BARE_NAME_FOLLOW_MS;
+    if (l.userId !== null) { if (bare) bareAt.set(l.userId, l.at); else bareAt.delete(l.userId); }
+    if (bare) continue;
+    if (findAddress(l.text) !== null || announced) out.push(l);
+  }
+  return out;
+}
+
 export const REPLY_CONTEXT_TTL_MS = 20_000;
 
 /**
@@ -846,8 +867,8 @@ export class AssistantRuntime {
   private async addressingLines(run: CallRun): Promise<TranscriptLine[]> {
     const record = await this.store.get(run.ctx.callId);
     if (!record) return [];
-    const lines = await this.store.lines(run.ctx.callId, Math.max(0, record.nextSeq - 1 - 100), 100);
-    return lines.filter((l) => !this.echoOf(run, l) && findAddress(l.text) !== null);
+    const lines = (await this.store.lines(run.ctx.callId, Math.max(0, record.nextSeq - 1 - 100), 100)).filter((l) => !this.echoOf(run, l));
+    return replyAddressing(lines);
   }
 
   /**

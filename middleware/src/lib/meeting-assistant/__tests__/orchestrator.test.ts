@@ -1484,6 +1484,18 @@ describe('the real provider\'s event order (paid runs, 14 November)', () => {
     expect(mockPosts.replies).toEqual([{ text: 'Fifty six.', askedBy: BOB, askedByName: 'Bob' }]);
   });
 
+  it('a bare "Nova?" asks nothing yet: the "Yes?" is not posted, and the same person\'s next line is the request it announced', async () => {
+    const base = now;
+    const s = await realRuntime();
+    await line(CAROL, 'Nova?', base + 26_800);
+    now = base + 28_275; s.sayAt('Yes?', 27_173, 27_374); await flush();
+    expect(mockPosts.replies).toEqual([]);
+    expect(mockPosts.notices).toEqual([]);
+    await store.appendLine({ callId: CALL, userId: CAROL, participantId: '', speakerName: CAROL, text: 'What is the capital of Spain?', at: base + 30_400, startMs: 28_800, endMs: 30_400, captionId: 'cap-spain' });
+    now = base + 31_496; s.sayAt('Madrid.', 30_596, 30_900); await flush();
+    expect(mockPosts.replies).toEqual([{ text: 'Madrid.', askedBy: CAROL, askedByName: 'Carol' }]);
+  });
+
   it('one heard turn holding two people (a request spoken right after someone else\'s sentence) is stored as one line each', async () => {
     const s = await realRuntime();
     audioTap.sink!.placed(BOB, loud(1_000), 0);
