@@ -10,6 +10,8 @@
 
 import { useState, type ReactNode } from 'react';
 import { Button, Card, Inline, InlineAlert, Stack, StatusPill, T } from '@connorhoehn/ui-components/shared';
+import { useFetch } from '../../hooks/useFetch';
+import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import { actionCardView, askedByLine, decideAssistantAction, readAssistantMessage, type ActionDecision, type AssistantAction } from '../../lib/assistantMessages';
 
 export interface AssistantActionCardProps {
@@ -18,6 +20,15 @@ export interface AssistantActionCardProps {
   callId: string | null;
   /** Injected for tests; the app posts to the BFF. */
   decide?: typeof decideAssistantAction;
+}
+
+/** "Initiative: <name>" for a create: the call's initiative, where the work item will land. Shown only once the name is known. */
+function CallInitiativeLine({ callId }: { callId: string | null }) {
+  const nova = useMeetingAssistant(callId);
+  const id = nova.view.initiativeId;
+  const named = useFetch<{ name?: string }>(id ? `/api/graph/projects/${encodeURIComponent(id)}` : null);
+  const name = named.data?.name?.trim();
+  return name ? <T size="xs" tone="secondary" wrap data-testid="assistant-action-initiative">{`Initiative: ${name}`}</T> : null;
 }
 
 export function AssistantActionCard({ action, viewerId, callId, decide = decideAssistantAction }: AssistantActionCardProps) {
@@ -40,6 +51,7 @@ export function AssistantActionCard({ action, viewerId, callId, decide = decideA
             {action.detail.map((line, index) => <T key={index} size="xs" tone="secondary" wrap>{line}</T>)}
           </Stack>
         )}
+        {action.tool.name === 'create' && <CallInitiativeLine callId={callId} />}
         <Inline gap="sm" align="center" wrap>
           <StatusPill tone={view.tone} label={view.statusLabel} size="sm" data-testid="assistant-action-status" />
           {view.waitingNote && <T size="xs" tone="tertiary" data-testid="assistant-action-waiting-note">{view.waitingNote}</T>}

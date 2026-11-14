@@ -13,7 +13,7 @@ import { useCallHost } from '../../lib/conversationCall';
 import { onTurnsPoke } from '../../lib/meetingTurnsPoke';
 import { PendingResults, SeenTurns, flushResults, parseClaim, parseTurns, processTurns, type ClaimResult } from '../../lib/meetingTurns';
 import { runCallTool } from '../../lib/voice/runCore';
-import { pageContextFor, pageTabsFor } from '../../lib/voice/pageContext';
+import { useFetch } from '../../hooks/useFetch';
 import { ResultMemory, type DeliveryRecord, type ToolContext } from '../../lib/voice/tools';
 import { PAGES, isPageVisible } from './portalCommands';
 import { useLiveCallId } from './MeetingAssistantBar';
@@ -50,6 +50,10 @@ export function MeetingTurnRunner() {
     send();
     return () => { stopped = true; if (timer) clearTimeout(timer); };
   }, [present, callId, mediaId]);
+  const callInitiative = useRef<{ id: string; name: string | null } | null>(null);
+  const initiativeId = nova.view.initiativeId;
+  const initiativeName = useFetch<{ name?: string }>(initiativeId ? `/api/graph/projects/${encodeURIComponent(initiativeId)}` : null).data?.name ?? null;
+  callInitiative.current = initiativeId ? { id: initiativeId, name: initiativeName } : null;
   const live = useRef({ session, can });
   live.current = { session, can };
 
@@ -95,8 +99,10 @@ export function MeetingTurnRunner() {
         tenant: s?.tenant ?? 'orgiq', role: s?.role ?? 'member', switchable: s?.switchable?.[s.tenant] ?? null, userId, userName: s?.name ?? null,
         ledger, results, palette: { pages: PAGES, visible: isPageVisible },
         can: live.current.can, fetch: (url, init) => fetch(url, init), navigate: () => undefined, now: () => new Date(),
-        // The page in view, as the voice navigator reads it: a work item made from the call's initiative page lands on that initiative.
-        page: () => pageContextFor(window.location.pathname), tabs: () => pageTabsFor(window.location.pathname),
+        // The call's initiative stands in for "the page in view": a work item made from a card lands on the CALL's initiative, never on
+        // whatever page this person is looking at. With none, the tools fail with their own "name the initiative" sentence.
+        page: () => { const c = callInitiative.current; return c ? { path: window.location.pathname, record: { ref: `initiative:${c.id}`, title: c.name ?? 'the call\'s initiative' }, rows: [] } : null; },
+        tabs: () => null,
       };
     };
     // Resolves true when the server answered (even with nothing to run), false on an error, so the loop can back off.
