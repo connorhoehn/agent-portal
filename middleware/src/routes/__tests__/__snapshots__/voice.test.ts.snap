@@ -971,7 +971,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
     "type": "function",
   },
   {
-    "description": "Create a record of one kind through the form its page uses, with the fields that kind takes. The kinds here and their fields: work-item (title, initiative?, type?); comment (on, text); saved-search (name, query); sprint (initiative, name, startsOn, endsOn); meeting (initiative, time, thread?); access-request (item, justification, duration?); document (initiative?, title?); whiteboard (initiative?, title?); deck (initiative?, focus?).",
+    "description": "Create a record of one kind through the form its page uses, with the fields that kind takes. The kinds here and their fields: work-item (title, initiative?, type?); comment (on, text); saved-search (name, query); sprint (initiative, name, startsOn, endsOn); meeting (initiative, time, thread?); access-request (item, justification, duration?); document (initiative?, title?); whiteboard (initiative?, title?); deck (initiative?, focus?); decision (initiative, statement, state, participants?, call?).",
     "name": "create",
     "parameters": {
       "additionalProperties": false,
@@ -979,6 +979,13 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
         "fields": {
           "additionalProperties": false,
           "properties": {
+            "call": {
+              "description": "The id of the call it was agreed in; left out, it was agreed by hand.",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
             "delegate": {
               "description": "Who decides for the user.",
               "type": [
@@ -1056,6 +1063,17 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
                 "null",
               ],
             },
+            "participants": {
+              "description": "The user ids of the people who agreed (a call's roster gives them); left out, only the user is named.",
+              "items": {
+                "description": "A user id.",
+                "type": "string",
+              },
+              "type": [
+                "array",
+                "null",
+              ],
+            },
             "privacy": {
               "description": "public (default) or private.",
               "enum": [
@@ -1084,6 +1102,25 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
             },
             "startsOn": {
               "description": "First day, YYYY-MM-DD.",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "state": {
+              "description": "resolved: record it as decided, with the user as decider (only the initiative's owner or an org-leader); waiting: raise it for the initiative's owner to decide.",
+              "enum": [
+                "resolved",
+                "waiting",
+                null,
+              ],
+              "type": [
+                "string",
+                "null",
+              ],
+            },
+            "statement": {
+              "description": "What was agreed, one sentence; it is the decision's title and its one option.",
               "type": [
                 "string",
                 "null",
@@ -1166,6 +1203,10 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
             "delegate",
             "window",
             "reason",
+            "statement",
+            "state",
+            "participants",
+            "call",
           ],
           "type": "object",
         },
@@ -1181,6 +1222,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
             "document",
             "whiteboard",
             "deck",
+            "decision",
           ],
           "type": "string",
         },
