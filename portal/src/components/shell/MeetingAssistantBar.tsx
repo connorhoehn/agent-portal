@@ -23,9 +23,9 @@ export function NovaBarControls() {
   const callId = useLiveCallId();
   const nova = useMeetingAssistant(callId);
   const { controls, view, busy } = nova;
+  const noticeClosed = useNovaNoticeHidden(callId);
   if (controls.hidden) return null;
   const state = assistantStateWords(view);
-  const noticeClosed = useNovaNoticeHidden(callId);
   const words = markWords(view, noticeClosed);
   const left = timeLeftWords(view);
   return <Inline gap="xs" align="center" wrap={false} className="shrink-0 border-l border-border pl-2" data-testid="nova-bar">
