@@ -244,6 +244,8 @@ export async function onCallEnded(callId: string, deps: { stop: (callId: string)
   }
   deps.stopIntake(callId);
   await deps.stop(callId);
+  // With no run in this process `stop` settles nothing: book the used minutes from the record (a no-op once settled).
+  await (await import('./reconcile.js')).settleFromRecord(callId);
   // `stop` runs `onFinished` only for a call with a live run; make sure the minutes are written either way.
   await finishMinutes(callId);
 }

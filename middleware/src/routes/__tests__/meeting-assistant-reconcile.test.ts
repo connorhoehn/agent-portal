@@ -29,8 +29,8 @@ import { assistantStore, assistantIntake, setAssistantStore, setAssistantIntake,
 import { AssistantRuntime, setAssistantRuntime, defaultRolesOf } from '../../lib/meeting-assistant/orchestrator.js';
 import { ScriptedSession } from '../../lib/meeting-assistant/scripted-session.js';
 import { settleFinished } from '../../lib/meeting-assistant/spend.js';
-import { reconcileAfterRestart, settleAtShutdown, RESTART_NOTICE } from '../../lib/meeting-assistant/reconcile.js';
-import { minutesIdle } from '../../lib/meeting-assistant/minutes-service.js';
+import { reconcileAfterRestart, settleAtShutdown, startReconcileTimer, RESTART_NOTICE } from '../../lib/meeting-assistant/reconcile.js';
+import { minutesIdle, onCallEnded } from '../../lib/meeting-assistant/minutes-service.js';
 import { NOVA_USER_ID } from '../../lib/meeting-assistant/chat-types.js';
 import { userBudgets } from '../../mock/user-budgets.js';
 import { spendHolds } from '../../mock/spend-holds.js';
@@ -277,5 +277,55 @@ describe('the heartbeat', () => {
     expect(await alive()).toBe(t0);
     clock += 21_000; await runtime.tick();
     expect(await alive()).toBe(t0 + 31_000);
+  });
+});
+
+describe('a dismiss or a call end that finds no run in this process', () => {
+  it('a dismiss settles the listening period from the record and releases the hold', async () => {
+    budget('alice');
+    await post('invite'); clock += 60_000; await runtime.tick();
+    freshRuntime(); clock += 3600_000;                       // the process that held the run died
+    expect((await post('dismiss')).status).toBe(200);
+    await flush();
+    expect((await assistantStore().get(CALL))!.session).toMatchObject({ listeningSeconds: 60, listeningSince: null, settled: true });
+    expect(entries()).toEqual([expect.objectContaining({ sourceId: 'ma:call-1', costUsd: 0.05 })]);
+    expect(holds()[0]!.status).toBe('settled');
+  });
+
+  it('a call end settles it the same way, once', async () => {
+    budget('alice');
+    await post('invite'); clock += 60_000; await runtime.tick();
+    const next = freshRuntime(); clock += 3600_000;
+    const deps = { stop: (id: string) => next.stop(id), stopIntake: () => undefined };
+    await onCallEnded(CALL, deps); await minutesIdle(); await flush();
+    await onCallEnded(CALL, deps); await minutesIdle(); await flush();
+    expect((await assistantStore().get(CALL))!.session).toMatchObject({ listeningSeconds: 60, settled: true });
+    expect(entries().filter((e) => e.sourceId === 'ma:call-1')).toHaveLength(1);
+    expect(holds()[0]!.status).toBe('settled');
+  });
+});
+
+describe('the periodic reconcile', () => {
+  it('runs on its timer, skips a run still in flight, and stops when told', async () => {
+    jest.useFakeTimers();
+    try {
+      let calls = 0; let release: () => void = () => undefined;
+      const stop = startReconcileTimer(1000, () => { calls += 1; return new Promise<void>((r) => { release = r; }); });
+      jest.advanceTimersByTime(1000); expect(calls).toBe(1);
+      jest.advanceTimersByTime(3000); expect(calls).toBe(1);   // the first is still running
+      release(); await Promise.resolve(); await Promise.resolve();
+      jest.advanceTimersByTime(1000); expect(calls).toBe(2);
+      stop(); jest.advanceTimersByTime(5000); expect(calls).toBe(2);
+    } finally { jest.useRealTimers(); }
+  });
+
+  it('a record whose heartbeat is older than 90 s is reconciled by a later pass, a fresher one is not', async () => {
+    budget('alice');
+    await post('invite'); clock += 60_000; await runtime.tick();
+    freshRuntime();
+    clock += 30_000;
+    expect(await reconcileAfterRestart({ clock: () => clock, ...noTaps })).toMatchObject({ paused: 0, settled: 0 });
+    clock += 70_000;
+    expect(await reconcileAfterRestart({ clock: () => clock, ...noTaps })).toMatchObject({ paused: 1, settled: 1 });
   });
 });

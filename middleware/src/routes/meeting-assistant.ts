@@ -42,6 +42,7 @@ import { assistantRuntime, MAX_RESULT_BYTES, type StartContext } from '../lib/me
 import { assistantAudio } from '../lib/meeting-assistant/audio-select.js';
 import { preflightAudio, tapArmer, type Preflight } from '../lib/meeting-assistant/media.js';
 import { onCallEnded, trackMinutes } from '../lib/meeting-assistant/minutes-service.js';
+import { settleFromRecord } from '../lib/meeting-assistant/reconcile.js';
 import { sessionAvailable } from '../lib/meeting-assistant/session-select.js';
 import { newAssistantSession, sessionOf as recordSession, type AssistantSession } from '../lib/meeting-assistant/types.js';
 import { assistantLimits } from '../lib/meeting-assistant/limits.js';
@@ -275,6 +276,7 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
       if (to === 'left') {
         assistantIntake().stop(callId);
         await assistantRuntime().stop(callId);
+        await settleFromRecord(callId); // no run in this process (it died): the used minutes are booked from the record
         assistantAudio().forget(callId);
       }
       res.json(await view(await store.get(callId), callId, session));

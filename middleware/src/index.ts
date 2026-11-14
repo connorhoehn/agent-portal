@@ -54,7 +54,7 @@ import { meetingAssistantDevRouter } from './routes/meeting-assistant-dev.js';
 import { meetingAssistantSinkRouter } from './routes/meeting-assistant-sink.js';
 import { announceSinkSecret } from './lib/meeting-assistant/sink-secret.js';
 import { startMeetingAssistantSweeps } from './lib/meeting-assistant/sweeps.js';
-import { reconcileAfterRestart, settleAtShutdown } from './lib/meeting-assistant/reconcile.js';
+import { reconcileAfterRestart, settleAtShutdown, startReconcileTimer } from './lib/meeting-assistant/reconcile.js';
 import { assertLiveFlagAllowed } from './lib/meeting-assistant/live-flag.js';
 import { meetingAssistantEnabled } from './lib/meeting-assistant/index.js';
 import { pipelinesRouter } from './routes/pipelines.js';
@@ -727,6 +727,7 @@ const gatewayHandle = gatewayOn ? await startRealtimeGateway(server, { leaseGrou
 if (mockRestartSnapshot()) { await fleetInitialization; assertMockRestartIdleDirectors(getDemoState()); completeMockRestartReplay(); }
 if (!gatewayHandle) console.log('[realtime-gateway] off (REALTIME_GATEWAY) — /ws upgrades are refused');
 rejectUnsupportedUpgrades(server, { allowPaths: gatewayOn ? [REALTIME_GATEWAY_PATH] : [] });
+let stopReconcileTimer: () => void = () => undefined;
 const bindHost = listenHost();
 server.listen(config.port, bindHost, () => {
   consumeMockRestartHandoff();
@@ -735,10 +736,12 @@ server.listen(config.port, bindHost, () => {
   console.log(`orgiq-middleware listening on ${bindHost}:${config.port} (${mockSuffix})`);
   // Runs live in memory: a record a dead process left `listening` is settled and paused once, at start (audit M5).
   void reconcileAfterRestart().catch((e: unknown) => console.warn('[meeting-assistant] reconcile at start failed', (e as Error).message));
+  stopReconcileTimer = startReconcileTimer(); // and again every two minutes, for a restart that came back inside the heartbeat window
 });
 let closing = false;
 const shutdown = async () => {
   if (closing) return; closing = true;
+  stopReconcileTimer();
   const deadline = setTimeout(() => process.exit(1), 10000); deadline.unref();
   try {
     await settleAtShutdown(); // live assistant runs are settled the way a restart would find them (bounded by the deadline above)

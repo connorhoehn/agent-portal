@@ -123,6 +123,39 @@ export async function reconcileAfterRestart(overrides: Partial<ReconcileDeps> = 
   return result;
 }
 
+/**
+ * A dismiss or a call end that finds no run in this process (the process that held it died): book the call's used minutes from the
+ * record and release the hold, as the reconcile would. Safe to repeat: a settled record is left alone. Never throws.
+ */
+export async function settleFromRecord(callId: string, overrides: Partial<Pick<ReconcileDeps, 'store' | 'clock' | 'settle'>> = {}): Promise<void> {
+  try {
+    const store = (overrides.store ?? assistantStore)();
+    const settle = overrides.settle ?? settleFinished;
+    const now = (overrides.clock ?? Date.now)();
+    const found = await store.get(callId);
+    if (!found) return;
+    const record = await closePeriod(store, found, now);
+    const s = sessionOf(record);
+    if (s.settled) return;
+    await settle({ callId, usageSeconds: s.usageSeconds, tokens: { input: s.tokensIn, output: s.tokensOut, cached: s.tokensCached }, sessionKind: s.sessionKind ?? 'scripted' }, now);
+  } catch (e) { console.warn('[meeting-assistant] settling a call from its record failed', (e as Error).message); }
+}
+
+/** How often a running server looks for records no process is serving. */
+export const RECONCILE_EVERY_MS = 120_000;
+
+/** Reconcile on a timer, not only at boot: a crash and a restart inside the heartbeat window leaves a record the boot pass skipped. Unref'd; returns the stopper. */
+export function startReconcileTimer(everyMs: number = RECONCILE_EVERY_MS, run: () => Promise<unknown> = () => reconcileAfterRestart()): () => void {
+  let busy = false;
+  const timer = setInterval(() => {
+    if (busy) return;
+    busy = true;
+    void run().catch((e: unknown) => console.warn('[meeting-assistant] periodic reconcile failed', (e as Error).message)).finally(() => { busy = false; });
+  }, everyMs);
+  timer.unref?.();
+  return () => clearInterval(timer);
+}
+
 /** Shutdown: close the runs this process holds the way a restart would find them, then reconcile. Never throws. */
 export async function settleAtShutdown(): Promise<void> {
   try {
