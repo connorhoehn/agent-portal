@@ -114,14 +114,15 @@ describe('a read in the call chat', () => {
     expect((await novaMessages('assistant-reply')).map((m) => m.message)).toEqual(['Here is the result.']);
   });
 
-  it('a private tool is answered to the asker alone: nothing in the chat, one private notification', async () => {
+  it('a private tool is answered to the asker alone: only the fixed line in the chat, one private notification', async () => {
     await post('invite');
     await ask('alice', 'Nova, how much budget do I have');
     const [turn] = (await get('turns?mine=1', 'alice')).body.turns;
     expect(turn.kind).toBe('private-read');
     await post(`turns/${turn.turnId}/result`, 'alice', { ok: true, output: { spent: 3 } });
     await flush();
-    expect(await novaMessages('assistant-reply')).toEqual([]);
+    // Audit B2: the call chat gets one fixed line and none of the answer.
+    expect((await novaMessages('assistant-reply')).map((m) => m.message)).toEqual(['Answered privately for Alice Ames.']);
     expect(notified.filter((n) => n.input.type === 'assistant-private-reply').map((n) => n.userId)).toEqual(['alice']);
   });
 });
