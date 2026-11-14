@@ -129,7 +129,9 @@ function FooterCall({ mediaOpen, onToggleMedia }: { mediaOpen: boolean; onToggle
     </>}
     {...(meetingItems && joined && !over && !barShown ? { meetingItems } : {})}
     {...(barShown && !over ? {} : { onLeave: () => void call.leave(), leaveLabel })}
-    className="shell-collaboration-bar shrink-0 grow basis-[14rem] border-l border-border"
+    // The call bar takes three parts of the row's free width to the today strip's one: shared evenly, at 1280 with three people,
+    // Nova's mark and a proposal count its last control (React) dropped under Message and the bar grew to two lines.
+    className="shell-collaboration-bar shrink-0 grow-[3] basis-[14rem] border-l border-border"
     data-testid="shell-call-dock"
   />;
 }
