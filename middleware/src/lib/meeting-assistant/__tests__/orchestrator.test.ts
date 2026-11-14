@@ -737,6 +737,26 @@ describe('who a spoken reply belongs to: one context per run (re-audit F1)', () 
   });
 });
 
+describe('a tool call waits for the lines before it (re-audit F6)', () => {
+  it('the request\'s own line is stored slowly; the call that follows is judged after it and is not refused as "could not tell who asked"', async () => {
+    const s = await realRuntime();
+    const loud = (ms: number) => { const b = Buffer.alloc(Math.round(ms * 16) * 2); for (let i = 0; i < b.length / 2; i += 1) b.writeInt16LE(i % 40 < 20 ? 4000 : -4000, i * 2); return b; };
+    await runtime.feedParticipantAudio(CALL, ALICE, loud(1000), 16_000);
+    now += 1000;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const real = store.appendLine.bind(store);
+    store.appendLine = (async (...a: Parameters<typeof real>) => { await gate; return real(...a); }) as typeof store.appendLine;
+    s.hear('Nova, find the Kubernetes experts.', 100, 900);
+    s.call('call_slow', 'search', { query: 'Kubernetes experts' }, 1000);
+    await flush();
+    expect(s.answersFor('call_slow')).toEqual([]); // still waiting for the line, not refused
+    release(); await flush();
+    expect(s.answersFor('call_slow')).toEqual([]); // a read waits for its asker's browser
+    expect((await runtime.turnsFor(CALL, ALICE)).map((t) => t.tool.name)).toEqual(['search']);
+  });
+});
+
 describe('the asker is the person who addressed Nova (B3), on the real path', () => {
   it('A asks, B chatters before the call arrives: A is the asker', async () => {
     const s = await realRuntime();

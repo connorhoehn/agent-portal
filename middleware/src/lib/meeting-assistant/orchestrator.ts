@@ -167,6 +167,8 @@ interface CallRun {
   sessionKind: 'openai' | 'scripted';
   /** Serialises session changes (pause, resume, replacement) so two never overlap. */
   chain: Promise<void>;
+  /** Every stored line of this run, in the order it arrived: a tool call is judged only after the lines that came before it are written. */
+  lineChain: Promise<void>;
   finished: boolean;
 }
 
@@ -267,7 +269,7 @@ export class AssistantRuntime {
       calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), holding: new Set(), reply: null, replyById: new Map(), callTimes: new Map(), lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity, heartbeatAt: -Infinity,
       intentionalClose: false, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, voice: false, voiceHeld: false,
-      relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), speech: new NovaSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), finished: false,
+      relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), speech: new NovaSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), lineChain: Promise.resolve(), finished: false,
     };
     this.runs.set(ctx.callId, run);
     // The record's switch (a restarted call keeps it); read after the run is registered so two invites never both start.
@@ -577,7 +579,14 @@ export class AssistantRuntime {
   // -------------------------------------------------------------------------------------------------------------
   // What the session says
 
-  private async onInput(run: CallRun, e: SessionEvents['inputTranscript']): Promise<void> {
+  /** Queue a line write behind the earlier ones of this run (never rejects). */
+  private onInput(run: CallRun, e: SessionEvents['inputTranscript']): Promise<void> {
+    const next = run.lineChain.then(() => this.storeInput(run, e));
+    run.lineChain = next.catch((err: unknown) => { console.warn('[meeting-assistant] session event failed', (err as Error).message); });
+    return next;
+  }
+
+  private async storeInput(run: CallRun, e: SessionEvents['inputTranscript']): Promise<void> {
     const who = attribute(run.timeline.intervals(), { startMs: e.startMs, endMs: e.endMs });
     run.pieceNo += 1;
     await this.deps.intake().handle(run.ctx.callId, {
@@ -638,6 +647,7 @@ export class AssistantRuntime {
     } else {
       // The short acknowledgement the voice speaks as it delegates: not an answer; changes nothing.
       if (this.anyCallOpen(run, t, tEnd)) return;
+      await run.lineChain;
       const c = run.reply;
       if (c && this.contextLive(c, t) && !(await this.addressedSince(run, c.answeredAt))) {
         if (c.visibility === 'muted' || !c.asker) return;
@@ -739,6 +749,8 @@ export class AssistantRuntime {
     if (run.calls.has(id)) return;
     run.calls.set(id, 'open');
     run.callTimes.set(id, { openedAt: this.now(), answeredAt: null });
+    // Judged only after every line that arrived before the call is stored (the asker is found among them).
+    await run.lineChain;
     try {
       await this.handleToolCall(run, e);
     } catch (err) {
