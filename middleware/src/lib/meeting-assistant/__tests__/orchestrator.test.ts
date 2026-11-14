@@ -760,10 +760,10 @@ describe('a tool call waits for the lines before it (re-audit F6)', () => {
 describe('provider errors are counted (re-audit F7)', () => {
   it('each error event adds to the count shown in the run\'s stats, and the count survives a replaced session', async () => {
     const s = await realRuntime();
-    expect(runtime.callStats(CALL)).toEqual({ providerErrors: 0 });
+    expect(runtime.callStats(CALL)).toEqual({ providerErrors: 0, echoLinesDropped: 0 });
     s.fire('error', { message: 'invalid_value: x', info: { code: 'invalid_value', param: 'session.thinking', type: null } });
     s.fire('error', { message: 'rate_limited: x', info: { code: 'rate_limited', param: null, type: null } });
-    expect(runtime.callStats(CALL)).toEqual({ providerErrors: 2 });
+    expect(runtime.callStats(CALL)).toMatchObject({ providerErrors: 2 });
   });
 });
 
@@ -1115,6 +1115,21 @@ describe('Nova cannot address herself through a microphone (the echo guard)', ()
     await heard(ALICE, 'Nova find the runbooks', start + 300, start + 900, 'echo-2');
     s.callAs('named_call', 'search', { query: 'x' }, now - start, ALICE); await flush();
     expect(refusedWith(s, 'named_call')).toEqual(['{"refused":"not addressed"}']);
+  });
+
+  it('a transcript piece that is Nova\'s own voice heard back is not stored at all and is counted (re-audit F8)', async () => {
+    const { s } = await speaking('Nova, find the runbooks for you');
+    s.hear('Nova find the runbooks', 300, 900); await flush();
+    expect(await store.lines(CALL, 0, 10)).toEqual([]);
+    expect(runtime.callStats(CALL).echoLinesDropped).toBe(1);
+  });
+
+  it('a person\'s own words spoken over her, and the same words outside her span, are kept', async () => {
+    const { s } = await speaking('Nova, find the runbooks for you');
+    s.hear('Bob can you open the dashboard first', 300, 900); await flush();
+    s.hear('Nova find the runbooks', 5000, 5800); await flush();
+    expect((await store.lines(CALL, 0, 10)).map((l) => l.text)).toEqual(['Bob can you open the dashboard first', 'Nova find the runbooks']);
+    expect(runtime.callStats(CALL).echoLinesDropped).toBe(0);
   });
 
   it('with the voice off no span is ever recorded, so a caption is never judged an echo', async () => {

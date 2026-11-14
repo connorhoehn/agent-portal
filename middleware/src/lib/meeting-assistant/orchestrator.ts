@@ -171,6 +171,8 @@ interface CallRun {
   lineChain: Promise<void>;
   /** Provider error events across this run's sessions: how many, and the latest few as codes only. */
   providerErrorCount: number;
+  /** Transcript pieces judged to be Nova's own voice and not stored. */
+  echoLinesDropped: number;
   providerErrors: ProviderErrorInfo[];
   finished: boolean;
 }
@@ -272,7 +274,7 @@ export class AssistantRuntime {
       calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), holding: new Set(), reply: null, replyById: new Map(), callTimes: new Map(), lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity, heartbeatAt: -Infinity,
       intentionalClose: false, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, voice: false, voiceHeld: false,
-      relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), speech: new NovaSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), lineChain: Promise.resolve(), providerErrorCount: 0, providerErrors: [], finished: false,
+      relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), speech: new NovaSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), lineChain: Promise.resolve(), providerErrorCount: 0, echoLinesDropped: 0, providerErrors: [], finished: false,
     };
     this.runs.set(ctx.callId, run);
     // The record's switch (a restarted call keeps it); read after the run is registered so two invites never both start.
@@ -557,8 +559,9 @@ export class AssistantRuntime {
 
   /** What the voice relay did on this run: frames handed to the gateway, and frames dropped (no gateway, a burst, a pause). Zeros when no run. */
   /** Counts the people who hold a seat may see: provider errors this run has had (codes are never shown). */
-  callStats(callId: string): { providerErrors: number } {
-    return { providerErrors: this.runs.get(callId)?.providerErrorCount ?? 0 };
+  callStats(callId: string): { providerErrors: number; echoLinesDropped: number } {
+    const run = this.runs.get(callId);
+    return { providerErrors: run?.providerErrorCount ?? 0, echoLinesDropped: run?.echoLinesDropped ?? 0 };
   }
 
   voiceStats(callId: string): { voiceFramesRelayed: number; voiceFramesDropped: number } {
@@ -599,6 +602,8 @@ export class AssistantRuntime {
   }
 
   private async storeInput(run: CallRun, e: SessionEvents['inputTranscript']): Promise<void> {
+    // Nova's own voice heard back through a microphone is not a person's line: not stored, only counted (the echo guard's own test).
+    if (run.voice && run.speech.isEcho({ text: e.text, startAt: run.sessionStartedAt + e.startMs, endAt: run.sessionStartedAt + e.endMs })) { run.echoLinesDropped += 1; return; }
     const who = attribute(run.timeline.intervals(), { startMs: e.startMs, endMs: e.endMs });
     run.pieceNo += 1;
     await this.deps.intake().handle(run.ctx.callId, {
