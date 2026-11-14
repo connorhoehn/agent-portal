@@ -50,7 +50,7 @@ beforeEach(() => {
 
 function make(over: Partial<ConstructorParameters<typeof OpenAiLiveSession>[0]> = {}) {
   const s = new OpenAiLiveSession({ model: 'gpt-live-1', voice: 'marin', delegationModel: 'gpt-6-luna', idleFlushMs: 40, closeTimeoutMs: 120, ...over });
-  const seen: { [K in keyof SessionEvents]: SessionEvents[K][] } = { inputTranscript: [], outputTranscript: [], toolCall: [], delegation: [], usage: [], outputAudio: [], expires: [], closed: [], error: [] };
+  const seen: { [K in keyof SessionEvents]: SessionEvents[K][] } = { inputTranscript: [], outputTranscript: [], toolCall: [], delegation: [], delegationReady: [], usage: [], outputAudio: [], expires: [], closed: [], error: [] };
   (Object.keys(seen) as Array<keyof SessionEvents>).forEach((k) => s.on(k, ((e: never) => { (seen[k] as unknown[]).push(e); }) as never));
   return { s, seen };
 }
@@ -119,9 +119,40 @@ describe('transcripts', () => {
     }
     await tick(120);
     expect(seen.inputTranscript).toEqual([
-      { text: 'Nova, what is it?', startMs: 1800, endMs: 2400 },
-      { text: 'ok then', startMs: 5000, endMs: 5400 },
+      { text: 'Nova, what is it?', startMs: 1800, endMs: 2400, parts: [{ text: ' Nova', startMs: 1800, endMs: 2000 }, { text: ', what', startMs: 2000, endMs: 2200 }, { text: ' is it?', startMs: 2200, endMs: 2400 }] },
+      { text: 'ok then', startMs: 5000, endMs: 5400, parts: [{ text: ' ok', startMs: 5000, endMs: 5200 }, { text: ' then', startMs: 5200, endMs: 5400 }] },
     ]);
+    await s.close();
+  });
+
+  // The paid run (14 November): input deltas come a word at a time with no sentence end, so the 1.5 s idle flush stored a request
+  // after Nova's short answer to it had already ended; the answer then found no line. Nova's first output delta ends the turn.
+  it('stores the line being heard when Nova begins to speak, before that utterance is judged', async () => {
+    const { s, seen } = make({ idleFlushMs: 5000 });
+    await s.start(START);
+    const order: string[] = [];
+    s.on('inputTranscript', () => order.push('input'));
+    s.on('outputTranscript', (e) => { if (e.final) order.push('output'); });
+    frame({ type: 'session.input_transcript.delta', start_ms: 16000, end_ms: 16200, delta: ' Nova' });
+    frame({ type: 'session.input_transcript.delta', start_ms: 16400, end_ms: 16600, delta: ' what is' });
+    frame({ type: 'session.output_transcript.delta', start_ms: 17600, end_ms: 17800, delta: ' Four.' });
+    await tick(1000);
+    expect(order).toEqual(['input', 'output']);
+    expect(seen.inputTranscript[0]).toMatchObject({ text: 'Nova what is', startMs: 16000, endMs: 16600 });
+    await s.close();
+  });
+
+  it('says when the work begun at a delegation first produced a message or a function call (reasoning does not count)', async () => {
+    const { s, seen } = make();
+    await s.start(START);
+    frame({ type: 'session.delegation.created', offset_ms: 11200 });
+    frame({ type: 'response.event', event: { type: 'response.created' } });
+    frame({ type: 'response.event', event: { type: 'response.output_item.added', item: { type: 'reasoning' } } });
+    frame({ type: 'response.event', event: { type: 'response.output_item.added', item: { type: 'function_call', call_id: 'c1' } } });
+    frame({ type: 'response.event', event: { type: 'response.output_item.added', item: { type: 'message' } } });
+    await tick(10);
+    expect(seen.delegation).toHaveLength(1);
+    expect(seen.delegationReady.map((e) => e.item)).toEqual(['function_call']);
     await s.close();
   });
 

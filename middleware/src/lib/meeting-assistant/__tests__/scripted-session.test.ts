@@ -54,7 +54,7 @@ describe('ScriptedSession voice', () => {
 describe('ScriptedSession', () => {
   function make(now = { t: 1_000_000 }) {
     const s = new ScriptedSession(() => now.t);
-    const seen: { [K in keyof SessionEvents]: SessionEvents[K][] } = { inputTranscript: [], outputTranscript: [], toolCall: [], delegation: [], usage: [], outputAudio: [], expires: [], closed: [], error: [] };
+    const seen: { [K in keyof SessionEvents]: SessionEvents[K][] } = { inputTranscript: [], outputTranscript: [], toolCall: [], delegation: [], delegationReady: [], usage: [], outputAudio: [], expires: [], closed: [], error: [] };
     (Object.keys(seen) as Array<keyof SessionEvents>).forEach((k) => s.on(k, ((e: never) => { (seen[k] as unknown[]).push(e); }) as never));
     return { s, seen, now };
   }

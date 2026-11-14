@@ -68,7 +68,8 @@ const SENTENCE_END = /[.!?]["')\]]*\s*$/;
 const shortCode = (v: unknown): string | null => (typeof v === 'string' && /^[\w.:\[\]-]{1,64}$/.test(v) ? v : null);
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0);
 
-interface Piece { text: string; startMs: number; endMs: number }
+interface Part { text: string; startMs: number; endMs: number }
+interface Piece { text: string; startMs: number; endMs: number; parts: Part[] }
 /** One thing Nova said: from its first output delta to 900 ms of output quiet. Times are on the session timeline (ms since `session.started`). */
 interface Utterance { text: string; startedAt: number; endedAt: number }
 
@@ -92,6 +93,8 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   private input: Piece | null = null;
   private output: Utterance | null = null;
   private outputTimer: unknown = null;
+  /** A delegation began and its work has not produced its first message or function call yet. */
+  private awaitingItem = false;
   private idle: ReturnType<typeof setTimeout> | null = null;
   /** Output audio: silent frames still owed after the last voiced one, and the frame counter. Audio is never kept. */
   private tailLeft = 0;
@@ -229,6 +232,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
         offsetMs: typeof ev['offset_ms'] === 'number' ? ev['offset_ms'] : undefined,
         inner: typeof inner === 'string' ? inner : undefined, item: typeof item?.type === 'string' ? item.type : undefined,
         callId: typeof item?.call_id === 'string' ? item.call_id : undefined,
+        sentenceEnd: type === 'session.input_transcript.delta' && typeof ev['delta'] === 'string' ? SENTENCE_END.test(ev['delta']) : undefined,
       });
     }
     switch (type) {
@@ -244,7 +248,8 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       case 'session.input_transcript.delta': this.onDelta('input', ev); return;
       case 'session.output_transcript.delta': this.onDelta('output', ev); return;
       case 'session.delegation.created': {
-        this.flushInput();
+        this.flushInput('delegation');
+        this.awaitingItem = true;
         this.emit('delegation', { atMs: this.sinceStart() });
         return;
       }
@@ -321,11 +326,15 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     const gapMs = this.opts.gapMs ?? 1000;
     if (side === 'input') {
       // Input never ends or splits an utterance of Nova's: only output quiet does.
-      if (this.input && startMs - this.input.endMs > gapMs) this.flushInput();
-      this.input = this.input ? { text: this.input.text + delta, startMs: this.input.startMs, endMs } : { text: delta, startMs, endMs };
-      if (SENTENCE_END.test(this.input.text)) this.flushInput(); else this.armIdle();
+      if (this.input && startMs - this.input.endMs > gapMs) this.flushInput('gap');
+      const part = { text: delta, startMs, endMs };
+      this.input = this.input ? { text: this.input.text + delta, startMs: this.input.startMs, endMs, parts: [...this.input.parts, part] } : { text: delta, startMs, endMs, parts: [part] };
+      if (SENTENCE_END.test(this.input.text)) this.flushInput('sentence'); else this.armIdle();
     } else {
       const at = this.sinceStart();
+      // Nova beginning to speak means the turn it answers is over: what was heard so far is a line now, stored before this
+      // utterance is judged (the provider's input deltas come in small pieces, and its idle flush would land after a short answer).
+      if (!this.output) this.flushInput('output');
       this.output = this.output ? { text: this.output.text + delta, startedAt: this.output.startedAt, endedAt: at } : { text: delta, startedAt: at, endedAt: at };
       this.emit('outputTranscript', { text: this.output.text.trim(), final: false });
       this.armOutput();
@@ -350,14 +359,18 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
 
   private armIdle(): void {
     if (this.idle) clearTimeout(this.idle);
-    this.idle = setTimeout(() => { this.idle = null; this.flushInput(); }, this.opts.idleFlushMs ?? 1500);
+    this.idle = setTimeout(() => { this.idle = null; this.flushInput('idle'); }, this.opts.idleFlushMs ?? 1500);
     this.idle.unref?.();
   }
 
-  private flushInput(): void {
+  private flushInput(why = 'closed'): void {
+    if (this.idle) { clearTimeout(this.idle); this.idle = null; }
     const p = this.input; this.input = null;
     const text = p?.text.replace(/\s+/g, ' ').trim();
-    if (p && text) { trace('input.flush', { t: this.sinceStart(), startMs: p.startMs, endMs: p.endMs }); this.emit('inputTranscript', { text, startMs: p.startMs, endMs: p.endMs }); }
+    if (p && text) {
+      trace('input.flush', { t: this.sinceStart(), startMs: p.startMs, endMs: p.endMs, why, parts: p.parts.length });
+      this.emit('inputTranscript', { text, startMs: p.startMs, endMs: p.endMs, ...(p.parts.length > 1 ? { parts: p.parts } : {}) });
+    }
   }
 
   private flushOutput(): void {
@@ -370,6 +383,11 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   private onResponseEvent(raw: unknown): void {
     if (!raw || typeof raw !== 'object') return;
     const e = raw as Record<string, unknown>;
+    if (e['type'] === 'response.output_item.added' && this.awaitingItem) {
+      const kind = (e['item'] as Record<string, unknown> | undefined)?.['type'];
+      if (kind === 'message' || kind === 'function_call') { this.awaitingItem = false; this.emit('delegationReady', { atMs: this.sinceStart(), item: kind }); }
+      return;
+    }
     if (e['type'] === 'response.output_item.done') {
       const item = e['item'] as Record<string, unknown> | undefined;
       if (item?.['type'] !== 'function_call') return;
