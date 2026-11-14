@@ -165,7 +165,7 @@ interface Delegation {
   at: number;
   /**
    * The moment the request is judged at, on the lines' clock. Lines carry the provider's audio times and the delegation the server's
-   * wall clock; the two differ by a few hundred ms (the paid run saw the request line end 200 ms after its own delegation). Every line
+   * wall clock; the two differ by up to a few seconds (the paid runs saw the request line end 0.2 to 2 s after its own delegation). Every line
    * stored before the delegation was heard before it, so the moment is the later of the delegation and the end of those lines
    * (bounded by DELEGATION_LINE_SKEW_MS). Set once `asker` resolves.
    */
@@ -182,8 +182,12 @@ export const MUTED_CONTEXT_TTL_MS = 8_000;
 export const ACKNOWLEDGEMENT_WINDOW_MS = 6_000;
 /** A line must end this long after a delegation to count as spoken after it (a line's reported end can run a little late). */
 const ACKNOWLEDGEMENT_LINE_MARGIN_MS = 1_000;
-/** How far the end of a line heard before a delegation may lie after the delegation's wall-clock moment and still be its request. */
-export const DELEGATION_LINE_SKEW_MS = 2_000;
+/**
+ * A sanity bound only: how far the end of a line heard before a delegation (or before Nova's first word) may lie after that moment's
+ * wall-clock time and still count as before it. The order the events arrived in is what decides; the paid runs saw the provider's
+ * audio clock run up to 2 s ahead of the server's in one session and behind it in another.
+ */
+export const DELEGATION_LINE_SKEW_MS = 10_000;
 /** The "could not tell who asked" reply is posted at most this often per call. */
 export const UNASKED_NOTICE_EVERY_MS = 30_000;
 /** How often the seat roster is read to record who is present while Nova is. */

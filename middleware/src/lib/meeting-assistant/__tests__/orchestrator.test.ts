@@ -1496,6 +1496,17 @@ describe('the real provider\'s event order (paid runs, 14 November)', () => {
     expect(mockPosts.replies).toEqual([{ text: 'Madrid.', askedBy: CAROL, askedByName: 'Carol' }]);
   });
 
+  it('the request line still counts when the provider\'s audio clock runs two seconds ahead of the server\'s', async () => {
+    const base = now;
+    const s = await realRuntime();
+    audioTap.sink!.placed(ALICE, loud(5_000), 34_600);
+    s.hear('Nova, what is in my unread messages', 34_600, 40_000); // its end lies 2.05 s after the delegation's wall-clock moment
+    now = base + 37_948; s.fire('delegation', { atMs: 37_948 });
+    await flush();
+    now = base + 40_118; s.call('call_u', 'search', { query: 'unread' }, 40_118); await flush();
+    expect((await runtime.turnsFor(CALL, ALICE)).map((t) => t.askedBy)).toEqual([ALICE]);
+  });
+
   it('one heard turn holding two people (a request spoken right after someone else\'s sentence) is stored as one line each', async () => {
     const s = await realRuntime();
     audioTap.sink!.placed(BOB, loud(1_000), 0);
