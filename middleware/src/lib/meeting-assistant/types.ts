@@ -89,11 +89,20 @@ export interface AssistantSession {
   tokensCached: number;
   /** The ledger has been written. */
   settled: boolean;
+  /** SHA-256 (base64url) of the live audio sink token while one is valid; null when dead. The plain token is never stored. */
+  sinkTokenHash?: string | null;
+  /** Media participant ids people bound to themselves (id -> user id). */
+  participants?: Record<string, string>;
+  /** Audio chunks dropped because their participant id is bound to nobody, or their person had not acknowledged, or arrived late. */
+  unmappedChunks?: number;
+  unackedChunks?: number;
+  lateChunks?: number;
 }
 
 export const newAssistantSession = (ceilingSeconds: number): AssistantSession => ({
   refusedCalls: 0, listeningSeconds: 0, listeningSince: null, ceilingSeconds, warned: false, limitNoticed: false, replacements: 0,
   holds: [], extensions: 0, usageSeconds: 0, tokensIn: 0, tokensOut: 0, tokensCached: 0, settled: false,
+  sinkTokenHash: null, participants: {}, unmappedChunks: 0, unackedChunks: 0, lateChunks: 0,
 });
 
 /** The record's session bookkeeping with defaults for anything missing. */

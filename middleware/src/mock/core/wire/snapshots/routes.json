@@ -1117,6 +1117,11 @@
     },
     {
       "method": "POST",
+      "path": "/api/calls/:callId/assistant/participant",
+      "source": "src/routes/meeting-assistant.ts:246"
+    },
+    {
+      "method": "POST",
       "path": "/api/calls/:callId/assistant/pause",
       "source": "src/routes/meeting-assistant.ts:221"
     },
@@ -2259,6 +2264,11 @@
       "method": "GET",
       "path": "/api/initiatives/:id/run-reports",
       "source": "src/routes/session-briefs.ts:196"
+    },
+    {
+      "method": "POST",
+      "path": "/api/internal/meeting-assistant/pcm/:sinkToken",
+      "source": "src/routes/meeting-assistant-sink.ts:32"
     },
     {
       "method": "POST",

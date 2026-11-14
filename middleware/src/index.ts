@@ -51,6 +51,7 @@ import { callPagesRouter } from './routes/call-pages.js';
 import { callChatRouter } from './routes/call-chat.js';
 import { meetingAssistantRouter, meetingsRouter } from './routes/meeting-assistant.js';
 import { meetingAssistantDevRouter } from './routes/meeting-assistant-dev.js';
+import { meetingAssistantSinkRouter } from './routes/meeting-assistant-sink.js';
 import { assistantStore, meetingAssistantEnabled, startRetentionSweep as startTranscriptRetentionSweep } from './lib/meeting-assistant/index.js';
 import { pipelinesRouter } from './routes/pipelines.js';
 import { accessRouter } from './routes/access.js';
@@ -168,6 +169,9 @@ app.set('trust proxy', trustedProxyHops());
 app.disable('x-powered-by');
 app.use(securityHeaders);
 
+// The meeting assistant's PCM sink (routes/meeting-assistant-sink.ts): authenticated by its path token alone, called by the media
+// server, never a browser. Mounted ahead of the browser-origin check, the JSON parser and the session middleware so none applies.
+app.use('/api/internal/meeting-assistant', meetingAssistantSinkRouter);
 app.use(browserOrigin);
 app.use(express.json({ verify: captureRawBody }));
 app.use(cookieParser());

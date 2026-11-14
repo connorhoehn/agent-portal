@@ -453,6 +453,7 @@ export const V2_TOOLS = [
 export const V2_RULES = [
   // Not for people
   [/^\w+ \/internal\//, 'n/a', null, 'service-auth plane'],
+  [/^POST \/api\/internal\/meeting-assistant\/pcm\/:sinkToken$/, 'n/a', null, 'the meeting assistant\'s PCM sink: called by the media server\'s taps, authenticated by an unguessable per-call token in the path, never by a person'],
   [/^\w+ \/api\/__mock\//, 'n/a', null, 'dev-only mock control plane'],
   [/^\w+ \/api\/dev\/calls\/:[^/]+\/(transcript-lines|assistant-messages|assistant-tool-call)$/, 'n/a', null, 'dev-only injectors for the meeting assistant (transcript lines, Nova messages, a scripted tool call; mock world and flag only)'],
   [/^\w+ \/api\/observability\/test-fixtures\//, 'n/a', null, 'E2E fixtures'],
@@ -522,7 +523,7 @@ export const V2_RULES = [
   [/^(PUT|PATCH|DELETE) \/api\/graph\/projects\/:[^/]+\/workspace-documents|^(POST|PUT|PATCH|DELETE) \/api\/graph\/documents/, 'never', null, 'document content'],
   [/^PATCH \/api\/graph\/projects\/:[^/]+(\/contributors\/:[^/]+)?$/, 'never', null, 'initiative governance edits'],
   [/^POST \/api\/graph\/projects$/, 'never', null, 'creating an initiative is a form on the page (CreateInitiative)'],
-  [/^(POST|GET) \/api\/calls\/:[^/]+\/assistant\/(invite|extend|pause|resume|dismiss|ack|state|transcript)$/, 'never', null, 'the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, extend (it holds money against the inviter), pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)'],
+  [/^(POST|GET) \/api\/calls\/:[^/]+\/assistant\/(invite|extend|pause|resume|dismiss|ack|participant|state|transcript)$/, 'never', null, 'the meeting assistant is run from the call bar and its own words; a voice session is one person, and invite, extend (it holds money against the inviter), pause, dismiss and the transcription acknowledgement are consent acts a person makes with a click (InviteMeetingAssistant)'],
   [/^(POST|GET) \/api\/calls\/:[^/]+\/assistant\/turns(\/:[^/]+\/result)?$/, 'never', null, 'the exchange between the meeting assistant and the asking person\'s own browser: the server lists the tool calls made for that person and takes the result they ran (never anyone else\'s); it is the transport of a tool call, not a tool of its own'],
   [/^(GET|DELETE) \/api\/calls\/:[^/]+\/assistant\/minutes$|^DELETE \/api\/calls\/:[^/]+\/assistant\/transcript$/, 'never', null, 'the minutes a meeting assistant left are the attendees\' own record: reading them is the meeting page, and deleting them (minutes and transcript, with a tombstone) is the inviter\'s own click on a confirm step; neither is something a voice session may do for anyone, and the attendee-only rule answers 404 to everyone else'],
   [/^GET \/api\/meetings$/, 'never', null, 'the list of meetings the signed-in person attended with the assistant present; it is the Meetings page\'s table and never anyone else\'s'],

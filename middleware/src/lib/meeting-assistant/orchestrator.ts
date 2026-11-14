@@ -23,6 +23,9 @@ import {
 } from './chat.js';
 import { MEETING_EXCLUDED_TOOLS, PRIVATE_TOOLS, meetingBackendInstructions, meetingFunctionTools, meetingInstructions, meetingTools } from './instructions.js';
 import { VoicedTimeline, attribute } from './attribution.js';
+import { OUT_RATE } from './mixer.js';
+import type { AudioIntake } from './audio-intake.js';
+import { assistantAudio } from './audio-select.js';
 import { findAddress, nameLock, type DetectorEvent } from './detector.js';
 import { assistantIntake } from './intake-select.js';
 import { assistantStore } from './store-select.js';
@@ -73,6 +76,8 @@ export interface RuntimeDeps {
   rolesOf: (userId: string, tenant: string) => Promise<string[]>;
   /** Called when a call's run ends (dismissed, left or abandoned), with what the sessions reported. Spend settles here. */
   onFinished?: (event: FinishedEvent) => Promise<void>;
+  /** The audio side (audio-intake.ts): told when a session opens and closes. Absent in tests that do not care. */
+  audio?: Pick<AudioIntake, 'attach' | 'suspend' | 'detach'>;
 }
 
 export interface FinishedEvent {
@@ -305,6 +310,11 @@ export class AssistantRuntime {
     });
     run.session = session;
     run.sessionStartedAt = this.now();
+    // The mixer's clock starts with the session's: its frames are the provider's audio timeline, and the timeline below is fed on it.
+    this.deps.audio?.attach(run.ctx.callId, {
+      append: (pcm) => { try { run.session?.appendAudio(pcm); } catch { /* the close handler reports it */ } },
+      placed: (userId, pcm, atMs) => run.timeline.feed(userId, pcm, OUT_RATE, atMs),
+    });
   }
 
   /** Close the current session on purpose; fold its usage into the totals; expire reads that were waiting on it. */
@@ -313,6 +323,8 @@ export class AssistantRuntime {
     if (!session) return;
     run.intentionalClose = true;
     run.session = null;
+    // Paused or left: the audio token dies with the session, before anything else.
+    this.deps.audio?.detach(run.ctx.callId);
     try { await session.close(); } catch (e) { console.warn('[meeting-assistant] session close failed', (e as Error).message); }
     this.foldUsage(run);
     for (const off of run.unsubscribers.splice(0)) off();
@@ -348,6 +360,7 @@ export class AssistantRuntime {
     if (run.intentionalClose || run.finished || run.session !== session) return;
     // An unexpected close (decision 11): replace the session with the last minutes of the call as context, a few times at most.
     run.session = null;
+    this.deps.audio?.suspend(run.ctx.callId); // the tap stays, its audio waits for the new session (and its time base)
     this.foldUsage(run);
     for (const off of run.unsubscribers.splice(0)) off();
     await this.expireOpenTurns(run, true);
@@ -740,6 +753,7 @@ let runtime: AssistantRuntime | null = null;
 export function assistantRuntime(): AssistantRuntime {
   return (runtime ??= new AssistantRuntime({
     store: assistantStore, intake: assistantIntake, clock: Date.now, makeSession, rolesOf: defaultRolesOf, onFinished: async (e) => { await settleFinished(e); void finishMinutes(e.callId); },
+    audio: assistantAudio(),
   }));
 }
 export function setAssistantRuntime(next: AssistantRuntime | null): void { void runtime?.dispose(); runtime = next; }

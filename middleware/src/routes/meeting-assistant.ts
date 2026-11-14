@@ -5,6 +5,8 @@
 //   POST resume      a seat.
 //   POST dismiss     a seat. Final: the assistant leaves.
 //   POST ack         a seat. Acknowledges the transcription notice; until then your lines are not stored.
+//   POST participant a seat. { participantId }: bind YOUR media participant id (the per-join id the media server minted for your seat)
+//                    to yourself, so audio the taps send under that id is yours. The id must be `<your user id>-<base36 stamp>`.
 //   POST actions/:actionId/decision  a seat, and ONLY the person the action was offered to. { decision: 'confirm' | 'decline' }.
 //   POST extend       InviteMeetingAssistant + a seat. Adds the default minutes to the call's listening ceiling, up to the hard maximum,
 //                      and holds the money for them against the inviter. { confirmOverUserBudget? }
@@ -32,6 +34,7 @@ import {
 } from '../lib/meeting-assistant/index.js';
 import { moveAction, nameOf, noticeText, postNoticeQuietly } from '../lib/meeting-assistant/chat.js';
 import { assistantRuntime, MAX_RESULT_BYTES, type StartContext } from '../lib/meeting-assistant/orchestrator.js';
+import { assistantAudio } from '../lib/meeting-assistant/audio-select.js';
 import { onCallEnded, trackMinutes } from '../lib/meeting-assistant/minutes-service.js';
 import { sessionAvailable } from '../lib/meeting-assistant/session-select.js';
 import { newAssistantSession, sessionOf as recordSession } from '../lib/meeting-assistant/types.js';
@@ -228,7 +231,31 @@ meetingAssistantRouter.post('/ack', asyncHandler(async (req, res) => {
   const current = await store.get(callId);
   if (!current) throw new NotFoundError('The assistant is not in this call');
   if (current.state === 'left') throw new AppError(409, 'The assistant already left this call');
-  res.json(await view(await store.ack(callId, session.sub), callId, session));
+  const acked = await store.ack(callId, session.sub);
+  await assistantAudio().refresh(callId); // this person's audio is admitted from now on, not at the next gate refresh
+  res.json(await view(acked, callId, session));
+}));
+
+/**
+ * A person binds their own media participant id (decision 8: audio is mixed in only for people who have acknowledged, and the
+ * taps name participants, not people). The media server mints the id as `${userId}-${Date.now().toString(36)}` from the same `sub`
+ * platform-api passes at join (and the call-binding proof pins to this session's `sub`), so the id must start with the caller's
+ * own `sub` and a base36 stamp; nobody can claim another person's id, and an id already bound to someone else is refused.
+ */
+const PARTICIPANT_STAMP = /^[0-9a-z]{1,16}$/;
+meetingAssistantRouter.post('/participant', asyncHandler(async (req, res) => {
+  const { session, callId } = await seatOf(req);
+  const id = (req.body as { participantId?: unknown } | undefined)?.participantId;
+  if (typeof id !== 'string' || id.length < 3 || id.length > 256) throw new ValidationError('participantId must be a string');
+  const prefix = `${session.sub}-`;
+  if (!id.startsWith(prefix) || !PARTICIPANT_STAMP.test(id.slice(prefix.length))) throw new AppError(403, 'You can only bind your own media participant id');
+  const record = await assistantStore().get(callId);
+  if (!record) throw new NotFoundError('The assistant is not in this call');
+  if (record.state === 'left') throw new AppError(409, 'The assistant already left this call');
+  const out = await assistantAudio().bindParticipant(callId, id, session.sub);
+  if (out === 'taken') throw new AppError(409, 'That media participant id is already bound to someone else');
+  if (out === 'too-many') throw new AppError(409, 'Too many media participant ids are bound for this call');
+  res.json({ callId, participantId: id, bound: true });
 }));
 
 /** Anyone who may invite Nova may extend her time (decision 10): the default minutes, once per request, up to the hard maximum. */
