@@ -945,6 +945,7 @@ export class AssistantRuntime {
   /** Shutdown: one last heartbeat for every live run, so the reconcile that follows closes each period at this moment. */
   async heartbeatAll(): Promise<void> { for (const run of [...this.runs.values()]) if (!run.finished) await this.heartbeat(run); }
   hasRuns(): boolean { return this.runs.size > 0; }
+  callIds(): string[] { return [...this.runs.keys()]; }
 
   /** Everyone who holds an ACTIVE seat right now was present while Nova was (audit M1); departed rows are never counted. */
   private async snapshotAttendance(callId: string): Promise<void> {

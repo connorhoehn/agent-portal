@@ -160,13 +160,42 @@ describe('a restart leaves a listening record behind', () => {
 
   it('a resume the budget refuses leaves the record paused and holds nothing new', async () => {
     budget('alice');
-    await post('invite'); freshRuntime(); clock += 1000;
+    await post('invite'); freshRuntime(); clock += 120_000; // the old process is gone and its heartbeat is stale
     await reconcileAfterRestart({ clock: () => clock, ...noTaps });
     userBudgets.reset(); budget('alice', 0, 0);
     const res = await post('resume', 'bob');
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect((await assistantStore().get(CALL))!.state).toBe('paused');
     expect(holds().filter((h) => h.status === 'held')).toEqual([]);
+  });
+});
+
+describe('only an orphaned record is reconciled (re-audit F3)', () => {
+  it('a record whose heartbeat is 60 s old, or that was invited 60 s ago with none, is left alone: another process may be serving it', async () => {
+    budget('alice'); await post('invite');
+    clock += 30_000; await runtime.tick();               // heartbeat at +30 s
+    freshRuntime(); clock += 60_000;                      // 60 s later, as a second process would see it
+    expect(await reconcileAfterRestart({ clock: () => clock, ...noTaps })).toEqual({ paused: 0, left: 0, settled: 0, tapsDeleted: 0 });
+    expect((await assistantStore().get(CALL))!.state).toBe('listening');
+    const rec = (await assistantStore().get(CALL))!;
+    await assistantStore().patchSession(CALL, { lastAliveAt: undefined });
+    clock = rec.invitedAt + 60_000;                       // no heartbeat at all, invited 60 s ago
+    expect(await reconcileAfterRestart({ clock: () => clock, ...noTaps })).toMatchObject({ paused: 0, settled: 0 });
+    expect((await assistantStore().get(CALL))!.state).toBe('listening');
+  });
+  it('a record quiet for more than 90 s is reconciled, with a heartbeat or without one', async () => {
+    budget('alice'); await post('invite');
+    clock += 30_000; await runtime.tick();
+    freshRuntime(); clock += 91_000;
+    expect(await reconcileAfterRestart({ clock: () => clock, ...noTaps })).toMatchObject({ paused: 1 });
+    expect((await assistantStore().get(CALL))!.state).toBe('paused');
+  });
+  it('with no heartbeat ever written, an invitation older than 90 s is reconciled', async () => {
+    budget('alice'); await post('invite');
+    const rec = (await assistantStore().get(CALL))!;
+    await assistantStore().patchSession(CALL, { lastAliveAt: undefined });
+    freshRuntime(); clock = rec.invitedAt + 91_000;
+    expect(await reconcileAfterRestart({ clock: () => clock, ...noTaps })).toMatchObject({ paused: 1 });
   });
 });
 
@@ -194,7 +223,7 @@ describe('a call that ended while the process was down', () => {
     budget('alice');
     await post('invite'); clock += 30_000;
     await assistantStore().appendLine({ callId: CALL, userId: 'alice', participantId: 'p', speakerName: 'alice', text: 'We decided to ship Thursday.', at: clock, captionId: 'c1' });
-    freshRuntime();
+    freshRuntime(); clock += 120_000;
     const result = await reconcileAfterRestart({ clock: () => clock, taps: () => null, callOver: async () => true });
     await minutesIdle(); await flush();
     expect(result).toMatchObject({ left: 1, paused: 0 });
@@ -210,7 +239,7 @@ describe('the call\'s tap', () => {
   it('is deleted on the channel the record names; a failure keeps the channel and is tried again on the next boot', async () => {
     budget('alice'); await post('invite');
     await assistantStore().patchSession(CALL, { channelArn: 'arn:mock:channel/1' });
-    freshRuntime();
+    freshRuntime(); clock += 120_000;
     const deleteStale = jest.fn(async () => false);
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     await reconcileAfterRestart({ clock: () => clock, callOver: async () => false, taps: () => ({ deleteStale }) });

@@ -38,7 +38,14 @@ export interface ReconcileDeps {
   /** The tap deleter, or null when media is not configured (or the feature is off). */
   taps: () => Pick<TapArmer, 'deleteStale'> | null;
   settle: typeof settleFinished;
+  /** A record is orphaned only when its last heartbeat (or, with none, its invitation) is older than this. Default 90 s: three missed 30 s heartbeats. */
+  staleAfterMs?: number;
+  /** Reconcile only these calls (shutdown: the runs this process held). */
+  only?: ReadonlySet<string>;
 }
+
+/** Another process serving the call writes a heartbeat at least every 30 s; a record quieter than this is orphaned. */
+export const ORPHAN_AFTER_MS = 90_000;
 
 export interface ReconcileResult { paused: number; left: number; settled: number; tapsDeleted: number }
 
@@ -82,9 +89,12 @@ export async function reconcileAfterRestart(overrides: Partial<ReconcileDeps> = 
   const result: ReconcileResult = { paused: 0, left: 0, settled: 0, tapsDeleted: 0 };
   for (const listed of await store.listByState(['listening', 'paused'], RECONCILE_LIMIT)) {
     if (deps.isRunning(listed.callId)) continue;
+    if (deps.only && !deps.only.has(listed.callId)) continue;
     const callId = listed.callId;
     try {
       const now = deps.clock();
+      // With two processes on one store, a record the other process is serving keeps a fresh heartbeat: leave it alone.
+      if (now - (sessionOf(listed).lastAliveAt ?? listed.invitedAt) <= (deps.staleAfterMs ?? ORPHAN_AFTER_MS)) continue;
       let record = await closePeriod(store, listed, now);
       let s = sessionOf(record);
       if (!s.settled) {
@@ -119,8 +129,10 @@ export async function settleAtShutdown(): Promise<void> {
     const { peekAssistantRuntime } = await import('./orchestrator.js');
     const rt = peekAssistantRuntime();
     if (!rt || !rt.hasRuns()) return;
+    const mine = new Set(rt.callIds());
     await rt.heartbeatAll();
     await rt.dispose();
-    await reconcileAfterRestart();
+    // Only this process's own runs, and now: their heartbeat is fresh because we just wrote it, not because someone else serves them.
+    await reconcileAfterRestart({ staleAfterMs: -1, only: mine });
   } catch (e) { console.warn('[meeting-assistant] settling at shutdown failed', (e as Error).message); }
 }
