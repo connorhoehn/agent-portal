@@ -92,6 +92,10 @@ describe('retention by the call age (memory store, injected clock)', () => {
     const eraseChat = async () => { if (fail) throw new Error('chat down'); };
     await sweepTranscripts(s, NOW, 30, { eraseChat });
     expect(await s.get('old')).not.toBeNull();
+    // The stored words are already gone, though the chat step failed.
+    expect(await s.lines('old', 0, 9)).toEqual([]);
+    expect(JSON.stringify(await s.listTurns('old'))).not.toContain('"a":1');
+    expect((await s.getAction('old', 'a'))!.resultText).not.toBe('r');
     fail = false;
     await sweepTranscripts(s, NOW, 30, { eraseChat });
     expect(await s.get('old')).toBeNull();

@@ -30,8 +30,8 @@ const defaultEraseChat = async (callId: string): Promise<unknown> => (await impo
 
 /**
  * Delete every line and every set of minutes older than the retention window, then every call that ended before it, whole.
- * Returns how many LINES were removed by the line sweep. A call whose chat messages could not be replaced keeps its record,
- * so the next sweep tries again.
+ * Returns how many LINES were removed by the line sweep. A call whose chat messages could not be replaced keeps its record (its stored words already cleared),
+ * so the next sweep tries the chat again.
  */
 export async function sweepTranscripts(store: AssistantStore, nowMs: number = Date.now(), days: number = retentionDays(), opts: SweepOptions = {}): Promise<number> {
   const cutoff = nowMs - days * DAY_MS;
@@ -48,6 +48,9 @@ export async function sweepTranscripts(store: AssistantStore, nowMs: number = Da
   const eraseChat = opts.eraseChat ?? defaultEraseChat;
   for (const call of await store.expiredCalls(cutoff, SWEEP_CALLS_PER_RUN)) {
     try {
+      // The stored words (lines, requests, tool arguments, result text) go first and for certain; only then the chat step, which may be down.
+      // A call whose chat step fails keeps its record, emptied, and the next sweep tries the chat again.
+      await store.tombstoneMinutes(call.callId, 'system', nowMs);
       await eraseChat(call.callId);
       await store.purgeCall(call.callId);
     } catch (e) { console.warn('[meeting-assistant] retention could not remove a call', (e as Error).message); }
