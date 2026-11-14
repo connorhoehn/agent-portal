@@ -13,8 +13,8 @@ export const NOVA_NAME = 'Nova' as const;
 export const DELETED_RECORD_LINE = 'This record was deleted by the person who invited Nova.';
 export const ASSISTANT_KIND_PREFIX = 'assistant-';
 
-export type AssistantKind = 'assistant-notice' | 'assistant-reply' | 'assistant-action';
-export const ASSISTANT_KINDS: readonly AssistantKind[] = ['assistant-notice', 'assistant-reply', 'assistant-action'];
+export type AssistantKind = 'assistant-notice' | 'assistant-reply' | 'assistant-action' | 'assistant-proposal';
+export const ASSISTANT_KINDS: readonly AssistantKind[] = ['assistant-notice', 'assistant-reply', 'assistant-action', 'assistant-proposal'];
 
 export type AssistantActionStatus = 'waiting' | 'confirmed' | 'declined' | 'expired' | 'done' | 'failed';
 export const ACTION_STATUSES: readonly AssistantActionStatus[] = ['waiting', 'confirmed', 'declined', 'expired', 'done', 'failed'];
@@ -48,7 +48,22 @@ export interface AssistantActionMetadata extends AssistantBase {
   resultText?: string;
 }
 
-export type AssistantMetadata = AssistantNoticeMetadata | AssistantReplyMetadata | AssistantActionMetadata;
+/** States a proposal card shows; the same names as the proposal record's (types.ts ProposalState). */
+export type AssistantProposalState = 'open' | 'consented' | 'running' | 'done' | 'failed' | 'objected' | 'dismissed' | 'expired';
+export const PROPOSAL_CARD_STATES: readonly AssistantProposalState[] = ['open', 'consented', 'running', 'done', 'failed', 'objected', 'dismissed', 'expired'];
+
+/**
+ * A proposal card (docs/meeting-consent-design.md). It carries the proposal's id and state only: the statement is the message text,
+ * and names, answers and reasons are read from the proposals route by people allowed to see them. It has no buttons; answers are
+ * given in the deck. Deleting the record blanks the text like any other Nova message, and the proposals go with the record.
+ */
+export interface AssistantProposalMetadata extends AssistantBase {
+  kind: 'assistant-proposal';
+  proposalId: string;
+  state: AssistantProposalState;
+}
+
+export type AssistantMetadata = AssistantNoticeMetadata | AssistantReplyMetadata | AssistantActionMetadata | AssistantProposalMetadata;
 
 /** What the caller supplies for each kind; chat.ts adds `assistant`, `displayName` and `kind`. */
 export type ReplyInput = { text: string; askedBy: string; askedByName: string };
@@ -83,6 +98,10 @@ export function parseAssistantMetadata(raw: unknown): AssistantMetadata | null {
     return { ...base, kind: 'assistant-action', actionId: m['actionId'], askedBy: m['askedBy'], askedByName: m['askedByName'], summary: m['summary'],
       ...(detail ? { detail } : {}), tool: { name: tool['name'], argsDigest: tool['argsDigest'] }, status: m['status'] as AssistantActionStatus,
       ...(typeof m['resultText'] === 'string' ? { resultText: m['resultText'] } : {}) };
+  }
+  if (m['kind'] === 'assistant-proposal') {
+    if (!str(m['proposalId'], 128) || !PROPOSAL_CARD_STATES.includes(m['state'] as AssistantProposalState)) return null;
+    return { ...base, kind: 'assistant-proposal', proposalId: m['proposalId'], state: m['state'] as AssistantProposalState };
   }
   return null;
 }

@@ -195,13 +195,32 @@ function announceConsented(p: Proposal): void {
   }
 }
 
+/**
+ * Called after a proposal is created or saved with a change (an answer, a dismissal, an expiry), whatever made it. The call chat's
+ * proposal card follows through this (chat.ts). Awaited so the card is in place when the route answers; a listener's failure is
+ * logged by id and never undoes the write.
+ */
+export type ChangedListener = (proposal: Proposal, how: 'created' | 'changed') => void | Promise<void>;
+const changedListeners = new Set<ChangedListener>();
+export function onProposalChanged(fn: ChangedListener): () => void {
+  changedListeners.add(fn);
+  return () => { changedListeners.delete(fn); };
+}
+async function announceChanged(p: Proposal, how: 'created' | 'changed'): Promise<void> {
+  for (const fn of changedListeners) {
+    try { await fn(p, how); } catch (e) { console.warn('[meeting-assistant] a proposal change listener failed', p.id, (e as Error).message); }
+  }
+}
+
 // ---- the service: read, apply, write back with the version read --------------------------------------------------------------------
 
 /** The expiry a proposal of a call that has ended should carry. */
 export const expiryAfter = (endedAt: number): number => endedAt + PROPOSAL_AFTER_CALL_MS;
 
 export async function createProposal(store: AssistantStore, input: NewProposal): Promise<{ proposal: Proposal; created: boolean }> {
-  return store.createProposal(buildProposal(input));
+  const out = await store.createProposal(buildProposal(input));
+  if (out.created) await announceChanged(out.proposal, 'created');
+  return out;
 }
 
 /** Give every proposal of the call its expiry (end + 72 h), once the call has ended. Safe to repeat. */
@@ -216,7 +235,7 @@ async function expireIfDue(store: AssistantStore, p: Proposal, nowMs: number): P
   let current: Proposal | null = p;
   for (let i = 0; i < SAVE_ATTEMPTS && current && isDue(current, nowMs); i += 1) {
     const saved = await store.saveProposal({ ...current, state: 'expired', updatedAt: nowMs }, current.version);
-    if (saved) return saved;
+    if (saved) { await announceChanged(saved, 'changed'); return saved; }
     current = await store.getProposal(p.callId, p.id);
   }
   return current ?? p;
@@ -250,6 +269,7 @@ export async function respondToProposal(store: AssistantStore, callId: string, i
     const saved = await store.saveProposal(out.proposal, current.version);
     if (!saved) continue; // someone else answered first: read again
     if (saved.state === 'consented' && (current.state !== 'consented' || input.asExecutor)) announceConsented(saved);
+    await announceChanged(saved, 'changed');
     return { ok: true, proposal: saved };
   }
   return { ok: false, why: 'busy' };

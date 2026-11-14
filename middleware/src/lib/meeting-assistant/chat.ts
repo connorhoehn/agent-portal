@@ -14,7 +14,7 @@
 //
 // When: only while an assistant record exists for the call and is not `left`; the dismiss notice is the one
 // exception (`leaving`). A private reply is not a chat message: `postPrivately` goes to one person's notifications.
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import type { ChatMessage } from '@connorhoehn/realtime-modules/chat';
 import { config } from '../../config.js';
 import { getUser } from '../../providers/identity.js';
@@ -22,6 +22,8 @@ import { callChatChannel, callChatRuntime } from '../call-chat.js';
 import { notify } from '../social-notify.js';
 import { postThreadMessage, updateThreadMessage } from '../social-chat.js';
 import { assistantStore } from './store-select.js';
+import { onProposalChanged } from './proposals.js';
+import type { Proposal } from './types.js';
 import {
   DELETED_RECORD_LINE, NOVA_NAME, NOVA_USER_ID,
   type ActionInput, type AssistantActionStatus, type AssistantMetadata, type ReplyInput,
@@ -44,6 +46,8 @@ export interface PostOptions {
   leaving?: boolean;
   /** So is the minutes message after it (and the action cards that message offers): minutes.ts is the only caller. */
   minutes?: boolean;
+  /** A fixed message id and time, for a message that must be found again without storing its id (a proposal card). */
+  fixed?: { id: string; at: string };
 }
 
 /** Is Nova in this call (a record that has not left)? */
@@ -59,9 +63,9 @@ export async function assistantPresent(callId: string): Promise<boolean> {
 export async function postAsAssistant(callId: string, message: { text: string; metadata: AssistantMetadata }, opts: PostOptions = {}): Promise<ChatMessage | null> {
   const record = await assistantStore().get(callId);
   if (!record || (record.state === 'left' && !opts.leaving && !opts.minutes)) return null;
-  const at = new Date().toISOString();
+  const at = opts.fixed?.at ?? new Date().toISOString();
   const row: ChatMessage = {
-    id: messageId(at), clientId: 'server:assistant', userId: NOVA_USER_ID, channel: callChatChannel(callId),
+    id: opts.fixed?.id ?? messageId(at), clientId: 'server:assistant', userId: NOVA_USER_ID, channel: callChatChannel(callId),
     message: message.text, metadata: { ...message.metadata }, timestamp: at,
   };
   await postThreadMessage(row, chatStore());
@@ -145,6 +149,35 @@ export async function moveAction(callId: string, actionId: string, move: ActionM
     { metadata: { status: decided.status, ...(decided.resultText ? { resultText: decided.resultText } : {}) } }, chatStore());
   return decided;
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Proposal cards (docs/meeting-consent-design.md). One card per proposal, whatever created it, posted when the proposal is created
+// and kept at the proposal's state afterwards (the same message, as an action card's status is). The card's id is derived from the
+// proposal (its time and a digest of its id), so it is found again without storing a message id, and a repeat post is the same row.
+// The text is the statement; nothing else from the proposal goes into the chat (names, answers and reasons come from the proposals
+// route). The card has no buttons: answers are given in the deck.
+
+export function proposalCardId(p: Pick<Proposal, 'id' | 'createdAt'>): string {
+  return `${p.createdAt.toString(36)}${createHash('sha256').update(`proposal:${p.id}`).digest('hex').slice(0, 12)}`;
+}
+
+export async function postProposalCard(p: Proposal): Promise<ChatMessage | null> {
+  return postAsAssistant(p.callId, {
+    text: p.statement,
+    metadata: { assistant: true, displayName: NOVA_NAME, kind: 'assistant-proposal', proposalId: p.id, state: p.state },
+  }, { fixed: { id: proposalCardId(p), at: new Date(p.createdAt).toISOString() } });
+}
+
+/** Bring the card to the proposal's state as stored now (read again, so two answers at once cannot leave an older state last). */
+export async function updateProposalCard(p: Proposal): Promise<boolean> {
+  const current = (await assistantStore().getProposal(p.callId, p.id)) ?? p;
+  return !!(await updateThreadMessage(callChatChannel(p.callId), proposalCardId(current), { metadata: { state: current.state } }, chatStore()));
+}
+
+onProposalChanged(async (p, how) => {
+  if (how === 'created') await postProposalCard(p);
+  else await updateProposalCard(p);
+});
 
 // ---------------------------------------------------------------------------------------------------------------
 // A private reply (decision 6: tools about one person's private standing answer only to the asker).
