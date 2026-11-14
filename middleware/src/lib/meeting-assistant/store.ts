@@ -14,6 +14,7 @@
 //    browser) is the same: created once per (call, turnId), `moveTurn` moves it only from the statuses named.
 import type { AssistantAction, AssistantRecord, MinutesRecord, AssistantSession, AssistantState, AssistantTurn, PendingRequest, TranscriptLine, TurnStatus } from './types.js';
 import { sessionOf } from './types.js';
+import { WRITE_FINISH_MS } from './limits.js';
 
 export const MAX_PENDING_REQUESTS = 20;
 export const MAX_LINE_CHARS = 2000;
@@ -232,6 +233,7 @@ export class MemoryAssistantStore implements AssistantStore {
     const runnable = t && (t.kind === 'write' ? t.status === 'running' : t.status === 'pending');
     if (!t || !runnable || t.claimId !== undefined || t.expiresAt <= nowMs) return null;
     t.claimId = claim.claimId; t.claimedAt = claim.claimedAt;
+    if (t.kind === 'write') t.expiresAt = Math.max(t.expiresAt, claim.claimedAt + WRITE_FINISH_MS);
     return copy(t);
   }
 

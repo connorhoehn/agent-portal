@@ -7,6 +7,7 @@
 // the INSERT reads the claimed seq from it. No transaction needed, no lost or doubled line numbers.
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import type { AssistantAction, AssistantRecord, MinutesActionItem, MinutesRecord, MinutesWriterKind, AssistantSession, AssistantState, AssistantTurn, PendingRequest, TranscriptLine, TurnKind, TurnStatus } from './types.js';
+import { WRITE_FINISH_MS } from './limits.js';
 import { MAX_PENDING_REQUESTS, REMOVED_BY_INVITER, type ActionChange, type AssistantStore, type MinutesFilter, type StateChange, type TurnChange, type TurnFilter } from './store.js';
 
 export type SqlExec = (sql: string, params?: SqlParameter[]) => Promise<Record<string, unknown>[]>;
@@ -286,7 +287,8 @@ export class SqlAssistantStore implements AssistantStore {
   async claimTurn(callId: string, turnId: string, claim: { claimId: string; claimedAt: number }, nowMs: number) {
     // One conditional update: of two simultaneous claims the database lets exactly one through.
     const rows = await this.exec(
-      `UPDATE meeting_assistant_turns SET claim_id = :claim, claimed_at = :at::timestamptz
+      `UPDATE meeting_assistant_turns SET claim_id = :claim, claimed_at = :at::timestamptz,
+         expires_at = CASE WHEN kind = 'write' THEN GREATEST(expires_at, :at::timestamptz + interval '${WRITE_FINISH_MS / 1000} seconds') ELSE expires_at END
        WHERE call_id = :call AND turn_id = :turn AND claim_id IS NULL AND expires_at > :now::timestamptz
          AND ((kind = 'write' AND status = 'running') OR (kind <> 'write' AND status = 'pending'))
        RETURNING ${TURN_COLUMNS}`,

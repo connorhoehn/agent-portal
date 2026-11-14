@@ -19,3 +19,6 @@ export function assistantLimits(): AssistantLimits {
 
 /** The warning goes out this long before the ceiling. */
 export const CEILING_WARNING_SECONDS = 300;
+
+/** A write claimed in the last seconds of its ten minutes still gets this long (from the claim) to run and report: its result is not refused as expired. */
+export const WRITE_FINISH_MS = 90_000;

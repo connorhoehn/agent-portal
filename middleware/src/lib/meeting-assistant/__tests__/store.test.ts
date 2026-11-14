@@ -220,6 +220,14 @@ describe('turns and the session bookkeeping (package 4a)', () => {
     await s.moveTurn('call-1', 't-w', { from: ['pending'], to: 'running' });
     expect(await s.claimTurn('call-1', 't-w', { claimId: 'w', claimedAt: 2000 }, 2000)).toMatchObject({ claimId: 'w' });
   });
+  it('a write claimed in its last seconds gets 90 s from the claim to finish; a read and an early claim keep their time (re-audit F5)', async () => {
+    await s.createTurn(turn({ turnId: 't-w', kind: 'write', status: 'running', expiresAt: 600_000 }));
+    expect((await s.claimTurn('call-1', 't-w', { claimId: 'w', claimedAt: 595_000 }, 595_000))!.expiresAt).toBe(685_000);
+    await s.createTurn(turn({ turnId: 't-w2', kind: 'write', status: 'running', expiresAt: 600_000 }));
+    expect((await s.claimTurn('call-1', 't-w2', { claimId: 'w', claimedAt: 100_000 }, 100_000))!.expiresAt).toBe(600_000);
+    await s.createTurn(turn({ turnId: 't-r', expiresAt: 100_000 }));
+    expect((await s.claimTurn('call-1', 't-r', { claimId: 'r', claimedAt: 95_000 }, 95_000))!.expiresAt).toBe(100_000);
+  });
 
   it('lists due turns across calls: pending or running, past their time, oldest first, bounded (M9)', async () => {
     await s.createTurn(turn());                                                   // due at 91 000
@@ -271,7 +279,7 @@ describe('SqlAssistantStore turn statements', () => {
     rows = [{ call_id: 'call-1', turn_id: 't-1', asked_by: 'u-vera', tool_name: 'search', tool_args: '{}', kind: 'read', status: 'pending', action_id: null, created_at: '1970-01-01T00:00:01Z', expires_at: '1970-01-01T00:01:31Z', claim_id: 'abc', claimed_at: '1970-01-01T00:00:02Z' }];
     const out = await store().claimTurn('call-1', 't-1', { claimId: 'abc', claimedAt: 2000 }, 2000);
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.sql).toMatch(/UPDATE meeting_assistant_turns SET claim_id = :claim, claimed_at = :at::timestamptz\s+WHERE call_id = :call AND turn_id = :turn AND claim_id IS NULL AND expires_at > :now::timestamptz\s+AND \(\(kind = 'write' AND status = 'running'\) OR \(kind <> 'write' AND status = 'pending'\)\)\s+RETURNING/);
+    expect(calls[0]!.sql).toMatch(/UPDATE meeting_assistant_turns SET claim_id = :claim, claimed_at = :at::timestamptz,\s+expires_at = CASE WHEN kind = 'write' THEN GREATEST\(expires_at, :at::timestamptz \+ interval '90 seconds'\) ELSE expires_at END\s+WHERE call_id = :call AND turn_id = :turn AND claim_id IS NULL AND expires_at > :now::timestamptz\s+AND \(\(kind = 'write' AND status = 'running'\) OR \(kind <> 'write' AND status = 'pending'\)\)\s+RETURNING/);
     expect(out).toMatchObject({ claimId: 'abc', claimedAt: 2000 });
     rows = [];
     expect(await store().claimTurn('call-1', 't-1', { claimId: 'def', claimedAt: 3000 }, 3000)).toBeNull();
