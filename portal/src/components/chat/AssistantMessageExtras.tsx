@@ -116,7 +116,7 @@ export function AssistantProposalCardView({ card, statement, callId }: { card: A
         {live && (
           <Inline gap="xs" align="center" wrap data-testid="assistant-proposal-people">
             {personChips(live).map((chip) => (
-              <Chip key={chip.userId} size="xs" tone={chip.tone} dot="static" data-testid="assistant-proposal-person" data-person={chip.userId} data-person-state={chip.state}>
+              <Chip key={chip.userId} size="xs" tone={chip.tone} dot="static" data-testid="assistant-proposal-person">
                 {chip.runsIt ? `${chip.label} · runs it` : chip.label}
               </Chip>
             ))}

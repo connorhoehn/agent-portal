@@ -487,7 +487,7 @@ async function proposalView(p: Proposal, viewer: string) {
     state: p.state, executor: { userId: p.executor, name: names[p.executor] }, named: p.named.map((u) => ({ userId: u, name: names[u] })),
     // A reason is shared with everyone who can see the proposal, and labelled so.
     responses: p.responses.map((r) => ({ userId: r.userId, name: names[r.userId], response: r.response, reason: r.reason, reasonShared: r.reason !== null, at: r.at })),
-    missing: whatIsMissing(p), dismissedBy: p.dismissedBy, createdAt: p.createdAt, updatedAt: p.updatedAt, expiresAt: p.expiresAt,
+    missing: whatIsMissing(p), dismissedBy: p.dismissedBy, dismissedByName: p.dismissedBy ? names[p.dismissedBy] : null, createdAt: p.createdAt, updatedAt: p.updatedAt, expiresAt: p.expiresAt,
     // The latest run (proposal-run.ts): running with its executor; done with what was made (`title`, and `href` for a decision record);
     // failed, or handed back to consented, with one sentence (`note`) the card shows.
     run: p.run ? { by: { userId: p.run.by, name: names[p.run.by] }, at: p.run.at, title: p.run.title, href: p.run.href, note: p.run.note } : null,

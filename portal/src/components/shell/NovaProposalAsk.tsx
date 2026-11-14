@@ -44,7 +44,8 @@ function buildPrompt(callId: string, p: ProposalView, initiativeName: string | n
       ? 'You consented. You can withdraw it until it runs.'
       : `You objected${objection?.reason ? `: ${objection.reason}` : ''}. Withdrawing reopens it.`;
     return {
-      ...base, id: `${scope}:${p.id}:${p.you.response}`, kind: 'choice', question,
+      ...base, // Its own id: the objection's reason prompt is `:object`, and a reused id would read as already answered.
+      id: `${scope}:${p.id}:answered-${p.you.response}`, kind: 'choice', question,
       fields: [{ label: 'Outcome', value: outcome }],
       options: [
         { id: 'withdraw', label: p.you.response === 'consent' ? 'Withdraw consent' : 'Withdraw objection' },
@@ -94,6 +95,7 @@ export function NovaProposalAsk() {
   // Esc collapses the deck; here that hides it, and the footer count is the way back.
   useEffect(() => { if (callId && deck.collapsed && deck.active) setProposalDeckHidden(callId, true); }, [callId, deck.collapsed, deck.active]);
   useEffect(() => { if (!hidden && deck.collapsed) deck.setCollapsed(false); }, [hidden, deck]);
-  if (!callId || !deck.visible || deck.collapsed || hidden) return null;
+  // Only a question is drawn: the card in the chat already shows what an answer changed, so no receipt row stays behind.
+  if (!callId || !deck.active || deck.collapsed || hidden) return null;
   return <ComposerPromptDeck deck={deck} className="mx-4 my-1" data-testid="nova-proposal-ask" />;
 }

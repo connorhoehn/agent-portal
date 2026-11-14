@@ -38,6 +38,7 @@ test('done and failed read the result and the reason when given; a link only to 
   assert.equal(one({ state: 'done', result: { title: 'x', href: 'https://elsewhere.example' } }).result?.href, null);
   assert.equal(stateLine(one({ state: 'done' })), 'Recorded');
   assert.equal(stateLine(one({ state: 'failed', failure: 'The initiative is archived' })), 'Failed: The initiative is archived');
+  assert.equal(stateLine(one({ state: 'dismissed', dismissedBy: 'u-sam', dismissedByName: 'Sam' })), 'Marked not a decision by Sam');
 });
 
 test('the deck asks unanswered first, then answered ones until kept; consent says what it does for the executor', () => {

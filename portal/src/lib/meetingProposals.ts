@@ -24,6 +24,7 @@ export interface ProposalView {
   responses: ProposalResponseView[];
   missing: { people: string[]; more: number; objectedBy: string[] };
   dismissedBy: string | null;
+  dismissedByName: string | null;
   createdAt: number;
   /** Filled once it ran (package 3): what was made and the portal path to it, when the server gives them. */
   result: { title: string | null; href: string | null } | null;
@@ -74,7 +75,7 @@ export function parseProposal(raw: unknown): ProposalView | null {
       people: Array.isArray(m['people']) ? m['people'].filter(str) : [], more: Number(m['more']) || 0,
       objectedBy: Array.isArray(m['objectedBy']) ? m['objectedBy'].filter(str) : [],
     },
-    dismissedBy: str(r['dismissedBy']) ? r['dismissedBy'] : null, createdAt: Number(r['createdAt']) || 0,
+    dismissedBy: str(r['dismissedBy']) ? r['dismissedBy'] : null, dismissedByName: str(r['dismissedByName']) ? r['dismissedByName'] : null, createdAt: Number(r['createdAt']) || 0,
     result: resultOf(r['result']), failure: str(r['failure']) ? r['failure'] : null,
     you: {
       userId: str(you['userId']) ? you['userId'] : '', response: you['response'] === 'consent' || you['response'] === 'object' ? you['response'] : null,
@@ -137,7 +138,10 @@ export function stateLine(p: ProposalView): string | null {
       const first = p.responses.find((r) => r.response === 'object');
       return first ? `Objected by ${first.name}${first.reason ? `: ${first.reason}` : ''}` : 'Objected';
     }
-    case 'dismissed': return p.dismissedBy ? `Marked not a decision by ${nameIn(p, p.dismissedBy)}` : 'Marked not a decision';
+    case 'dismissed': {
+      const who = p.dismissedByName ?? (p.dismissedBy ? nameIn(p, p.dismissedBy) : null);
+      return who ? `Marked not a decision by ${who}` : 'Marked not a decision';
+    }
     case 'expired': return 'Expired without running';
     case 'running': return `Running in ${p.executor.name}'s browser`;
     case 'done': {
