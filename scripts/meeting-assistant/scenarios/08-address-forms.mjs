@@ -9,7 +9,7 @@ export default {
     const { p, call } = await ctx.setup({ people: ['vera', 'nora', 'mia'] });
     for (const k of ['vera', 'nora', 'mia']) ctx.lane(k);
     ctx.at(500);
-    const f1 = ctx.next('vera', 'What is the capital of Portugal, Nova?', { gap: 1500, dry: { reply: { text: 'The capital of Portugal is Lisbon.', frames: 15 } } });
+    const f1 = ctx.next('vera', 'What is the capital of Portugal, Nova?', { gap: 1500, dry: { delegate: true, reply: { text: 'The capital of Portugal is Lisbon.', frames: 15 } } });
     const f2 = ctx.next('nora', 'Hey Nova, what is two plus two?', { gap: 7000, dry: { reply: { text: 'Two plus two is four.', frames: 12 } } });
     const f3a = ctx.next('mia', 'Nova?', { gap: 7000 });
     const f3b = ctx.next('mia', 'What is the capital of Spain?', { gap: 2000, dry: { reply: { text: 'The capital of Spain is Madrid.', frames: 15 } } });

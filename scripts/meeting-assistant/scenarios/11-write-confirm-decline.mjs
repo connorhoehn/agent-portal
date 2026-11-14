@@ -22,9 +22,11 @@ export default {
     // Vera
     const c1 = await cardOf('calendar sync', 'u-vera');
     r.expect('Vera\'s request is a card waiting for Vera', !!c1 && c1.metadata.status === 'waiting', c1 ? `${c1.metadata.status}: ${c1.metadata.summary}` : 'no card');
+    let before = new Set();
     if (c1) {
       const other = await p.nora.call('POST', `${call.A}/actions/${encodeURIComponent(c1.metadata.actionId)}/decision`, { decision: 'confirm' });
       r.expect('only the asker can decide the card (Nora is refused)', other.status === 403, `HTTP ${other.status}`);
+      before = new Set((await call.chatMessages(p.vera)).map((m) => m.id ?? JSON.stringify(m)));
       const ok = await p.vera.call('POST', `${call.A}/actions/${encodeURIComponent(c1.metadata.actionId)}/decision`, { decision: 'confirm' });
       r.harness('Vera confirms the card', ok.status === 200, `HTTP ${ok.status}`);
       const done = await waitFor(async () => { const m = (await call.novaMessages(p.vera)).find((x) => x.metadata?.actionId === c1.metadata.actionId); return m?.metadata?.status === 'done' ? m : null; }, 15_000, 400);
@@ -32,8 +34,12 @@ export default {
     }
     await sleep(3500);
     const chat1 = await call.chatMessages(p.vera);
-    const follow = chat1.find((m) => m.metadata?.kind === 'assistant-reply' && /created the work item for vera/i.test(String(m.message)));
-    r.expect('Nova\'s follow-up after the write is posted and labelled Vera', !!follow && follow.metadata.askedBy === 'u-vera', follow ? `labelled ${follow.metadata.askedBy}` : 'no follow-up');
+    // The server tells the model the write was done as silent context (session.thinking.append); the fake speaks after it, a real
+    // model may or may not. So whether Nova says anything is measured, and what it does say must be labelled Vera, never anyone else.
+    const after = c1 ? chat1.filter((m) => m.metadata?.kind === 'assistant-reply' && !before.has(m.id ?? JSON.stringify(m))) : [];
+    const follow = after.find((m) => /created|done|work item/i.test(String(m.message)));
+    r.measure('Nova spoke after the write was done', after.length);
+    r.expect('anything Nova says after the write is labelled Vera (and the fake\'s follow-up is)', after.every((m) => m.metadata.askedBy === 'u-vera') && (!ctx.dry || !!follow), follow ? `labelled ${follow.metadata.askedBy}` : `${after.length} reply(ies)`);
     // Nora
     await ctx.until(noraAt);
     const c2 = await cardOf('login cookie', 'u-nora');

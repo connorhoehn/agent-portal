@@ -25,12 +25,32 @@ const HEARD_RMS = 150;
  *
  *   dry.transcript  true (default) | false (heard nothing) | a string (a different text than was spoken)
  *   dry.reply       { text, frames }  a spoken answer: output text and that many voiced 100 ms frames, `delayMs` after (default 400)
- *   dry.call        { name, args }    a delegation and a function call; the output comes back as `response.item.create`
+ *   dry.call        { name, args }    a delegation, the voice's short acknowledgement, then the function call; the output comes back as `response.item.create`
+ *   dry.delegate    true              the reply is worked out by the second model: a delegation and an acknowledgement first, the reply `delayMs` later
+ *   dry.ack         { text, frames } | false  what the voice says as it hands the work over (default "One moment.", 8 frames)
  *   dry.followup    string | (output) => { text, frames }  what is said once the call's output arrives
  *   dry.afterContext string | (content) => { text, frames }  what is said when the server appends context about that call (a write done or declined)
  *   dry.id          a name other entries can point at (`echoOf`)
  * An echo entry (`addEcho`) sends a transcript delta for the window in which a reply was heard again by a microphone.
  */
+/**
+ * A heard turn as the real provider sends it: one delta per word with the span spread evenly over the turn. Sentence punctuation
+ * never ends a delta; it opens the next one instead (and the turn's last mark is dropped).
+ */
+export function wordDeltas(text, startMs, endMs) {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  const step = (endMs - startMs) / Math.max(1, words.length);
+  const out = [];
+  let carry = '';
+  words.forEach((w, i) => {
+    const m = /^(.*?)([.!?]+["')\]]*)$/.exec(w);
+    const body = m ? m[1] : w;
+    out.push({ start_ms: Math.round(startMs + i * step), end_ms: Math.round(startMs + (i + 1) * step), delta: `${carry} ${body}` });
+    carry = m ? m[2] : '';
+  });
+  return out;
+}
+
 export class FakeProvider {
   constructor({ port }) {
     this.port = port; this.entries = []; this.echoes = []; this.t0Wall = 0; this.connections = 0; this.live = new Set();
@@ -88,15 +108,31 @@ export class FakeProvider {
         const dry = e.dry ?? {};
         const delta = typeof dry.transcript === 'string' ? dry.transcript : e.text;
         if (!delta) continue;
-        send({ type: 'session.input_transcript.delta', start_ms: Math.max(0, Math.round(start)), end_ms: Math.max(1, Math.round(end)), delta: ` ${delta}` }); this.seen.deltas += 1;
-        if (dry.reply) later(dry.delayMs ?? 400, () => speakText(dry.reply.text, dry.reply.frames ?? 25, dry.id));
+        // As the real provider sends it (paid run, 14 November): a word or two per delta, each with its own span, and no delta ever
+        // ends a sentence, so a turn ends only at a gap, a delegation or Nova's own speech (or the server's idle flush).
+        for (const w of wordDeltas(delta, Math.max(0, Math.round(start)), Math.max(1, Math.round(end)))) { send({ type: 'session.input_transcript.delta', ...w }); this.seen.deltas += 1; }
+        const delegateWork = (callId) => {
+          send({ type: 'session.delegation.created', offset_ms: st.audioMs, delegation: { id: `item_${callId}`, type: 'delegation', target: 'responses' } });
+          // The voice acknowledges at once, before the work has produced anything (the real one within about 350 ms).
+          const ack = dry.ack === false ? null : (dry.ack ?? { text: 'One moment.', frames: 8 });
+          if (ack) later(150, () => speakText(ack.text, ack.frames ?? 8, undefined));
+        };
+        if (dry.reply && dry.delegate) {
+          st.callNo += 1; const itemId = `msg_dry_${this.connections}_${st.callNo}`;
+          delegateWork(itemId);
+          later(dry.delayMs ?? 2500, () => {
+            send({ type: 'response.event', event: { type: 'response.output_item.added', item: { type: 'message', id: itemId } } });
+            later(600, () => speakText(dry.reply.text, dry.reply.frames ?? 25, dry.id));
+          });
+        } else if (dry.reply) later(dry.delayMs ?? 400, () => speakText(dry.reply.text, dry.reply.frames ?? 25, dry.id));
         if (dry.call) {
           // The model begins working the moment it has heard the request: the delegation event comes then, and its function call
           // reaches the server `delayMs` later (the paid run saw the two apart, never together).
           st.callNo += 1; const callId = `call_dry_${this.connections}_${st.callNo}`;
-          send({ type: 'session.delegation.created', offset_ms: st.audioMs, delegation: { id: `item_${callId}`, type: 'delegation', target: 'responses' } });
-          later(dry.delayMs ?? 400, () => {
+          delegateWork(callId);
+          later(dry.delayMs ?? 1500, () => {
           st.lastCall = e; st.calls.set(callId, e); this.seen.calls.push(dry.call.name);
+          send({ type: 'response.event', event: { type: 'response.output_item.added', item: { type: 'function_call', call_id: callId } } });
           send({ type: 'response.event', event: { type: 'response.output_item.done', item: { type: 'function_call', call_id: callId, name: dry.call.name, arguments: JSON.stringify(dry.call.args ?? {}) } } });
           });
         }

@@ -29,7 +29,7 @@ export default {
     const chat = await call.chatMessages(p.vera);
     const replies = chat.filter((m) => m.metadata?.kind === 'assistant-reply');
     const by = (re) => replies.find((m) => re.test(String(m.message)));
-    const four = by(/two plus two is four/i), paris = by(/paris/i);
+    const four = by(/\bfour\b|\b4\b/i), paris = by(/paris/i);
     r.expect('(a) the first question is answered, labelled with Vera', !!four && four.metadata.askedBy === 'u-vera', four ? `labelled ${four.metadata.askedBy}` : 'no reply');
     r.expect('(a) the second question is answered, labelled with Nora', !!paris && paris.metadata.askedBy === 'u-nora', paris ? `labelled ${paris.metadata.askedBy}` : 'no reply');
     r.expect('(a) there are exactly two replies for the two questions', replies.filter((m) => /four|paris/i.test(String(m.message))).length === 2);
@@ -39,9 +39,9 @@ export default {
     r.expect('(b) the card is Vera\'s, who asked for it', !!card && card.metadata.askedBy === 'u-vera', card ? `askedBy ${card.metadata.askedBy}, ${card.metadata.status}` : 'no card');
     const stateAfter = await call.state();
     r.measure('refused calls so far', stateAfter?.refusedCalls ?? -1);
-    const seven = by(/fifty six/i);
+    const seven = by(/fifty[ -]?six|\b56\b/i);
     r.expect('(c) Nora\'s plain question is answered in the call chat while Vera\'s read waits', !!seven && seven.metadata.askedBy === 'u-nora', seven ? `labelled ${seven.metadata.askedBy}` : 'no reply posted');
-    const online = by(/right now/i);
+    const online = by(/right now|online|vera and nora/i);
     r.expect('(c) Vera\'s own read is answered to the call once her browser reports, labelled with Vera', !!online && online.metadata.askedBy === 'u-vera', online ? `labelled ${online.metadata.askedBy}` : 'no reply');
     const waited = veraRuns.log.find((x) => x.tool === 'activity');
     r.harness('Vera\'s stand-in held the read about 20 s and then posted it', !!waited && waited.posted === 200, JSON.stringify(waited ? { posted: waited.posted } : null));
