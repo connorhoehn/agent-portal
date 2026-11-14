@@ -5,7 +5,7 @@
 //   VoiceRelay   hands each 100 ms output frame to the gateway sink, one at a time and in order, behind a burst guard (at most 3 s of
 //                audio queued per call; the rest is dropped and counted). A frame is transient: it is base64 in one gateway frame
 //                and then gone.
-//   NovaSpeech   remembers WHEN Nova was being relayed (and for 400 ms after) and WHAT she said then, so a caption of Nova's own voice
+//   NovaSpeech   remembers WHEN Nova was being relayed (and for VOICE_ECHO_TAIL_MS after) and WHAT she said then, so a caption of Nova's own voice
 //                coming back through a microphone is not taken for a person addressing her (the echo guard).
 //
 // The gateway frame, for the browser (the portal's playback package codes against this):
@@ -20,8 +20,13 @@ export const VOICE_SAMPLE_RATE = 24_000;
 export const VOICE_FRAME_BYTES = 4800; // 100 ms of PCM16 mono at 24 kHz
 export const VOICE_FRAME_MS = 100;
 export const VOICE_MAX_QUEUED_MS = 3000;
-/** Nova counts as speaking this long after the last frame went out (her voice reaches a microphone a moment later). */
-export const VOICE_ECHO_TAIL_MS = 400;
+/**
+ * Nova counts as speaking this long after the last frame went out. Playout, the browser's jitter buffer, the microphone path and the
+ * transcript's stamping lag put an echo's end well after the last relayed frame (a simulated echo 900 ms late slipped past a 400 ms tail).
+ */
+export const VOICE_ECHO_TAIL_MS = 1500;
+/** A line is judged an echo (given matching words) when at least this share of its own voiced span lies inside Nova's speaking window. */
+export const ECHO_OVERLAP_SHARE = 0.5;
 
 export interface AssistantAudioFrame {
   type: 'assistant-audio';
@@ -120,13 +125,16 @@ export class NovaSpeech {
   speakingAt(ms: number): boolean { return this.spans.some((s) => ms >= s.start && ms <= s.end); }
 
   /**
-   * Is this caption Nova's own voice coming back? Only when the caption's whole span lies inside one Nova-speaking span AND its words
+   * Is this caption Nova's own voice coming back? Only when most of the caption's span (ECHO_OVERLAP_SHARE) lies inside one Nova-speaking
+   * span (her speech plus the tail; judged by overlap because a delayed echo's end falls past the window) AND its words
    * match what Nova said then: contained in her words in order (two words or more), or at least 80% of its words (three or more) are hers.
    * A person who merely talks over her is kept, and so is anyone whose span is unknown.
    */
   isEcho(line: { text: string; startAt: number; endAt: number } | null): boolean {
     if (!line || !(line.endAt >= line.startAt)) return false;
-    const span = this.spans.find((s) => line.startAt >= s.start && line.endAt <= s.end);
+    const len = line.endAt - line.startAt;
+    const share = (s: Span): number => len > 0 ? (Math.min(line.endAt, s.end) - Math.max(line.startAt, s.start)) / len : (line.startAt >= s.start && line.startAt <= s.end ? 1 : 0);
+    const span = this.spans.map((s) => ({ s, v: share(s) })).filter((x) => x.v >= ECHO_OVERLAP_SHARE).sort((a, b) => b.v - a.v)[0]?.s;
     if (!span) return false;
     const nova = words([...span.done, span.partial].join(' '));
     const mine = words(line.text);

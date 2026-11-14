@@ -77,15 +77,15 @@ describe('NovaSpeech (the echo guard)', () => {
     s.noteText(frames.at(-1)! + 200, said, true);
     return s;
   };
-  // Frames at 1000..1500 mean Nova is speaking from 1000 to 1500 + 100 + 400 = 2000.
+  // Frames at 1000..1500 mean Nova is speaking from 1000 to 1500 + 100 + 1500 = 3100.
   const speech = () => nova([1000, 1100, 1200, 1300, 1400, 1500], 'Here is the result for the budget.');
 
-  it('records the span: during the frames and for 400 ms after the last one, not before and not later', () => {
+  it('records the span: during the frames and for the tail after the last one, not before and not later', () => {
     const s = speech();
     expect(s.speakingAt(999)).toBe(false);
     expect(s.speakingAt(1000)).toBe(true);
     expect(s.speakingAt(1500 + 100 + VOICE_ECHO_TAIL_MS)).toBe(true);
-    expect(s.speakingAt(2001)).toBe(false);
+    expect(s.speakingAt(3101)).toBe(false);
   });
 
   it('treats a caption entirely inside the span whose words are Nova\'s own as an echo (containment, or at least 80% of three or more words)', () => {
@@ -99,12 +99,21 @@ describe('NovaSpeech (the echo guard)', () => {
     const s = speech();
     expect(s.isEcho({ text: 'Nova what is the weather', startAt: 1100, endAt: 1900 })).toBe(false);
     expect(s.isEcho({ text: 'the result looks wrong to me', startAt: 1100, endAt: 1900 })).toBe(false); // talks over her, 2 of 6 words hers
-    expect(s.isEcho({ text: 'here is the result', startAt: 1100, endAt: 2600 })).toBe(false); // ends after her span
-    expect(s.isEcho({ text: 'here is the result', startAt: 900, endAt: 1900 })).toBe(false); // starts before it
+    expect(s.isEcho({ text: 'here is the result', startAt: 2600, endAt: 4600 })).toBe(false); // mostly after her span
+    expect(s.isEcho({ text: 'here is the result', startAt: 100, endAt: 1100 })).toBe(false); // mostly before it
     expect(s.isEcho({ text: 'here is the result', startAt: 5000, endAt: 5500 })).toBe(false);
     expect(s.isEcho({ text: 'result', startAt: 1100, endAt: 1900 })).toBe(false); // one word is never judged
     expect(s.isEcho(null)).toBe(false);
     expect(new NovaSpeech().isEcho({ text: 'here is the result', startAt: 1100, endAt: 1900 })).toBe(false);
+  });
+
+  it('an echo 400 ms or 900 ms late is caught, even when its end falls past the window; a real line one second after it is kept', () => {
+    const s = speech(); // window 1000..3100
+    expect(s.isEcho({ text: 'here is the result for the budget', startAt: 1400, endAt: 2700 })).toBe(true); // 400 ms late
+    expect(s.isEcho({ text: 'here is the result for the budget', startAt: 1900, endAt: 3600 })).toBe(true); // 900 ms late, ends 500 ms past the window
+    // Someone speaking other words one second after the echo ends is a person, whatever the window.
+    expect(s.isEcho({ text: 'thanks that helps, can we move on', startAt: 4100, endAt: 5500 })).toBe(false);
+    expect(s.isEcho({ text: 'thanks that helps, can we move on', startAt: 2800, endAt: 4200 })).toBe(false);
   });
 
   it('a later utterance is its own span with its own words', () => {
