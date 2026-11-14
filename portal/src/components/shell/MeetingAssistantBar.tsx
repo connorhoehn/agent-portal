@@ -4,9 +4,10 @@
 //   useNovaRosterEntry  the "Nova (Assistant, listening)" line for the call's people lists
 // Everything renders nothing unless the server advertises the feature (session.meetingAssistant) and a call is live.
 
-import { Button, CheckIcon, Chip, CloseIcon, ConfirmDialog, DropdownMenu, InlinePopover, Inline, PauseCircleIcon, PlayCircleIcon, PlusCircleIcon, T, Tooltip } from '@connorhoehn/ui-components/shared';
+import { Button, CheckIcon, Chip, CloseIcon, DropdownMenu, InlinePopover, Inline, PauseCircleIcon, PlayCircleIcon, PlusCircleIcon, T, Tooltip } from '@connorhoehn/ui-components/shared';
 import { MicOffIcon, RecordingConsentNotice, SpeakerIcon, type RosterExtraEntry } from '@connorhoehn/ui-components/video';
-import { useRef, useState } from 'react';
+import { ComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
+import { useMemo, useRef, useState } from 'react';
 import { useNovaVoice } from '../../lib/novaVoice';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import { assistantPresent, assistantStateWords, markWords, timeLeftWords, noticeText, noticeVisible, rosterEntry, ASSISTANT_LABEL, ASSISTANT_NAME } from '../../lib/meetingAssistantModel';
@@ -61,9 +62,22 @@ export function NovaBarControls() {
         <T size="sm" tone="danger" wrap role="alert" data-testid="nova-error-text">{nova.error}</T>
       </InlinePopover>
     </>}
-    <ConfirmDialog open={!!nova.ask} tone="caution" title={nova.ask?.title ?? ''} body={nova.ask?.detail ?? ''} confirmLabel="Go ahead" cancelLabel="Cancel"
-      onConfirm={() => void nova.answerAsk(true)} onCancel={() => void nova.answerAsk(false)} />
   </Inline>;
+}
+
+/** The server's over-budget refusal, asked as a deck prompt above the footer row (no dialog): the refusal sentence, then Go ahead or Cancel. */
+export function NovaBudgetAsk() {
+  const callId = useLiveCallId();
+  const nova = useMeetingAssistant(callId);
+  const { ask, answerAsk } = nova;
+  const prompts = useMemo<ComposerPrompt[]>(() => ask ? [{
+    id: `nova-budget:${callId}:${ask.action}:${ask.detail}`, scope: `nova-budget:${callId}`, kind: 'choice', eyebrow: 'Nova', title: ask.title,
+    question: ask.detail,
+    options: [{ id: 'go', label: 'Go ahead', emphasis: 'primary' }, { id: 'cancel', label: 'Cancel' }],
+    onAnswer: async (a) => { await answerAsk('optionId' in a && a.optionId === 'go'); },
+  }] : [], [ask, callId, answerAsk]);
+  if (!ask) return null;
+  return <ComposerPromptDeck prompts={prompts} scope={`nova-budget:${callId}`} className="mx-4 my-1" data-testid="nova-budget-ask" />;
 }
 
 /** The notice, on the library's RecordingConsentNotice with its own wording and two actions. Its close mark only hides it here; nothing is acknowledged or dismissed by it. */
