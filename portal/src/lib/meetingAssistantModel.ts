@@ -19,6 +19,8 @@ export interface AssistantView {
   /** Seconds Nova has listened, and the ceiling it leaves at; null while the server has not said. */
   listeningSeconds: number | null;
   ceilingSeconds: number | null;
+  /** Nova speaks aloud in this call (off unless an inviter turned it on). */
+  voice: boolean;
 }
 
 /** The state is refreshed this often while a call is live (docs: keep any poll at 5 s or slower). */
@@ -41,6 +43,7 @@ export function parseAssistantState(callId: string, body: unknown): AssistantVie
     pausedBy: text(b['pausedBy']), leftBy: text(b['leftBy']),
     youMustAck: phase !== 'none' && phase !== 'left' && b['youMustAck'] === true,
     listeningSeconds: seconds(b['listeningSeconds']), ceilingSeconds: seconds(b['ceilingSeconds']),
+    voice: phase !== 'none' && phase !== 'left' && b['voice'] === true,
   };
 }
 
