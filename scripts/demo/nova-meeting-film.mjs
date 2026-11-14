@@ -15,7 +15,7 @@
 // only in the edited video.
 //
 // Options: --record-only (no compose), --compose-only (reuse <dir>/timeline.json), --check (one frame per scene in <dir>/check), --max-minutes <n> (Nova's ceiling, so
-// the "min left" mark shows from about scene 10; default 14.8). Env: FILM_OUT may stand in for --out.
+// the "min left" mark shows by scene 11; default 14.5). Env: FILM_OUT may stand in for --out.
 //
 // What the mock world cannot say for itself: the scripted stand-in for the live model answers only fixed phrases
 // (middleware/src/lib/meeting-assistant/scripted-session.ts). So the one spoken question with a free answer (scene 4)
@@ -48,7 +48,7 @@ const MW_PORT = 3945;
 const PORTAL_PORT = 5145;
 const PORTAL = `http://localhost:${PORTAL_PORT}`;
 const MIDDLEWARE = `http://127.0.0.1:${MW_PORT}`;
-const MAX_MINUTES = Number(flag('--max-minutes') ?? 14.8);
+const MAX_MINUTES = Number(flag('--max-minutes') ?? 14.5);
 const INITIATIVE = '/iq/projects/p-observability';
 const PRE_JOIN_KEY = 'orgiq.call-prejoin.v1';
 const STAND_IN_SFU = 'http://meeting-assistant.test';
@@ -168,12 +168,17 @@ const timeline = { size: { width: 1440, height: 900 }, cast: {}, videos: {}, sce
 for (const [k, c] of Object.entries(CAST)) timeline.cast[k] = { name: c.name, label: c.label ?? c.name, voice: c.voice };
 let scene = null;
 function beginScene(n, title, caption) { scene = { n, title, caption, shots: [] }; timeline.scenes.push(scene); console.log(`scene ${n}: ${title}`); }
-/** Ends the running shot (if any) and starts one with these views from now. `views`: [{ v: video id, crop?: name }]. */
-function cut(layout, views) {
+/**
+ * Ends the running shot (if any) and starts one with these views from now, or from `at` when the moment worth showing began
+ * a little earlier than the script noticed it (the recordings run on, so a shot may start in the past after a skip).
+ * `views`: [{ v: video id, crop?: name }].
+ */
+function cut(layout, views, { at } = {}) {
   const now = Date.now();
   const last = scene.shots.at(-1);
   if (last && last.to === null) last.to = now;
-  scene.shots.push({ layout, views, from: now, to: null });
+  const from = at !== undefined ? Math.max(at, last ? last.to : at) : now;
+  scene.shots.push({ layout, views, from, to: null });
 }
 /** Ends the running shot without starting another: what follows until the next cut is left out of the film. */
 function skip() { const last = scene.shots.at(-1); if (last && last.to === null) last.to = Date.now(); }
@@ -360,7 +365,7 @@ try {
   endScene();
 
   // ── 3. Nova listens ──
-  beginScene(3, 'Nova listens', 'The team talks. Nova keeps a transcript with each speaker\'s name, and stays quiet because nobody has asked it anything.');
+  beginScene(3, 'Nova listens', 'The team talks. Nova keeps a transcript with each speaker\'s name (it shows on the meeting page afterwards) and stays quiet: nobody has asked it anything.');
   cut('full', [V('eli')]);
   await hold(1000);
   await speak(vera, 's3a');
@@ -449,9 +454,12 @@ try {
   cut('split', [V('vera', 'chat-end'), V('eli', 'chat-end')]);
   await hold(600);
   await speak(nora, 's8a');
-  await speak(eli, 's8b', { after: 0 });
+  await speak(eli, 's8b', { after: 2500 });
+  // The watcher waits for six quiet seconds; most of that pause is cut, and the film picks up just before the card arrives.
+  skip();
   const p8 = await waitFor(async () => (await proposalsOf(vera)).find((p) => p.source === 'watcher' && p.state === 'open'), 45000, 'the watcher\'s proposal');
   const p8At = Date.now();
+  cut('split', [V('vera', 'chat-end'), V('eli', 'chat-end')], { at: p8At - 1500 });
   await proposalCard(vera, p8.id).waitFor({ timeout: 20000 });
   for (const p of [vera, nora, eli]) await deckOf(p).filter({ hasText: p8.statement }).waitFor({ timeout: 20000 });
   cut('split', [V('vera', 'chat-deck'), V('eli', 'chat-deck')]);
@@ -485,8 +493,10 @@ try {
   cut('split', [V('vera', 'chat-end'), V('eli', 'chat-end')]);
   await hold(600);
   await speak(vera, 's9a');
-  await speak(nora, 's9b', { after: 0 });
+  await speak(nora, 's9b', { after: 2500 });
+  skip();
   const p9 = await waitFor(async () => (await proposalsOf(vera)).find((p) => p.source === 'watcher' && p.state === 'open' && p.id !== p8.id), 45000, 'the second proposal');
+  cut('split', [V('vera', 'chat-end'), V('eli', 'chat-end')], { at: Date.now() - 1500 });
   await proposalCard(eli, p9.id).waitFor({ timeout: 20000 });
   for (const p of [vera, eli]) await deckOf(p).filter({ hasText: p9.statement }).waitFor({ timeout: 20000 });
   cut('split', [V('vera', 'chat-deck'), V('eli', 'chat-deck')]);
@@ -528,7 +538,7 @@ try {
   await waitFor(async () => (await nora.page.getByTestId('nova-mark').first().getAttribute('data-voice-muted')) === 'true', 8000, 'Nora\'s mute');
   await hold(2500);
   await shotPng(nora, 's10a');
-  cut('split', [V('vera', 'corner'), V('nora', 'corner')]);
+  cut('rows2', [V('vera', 'mark-chat'), V('nora', 'mark-chat')]);
   await hold(800);
   const repliesBefore = (await novaOf(vera, 'assistant-reply')).length;
   await speak(vera, 's10q', { after: 0 });
@@ -611,7 +621,7 @@ try {
   // ── 13. Who can see it, and deleting it ──
   layla = await person('layla', { call: false });
   beginScene(13, 'Who can see it', 'Layla was not in the call, so the meeting is not there for her. Vera deletes the record, and Nova\'s messages in the call chat are blanked.');
-  cut('full', [V('layla')]);
+  cut('full', [V('layla', 'notfound')]);
   await layla.page.goto(`${PORTAL}/iq/meetings/${encodeURIComponent(callId)}`, { waitUntil: 'domcontentloaded', timeout: 40000 });
   await layla.page.getByTestId('meeting-not-found').waitFor({ timeout: 30000 });
   await hold(4500);

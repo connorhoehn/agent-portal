@@ -21,7 +21,7 @@ import sys
 from PIL import Image, ImageDraw, ImageFont
 
 W, H = 1920, 1080
-CAP_H = 132
+CAP_H = 140
 AREA_H = H - CAP_H
 FPS = 30
 BG = (11, 18, 32)
@@ -41,7 +41,9 @@ CROPS = {
     'chat-deck': (960, 190, 480, 490),   # the newest messages while a deck prompt shortens the pane
     'deck': (0, 646, 1440, 254),         # the deck prompt above the footer row
     'bottom': (0, 580, 1440, 320),       # the transcription notice and the footer row
-    'corner': (520, 400, 920, 500),      # Nova's mark, its menu, and the lower call chat
+    'corner': (560, 520, 880, 380),      # Nova's mark, its menu (it opens above the mark), and the lower call chat
+    'mark-chat': (690, 560, 750, 340),   # Nova's mark and the newest call chat messages, for two people stacked
+    'notfound': (420, 44, 1020, 400),    # the meeting page's not-found message
     'lower': (0, 330, 1440, 570),        # the call card, the deck prompt and the footer
     'meeting': (60, 60, 980, 515),       # the meeting page's content, above the call card
 }
@@ -86,15 +88,15 @@ def caption_png(path, n, title, caption):
     d = ImageDraw.Draw(img)
     d.rectangle([0, 0, W, 3], fill=ACCENT)
     # Chapter badge
-    d.rounded_rectangle([48, 30, 48 + 72, 30 + 72], radius=16, fill=ACCENT)
+    d.rounded_rectangle([48, 34, 48 + 72, 34 + 72], radius=16, fill=ACCENT)
     num = str(n)
     f = font(40, True)
-    d.text((48 + 36 - d.textlength(num, font=f) / 2, 44), num, font=f, fill=(15, 23, 42))
-    d.text((150, 26), title, font=font(36, True), fill=INK)
-    lines = wrap(d, caption, font(27), W - 150 - 60)
-    y = 72
+    d.text((48 + 36 - d.textlength(num, font=f) / 2, 48), num, font=f, fill=(15, 23, 42))
+    d.text((150, 22), title, font=font(36, True), fill=INK)
+    lines = wrap(d, caption, font(26), W - 150 - 60)
+    y = 68 if len(lines) > 1 else 74
     for line in lines[:2]:
-        d.text((150, y), line, font=font(27), fill=MUTED)
+        d.text((150, y), line, font=font(26), fill=MUTED)
         y += 32
     img.save(path)
 
