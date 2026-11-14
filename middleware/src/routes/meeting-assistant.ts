@@ -36,6 +36,7 @@ import {
   type AssistantRecord,
 } from '../lib/meeting-assistant/index.js';
 import { moveAction, nameOf, noticeText, postNoticeQuietly } from '../lib/meeting-assistant/chat.js';
+import { eraseCall } from '../lib/meeting-assistant/erase.js';
 import { assistantRuntime, MAX_RESULT_BYTES, type StartContext } from '../lib/meeting-assistant/orchestrator.js';
 import { assistantAudio } from '../lib/meeting-assistant/audio-select.js';
 import { preflightAudio, tapArmer, type Preflight } from '../lib/meeting-assistant/media.js';
@@ -440,7 +441,7 @@ const deleteRecord = asyncHandler(async (req, res) => {
   const record = await liveRecordOf(session, callId);
   if (record.invitedBy !== session.sub) throw new AppError(403, 'Only the person who invited the assistant can delete this record');
   if (record.state !== 'left') throw new AppError(409, 'Dismiss the assistant before deleting its record');
-  const lines = await assistantStore().tombstoneMinutes(callId, session.sub, Date.now());
+  const lines = await eraseCall(assistantStore(), callId, session.sub, Date.now());
   res.json({ callId, deleted: true, linesRemoved: lines });
 });
 meetingAssistantRouter.delete('/minutes', refuseMasqueradeRead, deleteRecord);

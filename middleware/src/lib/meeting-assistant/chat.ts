@@ -23,7 +23,7 @@ import { notify } from '../social-notify.js';
 import { postThreadMessage, updateThreadMessage } from '../social-chat.js';
 import { assistantStore } from './store-select.js';
 import {
-  NOVA_NAME, NOVA_USER_ID,
+  DELETED_RECORD_LINE, NOVA_NAME, NOVA_USER_ID,
   type ActionInput, type AssistantActionStatus, type AssistantMetadata, type ReplyInput,
 } from './chat-types.js';
 
@@ -157,4 +157,29 @@ export async function postPrivately(callId: string, userId: string, input: { tex
     payload: { tenant: record.tenant, kind: 'assistant-private-reply', callId, assistant: true },
   });
   return sent.includes(userId);
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Erasing Nova's words from a call's chat (audit M2, M3). Only messages authored by the assistant identity change; people's own
+// messages are theirs. The text goes through `updateThreadMessage`, the same path a card's status change takes.
+
+/** How many of a call chat's newest messages one erase looks at (the update path itself searches the newest 200). */
+const ERASE_SCAN = 1000;
+
+/** Replace the text of every message Nova authored in the call's chat with the fixed line; cards lose summary, detail and result. Safe to repeat. Returns how many changed. */
+export async function eraseAssistantMessages(callId: string): Promise<number> {
+  const channel = callChatChannel(callId);
+  const rows = await chatStore().listMessages(channel, ERASE_SCAN);
+  let changed = 0;
+  for (const m of rows) {
+    if (m.userId !== NOVA_USER_ID || m.deletedAt) continue;
+    const isCard = m.metadata?.['kind'] === 'assistant-action';
+    const already = m.message === DELETED_RECORD_LINE && (!isCard || (m.metadata?.['summary'] === DELETED_RECORD_LINE && m.metadata?.['detail'] === undefined && m.metadata?.['resultText'] === undefined));
+    if (already) continue;
+    const patch = isCard
+      ? { message: DELETED_RECORD_LINE, metadata: { summary: DELETED_RECORD_LINE, detail: undefined, resultText: undefined, tool: { name: String((m.metadata?.['tool'] as { name?: unknown } | undefined)?.name ?? ''), argsDigest: '' } } }
+      : { message: DELETED_RECORD_LINE };
+    if (await updateThreadMessage(channel, m.id, patch, chatStore())) changed += 1;
+  }
+  return changed;
 }

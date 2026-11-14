@@ -7,7 +7,7 @@
 // the INSERT reads the claimed seq from it. No transaction needed, no lost or doubled line numbers.
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import type { AssistantAction, AssistantRecord, MinutesActionItem, MinutesRecord, MinutesWriterKind, AssistantSession, AssistantState, AssistantTurn, PendingRequest, TranscriptLine, TurnKind, TurnStatus } from './types.js';
-import { MAX_PENDING_REQUESTS, type ActionChange, type AssistantStore, type MinutesFilter, type StateChange, type TurnChange, type TurnFilter } from './store.js';
+import { MAX_PENDING_REQUESTS, REMOVED_BY_INVITER, type ActionChange, type AssistantStore, type MinutesFilter, type StateChange, type TurnChange, type TurnFilter } from './store.js';
 
 export type SqlExec = (sql: string, params?: SqlParameter[]) => Promise<Record<string, unknown>[]>;
 
@@ -346,9 +346,14 @@ export class SqlAssistantStore implements AssistantStore {
   }
 
   async tombstoneMinutes(callId: string, by: string, at: number) {
-    // One statement: the lines go, and the minutes row is written or blanked as a tombstone. A call with no assistant record has nothing to hold the row.
+    // One statement, so it is all or nothing and safe to repeat: the lines go, the minutes row is written or blanked as a tombstone, and the
+    // other tables that hold words are blanked in the same step (audit M2): the record's pending requests, each turn's tool arguments and
+    // each action's result text. A call with no assistant record has nothing to hold the tombstone row.
     const rows = await this.exec(
       `WITH gone AS (DELETE FROM meeting_transcript_lines WHERE call_id = :call RETURNING 1),
+            requests AS (UPDATE meeting_assistants SET pending_requests = '[]'::jsonb WHERE call_id = :call RETURNING 1),
+            turns AS (UPDATE meeting_assistant_turns SET tool_args = to_jsonb(:removed::text) WHERE call_id = :call RETURNING 1),
+            actions AS (UPDATE meeting_assistant_actions SET args_digest = '', result_text = CASE WHEN result_text IS NULL THEN NULL ELSE :removed END WHERE call_id = :call RETURNING 1),
             marked AS (
               INSERT INTO meeting_minutes (call_id, tenant, lobby, initiative_id, started_at, ended_at, invited_by, writer, created_at, deleted_at, deleted_by)
               SELECT call_id, tenant, lobby, initiative_id, invited_at, COALESCE(left_at, invited_at), invited_by, 'none', :at::timestamptz, :at::timestamptz, :by
@@ -357,7 +362,7 @@ export class SqlAssistantStore implements AssistantStore {
                 line_count = 0, truncated = false, writer = 'none', deleted_at = :at::timestamptz, deleted_by = :by
               RETURNING 1)
        SELECT (SELECT count(*) FROM gone) AS removed`,
-      [s('call', callId), s('at', iso(at)), s('by', by)],
+      [s('call', callId), s('at', iso(at)), s('by', by), s('removed', REMOVED_BY_INVITER)],
     );
     return Number(rows[0]?.['removed'] ?? 0);
   }

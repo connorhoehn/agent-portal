@@ -17,6 +17,8 @@ import { sessionOf } from './types.js';
 
 export const MAX_PENDING_REQUESTS = 20;
 export const MAX_LINE_CHARS = 2000;
+/** What a delete leaves in place of a turn's tool arguments and an action's result text: ids, statuses and times stay, words go. */
+export const REMOVED_BY_INVITER = 'Removed by the inviter';
 
 export interface StateChange {
   /** The states this change may start from; anything else leaves the record alone and returns null. */
@@ -256,6 +258,11 @@ export class MemoryAssistantStore implements AssistantStore {
     const rows = this.transcript.get(callId) ?? [];
     this.transcript.delete(callId);
     const r = this.records.get(callId);
+    // Every other place that holds the call's words (audit M2): the detector's pending requests, each turn's tool arguments and
+    // each action's result text. Ids, statuses and times stay so the cards and the counters remain consistent.
+    if (r) r.pendingRequests = [];
+    for (const t of this.turns.values()) if (t.callId === callId) t.tool = { name: t.tool.name, args: REMOVED_BY_INVITER };
+    for (const a of this.actions.values()) if (a.callId === callId) { a.argsDigest = ''; if (a.resultText !== null) a.resultText = REMOVED_BY_INVITER; }
     const old = this.minutes.get(callId);
     this.minutes.set(callId, tombstone(callId, old, r, by, at));
     return rows.length;

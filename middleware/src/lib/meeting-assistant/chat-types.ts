@@ -9,6 +9,8 @@
 
 export const NOVA_USER_ID = 'agent:nova';
 export const NOVA_NAME = 'Nova' as const;
+/** What Nova's own chat messages say once their call's record is deleted (by the inviter, or by retention). */
+export const DELETED_RECORD_LINE = 'This record was deleted by the person who invited Nova.';
 export const ASSISTANT_KIND_PREFIX = 'assistant-';
 
 export type AssistantKind = 'assistant-notice' | 'assistant-reply' | 'assistant-action';
