@@ -90,11 +90,16 @@ export class FakeProvider {
         if (!delta) continue;
         send({ type: 'session.input_transcript.delta', start_ms: Math.max(0, Math.round(start)), end_ms: Math.max(1, Math.round(end)), delta: ` ${delta}` }); this.seen.deltas += 1;
         if (dry.reply) later(dry.delayMs ?? 400, () => speakText(dry.reply.text, dry.reply.frames ?? 25, dry.id));
-        if (dry.call) later(dry.delayMs ?? 400, () => {
-          st.callNo += 1; st.lastCall = e; const callId = `call_dry_${this.connections}_${st.callNo}`; st.calls.set(callId, e); this.seen.calls.push(dry.call.name);
+        if (dry.call) {
+          // The model begins working the moment it has heard the request: the delegation event comes then, and its function call
+          // reaches the server `delayMs` later (the paid run saw the two apart, never together).
+          st.callNo += 1; const callId = `call_dry_${this.connections}_${st.callNo}`;
           send({ type: 'session.delegation.created', offset_ms: st.audioMs, delegation: { id: `item_${callId}`, type: 'delegation', target: 'responses' } });
+          later(dry.delayMs ?? 400, () => {
+          st.lastCall = e; st.calls.set(callId, e); this.seen.calls.push(dry.call.name);
           send({ type: 'response.event', event: { type: 'response.output_item.done', item: { type: 'function_call', call_id: callId, name: dry.call.name, arguments: JSON.stringify(dry.call.args ?? {}) } } });
-        });
+          });
+        }
       }
       // Entries with transcript: false are still "heard": nothing is sent for them, they only need to leave the list.
       for (const e of this.entries) if (e.dry?.transcript === false) e.done.add(ws);
