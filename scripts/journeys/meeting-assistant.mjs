@@ -151,9 +151,16 @@ async function main() {
     });
   }
 
+  // JOURNEY_VIDEO_DIR records every person's browser as video (Playwright's recordVideo), labelled by user in index.txt.
+  function videoOpts() { const dir = process.env.JOURNEY_VIDEO_DIR; return dir ? { recordVideo: { dir, size: { width: 1440, height: 900 } } } : {}; }
+  function labelVideos(context, who) {
+    const dir = process.env.JOURNEY_VIDEO_DIR; if (!dir) return;
+    context.on('page', (pg) => { void pg.video()?.path().then((f) => import('node:fs').then((fs) => fs.appendFileSync(`${dir}/index.txt`, `${who} ${Date.now()} ${f}\n`))).catch(() => undefined); });
+  }
   /** A signed-in person with their own browser context and page, the call's SFU stubbed (see the header). */
   async function person(who) {
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, ...videoOpts() });
+    labelVideos(context, who.userId);
     contexts.push(context);
     const login = await context.request.post(`${PORTAL}/api/session/login`, { data: { userId: who.userId } });
     check(login.status() === 200, `login ${who.userId}: ${login.status()}`);
@@ -1052,7 +1059,8 @@ async function main() {
     const LAYLA = { userId: 'u-layla', role: 'sme' };
     /** A person who was not in the call: logged in, no call, no initiative page needed. */
     const outsider = async () => {
-      const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, ...videoOpts() });
+      labelVideos(context, LAYLA.userId);
       contexts.push(context);
       const login = await context.request.post(`${PORTAL}/api/session/login`, { data: { userId: LAYLA.userId } });
       check(login.status() === 200, `login ${LAYLA.userId}: ${login.status()}`);
