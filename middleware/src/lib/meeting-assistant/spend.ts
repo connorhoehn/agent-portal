@@ -182,3 +182,39 @@ export const realMinutesSpend: MinutesSpend = {
 let minutesSpendImpl: MinutesSpend = realMinutesSpend;
 export function minutesSpend(): MinutesSpend { return minutesSpendImpl; }
 export function setMinutesSpend(next: MinutesSpend | null): void { minutesSpendImpl = next ?? realMinutesSpend; }
+
+// ---------------------------------------------------------------------------------------------------------------
+// The decision watcher (docs/meeting-consent-design.md, "Detection", package 5): each model check is one ledger row against the
+// INVITER and the call's initiative under the same source, keyed `ma:<callId>:watch:<n>` so a retried write never books twice.
+// A check is not made once the call's listening hold is used up (the ceiling reached) or the call's spend has been settled.
+
+export const watcherSourceId = (callId: string, n: number): string => `${sourceIdFor(callId)}:watch:${n}`;
+
+export interface WatcherSpend {
+  /** May a check be made now? False once the listening hold is exhausted or the call is settled. */
+  allowed(record: AssistantRecord, now: number): boolean;
+  /** Book one check. `reported` only when the provider's own token counts priced it. */
+  record(input: { callId: string; inviterId: string; initiativeId: string | null; n: number; model: string; costUsd: number | null; basis: 'reported' | 'estimated' | 'unknown'; tokensIn: number; tokensOut: number }): Promise<void>;
+}
+
+export function watcherBudgetLeft(record: AssistantRecord, now: number): boolean {
+  const s = sessionOf(record);
+  if (s.settled) return false;
+  return listeningSecondsOf(record, now) < s.ceilingSeconds;
+}
+
+export const realWatcherSpend: WatcherSpend = {
+  allowed: watcherBudgetLeft,
+  async record(i) {
+    const { recordSpend } = await import('../../providers/spend-ledger.js');
+    await recordSpend({
+      source: 'meeting_assistant', sourceId: watcherSourceId(i.callId, i.n), initiativeId: i.initiativeId, boxId: null, actorId: i.inviterId,
+      trigger: 'meeting-assistant-decision-check', model: i.model, costUsd: i.costUsd, costBasis: i.basis, provider: 'bedrock',
+      inputTokens: i.tokensIn, outputTokens: i.tokensOut, ...(i.costUsd !== null ? { estimatedCostUsd: i.costUsd } : {}),
+    });
+  },
+};
+
+let watcherSpendImpl: WatcherSpend = realWatcherSpend;
+export function watcherSpend(): WatcherSpend { return watcherSpendImpl; }
+export function setWatcherSpend(next: WatcherSpend | null): void { watcherSpendImpl = next ?? realWatcherSpend; }

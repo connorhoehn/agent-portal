@@ -43,6 +43,7 @@ export class LineIntake {
   private readonly tickMs: number;
   private readonly source: () => TranscriptSource;
   private readonly listeners = new Set<(callId: string, events: DetectorEvent[]) => void | Promise<void>>();
+  private readonly storedListeners = new Set<(line: TranscriptLine) => void>();
 
   constructor(private readonly store: AssistantStore, opts: IntakeOptions = {}) {
     this.clock = opts.clock ?? Date.now;
@@ -91,6 +92,7 @@ export class LineIntake {
       ...(raw.speakers?.length ? { speakers: [...new Set(raw.speakers.filter((x) => typeof x === 'string' && x))].slice(0, 16) } : {}),
     });
     if (!stored) return { stored: null, reason: 'duplicate', events: [] };
+    this.tellStored(stored);
     const detector = this.detectors.get(callId) ?? this.newDetector(callId);
     const events = detector.push(stored);
     await this.apply(callId, events);
@@ -111,6 +113,18 @@ export class LineIntake {
     const d = new RequestDetector(callId, this.clock);
     this.detectors.set(callId, d);
     return d;
+  }
+
+  /** Hear each line as it is stored (the decision watcher). Synchronous and never awaited: a listener cannot hold up the intake. */
+  onStored(listener: (line: TranscriptLine) => void): () => void {
+    this.storedListeners.add(listener);
+    return () => { this.storedListeners.delete(listener); };
+  }
+
+  private tellStored(line: TranscriptLine): void {
+    for (const l of [...this.storedListeners]) {
+      try { l(line); } catch (e) { console.warn('[meeting-assistant] stored-line listener failed', (e as Error).name); }
+    }
   }
 
   /** Hear what the detector decided, after the intake has applied it (requests queued, pause and dismiss done). */
