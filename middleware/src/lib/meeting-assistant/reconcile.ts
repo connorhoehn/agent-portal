@@ -1,16 +1,16 @@
 // After a restart (audit M5). Runs live in memory, so a process that dies leaves records saying `listening` with nothing listening:
 // the listening clock keeps counting, the call's tap keeps posting audio to a sink that no longer knows the token, and what was spent is
-// never booked. This is the one function that puts that right, called once at boot (and at shutdown, after the runs are closed).
+// never booked. This is the one function that puts that right, called at boot, every two minutes after that, and at shutdown (after the runs are closed). A record is touched only once its heartbeat is older than 90 seconds.
 //
 // For every record in `listening` or `paused` with no live run in this process:
 //   (a) the open listening period closes at the last moment the process is known to have been alive (`session.lastAliveAt`, written by
 //       the orchestrator's tick; `invitedAt` when there is none), so `listeningSeconds` stops growing;
 //   (b) spend is settled from the persisted figures, once (`settleFinished` guards on `session.settled`), and extension holds are released;
 //   (c) the call's media taps that point at this server's sink are deleted when media is configured (a failure is logged and tried again
-//       on the next boot; the channel stays on the record until it works);
+//       on the next pass; the channel stays on the record until it works);
 //   (d) a `listening` record becomes `paused` by `system` with one notice in the call chat; a call that is already over becomes `left` and
 //       its minutes are written through the existing service. A `paused` record keeps its state (only (a) to (c) apply).
-// Idempotent: a second run finds nothing to do. The clock is injectable.
+// Also here: a dismiss or call end that finds no run settles from the record (`settleFromRecord`), and the retention sweep ends records abandoned past the hard maximum (`endAbandonedCall`). Idempotent: a second run finds nothing to do. The clock is injectable.
 import { meetingAssistantEnabled } from './index.js';
 import { mediaConfig, tapArmer, type TapArmer } from './media.js';
 import { postNoticeQuietly } from './chat.js';

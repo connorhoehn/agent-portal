@@ -734,7 +734,7 @@ server.listen(config.port, bindHost, () => {
   const mockedDomains = Object.entries(config.mock).filter(([, v]) => v).map(([k]) => k);
   const mockSuffix = mockedDomains.length > 0 ? `mock=${mockedDomains.join(',')}` : 'mocks=off';
   console.log(`orgiq-middleware listening on ${bindHost}:${config.port} (${mockSuffix})`);
-  // Runs live in memory: a record a dead process left `listening` is settled and paused once, at start (audit M5).
+  // Runs live in memory: a record a dead process left `listening` is settled and paused at start and on a two-minute timer (audit M5, S6).
   void reconcileAfterRestart().catch((e: unknown) => console.warn('[meeting-assistant] reconcile at start failed', (e as Error).message));
   stopReconcileTimer = startReconcileTimer(); // and again every two minutes, for a restart that came back inside the heartbeat window
 });
