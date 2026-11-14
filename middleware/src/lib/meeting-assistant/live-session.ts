@@ -113,8 +113,8 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       });
     });
     socket.addEventListener('message', (msg: { data?: unknown }) => this.onMessage(msg?.data));
-    socket.addEventListener('error', () => { this.fail?.(new Error('the live socket failed')); this.finish('socket-error'); });
-    socket.addEventListener('close', () => { this.fail?.(new Error('the live socket closed before the session started')); this.finish('socket-closed'); });
+    socket.addEventListener('error', () => { this.fail?.(new Error('the live socket failed')); this.dropped('socket-error'); });
+    socket.addEventListener('close', () => { this.fail?.(new Error('the live socket closed before the session started')); this.dropped('socket-closed'); });
     try { await started; } catch (e) { this.finish('start-failed'); try { socket.close(1000); } catch { /* already closed */ } throw e; } finally { clearTimeout(timer); }
   }
 
@@ -169,6 +169,24 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       this.finish('close-timeout');
     }
     try { this.socket?.close(1000); } catch { /* already closed */ }
+  }
+
+  /**
+   * The socket ended and the server did not ask for it. The provider may still hold the session open and keep billing, so hang up
+   * over HTTPS (best effort, once), and report usage as the larger of the provider's last figure and the wall clock since
+   * `session.started`, rounded up; the report says when the wall clock won.
+   */
+  private dropped(reason: string): void {
+    if (this.ended) return;
+    if (this.closing === null && this.started) {
+      const wall = Math.ceil(this.sinceStart() / 1000);
+      const estimated = wall > this.seconds;
+      if (estimated) this.seconds = wall;
+      this.emit('usage', { seconds: this.seconds, backendTokens: { ...this.tokens }, ...(estimated ? { estimated: true } : {}) });
+      const id = this.providerSessionId;
+      if (id) { void Promise.resolve().then(() => (this.opts.hangup ?? hangupLiveSession)(id)).catch(() => undefined); }
+    }
+    this.finish(reason);
   }
 
   /** Emit `closed` once, and release anyone waiting on the close. */

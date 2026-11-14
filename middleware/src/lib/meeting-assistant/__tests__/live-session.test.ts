@@ -274,6 +274,36 @@ describe('usage and close', () => {
     expect(s.answerToolCall('call_x', '{}')).toBe(false);
   });
 
+  it('an unexpected close hangs up once over HTTPS and books the larger of the provider figure and the wall clock', async () => {
+    const hangup = jest.fn(async () => true);
+    let now = 1_000_000;
+    const { s, seen } = make({ hangup, clock: () => now });
+    await s.start(START);
+    frame({ type: 'session.usage.updated', usage: { seconds: 30 } });
+    await tick();
+    now += 90_400;
+    serverSocket!.terminate(); await tick(60);
+    expect(hangup).toHaveBeenCalledTimes(1);
+    expect(hangup).toHaveBeenCalledWith('live_u0_abc');
+    expect(seen.usage.at(-1)).toMatchObject({ seconds: 91, estimated: true });
+    expect(seen.closed).toHaveLength(1);
+    await s.close();
+    expect(hangup).toHaveBeenCalledTimes(1);
+  });
+
+  it('an unexpected close keeps the provider figure when it is the larger, and says nothing about an estimate', async () => {
+    const hangup = jest.fn(async () => true);
+    let now = 1_000_000;
+    const { s, seen } = make({ hangup, clock: () => now });
+    await s.start(START);
+    frame({ type: 'session.usage.updated', usage: { seconds: 30 } });
+    await tick();
+    now += 10_000;
+    serverSocket!.terminate(); await tick(60);
+    expect(seen.usage.at(-1)).toEqual({ seconds: 30, backendTokens: { inputTokens: 0, outputTokens: 0, cachedTokens: 0 } });
+    expect(hangup).toHaveBeenCalledTimes(1);
+  });
+
   it('a socket that drops reports closed once and later answers are refused', async () => {
     const { s, seen } = make();
     await s.start(START);
