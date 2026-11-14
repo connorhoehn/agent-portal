@@ -73,6 +73,8 @@ describe('MemoryAssistantStore', () => {
     await s.appendLine(line({ captionId: 'old', at: now - 31 * day }));
     await s.appendLine(line({ captionId: 'edge', at: now - 30 * day }));
     await s.appendLine(line({ captionId: 'new', at: now - 29 * day }));
+    // The call is over: a call still listening or paused is never swept (audit M3), so this old assertion's listening call is moved to left first.
+    await s.transition('call-1', { from: ['listening'], to: 'left', by: 'u-vera', at: now - 1000 });
     expect(await sweepTranscripts(s, now, 30)).toBe(2);
     expect((await s.lines('call-1', 0, 10)).map((l) => l.captionId)).toEqual(['new']);
     expect(await sweepTranscripts(s, now)).toBe(0);

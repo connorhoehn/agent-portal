@@ -77,8 +77,17 @@ export interface AssistantStore {
   dueTurns(nowMs: number, limit: number): Promise<AssistantTurn[]>;
   /** Move a turn; null when it is unknown or not in one of `change.from` (two results settle once). */
   moveTurn(callId: string, turnId: string, change: TurnChange): Promise<AssistantTurn | null>;
-  /** Delete lines at or before `cutoffMs` (epoch). Returns how many went. */
+  /** Delete lines at or before `cutoffMs` (epoch), except the lines of a call that is still `listening` or `paused`. Returns how many went. */
   sweepLines(cutoffMs: number): Promise<number>;
+  /**
+   * Calls whose age is at or before `cutoffMs` (`leftAt` when set, else `invitedAt`) and that are not `listening` or `paused`, oldest
+   * first, at most `limit`: what the retention sweep removes whole (audit M3).
+   */
+  expiredCalls(cutoffMs: number, limit: number): Promise<AssistantRecord[]>;
+  /** Delete everything stored for the call: lines, minutes or tombstone, turns, actions and the record. Refuses (false) a call that is `listening` or `paused`, or unknown. */
+  purgeCall(callId: string): Promise<boolean>;
+  /** Records in any of `states`, oldest invite first, at most `limit` (the boot reconcile, audit M5). */
+  listByState(states: readonly AssistantState[], limit: number): Promise<AssistantRecord[]>;
   /** The call's minutes, or its tombstone (`deleted` set); null when none were written. */
   getMinutes(callId: string): Promise<MinutesRecord | null>;
   /** Write the call's minutes once; an existing row (minutes or tombstone) is returned with `created: false`. */
@@ -232,11 +241,31 @@ export class MemoryAssistantStore implements AssistantStore {
   async sweepLines(cutoffMs: number) {
     let gone = 0;
     for (const [callId, rows] of this.transcript) {
+      const state = this.records.get(callId)?.state;
+      if (state === 'listening' || state === 'paused') continue;
       const keep = rows.filter((l) => l.at > cutoffMs);
       gone += rows.length - keep.length;
       if (keep.length) this.transcript.set(callId, keep); else this.transcript.delete(callId);
     }
     return gone;
+  }
+
+  async expiredCalls(cutoffMs: number, limit: number) {
+    return [...this.records.values()].filter((r) => r.state !== 'listening' && r.state !== 'paused' && (r.leftAt ?? r.invitedAt) <= cutoffMs)
+      .sort((a, b) => (a.leftAt ?? a.invitedAt) - (b.leftAt ?? b.invitedAt) || a.callId.localeCompare(b.callId)).slice(0, limit).map(copy);
+  }
+
+  async purgeCall(callId: string) {
+    const r = this.records.get(callId);
+    if (!r || r.state === 'listening' || r.state === 'paused') return false;
+    this.records.delete(callId); this.transcript.delete(callId); this.minutes.delete(callId);
+    for (const [k, t] of this.turns) if (t.callId === callId) this.turns.delete(k);
+    for (const [k, a] of this.actions) if (a.callId === callId) this.actions.delete(k);
+    return true;
+  }
+
+  async listByState(states: readonly AssistantState[], limit: number) {
+    return [...this.records.values()].filter((r) => states.includes(r.state)).sort((a, b) => a.invitedAt - b.invitedAt || a.callId.localeCompare(b.callId)).slice(0, limit).map(copy);
   }
 
   async getMinutes(callId: string) { const m = this.minutes.get(callId); return m ? copy(m) : null; }

@@ -309,10 +309,41 @@ export class SqlAssistantStore implements AssistantStore {
 
   async sweepLines(cutoffMs: number) {
     const rows = await this.exec(
-      `WITH gone AS (DELETE FROM meeting_transcript_lines WHERE at <= :cutoff::timestamptz RETURNING 1) SELECT count(*) AS removed FROM gone`,
+      `WITH gone AS (DELETE FROM meeting_transcript_lines WHERE at <= :cutoff::timestamptz
+                       AND call_id NOT IN (SELECT call_id FROM meeting_assistants WHERE state IN ('listening', 'paused')) RETURNING 1) SELECT count(*) AS removed FROM gone`,
       [s('cutoff', iso(cutoffMs))],
     );
     return Number(rows[0]?.['removed'] ?? 0);
+  }
+
+  async expiredCalls(cutoffMs: number, limit: number) {
+    const rows = await this.exec(
+      `SELECT ${COLUMNS} FROM meeting_assistants
+       WHERE state NOT IN ('listening', 'paused') AND COALESCE(left_at, invited_at) <= :cutoff::timestamptz
+       ORDER BY COALESCE(left_at, invited_at) ASC, call_id ASC LIMIT :limit`,
+      [s('cutoff', iso(cutoffMs)), n('limit', limit)],
+    );
+    return rows.map(recordFromRow);
+  }
+
+  async purgeCall(callId: string) {
+    // One statement, every table named (the foreign keys would cascade anyway): nothing is touched unless the call is not listening or paused.
+    const rows = await this.exec(
+      `WITH eligible AS (SELECT call_id FROM meeting_assistants WHERE call_id = :call AND state NOT IN ('listening', 'paused')),
+            lines AS (DELETE FROM meeting_transcript_lines WHERE call_id IN (SELECT call_id FROM eligible) RETURNING 1),
+            minutes AS (DELETE FROM meeting_minutes WHERE call_id IN (SELECT call_id FROM eligible) RETURNING 1),
+            turns AS (DELETE FROM meeting_assistant_turns WHERE call_id IN (SELECT call_id FROM eligible) RETURNING 1),
+            actions AS (DELETE FROM meeting_assistant_actions WHERE call_id IN (SELECT call_id FROM eligible) RETURNING 1),
+            gone AS (DELETE FROM meeting_assistants WHERE call_id IN (SELECT call_id FROM eligible) RETURNING 1)
+       SELECT count(*) AS removed FROM gone`,
+      [s('call', callId)],
+    );
+    return Number(rows[0]?.['removed'] ?? 0) > 0;
+  }
+
+  async listByState(states: readonly AssistantState[], limit: number) {
+    const rows = await this.exec(`SELECT ${COLUMNS} FROM meeting_assistants WHERE state IN (${list(states)}) ORDER BY invited_at ASC, call_id ASC LIMIT :limit`, [n('limit', limit)]);
+    return rows.map(recordFromRow);
   }
   async getMinutes(callId: string) {
     const rows = await this.exec(`SELECT ${MINUTES_COLUMNS} FROM meeting_minutes WHERE call_id = :call`, [s('call', callId)]);
