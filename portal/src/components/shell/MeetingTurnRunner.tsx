@@ -8,6 +8,8 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useSession } from '../../lib/auth';
 import { useCapabilities } from '../../lib/capabilities';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
+import { ownMediaId, reportMediaId } from '../../lib/meetingParticipant';
+import { useCallHost } from '../../lib/conversationCall';
 import { onTurnsPoke } from '../../lib/meetingTurnsPoke';
 import { PendingResults, SeenTurns, flushResults, parseClaim, parseTurns, processTurns, type ClaimResult } from '../../lib/meetingTurns';
 import { runCallTool } from '../../lib/voice/runCore';
@@ -36,6 +38,18 @@ export function MeetingTurnRunner() {
   const userId = session?.sub ?? null;
   const ledger = useMemo(() => new Map<string, DeliveryRecord>(), [userId]);
   const results = useMemo(() => new ResultMemory(), [userId, session?.tenant]);
+  const host = useCallHost();
+  const mediaId = ownMediaId(host?.call?.call?.participants as Parameters<typeof ownMediaId>[0], userId);
+  // M7: once an assistant record exists for this call and Nova has not left, tell the server this person's media id (again if it changes after a rejoin).
+  const present = nova.enabled && (nova.view.phase === 'invited' || nova.view.phase === 'listening' || nova.view.phase === 'paused');
+  useEffect(() => {
+    if (!present || !callId || !mediaId) return undefined;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const send = (): void => { void reportMediaId(callId, mediaId).then((done) => { if (!done && !stopped) timer = setTimeout(send, 5000); }); };
+    send();
+    return () => { stopped = true; if (timer) clearTimeout(timer); };
+  }, [present, callId, mediaId]);
   const live = useRef({ session, can });
   live.current = { session, can };
 
