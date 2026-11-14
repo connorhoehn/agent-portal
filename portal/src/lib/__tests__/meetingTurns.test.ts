@@ -268,3 +268,33 @@ test('a poll chain keeps one timer, whatever nudges arrive during a poll', async
   chain.stop();
   assert.equal(timers.size, 0);
 });
+
+// Meeting consent, package 3: a consented proposal's turn is a running write with no card of its own (the consent was the
+// confirmation). The browser runs it exactly like a confirmed card's turn, and the server's decision arguments name the
+// initiative by its typed ref, so the exact-record rule resolves it by id; the result carries the new record's id.
+test('a proposal\'s turn (a running write, no card) is claimed and run like a confirmed card\'s turn', async () => {
+  const h = harness();
+  const t = turn({ turnId: 't-p1', kind: 'write', status: 'running', tool: { name: 'create', args: { kind: 'decision', fields: {} } } });
+  assert.equal(runnable(t, NOW), true);
+  h.deps.claim = async (turnId: string): Promise<ClaimResult> => { h.claimed.push(turnId); return { status: 'claimed', claimId: 'c-1', kind: 'write', tool: t.tool }; };
+  assert.equal(await processTurns([t], h.deps), 1);
+  assert.deepEqual(h.ran, [{ name: 'create', write: true }]);
+  assert.deepEqual(h.posted.map((p) => p.turnId), ['t-p1']);
+});
+
+test('a proposal\'s decision runs with the typed initiative ref and answers the record id', async () => {
+  const STATEMENT = 'Cut over the smallest tenants first';
+  const { fetch, log } = fakeFetch([
+    // The exact-record rule: the typed ref is found by id in the person's own list, never by a name.
+    route('GET', '/api/graph/projects?limit=50&scope=all', 200, [{ id: 'p-auth', name: 'Auth Migration' }, { id: 'p-other', name: 'Auth Migration' }]),
+    route('GET', '/api/graph/projects/p-auth', 200, { id: 'p-auth', name: 'Auth Migration', canWriteWork: true }),
+    (req) => (req.method === 'POST' && req.url === '/api/graph/decisions' ? { status: 201, body: { id: 'd-new', topic: STATEMENT, status: 'open' } } : undefined),
+  ]);
+  const ctx = toolContext({ fetch, tenant: 'orgiq', allow: ['RaiseDecision'] });
+  const args = { kind: 'decision', fields: { initiative: 'initiative:p-auth', statement: STATEMENT, state: 'waiting', participants: ['u-sam', 'u-priya'], call: 'call-1' } };
+  const out = await runCallTool('create', args, ctx, { write: true });
+  assert.equal(out.ok, true, JSON.stringify([out, log.map((r) => `${r.method} ${r.url}`)]));
+  assert.equal(out.output!['id'], 'd-new');
+  const posts = log.filter((r) => r.method === 'POST');
+  assert.deepEqual(posts.map((r) => [r.url, r.body]), [['/api/graph/decisions', { initiativeId: 'p-auth', statement: STATEMENT, state: 'waiting', source: 'call', callId: 'call-1', participants: ['u-sam', 'u-priya'] }]]);
+});
