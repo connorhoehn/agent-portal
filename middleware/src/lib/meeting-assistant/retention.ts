@@ -3,11 +3,13 @@
 // lines, minutes (or tombstone), turns, actions and its assistant record, and Nova's own chat messages for it are replaced with the
 // fixed line (the call chat's own message store keeps its own age limit: the Dynamo adapter's 90-day TTL, none in memory; this sweep does not change it). A call that
 // is still `listening` or `paused` is not swept, unless nothing has served it for longer than the hard maximum plus a margin (it is then
-// ended first, as of its last heartbeat). No audio exists to delete.
+// ended first, as of its last heartbeat). No audio exists to delete. The same sweep expires proposals whose 72 hours after the
+// call are up (meeting consent); that only ends them, it never runs one.
 import { config } from '../../config.js';
 import type { AssistantStore } from './store.js';
 import { assistantLimits } from './limits.js';
 import { sessionOf } from './types.js';
+import { expireDueProposals } from './proposals.js';
 
 const DAY_MS = 86_400_000;
 /** How many expired calls one sweep removes; the next hourly sweep takes the rest. */
@@ -55,6 +57,8 @@ export async function sweepTranscripts(store: AssistantStore, nowMs: number = Da
       await store.purgeCall(call.callId);
     } catch (e) { console.warn('[meeting-assistant] retention could not remove a call', (e as Error).message); }
   }
+  // Proposals left open after a call end 72 hours after it (proposals.ts); nothing runs on this timer, it only ends them.
+  await expireDueProposals(store, nowMs);
   return lines;
 }
 

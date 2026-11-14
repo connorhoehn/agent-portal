@@ -244,6 +244,16 @@ async function expireIfDue(store: AssistantStore, p: Proposal, nowMs: number): P
   return current ?? p;
 }
 
+/**
+ * The retention sweep's step: every proposal whose 72 hours after the call are up is moved to `expired` (and its card follows).
+ * Nothing runs: expiry only ends it. Returns how many expired.
+ */
+export async function expireDueProposals(store: AssistantStore, nowMs: number, limit = 200): Promise<number> {
+  let expired = 0;
+  for (const p of await store.dueProposals(nowMs, limit)) if ((await expireIfDue(store, p, nowMs)).state === 'expired') expired += 1;
+  return expired;
+}
+
 /** The call's proposals with any whose time is up moved to `expired`, and an expiry set on those of a call that ended (`endedAt`). */
 export async function listProposalsFor(store: AssistantStore, callId: string, nowMs: number, endedAt: number | null): Promise<Proposal[]> {
   if (endedAt !== null) await closeProposals(store, callId, endedAt);

@@ -3,6 +3,7 @@ jest.mock('../../../config.js', () => ({ config: { mock: { aurora: true }, meeti
 import { MemoryAssistantStore } from '../store.js';
 import { SqlAssistantStore } from '../store-sql.js';
 import { sweepTranscripts, startRetentionSweep, lastGoodRetentionSweepAt } from '../retention.js';
+import { closeProposals, createProposal, expireDueProposals, PROPOSAL_AFTER_CALL_MS } from '../proposals.js';
 import type { AssistantRecord, AssistantState } from '../types.js';
 
 const DAY = 86_400_000;
@@ -22,6 +23,28 @@ async function fill(s: MemoryAssistantStore, r: AssistantRecord) {
 }
 const present = async (s: MemoryAssistantStore, id: string) => ({
   record: !!(await s.get(id)), lines: (await s.lines(id, 0, 9)).length, minutes: !!(await s.getMinutes(id)), turns: (await s.listTurns(id)).length, action: !!(await s.getAction(id, 'a')),
+});
+
+describe('proposals left open after the call', () => {
+  it('the sweep expires those whose 72 hours are up and leaves the others; nothing is run', async () => {
+    const s = new MemoryAssistantStore();
+    await s.create(rec('c', 'listening', { invitedAt: NOW - 5 * DAY }));
+    const base = { callId: 'c', tenant: 'orgiq', outcome: { kind: 'decision' as const, initiativeId: null }, named: [], executor: 'u-vera', source: 'dev' as const, at: NOW - 4 * DAY };
+    await createProposal(s, { ...base, id: 'due', statement: 'Due' });
+    await createProposal(s, { ...base, id: 'later', statement: 'Later' });
+    await createProposal(s, { ...base, id: 'done', statement: 'Done' });
+    const done = (await s.getProposal('c', 'done'))!;
+    await s.saveProposal({ ...done, state: 'done' }, done.version);
+    const ended = NOW - PROPOSAL_AFTER_CALL_MS;
+    await closeProposals(s, 'c', ended);
+    const later = (await s.getProposal('c', 'later'))!;
+    await s.saveProposal({ ...later, expiresAt: NOW + 1 }, later.version);
+    await sweepTranscripts(s, NOW, 30, { eraseChat: async () => undefined });
+    expect((await s.listProposals('c')).map((p) => [p.id, p.state])).toEqual([['done', 'done'], ['due', 'expired'], ['later', 'open']]);
+    expect(await s.listTurns('c')).toEqual([]);
+    // A second sweep finds nothing more to do.
+    expect(await expireDueProposals(s, NOW)).toBe(0);
+  });
 });
 
 describe('retention by the call age (memory store, injected clock)', () => {

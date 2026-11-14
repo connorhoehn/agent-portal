@@ -494,4 +494,14 @@ export class SqlAssistantStore implements AssistantStore {
     );
     return Number(rows[0]?.['changed'] ?? 0);
   }
+
+  async dueProposals(nowMs: number, limit: number) {
+    const rows = await this.exec(
+      `SELECT ${PROPOSAL_COLUMNS} FROM meeting_assistant_proposals
+       WHERE state IN ('open', 'objected', 'consented') AND expires_at <= :now::timestamptz
+       ORDER BY expires_at ASC, proposal_id ASC LIMIT :limit`,
+      [s('now', iso(nowMs)), n('limit', limit)],
+    );
+    return rows.map(proposalFromRow);
+  }
 }

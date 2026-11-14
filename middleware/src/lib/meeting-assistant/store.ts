@@ -117,6 +117,8 @@ export interface AssistantStore {
   saveProposal(next: Proposal, expectedVersion: number): Promise<Proposal | null>;
   /** Set the expiry of every proposal of the call that has none yet (the call ended). Returns how many were set. */
   setProposalExpiry(callId: string, expiresAt: number): Promise<number>;
+  /** Proposals of any call still answerable (open, objected, consented) whose expiry is at or before `nowMs`, oldest expiry first. */
+  dueProposals(nowMs: number, limit: number): Promise<Proposal[]>;
 }
 
 export interface MinutesFilter { tenant: string; userId: string; initiativeId?: string; before?: number; limit: number }
@@ -368,6 +370,12 @@ export class MemoryAssistantStore implements AssistantStore {
     let set = 0;
     for (const p of this.proposals.values()) if (p.callId === callId && p.expiresAt === null) { p.expiresAt = expiresAt; p.version += 1; set += 1; }
     return set;
+  }
+
+  async dueProposals(nowMs: number, limit: number) {
+    return [...this.proposals.values()]
+      .filter((p) => (p.state === 'open' || p.state === 'objected' || p.state === 'consented') && p.expiresAt !== null && p.expiresAt <= nowMs)
+      .sort((a, b) => a.expiresAt! - b.expiresAt! || a.id.localeCompare(b.id)).slice(0, limit).map(copy);
   }
 }
 
