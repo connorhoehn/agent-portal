@@ -1,5 +1,5 @@
 // crosstalk: three people talk over each other the way a real call does: pairs overlapping by a third to a half of a line, short
-// interjections under a long line, and an addressed request spoken while someone else is still talking. Attribution is measured for
+// interjections under a long line, and an addressed request that begins while someone else is finishing a line (40 percent of it overlapped). Attribution is measured for
 // every line (right, wrong, missing, split between two people); the asker of the request must be the person who spoke it.
 import { synth, msOf, PEOPLE } from '../lib/harness.mjs';
 
@@ -31,9 +31,9 @@ export default {
     const c1 = place('vera', 'What I would like is for every reminder to say clearly what it is about, who sent it, and how to turn it off, and then we can decide whether the digest needs the same treatment next week.', { gap: 2800 });
     place('nora', 'Right.', { prev: c1, inside: 2500 });
     place('mia', 'Agreed.', { prev: c1, inside: 5500 });
-    // A request while someone else is still talking.
+    // A request that starts while someone else is still talking: the first 40 percent of the request overlaps the end of that line.
     const d1 = place('vera', 'While we are on the launch, I also checked the release notes from last week and they still mention the old sign in page, so those need a pass before anything goes out to customers.', { gap: 2800 });
-    const req = place('mia', 'Nova, what is two plus two?', { prev: d1, inside: 3500, dry: { reply: { text: 'Two plus two is four.', frames: 12 } } });
+    const req = place('mia', 'Nova, what is two plus two?', { prev: d1, overlap: 0.4, dry: { reply: { text: 'Two plus two is four.', frames: 12 } } });
     ctx.begin();
     await ctx.until(Math.max(d1.endMs, req.endMs) + 9000);
     await ctx.world.stopLanes();
