@@ -3,7 +3,7 @@
 
 import type { PublishedPage } from '../../lib/voice/pageContext';
 import { dialogueRows } from './decisionDialogue.ts';
-import type { DecideBody, DecisionDetail, DecisionInitiativeRow, DecisionParticipant, DecisionSummary } from './types';
+import type { DecideBody, DecisionDetail, DecisionEvent, DecisionInitiativeRow, DecisionParticipant, DecisionSummary } from './types';
 
 export const DECISIONS_SOURCE = 'Decisions are read from the org graph';
 
@@ -147,11 +147,13 @@ export function historyOf(
 ): HistoryEvent[] {
   const who = decider(d.participants)?.name ?? null;
   // Who made a recorded call is on the record's Decided line; the history keeps what was said.
-  const events: HistoryEvent[] = (d.history ?? []).map((e) => ({
+  // A decision created in the product says how it began instead, naming people, never quoting a call.
+  const events: HistoryEvent[] = (d.history ?? []).map((e) => (isCreation(e) ? creationEvent(e) : {
     id: `event-${e.id}`, at: e.at,
     label: e.kind === 'resolved' ? 'Decided' : 'Rejected',
     detail: e.rationale,
   }));
+  const created = (d.history ?? []).some(isCreation);
   // Deciding it settled the work it held up, at the same moment as the call.
   const at = d.history?.[0]?.at ?? d.decidedAt;
   const unblocked = d.status === 'resolved' ? (d.heldWork ?? []).filter((w) => !w.blocked) : [];
@@ -170,11 +172,38 @@ export function historyOf(
       detail: row.requiredRole ? `Sent up to the ${row.requiredRole}${who ? `, ${who}` : ''}.` : 'Sent up to a decider.',
     });
   }
-  events.push({
-    id: 'raised', at: null, label: 'Raised',
-    detail: projectName ? `Raised against ${projectName}.` : 'Raised as an organisation-wide call.',
-  });
+  // A created decision's own event already says how it began.
+  if (!created) {
+    events.push({
+      id: 'raised', at: null, label: 'Raised',
+      detail: projectName ? `Raised against ${projectName}.` : 'Raised as an organisation-wide call.',
+    });
+  }
   return events;
+}
+
+const isCreation = (e: DecisionEvent): boolean => e.kind === 'recorded' || e.kind === 'raised';
+
+/** "Nina", "Nina and Katya", "Nina, Katya and Caleb". */
+export function nameList(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? '';
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/**
+ * How a decision created in the product began: "Agreed in a call by <names>"
+ * for one recorded from a call (everyone who agreed), "Raised in a call by
+ * <name>" for one raised there for the owner, and "Recorded by" / "Raised by"
+ * for one made by hand. Names only: no words said in the call.
+ */
+function creationEvent(e: DecisionEvent): HistoryEvent {
+  const recorded = e.kind === 'recorded';
+  const call = e.source === 'call';
+  const agreed = (e.people ?? []).map((p) => p.name).filter((n) => n.trim());
+  const detail = recorded && call
+    ? `Agreed in a call by ${nameList(agreed.length ? agreed : [e.by.name])}.`
+    : `${recorded ? 'Recorded' : 'Raised'}${call ? ' in a call' : ''} by ${e.by.name}.`;
+  return { id: `event-${e.id}`, at: e.at, label: recorded ? 'Recorded' : 'Raised', detail };
 }
 
 // ─── Deciding (G54) ─────────────────────────────────────────────────────────

@@ -62,6 +62,23 @@ test('history: raised last, escalation and the settling call before it', () => {
   assert.equal(historyOf(detail('open'), null, null).at(-1)!.detail, 'Raised as an organisation-wide call.');
 });
 
+test('history: a decision created in the product says how it began, naming people and quoting nothing', () => {
+  const by = { id: 'p-5', name: 'Sienna Garcia' };
+  const people = [by, { id: 'p-2', name: 'Nora' }, { id: 'u-g', name: 'Guest Reviewer' }];
+  const recorded = historyOf({ ...detail('resolved', '2026-11-14T10:00:00Z'), history: [{ id: '1', kind: 'recorded', at: '2026-11-14T10:00:00Z', by, rationale: '', source: 'call', callId: 'call-7', people }] }, null, 'Auth Migration');
+  assert.deepEqual(recorded.map((e) => [e.id, e.label, e.detail]), [['event-1', 'Recorded', 'Agreed in a call by Sienna Garcia, Nora and Guest Reviewer.']], 'its own event replaces the column-derived Raised line');
+  const raised = (source: 'call' | 'manual') => historyOf({ ...detail('open'), history: [{ id: '1', kind: 'raised', at: 'T', by: { id: 'p-2', name: 'Nora' }, rationale: '', source, callId: null, people: [{ id: 'p-2', name: 'Nora' }] }] }, null, 'Auth Migration');
+  assert.equal(raised('call')[0]!.detail, 'Raised in a call by Nora.');
+  assert.equal(raised('manual')[0]!.detail, 'Raised by Nora.');
+  assert.equal(raised('call')[0]!.label, 'Raised');
+  // Raised, then decided by the owner: the decide line first, the raising after it.
+  const both = historyOf({ ...detail('resolved', 'T2'), history: [
+    { id: '2', kind: 'resolved', at: 'T2', by, rationale: 'Cut over the smallest tenants first' },
+    { id: '1', kind: 'raised', at: 'T1', by: { id: 'p-2', name: 'Nora' }, rationale: '', source: 'call', callId: 'c', people: [] },
+  ] }, null, 'Auth Migration');
+  assert.deepEqual(both.map((e) => e.label), ['Decided', 'Raised']);
+});
+
 test('held-up work: "Holding up" while it waits, "Unblocked" once resolved, "Still blocked" when rejected', () => {
   const runbook = { id: 'wi-2', title: 'Cutover runbook', projectId: 'p-1', blocked: true };
   const href = '/iq/projects/p-1?tab=work&item=wi-2';

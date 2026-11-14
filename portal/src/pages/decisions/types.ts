@@ -37,14 +37,24 @@ export interface DecisionParticipant {
   weight: number;
 }
 
-/** One entry of the recorded history (G54): a call made in the product, who, when and why. */
+/**
+ * One entry of the recorded history (G54): a call made in the product, who,
+ * when and why; or how the decision was created in the product (`recorded`
+ * already decided, `raised` waiting on the owner), where it was agreed and
+ * who agreed, by name only.
+ */
 export interface DecisionEvent {
   id: string;
-  kind: 'resolved' | 'rejected';
+  kind: 'resolved' | 'rejected' | 'recorded' | 'raised';
   /** ISO timestamp. */
   at: string;
   by: { id: string; name: string };
   rationale: string;
+  /** Creation events only: 'call' (with its id) or 'manual'. */
+  source?: 'call' | 'manual';
+  callId?: string | null;
+  /** Creation events only: who agreed. */
+  people?: Array<{ id: string; name: string }>;
 }
 
 export interface DecisionDetail {
