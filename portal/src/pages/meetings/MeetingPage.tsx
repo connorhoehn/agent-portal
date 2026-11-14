@@ -29,9 +29,14 @@ export default function MeetingPage() {
   const [drafting, setDrafting] = useState<MinutesActionItem | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   if (minutes.isLoading && !minutes.data) return <LoadingState label="Loading the meeting…" />;
   const m = minutes.data;
+  if (!m && minutes.failure && minutes.failure.status !== 404) {
+    return <EmptyState testId="meeting-error" title="This meeting could not be loaded"
+      description={minutes.failure.message} action={<Button size="sm" variant="secondary" data-testid="meeting-retry" onClick={minutes.refresh}>Try again</Button>} />;
+  }
   if (!m) {
     return <EmptyState testId="meeting-not-found" title="Meeting not found"
       description="There is no meeting record here, or you were not in that call. Only the people who were in a call can read its minutes." />;
@@ -41,13 +46,14 @@ export default function MeetingPage() {
   const names = m.attendees.map((a) => a.name);
   const createItem = async (draft: NewItemDraft) => {
     setDrafting(null);
-    if (!m.initiativeId) return;
+    if (!m.initiativeId || creating) return;
+    setCreating(true);
     try {
       const created = await sendJson<{ id?: string }>('/api/graph/work-items', 'POST', {
         projectId: m.initiativeId, parentId: null, type: draft.type, title: draft.title, priority: draft.priority, storyPoints: draft.storyPoints,
       });
       toastSuccess(null, 'Work item created', created.id ? draft.title : undefined);
-    } catch (err) { surfaceWriteError(err, 'Creating this work item'); }
+    } catch (err) { surfaceWriteError(err, 'Creating this work item'); } finally { setCreating(false); }
   };
   const deleteRecord = async () => {
     setDeleting(true);
@@ -60,7 +66,7 @@ export default function MeetingPage() {
     { key: 'text', header: 'Action item', render: (i) => <T size="sm">{i.text}</T> },
     { key: 'owner', header: 'Owner', width: '208px', render: (i) => <T size="sm">{i.ownerName ?? 'Nobody named'}</T> },
     { key: 'create', header: '', width: '176px', render: (i) => (m.initiativeId && canCreateFor(i, viewer)
-      ? <Button size="sm" variant="secondary" data-testid="meeting-create-work-item" onClick={() => setDrafting(i)}>Create work item</Button>
+      ? <Button size="sm" variant="secondary" data-testid="meeting-create-work-item" disabled={creating || drafting !== null} onClick={() => setDrafting(i)}>Create work item</Button>
       : i.done ? <T size="sm" tone="secondary">Done in the call</T> : null) },
   ];
 
