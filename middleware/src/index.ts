@@ -53,9 +53,9 @@ import { meetingAssistantRouter, meetingsRouter } from './routes/meeting-assista
 import { meetingAssistantDevRouter } from './routes/meeting-assistant-dev.js';
 import { meetingAssistantSinkRouter } from './routes/meeting-assistant-sink.js';
 import { announceSinkSecret } from './lib/meeting-assistant/sink-secret.js';
-import { startTurnSweep } from './lib/meeting-assistant/orchestrator.js';
+import { startMeetingAssistantSweeps } from './lib/meeting-assistant/sweeps.js';
 import { assertLiveFlagAllowed } from './lib/meeting-assistant/live-flag.js';
-import { assistantStore, meetingAssistantEnabled, startRetentionSweep as startTranscriptRetentionSweep } from './lib/meeting-assistant/index.js';
+import { meetingAssistantEnabled } from './lib/meeting-assistant/index.js';
 import { pipelinesRouter } from './routes/pipelines.js';
 import { accessRouter } from './routes/access.js';
 import { accessQuickRouter } from './routes/access-requests-quick.js';
@@ -388,7 +388,9 @@ app.use('/api/calls', callChatRouter);
 // The meeting assistant (Nova): flag-gated, a call seat required (routes/meeting-assistant.ts).
 app.use('/api/calls/:callId/assistant', meetingAssistantRouter);
 app.use('/api/meetings', meetingsRouter);
-if (meetingAssistantEnabled()) { startTranscriptRetentionSweep(assistantStore()); startTurnSweep(); announceSinkSecret(); }
+// The sweeps run whether or not the feature is on: turning it off must not keep stored words for ever (audit M4).
+startMeetingAssistantSweeps();
+if (meetingAssistantEnabled()) announceSinkSecret();
 app.use('/api/social', requireTenant('social'), socialRouter);
 app.use('/api/pipelines/search', requireTenant('pipelines'), requireAction('ViewPipelines'), tenantSearchRouter('pipelines'));
 app.use('/api/pipelines', requireTenant('pipelines'), pipelinesRouter);

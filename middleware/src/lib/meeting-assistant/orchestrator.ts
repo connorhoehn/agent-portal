@@ -882,7 +882,9 @@ export function assistantRuntime(): AssistantRuntime {
  * retention sweep. `timers` is injectable for tests. Returns the stopper.
  */
 export function startTurnSweep(everyMs = 30_000, runtimeOf: () => AssistantRuntime = assistantRuntime, timers: { set: typeof setInterval; clear: typeof clearInterval } = { set: setInterval, clear: clearInterval }): () => void {
-  const timer = timers.set(() => { void runtimeOf().sweepTurns().catch((e: unknown) => console.warn('[meeting-assistant] turn sweep failed', (e as Error).message)); }, everyMs);
+  // A deployment that never ran the migration has no tables: say so once, not every 30 seconds.
+  let logged = false;
+  const timer = timers.set(() => { void runtimeOf().sweepTurns().catch((e: unknown) => { if (logged) return; logged = true; console.warn('[meeting-assistant] turn sweep failed (will keep trying quietly)', (e as Error).message); }); }, everyMs);
   (timer as { unref?: () => void }).unref?.();
   return () => timers.clear(timer);
 }
