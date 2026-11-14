@@ -18,7 +18,7 @@ import { Button, Card, Chip, Inline, InlineAlert, Link, Stack, StatusPill, T } f
 import { useFetch } from '../../hooks/useFetch';
 import { meetingHref } from '../../pages/meetings/meetingsModel';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
-import { needsLine, outcomeLine, personChips, stateLine, type ProposalState } from '../../lib/meetingProposals';
+import { needsLine, outcomeLine, personChips, resultHref, stateLine, type ProposalState, type ProposalView } from '../../lib/meetingProposals';
 import { actionCardView, askedByLine, namesNoInitiative, decideAssistantAction, readAssistantMessage, type ActionDecision, type AssistantAction, type AssistantProposalCard } from '../../lib/assistantMessages';
 
 export interface AssistantActionCardProps {
@@ -92,19 +92,26 @@ function useInitiativeName(id: string | null): string | null {
 }
 
 export function AssistantProposalCardView({ card, statement, callId }: { card: AssistantProposalCard; statement: string; callId: string | null }) {
-  const navigate = useNavigate();
   const nova = useMeetingAssistant(callId);
   const view = nova.proposals.find((p) => p.id === card.proposalId) ?? null;
   // The message's state moves with every change; the route's view may lag a poll behind, so the pill follows the message.
-  const state = card.state;
+  return <ProposalCard proposalId={card.proposalId} state={card.state} statement={statement} view={view} />;
+}
+
+/**
+ * One proposal, read-only: the statement, what it will do, who it needs, a chip per person and how it ended, with a link to what
+ * was made once done. The call chat's card and the meeting page's Proposals section draw this same card; answers are given in a deck.
+ */
+export function ProposalCard({ proposalId, state, statement, view }: { proposalId: string; state: ProposalState; statement: string; view: ProposalView | null }) {
+  const navigate = useNavigate();
   const initiativeName = useInitiativeName(view?.outcome.kind === 'decision' ? view.outcome.initiativeId : null);
   const [label, tone] = PROPOSAL_PILL[state];
   const live = view ? { ...view, state } : null;
   const needs = live && (state === 'open' || state === 'objected') ? needsLine(live) : null;
   const closing = live ? stateLine(live) : null;
-  const href = live?.state === 'done' ? live.result?.href ?? null : null;
+  const href = live ? resultHref(live) : null;
   return (
-    <Card padding="sm" className="mt-1 max-w-md" data-testid="assistant-proposal-card" data-proposal-id={card.proposalId} data-state={state}>
+    <Card padding="sm" className="mt-1 max-w-md" data-testid="assistant-proposal-card" data-proposal-id={proposalId} data-state={state}>
       <Stack gap="sm">
         <Inline gap="sm" align="center" wrap>
           <T size="xs" weight="medium" tone="secondary">Proposal</T>
@@ -125,7 +132,7 @@ export function AssistantProposalCardView({ card, statement, callId }: { card: A
         {closing && <T size="xs" tone={state === 'failed' ? 'danger' : 'secondary'} wrap data-testid="assistant-proposal-closing">{closing}</T>}
         {href && (
           <Link href={href} data-testid="assistant-proposal-result-link" onClick={(e) => { if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); navigate(href); } }}>
-            Open the record
+            {live?.outcome.kind === 'decision' ? 'Open the decision' : 'Open what was made'}
           </Link>
         )}
       </Stack>

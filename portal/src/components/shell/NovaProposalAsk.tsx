@@ -5,13 +5,16 @@
 //   - 1 Consent (the executor's consent is the one that records or runs it), 2 Object… (a one-line reason, labelled as shared with
 //     everyone in the call before it is sent), 3 Not a decision. Digits work from anywhere on the page outside a text field.
 //   - Esc hides it; the count on Nova's footer mark reopens it. The server judges every answer; a refusal shows on the card.
+//   - A consenter who is not the executor is offered "Run it in my browser" while it waits consented (the server's `you.canRun`);
+//     choosing it consents again as executor, so the run moves to their browser.
+//   - The meeting page asks with the same prompt after the call (`inCall: false`), without "Not a decision", which needs a seat.
 
 import { useEffect, useMemo } from 'react';
 import { ComposerPromptDeck, useComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { useFetch } from '../../hooks/useFetch';
 import { answerProposal, useMeetingAssistant } from '../../lib/meetingAssistant';
 import {
-  consentLabel, deckQueue, keptKey, needsLine, OBJECTION_SHARED, outcomeLine, proposalCountWords, type ProposalView,
+  consentLabel, deckQueue, keptKey, mayTakeOver, needsLine, OBJECTION_SHARED, outcomeLine, proposalCountWords, RUN_HERE, type ProposalView,
 } from '../../lib/meetingProposals';
 import { keepProposalAnswer, setProposalDeckHidden, useProposalDeck } from '../../lib/proposalDeckState';
 import { useLiveCallId } from '../../lib/liveCallId';
@@ -34,25 +37,38 @@ export function proposalCountOf(queue: readonly ProposalView[]): string | null {
 
 const reply = (error: string | null, receipt: string) => (error ? { error } : { receipt });
 
-function buildPrompt(callId: string, p: ProposalView, initiativeName: string | null): ComposerPrompt {
-  const scope = `nova-proposal:${callId}`;
+export interface ProposalPromptOptions {
+  /** In the call (the footer deck) or after it (the meeting page): "Not a decision" needs a seat, so only in the call. */
+  inCall: boolean;
+  /** "Keep my answer": remembered so the queue moves on. */
+  keep: (key: string) => void;
+  scope: string;
+}
+
+/** The deck prompt for one proposal, for the footer deck in the call and for the meeting page after it. */
+export function proposalPrompt(callId: string, p: ProposalView, initiativeName: string | null, opts: ProposalPromptOptions): ComposerPrompt {
+  const { scope } = opts;
   const outcome = outcomeLine(p.outcome, initiativeName);
   const base = { scope, eyebrow: EYEBROW, title: p.statement, keypad: 'page' as const };
   if (p.you.response !== null) {
     const objection = p.responses.find((r) => r.userId === p.you.userId && r.response === 'object');
+    const takeOver = p.you.response === 'consent' && mayTakeOver(p);
     const question = p.you.response === 'consent'
-      ? 'You consented. You can withdraw it until it runs.'
+      ? takeOver ? `${p.run?.note ?? `It is waiting for ${p.executor.name} to run it.`} You consented, so you can run it in your browser.` : 'You consented. You can withdraw it until it runs.'
       : `You objected${objection?.reason ? `: ${objection.reason}` : ''}. Withdrawing reopens it.`;
     return {
       ...base, // Its own id: the objection's reason prompt is `:object`, and a reused id would read as already answered.
-      id: `${scope}:${p.id}:answered-${p.you.response}`, kind: 'choice', question,
+      id: `${scope}:${p.id}:answered-${p.you.response}${takeOver ? `-run-${p.run?.at ?? 0}` : ''}`, kind: 'choice', question,
       fields: [{ label: 'Outcome', value: outcome }],
       options: [
         { id: 'withdraw', label: p.you.response === 'consent' ? 'Withdraw consent' : 'Withdraw objection' },
-        { id: 'keep', label: 'Keep my answer', emphasis: 'primary' },
+        takeOver ? { id: 'keep', label: 'Keep my answer' } : { id: 'keep', label: 'Keep my answer', emphasis: 'primary' as const },
+        ...(takeOver ? [{ id: 'run-here', label: RUN_HERE, emphasis: 'primary' as const }] : []),
       ],
       onAnswer: async (a) => {
-        if (!('optionId' in a) || a.optionId !== 'withdraw') { keepProposalAnswer(callId, keptKey(p)); return { receipt: 'Kept' }; }
+        const choice = 'optionId' in a ? a.optionId : null;
+        if (choice === 'run-here') return reply(await answerProposal(callId, p.id, 'consent', undefined, { asExecutor: true }), 'Running in your browser');
+        if (choice !== 'withdraw') { opts.keep(keptKey(p)); return { receipt: 'Kept' }; }
         return reply(await answerProposal(callId, p.id, 'withdraw'), 'Withdrawn');
       },
     };
@@ -72,7 +88,7 @@ function buildPrompt(callId: string, p: ProposalView, initiativeName: string | n
     options: [
       { id: 'consent', label: consentLabel(p), emphasis: 'primary' },
       { id: 'object', label: 'Object…' },
-      { id: 'not-a-decision', label: 'Not a decision' },
+      ...(opts.inCall ? [{ id: 'not-a-decision', label: 'Not a decision' }] : []),
     ],
     onAnswer: async (a) => {
       const choice = 'optionId' in a ? a.optionId : null;
@@ -90,7 +106,8 @@ export function NovaProposalAsk() {
   const initiativeId = head?.outcome.kind === 'decision' ? head.outcome.initiativeId : null;
   const named = useFetch<{ name?: string }>(initiativeId ? `/api/graph/projects/${encodeURIComponent(initiativeId)}` : null);
   const initiativeName = named.data?.name?.trim() || null;
-  const prompts = useMemo<ComposerPrompt[]>(() => (callId && head ? [buildPrompt(callId, head, initiativeName)] : []), [callId, head, initiativeName]);
+  const prompts = useMemo<ComposerPrompt[]>(() => (callId && head
+    ? [proposalPrompt(callId, head, initiativeName, { inCall: true, scope: `nova-proposal:${callId}`, keep: (key) => keepProposalAnswer(callId, key) })] : []), [callId, head, initiativeName]);
   const deck = useComposerPromptDeck(prompts, { scope: callId ? `nova-proposal:${callId}` : null });
   // Esc collapses the deck; here that hides it, and the footer count is the way back.
   useEffect(() => { if (callId && deck.collapsed && deck.active) setProposalDeckHidden(callId, true); }, [callId, deck.collapsed, deck.active]);

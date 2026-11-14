@@ -18,6 +18,7 @@
 import { randomBytes } from 'node:crypto';
 import { CREATE_ACTIONS, hashToolArgs } from '../voice/catalogue.js';
 import { MEETING_EXCLUDED_TOOLS, meetingTools } from './instructions.js';
+import { announceProposalChanged } from './proposals.js';
 import type { AssistantStore } from './store.js';
 import type { AssistantRecord, AssistantTurn, Proposal, ProposalRun } from './types.js';
 
@@ -95,10 +96,17 @@ async function saveWith(deps: ProposalRunDeps, callId: string, id: string, chang
     if (!p) return null;
     const next = change(p);
     if (!next) return null;
-    const saved = await deps.store.saveProposal(next, p.version);
+    const saved = await save(deps, next, p.version);
     if (saved) return saved;
   }
   return null;
+}
+
+/** Every save here is announced, so the call chat's card moves with running, done, failed and a hand-back. */
+async function save(deps: ProposalRunDeps, next: Proposal, version: number): Promise<Proposal | null> {
+  const saved = await deps.store.saveProposal(next, version);
+  if (saved) await announceProposalChanged(saved);
+  return saved;
 }
 
 /**
@@ -130,17 +138,17 @@ export async function startProposal(deps: ProposalRunDeps, callId: string, id: s
     const now = deps.now();
     const plan = await planOf(deps, p, record);
     if (!plan.ok) {
-      if (await deps.store.saveProposal({ ...p, state: 'failed', run: run(p.executor, now, { note: plan.fail }), updatedAt: now }, p.version)) return null;
+      if (await save(deps, { ...p, state: 'failed', run: run(p.executor, now, { note: plan.fail }), updatedAt: now }, p.version)) return null;
       continue;
     }
     if (!await mayRun(deps, p.executor, p.tenant, plan.name, plan.args)) {
       const note = await cannotRunNote(deps, p, plan.name, plan.args);
       if (p.run && p.run.turnId === null && p.run.by === p.executor && p.run.note === note) return null;
-      if (await deps.store.saveProposal({ ...p, run: run(p.executor, now, { note }), updatedAt: now }, p.version)) return null;
+      if (await save(deps, { ...p, run: run(p.executor, now, { note }), updatedAt: now }, p.version)) return null;
       continue;
     }
     const turnId = `t-p${randomBytes(5).toString('hex')}`;
-    const started = await deps.store.saveProposal({ ...p, state: 'running', run: run(p.executor, now, { turnId }), updatedAt: now }, p.version);
+    const started = await save(deps, { ...p, state: 'running', run: run(p.executor, now, { turnId }), updatedAt: now }, p.version);
     if (!started) continue; // another consent or a second announcement wrote first: read again (it is running then, and we stop)
     const turn: AssistantTurn = {
       turnId, callId, askedBy: p.executor, tool: { name: plan.name, args: plan.args }, kind: 'write', status: 'running', proposalId: p.id,

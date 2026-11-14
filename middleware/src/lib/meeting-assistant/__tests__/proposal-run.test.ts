@@ -15,7 +15,7 @@ jest.mock('../chat.js', () => ({
 
 import { MemoryAssistantStore } from '../store.js';
 import { AssistantRuntime, setAssistantRuntime } from '../orchestrator.js';
-import { buildProposal, createProposal, respondToProposal } from '../proposals.js';
+import { buildProposal, createProposal, onProposalChanged, respondToProposal } from '../proposals.js';
 import { PROPOSAL_TURN_TTL_MS } from '../proposal-run.js';
 import { ScriptedSession } from '../scripted-session.js';
 import { newAssistantSession, type AssistantRecord, type ProposalOutcome } from '../types.js';
@@ -159,6 +159,16 @@ describe('the result', () => {
     expect(out).toMatchObject({ turn: { status: 'done' } });
     expect(await proposal()).toMatchObject({ state: 'done', run: { title: STATEMENT, href: '/iq/decisions/d-new', note: null } });
     expect(mockPosted).toEqual([]);
+  });
+
+  it('every move the run makes is announced, so the card follows it: running, then done', async () => {
+    const seen: string[] = [];
+    const off = onProposalChanged((p) => { seen.push(p.state); });
+    try {
+      const t = await claimed();
+      await runtime.submitResult(CALL, t.turnId, PRIYA, { ok: true, claimId: t.claimId!, output: { id: 'd-new' } });
+    } finally { off(); }
+    expect(seen).toEqual(['open', 'open', 'consented', 'running', 'done']); // created, Sam, Priya, the run, the result
   });
 
   it('failed with the browser\'s reason', async () => {

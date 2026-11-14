@@ -212,6 +212,9 @@ async function announceChanged(p: Proposal, how: 'created' | 'changed'): Promise
   }
 }
 
+/** A save made elsewhere (the runner: running, done, failed, handed back) is announced the same way, so the card follows it. */
+export async function announceProposalChanged(p: Proposal): Promise<void> { await announceChanged(p, 'changed'); }
+
 // ---- the service: read, apply, write back with the version read --------------------------------------------------------------------
 
 /** The expiry a proposal of a call that has ended should carry. */

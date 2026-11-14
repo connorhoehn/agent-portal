@@ -14,6 +14,8 @@ export interface ProposalPerson { userId: string; name: string }
 export interface ProposalResponseView extends ProposalPerson { response: ProposalResponseKind; reason: string | null; at: number }
 export type ProposalOutcomeView = { kind: 'decision'; initiativeId: string | null } | { kind: 'tool'; name: string };
 
+export interface ProposalRunView { by: ProposalPerson; at: number; title: string | null; href: string | null; note: string | null }
+
 export interface ProposalView {
   id: string;
   statement: string;
@@ -26,11 +28,11 @@ export interface ProposalView {
   dismissedBy: string | null;
   dismissedByName: string | null;
   createdAt: number;
-  /** Filled once it ran (package 3): what was made and the portal path to it, when the server gives them. */
-  result: { title: string | null; href: string | null } | null;
-  /** Why it failed, when the server says. */
-  failure: string | null;
-  you: { userId: string; response: ProposalResponseKind | null; isExecutor: boolean; isNamed: boolean };
+  /** The latest run (the server's `run`): whose browser, then what was made (`title`, `href` to a portal path) or why not (`note`). */
+  run: ProposalRunView | null;
+  /** When it expires unrun (end of the call + 72 h); null while the call goes on. */
+  expiresAt: number | null;
+  you: { userId: string; response: ProposalResponseKind | null; isExecutor: boolean; isNamed: boolean; canRun: boolean };
 }
 
 /** States in which people may still answer (the server's ANSWERABLE). */
@@ -45,11 +47,10 @@ const person = (v: unknown): ProposalPerson | null => {
 
 /** A link is drawn only to a path inside the portal, never to whatever URL a field holds. */
 const portalPath = (v: unknown): string | null => (str(v) && /^\/(?!\/)/.test(v) ? v : null);
-const resultOf = (v: unknown): ProposalView['result'] => {
-  const r = rec(v);
-  if (!r) return null;
-  const title = str(r['title']) ? r['title'] : null; const href = portalPath(r['href']);
-  return title || href ? { title, href } : null;
+const runOf = (v: unknown): ProposalRunView | null => {
+  const r = rec(v); const by = person(r?.['by']);
+  if (!r || !by) return null;
+  return { by, at: Number(r['at']) || 0, title: str(r['title']) ? r['title'] : null, href: portalPath(r['href']), note: str(r['note']) ? r['note'] : null };
 };
 
 /** One proposal from the route's JSON; null when malformed (it is then left out, never drawn half). */
@@ -76,10 +77,10 @@ export function parseProposal(raw: unknown): ProposalView | null {
       objectedBy: Array.isArray(m['objectedBy']) ? m['objectedBy'].filter(str) : [],
     },
     dismissedBy: str(r['dismissedBy']) ? r['dismissedBy'] : null, dismissedByName: str(r['dismissedByName']) ? r['dismissedByName'] : null, createdAt: Number(r['createdAt']) || 0,
-    result: resultOf(r['result']), failure: str(r['failure']) ? r['failure'] : null,
+    run: runOf(r['run']), expiresAt: Number(r['expiresAt']) || null,
     you: {
       userId: str(you['userId']) ? you['userId'] : '', response: you['response'] === 'consent' || you['response'] === 'object' ? you['response'] : null,
-      isExecutor: you['isExecutor'] === true, isNamed: you['isNamed'] === true,
+      isExecutor: you['isExecutor'] === true, isNamed: you['isNamed'] === true, canRun: you['canRun'] === true,
     },
   };
 }
@@ -133,7 +134,8 @@ export function personChips(p: ProposalView): PersonChip[] {
 /** The card's closing line for a state other than open; null while open (the needs line says it). */
 export function stateLine(p: ProposalView): string | null {
   switch (p.state) {
-    case 'consented': return `Consented, waiting for ${p.executor.name} to run it`;
+    // Handed back (the executor may not run it, or their browser was not there): the server's sentence says who can.
+    case 'consented': return p.run?.note ?? `Consented, waiting for ${p.executor.name} to run it`;
     case 'objected': {
       const first = p.responses.find((r) => r.response === 'object');
       return first ? `Objected by ${first.name}${first.reason ? `: ${first.reason}` : ''}` : 'Objected';
@@ -143,12 +145,12 @@ export function stateLine(p: ProposalView): string | null {
       return who ? `Marked not a decision by ${who}` : 'Marked not a decision';
     }
     case 'expired': return 'Expired without running';
-    case 'running': return `Running in ${p.executor.name}'s browser`;
+    case 'running': return `Running in ${(p.run?.by ?? p.executor).name}'s browser`;
     case 'done': {
       const what = p.outcome.kind === 'decision' ? 'Recorded' : 'Done';
-      return p.result?.title ? `${what} · ${p.result.title}` : what;
+      return p.run?.title ? `${what} · ${p.run.title}` : what;
     }
-    case 'failed': return p.failure ? `Failed: ${p.failure}` : 'Failed';
+    case 'failed': return p.run?.note ? `Failed: ${p.run.note}` : 'Failed';
     default: return null;
   }
 }
@@ -166,7 +168,14 @@ export function deckQueue(proposals: readonly ProposalView[], kept: ReadonlySet<
   return [...ask, ...answered];
 }
 
-export const keptKey = (p: Pick<ProposalView, 'id' | 'you'>): string => `${p.id}:${p.you.response ?? ''}`;
+/** A hand-back after the answer was kept asks again: the offer to run it is new. */
+export const keptKey = (p: Pick<ProposalView, 'id' | 'you' | 'run'>): string => `${p.id}:${p.you.response ?? ''}${mayTakeOver(p) && p.run ? `:${p.run.at}` : ''}`;
+
+/** A consenter who is not the executor may run a consented proposal in their own browser (the server's `you.canRun`). */
+export const mayTakeOver = (p: Pick<ProposalView, 'you'>): boolean => p.you.canRun && !p.you.isExecutor;
+
+/** The card's link to what was made: only once done, and only to a portal path. */
+export const resultHref = (p: Pick<ProposalView, 'state' | 'run'>): string | null => (p.state === 'done' ? p.run?.href ?? null : null);
 
 /** The consent option's label: the executor's consent is the one that runs it. */
 export function consentLabel(p: Pick<ProposalView, 'outcome' | 'you'>): string {
@@ -176,5 +185,7 @@ export function consentLabel(p: Pick<ProposalView, 'outcome' | 'you'>): string {
 
 /** The count on Nova's footer mark: "1 proposal", "2 proposals"; null at none. */
 export const proposalCountWords = (n: number): string | null => (n <= 0 ? null : n === 1 ? '1 proposal' : `${n} proposals`);
+
+export const RUN_HERE = 'Run it in my browser';
 
 export const OBJECTION_SHARED = 'Everyone in the call will see this';

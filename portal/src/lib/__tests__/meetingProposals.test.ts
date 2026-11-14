@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readAssistantMessage } from '../assistantMessages.ts';
 import {
-  consentLabel, deckQueue, keptKey, needsLine, outcomeLine, parseProposals, personChips, proposalCountWords, stateLine, type ProposalView,
+  consentLabel, deckQueue, keptKey, mayTakeOver, needsLine, outcomeLine, parseProposals, personChips, proposalCountWords, resultHref, stateLine, type ProposalView,
 } from '../meetingProposals.ts';
 
 const raw = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
@@ -33,12 +33,36 @@ test('the card lines: outcome, needs, chips and the closing line', () => {
   assert.equal(stateLine(p), "Objected by Lee: I'm out next week");
 });
 
-test('done and failed read the result and the reason when given; a link only to a portal path', () => {
-  assert.equal(stateLine(one({ state: 'done', result: { title: 'Cutover order', href: '/decisions/d1' } })), 'Recorded · Cutover order');
-  assert.equal(one({ state: 'done', result: { title: 'x', href: 'https://elsewhere.example' } }).result?.href, null);
+test('the card reads the latest run: whose browser, what was made with a link only to a portal path, or why not', () => {
+  const by = { userId: 'u-sam', name: 'Sam' };
+  assert.equal(stateLine(one({ state: 'running', run: { by, at: 5, title: null, href: null, note: null } })), "Running in Sam's browser");
+  assert.equal(stateLine(one({ state: 'running' })), "Running in Priya's browser");
+  const done = one({ state: 'done', run: { by, at: 6, title: 'Cutover order', href: '/iq/decisions/d1', note: null } });
+  assert.equal(stateLine(done), 'Recorded · Cutover order');
+  assert.equal(resultHref(done), '/iq/decisions/d1');
+  assert.equal(resultHref(one({ state: 'done', run: { by, at: 6, title: 'x', href: 'https://elsewhere.example', note: null } })), null);
+  assert.equal(resultHref(one({ state: 'done', run: { by, at: 6, title: 'x', href: '//elsewhere.example/x', note: null } })), null);
+  assert.equal(resultHref(one({ state: 'running', run: { by, at: 6, title: 'x', href: '/iq/decisions/d1', note: null } })), null);
   assert.equal(stateLine(one({ state: 'done' })), 'Recorded');
-  assert.equal(stateLine(one({ state: 'failed', failure: 'The initiative is archived' })), 'Failed: The initiative is archived');
+  assert.equal(stateLine(one({ state: 'failed', run: { by, at: 7, title: null, href: null, note: 'The initiative is archived' } })), 'Failed: The initiative is archived');
+  assert.equal(stateLine(one({ state: 'failed' })), 'Failed');
+  const handedBack = one({ state: 'consented', run: { by: { userId: 'u-priya', name: 'Priya' }, at: 8, title: null, href: null, note: 'Priya cannot run this; Sam can, by consenting again to run it.' } });
+  assert.equal(stateLine(handedBack), 'Priya cannot run this; Sam can, by consenting again to run it.');
+  assert.equal(stateLine(one({ state: 'consented' })), 'Consented, waiting for Priya to run it');
   assert.equal(stateLine(one({ state: 'dismissed', dismissedBy: 'u-sam', dismissedByName: 'Sam' })), 'Marked not a decision by Sam');
+  // The old fields are not read.
+  assert.equal(stateLine(one({ state: 'done', result: { title: 'old', href: '/x' }, failure: 'old' })), 'Recorded');
+});
+
+test('a consenter who is not the executor may take it over; the executor and a non-consenter may not; a new hand-back asks again', () => {
+  const sam = { userId: 'u-sam', response: 'consent', isExecutor: false, isNamed: false, canRun: true };
+  const p = one({ state: 'consented', you: sam, run: { by: { userId: 'u-priya', name: 'Priya' }, at: 8, title: null, href: null, note: 'gone' } });
+  assert.equal(mayTakeOver(p), true);
+  assert.equal(mayTakeOver(one({ state: 'consented', you: { ...sam, isExecutor: true } })), false);
+  assert.equal(mayTakeOver(one({ state: 'consented', you: { ...sam, canRun: false } })), false);
+  const later = one({ state: 'consented', you: sam, run: { by: { userId: 'u-priya', name: 'Priya' }, at: 9, title: null, href: null, note: 'gone again' } });
+  assert.notEqual(keptKey(p), keptKey(later));
+  assert.deepEqual(deckQueue([later], new Set([keptKey(p)])).map((x) => x.id), ['p1']);
 });
 
 test('the deck asks unanswered first, then answered ones until kept; consent says what it does for the executor', () => {

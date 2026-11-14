@@ -59,8 +59,10 @@ export async function refreshProposals(callId: string): Promise<void> {
 }
 
 /** One answer to a proposal. The server judges it; the list is read again either way. Resolves to the refusal sentence, or null. */
-export async function answerProposal(callId: string, proposalId: string, answer: ProposalAnswer, reason?: string): Promise<string | null> {
-  const result = await writeJson<unknown>(`${base(callId)}/proposals/${encodeURIComponent(proposalId)}/response`, 'POST', reason ? { response: answer, reason } : { response: answer });
+/** `asExecutor` (a consent only): run it in this person's own browser instead of the executor's. */
+export async function answerProposal(callId: string, proposalId: string, answer: ProposalAnswer, reason?: string, opts: { asExecutor?: boolean } = {}): Promise<string | null> {
+  const body = { response: answer, ...(reason ? { reason } : {}), ...(opts.asExecutor && answer === 'consent' ? { asExecutor: true } : {}) };
+  const result = await writeJson<unknown>(`${base(callId)}/proposals/${encodeURIComponent(proposalId)}/response`, 'POST', body);
   await refreshProposals(callId);
   return result.ok ? null : (result.error ?? 'That answer was not saved.');
 }
