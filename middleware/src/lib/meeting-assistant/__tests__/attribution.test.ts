@@ -105,3 +105,43 @@ describe('VoicedTimeline', () => {
     expect(t.intervals()).toEqual([{ userId: 'alice', startMs: 700_000, endMs: 701_000 }]);
   });
 });
+
+describe('adaptive noise floor and energy', () => {
+  it('a constant-noise microphone is not credited with the real speaker\'s words', () => {
+    const t = new VoicedTimeline();
+    t.feed('noisy', pcm(30_000, 1500), 16_000, 0);
+    t.feed('real', pcm(26_000, 0), 16_000, 0);
+    t.feed('real', pcm(3000, 3000), 16_000, 26_000);
+    t.feed('real', pcm(1000, 0), 16_000, 29_000);
+    const who = t.attribute({ startMs: 26_500, endMs: 28_500 });
+    expect(who.userId).toBe('real');
+    expect(who.speakers).toEqual(['real']);
+  });
+
+  it('two real speakers overlapping are both listed, the louder first', () => {
+    const t = new VoicedTimeline();
+    t.feed('quiet', pcm(2000, 1500), 16_000, 0);
+    t.feed('loud', pcm(2000, 6000), 16_000, 0);
+    expect(t.attribute({ startMs: 200, endMs: 1800 }).speakers).toEqual(['loud', 'quiet']);
+  });
+
+  it('a quiet real speaker alone is still detected', () => {
+    const t = new VoicedTimeline();
+    t.feed('soft', pcm(500, 0), 16_000, 0);
+    t.feed('soft', pcm(1500, 700), 16_000, 500);
+    expect(t.attribute({ startMs: 700, endMs: 1900 })).toEqual({ userId: 'soft', speakers: ['soft'] });
+  });
+
+  it('silence is unattributed', () => {
+    const t = new VoicedTimeline();
+    t.feed('a', pcm(3000, 0), 16_000, 0);
+    expect(t.attribute({ startMs: 500, endMs: 2500 })).toEqual({ userId: null, speakers: [] });
+  });
+
+  it('attribute ranks by energy and drops anyone under a quarter of the loudest', () => {
+    const lv = (userId: string, startMs: number, endMs: number, level: number): VoicedInterval => ({ userId, startMs, endMs, level });
+    expect(attribute([lv('hum', 0, 2000, 400), lv('talk', 500, 1500, 4000)], { startMs: 0, endMs: 2000 }, 0))
+      .toEqual({ userId: 'talk', speakers: ['talk'] });
+    expect(attribute([lv('a', 0, 2000, 1000), lv('b', 500, 1500, 1500)], { startMs: 0, endMs: 2000 }, 0).speakers).toEqual(['a', 'b']);
+  });
+});
