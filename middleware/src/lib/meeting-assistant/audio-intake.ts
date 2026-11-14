@@ -19,7 +19,7 @@
 //   * A person who has not acknowledged the notice (and is not the inviter) is dropped before the timeline and the mixer.
 //   * Audio lives only in the mixer's ring. This module writes no file and logs no audio.
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { CallMixer } from './mixer.js';
+import { CallMixer, type MixerStats } from './mixer.js';
 import type { AssistantStore } from './store.js';
 import { sessionOf, type AssistantRecord } from './types.js';
 
@@ -299,6 +299,14 @@ export class AudioIntake {
       unackedChunks: a.base.unackedChunks + a.counters.unackedChunks,
       lateChunks: a.base.lateChunks + a.counters.lateChunks + (stats?.lateChunks ?? 0),
     }).catch(() => undefined);
+  }
+
+  /** What the mock world's dev route shows about a call's audio (never the token itself). */
+  describe(callId: string): { armed: boolean; attached: boolean; channelArn: string | null; counters: AudioCounters | null; mixer: MixerStats | null; bound: Record<string, string> } {
+    const armed = this.byCall.get(callId);
+    const attached = this.sessions.get(callId);
+    return { armed: !!armed, attached: !!attached, channelArn: armed?.channelArn ?? null, counters: armed ? { ...armed.counters } : null,
+      mixer: attached ? { ...attached.mixer.stats } : null, bound: Object.fromEntries(this.bindings.get(callId) ?? []) };
   }
 
   countersOf(callId: string): AudioCounters | null {

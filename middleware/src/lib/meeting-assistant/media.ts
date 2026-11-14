@@ -241,6 +241,7 @@ export class TapArmer {
     }
     this.release(callId);
     const token = await this.audio().arm(callId, channelArn);
+    if (mockTranscriptEnabled()) this.localTokens.set(callId, token);
     const sinkUrl = `${cfg.sinkBaseUrl}${SINK_PATH}${token}`;
     const state: ArmedTaps = { channelArn, generation: (this.gen += 1), tapIds: new Set(), sinkUrl };
     this.calls.set(callId, state);

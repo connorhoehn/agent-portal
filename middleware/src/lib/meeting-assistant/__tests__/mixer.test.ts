@@ -213,13 +213,13 @@ describe('the voiced timeline on the mixer\'s clock', () => {
 });
 
 describe('no audio is written anywhere', () => {
-  it('the audio path has no file or network write in it', () => {
-    const dir = join(__dirname, '..');
-    for (const f of ['mixer.ts', 'audio-intake.ts', 'attribution.ts']) {
-      let src = '';
-      try { src = readFileSync(join(dir, f), 'utf8'); } catch { continue; }
-      const code = src.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
-      expect(code).not.toMatch(/from 'node:fs|from "fs"|from 'fs'|writeFile|appendFile|createWriteStream|console\.(log|info|debug)\([^)]*(pcm|chunk|audio|body)/);
+  it('the audio path (sink route, intake, mixer, timeline, session send) has no file write and no audio in a log line', () => {
+    const files = ['mixer.ts', 'audio-intake.ts', 'attribution.ts', 'live-session.ts', 'media.ts', '../../routes/meeting-assistant-sink.ts'];
+    for (const f of files) {
+      const src = readFileSync(join(__dirname, '..', f), 'utf8');
+      const code = src.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n').replace(/'[^'\n]*'|"[^"\n]*"|`[^`]*`/g, "''");
+      expect(`${f}: ${/from 'node:fs|from "fs"|from 'fs'|from 'node:fs\/promises'|writeFile|appendFile|createWriteStream|writeSync/.test(code)}`).toBe(`${f}: false`);
+      expect(`${f}: ${/console\.(log|info|debug|warn|error)\([^)]*(pcm|chunk|audio|body|req\.body)/.test(code)}`).toBe(`${f}: false`);
     }
   });
 });

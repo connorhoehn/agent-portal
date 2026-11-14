@@ -455,7 +455,7 @@ export const V2_RULES = [
   [/^\w+ \/internal\//, 'n/a', null, 'service-auth plane'],
   [/^POST \/api\/internal\/meeting-assistant\/pcm\/:sinkToken$/, 'n/a', null, 'the meeting assistant\'s PCM sink: called by the media server\'s taps, authenticated by an unguessable per-call token in the path, never by a person'],
   [/^\w+ \/api\/__mock\//, 'n/a', null, 'dev-only mock control plane'],
-  [/^\w+ \/api\/dev\/calls\/:[^/]+\/(transcript-lines|assistant-messages|assistant-tool-call)$/, 'n/a', null, 'dev-only injectors for the meeting assistant (transcript lines, Nova messages, a scripted tool call; mock world and flag only)'],
+  [/^\w+ \/api\/dev\/calls\/:[^/]+\/(transcript-lines|assistant-messages|assistant-tool-call|assistant-audio)$/, 'n/a', null, 'dev-only injectors for the meeting assistant (transcript lines, Nova messages, a scripted tool call; mock world and flag only)'],
   [/^\w+ \/api\/observability\/test-fixtures\//, 'n/a', null, 'E2E fixtures'],
   [/^GET \/(api\/)?(health|livez)$/, 'n/a', null, 'load-balancer probe'],
   [/^\w+ \/api\/realtime\//, 'n/a', null, 'realtime token admission'],

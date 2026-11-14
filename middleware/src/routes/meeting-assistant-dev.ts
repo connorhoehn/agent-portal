@@ -18,6 +18,10 @@
 //   request, so a walk can send one that the rules would not (a call from someone who never said the name). It goes through
 //   every server check (asker, name lock, role, turn); it is not a shortcut around them. 409 with no scripted session.
 //
+//
+//   GET /api/dev/calls/:callId/assistant-audio
+//   The live sink token and channel for the tap simulator, and the audio counters. See the route below.
+//
 // It exists only when the mock providers are on AND NODE_ENV is not production AND the assistant flag is on
 // (lib/meeting-assistant/transcript-source.ts mockTranscriptEnabled); otherwise it answers 404, not 403, like
 // the mock control plane (routes/mock-control.ts). Mounted at the root with no session, like that plane, and under
@@ -28,6 +32,8 @@ import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { MOCK_CONTROL_SERVICE_AUTH, requireServiceAuth } from '../lib/service-auth.js';
 import { moveAction, postAction, postNotice, postPrivately, postReply } from '../lib/meeting-assistant/chat.js';
 import { assistantRuntime } from '../lib/meeting-assistant/orchestrator.js';
+import { assistantAudio } from '../lib/meeting-assistant/audio-select.js';
+import { tapArmer } from '../lib/meeting-assistant/media.js';
 import { meetingAssistantEnabled, MockTranscriptSource, mockTranscriptEnabled, transcriptSource, type RawLine } from '../lib/meeting-assistant/index.js';
 
 export const meetingAssistantDevRouter = Router();
@@ -134,6 +140,21 @@ meetingAssistantDevRouter.post('/api/dev/calls/:callId/assistant-messages', gate
       }
       default: throw new ValidationError('kind must be notice, reply, action, action-status or private');
     }
+  }));
+
+/**
+ * GET /api/dev/calls/:callId/assistant-audio: for the tap simulator (scripts/meeting-assistant/tap-sim.mjs) and the end-to-end script, the
+ * mock world's stand-in for the media server being told where to post. Gives the live sink token and channel (so the simulator can play
+ * the taps' part) and what the audio side did with the chunks. The token is shown nowhere outside the mock world: this route does not
+ * exist elsewhere, and the plain token is not kept anywhere but the tap armer's mock-world memory.
+ */
+meetingAssistantDevRouter.get('/api/dev/calls/:callId/assistant-audio', gate,
+  requireServiceAuth(MOCK_CONTROL_SERVICE_AUTH, 'mock control authentication required'),
+  asyncHandler(async (req, res) => {
+    const callId = req.params['callId'];
+    if (typeof callId !== 'string' || !/^[a-zA-Z0-9:_-]{1,256}$/.test(callId)) throw new ValidationError('Invalid call id');
+    const audio = assistantAudio().describe(callId);
+    res.json({ callId, ...audio, token: tapArmer().localToken(callId) });
   }));
 
 meetingAssistantDevRouter.post('/api/dev/calls/:callId/assistant-tool-call', gate,
