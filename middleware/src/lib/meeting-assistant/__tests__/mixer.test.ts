@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CallMixer, FRAME_MS, IN_RATE, LinearResampler, OUT_RATE, int16ToPcm, pcmToInt16 } from '../mixer.js';
@@ -145,6 +146,61 @@ describe('CallMixer output', () => {
     h.mixer.close();
     expect(h.mixer.push('u1', chunk(sine(200, 200, IN_RATE)))).toBe('rejected');
     expect(h.advance(1000)).toBe(0);
+  });
+});
+
+describe('a lane after bursts and stalls', () => {
+  /** The steady-state output is pinned: this hash was produced by the mixer before the lane repair, from the same input. */
+  it('steady real-time input from two people is bit-identical to the mixer before the repair', () => {
+    const h = harness();
+    const hash = createHash('sha1');
+    const tone = sine(440, 20, IN_RATE);
+    for (let k = 0; k < 500; k += 1) { h.wall.now += 20; h.mixer.push('a', chunk(tone)); h.mixer.push('b', chunk(tone)); h.mixer.tick(); }
+    for (const f of h.frames) hash.update(f);
+    expect(hash.digest('hex')).toBe('12740c9817c5080ed7310deecfd0dc24b9bab819');
+    expect(h.mixer.stats.overrunChunks + h.mixer.stats.lateChunks).toBe(0);
+  });
+
+  const loud = (frames: Buffer[]) => frames.map((f) => pcmToInt16(f).some((v) => Math.abs(v) > 100));
+
+  it('bursts totalling 3 s, then normal pacing: the participant is heard again within 500 ms', () => {
+    const h = harness();
+    for (let i = 0; i < 15; i += 1) h.mixer.push('a', chunk(sine(300, 200, IN_RATE)));
+    expect(h.mixer.stats.leadDroppedChunks).toBeGreaterThan(0);
+    h.advance(3000);
+    h.frames.length = 0;
+    const tone = sine(300, 20, IN_RATE);
+    for (let k = 0; k < 100; k += 1) { h.advance(20); h.mixer.push('a', chunk(tone)); h.mixer.tick(); }
+    const first = loud(h.frames).indexOf(true);
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(first * FRAME_MS).toBeLessThan(500);
+    // And it keeps being heard to the end: the lane does not run away.
+    expect(loud(h.frames).slice(-3)).toEqual([true, true, true]);
+  });
+
+  it('a participant who stalls for 5 s and resumes is heard at once', () => {
+    const h = harness();
+    const tone = sine(300, 20, IN_RATE);
+    for (let k = 0; k < 20; k += 1) { h.advance(20); h.mixer.push('a', chunk(tone)); }
+    h.advance(5000);
+    h.frames.length = 0;
+    for (let k = 0; k < 20; k += 1) { h.advance(20); expect(h.mixer.push('a', chunk(tone))).toBe('placed'); h.mixer.tick(); }
+    h.advance(400);
+    expect(loud(h.frames).indexOf(true)).toBeLessThanOrEqual(3);
+  });
+
+  it('counts a late chunk once, and an overrun does not move the write position', () => {
+    const h = harness();
+    h.advance(3000);
+    expect(h.mixer.push('a', chunk(sine(300, 200, IN_RATE)), 1000)).toBe('late');
+    expect(h.mixer.stats.lateChunks).toBe(1);
+    // The lane starts over at arrival rather than staying behind: the next on-time chunk is placed.
+    expect(h.mixer.push('a', chunk(sine(300, 200, IN_RATE)))).toBe('placed');
+    expect(h.mixer.stats.lateChunks).toBe(1);
+    let overrun = 0;
+    for (let i = 0; i < 30; i += 1) if (h.mixer.push('b', chunk(sine(300, 200, IN_RATE))) === 'overrun') overrun += 1;
+    expect(overrun).toBeGreaterThan(0);
+    expect(h.mixer.stats.overrunChunks).toBe(overrun);
   });
 });
 

@@ -83,6 +83,12 @@ export interface MixerOptions {
   lateMs?: number;
   /** A gap between a participant's chunks bigger than this is silence; smaller is jitter and keeps the stream contiguous. */
   gapMs?: number;
+  /** A lane whose next chunk would start more than this far ahead of its arrival is bursting: its chunks are dropped until it is back within `resumeLeadMs`. */
+  maxLeadMs?: number;
+  /** After a burst drop, a lane takes chunks again once its lead is down to this. */
+  resumeLeadMs?: number;
+  /** No chunks from a participant for longer than this and its next chunk starts a fresh run at the current position. */
+  stallMs?: number;
   /** The ring's length, which is also the most audio that can wait ahead of the output. */
   aheadMs?: number;
   /** The most participants mixed at once; a chunk from one more is dropped and counted. */
@@ -94,13 +100,23 @@ export interface MixerStats {
   chunks: number;
   lateChunks: number;
   overrunChunks: number;
+  /** The part of overrunChunks that was a lane running too far ahead of real time (a burst of audio). */
+  leadDroppedChunks: number;
   tooManyParticipants: number;
 }
 
-interface Lane { resampler: LinearResampler; /** Output sample (24 kHz, session timeline) where this participant's next chunk continues. */ nextSample: number | null }
+interface Lane {
+  resampler: LinearResampler;
+  /** Output sample (24 kHz, session timeline) where this participant's next chunk continues. */
+  nextSample: number | null;
+  /** Arrival (session ms) of the last chunk, for stall detection. */
+  lastArrivalMs: number;
+  /** Dropping chunks after a burst until the lead is back down. */
+  draining: boolean;
+}
 
 export class CallMixer {
-  readonly stats: MixerStats = { frames: 0, chunks: 0, lateChunks: 0, overrunChunks: 0, tooManyParticipants: 0 };
+  readonly stats: MixerStats = { frames: 0, chunks: 0, lateChunks: 0, overrunChunks: 0, leadDroppedChunks: 0, tooManyParticipants: 0 };
   private readonly startWall: number;
   private readonly ring: Int32Array;
   private readonly ringLen: number;
@@ -110,6 +126,9 @@ export class CallMixer {
   private readonly lateMs: number;
   private readonly gapMs: number;
   private readonly maxParticipants: number;
+  private readonly maxLeadMs: number;
+  private readonly resumeLeadMs: number;
+  private readonly stallMs: number;
   private closed = false;
 
   constructor(private readonly opts: MixerOptions) {
@@ -118,6 +137,9 @@ export class CallMixer {
     this.lateMs = opts.lateMs ?? 400;
     this.gapMs = opts.gapMs ?? 150;
     this.maxParticipants = opts.maxParticipants ?? 16;
+    this.maxLeadMs = opts.maxLeadMs ?? 1000;
+    this.resumeLeadMs = opts.resumeLeadMs ?? 600;
+    this.stallMs = opts.stallMs ?? 1000;
     this.ringLen = Math.round((opts.aheadMs ?? 2000) * OUT_PER_MS);
     this.ring = new Int32Array(this.ringLen);
   }
@@ -139,7 +161,7 @@ export class CallMixer {
     let lane = this.lanes.get(userId);
     if (!lane) {
       if (this.lanes.size >= this.maxParticipants) { this.stats.tooManyParticipants += 1; return 'rejected'; }
-      lane = { resampler: new LinearResampler(), nextSample: null };
+      lane = { resampler: new LinearResampler(), nextSample: null, lastArrivalMs: arrivalMs, draining: false };
       this.lanes.set(userId, lane);
     }
     this.stats.chunks += 1;
@@ -148,23 +170,37 @@ export class CallMixer {
     const byArrival = arrivalMs - durMs + this.playoutDelayMs;
     const arrivalSample = Math.round(byArrival * OUT_PER_MS);
     let startSample = arrivalSample;
+    // A long silence from this participant: start fresh at the current position, whatever the lane thought it owed.
+    if (arrivalMs - lane.lastArrivalMs > this.stallMs) { lane.nextSample = null; lane.draining = false; }
+    lane.lastArrivalMs = arrivalMs;
     // Jitter (either way) keeps the stream contiguous, to the sample; a real gap is silence and starts a new run.
     if (lane.nextSample !== null) {
-      if ((arrivalSample - lane.nextSample) / OUT_PER_MS > this.gapMs) lane.resampler.reset(); else startSample = lane.nextSample;
+      if ((arrivalSample - lane.nextSample) / OUT_PER_MS > this.gapMs) { lane.resampler.reset(); lane.draining = false; } else startSample = lane.nextSample;
+    }
+    // Bursts push a lane ahead of real time and contiguity never lets it back. Past the bound, drop chunks (and write
+    // position stays put, so real time catches up) until the lead is small again.
+    const leadMs = (startSample - arrivalSample) / OUT_PER_MS;
+    if (leadMs > this.maxLeadMs) lane.draining = true;
+    if (lane.draining) {
+      if (leadMs > this.resumeLeadMs) { lane.resampler.reset(); this.stats.leadDroppedChunks += 1; this.stats.overrunChunks += 1; return 'overrun'; }
+      lane.draining = false; lane.resampler.reset();
     }
     const out = lane.resampler.process(input);
-    lane.nextSample = startSample + out.length;
     const cursorSample = this.emitted * FRAME_MS * OUT_PER_MS;
+    const chunkStart = startSample;
     let from = 0;
+    const lateDrop = (): 'late' => { this.stats.lateChunks += 1; lane.nextSample = null; lane.resampler.reset(); return 'late'; };
     if (startSample < cursorSample) {
       const behindMs = (cursorSample - startSample) / OUT_PER_MS;
-      if (behindMs > this.lateMs) { this.stats.lateChunks += 1; return 'late'; }
+      if (behindMs > this.lateMs) return lateDrop();
       from = cursorSample - startSample;
       startSample = cursorSample;
     }
-    if (from >= out.length) { this.stats.lateChunks += 1; return 'late'; }
+    if (from >= out.length) return lateDrop();
     const count = out.length - from;
-    if (startSample + count > cursorSample + this.ringLen) { this.stats.overrunChunks += 1; return 'overrun'; }
+    // Dropped audio never advances the write position.
+    if (startSample + count > cursorSample + this.ringLen) { this.stats.overrunChunks += 1; lane.resampler.reset(); return 'overrun'; }
+    lane.nextSample = chunkStart + out.length;
     for (let i = 0; i < count; i += 1) this.ring[(startSample + i) % this.ringLen]! += out[from + i]!;
     if (this.opts.onPlaced) this.opts.onPlaced(userId, int16ToPcm(out.subarray(from)), startSample / OUT_PER_MS);
     return 'placed';
