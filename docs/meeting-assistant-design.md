@@ -1,6 +1,6 @@
 # Meeting assistant: design and plan
 
-13 November 2026, revised the same day. Status: packages 1 to 5 merged (13 November), all on the mock world; package 6, real audio, next.
+13 November 2026, revised the same day. Status: packages 1 to 5 merged (13 November), all on the mock world; package 6a (the server side of real audio) built on branch `meeting-assistant-audio`; 6b (the portal reporting its participant id) and the paid run next.
 
 **Revision.** The first draft listened with the media server's local Whisper captions service. The owner's instruction is to listen with the OpenAI live model the voice navigator already uses. This version does that. The captions service is not used.
 
@@ -113,7 +113,7 @@ Each package is one branch, verified by the full chain, merged on its own.
 | 4a | Session and turns on the server: the live session over the WebSocket (run against a fake server only), the scripted stand-in, attribution, the name lock, turns, spend source, hold on the inviter, ceiling and extend | this one | Done |
 | 4b | Turns in the asker's browser: reads run, confirmed writes run, results return; three tool calls per request; time left and extend; acknowledgement stays offered; a plain reply when a typed request cannot be heard | this one | Done |
 | 5 | Minutes: notes, decisions and action items when Nova leaves; the meeting page and the Meetings list under `/iq/meetings`; delete by the inviter. Not searchable: the search index cannot limit a record to named people | this one | Done; the provider request for minutes has run against a fake server only |
-| 6 | Real audio: the tap sink, mixer and voiced timeline; arming the tap on invite; the join-record lookup from per-join id to person; a paid end-to-end run | this one, `platform-api` | Medium |
+| 6 | Real audio. 6a, built: the tap sink, mixer and voiced timeline, arming the tap on invite, the participant binding route, the tap simulator and a dry end-to-end run. 6b: the portal binds its own participant id; the paid run | this one | Medium |
 | 7 | Nova's voice: relay of the output audio to participants' browsers, a speaking mark, a mute-Nova control per person | this one, `realtime-modules`, `ui-components` | Medium |
 | 8 | Later: joining scheduled rooms on its own, a real media participant, minutes from the recorded transcript when a call was recorded | several | Large |
 
@@ -122,6 +122,30 @@ Packages 1 to 5 run entirely on the mock world. Package 6 needs the social stack
 Order: 1, then 2 and 3 in parallel, then 4, then 5, then 6, then 7.
 
 Library gaps found by packages 2 and 3, closed in `ui-components` 2.526.0 and adopted (13 November): the chat panel cannot draw a custom message kind as a system line (Nova's notices show as a bubble); the consent notice has fixed wording and no acknowledge action (a banner is used); the call roster cannot show a non-media entry (Nova's line sits in the conversation pane's header).
+
+## Running it against real media
+
+Package 6a is the server side. The media server's per-participant taps post each speaker's 16 kHz audio to the middleware; the middleware mixes it into one 24 kHz stream for the live session and works out who spoke from the separate streams.
+
+**How a participant becomes a person.** The taps name a participant by the media server's per-join id, `<user id>-<base36 stamp>`, minted from the same `sub` platform-api passes at join (the middleware's call-binding proof pins that to the session's own `sub`). The middleware has no record of it, so the portal reports it: `POST /api/calls/:callId/assistant/participant { participantId }`, a seat required, the id required to be the caller's own `sub`, a dash and a base36 stamp, and an id already bound to someone else refused. Audio from an id nobody bound is dropped and counted (`unmappedChunks`).
+
+**The sink.** `POST /api/internal/meeting-assistant/pcm/:sinkToken`, raw PCM up to 64 KB, no cookie. The token is 32 random bytes made when Nova starts listening and again on every resume, kept only as a SHA-256 on the record, bound to the call's channel (`X-Channel-Arn`), and dead the moment the assistant pauses or leaves. Anything else is a 404 with no body. A person who has not acknowledged the notice is dropped before the timeline and the mixer.
+
+**The channel is the server's.** On invite and resume the middleware looks it up from the call's own lobby with platform-api's `GET /api/video/sessions/by-lobby/:lobbyName`, asked as the person who is inviting, then creates one per-participant `webhook-pcm` tap for it on the media server and deletes it when the token dies. If the three settings below are missing, or the channel cannot be found, the invite answers 503 and nothing starts. A tap that cannot be made because nobody publishes audio yet (`409 no audio producer in channel`) is retried for up to a minute, then Nova says in the chat that it cannot hear the call yet.
+
+| Variable | What it is |
+|---|---|
+| `MEETING_ASSISTANT_MEDIA_URL` | The media server's address, as the middleware reaches it |
+| `MEETING_ASSISTANT_MEDIA_ADMIN_TOKEN` | Its admin token (never logged) |
+| `MEETING_ASSISTANT_SINK_BASE_URL` | The address the media server reaches the middleware at, for example `http://host.docker.internal:<port>` |
+| `MEETING_ASSISTANT_LIVE=1` | Local only: the mock world uses the provider's real live session for one paid check. The key comes from `middleware/.env`. The process refuses to start with it on when `NODE_ENV=production` |
+
+**Two scripts** (`scripts/meeting-assistant/`):
+
+- `tap-sim.mjs` plays the media server's taps against a running middleware: `--base`, `--token`, `--channel` and a timeline of `{ participantId, wav, atMs }`, posting each speaker's audio in 200 ms chunks at real-time pace with the taps' headers.
+- `live-e2e.mjs` starts its own middleware on port 3953 in the mock world, seats two demo personas in one call, invites Nova and plays about 40 seconds of synthetic speech (macOS `say`, two voices) through the simulator. It checks who each line is attributed to, that Nova stays quiet in chatter and when only named, that the first request is answered in chat labelled with the asker, that the second is an action card waiting for its asker, and that no tool call was refused. `--dry` runs the same chain against a fake provider and a fake media server (no cost). Without `--dry` it needs `--yes`, costs about $0.04 and stops itself 75 seconds after the invite.
+
+What the audio is and is not. It passes through memory only: the sink, the mixer and the session write no file and log no audio. The mixer sends the provider one frame per 100 ms of wall time, silence included, so the provider's timeline matches wall time, and the voiced timeline is fed on that same timeline. A replaced session starts both again from zero while the tap and its token carry on.
 
 ## How it is judged
 
