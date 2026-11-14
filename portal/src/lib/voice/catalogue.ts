@@ -410,7 +410,7 @@ export const CREATE_ACTIONS: Readonly<Record<string, Readonly<Record<string, Act
 
 /** Each create kind's field set: [required, optional]. */
 export const CREATE_FIELDS: Readonly<Record<string, readonly [readonly string[], readonly string[]]>> = {
-  'work-item': [['title'], ['initiative', 'type']],
+  'work-item': [['title'], ['initiative', 'type', 'assignee']],
   comment: [['on', 'text'], []],
   'saved-search': [['name', 'query'], []],
   sprint: [['initiative', 'name', 'startsOn', 'endsOn'], []],
@@ -670,6 +670,7 @@ export const VOICE_TOOLS: readonly VoiceToolSpec[] = [
         title: str('Its title (a document or whiteboard without one is "Untitled").', { minLength: 1, maxLength: 200 }),
         focus: str('What the deck should cover, in the user\'s words.', { minLength: 1, maxLength: 200 }),
         type: str('story (default), bug or epic.', { enum: ['story', 'bug', 'epic'] }),
+        assignee: str('work-item: who owns it, by name ("me" for the user); left out, nobody yet.', { minLength: 1, maxLength: 120 }),
         on: str('The work item it is on (ref or position).', { minLength: 1, maxLength: 200 }),
         text: str('The comment.', { minLength: 1, maxLength: 2000 }),
         name: str('Its name.', { minLength: 1, maxLength: 80 }),

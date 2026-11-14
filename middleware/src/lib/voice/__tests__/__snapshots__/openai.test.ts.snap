@@ -1019,7 +1019,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
     "type": "function",
   },
   {
-    "description": "Create a record of one kind through the form its page uses, with the fields that kind takes. The kinds here and their fields: work-item (title, initiative?, type?); comment (on, text); saved-search (name, query); sprint (initiative, name, startsOn, endsOn); meeting (initiative, time, thread?); access-request (item, justification, duration?); document (initiative?, title?); whiteboard (initiative?, title?); deck (initiative?, focus?); decision (initiative, statement, state, participants?, call?).",
+    "description": "Create a record of one kind through the form its page uses, with the fields that kind takes. The kinds here and their fields: work-item (title, initiative?, type?, assignee?); comment (on, text); saved-search (name, query); sprint (initiative, name, startsOn, endsOn); meeting (initiative, time, thread?); access-request (item, justification, duration?); document (initiative?, title?); whiteboard (initiative?, title?); deck (initiative?, focus?); decision (initiative, statement, state, participants?, call?).",
     "name": "create",
     "parameters": {
       "additionalProperties": false,
@@ -1027,6 +1027,13 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
         "fields": {
           "additionalProperties": false,
           "properties": {
+            "assignee": {
+              "description": "work-item: who owns it, by name ("me" for the user); left out, nobody yet.",
+              "type": [
+                "string",
+                "null",
+              ],
+            },
             "call": {
               "description": "The id of the call it was agreed in; left out, it was agreed by hand.",
               "type": [
@@ -1235,6 +1242,7 @@ exports[`the mint body snapshot of the orgiq delegation tools as sent 1`] = `
             "title",
             "focus",
             "type",
+            "assignee",
             "on",
             "text",
             "name",

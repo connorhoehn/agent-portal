@@ -622,7 +622,7 @@ export const CREATE_ACTIONS: Readonly<Record<string, Readonly<Record<string, Cap
 
 /** Each create kind's field set: [required, optional]. */
 export const CREATE_FIELDS: Readonly<Record<string, readonly [readonly string[], readonly string[]]>> = {
-  'work-item': [['title'], ['initiative', 'type']],
+  'work-item': [['title'], ['initiative', 'type', 'assignee']],
   comment: [['on', 'text'], []],
   'saved-search': [['name', 'query'], []],
   sprint: [['initiative', 'name', 'startsOn', 'endsOn'], []],
@@ -952,6 +952,7 @@ export const VOICE_TOOLS: readonly VoiceTool[] = [
         title: str('Its title (a document or whiteboard without one is "Untitled").', { minLength: 1, maxLength: 200 }),
         focus: str('What the deck should cover, in the user\'s words.', { minLength: 1, maxLength: 200 }),
         type: str('story (default), bug or epic.', { enum: ['story', 'bug', 'epic'] }),
+        assignee: str('work-item: who owns it, by name ("me" for the user); left out, nobody yet.', { minLength: 1, maxLength: 120 }),
         on: str('The work item it is on (ref or position).', { minLength: 1, maxLength: 200 }),
         text: str('The comment.', { minLength: 1, maxLength: 2000 }),
         name: str('Its name.', { minLength: 1, maxLength: 80 }),
@@ -1055,7 +1056,7 @@ export const MOCK_CALLS: Readonly<Record<string, { name: string; arguments: Reco
   'pipelines/author': { name: 'list', arguments: { kind: 'run', filter: { q: null, status: 'failed', scope: null, since: null }, limit: null, detail: null }, said: 'List the failed runs.' },
   'social/community-admin': { name: 'list', arguments: { kind: 'channel', filter: null, limit: null, detail: null }, said: 'Which channels are there?' },
   // V2-11: a requester files a request from the catalogue (the card is the route's own preview of who approves).
-  'access/requester': { name: 'create', arguments: { kind: 'access-request', fields: { item: 'Operator in Pipelines', justification: 'I cover the nightly pipeline runs while the operators are out.', duration: '7d', initiative: null, title: null, type: null, on: null, text: null, name: null, query: null, startsOn: null, endsOn: null, description: null, privacy: null, delegate: null, window: null, reason: null, statement: null, state: null, participants: null, call: null } }, said: 'Request the pipelines operator role for a week: I cover the nightly runs while the operators are out.' },
+  'access/requester': { name: 'create', arguments: { kind: 'access-request', fields: { item: 'Operator in Pipelines', justification: 'I cover the nightly pipeline runs while the operators are out.', duration: '7d', initiative: null, title: null, type: null, assignee: null, on: null, text: null, name: null, query: null, startsOn: null, endsOn: null, description: null, privacy: null, delegate: null, window: null, reason: null, statement: null, state: null, participants: null, call: null } }, said: 'Request the pipelines operator role for a week: I cover the nightly runs while the operators are out.' },
   // V2-6: the aggregates. An org leader asks about the sweeps, an HR admin whether the fleet is healthy, a pipeline admin what failed.
   'orgiq/org-leader': { name: 'summary', arguments: { kind: 'sweeps', since: 'yesterday' }, said: 'Any issues with the sweeps since yesterday?' },
   // V2-7: an HR admin asks what the org spent (at the budgets tier). A member's own spend and the tier's offer

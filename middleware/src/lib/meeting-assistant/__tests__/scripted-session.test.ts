@@ -13,7 +13,7 @@ describe('the rule table', () => {
     ["What's 2 plus 2?", { say: 'Four.' }],
     ['please what is two plus two.', { say: 'Four.' }],
     ['create a work item for the login cookie bug', { call: { name: 'create', args: { kind: 'work-item', fields: { title: 'the login cookie bug' } } } }],
-    ['Create a work item for the login cookie bug and assign it to Priya.', { call: { name: 'create', args: { kind: 'work-item', fields: { title: 'the login cookie bug' } } } }],
+    ['Create a work item for the login cookie bug and assign it to Priya.', { call: { name: 'create', args: { kind: 'work-item', fields: { title: 'the login cookie bug', assignee: 'Priya' } } } }],
     ['how much budget do I have', { call: { name: 'budget', args: { scope: 'me' } } }],
     ["what's my budget?", { call: { name: 'budget', args: { scope: 'me' } } }],
     ['find the Kubernetes experts', { call: { name: 'search', args: { query: 'the Kubernetes experts' } } }],

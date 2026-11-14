@@ -95,6 +95,18 @@ test('create: "add a bug: …" on an initiative\'s page files it there; elsewher
   assert.equal(nowhere.result!.output['code'], 'not-on-this-page');
 });
 
+test('create: "a bug for Nora" files it owned by the initiative\'s own contributor; a stranger is refused before any write', async () => {
+  const { ctx, log } = ctxFor({ extra: [route('POST', '/api/graph/work-items', 201, { id: 'wi-x' })] });
+  const r = await plan('create', { kind: 'work-item', fields: { title: 'Cutover runbook', type: 'story', assignee: 'Nora' } }, ctx);
+  assert.match(r.card!.detail.join(' '), /owned by Nora DaSilva/);
+  assert.equal((await r.run()).outcome, 'done');
+  assert.deepEqual(writes(log), [['POST', '/api/graph/work-items', { projectId: P, type: 'story', title: 'Cutover runbook', priority: 'medium', assigneeId: 'p-004' }]]);
+  const { ctx: c2, log: l2 } = ctxFor();
+  const stranger = await plan('create', { kind: 'work-item', fields: { title: 'x', assignee: 'Zed Nobody' } }, c2);
+  assert.equal(stranger.result!.output['code'], 'not-found');
+  assert.deepEqual(writes(l2), []);
+});
+
 test('get: a work item\'s brief is one terse line; its criteria and history come back count first, history newest first', async () => {
   const { ctx } = ctxFor({ extra: [
     route('GET', '/api/graph/work-items/wi-auth-e2-b3/criteria', 200, { criteria: [{ id: 'c1', text: 'Logout clears the shim cookie', done: true }, { id: 'c2', text: 'A test proves it', done: false }] }),

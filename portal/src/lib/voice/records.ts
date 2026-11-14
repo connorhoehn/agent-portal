@@ -586,6 +586,21 @@ async function offInitiative(ctx: ToolContext, projectId: string, title?: string
   return { result: refused(`Only the people on ${name} (its owner and contributors) change its work, and you are not one of them.`, { code: 'not-on-initiative', requestItemId: `initiative:${projectId}` }) };
 }
 
+/**
+ * The initiative person a spoken owner names: the drawer's owner picker offers the initiative's contributors
+ * (GET /api/graph/projects/:id), and so does this. Nobody, or several people, matching is refused.
+ */
+async function initiativePerson(ctx: ToolContext, projectId: string, value: unknown, named: string): Promise<{ who: { personId: string; name: string } } | { result: ToolResult }> {
+  const read = await readJson<{ contributors?: Array<{ personId?: string; name?: string }> }>(ctx, `/api/graph/projects/${enc(projectId)}`);
+  if (!read.ok) return { result: readFailure('the initiative\'s people', read.status) };
+  const people = (read.body.contributors ?? []).filter((p): p is { personId: string; name: string } => typeof p.personId === 'string' && typeof p.name === 'string');
+  const said = String(value).trim();
+  const hits = people.filter((p) => samePerson(p.name, said, ctx));
+  if (!hits.length) return { result: refused(/^(me|myself|i)$/i.test(said) ? `You are not on this initiative's people, so ${named} cannot be yours.` : `No one called "${said}" works on this initiative; its people own its work.`, { code: 'not-found' }) };
+  if (hits.length > 1) return { result: ambiguous(`Several people on this initiative match "${said}". Ask which.`, hits.map((p) => ({ name: p.name }))) };
+  return { who: hits[0]! };
+}
+
 async function planCreateKind(kind: string, f: Rec, ctx: ToolContext): Promise<{ plan: ConfirmPlan } | { result: ToolResult }> {
   const card = (title: string, detail: string[], act: ActPlan) => ({ plan: { title, detail, data: act } satisfies ConfirmPlan });
   switch (kind) {
@@ -596,8 +611,16 @@ async function planCreateKind(kind: string, f: Rec, ctx: ToolContext): Promise<{
       const off = await offInitiative(ctx, where.id, where.title);
       if (off) return off;
       const type = String(f['type'] ?? 'story');
-      const body = { projectId: where.id, type, title: String(f['title']).trim(), priority: 'medium' };
-      return card(`Create a ${type} on ${where.title}`, [`"${body.title}"`, 'Priority medium; it starts open.'],
+      const title = String(f['title']).trim();
+      // An owner said with it is one of the initiative's people, as the drawer's owner picker allows.
+      let owner: { personId: string; name: string } | null = null;
+      if (f['assignee'] !== undefined && f['assignee'] !== null) {
+        const found = await initiativePerson(ctx, where.id, f['assignee'], `"${title}"`);
+        if ('result' in found) return found;
+        owner = found.who;
+      }
+      const body = { projectId: where.id, type, title, priority: 'medium', ...(owner ? { assigneeId: owner.personId } : {}) };
+      return card(`Create a ${type} on ${where.title}`, [`"${body.title}"`, owner ? `Priority medium; it starts open, owned by ${owner.name}.` : 'Priority medium; it starts open.'],
         { key: `POST /api/graph/work-items ${JSON.stringify(body)}`, send: { method: 'POST', url: '/api/graph/work-items', body }, done: `Created the ${type} "${body.title}" on ${where.title}`, result: { kind: 'work-item', title: body.title }, href: `/iq/projects/${enc(where.id)}` });
     }
     case 'comment': {
@@ -956,15 +979,9 @@ async function planWorkItemUpdate(field: string, value: unknown, ref: string, ct
   }
   if (!w.projectId) return { result: refused(`${named} belongs to no initiative I can read.`, { code: 'not-on-initiative' }) };
   if (field === 'assignee') {
-    // The drawer's owner picker offers the initiative's contributors (GET /api/graph/projects/:id), and so does this.
-    const read = await readJson<{ contributors?: Array<{ personId?: string; name?: string }> }>(ctx, `/api/graph/projects/${enc(w.projectId)}`);
-    if (!read.ok) return { result: readFailure('the initiative\'s people', read.status) };
-    const people = (read.body.contributors ?? []).filter((p): p is { personId: string; name: string } => typeof p.personId === 'string' && typeof p.name === 'string');
-    const said = String(value).trim();
-    const hits = people.filter((p) => samePerson(p.name, said, ctx));
-    if (!hits.length) return { result: refused(/^(me|myself|i)$/i.test(said) ? `You are not on this initiative's people, so ${named} cannot be yours.` : `No one called "${said}" works on this initiative; its people own its work.`, { code: 'not-found' }) };
-    if (hits.length > 1) return { result: ambiguous(`Several people on this initiative match "${said}". Ask which.`, hits.map((p) => ({ name: p.name }))) };
-    const who = hits[0]!;
+    const found = await initiativePerson(ctx, w.projectId, value, named);
+    if ('result' in found) return found;
+    const { who } = found;
     if (w.assigneeName === who.name) return { result: refused(`${named} is already ${who.name}'s.`) };
     const url = `/api/graph/work-items/${enc(w.id)}`;
     return plan(`Give ${named} to ${who.name}`, [`It is ${w.assigneeName ? `${w.assigneeName}'s` : 'unassigned'} now; ${who.name} is told.`], { method: 'PATCH', url, body: { assigneeId: who.personId } },
