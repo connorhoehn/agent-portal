@@ -27,6 +27,7 @@ import {
 import {
   MAX_PROVIDER_ERRORS, SessionEmitter, SessionTextUnsupported, type BackendTokens, type LiveMeetingSession, type ProviderErrorInfo, type SessionStartInput,
 } from './session.js';
+import { trace } from './trace.js';
 
 export interface OpenAiLiveSessionOptions {
   model: string;
@@ -219,6 +220,17 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       ev = parsed as Record<string, unknown>;
     } catch { return; }
     const type = ev['type'];
+    if (type !== 'session.output_audio.delta') {
+      const inner = type === 'response.event' ? (ev['event'] as { type?: unknown } | undefined)?.type : undefined;
+      const item = type === 'response.event' ? ((ev['event'] as { item?: { type?: unknown; call_id?: unknown } } | undefined)?.item) : undefined;
+      trace('provider', {
+        type: typeof type === 'string' ? type : 'unknown', t: this.started ? this.sinceStart() : null,
+        startMs: typeof ev['start_ms'] === 'number' ? ev['start_ms'] : undefined, endMs: typeof ev['end_ms'] === 'number' ? ev['end_ms'] : undefined,
+        offsetMs: typeof ev['offset_ms'] === 'number' ? ev['offset_ms'] : undefined,
+        inner: typeof inner === 'string' ? inner : undefined, item: typeof item?.type === 'string' ? item.type : undefined,
+        callId: typeof item?.call_id === 'string' ? item.call_id : undefined,
+      });
+    }
     switch (type) {
       case 'session.started': {
         const id = (ev['session'] as { id?: unknown } | undefined)?.id;
@@ -283,7 +295,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     const usable = whole.length - (whole.length % 2);
     for (let at = 0; at < usable; at += OUTPUT_FRAME_BYTES) {
       const pcm = whole.subarray(at, Math.min(usable, at + OUTPUT_FRAME_BYTES));
-      if (pcm16Rms(pcm) > OUTPUT_VOICED_RMS) this.tailLeft = OUTPUT_TAIL_FRAMES;
+      if (pcm16Rms(pcm) > OUTPUT_VOICED_RMS) { if (this.tailLeft === 0) trace('voice.start', { t: this.sinceStart() }); this.tailLeft = OUTPUT_TAIL_FRAMES; }
       else if (this.tailLeft === 0) continue;
       else this.tailLeft -= 1;
       this.audioSeq += 1;
@@ -345,14 +357,14 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   private flushInput(): void {
     const p = this.input; this.input = null;
     const text = p?.text.replace(/\s+/g, ' ').trim();
-    if (p && text) this.emit('inputTranscript', { text, startMs: p.startMs, endMs: p.endMs });
+    if (p && text) { trace('input.flush', { t: this.sinceStart(), startMs: p.startMs, endMs: p.endMs }); this.emit('inputTranscript', { text, startMs: p.startMs, endMs: p.endMs }); }
   }
 
   private flushOutput(): void {
     this.clearOutputTimer();
     const p = this.output; this.output = null;
     const text = p?.text.replace(/\s+/g, ' ').trim();
-    if (p && text) this.emit('outputTranscript', { text, final: true, startedAt: p.startedAt, endedAt: p.endedAt });
+    if (p && text) { trace('output.flush', { t: this.sinceStart(), startedAt: p.startedAt, endedAt: p.endedAt }); this.emit('outputTranscript', { text, final: true, startedAt: p.startedAt, endedAt: p.endedAt }); }
   }
 
   private onResponseEvent(raw: unknown): void {

@@ -64,6 +64,8 @@ export function startMiddleware({ dir, ports, dry, limitSeconds, useProxy = fals
     MOCK_AURORA: 'true', MOCK_AGENTCORE: 'true', MOCK_GUARDRAILS: 'true', MOCK_CLOUDWATCH: 'true', MOCK_QUEUE: 'true',
     POLICY_STORE_ID: '', SESSION_SIGNING_SECRET_ARN: '', COGNITO_USER_POOL_ID: '', COGNITO_CLIENT_ID: '', COGNITO_CLIENT_SECRET: '', COGNITO_DOMAIN: '', COGNITO_CALLBACK_URL: '',
     PORT: String(ports.mw), MEETING_ASSISTANT_ENABLED: 'true', MEETING_ASSISTANT_LIVE: '1', VOICE_LOG_DIR: path.join(dir, 'voice-log'),
+    // The decision trace (event types, times, ids; no text): honoured only under INSECURE_DEV_MODE, kept with --keep-logs.
+    MEETING_ASSISTANT_TRACE_FILE: path.join(dir, 'trace.jsonl'),
     // The safety: the server ends the session by itself one minute after the scenario's limit, and the preload ends the whole process.
     MEETING_ASSISTANT_MAX_MINUTES: String(maxMinutesFor(limitSeconds)),
     NODE_OPTIONS: `--require ${DEADMAN_PATH}`, MA_DEADMAN_MS: String(deadmanMsFor(limitSeconds)),

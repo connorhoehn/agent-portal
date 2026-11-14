@@ -45,6 +45,7 @@ import { hookProposalNotices } from './proposal-notify.js';
 import { checkBeforeClaim, expireProposalTurn, finishProposal, startProposal, type ProposalRunDeps } from './proposal-run.js';
 import { DecisionWatcher, defaultWatcherDeps } from './decision-watcher.js';
 import { MAX_PROVIDER_ERRORS, type LiveMeetingSession, type ProviderErrorInfo, type SessionEvents } from './session.js';
+import { trace } from './trace.js';
 import { sessionOf, type TranscriptLine, type AssistantRecord, type AssistantTurn, type TurnKind, type TurnStatus } from './types.js';
 
 export const READ_TURN_TTL_MS = 90_000;
@@ -505,6 +506,7 @@ export class AssistantRuntime {
       session.on('delegation', (e) => {
         if (session.kind === 'scripted') return;
         run.delegations.push(run.sessionStartedAt + e.atMs);
+        trace('delegation', { at: run.sessionStartedAt + e.atMs });
         if (run.delegations.length > MAX_DELEGATIONS) run.delegations.shift();
       }),
       session.on('outputAudio', (e) => this.onOutputAudio(run, session, e)),
@@ -667,13 +669,18 @@ export class AssistantRuntime {
 
   private async storeInput(run: CallRun, e: SessionEvents['inputTranscript']): Promise<void> {
     // Nova's own voice heard back through a microphone is not a person's line: not stored, only counted (the echo guard's own test).
-    if (run.voice && run.speech.isEcho({ text: e.text, startAt: run.sessionStartedAt + e.startMs, endAt: run.sessionStartedAt + e.endMs })) { run.echoLinesDropped += 1; return; }
+    if (run.voice && run.speech.isEcho({ text: e.text, startAt: run.sessionStartedAt + e.startMs, endAt: run.sessionStartedAt + e.endMs })) { run.echoLinesDropped += 1; trace('line.echo', { startMs: e.startMs, endMs: e.endMs }); return; }
     const who = attribute(run.timeline.intervals(), { startMs: e.startMs, endMs: e.endMs });
     run.pieceNo += 1;
-    await this.deps.intake().handle(run.ctx.callId, {
+    const outcome = await this.deps.intake().handle(run.ctx.callId, {
       userId: who.userId, text: e.text, at: run.sessionStartedAt + e.endMs, startMs: e.startMs, endMs: e.endMs,
       captionId: `live:${run.sessionNo}:${run.pieceNo}`,
       ...(who.speakers.length > 1 ? { speakers: who.speakers } : {}),
+    });
+    trace('line', {
+      piece: `live:${run.sessionNo}:${run.pieceNo}`, seq: outcome.stored?.seq ?? null, userId: who.userId, speakers: who.speakers.length,
+      startMs: e.startMs, endMs: e.endMs, at: run.sessionStartedAt + e.endMs, addressing: findAddress(e.text) !== null,
+      stored: outcome.stored !== null, reason: 'reason' in outcome ? outcome.reason : undefined, events: outcome.events.map((x) => x.type).join('|') || undefined,
     });
   }
 
@@ -745,6 +752,7 @@ export class AssistantRuntime {
     const open = (await this.addressingLines(run)).filter((l) => l.at <= at && l.at >= at - ASKER_WINDOW_MS && !run.answeredLines.has(l.seq));
     const free = open.find((l) => !run.claimedLines.has(l.seq));
     const next = free ?? open.find((l) => run.calls.get(run.claimedLines.get(l.seq) ?? '') === 'open');
+    trace('unanswered', { at, open: open.length, free: free?.seq ?? null, chosen: next?.seq ?? null, chosenUser: next?.userId ?? null });
     if (!next) return null;
     if (free) run.answeredLines.add(next.seq);
     return next.userId !== null && (next.speakers?.length ?? 0) <= 1 ? next.userId : null;
@@ -761,27 +769,31 @@ export class AssistantRuntime {
     const t = e.startedAt !== undefined ? run.sessionStartedAt + e.startedAt : this.now();
     const tEnd = e.endedAt !== undefined ? run.sessionStartedAt + e.endedAt : t;
     let asker: string | null;
+    const decide = (decision: string, f: Record<string, string | number | boolean | null | undefined> = {}) => trace('output', { decision, t, tEnd, ...f });
     if (e.inReplyTo !== undefined) {
       const c = run.replyById.get(e.inReplyTo);
-      if (!c || !this.contextLive(c, t) || c.visibility === 'muted' || !c.asker) return;
+      if (!c || !this.contextLive(c, t) || c.visibility === 'muted' || !c.asker) { decide('drop.byId', { found: !!c, visibility: c?.visibility }); return; }
       asker = c.asker;
+      decide('owner.byId', { asker });
     } else {
       // The short acknowledgement the voice speaks as it delegates: not an answer; changes nothing.
       await run.lineChain;
-      if (this.takeAcknowledgement(run, t, tEnd, await this.addressingLines(run))) return;
+      if (this.takeAcknowledgement(run, t, tEnd, await this.addressingLines(run))) { decide('acknowledgement'); return; }
       const c = run.reply;
       if (c && this.contextLive(c, t) && !(await this.contextEnded(run, c))) {
-        if (c.visibility === 'muted' || !c.asker) return;
+        if (c.visibility === 'muted' || !c.asker) { decide('drop.mutedContext', { call: c.modelCallId }); return; }
         asker = c.asker;
+        decide('owner.context', { asker, call: c.modelCallId });
       } else {
         // A plain answer with no tool call: whoever addressed Nova in the oldest line nothing has answered; no label when none says.
         const record = await this.store.get(run.ctx.callId);
-        if (record && record.requests > assistantLimits().maxRequests) return;
+        if (record && record.requests > assistantLimits().maxRequests) { decide('drop.limit'); return; }
         asker = await this.takeUnansweredAsker(run, t);
+        decide('owner.unanswered', { asker, context: c ? (this.contextLive(c, t) ? 'ended' : 'stale') : 'none' });
       }
     }
     const record = await this.store.get(run.ctx.callId);
-    if (!record || record.state === 'left') return;
+    if (!record || record.state === 'left') { decide('drop.left'); return; }
     if (asker === null) { await postNoticeQuietly(run.ctx.callId, e.text.slice(0, 1500)); return; }
     await postReply(run.ctx.callId, { text: e.text.slice(0, 1500), askedBy: asker, askedByName: await nameOf(asker) });
   }
@@ -848,6 +860,7 @@ export class AssistantRuntime {
     const times = run.callTimes.get(modelCallId);
     if (times) times.answeredAt = answeredAt;
     const sent = run.session?.answerToolCall(modelCallId, typeof output === 'string' ? output : JSON.stringify(output)) ?? false;
+    trace('call.answered', { call: modelCallId, sent, visibility: reply ? reply.visibility : 'muted', asker: reply?.asker ?? null, refused: !!(output && typeof output === 'object' && 'refused' in output) });
     // The spoken continuation that follows belongs to THIS call: public and labelled for its asker, or muted (the default).
     if (sent) {
       const ctx: ReplyContext = { modelCallId, asker: reply?.asker ?? null, visibility: reply ? reply.visibility : 'muted', answeredAt };
@@ -861,6 +874,7 @@ export class AssistantRuntime {
 
   /** Refuse a call: answered with the reason, counted on the record, and nothing posted (its follow-up speech is muted too). */
   private async refuse(run: CallRun, modelCallId: string, why: string): Promise<void> {
+    trace('call.refused', { call: modelCallId, why: why.replace(/\s+/g, '-') });
     this.answer(run, modelCallId, { refused: why });
     await this.store.bumpRefused(run.ctx.callId);
   }
@@ -882,6 +896,7 @@ export class AssistantRuntime {
     // The request was made when the model began working on it, not when its function call reached the server: judge from then.
     const began = run.session?.kind === 'scripted' ? null : this.takeDelegation(run, run.sessionStartedAt + e.atMs);
     run.callTimes.set(id, { openedAt: began ?? this.now(), answeredAt: null, acknowledged: false });
+    trace('call', { call: id, name: voiceTool(e.name) ? e.name : 'unknown', at: run.sessionStartedAt + e.atMs, began, matched: began !== null });
     // Judged only after every line that arrived before the call is stored (the asker is found among them).
     await run.lineChain;
     // The lines that addressed Nova up to that moment are this call's request: its context answers them, and a plain answer
@@ -915,6 +930,7 @@ export class AssistantRuntime {
       }
       return;
     }
+    trace('call.asker', { call: e.callId, asker, judgedAt: atMs });
     if (!canSpeakOnRecord(record, asker)) { await this.refuse(run, e.callId, 'not addressed'); return; }
     // (b) The name lock: the asker said the name in the window before the call.
     const lines = (await this.store.lines(callId, Math.max(0, record.nextSeq - 1 - 100), 100)).filter((l) => !this.echoOf(run, l));
@@ -936,6 +952,7 @@ export class AssistantRuntime {
     const roles = await this.deps.rolesOf(asker, tenant);
     const allowed = !MEETING_EXCLUDED_TOOLS.has(name) && roles.some((role) => meetingTools(tenant, role).some((t) => t.name === name));
     if (!allowed) {
+      trace('call.refused', { call: e.callId, why: 'role' });
       this.answer(run, e.callId, { refused: `not allowed for ${askerName}` });
       await this.store.bumpRefused(callId);
       await postReply(callId, { text: `${askerName} cannot do that here.`, askedBy: asker, askedByName: askerName });
@@ -965,6 +982,7 @@ export class AssistantRuntime {
       createdAt: now, expiresAt: now + (kind === 'write' ? WRITE_TURN_TTL_MS : READ_TURN_TTL_MS),
     };
     await this.store.createTurn(turn);
+    trace('call.turn', { call: e.callId, turn: turnId, kind, private: isPrivateRead(name, e.args) });
     if (kind === 'write') {
       const { summary, detail } = describeCall(name, e.args);
       const posted = await postAction(callId, { actionId: actionId!, askedBy: asker, askedByName: askerName, summary, ...(detail.length ? { detail } : {}), tool: { name, argsDigest: hashToolArgs(e.args) } });
