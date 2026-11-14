@@ -2425,6 +2425,9 @@
     "GET /api/calls/:callId/assistant/minutes": {
       "skipped": "no value found for :callId under /api/calls (orgiq/admin); no value found for :callId under /api/calls (assessment/admin); no value found for :callId under /api/calls (anonymous)"
     },
+    "GET /api/calls/:callId/assistant/proposals": {
+      "skipped": "no value found for :callId under /api/calls (orgiq/admin); no value found for :callId under /api/calls (assessment/admin); no value found for :callId under /api/calls (anonymous)"
+    },
     "GET /api/calls/:callId/assistant/state": {
       "skipped": "no value found for :callId under /api/calls (orgiq/admin); no value found for :callId under /api/calls (assessment/admin); no value found for :callId under /api/calls (anonymous)"
     },

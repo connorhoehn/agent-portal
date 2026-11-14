@@ -1126,6 +1126,16 @@
       "source": "src/routes/meeting-assistant.ts:306"
     },
     {
+      "method": "GET",
+      "path": "/api/calls/:callId/assistant/proposals",
+      "source": "src/routes/meeting-assistant.ts:493"
+    },
+    {
+      "method": "POST",
+      "path": "/api/calls/:callId/assistant/proposals/:proposalId/response",
+      "source": "src/routes/meeting-assistant.ts:502"
+    },
+    {
       "method": "POST",
       "path": "/api/calls/:callId/assistant/resume",
       "source": "src/routes/meeting-assistant.ts:307"
@@ -1604,6 +1614,11 @@
       "method": "POST",
       "path": "/api/dev/calls/:callId/assistant-messages",
       "source": "src/routes/meeting-assistant-dev.ts:98"
+    },
+    {
+      "method": "POST",
+      "path": "/api/dev/calls/:callId/assistant-proposals",
+      "source": "src/routes/meeting-assistant-dev.ts:177"
     },
     {
       "method": "POST",
