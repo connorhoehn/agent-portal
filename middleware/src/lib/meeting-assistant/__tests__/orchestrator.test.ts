@@ -1434,6 +1434,20 @@ describe('the real provider\'s event order (paid runs, 14 November)', () => {
     expect(await runtime.turnsFor(CALL, BOB)).toEqual([]);
   });
 
+  it('the request line the delegation itself flushes (emitted in the same tick, just before it) names the asker of the delegated answer', async () => {
+    const base = now;
+    const s = await realRuntime();
+    audioTap.sink!.placed(ALICE, loud(2_400), 6_800);
+    now = base + 10_077;
+    s.hear('What is the capital of Portugal, Nova', 6_800, 9_200);
+    s.fire('delegation', { atMs: 10_077 });
+    await flush();
+    now = base + 11_130; s.sayAt('One moment.', 10_229, 10_229); await flush();
+    now = base + 12_604; s.fire('delegationReady', { atMs: 12_604, item: 'message' });
+    now = base + 14_078; s.sayAt('Lisbon.', 13_179, 13_179); await flush();
+    expect(mockPosts.replies).toEqual([{ text: 'Lisbon.', askedBy: ALICE, askedByName: 'Alice' }]);
+  });
+
   it('one heard turn holding two people (a request spoken right after someone else\'s sentence) is stored as one line each', async () => {
     const s = await realRuntime();
     audioTap.sink!.placed(BOB, loud(1_000), 0);

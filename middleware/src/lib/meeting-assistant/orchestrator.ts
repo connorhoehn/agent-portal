@@ -535,7 +535,9 @@ export class AssistantRuntime {
         const at = run.sessionStartedAt + e.atMs;
         // Judged once every line heard before the delegation is stored (the provider flushes the request line just before it).
         const d: Delegation = { at, judgeAt: at, readyAt: null, item: null, acknowledged: false, answered: false, callId: null, asker: Promise.resolve({ userId: null, seq: null }) };
-        d.asker = run.lineChain.then(() => {
+        // The request line was emitted just before this event, and its write is queued on the next microtask (`guard`): wait
+        // one microtask before reading the chain, so the chain read already holds it.
+        d.asker = Promise.resolve().then(() => run.lineChain).then(() => {
           // Read at once, before any line heard after the delegation is stored (those are chained behind this one).
           d.judgeAt = Math.max(at, Math.min(run.lastLineAt, at + DELEGATION_LINE_SKEW_MS));
           return this.findAsker(run.ctx.callId, d.judgeAt);
