@@ -266,6 +266,16 @@ async function press(p, locator, { lead = 1100, click = true } = {}) {
   await sleep(lead);
   if (click) await el.click();
 }
+/** Notes in the page the moment its Nova mark first reads "Nova is speaking" (the browser and this script share one clock). */
+async function watchSpeaking(p) {
+  await p.page.evaluate(() => {
+    window.__novaSpeakingAt = null;
+    new MutationObserver(() => {
+      const el = document.querySelector('[data-testid="nova-mark"]');
+      if (el && window.__novaSpeakingAt === null && /Nova is speaking/.test(el.innerText || '')) window.__novaSpeakingAt = Date.now();
+    }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  });
+}
 async function menu(p, item) {
   await press(p, p.page.getByTestId('nova-mark'), { lead: 800 });
   await press(p, p.page.getByRole('menuitem', { name: item }), { lead: 900 });
@@ -536,14 +546,26 @@ try {
   await hold(800);
   await menu(nora, 'Mute Nova for me');
   await waitFor(async () => (await nora.page.getByTestId('nova-mark').first().getAttribute('data-voice-muted')) === 'true', 8000, 'Nora\'s mute');
-  await hold(2500);
+  await hold(1500);
+  // The mute is per browser and changes no words on the mark: her menu now offers to unmute.
+  await press(nora, nora.page.getByTestId('nova-mark'), { lead: 700 });
+  await press(nora, nora.page.getByRole('menuitem', { name: 'Unmute Nova for me' }), { lead: 2200, click: false });
+  await nora.page.keyboard.press('Escape');
+  await hold(800);
   await shotPng(nora, 's10a');
   cut('rows2', [V('vera', 'mark-chat'), V('nora', 'mark-chat')]);
   await hold(800);
   const repliesBefore = (await novaOf(vera, 'assistant-reply')).length;
+  await watchSpeaking(vera);
   await speak(vera, 's10q', { after: 0 });
   const reply10 = await waitFor(async () => (await novaOf(vera, 'assistant-reply')).slice(repliesBefore).find((m) => /confirm/i.test(m.message)), 25000, 'Nova\'s spoken reply');
-  const spoken = novaSpeaks(reply10.message, Date.now());
+  // Nova's voice starts when the mark says it is speaking (the mock voice is a short tone, so the mark holds about a second);
+  // a ring in the edit draws the eye to the mark for that moment.
+  const speakingAt = await waitFor(() => vera.page.evaluate(() => window.__novaSpeakingAt), 5000, 'the speaking mark').catch(() => null);
+  if (!speakingAt) console.log('  WARN: the mark never read "Nova is speaking"');
+  const markBox = await vera.page.getByTestId('nova-mark').first().boundingBox();
+  if (speakingAt && markBox) timeline.clicks.push({ video: 'vera', atMs: speakingAt - 150, leadMs: 1600, box: [markBox.x, markBox.y, markBox.width, markBox.height].map(Math.round) });
+  const spoken = novaSpeaks(reply10.message, speakingAt ?? Date.now());
   await shotPng(vera, 's10b');
   await hold(Math.max(3500, spoken + 1200));
   const card10 = vera.page.getByTestId('assistant-action-card').filter({ hasText: /on-call rota/ }).last();

@@ -207,7 +207,7 @@ def encode_shot(tl, out_dir, shot, scene, idx, tmp):
             if view['v'] != click['video']:
                 continue
             t0 = (click['atMs'] - shot['from']) / 1000
-            t1 = t0 + click['leadMs'] / 1000 + 0.35
+            t1 = t0 + click['leadMs'] / 1000 + 0.15
             if t1 < 0 or t0 > dur:
                 continue
             bx, by, bw, bh = click['box']
