@@ -33,6 +33,7 @@ import { EmbeddedSocialEntry } from './EmbeddedSocial';
 import { HuddleReactionBar, useHuddleChat, useHuddleChatToggle, useHuddleReact } from './HuddleChat';
 import { useMeetingBarItems } from './CallMeeting';
 import { NovaBarControls, NovaBudgetAsk, NovaNotice } from './MeetingAssistantBar';
+import { NovaProposalAsk } from './NovaProposalAsk';
 import { MeetingTurnRunner } from './MeetingTurnRunner';
 import { NovaPrivateAnswers } from './NovaPrivateAnswers';
 import { ShellCallMedia } from './ShellCallHost';
@@ -245,6 +246,7 @@ export function SocialFooter() {
     <ShellCallMedia id={mediaId} />
     <NovaNotice />
     <NovaBudgetAsk />
+    <NovaProposalAsk />
     <MeetingTurnRunner />
     <NovaPrivateAnswers />
     {/* The HuddleBar is a size container, so it has no intrinsic width: `basis-[14rem]` is what makes the row wrap it onto its own line. Wide: one row. Narrow: whole slots wrap onto a second line (none shrinks over its neighbour); the measured floor follows the row's height. */}

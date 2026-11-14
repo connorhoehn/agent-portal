@@ -11,16 +11,12 @@ import { useMemo, useRef, useState } from 'react';
 import { useNovaVoice } from '../../lib/novaVoice';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import { assistantPresent, assistantStateWords, markWords, timeLeftWords, noticeText, noticeVisible, rosterEntry, ASSISTANT_LABEL, ASSISTANT_NAME } from '../../lib/meetingAssistantModel';
-import { useCallHost } from '../../lib/conversationCall';
+import { useLiveCallId } from '../../lib/liveCallId';
+import { proposalCountOf, useProposalQueue } from './NovaProposalAsk';
+import { setProposalDeckHidden } from '../../lib/proposalDeckState';
 import { hideNovaNotice, useNovaNoticeHidden } from '../../lib/novaNoticeHidden';
 
-/** The live call's id, or null while there is no joined call to listen to. */
-export function useLiveCallId(): string | null {
-  const host = useCallHost();
-  const call = host?.call;
-  const joined = !!call && (call.phase === 'live' || call.phase === 'connecting' || call.phase === 'reconnecting');
-  return joined ? call.call?.callId ?? null : null;
-}
+export { useLiveCallId };
 
 export function NovaBarControls() {
   const callId = useLiveCallId();
@@ -30,6 +26,7 @@ export function NovaBarControls() {
   const voice = useNovaVoice(callId, nova.view);
   const errorRef = useRef<HTMLButtonElement | null>(null);
   const [errorOpen, setErrorOpen] = useState(false);
+  const proposals = proposalCountOf(useProposalQueue().queue);
   if (controls.hidden) return null;
   const state = assistantStateWords(view);
   const markBase = markWords(view, noticeClosed);
@@ -38,7 +35,7 @@ export function NovaBarControls() {
   const left = timeLeftWords(view);
   const soundPrompt = !!words && voice.needsGesture && (voice.framesPlayed > 0 || voice.framesIgnored > 0);
   // Someone who cannot invite, with no Nova in the call, gets no bar at all (not an empty ruled slot).
-  if (!controls.invite && !(state && controls.left) && !(words && !controls.left) && !soundPrompt && !nova.error) return null;
+  if (!controls.invite && !(state && controls.left) && !(words && !controls.left) && !soundPrompt && !nova.error && !proposals) return null;
   return <Inline gap="xs" align="center" wrap={false} className="shrink-0 border-l border-border pl-2" data-testid="nova-bar">
     {controls.invite && <Tooltip content="Nova listens to this call and answers when asked by name" placement="top">
       <Button variant="secondary" size="sm" disabled={busy} onClick={() => void nova.invite()} data-testid="nova-invite">Invite Nova</Button>
@@ -57,6 +54,8 @@ export function NovaBarControls() {
         ...(controls.extend ? [{ label: 'Extend time', ...(left ? { description: left } : {}), icon: <PlusCircleIcon size={14} />, onSelect: () => void nova.extend() }] : []),
         ...(controls.dismiss ? [{ label: 'Dismiss Nova', icon: <CloseIcon size={14} />, danger: true, onSelect: () => void nova.dismiss() }] : []),
       ] }]} />}
+    {/* The proposals waiting for this person: reopens the deck prompt that Esc hid. */}
+    {proposals && callId && <Button variant="secondary" size="sm" className="px-2" onClick={() => setProposalDeckHidden(callId, false)} data-testid="nova-proposal-count">{proposals}</Button>}
     {soundPrompt && <Button variant="ghost" size="sm" onClick={() => void voice.enableSound()} data-testid="nova-enable-sound">Click to hear Nova</Button>}
     {/* The refusal sentence is read in full in a popover; the row keeps one short line. */}
     {nova.error && <>
