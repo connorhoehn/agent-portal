@@ -70,7 +70,7 @@ import { MemoryCallChatStateStore, RedisCallChatStateStore } from './call-chat-s
 import { createRedisStore, type GatewayRedisStore } from './redis-store.js';
 import { createGatewayNotificationStore, releaseGatewayNotificationStore, seedMockNotifications } from './notification-store.js';
 import { admitTenantNotification, setNotificationSink } from './social-notify.js';
-import { createSocialChatBackend, setSocialChatBackend, setThreadLiveAppend, setThreadLiveUpdate, type SocialChatBackend } from './social-chat.js';
+import { createSocialChatBackend, setSocialChatBackend, setThreadLiveAppend, setThreadLiveFrame, setThreadLiveUpdate, type SocialChatBackend } from './social-chat.js';
 import { createReactionStore, gatewayUploadConfig, uploadFeatureOptions } from './gateway-attachments.js';
 import { tenantActivity, tenantPipeline } from './gateway-run-feed.js';
 import { directRecipientFilter } from './direct-recipient.js';
@@ -448,6 +448,8 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
   setThreadLiveAppend(async (message) => {
     await handle.services.chat?.appendServerMessage(message.channel, message);
   });
+  // A transient frame on a channel (the meeting assistant's voice): the same router the chat broadcast uses, nothing stored.
+  setThreadLiveFrame(async (channel, frame) => { await handle.router.sendToChannel(channel, frame); });
   // The matching live edit (a meeting assistant card changing status): persisted by the service, then `messageUpdated`.
   setThreadLiveUpdate(async (channel, messageId, patch) => (await handle.services.chat?.updateSystemMessage(channel, messageId, patch)) ?? null);
   if (inbox.memory) void seedMockNotifications().catch(() => undefined);
@@ -484,6 +486,7 @@ export function attachRealtimeGateway(server: Server, opts: AttachGatewayOptions
         setNotificationSink(null);
         setSocialChatBackend(null);
         setThreadLiveAppend(null);
+        setThreadLiveFrame(null);
         setThreadLiveUpdate(null);
         releaseGatewayNotificationStore();
         handleRef = null;

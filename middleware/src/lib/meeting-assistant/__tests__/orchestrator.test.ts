@@ -58,6 +58,7 @@ class FakeSession extends SessionEmitter implements LiveMeetingSession {
   appendContext(t: string) { this.contexts.push(t); return true; }
   async close() { if (this.closed) return; this.closed = true; this.emit('usage', { seconds: 90, backendTokens: { inputTokens: 100, outputTokens: 10, cachedTokens: 0 } }); this.emit('closed', { reason: 'close_requested' }); }
   call(id: string, name: string, args: unknown, atMs = 0) { this.open.add(id); this.emit('toolCall', { callId: id, name, args, atMs }); }
+  callAs(id: string, name: string, args: unknown, atMs: number, askedBy: string) { this.open.add(id); this.emit('toolCall', { callId: id, name, args, atMs, askedBy }); }
   say(text: string, inReplyTo?: string) { this.emit('outputTranscript', { text, final: true, ...(inReplyTo ? { inReplyTo } : {}) }); }
   hear(text: string, startMs: number, endMs: number) { this.emit('inputTranscript', { text, startMs, endMs }); }
   drop() { this.emit('closed', { reason: 'socket-closed' }); }
@@ -848,3 +849,166 @@ describe('a turn is claimed before it runs (B6)', () => {
     expect((await store.getAction(CALL, mockPosts.actions[0]!.actionId))!.resultText).toMatch(/browser was not available/);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// Nova's voice, server half (package 7a): the relay's conditions, and the echo guard.
+
+describe('relaying Nova\'s voice', () => {
+  let sent: Array<{ channel: string; data: { seq: number; last?: true; pcm: string } }>;
+  let sinkUp: boolean;
+  const pcm = Buffer.alloc(4800, 9);
+  async function voiceRuntime(): Promise<FakeSession> {
+    await runtime.stop(CALL);
+    sent = []; sinkUp = true;
+    factory = () => { const s = new FakeSession(); sessions.push(s); return s; };
+    runtime = new AssistantRuntime({
+      store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [],
+      voiceSink: (channel, frame) => { if (!sinkUp) return false; sent.push({ channel, data: frame.data }); return true; },
+    }, { tickMs: 0 });
+    await runtime.start(ctx);
+    return fake();
+  }
+  const frames = async (s: FakeSession, n: number, lastToo = true) => {
+    for (let i = 0; i < n; i += 1) s.fire('outputAudio', { pcm, seq: i + 1, ...(lastToo && i === n - 1 ? { last: true as const } : {}) });
+    await flush();
+  };
+
+  it('relays nothing while the voice is off (the default), and counts nothing', async () => {
+    const s = await voiceRuntime();
+    await frames(s, 3);
+    expect(sent).toEqual([]);
+    expect(runtime.voiceStats(CALL)).toEqual({ voiceFramesRelayed: 0, voiceFramesDropped: 0 });
+  });
+
+  it('with the voice on, relays each frame to the call chat channel in order, the last one marked, and counts them', async () => {
+    const s = await voiceRuntime();
+    await store.setVoice(CALL, true); runtime.setVoice(CALL, true);
+    await frames(s, 4);
+    expect(sent.map((f) => f.channel)).toEqual(Array(4).fill(`orgiq:huddle:${CALL}`));
+    expect(sent.map((f) => f.data.seq)).toEqual([1, 2, 3, 4]);
+    expect(sent.map((f) => f.data.last === true)).toEqual([false, false, false, true]);
+    expect(runtime.voiceStats(CALL)).toEqual({ voiceFramesRelayed: 4, voiceFramesDropped: 0 });
+  });
+
+  it('keeps the numbering across a replaced session, and ignores a frame from the session that was replaced', async () => {
+    const s = await voiceRuntime();
+    runtime.setVoice(CALL, true);
+    await frames(s, 2);
+    s.drop(); await flush();
+    const next = fake();
+    expect(next).not.toBe(s);
+    await frames(s, 1); // the old session still talks: not relayed
+    await frames(next, 2);
+    expect(sent.map((f) => f.data.seq)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('counts frames as dropped, not relayed, when no gateway runs in this process', async () => {
+    const s = await voiceRuntime();
+    runtime.setVoice(CALL, true); sinkUp = false;
+    await frames(s, 3);
+    expect(runtime.voiceStats(CALL)).toEqual({ voiceFramesRelayed: 0, voiceFramesDropped: 3 });
+  });
+
+  it('relays nothing while paused or after leaving, and nothing after the voice is switched off again', async () => {
+    const s = await voiceRuntime();
+    runtime.setVoice(CALL, true);
+    await frames(s, 1, false);
+    runtime.setVoice(CALL, false);
+    await frames(s, 2);
+    expect(sent).toHaveLength(1);
+    runtime.setVoice(CALL, true);
+    await runtime.pause(CALL);
+    await frames(s, 2);
+    expect(sent).toHaveLength(1);
+    await runtime.resume(CALL);
+    const resumed = fake();
+    await frames(resumed, 1);
+    expect(sent).toHaveLength(2);
+    await runtime.stop(CALL);
+    await frames(resumed, 2);
+    expect(sent).toHaveLength(2);
+  });
+
+  it('the scripted session\'s spoken reply reaches the sink as 9 frames: 600 ms of tone, a 300 ms tail, the last marked', async () => {
+    await runtime.stop(CALL); sent = [];
+    runtime = new AssistantRuntime({
+      store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [],
+      voiceSink: (channel, frame) => { sent.push({ channel, data: frame.data }); return true; },
+    }, { tickMs: 0 });
+    factory = () => { const s = new ScriptedSession(() => now); sessions.push(s); return s; };
+    await runtime.start(ctx);
+    runtime.setVoice(CALL, true);
+    scripted().sendText(ALICE, 'what is two plus two'); await flush();
+    expect(sent).toHaveLength(9);
+    expect(sent.at(-1)!.data.last).toBe(true);
+    expect(sent.map((f) => f.data.seq)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  });
+});
+
+describe('Nova cannot address herself through a microphone (the echo guard)', () => {
+  const pcm = Buffer.alloc(4800, 9);
+  async function speaking(said: string): Promise<{ s: FakeSession; start: number }> {
+    await runtime.stop(CALL);
+    factory = () => { const x = new FakeSession(); sessions.push(x); return x; };
+    runtime = new AssistantRuntime({ store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [], voiceSink: () => true }, { tickMs: 0 });
+    await runtime.start(ctx);
+    runtime.setVoice(CALL, true);
+    const s = fake(); const start = now;
+    s.fire('outputTranscript', { text: said, final: false });
+    for (let i = 0; i < 6; i += 1) { s.fire('outputAudio', { pcm, seq: i + 1, ...(i === 5 ? { last: true as const } : {}) }); now += 100; }
+    s.fire('outputTranscript', { text: said, final: true });
+    await flush();
+    return { s, start }; // Nova's span is [start, start + 500 + 100 + 400]
+  }
+  const heard = (userId: string, text: string, startAt: number, endAt: number, id: string) =>
+    store.appendLine({ callId: CALL, userId, participantId: '', speakerName: userId, text, at: endAt, startMs: 0, endMs: endAt - startAt, captionId: id });
+  const refusedWith = (s: FakeSession, id: string) => s.answersFor(id).map(([, o]) => o);
+
+  it('a caption of her own words inside her speaking span is ignored: no asker is found', async () => {
+    const { s, start } = await speaking('Nova, find the runbooks for you');
+    now = start + 900;
+    await heard(ALICE, 'Nova find the runbooks', start + 300, start + 900, 'echo-1');
+    s.call('echo_call', 'search', { query: 'runbooks' }, now - start); await flush();
+    expect(refusedWith(s, 'echo_call')).toEqual(['{"refused":"could not tell who asked"}']);
+    expect(await store.listTurns(CALL)).toEqual([]);
+  });
+
+  it('the same words said by a person outside her span are kept', async () => {
+    const { s, start } = await speaking('Nova, find the runbooks for you');
+    now = start + 3000;
+    await heard(ALICE, 'Nova find the runbooks', start + 2400, start + 3000, 'real-1');
+    s.call('real_call', 'search', { query: 'runbooks' }, now - start); await flush();
+    expect((await store.listTurns(CALL)).map((t) => t.askedBy)).toEqual([ALICE]);
+  });
+
+  it('a person who talks over her, in other words, inside her span is kept', async () => {
+    const { s, start } = await speaking('Nova, find the runbooks for you');
+    now = start + 900;
+    await heard(BOB, 'Nova what is the budget for next week', start + 300, start + 900, 'over-1');
+    s.call('over_call', 'search', { query: 'x' }, now - start); await flush();
+    expect((await store.listTurns(CALL)).map((t) => t.askedBy)).toEqual([BOB]);
+  });
+
+  it('the name lock ignores the echo too: a call the server attributed to Alice is refused when the only addressing line is Nova\'s own voice', async () => {
+    const { s, start } = await speaking('Nova, find the runbooks for you');
+    now = start + 900;
+    await heard(ALICE, 'Nova find the runbooks', start + 300, start + 900, 'echo-2');
+    s.callAs('named_call', 'search', { query: 'x' }, now - start, ALICE); await flush();
+    expect(refusedWith(s, 'named_call')).toEqual(['{"refused":"not addressed"}']);
+  });
+
+  it('with the voice off no span is ever recorded, so a caption is never judged an echo', async () => {
+    await runtime.stop(CALL);
+    factory = () => { const x = new FakeSession(); sessions.push(x); return x; };
+    runtime = new AssistantRuntime({ store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [], voiceSink: () => true }, { tickMs: 0 });
+    await runtime.start(ctx);
+    const s = fake(); const start = now;
+    s.fire('outputTranscript', { text: 'Nova, find the runbooks for you', final: true });
+    for (let i = 0; i < 6; i += 1) { s.fire('outputAudio', { pcm, seq: i + 1 }); now += 100; }
+    now = start + 900;
+    await heard(ALICE, 'Nova find the runbooks', start + 300, start + 900, 'echo-3');
+    s.call('call_off', 'search', { query: 'x' }, now - start); await flush();
+    expect((await store.listTurns(CALL)).map((t) => t.askedBy)).toEqual([ALICE]);
+  });
+});
+

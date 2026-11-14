@@ -597,6 +597,24 @@ export async function postThreadMessage(message: ChatMessage, store?: ChatStore)
   try { await liveAppend?.(message); } catch (error) { console.warn('[social-chat] live thread append failed', error); }
 }
 
+let liveFrame: ((channel: string, frame: unknown) => Promise<void> | void) | null = null;
+
+/** The gateway's live half of a TRANSIENT server frame on a channel (`router.sendToChannel`); null when the gateway is off. */
+export function setThreadLiveFrame(next: typeof liveFrame): void {
+  liveFrame = next;
+}
+
+/**
+ * A frame to the sockets subscribed to a channel that is NOT a message: nothing is stored, cached or retried (the meeting assistant's
+ * voice, package 7a). True when a gateway in this process took it; false (the frame is dropped, silently) when none runs. Each
+ * recipient still passes the gateway's own checks for the channel (subscribe access, and the call chat's seat filter).
+ */
+export async function sendThreadFrame(channel: string, frame: unknown): Promise<boolean> {
+  const send = liveFrame;
+  if (!send) return false;
+  try { await send(channel, frame); return true; } catch { return false; }
+}
+
 let liveUpdate: ((channel: string, messageId: string, patch: { message?: string; metadata?: Record<string, unknown> }) => Promise<ChatMessage | null>) | null = null;
 
 /** The gateway's live half of a server-side EDIT (the ChatService's `updateSystemMessage`: persist, then `messageUpdated`); null when the gateway is off. */

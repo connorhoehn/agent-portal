@@ -23,6 +23,8 @@ import type { Session } from '../../session.js';
 import { setAssistantStore, MemoryAssistantStore, assistantStore } from '../index.js';
 import { postNotice, postReply, postAction, moveAction, postAsAssistant } from '../chat.js';
 import { NOVA_USER_ID } from '../chat-types.js';
+import { VoiceRelay, voiceChannel } from '../voice.js';
+import { sendThreadFrame } from '../../social-chat.js';
 
 const SECRET = 'assistant-chat-test-secret';
 type Frame = Record<string, unknown>; type Client = { ws: WebSocket; frames: Frame[]; user: string };
@@ -106,6 +108,35 @@ it('posts as Nova without a seat: seats get it live with the assistant keys, an 
   expect(replay.body.messages[0]).toMatchObject({ userId: NOVA_USER_ID, metadata: { kind: 'assistant-notice', assistant: true } });
   await sleep(50);
   expect(charlie.frames.some(f => f.type === 'chat' && f.channel === channel && f.action === 'message')).toBe(false);
+});
+
+it('Nova\'s voice (assistant-audio) reaches only the sockets that joined the call chat, as a transient frame nothing stores', async () => {
+  const { alice, bob, charlie } = await startCall(); await join(alice); await join(bob); // charlie holds no seat and never joined
+  await invite();
+  const sent: Frame[] = [];
+  const relay = new VoiceRelay(callId, voiceChannel(callId), () => async (ch, frame) => { sent.push(frame as unknown as Frame); return sendThreadFrame(ch, frame); });
+  const pcm = Buffer.alloc(4800, 5);
+  relay.push(pcm, false); relay.push(pcm, true);
+  const audio = (c: Client) => c.frames.filter(f => f.type === 'assistant-audio');
+  await until(() => audio(bob).length === 2 && audio(alice).length === 2);
+  expect(audio(bob).map(f => (f.data as Frame).seq)).toEqual([1, 2]);
+  expect(audio(bob)[1]).toMatchObject({ type: 'assistant-audio', channel, data: { callId, sampleRate: 24000, last: true } });
+  expect(Buffer.from(String((audio(bob)[0]!.data as Frame).pcm), 'base64')).toEqual(pcm);
+  await sleep(50);
+  expect(audio(charlie)).toEqual([]);
+  expect(relay.relayed).toBe(2);
+  // Nothing was stored: history is empty.
+  const replay = await request(app).get(`/api/calls/${callId}/chat`).set('x-user', 'bob');
+  expect(replay.body.messages).toEqual([]);
+  // A person who left the call chat stops getting it.
+  out(bob, { service: 'chat', action: 'leave', channel }); await sleep(50);
+  const before = audio(bob).length; relay.push(pcm, false); await until(() => audio(alice).length === 3); await sleep(30);
+  expect(audio(bob)).toHaveLength(before);
+});
+
+it('without a gateway in this process the frame is not sent and the sink says so', async () => {
+  await handle.dispose();
+  expect(await sendThreadFrame(channel, { type: 'assistant-audio' })).toBe(false);
 });
 
 it('an action card is one message: a status change reaches readers as messageUpdated on the same id, and history shows one row', async () => {

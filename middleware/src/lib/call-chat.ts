@@ -522,6 +522,15 @@ export class CallChatRuntime implements CallLifecycleObserver {
       }
       return frame;
     }
+    // Nova's voice (meeting assistant package 7a): a transient frame for the call's main chat channel, only for a connected seat of that
+    // call that has not left. Room chats never carry it. The router has already checked this socket may read the channel.
+    if (frame.type === 'assistant-audio') {
+      const ref = huddleChatOf(typeof frame.channel === 'string' ? frame.channel : '');
+      const data = frame.data && typeof frame.data === 'object' ? frame.data as Record<string, unknown> : null;
+      const control = ref ? this.controls.get(ref.callId) : undefined;
+      if (!ref || ref.roomId || !data || data.callId !== ref.callId || !control || control.ended || control.departed.has(clientId)) return null;
+      return await resolveConnectedCallSession(this.opts.router, clientId) ? frame : null;
+    }
     if (typeof frame.callId !== 'string') return null;
     const session = await resolveConnectedCallSession(this.opts.router, clientId);
     if (!session) return null;

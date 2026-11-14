@@ -19,7 +19,9 @@ export function directRecipientFilter(guards: LiveCallGuards, protectedFrames?: 
     // Huddle chat frames (`orgiq:huddle:<callId>`) render page references per reader.
     const huddle = frame?.type === 'chat' && typeof frame.channel === 'string'
       && (frame.channel === 'orgiq:huddle' || frame.channel.startsWith('orgiq:huddle:'));
-    if (frame && (frame.type === 'call-page' || frame.type === 'call-chat' || huddle)) {
+    // Nova's voice frames (`assistant-audio`, meeting assistant package 7a) ride the huddle channel and take the same per-recipient seat filter.
+    const voice = frame?.type === 'assistant-audio' && typeof frame.channel === 'string' && frame.channel.startsWith('orgiq:huddle:');
+    if (frame && (frame.type === 'call-page' || frame.type === 'call-chat' || huddle || voice)) {
       return protectedFrames ? protectedFrames({ clientId, message, ctx }) : message;
     }
     // Other services own their read/recipient fences. Keep their synchronous
