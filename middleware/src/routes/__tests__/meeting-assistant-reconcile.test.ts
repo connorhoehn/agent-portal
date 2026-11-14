@@ -138,6 +138,26 @@ describe('a restart leaves a listening record behind', () => {
     expect(holds().every((h) => h.status === 'settled')).toBe(true);
   });
 
+  it('the ceiling survives a restart: after 50 of 60 minutes, the warning comes 5 minutes after the resume and the limit at 10', async () => {
+    budget('alice');
+    await post('invite');
+    clock += 50 * 60_000; await runtime.tick();             // 50 minutes listened, then the process dies
+    const rt2 = freshRuntime(); clock += 3600_000;
+    await reconcileAfterRestart({ clock: () => clock, ...noTaps });
+    expect((await post('resume', 'bob')).status).toBe(200);
+    const view = (await get('state')).body;
+    expect(view).toMatchObject({ listeningSeconds: 3000, ceilingSeconds: 3600 });
+    expect(await assistantStore().get(CALL)).toMatchObject({ session: { settledListeningSeconds: 3000, listeningSeconds: 0 } });
+    clock += 4 * 60_000; await rt2.tick(); await flush();
+    expect((await novaTexts()).some((t) => /leaves in 5 minutes/.test(t))).toBe(false);
+    clock += 60_000; await rt2.tick(); await flush();
+    expect((await novaTexts()).filter((t) => /leaves in 5 minutes/.test(t))).toHaveLength(1);
+    expect((await assistantStore().get(CALL))!.state).toBe('listening');
+    clock += 5 * 60_000; await rt2.tick(); await flush();
+    expect((await assistantStore().get(CALL))!.state).toBe('left');
+    expect((await novaTexts()).some((t) => /reached its 60-minute limit/.test(t))).toBe(true);
+  });
+
   it('a resume the budget refuses leaves the record paused and holds nothing new', async () => {
     budget('alice');
     await post('invite'); freshRuntime(); clock += 1000;

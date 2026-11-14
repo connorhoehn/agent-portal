@@ -106,10 +106,15 @@ let spend: AssistantSpend = realSpend;
 export function assistantSpend(): AssistantSpend { return spend; }
 export function setAssistantSpend(next: AssistantSpend | null): void { spend = next ?? realSpend; }
 
-/** Listening seconds as of `now`: the closed periods plus the open one. */
-export function listeningSecondsOf(record: Pick<AssistantRecord, 'session'>, now: number): number {
+/** Listening seconds of the current ledger period as of `now`: its closed periods plus the open one. This is what a settlement bills. */
+export function currentListeningSecondsOf(record: Pick<AssistantRecord, 'session'>, now: number): number {
   const s = sessionOf(record);
   return s.listeningSeconds + (s.listeningSince != null ? Math.max(0, (now - s.listeningSince) / 1000) : 0);
+}
+
+/** Listening seconds of the whole call as of `now`: settled periods plus the current one. The ceiling, its warning and the state view use this. */
+export function listeningSecondsOf(record: Pick<AssistantRecord, 'session'>, now: number): number {
+  return sessionOf(record).settledListeningSeconds + currentListeningSecondsOf(record, now);
 }
 
 /**
@@ -125,7 +130,7 @@ export async function settleFinished(e: { callId: string; usageSeconds: number; 
   // Claim the settlement first so two stops cannot book twice; give it back if the ledger write fails.
   await store.patchSession(e.callId, { settled: true });
   try {
-    await assistantSpend().settle({ record, usageSeconds: e.usageSeconds, tokens: e.tokens, sessionKind: e.sessionKind, listeningSeconds: listeningSecondsOf(record, now), part: s.ledgerPart ?? 0 });
+    await assistantSpend().settle({ record, usageSeconds: e.usageSeconds, tokens: e.tokens, sessionKind: e.sessionKind, listeningSeconds: currentListeningSecondsOf(record, now), part: s.ledgerPart ?? 0 });
     await assistantSpend().release(s.holds);
   } catch (err) {
     await store.patchSession(e.callId, { settled: false });

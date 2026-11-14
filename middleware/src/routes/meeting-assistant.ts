@@ -238,7 +238,9 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
       const held = await assistantSpend().reserve({ callId, tenant: before.tenant, inviterId: before.invitedBy, initiativeId: before.initiativeId, seconds: limits.maxSeconds, part });
       if (!held.ok) { if (held.refusal.headers) res.set(held.refusal.headers); res.status(held.refusal.status).json(held.refusal.body); return; }
       fresh = { holdId: held.holdId, patch: {
-        settled: false, ledgerPart: part, extensions: part, holds: [], listeningSeconds: 0, listeningSince: null, ceilingSeconds: limits.maxSeconds, warned: false, limitNoticed: false,
+        settled: false, ledgerPart: part, extensions: part, holds: [], listeningSeconds: 0, listeningSince: null, limitNoticed: false,
+        // The ceiling counts the whole call: what was settled stays on the clock, so a restart does not buy a second full period.
+        settledListeningSeconds: prior.settledListeningSeconds + prior.listeningSeconds, ceilingSeconds: prior.ceilingSeconds, warned: prior.warned,
         replacements: 0, usageSeconds: 0, tokensIn: 0, tokensOut: 0, tokensCached: 0,
       } };
     }

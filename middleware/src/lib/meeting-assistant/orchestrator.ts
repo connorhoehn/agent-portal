@@ -33,7 +33,7 @@ import { assistantStore } from './store-select.js';
 import { callChatRuntime } from '../call-chat.js';
 import { CEILING_WARNING_SECONDS, assistantLimits } from './limits.js';
 import { finishMinutes } from './minutes-service.js';
-import { assistantSpend, listeningSecondsOf, settleFinished, type ReserveOutcome } from './spend.js';
+import { assistantSpend, currentListeningSecondsOf, listeningSecondsOf, settleFinished, type ReserveOutcome } from './spend.js';
 import type { AssistantStore } from './store.js';
 import type { LineIntake } from './intake.js';
 import { canSpeakOnRecord } from './intake.js';
@@ -285,7 +285,7 @@ export class AssistantRuntime {
     if (!record) return;
     const s = sessionOf(record);
     if (s.listeningSince == null) return;
-    await this.store.patchSession(callId, { listeningSeconds: listeningSecondsOf(record, this.now()), listeningSince: null });
+    await this.store.patchSession(callId, { listeningSeconds: currentListeningSecondsOf(record, this.now()), listeningSince: null });
   }
 
   async pause(callId: string): Promise<void> {

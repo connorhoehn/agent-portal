@@ -70,6 +70,8 @@ export interface AssistantSession {
   refusedCalls: number;
   /** Listening seconds in finished listening periods; the open one is `listeningSince`. */
   listeningSeconds: number;
+  /** Listening seconds of earlier settled periods of this call (a restart settled them and a resume started again); the ceiling counts them. */
+  settledListeningSeconds: number;
   /** Epoch ms the current listening period began; null while paused, invited or left. */
   listeningSince: number | null;
   /** Listening time allowed for this call, extended by `extend`. */
@@ -110,7 +112,7 @@ export interface AssistantSession {
 }
 
 export const newAssistantSession = (ceilingSeconds: number): AssistantSession => ({
-  refusedCalls: 0, listeningSeconds: 0, listeningSince: null, ceilingSeconds, warned: false, limitNoticed: false, replacements: 0,
+  refusedCalls: 0, listeningSeconds: 0, settledListeningSeconds: 0, listeningSince: null, ceilingSeconds, warned: false, limitNoticed: false, replacements: 0,
   holds: [], extensions: 0, usageSeconds: 0, tokensIn: 0, tokensOut: 0, tokensCached: 0, settled: false,
   sinkTokenHash: null, participants: {}, unmappedChunks: 0, unackedChunks: 0, lateChunks: 0,
 });
