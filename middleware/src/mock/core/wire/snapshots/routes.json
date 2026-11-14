@@ -1083,57 +1083,72 @@
     {
       "method": "POST",
       "path": "/api/calls/:callId/assistant/ack",
-      "source": "src/routes/meeting-assistant.ts:220"
+      "source": "src/routes/meeting-assistant.ts:225"
     },
     {
       "method": "POST",
       "path": "/api/calls/:callId/assistant/actions/:actionId/decision",
-      "source": "src/routes/meeting-assistant.ts:246"
+      "source": "src/routes/meeting-assistant.ts:251"
     },
     {
       "method": "POST",
       "path": "/api/calls/:callId/assistant/dismiss",
-      "source": "src/routes/meeting-assistant.ts:218"
+      "source": "src/routes/meeting-assistant.ts:223"
     },
     {
       "method": "POST",
       "path": "/api/calls/:callId/assistant/extend",
-      "source": "src/routes/meeting-assistant.ts:230"
+      "source": "src/routes/meeting-assistant.ts:235"
     },
     {
       "method": "POST",
       "path": "/api/calls/:callId/assistant/invite",
-      "source": "src/routes/meeting-assistant.ts:111"
+      "source": "src/routes/meeting-assistant.ts:116"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/calls/:callId/assistant/minutes",
+      "source": "src/routes/meeting-assistant.ts:380"
+    },
+    {
+      "method": "GET",
+      "path": "/api/calls/:callId/assistant/minutes",
+      "source": "src/routes/meeting-assistant.ts:358"
     },
     {
       "method": "POST",
       "path": "/api/calls/:callId/assistant/pause",
-      "source": "src/routes/meeting-assistant.ts:216"
+      "source": "src/routes/meeting-assistant.ts:221"
     },
     {
       "method": "POST",
       "path": "/api/calls/:callId/assistant/resume",
-      "source": "src/routes/meeting-assistant.ts:217"
+      "source": "src/routes/meeting-assistant.ts:222"
     },
     {
       "method": "GET",
       "path": "/api/calls/:callId/assistant/state",
-      "source": "src/routes/meeting-assistant.ts:299"
+      "source": "src/routes/meeting-assistant.ts:305"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/calls/:callId/assistant/transcript",
+      "source": "src/routes/meeting-assistant.ts:381"
     },
     {
       "method": "GET",
       "path": "/api/calls/:callId/assistant/transcript",
-      "source": "src/routes/meeting-assistant.ts:313"
+      "source": "src/routes/meeting-assistant.ts:339"
     },
     {
       "method": "GET",
       "path": "/api/calls/:callId/assistant/turns",
-      "source": "src/routes/meeting-assistant.ts:271"
+      "source": "src/routes/meeting-assistant.ts:277"
     },
     {
       "method": "POST",
       "path": "/api/calls/:callId/assistant/turns/:turnId/result",
-      "source": "src/routes/meeting-assistant.ts:284"
+      "source": "src/routes/meeting-assistant.ts:290"
     },
     {
       "method": "GET",
@@ -2519,6 +2534,11 @@
       "method": "GET",
       "path": "/api/me/spend",
       "source": "src/routes/me-spend.ts:45"
+    },
+    {
+      "method": "GET",
+      "path": "/api/meetings",
+      "source": "src/routes/meeting-assistant.ts:401"
     },
     {
       "method": "GET",

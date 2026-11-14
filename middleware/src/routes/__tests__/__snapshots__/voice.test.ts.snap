@@ -70,6 +70,7 @@ exports[`POST /api/voice/sessions — the mint the session object names exactly 
             "runbook-proposals",
             "search",
             "communication",
+            "meetings",
             "settings",
             "system-logging",
             "workspaces",

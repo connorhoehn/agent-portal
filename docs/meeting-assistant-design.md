@@ -1,6 +1,6 @@
 # Meeting assistant: design and plan
 
-13 November 2026, revised the same day. Status: packages 1 to 3 and 4a merged (13 November); package 4b next.
+13 November 2026, revised the same day. Status: packages 1 to 5 merged (13 November), all on the mock world; package 6, real audio, next.
 
 **Revision.** The first draft listened with the media server's local Whisper captions service. The owner's instruction is to listen with the OpenAI live model the voice navigator already uses. This version does that. The captions service is not used.
 
@@ -111,8 +111,8 @@ Each package is one branch, verified by the full chain, merged on its own.
 | 2 | Nova in chat: server-side post as Nova, join and state notices, message and action card kinds | this one, `ui-components` | Done; three library gaps open (below) |
 | 3 | Call UI: Invite Nova, roster entry, listening mark, transcription notice and acknowledgement, pause and dismiss | this one | Done; the ceiling line moves to package 4 |
 | 4a | Session and turns on the server: the live session over the WebSocket (run against a fake server only), the scripted stand-in, attribution, the name lock, turns, spend source, hold on the inviter, ceiling and extend | this one | Done |
-| 4b | Turns in the asker's browser: reads run, confirmed writes run, results return; a cap on tool calls per request; the ceiling line and extend control; acknowledgement stays offered after the notice is hidden; a plain reply when a typed request cannot be heard | this one | Medium |
-| 5 | Minutes: end-of-call notes and action items, the meeting page, the call log entry, search over past meetings | this one | Done (14 November): minutes, the meeting page and a Meetings list at `/iq/meetings`. Past meetings are NOT in the org search index: its ACL is one action name per document and cannot say "these people only", and widening who can find a meeting was rejected. |
+| 4b | Turns in the asker's browser: reads run, confirmed writes run, results return; three tool calls per request; time left and extend; acknowledgement stays offered; a plain reply when a typed request cannot be heard | this one | Done |
+| 5 | Minutes: notes, decisions and action items when Nova leaves; the meeting page and the Meetings list under `/iq/meetings`; delete by the inviter. Not searchable: the search index cannot limit a record to named people | this one | Done; the provider request for minutes has run against a fake server only |
 | 6 | Real audio: the tap sink, mixer and voiced timeline; arming the tap on invite; the join-record lookup from per-join id to person; a paid end-to-end run | this one, `platform-api` | Medium |
 | 7 | Nova's voice: relay of the output audio to participants' browsers, a speaking mark, a mute-Nova control per person | this one, `realtime-modules`, `ui-components` | Medium |
 | 8 | Later: joining scheduled rooms on its own, a real media participant, minutes from the recorded transcript when a call was recorded | several | Large |

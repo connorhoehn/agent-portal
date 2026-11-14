@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-13T22:01:49.424Z",
-  "serverHandlerSha": "98ff0fa76529ca3fe9bd96f75dba01028a3b3a650db118750d6d6c3eaafd9d5b",
+  "capturedAt": "2026-11-14T01:57:57.648Z",
+  "serverHandlerSha": "c41de5d445507f0a925312275468e076314d1c698377168c6b42e01608c499e7",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -2422,6 +2422,9 @@
       },
       "values": {}
     },
+    "GET /api/calls/:callId/assistant/minutes": {
+      "skipped": "no value found for :callId under /api/calls (orgiq/admin); no value found for :callId under /api/calls (assessment/admin); no value found for :callId under /api/calls (anonymous)"
+    },
     "GET /api/calls/:callId/assistant/state": {
       "skipped": "no value found for :callId under /api/calls (orgiq/admin); no value found for :callId under /api/calls (assessment/admin); no value found for :callId under /api/calls (anonymous)"
     },
@@ -3953,8 +3956,8 @@
           "ORG-DSAPI-4",
           "ORG-FS-1",
           "ORG-FS-3",
-          "ORG-FS-4",
           "ORG-INF-1",
+          "ORG-INF-3",
           "ORG-LAKE-2",
           "ORG-LAKE-3",
           "ORG-LAKE-4",
@@ -5505,6 +5508,9 @@
         "unknownCount": "number"
       },
       "values": {}
+    },
+    "GET /api/meetings": {
+      "skipped": "HTTP 404 (orgiq/admin); HTTP 404 (assessment/admin); HTTP 404 (anonymous)"
     },
     "GET /api/observability/approvals": {
       "persona": "orgiq/admin",
