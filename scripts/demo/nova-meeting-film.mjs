@@ -192,8 +192,11 @@ fs.rmSync(RAW, { recursive: true, force: true });
 let callId = null;
 const pageErrors = [];
 
-/** A signed-in person with their own recorded browser (one video per page, keyed `who` or `who-2`...). */
-async function person(key, { call = true, video = key } = {}) {
+/**
+ * A signed-in person with their own recorded browser (one video per page, keyed `who` or `who-2`...). `nav` opens a page at
+ * once: a page that waits blank paints nothing, and its video starts only at its first frame.
+ */
+async function person(key, { call = true, video = key, nav = null } = {}) {
   const who = CAST[key];
   const dir = path.join(RAW, video);
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, recordVideo: { dir, size: { width: 1440, height: 900 } } });
@@ -218,6 +221,7 @@ async function person(key, { call = true, video = key } = {}) {
   page.on('request', (rq) => { const m = /\/api\/calls\/([^/]+)\/chat(?:\?|$)/.exec(new URL(rq.url()).pathname + new URL(rq.url()).search); if (m && !callId) callId = decodeURIComponent(m[1]); });
   const p = { key, who, video, context, page, api: context.request };
   p.videoPath = page.video()?.path();
+  if (nav) await page.goto(`${PORTAL}${nav}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
   return p;
 }
 
@@ -321,12 +325,9 @@ try {
   must(reset.status === 200, `mock reset answered ${reset.status}`);
 
   // ── Before the film: everyone signed in, on the initiative page ──
-  vera = await person('vera');
-  nora = await person('nora');
-  for (const p of [vera, nora]) {
-    await p.page.goto(`${PORTAL}${INITIATIVE}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
-    await p.page.getByTestId('initiative-header').waitFor({ timeout: 60000 });
-  }
+  vera = await person('vera', { nav: INITIATIVE });
+  nora = await person('nora', { nav: INITIATIVE });
+  for (const p of [vera, nora]) await p.page.getByTestId('initiative-header').waitFor({ timeout: 60000 });
   const me = await (await vera.api.get(`${PORTAL}/api/session/me`)).json();
   must(me.meetingAssistant === true, 'the assistant is not advertised (MEETING_ASSISTANT_ENABLED)');
   await sleep(2500);
@@ -341,8 +342,7 @@ try {
   await nora.page.getByTestId('shell-call-dock').waitFor({ timeout: 30000 });
   await waitFor(async () => callId, 15000, 'the call id on the wire');
   skip();
-  eli = await person('eli');
-  await eli.page.goto(`${PORTAL}${INITIATIVE}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  eli = await person('eli', { nav: INITIATIVE });
   await eli.page.getByTestId('initiative-header').waitFor({ timeout: 60000 });
   await eli.page.getByTestId('shell-footer-context').getByRole('button', { name: 'Huddle' }).click({ timeout: 30000 });
   await eli.page.getByTestId('shell-call-dock').waitFor({ timeout: 30000 });
@@ -551,6 +551,7 @@ try {
   await press(nora, nora.page.getByTestId('nova-mark'), { lead: 700 });
   await press(nora, nora.page.getByRole('menuitem', { name: 'Unmute Nova for me' }), { lead: 2200, click: false });
   await nora.page.keyboard.press('Escape');
+  await nora.page.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
   await hold(800);
   await shotPng(nora, 's10a');
   cut('rows2', [V('vera', 'mark-chat'), V('nora', 'mark-chat')]);
@@ -677,9 +678,21 @@ try {
   if (scene) { skip(); console.error(`  (in scene ${scene.n})`); }
 } finally {
   clearInterval(follower);
+  // Each video's clock: its recorder writes frames until its page has finished closing, so its first frame was `duration` before
+  // that. A page's video starts at its first painted frame, which trails the page's creation when the page waits blank (pages are
+  // navigated at once for that reason); it never starts before the page existed.
   for (const p of [vera, nora, eli, layla].filter(Boolean)) {
+    await p.page.close().catch(() => undefined);
+    const closedAt = Date.now();
     await p.context.close().catch(() => undefined);
-    timeline.videos[p.video].file = p.videoPath ? path.relative(OUT, await p.videoPath) : null;
+    const rec = timeline.videos[p.video];
+    rec.file = p.videoPath ? path.relative(OUT, await p.videoPath) : null;
+    if (!rec.file) continue;
+    const dur = Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', path.join(OUT, rec.file)]).toString().trim());
+    const firstFrame = Math.round(closedAt - dur * 1000);
+    rec.createdMs = rec.startMs;
+    if (Number.isFinite(firstFrame) && firstFrame > rec.startMs && firstFrame <= rec.startMs + 10_000) rec.startMs = firstFrame;
+    console.log(`  video ${p.video}: first frame ${rec.startMs - rec.createdMs} ms after the page was created`);
   }
   await browser.close().catch(() => undefined);
   stopAll();
