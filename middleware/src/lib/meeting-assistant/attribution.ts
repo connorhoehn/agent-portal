@@ -111,6 +111,29 @@ export function attribute(intervals: readonly VoicedInterval[], piece: Transcrip
   return { userId: primary, speakers: kept.map((s) => s.userId) };
 }
 
+/** One of the provider's pieces of a heard turn, with its times on the audio timeline. */
+export interface TranscriptPart { text: string; startMs: number; endMs: number }
+
+/**
+ * Split one heard turn where the voice changes. The provider groups everything said without a long pause into one turn, so a
+ * request spoken right after someone else's sentence arrives joined to it, and the whole turn then has no single speaker. Each
+ * part is attributed on its own; a part one person alone voiced that is not the current group's person starts a new group, and a
+ * part nobody (or several people) voiced stays with the group it follows. Text is joined as the provider sent it.
+ */
+export function splitBySpeaker(intervals: readonly VoicedInterval[], parts: readonly TranscriptPart[]): TranscriptPart[] {
+  const groups: Array<{ owner: string | null; parts: TranscriptPart[] }> = [];
+  for (const p of parts) {
+    const a = attribute(intervals, p);
+    const single = a.userId !== null && a.speakers.length === 1 ? a.userId : null;
+    const g = groups[groups.length - 1];
+    if (!g || (single !== null && g.owner !== null && single !== g.owner)) { groups.push({ owner: single, parts: [p] }); continue; }
+    g.parts.push(p);
+    if (g.owner === null) g.owner = single;
+  }
+  // A sentence mark the provider put at the head of the next piece belongs to the line before; it is dropped from the new one.
+  return groups.map((g, i) => ({ text: g.parts.map((p) => p.text).join('').replace(/\s+/g, ' ').trim().replace(i > 0 ? /^[.!?…]+\s*/ : /^$/, ''), startMs: g.parts[0]!.startMs, endMs: g.parts[g.parts.length - 1]!.endMs })).filter((g) => g.text);
+}
+
 export interface TimelineOptions {
   /** Absolute minimum 16-bit sample magnitude (0..32768) an RMS must reach for a frame to count as voiced. */
   rmsThreshold?: number;

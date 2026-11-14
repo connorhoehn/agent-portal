@@ -1383,3 +1383,76 @@ describe('who a spoken answer is posted for, and which speech is only an acknowl
     expect(mockPosts.replies).toEqual([{ text: 'Noon.', askedBy: ALICE, askedByName: 'Alice' }]);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// The real provider's event order, as the paid scenario runs of 14 November traced it (event types and times only). The fake
+// provider of the first runs sent a function call with no spoken acknowledgement, a request as one transcript delta, and no
+// message item; the real one does otherwise, and these replay what it did.
+
+describe('the real provider\'s event order (paid runs, 14 November)', () => {
+  const loud = (ms: number) => { const b = Buffer.alloc(Math.round(ms * 24) * 2); for (let i = 0; i < b.length / 2; i += 1) b.writeInt16LE(i % 40 < 20 ? 4000 : -4000, i * 2); return b; };
+
+  it('the acknowledgement spoken at once after a delegation, before its function call arrives, is not posted; the answer after the result is', async () => {
+    const base = now;
+    const s = await realRuntime();
+    await line(ALICE, 'Nova, find the Kubernetes experts.', base + 11_400);
+    now = base + 11_984; s.fire('delegation', { atMs: 11_984 });
+    now = base + 13_066; s.sayAt('Checking now.', 11_996, 12_165); await flush();
+    expect(mockPosts.replies).toEqual([]);
+    expect(mockPosts.notices).toEqual([]);
+    now = base + 14_422; s.fire('delegationReady', { atMs: 14_422, item: 'function_call' });
+    now = base + 14_570; s.call('call_r', 'search', { query: 'Kubernetes experts' }, 14_570); await flush();
+    const [turn] = await runtime.turnsFor(CALL, ALICE);
+    expect(turn!.askedBy).toBe(ALICE);
+    await submitClaimed(CALL, turn!.turnId, ALICE, { ok: true, output: { say: 'two experts' } });
+    now = base + 19_000; s.sayAt('Two experts found.', 17_600, 18_800); await flush();
+    expect(mockPosts.replies).toEqual([{ text: 'Two experts found.', askedBy: ALICE, askedByName: 'Alice' }]);
+  });
+
+  it('a plain question the second model answers: the acknowledgement is not posted and the delegated answer goes to who asked', async () => {
+    const base = now;
+    const s = await realRuntime();
+    await line(BOB, 'What is the capital of Portugal, Nova?', base + 9_200);
+    now = base + 9_500; s.fire('delegation', { atMs: 9_500 });
+    now = base + 11_379; s.sayAt('Sure.', 9_850, 10_060); await flush();
+    expect(mockPosts.replies).toEqual([]);
+    now = base + 14_000; s.fire('delegationReady', { atMs: 14_000, item: 'message' });
+    now = base + 16_856; s.sayAt('The capital of Portugal is Lisbon.', 15_583, 15_955); await flush();
+    expect(mockPosts.replies).toEqual([{ text: 'The capital of Portugal is Lisbon.', askedBy: BOB, askedByName: 'Bob' }]);
+    expect(mockPosts.notices).toEqual([]);
+  });
+
+  it('the request line whose reported end lies a little after its delegation is still the request: its speaker is the asker', async () => {
+    const base = now;
+    const s = await realRuntime();
+    await line(BOB, 'Nova, how is the weather in Lisbon?', base + 5_000);
+    audioTap.sink!.placed(ALICE, loud(2_600), 8_800);
+    s.hear('Nova, who is online right now', 8_800, 11_400); await flush(); // flushed by the delegation, which comes 200 ms "earlier"
+    now = base + 11_250; s.fire('delegation', { atMs: 11_200 });
+    now = base + 12_000; s.call('call_o', 'search', { query: 'online' }, 12_000); await flush();
+    expect((await runtime.turnsFor(CALL, ALICE)).map((t) => t.askedBy)).toEqual([ALICE]);
+    expect(await runtime.turnsFor(CALL, BOB)).toEqual([]);
+  });
+
+  it('one heard turn holding two people (a request spoken right after someone else\'s sentence) is stored as one line each', async () => {
+    const s = await realRuntime();
+    audioTap.sink!.placed(BOB, loud(1_000), 0);
+    audioTap.sink!.placed(ALICE, loud(1_000), 1_300);
+    s.fire('inputTranscript', { text: 'The cookie is late. Nova, find the experts', startMs: 0, endMs: 2_300, parts: [
+      { text: ' The cookie', startMs: 0, endMs: 500 }, { text: ' is late', startMs: 500, endMs: 1_000 },
+      { text: '. Nova, find', startMs: 1_300, endMs: 1_800 }, { text: ' the experts', startMs: 1_800, endMs: 2_300 },
+    ] });
+    await flush();
+    const lines = await store.lines(CALL, 0, 10);
+    expect(lines.map((l) => [l.userId, l.text])).toEqual([[BOB, 'The cookie is late'], [ALICE, 'Nova, find the experts']]);
+  });
+
+  it('speech with no addressing line in the window answers nobody and is not posted', async () => {
+    const base = now;
+    const s = await realRuntime();
+    await line(CAROL, 'Last week Nova helped Vera with the plan.', base + 2_000);
+    now = base + 4_000; s.sayAt('Happy to help again.', 3_000, 3_800); await flush();
+    expect(mockPosts.replies).toEqual([]);
+    expect(mockPosts.notices).toEqual([]);
+  });
+});
