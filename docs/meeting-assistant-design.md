@@ -1,6 +1,6 @@
 # Meeting assistant: design and plan
 
-13 November 2026, revised the same day. Status: packages 1 to 5 merged (13 November), all on the mock world; package 6a (the server side of real audio) built on branch `meeting-assistant-audio`; 6b (the portal reporting its participant id) and the paid run next.
+13 November 2026, revised the same day. Status: packages 1 to 6a merged (13 November), all run on the mock world only. An audit the same day (`docs/meeting-assistant-audit.md`) found nine defects that block a real call; they are repaired before the paid run, before 6b and before package 7.
 
 **Revision.** The first draft listened with the media server's local Whisper captions service. The owner's instruction is to listen with the OpenAI live model the voice navigator already uses. This version does that. The captions service is not used.
 
