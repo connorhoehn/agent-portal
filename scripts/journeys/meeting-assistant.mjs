@@ -654,7 +654,7 @@ async function main() {
       const text = await card(vera, p1).innerText();
       for (const want of ['Proposal', PROPOSAL_1, 'Record as a decision', 'Needs:', 'runs it', 'waiting']) check(text.includes(want), `the card lacks "${want}": ${text.replace(/\s+/g, ' ')}`);
       check(await card(vera, p1).getByRole('button').count() === 0, 'the card has a button');
-      for (const width of [1440, 1280]) { await vera.page.setViewportSize({ width, height: 900 }); await sleep(400); await shot(vera.page, 'P2-proposal-card', width); }
+      for (const width of [1440, 1280]) { await vera.page.setViewportSize({ width, height: 900 }); await sleep(400); await card(vera, p1).scrollIntoViewIfNeeded(); await shot(vera.page, 'P2-proposal-card', width); }
       await vera.page.setViewportSize({ width: 1440, height: 900 });
       return text.replace(/\s+/g, ' ').slice(0, 200);
     });
