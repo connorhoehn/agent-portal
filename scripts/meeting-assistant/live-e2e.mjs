@@ -221,7 +221,19 @@ async function main() {
 
     // 4. Where the taps would post: the mock world's dev route says (the real media server is told by the arming).
     let sink = null;
-    for (let i = 0; i < 40 && !sink?.token; i += 1) { sink = (await vera.call('GET', `/api/dev/calls/${encodeURIComponent(callId)}/assistant-audio`)).json; await sleep(150); }
+    // With the fake media server the address is read from the tap it was asked to create (the dev route keeps no token for a call
+    // armed against a media server); without one, from the dev route.
+    for (let i = 0; i < 40 && !sink?.token; i += 1) {
+      if (media) {
+        const c = media.log.filter((l) => l.method === 'POST' && l.body?.destination?.url).at(-1);
+        const t = /\/api\/internal\/meeting-assistant\/pcm\/([^/?#]+)$/.exec(c?.body?.destination?.url ?? '')?.[1];
+        const a = /\/api\/channels\/([^/]+)\/taps/.exec(c?.url ?? '')?.[1];
+        if (t && a) sink = { token: decodeURIComponent(t), channelArn: decodeURIComponent(a) };
+      } else {
+        sink = (await vera.call('GET', `/api/dev/calls/${encodeURIComponent(callId)}/assistant-audio`)).json;
+      }
+      if (!sink?.token) await sleep(150);
+    }
     check('the sink is armed with a token and the call\'s channel', !!sink?.token && !!sink?.channelArn, `channel ${sink?.channelArn}`);
     if (!sink?.token) throw new Error('no sink token');
     if (media) {

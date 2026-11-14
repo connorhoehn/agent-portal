@@ -267,10 +267,26 @@ export class Call {
   }
   async bind(p) { return p.call('POST', `${this.A}/participant`, { participantId: this.participantIds[p.userId] }); }
   async ack(p) { this.acked.add(p.userId); return p.call('POST', `${this.A}/ack`); }
-  /** Where the taps would post, from the mock world's dev route. */
+  /**
+   * Where the taps would post. With the fake media server (dry runs) it is read from the newest tap the server was asked to create,
+   * as a real media server learns it; the dev route keeps no token for a call armed against a media server. Without one (paid runs,
+   * simulator only) it comes from the mock world's dev route.
+   */
   async discoverSink() {
     let sink = null;
-    for (let i = 0; i < 40 && !sink?.token; i += 1) { sink = (await this.inviter.call('GET', `/api/dev/calls/${encodeURIComponent(this.callId)}/assistant-audio`)).json; await sleep(150); }
+    const media = this.world.media;
+    for (let i = 0; i < 40 && !sink?.token; i += 1) {
+      if (media) {
+        const create = media.log.filter((l) => l.method === 'POST' && l.body?.destination?.url).at(-1);
+        const url = create?.body?.destination?.url ?? '';
+        const token = /\/api\/internal\/meeting-assistant\/pcm\/([^/?#]+)$/.exec(url)?.[1];
+        const arn = /\/api\/channels\/([^/]+)\/taps/.exec(create?.url ?? '')?.[1];
+        if (token && arn && token !== this.sink?.token) sink = { token: decodeURIComponent(token), channelArn: decodeURIComponent(arn) };
+      } else {
+        sink = (await this.inviter.call('GET', `/api/dev/calls/${encodeURIComponent(this.callId)}/assistant-audio`)).json;
+      }
+      if (!sink?.token) await sleep(150);
+    }
     if (!sink?.token) throw new Error('no sink token');
     this.sink = sink; return sink;
   }
