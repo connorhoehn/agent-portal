@@ -8,9 +8,11 @@
 //   8 to 11 (package 4a, API level: the scripted session answers, no model): a spoken read lands in the call chat labelled with
 //     the asker; a write is a card only the asker confirms and shows as a running turn only after that; a tool call from someone
 //     who never said the name is refused and counted; after dismissal the inviter's spend has a meeting_assistant entry.
-//   P1 to P8 (meeting consent, package 2): a third person joins; a proposal from the dev creator is one read-only card for all three
-//     and a deck prompt for each; two consents including the executor, an objection with a shared reason, its withdrawal, Esc and
-//     the footer count, "Not a decision".
+//   P1 to P9 (meeting consent, packages 2, 3 and 6): a third person joins; a proposal from the dev creator is one read-only card for
+//     all three and a deck prompt for each; Esc and the footer count badge (the footer stays on one line at 1440 and 1280); two
+//     consents including the executor run it in her browser and the card ends with the decision's title and link, whose page says
+//     "Agreed in a call by"; an objection with a shared reason, its withdrawal, "Not a decision"; a proposal left open when Nova
+//     leaves is answered on the meeting page (13b), runs there and ends recorded.
 //   12 to 17 (package 5, the minutes; the scripted writer): the leaving message in the call chat, the meeting page at 1440 and 1280,
 //     a person who was not there gets 404 and a not-found page, the Meetings list, the :minutes ledger entry, the inviter's delete.
 //
@@ -673,36 +675,67 @@ async function main() {
       return 'prompted all three';
     });
 
-    await step('P4: Esc hides the prompt; the "1 proposal" count on Nova\'s footer mark reopens it', async () => {
+    await step('P4: Esc hides the prompt; the count badge on Nova\'s footer mark (named "1 proposal") reopens it; with three people and the count the footer row is one line at 1440 and 1280', async () => {
       await deckOf(eli).getByRole('button').first().focus();
       await eli.page.keyboard.press('Escape');
       await gone(eli.page, 'nova-proposal-ask');
       const count = eli.page.getByTestId('nova-proposal-count');
-      check((await count.innerText()).trim() === '1 proposal', `the count reads "${await count.innerText()}"`);
+      check((await count.getAttribute('aria-label')) === '1 proposal', `the count is named "${await count.getAttribute('aria-label')}"`);
+      check((await count.innerText()).trim() === '1', `the badge reads "${await count.innerText()}"`);
+      const lines = [];
+      for (const width of [1440, 1280]) {
+        await eli.page.setViewportSize({ width, height: 900 }); await sleep(700);
+        // markLineStarts flags every slot that starts a line of the wrapping row: one flag is one line.
+        // and the call bar keeps its controls on its own one line (no control dropped under another).
+        const [starts, dockHeight] = await eli.page.evaluate(() => [
+          document.querySelectorAll('[data-testid="shell-footer-row"] > [data-line-start]').length,
+          Math.round(document.querySelector('[data-testid="shell-call-dock"]').getBoundingClientRect().height),
+        ]);
+        lines.push(`${width}: ${starts} line(s), call bar ${dockHeight}px`);
+        check(starts === 1, `the footer row wraps onto ${starts} lines at ${width}`);
+        check(dockHeight <= 40, `the call bar wraps inside itself at ${width} (${dockHeight}px tall)`);
+        await shot(eli.page, 'P4-footer-three-people-count', width);
+      }
+      await eli.page.setViewportSize({ width: 1440, height: 900 });
       await count.click();
       await askFor(eli, PROPOSAL_1);
-      return 'hidden and reopened';
+      return `hidden and reopened; ${lines.join(', ')}`;
     });
 
-    await step('P5: the second person presses 1, then the executor presses 1: the card reads consented for everyone with both chips consented; both keep their answer (2)', async () => {
+    await step('P5: the second person presses 1, then the executor presses 1: it runs in her browser and the card ends "Recorded · <statement>" with a link to the decision for all three; no deck asks any more', async () => {
       await digit(nora, '1');
       await waitFor(async () => (await proposalsOf(nora)).find((p) => p.id === p1)?.responses.length === 1, 15000, 'the first consent');
       await cardState(vera, p1, 'open');
       await digit(vera, '1');
-      for (const p of [vera, nora, eli]) await cardState(p, p1, 'consented');
+      for (const p of [vera, nora, eli]) await cardState(p, p1, 'done');
+      const done = (await proposalsOf(vera)).find((p) => p.id === p1);
+      check(done?.run?.by?.userId === VERA.userId && /^\/iq\/decisions\//.test(done?.run?.href ?? ''), `the run: ${JSON.stringify(done?.run)}`);
+      check(results_.some((r) => r.by === VERA.userId && r.ok), 'the executor\'s browser posted no result');
       const chipsOf = async () => card(eli, p1).getByTestId('assistant-proposal-person').allInnerTexts();
       await waitFor(async () => (await chipsOf()).filter((t) => t.includes('· consented')).length === 2, 15000, 'two consented chips');
-      const chips = await chipsOf();
-      // The third person, who never answered, is no longer asked about a consented proposal.
-      await gone(eli.page, 'nova-proposal-ask');
-      // The two who consented are offered the withdrawal; keeping the answer (2) clears their deck and the count.
-      for (const p of [vera, nora]) {
-        await deckOf(p).filter({ hasText: 'You consented' }).waitFor({ timeout: 15000 }).catch(() => { throw new StepFailure(`${p.who.userId}: no withdrawal offered`); });
-        await digit(p, '2');
+      for (const p of [vera, nora, eli]) {
+        await waitFor(async () => (await card(p, p1).innerText()).includes(`Recorded · ${PROPOSAL_1}`), 15000, `${p.who.userId}: the card's closing line`);
+        await card(p, p1).getByTestId('assistant-proposal-result-link').waitFor({ timeout: 15000 }).catch(() => { throw new StepFailure(`${p.who.userId}: no link to the decision`); });
         await gone(p.page, 'nova-proposal-ask');
         await gone(p.page, 'nova-proposal-count');
       }
-      return `chips ${chips.join(', ')}; both kept their answer`;
+      await card(vera, p1).scrollIntoViewIfNeeded(); await shot(vera.page, 'P5-proposal-recorded', 1440);
+      return `run by ${done.run.by.name}; ${done.run.href}; chips ${(await chipsOf()).join(', ')}`;
+    });
+
+    await step('P5b: the card\'s link names the decision page, which says "Agreed in a call by" the two who consented', async () => {
+      const href = await card(vera, p1).getByTestId('assistant-proposal-result-link').getAttribute('href');
+      check(/^\/iq\/decisions\//.test(href ?? ''), `the link goes to ${href}`);
+      const tab = await vera.context.newPage(); watch(tab, 'vera#decision');
+      try {
+        await tab.goto(`${PORTAL}${href}`, { waitUntil: 'domcontentloaded', timeout: 40000 });
+        await waitFor(async () => /Agreed in a call by/.test(await bodyText(tab)), 30000, 'the decision page saying "Agreed in a call by"');
+        const text = await bodyText(tab);
+        check(text.includes(PROPOSAL_1), 'the decision page does not show the statement');
+        const agreed = /Agreed in a call by [^.]*\./.exec(text)?.[0] ?? '';
+        await shot(tab, 'P5b-decision-page', 1440);
+        return agreed;
+      } finally { await tab.close(); }
     });
 
     let p2 = null;
@@ -899,6 +932,18 @@ async function main() {
       return 'waiting for both';
     });
 
+    const PROPOSAL_3 = 'Freeze schema changes during the cutover';
+    let p3 = null;
+    await step('P9: a third proposal for the executor: the second person consents in the call and it waits for her', async () => {
+      p3 = await propose({ id: 'walk-proposal-3', statement: PROPOSAL_3, outcome: { kind: 'decision' }, executor: VERA.userId });
+      await askFor(nora, PROPOSAL_3);
+      await digit(nora, '1');
+      await waitFor(async () => (await proposalsOf(nora)).find((p) => p.id === p3)?.responses.length === 1, 15000, 'the consent');
+      for (const p of [vera, nora]) await cardState(p, p3, 'open');
+      await askFor(vera, PROPOSAL_3);
+      return 'open, waiting for the executor';
+    });
+
     await step('6: dismiss: the mark goes, Invite does not return, the bar says "Nova has left this call", re-invite is refused', async () => {
       await novaMenu(nora, 'Dismiss Nova');
       await seen(nora.page, 'nova-left');
@@ -914,7 +959,11 @@ async function main() {
       check(await vera.page.getByTestId('nova-roster-entry').count() === 0, 'Nova stayed in the roster');
       await barFits(vera.page, 'the bar after dismissal', 1280);
       await shot(vera.page, '6-left');
-      return 'left; re-invite 409';
+      // An unfinished proposal moves to the meeting page: the footer asks no more, and it waits 72 hours.
+      await gone(vera.page, 'nova-proposal-ask');
+      const open = (await proposalsOf(vera)).find((p) => p.id === p3);
+      check(open?.state === 'open' && typeof open.expiresAt === 'number' && open.expiresAt - Date.now() > 71 * 3600_000, `the open proposal after the dismissal: ${JSON.stringify({ state: open?.state, expiresAt: open?.expiresAt })}`);
+      return 'left; re-invite 409; the open proposal expires in 72 h';
     });
 
     await step('6b: with Nova dismissed the unconfirmed card reads Expired for both, says nobody confirmed it in time, and nothing was created', async () => {
@@ -990,7 +1039,7 @@ async function main() {
     });
 
     // The minutes steps read in a fresh tab of each person, so the first tabs stay in the call until step 18.
-    const veraM = { page: await vera.context.newPage() }; const noraM = { page: await nora.context.newPage() };
+    const veraM = { who: VERA, page: await vera.context.newPage() }; const noraM = { who: NORA, page: await nora.context.newPage() };
     watch(veraM.page, 'vera#m'); watch(noraM.page, 'nora#m');
     await step('13: the meeting page renders for an attendee at 1440 and 1280 with the summary, the action item for the work item made in the call (by its title) and the transcript with speaker names', async () => {
       await veraM.page.goto(MEETING(), { waitUntil: 'domcontentloaded', timeout: 40000 });
@@ -1019,6 +1068,30 @@ async function main() {
       await sleep(400);
       await veraM.page.screenshot({ path: path.join(SHOTS, '13-meeting-page-1280.png'), fullPage: false });
       return out.join(', ');
+    });
+
+    await step('13b: the meeting page lists the proposals with the call\'s card; the executor is asked there, consents (1), it runs in her browser on that page and the card ends recorded with its link', async () => {
+      await seen(veraM.page, 'meeting-proposals', 20000);
+      const cardM = card(veraM, p3);
+      await cardM.waitFor({ timeout: 15000 }).catch(() => { throw new StepFailure('no card for the open proposal on the meeting page'); });
+      check((await cardM.getAttribute('data-state')) === 'open', `the card is ${await cardM.getAttribute('data-state')}`);
+      check(await card(veraM, p1).getAttribute('data-state') === 'done', 'the recorded proposal is not listed as done');
+      // The meeting page asks in its own composer's deck (the page's command host), with the call's own prompt.
+      const deckM = veraM.page.getByTestId('collection-command-host');
+      await deckM.filter({ hasText: PROPOSAL_3 }).waitFor({ timeout: 20000 }).catch(() => { throw new StepFailure('the meeting page does not ask about the open proposal'); });
+      const ask = await deckM.innerText();
+      check(ask.includes('Consent and record') && !ask.includes('Not a decision'), `the meeting page's prompt: ${ask.replace(/\s+/g, ' ')}`);
+      await shot(veraM.page, '13b-meeting-proposal-ask', 1280);
+      await digit(veraM, '1');
+      await cardState(veraM, p3, 'done');
+      await waitFor(async () => (await cardM.innerText()).includes(`Recorded · ${PROPOSAL_3}`), 20000, 'the closing line on the meeting page');
+      await cardM.getByTestId('assistant-proposal-result-link').waitFor({ timeout: 15000 });
+      check(results_.some((r) => r.by === 'vera#m' && r.ok), 'the meeting page posted no result');
+      const minutes = await (await vera.api.get(asApi(vera, 'minutes'))).json();
+      const listed = (minutes.proposals ?? []).find((p) => p.id === p3);
+      check(listed?.state === 'done' && listed.consentedBy.length === 2, `the minutes list it as ${JSON.stringify(listed)}`);
+      await cardM.scrollIntoViewIfNeeded(); await shot(veraM.page, '13b-meeting-proposal-recorded', 1280);
+      return `recorded on the meeting page; minutes: ${listed.state}, consented by ${listed.consentedBy.join(' and ')}`;
     });
 
     await step('14: a person who was not in the call gets a not-found page and a 404 from both API routes', async () => {
