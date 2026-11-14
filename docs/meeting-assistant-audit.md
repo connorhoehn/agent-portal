@@ -61,3 +61,34 @@ Three steps assert too weakly: the create step finds the title anywhere in the w
 2. Records: M2 to M5.
 3. A real call: M7, M8, M10, M11, M12, then the paid run in the design's package 6.
 4. The low findings and the remaining walk gaps.
+
+## After the repairs
+
+Written after a second audit of the repaired code. Each blocking finding is closed by a rule that the code and a test now hold.
+
+- B1 is closed. A reply is judged as a whole utterance against one reply context for the run, which only an answered tool call can set. Speech from people never changes it, and a later line that addresses Nova ends it.
+- B2 is closed. A private read is answered outside the shared session. The session is told only that the question was answered privately, so it cannot repeat the answer.
+- B3 is closed. The asker is the speaker of the latest stored line that addresses Nova, and a tool call is judged only after every line that arrived before it has been stored.
+- B4 is closed on our side. The audio sink needs a second shared secret as well as the per-call token, and it refuses everything when none is configured outside the development switch. The media server's tap listing is still open (see below).
+- B5 is closed. Every assistant route refuses a masquerade, reads included.
+- B6 is closed. A browser claims a turn on the server before it runs it, a claim is granted once, and a result must carry the claim.
+- B7 is closed. The action card opens with the summary sentence and then shows every argument the tool will receive.
+- B8 is closed. The footer calls all its hooks before any early return.
+- B9 is closed. A failed replacement session is retried after 1, 3 and 9 seconds, and then Nova leaves with a notice.
+
+The four medium findings of the second audit are fixed as follows.
+
+- A muted continuation could be posted in pieces, a public answer could be split or mislabelled, and labels could swap with two requests in flight. Output speech is now grouped into utterances (a gap of 900 ms of Nova's silence ends one), there is one reply context per run, the acknowledgement spoken while any call is open is never posted, and a context lasts 20 seconds when public and 8 when muted. This is the rule set in F1.
+- A hidden browser tab stopped polling, so the asker's reads expired and confirmed writes never ran. A seated person now polls every 2 seconds, or every 5 seconds when the tab is hidden, and stops only when not seated.
+- The boot reconcile paused every listening record, which with two processes on one store would stop a call the other process serves. It now touches only records whose last heartbeat, or invitation when there is none, is older than 90 seconds.
+- The lost-connection and time-limit notices promised that anyone could invite Nova again, which the server refuses once the record is left. They now say Nova has left this call.
+
+Smaller repairs in the same pass. Claiming a confirmed write now gives it at least 90 seconds from the claim, so a write confirmed in its last seconds can finish. Provider error events are kept as codes only on the session and counted in the call's state for seat holders, and the paid check prints the count. A transcript piece that the echo guard judges to be Nova's own voice is not stored and is counted.
+
+Accepted residue. A private answer is delivered as a notification to the asker's inbox, tagged with the call id. The realtime notification service offers no operation to delete or blank a notification by id or by a payload field (it can list, mark read and deliver), so the inviter's delete and the retention sweep do not remove private answers that were already delivered. They stay in the asker's own inbox, readable only by that person.
+
+Still open:
+
+- The media server still lists tap destinations to a holder of a publisher-level credential for the channel. The per-call token in the address is therefore not enough on its own, which is why the second secret exists; the listing itself is not changed.
+- The SQL stores have never run against a real database. Their statements are checked as text only.
+- No real call has been made. The product code has run only on the mock world and against a fake provider.
