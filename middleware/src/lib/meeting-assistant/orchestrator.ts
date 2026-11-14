@@ -40,6 +40,7 @@ import { canSpeakOnRecord } from './intake.js';
 import { makeSession } from './session-select.js';
 import { onProposalConsented } from './proposals.js';
 import { checkBeforeClaim, expireProposalTurn, finishProposal, startProposal, type ProposalRunDeps } from './proposal-run.js';
+import { DecisionWatcher, defaultWatcherDeps } from './decision-watcher.js';
 import { MAX_PROVIDER_ERRORS, type LiveMeetingSession, type ProviderErrorInfo, type SessionEvents } from './session.js';
 import { sessionOf, type TranscriptLine, type AssistantRecord, type AssistantTurn, type TurnKind, type TurnStatus } from './types.js';
 
@@ -99,6 +100,8 @@ export interface RuntimeDeps {
   actionAllowed?: ProposalRunDeps['actionAllowed'];
   /** May this person record a decision as decided on this initiative? Default: lib/decision-authority.ts, over each of their roles. */
   mayDecide?: ProposalRunDeps['mayDecide'];
+  /** The decision watcher (decision-watcher.ts): started, paused and stopped with the run, and fed each stored line. Absent: none. */
+  watcher?: Pick<DecisionWatcher, 'start' | 'pause' | 'stop' | 'onLine' | 'dispose'>;
 }
 
 export interface FinishedEvent {
@@ -277,6 +280,7 @@ export class AssistantRuntime {
   private readonly extending = new Map<string, Promise<void>>();
   private subscribedTo: LineIntake | null = null;
   private unsubscribeIntake: (() => void) | null = null;
+  private unsubscribeLines: (() => void) | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
 
   constructor(readonly deps: RuntimeDeps, private readonly opts: { tickMs?: number } = {}) {}
@@ -322,6 +326,7 @@ export class AssistantRuntime {
     try { run.voice = (await this.store.get(ctx.callId))?.voice === true; } catch { /* off */ }
     try { await this.openSession(run, []); } catch (e) { this.runs.delete(ctx.callId); throw e; }
     await this.openListening(ctx.callId);
+    this.deps.watcher?.start(ctx.callId);
     this.armTimer();
   }
 
@@ -344,6 +349,7 @@ export class AssistantRuntime {
     const run = this.runs.get(callId);
     if (!run || run.finished) return;
     run.voiceHeld = true; run.relay.clear(); // nothing is relayed from the moment a pause begins
+    this.deps.watcher?.pause(callId); // no wait or check carries across a pause
     await this.serial(run, async () => { await this.closeSession(run, 'pause'); run.reply = null; run.replyById.clear(); });
     await this.closeListening(callId);
   }
@@ -364,6 +370,7 @@ export class AssistantRuntime {
     const run = this.runs.get(callId);
     if (!run || run.finished) return;
     run.finished = true; run.relay.clear();
+    this.deps.watcher?.stop(callId);
     // Whatever a step before it throws, the audio and the tap are released and the settlement is told: money is booked once, here.
     const guarded = async (step: () => Promise<void>): Promise<void> => {
       try { await step(); } catch (e) { console.warn('[meeting-assistant] stop step failed', (e as Error).message); }
@@ -384,7 +391,8 @@ export class AssistantRuntime {
 
   async dispose(): Promise<void> {
     this.disarmTimer();
-    this.unsubscribeIntake?.(); this.unsubscribeIntake = null; this.subscribedTo = null;
+    this.unsubscribeIntake?.(); this.unsubscribeIntake = null; this.unsubscribeLines?.(); this.unsubscribeLines = null; this.subscribedTo = null;
+    this.deps.watcher?.dispose();
     for (const id of [...this.runs.keys()]) {
       const run = this.runs.get(id)!;
       run.finished = true;
@@ -405,6 +413,8 @@ export class AssistantRuntime {
     this.unsubscribeIntake?.();
     this.subscribedTo = intake;
     this.unsubscribeIntake = intake.onEvents((callId, events) => this.onDetector(callId, events));
+    this.unsubscribeLines?.();
+    this.unsubscribeLines = this.deps.watcher ? intake.onStored((line) => { if (this.isRunning(line.callId)) this.deps.watcher?.onLine(line); }) : null;
   }
 
   private armTimer(): void {
@@ -619,6 +629,19 @@ export class AssistantRuntime {
     if (!run.voice || run.voiceHeld || run.finished || run.session !== session) return;
     run.speech.noteFrame(this.now());
     run.relay.push(e.pcm, e.last === true);
+  }
+
+  /** Is Nova answering in this call: her voice going out now, or one of her tool calls still open? (The watcher waits while she is.) */
+  novaAnswering(callId: string): boolean {
+    const run = this.runs.get(callId);
+    if (!run || run.finished) return false;
+    return run.speech.speakingAt(this.now()) || [...run.calls.values()].includes('open');
+  }
+
+  /** Is this stored line Nova's own voice heard back (the echo guard), for the watcher? */
+  isEchoLine(callId: string, line: TranscriptLine): boolean {
+    const run = this.runs.get(callId);
+    return !!run && this.echoOf(run, line);
   }
 
   /** A stored line as the echo guard sees it: its text and the wall-clock span it covered (unknown span: not judged). */
@@ -1222,9 +1245,15 @@ function hookProposals(): void {
 }
 export function assistantRuntime(): AssistantRuntime {
   hookProposals();
-  return (runtime ??= new AssistantRuntime({
+  if (runtime) return runtime;
+  const watcher = new DecisionWatcher(defaultWatcherDeps({
+    store: assistantStore, clock: Date.now,
+    novaAnswering: (callId) => runtime?.novaAnswering(callId) ?? false,
+    isEcho: (callId, line) => runtime?.isEchoLine(callId, line) ?? false,
+  }));
+  return (runtime = new AssistantRuntime({
     store: assistantStore, intake: assistantIntake, clock: Date.now, makeSession, rolesOf: defaultRolesOf, onFinished: async (e) => { await settleFinished(e); void finishMinutes(e.callId); },
-    audio: assistantAudio(),
+    audio: assistantAudio(), watcher,
   }));
 }
 /**
