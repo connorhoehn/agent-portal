@@ -38,6 +38,8 @@ import type { AssistantStore } from './store.js';
 import type { LineIntake } from './intake.js';
 import { canSpeakOnRecord } from './intake.js';
 import { makeSession } from './session-select.js';
+import { onProposalConsented } from './proposals.js';
+import { checkBeforeClaim, expireProposalTurn, finishProposal, startProposal, type ProposalRunDeps } from './proposal-run.js';
 import { MAX_PROVIDER_ERRORS, type LiveMeetingSession, type ProviderErrorInfo, type SessionEvents } from './session.js';
 import { sessionOf, type TranscriptLine, type AssistantRecord, type AssistantTurn, type TurnKind, type TurnStatus } from './types.js';
 
@@ -93,6 +95,10 @@ export interface RuntimeDeps {
   voiceSink?: VoiceSink;
   /** Sleep for `ms` (replacement retries, the turn sweep's tests); injectable so tests never wait. */
   wait?: (ms: number) => Promise<void>;
+  /** May this role take this Cedar action (a create form's gate, for a consented proposal)? Default: lib/authz.ts isAllowed. */
+  actionAllowed?: ProposalRunDeps['actionAllowed'];
+  /** May this person record a decision as decided on this initiative? Default: lib/decision-authority.ts, over each of their roles. */
+  mayDecide?: ProposalRunDeps['mayDecide'];
 }
 
 export interface FinishedEvent {
@@ -276,6 +282,17 @@ export class AssistantRuntime {
   constructor(readonly deps: RuntimeDeps, private readonly opts: { tickMs?: number } = {}) {}
 
   private get store(): AssistantStore { return this.deps.store(); }
+  private get proposalDeps(): ProposalRunDeps {
+    return {
+      store: this.store, now: () => this.now(), rolesOf: this.deps.rolesOf, nameOf,
+      actionAllowed: this.deps.actionAllowed ?? defaultActionAllowed, mayDecide: this.deps.mayDecide ?? defaultMayDecide,
+    };
+  }
+
+  /** A proposal of the call became consented (or was taken over): make the executor's turn (proposal-run.ts). */
+  async startProposal(callId: string, proposalId: string): Promise<AssistantTurn | null> {
+    return startProposal(this.proposalDeps, callId, proposalId);
+  }
   private now(): number { return this.deps.clock(); }
   private wait(ms: number): Promise<void> {
     return this.deps.wait ? this.deps.wait(ms) : new Promise<void>((resolve) => { const t = setTimeout(resolve, ms); t.unref?.(); });
@@ -942,6 +959,14 @@ export class AssistantRuntime {
   async claimTurn(callId: string, turnId: string, userId: string): Promise<{ turn: AssistantTurn } | { conflict: string } | null> {
     const turn = await this.store.getTurn(callId, turnId);
     if (!turn || turn.askedBy !== userId) return null;
+    if (turn.proposalId && turn.status === 'running' && turn.claimId === undefined && turn.expiresAt > this.now()) {
+      // A consented proposal: the executor's rights are checked again now, as they run it (and it must still be running this turn).
+      const check = await checkBeforeClaim(this.proposalDeps, turn);
+      if (!check.ok) {
+        await this.store.moveTurn(callId, turnId, { from: ['running'], to: check.why === 'gone' ? 'expired' : 'declined' });
+        return { conflict: check.why === 'gone' ? 'expired' : 'not allowed' };
+      }
+    }
     const claimed = await this.store.claimTurn(callId, turnId, { claimId: randomBytes(12).toString('hex'), claimedAt: this.now() }, this.now());
     if (claimed) return { turn: claimed };
     const now = (await this.store.getTurn(callId, turnId)) ?? turn;
@@ -963,6 +988,11 @@ export class AssistantRuntime {
     const moved = await this.store.moveTurn(callId, turnId, { from: [waiting], to: result.ok ? 'done' : 'failed' });
     if (!moved) return { conflict: (await this.store.getTurn(callId, turnId))?.status ?? 'expired' };
     const run = this.runs.get(callId);
+    if (turn.proposalId) {
+      // A consented proposal: its card reads the proposal; nothing is said in the call or told to the session.
+      await finishProposal(this.proposalDeps, turn, result);
+      return { turn: moved };
+    }
     if (turn.kind === 'write') {
       const text = result.ok ? capText((result.output as { say?: unknown } | null)?.say ?? 'Done.', 300) : capText(result.error ?? 'It did not work.', 300);
       if (turn.actionId) await moveAction(callId, turn.actionId, { from: ['waiting', 'confirmed'], to: result.ok ? 'done' : 'failed', by: userId, resultText: text }).catch(() => null);
@@ -1130,6 +1160,8 @@ export class AssistantRuntime {
     const callId = turn.callId;
     const moved = await this.store.moveTurn(callId, turn.turnId, { from: ['pending', 'running'], to: 'expired' });
     if (!moved) return;
+    // A consented proposal's turn hands the proposal back to `consented`: its card says why; nothing is said in the call.
+    if (turn.proposalId) { await expireProposalTurn(this.proposalDeps, turn); return; }
     const askerName = await nameOf(turn.askedBy);
     if (turn.kind === 'write') {
       if (turn.actionId) {
@@ -1166,8 +1198,30 @@ export async function defaultRolesOf(userId: string, tenant: string): Promise<st
   try { return (await getUser(userId))?.grants?.[tenant] ?? []; } catch { return []; }
 }
 
+async function defaultActionAllowed(userId: string, role: string, tenant: string, action: string): Promise<boolean> {
+  const { isAllowed } = await import('../authz.js');
+  return isAllowed({ sub: userId, role, tenant }, action);
+}
+
+/** The decide rule asked of the initiative for each of the person's roles; any one that may decide (and Cedar agrees) is enough. */
+async function defaultMayDecide(userId: string, tenant: string, initiativeId: string): Promise<boolean> {
+  const [{ mayDecideDecision }, { isAllowed }] = await Promise.all([import('../decision-authority.js'), import('../authz.js')]);
+  for (const role of await defaultRolesOf(userId, tenant)) {
+    const session = { sub: userId, role, tenant, grants: {}, iat: 0 } as unknown as Parameters<typeof mayDecideDecision>[0];
+    const verdict = await mayDecideDecision(session, { projectId: initiativeId, participants: [] });
+    if (verdict.ok && await isAllowed({ sub: userId, role, tenant }, 'DecideDecision', { decidesThis: verdict.decidesThis })) return true;
+  }
+  return false;
+}
+
 let runtime: AssistantRuntime | null = null;
+let proposalHook: (() => void) | null = null;
+/** Consented proposals run through the process's runtime, whichever it is now; subscribed once, when a runtime first exists. */
+function hookProposals(): void {
+  proposalHook ??= onProposalConsented(async (p) => { await runtime?.startProposal(p.callId, p.id); });
+}
 export function assistantRuntime(): AssistantRuntime {
+  hookProposals();
   return (runtime ??= new AssistantRuntime({
     store: assistantStore, intake: assistantIntake, clock: Date.now, makeSession, rolesOf: defaultRolesOf, onFinished: async (e) => { await settleFinished(e); void finishMinutes(e.callId); },
     audio: assistantAudio(),
@@ -1186,4 +1240,4 @@ export function startTurnSweep(everyMs = 30_000, runtimeOf: () => AssistantRunti
 }
 /** The process's runtime if one was ever made; never makes one (shutdown must not create what it is about to stop). */
 export function peekAssistantRuntime(): AssistantRuntime | null { return runtime; }
-export function setAssistantRuntime(next: AssistantRuntime | null): void { void runtime?.dispose(); runtime = next; }
+export function setAssistantRuntime(next: AssistantRuntime | null): void { void runtime?.dispose(); runtime = next; if (next) hookProposals(); }
