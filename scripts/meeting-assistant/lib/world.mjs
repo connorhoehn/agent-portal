@@ -229,7 +229,7 @@ export class World {
 export class Call {
   /** Seat `inviter` and `others` in one call (the gateway's call verbs, as the portal sends them), join the call chat channel. */
   static async open(world, inviter, others) {
-    const c = new Call(); c.world = world; c.callId = `scn-${stamp()}`; c.inviter = inviter; c.seated = [inviter]; c.participantIds = {};
+    const c = new Call(); c.world = world; c.callId = `scn-${stamp()}`; c.mediaMark = world.media ? world.media.log.length : 0; c.inviter = inviter; c.seated = [inviter]; c.participantIds = {};
     c.lobby = 'orgiq:initiative:p-observability'; // the initiative room the walk's call uses: any number of orgiq members may take a seat
     c.A = `/api/calls/${encodeURIComponent(c.callId)}/assistant`; c.chat = `orgiq:huddle:${c.callId}`; c.acked = new Set();
     if (others.length) await c.seat(others);
@@ -277,7 +277,7 @@ export class Call {
     const media = this.world.media;
     for (let i = 0; i < 40 && !sink?.token; i += 1) {
       if (media) {
-        const create = media.log.filter((l) => l.method === 'POST' && l.body?.destination?.url).at(-1);
+        const create = media.log.slice(this.mediaMark ?? 0).filter((l) => l.method === 'POST' && l.body?.destination?.url).at(-1); // only taps asked for since this call opened
         const url = create?.body?.destination?.url ?? '';
         const token = /\/api\/internal\/meeting-assistant\/pcm\/([^/?#]+)$/.exec(url)?.[1];
         const arn = /\/api\/channels\/([^/]+)\/taps/.exec(create?.url ?? '')?.[1];

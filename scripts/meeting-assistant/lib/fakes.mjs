@@ -13,8 +13,8 @@ const { WebSocketServer } = createRequire(path.join(MW, 'package.json'))('ws');
 export const PROVIDER_HOST = 'api.openai.com';
 /** The provider hears a quiet stretch this long before it calls a spoken line finished. */
 const VAD_MS = 900;
-/** Where the provider's audio clock puts a moment of the call: the mixer's playout delay (300 ms) plus the first 100 ms frame. */
-export const PIPELINE_MS = 400;
+/** Where the provider's audio clock puts a moment of the call: the mixer's playout delay (300 ms) after the moment the tap heard it. */
+export const PIPELINE_MS = 300;
 /** Quietest mixed-audio level (rms) the fake provider counts as speech heard. */
 const HEARD_RMS = 150;
 
@@ -122,7 +122,10 @@ export class FakeProvider {
         const buf = Buffer.from(String(ev.audio ?? ''), 'base64');
         if (buf.length !== 4800) this.seen.badFrames += 1;
         this.seen.frames += 1; this.seen.bytes += buf.length; if (!this.seen.wallStart) this.seen.wallStart = Date.now(); this.seen.wallLast = Date.now();
-        if (!st.anchor) st.anchor = Date.now();
+        // The provider's audio clock counts the audio it was sent: its millisecond 0 is when the session's first frame began, and frame k
+        // cannot arrive before 100 ms after frame k began. A busy test process can read the first frames late, so the zero is the earliest
+        // moment every frame seen so far allows, never the moment the first one happened to be read.
+        { const zero = Date.now() - st.audioMs - 100; if (!st.anchor || zero < st.anchor) st.anchor = zero; }
         st.outSeq += 1;
         if (st.speaking > 0) { st.speaking -= 1; this.seen.voicedSent += 1; send({ type: 'session.output_audio.delta', delta: voiced, event_id: `out_${st.outSeq}` }); }
         else { this.seen.silentSent += 1; send({ type: 'session.output_audio.delta', delta: silent, event_id: `out_${st.outSeq}` }); }

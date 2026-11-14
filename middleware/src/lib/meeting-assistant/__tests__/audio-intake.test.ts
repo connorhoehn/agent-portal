@@ -94,6 +94,23 @@ async function speak(who: keyof typeof PID, hz: number, ms: number, tok = token)
 const quiet = async (ms: number) => { for (let t = 0; t < ms; t += 100) { now += 100; await audio.tick(); } };
 const send = async (frames: Array<{ who: keyof typeof PID; hz: number }>) => { for (const f of frames) audio.accept(token, headers(PID[f.who]), sine(f.hz, 200)); };
 
+describe('audio that arrives before the session is open', () => {
+  beforeEach(() => setUp([ANA, BEN, CY]));
+
+  it('is refused, and the time base starts when the session attaches, so what comes after sits where it would have with no early audio', async () => {
+    audio.suspend(CALL); // armed, but the session is not open yet
+    for (let i = 0; i < 5; i += 1) { expect(audio.accept(token, headers(PID.ana), sine(300, 200))).toBe('unknown'); now += 200; await audio.tick(); }
+    const placed: number[] = []; const frames: Buffer[] = [];
+    audio.attach(CALL, { append: (f) => frames.push(f), placed: (_u, _pcm, at) => placed.push(at) });
+    now += 200; // the first chunk after the attach holds the 200 ms before it arrived
+    expect(audio.accept(token, headers(PID.ana), sine(300, 200))).toBe('mixed');
+    // session ms 0 is the attach: the chunk's audio began at 0, and it plays after the 300 ms playout delay
+    expect(placed).toEqual([300]);
+    await audio.tick();
+    expect(frames).toHaveLength(2);
+  });
+});
+
 describe('the sink token', () => {
   beforeEach(() => setUp([ANA, BEN, CY]));
 
