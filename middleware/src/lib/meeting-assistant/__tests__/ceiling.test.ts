@@ -93,6 +93,7 @@ describe('the ceiling', () => {
     await advance(100);                                  // 601 s
     expect((await rec()).state).toBe('left');
     expect(mockPosts.notices[1]).toMatch(/Nova left because this call reached its 10-minute limit/);
+    expect(mockPosts.notices[1]).not.toMatch(/again/);
     expect(runtime.isRunning(CALL)).toBe(false);
     expect(settled).toHaveLength(1);
     expect(settled[0]).toMatchObject({ usageSeconds: 601, sessionKind: 'scripted', listeningSeconds: 601, record: { callId: CALL, invitedBy: ALICE, initiativeId: 'p-auth' } });

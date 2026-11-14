@@ -501,7 +501,7 @@ describe('pause, resume, replacement and stop', () => {
     fake().drop(); await flush();
     expect(runtime.isRunning(CALL)).toBe(false);
     expect((await store.get(CALL))!.state).toBe('left');
-    expect(mockPosts.notices.at(-1)).toMatch(/lost its connection and has left/);
+    expect(mockPosts.notices.at(-1)).toBe('Nova lost its connection and has left this call.'); // and it no longer promises another invitation (invite answers 409 once left)
     expect(finished).toHaveLength(1);
   });
 

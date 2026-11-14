@@ -509,7 +509,7 @@ export class AssistantRuntime {
     await this.snapshotAttendance(callId);
     const done = await this.store.transition(callId, { from: ['listening'], to: 'left', by: 'system', at: this.now() });
     if (!done) return;
-    await postNoticeQuietly(callId, `${NOVA_NAME} lost its connection and has left the call. Anyone can invite ${NOVA_NAME} again.`, { leaving: true });
+    await postNoticeQuietly(callId, `${NOVA_NAME} lost its connection and has left this call.`, { leaving: true });
     this.deps.intake().stop(callId);
     this.deps.audio?.detach(callId);
     await this.stop(callId);
@@ -963,7 +963,7 @@ export class AssistantRuntime {
       await this.snapshotAttendance(callId);
       const done = await this.store.transition(callId, { from: ['listening'], to: 'left', by: 'system', at: this.now() });
       if (!done) return;
-      await postNoticeQuietly(callId, `${NOVA_NAME} left because this call reached its ${Math.round(s.ceilingSeconds / 60)}-minute limit. Anyone who can invite ${NOVA_NAME} can invite again.`, { leaving: true });
+      await postNoticeQuietly(callId, `${NOVA_NAME} left because this call reached its ${Math.round(s.ceilingSeconds / 60)}-minute limit.`, { leaving: true });
       this.deps.intake().stop(callId);
       await this.stop(callId);
     } else if (left <= CEILING_WARNING_SECONDS && !s.warned) {
