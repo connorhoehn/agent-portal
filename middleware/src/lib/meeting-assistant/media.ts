@@ -53,12 +53,8 @@ export function missingMediaSettings(): string[] {
   return out.length ? out : (mediaConfig() ? [] : ['MEETING_ASSISTANT_MEDIA_URL or MEETING_ASSISTANT_SINK_BASE_URL (not a plain http(s) address)']);
 }
 
-/** `MEETING_ASSISTANT_LIVE=1`: the mock world uses the real provider session (one paid check). Never in production. */
-export function liveForced(): boolean {
-  if (process.env['NODE_ENV'] === 'production') return false;
-  const v = (process.env['MEETING_ASSISTANT_LIVE'] ?? '').trim();
-  return v === '1' || v === 'true';
-}
+export { liveForced } from './live-flag.js';
+import { liveForced } from './live-flag.js';
 
 // ---------------------------------------------------------------------------------------------------------------------
 // The media server's tap API

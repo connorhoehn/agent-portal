@@ -6,12 +6,14 @@ import { voiceProviderConfigured } from '../voice/openai.js';
 import { OpenAiLiveSession } from './live-session.js';
 import { ScriptedSession } from './scripted-session.js';
 import type { LiveMeetingSession } from './session.js';
+import { liveForced } from './live-flag.js';
 import { mockTranscriptEnabled } from './transcript-source.js';
 
 export type SessionFactory = (clock: () => number) => LiveMeetingSession | null;
 
 export const defaultSessionFactory: SessionFactory = (clock) => {
-  if (mockTranscriptEnabled()) return new ScriptedSession(clock);
+  // The mock world scripts the session, unless MEETING_ASSISTANT_LIVE=1 asks for the real one (never in production).
+  if (mockTranscriptEnabled() && !liveForced()) return new ScriptedSession(clock);
   if (!voiceProviderConfigured()) return null;
   const cfg = voiceConfig();
   if (!cfg.delegationModel) return null;

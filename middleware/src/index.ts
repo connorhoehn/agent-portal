@@ -52,6 +52,7 @@ import { callChatRouter } from './routes/call-chat.js';
 import { meetingAssistantRouter, meetingsRouter } from './routes/meeting-assistant.js';
 import { meetingAssistantDevRouter } from './routes/meeting-assistant-dev.js';
 import { meetingAssistantSinkRouter } from './routes/meeting-assistant-sink.js';
+import { assertLiveFlagAllowed } from './lib/meeting-assistant/live-flag.js';
 import { assistantStore, meetingAssistantEnabled, startRetentionSweep as startTranscriptRetentionSweep } from './lib/meeting-assistant/index.js';
 import { pipelinesRouter } from './routes/pipelines.js';
 import { accessRouter } from './routes/access.js';
@@ -203,6 +204,14 @@ const viewObs = [requireTenant('orgiq'), requireAction('ViewObservability')];
 // set alone it stops the process rather than being quietly ignored.
 try {
   assertDemoModeAllowed();
+} catch (err) {
+  console.error(`[startup] ${(err as Error).message}`);
+  process.exit(2);
+}
+
+// MEETING_ASSISTANT_LIVE is a local, paid, one-off check: refuse to run with it on in production.
+try {
+  assertLiveFlagAllowed();
 } catch (err) {
   console.error(`[startup] ${(err as Error).message}`);
   process.exit(2);
