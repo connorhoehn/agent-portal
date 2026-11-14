@@ -1,7 +1,10 @@
 // /iq/meetings/:callId — what the meeting assistant left behind: who was there, the summary, decisions, action items
 // and the transcript. Only the people who were in the call can read it; everyone else, admins included, gets the
 // same "not found" the server gives them. The inviter can delete the record (minutes and transcript together).
-import { useMemo, useState } from 'react';
+// Proposals (docs/meeting-consent-design.md, package 6): each one is drawn with the call chat's own read-only card; someone who
+// still owes an answer is asked with the call's own deck prompt in the page's composer deck. A person a proposal names who was
+// not in the call sees only that section. A consent that completes one runs it in the executor's browser here (MeetingTurnRunner).
+import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import {
   Button, DataTable, DetailPage, DetailSection, EmptyState, Inline, LoadingState, MetaLine, Stack, T,
@@ -15,8 +18,12 @@ import { sendJson } from '../../lib/writeJson';
 import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
 import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
 import { newWorkItemHref } from '../projects/initiativeNavigation';
+import { ProposalCard } from '../../components/chat/AssistantMessageExtras';
+import { proposalPrompt } from '../../components/shell/NovaProposalAsk';
+import { MeetingTurnRunner } from '../../components/shell/MeetingTurnRunner';
+import { deckQueue, parseProposals } from '../../lib/meetingProposals';
 import {
-  canCreateFor, durationLabel, peopleLabel, transcriptSegments, whenLabel, minutesUrl,
+  canCreateFor, durationLabel, peopleLabel, transcriptSegments, whenLabel, minutesUrl, proposalsLive, proposalsUrl,
   type MinutesActionItem, type MinutesView,
 } from './meetingsModel';
 import { useMeetingTranscript } from './useMeetingTranscript';
@@ -27,6 +34,25 @@ export default function MeetingPage() {
   const { session } = useSession();
   const minutes = useFetch<MinutesView>(callId ? minutesUrl(callId) : null);
   const transcript = useMeetingTranscript(minutes.data ? callId : null);
+  // The call's proposals this person may see; asked again every few seconds while an answer or a run can still change one.
+  const [live, setLive] = useState(false);
+  const proposalsFetch = useFetch<unknown>(callId ? proposalsUrl(callId) : null, live ? 3000 : undefined);
+  const proposals = useMemo(() => parseProposals(proposalsFetch.data), [proposalsFetch.data]);
+  const nowLive = proposalsLive(proposals.map((p) => p.state));
+  if (nowLive !== live) setLive(nowLive);
+  const [kept, setKept] = useState<ReadonlySet<string>>(new Set());
+  const keep = useCallback((key: string) => setKept((k) => new Set([...k, key])), []);
+  const head = deckQueue(proposals, kept)[0] ?? null;
+  const headInitiative = useFetch<{ name?: string }>(head?.outcome.kind === 'decision' && head.outcome.initiativeId ? `/api/graph/projects/${encodeURIComponent(head.outcome.initiativeId)}` : null);
+  const refreshProposals = proposalsFetch.refresh;
+  const proposalAsk = useMemo<ComposerPrompt | null>(() => {
+    if (!head || !callId) return null;
+    const prompt = proposalPrompt(callId, head, headInitiative.data?.name?.trim() || null, { inCall: false, scope: `meeting-proposal:${callId}`, keep });
+    // The page's list is read again after every answer, so the card and the next question follow at once.
+    return { ...prompt, onAnswer: async (a) => { const out = await prompt.onAnswer(a); refreshProposals(); return out; } };
+  }, [head, callId, headInitiative.data?.name, keep, refreshProposals]);
+  const me = session?.sub ?? null;
+  const mayRunHere = proposals.some((p) => p.executor.userId === me && (p.state === 'consented' || p.state === 'running'));
   // The delete question rides the page's docked composer as a deck prompt; `asked` counts the times it was raised so Delete reopens a hidden one.
   const [asked, setAsked] = useState(0);
   const [answered, setAnswered] = useState(0);
@@ -50,6 +76,27 @@ export default function MeetingPage() {
 
   if (minutes.isLoading && !minutes.data) return <LoadingState label="Loading the meeting…" />;
   const m = minutes.data;
+  const prompts = [...(proposalAsk ? [proposalAsk] : []), ...(deletePrompt ? [deletePrompt] : [])];
+  const runner = callId && mayRunHere ? <MeetingTurnRunner afterCall={{ callId, initiativeId: m?.initiativeId ?? null, active: true }} /> : null;
+  // Drawn only when the call had proposals: a call without them keeps the page as it was.
+  const proposalSection = (first: boolean) => (proposals.length ? (
+    <DetailSection title="Proposals" as="h2" hint={String(proposals.length)} first={first}>
+      <Stack gap="sm" data-testid="meeting-proposals">{proposals.map((p) => <ProposalCard key={p.id} proposalId={p.id} state={p.state} statement={p.statement} view={p} />)}</Stack>
+    </DetailSection>
+  ) : null);
+  // A person a proposal names who was not in the call: no minutes for them, only the proposals that need them.
+  if (!m && proposals.length) {
+    return (
+      <>
+        <DetailPage data-testid="meeting-page" title="Proposals from a meeting"
+          meta={<MetaLine size="sm" items={['You were named in a proposal from a call you were not in', 'Only the proposals that need you are shown']} />}>
+          <Stack gap="md" className="pb-6">{proposalSection(true)}</Stack>
+        </DetailPage>
+        {runner}
+        {prompts.length > 0 && <CollectionCommandHost key="dialogue" adapter={adapter} prompts={prompts} />}
+      </>
+    );
+  }
   if (!m && minutes.failure && minutes.failure.status !== 404) {
     return <EmptyState testId="meeting-error" title="This meeting could not be loaded"
       description={minutes.failure.message} action={<Button size="sm" variant="secondary" data-testid="meeting-retry" onClick={minutes.refresh}>Try again</Button>} />;
@@ -87,6 +134,7 @@ export default function MeetingPage() {
               ? <Stack gap="xs" data-testid="meeting-decisions">{m.decisions.map((d, i) => <T key={i} size="sm">{d}</T>)}</Stack>
               : <T size="sm" tone="secondary">No decisions were recorded.</T>}
           </DetailSection>
+          {proposalSection(false)}
           <DetailSection title="Action items" as="h2" hint={String(m.actionItems.length)}>
             {m.actionItems.length
               ? <DataTable data={m.actionItems} columns={columns} keyField={(i) => `${i.text}|${i.ownerUserId ?? ''}`} narrow data-testid="meeting-action-items" />
@@ -109,7 +157,8 @@ export default function MeetingPage() {
         </Stack>
       </DetailPage>
 
-      {deletePrompt && <CollectionCommandHost key="dialogue" adapter={adapter} prompts={[deletePrompt]} />}
+      {runner}
+      {prompts.length > 0 && <CollectionCommandHost key="dialogue" adapter={adapter} prompts={prompts} />}
     </>
   );
 }

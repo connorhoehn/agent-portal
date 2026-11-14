@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { canCreateFor, durationLabel, peopleLabel, summaryLine, transcriptSegments, minutesUrl, transcriptUrl, meetingHref } from '../meetingsModel.ts';
+import { canCreateFor, durationLabel, peopleLabel, summaryLine, transcriptSegments, minutesUrl, transcriptUrl, meetingHref, proposalsLive, proposalsUrl } from '../meetingsModel.ts';
 
 test('duration reads in minutes and hours', () => {
   assert.equal(durationLabel(0, 20_000), 'under a minute');
@@ -43,4 +43,11 @@ test('urls are encoded', () => {
   assert.equal(minutesUrl('a/b'), '/api/calls/a%2Fb/assistant/minutes');
   assert.equal(transcriptUrl('c', 5, 100), '/api/calls/c/assistant/transcript?after=5&limit=100');
   assert.equal(meetingHref('c1'), '/iq/meetings/c1');
+});
+
+test('the meeting page asks for proposals again only while an answer or a run can change one', () => {
+  assert.equal(proposalsUrl('c/1'), '/api/calls/c%2F1/assistant/proposals');
+  for (const live of ['open', 'objected', 'consented', 'running']) assert.equal(proposalsLive(['done', live]), true);
+  assert.equal(proposalsLive(['done', 'failed', 'dismissed', 'expired']), false);
+  assert.equal(proposalsLive([]), false);
 });

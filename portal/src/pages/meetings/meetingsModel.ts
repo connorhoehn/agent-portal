@@ -18,6 +18,9 @@ export interface MeetingListRow {
 export interface MinutesActionItem { text: string; ownerUserId?: string; ownerName?: string; done?: boolean }
 export interface MinutesPerson { userId: string; name: string }
 
+/** A proposal as the minutes list it: its state and who consented or objected, by name only (docs/meeting-consent-design.md). */
+export interface MinutesProposal { id: string; statement: string; state: string; outcome: 'decision' | 'tool'; consentedBy: string[]; objectedBy: string[] }
+
 export interface MinutesView {
   callId: string;
   callName: string;
@@ -37,6 +40,8 @@ export interface MinutesView {
   writer: 'scripted' | 'openai' | 'none';
   createdAt: number;
   youAreInviter: boolean;
+  /** Absent from an older server. */
+  proposals?: MinutesProposal[];
 }
 
 export interface TranscriptLineView {
@@ -52,6 +57,7 @@ export interface TranscriptLineView {
 export const MEETINGS_URL = '/api/meetings?limit=100';
 export const minutesUrl = (callId: string): string => `/api/calls/${encodeURIComponent(callId)}/assistant/minutes`;
 export const transcriptUrl = (callId: string, after: number, limit: number): string => `/api/calls/${encodeURIComponent(callId)}/assistant/transcript?after=${after}&limit=${limit}`;
+export const proposalsUrl = (callId: string): string => `/api/calls/${encodeURIComponent(callId)}/assistant/proposals`;
 export const meetingHref = (callId: string): string => `/iq/meetings/${encodeURIComponent(callId)}`;
 export const TRANSCRIPT_PAGE = 100;
 
@@ -99,3 +105,6 @@ export function transcriptSegments(lines: readonly TranscriptLineView[], roster:
 export function canCreateFor(item: MinutesActionItem, viewerUserId: string | null): boolean {
   return !item.done && (!item.ownerUserId || item.ownerUserId === viewerUserId);
 }
+
+/** The meeting page asks again while something can still change: an answer is possible, or a run is under way. */
+export const proposalsLive = (states: readonly string[]): boolean => states.some((s) => s === 'open' || s === 'objected' || s === 'consented' || s === 'running');

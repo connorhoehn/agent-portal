@@ -3,6 +3,8 @@
 // this person every TURN_POLL_MS (the 5 s state poll is too slow for a read that someone is waiting on) and runs each
 // one once through the voice navigator's executor with this person's own session. See lib/meetingTurns.ts for the
 // rules: reads when pending, writes only when running, never twice.
+// After the call (`afterCall`, the meeting page): only a proposal's turn reaches this browser, when this person's consent there made
+// it run; the server serves those to the executor without a seat. It asks while one of their proposals may run, and not otherwise.
 
 import { useEffect, useMemo, useRef } from 'react';
 import { useSession } from '../../lib/auth';
@@ -25,15 +27,25 @@ const POKE_FOLLOW_UPS_MS = [1500, 4000, 9000];
 const POLL_MAX_MS = 30_000;
 export const pollDelay = (base: number, failures: number): number => Math.min(base * 2 ** Math.min(failures, 10), POLL_MAX_MS);
 
-export function MeetingTurnRunner() {
-  const callId = useLiveCallId();
-  const nova = useMeetingAssistant(callId);
+export interface AfterCallRun {
+  callId: string;
+  /** The call's initiative: a work item made from a proposal lands there, never on whatever page is in view. */
+  initiativeId: string | null;
+  /** One of this person's proposals is consented or running, so a turn may come. */
+  active: boolean;
+}
+
+export function MeetingTurnRunner({ afterCall }: { afterCall?: AfterCallRun } = {}) {
+  const liveCallId = useLiveCallId();
+  // After the call there is no seat and no state to read: the meeting page says when to ask.
+  const nova = useMeetingAssistant(afterCall ? null : liveCallId);
+  const callId = afterCall ? afterCall.callId : liveCallId;
   const { session } = useSession();
   const { can } = useCapabilities();
   // Seated in the live call (callId) is the first condition. Confirmed turns run whenever the person is seated: keep asking
   // while Nova listens or is paused; after it has left, ask when a card is confirmed (a poke) and a few times after.
   const phase = nova.view.phase;
-  const mode: 'active' | 'poke' | 'off' = !nova.enabled ? 'off' : phase === 'listening' || phase === 'invited' || phase === 'paused' ? 'active' : phase === 'left' ? 'poke' : 'off';
+  const mode: 'active' | 'poke' | 'off' = !nova.enabled ? 'off' : afterCall ? (afterCall.active ? 'active' : 'off') : phase === 'listening' || phase === 'invited' || phase === 'paused' ? 'active' : phase === 'left' ? 'poke' : 'off';
   const userId = session?.sub ?? null;
   const ledger = useMemo(() => new Map<string, DeliveryRecord>(), [userId]);
   const results = useMemo(() => new ResultMemory(), [userId, session?.tenant]);
@@ -50,7 +62,7 @@ export function MeetingTurnRunner() {
     return () => { stopped = true; if (timer) clearTimeout(timer); };
   }, [present, callId, mediaId]);
   const callInitiative = useRef<{ id: string; name: string | null } | null>(null);
-  const initiativeId = nova.view.initiativeId;
+  const initiativeId = afterCall ? afterCall.initiativeId : nova.view.initiativeId;
   const initiativeName = useFetch<{ name?: string }>(initiativeId ? `/api/graph/projects/${encodeURIComponent(initiativeId)}` : null).data?.name ?? null;
   callInitiative.current = initiativeId ? { id: initiativeId, name: initiativeName } : null;
   const live = useRef({ session, can });
