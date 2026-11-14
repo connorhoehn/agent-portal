@@ -66,6 +66,8 @@ export interface AssistantStore {
   createTurn(turn: AssistantTurn): Promise<{ turn: AssistantTurn; created: boolean }>;
   getTurn(callId: string, turnId: string): Promise<AssistantTurn | null>;
   listTurns(callId: string, filter?: TurnFilter): Promise<AssistantTurn[]>;
+  /** Turns in any call still `pending` or `running` whose time is up at `nowMs`, oldest first, at most `limit` (the expiry sweep, audit M9). */
+  dueTurns(nowMs: number, limit: number): Promise<AssistantTurn[]>;
   /** Move a turn; null when it is unknown or not in one of `change.from` (two results settle once). */
   moveTurn(callId: string, turnId: string, change: TurnChange): Promise<AssistantTurn | null>;
   /** Delete lines at or before `cutoffMs` (epoch). Returns how many went. */
@@ -197,6 +199,11 @@ export class MemoryAssistantStore implements AssistantStore {
     return [...this.turns.values()]
       .filter((t) => t.callId === callId && (!filter.askedBy || t.askedBy === filter.askedBy) && (!filter.statuses || filter.statuses.includes(t.status)))
       .sort((a, b) => a.createdAt - b.createdAt || a.turnId.localeCompare(b.turnId)).map(copy);
+  }
+
+  async dueTurns(nowMs: number, limit: number) {
+    return [...this.turns.values()].filter((t) => (t.status === 'pending' || t.status === 'running') && t.expiresAt <= nowMs)
+      .sort((a, b) => a.expiresAt - b.expiresAt || a.turnId.localeCompare(b.turnId)).slice(0, limit).map(copy);
   }
 
   async moveTurn(callId: string, turnId: string, change: TurnChange) {

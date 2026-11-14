@@ -732,6 +732,16 @@ export class AssistantRuntime {
   // -------------------------------------------------------------------------------------------------------------
   // Time
 
+  /**
+   * Expire every turn in any call whose time is up, whether or not a run is live in this process: after Nova left (the minutes'
+   * `m-` cards) and after a restart there is no run, and the cards must still settle (audit M9).
+   */
+  async sweepTurns(limit = 200): Promise<number> {
+    const due = await this.store.dueTurns(this.now(), limit);
+    for (const t of due) await this.expireTurn(this.runs.get(t.callId) ?? null, t);
+    return due.length;
+  }
+
   /** Expire turns whose time is up; answers the reads that were waiting. Tests call this with a moved clock. */
   async tick(): Promise<void> {
     const now = this.now();
@@ -801,23 +811,29 @@ export class AssistantRuntime {
     }
   }
 
-  private async expireTurn(run: CallRun, turn: AssistantTurn): Promise<void> {
-    const moved = await this.store.moveTurn(run.ctx.callId, turn.turnId, { from: ['pending', 'running'], to: 'expired' });
+  /**
+   * Expire one turn and update its card. `run` is the call's live run, or null when there is none (Nova has left, or the server
+   * restarted): the card is still settled, there is just no session to tell and no model call to answer (audit M9).
+   */
+  private async expireTurn(run: CallRun | null, turn: AssistantTurn): Promise<void> {
+    const callId = turn.callId;
+    const moved = await this.store.moveTurn(callId, turn.turnId, { from: ['pending', 'running'], to: 'expired' });
     if (!moved) return;
     const askerName = await nameOf(turn.askedBy);
     if (turn.kind === 'write') {
       if (turn.actionId) {
         // Confirmed but never run: the asker's browser was not there. Never confirmed: nobody decided in time.
         const resultText = turn.status === 'running' ? `${askerName} confirmed this, but their browser was not available to run it.` : `${askerName} did not confirm this in time.`;
-        await moveAction(run.ctx.callId, turn.actionId, { from: ['waiting', 'confirmed'], to: 'expired', by: 'system', resultText }).catch(() => null);
+        await moveAction(callId, turn.actionId, { from: ['waiting', 'confirmed'], to: 'expired', by: 'system', resultText }).catch(() => null);
       }
-      run.session?.appendContext(`The action offered to ${askerName} expired without being done.`);
+      run?.session?.appendContext(`The action offered to ${askerName} expired without being done.`);
       return;
     }
+    if (!run) return;
     const modelCallId = run.turnCalls.get(turn.turnId);
     run.turnCalls.delete(turn.turnId);
     if (modelCallId) this.answer(run, modelCallId, { error: 'the person who asked is not available' });
-    await postReply(run.ctx.callId, { text: `${askerName} is not available to run that, so I could not finish it.`, askedBy: turn.askedBy, askedByName: askerName }).catch(() => null);
+    await postReply(callId, { text: `${askerName} is not available to run that, so I could not finish it.`, askedBy: turn.askedBy, askedByName: askerName }).catch(() => null);
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -842,5 +858,14 @@ export function assistantRuntime(): AssistantRuntime {
     store: assistantStore, intake: assistantIntake, clock: Date.now, makeSession, rolesOf: defaultRolesOf, onFinished: async (e) => { await settleFinished(e); void finishMinutes(e.callId); },
     audio: assistantAudio(),
   }));
+}
+/**
+ * The turn expiry sweep for a running server: every `everyMs`, expire what is due in any call, live run or not. Unref'd, like the
+ * retention sweep. `timers` is injectable for tests. Returns the stopper.
+ */
+export function startTurnSweep(everyMs = 30_000, runtimeOf: () => AssistantRuntime = assistantRuntime, timers: { set: typeof setInterval; clear: typeof clearInterval } = { set: setInterval, clear: clearInterval }): () => void {
+  const timer = timers.set(() => { void runtimeOf().sweepTurns().catch((e: unknown) => console.warn('[meeting-assistant] turn sweep failed', (e as Error).message)); }, everyMs);
+  (timer as { unref?: () => void }).unref?.();
+  return () => timers.clear(timer);
 }
 export function setAssistantRuntime(next: AssistantRuntime | null): void { void runtime?.dispose(); runtime = next; }

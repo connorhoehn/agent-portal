@@ -274,6 +274,16 @@ export class SqlAssistantStore implements AssistantStore {
     return rows.map(turnFromRow);
   }
 
+  async dueTurns(nowMs: number, limit: number) {
+    const rows = await this.exec(
+      `SELECT ${TURN_COLUMNS} FROM meeting_assistant_turns
+       WHERE status IN ('pending', 'running') AND expires_at <= :now::timestamptz
+       ORDER BY expires_at ASC, turn_id ASC LIMIT :limit`,
+      [s('now', iso(nowMs)), n('limit', limit)],
+    );
+    return rows.map(turnFromRow);
+  }
+
   async moveTurn(callId: string, turnId: string, change: TurnChange) {
     const rows = await this.exec(
       `UPDATE meeting_assistant_turns SET status = :to, action_id = COALESCE(:action, action_id)

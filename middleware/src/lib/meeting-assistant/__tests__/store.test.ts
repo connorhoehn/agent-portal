@@ -183,6 +183,15 @@ describe('turns and the session bookkeeping (package 4a)', () => {
     expect(await s.moveTurn('call-1', 't-1', { from: ['pending', 'running'], to: 'expired' })).toBeNull();
     expect(await s.moveTurn('call-1', 'nope', { from: ['pending'], to: 'done' })).toBeNull();
   });
+  it('lists due turns across calls: pending or running, past their time, oldest first, bounded (M9)', async () => {
+    await s.createTurn(turn());                                                   // due at 91 000
+    await s.createTurn(turn({ turnId: 't-2', status: 'running', kind: 'write', expiresAt: 50_000 }));
+    await s.createTurn(turn({ turnId: 't-3', status: 'done', expiresAt: 10_000 }));
+    await s.createTurn(turn({ turnId: 't-4', expiresAt: 500_000 }));
+    expect((await s.dueTurns(100_000, 10)).map((t) => t.turnId)).toEqual(['t-2', 't-1']);
+    expect((await s.dueTurns(100_000, 1)).map((t) => t.turnId)).toEqual(['t-2']);
+  });
+
 
   it('merges session fields, counts refusals, and reads defaults for a record that has no session', async () => {
     expect(sessionOf((await s.get('call-1'))!).refusedCalls).toBe(0);
@@ -218,6 +227,11 @@ describe('SqlAssistantStore turn statements', () => {
     expect(calls[0]!.sql).toMatch(/UPDATE meeting_assistant_turns SET status = :to[\s\S]*AND status IN \('pending', 'running'\)/);
     await store().listTurns('call-1', { askedBy: 'u-vera', statuses: ['pending'] });
     expect(calls[1]!.sql).toMatch(/asked_by = :asked AND status IN \('pending'\)/);
+  });
+
+  it('finds due turns across calls with one bounded statement (M9)', async () => {
+    await store().dueTurns(5000, 50);
+    expect(calls[0]!.sql).toMatch(/WHERE status IN \('pending', 'running'\) AND expires_at <= :now::timestamptz[\s\S]*LIMIT :limit/);
   });
 
   it('counts a refusal and merges the session in single statements', async () => {

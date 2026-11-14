@@ -30,7 +30,7 @@ jest.mock('../chat.js', () => {
 import { LineIntake } from '../intake.js';
 import { MemoryAssistantStore } from '../store.js';
 import { MockTranscriptSource } from '../transcript-source.js';
-import { AssistantRuntime, TYPED_UNSUPPORTED_REPLY, READ_TURN_TTL_MS, WRITE_TURN_TTL_MS, classifyCall, describeCall, type StartContext } from '../orchestrator.js';
+import { AssistantRuntime, startTurnSweep, TYPED_UNSUPPORTED_REPLY, READ_TURN_TTL_MS, WRITE_TURN_TTL_MS, classifyCall, describeCall, type StartContext } from '../orchestrator.js';
 import { ScriptedSession } from '../scripted-session.js';
 import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type SessionStartInput } from '../session.js';
 import { newAssistantSession, sessionOf, type AssistantRecord } from '../types.js';
@@ -720,5 +720,42 @@ describe('a failed replacement retries, then leaves (B9)', () => {
     await runtime.stop(CALL);
     expect(finished).toHaveLength(1);
     expect(finished[0]!.usageSeconds).toBe(180); // 90 from the dropped session once, 90 from the replacement
+  });
+});
+
+describe('turns expire without a live run (M9)', () => {
+  const offer = async (turnId: string, kind: 'write' | 'read', status: 'pending' | 'running', expiresAt: number) => {
+    await store.createTurn({ turnId, callId: CALL, askedBy: ALICE, tool: { name: 'create', args: {} }, kind, status, ...(kind === 'write' ? { actionId: `a-${turnId}` } : {}), createdAt: now, expiresAt });
+    if (kind === 'write') {
+      await store.createAction({ callId: CALL, actionId: `a-${turnId}`, messageId: `msg-${turnId}`, askedBy: ALICE, toolName: 'create', argsDigest: 'd',
+        status: status === 'running' ? 'confirmed' : 'waiting', createdAt: now, decidedBy: null, decidedAt: null, resultText: null });
+    }
+  };
+
+  it('a sweep with no run in memory expires pending and running turns past their time and settles their cards, and leaves the rest', async () => {
+    await runtime.stop(CALL); // Nova has left: no run exists in this process
+    expect(runtime.isRunning(CALL)).toBe(false);
+    await offer('m-1', 'write', 'pending', now + 1000);
+    await offer('m-2', 'write', 'running', now + 1000);
+    await offer('t-3', 'read', 'pending', now + 1000);
+    await offer('m-4', 'write', 'pending', now + 600_000);
+    now += 2000;
+    expect(await runtime.sweepTurns()).toBe(3);
+    expect((await store.listTurns(CALL)).map((t) => [t.turnId, t.status])).toEqual([['m-1', 'expired'], ['m-2', 'expired'], ['m-4', 'pending'], ['t-3', 'expired']]);
+    expect((await store.getAction(CALL, 'a-m-1'))!.status).toBe('expired');
+    expect((await store.getAction(CALL, 'a-m-2'))!.status).toBe('expired');
+    expect((await store.getAction(CALL, 'a-m-4'))!.status).toBe('waiting');
+    expect(await runtime.sweepTurns()).toBe(0);
+  });
+
+  it('the timer runs the sweep on its own, started with no live run', async () => {
+    await runtime.stop(CALL);
+    await offer('m-1', 'write', 'pending', now + 1000);
+    let tick: (() => void) | null = null;
+    const stop = startTurnSweep(30_000, () => runtime, { set: ((fn: () => void) => { tick = fn; return 1; }) as never, clear: (() => { tick = null; }) as never });
+    now += 2000;
+    tick!(); await flush();
+    expect((await store.getTurn(CALL, 'm-1'))!.status).toBe('expired');
+    stop(); expect(tick).toBeNull();
   });
 });
