@@ -5,7 +5,7 @@
 //   assistant-action  a card that stands in for the bubble's text (`renderMessageBody`): detail lines, a status, and Confirm and Decline for the asker only; everyone else
 //                     reads it with "Waiting for <name>". A decision updates the same message (the server edits it),
 //                     so the card changes in place for every reader.
-// The card's own sentence is its summary, so the bubble does not repeat it.
+// The card's first line is its summary sentence (the bubble does not repeat it), then every detail line, then the status and the controls.
 // Library components only.
 
 import { useState, type ReactNode } from 'react';
@@ -34,6 +34,7 @@ export function AssistantActionCard({ action, viewerId, callId, decide = decideA
   return (
     <Card padding="sm" className="mt-1 max-w-md" data-testid="assistant-action-card" data-status={action.status}>
       <Stack gap="sm">
+        <T size="sm" weight="medium" wrap data-testid="assistant-action-summary">{action.summary}</T>
         {action.detail.length > 0 && (
           <Stack gap="none" data-testid="assistant-action-detail">
             {action.detail.map((line, index) => <T key={index} size="xs" tone="secondary" wrap>{line}</T>)}
@@ -77,7 +78,7 @@ export function AssistantMessageExtras({ metadata }: Pick<AssistantMessageExtras
 /** A Nova notice as a system line (the message's own sentence); null for any other message, so the thread draws it as usual. */
 export function assistantSystemLine(message: { content: string; metadata?: Record<string, unknown> }): ReactNode | null {
   return readAssistantMessage(message.metadata)?.kind === 'assistant-notice'
-    ? <span data-testid="assistant-notice-line">{message.content}</span> : null;
+    ? <T size="xs" tone="secondary" wrap data-testid="assistant-notice-line">{message.content}</T> : null;
 }
 
 /** The action card standing in for the bubble's text; null for any other message. */
