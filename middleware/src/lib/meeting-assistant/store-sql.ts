@@ -6,7 +6,7 @@
 // bumps `next_seq`, guarded by `state = 'listening'` and by the caption not being stored yet, and
 // the INSERT reads the claimed seq from it. No transaction needed, no lost or doubled line numbers.
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
-import type { AssistantAction, AssistantRecord, MinutesActionItem, MinutesRecord, MinutesWriterKind, AssistantSession, AssistantState, AssistantTurn, PendingRequest, TranscriptLine, TurnKind, TurnStatus } from './types.js';
+import type { AssistantAction, AssistantRecord, MinutesActionItem, MinutesRecord, MinutesWriterKind, AssistantSession, AssistantState, AssistantTurn, PendingRequest, Proposal, ProposalOutcome, ProposalResponse, ProposalSource, ProposalState, TranscriptLine, TurnKind, TurnStatus } from './types.js';
 import { WRITE_FINISH_MS } from './limits.js';
 import { MAX_PENDING_REQUESTS, REMOVED_BY_INVITER, type ActionChange, type AssistantStore, type MinutesFilter, type StateChange, type TurnChange, type TurnFilter } from './store.js';
 
@@ -76,6 +76,18 @@ export function actionFromRow(r: Record<string, unknown>): AssistantAction {
   return { callId: str(r['call_id']), actionId: str(r['action_id']), messageId: str(r['message_id']), askedBy: str(r['asked_by']),
     toolName: str(r['tool_name']), argsDigest: str(r['args_digest']), status: str(r['status']) as AssistantAction['status'],
     createdAt: ms(r['created_at']), decidedBy: strOrNull(r['decided_by']), decidedAt: msOrNull(r['decided_at']), resultText: strOrNull(r['result_text']) };
+}
+
+const PROPOSAL_COLUMNS = 'call_id, proposal_id, tenant, statement, outcome, args_digest, named, executor, source, evidence, state, responses, dismissed_by, created_at, updated_at, expires_at, version';
+
+export function proposalFromRow(r: Record<string, unknown>): Proposal {
+  return {
+    id: str(r['proposal_id']), callId: str(r['call_id']), tenant: str(r['tenant']), statement: str(r['statement']),
+    outcome: jsonObject<ProposalOutcome>(r['outcome']), argsDigest: str(r['args_digest']), named: json<string[]>(r['named'], []), executor: str(r['executor']),
+    source: str(r['source']) as ProposalSource, evidence: json<number[]>(r['evidence'], []), state: str(r['state']) as ProposalState,
+    responses: json<ProposalResponse[]>(r['responses'], []), dismissedBy: strOrNull(r['dismissed_by']),
+    createdAt: ms(r['created_at']), updatedAt: ms(r['updated_at']), expiresAt: msOrNull(r['expires_at']), version: Number(r['version'] ?? 1),
+  };
 }
 
 const MINUTES_COLUMNS = 'call_id, tenant, lobby, initiative_id, call_name, started_at, ended_at, invited_by, attendees, summary, decisions, action_items, topics, line_count, truncated, writer, created_at, deleted_at, deleted_by';
@@ -354,6 +366,7 @@ export class SqlAssistantStore implements AssistantStore {
             minutes AS (DELETE FROM meeting_minutes WHERE call_id IN (SELECT call_id FROM eligible) RETURNING 1),
             turns AS (DELETE FROM meeting_assistant_turns WHERE call_id IN (SELECT call_id FROM eligible) RETURNING 1),
             actions AS (DELETE FROM meeting_assistant_actions WHERE call_id IN (SELECT call_id FROM eligible) RETURNING 1),
+            proposals AS (DELETE FROM meeting_assistant_proposals WHERE call_id IN (SELECT call_id FROM eligible) RETURNING 1),
             gone AS (DELETE FROM meeting_assistants WHERE call_id IN (SELECT call_id FROM eligible) RETURNING 1)
        SELECT count(*) AS removed FROM gone`,
       [s('call', callId)],
@@ -399,13 +412,14 @@ export class SqlAssistantStore implements AssistantStore {
   async tombstoneMinutes(callId: string, by: string, at: number) {
     // One statement, so it is all or nothing and safe to repeat: the lines go, the minutes row is written or blanked as a tombstone, and the
     // other tables that hold words are blanked in the same step (audit M2): the record's pending requests, each turn's tool arguments and
-    // each action's result text. Open turns and cards are expired in the same step, so a late result is refused. A call with no assistant record has nothing to hold the tombstone row.
+    // each action's result text; the proposals (statements, reasons, arguments) are deleted. Open turns and cards are expired in the same step, so a late result is refused. A call with no assistant record has nothing to hold the tombstone row.
     const rows = await this.exec(
       `WITH gone AS (DELETE FROM meeting_transcript_lines WHERE call_id = :call RETURNING 1),
             requests AS (UPDATE meeting_assistants SET pending_requests = '[]'::jsonb WHERE call_id = :call RETURNING 1),
             turns AS (UPDATE meeting_assistant_turns SET tool_args = to_jsonb(:removed::text), status = CASE WHEN status IN ('pending', 'running') THEN 'expired' ELSE status END WHERE call_id = :call RETURNING 1),
             actions AS (UPDATE meeting_assistant_actions SET args_digest = '', result_text = CASE WHEN result_text IS NULL THEN NULL ELSE :removed END,
                           status = CASE WHEN status IN ('waiting', 'confirmed') THEN 'expired' ELSE status END WHERE call_id = :call RETURNING 1),
+            proposals AS (DELETE FROM meeting_assistant_proposals WHERE call_id = :call RETURNING 1),
             marked AS (
               INSERT INTO meeting_minutes (call_id, tenant, lobby, initiative_id, started_at, ended_at, invited_by, writer, created_at, deleted_at, deleted_by)
               SELECT call_id, tenant, lobby, initiative_id, invited_at, COALESCE(left_at, invited_at), invited_by, 'none', :at::timestamptz, :at::timestamptz, :by
@@ -425,5 +439,55 @@ export class SqlAssistantStore implements AssistantStore {
       [s('cutoff', iso(cutoffMs))],
     );
     return Number(rows[0]?.['removed'] ?? 0);
+  }
+
+  async createProposal(p: Proposal) {
+    // The tenant comes from the call's record, as for turns and actions: no record, no row.
+    const rows = await this.exec(
+      `INSERT INTO meeting_assistant_proposals (call_id, proposal_id, tenant, statement, outcome, args_digest, named, executor, source, evidence, state, responses, created_at, updated_at, version)
+       SELECT :call, :id, tenant, :statement, :outcome::jsonb, :digest, :named::jsonb, :executor, :source, :evidence::jsonb, :state, :responses::jsonb, :at::timestamptz, :at::timestamptz, 1
+       FROM meeting_assistants WHERE call_id = :call
+       ON CONFLICT (call_id, proposal_id) DO NOTHING
+       RETURNING ${PROPOSAL_COLUMNS}`,
+      [s('call', p.callId), s('id', p.id), s('statement', p.statement), s('outcome', JSON.stringify(p.outcome)), s('digest', p.argsDigest),
+        s('named', JSON.stringify(p.named)), s('executor', p.executor), s('source', p.source), s('evidence', JSON.stringify(p.evidence)),
+        s('state', p.state), s('responses', JSON.stringify(p.responses)), s('at', iso(p.createdAt))],
+    );
+    if (rows[0]) return { proposal: proposalFromRow(rows[0]), created: true };
+    const existing = await this.getProposal(p.callId, p.id);
+    if (!existing) throw new Error('meeting assistant proposal vanished between insert and read (or the call has no assistant)');
+    return { proposal: existing, created: false };
+  }
+
+  async getProposal(callId: string, id: string) {
+    const rows = await this.exec(`SELECT ${PROPOSAL_COLUMNS} FROM meeting_assistant_proposals WHERE call_id = :call AND proposal_id = :id`, [s('call', callId), s('id', id)]);
+    return rows[0] ? proposalFromRow(rows[0]) : null;
+  }
+
+  async listProposals(callId: string) {
+    const rows = await this.exec(`SELECT ${PROPOSAL_COLUMNS} FROM meeting_assistant_proposals WHERE call_id = :call ORDER BY created_at ASC, proposal_id ASC`, [s('call', callId)]);
+    return rows.map(proposalFromRow);
+  }
+
+  async saveProposal(next: Proposal, expectedVersion: number) {
+    // One conditional update on the version read: of two answers written at once exactly one lands, and the other reads again.
+    const rows = await this.exec(
+      `UPDATE meeting_assistant_proposals SET state = :state, responses = :responses::jsonb, dismissed_by = :dismissed,
+         expires_at = :expires::timestamptz, updated_at = :at::timestamptz, version = version + 1
+       WHERE call_id = :call AND proposal_id = :id AND version = :version
+       RETURNING ${PROPOSAL_COLUMNS}`,
+      [s('call', next.callId), s('id', next.id), s('state', next.state), s('responses', JSON.stringify(next.responses)), sOrNull('dismissed', next.dismissedBy),
+        sOrNull('expires', next.expiresAt === null ? null : iso(next.expiresAt)), s('at', iso(next.updatedAt)), n('version', expectedVersion)],
+    );
+    return rows[0] ? proposalFromRow(rows[0]) : null;
+  }
+
+  async setProposalExpiry(callId: string, expiresAt: number) {
+    const rows = await this.exec(
+      `WITH set AS (UPDATE meeting_assistant_proposals SET expires_at = :expires::timestamptz, version = version + 1
+                    WHERE call_id = :call AND expires_at IS NULL RETURNING 1) SELECT count(*) AS changed FROM set`,
+      [s('call', callId), s('expires', iso(expiresAt))],
+    );
+    return Number(rows[0]?.['changed'] ?? 0);
   }
 }

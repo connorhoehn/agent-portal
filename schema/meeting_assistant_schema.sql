@@ -130,3 +130,32 @@ CREATE INDEX IF NOT EXISTS meeting_minutes_created_idx ON meeting_minutes (creat
 
 -- Package 7a: Nova speaking aloud is a per-call switch, off by default. Audio itself is never stored; this is only the flag.
 ALTER TABLE meeting_assistants ADD COLUMN IF NOT EXISTS voice BOOLEAN NOT NULL DEFAULT false;
+
+-- Meeting consent, package 1 (docs/meeting-consent-design.md): proposals people in the call appear to have agreed, waiting for their
+-- explicit consent. One row per proposal. It is consented only when two distinct people consented, including every named person and
+-- the executor, and no objection is open (lib/meeting-assistant/proposals.ts). The statement, outcome, digest, named people and executor
+-- never change after the insert; every answer is a conditional update on `version`, so two answers at once are both kept. `expires_at`
+-- is set when the call ends (end + 72 hours) and only ends an unfinished proposal; nothing runs on a timer. Deleted with the call's
+-- record (the inviter's delete and the retention sweep).
+CREATE TABLE IF NOT EXISTS meeting_assistant_proposals (
+  call_id       TEXT        NOT NULL REFERENCES meeting_assistants (call_id) ON DELETE CASCADE,
+  proposal_id   TEXT        NOT NULL CHECK (proposal_id ~ '^[a-zA-Z0-9:_-]{1,128}$'),
+  tenant        TEXT        NOT NULL,
+  statement     TEXT        NOT NULL CHECK (char_length(statement) BETWEEN 1 AND 280),
+  outcome       JSONB       NOT NULL CHECK (jsonb_typeof(outcome) = 'object'),
+  args_digest   TEXT        NOT NULL,
+  named         JSONB       NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(named) = 'array'),
+  executor      TEXT        NOT NULL,
+  source        TEXT        NOT NULL CHECK (source IN ('watcher', 'asked', 'dev')),
+  evidence      JSONB       NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(evidence) = 'array'),
+  state         TEXT        NOT NULL DEFAULT 'open' CHECK (state IN ('open', 'consented', 'running', 'done', 'failed', 'objected', 'dismissed', 'expired')),
+  -- One answer per person: { userId, response: 'consent' | 'object', reason, at }. A withdrawal removes it.
+  responses     JSONB       NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(responses) = 'array'),
+  dismissed_by  TEXT,
+  created_at    TIMESTAMPTZ NOT NULL,
+  updated_at    TIMESTAMPTZ NOT NULL,
+  expires_at    TIMESTAMPTZ,
+  version       INTEGER     NOT NULL DEFAULT 1 CHECK (version >= 1),
+  PRIMARY KEY (call_id, proposal_id)
+);
+CREATE INDEX IF NOT EXISTS meeting_assistant_proposals_due_idx ON meeting_assistant_proposals (expires_at) WHERE state IN ('open', 'objected', 'consented');

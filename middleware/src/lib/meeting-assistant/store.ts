@@ -12,7 +12,10 @@
 //  * An action is created once per (call, actionId); `decideAction` moves it only from the statuses
 //    named in `from` and returns null otherwise, so two clicks decide once. A turn (a tool call waiting on the asker's
 //    browser) is the same: created once per (call, turnId), `moveTurn` moves it only from the statuses named.
-import type { AssistantAction, AssistantRecord, MinutesRecord, AssistantSession, AssistantState, AssistantTurn, PendingRequest, TranscriptLine, TurnStatus } from './types.js';
+//  * A proposal is created once per (call, id). `saveProposal` writes only when the stored version is the one the caller
+//    read, so of two responses at once one wins and the other reads again (lib/meeting-assistant/proposals.ts retries).
+//    Its statement, outcome, digest, named people and executor are never rewritten.
+import type { AssistantAction, AssistantRecord, MinutesRecord, AssistantSession, AssistantState, AssistantTurn, PendingRequest, Proposal, TranscriptLine, TurnStatus } from './types.js';
 import { sessionOf } from './types.js';
 import { WRITE_FINISH_MS } from './limits.js';
 
@@ -101,6 +104,18 @@ export interface AssistantStore {
   tombstoneMinutes(callId: string, by: string, at: number): Promise<number>;
   /** Delete minutes and tombstones created at or before `cutoffMs`. Returns how many went. */
   sweepMinutes(cutoffMs: number): Promise<number>;
+  /** Record a proposal; an existing (call, id) is returned as it is with `created: false`. */
+  createProposal(proposal: Proposal): Promise<{ proposal: Proposal; created: boolean }>;
+  getProposal(callId: string, id: string): Promise<Proposal | null>;
+  /** The call's proposals, oldest first. */
+  listProposals(callId: string): Promise<Proposal[]>;
+  /**
+   * Write the proposal's state, responses, dismissal, expiry and update time, bumping its version, ONLY when the stored version is
+   * `expectedVersion`. Null when it is unknown or someone else wrote first. The frozen fields are never touched.
+   */
+  saveProposal(next: Proposal, expectedVersion: number): Promise<Proposal | null>;
+  /** Set the expiry of every proposal of the call that has none yet (the call ended). Returns how many were set. */
+  setProposalExpiry(callId: string, expiresAt: number): Promise<number>;
 }
 
 export interface MinutesFilter { tenant: string; userId: string; initiativeId?: string; before?: number; limit: number }
@@ -114,6 +129,7 @@ export class MemoryAssistantStore implements AssistantStore {
   private readonly actions = new Map<string, AssistantAction>();
   private readonly turns = new Map<string, AssistantTurn>();
   private readonly minutes = new Map<string, MinutesRecord>();
+  private readonly proposals = new Map<string, Proposal>();
 
   async get(callId: string) { const r = this.records.get(callId); return r ? copy(r) : null; }
 
@@ -273,6 +289,7 @@ export class MemoryAssistantStore implements AssistantStore {
     this.records.delete(callId); this.transcript.delete(callId); this.minutes.delete(callId);
     for (const [k, t] of this.turns) if (t.callId === callId) this.turns.delete(k);
     for (const [k, a] of this.actions) if (a.callId === callId) this.actions.delete(k);
+    for (const [k, p] of this.proposals) if (p.callId === callId) this.proposals.delete(k);
     return true;
   }
 
@@ -305,6 +322,8 @@ export class MemoryAssistantStore implements AssistantStore {
     // Open turns and cards are expired too, so a late result is refused.
     for (const t of this.turns.values()) if (t.callId === callId) { t.tool = { name: t.tool.name, args: REMOVED_BY_INVITER }; if (t.status === 'pending' || t.status === 'running') t.status = 'expired'; }
     for (const a of this.actions.values()) if (a.callId === callId) { a.argsDigest = ''; if (a.resultText !== null) a.resultText = REMOVED_BY_INVITER; if (a.status === 'waiting' || a.status === 'confirmed') a.status = 'expired'; }
+    // Proposals hold the call's words (statement, reasons, arguments): they go with the delete.
+    for (const [k, p] of this.proposals) if (p.callId === callId) this.proposals.delete(k);
     const old = this.minutes.get(callId);
     this.minutes.set(callId, tombstone(callId, old, r, by, at));
     return rows.length;
@@ -314,6 +333,40 @@ export class MemoryAssistantStore implements AssistantStore {
     let gone = 0;
     for (const [id, m] of this.minutes) if (m.createdAt <= cutoffMs) { this.minutes.delete(id); gone += 1; }
     return gone;
+  }
+
+  async createProposal(proposal: Proposal) {
+    const key = `${proposal.callId}\0${proposal.id}`;
+    const existing = this.proposals.get(key);
+    if (existing) return { proposal: copy(existing), created: false };
+    // Like the SQL insert, which takes the tenant from the call's record: no record, no proposal.
+    const r = this.records.get(proposal.callId);
+    if (!r) throw new Error('meeting assistant proposal has no call record');
+    const stored = { ...copy(proposal), tenant: r.tenant };
+    this.proposals.set(key, stored);
+    return { proposal: copy(stored), created: true };
+  }
+
+  async getProposal(callId: string, id: string) { const p = this.proposals.get(`${callId}\0${id}`); return p ? copy(p) : null; }
+
+  async listProposals(callId: string) {
+    return [...this.proposals.values()].filter((p) => p.callId === callId)
+      .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)).map(copy);
+  }
+
+  async saveProposal(next: Proposal, expectedVersion: number) {
+    // Read, compare and write in one synchronous step: no await between them, so two saves cannot both pass the check.
+    const p = this.proposals.get(`${next.callId}\0${next.id}`);
+    if (!p || p.version !== expectedVersion) return null;
+    p.state = next.state; p.responses = copy(next.responses); p.dismissedBy = next.dismissedBy;
+    p.expiresAt = next.expiresAt; p.updatedAt = next.updatedAt; p.version = expectedVersion + 1;
+    return copy(p);
+  }
+
+  async setProposalExpiry(callId: string, expiresAt: number) {
+    let set = 0;
+    for (const p of this.proposals.values()) if (p.callId === callId && p.expiresAt === null) { p.expiresAt = expiresAt; p.version += 1; set += 1; }
+    return set;
   }
 }
 

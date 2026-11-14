@@ -175,6 +175,54 @@ export interface AssistantAction {
   resultText: string | null;
 }
 
+/**
+ * A proposal (docs/meeting-consent-design.md): something people in the call appear to have agreed, waiting for their explicit consent.
+ * open -> consented -> running -> done | failed, or objected, dismissed, expired. The rule is in proposals.ts.
+ */
+export type ProposalState = 'open' | 'consented' | 'running' | 'done' | 'failed' | 'objected' | 'dismissed' | 'expired';
+export type ProposalSource = 'watcher' | 'asked' | 'dev';
+/** What runs once consented, frozen at creation: record a decision on the initiative, or one tool call in the executor's browser. */
+export type ProposalOutcome =
+  | { kind: 'decision'; initiativeId: string | null }
+  | { kind: 'tool'; name: string; args: unknown };
+
+/** One person's current answer. Withdrawing removes it. An objection's reason is shown to everyone in the call. */
+export interface ProposalResponse {
+  userId: string;
+  response: 'consent' | 'object';
+  /** One line, at most 200 characters; objections only. */
+  reason: string | null;
+  at: number;
+}
+
+export interface Proposal {
+  id: string;
+  callId: string;
+  tenant: string;
+  /** At most 280 characters. Shown, never executed. */
+  statement: string;
+  outcome: ProposalOutcome;
+  /** sha256 of the outcome as canonical JSON (the action card's digest); the outcome never changes after creation. */
+  argsDigest: string;
+  /** People the outcome names (assignee, decider): each must consent. */
+  named: string[];
+  /** The person whose browser runs it: must consent. */
+  executor: string;
+  source: ProposalSource;
+  /** Transcript line numbers the proposal rests on. */
+  evidence: number[];
+  state: ProposalState;
+  responses: ProposalResponse[];
+  /** Who marked it "Not a decision". */
+  dismissedBy: string | null;
+  createdAt: number;
+  updatedAt: number;
+  /** End of the call + 72 hours; null while the call goes on. */
+  expiresAt: number | null;
+  /** Bumped by every change; a write names the version it read, so two responses at once never lose one. */
+  version: number;
+}
+
 /** An action item in the minutes. The owner is set only when the SERVER matched a roster display name exactly. */
 export interface MinutesActionItem {
   text: string;

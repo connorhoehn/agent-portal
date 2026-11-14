@@ -144,6 +144,7 @@ BEGIN
       ('meeting_assistant_actions',    'public.app_tenant_visible(tenant)'),
       ('meeting_assistant_turns',      'public.app_tenant_visible(tenant)'),
       ('meeting_minutes',              'public.app_tenant_visible(tenant)'),
+      ('meeting_assistant_proposals',  'public.app_tenant_visible(tenant)'),
       -- Two tenant columns.
       ('pipeline_definitions',         'public.app_tenant_visible(tenant) OR public.app_tenant_visible(context_tenant)'),
       ('pipeline_runs',                'public.app_tenant_visible(tenant) OR public.app_tenant_visible(context_tenant)'),
