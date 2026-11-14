@@ -9,8 +9,7 @@ import { useSession } from '../../lib/auth';
 import { useCapabilities } from '../../lib/capabilities';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import { onTurnsPoke } from '../../lib/meetingTurnsPoke';
-import { SeenTurns, parseTurns, processTurns } from '../../lib/meetingTurns';
-import { writeJson } from '../../lib/writeJson';
+import { PendingResults, SeenTurns, flushResults, parseClaim, parseTurns, processTurns, type ClaimResult } from '../../lib/meetingTurns';
 import { runCallTool } from '../../lib/voice/runCore';
 import { pageContextFor, pageTabsFor } from '../../lib/voice/pageContext';
 import { ResultMemory, type DeliveryRecord, type ToolContext } from '../../lib/voice/tools';
@@ -35,6 +34,35 @@ export function MeetingTurnRunner() {
   useEffect(() => {
     if (!listening || !callId || !userId) return undefined;
     const seen = new SeenTurns(`nova-turns:${callId}:${userId}`);
+    const pending = new PendingResults(`nova-results:${callId}:${userId}`);
+    // The server's clock, from the `Date` header of its answers: a turn's expiry is the server's time, not this browser's.
+    let offset = 0;
+    const serverNow = (): number => Date.now() + offset;
+    const learn = (res: Response): void => {
+      const at = Date.parse(res.headers.get('date') ?? '');
+      if (Number.isFinite(at)) offset = at - Date.now();
+    };
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const claim = async (turnId: string): Promise<ClaimResult> => {
+      try {
+        const res = await fetch(`${base}/turns/${encodeURIComponent(turnId)}/claim`, { method: 'POST', credentials: 'include', cache: 'no-store' });
+        learn(res);
+        if (res.status === 404 || res.status === 409) return { status: 'refused' };
+        return res.ok ? parseClaim(await res.json().catch(() => null)) : { status: 'error' };
+      } catch { return { status: 'error' }; }
+    };
+    const post = async (turnId: string, body: { claimId: string; ok: boolean; output?: unknown; error?: string }): Promise<number> => {
+      const res = await fetch(`${base}/turns/${encodeURIComponent(turnId)}/result`, {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      learn(res);
+      return res.status;
+    };
+    const flush = async (): Promise<void> => {
+      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+      const next = await flushResults({ pending, now: serverNow, post });
+      if (next !== null && !stopped) retryTimer = setTimeout(() => void flush(), Math.max(0, next - Date.now()));
+    };
     const base = `/api/calls/${encodeURIComponent(callId)}/assistant`;
     let stopped = false;
     let busy = false;
@@ -54,18 +82,21 @@ export function MeetingTurnRunner() {
       busy = true;
       try {
         const res = await fetch(`${base}/turns?mine=1`, { credentials: 'include', cache: 'no-store' });
+        learn(res);
         if (!res.ok || stopped) return;
         await processTurns(parseTurns(await res.json().catch(() => null)), {
-          seen, now: Date.now,
+          seen, pending, now: serverNow, claim,
           run: (name, args, write) => runCallTool(name, args, context(), { write }),
-          post: async (turnId, body) => { await writeJson(`${base}/turns/${encodeURIComponent(turnId)}/result`, 'POST', body); },
+          post,
         });
+        if (pending.size > 0 && !retryTimer) void flush();
       } catch { /* offline: the next tick asks again */ } finally { busy = false; }
     };
+    void flush(); // a result kept from before a reload is posted again, not run again
     void poll();
     const timer = setInterval(() => void poll(), TURN_POLL_MS);
     const off = onTurnsPoke(callId, () => void poll());
-    return () => { stopped = true; clearInterval(timer); off(); };
+    return () => { stopped = true; clearInterval(timer); if (retryTimer) clearTimeout(retryTimer); off(); };
   }, [listening, callId, userId, ledger, results]);
   return null;
 }
