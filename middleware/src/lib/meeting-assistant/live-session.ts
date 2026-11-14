@@ -42,6 +42,22 @@ export interface OpenAiLiveSessionOptions {
   hangup?: (providerSessionId: string) => Promise<boolean>;
 }
 
+/** One output frame is at most 100 ms of PCM16 mono 24 kHz. */
+export const OUTPUT_FRAME_BYTES = 4800;
+/** Silence that follows the last voiced frame and is still relayed, so an utterance does not end mid-word (300 ms = 3 frames). */
+export const OUTPUT_TAIL_FRAMES = 3;
+/** A frame whose RMS (of the 16-bit samples) is at or under this is silence. The provider's silent frames are all zero. */
+export const OUTPUT_VOICED_RMS = 100;
+
+/** RMS of the little-endian 16-bit samples in `pcm`. */
+export function pcm16Rms(pcm: Buffer): number {
+  const n = pcm.length >> 1;
+  if (n === 0) return 0;
+  let sum = 0;
+  for (let i = 0; i < n; i += 1) { const v = pcm.readInt16LE(i * 2); sum += v * v; }
+  return Math.sqrt(sum / n);
+}
+
 const SENTENCE_END = /[.!?]["')\]]*\s*$/;
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0);
 
@@ -65,6 +81,9 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   private input: Piece | null = null;
   private output: Piece | null = null;
   private idle: ReturnType<typeof setTimeout> | null = null;
+  /** Output audio: silent frames still owed after the last voiced one, and the frame counter. Audio is never kept. */
+  private tailLeft = 0;
+  private audioSeq = 0;
   private closing: Promise<void> | null = null;
   private onClosed: (() => void) | null = null;
   private fail: ((e: Error) => void) | null = null;
@@ -175,6 +194,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       case 'session.started': {
         const id = (ev['session'] as { id?: unknown } | undefined)?.id;
         if (typeof id === 'string' && /^[\w-]{1,200}$/.test(id)) this.providerSessionId = id;
+        this.noteExpiry(ev);
         this.startedWall = this.clock();
         this.started = true;
         this.succeed?.();
@@ -189,7 +209,9 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       }
       case 'response.event': this.onResponseEvent(ev['event']); return;
       case 'session.usage.updated': this.onUsage(ev); return;
+      case 'session.output_audio.delta': this.onAudio(ev['delta']); return;
       case 'session.closed': {
+        this.noteExpiry(ev);
         this.onUsage(ev);
         this.flushInput(); this.flushOutput();
         const reason = ev['reason'];
@@ -204,6 +226,35 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
         return;
       }
       default: return;
+    }
+  }
+
+  /** `session.expires_at` on `session.started` / `session.closed`: epoch seconds or milliseconds, or an ISO string. */
+  private noteExpiry(ev: Record<string, unknown>): void {
+    const raw = (ev['session'] as { expires_at?: unknown } | undefined)?.expires_at;
+    let at = NaN;
+    if (typeof raw === 'number') at = raw < 1e11 ? raw * 1000 : raw;
+    else if (typeof raw === 'string') at = /^\d+$/.test(raw) ? (Number(raw) < 1e11 ? Number(raw) * 1000 : Number(raw)) : Date.parse(raw);
+    if (Number.isFinite(at) && at > 0) this.emit('expires', { atMs: at });
+  }
+
+  /**
+   * The model's audio: the provider sends one 100 ms frame for every input frame, ALL ZERO unless the model is speaking
+   * (measured 13 November). Silence is dropped here so nothing is relayed while it is quiet; a voiced frame and the 300 ms
+   * after it go out, the last of them marked `last`. The bytes are decoded, passed on, and forgotten: never logged or written.
+   */
+  private onAudio(delta: unknown): void {
+    if (this.ended || typeof delta !== 'string' || !delta) return;
+    const whole = Buffer.from(delta, 'base64');
+    const usable = whole.length - (whole.length % 2);
+    for (let at = 0; at < usable; at += OUTPUT_FRAME_BYTES) {
+      const pcm = whole.subarray(at, Math.min(usable, at + OUTPUT_FRAME_BYTES));
+      if (pcm16Rms(pcm) > OUTPUT_VOICED_RMS) this.tailLeft = OUTPUT_TAIL_FRAMES;
+      else if (this.tailLeft === 0) continue;
+      else this.tailLeft -= 1;
+      this.audioSeq += 1;
+      const last = this.tailLeft === 0;
+      this.emit('outputAudio', { pcm: Buffer.from(pcm), seq: this.audioSeq, ...(last ? { last: true as const } : {}) });
     }
   }
 

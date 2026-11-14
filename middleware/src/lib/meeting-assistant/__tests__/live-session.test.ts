@@ -50,7 +50,7 @@ beforeEach(() => {
 
 function make(over: Partial<ConstructorParameters<typeof OpenAiLiveSession>[0]> = {}) {
   const s = new OpenAiLiveSession({ model: 'gpt-live-1', voice: 'marin', delegationModel: 'gpt-6-luna', idleFlushMs: 40, closeTimeoutMs: 120, ...over });
-  const seen: { [K in keyof SessionEvents]: SessionEvents[K][] } = { inputTranscript: [], outputTranscript: [], toolCall: [], delegation: [], usage: [], closed: [], error: [] };
+  const seen: { [K in keyof SessionEvents]: SessionEvents[K][] } = { inputTranscript: [], outputTranscript: [], toolCall: [], delegation: [], usage: [], outputAudio: [], expires: [], closed: [], error: [] };
   (Object.keys(seen) as Array<keyof SessionEvents>).forEach((k) => s.on(k, ((e: never) => { (seen[k] as unknown[]).push(e); }) as never));
   return { s, seen };
 }
@@ -139,6 +139,51 @@ describe('transcripts', () => {
     expect(seen.delegation).toHaveLength(1);
     expect(seen.inputTranscript.map((i) => i.text)).toEqual(['Hey']);
     await s.close();
+  });
+});
+
+describe('output audio', () => {
+  const pcmB64 = (amp: number, bytes = 4800) => {
+    const b = Buffer.alloc(bytes);
+    if (amp) for (let i = 0; i < Math.floor(bytes / 2); i += 1) b.writeInt16LE(i % 2 ? amp : -amp, i * 2);
+    return b.toString('base64');
+  };
+  const delta = (amp: number, bytes?: number) => frame({ type: 'session.output_audio.delta', delta: pcmB64(amp, bytes), event_id: 'e' });
+
+  it('drops silent frames, relays voiced frames and a 300 ms tail, marks the last, and starts over for the next utterance', async () => {
+    const { s, seen } = make();
+    await s.start(START);
+    for (let i = 0; i < 5; i += 1) delta(0);
+    expect(seen.outputAudio).toHaveLength(0);
+    delta(3000); delta(3000);
+    for (let i = 0; i < 6; i += 1) delta(0);
+    await tick(20);
+    expect(seen.outputAudio.map((f) => f.seq)).toEqual([1, 2, 3, 4, 5]);
+    expect(seen.outputAudio.map((f) => f.last === true)).toEqual([false, false, false, false, true]);
+    expect(seen.outputAudio.every((f) => f.pcm.length === 4800)).toBe(true);
+    delta(3000); delta(0); delta(3000); delta(0); delta(0); delta(0);
+    await tick(20);
+    expect(seen.outputAudio.slice(5).map((f) => f.last === true)).toEqual([false, false, false, false, false, true]);
+    await s.close();
+  });
+
+  it('cuts an oversized delta into frames of at most 100 ms and ignores a bad one', async () => {
+    const { s, seen } = make();
+    await s.start(START);
+    delta(3000, 9601); frame({ type: 'session.output_audio.delta', delta: 42 }); frame({ type: 'session.output_audio.delta' });
+    await tick(20);
+    expect(seen.outputAudio.map((f) => f.pcm.length)).toEqual([4800, 4800]);
+    await s.close();
+  });
+
+  it('reports expires_at from session.started (seconds, ms or ISO) as epoch milliseconds', async () => {
+    for (const [raw, want] of [[1_800_000_000, 1_800_000_000_000], [1_800_000_000_000, 1_800_000_000_000], ['2027-01-15T08:00:00Z', Date.parse('2027-01-15T08:00:00Z')]] as const) {
+      onClientEvent = (ev, sock) => { if (ev['type'] === 'session.start') sock.send(JSON.stringify({ type: 'session.started', session: { id: 'live_u0_abc', expires_at: raw } })); };
+      const { s, seen } = make();
+      await s.start(START);
+      expect(seen.expires).toEqual([{ atMs: want }]);
+      await s.close();
+    }
   });
 });
 

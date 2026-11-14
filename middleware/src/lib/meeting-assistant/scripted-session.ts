@@ -2,6 +2,7 @@
 // no network. The orchestrator hands it each request the detector found, WITH the person who asked (the server's own
 // record of who spoke, never anything the session says), and it answers by a small rule table, so walks and tests
 // need no provider. Usage is the seconds it was open, so the ledger shows a realistic entry.
+import { OUTPUT_FRAME_BYTES, OUTPUT_TAIL_FRAMES } from './live-session.js';
 import {
   SessionEmitter, type LiveMeetingSession, type SessionStartInput,
 } from './session.js';
@@ -55,6 +56,21 @@ export function scriptedSpeech(output: string): string {
   return 'Here is the result.';
 }
 
+/** The synthetic "voice" of the scripted session: 600 ms of a 440 Hz sine at low level, in 100 ms frames, then the 300 ms silent tail. */
+export const SCRIPT_TONE_FRAMES = 6;
+export function scriptToneFrames(): Buffer[] {
+  const perFrame = OUTPUT_FRAME_BYTES / 2;
+  const frames: Buffer[] = [];
+  for (let f = 0; f < SCRIPT_TONE_FRAMES + OUTPUT_TAIL_FRAMES; f += 1) {
+    const buf = Buffer.alloc(OUTPUT_FRAME_BYTES);
+    if (f < SCRIPT_TONE_FRAMES) {
+      for (let i = 0; i < perFrame; i += 1) buf.writeInt16LE(Math.round(2000 * Math.sin((2 * Math.PI * 440 * (f * perFrame + i)) / 24_000)), i * 2);
+    }
+    frames.push(buf);
+  }
+  return frames;
+}
+
 export class ScriptedSession extends SessionEmitter implements LiveMeetingSession {
   readonly kind = 'scripted' as const;
   readonly acceptsText = true;
@@ -65,6 +81,7 @@ export class ScriptedSession extends SessionEmitter implements LiveMeetingSessio
   private startedAt = 0;
   private ended = false;
   private seq = 0;
+  private audioSeq = 0;
 
   constructor(private readonly clock: () => number = Date.now) { super(); }
 
@@ -80,8 +97,19 @@ export class ScriptedSession extends SessionEmitter implements LiveMeetingSessio
     const step = scriptFor(text);
     queueMicrotask(() => {
       if (this.ended) return;
-      if ('say' in step) { this.emit('outputTranscript', { text: step.say, final: true }); return; }
+      if ('say' in step) { this.speak(step.say); return; }
       this.emitToolCall(userId, step.call.name, step.call.args);
+    });
+  }
+
+  /** A spoken reply: its words, then the synthetic tone so a walk or a test can watch the relay with no provider. */
+  private speak(text: string, inReplyTo?: string): void {
+    this.emit('outputTranscript', { text, final: true, ...(inReplyTo ? { inReplyTo } : {}) });
+    const frames = scriptToneFrames();
+    frames.forEach((pcm, i) => {
+      if (this.ended) return;
+      this.audioSeq += 1;
+      this.emit('outputAudio', { pcm, seq: this.audioSeq, ...(i === frames.length - 1 ? { last: true as const } : {}) });
     });
   }
 
@@ -98,7 +126,7 @@ export class ScriptedSession extends SessionEmitter implements LiveMeetingSessio
   answerToolCall(callId: string, output: string): boolean {
     if (this.ended || !this.open.delete(callId)) return false;
     const text = scriptedSpeech(output);
-    queueMicrotask(() => { if (!this.ended) this.emit('outputTranscript', { text, final: true, inReplyTo: callId }); });
+    queueMicrotask(() => { if (!this.ended) this.speak(text, callId); });
     return true;
   }
 

@@ -34,10 +34,27 @@ describe('the rule table', () => {
   });
 });
 
+describe('ScriptedSession voice', () => {
+  it('emits 600 ms of tone then a 300 ms silent tail, in 100 ms frames, last marked, for each spoken reply', async () => {
+    const s = new ScriptedSession(() => 1);
+    const frames: Array<{ pcm: Buffer; seq: number; last?: true }> = [];
+    s.on('outputAudio', (f) => frames.push(f));
+    await s.start({ instructions: 'i', tools: [], backendInstructions: 'b' });
+    s.sendText('u-1', 'what is two plus two'); await flush();
+    expect(frames).toHaveLength(9);
+    expect(frames.every((f) => f.pcm.length === 4800)).toBe(true);
+    expect(frames.slice(0, 6).every((f) => f.pcm.some((b) => b !== 0))).toBe(true);
+    expect(frames.slice(6).every((f) => f.pcm.every((b) => b === 0))).toBe(true);
+    expect(frames.map((f) => f.last === true)).toEqual([false, false, false, false, false, false, false, false, true]);
+    s.sendText('u-1', 'what is two plus two'); await flush();
+    expect(frames[9]!.seq).toBe(10);
+  });
+});
+
 describe('ScriptedSession', () => {
   function make(now = { t: 1_000_000 }) {
     const s = new ScriptedSession(() => now.t);
-    const seen: { [K in keyof SessionEvents]: SessionEvents[K][] } = { inputTranscript: [], outputTranscript: [], toolCall: [], delegation: [], usage: [], closed: [], error: [] };
+    const seen: { [K in keyof SessionEvents]: SessionEvents[K][] } = { inputTranscript: [], outputTranscript: [], toolCall: [], delegation: [], usage: [], outputAudio: [], expires: [], closed: [], error: [] };
     (Object.keys(seen) as Array<keyof SessionEvents>).forEach((k) => s.on(k, ((e: never) => { (seen[k] as unknown[]).push(e); }) as never));
     return { s, seen, now };
   }

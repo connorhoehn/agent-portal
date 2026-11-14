@@ -50,6 +50,8 @@ export const TYPED_UNSUPPORTED_REPLY = 'I can only hear spoken requests in this 
 /** A call chat message that addresses Nova: it starts with the name and a comma, colon or space, or mentions @Nova. */
 export const addressesNova = (text: string): boolean => /^\s*@?nova(?:[,:\s]|$)/i.test(text) || /(^|[^\w])@nova\b/i.test(text);
 export const MAX_REPLACEMENTS = 3;
+/** The provider's session is replaced this long before its `expires_at` (about two hours after it starts). */
+export const SESSION_EXPIRY_MARGIN_MS = 5 * 60_000;
 /** A failed replacement is retried after each of these delays; when they are spent Nova leaves (audit B9). */
 export const REPLACEMENT_RETRY_MS: readonly number[] = [1000, 3000, 9000];
 /** The voice speaks a short acknowledgement the moment it delegates; output this soon after a delegation is not posted. */
@@ -147,6 +149,8 @@ interface CallRun {
   tokens: { input: number; output: number; cached: number };
   totals: { seconds: number; input: number; output: number; cached: number };
   replacements: number;
+  /** When the provider says the open session ends (epoch ms), or null when it did not say. */
+  expiresAt: number | null;
   sessionKind: 'openai' | 'scripted';
   /** Serialises session changes (pause, resume, replacement) so two never overlap. */
   chain: Promise<void>;
@@ -246,7 +250,7 @@ export class AssistantRuntime {
       ctx, session: null, unsubscribers: [], sessionStartedAt: 0, sessionNo: 0, pieceNo: 0, timeline: new VoicedTimeline(),
       calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), holding: new Set(), replies: [], lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity, heartbeatAt: -Infinity,
       delegationAt: -Infinity, answeredSinceDelegation: true, intentionalClose: false, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
-      totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, sessionKind: 'scripted', chain: Promise.resolve(), finished: false,
+      totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), finished: false,
     };
     this.runs.set(ctx.callId, run);
     try { await this.openSession(run, []); } catch (e) { this.runs.delete(ctx.callId); throw e; }
@@ -353,7 +357,7 @@ export class AssistantRuntime {
     run.sessionNo += 1; run.pieceNo = 0; run.timeline = new VoicedTimeline();
     run.usageSeconds = 0; run.tokens = { input: 0, output: 0, cached: 0 };
     run.calls = new Map(); run.turnCalls = new Map(); run.holding = new Set(); run.replies = []; run.intentionalClose = false;
-    run.delegationAt = -Infinity; run.answeredSinceDelegation = true;
+    run.delegationAt = -Infinity; run.answeredSinceDelegation = true; run.expiresAt = null;
     this.wire(run, session);
     run.sessionKind = session.kind;
     await session.start({
@@ -405,6 +409,7 @@ export class AssistantRuntime {
         run.usageSeconds = Math.max(run.usageSeconds, e.seconds);
         if (e.backendTokens) run.tokens = { input: e.backendTokens.inputTokens, output: e.backendTokens.outputTokens, cached: e.backendTokens.cachedTokens };
       }),
+      session.on('expires', (e) => { run.expiresAt = e.atMs; }),
       session.on('closed', guard((e: SessionEvents['closed']) => this.onClosed(run, session, e.reason))),
       session.on('error', (e) => console.warn('[meeting-assistant] session error', e.message)),
     );
@@ -418,12 +423,22 @@ export class AssistantRuntime {
     this.foldUsage(run);
     for (const off of run.unsubscribers.splice(0)) off();
     await this.expireOpenTurns(run, true);
+    await this.reopen(run, reason, true);
+  }
+
+  /**
+   * Nova has no session and the call still wants one: open a replacement with the last minutes as context. An unexpected close
+   * counts against MAX_REPLACEMENTS; the planned replacement before the provider's expiry does not.
+   */
+  private async reopen(run: CallRun, reason: string, counted: boolean): Promise<void> {
     const record = await this.store.get(run.ctx.callId);
     if (!record || record.state !== 'listening') return;
-    if (run.replacements >= MAX_REPLACEMENTS) { await this.giveUp(run); return; }
-    run.replacements += 1;
-    await this.store.patchSession(run.ctx.callId, { replacements: run.replacements });
-    console.warn(`[meeting-assistant] replacing session for ${run.ctx.callId} (${reason}), replacement ${run.replacements}`);
+    if (counted) {
+      if (run.replacements >= MAX_REPLACEMENTS) { await this.giveUp(run); return; }
+      run.replacements += 1;
+      await this.store.patchSession(run.ctx.callId, { replacements: run.replacements });
+    }
+    console.warn(`[meeting-assistant] replacing session for ${run.ctx.callId} (${reason})${counted ? `, replacement ${run.replacements}` : ''}`);
     // The first attempt is at once; a failed one is retried after 1, 3 and 9 seconds (audit B9). The waits run OUTSIDE the
     // serial chain, so a pause or a dismiss is never held up behind them, and each attempt re-checks that it is still wanted.
     for (let attempt = 0; attempt <= REPLACEMENT_RETRY_MS.length; attempt += 1) {
@@ -443,6 +458,27 @@ export class AssistantRuntime {
       if (opened || run.finished) return;
     }
     await this.giveUp(run);
+  }
+
+  /**
+   * The provider's session is about to expire: close it on purpose and open a fresh one with the same context, through the
+   * replacement path an unexpected close takes, but not counted against the cap. Waiting reads expire, as for a pause.
+   */
+  private async replaceBeforeExpiry(run: CallRun): Promise<void> {
+    let closed = false;
+    await this.serial(run, async () => {
+      const session = run.session;
+      if (!session || run.finished) return;
+      closed = true;
+      run.intentionalClose = true;
+      run.session = null;
+      this.deps.audio?.suspend(run.ctx.callId); // the tap stays; its audio waits for the new session
+      try { await session.close(); } catch (e) { console.warn('[meeting-assistant] session close failed', (e as Error).message); }
+      this.foldUsage(run);
+      for (const off of run.unsubscribers.splice(0)) off();
+      await this.expireOpenTurns(run, true);
+    });
+    if (closed && !run.finished) await this.reopen(run, 'planned replacement before the provider expiry', false);
   }
 
   /** Nova has no session and cannot get one: leave with a notice, stop intake and audio, settle spend and write the minutes (once). */
@@ -793,6 +829,8 @@ export class AssistantRuntime {
       if (now - run.attendanceAt >= ATTENDANCE_EVERY_MS) { run.attendanceAt = now; await this.snapshotAttendance(run.ctx.callId); }
       if (now - run.heartbeatAt >= HEARTBEAT_EVERY_MS) await this.heartbeat(run);
       await this.checkCeiling(run);
+      if (run.finished) continue;
+      if (run.session && run.expiresAt !== null && now >= run.expiresAt - SESSION_EXPIRY_MARGIN_MS) await this.replaceBeforeExpiry(run);
       if (run.finished) continue;
       const due = (await this.store.listTurns(run.ctx.callId, { statuses: ['pending', 'running'] })).filter((t) => t.expiresAt <= now);
       for (const t of due) await this.expireTurn(run, t);

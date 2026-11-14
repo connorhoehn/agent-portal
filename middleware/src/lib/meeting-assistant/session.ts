@@ -32,6 +32,10 @@ export interface SessionEvents {
   delegation: { atMs: number };
   /** Cumulative seconds the session has run, and the backend tokens so far when the provider reported them. */
   usage: { seconds: number; backendTokens?: BackendTokens };
+  /** What Nova said aloud: PCM16 mono 24 kHz, at most 100 ms, VOICED frames only (silence is dropped at the source). `seq` counts frames from 1 per session. Never stored or logged. */
+  outputAudio: { pcm: Buffer; seq: number; /** True on the final frame of an utterance (the end of the tail after the last voiced frame). */ last?: true };
+  /** The provider told us when the session ends (epoch ms). */
+  expires: { atMs: number };
   closed: { reason: string };
   error: { message: string };
 }

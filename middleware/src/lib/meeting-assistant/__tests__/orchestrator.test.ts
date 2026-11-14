@@ -32,7 +32,7 @@ import { MemoryAssistantStore } from '../store.js';
 import { MockTranscriptSource } from '../transcript-source.js';
 import { AssistantRuntime, startTurnSweep, TYPED_UNSUPPORTED_REPLY, READ_TURN_TTL_MS, WRITE_TURN_TTL_MS, classifyCall, describeCall, type StartContext } from '../orchestrator.js';
 import { ScriptedSession } from '../scripted-session.js';
-import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type SessionStartInput } from '../session.js';
+import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type SessionEvents, type SessionStartInput } from '../session.js';
 import { newAssistantSession, sessionOf, type AssistantRecord } from '../types.js';
 import { setAssistantStore } from '../store-select.js';
 
@@ -61,6 +61,7 @@ class FakeSession extends SessionEmitter implements LiveMeetingSession {
   say(text: string, inReplyTo?: string) { this.emit('outputTranscript', { text, final: true, ...(inReplyTo ? { inReplyTo } : {}) }); }
   hear(text: string, startMs: number, endMs: number) { this.emit('inputTranscript', { text, startMs, endMs }); }
   drop() { this.emit('closed', { reason: 'socket-closed' }); }
+  fire<K extends keyof SessionEvents>(type: K, event: SessionEvents[K]) { this.emit(type, event); }
   answersFor(id: string) { return this.answers.filter(([c]) => c === id); }
 }
 
@@ -481,6 +482,29 @@ describe('pause, resume, replacement and stop', () => {
     expect((await store.get(CALL))!.state).toBe('left');
     expect(mockPosts.notices.at(-1)).toMatch(/lost its connection and has left/);
     expect(finished).toHaveLength(1);
+  });
+
+  it('replaces the session 5 minutes before the provider expiry with the same context, not counted against the cap, and never twice for one session', async () => {
+    factory = () => { const s = new FakeSession(); sessions.push(s); return s; };
+    await runtime.stop(CALL); finished.length = 0;
+    runtime = new AssistantRuntime({ store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [], onFinished: async (e) => { finished.push(e); } }, { tickMs: 0 });
+    await runtime.start(ctx);
+    await store.appendLine({ callId: CALL, userId: BOB, participantId: '', speakerName: 'Bob', text: 'The deadline is Friday.', at: now - 1000, captionId: 'b1' });
+    await store.patchSession(CALL, { ceilingSeconds: 5 * 3600 });
+    const first = fake();
+    first.fire('expires', { atMs: now + 2 * 3600_000 });
+    now += 2 * 3600_000 - 6 * 60_000; await runtime.tick();
+    expect(fake()).toBe(first); // six minutes before: nothing yet
+    now += 90_000;
+    await store.appendLine({ callId: CALL, userId: BOB, participantId: '', speakerName: 'Bob', text: 'The deadline is Friday.', at: now - 1000, captionId: 'b2' });
+    await runtime.tick(); await flush();
+    expect(first.closed).toBe(true);
+    expect(fake()).not.toBe(first);
+    expect(fake().startInput!.instructions).toContain('Bob: The deadline is Friday.');
+    expect(sessionOf((await store.get(CALL))!).replacements ?? 0).toBe(0);
+    expect(runtime.isRunning(CALL)).toBe(true);
+    now += 60_000; await runtime.tick(); // the new session said no expiry yet: left alone
+    expect(sessions).toHaveLength(3); // the beforeEach one, the first fake, its replacement
   });
 
   it('stop settles once with the session seconds and tokens, and expires what was open', async () => {
