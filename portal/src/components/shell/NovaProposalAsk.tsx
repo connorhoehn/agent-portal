@@ -7,7 +7,8 @@
 //   - Esc hides it; the count on Nova's footer mark reopens it. The server judges every answer; a refusal shows on the card.
 //   - A consenter who is not the executor is offered "Run it in my browser" while it waits consented (the server's `you.canRun`);
 //     choosing it consents again as executor, so the run moves to their browser.
-//   - The meeting page asks with the same prompt after the call (`inCall: false`), without "Not a decision", which needs a seat.
+//   - Once Nova has left, the footer asks no more: unfinished proposals move to the meeting page, which asks with the same prompt
+//     (`inCall: false`) and without "Not a decision", which needs a seat. One place asks at a time, so a digit answers once.
 
 import { useEffect, useMemo } from 'react';
 import { ComposerPromptDeck, useComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
@@ -16,6 +17,7 @@ import { answerProposal, useMeetingAssistant } from '../../lib/meetingAssistant'
 import {
   consentLabel, deckQueue, keptKey, mayTakeOver, needsLine, OBJECTION_SHARED, outcomeLine, proposalCountWords, RUN_HERE, type ProposalView,
 } from '../../lib/meetingProposals';
+import { assistantPresent } from '../../lib/meetingAssistantModel';
 import { keepProposalAnswer, setProposalDeckHidden, useProposalDeck } from '../../lib/proposalDeckState';
 import { useLiveCallId } from '../../lib/liveCallId';
 
@@ -26,7 +28,8 @@ export function useProposalQueue(): { callId: string | null; queue: ProposalView
   const callId = useLiveCallId();
   const nova = useMeetingAssistant(callId);
   const { kept } = useProposalDeck(callId);
-  const queue = useMemo(() => deckQueue(nova.proposals, kept), [nova.proposals, kept]);
+  const present = assistantPresent(nova.view);
+  const queue = useMemo(() => (present ? deckQueue(nova.proposals, kept) : []), [present, nova.proposals, kept]);
   return { callId, queue };
 }
 

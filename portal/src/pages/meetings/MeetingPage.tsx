@@ -76,7 +76,8 @@ export default function MeetingPage() {
 
   if (minutes.isLoading && !minutes.data) return <LoadingState label="Loading the meeting…" />;
   const m = minutes.data;
-  const prompts = [...(proposalAsk ? [proposalAsk] : []), ...(deletePrompt ? [deletePrompt] : [])];
+  // A delete the inviter just asked for is asked first; the proposal waits behind it.
+  const prompts = [...(deletePrompt ? [deletePrompt] : []), ...(proposalAsk ? [proposalAsk] : [])];
   const runner = callId && mayRunHere ? <MeetingTurnRunner afterCall={{ callId, initiativeId: m?.initiativeId ?? null, active: true }} /> : null;
   // Drawn only when the call had proposals: a call without them keeps the page as it was.
   const proposalSection = (first: boolean) => (proposals.length ? (
