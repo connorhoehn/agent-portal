@@ -254,7 +254,7 @@ export class TapArmer {
     this.release(callId);
     this.retryPending(callId);
     const token = await this.audio().arm(callId, channelArn);
-    if (mockTranscriptEnabled()) this.localTokens.set(callId, token);
+    // A call armed against a real media server never has its token kept for the dev route: only the simulator-only path above does.
     const sinkUrl = `${cfg.sinkBaseUrl}${SINK_PATH}${token}`;
     const state: ArmedTaps = { channelArn, generation: (this.gen += 1), tapIds: new Set(), sinkUrl, noticed: false };
     this.calls.set(callId, state);

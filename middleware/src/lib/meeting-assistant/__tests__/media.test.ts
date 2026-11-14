@@ -324,3 +324,19 @@ describe('a failed tap delete is remembered and repeated (S11)', () => {
     expect(armer.pendingDeleteCount(CALL)).toBe(0);
   });
 });
+
+describe('the dev route token (mock world only)', () => {
+  it('is never handed out for a call armed against a real media server', async () => {
+    process.env['MEETING_ASSISTANT_LIVE'] = '1'; mockConfig.mock.aurora = true;
+    await armer.arm(CALL, ARN); await settle();
+    expect(armer.tapsOf(CALL)).toEqual(['tap-1']);
+    expect(armer.localToken(CALL)).toBeNull();
+  });
+
+  it('is handed out when the tap simulator stands in for the media server', async () => {
+    process.env['MEETING_ASSISTANT_LIVE'] = '1'; mockConfig.mock.aurora = true;
+    mockConfig.meetingAssistant.media = { url: '', adminToken: '', sinkBaseUrl: '' };
+    await armer.arm(CALL, ARN);
+    expect(armer.localToken(CALL)).toMatch(/\S/);
+  });
+});
