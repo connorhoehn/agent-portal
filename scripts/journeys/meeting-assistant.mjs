@@ -567,6 +567,129 @@ async function main() {
       return out.join('; ');
     });
 
+    // ── 7b. Nova's voice (package 7b): off by default, on by an inviter, played in both browsers, muted per person ──
+    // The page counts what it scheduled in data-voice-* attributes on the mark; headless sound is not asserted.
+    const voiceOf = async (p) => {
+      const a = await p.page.getByTestId('nova-mark').first().evaluate((el) => ({
+        on: el.getAttribute('data-voice') === 'true', muted: el.getAttribute('data-voice-muted') === 'true',
+        frames: Number(el.getAttribute('data-voice-frames')), ignored: Number(el.getAttribute('data-voice-ignored')), lastSeq: Number(el.getAttribute('data-voice-last-seq')),
+      }));
+      return a;
+    };
+    const watchSpeaking = (p) => p.page.evaluate(() => {
+      const el = document.querySelector('[data-testid="nova-mark"]');
+      window.__novaSeen = { speaking: false, listeningAfter: false };
+      new MutationObserver(() => {
+        const t = (el.innerText || '').trim();
+        if (/Nova is speaking/.test(t)) window.__novaSeen.speaking = true;
+        else if (window.__novaSeen.speaking && /Nova is listening/.test(t)) window.__novaSeen.listeningAfter = true;
+      }).observe(document.body, { subtree: true, childList: true, characterData: true });
+    });
+    const ask = async () => { await inject(VERA.userId, 'Nova, what is two plus two?'); };
+    const voiceWords = async (p) => (await (await p.api.get(asApi(p, 'state'))).json());
+
+    await step('7b-a: voice is off by default: after a spoken request the asker\'s page scheduled no frames and the server relayed none', async () => {
+      const before = await voiceOf(vera);
+      check(before.on === false, 'voice reads on before anyone turned it on');
+      await ask();
+      await sleep(4000);
+      const after = await voiceOf(vera);
+      check(after.frames === 0, `${after.frames} frames played with voice off`);
+      const st = await voiceWords(vera);
+      check(st.voice === false && (st.voiceFramesRelayed ?? 0) === 0, `state: voice=${st.voice} relayed=${st.voiceFramesRelayed}`);
+      return 'no frames with voice off';
+    });
+
+    await step('7b-b: the inviter turns the voice on: both see the notice in the chat and the mark says so', async () => {
+      await novaMenu(vera, "Turn Nova's voice on");
+      for (const p of [vera, nora]) {
+        await waitFor(async () => (await voiceOf(p)).on, 15000, `${p.who.userId} seeing voice on`);
+        await waitFor(async () => /turned Nova's voice on/.test(await bodyText(p.page)), 15000, `${p.who.userId} seeing the notice`);
+        const label = await p.page.getByTestId('nova-mark').first().getAttribute('aria-label');
+        check(/Nova's voice is on/.test(label ?? ''), `the mark does not say voice is on: "${label}"`);
+      }
+      await vera.page.getByTestId('nova-mark').click();
+      check(await vera.page.getByRole('menuitem', { name: "Turn Nova's voice off" }).isVisible(), 'no "Turn Nova\'s voice off" item');
+      check(await vera.page.getByRole('menuitem', { name: 'Mute Nova for me' }).isVisible(), 'no "Mute Nova for me" item');
+      await shot(vera.page, '7b-voice-menu');
+      await vera.page.keyboard.press('Escape');
+      return 'voice on: notice and mark in both pages';
+    });
+
+    await step('7b-c: a spoken request: both pages schedule frames with increasing seq, the mark reads "Nova is speaking" and goes back to listening', async () => {
+      await watchSpeaking(vera); await watchSpeaking(nora);
+      const v0 = await voiceOf(vera); const n0 = await voiceOf(nora);
+      await ask();
+      for (const [p, b] of [[vera, v0], [nora, n0]]) {
+        await waitFor(async () => (await voiceOf(p)).frames > b.frames, 20000, `${p.who.userId} scheduling frames`);
+      }
+      await sleep(2500);
+      for (const [p, b] of [[vera, v0], [nora, n0]]) {
+        const a = await voiceOf(p);
+        check(a.frames - b.frames >= 5, `${p.who.userId} scheduled only ${a.frames - b.frames} frames`);
+        check(a.lastSeq > b.lastSeq, `${p.who.userId}: seq did not rise (${b.lastSeq} -> ${a.lastSeq})`);
+        const seen = await p.page.evaluate(() => window.__novaSeen);
+        check(seen.speaking, `${p.who.userId}: the mark never read "Nova is speaking"`);
+        check(seen.listeningAfter, `${p.who.userId}: the mark did not return to "Nova is listening"`);
+        await waitMark(p.page, /^Nova is listening$/);
+      }
+      return `frames in both pages, seq ${(await voiceOf(vera)).lastSeq}`;
+    });
+
+    await step('7b-c2: while frames play the mark reads "Nova is speaking" (screenshot)', async () => {
+      const v0 = await voiceOf(vera);
+      await ask();
+      await waitMark(vera.page, /^Nova is speaking$/, 20000);
+      // At once: the mark holds "speaking" only 400 ms after the last frame, so `shot`'s settle delay would miss it.
+      await vera.page.screenshot({ path: path.join(SHOTS, '7b-speaking-1280.png') });
+      await waitFor(async () => (await voiceOf(vera)).frames > v0.frames, 5000, 'frames');
+      await waitMark(vera.page, /^Nova is listening$/);
+      return 'speaking mark captured';
+    });
+
+    await step('7b-d: the second person mutes Nova: on the next request their page plays nothing and the asker\'s still does; unmute brings it back', async () => {
+      await novaMenu(nora, 'Mute Nova for me');
+      await waitFor(async () => (await voiceOf(nora)).muted, 5000, 'the mute');
+      const v0 = await voiceOf(vera); const n0 = await voiceOf(nora);
+      await ask();
+      await waitFor(async () => (await voiceOf(vera)).frames > v0.frames, 20000, 'the asker\'s frames');
+      await sleep(3000);
+      check((await voiceOf(nora)).frames === n0.frames, 'a muted page scheduled frames');
+      await novaMenu(nora, 'Unmute Nova for me');
+      await waitFor(async () => !(await voiceOf(nora)).muted, 5000, 'the unmute');
+      const n1 = await voiceOf(nora); const v1 = await voiceOf(vera);
+      await sleep(1500);
+      await ask();
+      await waitFor(async () => (await voiceOf(nora)).frames > n1.frames, 20000, 'frames after unmute');
+      check((await voiceOf(vera)).frames > v1.frames, 'the asker stopped hearing Nova');
+      return 'muted page silent, others unaffected, unmute restores';
+    });
+
+    await step('7b-e: paused: a request plays nothing on either page; resume brings it back', async () => {
+      await sleep(2500);
+      await novaMenu(vera, 'Pause Nova');
+      await waitMark(vera.page, /^Nova is paused$/); await waitMark(nora.page, /^Nova is paused$/);
+      const v0 = await voiceOf(vera); const n0 = await voiceOf(nora);
+      await ask();
+      await sleep(4000);
+      check((await voiceOf(vera)).frames === v0.frames && (await voiceOf(nora)).frames === n0.frames, 'frames were scheduled while Nova was paused');
+      await novaMenu(vera, 'Resume Nova');
+      await waitMark(vera.page, /^Nova is listening$/); await waitMark(nora.page, /^Nova is listening$/);
+      return 'nothing scheduled while paused';
+    });
+
+    await step('7b-f: voice off: a request plays nothing and both pages say so', async () => {
+      await novaMenu(vera, "Turn Nova's voice off");
+      for (const p of [vera, nora]) await waitFor(async () => !(await voiceOf(p)).on, 15000, `${p.who.userId} seeing voice off`);
+      await sleep(1500);
+      const v0 = await voiceOf(vera); const n0 = await voiceOf(nora);
+      await ask();
+      await sleep(4000);
+      check((await voiceOf(vera)).frames === v0.frames && (await voiceOf(nora)).frames === n0.frames, 'frames were scheduled with voice off');
+      await barFits(vera.page, 'the bar with the voice items', 1280);
+      return 'nothing scheduled with voice off';
+    });
+
     // ── 6. Dismiss ──
     await step('6: dismiss: the mark goes, Invite does not return, the bar says "Nova has left this call", re-invite is refused', async () => {
       await novaMenu(nora, 'Dismiss Nova');
