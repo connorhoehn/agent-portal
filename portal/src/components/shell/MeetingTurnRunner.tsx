@@ -11,15 +11,14 @@ import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import { ownMediaId, reportMediaId } from '../../lib/meetingParticipant';
 import { useCallHost } from '../../lib/conversationCall';
 import { onTurnsPoke } from '../../lib/meetingTurnsPoke';
-import { PendingResults, SeenTurns, flushResults, parseClaim, parseTurns, processTurns, type ClaimResult } from '../../lib/meetingTurns';
+import { PendingResults, SeenTurns, flushResults, parseClaim, parseTurns, processTurns, turnPollBaseMs, TURN_POLL_MS, type ClaimResult } from '../../lib/meetingTurns';
 import { runCallTool } from '../../lib/voice/runCore';
 import { useFetch } from '../../hooks/useFetch';
 import { ResultMemory, type DeliveryRecord, type ToolContext } from '../../lib/voice/tools';
 import { PAGES, isPageVisible } from './portalCommands';
 import { useLiveCallId } from './MeetingAssistantBar';
 
-/** How often the browser asks for its turns while Nova is listening or paused. */
-export const TURN_POLL_MS = 2000;
+export { TURN_POLL_MS };
 /** After Nova has left, a confirmed card is followed by these extra polls (ms after the poke). */
 const POKE_FOLLOW_UPS_MS = [1500, 4000, 9000];
 /** An error doubles the wait, up to this. */
@@ -130,14 +129,14 @@ export function MeetingTurnRunner() {
     const tick = async (): Promise<void> => {
       loop = null;
       if (stopped) return;
-      if (!hidden()) failures = (await poll()) ? 0 : failures + 1;
-      if (!stopped && mode === 'active') loop = setTimeout(() => void tick(), pollDelay(TURN_POLL_MS, failures));
+      failures = (await poll()) ? 0 : failures + 1; // a hidden tab still polls (slower): its reads and confirmed writes must not wait
+      const base = turnPollBaseMs(mode, hidden());
+      if (!stopped && base !== null) loop = setTimeout(() => void tick(), pollDelay(base, failures));
     };
     void flush(); // a result kept from before a reload is posted again, not run again
     void tick();
-    const onVisible = (): void => { if (!hidden() && !stopped) { if (loop) clearTimeout(loop); void tick(); } };
+    const onVisible = (): void => { if (!stopped) { if (loop) clearTimeout(loop); void tick(); } };
     const off = onTurnsPoke(callId, () => {
-      if (hidden()) return;
       void poll();
       if (mode === 'poke') for (const ms of POKE_FOLLOW_UPS_MS) followUps.push(setTimeout(() => void poll(), ms));
     });

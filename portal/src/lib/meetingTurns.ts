@@ -193,3 +193,14 @@ export async function processTurns(turns: readonly AssistantTurn[], deps: TurnDe
   }
   return ran;
 }
+
+/** How often the browser asks for its turns while the person is seated in a live call and the page is in front. */
+export const TURN_POLL_MS = 2000;
+/** The same while another window is in front: slower, but never off (a read expires after 90 s, a confirmed write must run). */
+export const TURN_POLL_HIDDEN_MS = 5000;
+/** What the runner is doing: `active` polls on a timer (seated in a live call), `poke` polls only after a confirmed card, `off` does nothing. */
+export type TurnRunnerMode = 'active' | 'poke' | 'off';
+/** The wait before the next scheduled poll, or null when this mode does not poll on a timer. A hidden tab polls slower, it does not stop. */
+export function turnPollBaseMs(mode: TurnRunnerMode, hidden: boolean): number | null {
+  return mode === 'active' ? (hidden ? TURN_POLL_HIDDEN_MS : TURN_POLL_MS) : null;
+}

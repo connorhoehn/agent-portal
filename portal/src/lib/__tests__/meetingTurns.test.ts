@@ -1,7 +1,7 @@
 // The call assistant's turns in the asker's browser: what runs, what never runs, and that nothing runs twice.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PendingResults, SeenTurns, flushResults, parseClaim, parseTurns, privateSay, processTurns, resultBody, runnable, type AssistantTurn, type ClaimResult } from '../meetingTurns.ts';
+import { PendingResults, SeenTurns, flushResults, parseClaim, parseTurns, privateSay, processTurns, resultBody, runnable, turnPollBaseMs, TURN_POLL_MS, TURN_POLL_HIDDEN_MS, type AssistantTurn, type ClaimResult } from '../meetingTurns.ts';
 import { runCallTool } from '../voice/runCore.ts';
 import { fakeFetch, route, toolContext } from '../voice/__tests__/voiceHarness.ts';
 
@@ -218,4 +218,13 @@ test('parseClaim reads a claim and refuses a body that is not one', () => {
   assert.deepEqual(parseClaim({ turnId: 't', claimId: 'c', kind: 'read', tool: { name: 'search', args: { q: 1 } } }), { status: 'claimed', claimId: 'c', kind: 'read', tool: { name: 'search', args: { q: 1 } } });
   assert.equal(parseClaim({ claimId: '', kind: 'read', tool: { name: 's' } }).status, 'error');
   assert.equal(parseClaim(null).status, 'error');
+});
+
+test('a seated person keeps polling when the tab is hidden, slower; a person not seated has no timer', () => {
+  assert.equal(turnPollBaseMs('active', false), TURN_POLL_MS);
+  assert.equal(turnPollBaseMs('active', true), TURN_POLL_HIDDEN_MS);
+  assert.equal(TURN_POLL_MS, 2000);
+  assert.equal(TURN_POLL_HIDDEN_MS, 5000);
+  assert.equal(turnPollBaseMs('poke', true), null);
+  assert.equal(turnPollBaseMs('off', false), null);
 });
