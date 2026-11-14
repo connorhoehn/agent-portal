@@ -15,11 +15,11 @@ import { resolve } from 'node:path';
 const ROUTES = resolve(__dirname, '..');
 const FILES = ['bots', 'work', 'agent-projects', 'sdlc', 'internal-devbox', 'work-items', 'work-documents',
   'budgets', 'grants', 'lab', 'designs', 'initiative-decks', 'devbox', 'sprints', 'prompt-pointers', 'user-budgets',
-  'ops-switches', 'projects', 'runbooks', 'local-compute'];
+  'ops-switches', 'projects', 'runbooks', 'local-compute', 'decisions'];
 // `sprintMoveAllowed` is deliberately NOT a scope check here (sweep 11, M1): it
 // runs only when a write moves an item into a sprint, so a route that named it
 // passed this matrix while every other field was open to anyone with the action.
-const SCOPE_CHECK = /requireInitiativeScope|requireBoxAccess|userReachesBox|requireInitiativeSteward|userStewardsInitiative|stewardsInitiative|grantScopedDispatchVerdict|canSee\(|runAttribution\(|itemInScope\(|designInScope\(|requireBudgetScope\(|mayReviewRunbook\(|decidable\(|fencedJob\(|localBoxId\(node\.id\)|ownedNode\(/;
+const SCOPE_CHECK = /requireInitiativeScope|requireBoxAccess|userReachesBox|requireInitiativeSteward|userStewardsInitiative|stewardsInitiative|grantScopedDispatchVerdict|canSee\(|runAttribution\(|itemInScope\(|designInScope\(|requireBudgetScope\(|mayReviewRunbook\(|decidable\(|mayDecideDecision\(|fencedJob\(|localBoxId\(node\.id\)|ownedNode\(/;
 // The direct checks a handler can make itself, for the top-level test below.
 const DIRECT_CHECK = /requireInitiativeScope\(|itemInScope\(|stewardsInitiative\(/;
 // Files whose SCOPED routes must make that check unconditionally, at the
@@ -84,6 +84,11 @@ const SCOPED = [
   'local-compute POST /claim', 'local-compute POST /jobs/:jobId/start', 'local-compute POST /jobs/:jobId/heartbeat',
   'local-compute POST /jobs/:jobId/skills', 'local-compute POST /jobs/:jobId/complete', 'local-compute POST /jobs/:jobId/debrief',
   'local-compute POST /jobs/:jobId/log', 'local-compute POST /nodes/:nodeId/work',
+  // Decisions (meeting consent, package 4): a decision is raised only by the initiative's own people
+  // (requireInitiativeScope), and one recorded as already decided, or a waiting one decided, only by
+  // someone lib/decision-authority.ts mayDecideDecision lets decide there (decider, owner; org-leader
+  // and admin override).
+  'decisions POST /', 'decisions POST /:id/decide',
 ];
 
 /** Not scoped yet, each with why. Fixing one moves it to SCOPED. */

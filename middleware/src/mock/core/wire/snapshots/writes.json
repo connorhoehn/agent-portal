@@ -2706,6 +2706,70 @@
         "sprintId"
       ]
     },
+    "POST /api/graph/decisions": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "decidedAt": "null",
+        "decidedBy": "null",
+        "heldWork": "array",
+        "history": "array",
+        "history[]": "object",
+        "history[].at": "string",
+        "history[].by": "object",
+        "history[].by.id": "string",
+        "history[].by.name": "string",
+        "history[].callId": "null",
+        "history[].id": "string",
+        "history[].kind": "string",
+        "history[].people": "array",
+        "history[].people[]": "object",
+        "history[].people[].id": "string",
+        "history[].people[].name": "string",
+        "history[].rationale": "string",
+        "history[].source": "string",
+        "id": "string",
+        "options": "array",
+        "options[]": "object",
+        "options[].id": "string",
+        "options[].label": "string",
+        "outcome": "null",
+        "participants": "array",
+        "participants[]": "object",
+        "participants[].avatarUrl": "string",
+        "participants[].name": "string",
+        "participants[].personId": "string",
+        "participants[].role": "string",
+        "participants[].title": "string",
+        "participants[].weight": "number",
+        "projectId": "string",
+        "status": "string",
+        "summary": "null",
+        "topic": "string",
+        "viewerMayDecide": "boolean"
+      },
+      "values": {
+        "history[].kind": [
+          "raised"
+        ],
+        "history[].source": [
+          "manual"
+        ],
+        "participants[].role": [
+          "decider"
+        ],
+        "status": [
+          "open"
+        ]
+      },
+      "sent": [
+        "initiativeId",
+        "source",
+        "state",
+        "statement"
+      ]
+    },
     "POST /api/graph/decisions/:id/decide": {
       "persona": "orgiq/admin",
       "status": 200,

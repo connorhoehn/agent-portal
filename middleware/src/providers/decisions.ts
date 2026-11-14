@@ -14,9 +14,9 @@ import { config } from '../config.js';
 import { exec, fetchAvatarsById, withTransaction } from './aurora.js';
 import { mockAvatarUrl } from '../mock/avatars.js';
 import { clock, countBy } from '../mock/core/index.js';
-import { decisionRows, decisionParticipantRows, decisionEventRows, type DecisionOption } from '../mock/decisions.js';
+import { decisionRows, decisionParticipantRows, decisionEventRows, type DecisionEventKind, type DecisionOption, type DecisionSource } from '../mock/decisions.js';
 
-export type { DecisionOption } from '../mock/decisions.js';
+export type { DecisionEventKind, DecisionOption, DecisionSource } from '../mock/decisions.js';
 import { mockPeople } from '../mock/people.js';
 import { initiativeOwners, isDeciderRole, waitingOn, type DeciderRole, type NamedBy } from '../lib/decision-authority.js';
 import { getWorkHeldBy, mockSettleWorkBlockedOn, txSettleWorkBlockedOn, type HeldWork, type SettledWork } from './work-items.js';
@@ -64,15 +64,39 @@ export interface DecisionSummary {
 
 /**
  * One entry of a decision's recorded history (`decision_events`, G54): the
- * call someone made on the page or by voice, who made it, when and why.
+ * call someone made on the page or by voice, who made it, when and why; or
+ * its creation in the product (`recorded` decided, `raised` waiting), with
+ * where it was agreed and who agreed, by name only.
  */
 export interface DecisionEvent {
   id: string;
-  kind: 'resolved' | 'rejected';
+  kind: DecisionEventKind;
   /** ISO timestamp. */
   at: string;
   by: { id: string; name: string };
   rationale: string;
+  /** Creation events only: 'call' (with `callId`) or 'manual', and the people who agreed. */
+  source?: DecisionSource;
+  callId?: string | null;
+  people?: Array<{ id: string; name: string }>;
+}
+
+/** The creation fields of an event, present only on a creation event. */
+function creationFields(source: unknown, callId: unknown, people: unknown): Pick<DecisionEvent, 'source' | 'callId' | 'people'> {
+  if (source !== 'call' && source !== 'manual') return {};
+  let list: unknown = people;
+  if (typeof people === 'string') { try { list = JSON.parse(people); } catch { list = []; } }
+  const named = Array.isArray(list)
+    ? list.flatMap((p) => (p && typeof p === 'object' && typeof (p as Record<string, unknown>)['id'] === 'string'
+      ? [{ id: String((p as Record<string, unknown>)['id']), name: String((p as Record<string, unknown>)['name'] ?? (p as Record<string, unknown>)['id']) }] : []))
+    : [];
+  return { source, callId: typeof callId === 'string' && callId ? callId : null, people: named };
+}
+
+/** A stored event kind as the history reads it; anything unknown reads as the decide it most likely was. */
+function eventKind(raw: unknown): DecisionEventKind {
+  const k = String(raw);
+  return k === 'rejected' || k === 'recorded' || k === 'raised' ? k : 'resolved';
 }
 
 export interface DecisionDetail {
@@ -199,7 +223,10 @@ function mockGetDecision(id: string): Omit<DecisionDetail, 'heldWork'> | null {
   const byId = new Map(mockPeople.map((p) => [p.id, p]));
   const history = decisionEventRows.rows()
     .filter((e) => e.decisionId === id)
-    .map((e) => ({ id: e.id, kind: e.kind, at: e.at, by: { id: e.actorId, name: e.actorName }, rationale: e.rationale }))
+    .map((e): DecisionEvent => ({
+      id: e.id, kind: e.kind, at: e.at, by: { id: e.actorId, name: e.actorName }, rationale: e.rationale,
+      ...creationFields(e.source, e.callId, e.people),
+    }))
     // ORDER BY at DESC
     .sort((a, b) => b.at.localeCompare(a.at));
   return {
@@ -335,7 +362,7 @@ export async function getDecision(id: string): Promise<DecisionDetail | null> {
   );
 
   const eventRows = await exec(
-    `SELECT id::text AS id, kind, at, actor_id, actor_name, rationale
+    `SELECT id::text AS id, kind, at, actor_id, actor_name, rationale, source, call_id, people::text AS people
        FROM decision_events WHERE decision_id = :id ORDER BY at DESC`,
     [strParam('id', id)],
   );
@@ -357,12 +384,13 @@ export async function getDecision(id: string): Promise<DecisionDetail | null> {
       ? { id: String(head['decided_by']), name: String(head['decided_by_name'] ?? head['decided_by']) }
       : null,
     outcome: head['resolution'] != null ? String(head['resolution']) : null,
-    history: eventRows.map((r) => ({
+    history: eventRows.map((r): DecisionEvent => ({
       id: String(r['id']),
-      kind: String(r['kind']) === 'rejected' ? 'rejected' as const : 'resolved' as const,
+      kind: eventKind(r['kind']),
       at: String(r['at']),
       by: { id: String(r['actor_id'] ?? ''), name: String(r['actor_name'] ?? r['actor_id'] ?? '') },
       rationale: String(r['rationale'] ?? ''),
+      ...creationFields(r['source'], r['call_id'], r['people']),
     })),
     options: parseDecisionOptions(head['options']),
     heldWork,
@@ -478,6 +506,84 @@ export async function decideDecision(id: string, input: DecideInput): Promise<De
   }
   const decision = await getDecision(id);
   return decision ? { kind: 'ok', decision, settled } : { kind: 'not-found' };
+}
+
+// ─── Creating (meeting consent, package 4) ───────────────────────────────────
+//
+// A decision made outside the seed: one statement, which is its topic and its
+// one option, raised against an initiative. `resolved` is created already
+// decided (its creator decides, the statement is the outcome); `waiting` is
+// created open, its decider row naming who it waits on. Either way one history
+// event says how it began (`recorded` or `raised`), where (`call` with the
+// call id, or `manual`) and who agreed, by name. Who may call it is the
+// route's question (routes/decisions.ts).
+
+export const CREATE_STATES = ['resolved', 'waiting'] as const;
+export type CreateState = (typeof CREATE_STATES)[number];
+export const DECISION_SOURCES: readonly DecisionSource[] = ['call', 'manual'];
+/** The id of a created decision's one option: the statement everyone agreed to. */
+export const AGREED_OPTION_ID = 'agreed';
+
+export interface CreateDecisionInput {
+  id: string;
+  projectId: string;
+  statement: string;
+  state: CreateState;
+  /** Person rows: the decider first, then everyone else who agreed. */
+  participants: Array<{ personId: string; role: 'decider' | 'contributor' }>;
+  /** The person id the creator acts under, else their account subject. */
+  actorId: string;
+  actorName: string;
+  source: DecisionSource;
+  callId: string | null;
+  /** Who agreed, by name (unlinked accounts too), for the history line. */
+  people: NamedBy[];
+}
+
+export async function createDecision(input: CreateDecisionInput): Promise<DecisionDetail | null> {
+  const resolved = input.state === 'resolved';
+  const options: DecisionOption[] = [{ id: AGREED_OPTION_ID, label: input.statement }];
+  const kind: DecisionEventKind = resolved ? 'recorded' : 'raised';
+  if (config.mock.aurora) {
+    const at = clock.nowIso();
+    decisionRows.rows().push({
+      id: input.id, topic: input.statement, summary: null, status: resolved ? 'resolved' : 'open',
+      projectId: input.projectId, requiredRole: null, decidedAt: resolved ? at : null, escalatedAt: null, workItemId: null,
+      decidedBy: resolved ? input.actorId : null, resolution: resolved ? input.statement : null, resolvedAt: resolved ? at : null,
+      options,
+    });
+    for (const p of input.participants) decisionParticipantRows.rows().push({ decisionId: input.id, personId: p.personId, role: p.role, weight: 1.0 });
+    const events = decisionEventRows.rows();
+    events.push({
+      id: `de-${events.length + 1}`, decisionId: input.id, kind, at, actorId: input.actorId, actorName: input.actorName,
+      rationale: '', source: input.source, callId: input.callId, people: input.people.map((p) => ({ ...p })),
+    });
+    return getDecision(input.id);
+  }
+
+  await withTransaction(async (tx) => {
+    await tx(
+      `INSERT INTO decisions (id, topic, summary, status, project_id, options, decided_at, resolved_at, decided_by, resolution)
+       VALUES (:id, :topic, NULL, :status, :project, :options::jsonb,
+               ${resolved ? 'CURRENT_DATE, NOW(), :actor, :topic' : 'NULL, NULL, NULL, NULL'})`,
+      [strParam('id', input.id), strParam('topic', input.statement), strParam('status', resolved ? 'resolved' : 'open'),
+        strParam('project', input.projectId), strParam('options', JSON.stringify(options)), ...(resolved ? [strParam('actor', input.actorId)] : [])],
+    );
+    for (const p of input.participants) {
+      await tx(
+        `INSERT INTO decision_participants (person_id, decision_id, role) VALUES (:person, :id, :role) ON CONFLICT DO NOTHING`,
+        [strParam('person', p.personId), strParam('id', input.id), strParam('role', p.role)],
+      );
+    }
+    await tx(
+      `INSERT INTO decision_events (decision_id, kind, actor_id, actor_name, rationale, source, call_id, people)
+       VALUES (:id, :kind, :actor, :name, '', :source, ${input.callId ? ':call' : 'NULL'}, :people::jsonb)`,
+      [strParam('id', input.id), strParam('kind', kind), strParam('actor', input.actorId), strParam('name', input.actorName),
+        strParam('source', input.source), ...(input.callId ? [strParam('call', input.callId)] : []), strParam('people', JSON.stringify(input.people))],
+    );
+    return null;
+  });
+  return getDecision(input.id);
 }
 
 // ─── Work-graph read (lib/work-graph/sources.ts) ─────────────────────────────

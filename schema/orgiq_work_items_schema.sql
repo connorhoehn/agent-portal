@@ -128,6 +128,20 @@ CREATE TABLE IF NOT EXISTS decision_events (
 );
 CREATE INDEX IF NOT EXISTS decision_events_decision_idx ON decision_events (decision_id, at DESC);
 
+-- A decision can be created in the product (POST /api/graph/decisions): already
+-- decided ('recorded', by someone who may decide on its initiative) or waiting
+-- on the initiative's owner ('raised'). `source` says where it was agreed
+-- ('call' with its `call_id`, or 'manual'), and `people` names who agreed as
+-- [{ "id", "name" }], so the history reads "Agreed in a call by ..." without
+-- keeping any words that were said.
+ALTER TABLE decision_events DROP CONSTRAINT IF EXISTS decision_events_kind_check;
+ALTER TABLE decision_events ADD CONSTRAINT decision_events_kind_check
+  CHECK (kind IN ('resolved','rejected','recorded','raised'));
+ALTER TABLE decision_events
+  ADD COLUMN IF NOT EXISTS source  TEXT CHECK (source IN ('call','manual')),
+  ADD COLUMN IF NOT EXISTS call_id TEXT,
+  ADD COLUMN IF NOT EXISTS people  JSONB;
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Upgrade projects: add description + github_url
 -- ─────────────────────────────────────────────────────────────────────────────

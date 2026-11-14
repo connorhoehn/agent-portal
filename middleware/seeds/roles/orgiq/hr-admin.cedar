@@ -56,6 +56,11 @@ permit (
     // scopes it to the decider and the initiative's owner, with org-leader and
     // admin overriding (`decidesThis`, the forbid in member.cedar).
     OrgIQ::Action::"DecideDecision",
+    // Raise a waiting decision on an initiative you are on (POST /api/graph/decisions,
+    // state waiting): its owner decides it. Role-wide, as anyone on an initiative may
+    // raise one; the route scopes it to the initiative's own people. Recording one
+    // already decided is DecideDecision, asked with `decidesThis` as above.
+    OrgIQ::Action::"RaiseDecision",
     // Mint a voice navigator session (docs/voice-navigator-spec.md §6). Each tool the
     // voice runs is then gated by the action of the button it stands in for.
     OrgIQ::Action::"VoiceNavigate",

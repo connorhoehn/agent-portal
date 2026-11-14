@@ -145,7 +145,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // Mint a voice navigator session (docs/voice-navigator-spec.md §6).
       'VoiceNavigate', 'InviteMeetingAssistant',
       // G54: anyone can be named a decider; routes/decisions.ts scopes it.
-      'DecideDecision'],
+      'DecideDecision', 'RaiseDecision'],
   },
   'orgiq/sme': {
     tenant: 'orgiq',
@@ -166,7 +166,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // conditioned on onInitiative (shell and task also on ownsBox).
       // ManageSdlcPolicies is deliberately absent (DE-43).
       'OpenDevboxShell', 'RunDevboxTask', 'DecideAgentChange', 'DeliverAgentChange',
-      'VoiceNavigate', 'InviteMeetingAssistant', 'DecideDecision',
+      'VoiceNavigate', 'InviteMeetingAssistant', 'DecideDecision', 'RaiseDecision',
     ],
   },
   'orgiq/program-owner': {
@@ -179,7 +179,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // ManageBudgets only on initiatives they own (a forbid, §9 item 8a).
       'Search', 'ViewOrgChart', 'ViewObservability', 'LabelFeedback', 'ViewWorkItems',
       'DispatchAgentRun', 'ManageSprints', 'ManageBots', 'ManageBudgets',
-      'ViewSessionBrief', 'ReviewRunbook', 'VoiceNavigate', 'InviteMeetingAssistant', 'DecideDecision', 'CreateInitiative',
+      'ViewSessionBrief', 'ReviewRunbook', 'VoiceNavigate', 'InviteMeetingAssistant', 'DecideDecision', 'RaiseDecision', 'CreateInitiative',
     ],
   },
   'orgiq/org-leader': {
@@ -196,7 +196,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // Start an initiative by hand (package 14 of the value sweep).
       'CreateInitiative',
       // §9 items 8b and 8c: the SDLC policy editor and the guardrail editor.
-      'ManageSdlcPolicies', 'EditGuardrail', 'VoiceNavigate', 'InviteMeetingAssistant', 'DecideDecision',
+      'ManageSdlcPolicies', 'EditGuardrail', 'VoiceNavigate', 'InviteMeetingAssistant', 'DecideDecision', 'RaiseDecision',
     ],
   },
   'orgiq/hr-admin': {
@@ -212,7 +212,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // policies: that is ManageSdlcPolicies, which a devbox operator never
       // holds (§9 item 8b).
       'OpenDevboxShell', 'RunDevboxTask', 'DecideAgentChange', 'DeliverAgentChange',
-      'VoiceNavigate', 'InviteMeetingAssistant', 'DecideDecision',
+      'VoiceNavigate', 'InviteMeetingAssistant', 'DecideDecision', 'RaiseDecision',
     ],
   },
   'assessment/assessor': {
@@ -340,6 +340,11 @@ describe('capability boundaries that must not regress', () => {
   test('deciding a decision (G54): every orgiq role holds the floor; no other tenant\'s role does', () => {
     for (const r of ['orgiq/member', 'orgiq/sme', 'orgiq/program-owner', 'orgiq/org-leader', 'orgiq/hr-admin']) expect(has(r, 'DecideDecision')).toBe(true);
     for (const [key, spec] of Object.entries(MATRIX)) if (spec.tenant && spec.tenant !== 'orgiq') expect(has(key, 'DecideDecision')).toBe(false);
+  });
+
+  test('raising a decision (meeting consent): every orgiq role may raise one for the owner; no other tenant\'s role may', () => {
+    for (const r of ['orgiq/member', 'orgiq/sme', 'orgiq/program-owner', 'orgiq/org-leader', 'orgiq/hr-admin']) expect(has(r, 'RaiseDecision')).toBe(true);
+    for (const [key, spec] of Object.entries(MATRIX)) if (spec.tenant && spec.tenant !== 'orgiq') expect(has(key, 'RaiseDecision')).toBe(false);
   });
 
   test('sme adds dispatch + sprints only; never budgets, ingest, approval, masquerade', () => {

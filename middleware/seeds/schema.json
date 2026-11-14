@@ -415,6 +415,16 @@
           ]
         }
       },
+      "RaiseDecision": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
       "ViewSessionBrief": {
         "appliesTo": {
           "principalTypes": [

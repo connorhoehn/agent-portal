@@ -441,6 +441,17 @@ describe('§9 item 8: the program-owner budget forbid and the new org-leader gra
     expect(Object.keys(schema.OrgIQ.actions)).toContain('CreateInitiative');
   });
 
+  test('RaiseDecision sits on the general permit of every orgiq role, beside DecideDecision, no forbid narrows it, and it is in the schema', () => {
+    for (const key of ['orgiq/member', 'orgiq/sme', 'orgiq/hr-admin', 'orgiq/org-leader', 'orgiq/program-owner']) {
+      const general = permits(role(key))[0]!;
+      expect(general).toContain('OrgIQ::Action::"RaiseDecision"');
+      expect(general).toContain('OrgIQ::Action::"DecideDecision"');
+      // Who may raise where is the route's (the initiative's own people); Cedar holds only the floor.
+      expect(forbids(role(key)).join('\n')).not.toContain('"RaiseDecision"');
+    }
+    expect(Object.keys(schema.OrgIQ.actions)).toContain('RaiseDecision');
+  });
+
   test('InviteMeetingAssistant sits on the general permit of every orgiq role and nowhere else, and is in the schema', () => {
     for (const key of ['orgiq/member', 'orgiq/sme', 'orgiq/hr-admin', 'orgiq/org-leader', 'orgiq/program-owner']) {
       expect(permits(role(key))[0]!).toContain('OrgIQ::Action::"InviteMeetingAssistant"');

@@ -1519,6 +1519,17 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     build: async (ctx) => ({ outcome: 'rejected', rationale: ctx.label() }),
   },
   {
+    route: 'POST /api/graph/decisions',
+    persona: 'orgiq/admin',
+    safe: 'Appends to the registered `graph-decisions`, `graph-decision-participants` and `graph-decision-events` fixtures (meeting consent, package 4); reset drops all three rows. Under the mock providers no SQL runs.',
+    bodyFrom: "routes/decisions.ts: `initiativeId` an initiative the list hands out, `statement` non-blank and at most STATEMENT_MAX (280), `state` ∈ CREATE_STATES ('resolved','waiting'), `source` ∈ DECISION_SOURCES ('call','manual'); `participants` and `callId` are left out (a manual decision takes no call id).",
+    build: async (ctx) => {
+      const initiativeId = await ctx.pick('/api/graph/projects', 'id');
+      if (initiativeId === null) return unsynthesisable('GET /api/graph/projects listed no initiative');
+      return { initiativeId, statement: ctx.label(), state: 'waiting', source: 'manual' };
+    },
+  },
+  {
     route: 'PUT /api/voice/settings',
     persona: 'orgiq/admin',
     safe: 'Mutates the caller\'s row in the registered `voice-settings` fixture (G38); reset restores it. No provider call: the settings are read again at the next mint only.',

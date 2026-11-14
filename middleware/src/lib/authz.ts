@@ -76,6 +76,7 @@ export const CAPABILITY_ACTIONS = [
   'ConnectLocalCompute', // local-compute.ts — pair/manage your own machine as a fleet node
   'ReviewRunbook',       // runbooks.ts — decide runbook proposals (route scopes to owner / initiative SME; org-leader + admin override)
   'DecideDecision',      // decisions.ts — resolve / reject a waiting decision (route scopes to the decider or the initiative's owner; org-leader + admin override), G54
+  'RaiseDecision',       // decisions.ts POST / — raise a waiting decision on an initiative you are on (the owner decides it); recording one already decided also needs DecideDecision
   'ViewSessionBrief',    // session-briefs.ts — read the brief a run was given, preview a work item's brief
   'VoiceNavigate',       // voice.ts — mint a voice navigator session (orgiq + social roles, docs/voice-navigator-spec.md §6)
   // Assessment tenant — routes/assessment.ts. Missing from this list, every

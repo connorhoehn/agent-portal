@@ -260,20 +260,30 @@ export const decisionParticipantRows = defineFixture<DecisionParticipantRow>({
  * decision's history as the product recorded it (G54). Empty in every seed:
  * a seeded decision's history is derived from its columns (raised, escalated,
  * decided), and a row lands here only when someone decides it on the page or
- * by voice. `POST /api/__mock/reset` takes them away again.
+ * by voice, or creates one (POST /api/graph/decisions). `POST /api/__mock/reset` takes them away again.
  */
 export interface DecisionEventRow {
   id: string;
   decisionId: string;
-  /** What happened: the outcome the decider chose. */
-  kind: 'resolved' | 'rejected';
+  /**
+   * What happened: the outcome the decider chose, or how the decision was
+   * created in the product (`recorded` already decided, `raised` waiting).
+   */
+  kind: DecisionEventKind;
   /** ISO timestamp. */
   at: string;
   /** The person id the decider acts under, else their account subject. */
   actorId: string;
   actorName: string;
   rationale: string;
+  /** A created decision only: where it was agreed, the call's id, and who agreed (names, never words said). */
+  source?: DecisionSource | null;
+  callId?: string | null;
+  people?: Array<{ id: string; name: string }> | null;
 }
+
+export type DecisionEventKind = 'resolved' | 'rejected' | 'recorded' | 'raised';
+export type DecisionSource = 'call' | 'manual';
 
 export const decisionEventRows = defineFixture<DecisionEventRow>({
   key: 'graph-decision-events',

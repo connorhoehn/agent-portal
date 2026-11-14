@@ -1803,17 +1803,22 @@
     {
       "method": "GET",
       "path": "/api/graph/decisions",
-      "source": "src/routes/decisions.ts:51"
+      "source": "src/routes/decisions.ts:66"
     },
     {
       "method": "GET",
       "path": "/api/graph/decisions/:id",
-      "source": "src/routes/decisions.ts:73"
+      "source": "src/routes/decisions.ts:199"
+    },
+    {
+      "method": "POST",
+      "path": "/api/graph/decisions",
+      "source": "src/routes/decisions.ts:127"
     },
     {
       "method": "POST",
       "path": "/api/graph/decisions/:id/decide",
-      "source": "src/routes/decisions.ts:104"
+      "source": "src/routes/decisions.ts:230"
     },
     {
       "method": "GET",

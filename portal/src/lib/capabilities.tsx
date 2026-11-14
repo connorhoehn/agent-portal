@@ -54,6 +54,8 @@ export type Action =
   // Runbooks — in CAPABILITY_ACTIONS server-side
   | 'ReviewRunbook'
   | 'DecideDecision'
+  // Raise a waiting decision on an initiative you are on (its owner decides it)
+  | 'RaiseDecision'
   | 'ViewSessionBrief'
   // The voice navigator (docs/voice-navigator-spec.md §6) — in CAPABILITY_ACTIONS server-side
   | 'VoiceNavigate'
