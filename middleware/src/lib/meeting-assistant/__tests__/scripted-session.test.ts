@@ -59,7 +59,7 @@ describe('ScriptedSession', () => {
     expect(s.answerToolCall(id, '{"rows":[]}')).toBe(true);
     expect(s.answerToolCall(id, '{"rows":[]}')).toBe(false);
     await flush();
-    expect(seen.outputTranscript).toEqual([{ text: 'Here is the result.', final: true }]);
+    expect(seen.outputTranscript).toEqual([{ text: 'Here is the result.', final: true, inReplyTo: id }]); // the speech names the call it continues (audit B1)
   });
 
   it('reports usage as the elapsed seconds on close, once', async () => {

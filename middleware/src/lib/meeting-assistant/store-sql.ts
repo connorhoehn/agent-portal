@@ -17,7 +17,7 @@ const n = (name: string, value: number): SqlParameter => ({ name, value: { longV
 const nOrNull = (name: string, value: number | null): SqlParameter => (value === null ? { name, value: { isNull: true } } : n(name, value));
 const LINE_COLUMNS = 'call_id, seq, user_id, participant_id, speaker_name, text, at, caption_id, start_ms, end_ms, speakers';
 const ACTION_COLUMNS = 'call_id, action_id, message_id, asked_by, tool_name, args_digest, status, created_at, decided_by, decided_at, result_text';
-const TURN_COLUMNS = 'call_id, turn_id, asked_by, tool_name, tool_args, kind, status, action_id, created_at, expires_at';
+const TURN_COLUMNS = 'call_id, turn_id, asked_by, tool_name, tool_args, kind, status, action_id, created_at, expires_at, claim_id, claimed_at';
 const iso = (ms: number): string => new Date(ms).toISOString();
 
 const COLUMNS = `call_id, tenant, lobby, initiative_id, state, invited_by, invited_at, paused_by, left_at, left_by,
@@ -60,7 +60,8 @@ const jsonValue = (v: unknown): unknown => {
 export function turnFromRow(r: Record<string, unknown>): AssistantTurn {
   return { turnId: str(r['turn_id']), callId: str(r['call_id']), askedBy: str(r['asked_by']), tool: { name: str(r['tool_name']), args: jsonValue(r['tool_args']) },
     kind: str(r['kind']) as TurnKind, status: str(r['status']) as TurnStatus, ...(r['action_id'] != null ? { actionId: str(r['action_id']) } : {}),
-    createdAt: ms(r['created_at']), expiresAt: ms(r['expires_at']) };
+    createdAt: ms(r['created_at']), expiresAt: ms(r['expires_at']),
+    ...(r['claim_id'] != null ? { claimId: str(r['claim_id']), claimedAt: ms(r['claimed_at']) } : {}) };
 }
 
 export function lineFromRow(r: Record<string, unknown>): TranscriptLine {
@@ -272,6 +273,18 @@ export class SqlAssistantStore implements AssistantStore {
       [s('call', callId), ...(filter.askedBy ? [s('asked', filter.askedBy)] : [])],
     );
     return rows.map(turnFromRow);
+  }
+
+  async claimTurn(callId: string, turnId: string, claim: { claimId: string; claimedAt: number }, nowMs: number) {
+    // One conditional update: of two simultaneous claims the database lets exactly one through.
+    const rows = await this.exec(
+      `UPDATE meeting_assistant_turns SET claim_id = :claim, claimed_at = :at::timestamptz
+       WHERE call_id = :call AND turn_id = :turn AND claim_id IS NULL AND expires_at > :now::timestamptz
+         AND ((kind = 'write' AND status = 'running') OR (kind <> 'write' AND status = 'pending'))
+       RETURNING ${TURN_COLUMNS}`,
+      [s('call', callId), s('turn', turnId), s('claim', claim.claimId), s('at', iso(claim.claimedAt)), s('now', iso(nowMs))],
+    );
+    return rows[0] ? turnFromRow(rows[0]) : null;
   }
 
   async dueTurns(nowMs: number, limit: number) {

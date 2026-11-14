@@ -183,6 +183,21 @@ describe('turns and the session bookkeeping (package 4a)', () => {
     expect(await s.moveTurn('call-1', 't-1', { from: ['pending', 'running'], to: 'expired' })).toBeNull();
     expect(await s.moveTurn('call-1', 'nope', { from: ['pending'], to: 'done' })).toBeNull();
   });
+  it('claims a turn once, in one step: simultaneous claims have exactly one winner, and only a runnable, unexpired, unclaimed turn can be claimed (B6)', async () => {
+    await s.createTurn(turn());                                                                    // a pending read
+    await s.createTurn(turn({ turnId: 't-w', kind: 'write', status: 'pending' }));                 // a write not confirmed yet
+    await s.createTurn(turn({ turnId: 't-x', expiresAt: 5000 }));
+    const racers = await Promise.all(['a', 'b', 'c', 'd'].map((id) => s.claimTurn('call-1', 't-1', { claimId: id, claimedAt: 2000 }, 2000)));
+    expect(racers.filter((r) => r !== null)).toHaveLength(1);
+    const winner = racers.find((r) => r !== null)!;
+    expect((await s.getTurn('call-1', 't-1'))).toMatchObject({ claimId: winner.claimId, claimedAt: 2000 });
+    expect(await s.claimTurn('call-1', 't-1', { claimId: 'z', claimedAt: 2500 }, 2500)).toBeNull();
+    expect(await s.claimTurn('call-1', 't-w', { claimId: 'z', claimedAt: 2000 }, 2000)).toBeNull();
+    expect(await s.claimTurn('call-1', 't-x', { claimId: 'z', claimedAt: 6000 }, 6000)).toBeNull();
+    await s.moveTurn('call-1', 't-w', { from: ['pending'], to: 'running' });
+    expect(await s.claimTurn('call-1', 't-w', { claimId: 'w', claimedAt: 2000 }, 2000)).toMatchObject({ claimId: 'w' });
+  });
+
   it('lists due turns across calls: pending or running, past their time, oldest first, bounded (M9)', async () => {
     await s.createTurn(turn());                                                   // due at 91 000
     await s.createTurn(turn({ turnId: 't-2', status: 'running', kind: 'write', expiresAt: 50_000 }));
@@ -227,6 +242,16 @@ describe('SqlAssistantStore turn statements', () => {
     expect(calls[0]!.sql).toMatch(/UPDATE meeting_assistant_turns SET status = :to[\s\S]*AND status IN \('pending', 'running'\)/);
     await store().listTurns('call-1', { askedBy: 'u-vera', statuses: ['pending'] });
     expect(calls[1]!.sql).toMatch(/asked_by = :asked AND status IN \('pending'\)/);
+  });
+
+  it('claims a turn in one conditional update (B6)', async () => {
+    rows = [{ call_id: 'call-1', turn_id: 't-1', asked_by: 'u-vera', tool_name: 'search', tool_args: '{}', kind: 'read', status: 'pending', action_id: null, created_at: '1970-01-01T00:00:01Z', expires_at: '1970-01-01T00:01:31Z', claim_id: 'abc', claimed_at: '1970-01-01T00:00:02Z' }];
+    const out = await store().claimTurn('call-1', 't-1', { claimId: 'abc', claimedAt: 2000 }, 2000);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.sql).toMatch(/UPDATE meeting_assistant_turns SET claim_id = :claim, claimed_at = :at::timestamptz\s+WHERE call_id = :call AND turn_id = :turn AND claim_id IS NULL AND expires_at > :now::timestamptz\s+AND \(\(kind = 'write' AND status = 'running'\) OR \(kind <> 'write' AND status = 'pending'\)\)\s+RETURNING/);
+    expect(out).toMatchObject({ claimId: 'abc', claimedAt: 2000 });
+    rows = [];
+    expect(await store().claimTurn('call-1', 't-1', { claimId: 'def', claimedAt: 3000 }, 3000)).toBeNull();
   });
 
   it('finds due turns across calls with one bounded statement (M9)', async () => {

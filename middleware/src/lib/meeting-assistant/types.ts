@@ -127,6 +127,9 @@ export interface AssistantTurn {
   actionId?: string;
   createdAt: number;
   expiresAt: number;
+  /** Set when one of the asker's browsers claimed the turn to run it (audit B6); a claimed turn is not listed again and takes its result only with this id. */
+  claimId?: string;
+  claimedAt?: number;
 }
 
 /** What a transcript source hands the intake. `userId` is already a person; `participantId` may be empty. */

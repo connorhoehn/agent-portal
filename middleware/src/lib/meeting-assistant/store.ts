@@ -66,6 +66,11 @@ export interface AssistantStore {
   createTurn(turn: AssistantTurn): Promise<{ turn: AssistantTurn; created: boolean }>;
   getTurn(callId: string, turnId: string): Promise<AssistantTurn | null>;
   listTurns(callId: string, filter?: TurnFilter): Promise<AssistantTurn[]>;
+  /**
+   * Claim a turn for one browser, in ONE conditional step: the turn is runnable (a read `pending`, a write `running`), not past
+   * `nowMs`, and not claimed yet. Null otherwise, so of two simultaneous claims exactly one wins (audit B6).
+   */
+  claimTurn(callId: string, turnId: string, claim: { claimId: string; claimedAt: number }, nowMs: number): Promise<AssistantTurn | null>;
   /** Turns in any call still `pending` or `running` whose time is up at `nowMs`, oldest first, at most `limit` (the expiry sweep, audit M9). */
   dueTurns(nowMs: number, limit: number): Promise<AssistantTurn[]>;
   /** Move a turn; null when it is unknown or not in one of `change.from` (two results settle once). */
@@ -199,6 +204,14 @@ export class MemoryAssistantStore implements AssistantStore {
     return [...this.turns.values()]
       .filter((t) => t.callId === callId && (!filter.askedBy || t.askedBy === filter.askedBy) && (!filter.statuses || filter.statuses.includes(t.status)))
       .sort((a, b) => a.createdAt - b.createdAt || a.turnId.localeCompare(b.turnId)).map(copy);
+  }
+
+  async claimTurn(callId: string, turnId: string, claim: { claimId: string; claimedAt: number }, nowMs: number) {
+    const t = this.turns.get(`${callId}\0${turnId}`);
+    const runnable = t && (t.kind === 'write' ? t.status === 'running' : t.status === 'pending');
+    if (!t || !runnable || t.claimId !== undefined || t.expiresAt <= nowMs) return null;
+    t.claimId = claim.claimId; t.claimedAt = claim.claimedAt;
+    return copy(t);
   }
 
   async dueTurns(nowMs: number, limit: number) {

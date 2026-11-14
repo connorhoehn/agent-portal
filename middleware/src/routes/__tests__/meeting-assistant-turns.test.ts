@@ -102,14 +102,24 @@ describe('a read in the call chat', () => {
     expect((await get('turns?mine=1', 'alice')).body.turns).toEqual([]);
     expect((await get('turns', 'alice')).body.turns).toEqual([]);
     const id = mine[0].turnId;
-    expect((await post(`turns/${id}/result`, 'alice', { ok: true, output: { rows: [] } })).status).toBe(404);
-    expect((await post(`turns/${id}/result`, 'carol', { ok: true, output: { rows: [] } })).status).toBe(404);
-    expect((await post(`turns/${id}/result`, 'bob', { ok: 'yes' })).status).toBe(400);
-    expect((await post(`turns/${id}/result`, 'bob', { ok: true, output: { blob: 'x'.repeat(17 * 1024) } })).status).toBe(413);
-    const done = await post(`turns/${id}/result`, 'bob', { ok: true, output: { rows: [{ title: 'RAW-DATA-ROW' }] } });
+    expect((await post(`turns/${id}/claim`, 'alice')).status).toBe(404);
+    expect((await post(`turns/${id}/claim`, 'carol')).status).toBe(404);
+    expect((await post(`turns/${id}/result`, 'alice', { claimId: 'aaaaaaaaaaaaaaaa', ok: true, output: { rows: [] } })).status).toBe(404);
+    expect((await post(`turns/${id}/result`, 'carol', { claimId: 'aaaaaaaaaaaaaaaa', ok: true, output: { rows: [] } })).status).toBe(404);
+    const claimed = await post(`turns/${id}/claim`, 'bob');
+    expect(claimed.status).toBe(200);
+    expect(claimed.body).toEqual({ turnId: id, claimId: expect.stringMatching(/^[0-9a-f]{24}$/), tool: { name: 'search', args: { query: 'the Kubernetes experts' } }, kind: 'read' });
+    const claimId = claimed.body.claimId;
+    expect((await post(`turns/${id}/claim`, 'bob')).status).toBe(409);               // one claim per turn
+    expect((await get('turns?mine=1', 'bob')).body.turns).toEqual([]);                // a claimed turn is not listed again
+    expect((await post(`turns/${id}/result`, 'bob', { ok: true, output: {} })).status).toBe(400);                           // no claim id
+    expect((await post(`turns/${id}/result`, 'bob', { claimId: 'bbbbbbbbbbbbbbbb', ok: true, output: {} })).status).toBe(409); // not the claim
+    expect((await post(`turns/${id}/result`, 'bob', { claimId, ok: 'yes' })).status).toBe(400);
+    expect((await post(`turns/${id}/result`, 'bob', { claimId, ok: true, output: { blob: 'x'.repeat(17 * 1024) } })).status).toBe(413);
+    const done = await post(`turns/${id}/result`, 'bob', { claimId, ok: true, output: { rows: [{ title: 'RAW-DATA-ROW' }] } });
     expect(done.status).toBe(200); expect(done.body).toEqual({ turnId: id, status: 'done' });
     await flush();
-    expect((await post(`turns/${id}/result`, 'bob', { ok: true, output: {} })).status).toBe(409);
+    expect((await post(`turns/${id}/result`, 'bob', { claimId, ok: true, output: {} })).status).toBe(409);
     expect((await chat()).map((m) => m.message).join('\n')).not.toContain('RAW-DATA-ROW');
     expect((await novaMessages('assistant-reply')).map((m) => m.message)).toEqual(['Here is the result.']);
   });
@@ -119,7 +129,8 @@ describe('a read in the call chat', () => {
     await ask('alice', 'Nova, how much budget do I have');
     const [turn] = (await get('turns?mine=1', 'alice')).body.turns;
     expect(turn.kind).toBe('private-read');
-    await post(`turns/${turn.turnId}/result`, 'alice', { ok: true, output: { spent: 3 } });
+    const { claimId } = (await post(`turns/${turn.turnId}/claim`, 'alice')).body;
+    await post(`turns/${turn.turnId}/result`, 'alice', { claimId, ok: true, output: { spent: 3 } });
     await flush();
     // Audit B2: the call chat gets one fixed line and none of the answer.
     expect((await novaMessages('assistant-reply')).map((m) => m.message)).toEqual(['Answered privately for Alice Ames.']);
@@ -138,13 +149,18 @@ describe('a write in the call chat', () => {
     expect((await get('turns?mine=1', 'alice')).body.turns).toEqual([]);
     expect((await post(`actions/${meta.actionId}/decision`, 'bob', { decision: 'confirm' })).status).toBe(403);
     expect((await get('turns?mine=1', 'alice')).body.turns).toEqual([]);
+    const pendingWrite = (await assistantStore().listTurns(CALL))[0]!;
+    expect((await post(`turns/${pendingWrite.turnId}/claim`, 'alice')).status).toBe(409);  // not confirmed yet: nothing to run
     expect((await post(`actions/${meta.actionId}/decision`, 'alice', { decision: 'confirm' })).status).toBe(200);
     const turns = (await get('turns?mine=1', 'alice')).body.turns;
     expect(turns).toHaveLength(1);
     expect(turns[0]).toMatchObject({ kind: 'write', status: 'running', actionId: meta.actionId, tool: { name: 'create' } });
     expect((await get('turns?mine=1', 'bob')).body.turns).toEqual([]);
-    expect((await post(`turns/${turns[0].turnId}/result`, 'bob', { ok: true })).status).toBe(404);
-    expect((await post(`turns/${turns[0].turnId}/result`, 'alice', { ok: true, output: { say: 'Created.' } })).status).toBe(200);
+    expect((await post(`turns/${turns[0].turnId}/claim`, 'bob')).status).toBe(404);
+    expect((await post(`turns/${turns[0].turnId}/result`, 'bob', { claimId: 'aaaaaaaaaaaaaaaa', ok: true })).status).toBe(404);
+    const writeClaim = (await post(`turns/${turns[0].turnId}/claim`, 'alice')).body;
+    expect(writeClaim).toMatchObject({ kind: 'write', tool: { name: 'create' } });
+    expect((await post(`turns/${turns[0].turnId}/result`, 'alice', { claimId: writeClaim.claimId, ok: true, output: { say: 'Created.' } })).status).toBe(200);
     expect((await assistantStore().getAction(CALL, meta.actionId))).toMatchObject({ status: 'done', resultText: 'Created.' });
     const card = (await chat()).find((m) => m.id === cards[0]!.id)!;
     expect((card.metadata as { status: string }).status).toBe('done');
@@ -184,8 +200,10 @@ describe('turn routes: who may call them', () => {
     await post('invite');
     sessions.set('dave', mk('dave'));
     expect((await get('turns', 'dave')).status).toBe(403);
-    expect((await post('turns/t-1/result', 'dave', { ok: true })).status).toBe(403);
-    expect((await post('turns/t-nope/result', 'alice', { ok: true })).status).toBe(404);
+    expect((await post('turns/t-1/result', 'dave', { claimId: 'aaaaaaaaaaaaaaaa', ok: true })).status).toBe(403);
+    expect((await post('turns/t-1/claim', 'dave')).status).toBe(403);
+    expect((await post('turns/t-nope/claim', 'alice')).status).toBe(404);
+    expect((await post('turns/t-nope/result', 'alice', { claimId: 'aaaaaaaaaaaaaaaa', ok: true })).status).toBe(404);
   });
 });
 

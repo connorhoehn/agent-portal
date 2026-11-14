@@ -672,21 +672,37 @@ export class AssistantRuntime {
   // -------------------------------------------------------------------------------------------------------------
   // The asker's browser: turns, results, card decisions
 
-  /** The turns the browser of `userId` should run now: pending reads and running writes that have not expired. */
+  /** The turns the browser of `userId` should run now: pending reads and running writes that have not expired and nobody has claimed. */
   async turnsFor(callId: string, userId: string): Promise<AssistantTurn[]> {
     const now = this.now();
     return (await this.store.listTurns(callId, { askedBy: userId, statuses: ['pending', 'running'] }))
-      .filter((t) => t.expiresAt > now && ((t.kind === 'write') === (t.status === 'running')));
+      .filter((t) => t.expiresAt > now && t.claimId === undefined && ((t.kind === 'write') === (t.status === 'running')));
+  }
+
+  /**
+   * One of the asker's browsers claims a turn before running it (audit B6): exactly one claim per turn, and only the asker may
+   * make it. Null when the turn is not the caller's or unknown (a 404); `{ conflict }` when it is not runnable now, expired or
+   * already claimed (a 409). The result must carry the returned `claimId`.
+   */
+  async claimTurn(callId: string, turnId: string, userId: string): Promise<{ turn: AssistantTurn } | { conflict: string } | null> {
+    const turn = await this.store.getTurn(callId, turnId);
+    if (!turn || turn.askedBy !== userId) return null;
+    const claimed = await this.store.claimTurn(callId, turnId, { claimId: randomBytes(12).toString('hex'), claimedAt: this.now() }, this.now());
+    if (claimed) return { turn: claimed };
+    const now = (await this.store.getTurn(callId, turnId)) ?? turn;
+    return { conflict: now.claimId !== undefined ? 'claimed' : now.expiresAt <= this.now() ? 'expired' : now.status === 'pending' && now.kind === 'write' ? 'waiting for confirmation' : now.status };
   }
 
   /**
    * The asker's browser finished a turn. `result.output` is already size-checked by the route. Null when the turn is not
    * the caller's, unknown, or no longer waiting for a result (answered once: a second result is a conflict).
    */
-  async submitResult(callId: string, turnId: string, userId: string, result: { ok: boolean; output?: unknown; error?: string }):
-    Promise<{ turn: AssistantTurn } | { conflict: TurnStatus } | null> {
+  async submitResult(callId: string, turnId: string, userId: string, result: { ok: boolean; claimId: string; output?: unknown; error?: string }):
+    Promise<{ turn: AssistantTurn } | { conflict: TurnStatus | 'claim' } | null> {
     const turn = await this.store.getTurn(callId, turnId);
     if (!turn || turn.askedBy !== userId) return null;
+    // Only the browser that claimed the turn can finish it (audit B6): no claim, or another claim, is a conflict.
+    if (turn.claimId === undefined || turn.claimId !== result.claimId) return { conflict: 'claim' };
     const waiting: TurnStatus = turn.kind === 'write' ? 'running' : 'pending';
     if (turn.status !== waiting || turn.expiresAt <= this.now()) return { conflict: turn.status === waiting ? 'expired' : turn.status };
     const moved = await this.store.moveTurn(callId, turnId, { from: [waiting], to: result.ok ? 'done' : 'failed' });
@@ -822,8 +838,10 @@ export class AssistantRuntime {
     const askerName = await nameOf(turn.askedBy);
     if (turn.kind === 'write') {
       if (turn.actionId) {
-        // Confirmed but never run: the asker's browser was not there. Never confirmed: nobody decided in time.
-        const resultText = turn.status === 'running' ? `${askerName} confirmed this, but their browser was not available to run it.` : `${askerName} did not confirm this in time.`;
+        // Claimed but no result: it may or may not have run, so the card must not say it did not (audit B6). Confirmed but never
+        // claimed: the asker's browser was not there. Never confirmed: nobody decided in time.
+        const resultText = turn.claimId !== undefined ? 'Nova could not confirm whether this was done. Check before trying again.'
+          : turn.status === 'running' ? `${askerName} confirmed this, but their browser was not available to run it.` : `${askerName} did not confirm this in time.`;
         await moveAction(callId, turn.actionId, { from: ['waiting', 'confirmed'], to: 'expired', by: 'system', resultText }).catch(() => null);
       }
       run?.session?.appendContext(`The action offered to ${askerName} expired without being done.`);

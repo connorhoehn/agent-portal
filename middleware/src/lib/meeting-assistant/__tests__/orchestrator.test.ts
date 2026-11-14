@@ -91,11 +91,18 @@ async function say(userId: string, text: string, quietMs = 5000) {
   await intake.tick();
   await flush();
 }
+/** The browser's way: claim the turn, then post the result with the claim id (a turn that cannot be claimed is posted with a made-up one). */
+const claimsMade = new Map<string, string>();
+const submitClaimed = async (callId: string, turnId: string, userId: string, result: { ok: boolean; output?: unknown; error?: string }) => {
+  let claimId = claimsMade.get(turnId);
+  if (!claimId) { const claim = await runtime.claimTurn(callId, turnId, userId); if (claim && 'turn' in claim) { claimId = claim.turn.claimId!; claimsMade.set(turnId, claimId); } }
+  return runtime.submitResult(callId, turnId, userId, { ...result, claimId: claimId ?? 'deadbeefdeadbeef' });
+};
 const scripted = () => runtime.sessionOf(CALL) as ScriptedSession;
 const fake = () => runtime.sessionOf(CALL) as unknown as FakeSession;
 
 beforeEach(async () => {
-  now = T0;
+  now = T0; claimsMade.clear();
   mockPosts.replies.length = 0; mockPosts.privates.length = 0; mockPosts.actions.length = 0; mockPosts.notices.length = 0;
   store = new MemoryAssistantStore(); setAssistantStore(store);
   source = new MockTranscriptSource();
@@ -157,18 +164,18 @@ describe('a spoken request in the scripted world', () => {
     // the model was told at once: its next words are about the waiting card
     expect(mockPosts.replies.map((r) => r.text)).toEqual(['I have asked Alice to confirm.']);
     // Bob cannot move Alice's turn
-    expect(await runtime.submitResult(CALL, turns[0]!.turnId, BOB, { ok: true })).toBeNull();
+    expect(await submitClaimed(CALL, turns[0]!.turnId, BOB, { ok: true })).toBeNull();
     await runtime.onDecision(CALL, mockPosts.actions[0]!.actionId, 'confirm');
     const mine = await runtime.turnsFor(CALL, ALICE);
     expect(mine).toHaveLength(1);
     expect(mine[0]).toMatchObject({ status: 'running', kind: 'write' });
     expect(await runtime.turnsFor(CALL, BOB)).toEqual([]);
-    const done = await runtime.submitResult(CALL, mine[0]!.turnId, ALICE, { ok: true, output: { say: 'Created WI-12.' } });
+    const done = await submitClaimed(CALL, mine[0]!.turnId, ALICE, { ok: true, output: { say: 'Created WI-12.' } });
     expect(done).toMatchObject({ turn: { status: 'done' } });
     expect((await store.getAction(CALL, mockPosts.actions[0]!.actionId))).toMatchObject({ status: 'done', resultText: 'Created WI-12.' });
     expect(scripted().contexts.at(-1)).toMatch(/was done: Created WI-12\./);
     // a second result is a conflict, not a second effect
-    expect(await runtime.submitResult(CALL, mine[0]!.turnId, ALICE, { ok: true })).toEqual({ conflict: 'done' });
+    expect(await submitClaimed(CALL, mine[0]!.turnId, ALICE, { ok: true })).toEqual({ conflict: 'done' });
   });
 
   it('a declined card ends the turn and tells the session; it never reaches the browser', async () => {
@@ -185,14 +192,14 @@ describe('a spoken request in the scripted world', () => {
     expect(turn).toMatchObject({ kind: 'read', status: 'pending', tool: { name: 'search', args: { query: 'the Kubernetes experts' } } });
     expect(mockPosts.replies).toEqual([]);
     const spy = jest.spyOn(scripted(), 'answerToolCall');
-    const out = await runtime.submitResult(CALL, turn!.turnId, BOB, { ok: true, output: { rows: [{ title: 'SECRET-ROW' }] } });
+    const out = await submitClaimed(CALL, turn!.turnId, BOB, { ok: true, output: { rows: [{ title: 'SECRET-ROW' }] } });
     expect(out).toMatchObject({ turn: { status: 'done' } });
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.calls[0]![1]).toBe('{"rows":[{"title":"SECRET-ROW"}]}');
     await flush();
     expect(mockPosts.replies).toEqual([{ text: 'Here is the result.', askedBy: BOB, askedByName: 'Bob' }]);
     expect(JSON.stringify(mockPosts)).not.toContain('SECRET-ROW');
-    expect(await runtime.submitResult(CALL, turn!.turnId, BOB, { ok: true, output: { rows: [] } })).toEqual({ conflict: 'done' });
+    expect(await submitClaimed(CALL, turn!.turnId, BOB, { ok: true, output: { rows: [] } })).toEqual({ conflict: 'done' });
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
@@ -200,7 +207,7 @@ describe('a spoken request in the scripted world', () => {
     await say(BOB, 'Nova, find the runbooks');
     const [turn] = await runtime.turnsFor(CALL, BOB);
     const spy = jest.spyOn(scripted(), 'answerToolCall');
-    await runtime.submitResult(CALL, turn!.turnId, BOB, { ok: false, error: 'the search failed' });
+    await submitClaimed(CALL, turn!.turnId, BOB, { ok: false, error: 'the search failed' });
     expect(spy).toHaveBeenCalledWith(expect.any(String), '{"error":"the search failed"}');
     expect((await store.getTurn(CALL, turn!.turnId))!.status).toBe('failed');
   });
@@ -209,7 +216,7 @@ describe('a spoken request in the scripted world', () => {
     await say(BOB, 'Nova, how much budget do I have');
     const [turn] = await runtime.turnsFor(CALL, BOB);
     expect(turn!.kind).toBe('private-read');
-    await runtime.submitResult(CALL, turn!.turnId, BOB, { ok: true, output: { spent: 12, say: 'You have spent 12 dollars.' } });
+    await submitClaimed(CALL, turn!.turnId, BOB, { ok: true, output: { spent: 12, say: 'You have spent 12 dollars.' } });
     await flush();
     expect(mockPosts.replies).toEqual([{ text: 'Answered privately for Bob.', askedBy: BOB, askedByName: 'Bob' }]);
     expect(mockPosts.privates).toEqual([{ userId: BOB, text: 'You have spent 12 dollars.' }]);
@@ -304,7 +311,7 @@ describe('the refusals', () => {
     expect(s.answersFor('call_2')).toEqual([]);
     expect(mockPosts.replies).toEqual([]);
     // the model's speech after the result goes to Alice
-    await runtime.submitResult(CALL, turns[0]!.turnId, ALICE, { ok: true, output: { rows: [] } });
+    await submitClaimed(CALL, turns[0]!.turnId, ALICE, { ok: true, output: { rows: [] } });
     expect(s.answersFor('call_2')).toHaveLength(1);
     s.say('There are no matches.'); await flush();
     expect(mockPosts.replies).toEqual([{ text: 'There are no matches.', askedBy: ALICE, askedByName: 'Alice' }]);
@@ -369,7 +376,7 @@ describe('one answer per tool call', () => {
     expect((await store.getTurn(CALL, turn!.turnId))!.status).toBe('expired');
     expect(mockPosts.replies.at(-1)!.text).toMatch(/Bob is not available/);
     expect(await runtime.turnsFor(CALL, BOB)).toEqual([]);
-    expect(await runtime.submitResult(CALL, turn!.turnId, BOB, { ok: true, output: {} })).toEqual({ conflict: 'expired' });
+    expect(await runtime.claimTurn(CALL, turn!.turnId, BOB)).toEqual({ conflict: 'expired' }); // (a claim is the browser's first step now)
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
@@ -399,7 +406,7 @@ describe('one answer per tool call', () => {
     expect(s.answersFor('c3')).toHaveLength(1);
     expect(await store.listTurns(CALL)).toHaveLength(2);
     const reads = (await store.listTurns(CALL)).filter((t) => t.kind === 'read');
-    await runtime.submitResult(CALL, reads[0]!.turnId, ALICE, { ok: true, output: { n: 1 } });
+    await submitClaimed(CALL, reads[0]!.turnId, ALICE, { ok: true, output: { n: 1 } });
     expect(s.answersFor('c1')).toHaveLength(1);
     for (const id of ['c1', 'c2', 'c3']) expect(s.answersFor(id).length).toBe(1);
   });
@@ -526,7 +533,7 @@ describe('a reply belongs to its tool call (B1)', () => {
     await line(BOB, 'Nova, what is two plus two?', now - 500); // Bob addresses Nova while Alice's read is running
     s.hear('Nova, what is two plus two?', 100, 900); await flush(); // and the provider's own transcript of it arrives
     const [turn] = await runtime.turnsFor(CALL, ALICE);
-    await runtime.submitResult(CALL, turn!.turnId, ALICE, { ok: true, output: { rows: [] } });
+    await submitClaimed(CALL, turn!.turnId, ALICE, { ok: true, output: { rows: [] } });
     s.say('No experts found.'); await flush();
     expect(mockPosts.replies).toEqual([{ text: 'No experts found.', askedBy: ALICE, askedByName: 'Alice' }]);
   });
@@ -541,7 +548,7 @@ describe('a reply belongs to its tool call (B1)', () => {
     s.call('call_b', 'search', { query: 'Kubernetes experts' });
     await flush();
     const [turn] = await runtime.turnsFor(CALL, BOB);
-    await runtime.submitResult(CALL, turn!.turnId, BOB, { ok: true, output: { rows: [] } });
+    await submitClaimed(CALL, turn!.turnId, BOB, { ok: true, output: { rows: [] } });
     mockPosts.replies.length = 0; // (the refusal's own fixed "could not tell who asked" line)
     s.say('Sorry, I cannot do that.'); await flush(); // the refused call's continuation
     expect(mockPosts.replies).toEqual([]);
@@ -555,7 +562,7 @@ describe('a reply belongs to its tool call (B1)', () => {
     s.call('call_a', 'search', { query: 'x' });
     await flush();
     const [turn] = await runtime.turnsFor(CALL, ALICE);
-    await runtime.submitResult(CALL, turn!.turnId, ALICE, { ok: true, output: {} });
+    await submitClaimed(CALL, turn!.turnId, ALICE, { ok: true, output: {} });
     now += 21_000;
     s.say('Late words.'); await flush();
     expect(mockPosts.replies).toEqual([]); // dropped; no addressing line in the last 20 seconds either
@@ -568,7 +575,7 @@ describe('a reply belongs to its tool call (B1)', () => {
     await line(BOB, 'Nova, find b.', now - 1500);
     s.call('call_b', 'search', { query: 'b' }); await flush();
     const turns = await store.listTurns(CALL);
-    for (const t of turns) await runtime.submitResult(CALL, t.turnId, t.askedBy, { ok: true, output: {} });
+    for (const t of turns) await submitClaimed(CALL, t.turnId, t.askedBy, { ok: true, output: {} });
     s.say('For Bob.', 'call_b'); await flush();
     s.say('For Alice.', 'call_a'); await flush();
     expect(mockPosts.replies).toEqual([
@@ -592,7 +599,7 @@ describe('a reply belongs to its tool call (B1)', () => {
     scripted().on('outputTranscript', (e) => seen.push(e.inReplyTo));
     await say(ALICE, 'Nova, find the experts');
     const [turn] = await runtime.turnsFor(CALL, ALICE);
-    await runtime.submitResult(CALL, turn!.turnId, ALICE, { ok: true, output: {} });
+    await submitClaimed(CALL, turn!.turnId, ALICE, { ok: true, output: {} });
     await flush();
     expect(seen).toEqual(['sc_1']);
     expect(mockPosts.replies).toEqual([{ text: 'Here is the result.', askedBy: ALICE, askedByName: 'Alice' }]);
@@ -651,7 +658,7 @@ describe('a private read never passes through the shared session (B2)', () => {
     const [turn] = await runtime.turnsFor(CALL, BOB);
     expect(turn!.kind).toBe('private-read');
     await line(ALICE, 'Nova, what is two plus two?', now - 300); // someone else addresses Nova in between
-    await runtime.submitResult(CALL, turn!.turnId, BOB, { ok: true, output: { spent: 4217, limit: 9000, say: 'You have spent $4,217 of $9,000 this month.' } });
+    await submitClaimed(CALL, turn!.turnId, BOB, { ok: true, output: { spent: 4217, limit: 9000, say: 'You have spent $4,217 of $9,000 this month.' } });
     expect(s.answersFor('call_p').map(([, o]) => o)).toEqual(['{"status":"answered_privately"}']);
     expect(JSON.stringify(s.answers)).not.toContain('4217');
     expect(s.contexts.join(' ')).not.toContain('4217');
@@ -666,13 +673,13 @@ describe('a private read never passes through the shared session (B2)', () => {
     await line(BOB, 'Nova, how much budget do I have?', now - 2000);
     s.call('call_p', 'budget', { scope: 'me' }); await flush();
     const [turn] = await runtime.turnsFor(CALL, BOB);
-    await runtime.submitResult(CALL, turn!.turnId, BOB, { ok: true, output: { spent: 1 } });
+    await submitClaimed(CALL, turn!.turnId, BOB, { ok: true, output: { spent: 1 } });
     expect(mockPosts.privates).toEqual([{ userId: BOB, text: 'Your answer is ready; open the page to see it.' }]);
     mockPosts.privates.length = 0;
     await line(BOB, 'Nova, how much budget do I have now?', now - 500);
     s.call('call_q', 'budget', { scope: 'me' }); await flush();
     const [t2] = await runtime.turnsFor(CALL, BOB);
-    await runtime.submitResult(CALL, t2!.turnId, BOB, { ok: true, output: { say: `x\n\u0007${'y'.repeat(700)}` } });
+    await submitClaimed(CALL, t2!.turnId, BOB, { ok: true, output: { say: `x\n\u0007${'y'.repeat(700)}` } });
     expect(mockPosts.privates[0]!.text).toHaveLength(600);
     expect(mockPosts.privates[0]!.text).not.toMatch(/[\u0000-\u001f]/);
   });
@@ -757,5 +764,47 @@ describe('turns expire without a live run (M9)', () => {
     tick!(); await flush();
     expect((await store.getTurn(CALL, 'm-1'))!.status).toBe('expired');
     stop(); expect(tick).toBeNull();
+  });
+});
+
+describe('a turn is claimed before it runs (B6)', () => {
+  it('only the asker claims, once; a claimed turn is not listed; a result needs the matching claim', async () => {
+    await say(BOB, 'Nova, find the Kubernetes experts');
+    const [turn] = await runtime.turnsFor(CALL, BOB);
+    expect(await runtime.claimTurn(CALL, turn!.turnId, ALICE)).toBeNull();                      // not hers: 404
+    const first = await runtime.claimTurn(CALL, turn!.turnId, BOB);
+    expect(first).toMatchObject({ turn: { turnId: turn!.turnId, claimId: expect.any(String) } });
+    expect(await runtime.claimTurn(CALL, turn!.turnId, BOB)).toEqual({ conflict: 'claimed' });  // a second tab: 409
+    expect(await runtime.turnsFor(CALL, BOB)).toEqual([]);
+    const claimId = 'turn' in first! ? first.turn.claimId! : '';
+    expect(await runtime.submitResult(CALL, turn!.turnId, BOB, { ok: true, claimId: 'deadbeefdeadbeef', output: {} })).toEqual({ conflict: 'claim' });
+    expect(await runtime.submitResult(CALL, turn!.turnId, BOB, { ok: true, claimId, output: {} })).toMatchObject({ turn: { status: 'done' } });
+  });
+
+  it('a write cannot be claimed before it is confirmed, and an expired turn cannot be claimed', async () => {
+    await say(ALICE, 'Nova, create a work item for the cookie bug');
+    const [w] = await store.listTurns(CALL);
+    expect(await runtime.claimTurn(CALL, w!.turnId, ALICE)).toEqual({ conflict: 'waiting for confirmation' });
+    await runtime.onDecision(CALL, mockPosts.actions[0]!.actionId, 'confirm');
+    now += WRITE_TURN_TTL_MS + 1;
+    expect(await runtime.claimTurn(CALL, w!.turnId, ALICE)).toEqual({ conflict: 'expired' });
+  });
+
+  it('a claimed write whose result never arrives says Nova could not confirm whether it was done, not "expired"', async () => {
+    await say(ALICE, 'Nova, create a work item for the cookie bug');
+    await runtime.onDecision(CALL, mockPosts.actions[0]!.actionId, 'confirm');
+    const [w] = await runtime.turnsFor(CALL, ALICE);
+    await runtime.claimTurn(CALL, w!.turnId, ALICE);
+    now += WRITE_TURN_TTL_MS + 1;
+    await runtime.sweepTurns();
+    expect(await store.getAction(CALL, w!.actionId!)).toMatchObject({ status: 'expired', resultText: 'Nova could not confirm whether this was done. Check before trying again.' });
+  });
+
+  it('an unclaimed confirmed write keeps the plain "browser was not available" text', async () => {
+    await say(ALICE, 'Nova, create a work item for the cookie bug');
+    await runtime.onDecision(CALL, mockPosts.actions[0]!.actionId, 'confirm');
+    now += WRITE_TURN_TTL_MS + 1;
+    await runtime.sweepTurns();
+    expect((await store.getAction(CALL, mockPosts.actions[0]!.actionId))!.resultText).toMatch(/browser was not available/);
   });
 });

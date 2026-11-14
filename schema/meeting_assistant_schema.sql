@@ -97,6 +97,9 @@ CREATE TABLE IF NOT EXISTS meeting_assistant_turns (
   expires_at  TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (call_id, turn_id)
 );
+-- A browser claims a turn before running it (one claim per turn; the result must carry the claim id).
+ALTER TABLE meeting_assistant_turns ADD COLUMN IF NOT EXISTS claim_id TEXT;
+ALTER TABLE meeting_assistant_turns ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS meeting_assistant_turns_asker_idx ON meeting_assistant_turns (call_id, asked_by) WHERE status IN ('pending', 'running');
 
 -- Package 5: the minutes. One row per call, written once when the assistant leaves. `deleted_at` marks a tombstone (the inviter

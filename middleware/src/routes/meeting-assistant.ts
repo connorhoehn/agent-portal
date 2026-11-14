@@ -10,9 +10,12 @@
 //   POST actions/:actionId/decision  a seat, and ONLY the person the action was offered to. { decision: 'confirm' | 'decline' }.
 //   POST extend       InviteMeetingAssistant + a seat. Adds the default minutes to the call's listening ceiling, up to the hard maximum,
 //                      and holds the money for them against the inviter. { confirmOverUserBudget? }
-//   GET  turns?mine=1  a seat. The tool calls waiting for MY browser: pending reads, and writes I confirmed (running). Only mine, ever.
-//   POST turns/:turnId/result  a seat, and ONLY the person the turn was made for (404 for anyone else). { ok, output?, error? }:
-//                      the browser's result of running the tool as that person. The server hands it to the live session as data.
+//   GET  turns?mine=1  a seat. The tool calls waiting for MY browser: pending reads, and writes I confirmed (running), not yet claimed. Only mine.
+//   POST turns/:turnId/claim   a seat, ONLY the asker (404 otherwise). Claims the turn for this browser before it runs: { turnId, claimId, tool, kind };
+//                      a second claim, an expired turn or one not runnable yet is 409.
+//   POST turns/:turnId/result  a seat, and ONLY the person the turn was made for (404 for anyone else). { claimId, ok, output?, error? }:
+//                      the browser's result of running the tool as that person (400 without claimId, 409 when it is not the claim). The server
+//                      hands it to the live session as data, except a private read's `output.say`, which only the asker is shown.
 //   GET  state       a seat. State, who invited, who still owes an ack, counters, pending requests.
 //   GET  transcript  people who hold or held a seat in this call, nobody else (admins included).
 //   GET  minutes     the same rule (`attendeeOf`): the notes the assistant left. 404 for everyone else, and while there are none.
@@ -336,17 +339,31 @@ const turnIdOf = (req: Request): string => {
   return id;
 };
 
-/** The browser's result of a turn. A caller who is not the asker, or an unknown turn, gets the same 404. */
+/**
+ * A browser claims a turn before running it (audit B6). Only the asker; anyone else, and an unknown turn, get the same 404.
+ * Answers { turnId, claimId, tool: { name, args }, kind }; a second claim, an expired or not-yet-runnable turn answers 409.
+ */
+meetingAssistantRouter.post('/turns/:turnId/claim', asyncHandler(async (req, res) => {
+  const { session, callId } = await seatOf(req);
+  const turnId = turnIdOf(req);
+  const out = await assistantRuntime().claimTurn(callId, turnId, session.sub);
+  if (!out) throw new NotFoundError('No such turn');
+  if ('conflict' in out) throw new AppError(409, `This turn cannot be claimed: ${out.conflict}`);
+  res.json({ turnId, claimId: out.turn.claimId, tool: out.turn.tool, kind: out.turn.kind });
+}));
+
+/** The browser's result of a turn, with the claim id its claim returned (400 without it, 409 when it is not the claim). A caller who is not the asker, or an unknown turn, gets the 404. */
 meetingAssistantRouter.post('/turns/:turnId/result', asyncHandler(async (req, res) => {
   const { session, callId } = await seatOf(req);
   const turnId = turnIdOf(req);
-  const body = (req.body ?? {}) as { ok?: unknown; output?: unknown; error?: unknown };
+  const body = (req.body ?? {}) as { ok?: unknown; claimId?: unknown; output?: unknown; error?: unknown };
   if (typeof body.ok !== 'boolean') throw new ValidationError('ok must be true or false');
+  if (typeof body.claimId !== 'string' || !/^[0-9a-f]{8,64}$/.test(body.claimId)) throw new ValidationError('claimId is required: claim the turn first');
   if (body.error !== undefined && typeof body.error !== 'string') throw new ValidationError('error must be a string');
   let size = 0;
   try { size = Buffer.byteLength(JSON.stringify(body.output ?? null)); } catch { throw new ValidationError('output must be JSON'); }
   if (size > MAX_RESULT_BYTES) throw new AppError(413, `output may be at most ${MAX_RESULT_BYTES} bytes`);
-  const out = await assistantRuntime().submitResult(callId, turnId, session.sub, { ok: body.ok, output: body.output, ...(typeof body.error === 'string' ? { error: body.error } : {}) });
+  const out = await assistantRuntime().submitResult(callId, turnId, session.sub, { ok: body.ok, claimId: body.claimId, output: body.output, ...(typeof body.error === 'string' ? { error: body.error } : {}) });
   if (!out) throw new NotFoundError('No such turn');
   if ('conflict' in out) throw new AppError(409, `This turn is ${out.conflict}`);
   res.json({ turnId, status: out.turn.status });
