@@ -28,6 +28,8 @@ jest.mock('../chat.js', () => {
 });
 
 import { LineIntake } from '../intake.js';
+import { voiceTool } from '../../voice/catalogue.js';
+import { PRIVATE_TOOLS, meetingTools } from '../instructions.js';
 import { MemoryAssistantStore } from '../store.js';
 import { MockTranscriptSource } from '../transcript-source.js';
 import { AssistantRuntime, startTurnSweep, TYPED_UNSUPPORTED_REPLY, READ_TURN_TTL_MS, WRITE_TURN_TTL_MS, classifyCall, describeCall, type StartContext } from '../orchestrator.js';
@@ -143,6 +145,11 @@ describe('what a session is started with', () => {
     expect(classifyCall('budget', { scope: 'me' })).toBe('private-read');
     expect(classifyCall('access_request_status', {})).toBe('private-read');
     expect(classifyCall('no_such_tool', {})).toBeNull();
+    // in a meeting nothing that changes anything skips the card, whatever the dock's own confirm flag says
+    expect(voiceTool('set_status')!.confirm).toBe(false);
+    expect(classifyCall('set_status', { status: 'away', message: null })).toBe('write');
+    expect(describeCall('set_status', { status: 'away', message: 'out today' }).summary).toBe('Set your status to away: out today');
+    for (const t of meetingTools('orgiq')) expect(classifyCall(t.name, {})).toBe(t.kind === 'read' ? (PRIVATE_TOOLS.has(t.name) ? 'private-read' : 'read') : 'write');
     expect(describeCall('create', { kind: 'work-item', fields: { title: 'the login cookie bug' } }).summary).toBe('Create a work item titled "the login cookie bug"');
   });
 

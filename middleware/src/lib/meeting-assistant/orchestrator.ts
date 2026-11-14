@@ -178,16 +178,15 @@ const plainSentence = (v: unknown, max: number): string => (typeof v === 'string
 const newId = (): string => randomBytes(5).toString('hex');
 const capText = (v: unknown, n: number): string => (typeof v === 'string' ? v : '').replace(/\s+/g, ' ').trim().slice(0, n);
 
-/** The kind of a tool call from the catalogue's own `confirm` flag (an argument value in `noConfirm` skips the card), and decision 6's private list. */
-export function classifyCall(name: string, args: unknown): TurnKind | null {
+/**
+ * The kind of a tool call. In a meeting every tool that changes anything goes through a card, whatever the voice catalogue's
+ * `confirm` / `noConfirm` flags say (they are for one person's own dock): the catalogue marks a read-only tool with `kind: 'read'`,
+ * so any other kind is a write. Decision 6's private list is the other exception.
+ */
+export function classifyCall(name: string, _args: unknown): TurnKind | null {
   const tool = voiceTool(name);
   if (!tool) return null;
-  if (tool.confirm) {
-    const skip = tool.noConfirm && args && typeof args === 'object'
-      ? Object.entries(tool.noConfirm).some(([arg, values]) => values.includes(String((args as Record<string, unknown>)[arg] ?? '')))
-      : false;
-    if (!skip) return 'write';
-  }
+  if (tool.kind !== 'read' || tool.confirm) return 'write';
   return PRIVATE_TOOLS.has(name) ? 'private-read' : 'read';
 }
 
@@ -226,6 +225,10 @@ export function describeCall(name: string, args: unknown): { summary: string; de
     const kind = capText(a['kind'], 40), title = capText(fields['title'] ?? fields['name'], 120);
     const label = KIND_LABELS[kind] ?? (kind || 'record');
     return { summary: `Create a ${label}${title ? ` titled "${title}"` : ''}`, detail };
+  }
+  if (name === 'set_status') {
+    const status = capText(a['status'], 20), message = capText(a['message'], 120);
+    return { summary: `Set your status to ${status || 'a new value'}${message ? `: ${message}` : ''}`, detail };
   }
   const tool = voiceTool(name);
   const says = tool?.says?.replace(/ once you confirm\.?$/i, '').replace(/\.$/, '') ?? '';
