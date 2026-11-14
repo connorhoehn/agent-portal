@@ -305,3 +305,19 @@ describe('SqlAssistantStore turn statements', () => {
     expect(recordFromRow({ call_id: 'c', tenant: 't', lobby: 'l', state: 'listening', invited_by: 'u', invited_at: 1000, session: '{"refusedCalls":2}' }).session).toEqual({ refusedCalls: 2 });
   });
 });
+
+describe('a caption that arrives twice at once (SQL store)', () => {
+  const line = { callId: 'c1', userId: 'u-vera', participantId: 'p', speakerName: 'Vera', text: 'words', at: 1, captionId: 'cap-1' };
+  it('returns null when the unique index refuses the second copy, as the memory store does for a repeat', async () => {
+    const dup = new SqlAssistantStore(async () => { throw new Error('ERROR: duplicate key value violates unique constraint "meeting_transcript_lines_call_id_caption_id_key"'); });
+    await expect(dup.appendLine(line)).resolves.toBeNull();
+    const memory = new MemoryAssistantStore();
+    await memory.create({ callId: 'c1', tenant: 'orgiq', lobby: 'l', initiativeId: null, state: 'listening', invitedBy: 'u-vera', invitedAt: 1, pausedBy: null, leftAt: null, leftBy: null, acked: [], attendees: [], presentAtInvite: [], requests: 0, linesStored: 0, nextSeq: 1, pendingRequests: [] });
+    expect(await memory.appendLine(line)).not.toBeNull();
+    expect(await memory.appendLine(line)).toBeNull();
+  });
+  it('still throws any other database error', async () => {
+    const broken = new SqlAssistantStore(async () => { throw new Error('connection lost'); });
+    await expect(broken.appendLine(line)).rejects.toThrow('connection lost');
+  });
+});

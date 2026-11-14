@@ -154,7 +154,18 @@ export class SqlAssistantStore implements AssistantStore {
   }
 
   async appendLine(line: Omit<TranscriptLine, 'seq'>) {
-    const rows = await this.exec(
+    // Two copies of one caption arriving at once both pass the NOT EXISTS check; the unique index refuses the second and the whole
+    // statement (counters included) rolls back. That is the answer the memory store gives a repeat: nothing stored.
+    let rows: Array<Record<string, unknown>>;
+    try { rows = await this.appendLineRows(line); } catch (e) {
+      if (/duplicate key|unique constraint/i.test((e as Error).message ?? '')) return null;
+      throw e;
+    }
+    return rows[0] ? lineFromRow(rows[0]) : null;
+  }
+
+  private async appendLineRows(line: Omit<TranscriptLine, 'seq'>) {
+    return this.exec(
       `WITH claimed AS (
          UPDATE meeting_assistants SET next_seq = next_seq + 1, lines_stored = lines_stored + 1, updated_at = now()
          WHERE call_id = :call AND state = 'listening'
@@ -168,7 +179,6 @@ export class SqlAssistantStore implements AssistantStore {
         nOrNull('start', line.startMs ?? null), nOrNull('end', line.endMs ?? null),
         sOrNull('speakers', line.speakers ? JSON.stringify(line.speakers) : null)],
     );
-    return rows[0] ? lineFromRow(rows[0]) : null;
   }
 
   async addRequest(callId: string, request: PendingRequest) {
