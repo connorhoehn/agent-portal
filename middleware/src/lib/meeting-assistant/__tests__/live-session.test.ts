@@ -125,20 +125,38 @@ describe('transcripts', () => {
     await s.close();
   });
 
-  it('streams output text and ends the piece when the other direction speaks or the delegation starts', async () => {
-    const { s, seen } = make();
+  it('streams output text; an utterance ends only after 900 ms without an output delta, never when people speak', async () => {
+    let handle = 0; const timers = new Map<number, () => void>();
+    let wall = 1000;
+    const { s, seen } = make({ clock: () => wall, timers: { set: (fn) => { handle += 1; timers.set(handle, fn); return handle; }, clear: (h) => { timers.delete(h as number); } } });
     await s.start(START);
+    wall = 1500;
     frame({ type: 'session.output_transcript.delta', start_ms: 3200, end_ms: 3400, delta: ' No problem' });
+    frame({ type: 'session.input_transcript.delta', start_ms: 3500, end_ms: 3600, delta: ' Hey' });
+    await tick();
+    wall = 1900;
     frame({ type: 'session.output_transcript.delta', start_ms: 3400, end_ms: 3600, delta: '.' });
+    frame({ type: 'session.input_transcript.delta', start_ms: 3700, end_ms: 3800, delta: ' there.' });
     await tick();
-    frame({ type: 'session.input_transcript.delta', start_ms: 4000, end_ms: 4200, delta: ' Hey' });
-    await tick();
-    expect(seen.outputTranscript.map((o) => [o.text, o.final])).toEqual([['No problem', false], ['No problem.', false], ['No problem.', true]]);
+    expect(seen.outputTranscript.map((o) => [o.text, o.final])).toEqual([['No problem', false], ['No problem.', false]]);
+    expect(timers.size).toBe(1); // one output timer, re-armed by each delta
+    for (const fn of [...timers.values()]) fn(); // 900 ms of output quiet
+    expect(seen.outputTranscript.at(-1)).toEqual({ text: 'No problem.', final: true, startedAt: 500, endedAt: 900 });
+    expect(seen.outputTranscript.filter((o) => o.final)).toHaveLength(1);
     frame({ type: 'session.delegation.created', offset_ms: 4400, delegation: { id: 'item_1', type: 'delegation', target: 'responses' } });
     await tick();
     expect(seen.delegation).toHaveLength(1);
-    expect(seen.inputTranscript.map((i) => i.text)).toEqual(['Hey']);
+    expect(seen.inputTranscript.map((i) => i.text)).toEqual(['Hey there.']);
     await s.close();
+  });
+
+  it('an utterance still being spoken when the session closes is emitted once at close', async () => {
+    const { s, seen } = make({ utteranceGapMs: 60_000 });
+    await s.start(START);
+    frame({ type: 'session.output_transcript.delta', start_ms: 0, end_ms: 100, delta: 'Goodbye' });
+    await tick();
+    await s.close();
+    expect(seen.outputTranscript.filter((o) => o.final).map((o) => o.text)).toEqual(['Goodbye']);
   });
 });
 

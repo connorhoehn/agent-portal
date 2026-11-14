@@ -62,6 +62,8 @@ class FakeSession extends SessionEmitter implements LiveMeetingSession {
   call(id: string, name: string, args: unknown, atMs = 0) { this.open.add(id); this.emit('toolCall', { callId: id, name, args, atMs }); }
   callAs(id: string, name: string, args: unknown, atMs: number, askedBy: string) { this.open.add(id); this.emit('toolCall', { callId: id, name, args, atMs, askedBy }); }
   say(text: string, inReplyTo?: string) { this.emit('outputTranscript', { text, final: true, ...(inReplyTo ? { inReplyTo } : {}) }); }
+  /** A finished utterance that began `startedAt` ms into the session (the test clock is T0 at the session start). */
+  sayAt(text: string, startedAt: number, endedAt = startedAt) { this.emit('outputTranscript', { text, final: true, startedAt, endedAt }); }
   hear(text: string, startMs: number, endMs: number) { this.emit('inputTranscript', { text, startMs, endMs }); }
   drop() { this.emit('closed', { reason: 'socket-closed' }); }
   fire<K extends keyof SessionEvents>(type: K, event: SessionEvents[K]) { this.emit(type, event); }
@@ -590,7 +592,7 @@ describe('a reply belongs to its tool call (B1)', () => {
     s.call('call_a', 'search', { query: 'Kubernetes experts' });
     await flush();
     await line(BOB, 'Nova, what is two plus two?', now - 500); // Bob addresses Nova while Alice's read is running
-    s.hear('Nova, what is two plus two?', 100, 900); await flush(); // and the provider's own transcript of it arrives
+    s.hear('Nova, what is two plus two?', 0, 0); await flush(); // and the provider's own transcript of it arrives (it ends before the answer)
     const [turn] = await runtime.turnsFor(CALL, ALICE);
     await submitClaimed(CALL, turn!.turnId, ALICE, { ok: true, output: { rows: [] } });
     s.say('No experts found.'); await flush();
@@ -603,14 +605,15 @@ describe('a reply belongs to its tool call (B1)', () => {
     s.call('call_r', 'search', { query: 'x' });
     await flush();
     expect(s.answersFor('call_r').map(([, o]) => o)).toEqual(['{"refused":"could not tell who asked"}']);
+    mockPosts.replies.length = 0; // (the refusal's own fixed "could not tell who asked" line)
+    s.say('Sorry, I cannot do that.'); await flush(); // the refused call's continuation, spoken right after the refusal
+    expect(mockPosts.replies).toEqual([]);
+    now += 1000;
     await line(BOB, 'Nova, find the Kubernetes experts.', now - 500);
-    s.call('call_b', 'search', { query: 'Kubernetes experts' });
+    s.call('call_b', 'search', { query: 'Kubernetes experts' }, now - T0);
     await flush();
     const [turn] = await runtime.turnsFor(CALL, BOB);
     await submitClaimed(CALL, turn!.turnId, BOB, { ok: true, output: { rows: [] } });
-    mockPosts.replies.length = 0; // (the refusal's own fixed "could not tell who asked" line)
-    s.say('Sorry, I cannot do that.'); await flush(); // the refused call's continuation
-    expect(mockPosts.replies).toEqual([]);
     s.say('Two experts.'); await flush(); // Bob's
     expect(mockPosts.replies).toEqual([{ text: 'Two experts.', askedBy: BOB, askedByName: 'Bob' }]);
   });
@@ -662,6 +665,75 @@ describe('a reply belongs to its tool call (B1)', () => {
     await flush();
     expect(seen).toEqual(['sc_1']);
     expect(mockPosts.replies).toEqual([{ text: 'Here is the result.', askedBy: ALICE, askedByName: 'Alice' }]);
+  });
+});
+
+describe('who a spoken reply belongs to: one context per run (re-audit F1)', () => {
+  const startOf = () => now - T0;
+  async function publicRead(s: FakeSession, asker: string, id: string) {
+    await line(asker, 'Nova, find the experts.', now - 1500);
+    s.call(id, 'search', { query: 'x' }); await flush();
+    const [turn] = await runtime.turnsFor(CALL, asker);
+    await submitClaimed(CALL, turn!.turnId, asker, { ok: true, output: {} });
+  }
+
+  it('a muted continuation spoken in three utterances posts nothing', async () => {
+    const s = await realRuntime();
+    await line(ALICE, 'find the experts', now - 2000);
+    s.call('call_r', 'search', { query: 'x' }); await flush();
+    mockPosts.replies.length = 0;
+    for (const t of ['Sorry.', 'I cannot do that.', 'Anything else?']) { now += 1500; s.sayAt(t, startOf()); await flush(); }
+    expect(mockPosts.replies).toEqual([]);
+  });
+
+  it('a public answer spoken in two utterances 2 s apart posts two messages, both labelled with the asker (utterances are not merged)', async () => {
+    const s = await realRuntime();
+    await publicRead(s, ALICE, 'call_a');
+    s.sayAt('Two experts found.', startOf()); await flush();
+    now += 2000;
+    s.sayAt('Both are in platform.', startOf()); await flush();
+    expect(mockPosts.replies).toEqual([
+      { text: 'Two experts found.', askedBy: ALICE, askedByName: 'Alice' },
+      { text: 'Both are in platform.', askedBy: ALICE, askedByName: 'Alice' },
+    ]);
+  });
+
+  it('B addresses Nova 5 s after A\'s answered read and Nova answers B plainly: labelled B, not A', async () => {
+    const s = await realRuntime();
+    await publicRead(s, ALICE, 'call_a');
+    now += 5000;
+    await line(BOB, 'Nova, what is two plus two?', now - 500);
+    s.sayAt('Four.', startOf()); await flush();
+    expect(mockPosts.replies).toEqual([{ text: 'Four.', askedBy: BOB, askedByName: 'Bob' }]);
+  });
+
+  it('the acknowledgement spoken while a read is pending is never posted', async () => {
+    const s = await realRuntime();
+    await line(ALICE, 'Nova, find the experts.', now - 1500);
+    s.call('call_a', 'search', { query: 'x' }); await flush();
+    s.sayAt('One moment, looking that up.', startOf() - 200, startOf() + 800); await flush();
+    expect(mockPosts.replies).toEqual([]);
+    now += 3000;
+    s.sayAt('Still looking.', startOf()); await flush(); // the read is still open
+    expect(mockPosts.replies).toEqual([]);
+  });
+
+  it('chatter from C during A\'s public answer changes nothing', async () => {
+    const s = await realRuntime();
+    await publicRead(s, ALICE, 'call_a');
+    now += 1000;
+    await line(CAROL, 'ha, the experts, right', now - 300);
+    s.hear('ha, the experts, right', 100, 900); await flush();
+    s.sayAt('Two experts found.', startOf()); await flush();
+    expect(mockPosts.replies).toEqual([{ text: 'Two experts found.', askedBy: ALICE, askedByName: 'Alice' }]);
+  });
+
+  it('an utterance 25 s after the answer with nobody addressing Nova is not posted', async () => {
+    const s = await realRuntime();
+    await publicRead(s, ALICE, 'call_a');
+    now += 25_000;
+    s.sayAt('Anything else?', startOf()); await flush();
+    expect(mockPosts.replies).toEqual([]);
   });
 });
 

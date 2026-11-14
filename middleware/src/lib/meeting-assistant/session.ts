@@ -25,7 +25,7 @@ export interface SessionEvents {
   /** One piece of what the call said, with its offsets on the session's own timeline (ms since `start`). */
   inputTranscript: { text: string; startMs: number; endMs: number };
   /** What Nova said. `final: false` is the text so far; `final: true` ends the piece. */
-  outputTranscript: { text: string; final: boolean; /** The model call this speech continues, when the session can say exactly (the scripted one can; the provider's transcript events carry no id). */ inReplyTo?: string };
+  outputTranscript: { text: string; final: boolean; /** For a final utterance: when it began and when its last word arrived, in ms on the session timeline (the same clock as a tool call's `atMs`). */ startedAt?: number; endedAt?: number; /** The model call this speech continues, when the session can say exactly (the scripted one can; the provider's transcript events carry no id). */ inReplyTo?: string };
   /** The delegation backend called a function. `atMs` is the session timeline when it arrived. */
   toolCall: { callId: string; name: string; args: unknown; atMs: number; askedBy?: string };
   /** The model handed a request to the backend (it speaks a short acknowledgement about now). */

@@ -16,9 +16,9 @@
 //   out  session.thinking.append { event_id, delegation_id: null, content }     silent context
 //   out  session.close                                                          then session.closed; HTTPS hangup as the fallback
 //
-// Transcripts arrive only as DELTAS (no "done" event is documented), so this class cuts pieces: at a sentence end, at a
-// gap of more than `gapMs` on the session timeline, when the other direction speaks, at a delegation, at close, and after
-// `idleFlushMs` of quiet. Typed requests: the spec records no text-input event, so `sendText` is not supported.
+// Transcripts arrive only as DELTAS (no "done" event is documented). Input is cut into pieces: at a sentence end, at a gap of
+// more than `gapMs`, at a delegation, at close, and after `idleFlushMs` of quiet. Output is cut into UTTERANCES: one runs from its
+// first delta until 900 ms pass with no output delta, or the session closes; people speaking never end or split it. Typed requests: the spec records no text-input event, so `sendText` is not supported.
 //
 // The key never leaves lib/voice/openai.ts; nothing here logs a transcript or a tool argument.
 import {
@@ -37,6 +37,10 @@ export interface OpenAiLiveSessionOptions {
   closeTimeoutMs?: number;
   idleFlushMs?: number;
   gapMs?: number;
+  /** Quiet on the output side that ends one spoken utterance (default 900 ms). */
+  utteranceGapMs?: number;
+  /** Timer functions, injectable so a test can move time by hand. */
+  timers?: { set: (fn: () => void, ms: number) => unknown; clear: (handle: unknown) => void };
   clock?: () => number;
   /** The HTTPS fallback when `session.closed` never arrives. */
   hangup?: (providerSessionId: string) => Promise<boolean>;
@@ -62,6 +66,8 @@ const SENTENCE_END = /[.!?]["')\]]*\s*$/;
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0);
 
 interface Piece { text: string; startMs: number; endMs: number }
+/** One thing Nova said: from its first output delta to 900 ms of output quiet. Times are on the session timeline (ms since `session.started`). */
+interface Utterance { text: string; startedAt: number; endedAt: number }
 
 export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSession {
   readonly kind = 'openai' as const;
@@ -79,7 +85,8 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   private tokens: BackendTokens = { inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
   private seconds = 0;
   private input: Piece | null = null;
-  private output: Piece | null = null;
+  private output: Utterance | null = null;
+  private outputTimer: unknown = null;
   private idle: ReturnType<typeof setTimeout> | null = null;
   /** Output audio: silent frames still owed after the last voiced one, and the frame counter. Audio is never kept. */
   private tailLeft = 0;
@@ -194,6 +201,7 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     if (this.ended) return;
     this.ended = true;
     if (this.idle) { clearTimeout(this.idle); this.idle = null; }
+    this.clearOutputTimer();
     this.input = null; this.output = null; this.open.clear();
     this.emit('closed', { reason });
     this.onClosed?.();
@@ -284,22 +292,37 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
     const startMs = num(ev['start_ms']), endMs = Math.max(startMs, num(ev['end_ms']));
     const gapMs = this.opts.gapMs ?? 1000;
     if (side === 'input') {
-      this.flushOutput();
+      // Input never ends or splits an utterance of Nova's: only output quiet does.
       if (this.input && startMs - this.input.endMs > gapMs) this.flushInput();
       this.input = this.input ? { text: this.input.text + delta, startMs: this.input.startMs, endMs } : { text: delta, startMs, endMs };
       if (SENTENCE_END.test(this.input.text)) this.flushInput(); else this.armIdle();
     } else {
-      this.flushInput();
-      if (this.output && startMs - this.output.endMs > gapMs) this.flushOutput();
-      this.output = this.output ? { text: this.output.text + delta, startMs: this.output.startMs, endMs } : { text: delta, startMs, endMs };
+      const at = this.sinceStart();
+      this.output = this.output ? { text: this.output.text + delta, startedAt: this.output.startedAt, endedAt: at } : { text: delta, startedAt: at, endedAt: at };
       this.emit('outputTranscript', { text: this.output.text.trim(), final: false });
-      this.armIdle();
+      this.armOutput();
     }
+  }
+
+  private clearOutputTimer(): void {
+    if (this.outputTimer === null) return;
+    const t = this.opts.timers;
+    if (t) t.clear(this.outputTimer); else clearTimeout(this.outputTimer as ReturnType<typeof setTimeout>);
+    this.outputTimer = null;
+  }
+
+  private armOutput(): void {
+    this.clearOutputTimer();
+    const fire = () => { this.outputTimer = null; this.flushOutput(); };
+    const ms = this.opts.utteranceGapMs ?? 900;
+    const t = this.opts.timers;
+    if (t) this.outputTimer = t.set(fire, ms);
+    else { const h = setTimeout(fire, ms); h.unref?.(); this.outputTimer = h; }
   }
 
   private armIdle(): void {
     if (this.idle) clearTimeout(this.idle);
-    this.idle = setTimeout(() => { this.idle = null; this.flushInput(); this.flushOutput(); }, this.opts.idleFlushMs ?? 1500);
+    this.idle = setTimeout(() => { this.idle = null; this.flushInput(); }, this.opts.idleFlushMs ?? 1500);
     this.idle.unref?.();
   }
 
@@ -310,9 +333,10 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   }
 
   private flushOutput(): void {
+    this.clearOutputTimer();
     const p = this.output; this.output = null;
     const text = p?.text.replace(/\s+/g, ' ').trim();
-    if (p && text) this.emit('outputTranscript', { text, final: true });
+    if (p && text) this.emit('outputTranscript', { text, final: true, startedAt: p.startedAt, endedAt: p.endedAt });
   }
 
   private onResponseEvent(raw: unknown): void {
