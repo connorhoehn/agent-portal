@@ -119,6 +119,8 @@ export interface ReplyContext {
 /** A public reply context covers speech this long after its answer; a muted one only the short continuation (counted from `answeredAt`). */
 export const REPLY_CONTEXT_TTL_MS = 20_000;
 export const MUTED_CONTEXT_TTL_MS = 8_000;
+/** An utterance is the short acknowledgement of an open call only when it starts this soon after the call's delegation moment. */
+export const ACKNOWLEDGEMENT_WINDOW_MS = 6_000;
 /** The "could not tell who asked" reply is posted at most this often per call. */
 export const UNASKED_NOTICE_EVERY_MS = 30_000;
 /** How often the seat roster is read to record who is present while Nova is. */
@@ -149,7 +151,11 @@ interface CallRun {
   reply: ReplyContext | null;
   replyById: Map<string, ReplyContext>;
   /** When each tool call of this session was received and answered (null: still open). */
-  callTimes: Map<string, { openedAt: number; answeredAt: number | null }>;
+  callTimes: Map<string, { openedAt: number; answeredAt: number | null; acknowledged: boolean }>;
+  /** Sequence numbers of addressing lines already answered (by a tool call's context or a plain answer): each gets one answer. */
+  answeredLines: Set<number>;
+  /** Addressing lines a tool call took as its request (line seq to the model's call id): that call's context answers them. */
+  claimedLines: Map<number, string>;
   /** When the provider said the model began working on a request (epoch ms), not yet matched to a function call; oldest dropped. */
   delegations: number[];
   lastUnaskedNoticeAt: number;
@@ -287,7 +293,7 @@ export class AssistantRuntime {
     this.watchIntake();
     const run: CallRun = {
       ctx, session: null, unsubscribers: [], sessionStartedAt: 0, sessionNo: 0, pieceNo: 0, timeline: new VoicedTimeline(),
-      calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), holding: new Set(), reply: null, replyById: new Map(), callTimes: new Map(), delegations: [], lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity, heartbeatAt: -Infinity,
+      calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), holding: new Set(), reply: null, replyById: new Map(), callTimes: new Map(), answeredLines: new Set(), claimedLines: new Map(), delegations: [], lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity, heartbeatAt: -Infinity,
       intentionalClose: false, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, voice: false, voiceHeld: false,
       relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), speech: new NovaSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), lineChain: Promise.resolve(), providerErrorCount: 0, echoLinesDropped: 0, providerErrors: [], finished: false,
@@ -408,7 +414,7 @@ export class AssistantRuntime {
     if (!session) throw new Error('no live session is available in this process');
     run.sessionNo += 1; run.pieceNo = 0; run.timeline = new VoicedTimeline();
     run.usageSeconds = 0; run.tokens = { input: 0, output: 0, cached: 0 };
-    run.calls = new Map(); run.turnCalls = new Map(); run.holding = new Set(); run.reply = null; run.replyById = new Map(); run.callTimes = new Map(); run.delegations = []; run.intentionalClose = false;
+    run.calls = new Map(); run.turnCalls = new Map(); run.holding = new Set(); run.reply = null; run.replyById = new Map(); run.callTimes = new Map(); run.answeredLines = new Set(); run.claimedLines = new Map(); run.delegations = []; run.intentionalClose = false;
     run.expiresAt = null;
     this.wire(run, session);
     run.sessionKind = session.kind;
@@ -558,26 +564,6 @@ export class AssistantRuntime {
   }
 
   // -------------------------------------------------------------------------------------------------------------
-  // Audio (the sink and the mixer are package 6; these are the two doors it uses)
-
-  /** One participant's own audio, for the voiced timeline. Only a person who may speak on the record is tracked. */
-  async feedParticipantAudio(callId: string, userId: string, pcm: Buffer, sampleRate: number): Promise<void> {
-    const run = this.runs.get(callId);
-    if (!run || !run.session) return;
-    const record = await this.store.get(callId);
-    if (!record || record.state !== 'listening' || !canSpeakOnRecord(record, userId)) return;
-    run.timeline.feed(userId, pcm, sampleRate, this.now() - run.sessionStartedAt);
-  }
-
-  /** The mix of acknowledged speakers, 24 kHz mono PCM16. Dropped while paused (there is no session then). */
-  appendMixedAudio(callId: string, pcm24kMono: Buffer): boolean {
-    const run = this.runs.get(callId);
-    if (!run?.session) return false;
-    run.session.appendAudio(pcm24kMono);
-    return true;
-  }
-
-  // -------------------------------------------------------------------------------------------------------------
   // Nova's voice (package 7a)
 
   /** The call's voice switch changed (the route wrote the record first). Turning it off drops what is queued. */
@@ -661,9 +647,17 @@ export class AssistantRuntime {
     return { ok: true, userId: last.userId };
   }
 
-  /** Is a call of this run open at any time during [from, to]: received by then and not yet answered at `from`? */
-  private anyCallOpen(run: CallRun, from: number, to: number): boolean {
-    for (const t of run.callTimes.values()) if (t.openedAt <= to && (t.answeredAt === null || t.answeredAt > from)) return true;
+  /**
+   * Is this utterance the short acknowledgement of an open call? Only when it starts within the window after the call's delegation
+   * moment, the call is still open, and no acknowledgement was taken for it yet. Taking one marks it (one per call at most).
+   */
+  private takeAcknowledgement(run: CallRun, from: number, to: number): boolean {
+    for (const t of run.callTimes.values()) {
+      if (t.acknowledged || t.openedAt > to || (t.answeredAt !== null && t.answeredAt <= from)) continue;
+      if (from - t.openedAt >= ACKNOWLEDGEMENT_WINDOW_MS) continue;
+      t.acknowledged = true;
+      return true;
+    }
     return false;
   }
 
@@ -671,18 +665,45 @@ export class AssistantRuntime {
     return at - c.answeredAt < (c.visibility === 'public' ? REPLY_CONTEXT_TTL_MS : MUTED_CONTEXT_TTL_MS);
   }
 
-  /** Has someone addressed Nova (the detector's own rule, echoes excluded) after `since`? Then an earlier answer's context is spent. */
-  private async addressedSince(run: CallRun, since: number): Promise<boolean> {
+  /** Lines that address Nova by the detector's rule (echoes excluded), oldest first, from the latest stored ones. */
+  private async addressingLines(run: CallRun): Promise<TranscriptLine[]> {
     const record = await this.store.get(run.ctx.callId);
-    if (!record) return false;
-    const lines = (await this.store.lines(run.ctx.callId, Math.max(0, record.nextSeq - 1 - 100), 100)).filter((l) => !this.echoOf(run, l));
-    return lines.some((l) => l.at > since && findAddress(l.text) !== null);
+    if (!record) return [];
+    const lines = await this.store.lines(run.ctx.callId, Math.max(0, record.nextSeq - 1 - 100), 100);
+    return lines.filter((l) => !this.echoOf(run, l) && findAddress(l.text) !== null);
+  }
+
+  /**
+   * A reply context ends when a person other than its asker addressed Nova after the context was set (a muted context has no
+   * asker, so anyone does). The same asker speaking again keeps it: the answer still goes to them.
+   */
+  private async contextEnded(run: CallRun, c: ReplyContext): Promise<boolean> {
+    return (await this.addressingLines(run)).some((l) => l.at > c.answeredAt && (c.asker === null || l.userId !== c.asker));
+  }
+
+  /** The addressing lines up to `until` (within the asker window) are the request of this call. */
+  private async claimAddressing(run: CallRun, modelCallId: string, until: number): Promise<void> {
+    for (const l of await this.addressingLines(run)) if (l.at <= until && l.at >= until - ASKER_WINDOW_MS && !run.claimedLines.has(l.seq)) run.claimedLines.set(l.seq, modelCallId);
+  }
+
+  /**
+   * The asker for a plain answer: the oldest addressing line in the window that nothing has answered and no call has taken, marked
+   * answered, so two quick questions from two people get one answer each in order. Only when there is none, a line whose call is
+   * still open (Nova speaking about that request, not marked). Null when no line says who (or several people voiced it).
+   */
+  private async takeUnansweredAsker(run: CallRun, at: number): Promise<string | null> {
+    const open = (await this.addressingLines(run)).filter((l) => l.at <= at && l.at >= at - ASKER_WINDOW_MS && !run.answeredLines.has(l.seq));
+    const free = open.find((l) => !run.claimedLines.has(l.seq));
+    const next = free ?? open.find((l) => run.calls.get(run.claimedLines.get(l.seq) ?? '') === 'open');
+    if (!next) return null;
+    if (free) run.answeredLines.add(next.seq);
+    return next.userId !== null && (next.speakers?.length ?? 0) <= 1 ? next.userId : null;
   }
 
   /**
    * One finished utterance of Nova's, in the order of the rules in the header: the scripted session's exact call; the
-   * acknowledgement spoken while a call is open (never posted); the current context (muted: silent; public: posted for its asker);
-   * else a plain answer for whoever addressed Nova.
+   * first short acknowledgement of an open call (never posted); the current context unless another person addressed Nova since (muted: silent; public: posted for its asker);
+   * else a plain answer for the oldest unanswered addressing line (no label when none says who).
    */
   private async onOutput(run: CallRun, e: SessionEvents['outputTranscript']): Promise<void> {
     // A pause closes the session on purpose: the half sentence its close flushes is not an answer to anyone.
@@ -696,23 +717,22 @@ export class AssistantRuntime {
       asker = c.asker;
     } else {
       // The short acknowledgement the voice speaks as it delegates: not an answer; changes nothing.
-      if (this.anyCallOpen(run, t, tEnd)) return;
+      if (this.takeAcknowledgement(run, t, tEnd)) return;
       await run.lineChain;
       const c = run.reply;
-      if (c && this.contextLive(c, t) && !(await this.addressedSince(run, c.answeredAt))) {
+      if (c && this.contextLive(c, t) && !(await this.contextEnded(run, c))) {
         if (c.visibility === 'muted' || !c.asker) return;
         asker = c.asker;
       } else {
-        // A plain answer with no tool call: whoever addressed Nova last, and only if that line says who.
+        // A plain answer with no tool call: whoever addressed Nova in the oldest line nothing has answered; no label when none says.
         const record = await this.store.get(run.ctx.callId);
         if (record && record.requests > assistantLimits().maxRequests) return;
-        const found = await this.findAsker(run.ctx.callId, t);
-        if (!found.ok) return;
-        asker = found.userId;
+        asker = await this.takeUnansweredAsker(run, t);
       }
     }
     const record = await this.store.get(run.ctx.callId);
     if (!record || record.state === 'left') return;
+    if (asker === null) { await postNoticeQuietly(run.ctx.callId, e.text.slice(0, 1500)); return; }
     await postReply(run.ctx.callId, { text: e.text.slice(0, 1500), askedBy: asker, askedByName: await nameOf(asker) });
   }
 
@@ -781,7 +801,8 @@ export class AssistantRuntime {
     // The spoken continuation that follows belongs to THIS call: public and labelled for its asker, or muted (the default).
     if (sent) {
       const ctx: ReplyContext = { modelCallId, asker: reply?.asker ?? null, visibility: reply ? reply.visibility : 'muted', answeredAt };
-      run.reply = ctx;
+      // A muted context never replaces a live public one (its own call still finds it by id).
+      if (!(ctx.visibility === 'muted' && run.reply && run.reply.visibility === 'public' && this.contextLive(run.reply, answeredAt))) run.reply = ctx;
       run.replyById.set(modelCallId, ctx);
       for (const [id, c] of run.replyById) if (answeredAt - c.answeredAt >= REPLY_CONTEXT_TTL_MS) run.replyById.delete(id);
     }
@@ -810,9 +831,12 @@ export class AssistantRuntime {
     run.calls.set(id, 'open');
     // The request was made when the model began working on it, not when its function call reached the server: judge from then.
     const began = run.session?.kind === 'scripted' ? null : this.takeDelegation(run, run.sessionStartedAt + e.atMs);
-    run.callTimes.set(id, { openedAt: began ?? this.now(), answeredAt: null });
+    run.callTimes.set(id, { openedAt: began ?? this.now(), answeredAt: null, acknowledged: false });
     // Judged only after every line that arrived before the call is stored (the asker is found among them).
     await run.lineChain;
+    // The lines that addressed Nova up to that moment are this call's request: its context answers them, and a plain answer
+    // spoken meanwhile goes to someone else's line first.
+    await this.claimAddressing(run, id, run.callTimes.get(id)?.openedAt ?? this.now()).catch(() => undefined);
     try {
       await this.handleToolCall(run, e, began);
     } catch (err) {

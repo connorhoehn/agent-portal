@@ -37,6 +37,7 @@ import { ScriptedSession } from '../scripted-session.js';
 import { SessionEmitter, SessionTextUnsupported, type LiveMeetingSession, type SessionEvents, type SessionStartInput } from '../session.js';
 import { newAssistantSession, sessionOf, type AssistantRecord } from '../types.js';
 import { setAssistantStore } from '../store-select.js';
+import type { AudioSink } from '../audio-intake.js';
 
 const CALL = 'call-1';
 const ALICE = 'u-alice', BOB = 'u-bob', CAROL = 'u-carol';
@@ -78,6 +79,10 @@ let runtime: AssistantRuntime;
 let sessions: LiveMeetingSession[];
 let factory: () => LiveMeetingSession;
 let roles: Record<string, string[]>;
+/** The audio tap the real intake would be: it hands the runtime's sink to the test, and drops it when the session goes. */
+const audioTap: { sink: AudioSink | null; attach(callId: string, sink: AudioSink): void; suspend(callId: string): void; detach(callId: string): void } = {
+  sink: null, attach(_c, sink) { this.sink = sink; }, suspend() { this.sink = null; }, detach() { this.sink = null; },
+};
 let finished: Array<{ callId: string; usageSeconds: number; tokens: { input: number; output: number; cached: number }; sessionKind: string }>;
 
 const ctx: StartContext = { callId: CALL, tenant: 'orgiq', inviterId: ALICE, roster: ['Alice', 'Bob', 'Carol'], recordName: 'Auth Migration' };
@@ -119,7 +124,7 @@ beforeEach(async () => {
   roles = { [ALICE]: ['member'], [BOB]: ['member'], [CAROL]: [] };
   runtime = new AssistantRuntime({
     store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(),
-    rolesOf: async (u) => roles[u] ?? [], onFinished: async (e) => { finished.push(e); },
+    rolesOf: async (u) => roles[u] ?? [], onFinished: async (e) => { finished.push(e); }, audio: audioTap,
   }, { tickMs: 0 });
   await listening();
   await runtime.start(ctx);
@@ -466,12 +471,12 @@ describe('one answer per tool call', () => {
 describe('pause, resume, replacement and stop', () => {
   it('pause closes the session so nothing bills or is sent; resume opens a new one with the last minutes of the call as context', async () => {
     await say(ALICE, 'We should ship the cookie fix on Friday.');
-    expect(runtime.appendMixedAudio(CALL, Buffer.alloc(10))).toBe(true);
+    expect(audioTap.sink).not.toBeNull();
     const first = scripted();
     now += 125_000;
     await runtime.pause(CALL);
     expect(runtime.hasSession(CALL)).toBe(false);
-    expect(runtime.appendMixedAudio(CALL, Buffer.alloc(10))).toBe(false);
+    expect(audioTap.sink).toBeNull();
     await runtime.resume(CALL);
     const second = scripted();
     expect(second).not.toBe(first);
@@ -549,10 +554,10 @@ describe('what the real session hears', () => {
   it('attributes a transcript piece from the participants\' own audio, stores it with the speakers, and stores an unattributed piece with no person', async () => {
     factory = () => { const s = new FakeSession(); sessions.push(s); return s; };
     await runtime.stop(CALL);
-    runtime = new AssistantRuntime({ store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [] }, { tickMs: 0 });
+    runtime = new AssistantRuntime({ store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [], audio: audioTap }, { tickMs: 0 });
     await runtime.start(ctx);
-    const loud = (ms: number) => { const b = Buffer.alloc(Math.round(ms * 16) * 2); for (let i = 0; i < b.length / 2; i += 1) b.writeInt16LE(i % 40 < 20 ? 4000 : -4000, i * 2); return b; };
-    await runtime.feedParticipantAudio(CALL, BOB, loud(1000), 16_000);
+    const loud = (ms: number) => { const b = Buffer.alloc(Math.round(ms * 24) * 2); for (let i = 0; i < b.length / 2; i += 1) b.writeInt16LE(i % 40 < 20 ? 4000 : -4000, i * 2); return b; };
+    audioTap.sink!.placed(BOB, loud(1000), 0);
     now += 1000;
     fake().hear('The cookie is set too early.', 100, 900);
     await flush();
@@ -563,12 +568,11 @@ describe('what the real session hears', () => {
     expect(lines[0]).toMatchObject({ startMs: 100, endMs: 900 });
   });
 
-  it('audio from someone who has not acknowledged is not tracked, and nothing is sent to the session while no session is open', async () => {
-    const { acked } = (await store.get(CALL))!;
-    expect(acked).toContain(BOB);
-    await runtime.feedParticipantAudio(CALL, 'u-dave', Buffer.alloc(3200), 16_000);
+  it('nothing is handed to the audio tap once the session is paused', async () => {
+    await realRuntime();
+    expect(audioTap.sink).not.toBeNull();
     await runtime.pause(CALL);
-    expect(runtime.appendMixedAudio(CALL, Buffer.alloc(10))).toBe(false);
+    expect(audioTap.sink).toBeNull();
   });
 });
 
@@ -578,7 +582,7 @@ describe('what the real session hears', () => {
 async function realRuntime(): Promise<FakeSession> {
   await runtime.stop(CALL);
   factory = () => { const s = new FakeSession(); sessions.push(s); return s; };
-  runtime = new AssistantRuntime({ store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [] }, { tickMs: 0 });
+  runtime = new AssistantRuntime({ store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [], audio: audioTap }, { tickMs: 0 });
   await runtime.start(ctx);
   return fake();
 }
@@ -708,15 +712,15 @@ describe('who a spoken reply belongs to: one context per run (re-audit F1)', () 
     expect(mockPosts.replies).toEqual([{ text: 'Four.', askedBy: BOB, askedByName: 'Bob' }]);
   });
 
-  it('the acknowledgement spoken while a read is pending is never posted', async () => {
+  it('the one acknowledgement spoken as a read is delegated is never posted; a second utterance is an answer for the asker', async () => {
     const s = await realRuntime();
     await line(ALICE, 'Nova, find the experts.', now - 1500);
     s.call('call_a', 'search', { query: 'x' }); await flush();
     s.sayAt('One moment, looking that up.', startOf() - 200, startOf() + 800); await flush();
     expect(mockPosts.replies).toEqual([]);
     now += 3000;
-    s.sayAt('Still looking.', startOf()); await flush(); // the read is still open
-    expect(mockPosts.replies).toEqual([]);
+    s.sayAt('Still looking.', startOf()); await flush(); // the read is still open; one acknowledgement per call at most
+    expect(mockPosts.replies).toEqual([{ text: 'Still looking.', askedBy: ALICE, askedByName: 'Alice' }]);
   });
 
   it('chatter from C during A\'s public answer changes nothing', async () => {
@@ -741,8 +745,8 @@ describe('who a spoken reply belongs to: one context per run (re-audit F1)', () 
 describe('a tool call waits for the lines before it (re-audit F6)', () => {
   it('the request\'s own line is stored slowly; the call that follows is judged after it and is not refused as "could not tell who asked"', async () => {
     const s = await realRuntime();
-    const loud = (ms: number) => { const b = Buffer.alloc(Math.round(ms * 16) * 2); for (let i = 0; i < b.length / 2; i += 1) b.writeInt16LE(i % 40 < 20 ? 4000 : -4000, i * 2); return b; };
-    await runtime.feedParticipantAudio(CALL, ALICE, loud(1000), 16_000);
+    const loud = (ms: number) => { const b = Buffer.alloc(Math.round(ms * 24) * 2); for (let i = 0; i < b.length / 2; i += 1) b.writeInt16LE(i % 40 < 20 ? 4000 : -4000, i * 2); return b; };
+    audioTap.sink!.placed(ALICE, loud(1000), 0);
     now += 1000;
     let release!: () => void;
     const gate = new Promise<void>((r) => { release = r; });
@@ -1283,3 +1287,87 @@ describe('Nova cannot address herself through a microphone (the echo guard)', ()
   });
 });
 
+
+describe('who a spoken answer is posted for, and which speech is only an acknowledgement (S3)', () => {
+  it('two people ask no-tool questions 1.5 seconds apart: one answer each, in order, each with its own asker', async () => {
+    const s = await realRuntime();
+    await line(ALICE, 'Nova, what is two plus two?', T0 + 1000);
+    await line(BOB, 'Nova, what day is it?', T0 + 2500);
+    now = T0 + 3000;
+    s.sayAt('Four.', 3000); await flush();
+    s.sayAt('Friday.', 5000); await flush();
+    expect(mockPosts.replies).toEqual([
+      { text: 'Four.', askedBy: ALICE, askedByName: 'Alice' },
+      { text: 'Friday.', askedBy: BOB, askedByName: 'Bob' },
+    ]);
+  });
+
+  it('a read waiting 20 seconds on one person\'s browser does not swallow another person\'s no-tool answer', async () => {
+    const s = await realRuntime();
+    await line(ALICE, 'Nova, find the Kubernetes experts.', T0 + 1000);
+    now = T0 + 1500;
+    s.call('call_a', 'search', { query: 'Kubernetes experts' }, 1500);
+    await flush();
+    await line(BOB, 'Nova, what is two plus two?', T0 + 8000);
+    now = T0 + 9000;
+    s.sayAt('Four.', 9000); await flush();
+    expect(mockPosts.replies).toEqual([{ text: 'Four.', askedBy: BOB, askedByName: 'Bob' }]);
+  });
+
+  it('a refusal for one person followed within 8 seconds by another person\'s question: the second answer is posted', async () => {
+    const s = await realRuntime();
+    await line(ALICE, 'find the experts', T0 + 1000); // nobody addressed Nova: refused, its continuation is muted
+    now = T0 + 2000;
+    s.call('call_r', 'search', { query: 'x' }, 2000);
+    await flush();
+    mockPosts.replies.length = 0;
+    await line(BOB, 'Nova, what is two plus two?', T0 + 3000);
+    now = T0 + 3500;
+    s.sayAt('Four.', 3500); await flush();
+    expect(mockPosts.replies).toEqual([{ text: 'Four.', askedBy: BOB, askedByName: 'Bob' }]);
+  });
+
+  it('a private answer\'s context followed by another person\'s question posts that person\'s answer and nothing of the private one', async () => {
+    const s = await realRuntime();
+    await line(ALICE, 'Nova, what is my budget?', T0 + 1000);
+    now = T0 + 1500;
+    s.call('call_p', 'budget', { scope: 'me' }, 1500);
+    await flush();
+    const [turn] = await runtime.turnsFor(CALL, ALICE);
+    await submitClaimed(CALL, turn!.turnId, ALICE, { ok: true, output: { remaining: 'SECRET-FIGURE' } });
+    mockPosts.replies.length = 0;
+    await line(BOB, 'Nova, what day is it?', T0 + 2500);
+    now = T0 + 3000;
+    s.sayAt('Friday.', 3000); await flush();
+    expect(mockPosts.replies).toEqual([{ text: 'Friday.', askedBy: BOB, askedByName: 'Bob' }]);
+    expect(JSON.stringify([mockPosts.replies, mockPosts.notices, s.contexts])).not.toContain('SECRET-FIGURE');
+    expect(s.answersFor('call_p').map(([, o]) => o)).toEqual(['{"status":"answered_privately"}']);
+  });
+
+  it('the first short acknowledgement after a delegation is not posted; a later utterance while the call is still open is posted for its asker', async () => {
+    const s = await realRuntime();
+    await line(ALICE, 'Nova, find the Kubernetes experts.', T0 + 1000);
+    now = T0 + 1500;
+    s.call('call_a', 'search', { query: 'Kubernetes experts' }, 1500);
+    await flush();
+    s.sayAt('One moment.', 2000); await flush();
+    expect(mockPosts.replies).toEqual([]);
+    now = T0 + 12_000;
+    s.sayAt('Still working on it.', 11_500); await flush();
+    expect(mockPosts.replies).toEqual([{ text: 'Still working on it.', askedBy: ALICE, askedByName: 'Alice' }]);
+  });
+
+  it('a reply after its context\'s time window falls to the asker of the latest unanswered line', async () => {
+    const s = await realRuntime();
+    await line(ALICE, 'Nova, find the experts.', T0 + 1000);
+    now = T0 + 1500;
+    s.call('call_a', 'search', { query: 'x' }, 1500);
+    await flush();
+    const [turn] = await runtime.turnsFor(CALL, ALICE);
+    await submitClaimed(CALL, turn!.turnId, ALICE, { ok: true, output: {} });
+    await line(ALICE, 'Nova, and the time?', T0 + 30_000);
+    now = T0 + 31_000;
+    s.sayAt('Noon.', 31_000); await flush(); // 29 seconds after the context was set
+    expect(mockPosts.replies).toEqual([{ text: 'Noon.', askedBy: ALICE, askedByName: 'Alice' }]);
+  });
+});
