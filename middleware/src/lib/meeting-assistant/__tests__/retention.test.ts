@@ -2,7 +2,7 @@
 jest.mock('../../../config.js', () => ({ config: { mock: { aurora: true }, meetingAssistant: { enabled: true, transcriptRetentionDays: 30 } } }));
 import { MemoryAssistantStore } from '../store.js';
 import { SqlAssistantStore } from '../store-sql.js';
-import { sweepTranscripts, startRetentionSweep } from '../retention.js';
+import { sweepTranscripts, startRetentionSweep, lastGoodRetentionSweepAt } from '../retention.js';
 import type { AssistantRecord, AssistantState } from '../types.js';
 
 const DAY = 86_400_000;
@@ -96,6 +96,27 @@ describe('retention by the call age (memory store, injected clock)', () => {
     await sweepTranscripts(s, NOW, 30, { eraseChat });
     expect(await s.get('old')).toBeNull();
     warn.mockRestore();
+  });
+
+  it('logs a repeated failure again when the message changes or a day has passed, and records the last good sweep', async () => {
+    jest.useFakeTimers();
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    let t = 1_000_000; let message = 'first'; let broken = true;
+    const store = new MemoryAssistantStore();
+    jest.spyOn(store, 'sweepLines').mockImplementation(async () => { if (broken) throw new Error(message); return 0; });
+    const stop = startRetentionSweep(store, 1000, () => t);
+    const tick = async (advanceMs: number) => { t += advanceMs; jest.advanceTimersByTime(1000); for (let i = 0; i < 6; i += 1) await Promise.resolve(); };
+    const before = lastGoodRetentionSweepAt();
+    await tick(1000); await tick(3_600_000);
+    expect(warn).toHaveBeenCalledTimes(1);                   // same message within a day: quiet
+    message = 'second'; await tick(3_600_000);
+    expect(warn).toHaveBeenCalledTimes(2);                   // a new message: logged
+    await tick(24 * 3_600_000);
+    expect(warn).toHaveBeenCalledTimes(3);                   // a day later: logged again
+    expect(lastGoodRetentionSweepAt()).toBe(before);
+    broken = false; await tick(1000);
+    expect(lastGoodRetentionSweepAt()).toBe(t);
+    stop(); jest.useRealTimers(); warn.mockRestore();
   });
 
   it('is a no-op on empty tables', async () => {

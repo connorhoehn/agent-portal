@@ -55,14 +55,24 @@ export async function sweepTranscripts(store: AssistantStore, nowMs: number = Da
   return lines;
 }
 
+let lastGoodSweepAt: number | null = null;
+/** When the hourly sweep last finished without an error (epoch ms), or null if it has not yet. A reader that sees this fall behind knows stored words may be outliving the period. */
+export function lastGoodRetentionSweepAt(): number | null { return lastGoodSweepAt; }
+
+/** A repeated failure is logged again when its message changes, or after this long. */
+export const FAILURE_RELOG_MS = 24 * 3_600_000;
+
 /** Hourly sweep for a running server; unref'd so it never holds the process open. Returns the stopper. */
-export function startRetentionSweep(store: AssistantStore, everyMs = 3_600_000): () => void {
-  let missingLogged = false;
-  const run = () => { void sweepTranscripts(store).catch((e: unknown) => {
-    // A deployment that never ran the migration has no tables: say so once, not every hour.
-    if (missingLogged) return;
-    missingLogged = true;
-    console.warn('[meeting-assistant] retention sweep failed (will keep trying quietly)', (e as Error).message);
+export function startRetentionSweep(store: AssistantStore, everyMs = 3_600_000, clock: () => number = Date.now): () => void {
+  let lastMessage: string | null = null;
+  let lastLoggedAt = 0;
+  const run = () => { void sweepTranscripts(store).then(() => { lastGoodSweepAt = clock(); lastMessage = null; }, (e: unknown) => {
+    // A deployment that never ran the migration has no tables: say so once, and again only if the message changes or a day has passed.
+    const message = (e as Error).message;
+    const now = clock();
+    if (message === lastMessage && now - lastLoggedAt < FAILURE_RELOG_MS) return;
+    lastMessage = message; lastLoggedAt = now;
+    console.warn('[meeting-assistant] retention sweep failed (will keep trying)', message);
   }); };
   const timer = setInterval(run, everyMs);
   timer.unref?.();

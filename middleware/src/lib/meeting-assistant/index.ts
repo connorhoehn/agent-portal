@@ -10,7 +10,7 @@ export * from './types.js';
 export * from './detector.js';
 export { setAssistantStore } from './store-select.js';
 export { transcriptSource, setTranscriptSource, theMockTranscriptSource, mockTranscriptEnabled, TranscriptSourceNotConfigured } from './transcript-source.js';
-export { sweepTranscripts, startRetentionSweep } from './retention.js';
+export { sweepTranscripts, startRetentionSweep, lastGoodRetentionSweepAt } from './retention.js';
 
 /** Off by default (MEETING_ASSISTANT_ENABLED=true). Read per request so tests can flip it. */
 export function meetingAssistantEnabled(): boolean { return config.meetingAssistant?.enabled === true; }
