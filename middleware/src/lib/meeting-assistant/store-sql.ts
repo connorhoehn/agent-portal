@@ -379,7 +379,7 @@ export class SqlAssistantStore implements AssistantStore {
   async listMinutes(f: MinutesFilter) {
     const rows = await this.exec(
       `SELECT ${MINUTES_COLUMNS} FROM meeting_minutes
-       WHERE tenant = :tenant AND deleted_at IS NULL AND attendees ? :user${f.initiativeId ? ' AND initiative_id = :initiative' : ''}${f.before !== undefined ? ' AND ended_at < :before::timestamptz' : ''}
+       WHERE tenant = :tenant AND deleted_at IS NULL AND attendees @> to_jsonb(:user::text)${f.initiativeId ? ' AND initiative_id = :initiative' : ''}${f.before !== undefined ? ' AND ended_at < :before::timestamptz' : ''}
        ORDER BY ended_at DESC, call_id ASC LIMIT :limit`,
       [s('tenant', f.tenant), s('user', f.userId), ...(f.initiativeId ? [s('initiative', f.initiativeId)] : []), ...(f.before !== undefined ? [s('before', iso(f.before))] : []), n('limit', f.limit)],
     );

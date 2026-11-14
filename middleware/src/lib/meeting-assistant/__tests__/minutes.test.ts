@@ -211,6 +211,17 @@ describe('minutes in the store', () => {
   });
   const base: Omit<AssistantRecord, 'callId'> = { tenant: 'orgiq', state: 'left', invitedBy: 'u-vera', invitedAt: 1, pausedBy: null, leftAt: 2, leftBy: 'u-vera', acked: [], attendees: [], presentAtInvite: [], requests: 0, linesStored: 0, nextSeq: 1, pendingRequests: [], lobby: 'l', initiativeId: null };
 
+  it('sql: the attendee filter uses containment, never the question-mark operator a data API may read as a placeholder', async () => {
+    const seen: Array<{ sql: string; params: Array<{ name: string }> }> = [];
+    const store = new SqlAssistantStore(async (sql, params) => { seen.push({ sql, params: (params ?? []) as never }); return []; });
+    await store.listMinutes({ tenant: 'orgiq', userId: 'u-nora', limit: 5 });
+    const { sql, params } = seen[0]!;
+    expect(sql).toMatch(/attendees @> to_jsonb\(:user::text\)/);
+    expect(sql).not.toMatch(/\?/);
+    expect(sql).toMatch(/tenant = :tenant/);
+    expect(params.map((p) => p.name)).toEqual(expect.arrayContaining(['tenant', 'user']));
+  });
+
   it('memory: written once, listed for attendees only newest first, tombstoned, and swept with the transcript retention', async () => {
     const s = new MemoryAssistantStore();
     await s.create({ ...base, callId: 'c1' });
@@ -246,7 +257,7 @@ describe('minutes in the store', () => {
     expect(calls[0]!.sql).toMatch(/INSERT INTO meeting_minutes[\s\S]*ON CONFLICT \(call_id\) DO NOTHING/);
     await store.listMinutes({ tenant: 'orgiq', userId: 'u-nora', limit: 5, before: 9000, initiativeId: 'p1' });
     const list = calls[1]!;
-    expect(list.sql).toMatch(/tenant = :tenant AND deleted_at IS NULL AND attendees \? :user AND initiative_id = :initiative AND ended_at < :before::timestamptz/);
+    expect(list.sql).toMatch(/tenant = :tenant AND deleted_at IS NULL AND attendees @> to_jsonb\(:user::text\) AND initiative_id = :initiative AND ended_at < :before::timestamptz/);
     expect(list.params.map((p) => p.name).sort()).toEqual(['before', 'initiative', 'limit', 'tenant', 'user']);
     expect(await store.tombstoneMinutes('c1', 'u', 1)).toBe(4);
     expect(calls[2]!.sql).toMatch(/DELETE FROM meeting_transcript_lines WHERE call_id = :call[\s\S]*INSERT INTO meeting_minutes[\s\S]*DO UPDATE SET/);
