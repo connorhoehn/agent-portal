@@ -302,8 +302,9 @@ export class MemoryAssistantStore implements AssistantStore {
     // Every other place that holds the call's words (audit M2): the detector's pending requests, each turn's tool arguments and
     // each action's result text. Ids, statuses and times stay so the cards and the counters remain consistent.
     if (r) r.pendingRequests = [];
-    for (const t of this.turns.values()) if (t.callId === callId) t.tool = { name: t.tool.name, args: REMOVED_BY_INVITER };
-    for (const a of this.actions.values()) if (a.callId === callId) { a.argsDigest = ''; if (a.resultText !== null) a.resultText = REMOVED_BY_INVITER; }
+    // Open turns and cards are expired too, so a late result is refused.
+    for (const t of this.turns.values()) if (t.callId === callId) { t.tool = { name: t.tool.name, args: REMOVED_BY_INVITER }; if (t.status === 'pending' || t.status === 'running') t.status = 'expired'; }
+    for (const a of this.actions.values()) if (a.callId === callId) { a.argsDigest = ''; if (a.resultText !== null) a.resultText = REMOVED_BY_INVITER; if (a.status === 'waiting' || a.status === 'confirmed') a.status = 'expired'; }
     const old = this.minutes.get(callId);
     this.minutes.set(callId, tombstone(callId, old, r, by, at));
     return rows.length;

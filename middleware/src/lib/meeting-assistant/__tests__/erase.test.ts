@@ -113,6 +113,18 @@ describe('the inviter delete (memory store)', () => {
     expect(updates).toHaveLength(3);
   });
 
+  it('expires the call\'s open turns and cards, and leaves finished ones as they were', async () => {
+    await store.createTurn({ turnId: 't3', callId: CALL, askedBy: 'u-vera', tool: { name: 'create_work_item', args: { title: 'x' } }, kind: 'write', status: 'pending', createdAt: 100, expiresAt: 900 });
+    await store.createTurn({ turnId: 't4', callId: CALL, askedBy: 'u-vera', tool: { name: 'search', args: {} }, kind: 'read', status: 'running', createdAt: 100, expiresAt: 900 });
+    await store.createAction({ callId: CALL, actionId: 'a2', messageId: 'm2', askedBy: 'u-vera', toolName: 'x', argsDigest: 'd', status: 'waiting', createdAt: 1, decidedBy: null, decidedAt: null, resultText: null });
+    await eraseCall(store, CALL, 'u-vera', 9500);
+    const turns = Object.fromEntries((await store.listTurns(CALL)).map((t) => [t.turnId, t.status]));
+    expect(turns).toEqual({ t1: 'done', t2: 'expired', t3: 'expired', t4: 'expired' });
+    expect((await store.getAction(CALL, 'a2'))!.status).toBe('expired');
+    expect((await store.getAction(CALL, 'a1'))!.status).toBe('done');
+    expect(await store.moveTurn(CALL, 't3', { from: ['pending'], to: 'running' })).toBeNull();
+  });
+
   it('is safe to repeat: a second erase changes no chat message and keeps the tombstone', async () => {
     await eraseCall(store, CALL, 'u-vera', 9500);
     updates.length = 0;
@@ -131,7 +143,8 @@ describe('the inviter delete (SQL statements)', () => {
     const { sql, params } = calls[0]!;
     for (const table of ['meeting_transcript_lines', 'meeting_assistants', 'meeting_assistant_turns', 'meeting_assistant_actions', 'meeting_minutes']) expect(sql).toContain(table);
     expect(sql).toMatch(/UPDATE meeting_assistants SET pending_requests = '\[\]'/);
-    expect(sql).toMatch(/UPDATE meeting_assistant_turns SET tool_args = /);
+    expect(sql).toMatch(/UPDATE meeting_assistant_turns SET tool_args = .*status = CASE WHEN status IN \('pending', 'running'\) THEN 'expired'/);
+    expect(sql).toMatch(/status = CASE WHEN status IN \('waiting', 'confirmed'\) THEN 'expired'/);
     expect(sql).toMatch(/UPDATE meeting_assistant_actions SET args_digest = '', result_text = CASE WHEN result_text IS NULL/);
     expect(params.find((p) => p.name === 'removed')?.value?.stringValue).toBe(REMOVED_BY_INVITER);
   });
