@@ -142,6 +142,12 @@ interface CallRun {
   finished: boolean;
 }
 
+/** What a private read posts when the asker's browser sent no sentence of its own. */
+export const PRIVATE_FALLBACK = 'Your answer is ready; open the page to see it.';
+export const PRIVATE_SAY_MAX = 600;
+/** One plain-text line of at most `max` characters: control characters dropped, whitespace collapsed. */
+const plainSentence = (v: unknown, max: number): string => (typeof v === 'string' ? v : '').replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+
 const newId = (): string => randomBytes(5).toString('hex');
 const capText = (v: unknown, n: number): string => (typeof v === 'string' ? v : '').replace(/\s+/g, ' ').trim().slice(0, n);
 
@@ -665,10 +671,22 @@ export class AssistantRuntime {
       return { turn: moved };
     }
     const modelCallId = run?.turnCalls.get(turnId);
+    if (turn.kind === 'private-read') {
+      // Decision 6, audit B2: a private answer never passes through the shared session. The model is told only that it was
+      // answered privately (its continuation is muted); the asker gets their own sentence in the chat, and the call a fixed line.
+      if (run && modelCallId) {
+        run.turnCalls.delete(turnId);
+        this.answer(run, modelCallId, result.ok ? { status: 'answered_privately' } : { error: 'It did not work.' });
+      }
+      const say = result.ok ? plainSentence((result.output as { say?: unknown } | null)?.say, PRIVATE_SAY_MAX) : '';
+      await postPrivately(callId, userId, { text: result.ok ? (say || PRIVATE_FALLBACK) : 'Nova could not get that.' }).catch(() => false);
+      if (result.ok) await postReply(callId, { text: `Answered privately for ${await nameOf(userId)}.`, askedBy: userId, askedByName: await nameOf(userId) }).catch(() => null);
+      return { turn: moved };
+    }
     if (run && modelCallId) {
       run.turnCalls.delete(turnId);
       // The result is data. It goes to the session as the tool's output and nowhere else.
-      this.answer(run, modelCallId, result.ok ? (result.output ?? null) : { error: capText(result.error ?? 'It did not work.', 300) }, turn.kind === 'private-read' ? null : { asker: turn.askedBy, visibility: 'public' });
+      this.answer(run, modelCallId, result.ok ? (result.output ?? null) : { error: capText(result.error ?? 'It did not work.', 300) }, { asker: turn.askedBy, visibility: 'public' });
     }
     return { turn: moved };
   }

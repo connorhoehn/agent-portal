@@ -209,9 +209,10 @@ describe('a spoken request in the scripted world', () => {
     await say(BOB, 'Nova, how much budget do I have');
     const [turn] = await runtime.turnsFor(CALL, BOB);
     expect(turn!.kind).toBe('private-read');
-    await runtime.submitResult(CALL, turn!.turnId, BOB, { ok: true, output: { spent: 12 } });
+    await runtime.submitResult(CALL, turn!.turnId, BOB, { ok: true, output: { spent: 12, say: 'You have spent 12 dollars.' } });
     await flush();
-    expect(mockPosts.replies).toEqual([]);
+    expect(mockPosts.replies).toEqual([{ text: 'Answered privately for Bob.', askedBy: BOB, askedByName: 'Bob' }]);
+    expect(mockPosts.privates).toEqual([{ userId: BOB, text: 'You have spent 12 dollars.' }]);
   });
 
   it('a request over the cap of the scripted rules gets the one-line help, no tool', async () => {
@@ -639,5 +640,40 @@ describe('the asker is the person who addressed Nova (B3), on the real path', ()
     expect(s.answersFor('call_1').map(([, o]) => o)).toEqual(['{"refused":"could not tell who asked"}']);
     expect(await store.listTurns(CALL)).toEqual([]);
     expect(mockPosts.replies.map((r) => r.text)).toEqual(['I could not tell who asked. Please ask again.']);
+  });
+});
+
+describe('a private read never passes through the shared session (B2)', () => {
+  it('the session is told only "answered privately"; the chat gets the fixed line; the asker gets their own sentence; another speaker changes nothing', async () => {
+    const s = await realRuntime();
+    await line(BOB, 'Nova, how much budget do I have?', now - 2000);
+    s.call('call_p', 'budget', { scope: 'me' }); await flush();
+    const [turn] = await runtime.turnsFor(CALL, BOB);
+    expect(turn!.kind).toBe('private-read');
+    await line(ALICE, 'Nova, what is two plus two?', now - 300); // someone else addresses Nova in between
+    await runtime.submitResult(CALL, turn!.turnId, BOB, { ok: true, output: { spent: 4217, limit: 9000, say: 'You have spent $4,217 of $9,000 this month.' } });
+    expect(s.answersFor('call_p').map(([, o]) => o)).toEqual(['{"status":"answered_privately"}']);
+    expect(JSON.stringify(s.answers)).not.toContain('4217');
+    expect(s.contexts.join(' ')).not.toContain('4217');
+    s.say('You are fine on budget.'); await flush(); // the model's continuation is muted
+    expect(mockPosts.replies).toEqual([{ text: 'Answered privately for Bob.', askedBy: BOB, askedByName: 'Bob' }]);
+    expect(mockPosts.privates).toEqual([{ userId: BOB, text: 'You have spent $4,217 of $9,000 this month.' }]);
+    expect(JSON.stringify(await store.getTurn(CALL, turn!.turnId))).not.toContain('4217');
+  });
+
+  it('without a sentence the asker is told the answer is ready; a long or ragged sentence is capped to 600 plain characters', async () => {
+    const s = await realRuntime();
+    await line(BOB, 'Nova, how much budget do I have?', now - 2000);
+    s.call('call_p', 'budget', { scope: 'me' }); await flush();
+    const [turn] = await runtime.turnsFor(CALL, BOB);
+    await runtime.submitResult(CALL, turn!.turnId, BOB, { ok: true, output: { spent: 1 } });
+    expect(mockPosts.privates).toEqual([{ userId: BOB, text: 'Your answer is ready; open the page to see it.' }]);
+    mockPosts.privates.length = 0;
+    await line(BOB, 'Nova, how much budget do I have now?', now - 500);
+    s.call('call_q', 'budget', { scope: 'me' }); await flush();
+    const [t2] = await runtime.turnsFor(CALL, BOB);
+    await runtime.submitResult(CALL, t2!.turnId, BOB, { ok: true, output: { say: `x\n\u0007${'y'.repeat(700)}` } });
+    expect(mockPosts.privates[0]!.text).toHaveLength(600);
+    expect(mockPosts.privates[0]!.text).not.toMatch(/[\u0000-\u001f]/);
   });
 });
