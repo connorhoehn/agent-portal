@@ -4,7 +4,7 @@
 //   useNovaRosterEntry  the "Nova (Assistant, listening)" line for the call's people lists
 // Everything renders nothing unless the server advertises the feature (session.meetingAssistant) and a call is live.
 
-import { Button, CheckIcon, Chip, CloseIcon, DropdownMenu, InlinePopover, Inline, PauseCircleIcon, PlayCircleIcon, PlusCircleIcon, T, Tooltip } from '@connorhoehn/ui-components/shared';
+import { Badge, Button, CheckIcon, Chip, CloseIcon, DropdownMenu, InlinePopover, Inline, PauseCircleIcon, PlayCircleIcon, PlusCircleIcon, T, Tooltip } from '@connorhoehn/ui-components/shared';
 import { MicOffIcon, RecordingConsentNotice, SpeakerIcon, type RosterExtraEntry } from '@connorhoehn/ui-components/video';
 import { ComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { useMemo, useRef, useState } from 'react';
@@ -26,7 +26,8 @@ export function NovaBarControls() {
   const voice = useNovaVoice(callId, nova.view);
   const errorRef = useRef<HTMLButtonElement | null>(null);
   const [errorOpen, setErrorOpen] = useState(false);
-  const proposals = proposalCountOf(useProposalQueue().queue);
+  const queue = useProposalQueue().queue;
+  const proposals = proposalCountOf(queue);
   if (controls.hidden) return null;
   const state = assistantStateWords(view);
   const markBase = markWords(view, noticeClosed);
@@ -54,8 +55,13 @@ export function NovaBarControls() {
         ...(controls.extend ? [{ label: 'Extend time', ...(left ? { description: left } : {}), icon: <PlusCircleIcon size={14} />, onSelect: () => void nova.extend() }] : []),
         ...(controls.dismiss ? [{ label: 'Dismiss Nova', icon: <CloseIcon size={14} />, danger: true, onSelect: () => void nova.dismiss() }] : []),
       ] }]} />}
-    {/* The proposals waiting for this person: reopens the deck prompt that Esc hid. */}
-    {proposals && callId && <Button variant="secondary" size="sm" className="px-2" onClick={() => setProposalDeckHidden(callId, false)} data-testid="nova-proposal-count">{proposals}</Button>}
+    {/* The proposals waiting for this person: reopens the deck prompt that Esc hid. A count badge, with the words as its name and
+        tooltip, keeps the footer on one line at 1280 with three people in the call. */}
+    {proposals && callId && <Tooltip content={proposals} placement="top">
+      <Button variant="ghost" size="sm" className="px-1" aria-label={proposals} onClick={() => setProposalDeckHidden(callId, false)} data-testid="nova-proposal-count">
+        <Badge variant="count" value={queue.length} color="accent" aria-label={proposals} />
+      </Button>
+    </Tooltip>}
     {soundPrompt && <Button variant="ghost" size="sm" onClick={() => void voice.enableSound()} data-testid="nova-enable-sound">Click to hear Nova</Button>}
     {/* The refusal sentence is read in full in a popover; the row keeps one short line. */}
     {nova.error && <>
