@@ -37,8 +37,14 @@ export interface SessionEvents {
   /** The provider told us when the session ends (epoch ms). */
   expires: { atMs: number };
   closed: { reason: string };
-  error: { message: string };
+  /** `info` holds only codes (never the provider's message text, which could echo content). */
+  error: { message: string; info?: ProviderErrorInfo };
 }
+
+/** What is kept of a provider `error` event: short identifier-like codes only, null when absent or not shaped like one. */
+export interface ProviderErrorInfo { code: string | null; param: string | null; type: string | null }
+/** The most provider errors kept per session or run. */
+export const MAX_PROVIDER_ERRORS = 20;
 export type SessionEventName = keyof SessionEvents;
 export type SessionListener<K extends SessionEventName> = (event: SessionEvents[K]) => void;
 
@@ -59,6 +65,8 @@ export interface LiveMeetingSession {
   answerToolCall(callId: string, output: string): boolean;
   /** Silent context for the model ("the card was declined"). False when the session cannot take it. */
   appendContext(text: string): boolean;
+  /** The provider's error events so far (codes only, bounded); absent on a session with no provider. */
+  readonly providerErrors?: readonly ProviderErrorInfo[];
   /** Ends the session, resolving once `closed` has been emitted (or a bounded wait passed). Idempotent. */
   close(): Promise<void>;
   on<K extends SessionEventName>(type: K, listener: SessionListener<K>): () => void;

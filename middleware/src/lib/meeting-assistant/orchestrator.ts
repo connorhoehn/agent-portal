@@ -38,7 +38,7 @@ import type { AssistantStore } from './store.js';
 import type { LineIntake } from './intake.js';
 import { canSpeakOnRecord } from './intake.js';
 import { makeSession } from './session-select.js';
-import type { LiveMeetingSession, SessionEvents } from './session.js';
+import { MAX_PROVIDER_ERRORS, type LiveMeetingSession, type ProviderErrorInfo, type SessionEvents } from './session.js';
 import { sessionOf, type TranscriptLine, type AssistantRecord, type AssistantTurn, type TurnKind, type TurnStatus } from './types.js';
 
 export const READ_TURN_TTL_MS = 90_000;
@@ -169,6 +169,9 @@ interface CallRun {
   chain: Promise<void>;
   /** Every stored line of this run, in the order it arrived: a tool call is judged only after the lines that came before it are written. */
   lineChain: Promise<void>;
+  /** Provider error events across this run's sessions: how many, and the latest few as codes only. */
+  providerErrorCount: number;
+  providerErrors: ProviderErrorInfo[];
   finished: boolean;
 }
 
@@ -269,7 +272,7 @@ export class AssistantRuntime {
       calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), holding: new Set(), reply: null, replyById: new Map(), callTimes: new Map(), lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity, heartbeatAt: -Infinity,
       intentionalClose: false, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, voice: false, voiceHeld: false,
-      relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), speech: new NovaSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), lineChain: Promise.resolve(), finished: false,
+      relay: new VoiceRelay(ctx.callId, voiceChannel(ctx.callId), () => this.deps.voiceSink ?? defaultVoiceSink), speech: new NovaSpeech(), expiresAt: null, sessionKind: 'scripted', chain: Promise.resolve(), lineChain: Promise.resolve(), providerErrorCount: 0, providerErrors: [], finished: false,
     };
     this.runs.set(ctx.callId, run);
     // The record's switch (a restarted call keeps it); read after the run is registered so two invites never both start.
@@ -435,7 +438,11 @@ export class AssistantRuntime {
       session.on('outputTranscript', (e) => { if (run.voice) run.speech.noteText(this.now(), e.text, e.final); }),
       session.on('expires', (e) => { run.expiresAt = e.atMs; }),
       session.on('closed', guard((e: SessionEvents['closed']) => this.onClosed(run, session, e.reason))),
-      session.on('error', (e) => console.warn('[meeting-assistant] session error', e.message)),
+      session.on('error', (e) => {
+        console.warn('[meeting-assistant] session error', e.message);
+        run.providerErrorCount += 1;
+        if (e.info) { run.providerErrors.push(e.info); if (run.providerErrors.length > MAX_PROVIDER_ERRORS) run.providerErrors.shift(); }
+      }),
     );
   }
 
@@ -549,6 +556,11 @@ export class AssistantRuntime {
   }
 
   /** What the voice relay did on this run: frames handed to the gateway, and frames dropped (no gateway, a burst, a pause). Zeros when no run. */
+  /** Counts the people who hold a seat may see: provider errors this run has had (codes are never shown). */
+  callStats(callId: string): { providerErrors: number } {
+    return { providerErrors: this.runs.get(callId)?.providerErrorCount ?? 0 };
+  }
+
   voiceStats(callId: string): { voiceFramesRelayed: number; voiceFramesDropped: number } {
     const run = this.runs.get(callId);
     return { voiceFramesRelayed: run?.relay.relayed ?? 0, voiceFramesDropped: run?.relay.dropped ?? 0 };

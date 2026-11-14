@@ -757,6 +757,16 @@ describe('a tool call waits for the lines before it (re-audit F6)', () => {
   });
 });
 
+describe('provider errors are counted (re-audit F7)', () => {
+  it('each error event adds to the count shown in the run\'s stats, and the count survives a replaced session', async () => {
+    const s = await realRuntime();
+    expect(runtime.callStats(CALL)).toEqual({ providerErrors: 0 });
+    s.fire('error', { message: 'invalid_value: x', info: { code: 'invalid_value', param: 'session.thinking', type: null } });
+    s.fire('error', { message: 'rate_limited: x', info: { code: 'rate_limited', param: null, type: null } });
+    expect(runtime.callStats(CALL)).toEqual({ providerErrors: 2 });
+  });
+});
+
 describe('the asker is the person who addressed Nova (B3), on the real path', () => {
   it('A asks, B chatters before the call arrives: A is the asker', async () => {
     const s = await realRuntime();

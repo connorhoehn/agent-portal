@@ -112,6 +112,7 @@ async function view(record: AssistantRecord | null, callId: string, session: Ses
     pendingRequests: record.pendingRequests,
     voice: record.voice === true,
     ...assistantRuntime().voiceStats(callId),
+    ...assistantRuntime().callStats(callId),
   };
 }
 

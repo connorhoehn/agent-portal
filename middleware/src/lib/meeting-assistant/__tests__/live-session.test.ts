@@ -331,6 +331,20 @@ describe('usage and close', () => {
     expect(s.answerToolCall('call_9', '{}')).toBe(false);
   });
 
+  it('keeps a bounded list of provider errors as codes only, never the message or anything that is not shaped like a code', async () => {
+    const { s, seen } = make();
+    await s.start(START);
+    frame({ type: 'error', code: 'invalid_value', param: 'session.thinking', message: 'secret words from the call', error: { type: 'invalid_request_error' } });
+    frame({ type: 'error', code: 'has spaces and secret words', message: 'x' });
+    for (let i = 0; i < 30; i += 1) frame({ type: 'error', code: `e_${i}` });
+    await tick();
+    expect(s.providerErrors).toHaveLength(20);
+    expect(s.providerErrors.at(-1)).toEqual({ code: 'e_29', param: null, type: null });
+    expect(seen.error[0]!.info).toEqual({ code: 'invalid_value', param: 'session.thinking', type: 'invalid_request_error' });
+    expect(seen.error[1]!.info!.code).toBeNull();
+    expect(JSON.stringify(s.providerErrors)).not.toMatch(/secret/);
+    await s.close();
+  });
   it('surfaces a provider error after start as an event with a code and a capped message', async () => {
     const { s, seen } = make();
     await s.start(START);

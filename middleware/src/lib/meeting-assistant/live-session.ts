@@ -25,7 +25,7 @@ import {
   hangupLiveSession, liveSocketSessionBody, LIVE_SOCKET_OPEN, openLiveSocket, type LiveSocket,
 } from '../voice/openai.js';
 import {
-  SessionEmitter, SessionTextUnsupported, type BackendTokens, type LiveMeetingSession, type SessionStartInput,
+  MAX_PROVIDER_ERRORS, SessionEmitter, SessionTextUnsupported, type BackendTokens, type LiveMeetingSession, type ProviderErrorInfo, type SessionStartInput,
 } from './session.js';
 
 export interface OpenAiLiveSessionOptions {
@@ -63,6 +63,8 @@ export function pcm16Rms(pcm: Buffer): number {
 }
 
 const SENTENCE_END = /[.!?]["')\]]*\s*$/;
+/** A provider code, type or parameter name only when it looks like one: never free text. */
+const shortCode = (v: unknown): string | null => (typeof v === 'string' && /^[\w.:\[\]-]{1,64}$/.test(v) ? v : null);
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0);
 
 interface Piece { text: string; startMs: number; endMs: number }
@@ -73,6 +75,8 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   readonly kind = 'openai' as const;
   readonly acceptsText = false;
   providerSessionId: string | null = null;
+  /** Provider `error` events, codes only, the latest MAX_PROVIDER_ERRORS. */
+  readonly providerErrors: ProviderErrorInfo[] = [];
 
   private socket: LiveSocket | null = null;
   private opened = false;
@@ -247,8 +251,12 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
       case 'error': {
         const code = (ev['code'] ?? (ev['error'] as { code?: unknown } | undefined)?.code);
         const message = `${typeof code === 'string' ? code : 'error'}: ${typeof ev['message'] === 'string' ? ev['message'].slice(0, 200) : ''}`;
+        const err = ev['error'] as { code?: unknown; param?: unknown; type?: unknown } | undefined;
+        const info: ProviderErrorInfo = { code: shortCode(code), param: shortCode(ev['param'] ?? err?.param), type: shortCode(err?.type) };
+        this.providerErrors.push(info);
+        if (this.providerErrors.length > MAX_PROVIDER_ERRORS) this.providerErrors.shift();
         if (!this.started) { this.fail?.(new Error(message)); return; }
-        this.emit('error', { message });
+        this.emit('error', { message, info });
         return;
       }
       default: return;

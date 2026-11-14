@@ -260,7 +260,7 @@ async function main() {
   const media = DRY ? await startFakeMedia() : null;
   const child = startMiddleware();
   const vera = new Person(VERA), nora = new Person(NORA);
-  let callId = null, invited = false, watchdog = null, dismissed = false;
+  let callId = null, invited = false, watchdog = null, dismissed = false, providerErrors = null;
   const dismiss = async () => {
     if (!invited || dismissed) return;
     dismissed = true;
@@ -405,7 +405,9 @@ async function main() {
     const audio = (await vera.call('GET', `/api/dev/calls/${encodeURIComponent(callId)}/assistant-audio`)).json;
     check('no participant was unmapped', (audio?.counters?.unmappedChunks ?? 1) === 0, JSON.stringify(audio?.counters));
     const stateNow = (await vera.call('GET', `${A}/state`)).json;
+    providerErrors = typeof stateNow?.providerErrors === 'number' ? stateNow.providerErrors : null;
     if (DRY) {
+      check('the provider sent no error event', providerErrors === 0, `providerErrors ${providerErrors}`);
       check('with the voice off (the default) the first spoken reply relayed nothing, though the provider sent voiced frames',
         offCheck && offCheck.relayed === 0 && offCheck.voicedSent >= 6 && offCheck.state?.voice === false && offCheck.state?.voiceFramesRelayed === 0,
         offCheck ? `${offCheck.voicedSent} voiced frames from the provider, ${offCheck.relayed} relayed, voice ${offCheck.state?.voice}` : 'the first reply never came');
@@ -463,6 +465,7 @@ async function main() {
     await provider?.close(); await media?.close();
     if (!KEEP) fs.rmSync(OUT, { recursive: true, force: true });
   }
+  console.log(`provider error events this call: ${providerErrors ?? 'unknown'} (a count only; codes are kept on the session, never their text)`);
   const failed = results.filter((r) => !r.ok);
   console.log(failed.length ? `live-e2e: FAIL (${failed.length} of ${results.length})` : `live-e2e: PASS (${results.length} checks)`);
   return failed.length ? 1 : 0;
