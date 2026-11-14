@@ -143,6 +143,22 @@ describe('what a session is started with', () => {
     expect(classifyCall('no_such_tool', {})).toBeNull();
     expect(describeCall('create', { kind: 'work-item', fields: { title: 'the login cookie bug' } }).summary).toBe('Create a work item titled "the login cookie bug"');
   });
+
+  it('lists every argument the tool will receive on the card, nested ones included (audit B7)', () => {
+    const long = 'x'.repeat(400);
+    const { summary, detail } = describeCall('create', {
+      kind: 'work-item',
+      fields: { title: 'the login cookie bug', description: long, points: 3, labels: ['auth', 'cookies'], owner: { id: 'u-vera', name: 'Vera Green' } },
+      initiative: 'p-auth-migration', a: 1, b: 2, c: 3, d: 4, e: 5, f: 6, g: 7,
+    });
+    expect(summary).toBe('Create a work item titled "the login cookie bug"');
+    expect(detail).toEqual(expect.arrayContaining([
+      'title: the login cookie bug', `description: ${long}`, 'points: 3', 'labels: auth, cookies',
+      'owner id: u-vera', 'owner name: Vera Green', 'kind: work-item', 'initiative: p-auth-migration', 'g: 7',
+    ]));
+    expect(detail).toHaveLength(15);
+    expect(detail.join('\n')).not.toContain('[object Object]');
+  });
 });
 
 describe('a spoken request in the scripted world', () => {

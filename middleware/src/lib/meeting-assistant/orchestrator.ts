@@ -177,13 +177,35 @@ export function classifyCall(name: string, args: unknown): TurnKind | null {
 
 const KIND_LABELS: Readonly<Record<string, string>> = { 'work-item': 'work item', 'saved-search': 'saved search', 'access-request': 'access request' };
 
-/** A human line and a few detail lines for a write's card. Built from the catalogue's own names and the call's own arguments. */
+/** One argument value in words: scalars as they are, lists joined, nothing cut (the whole call is at most MAX_ARGS_BYTES). */
+const argText = (v: unknown): string => (typeof v === 'string' ? v : String(v)).replace(/\s+/g, ' ').trim();
+
+/** Every leaf of the arguments as `path: value`, so the card hides nothing the tool will receive (audit B7). */
+function argLines(value: unknown, path: string, out: string[]): void {
+  if (value === null || value === undefined) return;
+  if (Array.isArray(value)) {
+    if (value.every((x) => x === null || typeof x !== 'object')) { if (value.length) out.push(`${path}: ${value.map(argText).join(', ')}`); return; }
+    value.forEach((x, i) => argLines(x, `${path} ${i + 1}`, out));
+    return;
+  }
+  if (typeof value === 'object') {
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) argLines(v, path ? `${path} ${k}` : k, out);
+    return;
+  }
+  out.push(`${path}: ${argText(value)}`);
+}
+
+/**
+ * A human line and the detail lines for a write's card. Built from the catalogue's own names and the call's own arguments.
+ * The detail lists EVERY argument the tool will receive, nested ones included: the asker confirms what they can read.
+ */
 export function describeCall(name: string, args: unknown): { summary: string; detail: string[] } {
-  const a = args && typeof args === 'object' ? args as Record<string, unknown> : {};
-  const fields = a['fields'] && typeof a['fields'] === 'object' ? a['fields'] as Record<string, unknown> : {};
-  const detail = Object.entries({ ...fields, ...Object.fromEntries(Object.entries(a).filter(([k]) => k !== 'fields' && k !== 'kind')) })
-    .filter(([, v]) => v !== null && v !== undefined && typeof v !== 'object')
-    .slice(0, 8).map(([k, v]) => `${k}: ${capText(String(v), 120)}`);
+  const a = args && typeof args === 'object' && !Array.isArray(args) ? args as Record<string, unknown> : {};
+  const fields = a['fields'] && typeof a['fields'] === 'object' && !Array.isArray(a['fields']) ? a['fields'] as Record<string, unknown> : {};
+  const detail: string[] = [];
+  // The record's own fields first, under their own names; then every other argument.
+  argLines(fields, '', detail);
+  for (const [k, v] of Object.entries(a)) if (k !== 'fields') argLines(v, k, detail);
   if (name === 'create') {
     const kind = capText(a['kind'], 40), title = capText(fields['title'] ?? fields['name'], 120);
     const label = KIND_LABELS[kind] ?? (kind || 'record');
