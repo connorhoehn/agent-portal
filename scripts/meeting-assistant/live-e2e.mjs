@@ -17,6 +17,13 @@
 // labelled with the right asker; an action card waiting for the right asker for the second; refusedCalls 0. Then it dismisses and
 // prints the billed seconds.
 //
+// Nova's voice (package 7a). The fake provider sends one SILENT output frame (100 ms, all zero) for every input frame, as the real one does,
+// and voiced frames (a sine) for each spoken reply. Both people join the call chat channel with their gateway sockets, which is how the
+// browser will receive `assistant-audio` frames. In --dry the gateway runs in the script's own middleware process, so the script acts as
+// the members' sockets (no dev read is needed) and asserts: with the voice off (the default) the first spoken reply relays NOTHING; the
+// voice is then turned on over the route and the second spoken reply arrives at both sockets as voiced frames in order, with a `last`
+// frame, and nothing for the silence. In the paid run the voice is turned on at the start and the number of relayed frames is printed.
+//
 // Safety. The session is hard-stopped 75 seconds after the invite whatever happens, and the script always dismisses (and then stops
 // its own middleware by PID). Audio is read from files it makes in a temp folder, is posted to its own middleware, and is never
 // written by the server. Nothing here prints a key or a token. Ports: 3953 (middleware), 3954 (fake provider), 3955 (fake media).
@@ -101,10 +108,15 @@ function speak(text, voice, file) {
 
 // ── A fake provider (dry run): replays a canned session, driven by the audio it is sent ──────────────────
 function startFakeProvider(script) {
-  const seen = { frames: 0, bytes: 0, badFrames: 0, started: 0, closed: 0, toolResults: 0, wallStart: 0, wallLast: 0 };
+  const seen = { frames: 0, bytes: 0, badFrames: 0, started: 0, closed: 0, toolResults: 0, wallStart: 0, wallLast: 0, voicedSent: 0, silentSent: 0, replies: [] };
   const wss = new WebSocketServer({ port: PROVIDER_PORT, host: '127.0.0.1' });
   wss.on('connection', (ws) => {
-    let audioMs = 0, voiced = null, quiet = 0, utterance = 0, openedAt = Date.now();
+    let audioMs = 0, voiced = null, quiet = 0, utterance = 0, openedAt = Date.now(), speaking = 0, outSeq = 0;
+    // One output frame for every input frame (measured on the real provider): all zero unless the model is speaking, then a sine.
+    const silent = Buffer.alloc(4800).toString('base64');
+    const tone = Buffer.alloc(4800); for (let i = 0; i < 2400; i += 1) tone.writeInt16LE(Math.round(3000 * Math.sin((2 * Math.PI * 330 * i) / 24000)), i * 2);
+    const voicedB64 = tone.toString('base64');
+    const speak = (label) => { speaking += 6; seen.replies.push(label); };
     const send = (ev) => { try { ws.send(JSON.stringify(ev)); } catch { /* closed */ } };
     const finishRun = (run) => {
       const item = script[utterance]; utterance += 1;
@@ -113,6 +125,7 @@ function startFakeProvider(script) {
       if (item.request === 'answer') {
         setTimeout(() => {
           send({ type: 'session.output_transcript.delta', start_ms: audioMs, end_ms: audioMs + 200, delta: ' Two plus two is four.' });
+          speak('answer');
         }, 150);
       } else if (item.request === 'tool') {
         send({ type: 'session.delegation.created', offset_ms: audioMs, delegation: { id: 'item_dry_1', type: 'delegation', target: 'responses' } });
@@ -129,6 +142,9 @@ function startFakeProvider(script) {
         const buf = Buffer.from(String(ev.audio ?? ''), 'base64');
         if (buf.length !== 4800) seen.badFrames += 1;
         seen.frames += 1; seen.bytes += buf.length; if (!seen.wallStart) seen.wallStart = Date.now(); seen.wallLast = Date.now();
+        outSeq += 1;
+        if (speaking > 0) { speaking -= 1; seen.voicedSent += 1; send({ type: 'session.output_audio.delta', delta: voicedB64, event_id: `out_${outSeq}` }); }
+        else { seen.silentSent += 1; send({ type: 'session.output_audio.delta', delta: silent, event_id: `out_${outSeq}` }); }
         let sum = 0; const n = buf.length / 2; for (let i = 0; i < n; i += 1) { const v = buf.readInt16LE(i * 2); sum += v * v; }
         const loud = Math.sqrt(sum / Math.max(1, n)) > 350;
         const t0 = audioMs; audioMs += (buf.length / 2 / 24000) * 1000;
@@ -137,6 +153,7 @@ function startFakeProvider(script) {
       } else if (ev.type === 'response.item.create') {
         seen.toolResults += 1;
         send({ type: 'session.output_transcript.delta', start_ms: audioMs, end_ms: audioMs + 200, delta: ' I have asked Nora to confirm that.' });
+        speak('confirm');
       } else if (ev.type === 'session.close') {
         seen.closed += 1;
         send({ type: 'session.closed', reason: 'closed', usage: { seconds: Math.round((Date.now() - openedAt) / 1000) } });
@@ -268,6 +285,13 @@ async function main() {
     }
     await vera.waitFrame((f) => f.type === 'call-chat' && f.action === 'members' && f.participants?.length === 2, 20_000);
     check('two people hold seats in one call', true, callId);
+    // Each person joins the call chat channel, as the browser does for the chat; Nova's voice frames go to the sockets that did.
+    const CHAT = `orgiq:huddle:${callId}`;
+    for (const person of [vera, nora]) {
+      person.send({ service: 'chat', action: 'join', channel: CHAT });
+      await person.waitFrame((f) => f.type === 'chat' && f.action === 'joined' && f.channel === CHAT, 15_000);
+    }
+    const voiceFrames = (person) => person.frames.filter((f) => f.type === 'assistant-audio' && f.channel === CHAT);
 
     // 3. Vera invites Nova; then each person binds their own participant id (the portal does this once it knows the assistant is there); Nora acknowledges.
     const A = `/api/calls/${encodeURIComponent(callId)}/assistant`;
@@ -284,6 +308,8 @@ async function main() {
     const stolen = await nora.call('POST', `${A}/participant`, { participantId: participantIds[VERA.userId] });
     check('a person cannot bind another person\'s participant id', stolen.status === 403, `HTTP ${stolen.status}`);
     check('Nora acknowledges the notice', (await nora.call('POST', `${A}/ack`)).status === 200);
+    check('Nova\'s voice is off by default', (await vera.call('GET', `${A}/state`)).json?.voice === false);
+    if (!DRY) check('Vera turns Nova\'s voice on (paid run)', (await vera.call('POST', `${A}/voice`, { on: true })).json?.voice === true);
 
     // 4. Where the taps would post: the mock world's dev route says (the real media server is told by the arming).
     let sink = null;
@@ -302,8 +328,17 @@ async function main() {
     const novaSeen = new Map(); // message id -> { elapsed, msg }
     const t0 = Date.now();
     let polling = true;
+    let offCheck = null, voiceOnAt = 0;
     const poll = (async () => {
       while (polling) {
+        // Dry: once the first spoken reply is in the chat and its voiced frames have gone through the provider, the voice was off for all of it.
+        if (DRY && !voiceOnAt && [...novaSeen.values()].some((v) => v.msg.metadata.kind === 'assistant-reply') && provider.seen.voicedSent >= 6) {
+          await sleep(800);
+          offCheck = { relayed: voiceFrames(vera).length + voiceFrames(nora).length, voicedSent: provider.seen.voicedSent, state: (await vera.call('GET', `${A}/state`)).json };
+          const on = await vera.call('POST', `${A}/voice`, { on: true });
+          voiceOnAt = Date.now() - t0;
+          check('Vera turns Nova\'s voice on after the first reply', on.status === 200 && on.json?.voice === true, `HTTP ${on.status}`);
+        }
         const r = await vera.call('GET', `/api/calls/${encodeURIComponent(callId)}/chat?limit=100`);
         for (const m of r.json?.messages ?? []) if (m.metadata?.assistant === true && !novaSeen.has(m.id)) novaSeen.set(m.id, { elapsed: Date.now() - t0, msg: m });
         // Replies and cards can change (a card's status): keep the latest of each.
@@ -314,6 +349,7 @@ async function main() {
     const sim = await runTapSim({ base: BASE, token: sink.token, channel: sink.channelArn, timeline: plan, dir: OUT, ...(DRY ? { secret: SINK_SECRET } : {}) });
     const waitUntil = Date.now() + 14_000;
     while (Date.now() < waitUntil && ![...novaSeen.values()].some((v) => v.msg.metadata.kind === 'assistant-action' && v.msg.metadata.tool?.name === 'create')) await sleep(500);
+    if (DRY) { const until = Date.now() + 8000; while (Date.now() < until && voiceFrames(vera).length < 9) await sleep(200); }
     await sleep(1500);
     polling = false; await poll;
     check('the sink took every chunk', sim.failed === 0 && (sim.answers['204'] ?? 0) === sim.sent, `${sim.sent} chunks, answers ${JSON.stringify(sim.answers)}`);
@@ -368,6 +404,27 @@ async function main() {
     check('no tool call was refused', state?.refusedCalls === 0, `refusedCalls ${state?.refusedCalls}`);
     const audio = (await vera.call('GET', `/api/dev/calls/${encodeURIComponent(callId)}/assistant-audio`)).json;
     check('no participant was unmapped', (audio?.counters?.unmappedChunks ?? 1) === 0, JSON.stringify(audio?.counters));
+    const stateNow = (await vera.call('GET', `${A}/state`)).json;
+    if (DRY) {
+      check('with the voice off (the default) the first spoken reply relayed nothing, though the provider sent voiced frames',
+        offCheck && offCheck.relayed === 0 && offCheck.voicedSent >= 6 && offCheck.state?.voice === false && offCheck.state?.voiceFramesRelayed === 0,
+        offCheck ? `${offCheck.voicedSent} voiced frames from the provider, ${offCheck.relayed} relayed, voice ${offCheck.state?.voice}` : 'the first reply never came');
+      for (const [person, who] of [[vera, VERA], [nora, NORA]]) {
+        const got = voiceFrames(person);
+        const seqs = got.map((f) => f.data?.seq);
+        const bytes = got.map((f) => Buffer.from(String(f.data?.pcm ?? ''), 'base64'));
+        const energy = bytes.map((b) => { let m = 0; for (let i = 0; i + 1 < b.length; i += 2) m = Math.max(m, Math.abs(b.readInt16LE(i))); return m; });
+        check(`${who.name}'s socket received Nova's second reply: 6 voiced frames and a 300 ms tail, in order, no silence in between, the last marked`,
+          got.length === 9 && seqs.every((q, i) => i === 0 || q === seqs[i - 1] + 1) && energy.slice(0, 6).every((m) => m > 100) && energy.slice(6).every((m) => m === 0)
+            && got.every((f, i) => (f.data?.last === true) === (i === 8) && f.data?.callId === callId && f.data?.sampleRate === 24000) && bytes.every((b) => b.length === 4800),
+          `${got.length} frames, seq ${seqs.join(',')}`);
+      }
+      check('the silent output frames the provider sent throughout were dropped at the source (nothing relayed for them)',
+        provider.seen.silentSent > 20 && (stateNow?.voiceFramesRelayed ?? -1) === 9 && stateNow?.voiceFramesDropped === 0,
+        `${provider.seen.silentSent} silent frames sent, relayed ${stateNow?.voiceFramesRelayed}, dropped ${stateNow?.voiceFramesDropped}`);
+    } else {
+      console.log(`voice: the middleware relayed ${stateNow?.voiceFramesRelayed ?? '?'} frame(s) of Nova's voice to the call chat (dropped ${stateNow?.voiceFramesDropped ?? '?'})`);
+    }
     if (provider) {
       const s = provider.seen;
       const wallS = (s.wallLast - s.wallStart) / 1000, audioS = s.bytes / 48000;

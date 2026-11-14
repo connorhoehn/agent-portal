@@ -270,7 +270,9 @@ describe('the voiced timeline on the mixer\'s clock', () => {
 
 describe('no audio is written anywhere', () => {
   it('the audio path (sink route, intake, mixer, timeline, session send) has no file write and no audio in a log line', () => {
-    const files = ['mixer.ts', 'audio-intake.ts', 'attribution.ts', 'live-session.ts', 'media.ts', '../../routes/meeting-assistant-sink.ts'];
+    const files = ['mixer.ts', 'audio-intake.ts', 'attribution.ts', 'live-session.ts', 'media.ts', '../../routes/meeting-assistant-sink.ts',
+      // Nova's voice (package 7a): the relay, the sessions that emit it and the orchestrator that hands it on.
+      'voice.ts', 'session.ts', 'scripted-session.ts', 'orchestrator.ts'];
     for (const f of files) {
       const src = readFileSync(join(__dirname, '..', f), 'utf8');
       const code = src.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n').replace(/'[^'\n]*'|"[^"\n]*"|`[^`]*`/g, "''");
