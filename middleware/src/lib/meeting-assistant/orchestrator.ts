@@ -130,8 +130,9 @@ export interface ReplyContext {
   asker: string | null;
   visibility: 'public' | 'muted';
   answeredAt: number;
+  /** The latest line stored when the context was set: only a line stored after it can end the context (the order decides, not the clocks). */
+  lastSeq?: number;
 }
-/** A public reply context covers speech this long after its answer; a muted one only the short continuation (counted from `answeredAt`). */
 /** How soon after a bare "Nova?" the same person's next line is the request it announced. */
 export const BARE_NAME_FOLLOW_MS = 8_000;
 const BARE_NAME = new RegExp(`^\\s*((hey|hi|ok|okay)[\\s,]+)?${NOVA_NAME}[\\s.,!?…]*$`, 'i');
@@ -153,6 +154,7 @@ export function replyAddressing(lines: readonly TranscriptLine[]): TranscriptLin
   return out;
 }
 
+/** A public reply context covers speech this long after its answer; a muted one only the short continuation (counted from `answeredAt`). */
 export const REPLY_CONTEXT_TTL_MS = 20_000;
 
 /**
@@ -170,6 +172,8 @@ interface Delegation {
    * (bounded by DELEGATION_LINE_SKEW_MS). Set once `asker` resolves.
    */
   judgeAt: number;
+  /** The latest line stored before the delegation (set with `judgeAt`): a line after it was spoken after the work began. */
+  lastSeq: number | null;
   readyAt: number | null;
   item: 'message' | 'function_call' | null;
   acknowledged: boolean;
@@ -184,10 +188,10 @@ export const ACKNOWLEDGEMENT_WINDOW_MS = 6_000;
 const ACKNOWLEDGEMENT_LINE_MARGIN_MS = 1_000;
 /**
  * A sanity bound only: how far the end of a line heard before a delegation (or before Nova's first word) may lie after that moment's
- * wall-clock time and still count as before it. The order the events arrived in is what decides; the paid runs saw the provider's
- * audio clock run up to 2 s ahead of the server's in one session and behind it in another.
+ * wall-clock time and still count as before it. The order the events arrived in is what decides: the paid runs saw the provider's
+ * audio clock start up to 2 s ahead of the server's and then gain about 1.3 s every 100 s, so over a long call the two drift far apart.
  */
-export const DELEGATION_LINE_SKEW_MS = 10_000;
+export const DELEGATION_LINE_SKEW_MS = 5 * 60_000;
 /** The "could not tell who asked" reply is posted at most this often per call. */
 export const UNASKED_NOTICE_EVERY_MS = 30_000;
 /** How often the seat roster is read to record who is present while Nova is. */
@@ -569,13 +573,15 @@ export class AssistantRuntime {
         if (session.kind === 'scripted') return;
         const at = run.sessionStartedAt + e.atMs;
         // Judged once every line heard before the delegation is stored (the provider flushes the request line just before it).
-        const d: Delegation = { at, judgeAt: at, readyAt: null, item: null, acknowledged: false, answered: false, callId: null, asker: Promise.resolve({ userId: null, seq: null }) };
+        const d: Delegation = { at, judgeAt: at, lastSeq: null, readyAt: null, item: null, acknowledged: false, answered: false, callId: null, asker: Promise.resolve({ userId: null, seq: null }) };
         // The request line was emitted just before this event, and its write is queued on the next microtask (`guard`): wait
         // one microtask before reading the chain, so the chain read already holds it.
         d.asker = Promise.resolve().then(() => run.lineChain).then(() => {
           // Read at once, before any line heard after the delegation is stored (those are chained behind this one).
           d.judgeAt = Math.max(at, Math.min(run.lastLineAt, at + DELEGATION_LINE_SKEW_MS));
           const turn = { fromSeq: run.delegationSeq, toSeq: run.lastLineSeq };
+          // (Lines this session stored itself; when it stored none, the time rule below is used.)
+          d.lastSeq = run.lastLineSeq > 0 ? run.lastLineSeq : null;
           run.delegationSeq = run.lastLineSeq;
           return this.findAsker(run.ctx.callId, d.judgeAt, turn);
         }).then((f) => (f.ok ? { userId: f.userId, seq: f.seq } : { userId: null, seq: null }), () => ({ userId: null, seq: null }));
@@ -771,7 +777,7 @@ export class AssistantRuntime {
     const who = attribute(intervals, { startMs: e.startMs - lag, endMs: e.endMs - lag });
     // A whole turn one person clearly spoke measures the lag: how far its reported start lies after that person's voice began.
     if (whole && who.userId !== null && who.speakers.length === 1) {
-      const sample = lagSample(intervals, who.userId, e);
+      const sample = lagSample(intervals, who.userId, e, lag);
       if (sample !== null) { run.lagSamples.push(sample); if (run.lagSamples.length > LAG_SAMPLES) run.lagSamples.shift(); }
     }
     run.pieceNo += 1;
@@ -828,7 +834,7 @@ export class AssistantRuntime {
       if (d.readyAt !== null && from >= d.readyAt) continue;
       const answeredAt = d.callId ? run.callTimes.get(d.callId)?.answeredAt ?? null : null;
       if (answeredAt !== null && answeredAt <= from) continue;
-      if (addressedSince(d.at)) continue;
+      if (d.lastSeq !== null ? addressing.some((l) => l.seq > d.lastSeq! && l.at <= fromLines && !run.claimedLines.has(l.seq)) : addressedSince(d.at)) continue;
       d.acknowledged = true;
       const t = d.callId ? run.callTimes.get(d.callId) : undefined;
       if (t) t.acknowledged = true;
@@ -880,7 +886,7 @@ export class AssistantRuntime {
    * asker, so anyone does). The same asker speaking again keeps it: the answer still goes to them.
    */
   private async contextEnded(run: CallRun, c: ReplyContext): Promise<boolean> {
-    return (await this.addressingLines(run)).some((l) => l.at > c.answeredAt && (c.asker === null || l.userId !== c.asker));
+    return (await this.addressingLines(run)).some((l) => (c.lastSeq !== undefined ? l.seq > c.lastSeq : l.at > c.answeredAt) && (c.asker === null || l.userId !== c.asker));
   }
 
   /** The addressing lines up to `until` (within the asker window) are the request of this call. */
@@ -1018,7 +1024,7 @@ export class AssistantRuntime {
     trace('call.answered', { call: modelCallId, sent, visibility: reply ? reply.visibility : 'muted', asker: reply?.asker ?? null, refused: !!(output && typeof output === 'object' && 'refused' in output) });
     // The spoken continuation that follows belongs to THIS call: public and labelled for its asker, or muted (the default).
     if (sent) {
-      const ctx: ReplyContext = { modelCallId, asker: reply?.asker ?? null, visibility: reply ? reply.visibility : 'muted', answeredAt };
+      const ctx: ReplyContext = { modelCallId, asker: reply?.asker ?? null, visibility: reply ? reply.visibility : 'muted', answeredAt, ...(run.lastLineSeq > 0 ? { lastSeq: run.lastLineSeq } : {}) };
       // A muted context never replaces a live public one (its own call still finds it by id).
       if (!(ctx.visibility === 'muted' && run.reply && run.reply.visibility === 'public' && this.contextLive(run.reply, answeredAt))) run.reply = ctx;
       run.replyById.set(modelCallId, ctx);
@@ -1051,7 +1057,8 @@ export class AssistantRuntime {
     const delegation = run.session?.kind === 'scripted' ? null : this.takeDelegation(run, run.sessionStartedAt + e.atMs, id);
     const judged = delegation ? await delegation.asker : undefined;
     const began = delegation?.at ?? null;
-    const judgeAt = delegation?.judgeAt ?? null;
+    // Without a delegation the call is judged when it arrived; on the lines' clock that is no earlier than the last line stored.
+    const judgeAt = delegation?.judgeAt ?? (run.session?.kind === 'scripted' ? null : Math.max(run.sessionStartedAt + e.atMs, run.lastLineAt));
     run.callTimes.set(id, { openedAt: began ?? this.now(), answeredAt: null, acknowledged: delegation?.acknowledged ?? false });
     trace('call', { call: id, name: voiceTool(e.name) ? e.name : 'unknown', at: run.sessionStartedAt + e.atMs, began, matched: began !== null });
     // Judged only after every line that arrived before the call is stored (the asker is found among them).

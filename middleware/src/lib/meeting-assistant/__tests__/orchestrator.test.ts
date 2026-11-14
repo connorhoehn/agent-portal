@@ -1507,6 +1507,21 @@ describe('the real provider\'s event order (paid runs, 14 November)', () => {
     expect((await runtime.turnsFor(CALL, ALICE)).map((t) => t.askedBy)).toEqual([ALICE]);
   });
 
+  it('with the provider\'s clock drifted seconds ahead, the request line still precedes its delegation: the acknowledgement is not posted', async () => {
+    const base = now;
+    const s = await realRuntime();
+    audioTap.sink!.placed(ALICE, loud(6_000), 8_000);
+    now = base + 11_000;
+    s.hear('Nova, what is the capital of Portugal', 8_000, 14_000); // its end lies 3 s after the delegation's wall-clock moment
+    s.fire('delegation', { atMs: 11_000 });
+    await flush();
+    now = base + 12_400; s.sayAt('One moment.', 11_200, 11_500); await flush();
+    expect(mockPosts.replies).toEqual([]);
+    now = base + 13_500; s.fire('delegationReady', { atMs: 13_500, item: 'message' });
+    now = base + 15_200; s.sayAt('Lisbon.', 14_300, 14_600); await flush();
+    expect(mockPosts.replies).toEqual([{ text: 'Lisbon.', askedBy: ALICE, askedByName: 'Alice' }]);
+  });
+
   it('one heard turn holding two people (a request spoken right after someone else\'s sentence) is stored as one line each', async () => {
     const s = await realRuntime();
     audioTap.sink!.placed(BOB, loud(1_000), 0);

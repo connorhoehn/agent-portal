@@ -179,11 +179,31 @@ describe('the provider\'s transcript lag', () => {
   const iv = (userId: string, startMs: number, endMs: number): VoicedInterval => ({ userId, startMs, endMs });
   it('is measured from whole turns one person spoke, and is the median of the recent samples', () => {
     expect(lagSample([iv('vera', 37_544, 40_264), iv('nora', 41_827, 43_087)], 'vera', { startMs: 38_800, endMs: 41_400 })).toBe(1_256);
+    expect(lagSample([iv('vera', 37_544, 40_264)], 'vera', { startMs: 38_800, endMs: 41_400 }, 4_000)).toBeNull(); // strays from the estimate
     expect(lagSample([iv('mia', 25_389, 25_849)], 'mia', { startMs: 26_600, endMs: 26_800 })).toBeNull(); // too short to measure
     expect(transcriptLag([])).toBe(0);
     expect(transcriptLag([1_256])).toBe(0);
     expect(transcriptLag([1_256, 973, 1_331])).toBe(1_256);
   });
+  it('follows a lag that grows by 1.3 s a minute over ten minutes, as the paid runs saw', () => {
+    const who = ['vera', 'nora', 'mia'];
+    const intervals: VoicedInterval[] = [];
+    const samples: number[] = [];
+    let right = 0;
+    for (let k = 0; k < 80; k += 1) {
+      const start = 5_000 + k * 7_400, end = start + 3_000, userId = who[k % 3]!;
+      intervals.push(iv(userId, start, end));
+      const actual = 1_000 + Math.round(start * 0.0217); // 1.3 s a minute
+      const span = { startMs: start + actual, endMs: end + actual - 200 };
+      const lag = transcriptLag(samples);
+      if (attribute(intervals, { startMs: span.startMs - lag, endMs: span.endMs - lag }).userId === userId) right += 1;
+      const sample = lagSample(intervals, userId, span, lag);
+      if (sample !== null) { samples.push(sample); if (samples.length > 5) samples.shift(); }
+    }
+    expect(right).toBeGreaterThanOrEqual(78);
+    expect(Math.abs(transcriptLag(samples) - (1_000 + Math.round((5_000 + 79 * 7_400) * 0.0217)))).toBeLessThan(400);
+  });
+
   it('moved back by it, a one-word "Nova?" lands on the person who said it', () => {
     const intervals = [iv('mia', 25_389, 25_849), iv('vera', 37_544, 40_264)];
     expect(attribute(intervals, { startMs: 26_600, endMs: 26_800 }).userId).toBeNull();
