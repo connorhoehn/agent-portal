@@ -100,6 +100,18 @@ describe('the inviter delete (memory store)', () => {
     expect(rows.find((m) => m.id === 'h1')!.message).toBe(`I like the ${WORDS[2]} idea`);
   });
 
+  it("reaches Nova's messages that are the oldest of a 1,500-message chat", async () => {
+    const channel = `orgiq:huddle:${CALL}`;
+    for (let i = 0; i < 1500; i++) await chat.putMessage({ id: `bulk-${i}`, clientId: 'c', userId: 'u-nora', channel, message: `chatter ${i}`, timestamp: new Date(10_000 + i).toISOString() });
+    const rows = await chat.listMessages(channel, 5000);
+    const nova = rows.filter((m) => m.userId === NOVA_USER_ID);
+    expect(nova).toHaveLength(3);
+    expect(rows.indexOf(nova[nova.length - 1]!)).toBeLessThan(10);
+    await eraseCall(store, CALL, 'u-vera', 9500);
+    for (const m of (await chat.listMessages(channel, 5000)).filter((x) => x.userId === NOVA_USER_ID)) expect(m.message).toBe(DELETED_RECORD_LINE);
+    expect(updates).toHaveLength(3);
+  });
+
   it('is safe to repeat: a second erase changes no chat message and keeps the tombstone', async () => {
     await eraseCall(store, CALL, 'u-vera', 9500);
     updates.length = 0;

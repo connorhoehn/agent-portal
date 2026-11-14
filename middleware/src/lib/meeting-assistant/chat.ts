@@ -112,7 +112,8 @@ export async function postAction(callId: string, input: ActionInput, opts: PostO
   const store = assistantStore();
   const prior = await store.getAction(callId, input.actionId);
   if (prior) {
-    const existing = (await chatStore().listMessages(callChatChannel(callId), 200)).find((m) => m.id === prior.messageId);
+    const store2 = chatStore();
+    const existing = store2.getMessage ? await store2.getMessage(callChatChannel(callId), prior.messageId) : (await store2.listMessages(callChatChannel(callId), 20_000)).find((m) => m.id === prior.messageId) ?? null;
     return existing ? { message: existing, created: false } : null;
   }
   const status = input.status ?? 'waiting';
@@ -165,13 +166,14 @@ export async function postPrivately(callId: string, userId: string, input: { tex
 // Erasing Nova's words from a call's chat (audit M2, M3). Only messages authored by the assistant identity change; people's own
 // messages are theirs. The text goes through `updateThreadMessage`, the same path a card's status change takes.
 
-/** How many of a call chat's newest messages one erase looks at (the update path itself searches the newest 200). */
-const ERASE_SCAN = 1000;
+/** The most messages of one call chat an erase reads; the update itself is by message id and has no window. */
+export const ERASE_SCAN_MAX = 20_000;
 
 /** Replace the text of every message Nova authored in the call's chat with the fixed line; cards lose summary, detail and result. Safe to repeat. Returns how many changed. */
 export async function eraseAssistantMessages(callId: string): Promise<number> {
   const channel = callChatChannel(callId);
-  const rows = await chatStore().listMessages(channel, ERASE_SCAN);
+  const rows = await chatStore().listMessages(channel, ERASE_SCAN_MAX);
+  if (rows.length >= ERASE_SCAN_MAX) console.warn(`[meeting-assistant] erase read the ${ERASE_SCAN_MAX} newest messages of a call chat; older ones were not looked at`);
   let changed = 0;
   for (const m of rows) {
     if (m.userId !== NOVA_USER_ID || m.deletedAt) continue;
