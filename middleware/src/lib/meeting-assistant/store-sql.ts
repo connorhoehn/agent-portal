@@ -146,7 +146,7 @@ export class SqlAssistantStore implements AssistantStore {
   async attend(callId: string, userId: string) {
     await this.exec(
       `UPDATE meeting_assistants SET attendees = attendees || to_jsonb(:user::text), updated_at = now()
-       WHERE call_id = :call AND NOT (attendees @> to_jsonb(:user::text))`,
+       WHERE call_id = :call AND state <> 'left' AND NOT (attendees @> to_jsonb(:user::text))`,
       [s('call', callId), s('user', userId)],
     );
   }

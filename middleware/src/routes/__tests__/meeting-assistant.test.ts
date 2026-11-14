@@ -198,6 +198,44 @@ describe('lines, acknowledgement and the transcript', () => {
     expect((await get('transcript', 'dave')).status).toBe(404);
   });
 
+  describe('attendance means an active seat while Nova was present (M1)', () => {
+    const seat = async (user: string, clientId: string) => {
+      contexts.set(clientId, ctx(mk(user)));
+      await observeCallPageLifecycle(calls, () => null, () => runtime).registerParticipant(CALL, clientId, user, LOBBY, ['alice', 'bob', 'carol', 'dave']);
+    };
+    const leave = async (clientId: string) => { runtime.invalidate(CALL, clientId); await calls.removeParticipant(CALL, clientId); await runtime.removed(CALL, clientId); };
+
+    it('someone who left before the invite cannot read the transcript or the minutes', async () => {
+      await seat('dave', 'd'); await leave('d');
+      expect((await runtime.seatedUsers(CALL)).find((u) => u.userId === 'dave')).toMatchObject({ active: false });
+      await post('invite');
+      await inject({ userId: 'alice', text: 'after dave left' });
+      expect((await get('transcript', 'dave')).status).toBe(404);
+      expect((await get('minutes', 'dave')).status).toBe(404);
+      expect((await assistantStore().get(CALL))!.attendees).not.toContain('dave');
+    });
+
+    it('someone who joins after Nova left cannot read; someone who was there still can, after the call too', async () => {
+      await post('invite');
+      await inject({ userId: 'alice', text: 'during the call' });
+      await post('dismiss', 'bob');
+      await seat('dave', 'd'); // joins after Nova left, then asks for state like any seated person
+      expect((await get('state', 'dave')).status).toBe(200);
+      expect((await get('transcript', 'dave')).status).toBe(404);
+      await runtime.finish(CALL);
+      expect((await get('transcript', 'dave')).status).toBe(404);
+      expect((await get('transcript', 'bob')).body.lines).toHaveLength(1);
+    });
+
+    it('someone who was present at the invite and left while Nova was there is still an attendee', async () => {
+      await seat('dave', 'd');
+      await post('invite'); // dave is present at the invite
+      await leave('d');
+      await post('dismiss', 'alice');
+      expect((await get('transcript', 'dave')).status).toBe(200);
+    });
+  });
+
   it('rejects odd paging values', async () => {
     await post('invite');
     for (const q of ['after=-1', 'after=x', 'limit=0', 'limit=501', 'limit=1e3']) expect((await get(`transcript?${q}`)).status).toBe(400);

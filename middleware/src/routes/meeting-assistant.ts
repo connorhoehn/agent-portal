@@ -78,6 +78,8 @@ meetingAssistantRouter.use(flagGate, requireTenant('orgiq'), refuseMasquerade);
 const seatOf = async (req: Request): Promise<{ session: Session; callId: string }> => {
   const session = sessionOf(req); const callId = callIdOf(req);
   await callChatRuntime().assertMember(callId, session, false);
+  // A connected seat while the assistant is in the call is attendance (the store ignores it once the assistant has left, audit M1).
+  await assistantStore().attend(callId, session.sub).catch(() => undefined);
   return { session, callId };
 };
 
@@ -206,6 +208,8 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
     if (to === 'listening' && before?.state === 'paused' && !sessionAvailable()) throw new AppError(503, 'The live assistant is not configured for this deployment');
     // Resuming listens again: a new token and a new tap, so the channel is looked up again first (503, still paused, when it cannot be).
     const pre = to === 'listening' && before?.state === 'paused' ? await preflightAudio(session, callId, before.lobby) : null;
+    // Leaving: whoever holds a seat right now was there while Nova was (read before the record becomes `left`, which closes attendance).
+    if (to === 'left') for (const u of await callChatRuntime().seatedUsers(callId).catch(() => [])) if (u.active) await store.attend(callId, u.userId);
     const done = await store.transition(callId, { from, to, by: session.sub, at: Date.now() });
     if (done) {
       const runtime = assistantRuntime();
@@ -224,8 +228,6 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
       if (to === 'listening') await postNoticeQuietly(callId, noticeText.resumed(who));
       if (to === 'left') await postNoticeQuietly(callId, noticeText.dismissed(who, done.linesStored === 0), { leaving: true });
       if (to === 'left') {
-        // Snapshot who was seated so they can still read the transcript after the call ends.
-        for (const u of await callChatRuntime().seatedUsers(callId).catch(() => [])) await store.attend(callId, u.userId);
         assistantIntake().stop(callId);
         await assistantRuntime().stop(callId);
         assistantAudio().forget(callId);
@@ -363,14 +365,13 @@ function intParam(raw: unknown, name: string, min: number, max: number, fallback
 
 /**
  * THE attendee rule, applied by every read of a call's words (transcript and minutes; the meeting list asks the store for
- * the same test): the assistant has a record for this call in the caller's tenant, and the caller held a seat while it was
- * there or holds one now. Same answer for "no assistant", "another tenant's call" and "you were not there": 404.
+ * the same test): the assistant has a record for this call in the caller's tenant, and the caller held an ACTIVE seat at some
+ * moment between the invite and the assistant leaving (recorded as it happens; nothing is inferred from a seat read afterwards). Same answer for "no assistant", "another tenant's call" and "you were not there": 404.
  * Admins get no exception.
  */
 export async function attendeeOf(session: Session, callId: string): Promise<AssistantRecord> {
   const record = await assistantStore().get(callId);
-  const seated = (await callChatRuntime().seatedUsers(callId).catch(() => [])).some((u) => u.userId === session.sub);
-  if (!record || record.tenant !== session.tenant || !(record.attendees.includes(session.sub) || seated)) throw new NotFoundError('Not found');
+  if (!record || record.tenant !== session.tenant || !record.attendees.includes(session.sub)) throw new NotFoundError('Not found');
   return record;
 }
 

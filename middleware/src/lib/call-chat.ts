@@ -573,7 +573,8 @@ export class CallChatRuntime implements CallLifecycleObserver {
   async finish(callId: string, participantClientIds: string[] = []) {
     // Anyone who listens for a call's end (the meeting assistant) is told with the people who held a seat, read before the roster is cleared.
     if (finishListeners.size) {
-      const seated = (await this.seatedUsers(callId).catch(() => [])).map((u) => u.userId);
+      // Only people still holding a seat as the call ends: someone who left earlier was not there for what came after (meeting assistant, audit M1).
+      const seated = (await this.seatedUsers(callId).catch(() => [])).filter((u) => u.active).map((u) => u.userId);
       for (const listener of finishListeners) { try { void Promise.resolve(listener(callId, seated)).catch((e: unknown) => console.warn('[call-chat] finish listener failed', e)); } catch (e) { console.warn('[call-chat] finish listener failed', e); } }
     }
     const control = this.control(callId); control.ended = true; control.generation += 1;
@@ -601,7 +602,7 @@ export class CallChatRuntime implements CallLifecycleObserver {
 }
 type FinishListener = (callId: string, seatedUserIds: string[]) => void | Promise<void>;
 const finishListeners = new Set<FinishListener>();
-/** Be told when a call's conversation ends (once per `finish`), with the user ids that held a seat. Returns the unsubscribe. */
+/** Be told when a call's conversation ends (once per `finish`), with the user ids that still held an ACTIVE seat. Returns the unsubscribe. */
 export function onCallChatFinished(listener: FinishListener): () => void { finishListeners.add(listener); return () => { finishListeners.delete(listener); }; }
 let runtime: CallChatRuntime | null = null;
 export function setCallChatRuntime(value: CallChatRuntime | null) { runtime = value; }

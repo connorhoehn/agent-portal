@@ -48,7 +48,7 @@ export interface AssistantStore {
   transition(callId: string, change: StateChange): Promise<AssistantRecord | null>;
   /** Record that `userId` acknowledged the transcription notice (idempotent); null when there is no record. */
   ack(callId: string, userId: string): Promise<AssistantRecord | null>;
-  /** Record that `userId` held a seat while the assistant was in the call (idempotent). */
+  /** Record that `userId` held an ACTIVE seat while the assistant was in the call (idempotent; ignored once the assistant has left, audit M1). */
   attend(callId: string, userId: string): Promise<void>;
   appendLine(line: Omit<TranscriptLine, 'seq'>): Promise<TranscriptLine | null>;
   addRequest(callId: string, request: PendingRequest): Promise<void>;
@@ -122,7 +122,7 @@ export class MemoryAssistantStore implements AssistantStore {
 
   async attend(callId: string, userId: string) {
     const r = this.records.get(callId);
-    if (r) addTo(r.attendees, userId);
+    if (r && r.state !== 'left') addTo(r.attendees, userId); // attendance ends when Nova leaves (audit M1)
   }
 
   async appendLine(line: Omit<TranscriptLine, 'seq'>) {

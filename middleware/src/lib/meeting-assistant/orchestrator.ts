@@ -109,6 +109,8 @@ export interface ReplyContext {
 export const REPLY_CONTEXT_TTL_MS = 20_000;
 /** The "could not tell who asked" reply is posted at most this often per call. */
 export const UNASKED_NOTICE_EVERY_MS = 30_000;
+/** How often the seat roster is read to record who is present while Nova is. */
+export const ATTENDANCE_EVERY_MS = 15_000;
 export const UNASKED_REPLY = 'I could not tell who asked. Please ask again.';
 
 /** One call's live state. Plain data plus the session; every behaviour is a method of the runtime. */
@@ -132,6 +134,7 @@ interface CallRun {
   /** Replies waiting for the model's spoken continuation, oldest first. */
   replies: ReplyContext[];
   lastUnaskedNoticeAt: number;
+  attendanceAt: number;
   delegationAt: number;
   answeredSinceDelegation: boolean;
   intentionalClose: boolean;
@@ -215,7 +218,7 @@ export class AssistantRuntime {
     this.watchIntake();
     const run: CallRun = {
       ctx, session: null, unsubscribers: [], sessionStartedAt: 0, sessionNo: 0, pieceNo: 0, timeline: new VoicedTimeline(),
-      calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), holding: new Set(), replies: [], lastUnaskedNoticeAt: -Infinity,
+      calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), holding: new Set(), replies: [], lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity,
       delegationAt: -Infinity, answeredSinceDelegation: true, intentionalClose: false, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, sessionKind: 'scripted', chain: Promise.resolve(), finished: false,
     };
@@ -418,6 +421,7 @@ export class AssistantRuntime {
   /** Nova has no session and cannot get one: leave with a notice, stop intake and audio, settle spend and write the minutes (once). */
   private async giveUp(run: CallRun): Promise<void> {
     const callId = run.ctx.callId;
+    await this.snapshotAttendance(callId);
     const done = await this.store.transition(callId, { from: ['listening'], to: 'left', by: 'system', at: this.now() });
     if (!done) return;
     await postNoticeQuietly(callId, `${NOVA_NAME} lost its connection and has left the call. Anyone can invite ${NOVA_NAME} again.`, { leaving: true });
@@ -733,11 +737,17 @@ export class AssistantRuntime {
     const now = this.now();
     for (const run of [...this.runs.values()]) {
       if (run.finished) continue;
+      if (now - run.attendanceAt >= ATTENDANCE_EVERY_MS) { run.attendanceAt = now; await this.snapshotAttendance(run.ctx.callId); }
       await this.checkCeiling(run);
       if (run.finished) continue;
       const due = (await this.store.listTurns(run.ctx.callId, { statuses: ['pending', 'running'] })).filter((t) => t.expiresAt <= now);
       for (const t of due) await this.expireTurn(run, t);
     }
+  }
+
+  /** Everyone who holds an ACTIVE seat right now was present while Nova was (audit M1); departed rows are never counted. */
+  private async snapshotAttendance(callId: string): Promise<void> {
+    try { for (const u of await callChatRuntime().seatedUsers(callId)) if (u.active) await this.store.attend(callId, u.userId); } catch { /* the seat roster is best effort here */ }
   }
 
   /** Five minutes before the ceiling, say so once; at the ceiling, leave with a notice (the listening time counts, a pause does not). */
@@ -748,10 +758,10 @@ export class AssistantRuntime {
     const s = sessionOf(record, assistantLimits().maxSeconds);
     const left = s.ceilingSeconds - listeningSecondsOf(record, this.now());
     if (left <= 0) {
+      await this.snapshotAttendance(callId);
       const done = await this.store.transition(callId, { from: ['listening'], to: 'left', by: 'system', at: this.now() });
       if (!done) return;
       await postNoticeQuietly(callId, `${NOVA_NAME} left because this call reached its ${Math.round(s.ceilingSeconds / 60)}-minute limit. Anyone who can invite ${NOVA_NAME} can invite again.`, { leaving: true });
-      for (const u of await callChatRuntime().seatedUsers(callId).catch(() => [])) await this.store.attend(callId, u.userId);
       this.deps.intake().stop(callId);
       await this.stop(callId);
     } else if (left <= CEILING_WARNING_SECONDS && !s.warned) {
