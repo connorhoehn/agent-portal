@@ -133,6 +133,7 @@ export class AudioIntake {
 
   /** The call's token is dead (the tap is the caller's to delete). Idempotent. */
   disarm(callId: string): void {
+    void this.dropBindingsIfOver(callId);
     const armed = this.byCall.get(callId);
     // With no live token the listeners still hear of it: a tap whose delete failed earlier (or was never confirmed) is retried by the armer.
     if (!armed) { for (const l of [...this.deadListeners]) { try { l(callId); } catch (e) { console.warn('[meeting-assistant] audio listener failed', (e as Error).message); } } return; }
@@ -141,6 +142,18 @@ export class AudioIntake {
     void this.flush(armed);
     void this.store().patchSession(callId, { sinkTokenHash: null }).catch(() => undefined);
     for (const l of [...this.deadListeners]) { try { l(callId); } catch (e) { console.warn('[meeting-assistant] audio listener failed', (e as Error).message); } }
+  }
+
+  /**
+   * Who was who is kept across a pause and a resume, and dropped once the assistant has left the call, whichever way that happened
+   * (a dismiss goes through `forget`; a call that ends, a ceiling or a lost connection only kill the token).
+   */
+  private async dropBindingsIfOver(callId: string): Promise<void> {
+    if (!this.bindings.has(callId)) return;
+    try {
+      const record = await this.store().get(callId);
+      if (!record || record.state === 'left') this.bindings.delete(callId);
+    } catch { /* kept: the next token death asks again */ }
   }
 
   /** Be told when a call's token dies (paused, left, ceiling, call end). The tap armer deletes the tap then. */

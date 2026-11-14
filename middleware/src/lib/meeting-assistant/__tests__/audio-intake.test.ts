@@ -195,6 +195,17 @@ describe('who a participant is', () => {
     expect(rate(1500)).toBe(0);                                 // 38 bound people: 8 each, 304 a second
   });
 
+  it('the bindings are kept across a pause and dropped when the call ends without a dismiss', async () => {
+    await store.transition(CALL, { from: ['listening'], to: 'paused', by: BEN, at: now });
+    await runtime.pause(CALL);
+    for (let i = 0; i < 4; i += 1) await new Promise<void>((r) => setImmediate(r));
+    expect(audio.userOf(CALL, PID.ana)).toBe(ANA);
+    await store.transition(CALL, { from: ['paused'], to: 'left', by: 'system', at: now });
+    audio.detach(CALL); // what the stop path does; the dismiss route's `forget` is not called
+    for (let i = 0; i < 4; i += 1) await new Promise<void>((r) => setImmediate(r));
+    expect(audio.userOf(CALL, PID.ana)).toBeNull();
+  });
+
   it('the bindings survive on the record (a resumed call keeps them)', async () => {
     expect(sessionOf((await store.get(CALL))!).participants).toMatchObject({ [PID.ana]: ANA, [PID.ben]: BEN });
   });
