@@ -130,6 +130,20 @@ describe('invite, pause, resume, dismiss', () => {
     expect((await post('ack', 'bob')).body).toMatchObject({ mustAck: [], youMustAck: false });
   });
 
+  it('a repeated invite from the inviter completes a record stuck in invited, once, with one joined notice', async () => {
+    const stuck = { callId: CALL, tenant: 'orgiq', lobby: LOBBY, initiativeId: null, state: 'invited' as const, invitedBy: 'alice', invitedAt: 1, pausedBy: null, leftAt: null, leftBy: null,
+      acked: ['alice'], attendees: ['alice'], presentAtInvite: ['alice'], requests: 0, linesStored: 0, nextSeq: 1, pendingRequests: [] };
+    await assistantStore().create(stuck);
+    const joined = async () => (await runtime.messages.listMessages(`orgiq:huddle:${CALL}`, 50)).filter((m) => (m.metadata as { kind?: string } | undefined)?.kind === 'assistant-notice').length;
+    expect((await post('invite', 'bob')).body).toMatchObject({ state: 'invited' });   // someone else's repeat does not complete it
+    const res = await post('invite');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ state: 'listening', invitedBy: 'alice' });
+    expect(await joined()).toBe(1);
+    await post('invite');
+    expect(await joined()).toBe(1);
+  });
+
   it('anyone with a seat can pause, resume and dismiss; repeats succeed; a dismissed assistant stays gone', async () => {
     await post('invite');
     expect((await post('pause', 'bob')).body).toMatchObject({ state: 'paused', pausedBy: 'bob' });

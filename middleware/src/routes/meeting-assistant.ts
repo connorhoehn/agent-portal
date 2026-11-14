@@ -152,13 +152,20 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
   if (existing?.state === 'left') throw new AppError(409, 'The assistant already left this call');
   if (existing) {
     startListening(); await noteSeat(callId, session);
+    // A record stuck in `invited` (the first request stopped before it moved on): the inviter's repeat finishes it, once (the move is conditional).
+    let current = existing; let completed = false;
+    if (existing.state === 'invited' && existing.invitedBy === session.sub) {
+      const moved = await store.transition(callId, { from: ['invited'], to: 'listening', by: session.sub, at: Date.now() });
+      if (moved) { current = moved; completed = true; }
+    }
     // After a restart a listening record has no live session in this process: start one again on a repeated invite.
-    if (existing.state === 'listening' && !assistantRuntime().isRunning(callId)) {
-      const pre = await preflightAudio(session, callId, existing.lobby);
-      const started = await startSession(callId, existing, session).then(() => true, () => false);
+    if (current.state === 'listening' && !assistantRuntime().isRunning(callId)) {
+      const pre = await preflightAudio(session, callId, current.lobby);
+      const started = await startSession(callId, current, session).then(() => true, () => false);
       if (started) await armAudio(callId, pre);
     }
-    res.json(await view((await store.get(callId)) ?? existing, callId, session)); return;
+    if (completed) await postNoticeQuietly(callId, noticeText.joined(await nameOf(session.sub, session.name), config.meetingAssistant.transcriptRetentionDays));
+    res.json(await view((await store.get(callId)) ?? current, callId, session)); return;
   }
   if (!sessionAvailable()) throw new AppError(503, 'The live assistant is not configured for this deployment');
 
