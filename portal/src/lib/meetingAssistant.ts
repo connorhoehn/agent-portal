@@ -62,6 +62,17 @@ export async function actOnAssistant(callId: string, action: AssistantAction, op
   return false;
 }
 
+/** Turns Nova's voice on or off for the call (an inviter's action; the server posts the notice in the chat). */
+export async function setAssistantVoice(callId: string, on: boolean): Promise<boolean> {
+  const slot = slotOf(callId);
+  publish(slot, { busy: true, error: null, ask: null });
+  const result = await writeJson<unknown>(`${base(callId)}/voice`, 'POST', { on });
+  if (result.ok) { publish(slot, { busy: false, view: parseAssistantState(callId, result.data) }); return true; }
+  publish(slot, { busy: false, error: result.error ?? 'Nova could not do that.' });
+  await refreshAssistant(callId);
+  return false;
+}
+
 export interface MeetingAssistantHandle {
   /** The server advertises the feature. */
   enabled: boolean;
@@ -79,6 +90,10 @@ export interface MeetingAssistantHandle {
   dismiss(): Promise<boolean>;
   acknowledge(): Promise<boolean>;
   extend(): Promise<boolean>;
+  /** The inviter's switch: Nova speaks aloud in this call, or stops. */
+  setVoice(on: boolean): Promise<boolean>;
+  /** This person may use the voice switch. */
+  canSetVoice: boolean;
 }
 
 const cache = new WeakMap<Slot, { key: string; value: Pick<MeetingAssistantHandle, 'view' | 'busy' | 'error' | 'ask'> }>();
@@ -126,5 +141,7 @@ export function useMeetingAssistant(callId: string | null): MeetingAssistantHand
     controls: assistantControls({ enabled, inCall: !!callId, canInvite: can('InviteMeetingAssistant'), view }),
     invite: () => run('invite'), pause: () => run('pause'), resume: () => run('resume'),
     dismiss: () => run('dismiss'), acknowledge: () => run('ack'), extend: () => run('extend'),
+    setVoice: (on) => (callId && enabled ? setAssistantVoice(callId, on) : Promise.resolve(false)),
+    canSetVoice: can('InviteMeetingAssistant'),
   };
 }

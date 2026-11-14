@@ -5,8 +5,9 @@
 // Everything renders nothing unless the server advertises the feature (session.meetingAssistant) and a call is live.
 
 import { Button, CheckIcon, Chip, CloseIcon, ConfirmDialog, DropdownMenu, InlinePopover, Inline, PauseCircleIcon, PlayCircleIcon, PlusCircleIcon, T, Tooltip } from '@connorhoehn/ui-components/shared';
-import { RecordingConsentNotice, type RosterExtraEntry } from '@connorhoehn/ui-components/video';
+import { MicOffIcon, RecordingConsentNotice, SpeakerIcon, type RosterExtraEntry } from '@connorhoehn/ui-components/video';
 import { useRef, useState } from 'react';
+import { useNovaVoice } from '../../lib/novaVoice';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import { assistantPresent, assistantStateWords, markWords, timeLeftWords, noticeText, noticeVisible, rosterEntry, ASSISTANT_LABEL, ASSISTANT_NAME } from '../../lib/meetingAssistantModel';
 import { useCallHost } from '../../lib/conversationCall';
@@ -25,11 +26,14 @@ export function NovaBarControls() {
   const nova = useMeetingAssistant(callId);
   const { controls, view, busy } = nova;
   const noticeClosed = useNovaNoticeHidden(callId);
+  const voice = useNovaVoice(callId, nova.view);
   const errorRef = useRef<HTMLButtonElement | null>(null);
   const [errorOpen, setErrorOpen] = useState(false);
   if (controls.hidden) return null;
   const state = assistantStateWords(view);
-  const words = markWords(view, noticeClosed);
+  const markBase = markWords(view, noticeClosed);
+  const words = markBase === `${ASSISTANT_NAME} is listening` && voice.speaking ? `${ASSISTANT_NAME} is speaking` : markBase;
+  const voiceMenu = assistantPresent(view);
   const left = timeLeftWords(view);
   return <Inline gap="xs" align="center" wrap={false} className="shrink-0 border-l border-border pl-2" data-testid="nova-bar">
     {controls.invite && <Tooltip content="Nova listens to this call and answers when asked by name" placement="top">
@@ -37,16 +41,19 @@ export function NovaBarControls() {
     </Tooltip>}
     {/* One compact control keeps the dense bar on a line: the state in words is the trigger; acknowledge, pause or resume, extend and dismiss are its menu. */}
     {state && controls.left && <Chip size="xs" tone="neutral" data-testid="nova-left">{state}</Chip>}
-    {words && !controls.left && <DropdownMenu align="end" triggerVariant="secondary" triggerClassName="px-2" triggerLabel={`${words}${left ? `, ${left}` : ''}. Acknowledge, pause, extend or dismiss Nova`} triggerTestId="nova-mark"
-      triggerAttributes={{ 'data-phase': view.phase, 'data-must-ack': String(controls.acknowledge), ...(left ? { 'data-time-left': left } : {}) }} disabled={busy} data-testid="nova-menu"
+    {words && !controls.left && <DropdownMenu align="end" triggerVariant="secondary" triggerClassName="px-2" triggerLabel={`${words}${left ? `, ${left}` : ''}${view.voice ? ", Nova's voice is on" : ''}. Acknowledge, pause, extend or dismiss Nova`} triggerTestId="nova-mark"
+      triggerAttributes={{ 'data-phase': view.phase, 'data-voice': String(view.voice), 'data-voice-muted': String(voice.muted), 'data-voice-speaking': String(voice.speaking), 'data-voice-frames': String(voice.framesPlayed), 'data-voice-ignored': String(voice.framesIgnored), 'data-voice-last-seq': String(voice.lastSeq), 'data-must-ack': String(controls.acknowledge), ...(left ? { 'data-time-left': left } : {}) }} disabled={busy} data-testid="nova-menu"
       trigger={<T size="xs" weight="medium" className="whitespace-nowrap">{words}{left ? ` · ${left}` : ''}</T>}
       sections={[{ items: [
         ...(controls.acknowledge ? [{ label: 'Acknowledge', description: 'Nova cannot hear you until you do', icon: <CheckIcon size={14} />, onSelect: () => void nova.acknowledge() }] : []),
         ...(controls.pause ? [{ label: 'Pause Nova', icon: <PauseCircleIcon size={14} />, onSelect: () => void nova.pause() }] : []),
         ...(controls.resume ? [{ label: 'Resume Nova', icon: <PlayCircleIcon size={14} />, onSelect: () => void nova.resume() }] : []),
+        ...(voiceMenu && nova.canSetVoice ? [{ label: view.voice ? "Turn Nova's voice off" : "Turn Nova's voice on", description: view.voice ? "Nova's voice is on in this call" : 'Nova answers aloud when asked', icon: <SpeakerIcon size={14} />, onSelect: () => void nova.setVoice(!view.voice) }] : []),
+        ...(voiceMenu ? [{ label: voice.muted ? 'Unmute Nova for me' : 'Mute Nova for me', description: 'Only for you, on this browser', icon: <MicOffIcon size={14} />, onSelect: () => voice.setMuted(!voice.muted) }] : []),
         ...(controls.extend ? [{ label: 'Extend time', ...(left ? { description: left } : {}), icon: <PlusCircleIcon size={14} />, onSelect: () => void nova.extend() }] : []),
         ...(controls.dismiss ? [{ label: 'Dismiss Nova', icon: <CloseIcon size={14} />, danger: true, onSelect: () => void nova.dismiss() }] : []),
       ] }]} />}
+    {words && voice.needsGesture && voice.framesPlayed > 0 && <Button variant="ghost" size="sm" onClick={() => void voice.enableSound()} data-testid="nova-enable-sound">Click to hear Nova</Button>}
     {/* The refusal sentence is read in full in a popover; the row keeps one short line. */}
     {nova.error && <>
       <Button ref={errorRef} variant="ghost" size="sm" className="max-w-[12rem] truncate text-danger" onClick={() => setErrorOpen((v) => !v)} aria-expanded={errorOpen} title={nova.error} data-testid="nova-error">{nova.error}</Button>
