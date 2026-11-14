@@ -17,6 +17,11 @@
 //   POST turns/:turnId/result  a seat, and ONLY the person the turn was made for (404 for anyone else). { claimId, ok, output?, error? }:
 //                      the browser's result of running the tool as that person (400 without claimId, 409 when it is not the claim). The server
 //                      hands it to the live session as data, except a private read's `output.say`, which only the asker is shown.
+//   GET  proposals   a seat, a recorded attendee, or a person a proposal names or makes its executor (who sees only those): the call's
+//                    proposals (docs/meeting-consent-design.md) with each person's answer and who is still needed. Anyone else 404.
+//   POST proposals/:id/response  the same people. { response: 'consent' | 'object' | 'withdraw' | 'not-a-decision', reason? }: the
+//                    reason is for an objection only, one line of at most 200 characters, and everyone in the call sees it. "Not a
+//                    decision" needs a seat now. Answers the updated proposal; 409 once it is running, finished or expired.
 //   GET  state       a seat. State, who invited, who still owes an ack, counters, pending requests.
 //   GET  transcript  people who hold or held a seat in this call, nobody else (admins included).
 //   GET  minutes     the same rule (`attendeeOf`): the notes the assistant left. 404 for everyone else, and while there are none.
@@ -26,7 +31,7 @@
 //
 // Every route needs: the flag on (else 404), the orgiq tenant, and a currently connected seat of THIS call
 // (lib/call-chat.ts assertMember) — except the transcript, which also serves people who have left or after
-// the call ended, by attendance. Every route is refused under a masquerade, reads included: they show a person's own turns and the call's words.
+// the call ended, by attendance, and the proposals, which also serve the people a proposal needs. Every route is refused under a masquerade, reads included: they show a person's own turns and the call's words.
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { AppError, asyncHandler, NotFoundError, ValidationError } from '../lib/async-handler.js';
 import { requireAction, requireTenant, resolveSession } from '../lib/authz.js';
@@ -47,6 +52,8 @@ import { sessionAvailable } from '../lib/meeting-assistant/session-select.js';
 import { newAssistantSession, sessionOf as recordSession, type AssistantSession } from '../lib/meeting-assistant/types.js';
 import { assistantLimits } from '../lib/meeting-assistant/limits.js';
 import { assistantSpend, listeningSecondsOf } from '../lib/meeting-assistant/spend.js';
+import { cleanReason, closeProposals, listProposalsFor, ProposalInputError, respondToProposal, whatIsMissing, type ResponseKind } from '../lib/meeting-assistant/proposals.js';
+import type { Proposal } from '../lib/meeting-assistant/types.js';
 import { getProject } from '../providers/projects.js';
 import { config } from '../config.js';
 
@@ -289,6 +296,7 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
       if (to === 'listening') await postNoticeQuietly(callId, noticeText.resumed(who));
       if (to === 'left') await postNoticeQuietly(callId, noticeText.dismissed(who, done.linesStored === 0), { leaving: true });
       if (to === 'left') {
+        await closeProposals(store, callId, done.leftAt ?? Date.now()).catch(() => 0); // open proposals wait 72 hours on the meeting page
         assistantIntake().stop(callId);
         await assistantRuntime().stop(callId);
         await settleFromRecord(callId); // no run in this process (it died): the used minutes are booked from the record
@@ -444,6 +452,77 @@ meetingAssistantRouter.post('/turns/:turnId/result', asyncHandler(async (req, re
   res.json({ turnId, status: out.turn.status });
 }));
 
+// ---- proposals (docs/meeting-consent-design.md) ---------------------------------------------------------------------------------
+
+/**
+ * Who may see and answer a call's proposals: the call has an assistant record in the caller's tenant, and the caller holds a seat now,
+ * or held one while the assistant was in the call, or is named by a proposal or is its executor (they must consent even if they were
+ * never there; they see only those proposals). Everyone else gets the same 404 as "no such call".
+ */
+interface ProposalViewer { session: Session; callId: string; record: AssistantRecord; seated: boolean; attendee: boolean }
+async function proposalViewer(req: Request): Promise<ProposalViewer> {
+  const session = sessionOf(req); const callId = callIdOf(req);
+  let record = await assistantStore().get(callId);
+  if (!record || record.tenant !== session.tenant) throw new NotFoundError('Not found');
+  let seated = false;
+  try { await callChatRuntime().assertMember(callId, session, false); seated = true; } catch (e) { if (!(e instanceof AppError)) throw e; }
+  if (seated && !record.attendees.includes(session.sub)) { await attendOnce(callId, session.sub).catch(() => undefined); record = (await assistantStore().get(callId)) ?? record; }
+  if ((await assistantStore().getMinutes(callId))?.deleted) throw new NotFoundError('Not found');
+  return { session, callId, record, seated, attendee: record.attendees.includes(session.sub) };
+}
+
+const involves = (p: Proposal, userId: string): boolean => p.executor === userId || p.named.includes(userId);
+const visibleTo = (v: ProposalViewer, p: Proposal): boolean => v.seated || v.attendee || involves(p, v.session.sub);
+/** The end of the call for expiry: when the assistant left (the call ending makes it leave). Null while it is in the call. */
+const endedAt = (record: AssistantRecord): number | null => (record.state === 'left' ? (record.leftAt ?? record.invitedAt) : null);
+
+async function proposalView(p: Proposal, viewer: string) {
+  const people = [...new Set([p.executor, ...p.named, ...p.responses.map((r) => r.userId), ...(p.dismissedBy ? [p.dismissedBy] : [])])];
+  const names = Object.fromEntries(await Promise.all(people.map(async (u) => [u, await nameOf(u)] as const)));
+  const mine = p.responses.find((r) => r.userId === viewer);
+  return {
+    id: p.id, callId: p.callId, statement: p.statement, outcome: p.outcome, argsDigest: p.argsDigest, source: p.source, evidence: p.evidence,
+    state: p.state, executor: { userId: p.executor, name: names[p.executor] }, named: p.named.map((u) => ({ userId: u, name: names[u] })),
+    // A reason is shared with everyone who can see the proposal, and labelled so.
+    responses: p.responses.map((r) => ({ userId: r.userId, name: names[r.userId], response: r.response, reason: r.reason, reasonShared: r.reason !== null, at: r.at })),
+    missing: whatIsMissing(p), dismissedBy: p.dismissedBy, createdAt: p.createdAt, updatedAt: p.updatedAt, expiresAt: p.expiresAt,
+    you: { userId: viewer, response: mine?.response ?? null, isExecutor: p.executor === viewer, isNamed: p.named.includes(viewer) },
+  };
+}
+
+meetingAssistantRouter.get('/proposals', asyncHandler(async (req, res) => {
+  const v = await proposalViewer(req);
+  const all = await listProposalsFor(assistantStore(), v.callId, Date.now(), endedAt(v.record));
+  const shown = all.filter((p) => visibleTo(v, p));
+  if (!v.seated && !v.attendee && !shown.length) throw new NotFoundError('Not found');
+  res.json({ callId: v.callId, proposals: await Promise.all(shown.map((p) => proposalView(p, v.session.sub))) });
+}));
+
+const RESPONSES: readonly ResponseKind[] = ['consent', 'object', 'withdraw', 'not-a-decision'];
+meetingAssistantRouter.post('/proposals/:proposalId/response', asyncHandler(async (req, res) => {
+  const v = await proposalViewer(req);
+  const id = req.params['proposalId'];
+  if (typeof id !== 'string' || !/^[a-zA-Z0-9:_-]{1,128}$/.test(id)) throw new NotFoundError('No such proposal');
+  const body = (req.body ?? {}) as { response?: unknown; reason?: unknown };
+  if (!RESPONSES.includes(body.response as ResponseKind)) throw new ValidationError("response must be 'consent', 'object', 'withdraw' or 'not-a-decision'");
+  const response = body.response as ResponseKind;
+  let reason: string | null;
+  try { reason = cleanReason(body.reason); } catch (e) { if (e instanceof ProposalInputError) throw new ValidationError(e.message); throw e; }
+  if (reason !== null && response !== 'object') throw new ValidationError('a reason goes with an objection only');
+  const store = assistantStore();
+  const existing = await store.getProposal(v.callId, id);
+  if (!existing || !visibleTo(v, existing)) throw new NotFoundError('No such proposal');
+  if (response === 'not-a-decision' && !v.seated) throw new AppError(403, 'Only someone in the call can mark a proposal as not a decision');
+  const out = await respondToProposal(store, v.callId, id, { userId: v.session.sub, response, reason, at: Date.now() }, endedAt(v.record));
+  if (!out.ok) {
+    if (out.why === 'not-found') throw new NotFoundError('No such proposal');
+    if (out.why === 'reason-not-allowed') throw new ValidationError('a reason goes with an objection only');
+    if (out.why === 'busy') throw new AppError(409, 'Too many answers at once; try again');
+    throw new AppError(409, `This proposal is ${out.proposal?.state ?? 'finished'}`);
+  }
+  res.json(await proposalView(out.proposal, v.session.sub));
+}));
+
 meetingAssistantRouter.get('/state', asyncHandler(async (req, res) => {
   const { session, callId } = await seatOf(req);
   const store = assistantStore();
@@ -538,6 +617,8 @@ function watchCallEnd(): void {
     if (!meetingAssistantEnabled()) { await endAbandonedCall(callId, Date.now()); return; }
     for (const userId of seated) await attendOnce(callId, userId);
     await onCallEnded(callId, { stop: (id) => assistantRuntime().stop(id), stopIntake: (id) => assistantIntake().stop(id) });
+    const ended = await store.get(callId);
+    if (ended?.state === 'left') await closeProposals(store, callId, ended.leftAt ?? Date.now()).catch(() => 0);
   })()));
 }
 watchCallEnd();

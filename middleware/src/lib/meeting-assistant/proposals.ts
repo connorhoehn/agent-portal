@@ -129,7 +129,7 @@ export function buildProposal(input: NewProposal): Proposal {
   const statement = typeof input.statement === 'string' ? input.statement.replace(/\s+/g, ' ').trim() : '';
   if (!statement || statement.length > MAX_STATEMENT_CHARS) throw new ProposalInputError(`statement is required (at most ${MAX_STATEMENT_CHARS} characters)`);
   const id = input.id ?? `p-${randomBytes(8).toString('hex')}`;
-  if (!ID.test(id)) throw new ProposalInputError('Invalid proposal id');
+  if (typeof id !== 'string' || !ID.test(id)) throw new ProposalInputError('Invalid proposal id');
   if (typeof input.executor !== 'string' || !USER.test(input.executor)) throw new ProposalInputError('executor must be a user id');
   if (!Array.isArray(input.named) || input.named.length > MAX_NAMED || input.named.some((u) => typeof u !== 'string' || !USER.test(u))) throw new ProposalInputError(`named must be at most ${MAX_NAMED} user ids`);
   const evidence = input.evidence ?? [];

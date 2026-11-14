@@ -18,6 +18,10 @@
 //   request, so a walk can send one that the rules would not (a call from someone who never said the name). It goes through
 //   every server check (asker, name lock, role, turn); it is not a shortcut around them. 409 with no scripted session.
 //
+//   POST /api/dev/calls/:callId/assistant-proposals
+//   body: { statement, outcome: { kind: 'decision', initiativeId? } | { kind: 'tool', name, args }, executor, named?, evidence?, id? }
+//   Creates a proposal (source `dev`) exactly as the watcher will, through the same checks: nobody is consented, the outcome is frozen
+//   and digested. 201 with the proposal, 200 when that id exists, 409 when the assistant was never in the call.
 //
 //   GET /api/dev/calls/:callId/assistant-audio
 //   The live sink token and channel for the tap simulator, and the audio counters. See the route below.
@@ -32,6 +36,8 @@ import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { MOCK_CONTROL_SERVICE_AUTH, requireServiceAuth } from '../lib/service-auth.js';
 import { moveAction, postAction, postNotice, postPrivately, postReply } from '../lib/meeting-assistant/chat.js';
 import { assistantRuntime } from '../lib/meeting-assistant/orchestrator.js';
+import { createProposal, ProposalInputError } from '../lib/meeting-assistant/proposals.js';
+import { assistantStore } from '../lib/meeting-assistant/store-select.js';
 import { assistantAudio } from '../lib/meeting-assistant/audio-select.js';
 import { tapArmer } from '../lib/meeting-assistant/media.js';
 import { meetingAssistantEnabled, MockTranscriptSource, mockTranscriptEnabled, transcriptSource, type RawLine } from '../lib/meeting-assistant/index.js';
@@ -166,4 +172,29 @@ meetingAssistantDevRouter.post('/api/dev/calls/:callId/assistant-tool-call', gat
     const id = assistantRuntime().devToolCall(callId, need(b['askedBy'], 'askedBy', 128), need(b['name'], 'name', 64), b['args'] ?? {});
     if (!id) { res.status(409).json({ error: 'No scripted assistant session in this call' }); return; }
     res.status(202).json({ callId: id });
+  }));
+
+meetingAssistantDevRouter.post('/api/dev/calls/:callId/assistant-proposals', gate,
+  requireServiceAuth(MOCK_CONTROL_SERVICE_AUTH, 'mock control authentication required'),
+  asyncHandler(async (req, res) => {
+    const callId = req.params['callId'];
+    if (typeof callId !== 'string' || !/^[a-zA-Z0-9:_-]{1,256}$/.test(callId)) throw new ValidationError('Invalid call id');
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const record = await assistantStore().get(callId);
+    if (!record) { res.status(409).json({ error: 'The assistant is not in this call' }); return; }
+    const outcome = (b['outcome'] ?? {}) as Record<string, unknown>;
+    try {
+      const out = await createProposal(assistantStore(), {
+        callId, tenant: record.tenant, source: 'dev', at: Date.now(),
+        statement: b['statement'] as string, executor: b['executor'] as string,
+        named: (b['named'] ?? []) as string[], evidence: (b['evidence'] ?? []) as number[],
+        // A decision with no initiative named records on the call's own initiative.
+        outcome: (outcome['kind'] === 'decision' && outcome['initiativeId'] === undefined ? { kind: 'decision', initiativeId: record.initiativeId } : outcome) as never,
+        ...(b['id'] !== undefined ? { id: b['id'] as string } : {}),
+      });
+      res.status(out.created ? 201 : 200).json({ created: out.created, proposal: out.proposal });
+    } catch (e) {
+      if (e instanceof ProposalInputError) throw new ValidationError(e.message);
+      throw e;
+    }
   }));
