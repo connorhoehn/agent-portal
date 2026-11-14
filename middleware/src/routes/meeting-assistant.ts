@@ -21,7 +21,9 @@
 //                    proposals (docs/meeting-consent-design.md) with each person's answer and who is still needed. Anyone else 404.
 //   POST proposals/:id/response  the same people. { response: 'consent' | 'object' | 'withdraw' | 'not-a-decision', reason? }: the
 //                    reason is for an objection only, one line of at most 200 characters, and everyone in the call sees it. "Not a
-//                    decision" needs a seat now. Answers the updated proposal; 409 once it is running, finished or expired.
+//                    decision" needs a seat now. With `asExecutor: true` (consent only, while it is consented, by someone who
+//                    consented) the caller becomes the one whose browser runs it. Answers the updated proposal, with `run` (the
+//                    latest run: who, what was made, or why not); 409 once it is running, finished or expired.
 //   GET  state       a seat. State, who invited, who still owes an ack, counters, pending requests.
 //   GET  transcript  people who hold or held a seat in this call, nobody else (admins included).
 //   GET  minutes     the same rule (`attendeeOf`): the notes the assistant left. 404 for everyone else, and while there are none.
@@ -477,7 +479,7 @@ const visibleTo = (v: ProposalViewer, p: Proposal): boolean => v.seated || v.att
 const endedAt = (record: AssistantRecord): number | null => (record.state === 'left' ? (record.leftAt ?? record.invitedAt) : null);
 
 async function proposalView(p: Proposal, viewer: string) {
-  const people = [...new Set([p.executor, ...p.named, ...p.responses.map((r) => r.userId), ...(p.dismissedBy ? [p.dismissedBy] : [])])];
+  const people = [...new Set([p.executor, ...p.named, ...p.responses.map((r) => r.userId), ...(p.dismissedBy ? [p.dismissedBy] : []), ...(p.run ? [p.run.by] : [])])];
   const names = Object.fromEntries(await Promise.all(people.map(async (u) => [u, await nameOf(u)] as const)));
   const mine = p.responses.find((r) => r.userId === viewer);
   return {
@@ -486,7 +488,14 @@ async function proposalView(p: Proposal, viewer: string) {
     // A reason is shared with everyone who can see the proposal, and labelled so.
     responses: p.responses.map((r) => ({ userId: r.userId, name: names[r.userId], response: r.response, reason: r.reason, reasonShared: r.reason !== null, at: r.at })),
     missing: whatIsMissing(p), dismissedBy: p.dismissedBy, createdAt: p.createdAt, updatedAt: p.updatedAt, expiresAt: p.expiresAt,
-    you: { userId: viewer, response: mine?.response ?? null, isExecutor: p.executor === viewer, isNamed: p.named.includes(viewer) },
+    // The latest run (proposal-run.ts): running with its executor; done with what was made (`title`, and `href` for a decision record);
+    // failed, or handed back to consented, with one sentence (`note`) the card shows.
+    run: p.run ? { by: { userId: p.run.by, name: names[p.run.by] }, at: p.run.at, title: p.run.title, href: p.run.href, note: p.run.note } : null,
+    you: {
+      userId: viewer, response: mine?.response ?? null, isExecutor: p.executor === viewer, isNamed: p.named.includes(viewer),
+      // While it is consented, anyone who consented may consent again to run it in their own browser (the executor trying again, or a take-over).
+      canRun: p.state === 'consented' && mine?.response === 'consent',
+    },
   };
 }
 
@@ -503,7 +512,9 @@ meetingAssistantRouter.post('/proposals/:proposalId/response', asyncHandler(asyn
   const v = await proposalViewer(req);
   const id = req.params['proposalId'];
   if (typeof id !== 'string' || !/^[a-zA-Z0-9:_-]{1,128}$/.test(id)) throw new NotFoundError('No such proposal');
-  const body = (req.body ?? {}) as { response?: unknown; reason?: unknown };
+  const body = (req.body ?? {}) as { response?: unknown; reason?: unknown; asExecutor?: unknown };
+  if (body.asExecutor !== undefined && typeof body.asExecutor !== 'boolean') throw new ValidationError('asExecutor must be true or false');
+  const asExecutor = body.asExecutor === true;
   if (!RESPONSES.includes(body.response as ResponseKind)) throw new ValidationError("response must be 'consent', 'object', 'withdraw' or 'not-a-decision'");
   const response = body.response as ResponseKind;
   let reason: string | null;
@@ -513,11 +524,12 @@ meetingAssistantRouter.post('/proposals/:proposalId/response', asyncHandler(asyn
   const existing = await store.getProposal(v.callId, id);
   if (!existing || !visibleTo(v, existing)) throw new NotFoundError('No such proposal');
   if (response === 'not-a-decision' && !v.seated) throw new AppError(403, 'Only someone in the call can mark a proposal as not a decision');
-  const out = await respondToProposal(store, v.callId, id, { userId: v.session.sub, response, reason, at: Date.now() }, endedAt(v.record));
+  const out = await respondToProposal(store, v.callId, id, { userId: v.session.sub, response, reason, at: Date.now(), ...(asExecutor ? { asExecutor } : {}) }, endedAt(v.record));
   if (!out.ok) {
     if (out.why === 'not-found') throw new NotFoundError('No such proposal');
     if (out.why === 'reason-not-allowed') throw new ValidationError('a reason goes with an objection only');
     if (out.why === 'busy') throw new AppError(409, 'Too many answers at once; try again');
+    if (out.why === 'not-a-consenter') throw new AppError(409, 'Only someone who consented can run it');
     throw new AppError(409, `This proposal is ${out.proposal?.state ?? 'finished'}`);
   }
   res.json(await proposalView(out.proposal, v.session.sub));

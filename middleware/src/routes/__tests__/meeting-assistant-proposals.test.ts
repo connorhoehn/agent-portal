@@ -124,9 +124,16 @@ describe('the consent rule through the routes', () => {
     off();
     expect([a.status, b.status]).toEqual([200, 200]);
     const list = await get('proposals', 'lee');
-    expect(list.body.proposals[0].state).toBe('consented');
+    // Consented, then run at once: this call (a direct message) has no initiative to record a decision on, so the run fails with a reason.
+    expect(list.body.proposals[0]).toMatchObject({ state: 'failed', run: { note: expect.stringMatching(/no initiative/) } });
     expect(list.body.proposals[0].responses).toHaveLength(2);
     expect(seen).toEqual(['p-1']);
+  });
+
+  it('consenting again to run it is for a consented proposal only, and the flag is a boolean', async () => {
+    expect((await post('proposals/p-1/response', 'sam', { response: 'consent', asExecutor: 'yes' })).status).toBe(400);
+    expect((await post('proposals/p-1/response', 'sam', { response: 'consent', asExecutor: true })).status).toBe(409);
+    expect((await get('proposals', 'sam')).body.proposals[0]).toMatchObject({ state: 'open', run: null, you: { canRun: false } });
   });
 
   it('"Not a decision" dismisses it, and then nothing more is taken', async () => {
