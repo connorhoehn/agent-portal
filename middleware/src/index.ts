@@ -52,6 +52,7 @@ import { callChatRouter } from './routes/call-chat.js';
 import { meetingAssistantRouter, meetingsRouter } from './routes/meeting-assistant.js';
 import { meetingAssistantDevRouter } from './routes/meeting-assistant-dev.js';
 import { meetingAssistantSinkRouter } from './routes/meeting-assistant-sink.js';
+import { announceSinkSecret } from './lib/meeting-assistant/sink-secret.js';
 import { startTurnSweep } from './lib/meeting-assistant/orchestrator.js';
 import { assertLiveFlagAllowed } from './lib/meeting-assistant/live-flag.js';
 import { assistantStore, meetingAssistantEnabled, startRetentionSweep as startTranscriptRetentionSweep } from './lib/meeting-assistant/index.js';
@@ -387,7 +388,7 @@ app.use('/api/calls', callChatRouter);
 // The meeting assistant (Nova): flag-gated, a call seat required (routes/meeting-assistant.ts).
 app.use('/api/calls/:callId/assistant', meetingAssistantRouter);
 app.use('/api/meetings', meetingsRouter);
-if (meetingAssistantEnabled()) { startTranscriptRetentionSweep(assistantStore()); startTurnSweep(); }
+if (meetingAssistantEnabled()) { startTranscriptRetentionSweep(assistantStore()); startTurnSweep(); announceSinkSecret(); }
 app.use('/api/social', requireTenant('social'), socialRouter);
 app.use('/api/pipelines/search', requireTenant('pipelines'), requireAction('ViewPipelines'), tenantSearchRouter('pipelines'));
 app.use('/api/pipelines', requireTenant('pipelines'), pipelinesRouter);

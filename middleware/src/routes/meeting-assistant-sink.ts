@@ -3,7 +3,8 @@
 //   POST /api/internal/meeting-assistant/pcm/:sinkToken
 //     body    raw 16 kHz mono s16le PCM, one 200 ms chunk (at most 64 KB)
 //     headers X-Channel-Arn (must be the call's channel), X-Participant-Id, X-Sample-Rate, X-Encoding, X-Channels
-//     auth    the unguessable per-call token in the path, and nothing else: no cookie, no session, no CSRF. It is mounted in
+//     auth    the shared secret in `X-Live-Captions-Secret` (MEETING_ASSISTANT_SINK_SECRET, constant-time compare, checked first),
+//             then the unguessable per-call token in the path: no cookie, no session, no CSRF. It is mounted in
 //             index.ts BEFORE the browser-origin check, the JSON body parser and the cookie and session middleware, so none of
 //             them runs; the media server is the only caller.
 //   An unknown, dead, wrong-channel or not-yet-listening token answers 404 with an empty body before the body is read.
@@ -14,6 +15,7 @@ import express, { Router, type NextFunction, type Request, type Response } from 
 import { meetingAssistantEnabled } from '../lib/meeting-assistant/index.js';
 import { MAX_CHUNK_BYTES } from '../lib/meeting-assistant/audio-intake.js';
 import { assistantAudio } from '../lib/meeting-assistant/audio-select.js';
+import { SINK_SECRET_HEADER, sinkSecretOk } from '../lib/meeting-assistant/sink-secret.js';
 
 export const meetingAssistantSinkRouter = Router();
 
@@ -23,6 +25,9 @@ const gone = (res: Response): void => { res.status(404).end(); };
 
 function admit(req: Request, res: Response, next: NextFunction): void {
   if (!meetingAssistantEnabled()) { gone(res); return; }
+  // The second credential first (audit B4): the token in the tap's address can be read back from the media server, so it is not
+  // enough. A missing or wrong secret is the same empty 404 as an unknown token; the token is not even looked at.
+  if (!sinkSecretOk(one(req.headers[SINK_SECRET_HEADER]))) { gone(res); return; }
   const verdict = assistantAudio().admit(tokenOf(req), one(req.headers['x-channel-arn']));
   if (verdict === 'unknown') { gone(res); return; }
   if (verdict === 'limited') { res.set('Retry-After', '1').status(429).end(); return; }

@@ -12,6 +12,7 @@ jest.mock('../chat.js', () => ({ nameOf: async (id: string) => id, postNoticeQui
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { AudioIntake } from '../audio-intake.js';
+import { announceSinkSecret, resetSinkAnnouncement } from '../sink-secret.js';
 import { CANNOT_HEAR_NOTICE, DirectMediaClient, SINK_PATH, TapArmer, mediaConfig, missingMediaSettings, preflightAudio, setChannelResolver, liveForced } from '../media.js';
 import { MemoryAssistantStore } from '../store.js';
 import { newAssistantSession } from '../types.js';
@@ -223,5 +224,44 @@ describe('before anything starts (preflight)', () => {
     expect(mediaConfig()).toBeNull();
     mockConfig.meetingAssistant.media = { url: 'http://media.local/', adminToken: ADMIN, sinkBaseUrl: `${SINK_BASE}/` };
     expect(mediaConfig()).toEqual({ url: 'http://media.local', adminToken: ADMIN, sinkBaseUrl: SINK_BASE });
+  });
+});
+
+describe('the sink secret gates arming (B4)', () => {
+  const session = { sub: 'u-ana', name: 'Ana', tenant: 'orgiq', role: 'member', epoch: 0, grants: {}, iat: 0 } as unknown as Session;
+  const prior = process.env['INSECURE_DEV_MODE'];
+  const withSecret = (secret: string) => { (mockConfig.meetingAssistant.media as unknown as { sinkSecret: string }).sinkSecret = secret; };
+  afterEach(() => { if (prior === undefined) delete process.env['INSECURE_DEV_MODE']; else process.env['INSECURE_DEV_MODE'] = prior; withSecret(''); resetSinkAnnouncement(); });
+
+  it('arming without a secret is refused with a 503 and a plain reason, and no tap is created', async () => {
+    process.env['INSECURE_DEV_MODE'] = 'false';
+    await expect(armer.arm(CALL, ARN)).rejects.toMatchObject({ status: 503, message: expect.stringContaining('MEETING_ASSISTANT_SINK_SECRET') });
+    await settle();
+    expect(tapPosts()).toEqual([]);
+    setChannelResolver({ channelOf: async () => ARN });
+    await expect(preflightAudio(session, CALL, 'orgiq:dm:a:b')).rejects.toMatchObject({ status: 503, message: expect.stringContaining('MEETING_ASSISTANT_SINK_SECRET') });
+  });
+
+  it('with a secret configured arming goes ahead; the secret never appears in a message', async () => {
+    process.env['INSECURE_DEV_MODE'] = 'false';
+    withSecret('top-secret-value');
+    setChannelResolver({ channelOf: async () => ARN });
+    await expect(preflightAudio(session, CALL, 'orgiq:dm:a:b')).resolves.toEqual({ channelArn: ARN, arm: true });
+    await armer.arm(CALL, ARN); await settle();
+    expect(tapPosts()).toHaveLength(1);
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('top-secret-value');
+  });
+
+  it('INSECURE_DEV_MODE opens it, and says so once at start', async () => {
+    process.env['INSECURE_DEV_MODE'] = 'true';
+    await armer.arm(CALL, ARN); await settle();
+    expect(tapPosts()).toHaveLength(1);
+    const lines: string[] = [];
+    expect(announceSinkSecret((l) => lines.push(l))).toBe(true);
+    expect(announceSinkSecret((l) => lines.push(l))).toBe(false);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/OPEN/);
+    withSecret('x'); resetSinkAnnouncement();
+    expect(announceSinkSecret((l) => lines.push(l))).toBe(false); // a secret is set: not open
   });
 });

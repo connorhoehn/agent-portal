@@ -188,6 +188,44 @@ describe('POST /api/internal/meeting-assistant/pcm/:sinkToken', () => {
   });
 });
 
+describe('the sink needs a second secret, then the token (B4)', () => {
+  const SECRET = 'sink-secret-value';
+  const prior = process.env['INSECURE_DEV_MODE'];
+  const setSecret = (v: string) => { (mockConfig.meetingAssistant as unknown as { media: { sinkSecret: string } }).media = { sinkSecret: v } as never; };
+  const armedToken = async () => { await post('invite'); await post('ack', 'bob'); await post('participant', 'bob', { participantId: 'bob-lq1' }); return audio.arm(CALL, ARN); };
+  afterEach(() => { if (prior === undefined) delete process.env['INSECURE_DEV_MODE']; else process.env['INSECURE_DEV_MODE'] = prior; setSecret(''); });
+
+  it('a wrong or missing secret with a right token is the same empty 404, and nothing is counted', async () => {
+    setSecret(SECRET); process.env['INSECURE_DEV_MODE'] = 'false';
+    const token = await armedToken();
+    for (const headers of [{ 'x-live-captions-secret': 'nope' }, { 'x-live-captions-secret': `${SECRET}x` }, {}] as Array<Record<string, string>>) {
+      const r = await sink(token, pcm(), headers);
+      expect([r.status, r.text ?? '']).toEqual([404, '']);
+    }
+    expect(audio.countersOf(CALL)).toMatchObject({ chunks: 0 });
+    const ok = await sink(token, pcm(), { 'x-live-captions-secret': SECRET });
+    expect(ok.status).toBe(204);
+    expect(audio.countersOf(CALL)).toMatchObject({ chunks: 1 });
+  });
+
+  it('the right secret with an unknown or dead token is a 404', async () => {
+    setSecret(SECRET); process.env['INSECURE_DEV_MODE'] = 'false';
+    const token = await armedToken();
+    expect((await sink('A'.repeat(43), pcm(), { 'x-live-captions-secret': SECRET })).status).toBe(404);
+    await post('pause', 'bob');
+    expect((await sink(token, pcm(), { 'x-live-captions-secret': SECRET })).status).toBe(404);
+  });
+
+  it('with no secret configured the sink is closed, except under INSECURE_DEV_MODE where it is open', async () => {
+    setSecret(''); process.env['INSECURE_DEV_MODE'] = 'false';
+    const token = await armedToken();
+    expect((await sink(token, pcm())).status).toBe(404);
+    expect((await sink(token, pcm(), { 'x-live-captions-secret': '' })).status).toBe(404);
+    process.env['INSECURE_DEV_MODE'] = 'true';
+    expect((await sink(token, pcm())).status).toBe(204);
+  });
+});
+
 describe('arming the tap from invite, pause and resume (the real audio path)', () => {
   const calls: string[] = [];
   const client: MediaClient = {

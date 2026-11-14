@@ -21,6 +21,7 @@ import { platformBearer, socialPlatformUrl } from '../../providers/social-platfo
 import { postNoticeQuietly } from './chat.js';
 import { NOVA_NAME } from './chat-types.js';
 import { mockTranscriptEnabled } from './transcript-source.js';
+import { SINK_SECRET_SETTING, sinkSecretUsable } from './sink-secret.js';
 import type { AudioIntake } from './audio-intake.js';
 import { assistantAudio } from './audio-select.js';
 
@@ -184,6 +185,7 @@ export async function preflightAudio(session: Session, callId: string, lobby: st
     if (mockTranscriptEnabled()) return { channelArn: (await new MockChannelResolver().channelOf(session, callId)) ?? '', arm: false };
     throw new AppError(503, `Live listening is not configured for this deployment (missing ${missingMediaSettings().join(', ')})`);
   }
+  if (!sinkSecretUsable()) throw new AppError(503, `Live listening is not configured for this deployment (missing ${SINK_SECRET_SETTING})`);
   const channelArn = await channelResolver().channelOf(session, callId, lobby);
   if (!channelArn) throw new AppError(503, 'This call has no live media session to listen to yet. Try again once someone is publishing audio.');
   return { channelArn, arm: true };
@@ -233,6 +235,8 @@ export class TapArmer {
    */
   async arm(callId: string, channelArn: string): Promise<void> {
     const cfg = this.cfg();
+    // A tap that posts audio to an unsecured sink must never be created (audit B4): no secret, no tap, outside dev mode.
+    if (cfg && !sinkSecretUsable()) throw new AppError(503, `Live listening is not configured for this deployment (missing ${SINK_SECRET_SETTING})`);
     if (!cfg) {
       // No media server in the picture: only the mock world's tap simulator stands in for it, and it is told the token through the dev route.
       if (!mockTranscriptEnabled()) return;

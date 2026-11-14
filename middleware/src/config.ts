@@ -107,6 +107,8 @@ export const config = {
       url: env('MEETING_ASSISTANT_MEDIA_URL'),
       adminToken: env('MEETING_ASSISTANT_MEDIA_ADMIN_TOKEN'),
       sinkBaseUrl: env('MEETING_ASSISTANT_SINK_BASE_URL'),
+      // The shared secret the media server sends in `X-Live-Captions-Secret` on every PCM post (its LIVE_CAPTIONS_SHARED_SECRET). Never logged.
+      sinkSecret: env('MEETING_ASSISTANT_SINK_SECRET'),
     },
   },
 
