@@ -134,6 +134,24 @@ it('Nova\'s voice (assistant-audio) reaches only the sockets that joined the cal
   expect(audio(bob)).toHaveLength(before);
 });
 
+it('Nova\'s voice stops for a seat whose grant was revoked after it subscribed (the router already refuses it; no extra seat check is needed), and keeps reaching the others', async () => {
+  const { alice, bob, charlie } = await startCall();
+  out(charlie, { service: 'call', action: 'accepted', callId, lobbyName, callerId: 'charlie', userId: 'charlie', targetUserIds: ['alice'] });
+  await until(() => alice.frames.some(frame => frame.type === 'call-chat' && frame.action === 'members' && (frame.participants as unknown[])?.length === 3));
+  await join(alice); await join(bob); await join(charlie);
+  await invite();
+  const relay = new VoiceRelay(callId, voiceChannel(callId), () => async (ch, frame) => sendThreadFrame(ch, frame));
+  const pcm = Buffer.alloc(4800, 5);
+  const audio = (c: Client) => c.frames.filter(f => f.type === 'assistant-audio');
+  relay.push(pcm, false);
+  await until(() => audio(alice).length === 1 && audio(bob).length === 1 && audio(charlie).length === 1);
+  // Charlie loses the host grant but his socket still holds the subscription.
+  sessions.set('charlie', { ...sessions.get('charlie')!, grants: { social: ['participant'] } });
+  relay.push(pcm, false);
+  await until(() => audio(alice).length === 2 && audio(bob).length === 2); await sleep(50);
+  expect(audio(charlie)).toHaveLength(1);
+});
+
 it('without a gateway in this process the frame is not sent and the sink says so', async () => {
   await handle.dispose();
   expect(await sendThreadFrame(channel, { type: 'assistant-audio' })).toBe(false);
