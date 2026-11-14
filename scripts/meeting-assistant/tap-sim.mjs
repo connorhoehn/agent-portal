@@ -52,9 +52,9 @@ const toPcm = (samples) => { const b = Buffer.allocUnsafe(samples.length * 2); s
 
 /**
  * Play the timeline against a sink. Resolves with counts once the last chunk's answer is in:
- * { sent, answers: { '204': n, '404': n, ... }, failed }. `fetchImpl` and `now`/`sleep` are injectable for tests.
+ * { sent, answers: { '204': n, '404': n, ... }, failed }. `secret` (default: the MEETING_ASSISTANT_SINK_SECRET variable) is sent as X-Live-Captions-Secret. `fetchImpl` and `now`/`sleep` are injectable for tests.
  */
-export async function runTapSim({ base, token, channel, timeline, dir = '.', speed = 1, fetchImpl = fetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), now = () => performance.now(), onChunk } = {}) {
+export async function runTapSim({ base, token, channel, timeline, dir = '.', speed = 1, fetchImpl = fetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), now = () => performance.now(), onChunk, secret = process.env.MEETING_ASSISTANT_SINK_SECRET } = {}) {
   if (!base || !token || !channel || !Array.isArray(timeline)) throw new Error('base, token, channel and timeline are required');
   const url = `${String(base).replace(/\/+$/, '')}/api/internal/meeting-assistant/pcm/${encodeURIComponent(token)}`;
   const plan = [];
@@ -79,6 +79,8 @@ export async function runTapSim({ base, token, channel, timeline, dir = '.', spe
       headers: {
         'Content-Type': 'application/octet-stream', 'X-Tap-Id': 'tap-sim', 'X-Channel-Arn': channel, 'X-Participant-Id': chunk.participantId,
         'X-Producer-Id': `producer-${chunk.participantId}`, 'X-Sample-Rate': String(RATE), 'X-Encoding': 'pcm_s16le', 'X-Channels': '1',
+        // The second credential the real media server sends (its LIVE_CAPTIONS_SHARED_SECRET): sent when MEETING_ASSISTANT_SINK_SECRET is set.
+        ...(secret ? { 'X-Live-Captions-Secret': secret } : {}),
       },
       body: chunk.pcm,
     }).then(async (res) => { await res.arrayBuffer().catch(() => undefined); answers[res.status] = (answers[res.status] ?? 0) + 1; }, () => { failed += 1; }));

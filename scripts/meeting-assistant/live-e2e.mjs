@@ -62,6 +62,7 @@ const check = (name, ok, detail = '') => { results.push({ name, ok: !!ok, detail
 
 // ── Personas ──────────────────────────────────────────────────────────────────────────────────────────
 const VERA = { userId: 'u-vera', role: 'org-leader', voice: 'Samantha', name: 'Vera' };
+const SINK_SECRET = 'dry-sink-secret'; // the dry run's second credential on the sink (what the real media server's LIVE_CAPTIONS_SHARED_SECRET is)
 const NORA = { userId: 'u-nora', role: 'sme', voice: 'Daniel', name: 'Nora' };
 const LOBBY = 'orgiq:dm:u-nora:u-vera';
 const stamp = () => Date.now().toString(36);
@@ -174,7 +175,7 @@ function startMiddleware() {
     ...(DRY ? {
       // The same real session class, pointed at the fake provider with a dummy key; the real key is never read in a dry run.
       OPENAI_API_KEY: 'dry-run-key', OPENAI_BASE_URL: `http://127.0.0.1:${PROVIDER_PORT}/v1`,
-      MEETING_ASSISTANT_MEDIA_URL: `http://127.0.0.1:${MEDIA_PORT}`, MEETING_ASSISTANT_MEDIA_ADMIN_TOKEN: 'dry-admin-token', MEETING_ASSISTANT_SINK_BASE_URL: BASE,
+      MEETING_ASSISTANT_MEDIA_URL: `http://127.0.0.1:${MEDIA_PORT}`, MEETING_ASSISTANT_MEDIA_ADMIN_TOKEN: 'dry-admin-token', MEETING_ASSISTANT_SINK_BASE_URL: BASE, MEETING_ASSISTANT_SINK_SECRET: SINK_SECRET,
     } : {}), // live: the key is read by middleware/src/config.ts from middleware/.env, as the voice navigator's is; no media server, so no tap is armed
   };
   const logFile = fs.openSync(path.join(OUT, 'middleware.log'), 'w');
@@ -310,12 +311,17 @@ async function main() {
         await sleep(500);
       }
     })();
-    const sim = await runTapSim({ base: BASE, token: sink.token, channel: sink.channelArn, timeline: plan, dir: OUT });
+    const sim = await runTapSim({ base: BASE, token: sink.token, channel: sink.channelArn, timeline: plan, dir: OUT, ...(DRY ? { secret: SINK_SECRET } : {}) });
     const waitUntil = Date.now() + 14_000;
     while (Date.now() < waitUntil && ![...novaSeen.values()].some((v) => v.msg.metadata.kind === 'assistant-action' && v.msg.metadata.tool?.name === 'create')) await sleep(500);
     await sleep(1500);
     polling = false; await poll;
     check('the sink took every chunk', sim.failed === 0 && (sim.answers['204'] ?? 0) === sim.sent, `${sim.sent} chunks, answers ${JSON.stringify(sim.answers)}`);
+    if (DRY) {
+      const wrong = await runTapSim({ base: BASE, token: sink.token, channel: sink.channelArn, timeline: [{ participantId: participantIds[VERA.userId], wav: 'u1.wav', atMs: 0 }], dir: OUT, speed: 50, secret: 'not-the-secret' });
+      const none = await runTapSim({ base: BASE, token: sink.token, channel: sink.channelArn, timeline: [{ participantId: participantIds[VERA.userId], wav: 'u1.wav', atMs: 0 }], dir: OUT, speed: 50, secret: '' });
+      check('the sink answers 404 to a right token with a wrong or missing secret', wrong.answers['404'] === wrong.sent && none.answers['404'] === none.sent, `wrong ${JSON.stringify(wrong.answers)}, missing ${JSON.stringify(none.answers)}`);
+    }
 
     // 6. The transcript: each utterance, with the right speaker.
     const transcript = (await vera.call('GET', `${A}/transcript?limit=200`)).json;
@@ -341,6 +347,23 @@ async function main() {
     check('the second request is an action card waiting for Nora', !!card && card.msg.metadata.askedBy === NORA.userId && card.msg.metadata.status === 'waiting', card ? `asked by ${card.msg.metadata.askedBy}, ${card.msg.metadata.status}: ${card.msg.metadata.summary}` : 'no card');
     const stranger = card ? await vera.call('POST', `${A}/actions/${encodeURIComponent(card.msg.metadata.actionId)}/decision`, { decision: 'confirm' }) : null;
     check('only Nora can decide the card (Vera is refused)', !!stranger && stranger.status === 403, `HTTP ${stranger?.status}`);
+    // Nora confirms; her browser claims the turn once, and the result needs the claim (audit B6).
+    if (card) {
+      const confirmed = await nora.call('POST', `${A}/actions/${encodeURIComponent(card.msg.metadata.actionId)}/decision`, { decision: 'confirm' });
+      check('Nora confirms the card', confirmed.status === 200, `HTTP ${confirmed.status}`);
+      const mine = (await nora.call('GET', `${A}/turns?mine=1`)).json?.turns ?? [];
+      const turn = mine.find((t) => t.kind === 'write');
+      check('the confirmed write is listed for Nora, and only Nora', !!turn && ((await vera.call('GET', `${A}/turns?mine=1`)).json?.turns ?? []).length === 0, `${mine.length} turn(s)`);
+      if (turn) {
+        const t = encodeURIComponent(turn.turnId);
+        const first = await nora.call('POST', `${A}/turns/${t}/claim`), second = await nora.call('POST', `${A}/turns/${t}/claim`), other = await vera.call('POST', `${A}/turns/${t}/claim`);
+        check('the turn is claimed once (a second claim is 409, anyone else 404)', first.status === 200 && !!first.json?.claimId && second.status === 409 && other.status === 404, `${first.status}/${second.status}/${other.status}`);
+        const noClaim = await nora.call('POST', `${A}/turns/${t}/result`, { ok: true, output: { say: 'Created.' } });
+        const wrongClaim = await nora.call('POST', `${A}/turns/${t}/result`, { claimId: 'ffffffffffffffff', ok: true, output: { say: 'Created.' } });
+        const posted = await nora.call('POST', `${A}/turns/${t}/result`, { claimId: first.json?.claimId, ok: true, output: { say: 'Created.' } });
+        check('a result needs the claim id: none is 400, a wrong one 409, the right one 200', noClaim.status === 400 && wrongClaim.status === 409 && posted.status === 200, `${noClaim.status}/${wrongClaim.status}/${posted.status}`);
+      }
+    }
     const state = (await vera.call('GET', `${A}/state`)).json;
     check('no tool call was refused', state?.refusedCalls === 0, `refusedCalls ${state?.refusedCalls}`);
     const audio = (await vera.call('GET', `/api/dev/calls/${encodeURIComponent(callId)}/assistant-audio`)).json;
@@ -368,7 +391,7 @@ async function main() {
     if (media) {
       await sleep(300);
       check('the tap was deleted when Nova left', media.log.some((l) => l.method === 'DELETE' && /\/taps\/tap-dry-1$/.test(l.url)));
-      const dead = await runTapSim({ base: BASE, token: sink.token, channel: sink.channelArn, timeline: [{ participantId: participantIds[VERA.userId], wav: 'u1.wav', atMs: 0 }], dir: OUT, speed: 50 });
+      const dead = await runTapSim({ base: BASE, token: sink.token, channel: sink.channelArn, timeline: [{ participantId: participantIds[VERA.userId], wav: 'u1.wav', atMs: 0 }], dir: OUT, speed: 50, secret: SINK_SECRET });
       check('the sink token is dead after Nova left', dead.answers['404'] === dead.sent, `answers ${JSON.stringify(dead.answers)}`);
     }
   } catch (e) {
