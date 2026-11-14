@@ -7,7 +7,7 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { useGatewayFrames } from './gatewayFrames';
 import type { AssistantView } from './meetingAssistantModel';
-import { SPEAKING_HOLD_MS, parseAudioFrame, pcm16ToFloat32, scheduleFrame, shouldPlay, type AudioFrame } from './novaVoiceModel';
+import { SPEAKING_HOLD_MS, parseAudioFrame, pcm16ToFloat32, runChanged, scheduleFrame, shouldPlay, type AudioFrame } from './novaVoiceModel';
 
 const MUTE_KEY = 'orgiq.novaMuted';
 
@@ -30,6 +30,7 @@ class NovaPlayer {
   private ctx: AudioContext | null = null;
   private clock: Clock = { get currentTime() { return performance.now() / 1000; } };
   private nextStart = 0;
+  private runId = '';
   private utterance = false;
   private sources = new Set<AudioBufferSourceNode>();
   private hold: ReturnType<typeof setTimeout> | null = null;
@@ -96,8 +97,16 @@ class NovaPlayer {
     if (this.snap.speaking || this.snap.needsGesture) this.set({ speaking: false, needsGesture: false });
   }
 
+  /** The server started a new run (a restart): its `seq` begins again at 1, so the last sequence seen is forgotten. */
+  noteRun(frame: AudioFrame) {
+    if (!runChanged(this.runId, frame)) return;
+    const first = this.runId === '';
+    this.runId = frame.runId;
+    if (!first) { this.stop(); this.set({ lastSeq: 0 }); }
+  }
+
   /** A new call starts counting from nothing; the server's `seq` is per call. */
-  resetCall() { this.stop(); this.set({ framesPlayed: 0, framesIgnored: 0, lastSeq: 0 }); }
+  resetCall() { this.runId = ''; this.stop(); this.set({ framesPlayed: 0, framesIgnored: 0, lastSeq: 0 }); }
 }
 
 const player = new NovaPlayer();
@@ -121,6 +130,7 @@ export function useNovaVoice(callId: string | null, view: AssistantView) {
       if (!frame) return;
       const cur = live.current;
       if (frame.callId !== cur.callId) return;
+      player.noteRun(frame);
       if (shouldPlay({ callId: cur.callId ?? '', frameCallId: frame.callId, seq: frame.seq, lastSeq: player.getSnapshot().lastSeq, muted: cur.muted, voice: cur.voice, listening: cur.listening })) player.play(frame);
       else if (frame.seq > player.getSnapshot().lastSeq) player.ignored();
     });

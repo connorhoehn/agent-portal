@@ -10,9 +10,12 @@
 //
 // The gateway frame, for the browser (the portal's playback package codes against this):
 //   { type: 'assistant-audio', channel: 'orgiq:huddle:<callId>',
-//     data: { callId, seq, sampleRate: 24000, pcm: <base64 PCM16 mono LE, at most 100 ms>, last?: true } }
-// `seq` counts from 1 for the life of the call's run (it does not restart when the provider session is replaced). `last: true` marks
+//     data: { callId, runId, seq, sampleRate: 24000, pcm: <base64 PCM16 mono LE, at most 100 ms>, last?: true } }
+// `seq` counts from 1 for the life of the call's run (it does not restart when the provider session is replaced). `runId` names the run;
+// a server restart starts a new run whose `seq` begins again at 1, and a browser that sees a new `runId` starts counting afresh. `last: true` marks
 // the final frame of an utterance (the end of its 300 ms tail).
+
+import { randomUUID } from 'node:crypto';
 
 /** The call chat's channel (lib/call-chat.ts `callChatChannel`; a test holds the two equal). Written here so this module needs no gateway imports. */
 export const voiceChannel = (callId: string): string => `orgiq:huddle:${callId}`;
@@ -31,7 +34,7 @@ export const ECHO_OVERLAP_SHARE = 0.5;
 export interface AssistantAudioFrame {
   type: 'assistant-audio';
   channel: string;
-  data: { callId: string; seq: number; sampleRate: number; pcm: string; last?: true };
+  data: { callId: string; runId: string; seq: number; sampleRate: number; pcm: string; last?: true };
 }
 /** Sends one frame to the sockets in the call's chat channel. False when no gateway runs in this process (the frame is dropped). */
 export type VoiceSink = (channel: string, frame: AssistantAudioFrame) => Promise<boolean> | boolean;
@@ -40,6 +43,8 @@ export class VoiceRelay {
   relayed = 0;
   dropped = 0;
   private seq = 0;
+  /** Names this relay (one per run of the call), so a browser can tell a restarted counter from a late frame. */
+  readonly runId = randomUUID();
   private queue: Array<{ pcm: Buffer; last: boolean }> = [];
   private pumping = false;
   /** Bumped by `clear`, so a pump that was mid-send when the relay was cleared stops and its frame is not counted. */
@@ -77,7 +82,7 @@ export class VoiceRelay {
         const next = this.queue.shift()!;
         const frame: AssistantAudioFrame = {
           type: 'assistant-audio', channel: this.channel,
-          data: { callId: this.callId, seq: this.seq + 1, sampleRate: VOICE_SAMPLE_RATE, pcm: next.pcm.toString('base64'), ...(next.last ? { last: true as const } : {}) },
+          data: { callId: this.callId, runId: this.runId, seq: this.seq + 1, sampleRate: VOICE_SAMPLE_RATE, pcm: next.pcm.toString('base64'), ...(next.last ? { last: true as const } : {}) },
         };
         let sent = false;
         try { sent = await this.sink()(this.channel, frame); } catch { sent = false; }

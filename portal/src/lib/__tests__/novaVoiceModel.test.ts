@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { JITTER_BUFFER_S, MAX_LATE_S, SCHEDULE_LEAD_S, parseAudioFrame, pcm16ToFloat32, scheduleFrame, shouldPlay } from '../novaVoiceModel.ts';
+import { JITTER_BUFFER_S, MAX_LATE_S, SCHEDULE_LEAD_S, parseAudioFrame, pcm16ToFloat32, runChanged, scheduleFrame, shouldPlay } from '../novaVoiceModel.ts';
 
 const b64 = (vals: number[]) => { const buf = Buffer.alloc(vals.length * 2); vals.forEach((v, i) => buf.writeInt16LE(v, i * 2)); return buf.toString('base64'); };
 
@@ -15,12 +15,20 @@ test('PCM16 little-endian decodes to floats and an odd byte or bad base64 is har
 
 test('only well-formed assistant-audio frames parse', () => {
   const ok = { type: 'assistant-audio', channel: 'x', data: { callId: 'c1', seq: 3, sampleRate: 24000, pcm: 'AAA=', last: true } };
-  assert.deepEqual(parseAudioFrame(ok), { callId: 'c1', seq: 3, sampleRate: 24000, pcm: 'AAA=', last: true });
+  assert.deepEqual(parseAudioFrame(ok), { callId: 'c1', runId: '', seq: 3, sampleRate: 24000, pcm: 'AAA=', last: true });
   assert.equal(parseAudioFrame({ ...ok, type: 'message' }), null);
   assert.equal(parseAudioFrame({ ...ok, data: { ...ok.data, seq: 0 } }), null);
   assert.equal(parseAudioFrame({ ...ok, data: { ...ok.data, pcm: 5 } }), null);
   assert.equal(parseAudioFrame(null), null);
   assert.equal(parseAudioFrame({ ...ok, data: { callId: 'c1', seq: 1, pcm: '' } })?.sampleRate, 24000);
+});
+
+test('a new run id means the server counted again from 1, and a frame without one never does', () => {
+  const ok = { type: 'assistant-audio', channel: 'x', data: { callId: 'c1', runId: 'run-a', seq: 9, pcm: 'AAA=' } };
+  assert.equal(parseAudioFrame(ok)?.runId, 'run-a');
+  assert.equal(runChanged('run-a', { runId: 'run-a' }), false);
+  assert.equal(runChanged('run-a', { runId: 'run-b' }), true);
+  assert.equal(runChanged('run-a', { runId: '' }), false);
 });
 
 test('a frame plays only for this call, newer, unmuted, with voice on and Nova listening', () => {

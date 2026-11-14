@@ -12,7 +12,7 @@ export const MAX_LATE_S = 0.5;
 /** The mark goes back to "listening" this long after the last frame. */
 export const SPEAKING_HOLD_MS = 400;
 
-export interface AudioFrame { callId: string; seq: number; sampleRate: number; pcm: string; last: boolean }
+export interface AudioFrame { callId: string; /** Names the server's run of the call; empty from a server that does not send it. */ runId: string; seq: number; sampleRate: number; pcm: string; last: boolean }
 
 /** Reads one gateway frame; null unless it is an `assistant-audio` frame with a well-formed body. */
 export function parseAudioFrame(frame: unknown): AudioFrame | null {
@@ -26,7 +26,7 @@ export function parseAudioFrame(frame: unknown): AudioFrame | null {
   if (typeof callId !== 'string' || !callId || typeof pcm !== 'string') return null;
   if (typeof seq !== 'number' || !Number.isInteger(seq) || seq < 1) return null;
   const rate = typeof sampleRate === 'number' && sampleRate >= 8000 && sampleRate <= 96000 ? sampleRate : NOVA_SAMPLE_RATE;
-  return { callId, seq, sampleRate: rate, pcm, last: b['last'] === true };
+  return { callId, runId: typeof b['runId'] === 'string' ? b['runId'].slice(0, 64) : '', seq, sampleRate: rate, pcm, last: b['last'] === true };
 }
 
 /** Base64 PCM16 mono little-endian to floats in [-1, 1). An odd trailing byte is ignored. */
@@ -41,6 +41,11 @@ export function pcm16ToFloat32(base64: string): Float32Array {
     out[i] = v / 0x8000;
   }
   return out;
+}
+
+/** A frame from a different run than the one being played means the server's counter started over: the sequence filter must too. */
+export function runChanged(current: string, frame: Pick<AudioFrame, 'runId'>): boolean {
+  return frame.runId !== '' && frame.runId !== current;
 }
 
 export interface PlayGate { callId: string; frameCallId: string; seq: number; lastSeq: number; muted: boolean; voice: boolean; listening: boolean }

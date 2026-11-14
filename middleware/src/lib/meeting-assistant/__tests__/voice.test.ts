@@ -11,6 +11,17 @@ describe('the channel', () => {
 });
 
 describe('VoiceRelay', () => {
+  it('every frame of a relay carries that relay\'s run id, and a new relay has another', async () => {
+    const sent: AssistantAudioFrame[] = [];
+    const sink = async (_c: string, f: AssistantAudioFrame) => { sent.push(f); return true; };
+    const a = new VoiceRelay('c', voiceChannel('c'), () => sink), b = new VoiceRelay('c', voiceChannel('c'), () => sink);
+    a.push(Buffer.alloc(9600), false);
+    await new Promise<void>((r) => setImmediate(r));
+    expect(new Set(sent.map((f) => f.data.runId)).size).toBe(1);
+    expect(sent[0]!.data.runId).toBe(a.runId);
+    expect(a.runId).not.toBe(b.runId);
+  });
+
   it('sends frames one at a time in order with a growing seq, base64 PCM, 24 kHz and last only on the marked one', async () => {
     const sent: AssistantAudioFrame[] = [];
     const relay = new VoiceRelay('c1', 'orgiq:huddle:c1', () => async (_ch, f) => { await tick(); sent.push(f); return true; });
