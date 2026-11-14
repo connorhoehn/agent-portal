@@ -45,11 +45,12 @@ describe('attribute', () => {
 
   it('merges one person\'s overlapping intervals so they are not counted twice', () => {
     const a = [iv('alice', 0, 1000), iv('alice', 500, 1500), iv('bob', 0, 1200)];
-    expect(attribute(a, { startMs: 0, endMs: 1500 })).toEqual({ userId: 'alice', speakers: ['alice', 'bob'] });
+    // alice 1500 ms, bob 1200 ms: neither holds 60 % of the voiced time, so no primary.
+    expect(attribute(a, { startMs: 0, endMs: 1500 })).toEqual({ userId: null, speakers: ['alice', 'bob'] });
   });
 
-  it('a tie goes to whoever started first', () => {
-    expect(attribute([iv('bob', 500, 1500), iv('alice', 0, 1000)], { startMs: 0, endMs: 1500 }).userId).toBe('alice');
+  it('a tie is listed with whoever started first, and has no primary speaker', () => {
+    expect(attribute([iv('bob', 500, 1500), iv('alice', 0, 1000)], { startMs: 0, endMs: 1500 })).toEqual({ userId: null, speakers: ['alice', 'bob'] });
   });
 });
 
@@ -143,5 +144,32 @@ describe('adaptive noise floor and energy', () => {
     expect(attribute([lv('hum', 0, 2000, 400), lv('talk', 500, 1500, 4000)], { startMs: 0, endMs: 2000 }, 0))
       .toEqual({ userId: 'talk', speakers: ['talk'] });
     expect(attribute([lv('a', 0, 2000, 1000), lv('b', 500, 1500, 1500)], { startMs: 0, endMs: 2000 }, 0).speakers).toEqual(['a', 'b']);
+  });
+});
+
+describe('primary speaker (a request spoken over someone)', () => {
+  it('a request over a third to a half overlap names the one who spoke the whole line', () => {
+    for (const overlap of [1 / 3, 0.4, 0.5]) {
+      const end = 3000, ov = Math.round(end * overlap);
+      const a = [iv('alice', 0, end), iv('bob', end - ov, end + 1500)];
+      expect(attribute(a, { startMs: 0, endMs: end })).toEqual({ userId: 'alice', speakers: ['alice', 'bob'] });
+    }
+  });
+
+  it('two people starting together have no primary speaker', () => {
+    expect(attribute([iv('alice', 0, 2000), iv('bob', 0, 2000)], { startMs: 0, endMs: 2000 }).userId).toBeNull();
+  });
+
+  it('a neighbour four times as loud for a small part of the line does not outrank the speaker', () => {
+    const lv = (userId: string, startMs: number, endMs: number, level: number, noiseFloor: number): VoicedInterval => ({ userId, startMs, endMs, level, noiseFloor });
+    const a = [lv('alice', 0, 3000, 1000, 100), lv('bob', 2000, 3000, 4000, 100)];
+    expect(attribute(a, { startMs: 0, endMs: 3000 }).userId).toBe('alice');
+  });
+
+  it('key clicks joined into one stretch count only their voiced part', () => {
+    // bob: a 3 s stretch that was voiced for 400 ms in all; alice spoke 1.5 s of it.
+    const clicks: VoicedInterval = { userId: 'bob', startMs: 0, endMs: 3000, level: 3000, voicedMs: 400 };
+    const talk: VoicedInterval = { userId: 'alice', startMs: 500, endMs: 2000, level: 1000, voicedMs: 1500 };
+    expect(attribute([clicks, talk], { startMs: 0, endMs: 3000 })).toMatchObject({ userId: 'alice' });
   });
 });

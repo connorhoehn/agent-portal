@@ -646,7 +646,7 @@ export class AssistantRuntime {
 
   /**
    * Who addressed Nova (audit B3): the speaker of the latest stored line in the window before `atMs` that addresses Nova by the
-   * detector's own rule. A line with no person, or voiced by more than one, says nobody.
+   * detector's own rule. A line with no primary speaker (nobody, or two people who started together) says nobody; a request spoken over someone names who spoke it.
    */
   private async findAsker(callId: string, atMs: number): Promise<{ ok: true; userId: string } | { ok: false }> {
     const record = await this.store.get(callId);
@@ -656,7 +656,8 @@ export class AssistantRuntime {
     const lines = (await this.store.lines(callId, Math.max(0, record.nextSeq - 1 - 100), 100)).filter((l) => !run || !this.echoOf(run, l));
     const addressing = lines.filter((l) => l.at <= atMs && l.at >= atMs - ASKER_WINDOW_MS && findAddress(l.text) !== null);
     const last = addressing[addressing.length - 1];
-    if (!last || last.userId === null || (last.speakers?.length ?? 0) > 1) return { ok: false };
+    // A line voiced by several people still has its primary speaker as `userId` (attribution.ts); only a line nobody dominated has none.
+    if (!last || last.userId === null) return { ok: false };
     return { ok: true, userId: last.userId };
   }
 

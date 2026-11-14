@@ -802,9 +802,17 @@ describe('the asker is the person who addressed Nova (B3), on the real path', ()
     expect(mockPosts.replies).toHaveLength(2);
   });
 
-  it('overlap on the request line (two speakers) is refused', async () => {
+  it('a request spoken over someone names the person who spoke it (the line\'s primary speaker)', async () => {
     const s = await realRuntime();
-    await line(ALICE, 'Nova, find the experts.', now - 1000, { speakers: [ALICE, BOB] });
+    await line(ALICE, 'Nova, find the Kubernetes experts.', now - 1000, { speakers: [ALICE, BOB] });
+    s.call('call_1', 'search', { query: 'Kubernetes experts' }); await flush();
+    expect((await runtime.turnsFor(CALL, ALICE)).length).toBe(1);
+    expect(await runtime.turnsFor(CALL, BOB)).toEqual([]);
+  });
+
+  it('a request line nobody dominated (two people started together) is refused', async () => {
+    const s = await realRuntime();
+    await line(null, 'Nova, find the experts.', now - 1000, { speakers: [ALICE, BOB] });
     s.call('call_1', 'search', { query: 'x' }); await flush();
     expect(s.answersFor('call_1').map(([, o]) => o)).toEqual(['{"refused":"could not tell who asked"}']);
     expect(await store.listTurns(CALL)).toEqual([]);
