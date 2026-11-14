@@ -772,6 +772,26 @@ async function main() {
       return 'dismissed for all; third person out';
     });
 
+    // ── P10. An asked write that names another person (package 7) is a proposal needing them, not the asker's card ──
+    await step('P10: "create a work item ... assigned to Nora" asked by the inviter is a proposal card needing Nora with the inviter as executor, and no action card; Nora removes it', async () => {
+      await inject(VERA.userId, 'Nova, I need a hand with one more thing.');
+      await sleep(1500);
+      const actionsBefore = (await novaOf(vera, 'assistant-action')).length;
+      const res = await fetch(`${MIDDLEWARE}/api/dev/calls/${encodeURIComponent(callId)}/assistant-tool-call`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ askedBy: VERA.userId, name: 'create', args: { kind: 'work-item', fields: { title: 'Walk named runbook', assignee: 'Nora' } } }),
+      });
+      check(res.status === 202, `the dev tool call answered ${res.status}`);
+      const asked = await waitFor(async () => (await proposalsOf(vera)).find((p) => p.source === 'asked' && /Walk named runbook/.test(p.statement)), 15000, 'the asked proposal');
+      check(asked.executor?.userId === VERA.userId && asked.named.map((x) => x.userId).join() === NORA.userId, `executor ${asked.executor?.userId}, named ${asked.named.map((x) => x.userId).join()}`);
+      for (const p of [vera, nora]) await card(p, asked.id).waitFor({ timeout: 20000 });
+      check((await novaOf(vera, 'assistant-action')).length === actionsBefore, 'an action card was posted for a write naming another person');
+      const gone2 = await nora.api.post(asApi(nora, `proposals/${encodeURIComponent(asked.id)}/response`), { data: { response: 'not-a-decision' } });
+      check(gone2.status() === 200, `the dismissal answered ${gone2.status()}`);
+      for (const p of [vera, nora]) await cardState(p, asked.id, 'dismissed');
+      return `proposal ${asked.state} -> dismissed; "${asked.statement}"`;
+    });
+
     // ── 7. The bar at both widths with Nova's controls present ──
     await step('7: with Nova listening and its controls present the call bar and Nova controls neither scroll sideways nor clip at 1440 and 1280, and the footer keeps its height', async () => {
       const out = [];
