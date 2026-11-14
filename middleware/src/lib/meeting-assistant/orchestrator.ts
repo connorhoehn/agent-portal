@@ -90,13 +90,22 @@ export interface FinishedEvent {
 
 type CallState = 'open' | 'answered' | 'dropped';
 
-interface ReplyContext {
+/**
+ * A reply belongs to the tool call the server answered, not to the call as a whole (audit B1). `answer()` queues one of these for
+ * the spoken continuation that follows. People speaking in between never change who a queued reply belongs to. `muted` means the
+ * continuation is not posted (a refused call, a private answer, an expired read).
+ */
+export interface ReplyContext {
+  modelCallId: string;
   asker: string | null;
-  /** The model's speech goes to the asker alone (decision 6). */
-  private: boolean;
-  /** A refused call's follow-up speech is not posted. */
-  mute: boolean;
+  visibility: 'public' | 'muted';
+  answeredAt: number;
 }
+/** A reply context older than this is dropped, never applied. */
+export const REPLY_CONTEXT_TTL_MS = 20_000;
+/** The "could not tell who asked" reply is posted at most this often per call. */
+export const UNASKED_NOTICE_EVERY_MS = 30_000;
+export const UNASKED_REPLY = 'I could not tell who asked. Please ask again.';
 
 /** One call's live state. Plain data plus the session; every behaviour is a method of the runtime. */
 interface CallRun {
@@ -116,7 +125,9 @@ interface CallRun {
   /** People already told that typed requests are not heard in this call. */
   typedNoticed: Set<string>;
   holding: Set<string>;
-  reply: ReplyContext;
+  /** Replies waiting for the model's spoken continuation, oldest first. */
+  replies: ReplyContext[];
+  lastUnaskedNoticeAt: number;
   delegationAt: number;
   answeredSinceDelegation: boolean;
   intentionalClose: boolean;
@@ -191,7 +202,7 @@ export class AssistantRuntime {
     this.watchIntake();
     const run: CallRun = {
       ctx, session: null, unsubscribers: [], sessionStartedAt: 0, sessionNo: 0, pieceNo: 0, timeline: new VoicedTimeline(),
-      calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), holding: new Set(), reply: { asker: null, private: false, mute: false },
+      calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), holding: new Set(), replies: [], lastUnaskedNoticeAt: -Infinity,
       delegationAt: -Infinity, answeredSinceDelegation: true, intentionalClose: false, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, sessionKind: 'scripted', chain: Promise.resolve(), finished: false,
     };
@@ -219,7 +230,7 @@ export class AssistantRuntime {
   async pause(callId: string): Promise<void> {
     const run = this.runs.get(callId);
     if (!run || run.finished) return;
-    await this.serial(run, async () => { await this.closeSession(run, 'pause'); run.reply = { asker: null, private: false, mute: false }; });
+    await this.serial(run, async () => { await this.closeSession(run, 'pause'); run.replies = []; });
     await this.closeListening(callId);
   }
 
@@ -299,7 +310,7 @@ export class AssistantRuntime {
     if (!session) throw new Error('no live session is available in this process');
     run.sessionNo += 1; run.pieceNo = 0; run.timeline = new VoicedTimeline();
     run.usageSeconds = 0; run.tokens = { input: 0, output: 0, cached: 0 };
-    run.calls = new Map(); run.turnCalls = new Map(); run.holding = new Set(); run.intentionalClose = false;
+    run.calls = new Map(); run.turnCalls = new Map(); run.holding = new Set(); run.replies = []; run.intentionalClose = false;
     run.delegationAt = -Infinity; run.answeredSinceDelegation = true;
     this.wire(run, session);
     run.sessionKind = session.kind;
@@ -409,7 +420,6 @@ export class AssistantRuntime {
   // What the session says
 
   private async onInput(run: CallRun, e: SessionEvents['inputTranscript']): Promise<void> {
-    run.reply = { asker: null, private: false, mute: false };
     const who = attribute(run.timeline.intervals(), { startMs: e.startMs, endMs: e.endMs });
     run.pieceNo += 1;
     await this.deps.intake().handle(run.ctx.callId, {
@@ -419,33 +429,53 @@ export class AssistantRuntime {
     });
   }
 
-  /** The latest attributed line in the window before `atMs`, or null. */
-  private async recentAsker(callId: string, atMs: number, needName: boolean): Promise<string | null> {
+  /**
+   * Who addressed Nova (audit B3): the speaker of the latest stored line in the window before `atMs` that addresses Nova by the
+   * detector's own rule. A line with no person, or voiced by more than one, says nobody.
+   */
+  private async findAsker(callId: string, atMs: number): Promise<{ ok: true; userId: string } | { ok: false }> {
     const record = await this.store.get(callId);
-    if (!record) return null;
-    const lines = await this.store.lines(callId, Math.max(0, record.nextSeq - 1 - 60), 60);
-    const inWindow = lines.filter((l) => l.userId !== null && l.at <= atMs && l.at >= atMs - ASKER_WINDOW_MS && (!needName || findAddress(l.text) !== null));
-    return inWindow.length ? inWindow[inWindow.length - 1]!.userId : null;
+    if (!record) return { ok: false };
+    const lines = await this.store.lines(callId, Math.max(0, record.nextSeq - 1 - 100), 100);
+    const addressing = lines.filter((l) => l.at <= atMs && l.at >= atMs - ASKER_WINDOW_MS && findAddress(l.text) !== null);
+    const last = addressing[addressing.length - 1];
+    if (!last || last.userId === null || (last.speakers?.length ?? 0) > 1) return { ok: false };
+    return { ok: true, userId: last.userId };
+  }
+
+  /** The reply context for a final output transcript: the exact call when the session says which, else the oldest unexpired one. */
+  private takeReply(run: CallRun, inReplyTo: string | undefined): ReplyContext | 'none' | 'dropped' {
+    const now = this.now();
+    run.replies = run.replies.filter((c) => now - c.answeredAt < REPLY_CONTEXT_TTL_MS);
+    if (inReplyTo !== undefined) {
+      const i = run.replies.findIndex((c) => c.modelCallId === inReplyTo);
+      return i < 0 ? 'dropped' : run.replies.splice(i, 1)[0]!;
+    }
+    return run.replies.shift() ?? 'none';
   }
 
   private async onOutput(run: CallRun, e: SessionEvents['outputTranscript']): Promise<void> {
     if (!e.final || !e.text.trim() || run.finished) return;
-    if (run.reply.mute) return;
-    // The short acknowledgement the voice speaks as it delegates is not an answer.
+    // The short acknowledgement the voice speaks as it delegates is not an answer, and takes nothing from the queue.
     if (!run.answeredSinceDelegation && this.now() - run.delegationAt < ACK_WINDOW_MS) return;
-    let asker = run.reply.asker;
-    if (!asker) {
-      // A plain answer with no tool: whoever addressed Nova last, and only if they did.
-      asker = await this.recentAsker(run.ctx.callId, this.now(), true);
-      if (!asker) return;
-      run.reply = { ...run.reply, asker };
+    // Taken before any await, so two outputs keep their order.
+    const ctx = this.takeReply(run, e.inReplyTo);
+    if (ctx === 'dropped') return;
+    let asker: string | null;
+    if (ctx !== 'none') {
+      if (ctx.visibility === 'muted' || !ctx.asker) return;
+      asker = ctx.asker;
+    } else {
+      // A plain answer with no tool call: whoever addressed Nova last, and only if that line says who.
+      const record = await this.store.get(run.ctx.callId);
+      if (record && record.requests > assistantLimits().maxRequests) return;
+      const found = await this.findAsker(run.ctx.callId, this.now());
+      if (!found.ok) return;
+      asker = found.userId;
     }
     const record = await this.store.get(run.ctx.callId);
     if (!record || record.state === 'left') return;
-    const askedByName = await nameOf(asker);
-    const text = e.text.slice(0, 1500);
-    if (run.reply.private) await postPrivately(run.ctx.callId, asker, { text });
-    else await postReply(run.ctx.callId, { text, askedBy: asker, askedByName });
+    await postReply(run.ctx.callId, { text: e.text.slice(0, 1500), askedBy: asker, askedByName: await nameOf(asker) });
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -459,14 +489,12 @@ export class AssistantRuntime {
         // Past the per-call cap Nova says so once and ignores further requests (the cap counts what the detector found).
         const record = await this.store.get(callId);
         if (record && record.requests > assistantLimits().maxRequests) {
-          run.reply = { asker: null, private: false, mute: true };
           if (!sessionOf(record).limitNoticed) {
             await this.store.patchSession(callId, { limitNoticed: true });
             await postNoticeQuietly(callId, `${NOVA_NAME} has reached its limit of ${assistantLimits().maxRequests} requests for this call and will not answer more.`);
           }
           continue;
         }
-        run.reply = { asker: e.askedBy, private: false, mute: false };
         // The scripted session answers typed text; the real one hears the same request in the audio and needs nothing.
         const session = run.session;
         if (session?.acceptsText) {
@@ -504,17 +532,19 @@ export class AssistantRuntime {
   // Tool calls
 
   /** The one place a tool call is answered. True when this call sent the answer. */
-  private answer(run: CallRun, modelCallId: string, output: unknown): boolean {
+  private answer(run: CallRun, modelCallId: string, output: unknown, reply: { asker: string; visibility: 'public' } | null = null): boolean {
     if (run.calls.get(modelCallId) !== 'open') return false;
     run.calls.set(modelCallId, 'answered');
     run.holding.delete(modelCallId);
     run.answeredSinceDelegation = true;
-    return run.session?.answerToolCall(modelCallId, typeof output === 'string' ? output : JSON.stringify(output)) ?? false;
+    const sent = run.session?.answerToolCall(modelCallId, typeof output === 'string' ? output : JSON.stringify(output)) ?? false;
+    // The spoken continuation that follows belongs to THIS call: public and labelled for its asker, or muted (the default).
+    if (sent) run.replies.push({ modelCallId, asker: reply?.asker ?? null, visibility: reply ? reply.visibility : 'muted', answeredAt: this.now() });
+    return sent;
   }
 
   /** Refuse a call: answered with the reason, counted on the record, and nothing posted (its follow-up speech is muted too). */
   private async refuse(run: CallRun, modelCallId: string, why: string): Promise<void> {
-    run.reply = { asker: null, private: false, mute: true };
     this.answer(run, modelCallId, { refused: why });
     await this.store.bumpRefused(run.ctx.callId);
   }
@@ -541,7 +571,7 @@ export class AssistantRuntime {
     if (record.requests > assistantLimits().maxRequests) { await this.refuse(run, e.callId, 'request limit reached'); return; }
     const atMs = run.session?.kind === 'scripted' ? this.now() : run.sessionStartedAt + e.atMs;
     // (a) The asker: the server's own record of who spoke.
-    const asker = e.askedBy ?? await this.recentAsker(callId, atMs, false);
+    const asker = e.askedBy ?? await this.findAsker(callId, atMs).then((f) => (f.ok ? f.userId : null));
     if (!asker) { await this.refuse(run, e.callId, 'no asker'); return; }
     if (!canSpeakOnRecord(record, asker)) { await this.refuse(run, e.callId, 'not addressed'); return; }
     // (b) The name lock: the asker said the name in the window before the call.
@@ -564,7 +594,6 @@ export class AssistantRuntime {
     const roles = await this.deps.rolesOf(asker, tenant);
     const allowed = !MEETING_EXCLUDED_TOOLS.has(name) && roles.some((role) => meetingTools(tenant, role).some((t) => t.name === name));
     if (!allowed) {
-      run.reply = { asker: null, private: false, mute: true };
       this.answer(run, e.callId, { refused: `not allowed for ${askerName}` });
       await this.store.bumpRefused(callId);
       await postReply(callId, { text: `${askerName} cannot do that here.`, askedBy: asker, askedByName: askerName });
@@ -583,7 +612,6 @@ export class AssistantRuntime {
       createdAt: now, expiresAt: now + (kind === 'write' ? WRITE_TURN_TTL_MS : READ_TURN_TTL_MS),
     };
     await this.store.createTurn(turn);
-    run.reply = { asker, private: kind === 'private-read', mute: false };
     if (kind === 'write') {
       const { summary, detail } = describeCall(name, e.args);
       const posted = await postAction(callId, { actionId: actionId!, askedBy: asker, askedByName: askerName, summary, ...(detail.length ? { detail } : {}), tool: { name, argsDigest: hashToolArgs(e.args) } });
@@ -592,8 +620,7 @@ export class AssistantRuntime {
         this.answer(run, e.callId, { error: 'Nova could not offer that action.' });
         return;
       }
-      run.reply = { asker, private: false, mute: false };
-      this.answer(run, e.callId, { status: 'waiting_for_confirmation', person: askerName });
+      this.answer(run, e.callId, { status: 'waiting_for_confirmation', person: askerName }, { asker, visibility: 'public' });
       return;
     }
     run.turnCalls.set(turnId, e.callId);
@@ -633,7 +660,7 @@ export class AssistantRuntime {
     if (run && modelCallId) {
       run.turnCalls.delete(turnId);
       // The result is data. It goes to the session as the tool's output and nowhere else.
-      this.answer(run, modelCallId, result.ok ? (result.output ?? null) : { error: capText(result.error ?? 'It did not work.', 300) });
+      this.answer(run, modelCallId, result.ok ? (result.output ?? null) : { error: capText(result.error ?? 'It did not work.', 300) }, turn.kind === 'private-read' ? null : { asker: turn.askedBy, visibility: 'public' });
     }
     return { turn: moved };
   }
@@ -729,7 +756,6 @@ export class AssistantRuntime {
     const modelCallId = run.turnCalls.get(turn.turnId);
     run.turnCalls.delete(turn.turnId);
     if (modelCallId) this.answer(run, modelCallId, { error: 'the person who asked is not available' });
-    run.reply = { asker: null, private: false, mute: true };
     await postReply(run.ctx.callId, { text: `${askerName} is not available to run that, so I could not finish it.`, askedBy: turn.askedBy, askedByName: askerName }).catch(() => null);
   }
 

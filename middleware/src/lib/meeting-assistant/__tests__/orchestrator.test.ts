@@ -58,7 +58,7 @@ class FakeSession extends SessionEmitter implements LiveMeetingSession {
   appendContext(t: string) { this.contexts.push(t); return true; }
   async close() { if (this.closed) return; this.closed = true; this.emit('usage', { seconds: 90, backendTokens: { inputTokens: 100, outputTokens: 10, cachedTokens: 0 } }); this.emit('closed', { reason: 'close_requested' }); }
   call(id: string, name: string, args: unknown, atMs = 0) { this.open.add(id); this.emit('toolCall', { callId: id, name, args, atMs }); }
-  say(text: string) { this.emit('outputTranscript', { text, final: true }); }
+  say(text: string, inReplyTo?: string) { this.emit('outputTranscript', { text, final: true, ...(inReplyTo ? { inReplyTo } : {}) }); }
   hear(text: string, startMs: number, endMs: number) { this.emit('inputTranscript', { text, startMs, endMs }); }
   drop() { this.emit('closed', { reason: 'socket-closed' }); }
   answersFor(id: string) { return this.answers.filter(([c]) => c === id); }
@@ -212,7 +212,6 @@ describe('a spoken request in the scripted world', () => {
     await runtime.submitResult(CALL, turn!.turnId, BOB, { ok: true, output: { spent: 12 } });
     await flush();
     expect(mockPosts.replies).toEqual([]);
-    expect(mockPosts.privates).toEqual([{ userId: BOB, text: 'Here is the result.' }]);
   });
 
   it('a request over the cap of the scripted rules gets the one-line help, no tool', async () => {
@@ -242,13 +241,13 @@ describe('the refusals', () => {
     runtime = new AssistantRuntime({ store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [] }, { tickMs: 0 });
     await runtime.start(ctx);
     const s = fake();
-    // Bob is the latest voice but only Alice said the name.
-    await store.appendLine({ callId: CALL, userId: ALICE, participantId: '', speakerName: 'Alice', text: 'Nova, find the experts', at: now - 3000, captionId: 'c1' });
+    // Nobody addressed Nova (the old test had Alice address her and Bob chatter after, and expected a refusal: that was the defect, B3).
+    await store.appendLine({ callId: CALL, userId: ALICE, participantId: '', speakerName: 'Alice', text: 'find the experts', at: now - 3000, captionId: 'c1' });
     await store.appendLine({ callId: CALL, userId: BOB, participantId: '', speakerName: 'Bob', text: 'yes please', at: now - 1000, captionId: 'c2' });
     s.call('call_1', 'search', { query: 'experts' }, 0);
     await flush();
     answers.push(...s.answersFor('call_1').map(([, o]) => o));
-    expect(answers).toEqual(['{"refused":"not addressed"}']);
+    expect(answers).toEqual(['{"refused":"no asker"}']);
     s.say('Sorry, I cannot do that.'); await flush();
     expect(mockPosts.replies).toEqual([]);
     expect(sessionOf((await store.get(CALL))!).refusedCalls).toBe(1);
@@ -499,5 +498,100 @@ describe('what the real session hears', () => {
     await runtime.feedParticipantAudio(CALL, 'u-dave', Buffer.alloc(3200), 16_000);
     await runtime.pause(CALL);
     expect(runtime.appendMixedAudio(CALL, Buffer.alloc(10))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// Audit B1: a reply belongs to its tool call. Real-path tests with a fake provider session.
+
+async function realRuntime(): Promise<FakeSession> {
+  await runtime.stop(CALL);
+  factory = () => { const s = new FakeSession(); sessions.push(s); return s; };
+  runtime = new AssistantRuntime({ store: () => store, intake: () => intake, clock: () => now, makeSession: () => factory(), rolesOf: async (u) => roles[u] ?? [] }, { tickMs: 0 });
+  await runtime.start(ctx);
+  return fake();
+}
+let capNo = 0;
+const line = (userId: string | null, text: string, at: number, extra: { speakers?: string[] } = {}) =>
+  store.appendLine({ callId: CALL, userId, participantId: '', speakerName: userId ?? '', text, at, captionId: `cap-${capNo += 1}`, ...extra });
+
+describe('a reply belongs to its tool call (B1)', () => {
+  it('a public request from someone else between the call and its answer does not change who the reply is labelled for', async () => {
+    const s = await realRuntime();
+    await line(ALICE, 'Nova, find the Kubernetes experts.', now - 2000);
+    s.call('call_a', 'search', { query: 'Kubernetes experts' });
+    await flush();
+    await line(BOB, 'Nova, what is two plus two?', now - 500); // Bob addresses Nova while Alice's read is running
+    s.hear('Nova, what is two plus two?', 100, 900); await flush(); // and the provider's own transcript of it arrives
+    const [turn] = await runtime.turnsFor(CALL, ALICE);
+    await runtime.submitResult(CALL, turn!.turnId, ALICE, { ok: true, output: { rows: [] } });
+    s.say('No experts found.'); await flush();
+    expect(mockPosts.replies).toEqual([{ text: 'No experts found.', askedBy: ALICE, askedByName: 'Alice' }]);
+  });
+
+  it('a refused call\'s continuation is muted and the next person\'s answer is not', async () => {
+    const s = await realRuntime();
+    await line(ALICE, 'find the experts', now - 2000); // nobody addressed Nova: refused
+    s.call('call_r', 'search', { query: 'x' });
+    await flush();
+    expect(s.answersFor('call_r').map(([, o]) => o)).toEqual(['{"refused":"no asker"}']);
+    await line(BOB, 'Nova, find the Kubernetes experts.', now - 500);
+    s.call('call_b', 'search', { query: 'Kubernetes experts' });
+    await flush();
+    const [turn] = await runtime.turnsFor(CALL, BOB);
+    await runtime.submitResult(CALL, turn!.turnId, BOB, { ok: true, output: { rows: [] } });
+    s.say('Sorry, I cannot do that.'); await flush(); // the refused call's continuation
+    expect(mockPosts.replies).toEqual([]);
+    s.say('Two experts.'); await flush(); // Bob's
+    expect(mockPosts.replies).toEqual([{ text: 'Two experts.', askedBy: BOB, askedByName: 'Bob' }]);
+  });
+
+  it('a context older than 20 seconds is dropped and never applied', async () => {
+    const s = await realRuntime();
+    await line(ALICE, 'Nova, find the experts.', now - 2000);
+    s.call('call_a', 'search', { query: 'x' });
+    await flush();
+    const [turn] = await runtime.turnsFor(CALL, ALICE);
+    await runtime.submitResult(CALL, turn!.turnId, ALICE, { ok: true, output: {} });
+    now += 21_000;
+    s.say('Late words.'); await flush();
+    expect(mockPosts.replies).toEqual([]); // dropped; no addressing line in the last 20 seconds either
+  });
+
+  it('a session that can say which call a transcript continues is believed exactly', async () => {
+    const s = await realRuntime();
+    await line(ALICE, 'Nova, find a.', now - 2000);
+    s.call('call_a', 'search', { query: 'a' }); await flush();
+    await line(BOB, 'Nova, find b.', now - 1500);
+    s.call('call_b', 'search', { query: 'b' }); await flush();
+    const turns = await store.listTurns(CALL);
+    for (const t of turns) await runtime.submitResult(CALL, t.turnId, t.askedBy, { ok: true, output: {} });
+    s.say('For Bob.', 'call_b'); await flush();
+    s.say('For Alice.', 'call_a'); await flush();
+    expect(mockPosts.replies).toEqual([
+      { text: 'For Bob.', askedBy: BOB, askedByName: 'Bob' },
+      { text: 'For Alice.', askedBy: ALICE, askedByName: 'Alice' },
+    ]);
+  });
+
+  it('a plain answer with no tool call goes to whoever addressed Nova last, and is posted only if someone did', async () => {
+    const s = await realRuntime();
+    s.say('Hello there.'); await flush();
+    expect(mockPosts.replies).toEqual([]);
+    await line(ALICE, 'Nova, what is two plus two?', now - 1000);
+    await line(BOB, 'hm', now - 500);
+    s.say('Four.'); await flush();
+    expect(mockPosts.replies).toEqual([{ text: 'Four.', askedBy: ALICE, askedByName: 'Alice' }]);
+  });
+
+  it('the scripted session names the call its speech continues', async () => {
+    const seen: Array<string | undefined> = [];
+    scripted().on('outputTranscript', (e) => seen.push(e.inReplyTo));
+    await say(ALICE, 'Nova, find the experts');
+    const [turn] = await runtime.turnsFor(CALL, ALICE);
+    await runtime.submitResult(CALL, turn!.turnId, ALICE, { ok: true, output: {} });
+    await flush();
+    expect(seen).toEqual(['sc_1']);
+    expect(mockPosts.replies).toEqual([{ text: 'Here is the result.', askedBy: ALICE, askedByName: 'Alice' }]);
   });
 });

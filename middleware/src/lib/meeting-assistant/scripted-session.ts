@@ -98,7 +98,7 @@ export class ScriptedSession extends SessionEmitter implements LiveMeetingSessio
   answerToolCall(callId: string, output: string): boolean {
     if (this.ended || !this.open.delete(callId)) return false;
     const text = scriptedSpeech(output);
-    queueMicrotask(() => { if (!this.ended) this.emit('outputTranscript', { text, final: true }); });
+    queueMicrotask(() => { if (!this.ended) this.emit('outputTranscript', { text, final: true, inReplyTo: callId }); });
     return true;
   }
 
