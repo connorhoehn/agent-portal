@@ -166,6 +166,19 @@ describe('extension', () => {
     expect((await get('state')).body.ceilingSeconds).toBe(3600);
   });
 
+  it('confirming past the inviter\'s budget is honoured only from the inviter (M6)', async () => {
+    budget('alice', 1, 100);
+    expect((await post('invite', 'alice', { confirmOverUserBudget: true })).status).toBe(201);
+    const byBob = await post('extend', 'bob', { confirmOverUserBudget: true });
+    expect(byBob.status).toBe(409);                      // the ordinary refusal, as if no confirmation had been sent
+    expect(byBob.body).toMatchObject({ reason: 'budget' });
+    expect((await get('state')).body.ceilingSeconds).toBe(3600);
+    expect(holds().filter((h) => h.status === 'held')).toHaveLength(1);
+    const byAlice = await post('extend', 'alice', { confirmOverUserBudget: true });
+    expect(byAlice.status).toBe(200);
+    expect((await get('state')).body.ceilingSeconds).toBe(7200);
+  });
+
   it('a call whose assistant left cannot be extended, and one without an assistant is a 404', async () => {
     expect((await post('extend', 'alice')).status).toBe(404);
     budget('alice');

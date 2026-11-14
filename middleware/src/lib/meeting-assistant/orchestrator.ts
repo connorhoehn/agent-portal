@@ -786,7 +786,8 @@ export class AssistantRuntime {
     if (added <= 0) return { ok: false, why: 'at-maximum' };
     const held = await assistantSpend().reserve({
       callId, tenant: record.tenant, inviterId: record.invitedBy, initiativeId: record.initiativeId, seconds: added, part: s.extensions + 1,
-      ...(confirmOverUserBudget ? { confirmOverUserBudget: true } : {}),
+      // Going past a budget is the budget owner's choice: only the inviter (the person the hold is against) can confirm it (audit M6).
+      ...(confirmOverUserBudget && by.sub === record.invitedBy ? { confirmOverUserBudget: true } : {}),
     });
     if (!held.ok) return { ok: false, why: 'refused', refusal: held.refusal };
     await this.store.patchSession(callId, { ceilingSeconds: next, warned: false, extensions: s.extensions + 1, holds: held.holdId ? [...s.holds, held.holdId] : s.holds });
