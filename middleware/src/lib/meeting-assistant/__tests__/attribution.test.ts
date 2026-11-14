@@ -1,4 +1,4 @@
-import { attribute, VoicedTimeline, type VoicedInterval } from '../attribution.js';
+import { attribute, lagSample, splitBySpeaker, transcriptLag, VoicedTimeline, type VoicedInterval } from '../attribution.js';
 
 const iv = (userId: string, startMs: number, endMs: number): VoicedInterval => ({ userId, startMs, endMs });
 
@@ -171,5 +171,27 @@ describe('primary speaker (a request spoken over someone)', () => {
     const clicks: VoicedInterval = { userId: 'bob', startMs: 0, endMs: 3000, level: 3000, voicedMs: 400 };
     const talk: VoicedInterval = { userId: 'alice', startMs: 500, endMs: 2000, level: 1000, voicedMs: 1500 };
     expect(attribute([clicks, talk], { startMs: 0, endMs: 3000 })).toMatchObject({ userId: 'alice' });
+  });
+});
+
+// The paid scenario runs of 14 November (times only): reported turns started 0.5 to 1.4 s after the voice that spoke them.
+describe('the provider\'s transcript lag', () => {
+  const iv = (userId: string, startMs: number, endMs: number): VoicedInterval => ({ userId, startMs, endMs });
+  it('is measured from whole turns one person spoke, and is the median of the recent samples', () => {
+    expect(lagSample([iv('vera', 37_544, 40_264), iv('nora', 41_827, 43_087)], 'vera', { startMs: 38_800, endMs: 41_400 })).toBe(1_256);
+    expect(lagSample([iv('mia', 25_389, 25_849)], 'mia', { startMs: 26_600, endMs: 26_800 })).toBeNull(); // too short to measure
+    expect(transcriptLag([])).toBe(0);
+    expect(transcriptLag([1_256])).toBe(0);
+    expect(transcriptLag([1_256, 973, 1_331])).toBe(1_256);
+  });
+  it('moved back by it, a one-word "Nova?" lands on the person who said it', () => {
+    const intervals = [iv('mia', 25_389, 25_849), iv('vera', 37_544, 40_264)];
+    expect(attribute(intervals, { startMs: 26_600, endMs: 26_800 }).userId).toBeNull();
+    expect(attribute(intervals, { startMs: 26_600 - 1_200, endMs: 26_800 - 1_200 }).userId).toBe('mia');
+  });
+  it('a turn holding two voices splits where the voice changes', () => {
+    const intervals = [iv('vera', 21_584, 24_664), iv('nora', 25_065, 27_585)];
+    const parts = [{ text: ' Nova, create', startMs: 21_600, endMs: 23_000 }, { text: ' a work item', startMs: 23_000, endMs: 24_600 }, { text: '. Nova, how is', startMs: 25_200, endMs: 26_400 }, { text: ' the weather', startMs: 26_400, endMs: 27_500 }];
+    expect(splitBySpeaker(intervals, parts)).toEqual([{ text: 'Nova, create a work item', startMs: 21_600, endMs: 24_600 }, { text: 'Nova, how is the weather', startMs: 25_200, endMs: 27_500 }]);
   });
 });

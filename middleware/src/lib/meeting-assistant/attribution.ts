@@ -111,6 +111,35 @@ export function attribute(intervals: readonly VoicedInterval[], piece: Transcrip
   return { userId: primary, speakers: kept.map((s) => s.userId) };
 }
 
+/**
+ * How late the provider's transcript times run behind the voiced timeline. The probe saw up to 600 ms; the paid scenario runs of
+ * 14 November saw a turn's reported start 0.5 to 1.4 s after its speaker's voice began, varying by session. Each whole turn one
+ * person clearly spoke gives a sample; the lag used is the median of the recent ones (0 until there are two), and spans are moved
+ * back by it before they are attributed, so short lines ("Nova?") and the edges of a split land on the right voice.
+ */
+export const LAG_SAMPLES = 8;
+export const LAG_MAX_MS = 2_000;
+export function transcriptLag(samples: readonly number[]): number {
+  if (samples.length < 2) return 0;
+  const s = [...samples].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid]! : Math.round((s[mid - 1]! + s[mid]!) / 2);
+}
+
+/** One sample: the reported start minus the start of that person's voiced interval that the turn overlaps most (looking up to LAG_MAX_MS back). */
+export function lagSample(intervals: readonly VoicedInterval[], userId: string, span: TranscriptSpan): number | null {
+  if (span.endMs - span.startMs < 1_000) return null;
+  let best: VoicedInterval | null = null, bestOverlap = 0;
+  for (const i of intervals) {
+    if (i.userId !== userId || i.endMs - i.startMs < 800) continue;
+    const overlap = Math.min(i.endMs, span.endMs) - Math.max(i.startMs, span.startMs - LAG_MAX_MS);
+    if (overlap > bestOverlap) { bestOverlap = overlap; best = i; }
+  }
+  if (!best) return null;
+  const d = span.startMs - best.startMs;
+  return d >= 0 && d <= LAG_MAX_MS ? d : null;
+}
+
 /** One of the provider's pieces of a heard turn, with its times on the audio timeline. */
 export interface TranscriptPart { text: string; startMs: number; endMs: number }
 

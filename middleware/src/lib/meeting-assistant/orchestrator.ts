@@ -22,7 +22,7 @@ import {
   nameOf, postAction, postNoticeQuietly, postPrivately, postReply, moveAction,
 } from './chat.js';
 import { MEETING_EXCLUDED_TOOLS, isPrivateRead, meetingBackendInstructions, meetingFunctionTools, meetingInstructions, meetingTools } from './instructions.js';
-import { VoicedTimeline, attribute, splitBySpeaker } from './attribution.js';
+import { VoicedTimeline, attribute, lagSample, splitBySpeaker, transcriptLag, LAG_SAMPLES } from './attribution.js';
 import { OUT_RATE } from './mixer.js';
 import { NovaSpeech, VoiceRelay, voiceChannel, type VoiceSink } from './voice.js';
 import type { AudioIntake } from './audio-intake.js';
@@ -189,6 +189,8 @@ interface CallRun {
   inputEndAt: Map<number, number>;
   /** Which input transcript (by number) each recent stored line came from: lines split from one heard turn share it. */
   lineInput: Map<number, number>;
+  /** Recent measures of how late the provider's transcript times run behind the voiced timeline (ms); see `transcriptLag`. */
+  lagSamples: number[];
   delegationSeq: number;
   timeline: VoicedTimeline;
   calls: Map<string, CallState>;
@@ -356,7 +358,7 @@ export class AssistantRuntime {
     if (this.runs.has(ctx.callId)) return;
     this.watchIntake();
     const run: CallRun = {
-      ctx, session: null, unsubscribers: [], sessionStartedAt: 0, sessionNo: 0, pieceNo: 0, lastLineAt: 0, lastLineSeq: 0, delegationSeq: 0, inputNo: 0, inputEndAt: new Map(), lineInput: new Map(), timeline: new VoicedTimeline(),
+      ctx, session: null, unsubscribers: [], sessionStartedAt: 0, sessionNo: 0, pieceNo: 0, lastLineAt: 0, lastLineSeq: 0, delegationSeq: 0, inputNo: 0, inputEndAt: new Map(), lineInput: new Map(), lagSamples: [], timeline: new VoicedTimeline(),
       calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), holding: new Set(), reply: null, replyById: new Map(), callTimes: new Map(), answeredLines: new Set(), claimedLines: new Map(), delegations: [], lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity, heartbeatAt: -Infinity,
       intentionalClose: false, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, voice: false, voiceHeld: false,
@@ -482,7 +484,7 @@ export class AssistantRuntime {
   private async openSession(run: CallRun, recent: Awaited<ReturnType<AssistantRuntime['recentLines']>>): Promise<void> {
     const session = this.deps.makeSession(this.deps.clock);
     if (!session) throw new Error('no live session is available in this process');
-    run.sessionNo += 1; run.pieceNo = 0; run.lastLineAt = 0; run.lastLineSeq = 0; run.delegationSeq = 0; run.inputNo = 0; run.inputEndAt = new Map(); run.lineInput = new Map(); run.timeline = new VoicedTimeline();
+    run.sessionNo += 1; run.pieceNo = 0; run.lastLineAt = 0; run.lastLineSeq = 0; run.delegationSeq = 0; run.inputNo = 0; run.inputEndAt = new Map(); run.lineInput = new Map(); run.lagSamples = []; run.timeline = new VoicedTimeline();
     run.usageSeconds = 0; run.tokens = { input: 0, output: 0, cached: 0 };
     run.calls = new Map(); run.turnCalls = new Map(); run.holding = new Set(); run.reply = null; run.replyById = new Map(); run.callTimes = new Map(); run.answeredLines = new Set(); run.claimedLines = new Map(); run.delegations = []; run.intentionalClose = false;
     run.expiresAt = null;
@@ -729,20 +731,31 @@ export class AssistantRuntime {
     // Nova's own voice heard back through a microphone is not a person's line: not stored, only counted (the echo guard's own test).
     if (run.voice && run.speech.isEcho({ text: e.text, startAt: run.sessionStartedAt + e.startMs, endAt: run.sessionStartedAt + e.endMs })) { run.echoLinesDropped += 1; trace('line.echo', { startMs: e.startMs, endMs: e.endMs }); return; }
     // One heard turn can hold two people (a request spoken right after someone else's sentence): one line per voice.
-    const pieces = e.parts && e.parts.length > 1 ? splitBySpeaker(run.timeline.intervals(), e.parts) : [{ text: e.text, startMs: e.startMs, endMs: e.endMs }];
-    for (const p of pieces) await this.storePiece(run, p, inputNo);
+    // The split is judged with each piece moved back by the measured lag of the provider's times behind the voices.
+    const lag = transcriptLag(run.lagSamples);
+    const pieces = e.parts && e.parts.length > 1
+      ? splitBySpeaker(run.timeline.intervals(), e.parts.map((p) => ({ ...p, startMs: p.startMs - lag, endMs: p.endMs - lag }))).map((p) => ({ ...p, startMs: p.startMs + lag, endMs: p.endMs + lag }))
+      : [{ text: e.text, startMs: e.startMs, endMs: e.endMs }];
+    for (const p of pieces) await this.storePiece(run, p, inputNo, pieces.length === 1);
   }
 
-  private async storePiece(run: CallRun, e: { text: string; startMs: number; endMs: number }, inputNo = 0): Promise<void> {
+  private async storePiece(run: CallRun, e: { text: string; startMs: number; endMs: number }, inputNo = 0, whole = true): Promise<void> {
     const intervals = run.timeline.intervals();
-    for (const i of intervals) if (i.endMs >= e.startMs - 1500 && i.startMs <= e.endMs + 1500) trace('line.voiced', { piece: `live:${run.sessionNo}:${run.pieceNo + 1}`, userId: i.userId, startMs: i.startMs, endMs: i.endMs });
-    const who = attribute(intervals, { startMs: e.startMs, endMs: e.endMs });
+    for (const i of intervals) if (i.endMs >= e.startMs - 2500 && i.startMs <= e.endMs + 1500) trace('line.voiced', { piece: `live:${run.sessionNo}:${run.pieceNo + 1}`, userId: i.userId, startMs: i.startMs, endMs: i.endMs });
+    const lag = transcriptLag(run.lagSamples);
+    const who = attribute(intervals, { startMs: e.startMs - lag, endMs: e.endMs - lag });
+    // A whole turn one person clearly spoke measures the lag: how far its reported start lies after that person's voice began.
+    if (whole && who.userId !== null && who.speakers.length === 1) {
+      const sample = lagSample(intervals, who.userId, e);
+      if (sample !== null) { run.lagSamples.push(sample); if (run.lagSamples.length > LAG_SAMPLES) run.lagSamples.shift(); }
+    }
     run.pieceNo += 1;
     const outcome = await this.deps.intake().handle(run.ctx.callId, {
       userId: who.userId, text: e.text, at: run.sessionStartedAt + e.endMs, startMs: e.startMs, endMs: e.endMs,
       captionId: `live:${run.sessionNo}:${run.pieceNo}`,
       ...(who.speakers.length > 1 ? { speakers: who.speakers } : {}),
     });
+    trace('line.lag', { lag });
     if (outcome.stored) { run.lastLineAt = Math.max(run.lastLineAt, outcome.stored.at); run.lastLineSeq = Math.max(run.lastLineSeq, outcome.stored.seq); run.lineInput.set(outcome.stored.seq, inputNo); if (run.lineInput.size > 200) run.lineInput.delete(run.lineInput.keys().next().value as number); }
     trace('line', {
       piece: `live:${run.sessionNo}:${run.pieceNo}`, seq: outcome.stored?.seq ?? null, userId: who.userId, speakers: who.speakers.length,
