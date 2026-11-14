@@ -1,5 +1,5 @@
 // Runs the call assistant's turns in this person's own browser (docs/meeting-assistant-design.md, decision 5).
-// Renders nothing. While Nova is listening in the call this person is in, it asks the server for the turns made for
+// Renders nothing. While this person is seated in a call with Nova (listening, paused, or after it left, on a confirmation), it asks the server for the turns made for
 // this person every TURN_POLL_MS (the 5 s state poll is too slow for a read that someone is waiting on) and runs each
 // one once through the voice navigator's executor with this person's own session. See lib/meetingTurns.ts for the
 // rules: reads when pending, writes only when running, never twice.
@@ -16,15 +16,23 @@ import { ResultMemory, type DeliveryRecord, type ToolContext } from '../../lib/v
 import { PAGES, isPageVisible } from './portalCommands';
 import { useLiveCallId } from './MeetingAssistantBar';
 
-/** How often the browser asks for its turns while Nova is listening. */
+/** How often the browser asks for its turns while Nova is listening or paused. */
 export const TURN_POLL_MS = 2000;
+/** After Nova has left, a confirmed card is followed by these extra polls (ms after the poke). */
+const POKE_FOLLOW_UPS_MS = [1500, 4000, 9000];
+/** An error doubles the wait, up to this. */
+const POLL_MAX_MS = 30_000;
+export const pollDelay = (base: number, failures: number): number => Math.min(base * 2 ** Math.min(failures, 10), POLL_MAX_MS);
 
 export function MeetingTurnRunner() {
   const callId = useLiveCallId();
   const nova = useMeetingAssistant(callId);
   const { session } = useSession();
   const { can } = useCapabilities();
-  const listening = nova.enabled && (nova.view.phase === 'listening' || nova.view.phase === 'invited');
+  // Seated in the live call (callId) is the first condition. Confirmed turns run whenever the person is seated: keep asking
+  // while Nova listens or is paused; after it has left, ask when a card is confirmed (a poke) and a few times after.
+  const phase = nova.view.phase;
+  const mode: 'active' | 'poke' | 'off' = !nova.enabled ? 'off' : phase === 'listening' || phase === 'invited' || phase === 'paused' ? 'active' : phase === 'left' ? 'poke' : 'off';
   const userId = session?.sub ?? null;
   const ledger = useMemo(() => new Map<string, DeliveryRecord>(), [userId]);
   const results = useMemo(() => new ResultMemory(), [userId, session?.tenant]);
@@ -32,7 +40,7 @@ export function MeetingTurnRunner() {
   live.current = { session, can };
 
   useEffect(() => {
-    if (!listening || !callId || !userId) return undefined;
+    if (mode === 'off' || !callId || !userId) return undefined;
     const seen = new SeenTurns(`nova-turns:${callId}:${userId}`);
     const pending = new PendingResults(`nova-results:${callId}:${userId}`);
     // The server's clock, from the `Date` header of its answers: a turn's expiry is the server's time, not this browser's.
@@ -77,26 +85,47 @@ export function MeetingTurnRunner() {
         page: () => pageContextFor(window.location.pathname), tabs: () => pageTabsFor(window.location.pathname),
       };
     };
-    const poll = async (): Promise<void> => {
-      if (busy || stopped) return;
+    // Resolves true when the server answered (even with nothing to run), false on an error, so the loop can back off.
+    const poll = async (): Promise<boolean> => {
+      if (busy || stopped) return true;
       busy = true;
       try {
         const res = await fetch(`${base}/turns?mine=1`, { credentials: 'include', cache: 'no-store' });
         learn(res);
-        if (!res.ok || stopped) return;
+        if (!res.ok || stopped) return res.ok;
         await processTurns(parseTurns(await res.json().catch(() => null)), {
           seen, pending, now: serverNow, claim,
           run: (name, args, write) => runCallTool(name, args, context(), { write }),
           post,
         });
         if (pending.size > 0 && !retryTimer) void flush();
-      } catch { /* offline: the next tick asks again */ } finally { busy = false; }
+        return true;
+      } catch { return false; } finally { busy = false; }
+    };
+    const hidden = (): boolean => typeof document !== 'undefined' && document.visibilityState === 'hidden';
+    let failures = 0;
+    let loop: ReturnType<typeof setTimeout> | null = null;
+    const followUps: ReturnType<typeof setTimeout>[] = [];
+    // While Nova is listening or paused the browser keeps asking; after it has left it asks only when a card is confirmed.
+    const tick = async (): Promise<void> => {
+      loop = null;
+      if (stopped) return;
+      if (!hidden()) failures = (await poll()) ? 0 : failures + 1;
+      if (!stopped && mode === 'active') loop = setTimeout(() => void tick(), pollDelay(TURN_POLL_MS, failures));
     };
     void flush(); // a result kept from before a reload is posted again, not run again
-    void poll();
-    const timer = setInterval(() => void poll(), TURN_POLL_MS);
-    const off = onTurnsPoke(callId, () => void poll());
-    return () => { stopped = true; clearInterval(timer); if (retryTimer) clearTimeout(retryTimer); off(); };
-  }, [listening, callId, userId, ledger, results]);
+    void tick();
+    const onVisible = (): void => { if (!hidden() && !stopped) { if (loop) clearTimeout(loop); void tick(); } };
+    const off = onTurnsPoke(callId, () => {
+      if (hidden()) return;
+      void poll();
+      if (mode === 'poke') for (const ms of POKE_FOLLOW_UPS_MS) followUps.push(setTimeout(() => void poll(), ms));
+    });
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      stopped = true; if (loop) clearTimeout(loop); for (const t of followUps) clearTimeout(t);
+      if (retryTimer) clearTimeout(retryTimer); off(); document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [mode, callId, userId, ledger, results]);
   return null;
 }
