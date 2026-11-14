@@ -93,6 +93,8 @@ export interface MixerOptions {
   catchUpMs?: number;
   /** The ring's length, which is also the most audio that can wait ahead of the output. */
   aheadMs?: number;
+  /** A lane (one per participant id, so two devices of one person never share a resampler) with no audio for this long is released. */
+  laneIdleMs?: number;
   /** The most participants mixed at once; a chunk from one more is dropped and counted. */
   maxParticipants?: number;
 }
@@ -117,6 +119,8 @@ interface Lane {
   lastArrivalMs: number;
   /** Dropping chunks after a burst until the lead is back down. */
   draining: boolean;
+  /** Whose audio the lane carries (several lanes can carry one person: one per device). */
+  userId: string;
 }
 
 export class CallMixer {
@@ -134,6 +138,7 @@ export class CallMixer {
   private readonly resumeLeadMs: number;
   private readonly stallMs: number;
   private readonly catchUpMs: number;
+  private readonly laneIdleMs: number;
   private skippedFrames = 0;
   private closed = false;
 
@@ -147,6 +152,7 @@ export class CallMixer {
     this.resumeLeadMs = opts.resumeLeadMs ?? 600;
     this.stallMs = opts.stallMs ?? 1000;
     this.catchUpMs = opts.catchUpMs ?? 3000;
+    this.laneIdleMs = opts.laneIdleMs ?? 60_000;
     this.ringLen = Math.round((opts.aheadMs ?? 2000) * OUT_PER_MS);
     this.ring = new Int32Array(this.ringLen);
   }
@@ -158,18 +164,18 @@ export class CallMixer {
   get participants(): number { return this.lanes.size; }
 
   /**
-   * One chunk of `userId`'s own 16 kHz mono s16le audio, which arrived at session ms `arrivalMs` (default: now). Returns
+   * One chunk of `userId`'s own 16 kHz mono s16le audio, on the lane `laneId` (the participant id; default: the user), which arrived at session ms `arrivalMs` (default: now). Returns
    * what became of it. The chunk is a few milliseconds of work and is never awaited by the caller.
    */
-  push(userId: string, pcm16k: Buffer, arrivalMs: number = this.nowMs()): 'placed' | 'late' | 'overrun' | 'rejected' {
+  push(userId: string, pcm16k: Buffer, arrivalMs: number = this.nowMs(), laneId: string = userId): 'placed' | 'late' | 'overrun' | 'rejected' {
     if (this.closed) return 'rejected';
     const input = pcmToInt16(pcm16k);
     if (!input.length) return 'rejected';
-    let lane = this.lanes.get(userId);
+    let lane = this.lanes.get(laneId);
     if (!lane) {
       if (this.lanes.size >= this.maxParticipants) { this.stats.tooManyParticipants += 1; return 'rejected'; }
-      lane = { resampler: new LinearResampler(), nextSample: null, lastArrivalMs: arrivalMs, draining: false };
-      this.lanes.set(userId, lane);
+      lane = { resampler: new LinearResampler(), nextSample: null, lastArrivalMs: arrivalMs, draining: false, userId };
+      this.lanes.set(laneId, lane);
     }
     this.stats.chunks += 1;
     const durMs = (input.length / IN_RATE) * 1000;
@@ -209,7 +215,7 @@ export class CallMixer {
     if (startSample + count > cursorSample + this.ringLen) { this.stats.overrunChunks += 1; lane.resampler.reset(); return 'overrun'; }
     lane.nextSample = chunkStart + out.length;
     for (let i = 0; i < count; i += 1) this.ring[(startSample + i) % this.ringLen]! += out[from + i]!;
-    if (this.opts.onPlaced) this.opts.onPlaced(userId, int16ToPcm(out.subarray(from)), startSample / OUT_PER_MS - this.skippedFrames * FRAME_MS);
+    if (this.opts.onPlaced) this.opts.onPlaced(lane.userId, int16ToPcm(out.subarray(from)), startSample / OUT_PER_MS - this.skippedFrames * FRAME_MS);
     return 'placed';
   }
 
@@ -226,6 +232,8 @@ export class CallMixer {
       for (const lane of this.lanes.values()) { lane.nextSample = null; lane.draining = false; lane.resampler.reset(); }
       this.stats.stalls += 1;
     }
+    const now = this.nowMs();
+    for (const [id, lane] of this.lanes) if (now - lane.lastArrivalMs > this.laneIdleMs) this.lanes.delete(id);
     let n = 0;
     while (this.emitted < due) { this.emitFrame(); n += 1; }
     return n;

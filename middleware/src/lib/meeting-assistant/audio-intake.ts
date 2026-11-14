@@ -273,7 +273,7 @@ export class AudioIntake {
     const userId = this.bindings.get(armed.callId)?.get((h.participantId ?? '').slice(0, 256));
     if (!userId) { c.unmappedChunks += 1; return 'unmapped'; }
     if (userId !== gate.invitedBy && !gate.acked.has(userId)) { c.unackedChunks += 1; return 'unacked'; }
-    const placed = mixer.push(userId, body.length % 2 ? body.subarray(0, body.length - 1) : body);
+    const placed = mixer.push(userId, body.length % 2 ? body.subarray(0, body.length - 1) : body, undefined, (h.participantId ?? '').slice(0, 256));
     if (placed === 'late') { c.lateChunks += 1; return 'late'; }
     if (placed === 'overrun') { c.overrunChunks += 1; return 'overrun'; }
     if (placed === 'rejected') return 'bad-format';

@@ -159,6 +159,26 @@ describe('CallMixer output', () => {
   });
 });
 
+describe('lanes', () => {
+  it('two devices of one person get a lane each, and both are reported as that person', () => {
+    const h = harness();
+    const tone = sine(440, 200, IN_RATE);
+    h.mixer.push('ana', chunk(tone), undefined, 'device-1');
+    h.mixer.push('ana', chunk(tone), undefined, 'device-2');
+    expect(h.mixer.participants).toBe(2);
+    expect(h.placed.map((p) => p.userId)).toEqual(['ana', 'ana']);
+  });
+
+  it('a lane with no audio for 60 s is released', () => {
+    const h = harness();
+    h.mixer.push('ana', chunk(sine(440, 200, IN_RATE)), undefined, 'device-1');
+    h.advance(59_000); h.mixer.tick();
+    expect(h.mixer.participants).toBe(1);
+    h.advance(2000);
+    expect(h.mixer.participants).toBe(0);
+  });
+});
+
 describe('a lane after bursts and stalls', () => {
   /** The steady-state output is pinned: this hash was produced by the mixer before the lane repair, from the same input. */
   it('steady real-time input from two people is bit-identical to the mixer before the repair', () => {
