@@ -843,7 +843,8 @@ async function main() {
       await veraM.page.goto(MEETING(), { waitUntil: 'domcontentloaded', timeout: 40000 });
       await seen(veraM.page, 'meeting-delete', 30000);
       await veraM.page.getByTestId('meeting-delete').click();
-      await veraM.page.getByRole('button', { name: 'Delete record' }).click();
+      await shot(veraM.page, '17-delete-prompt');
+      await veraM.page.getByRole('button', { name: /Delete the record/ }).click();
       await veraM.page.waitForURL(/\/iq\/meetings$/, { timeout: 20000 }).catch(() => { throw new StepFailure('deleting did not return to the Meetings list'); });
       for (const p of [vera, nora]) {
         const a = await p.api.get(asApi(p, 'minutes')); const b = await p.api.get(asApi(p, 'transcript'));

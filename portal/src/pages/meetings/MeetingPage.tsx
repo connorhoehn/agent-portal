@@ -1,19 +1,20 @@
 // /iq/meetings/:callId — what the meeting assistant left behind: who was there, the summary, decisions, action items
 // and the transcript. Only the people who were in the call can read it; everyone else, admins included, gets the
 // same "not found" the server gives them. The inviter can delete the record (minutes and transcript together).
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router';
 import {
-  Button, ConfirmDialog, DataTable, DetailPage, DetailSection, EmptyState, Inline, LoadingState, MetaLine, Modal, Stack, T,
+  Button, DataTable, DetailPage, DetailSection, EmptyState, Inline, LoadingState, MetaLine, Stack, T,
   type DataTableColumn,
 } from '@connorhoehn/ui-components/shared';
+import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { TranscriptPanel } from '@connorhoehn/ui-components/video';
 import { useSession } from '../../lib/auth';
 import { useFetch } from '../../hooks/useFetch';
-import { toastError, toastSuccess } from '../../lib/toastStore';
 import { sendJson } from '../../lib/writeJson';
-import { NewItemForm, type NewItemDraft } from '../project-detail/NewItemForm';
-import { surfaceWriteError } from '../project-detail/writeJson';
+import { CollectionCommandHost } from '../../components/collections/CollectionCommandHost';
+import { collectionCommandAdapter } from '../../components/collections/collectionCommands';
+import { newWorkItemHref } from '../projects/initiativeNavigation';
 import {
   canCreateFor, durationLabel, peopleLabel, transcriptSegments, whenLabel, minutesUrl,
   type MinutesActionItem, type MinutesView,
@@ -26,10 +27,26 @@ export default function MeetingPage() {
   const { session } = useSession();
   const minutes = useFetch<MinutesView>(callId ? minutesUrl(callId) : null);
   const transcript = useMeetingTranscript(minutes.data ? callId : null);
-  const [drafting, setDrafting] = useState<MinutesActionItem | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [creating, setCreating] = useState(false);
+  // The delete question rides the page's docked composer as a deck prompt; `asked` counts the times it was raised so Delete reopens a hidden one.
+  const [asked, setAsked] = useState(0);
+  const [answered, setAnswered] = useState(0);
+  const adapter = useMemo(() => collectionCommandAdapter({ noun: 'meeting' }, {
+    id: 'meeting-commands', label: 'Meeting', placeholder: 'Refresh this meeting…',
+    setQuery: () => { throw new Error('This page has nothing to search. No changes were made.'); },
+    refresh: () => minutes.refresh(),
+    scopeNote: 'Refresh reloads the minutes. Deleting the record is asked here and never done by a typed command.',
+  }), [minutes.refresh]);
+  const deletePrompt = useMemo<ComposerPrompt | null>(() => asked > answered && minutes.data ? {
+    id: `meeting-delete:${callId}:${asked}`, scope: `meeting-delete:${callId}`, kind: 'choice', eyebrow: 'Delete the record', title: minutes.data.callName,
+    question: 'Delete the minutes and the transcript for everyone who was in the call? Nova will not write them again, and this cannot be undone. Work items created from them stay.',
+    options: [{ id: 'delete', label: 'Delete the record', emphasis: 'danger' }, { id: 'keep', label: 'Keep it' }],
+    onAnswer: async (a) => {
+      if (!('optionId' in a) || a.optionId !== 'delete') { setAnswered(asked); return; }
+      try { await sendJson(`/api/calls/${encodeURIComponent(callId)}/assistant/minutes`, 'DELETE'); navigate('/iq/meetings'); } catch (err) {
+        return { error: `Could not delete this record: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    },
+  } : null, [asked, answered, callId, minutes.data?.callName, navigate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (minutes.isLoading && !minutes.data) return <LoadingState label="Loading the meeting…" />;
   const m = minutes.data;
@@ -44,29 +61,11 @@ export default function MeetingPage() {
 
   const viewer = session?.sub ?? null;
   const names = m.attendees.map((a) => a.name);
-  const createItem = async (draft: NewItemDraft) => {
-    setDrafting(null);
-    if (!m.initiativeId || creating) return;
-    setCreating(true);
-    try {
-      const created = await sendJson<{ id?: string }>('/api/graph/work-items', 'POST', {
-        projectId: m.initiativeId, parentId: null, type: draft.type, title: draft.title, priority: draft.priority, storyPoints: draft.storyPoints,
-      });
-      toastSuccess(null, 'Work item created', created.id ? draft.title : undefined);
-    } catch (err) { surfaceWriteError(err, 'Creating this work item'); } finally { setCreating(false); }
-  };
-  const deleteRecord = async () => {
-    setDeleting(true);
-    try { await sendJson(`/api/calls/${encodeURIComponent(callId)}/assistant/minutes`, 'DELETE'); navigate('/iq/meetings'); } catch (err) {
-      toastError(null, 'Could not delete this record', err instanceof Error ? err.message : String(err));
-    } finally { setDeleting(false); setConfirmDelete(false); }
-  };
-
   const columns: DataTableColumn<MinutesActionItem>[] = [
     { key: 'text', header: 'Action item', render: (i) => <T size="sm">{i.text}</T> },
     { key: 'owner', header: 'Owner', width: '208px', render: (i) => <T size="sm">{i.ownerName ?? 'Nobody named'}</T> },
     { key: 'create', header: '', width: '176px', render: (i) => (m.initiativeId && canCreateFor(i, viewer)
-      ? <Button size="sm" variant="secondary" data-testid="meeting-create-work-item" disabled={creating || drafting !== null} onClick={() => setDrafting(i)}>Create work item</Button>
+      ? <Link to={newWorkItemHref(m.initiativeId, i.text)} data-testid="meeting-create-work-item" className="no-underline"><T size="sm" tone="primary" className="hover:underline">Create work item</T></Link>
       : i.done ? <T size="sm" tone="secondary">Done in the call</T> : null) },
   ];
 
@@ -77,7 +76,7 @@ export default function MeetingPage() {
         title={m.callName}
         meta={<MetaLine size="sm" items={[whenLabel(m.startedAt), durationLabel(m.startedAt, m.endedAt), peopleLabel(names), `Nova invited by ${m.invitedByName}`]} />}
         actions={m.youAreInviter
-          ? <Button variant="danger" size="sm" data-testid="meeting-delete" onClick={() => setConfirmDelete(true)}>Delete this record</Button> : undefined}
+          ? <Button variant="danger" size="sm" data-testid="meeting-delete" onClick={() => setAsked((n) => Math.max(n, answered) + 1)}>Delete this record</Button> : undefined}
       >
         <Stack gap="md" className="pb-6">
           <DetailSection title="Summary" as="h2" first>
@@ -110,22 +109,7 @@ export default function MeetingPage() {
         </Stack>
       </DetailPage>
 
-      {drafting && (
-        <Modal open onClose={() => setDrafting(null)} ariaLabel="New work item from this meeting" maxWidth={560}>
-          <NewItemForm defaultType="story" typeOptions={['story', 'bug']} defaultTitle={drafting.text}
-            onSave={(draft) => void createItem(draft)} onCancel={() => setDrafting(null)} />
-        </Modal>
-      )}
-      <ConfirmDialog
-        open={confirmDelete}
-        tone="destructive"
-        title="Delete this meeting record?"
-        body="The minutes and the transcript are deleted for everyone who was in the call, and Nova will not write them again. Work items created from them stay."
-        confirmLabel={deleting ? 'Deleting…' : 'Delete record'}
-        confirmDisabled={deleting}
-        onConfirm={() => void deleteRecord()}
-        onCancel={() => setConfirmDelete(false)}
-      />
+      {deletePrompt && <CollectionCommandHost key="dialogue" adapter={adapter} prompts={[deletePrompt]} />}
     </>
   );
 }
