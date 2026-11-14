@@ -5,6 +5,10 @@
 // written again (the tombstone).
 //
 // Privacy: minutes are the attendees' (routes/meeting-assistant.ts `attendeeOf`). Nothing here widens that.
+//
+// Proposals (docs/meeting-consent-design.md, package 6): a decision a proposal already holds is not written again as a decision line;
+// the minutes route lists each proposal with its state and the names of who consented or objected, read live, so a consent given on
+// the meeting page after the call shows there.
 import { createHash } from 'node:crypto';
 import { getProject } from '../../providers/projects.js';
 import { hashToolArgs, voiceTool } from '../voice/catalogue.js';
@@ -15,7 +19,7 @@ import { nameOf, postAction, postAsAssistant, postNoticeQuietly, noticeText } fr
 import { NOVA_NAME } from './chat-types.js';
 import { meetingTools } from './instructions.js';
 import {
-  capTranscript, MINUTES_TIMEOUT_MS, MinutesWriterError, OpenAiMinutesWriter, ScriptedMinutesWriter, type MinutesDraft, type MinutesWriter, type RosterEntry,
+  capTranscript, withoutHeld, MINUTES_TIMEOUT_MS, MinutesWriterError, OpenAiMinutesWriter, ScriptedMinutesWriter, type MinutesDraft, type MinutesWriter, type RosterEntry,
 } from './minutes.js';
 import { assistantStore } from './store-select.js';
 import { minutesSpend, SCRIPTED_MINUTES_USD } from './spend.js';
@@ -189,16 +193,19 @@ async function writeMinutesOnce(callId: string): Promise<MinutesRecord | null> {
   const initiativeName = record.initiativeId ? await getProject(record.initiativeId).then((p) => p?.name ?? null).catch(() => null) : null;
   const turns = await store.listTurns(callId, { statuses: ['done'] }).catch(() => [] as AssistantTurn[]);
   const doneActions = turns.filter((t) => t.kind === 'write').map((t) => ({ text: doneActionText(t), ownerUserId: t.askedBy }));
+  // The decisions the call's proposals already hold are listed as proposals (GET minutes), never invented again as decision lines.
+  const proposals = await store.listProposals(callId).catch(() => []);
+  const held = { statements: proposals.map((p) => p.statement), evidence: proposals.flatMap((p) => p.evidence) };
 
   const writer = (writerFactory ?? defaultMinutesWriterFactory)();
   let result: { draft: MinutesDraft | null; note: string | null; writer: MinutesWriterKind } = { draft: null, note: NOTES.noWriter, writer: 'none' };
   if (writer) {
     result = await Promise.race([
-      writeDraft(record, writer, { lines, roster, callName, doneActions }),
+      writeDraft(record, writer, { lines, roster, callName, doneActions, held }),
       new Promise<typeof result>((resolve) => { const t = setTimeout(() => resolve({ draft: null, note: NOTES.failed, writer: 'none' }), MINUTES_TIMEOUT_MS * 2 + 5000); t.unref?.(); }),
     ]);
   }
-  const draft = result.draft;
+  const draft = result.draft ? { ...result.draft, decisions: withoutHeld(result.draft.decisions, held) } : null;
   const minutes: MinutesRecord = {
     callId, tenant: record.tenant, lobby: record.lobby, initiativeId: record.initiativeId, callName,
     startedAt: record.invitedAt, endedAt: record.leftAt ?? Date.now(), invitedBy: record.invitedBy, attendees,

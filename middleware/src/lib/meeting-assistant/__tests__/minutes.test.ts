@@ -8,7 +8,7 @@ import { sweepTranscripts } from '../retention.js';
 import { SqlAssistantStore, minutesFromRow } from '../store-sql.js';
 import {
   buildMinutesRequest, capTranscript, MAX_MINUTES_BYTES, MAX_MINUTES_LINES, MinutesWriterError, OpenAiMinutesWriter, parseMinutesResponse, resolveOwner,
-  ScriptedMinutesWriter, type RosterEntry,
+  ScriptedMinutesWriter, heldByProposal, withoutHeld, type RosterEntry,
 } from '../minutes.js';
 import type { AssistantRecord, MinutesRecord, TranscriptLine } from '../types.js';
 
@@ -54,6 +54,16 @@ describe('the scripted writer', () => {
     expect(out.decisions).toEqual(['We decided to ship Thursday.', 'no Friday deploys.', 'Agreed, thanks.']);
   });
 
+  it('does not invent a decision a proposal already holds: its evidence lines and a line that says the same thing are left out', async () => {
+    const a = line('u-vera', 'Let us cut over the smallest tenants first.');
+    const b = line('u-nora', 'Agreed, smallest tenants first for the cutover.');
+    const c = line('u-layla', 'We decided to ship Thursday.');
+    const d = line('u-vera', 'Decision: cut over smallest tenants first.');
+    const out = await new ScriptedMinutesWriter().write({ lines: [a, b, c, d], roster: ROSTER, callName: 'Auth call',
+      held: { statements: ['Cut over the smallest tenants first'], evidence: [a.seq, b.seq] } });
+    expect(out.decisions).toEqual(['We decided to ship Thursday.']);
+  });
+
   it('is deterministic, empty-safe, and never owns an item by a name that is not in the roster', async () => {
     const lines = [line('u-vera', 'Rollback rollback rollback plan.'), line('u-nora', 'The rollback plan is ready.')];
     expect(await write(lines)).toEqual(await write(lines));
@@ -69,6 +79,18 @@ describe('the scripted writer', () => {
     const out = await write(lines);
     expect(out.truncated).toBe(true);
     expect(out.summary).toMatch(/Only the most recent part/);
+  });
+});
+
+describe('decisions a proposal holds', () => {
+  it('matches containment or most of the shorter one\'s words, and nothing looser', () => {
+    const held = ['Cut over the smallest tenants first'];
+    expect(heldByProposal('We agreed: cut over the smallest tenants first.', held)).toBe(true);
+    expect(heldByProposal('Smallest tenants cut over first', held)).toBe(true);
+    expect(heldByProposal('We decided to ship Thursday.', held)).toBe(false);
+    expect(heldByProposal('Agreed.', held)).toBe(false);
+    expect(withoutHeld(['Smallest tenants cut over first', 'Ship Thursday'], { statements: held, evidence: [] })).toEqual(['Ship Thursday']);
+    expect(withoutHeld(['Ship Thursday'], undefined)).toEqual(['Ship Thursday']);
   });
 });
 

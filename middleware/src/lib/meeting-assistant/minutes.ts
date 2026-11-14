@@ -19,6 +19,8 @@ export interface MinutesInput {
   callName: string;
   /** Write actions that were confirmed and done in the call (scripted rules turn each into an action item). */
   doneActions?: ReadonlyArray<{ text: string; ownerUserId: string }>;
+  /** What the call's proposals already hold: their statements and the line numbers they rest on. Neither becomes a decision line. */
+  held?: { statements: readonly string[]; evidence: readonly number[] };
 }
 
 export interface MinutesDraft {
@@ -106,6 +108,32 @@ function ownerFromLeadingName(name: string, roster: readonly RosterEntry[]): Ros
   return first.length === 1 ? first[0]! : null;
 }
 
+const contentWords = (text: string): Set<string> => new Set((text.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).filter((w) => !STOPWORDS.has(w) && w !== 'the' && w !== 'and' && w !== 'for' && w !== 'let' && w !== 'lets'));
+
+/**
+ * A decision line the minutes found that a proposal already holds: one contains the other, or most of the shorter one's words are
+ * in the other. The minutes then list the proposal (with its state and who consented) instead of inventing a second decision.
+ */
+export function heldByProposal(decision: string, statements: readonly string[]): boolean {
+  const d = decision.toLowerCase().replace(/\s+/g, ' ').trim();
+  const dw = contentWords(d);
+  return statements.some((st) => {
+    const s = st.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!s || !d) return false;
+    if (d.includes(s) || s.includes(d)) return true;
+    const sw = contentWords(s);
+    const shorter = dw.size <= sw.size ? dw : sw; const longer = shorter === dw ? sw : dw;
+    if (shorter.size < 2) return false;
+    let shared = 0; for (const w of shorter) if (longer.has(w)) shared += 1;
+    return shared / shorter.size >= 0.6;
+  });
+}
+
+/** The draft's decisions without those the proposals hold (whichever writer wrote them). */
+export function withoutHeld(decisions: readonly string[], held: MinutesInput['held']): string[] {
+  return held?.statements.length ? decisions.filter((d) => !heldByProposal(d, held.statements)) : [...decisions];
+}
+
 export class ScriptedMinutesWriter implements MinutesWriter {
   readonly kind = 'scripted' as const;
 
@@ -122,13 +150,14 @@ export class ScriptedMinutesWriter implements MinutesWriter {
     };
     const firstBySpeaker = new Map<string, string>();
     const words = new Map<string, number>();
+    const evidence = new Set(input.held?.evidence ?? []);
 
     for (const line of lines) {
       const speaker = speakerOf(line, input.roster);
       const text = line.text.replace(/\s+/g, ' ').trim();
       if (!text) continue;
       if (!firstBySpeaker.has(speaker)) firstBySpeaker.set(speaker, sentenceOf(text));
-      if (DECISION.test(text) && decisions.length < MAX_ITEMS) {
+      if (DECISION.test(text) && !evidence.has(line.seq) && decisions.length < MAX_ITEMS) {
         const d = clip(text.replace(/^\s*decision:\s*/i, ''), MAX_ITEM_CHARS);
         if (d && !decisions.includes(d)) decisions.push(d);
       }
@@ -146,7 +175,7 @@ export class ScriptedMinutesWriter implements MinutesWriter {
     let summary = speakers.length ? speakers.map(([name, first]) => `${name} said: ${first}`).join(' ') : '';
     if (truncated) summary = `${summary} Only the most recent part of a long call was summarised.`.trim();
     const topics = [...words.entries()].filter(([, c]) => c >= 2).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5).map(([w]) => w);
-    return { summary: clip(summary, MAX_SUMMARY_CHARS), decisions, actionItems: items, topics, truncated };
+    return { summary: clip(summary, MAX_SUMMARY_CHARS), decisions: withoutHeld(decisions, input.held), actionItems: items, topics, truncated };
   }
 }
 
