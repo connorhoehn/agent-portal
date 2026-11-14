@@ -89,6 +89,8 @@ export interface MixerOptions {
   resumeLeadMs?: number;
   /** No chunks from a participant for longer than this and its next chunk starts a fresh run at the current position. */
   stallMs?: number;
+  /** Behind real time by more than this, the mixer starts a new time base instead of emitting every missed frame. */
+  catchUpMs?: number;
   /** The ring's length, which is also the most audio that can wait ahead of the output. */
   aheadMs?: number;
   /** The most participants mixed at once; a chunk from one more is dropped and counted. */
@@ -103,6 +105,8 @@ export interface MixerStats {
   /** The part of overrunChunks that was a lane running too far ahead of real time (a burst of audio). */
   leadDroppedChunks: number;
   tooManyParticipants: number;
+  /** Times a stall longer than `catchUpMs` started a new time base. */
+  stalls: number;
 }
 
 interface Lane {
@@ -116,7 +120,7 @@ interface Lane {
 }
 
 export class CallMixer {
-  readonly stats: MixerStats = { frames: 0, chunks: 0, lateChunks: 0, overrunChunks: 0, leadDroppedChunks: 0, tooManyParticipants: 0 };
+  readonly stats: MixerStats = { frames: 0, chunks: 0, lateChunks: 0, overrunChunks: 0, leadDroppedChunks: 0, tooManyParticipants: 0, stalls: 0 };
   private readonly startWall: number;
   private readonly ring: Int32Array;
   private readonly ringLen: number;
@@ -129,6 +133,8 @@ export class CallMixer {
   private readonly maxLeadMs: number;
   private readonly resumeLeadMs: number;
   private readonly stallMs: number;
+  private readonly catchUpMs: number;
+  private skippedFrames = 0;
   private closed = false;
 
   constructor(private readonly opts: MixerOptions) {
@@ -140,14 +146,15 @@ export class CallMixer {
     this.maxLeadMs = opts.maxLeadMs ?? 1000;
     this.resumeLeadMs = opts.resumeLeadMs ?? 600;
     this.stallMs = opts.stallMs ?? 1000;
+    this.catchUpMs = opts.catchUpMs ?? 3000;
     this.ringLen = Math.round((opts.aheadMs ?? 2000) * OUT_PER_MS);
     this.ring = new Int32Array(this.ringLen);
   }
 
   /** The session timeline's "now" in ms, from the injected clock. */
   nowMs(): number { return this.opts.clock() - this.startWall; }
-  /** Session ms up to which frames have been emitted. */
-  get cursorMs(): number { return this.emitted * FRAME_MS; }
+  /** Provider-timeline ms up to which frames have been emitted (the time skipped by a long stall is not counted). */
+  get cursorMs(): number { return (this.emitted - this.skippedFrames) * FRAME_MS; }
   get participants(): number { return this.lanes.size; }
 
   /**
@@ -202,7 +209,7 @@ export class CallMixer {
     if (startSample + count > cursorSample + this.ringLen) { this.stats.overrunChunks += 1; lane.resampler.reset(); return 'overrun'; }
     lane.nextSample = chunkStart + out.length;
     for (let i = 0; i < count; i += 1) this.ring[(startSample + i) % this.ringLen]! += out[from + i]!;
-    if (this.opts.onPlaced) this.opts.onPlaced(userId, int16ToPcm(out.subarray(from)), startSample / OUT_PER_MS);
+    if (this.opts.onPlaced) this.opts.onPlaced(userId, int16ToPcm(out.subarray(from)), startSample / OUT_PER_MS - this.skippedFrames * FRAME_MS);
     return 'placed';
   }
 
@@ -210,6 +217,15 @@ export class CallMixer {
   tick(): number {
     if (this.closed) return 0;
     const due = Math.floor(this.nowMs() / FRAME_MS);
+    // After a stall longer than `catchUpMs` (the process was suspended or blocked), emitting every missed frame would flood the
+    // provider with minutes of silence in one burst. A new time base starts instead: the missed time is skipped, nothing waiting
+    // is kept, and the provider timeline (cursorMs, the placed times) carries on from where it stopped.
+    if (due - this.emitted > this.catchUpMs / FRAME_MS) {
+      this.skippedFrames += due - this.emitted; this.emitted = due;
+      this.ring.fill(0);
+      for (const lane of this.lanes.values()) { lane.nextSample = null; lane.draining = false; lane.resampler.reset(); }
+      this.stats.stalls += 1;
+    }
     let n = 0;
     while (this.emitted < due) { this.emitFrame(); n += 1; }
     return n;

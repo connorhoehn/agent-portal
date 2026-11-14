@@ -66,10 +66,20 @@ describe('CallMixer output', () => {
     for (const f of h.frames) { expect(f.length).toBe((OUT_RATE * FRAME_MS) / 1000 * 2); expect(f.every((b) => b === 0)).toBe(true); }
   });
 
-  it('catches up after a stall by emitting every missed frame, so the provider timeline never skips', () => {
+  it('catches up after a short stall by emitting every missed frame, so the provider timeline does not skip', () => {
     const h = harness();
     expect(h.advance(2500)).toBe(25);
     expect(h.mixer.cursorMs).toBe(2500);
+  });
+
+  it('after a stall longer than 3 s a new time base starts: nothing is flooded, and the timeline carries on from where it stopped', () => {
+    const h = harness();
+    h.advance(1000);
+    expect(h.advance(60_000)).toBe(0); // one minute missed: no burst of 600 frames
+    expect(h.mixer.cursorMs).toBe(1000);
+    expect(h.mixer.stats.stalls).toBe(1);
+    expect(h.advance(200)).toBe(2); // and it emits normally again
+    expect(h.mixer.cursorMs).toBe(1200);
   });
 
   it('a speaker\'s chunks come out as continuous audio of the right pitch', () => {
