@@ -99,6 +99,13 @@ const sentence = (s: string): string => {
   return t ? t[0]!.toUpperCase() + t.slice(1) : t;
 };
 
+/** The roster name a spoken name stands for: the exact name, or a first name only one person has. */
+function rosterName(said: string, roster: readonly string[]): string | null {
+  if (roster.includes(said)) return said;
+  const first = roster.filter((n) => n.split(/\s+/)[0] === said);
+  return first.length === 1 ? first[0]! : null;
+}
+
 export function scriptedAnswer(input: DecisionCheckInput): DecisionAnswer {
   const none: DecisionAnswer = { isDecision: false, outcome: 'none', statement: '', named: [], evidence: [], confidence: 0.9 };
   const lines = input.lines;
@@ -121,11 +128,11 @@ export function scriptedAnswer(input: DecisionCheckInput): DecisionAnswer {
       }
     }
     const ask = OWN_ASK.exec(p.text);
-    if (ask && input.roster.includes(ask[1]!) && ask[1] !== p.speaker) {
-      const who = ask[1]!;
+    const who = ask ? rosterName(ask[1]!, input.roster) : null;
+    if (ask && who && who !== p.speaker) {
       const yes = agreeAfter(i, (l) => l.speaker === who, TAKES_IT);
       if (yes && !JOKE.test(p.text) && !JOKE.test(yes.text)) {
-        work = { isDecision: true, outcome: 'work-item', statement: `${who} owns ${ask[2]!.trim()}`.slice(0, 280), named: [who], evidence: [p.seq, yes.seq], confidence: 0.9 };
+        work = { isDecision: true, outcome: 'work-item', statement: `${ask[1]!} owns ${ask[2]!.trim()}`.slice(0, 280), named: [who], evidence: [p.seq, yes.seq], confidence: 0.9 };
       }
     }
   }
