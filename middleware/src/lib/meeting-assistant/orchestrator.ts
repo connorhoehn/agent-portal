@@ -15,7 +15,7 @@
 //   * PAUSE. While paused the session is closed (it does not bill) and nothing is sent anywhere; resume opens a new session
 //     carrying the last minutes of the transcript. An unexpected close is replaced the same way, at most 3 times per call.
 import { randomBytes } from 'node:crypto';
-import { getUser } from '../../providers/identity.js';
+import { getUser, listUsers } from '../../providers/identity.js';
 import { hashToolArgs, voiceTool } from '../voice/catalogue.js';
 import { NOVA_NAME } from './chat-types.js';
 import {
@@ -38,7 +38,9 @@ import type { AssistantStore } from './store.js';
 import type { LineIntake } from './intake.js';
 import { canSpeakOnRecord } from './intake.js';
 import { makeSession } from './session-select.js';
-import { onProposalConsented } from './proposals.js';
+import { MAX_NAMED, MAX_STATEMENT_CHARS, ProposalInputError, createProposal, onProposalConsented } from './proposals.js';
+import { consentStatus, namedStatement, peopleSaid, resolvePeople, type PersonRole } from './named-people.js';
+import type { RosterEntry } from './minutes.js';
 import { hookProposalNotices } from './proposal-notify.js';
 import { checkBeforeClaim, expireProposalTurn, finishProposal, startProposal, type ProposalRunDeps } from './proposal-run.js';
 import { DecisionWatcher, defaultWatcherDeps } from './decision-watcher.js';
@@ -103,6 +105,8 @@ export interface RuntimeDeps {
   mayDecide?: ProposalRunDeps['mayDecide'];
   /** The decision watcher (decision-watcher.ts): started, paused and stopped with the run, and fed each stored line. Absent: none. */
   watcher?: Pick<DecisionWatcher, 'start' | 'pause' | 'stop' | 'onLine' | 'dispose'>;
+  /** The org directory, for a person a write names who never held a seat in the call. Default: providers/identity.ts listUsers. */
+  directory?: () => Promise<RosterEntry[]>;
 }
 
 export interface FinishedEvent {
@@ -941,6 +945,17 @@ export class AssistantRuntime {
     // (d) Read or write; private tools are decision 6's list.
     const kind = classifyCall(name, e.args);
     if (!kind) { await this.refuse(run, e.callId, 'unknown tool'); return; }
+    // (d2) A write that names someone other than the asker needs their consent too: a proposal, not the asker's card
+    // (named-people.ts). A write that names only the asker, or nobody, goes on to the card below unchanged.
+    if (kind === 'write') {
+      const said = peopleSaid(name, e.args);
+      if (said === null) { await this.refuse(run, e.callId, 'not reviewed for consent'); return; }
+      if (said.length) {
+        const found = await resolvePeople(said, asker, await this.rosterOf(record), this.deps.directory ?? defaultDirectory);
+        if (!found.ok) { await this.refuse(run, e.callId, found.why); return; }
+        if (found.others.length) { await this.proposeNamed(run, e, asker, found.others); return; }
+      }
+    }
     // (e) The turn.
     const now = this.now();
     const turnId = `t-${newId()}`;
@@ -963,6 +978,38 @@ export class AssistantRuntime {
     }
     run.turnCalls.set(turnId, e.callId);
     run.holding.add(e.callId);
+  }
+
+  /** Everyone who held a seat while Nova was in the call, everyone seated now and the inviter, by display name. */
+  private async rosterOf(record: AssistantRecord): Promise<RosterEntry[]> {
+    let seated: string[] = [];
+    try { seated = (await callChatRuntime().seatedUsers(record.callId)).filter((u) => u.active).map((u) => u.userId); } catch { /* the seat roster is best effort here */ }
+    const ids = [...new Set([...record.attendees, ...seated, record.invitedBy])];
+    return Promise.all(ids.map(async (userId) => ({ userId, name: await nameOf(userId).catch(() => userId) })));
+  }
+
+  /**
+   * The proposal an asked write that names other people becomes: the frozen call as its outcome, those people named, the asker
+   * its executor. Nova is told whose consent it needs; the card in the chat is the proposal's own (chat.ts). Nothing is logged.
+   */
+  private async proposeNamed(run: CallRun, e: SessionEvents['toolCall'], asker: string, others: ReadonlyArray<RosterEntry & { role: PersonRole }>): Promise<void> {
+    if (others.length > MAX_NAMED) { await this.refuse(run, e.callId, 'too many people'); return; }
+    const people = await Promise.all(others.map(async (o) => ({ ...o, name: o.name && o.name !== o.userId ? o.name : await nameOf(o.userId) })));
+    const a = e.args as Record<string, unknown>;
+    // An update's own sentence says nothing of what it changes; its statement names the row it is on instead.
+    const base = e.name === 'update' ? `Update ${capText(a['ref'], 120) || 'a record'}` : describeCall(e.name, e.args).summary;
+    try {
+      await createProposal(this.store, {
+        callId: run.ctx.callId, tenant: run.ctx.tenant, statement: namedStatement(base, people, MAX_STATEMENT_CHARS),
+        outcome: { kind: 'tool', name: e.name, args: e.args }, named: people.map((p) => p.userId), executor: asker, source: 'asked', at: this.now(),
+      });
+    } catch (err) {
+      if (!(err instanceof ProposalInputError)) throw err;
+      this.answer(run, e.callId, { error: 'Nova could not offer that.' });
+      return;
+    }
+    const names = people.map((p) => p.name);
+    this.answer(run, e.callId, { status: 'waiting_for_consent', people: names, say: consentStatus(names) }, { asker, visibility: 'public' });
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -1217,6 +1264,11 @@ export class AssistantRuntime {
 }
 
 // -----------------------------------------------------------------------------------------------------------------
+
+/** The org directory by display name, for a named person who never held a seat; empty when it cannot be read. */
+async function defaultDirectory(): Promise<RosterEntry[]> {
+  try { return (await listUsers()).map((u) => ({ userId: u.id, name: u.displayName })); } catch { return []; }
+}
 
 export async function defaultRolesOf(userId: string, tenant: string): Promise<string[]> {
   try { return (await getUser(userId))?.grants?.[tenant] ?? []; } catch { return []; }
