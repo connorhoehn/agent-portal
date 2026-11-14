@@ -177,7 +177,22 @@ describe('who a participant is', () => {
     expect(await audio.bindParticipant(CALL, PID.dee, BEN)).toBe('taken');
     expect(audio.userOf(CALL, PID.dee)).toBe(DEE);
     for (let i = 0; i < 7; i += 1) expect(await audio.bindParticipant(CALL, `${DEE}-x${i}`, DEE)).toBe('bound');
-    expect(await audio.bindParticipant(CALL, `${DEE}-x9`, DEE)).toBe('too-many');
+    // The ninth id replaces the oldest binding of the SAME person (audit Low: a reconnect got a new id and the cap was never released).
+    expect(await audio.bindParticipant(CALL, `${DEE}-x9`, DEE)).toBe('bound');
+    expect(audio.userOf(CALL, PID.dee)).toBeNull();
+    expect(audio.userOf(CALL, `${DEE}-x9`)).toBe(DEE);
+    expect(audio.userOf(CALL, `${DEE}-x0`)).toBe(DEE);
+    expect(audio.userOf(CALL, PID.ana)).toBe(ANA);              // nobody else's binding moved
+    expect([...Array(9).keys()].filter((i) => audio.userOf(CALL, i === 8 ? `${DEE}-x9` : `${DEE}-x${i}`) === DEE).length).toBeLessThanOrEqual(8);
+  });
+
+  it('the rate limit grows with the people bound on the call: 150 chunks a second trips a three-person call, not a thirty-person one', async () => {
+    const rate = (n: number) => { let limited = 0; for (let i = 0; i < n; i += 1) { now += Math.floor(1000 / 150); if (audio.admit(token, ARN) === 'limited') limited += 1; } return limited; };
+    expect(rate(1500)).toBeGreaterThan(100);                    // ten seconds at 150 a second against a floor of 100
+    now += 5000;
+    for (let u = 0; u < 5; u += 1) for (let i = 0; i < 7; i += 1) await audio.bindParticipant(CALL, `u-many${u}-p${i}`, `u-many${u}`);
+    now += 5000;
+    expect(rate(1500)).toBe(0);                                 // 38 bound people: 8 each, 304 a second
   });
 
   it('the bindings survive on the record (a resumed call keeps them)', async () => {

@@ -201,6 +201,13 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
     });
   } catch (e) { await assistantRuntime().stop(callId); await giveBack(); throw e; }
   const { record } = created;
+  if (!created.created) {
+    // Two invites at once: the other request wrote the record first. This request's hold is a second one for the same call, so it goes back,
+    // no second notice is posted, and the caller gets the record that exists (the other request arms the audio).
+    await spend.release(held.holdId ? [held.holdId] : []);
+    res.json(await view(record, callId, session));
+    return;
+  }
   const listening = await store.transition(callId, { from: ['invited'], to: 'listening', by: session.sub, at: Date.now() });
   await armAudio(callId, pre);
   await postNoticeQuietly(callId, noticeText.joined(await nameOf(session.sub, session.name), config.meetingAssistant.transcriptRetentionDays));

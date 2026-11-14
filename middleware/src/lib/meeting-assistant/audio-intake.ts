@@ -28,6 +28,8 @@ export const SINK_SAMPLE_RATE = 16_000;
 const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
 const MAX_IDS_PER_USER = 8;
 const MAX_IDS_PER_CALL = 64;
+/** Chunks per second each bound participant adds to a token's limit (a tap sends five per speaker; this leaves headroom). */
+export const CHUNKS_PER_BOUND_PARTICIPANT = 8;
 
 export const hashToken = (token: string): Buffer => createHash('sha256').update(token).digest();
 export const newSinkToken = (): string => randomBytes(32).toString('base64url');
@@ -192,8 +194,11 @@ export class AudioIntake {
     const owner = map.get(participantId);
     if (owner && owner !== userId) return 'taken';
     if (owner === userId) return 'bound';
-    const mine = [...map.values()].filter((u) => u === userId).length;
-    if (mine >= MAX_IDS_PER_USER || map.size >= MAX_IDS_PER_CALL) return 'too-many';
+    // A person's ids are capped; at the cap the OLDEST binding of that same person is replaced (a reconnect gets a new id, and the old
+    // one is dead), never someone else's (audit Low). The map keeps insertion order, so the first match is the oldest.
+    const mine = [...map.entries()].filter(([, u]) => u === userId);
+    if (mine.length >= MAX_IDS_PER_USER) map.delete(mine[0]![0]);
+    if (map.size >= MAX_IDS_PER_CALL) return 'too-many';
     map.set(participantId, userId);
     await this.store().patchSession(callId, { participants: Object.fromEntries(map) }).catch(() => undefined);
     return 'bound';
@@ -230,7 +235,10 @@ export class AudioIntake {
     if (!armed) return 'unknown';
     const now = this.clock();
     const b = armed.bucket;
-    b.tokens = Math.min(this.burst, b.tokens + ((now - b.at) / 1000) * this.rate); b.at = now;
+    // The limit grows with the people bound on the call (a tap sends five chunks a second per speaker): the floor, or this many per bound person.
+    const rate = Math.max(this.rate, CHUNKS_PER_BOUND_PARTICIPANT * (this.bindings.get(armed.callId)?.size ?? 0));
+    const burst = Math.max(this.burst, 2 * rate);
+    b.tokens = Math.min(burst, b.tokens + ((now - b.at) / 1000) * rate); b.at = now;
     if (b.tokens < 1) return 'limited';
     b.tokens -= 1;
     return 'ok';

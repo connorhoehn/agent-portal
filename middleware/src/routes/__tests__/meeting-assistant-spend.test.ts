@@ -28,7 +28,7 @@ import { observeCallPageLifecycle } from '../../lib/call-pages.js';
 import { assistantStore, assistantIntake, setAssistantStore, setAssistantIntake, LineIntake, MemoryAssistantStore, setTranscriptSource, MockTranscriptSource } from '../../lib/meeting-assistant/index.js';
 import { AssistantRuntime, setAssistantRuntime, defaultRolesOf } from '../../lib/meeting-assistant/orchestrator.js';
 import { ScriptedSession } from '../../lib/meeting-assistant/scripted-session.js';
-import { settleFinished } from '../../lib/meeting-assistant/spend.js';
+import { settleFinished, setAssistantSpend, realSpend } from '../../lib/meeting-assistant/spend.js';
 import { userBudgets } from '../../mock/user-budgets.js';
 import { spendHolds } from '../../mock/spend-holds.js';
 import { spendEntries } from '../../mock/spend-ledger.js';
@@ -184,5 +184,21 @@ describe('extension', () => {
     budget('alice');
     await post('invite'); await post('dismiss', 'alice');
     expect((await post('extend', 'alice')).status).toBe(409);
+  });
+});
+
+describe('two invites at once', () => {
+  it('leave one record, one hold, one join notice; the second request gets the record that exists', async () => {
+    budget('alice'); budget('bob');
+    // A barrier in the reservation: both requests have read "no record" before either writes one, which is the race.
+    let arrived = 0; let open!: () => void; const gate = new Promise<void>((r) => { open = r; });
+    setAssistantSpend({ ...realSpend, reserve: async (i) => { arrived += 1; if (arrived >= 2) open(); await gate; return realSpend.reserve(i); } });
+    const [a, b] = await Promise.all([post('invite', 'alice'), post('invite', 'bob')]);
+    expect([a.status, b.status].sort()).toEqual([200, 201]);
+    expect(a.body.state).toBe('listening'); expect(b.body.state).toBe('listening');
+    expect(holds().filter((h) => h.status === 'held')).toHaveLength(1);
+    const joined = (await rt.messages.listMessages(callChatChannel(CALL), 50)).filter((m) => String(m.message).includes('joined at'));
+    expect(joined).toHaveLength(1);
+    setAssistantSpend(null);
   });
 });
