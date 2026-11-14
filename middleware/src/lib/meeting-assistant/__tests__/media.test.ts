@@ -93,17 +93,31 @@ describe('creating the tap', () => {
     expect(notices).toEqual([]);
   });
 
-  it('gives up after a minute with a plain notice in the call chat, and stops asking', async () => {
+  it('says in the chat after a minute that Nova cannot hear yet, once, and goes on arming every 30 s while she listens', async () => {
     behaviour.create = Array.from({ length: 100 }, () => ({ status: 409, body: { error: 'no audio producer in channel' } }));
+    // The call is still being listened to for four slow retries; then the producer appears (the next create takes) .
+    let slow = 0;
+    const slowSleep = armer as unknown as { sleep: (ms: number) => Promise<void> };
+    slowSleep.sleep = async (ms) => { sleeps.push(ms); now += ms; if (ms === 30_000 && (slow += 1) === 4) behaviour.create = []; };
     await armer.arm(CALL, ARN); await settle();
     expect(notices).toEqual([CANNOT_HEAR_NOTICE]);
     expect(CANNOT_HEAR_NOTICE).toMatch(/^Nova cannot hear this call yet/);
-    const total = sleeps.reduce((a, b) => a + b, 0);
-    expect(total).toBeGreaterThanOrEqual(60_000 - 8000);
-    expect(total).toBeLessThanOrEqual(60_000 + 8000);
+    const before30 = sleeps.slice(0, sleeps.indexOf(30_000)).reduce((a, b) => a + b, 0);
+    expect(before30).toBeGreaterThanOrEqual(60_000 - 8000);
+    expect(before30).toBeLessThanOrEqual(60_000 + 8000);
+    expect(sleeps.filter((m) => m === 30_000)).toHaveLength(4);
+    expect(armer.tapsOf(CALL)).toEqual(['tap-1']);
+  });
+
+  it('stops asking the moment the call stops being listened to', async () => {
+    behaviour.create = Array.from({ length: 100 }, () => ({ status: 409, body: { error: 'no audio producer in channel' } }));
+    const slowSleep = armer as unknown as { sleep: (ms: number) => Promise<void> };
+    slowSleep.sleep = async (ms) => { sleeps.push(ms); now += ms; if (ms === 30_000) await armer.disarm(CALL); };
+    await armer.arm(CALL, ARN); await settle();
     const after = tapPosts().length;
     await settle();
     expect(tapPosts().length).toBe(after);
+    expect(notices).toEqual([CANNOT_HEAR_NOTICE]);
     expect(armer.tapsOf(CALL)).toEqual([]);
   });
 
@@ -263,5 +277,50 @@ describe('the sink secret gates arming (B4)', () => {
     expect(lines[0]).toMatch(/OPEN/);
     withSecret('x'); resetSinkAnnouncement();
     expect(announceSinkSecret((l) => lines.push(l))).toBe(false); // a secret is set: not open
+  });
+});
+
+describe('a failed tap delete is remembered and repeated (S11)', () => {
+  const fake = (results: Array<'removed' | 'failed'>) => {
+    const deletes: string[] = [];
+    const client = {
+      list: async () => [] as Array<{ tapId: string; url: string }>,
+      create: async () => ({ kind: 'created' as const, tapId: 'tap-9' }),
+      delete: async (_arn: string, tapId: string) => { deletes.push(tapId); return results.shift() ?? 'removed'; },
+    };
+    return { client, deletes };
+  };
+  const armerWith = (client: ReturnType<typeof fake>['client']) => new TapArmer({ client, audio: () => audio, clock: () => now, sleep: async (ms) => { sleeps.push(ms); now += ms; }, notify: async () => undefined });
+
+  it('retries after 1, 3 and 9 s until the media server says the tap is gone', async () => {
+    const f = fake(['failed', 'failed', 'removed']);
+    armer = armerWith(f.client);
+    await armer.arm(CALL, ARN); await settle();
+    await armer.disarm(CALL); await settle();
+    expect(f.deletes).toEqual(['tap-9', 'tap-9', 'tap-9']);
+    expect(sleeps.slice(-2)).toEqual([1000, 3000]);
+    expect(armer.pendingDeleteCount(CALL)).toBe(0);
+  });
+
+  it('keeps a delete that failed every time, and tries it again on the next disarm', async () => {
+    const f = fake(['failed', 'failed', 'failed', 'failed']);
+    armer = armerWith(f.client);
+    await armer.arm(CALL, ARN); await settle();
+    await armer.disarm(CALL); await settle();
+    expect(f.deletes).toHaveLength(4); // the attempt and three timed retries
+    expect(armer.pendingDeleteCount(CALL)).toBe(1);
+    await armer.disarm(CALL); await settle(); // nothing armed now, the pending one is still asked about
+    expect(f.deletes.length).toBeGreaterThan(4);
+    expect(armer.pendingDeleteCount(CALL)).toBe(0);
+  });
+
+  it('detaching a call with no live token still reaches the armer, so a recorded delete is retried', async () => {
+    const f = fake(['failed', 'failed', 'failed', 'failed']);
+    armer = armerWith(f.client);
+    await armer.arm(CALL, ARN); await settle();
+    audio.detach(CALL); await settle(); // token dies: delete fails four times, recorded
+    expect(armer.pendingDeleteCount(CALL)).toBe(1);
+    audio.detach(CALL); await settle(); // the stop path asks again with nothing armed
+    expect(armer.pendingDeleteCount(CALL)).toBe(0);
   });
 });

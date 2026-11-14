@@ -134,7 +134,8 @@ export class AudioIntake {
   /** The call's token is dead (the tap is the caller's to delete). Idempotent. */
   disarm(callId: string): void {
     const armed = this.byCall.get(callId);
-    if (!armed) return;
+    // With no live token the listeners still hear of it: a tap whose delete failed earlier (or was never confirmed) is retried by the armer.
+    if (!armed) { for (const l of [...this.deadListeners]) { try { l(callId); } catch (e) { console.warn('[meeting-assistant] audio listener failed', (e as Error).message); } } return; }
     this.byHash.delete(armed.hash.toString('base64url'));
     this.byCall.delete(callId);
     void this.flush(armed);

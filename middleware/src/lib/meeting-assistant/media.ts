@@ -28,6 +28,11 @@ import { assistantAudio } from './audio-select.js';
 export const SINK_PATH = '/api/internal/meeting-assistant/pcm/';
 export const TAP_GIVE_UP_MS = 60_000;
 const BACKOFF_MS = [1000, 2000, 4000, 8000, 8000];
+/** After the give-up notice, arming is tried again this often for as long as the call is still being listened to. */
+export const TAP_REARM_MS = 30_000;
+/** A tap delete that failed is tried again after each of these waits; after that, on every later arm or disarm for the call. */
+const DELETE_RETRY_MS = [1000, 3000, 9000];
+const MAX_PENDING_DELETES_PER_CALL = 20;
 export const CANNOT_HEAR_NOTICE = `${NOVA_NAME} cannot hear this call yet. Audio has not reached the call's media session.`;
 
 export interface MediaConfig { url: string; adminToken: string; sinkBaseUrl: string }
@@ -191,7 +196,8 @@ export async function preflightAudio(session: Session, callId: string, lobby: st
   return { channelArn, arm: true };
 }
 
-interface ArmedTaps { channelArn: string; generation: number; tapIds: Set<string>; sinkUrl: string }
+interface ArmedTaps { channelArn: string; generation: number; tapIds: Set<string>; sinkUrl: string; noticed: boolean }
+interface PendingDelete { channelArn: string; tapId: string }
 
 export interface TapArmerOptions {
   client?: MediaClient;
@@ -214,6 +220,8 @@ export class TapArmer {
   private readonly giveUpMs: number;
   private gen = 0;
   private readonly localTokens = new Map<string, string>();
+  /** Taps whose delete failed, by call: a tap left behind keeps posting audio, so each is kept until the media server says it is gone. */
+  private readonly pendingDeletes = new Map<string, PendingDelete[]>();
   /** Tap work in flight, so a caller (a test, a shutdown) can wait for it. */
   readonly inFlight = new Set<Promise<void>>();
 
@@ -244,10 +252,11 @@ export class TapArmer {
       return;
     }
     this.release(callId);
+    this.retryPending(callId);
     const token = await this.audio().arm(callId, channelArn);
     if (mockTranscriptEnabled()) this.localTokens.set(callId, token);
     const sinkUrl = `${cfg.sinkBaseUrl}${SINK_PATH}${token}`;
-    const state: ArmedTaps = { channelArn, generation: (this.gen += 1), tapIds: new Set(), sinkUrl };
+    const state: ArmedTaps = { channelArn, generation: (this.gen += 1), tapIds: new Set(), sinkUrl, noticed: false };
     this.calls.set(callId, state);
     const job = this.createWithRetry(callId, state).catch((e: unknown) => console.warn('[meeting-assistant] tap arming failed', (e as Error).message)).finally(() => { this.inFlight.delete(job); });
     this.inFlight.add(job);
@@ -263,14 +272,14 @@ export class TapArmer {
       for (const tap of existing) {
         if (!this.current(callId, state)) return;
         if (tap.url === state.sinkUrl) { state.tapIds.add(tap.tapId); return; }
-        if (this.isOurs(tap.url)) await this.client.delete(state.channelArn, tap.tapId);
+        if (this.isOurs(tap.url)) await this.deleteTap(callId, state.channelArn, tap.tapId);
       }
     }
     for (let attempt = 0; this.current(callId, state); attempt += 1) {
       const out = await this.client.create(state.channelArn, state.sinkUrl);
       if (!this.current(callId, state)) {
         // Disarmed while the request was out: a tap that came into being anyway must not outlive the call.
-        if (out.kind === 'created') await this.client.delete(state.channelArn, out.tapId);
+        if (out.kind === 'created') await this.deleteTap(callId, state.channelArn, out.tapId);
         return;
       }
       if (out.kind === 'created') { state.tapIds.add(out.tapId); return; }
@@ -278,8 +287,9 @@ export class TapArmer {
         console.warn(`[meeting-assistant] the media server refused the tap (HTTP ${out.status})`);
         await this.giveUp(callId, state); return;
       }
-      if (this.clock() - started >= this.giveUpMs) { await this.giveUp(callId, state); return; }
-      await this.sleep(BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)]!);
+      // After the one-minute give-up the notice is said once and arming goes on slowly: a producer that appears later is still heard.
+      if (!state.noticed && this.clock() - started >= this.giveUpMs) await this.giveUp(callId, state);
+      await this.sleep(state.noticed ? TAP_REARM_MS : BACKOFF_MS[Math.min(attempt, BACKOFF_MS.length - 1)]!);
     }
   }
 
@@ -289,7 +299,8 @@ export class TapArmer {
   }
 
   private async giveUp(callId: string, state: ArmedTaps): Promise<void> {
-    if (!this.current(callId, state)) return;
+    if (!this.current(callId, state) || state.noticed) return;
+    state.noticed = true;
     await this.notify(callId, CANNOT_HEAR_NOTICE).catch(() => undefined);
   }
 
@@ -297,18 +308,58 @@ export class TapArmer {
   async disarm(callId: string): Promise<void> {
     this.localTokens.delete(callId);
     const state = this.calls.get(callId);
-    if (!state) return;
-    this.calls.delete(callId);
-    for (const id of [...state.tapIds]) await this.client.delete(state.channelArn, id).catch(() => 'failed' as const);
+    if (state) {
+      this.calls.delete(callId);
+      for (const id of [...state.tapIds]) await this.deleteTap(callId, state.channelArn, id);
+    }
+    // Earlier deletes of this call that failed are tried again on every disarm, with or without a tap of the current arming.
+    this.retryPending(callId);
   }
 
-  /** Forget a call's earlier arming without deleting (a new arming follows and clears stale taps by their target). */
+  /** Forget a call's earlier arming without deleting in the foreground (a new arming follows and clears stale taps by their target). */
   private release(callId: string): void {
     const state = this.calls.get(callId);
     if (!state) return;
     this.calls.delete(callId);
-    for (const id of state.tapIds) void this.client.delete(state.channelArn, id).catch(() => undefined);
+    for (const id of state.tapIds) void this.deleteTap(callId, state.channelArn, id);
   }
+
+  /** One delete attempt. A failure is recorded and retried in the background (1, 3 and 9 s), then on each later arm or disarm of the call. */
+  private async deleteTap(callId: string, channelArn: string, tapId: string): Promise<void> {
+    const out = await this.client.delete(channelArn, tapId).catch(() => 'failed' as const);
+    if (out === 'removed') { this.forgetPending(callId, tapId); return; }
+    const list = this.pendingDeletes.get(callId) ?? [];
+    if (!list.some((p) => p.tapId === tapId && p.channelArn === channelArn) && list.length < MAX_PENDING_DELETES_PER_CALL) list.push({ channelArn, tapId });
+    this.pendingDeletes.set(callId, list);
+    this.retryPending(callId);
+  }
+
+  private forgetPending(callId: string, tapId: string): void {
+    const list = this.pendingDeletes.get(callId)?.filter((p) => p.tapId !== tapId);
+    if (list?.length) this.pendingDeletes.set(callId, list); else this.pendingDeletes.delete(callId);
+  }
+
+  private readonly retrying = new Set<string>();
+  /** Start the timed retries for a call's failed deletes (one runner per call). */
+  private retryPending(callId: string): void {
+    if (!this.pendingDeletes.get(callId)?.length || this.retrying.has(callId)) return;
+    this.retrying.add(callId);
+    const job = (async () => {
+      try {
+        for (const wait of DELETE_RETRY_MS) {
+          await this.sleep(wait);
+          for (const p of [...(this.pendingDeletes.get(callId) ?? [])]) {
+            if ((await this.client.delete(p.channelArn, p.tapId).catch(() => 'failed' as const)) === 'removed') this.forgetPending(callId, p.tapId);
+          }
+          if (!this.pendingDeletes.get(callId)?.length) return;
+        }
+      } finally { this.retrying.delete(callId); }
+    })().finally(() => { this.inFlight.delete(job); });
+    this.inFlight.add(job);
+  }
+
+  /** Taps whose delete has not yet been confirmed (for tests and the status line). */
+  pendingDeleteCount(callId: string): number { return this.pendingDeletes.get(callId)?.length ?? 0; }
 
   /**
    * Delete every tap on `channelArn` that points at THIS server's sink (a tap an earlier process left behind posts to a token that no
