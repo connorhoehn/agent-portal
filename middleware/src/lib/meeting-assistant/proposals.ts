@@ -7,8 +7,12 @@
 //   4. no objection is open.
 // Nobody is consented automatically: a proposal starts with no responses. Consent and objection can be withdrawn until it runs.
 // An objection moves it to `objected`; withdrawing the last one re-evaluates (back to `open`, or straight to `consented`). "Not a
-// decision" dismisses it. Nothing runs on a timer: expiry (end of call + 72 h) only ends it. Running it is a later package; this
-// module only announces the move to `consented` (onProposalConsented).
+// decision" dismisses it. Nothing runs on a timer: expiry (end of call + 72 h) only ends it. This module announces the move to
+// `consented` (onProposalConsented); proposal-run.ts runs it in the executor's browser.
+//
+// Taking over: while it is `consented` (its executor may not run it, or their browser was not there), a person who already consented
+// may consent again AS EXECUTOR. They become the executor and it is announced again, so the runner tries once more for them. The
+// rule is unchanged by it: they had consented, so every condition still holds, and the new executor's click is again the last step.
 //
 // The rule itself is pure (`consentMet`, `settle`, `applyResponse`, `whatIsMissing`) so it is tested without a store. The service
 // half (`createProposal`, `respondToProposal`, `listProposalsFor`, `closeProposals`) reads, applies the rule and writes back with the
@@ -30,7 +34,11 @@ export const ANSWERABLE: readonly ProposalState[] = ['open', 'objected', 'consen
 export const FINISHED: readonly ProposalState[] = ['done', 'failed', 'dismissed', 'expired'];
 
 export type ResponseKind = 'consent' | 'object' | 'withdraw' | 'not-a-decision';
-export interface ResponseInput { userId: string; response: ResponseKind; reason?: string | null; at: number }
+export interface ResponseInput {
+  userId: string; response: ResponseKind; reason?: string | null; at: number;
+  /** With `consent` only, while the proposal is `consented`, by someone who already consented: run it in my browser (a take-over, or the executor trying again). */
+  asExecutor?: boolean;
+}
 
 const consenters = (p: Pick<Proposal, 'responses'>): Set<string> => new Set(p.responses.filter((r) => r.response === 'consent').map((r) => r.userId));
 
@@ -60,7 +68,7 @@ export function whatIsMissing(p: Pick<Proposal, 'responses' | 'named' | 'executo
 
 export type ApplyResult =
   | { ok: true; proposal: Proposal; changed: boolean }
-  | { ok: false; why: 'finished' | 'reason-not-allowed' };
+  | { ok: false; why: 'finished' | 'reason-not-allowed' | 'not-consented' | 'not-a-consenter' };
 
 /**
  * One person's answer, applied to a copy. Answers are taken only while the proposal is open, objected or consented; one answer per
@@ -71,6 +79,14 @@ export function applyResponse(p: Proposal, input: ResponseInput): ApplyResult {
   const reason = input.reason ?? null;
   if (reason !== null && input.response !== 'object') return { ok: false, why: 'reason-not-allowed' };
   const next: Proposal = { ...p, responses: p.responses.map((r) => ({ ...r })) };
+  if (input.asExecutor) {
+    // Only a person who already consented takes over, and only once it is consented: nobody becomes executor of something not agreed.
+    if (input.response !== 'consent') return { ok: false, why: 'reason-not-allowed' };
+    if (p.state !== 'consented') return { ok: false, why: 'not-consented' };
+    if (!consenters(p).has(input.userId)) return { ok: false, why: 'not-a-consenter' };
+    const responses = next.responses.map((r) => (r.userId === input.userId ? { ...r, at: input.at } : r));
+    return { ok: true, changed: true, proposal: { ...next, responses, executor: input.userId, state: 'consented', updatedAt: input.at } };
+  }
   if (input.response === 'not-a-decision') {
     return { ok: true, changed: true, proposal: { ...next, state: 'dismissed', dismissedBy: input.userId, updatedAt: input.at } };
   }
@@ -139,7 +155,7 @@ export function buildProposal(input: NewProposal): Proposal {
   return {
     id, callId: input.callId, tenant: input.tenant, statement, outcome, argsDigest: hashToolArgs(outcome),
     named: [...new Set(input.named)], executor: input.executor, source: input.source, evidence: [...new Set(evidence)].sort((a, b) => a - b),
-    state: 'open', responses: [], dismissedBy: null, createdAt: input.at, updatedAt: input.at, expiresAt: null, version: 1,
+    state: 'open', responses: [], dismissedBy: null, createdAt: input.at, updatedAt: input.at, expiresAt: null, version: 1, run: null,
   };
 }
 
@@ -166,7 +182,7 @@ function cleanOutcome(raw: unknown): ProposalOutcome {
 export type ConsentedListener = (proposal: Proposal) => void | Promise<void>;
 const listeners = new Set<ConsentedListener>();
 
-/** Called once each time a proposal moves INTO `consented` (after withdrawals it can happen again). Nothing runs here. Returns the unsubscriber. */
+/** Called once each time a proposal moves INTO `consented` (after withdrawals it can happen again) and on each take-over. Nothing runs here. Returns the unsubscriber. */
 export function onProposalConsented(fn: ConsentedListener): () => void {
   listeners.add(fn);
   return () => { listeners.delete(fn); };
@@ -215,7 +231,7 @@ export async function listProposalsFor(store: AssistantStore, callId: string, no
 
 export type RespondResult =
   | { ok: true; proposal: Proposal }
-  | { ok: false; why: 'not-found' | 'finished' | 'expired' | 'reason-not-allowed' | 'busy'; proposal?: Proposal };
+  | { ok: false; why: 'not-found' | 'finished' | 'expired' | 'reason-not-allowed' | 'not-consented' | 'not-a-consenter' | 'busy'; proposal?: Proposal };
 
 /**
  * Apply one answer. Reads the proposal, expires it when its time is up, applies the rule and writes back naming the version read; when
@@ -233,7 +249,7 @@ export async function respondToProposal(store: AssistantStore, callId: string, i
     if (!out.changed) return { ok: true, proposal: current };
     const saved = await store.saveProposal(out.proposal, current.version);
     if (!saved) continue; // someone else answered first: read again
-    if (saved.state === 'consented' && current.state !== 'consented') announceConsented(saved);
+    if (saved.state === 'consented' && (current.state !== 'consented' || input.asExecutor)) announceConsented(saved);
     return { ok: true, proposal: saved };
   }
   return { ok: false, why: 'busy' };

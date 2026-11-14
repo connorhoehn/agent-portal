@@ -158,4 +158,9 @@ CREATE TABLE IF NOT EXISTS meeting_assistant_proposals (
   version       INTEGER     NOT NULL DEFAULT 1 CHECK (version >= 1),
   PRIMARY KEY (call_id, proposal_id)
 );
+-- Package 3: running a consented proposal. `run` is the latest attempt (the executor's turn, what was made, or why it went back to
+-- `consented`); the executor may change while it is `consented`, when another consenter takes it over. A turn that runs a proposal
+-- names it, so its result closes the proposal and its expiry hands it back.
+ALTER TABLE meeting_assistant_proposals ADD COLUMN IF NOT EXISTS run JSONB CHECK (run IS NULL OR jsonb_typeof(run) = 'object');
+ALTER TABLE meeting_assistant_turns ADD COLUMN IF NOT EXISTS proposal_id TEXT;
 CREATE INDEX IF NOT EXISTS meeting_assistant_proposals_due_idx ON meeting_assistant_proposals (expires_at) WHERE state IN ('open', 'objected', 'consented');

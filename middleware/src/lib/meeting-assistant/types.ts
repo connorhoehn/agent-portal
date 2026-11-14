@@ -142,6 +142,8 @@ export interface AssistantTurn {
   /** Set when one of the asker's browsers claimed the turn to run it (audit B6); a claimed turn is not listed again and takes its result only with this id. */
   claimId?: string;
   claimedAt?: number;
+  /** Set when the turn runs a consented proposal (proposal-run.ts): its result closes that proposal, and its expiry hands it back to `consented`. */
+  proposalId?: string;
 }
 
 /** What a transcript source hands the intake. `userId` is already a person; `participantId` may be empty. */
@@ -195,6 +197,21 @@ export interface ProposalResponse {
   at: number;
 }
 
+/**
+ * The latest attempt to run a consented proposal. While `running`, `turnId` is the executor's turn. Done, `title` and `href` name
+ * what was made (`href` only for a decision record). Failed, or handed back to `consented` (the executor may not run it, or their
+ * browser was not there), `note` is one sentence the card shows.
+ */
+export interface ProposalRun {
+  turnId: string | null;
+  /** The executor it ran (or was to run) for. */
+  by: string;
+  at: number;
+  title: string | null;
+  href: string | null;
+  note: string | null;
+}
+
 export interface Proposal {
   id: string;
   callId: string;
@@ -206,7 +223,7 @@ export interface Proposal {
   argsDigest: string;
   /** People the outcome names (assignee, decider): each must consent. */
   named: string[];
-  /** The person whose browser runs it: must consent. */
+  /** The person whose browser runs it: must consent. Another consenter takes it over by consenting again as executor while it is `consented`. */
   executor: string;
   source: ProposalSource;
   /** Transcript line numbers the proposal rests on. */
@@ -219,6 +236,8 @@ export interface Proposal {
   updatedAt: number;
   /** End of the call + 72 hours; null while the call goes on. */
   expiresAt: number | null;
+  /** The latest attempt to run it (proposal-run.ts); null until it was first consented. */
+  run: ProposalRun | null;
   /** Bumped by every change; a write names the version it read, so two responses at once never lose one. */
   version: number;
 }

@@ -116,6 +116,18 @@ describe('the consent rule (pure)', () => {
   it('settle reads only the responses', () => {
     expect(settle({ named: [], executor: 'a', responses: [] })).toBe('open');
   });
+
+  it('a take-over: only a person who consented, only once it is consented, only by consenting; they become the executor', () => {
+    const done = answer(answer(base(), 'u-sam', 'consent'), 'u-priya', 'consent');
+    const as = (p: Proposal, userId: string, response: ResponseInput['response'] = 'consent') => applyResponse(p, { userId, response, at: T0 + 2000, asExecutor: true });
+    expect(as(answer(base(), 'u-sam', 'consent'), 'u-sam')).toEqual({ ok: false, why: 'not-consented' });
+    expect(as(done, 'u-lee')).toEqual({ ok: false, why: 'not-a-consenter' });
+    expect(as(done, 'u-sam', 'object')).toEqual({ ok: false, why: 'reason-not-allowed' });
+    const out = as(done, 'u-sam');
+    expect(out).toMatchObject({ ok: true, changed: true, proposal: { state: 'consented', executor: 'u-sam' } });
+    // The rule still holds with the new executor: two people, the executor among them.
+    if (out.ok) expect(consentMet(out.proposal)).toBe(true);
+  });
 });
 
 describe('checking input', () => {
@@ -174,9 +186,9 @@ describe('the service on the memory store', () => {
     expect(await store.saveProposal({ ...proposal, state: 'open' }, 1)).toBeNull();
   });
 
-  it('never rewrites the frozen fields', async () => {
+  it('never rewrites the frozen fields (the executor changes only by a take-over, so the store writes it)', async () => {
     const { proposal } = await createProposal(store, input());
-    await store.saveProposal({ ...proposal, statement: 'changed', executor: 'u-mallory', named: ['u-x'], argsDigest: 'x' }, 1);
+    await store.saveProposal({ ...proposal, statement: 'changed', named: ['u-x'], argsDigest: 'x' }, 1);
     expect(await store.getProposal('call-1', 'p-1')).toMatchObject({ statement: 'Cut over first', executor: 'u-priya', named: [], argsDigest: proposal.argsDigest });
   });
 
@@ -243,7 +255,7 @@ describe('SqlAssistantStore proposal statements', () => {
     expect(proposalFromRow(row())).toEqual({
       id: 'p-1', callId: 'call-1', tenant: 'orgiq', statement: 'Cut over first', outcome: { kind: 'decision', initiativeId: null }, argsDigest: 'd',
       named: ['u-lee'], executor: 'u-priya', source: 'dev', evidence: [3], state: 'open', responses: [{ userId: 'u-sam', response: 'consent', reason: null, at: 5 }],
-      dismissedBy: null, createdAt: T0, updatedAt: T0 + 1000, expiresAt: null, version: 2,
+      dismissedBy: null, createdAt: T0, updatedAt: T0 + 1000, expiresAt: null, version: 2, run: null,
     });
   });
 
@@ -258,7 +270,7 @@ describe('SqlAssistantStore proposal statements', () => {
     rows = [];
     expect(await store().saveProposal(base(), 4)).toBeNull();
     expect(calls[0]!.sql).toMatch(/UPDATE meeting_assistant_proposals SET state = :state[\s\S]*version = version \+ 1[\s\S]*WHERE call_id = :call AND proposal_id = :id AND version = :version/);
-    expect(calls[0]!.sql.split('RETURNING')[0]).not.toMatch(/statement|outcome|executor|named|args_digest/);
+    expect(calls[0]!.sql.split('RETURNING')[0]).not.toMatch(/statement|outcome|named|args_digest/);
     expect(calls[0]!.params.find((p) => p.name === 'version')!.value).toEqual({ longValue: 4 });
   });
 

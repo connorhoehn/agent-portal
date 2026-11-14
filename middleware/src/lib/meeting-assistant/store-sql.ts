@@ -6,7 +6,7 @@
 // bumps `next_seq`, guarded by `state = 'listening'` and by the caption not being stored yet, and
 // the INSERT reads the claimed seq from it. No transaction needed, no lost or doubled line numbers.
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
-import type { AssistantAction, AssistantRecord, MinutesActionItem, MinutesRecord, MinutesWriterKind, AssistantSession, AssistantState, AssistantTurn, PendingRequest, Proposal, ProposalOutcome, ProposalResponse, ProposalSource, ProposalState, TranscriptLine, TurnKind, TurnStatus } from './types.js';
+import type { AssistantAction, AssistantRecord, MinutesActionItem, MinutesRecord, MinutesWriterKind, AssistantSession, AssistantState, AssistantTurn, PendingRequest, Proposal, ProposalOutcome, ProposalResponse, ProposalRun, ProposalSource, ProposalState, TranscriptLine, TurnKind, TurnStatus } from './types.js';
 import { WRITE_FINISH_MS } from './limits.js';
 import { MAX_PENDING_REQUESTS, REMOVED_BY_INVITER, type ActionChange, type AssistantStore, type MinutesFilter, type StateChange, type TurnChange, type TurnFilter } from './store.js';
 
@@ -18,7 +18,7 @@ const n = (name: string, value: number): SqlParameter => ({ name, value: { longV
 const nOrNull = (name: string, value: number | null): SqlParameter => (value === null ? { name, value: { isNull: true } } : n(name, value));
 const LINE_COLUMNS = 'call_id, seq, user_id, participant_id, speaker_name, text, at, caption_id, start_ms, end_ms, speakers';
 const ACTION_COLUMNS = 'call_id, action_id, message_id, asked_by, tool_name, args_digest, status, created_at, decided_by, decided_at, result_text';
-const TURN_COLUMNS = 'call_id, turn_id, asked_by, tool_name, tool_args, kind, status, action_id, created_at, expires_at, claim_id, claimed_at';
+const TURN_COLUMNS = 'call_id, turn_id, asked_by, tool_name, tool_args, kind, status, action_id, created_at, expires_at, claim_id, claimed_at, proposal_id';
 const iso = (ms: number): string => new Date(ms).toISOString();
 
 const COLUMNS = `call_id, tenant, lobby, initiative_id, state, invited_by, invited_at, paused_by, left_at, left_by,
@@ -62,7 +62,8 @@ export function turnFromRow(r: Record<string, unknown>): AssistantTurn {
   return { turnId: str(r['turn_id']), callId: str(r['call_id']), askedBy: str(r['asked_by']), tool: { name: str(r['tool_name']), args: jsonValue(r['tool_args']) },
     kind: str(r['kind']) as TurnKind, status: str(r['status']) as TurnStatus, ...(r['action_id'] != null ? { actionId: str(r['action_id']) } : {}),
     createdAt: ms(r['created_at']), expiresAt: ms(r['expires_at']),
-    ...(r['claim_id'] != null ? { claimId: str(r['claim_id']), claimedAt: ms(r['claimed_at']) } : {}) };
+    ...(r['claim_id'] != null ? { claimId: str(r['claim_id']), claimedAt: ms(r['claimed_at']) } : {}),
+    ...(r['proposal_id'] != null ? { proposalId: str(r['proposal_id']) } : {}) };
 }
 
 export function lineFromRow(r: Record<string, unknown>): TranscriptLine {
@@ -78,7 +79,7 @@ export function actionFromRow(r: Record<string, unknown>): AssistantAction {
     createdAt: ms(r['created_at']), decidedBy: strOrNull(r['decided_by']), decidedAt: msOrNull(r['decided_at']), resultText: strOrNull(r['result_text']) };
 }
 
-const PROPOSAL_COLUMNS = 'call_id, proposal_id, tenant, statement, outcome, args_digest, named, executor, source, evidence, state, responses, dismissed_by, created_at, updated_at, expires_at, version';
+const PROPOSAL_COLUMNS = 'call_id, proposal_id, tenant, statement, outcome, args_digest, named, executor, source, evidence, state, responses, dismissed_by, created_at, updated_at, expires_at, version, run';
 
 export function proposalFromRow(r: Record<string, unknown>): Proposal {
   return {
@@ -87,6 +88,7 @@ export function proposalFromRow(r: Record<string, unknown>): Proposal {
     source: str(r['source']) as ProposalSource, evidence: json<number[]>(r['evidence'], []), state: str(r['state']) as ProposalState,
     responses: json<ProposalResponse[]>(r['responses'], []), dismissedBy: strOrNull(r['dismissed_by']),
     createdAt: ms(r['created_at']), updatedAt: ms(r['updated_at']), expiresAt: msOrNull(r['expires_at']), version: Number(r['version'] ?? 1),
+    run: r['run'] == null ? null : jsonObject<ProposalRun>(r['run']),
   };
 }
 
@@ -277,13 +279,14 @@ export class SqlAssistantStore implements AssistantStore {
 
   async createTurn(turn: AssistantTurn) {
     const rows = await this.exec(
-      `INSERT INTO meeting_assistant_turns (call_id, turn_id, tenant, asked_by, tool_name, tool_args, kind, status, action_id, created_at, expires_at)
-       SELECT :call, :turn, tenant, :asked, :tool, :args::jsonb, :kind, :status, :action, :at::timestamptz, :expires::timestamptz
+      `INSERT INTO meeting_assistant_turns (call_id, turn_id, tenant, asked_by, tool_name, tool_args, kind, status, action_id, created_at, expires_at, proposal_id)
+       SELECT :call, :turn, tenant, :asked, :tool, :args::jsonb, :kind, :status, :action, :at::timestamptz, :expires::timestamptz, :proposal
        FROM meeting_assistants WHERE call_id = :call
        ON CONFLICT (call_id, turn_id) DO NOTHING
        RETURNING ${TURN_COLUMNS}`,
       [s('call', turn.callId), s('turn', turn.turnId), s('asked', turn.askedBy), s('tool', turn.tool.name), s('args', JSON.stringify(turn.tool.args ?? null)),
-        s('kind', turn.kind), s('status', turn.status), sOrNull('action', turn.actionId ?? null), s('at', iso(turn.createdAt)), s('expires', iso(turn.expiresAt))],
+        s('kind', turn.kind), s('status', turn.status), sOrNull('action', turn.actionId ?? null), s('at', iso(turn.createdAt)), s('expires', iso(turn.expiresAt)),
+        sOrNull('proposal', turn.proposalId ?? null)],
     );
     if (rows[0]) return { turn: turnFromRow(rows[0]), created: true };
     const existing = await this.getTurn(turn.callId, turn.turnId);
@@ -472,11 +475,12 @@ export class SqlAssistantStore implements AssistantStore {
   async saveProposal(next: Proposal, expectedVersion: number) {
     // One conditional update on the version read: of two answers written at once exactly one lands, and the other reads again.
     const rows = await this.exec(
-      `UPDATE meeting_assistant_proposals SET state = :state, responses = :responses::jsonb, dismissed_by = :dismissed,
-         expires_at = :expires::timestamptz, updated_at = :at::timestamptz, version = version + 1
+      `UPDATE meeting_assistant_proposals SET state = :state, responses = :responses::jsonb, dismissed_by = :dismissed, executor = :executor,
+         run = :run::jsonb, expires_at = :expires::timestamptz, updated_at = :at::timestamptz, version = version + 1
        WHERE call_id = :call AND proposal_id = :id AND version = :version
        RETURNING ${PROPOSAL_COLUMNS}`,
       [s('call', next.callId), s('id', next.id), s('state', next.state), s('responses', JSON.stringify(next.responses)), sOrNull('dismissed', next.dismissedBy),
+        s('executor', next.executor), sOrNull('run', next.run ? JSON.stringify(next.run) : null),
         sOrNull('expires', next.expiresAt === null ? null : iso(next.expiresAt)), s('at', iso(next.updatedAt)), n('version', expectedVersion)],
     );
     return rows[0] ? proposalFromRow(rows[0]) : null;

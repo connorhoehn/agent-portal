@@ -110,8 +110,9 @@ export interface AssistantStore {
   /** The call's proposals, oldest first. */
   listProposals(callId: string): Promise<Proposal[]>;
   /**
-   * Write the proposal's state, responses, dismissal, expiry and update time, bumping its version, ONLY when the stored version is
-   * `expectedVersion`. Null when it is unknown or someone else wrote first. The frozen fields are never touched.
+   * Write the proposal's state, responses, dismissal, executor, run, expiry and update time, bumping its version, ONLY when the stored
+   * version is `expectedVersion`. Null when it is unknown or someone else wrote first. The frozen fields (statement, outcome, digest,
+   * named people) are never touched.
    */
   saveProposal(next: Proposal, expectedVersion: number): Promise<Proposal | null>;
   /** Set the expiry of every proposal of the call that has none yet (the call ended). Returns how many were set. */
@@ -358,8 +359,8 @@ export class MemoryAssistantStore implements AssistantStore {
     // Read, compare and write in one synchronous step: no await between them, so two saves cannot both pass the check.
     const p = this.proposals.get(`${next.callId}\0${next.id}`);
     if (!p || p.version !== expectedVersion) return null;
-    p.state = next.state; p.responses = copy(next.responses); p.dismissedBy = next.dismissedBy;
-    p.expiresAt = next.expiresAt; p.updatedAt = next.updatedAt; p.version = expectedVersion + 1;
+    p.state = next.state; p.responses = copy(next.responses); p.dismissedBy = next.dismissedBy; p.executor = next.executor;
+    p.run = next.run ? copy(next.run) : null; p.expiresAt = next.expiresAt; p.updatedAt = next.updatedAt; p.version = expectedVersion + 1;
     return copy(p);
   }
 
