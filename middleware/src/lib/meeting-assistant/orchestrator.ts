@@ -27,7 +27,7 @@ import { OUT_RATE } from './mixer.js';
 import { NovaSpeech, VoiceRelay, voiceChannel, type VoiceSink } from './voice.js';
 import type { AudioIntake } from './audio-intake.js';
 import { assistantAudio } from './audio-select.js';
-import { findAddress, nameLock, type DetectorEvent } from './detector.js';
+import { findAddress, nameLock, parseCommand, type DetectorEvent } from './detector.js';
 import { assistantIntake } from './intake-select.js';
 import { assistantStore } from './store-select.js';
 import { callChatRuntime } from '../call-chat.js';
@@ -149,7 +149,10 @@ export function replyAddressing(lines: readonly TranscriptLine[]): TranscriptLin
     const announced = l.userId !== null && (bareAt.get(l.userId) ?? -Infinity) >= l.at - (l.endMs !== undefined && l.startMs !== undefined ? l.endMs - l.startMs : 0) - BARE_NAME_FOLLOW_MS;
     if (l.userId !== null) { if (bare) bareAt.set(l.userId, l.at); else bareAt.delete(l.userId); }
     if (bare) continue;
-    if (findAddress(l.text) !== null || announced) out.push(l);
+    const hit = findAddress(l.text);
+    // "Nova, pause" / "Nova, leave" addresses Nova but asks nothing: never the request a later answer belongs to.
+    if (hit) { const command = parseCommand(hit.rest); if (command === 'pause' || command === 'dismiss') continue; }
+    if (hit !== null || announced) out.push(l);
   }
   return out;
 }

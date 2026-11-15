@@ -3,6 +3,8 @@
 // recorder (the chat's own path is covered by meeting-assistant-chat.test.ts); stores, intake, detector and sessions are real.
 jest.mock('../../../config.js', () => ({ config: { region: 'us-east-1', auth: {}, cognito: {}, mock: { aurora: true }, meetingAssistant: { enabled: true, transcriptRetentionDays: 30 } } }));
 jest.mock('../../../providers/identity.js', () => ({ getUser: jest.fn(async () => null) }));
+// Notifications go nowhere here (the absent-people step of a dismiss would otherwise reach for a real inbox).
+jest.mock('../../social-notify.js', () => ({ notify: jest.fn(async () => []) }));
 const mockPosts = {
   replies: [] as Array<{ text: string; askedBy: string; askedByName: string }>,
   privates: [] as Array<{ userId: string; text: string }>,
@@ -1061,6 +1063,15 @@ describe('spoken pause and dismiss take the same steps as the buttons (one share
     expect(runtime.isRunning(CALL)).toBe(false);
     expect(await store.getAction(CALL, card)).toMatchObject({ status: 'expired', resultText: 'Nova was dismissed before this was done.' });
     expect(finished).toHaveLength(1);
+  });
+
+  it('the spoken command line is not a request: a question asked after the resume is answered for its own asker', async () => {
+    await say(BOB, 'Nova, pause');
+    await store.transition(CALL, { from: ['paused'], to: 'listening', by: ALICE, at: now });
+    await runtime.resume(CALL);
+    mockPosts.replies.length = 0;
+    await say(ALICE, 'Nova, what is two plus two?');
+    expect(mockPosts.replies.map((r) => r.askedBy)).toEqual([ALICE]);
   });
 
   it('the route\'s path and the spoken path are the same method: afterMove on a record the button moved does the same', async () => {
