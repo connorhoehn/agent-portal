@@ -22,7 +22,8 @@
 //     a person who was not there gets 404 and a neutral not-found page, the Meetings list, the :minutes ledger entry, the inviter's delete.
 //   R1 to R4 (Nova invited back, run after 13b): a third person joins again; "Invite Nova again" beside the left chip on one footer line
 //     with three people; the inviter uses it, the chat says Nova is back, the others owe the acknowledgement again and their words are
-//     not kept until they give it; something is said; Nova is dismissed; the minutes hold both periods, the earlier items in place.
+//     not kept until they give it; something is said; Nova is dismissed; the minutes hold both periods, the earlier items in place;
+//     16b: the second period and the minutes addition are each billed once under entries of their own.
 //   R3b, R5: the second person's live transcript stays open across that dismissal; Nova is invited back a third time, the view listens
 //     again, and when Nova leaves again the line said just before is read into it (one more read after every leave, not only the first).
 //
@@ -1938,6 +1939,16 @@ async function main() {
       const body = await res.json();
       const ids = (body.entries ?? []).map((e) => e.sourceId);
       check(ids.some((id) => id === `ma:${callId}:minutes`), `no :minutes entry among ${JSON.stringify(ids)}`);
+      return `entries ${JSON.stringify(ids)}`;
+    });
+
+    await step('16b: Nova invited back is billed on its own: the second period under its own part (:x1), the minutes addition under its own entry (:minutes:1:1), each once', async () => {
+      const res = await vera.api.get(`${PORTAL}/api/spend/entries?groupBy=source&key=meeting_assistant&period=month&limit=50`);
+      check(res.status() === 200, `the spend entries answered ${res.status()}`);
+      const ids = ((await res.json()).entries ?? []).map((e) => e.sourceId).filter((id) => String(id).startsWith(`ma:${callId}`));
+      for (const id of [`ma:${callId}`, `ma:${callId}:x1`, `ma:${callId}:minutes`, `ma:${callId}:minutes:1:1`]) {
+        check(ids.filter((x) => x === id).length === 1, `${id} is not booked exactly once among ${JSON.stringify(ids)}`);
+      }
       return `entries ${JSON.stringify(ids)}`;
     });
 

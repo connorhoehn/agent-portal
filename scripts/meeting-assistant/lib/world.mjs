@@ -321,7 +321,7 @@ export async function billingOf(person, call) {
   let ledger = null;
   for (let i = 0; i < 12 && !ledger; i += 1) {
     const entries = (await person.call('GET', '/api/spend/entries?groupBy=source&key=meeting_assistant&period=month&limit=50')).json?.entries ?? [];
-    const mine = entries.filter((e) => String(e.sourceId ?? '').startsWith(`ma:${call.callId}`) && !String(e.sourceId).endsWith(':minutes'));
+    const mine = entries.filter((e) => String(e.sourceId ?? '').startsWith(`ma:${call.callId}`) && !/:minutes(:|$)/.test(String(e.sourceId))); // every minutes run (an addition's and a retry's book under ids of their own)
     if (mine.length) ledger = mine.map((e) => ({ sourceId: e.sourceId, seconds: e.seconds ?? e.quantity, costUsd: e.costUsd ?? e.amountUsd ?? e.usd, basis: e.basis }));
     else await sleep(400);
   }

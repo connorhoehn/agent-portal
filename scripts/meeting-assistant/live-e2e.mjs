@@ -362,7 +362,7 @@ async function main() {
     let ledger = '';
     for (let i = 0; i < 20 && !ledger; i += 1) {
       const entries = (await vera.call('GET', '/api/spend/entries?groupBy=source&key=meeting_assistant&period=month&limit=50')).json?.entries ?? [];
-      const mine = entries.filter((e) => String(e.sourceId ?? '').startsWith(`ma:${callId}`) && !String(e.sourceId).endsWith(':minutes'));
+      const mine = entries.filter((e) => String(e.sourceId ?? '').startsWith(`ma:${callId}`) && !/:minutes(:|$)/.test(String(e.sourceId))); // every minutes run (an addition's and a retry's book under ids of their own)
       if (mine.length) ledger = JSON.stringify(mine.map((e) => ({ sourceId: e.sourceId, seconds: e.seconds ?? e.quantity, costUsd: e.costUsd ?? e.amountUsd ?? e.usd, basis: e.basis })));
       else await sleep(500);
     }
