@@ -27,6 +27,10 @@ export interface AssistantAction {
   askedBy: string;
   askedByName: string;
   summary: string;
+  /** The record's own name, the card's headline; absent on a write that names none (and on cards posted before it existed). */
+  title?: string;
+  /** What confirming does, in plain words ("Creates a work item"); the card adds where it lands. */
+  does?: string;
   detail: string[];
   tool: { name: string; argsDigest: string };
   status: AssistantActionStatus;
@@ -64,7 +68,8 @@ export function readAssistantMessage(metadata: Record<string, unknown> | undefin
       || !tool || typeof tool !== 'object' || !text((tool as Record<string, unknown>)['name']) || !STATUSES.includes(status as AssistantActionStatus)) return null;
     const detail = Array.isArray(metadata['detail']) ? metadata['detail'].filter((x): x is string => typeof x === 'string') : [];
     return {
-      kind: 'assistant-action', actionId: metadata['actionId'], askedBy: metadata['askedBy'], askedByName: metadata['askedByName'], summary: metadata['summary'], detail,
+      kind: 'assistant-action', actionId: metadata['actionId'], askedBy: metadata['askedBy'], askedByName: metadata['askedByName'], summary: metadata['summary'],
+      ...(text(metadata['title']) ? { title: metadata['title'] } : {}), ...(text(metadata['does']) ? { does: metadata['does'] } : {}), detail,
       tool: { name: String((tool as Record<string, unknown>)['name']), argsDigest: String((tool as Record<string, unknown>)['argsDigest'] ?? '') },
       status: status as AssistantActionStatus, ...(text(metadata['resultText']) ? { resultText: metadata['resultText'] } : {}),
     };
@@ -125,3 +130,71 @@ export async function decideAssistantAction(callId: string, actionId: string, de
 /** A new work item whose arguments (listed in the card's detail lines) name no initiative lands on the call's own: only then does the card say which. */
 export const namesNoInitiative = (action: Pick<AssistantAction, 'tool' | 'detail'>): boolean =>
   action.tool.name === 'create' && action.detail.some((l) => /^kind:\s*work-item\s*$/i.test(l)) && !action.detail.some((l) => /^initiative\b/i.test(l));
+
+// ---- the card's anatomy (one shape for the action, proposal and minutes cards) -------------------------------------------------
+
+/**
+ * How big and loud a Nova card is, from its state and the viewer: `you` (it waits on the viewer: the full card, in Nova's accent),
+ * `others` (it waits on someone else, or is running: the full card on the plain surface), `done` (one row with a success mark) and
+ * `muted` (declined, expired, failed, not a decision...: one quiet row with the reason). A row can be opened to the full card.
+ */
+export type CardLayout = 'you' | 'others' | 'done' | 'muted';
+
+export function actionLayout(action: Pick<AssistantAction, 'status' | 'askedBy'>, viewerId: string | null): CardLayout {
+  if (action.status === 'done') return 'done';
+  if (action.status === 'declined' || action.status === 'expired' || action.status === 'failed') return 'muted';
+  return action.status === 'waiting' && viewerId !== null && viewerId === action.askedBy ? 'you' : 'others';
+}
+
+/** The header's left side: what it is and who asked. */
+export const actionHeader = (action: Pick<AssistantAction, 'askedByName'>): string => `Action · asked by ${action.askedByName}`;
+
+/** The headline: the record's own name, or the action's sentence when the write names none. */
+export const actionTitle = (action: Pick<AssistantAction, 'title' | 'summary'>): string => action.title ?? action.summary;
+
+/**
+ * What confirming will do, in plain words: "Creates a work item in Observability Platform". The call's initiative is named only for
+ * a new work item whose arguments name none (it lands there); null on a card that carries no such line (posted before it existed).
+ */
+export function actionDoesLine(action: Pick<AssistantAction, 'does' | 'tool' | 'detail'>, initiativeName: string | null): string | null {
+  if (!action.does) return null;
+  return initiativeName && namesNoInitiative(action) && !/\bin\s/.test(action.does) ? `${action.does} in ${initiativeName}` : action.does;
+}
+
+/** Who it waits on, in words: "Waiting for you to confirm" for the asker, "Waiting for Vera Green" for everyone else; null once decided. */
+export function actionNeedsLine(action: Pick<AssistantAction, 'status' | 'askedBy' | 'askedByName'>, viewerId: string | null): string | null {
+  if (action.status !== 'waiting') return null;
+  return viewerId !== null && viewerId === action.askedBy ? 'Waiting for you to confirm' : `Waiting for ${action.askedByName}`;
+}
+
+/**
+ * The one row a finished or closed card collapses to: what was done ("Created “the login cookie bug”") or the headline with the
+ * reason ("the nightly audit · Nova was dismissed before this was done."). Always carries the headline, so the row is found by it.
+ */
+export function actionRowText(action: Pick<AssistantAction, 'status' | 'title' | 'summary' | 'tool' | 'resultText' | 'askedByName'>): string {
+  const title = actionTitle(action);
+  switch (action.status) {
+    case 'done': return action.tool.name === 'create' && action.title ? `Created “${action.title}”` : title;
+    case 'declined': return `${title} · ${action.askedByName} declined it, so nothing was done.`;
+    case 'expired': return `${title} · ${action.resultText ?? 'Nobody confirmed it in time, so nothing was done.'}`;
+    case 'failed': return `${title} · ${action.resultText ?? 'It did not work, so nothing was changed.'}`;
+    default: return title;
+  }
+}
+
+/** The minutes card's counts as one line: "2 decisions · 3 action items · 1 proposal". */
+export function minutesCountLine(counts: MinutesCounts): string {
+  const l = minutesCountLabels(counts);
+  return `${l.decisions} · ${l.actionItems} · ${l.proposals}`;
+}
+
+/** A notice longer than this is a block with its first sentence showing and the rest behind "More"; a shorter one stays a pill. */
+export const LONG_NOTICE_CHARS = 120;
+export const isLongNotice = (content: string): boolean => content.trim().length > LONG_NOTICE_CHARS;
+
+/** A long notice split at its first sentence: what shows, and the rest (empty when it is one sentence). */
+export function splitNotice(content: string): { first: string; rest: string } {
+  const t = content.trim();
+  const m = /^(.+?[.!?])\s+(\S[\s\S]*)$/.exec(t);
+  return m ? { first: m[1]!, rest: m[2]! } : { first: t, rest: '' };
+}

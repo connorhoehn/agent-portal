@@ -231,6 +231,14 @@ async function main() {
     return (await res.json()).messages;
   };
   const novaOf = async (p, kind) => (await chatMessages(p)).filter((m) => m.metadata?.kind === kind);
+  // A Nova card's look: its layout (you / others / done / muted), whether it is one row, its height, and whether its surface is opaque.
+  const cardLook = (loc) => loc.evaluate((el) => {
+    const bg = getComputedStyle(el).backgroundColor;
+    const alpha = /rgba?\(([^)]+)\)/.exec(bg)?.[1].split(',').map((x) => x.trim())[3];
+    const oklab = /\/\s*([\d.]+%?)\s*\)$/.exec(bg)?.[1];
+    const a = alpha !== undefined ? Number(alpha) : oklab !== undefined ? (oklab.endsWith('%') ? Number(oklab.slice(0, -1)) / 100 : Number(oklab)) : 1;
+    return { layout: el.getAttribute('data-layout'), collapsed: el.getAttribute('data-collapsed') === 'true', height: Math.round(el.getBoundingClientRect().height), opaque: a >= 0.99, bg };
+  });
   const waitFor = async (fn, ms, what) => {
     const end = Date.now() + ms;
     for (;;) { const v = await fn(); if (v) return v; if (Date.now() > end) throw new StepFailure(`${what} never happened`); await sleep(400); }
@@ -386,6 +394,15 @@ async function main() {
         pill: !!el.querySelector('[data-testid="chat-assistant-notice"]'), justify: getComputedStyle(el).justifyContent }));
       check(lineLook.voice === 'assistant' && lineLook.mark && lineLook.pill, `the pause notice is not in Nova's voice: ${JSON.stringify(lineLook)}`);
       check(lineLook.justify !== 'center', 'the pause notice is still centred');
+      // The long join notice is a quiet notice block, not a paragraph squeezed into a pill: its first sentence, the rest behind "More".
+      const joinBlock = vera.page.getByTestId('assistant-notice-block').filter({ hasText: /joined at .+ invitation\./ }).first();
+      await joinBlock.waitFor({ state: 'visible', timeout: 15000 }).catch(() => { throw new StepFailure('the join notice is not a notice block'); });
+      const joinLook = await joinBlock.evaluate((el) => ({ inPill: !!el.closest('[data-testid="chat-assistant-notice"]'), open: !!el.querySelector('details[open]') }));
+      check(!joinLook.inPill, 'the join notice is still inside a pill');
+      check(!joinLook.open && !(await joinBlock.getByTestId('assistant-notice-rest').isVisible()), 'the join notice shows its whole paragraph before "More"');
+      check(/^Nova joined at .+ invitation\.$/.test((await joinBlock.getByTestId('assistant-notice-line').innerText()).trim()), 'the join notice does not lead with its first sentence');
+      await joinBlock.scrollIntoViewIfNeeded();
+      for (const width of [1440, 1280]) await shot(vera.page, 'C7-join-notice', width);
       await shot(vera.page, '5-paused');
       await novaMenu(vera, 'Resume Nova');
       await waitMark(vera.page, /^Nova is listening$/);
@@ -487,10 +504,23 @@ async function main() {
       check(await veraCard.getByTestId('assistant-action-confirm').isVisible(), 'the asker has no Confirm');
       check(await noraCard.getByTestId('assistant-action-confirm').count() === 0 && await noraCard.getByTestId('assistant-action-decline').count() === 0, 'the other person has controls on the card');
       const cardText = await veraCard.innerText();
-      check(cardText.includes(card.metadata.summary), `the card does not carry the action's sentence "${card.metadata.summary}": "${cardText}"`);
-      check(/title\W.*login cookie bug/i.test(cardText), `the card has no title line: "${cardText}"`);
-      check(/Initiative: .+/.test(cardText), `the card names no initiative: "${cardText}"`);
+      // One anatomy: a header, the record's name as the headline, ONE plain-words line saying where it lands, no raw `key: value` rows.
+      check((await veraCard.getByTestId('assistant-action-eyebrow').innerText()).trim() === 'Action · asked by Vera Green', `the card's header reads "${await veraCard.getByTestId('assistant-action-eyebrow').innerText()}"`);
+      check(/login cookie bug/.test(await veraCard.getByTestId('assistant-action-summary').innerText()), `the card's headline: "${cardText}"`);
+      await waitFor(async () => /^Creates a work item in .+/.test((await veraCard.getByTestId('assistant-action-does').innerText().catch(() => '')).trim()), 15000, 'the card saying where the work item lands');
+      check(!/\bkind:|\btitle:|Initiative:/.test(await veraCard.innerText()), `the card shows raw fields: "${(await veraCard.innerText()).replace(/\s+/g, ' ')}"`);
+      check(!(await veraCard.getByTestId('assistant-action-detail').isVisible().catch(() => false)), 'the exact fields are not behind the closed "Details"');
       check(/Waiting for Vera/.test(await noraCard.innerText()), `the other person's card does not say who it waits for: "${await noraCard.innerText()}"`);
+      // State decides the look: the asker's card stands out in Nova's accent; the other person's sits on the plain surface; both opaque.
+      const [lookV, lookN] = [await cardLook(veraCard), await cardLook(noraCard)];
+      check(lookV.layout === 'you' && lookN.layout === 'others', `the waiting card's layouts: asker ${lookV.layout}, other ${lookN.layout}`);
+      check(lookV.opaque && lookN.opaque, `a card lets the dot field through: ${lookV.bg} / ${lookN.bg}`);
+      // The card already says who it waits for: Nova's "I have asked Vera Green to confirm." is not posted to the chat as well.
+      await sleep(2500);
+      const asked = (await chatMessages(vera)).filter((m) => /I have asked .+ to confirm/.test(String(m.message)));
+      check(asked.length === 0, `the chat repeats the card: ${JSON.stringify(asked.map((m) => m.message))}`);
+      check(await vera.page.getByTestId('huddle-thread').getByText(/I have asked .+ to confirm/).count() === 0, 'the chat shows "I have asked … to confirm." under the card');
+      for (const width of [1440, 1280]) { await veraCard.scrollIntoViewIfNeeded(); await shot(vera.page, 'C1-card-waiting-asker', width); await noraCard.scrollIntoViewIfNeeded(); await shot(nora.page, 'C2-card-waiting-other', width); }
       await shot(vera.page, '9-card-waiting-asker'); await shot(nora.page, '9-card-waiting-other');
       const stranger = await nora.api.post(asApi(nora, `actions/${encodeURIComponent(card.metadata.actionId)}/decision`), { data: { decision: 'confirm' } });
       check(stranger.status() === 403, `another person confirming answered ${stranger.status()}, not 403`);
@@ -501,8 +531,19 @@ async function main() {
       check(made.length === 1, `${made.length} work items titled "login cookie bug" exist after one confirm, not one: ${JSON.stringify(made)}`);
       check(made[0].projectId === callInitiative, `the work item is on ${made[0].projectId}, the call's initiative is ${callInitiative}`);
       check((await myTurns(vera)).length === 0, 'the confirmed turn is still waiting');
-      await waitFor(async () => /Done/.test(await noraCard.getByTestId('assistant-action-status').innerText()) && (await noraCard.getByTestId('assistant-action-result').count()) > 0, 15000, 'the other person\'s card reading done with a result sentence');
-      const resultLine = await noraCard.getByTestId('assistant-action-result').innerText();
+      // Finished, the card folds to ONE row: the mark, what was done in plain words; Show opens the whole card with the result sentence.
+      await waitFor(async () => /Done/.test(await noraCard.getByTestId('assistant-action-status').innerText()) && (await cardLook(noraCard)).collapsed, 15000, 'the other person\'s card folding to a done row');
+      const resultLine = (await noraCard.getByTestId('assistant-action-row-text').innerText()).trim();
+      check(resultLine === 'Created “the login cookie bug”', `the done row reads "${resultLine}"`);
+      const doneLook = await cardLook(noraCard);
+      check(doneLook.height <= 48, `the done card is not one row: ${doneLook.height}px tall`);
+      await noraCard.scrollIntoViewIfNeeded();
+      for (const width of [1440, 1280]) await shot(nora.page, 'C3-card-done-row', width);
+      await noraCard.getByTestId('assistant-action-expand').click();
+      await waitFor(async () => !(await cardLook(noraCard)).collapsed, 5000, 'Show opening the whole card');
+      await noraCard.getByTestId('assistant-action-more').locator('summary').click();
+      check((await noraCard.getByTestId('assistant-action-result').innerText()).trim().length > 0, 'the opened card has no result sentence');
+      await noraCard.getByTestId('assistant-action-collapse').click();
       await shot(nora.page, '9-card-done-other'); await shot(vera.page, '9-card-done-asker');
       await shot(vera.page, '9-card-done-asker', 1440);
       return `card waiting (controls: asker only), 403 for the other person, confirmed in the UI, done: "${resultLine}"; the work item exists`;
@@ -518,6 +559,12 @@ async function main() {
       await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === card.metadata.actionId && m.metadata.status === 'declined'), 15000, 'the card going to declined');
       const noraCard = nora.page.getByTestId('assistant-action-card').filter({ hasText: /nightly export audit/ }).last();
       await waitFor(async () => /Declined/.test(await noraCard.getByTestId('assistant-action-status').innerText()), 15000, 'the other person seeing declined');
+      // Declined, the card is one muted row with the reason.
+      const declinedLook = await cardLook(noraCard);
+      check(declinedLook.collapsed && declinedLook.layout === 'muted' && declinedLook.height <= 48, `the declined card is not one muted row: ${JSON.stringify(declinedLook)}`);
+      check(/declined it, so nothing was done\./.test(await noraCard.getByTestId('assistant-action-row-text').innerText()), 'the declined row gives no reason');
+      await noraCard.scrollIntoViewIfNeeded();
+      for (const width of [1440, 1280]) await shot(nora.page, 'C4-card-declined-row', width);
       await sleep(3500);
       check(!(await workTitles(vera)).includes('nightly export audit'), 'a declined card created the work item');
       check((await myTurns(vera)).length === 0, 'a declined card left a turn');
@@ -751,7 +798,12 @@ async function main() {
       const id = await propose({ id: 'walk-proposal-heard', statement: PROPOSAL_H, outcome: { kind: 'decision' }, executor: VERA.userId, named: ['u-theo'], evidence });
       const mine = (await proposalsOf(vera)).find((p) => p.id === id);
       check(mine?.heard?.length === 2 && mine.heard.every((h) => typeof h.text === 'string' && h.text.length > 0), `the attendee's heard lines: ${JSON.stringify(mine?.heard)}`);
-      await card(vera, id).getByTestId('assistant-proposal-heard').waitFor({ timeout: 20000 }).catch(() => { throw new StepFailure('the card shows no heard lines to an attendee'); });
+      // The heard lines sit behind "What Nova heard", closed by default.
+      await card(vera, id).getByTestId('assistant-proposal-more').waitFor({ timeout: 20000 }).catch(() => { throw new StepFailure('the card has no "What Nova heard" for an attendee'); });
+      check(!(await card(vera, id).getByTestId('assistant-proposal-heard').isVisible()), 'the heard lines show before "What Nova heard" is opened');
+      check((await card(vera, id).getByTestId('assistant-proposal-more').locator('summary').innerText()).includes('What Nova heard'), 'the disclosure is not "What Nova heard"');
+      await card(vera, id).getByTestId('assistant-proposal-more').locator('summary').click();
+      await card(vera, id).getByTestId('assistant-proposal-heard').waitFor({ timeout: 5000 }).catch(() => { throw new StepFailure('the card shows no heard lines to an attendee'); });
       const away = await browser.newContext(); contexts.push(away);
       check((await away.request.post(`${PORTAL}/api/session/login`, { data: { userId: 'u-theo' } })).status() === 200, 'the absent person could not sign in');
       check((await away.request.post(`${PORTAL}/api/session/role`, { data: { tenant: 'orgiq', role: 'member' } })).status() === 200, 'the absent person has no orgiq role');
@@ -782,14 +834,25 @@ async function main() {
       await waitFor(async () => (await card(vera, p1).innerText()).includes('Record as a decision on'), 15000, 'the card filled from the proposals route');
       const text = await card(vera, p1).innerText();
       for (const want of ['Nova heard a decision', PROPOSAL_1, 'Record as a decision', 'Needs you (runs it) and one more person.', 'runs it', 'waiting']) check(text.includes(want), `the card lacks "${want}": ${text.replace(/\s+/g, ' ')}`);
-      // Before anyone consents the card says how the decision will be recorded.
-      await waitFor(async () => /It will be recorded as (decided|waiting for the initiative owner's decision)\./.test(await card(vera, p1).innerText()), 15000, 'the card saying how it will be recorded');
+      // People are faces: one avatar per person, each named with their answer; the card waits on Vera, so it is the full card in Nova's accent.
+      const people = card(vera, p1).getByTestId('assistant-proposal-person');
+      check(await people.count() >= 1 && await card(vera, p1).getByTestId('assistant-proposal-people').locator('[data-testid="assistant-proposal-person"] > *').count() >= 1, 'the proposal card has no avatars');
+      check((await people.allInnerTexts()).some((t) => /Vera Green · waiting · runs it/.test(t)), `the avatars' names: ${JSON.stringify(await people.allInnerTexts())}`);
+      const lookP = await cardLook(card(vera, p1));
+      check(lookP.layout === 'you' && lookP.opaque, `the card waiting on Vera: ${JSON.stringify(lookP)}`);
       // The card asks nothing itself: its only control is Answer, which opens the deck.
       const buttons = (await card(vera, p1).getByRole('button').allInnerTexts()).map((t) => t.trim());
       check(buttons.length === 1 && buttons[0] === 'Answer', `the card's controls: ${JSON.stringify(buttons)}`);
+      // Before anyone consents the card says how the decision will be recorded, behind its closed disclosure.
+      const more = card(vera, p1).getByTestId('assistant-proposal-more');
+      check(!(await card(vera, p1).getByTestId('assistant-proposal-records').isVisible().catch(() => false)), 'how it will be recorded shows before the disclosure is opened');
+      await more.locator('summary').click();
+      await waitFor(async () => /It will be recorded as (decided|waiting for the initiative owner's decision)\./.test(await card(vera, p1).innerText()), 15000, 'the card saying how it will be recorded');
+      for (const width of [1440, 1280]) { await card(vera, p1).scrollIntoViewIfNeeded(); await shot(vera.page, 'C5-proposal-needs-you-open', width); }
+      await more.locator('summary').click();
       // The second person's card fills on their own poll: their needs line names the executor, not "you".
       await waitFor(async () => { const t = await card(nora, p1).innerText(); return t.includes('Needs Vera') && t.includes('(runs it) and one more person.'); }, 15000, 'the second person\'s needs line naming the executor');
-      for (const width of [1440, 1280]) { await vera.page.setViewportSize({ width, height: 900 }); await sleep(400); await card(vera, p1).scrollIntoViewIfNeeded(); await shot(vera.page, 'P2-proposal-card', width); }
+      for (const width of [1440, 1280]) { await vera.page.setViewportSize({ width, height: 900 }); await sleep(400); await card(vera, p1).scrollIntoViewIfNeeded(); await shot(vera.page, 'P2-proposal-card', width); await shot(vera.page, 'C5-proposal-needs-you', width); }
       await vera.page.setViewportSize({ width: 1440, height: 900 });
       return text.replace(/\s+/g, ' ').slice(0, 200);
     });
@@ -857,7 +920,13 @@ async function main() {
       check(done?.run?.by?.userId === VERA.userId && /^\/iq\/decisions\//.test(done?.run?.href ?? ''), `the run: ${JSON.stringify(done?.run)}`);
       check(results_.some((r) => r.by === VERA.userId && r.ok), 'the executor\'s browser posted no result');
       const chipsOf = async () => card(eli, p1).getByTestId('assistant-proposal-person').allInnerTexts();
+      // Recorded, the card is one row; Show opens it to the faces with their answers.
+      await waitFor(async () => (await cardLook(card(eli, p1))).collapsed, 15000, 'the recorded card folding to one row');
+      const recLook = await cardLook(card(eli, p1));
+      check(recLook.layout === 'done' && recLook.height <= 48, `the recorded card is not one row: ${JSON.stringify(recLook)}`);
+      await card(eli, p1).getByTestId('assistant-proposal-expand').click();
       await waitFor(async () => (await chipsOf()).filter((t) => t.includes('· consented')).length === 2, 15000, 'two consented chips');
+      await card(eli, p1).getByTestId('assistant-proposal-collapse').click();
       for (const p of [vera, nora, eli]) {
         await waitFor(async () => recorded(PROPOSAL_1).test(await card(p, p1).innerText()), 15000, `${p.who.userId}: the card's closing line`);
         await card(p, p1).getByTestId('assistant-proposal-result-link').waitFor({ timeout: 15000 }).catch(() => { throw new StepFailure(`${p.who.userId}: no link to the decision`); });
@@ -1234,6 +1303,12 @@ async function main() {
         check(await card.getByTestId('assistant-action-confirm').count() === 0, `${p.who.userId} still has Confirm on an expired card`);
       }
       check((await itemsTitled(vera, 'expiry audit')).length === 0, 'an expired card created the work item');
+      const expiredCard = vera.page.getByTestId('assistant-action-card').filter({ hasText: 'expiry audit' }).last();
+      const expLook = await cardLook(expiredCard);
+      check(expLook.collapsed && expLook.layout === 'muted', `the expired card is not one muted row: ${JSON.stringify(expLook)}`);
+      check(/Nova was dismissed before this was done\./.test(await expiredCard.getByTestId('assistant-action-row-text').innerText()), 'the expired row gives no reason');
+      await expiredCard.scrollIntoViewIfNeeded();
+      for (const width of [1440, 1280]) await shot(vera.page, 'C4-card-expired-row', width);
       await shot(vera.page, '6b-card-expired');
       return `expired for both: "${expired.metadata.resultText}"`;
     });
@@ -1298,23 +1373,30 @@ async function main() {
       check(all.length === 1, `${all.length} minutes messages were posted`);
       const card = vera.page.getByTestId('assistant-minutes-card').last();
       await card.waitFor({ state: 'visible', timeout: 20000 }).catch(() => { throw new StepFailure('the chat shows no minutes card'); });
-      check((await card.getByTestId('assistant-minutes-title').innerText()).trim() === 'Meeting minutes', 'the minutes card has no "Meeting minutes" title');
+      check((await card.getByTestId('assistant-minutes-title').innerText()).trim() === 'Minutes', 'the minutes card has no "Minutes" header');
+      check((await card.getByTestId('assistant-minutes-status').innerText()).trim() === 'Ready', 'the minutes card has no "Ready" pill');
       check((await card.getByTestId('assistant-minutes-summary').innerText()).trim().length > 0, 'the minutes card shows no summary');
       const shown = (await card.getByTestId('assistant-minutes-counts').innerText()).replace(/\s+/g, ' ');
+      check(/^\d+ decisions? · \d+ action items? · \d+ proposals?$/.test(shown.trim()), `the counts are not one readable line: "${shown}"`);
       check(shown.includes(`${counts.decisions} decision`) && shown.includes(`${counts.actionItems} action item`) && shown.includes(`${counts.proposals} proposal`), `the card shows "${shown}" for ${JSON.stringify(counts)}`);
       check(await card.evaluate((el) => el.closest('[data-testid="chat-message"]')?.getAttribute('data-voice') === 'assistant'), 'the minutes card is not in a row in Nova\'s voice');
-      // Nova's cards carry its tint against the plain replies: the minutes card, and every action and proposal card in the chat.
-      const tones = await vera.page.locator('[data-testid="assistant-minutes-card"], [data-testid="assistant-action-card"], [data-testid="assistant-proposal-card"]')
-        .evaluateAll((els) => els.map((el) => el.getAttribute('data-tone')));
-      check(tones.length >= 3 && tones.every((t) => t === 'assistant'), `Nova's cards are not all tinted: ${JSON.stringify(tones)}`);
+      // Every Nova card is opaque (the dialogue's dot field never shows through); finished and closed ones are single rows; Nova's
+      // accent is kept for the one that waits on the viewer.
+      const looks = await vera.page.locator('[data-testid="assistant-minutes-card"], [data-testid="assistant-action-card"], [data-testid="assistant-proposal-card"]')
+        .evaluateAll((els) => els.map((el) => ({ layout: el.getAttribute('data-layout'), collapsed: el.getAttribute('data-collapsed'), tone: el.getAttribute('data-tone'), bg: getComputedStyle(el).backgroundColor })));
+      const alphaOf = (bg) => { const rgba = /rgba?\(([^)]+)\)/.exec(bg)?.[1].split(',').map((x) => x.trim())[3]; const slash = /\/\s*([\d.]+%?)\s*\)$/.exec(bg)?.[1];
+        return rgba !== undefined ? Number(rgba) : slash !== undefined ? (slash.endsWith('%') ? Number(slash.slice(0, -1)) / 100 : Number(slash)) : 1; };
+      const seeThrough = looks.filter((l) => alphaOf(l.bg) < 0.99);
+      check(looks.length >= 3 && seeThrough.length === 0, `Nova's cards let the dot field through: ${JSON.stringify(seeThrough)}`);
+      check(looks.every((l) => (l.tone === 'assistant') === (l.layout === 'you')), `Nova's accent is not kept for the cards waiting on the viewer: ${JSON.stringify(looks)}`);
+      check(looks.filter((l) => l.layout === 'done' || l.layout === 'muted').every((l) => l.collapsed === 'true'), `a finished or closed card is not a row: ${JSON.stringify(looks)}`);
       await card.scrollIntoViewIfNeeded();
       for (const width of [1440, 1280]) await shot(vera.page, '12-chat-minutes', width);
       const expected = `/iq/meetings/${encodeURIComponent(callId)}`;
       const link = vera.page.getByTestId('assistant-notice-meeting-link').last();
       await link.waitFor({ state: 'visible', timeout: 20000 }).catch(() => { throw new StepFailure('the chat shows no meeting link under the closing notice'); });
-      check(await link.evaluate((el) => el.tagName) === 'A', 'the meeting link is not an anchor');
-      check((await link.getAttribute('href')) === expected, `the link goes to ${await link.getAttribute('href')}, not ${expected}`);
-      check(/^Open the meeting page$/.test((await link.innerText()).trim()), `the link reads "${await link.innerText()}"`);
+      check(await link.evaluate((el) => el.tagName) === 'BUTTON', 'the minutes card opens the meeting with something other than a button');
+      check(/^Open the meeting$/.test((await link.innerText()).trim()), `the button reads "${await link.innerText()}"`);
       check(await vera.page.getByTestId('assistant-notice-meeting-link').count() === 1, 'more than one meeting link in the chat');
       await link.click();
       await vera.page.waitForURL((u) => u.pathname === expected, { timeout: 20000 }).catch(() => { throw new StepFailure(`clicking the link did not open ${expected}: ${vera.page.url()}`); });

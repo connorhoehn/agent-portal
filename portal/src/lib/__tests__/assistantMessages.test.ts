@@ -93,3 +93,47 @@ test('a minutes notice carries well-formed counts only, and every Nova message i
   assert.equal(isAssistantChatMessage({ metadata: { kind: 'assistant-reply' } }), false);
   assert.equal(isAssistantChatMessage({}), false);
 });
+
+test('the action card\'s anatomy: a headline, one plain-words line, who it waits on, and no key: value rows', async () => {
+  const { actionDoesLine, actionHeader, actionNeedsLine, actionTitle } = await import('../assistantMessages.ts');
+  const a = readAssistantMessage(card({ tool: { name: 'create', argsDigest: '' }, detail: ['title: the login cookie bug', 'kind: work-item'], title: 'the login cookie bug', does: 'Creates a work item' })) as AssistantAction;
+  assert.equal(a.title, 'the login cookie bug');
+  assert.equal(actionHeader(a), 'Action · asked by Vera Lindqvist');
+  assert.equal(actionTitle(a), 'the login cookie bug');
+  assert.equal(actionDoesLine(a, 'Observability Platform'), 'Creates a work item in Observability Platform');
+  assert.equal(actionDoesLine(a, null), 'Creates a work item');
+  for (const line of [actionHeader(a), actionTitle(a), actionDoesLine(a, 'Observability Platform')!]) assert.doesNotMatch(line, /\w+: \w/);
+  // an older card with no title or line: the sentence is the headline, and nothing is invented
+  const old = readAssistantMessage(card()) as AssistantAction;
+  assert.equal(actionTitle(old), old.summary);
+  assert.equal(actionDoesLine(old, 'Observability Platform'), null);
+  assert.equal(actionNeedsLine(a, 'u-vera'), 'Waiting for you to confirm');
+  assert.equal(actionNeedsLine(a, 'u-nora'), 'Waiting for Vera Lindqvist');
+  assert.equal(actionNeedsLine({ ...a, status: 'done' }, 'u-nora'), null);
+});
+
+test('state decides the card\'s size: waiting on you, on others, done as a row, closed as a muted row with its reason', async () => {
+  const { actionLayout, actionRowText } = await import('../assistantMessages.ts');
+  const a = readAssistantMessage(card({ tool: { name: 'create', argsDigest: '' }, title: 'the login cookie bug' })) as AssistantAction;
+  assert.equal(actionLayout(a, 'u-vera'), 'you');
+  assert.equal(actionLayout(a, 'u-nora'), 'others');
+  assert.equal(actionLayout(a, null), 'others');
+  assert.equal(actionLayout({ ...a, status: 'confirmed' }, 'u-vera'), 'others');
+  assert.equal(actionLayout({ ...a, status: 'done' }, 'u-vera'), 'done');
+  for (const status of ['declined', 'expired', 'failed'] as const) assert.equal(actionLayout({ ...a, status }, 'u-vera'), 'muted');
+  assert.equal(actionRowText({ ...a, status: 'done', resultText: 'Created WI-12.' }), 'Created “the login cookie bug”');
+  assert.equal(actionRowText({ ...a, status: 'expired', resultText: 'Nova was dismissed before this was done.' }), 'the login cookie bug · Nova was dismissed before this was done.');
+  assert.equal(actionRowText({ ...a, status: 'declined' }), 'the login cookie bug · Vera Lindqvist declined it, so nothing was done.');
+  const update = { ...a, title: undefined, tool: { name: 'update', argsDigest: '' }, summary: 'Update the work item' } as AssistantAction;
+  assert.match(actionRowText({ ...update, status: 'failed', resultText: 'Use the full name.' }), /^Update the work item · Use the full name\.$/);
+});
+
+test('the minutes counts read as one line; a long notice splits at its first sentence, a short one stays a pill', async () => {
+  const { isLongNotice, minutesCountLine, splitNotice } = await import('../assistantMessages.ts');
+  assert.equal(minutesCountLine({ decisions: 2, actionItems: 1, proposals: 0 }), '2 decisions · 1 action item · 0 proposals');
+  const join = "Nova joined at Vera Green's invitation. Once you acknowledge, what you say is sent to the speech provider and kept as text for 30 days. Nova writes minutes.";
+  assert.equal(isLongNotice(join), true);
+  assert.deepEqual(splitNotice(join), { first: "Nova joined at Vera Green's invitation.", rest: 'Once you acknowledge, what you say is sent to the speech provider and kept as text for 30 days. Nova writes minutes.' });
+  assert.equal(isLongNotice('Nora DaSilva paused Nova. Nothing is being heard or stored.'), false);
+  assert.deepEqual(splitNotice('One sentence only'), { first: 'One sentence only', rest: '' });
+});

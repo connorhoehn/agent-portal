@@ -130,3 +130,16 @@ test('dismissing reads for what it is, and the expiry shows once the call has en
   assert.match(expiryLine(one({ expiresAt: now + 3600_000, missing: { people: ['u-sam'], more: 0, objectedBy: [] } }), now) ?? '', /^Waiting on you · expires /);
   assert.equal(expiryLine(one({ expiresAt: now + 3600_000, state: 'done' }), now), null);
 });
+
+test('the proposal card\'s size follows its state and the viewer; each person\'s name carries their answer', async () => {
+  const { proposalLayout, personLabel } = await import('../meetingProposals.ts');
+  const mine = one({ you: { userId: 'u-priya', response: null, isExecutor: true }, missing: { people: ['u-priya'], more: 1, objectedBy: [] } });
+  assert.equal(proposalLayout('open', mine), 'you');
+  assert.equal(proposalLayout('open', one()), 'others');
+  assert.equal(proposalLayout('open', null), 'others');
+  assert.equal(proposalLayout('running', mine), 'others');
+  assert.equal(proposalLayout('done', mine), 'done');
+  for (const s of ['dismissed', 'expired', 'failed'] as const) assert.equal(proposalLayout(s, mine), 'muted');
+  const chips = personChips(one({ responses: [{ userId: 'u-lee', name: 'Lee', response: 'consent', reason: null, at: 1 }] }));
+  assert.deepEqual(chips.map(personLabel), ['Priya · waiting · runs it', 'Lee · consented']);
+});

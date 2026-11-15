@@ -286,3 +286,20 @@ export const RUN_NOW = 'Run it now';
 export const RUN_HERE = 'Run it myself';
 
 export const OBJECTION_SHARED = 'Why do you object? Everyone who can see this proposal will see your reason.';
+
+// ---- the card's size --------------------------------------------------------------------------------------------------------
+
+/**
+ * How big and loud a proposal card is (the same four layouts as the action card's): `you` when it waits on the viewer, `others` while
+ * it waits on someone else or runs, `done` once recorded or made (one row with a success mark and the link), `muted` once dismissed,
+ * expired or failed (one quiet row with the reason, and Undo or Raise it again where they apply). Before the route's view arrives,
+ * the message's state alone decides.
+ */
+export function proposalLayout(state: ProposalState, p: ProposalView | null): 'you' | 'others' | 'done' | 'muted' {
+  if (state === 'done') return 'done';
+  if (state === 'dismissed' || state === 'expired' || state === 'failed') return 'muted';
+  return p && waitingOnYou({ ...p, state }) ? 'you' : 'others';
+}
+
+/** One person's accessible name on the card's avatar group: "Vera Green · consented · runs it". */
+export const personLabel = (chip: Pick<PersonChip, 'label' | 'runsIt'>): string => (chip.runsIt ? `${chip.label} · runs it` : chip.label);
