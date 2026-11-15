@@ -223,6 +223,7 @@ async function armAudio(callId: string, pre: Preflight | null): Promise<void> {
 
 const noteSeat = async (callId: string, session: Session) => { await attendOnce(callId, session.sub); };
 
+// Every sentence below names the assistant through ASSISTANT_NAME (lib/meeting-assistant/chat-types.ts), never a literal name.
 const NOT_HERE = `${ASSISTANT_NAME} is not in this call.`;
 const ALREADY_LEFT = `${ASSISTANT_NAME} has already left this call.`;
 /** A pause, resume or dismiss the record's state does not allow right now, in words (never the state's name). */
