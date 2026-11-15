@@ -523,7 +523,11 @@ function ShellLayout() {
     <TodayPlacementProvider>
     <EmbeddedSocialProvider>
     <CommandPaletteProvider commands={commands} getDynamicCommands={getDynamicCommands}>
-      <Stack ref={shellRef} gap="none" data-tenant={tenantAttr} className="h-screen">
+      {/* One screen tall, and the document never scrolls: `relative` makes the shell the containing block of absolutely placed
+          text inside a page column that is not positioned (an avatar group's screen-reader label, say) and `overflow-y-clip` cuts
+          it off, instead of it stretching the document so a wheel past a page's end slid the whole shell, footer and composer
+          deck up off the screen. */}
+      <Stack ref={shellRef} gap="none" data-tenant={tenantAttr} className="relative h-screen overflow-y-clip">
         {/* First in the tab order, visible only while focused: a keyboard
             user lands on the page content without walking the header, the
             rail and the nested rail first (WCAG 2.4.1, Bypass Blocks). */}

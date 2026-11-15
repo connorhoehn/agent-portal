@@ -1615,6 +1615,43 @@ async function main() {
       const ask = await deckM.innerText();
       check(ask.includes('Consent and record') && !ask.includes('Not a decision'), `the meeting page's prompt: ${ask.replace(/\s+/g, ' ')}`);
       await shot(veraM.page, '13b-meeting-proposal-ask', 1280);
+      // With the prompt showing, the page's end scrolls clear of it: the last proposal row and the collapsed Transcript header sit
+      // fully above the deck (and the footer) once the page is scrolled to its end, at both widths.
+      const clear = [];
+      for (const width of [1440, 1280]) {
+        await veraM.page.setViewportSize({ width, height: 900 });
+        await sleep(500);
+        const r = await veraM.page.evaluate(() => {
+          const rows = document.querySelectorAll('[data-testid="meeting-proposal-row"]');
+          const last = rows[rows.length - 1];
+          const head = document.querySelector('[data-testid="meeting-transcript"] summary');
+          // The document itself never scrolls (the shell is one screen tall): measure that before anything is scrolled.
+          window.scrollTo(0, 0);
+          const docOver = document.documentElement.scrollHeight - innerHeight;
+          // On a failure, name what reaches below the screen with no clipping ancestor (what makes the document taller).
+          const clipped = (el) => { for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) { if (getComputedStyle(a).overflowY !== 'visible' || getComputedStyle(a).overflowX !== 'visible') return true; } return false; };
+          const out = (el) => { const pos = getComputedStyle(el).position; return pos === 'absolute' || pos === 'fixed' ? true : !clipped(el); };
+          const past = docOver > 1 ? [...document.querySelectorAll('body *')].filter((el) => { const b = el.getBoundingClientRect(); return b.height > 0 && b.bottom > innerHeight + 1 && out(el); })
+            .slice(0, 8).map((el) => `${el.tagName.toLowerCase()}[${el.getAttribute('data-testid') ?? ''}](${getComputedStyle(el).position}).${String(el.className).slice(0, 60)} "${(el.textContent ?? '').slice(0, 30)}" in ${el.parentElement?.tagName.toLowerCase()}.${String(el.parentElement?.className ?? '').slice(0, 40)} ${Math.round(el.getBoundingClientRect().top)}..${Math.round(el.getBoundingClientRect().bottom)}`) : [];
+          // Every scroller above the page to its end (the header is sticky, so one scrollIntoView is not the test).
+          for (let n = head?.parentElement; n && n !== document.body; n = n.parentElement) if (n.scrollHeight > n.clientHeight && /auto|scroll/.test(getComputedStyle(n).overflowY)) n.scrollTop = n.scrollHeight;
+          const deck = document.querySelector('[data-testid="collection-command-host"]')?.getBoundingClientRect();
+          const foot = document.querySelector('[data-testid="shell-footer"]')?.getBoundingClientRect();
+          const floor = Math.min(deck?.top ?? innerHeight, foot?.top ?? innerHeight);
+          const box = (el) => { const b = el?.getBoundingClientRect(); return b ? { top: Math.round(b.top), bottom: Math.round(b.bottom) } : null; };
+          let scroller = null;
+          for (let n = head?.parentElement; n; n = n.parentElement) if (n.scrollHeight > n.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(n).overflowY)) { scroller = n; break; }
+          const sb = scroller?.getBoundingClientRect();
+          return { docOver, past, floor: Math.round(floor), row: box(last), head: box(head), deckTop: Math.round(deck?.top ?? -1), footTop: Math.round(foot?.top ?? -1),
+            scroller: sb ? { top: Math.round(sb.top), bottom: Math.round(sb.bottom), testid: scroller.getAttribute('data-testid') ?? scroller.className.slice(0, 60) } : null };
+        });
+        await shot(veraM.page, '13b-meeting-end-with-prompt', width);
+        check(r.docOver <= 1, `at ${width} with the prompt showing the document scrolls by ${r.docOver}px: ${JSON.stringify(r)}`);
+        check(r.row && r.head, `the last proposal row or the Transcript header is missing: ${JSON.stringify(r)}`);
+        check(r.row.bottom <= r.floor + 1 && r.head.bottom <= r.floor + 1, `at ${width} the page's end stays behind the prompt: ${JSON.stringify(r)}`);
+        check(r.row.top >= (r.scroller?.top ?? 0) - 1, `at ${width} the last proposal row is above its scroller: ${JSON.stringify(r)}`);
+        clear.push(`${width}: row ends ${r.row.bottom}, transcript ${r.head.bottom}, deck ${r.deckTop}, scroller ${JSON.stringify(r.scroller)}, footer ${r.footTop}`);
+      }
       await digit(veraM, '1', deckM);
       await waitFor(async () => (await cardM.getAttribute('data-state').catch(() => null)) === 'done', 20000, 'the row reading done');
       // The row opens its detail: how it ended, with its link.
@@ -1628,7 +1665,7 @@ async function main() {
       check(listed?.state === 'done' && listed.consentedBy.length === 2, `the minutes list it as ${JSON.stringify(listed)}`);
       await shot(veraM.page, '13b-meeting-proposal-recorded', 1280);
       await veraM.page.getByTestId('meeting-proposal-detail-close').click();
-      return `recorded on the meeting page; minutes: ${listed.state}, consented by ${listed.consentedBy.join(' and ')}`;
+      return `recorded on the meeting page; minutes: ${listed.state}, consented by ${listed.consentedBy.join(' and ')}; end clear of the prompt (${clear.join('; ')})`;
     });
 
     await step('14: a person who was not in the call gets a not-found page and a 404 from both API routes', async () => {
