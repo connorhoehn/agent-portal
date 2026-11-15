@@ -551,7 +551,8 @@ async function main() {
       const toastCard = vera.page.locator('[role="status"]').filter({ hasText: /only you can see this/i }).first();
       await toastCard.getByTestId('toast-action').click();
       await seen(vera.page, 'activity-bell-popover', 5000);
-      check(await toast.count() === 0, '"Open notifications" did not close the toast');
+      // (The bell's own row may carry the same words, so the toast card itself is what must be gone.)
+      check(await vera.page.locator('[role="status"]').filter({ has: vera.page.getByTestId('toast-action') }).filter({ hasText: /only you can see this/i }).count() === 0, '"Open notifications" did not close the toast');
       await vera.page.keyboard.press('Escape');
       return `toast: "${toastBox.slice(0, 120)}"; public line "${line[0].message}"; other person: the fixed line only`;
     });
