@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { forgetProposalDecks, keepProposalAnswer, noteWaitingProposals, proposalDeckOf, setProposalDeckHidden } from '../proposalDeckState.ts';
+import { bumpProposalPrompt, forgetProposalDecks, keepProposalAnswer, noteWaitingProposals, proposalDeckOf, proposalPromptGeneration, setProposalDeckHidden } from '../proposalDeckState.ts';
 
 function withStorage(fn: (store: Map<string, string>) => void, storage?: unknown): void {
   const store = new Map<string, string>();
@@ -37,5 +37,15 @@ test('a NEW proposal waiting on you shows the deck again after Esc; one already 
     assert.equal(proposalDeckOf('call-1').hidden, true);
     noteWaitingProposals('call-1', ['p1', 'p2']);
     assert.equal(proposalDeckOf('call-1').hidden, false);
+  });
+});
+
+test('taking back an answer gives the question a new generation, so the deck asks it again', () => {
+  withStorage(() => {
+    assert.equal(proposalPromptGeneration('call-1', 'p1'), 0);
+    bumpProposalPrompt('call-1', 'p1');
+    bumpProposalPrompt('call-1', 'p1');
+    assert.equal(proposalPromptGeneration('call-1', 'p1'), 2);
+    assert.equal(proposalPromptGeneration('call-1', 'p2'), 0);
   });
 });

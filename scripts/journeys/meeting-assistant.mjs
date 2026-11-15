@@ -706,6 +706,8 @@ async function main() {
         const list = res && res.ok() ? (await res.json()).proposals.map((x) => `${x.id}:${x.state}:${x.you?.response ?? '-'}:${(x.missing?.people ?? []).join('+')}+${x.missing?.more}`).join(', ') : `HTTP ${res?.status()}`;
         const deck = await deckOf(p).innerText({ timeout: 2000 }).catch(() => '(no deck)');
         const page = await p.page.evaluate(() => ({ decks: document.querySelectorAll('[data-composer-prompt-deck]').length, store: JSON.stringify(Object.fromEntries(Object.entries(sessionStorage).filter(([k]) => k.startsWith('nova-proposal')))), count: document.querySelector('[data-testid="nova-proposal-count"]')?.getAttribute('aria-label') ?? null })).catch((e) => ({ err: String(e) }));
+        const cardText = await p.page.locator('[data-testid="assistant-proposal-card"]').filter({ hasText: statement }).last().innerText({ timeout: 2000 }).catch(() => '(no card)');
+        page.card = cardText.replace(/\s+/g, ' ').slice(0, 300);
         throw new StepFailure(`${p.who.userId}: no deck prompt for "${statement}"; route: ${list}; deck: ${deck.replace(/\s+/g, ' ').slice(0, 160)}; page: ${JSON.stringify(page)}`);
       });
     };

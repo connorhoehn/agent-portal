@@ -24,7 +24,7 @@ import {
   proposalCountWords, recordsLine, RUN_HERE, RUN_NOW, waitingCount, waitingOnYou, type ProposalView,
 } from '../../lib/meetingProposals';
 import { assistantPresent } from '../../lib/meetingAssistantModel';
-import { keepProposalAnswer, noteWaitingProposals, setProposalDeckHidden, useProposalDeck } from '../../lib/proposalDeckState';
+import { keepProposalAnswer, noteWaitingProposals, proposalPromptGeneration, setProposalDeckHidden, useProposalDeck } from '../../lib/proposalDeckState';
 import { useLiveCallId } from '../../lib/liveCallId';
 
 /** The proposals this person's deck would ask about in the live call: those waiting on them first. */
@@ -59,6 +59,10 @@ export function proposalPrompt(callId: string, p: ProposalView, initiativeName: 
   const heard = p.heard.at(-1);
   const fields = [{ label: 'Outcome', value: outcome }, ...(heard ? [{ label: 'Heard', value: heardText(heard) }] : [])];
   const base = { scope, eyebrow: eyebrowOf(p), title: p.statement, keypad: 'deck' as const, focusOnArrive: false };
+  // A question this person already answered can come back (they withdrew, or undid a dismissal): it gets a new id, so the deck
+  // asks it again instead of remembering the old answer.
+  const gen = proposalPromptGeneration(callId, p.id);
+  const ask = `${scope}:${p.id}:ask${gen ? `-${gen}` : ''}`;
 
   if (p.state === 'consented' && p.you.canRun) {
     // The executor's own click is the last step; after a hand-back, whoever the server allows may run it instead.
@@ -94,7 +98,7 @@ export function proposalPrompt(callId: string, p: ProposalView, initiativeName: 
   }
 
   const object: ComposerPrompt = {
-    ...base, id: `${scope}:${p.id}:object`, kind: 'text', question: OBJECTION_SHARED, placeholder: 'Your reason, in one line', fields,
+    ...base, id: `${ask}:object`, kind: 'text', question: OBJECTION_SHARED, placeholder: 'Your reason, in one line', fields,
     onAnswer: async (a) => {
       const reason = a.kind === 'text' ? a.text.trim() : '';
       if (!reason) return { error: 'Say why in one line.' };
@@ -105,7 +109,7 @@ export function proposalPrompt(callId: string, p: ProposalView, initiativeName: 
   const question = [`${outcome}.`, blockedLine(p) ?? needsLine(p), recordsLine(p), needed ? null : OPTIONAL_LINE].filter(Boolean).join(' ');
   const dismiss = opts.inCall && p.you.canDismiss ? [{ id: 'dismiss', label: dismissLabel(p) }] : [];
   return {
-    ...base, id: `${scope}:${p.id}:ask`, kind: 'choice', question,
+    ...base, id: ask, kind: 'choice', question,
     ...(heard ? { fields: [{ label: 'Heard', value: heardText(heard) }] } : {}),
     options: [
       { id: 'consent', label: consentLabel(p), emphasis: 'primary' },

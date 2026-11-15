@@ -27,7 +27,7 @@ import {
   blockedLine, expiryLine, eyebrowOf, heardText, isAnswerable, needsLine, optionalFor, outcomeLine, personChips, recordsLine, resultHref, stateLine, waitingOnYou,
   type ProposalState, type ProposalView,
 } from '../../lib/meetingProposals';
-import { setProposalDeckHidden } from '../../lib/proposalDeckState';
+import { bumpProposalPrompt, setProposalDeckHidden } from '../../lib/proposalDeckState';
 import { actionCardView, askedByLine, minutesCountLabels, namesNoInitiative, decideAssistantAction, readAssistantMessage, type ActionDecision, type AssistantAction, type AssistantProposalCard, type MinutesCounts } from '../../lib/assistantMessages';
 
 export interface AssistantActionCardProps {
@@ -179,13 +179,13 @@ export function ProposalCard({ proposalId, state, statement, view, surface = 'de
               <Button variant="link" size="sm" onClick={() => setProposalDeckHidden(callId, false)} data-testid="assistant-proposal-answer">Answer</Button>
             )}
             {live.you.canReopen && (
-              <Button variant="link" size="sm" disabled={busy} onClick={() => act((c) => answerProposal(c, live.id, 'reopen'))} data-testid="assistant-proposal-undo">Undo</Button>
+              <Button variant="link" size="sm" disabled={busy} onClick={() => act((c) => { bumpProposalPrompt(c, live.id); return answerProposal(c, live.id, 'reopen'); })} data-testid="assistant-proposal-undo">Undo</Button>
             )}
             {live.you.canRaiseAgain && (
               <Button variant="link" size="sm" disabled={busy} onClick={() => act((c) => raiseProposalAgain(c, live.id))} data-testid="assistant-proposal-raise">Raise it again</Button>
             )}
             {withdraw && (
-              <Button variant="link" size="sm" disabled={busy} onClick={() => act((c) => answerProposal(c, live.id, 'withdraw'))} data-testid="assistant-proposal-withdraw">
+              <Button variant="link" size="sm" disabled={busy} onClick={() => act((c) => { bumpProposalPrompt(c, live.id); return answerProposal(c, live.id, 'withdraw'); })} data-testid="assistant-proposal-withdraw">
                 {live.you.response === 'consent' ? 'Withdraw my consent' : 'Withdraw my objection'}
               </Button>
             )}

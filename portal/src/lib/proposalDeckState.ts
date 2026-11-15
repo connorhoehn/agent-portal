@@ -55,8 +55,19 @@ export function noteWaitingProposals(callId: string, ids: readonly string[]): vo
   set(callId, { seen: new Set([...d.seen, ...fresh]), hidden: false });
 }
 
+/**
+ * How many times this person took back an answer to a proposal here (withdrew it, or undid a dismissal). The deck prompt's id
+ * carries it, so the question comes back as a new one; the deck would otherwise remember the old answer to the same id.
+ */
+const generations = new Map<string, number>();
+export const proposalPromptGeneration = (callId: string, proposalId: string): number => generations.get(`${callId}\0${proposalId}`) ?? 0;
+export function bumpProposalPrompt(callId: string, proposalId: string): void {
+  generations.set(`${callId}\0${proposalId}`, proposalPromptGeneration(callId, proposalId) + 1);
+  for (const fn of listeners) fn();
+}
+
 /** Tests start clean (and stand for a reload: memory goes, the tab's storage stays). */
-export function forgetProposalDecks(): void { decks.clear(); }
+export function forgetProposalDecks(): void { decks.clear(); generations.clear(); }
 
 /** The call's deck state as the hook reads it. */
 export const proposalDeckOf = (callId: string): CallDeck => get(callId);
