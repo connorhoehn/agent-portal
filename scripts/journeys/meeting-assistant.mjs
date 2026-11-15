@@ -359,6 +359,24 @@ async function main() {
       return 'notice hidden; mark "Nova cannot hear you yet"; menu offers Acknowledge';
     });
 
+    // ── L0. The live transcript for someone who has not acknowledged: other people's lines, and why their own are missing ──
+    await step('L0: someone who has not acknowledged opens "Show transcript" from Nova\'s menu: the pane opens on the live transcript, which says their own words are not transcribed until they acknowledge; Back to chat returns to the thread', async () => {
+      await nora.page.getByTestId('nova-mark').click();
+      const item = nora.page.getByRole('menuitem', { name: /Show transcript/ });
+      check(await item.isVisible(), 'no Show transcript in Nova\'s menu');
+      check(/What Nova is hearing, as it hears it/.test(await item.innerText()), `Show transcript does not say what it shows: "${await item.innerText()}"`);
+      await item.click();
+      await seen(nora.page, 'live-transcript');
+      const note = (await nora.page.getByTestId('live-transcript-not-acked').innerText()).trim();
+      check(note === 'Your own words are not transcribed until you acknowledge Nova\'s notice.', `the not-acknowledged sentence reads "${note}"`);
+      const state = (await nora.page.getByTestId('live-transcript-state').innerText()).trim();
+      check(state === 'Nova is listening', `the transcript's state reads "${state}"`);
+      await nora.page.getByTestId('live-transcript-back').click();
+      await gone(nora.page, 'live-transcript');
+      await seen(nora.page, 'huddle-thread');
+      return `"${note}"`;
+    });
+
     // ── 4. Nothing kept before the acknowledgement ──
     await step('4: a line for the second person is not stored before they acknowledge; after they do, a new one is', async () => {
       const before = 'Before ack: the canary rollout is on hold until Thursday.';
@@ -429,6 +447,65 @@ async function main() {
       await novaMenu(vera, 'Resume Nova');
       await waitMark(vera.page, /^Nova is listening$/);
       return `paused by voice; notice "${notices.at(-1).message}"`;
+    });
+
+    // ── L1. The live transcript: lines appear as they are said, follow the newest, stop following when scrolled up ──
+    await step('L1: the inviter opens the live transcript from Nova\'s menu: the thread gives way to "Live transcript · Nova is listening", a line just said appears without a reload under its speaker, scrolling up stops following and offers "Jump to latest", and Back to chat returns to the same thread and composer (screenshots at 1440 and 1280)', async () => {
+      const noraName = (await (await nora.api.get(`${PORTAL}/api/session/me`)).json()).name;
+      const panel = vera.page.getByTestId('live-transcript-panel');
+      const geo = () => vera.page.evaluate(() => {
+        const el = document.querySelector('[data-testid="live-transcript-panel"] [data-seg-index]')?.parentElement;
+        return el ? { top: Math.round(el.scrollTop), max: Math.round(el.scrollHeight - el.clientHeight) } : null;
+      });
+      const linesShown = async () => Number(await vera.page.getByTestId('live-transcript').getAttribute('data-lines'));
+      // The pane's composer, marked so Back to chat can show it is the same one (kept mounted, not rebuilt).
+      const composer = vera.page.getByRole('textbox', { name: 'Huddle message' });
+      const hadComposer = (await composer.count()) > 0;
+      if (hadComposer) await composer.first().evaluate((el) => el.setAttribute('data-live-transcript-marker', 'kept'));
+      await novaMenu(vera, /Show transcript/);
+      await seen(vera.page, 'live-transcript');
+      check(!(await chatPanel(vera).isVisible()), 'the chat thread still shows under the transcript');
+      const head = (await panel.locator('header').first().innerText()).replace(/\s+/g, ' ').trim();
+      check(/^Live transcript/.test(head) && /Nova is listening/.test(head) && /Back to chat/.test(head), `the transcript's header reads "${head}"`);
+      await waitFor(async () => (await linesShown()) > 0, 10000, 'the stored lines in the transcript');
+      const said = `Live check: the staging cutover moves to the ${Date.now() % 100000}th build.`;
+      await inject(NORA.userId, said);
+      const row = panel.locator('[data-seg-index]').filter({ hasText: said });
+      await row.waitFor({ state: 'visible', timeout: 10000 }).catch(() => { throw new StepFailure('the line just said did not appear without a reload'); });
+      const rowText = (await row.innerText()).replace(/\s+/g, ' ');
+      check(rowText.includes(noraName), `the line is not under its speaker ${noraName}: "${rowText}"`);
+      // Enough lines to scroll: the view follows the newest while the reader is at the bottom.
+      const batch = Array.from({ length: 18 }, (_, i) => ({ userId: i % 2 ? VERA.userId : NORA.userId, text: `Status round ${i + 1}: the build on the staging lane is green.` }));
+      const res = await fetch(`${MIDDLEWARE}/api/dev/calls/${encodeURIComponent(callId)}/transcript-lines`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(batch) });
+      check(res.status < 300, `the injector answered ${res.status}`);
+      await panel.locator('[data-seg-index]').filter({ hasText: 'Status round 18:' }).waitFor({ state: 'visible', timeout: 10000 }).catch(() => { throw new StepFailure('the batch of lines did not appear'); });
+      await sleep(300);
+      const atEnd = await geo();
+      check(atEnd && atEnd.max > 0 && atEnd.max - atEnd.top <= 24, `the view did not follow the newest line: ${JSON.stringify(atEnd)}`);
+      check(await vera.page.getByTestId('transcript-jump-latest').count() === 0, 'Jump to latest shows while following');
+      // Scrolled up: it stops following and offers one way back.
+      await vera.page.evaluate(() => { const el = document.querySelector('[data-testid="live-transcript-panel"] [data-seg-index]')?.parentElement; if (el) el.scrollTop = 0; });
+      await seen(vera.page, 'transcript-jump-latest', 5000);
+      check(await vera.page.getByTestId('transcript-jump-latest').count() === 1, 'more than one Jump to latest');
+      const before = await linesShown();
+      await inject(VERA.userId, 'Status round 19: still green while the reader looks back.');
+      await waitFor(async () => (await linesShown()) > before, 10000, 'the next line while scrolled up');
+      const held = await geo();
+      check(held && held.top <= 24, `the view jumped down while the reader was scrolled up: ${JSON.stringify(held)}`);
+      for (const width of [1440, 1280]) { await shot(vera.page, 'L1-live-transcript-scrolled', width); await barFits(vera.page, 'the bar with the transcript open', width); }
+      await vera.page.getByTestId('transcript-jump-latest').click();
+      await gone(vera.page, 'transcript-jump-latest', 5000);
+      const back = await geo();
+      check(back && back.max - back.top <= 24, `Jump to latest did not reach the newest line: ${JSON.stringify(back)}`);
+      for (const width of [1440, 1280]) await shot(vera.page, 'L1-live-transcript', width);
+      await vera.page.getByTestId('nova-mark').click();
+      check(await vera.page.getByRole('menuitem', { name: 'Hide transcript' }).isVisible(), 'the menu does not offer Hide transcript while the view is on');
+      await vera.page.keyboard.press('Escape');
+      await vera.page.getByTestId('live-transcript-back').click();
+      await gone(vera.page, 'live-transcript');
+      await seen(vera.page, 'huddle-thread');
+      if (hadComposer) check(await composer.first().getAttribute('data-live-transcript-marker') === 'kept', 'Back to chat brought back a different composer');
+      return `"${head}"; "${rowText.slice(0, 90)}"; followed ${JSON.stringify(atEnd)}, held ${JSON.stringify(held)}; composer ${hadComposer ? 'kept' : 'owned by the page'}`;
     });
 
     // ── 8. A spoken read is answered in the call chat, labelled with who asked (the scripted session: no model) ──
