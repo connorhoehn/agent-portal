@@ -217,13 +217,14 @@ describe('after the call', () => {
     expect((await get('proposals', 'sam')).status).toBe(404);
   });
 
-  it('the inviter\'s delete also blanks the proposal card in the call chat', async () => {
+  it('the inviter\'s delete leaves no proposal card in the call chat: Nova\'s fixed line once, and none of the statement', async () => {
     await post('dismiss', 'priya');
     expect((await request(app).delete(url('minutes')).set('x-user', 'priya')).status).toBe(200);
-    const cards = (await rt.messages.listMessages(callChatChannel(CALL), 100)).filter((m) => m.metadata?.['kind'] === 'assistant-proposal');
-    expect(cards).toHaveLength(1);
-    expect(cards[0]!.message).toBe(DELETED_RECORD_LINE);
-    expect(JSON.stringify(cards[0])).not.toContain('smallest tenants');
+    const rows = await rt.messages.listMessages(callChatChannel(CALL), 100);
+    const shown = rows.filter((m) => !m.deletedAt && m.metadata?.['deleted'] !== true);
+    expect(shown.filter((m) => m.metadata?.['kind'] === 'assistant-proposal')).toEqual([]);
+    expect(shown.filter((m) => m.userId === 'agent:nova').map((m) => m.message)).toEqual([DELETED_RECORD_LINE]);
+    expect(JSON.stringify(rows)).not.toContain('smallest tenants');
   });
 });
 
