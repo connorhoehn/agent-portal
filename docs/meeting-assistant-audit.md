@@ -213,9 +213,19 @@ Four of the items first listed as open were closed in the same run:
 - **"Click to hear Nova".** It shows as soon as Nova's voice is on and the browser still needs a click, before any reply is lost.
 - **The prompt over the last rows.** The page could already be scrolled clear of the docked prompt. The real defect was different: hidden labels in the proposals table made the whole document taller than the screen, so scrolling past the end slid the header, prompt and footer off the screen. The shell no longer lets the document scroll.
 
+### Fourth pass (15 November): the three items left from the real-provider runs
+
+Built the same day, each in its own lane, then reviewed as one change before merging:
+
+- **Nova's voice only for speech someone asked for.** A gate in front of the relay decides each speaking turn: it goes out at once when someone addressed Nova in the last 10 seconds or Nova has addressed work in flight; otherwise it is held for at most 2 seconds and then released whole or withheld whole. The quiet scenario now makes two unprompted remarks and both are withheld, while the answer to the final request is voiced, including when its audio arrives before the request's words.
+- **A live transcript in the call.** "Show transcript" in Nova's menu turns the call's pane into what Nova is hearing, following the newest line. `TranscriptPanel` gained `follow` and portraits for it (ui-components 2.530.0).
+- **Inviting Nova back.** A call can have several listening periods on one record; everyone acknowledges again, each period is billed on its own, and the minutes are added to when Nova leaves again, with earlier items kept in place.
+
+A review of the combined change found five defects, all repaired before the merge, each with a test that fails without its repair: inviting Nova back while it was still leaving billed the earlier period twice and left Nova shown as listening with no session (the invitation now waits for the departure, and a late departure cannot touch the newer period); the gate cut long spoken answers between sentences and could drop a held opening sentence early (decisions now cover a speaking turn); a minutes addition's cost was never booked (every minutes run has its own ledger entry); a delete racing an invitation back could leave a deleted meeting listening (both stores now refuse either order); and a call ending during an invitation back could leave Nova listening to nothing (it now leaves with the call). Two smaller ones were repaired with them: released audio is counted as heard when it plays, and the live transcript reads once more after every leave.
+
 ### Decided
 
-- Nova cannot rejoin a call it left. A second listening period needs a way to add to minutes that were already written; it is the next package, not a patch.
+- Nova can be invited back into a call it left (fourth pass, above). Until then it could not.
 - The chat's history floor stays: a late joiner does not get Nova's earlier answers.
 - A tombstone tells only attendees that a record was deleted or expired. Once the sweep has removed the call, nobody can be told apart, so everyone gets the neutral sentence.
 - The minutes page counts the people who were not transcribed and does not name them.
@@ -223,11 +233,10 @@ Four of the items first listed as open were closed in the same run:
 
 ### Still open
 
-- Re-inviting Nova after it leaves (above).
 - "Paused for" on the meeting page is all the time Nova was in the call and not listening; pauses are not tracked on their own.
 - A finished action row has no link to what it created; the card carries no link the browser can trust.
 - Covered by unit tests only, because the walk cannot produce them: the "working for" mark (a lookup finishes too fast to catch), the failed-minutes path (the scripted writer cannot fail), a work item made from an action item on the meeting page (the walk's meeting has none left to make), and the "Click to hear Nova" prompt (headless Chromium does not block sound).
 - The meeting page's "Create work item" now makes a story at once, titled with the action item's text; the earlier path opened the initiative's form first. Two presses at the same moment on two servers could make two work items, of which one is recorded.
 - The meeting page is not in the DOM geometry audit's route list.
-- From the real-provider runs, unchanged by this sweep: Nova still voices speech nobody asked for when its voice is on; the two-askers case was relaxed and not re-run against the provider; the echo guard is unproven on a long call; the attribution fix has not yet been seen on a live call.
+- From the real-provider runs: the voice gate (fourth pass) is proven on the fake provider; a short paid run to prove it on the real provider (`scenarios.mjs --scenario quiet-long,personal-read --minutes 2 --yes`, worst case $0.27) could not start on 15 November because the provider rejected the API key, so it is not yet proven there; the two-askers case was relaxed and not re-run against the provider; the echo guard is unproven on a long call; the attribution fix has not yet been seen on a live call.
 
