@@ -17,7 +17,9 @@ export default {
     const b1 = ctx.next('vera', 'Nova, create a work item for the calendar sync bug.', { gap: 6000, dry: { delayMs: 3500, call: { name: 'create', args: { kind: 'work-item', fields: { title: 'Calendar sync bug' } } }, followup: 'I have asked Vera to confirm that.' } });
     const b2 = ctx.next('nora', 'Nova, how is the weather in Lisbon today?', { gap: 300, dry: { reply: { text: 'It is sunny in Lisbon today.', frames: 12 } } });
     // (c)
-    const c1 = ctx.next('vera', 'Nova, who is online right now?', { gap: 9000, dry: { call: { name: 'activity', args: { scope: 'online' } }, followup: (out) => ({ text: `Right now: ${JSON.parse(out)?.say ?? 'nobody'}`, frames: 15 }) } });
+    // Fourteen seconds after (b): a real model is still speaking its follow-up to the card nine seconds after, and a request spoken
+    // over Nova's own voice was not acted on in one paid run (a person would ask again); this part is about the read waiting.
+    const c1 = ctx.next('vera', 'Nova, who is online right now?', { gap: 14_000, dry: { call: { name: 'activity', args: { scope: 'online' } }, followup: (out) => ({ text: `Right now: ${JSON.parse(out)?.say ?? 'nobody'}`, frames: 15 }) } });
     const c2 = ctx.next('nora', 'Nova, what is seven times eight?', { gap: 3500, dry: { reply: { text: 'Seven times eight is fifty six.', frames: 12 } } });
     const veraRuns = ctx.turns('vera', (t) => (t.tool.name === 'activity' ? { ok: true, say: 'Vera and Nora are online.', delayMs: 20_000 } : { withhold: true }));
     const noraRuns = ctx.turns('nora', () => ({ withhold: true }));
