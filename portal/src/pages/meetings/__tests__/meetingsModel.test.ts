@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { canCreateFor, durationLabel, peopleLabel, summaryLine, transcriptSegments, minutesUrl, transcriptUrl, meetingHref, proposalsLive, proposalsUrl,
   goneCopy, meetingsUrl, headerMeta, quietMeta, summaryOf, listLead, listenedLabel, outcomesLabel, orderProposals, proposalClosed, proposalPill,
-  actionStatus, actionWaitsOn, decisionRows, mergeMeetings, minutesWritten, rewriteUrl, waitingLabel, MINUTES_UNAVAILABLE, type MeetingListRow } from '../meetingsModel.ts';
+  actionStatus, actionWaitsOn, decisionRows, actionText, outcomeShort, facesFor, mergeMeetings, minutesWritten, rewriteUrl, waitingLabel, MINUTES_UNAVAILABLE, type MeetingListRow } from '../meetingsModel.ts';
 
 test('duration reads in minutes and hours', () => {
   assert.equal(durationLabel(0, 20_000), 'under a minute');
@@ -138,4 +138,22 @@ test('the list pages by the server cursor and merges pages once each; the waitin
   assert.equal(waitingLabel(0), null);
   assert.equal(waitingLabel(undefined), null);
   assert.equal(waitingLabel(2), '2 waiting on you');
+});
+
+test('done-action text never reaches a person as "Ran create" or "Created work item: X"', () => {
+  assert.equal(actionText('Created work item: the login cookie bug'), 'Created work item "the login cookie bug"');
+  assert.equal(actionText('Ran create'), 'Created a record');
+  assert.equal(actionText('Ran something_else'), 'Nova carried out a request');
+  assert.equal(actionText('review the schema'), 'review the schema');
+});
+
+test('what a proposal does, short: the kind and the target', () => {
+  assert.equal(outcomeShort({ kind: 'decision' }, 'Observability Platform'), 'Decision · Observability Platform');
+  assert.equal(outcomeShort({ kind: 'tool', name: 'create', summary: 'Create a work item titled "X", owned by Nora' }, 'Observability Platform'), 'Work item · Observability Platform');
+  assert.equal(outcomeShort({ kind: 'tool', name: 'update' }, null), 'Update');
+});
+
+test('faces carry the portrait the server sent, by name; others draw initials', () => {
+  assert.deepEqual(facesFor(['Vera Green', 'Theo Chang'], [{ name: 'Vera Green', avatarUrl: '/avatars/photos/v.jpg' }, { name: 'Theo Chang', avatarUrl: null }]),
+    [{ name: 'Vera Green', src: '/avatars/photos/v.jpg' }, { name: 'Theo Chang' }]);
 });

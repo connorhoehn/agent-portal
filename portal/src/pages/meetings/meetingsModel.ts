@@ -21,11 +21,14 @@ export interface MeetingListRow {
   listenedSeconds?: number | null;
   /** What came out of the meeting, counted by the server: decisions (agreed proposals included), action items, proposals still open. */
   outcomes?: { decisions: number; actionItems: number; open: number };
+  /** The people with their portraits, in `attendees` order; absent from an older server. */
+  people?: Array<{ name: string; avatarUrl: string | null }>;
 }
 
 /** `workItemCreated`: the server says its work item exists (done in the call, or its card was carried out); absent from an older server. */
 export interface MinutesActionItem { text: string; ownerUserId?: string; ownerName?: string; done?: boolean; workItemCreated?: boolean }
-export interface MinutesPerson { userId: string; name: string }
+/** `avatarUrl`: the person's portrait from the server; null or absent draws initials. */
+export interface MinutesPerson { userId: string; name: string; avatarUrl?: string | null }
 
 /** A proposal as the minutes list it: its state and who consented or objected, by name only (docs/meeting-consent-design.md). */
 export interface MinutesProposal { id: string; statement: string; state: string; outcome: 'decision' | 'tool'; consentedBy: string[]; objectedBy: string[] }
@@ -266,4 +269,44 @@ export function decisionRows(
     agreedBy: p.responses.filter((r) => r.response === 'consent').map((r) => r.name), href: p.state === 'done' ? p.run?.href ?? null : null,
   }));
   return [...agreed, ...own];
+}
+
+/** A face for an avatar: the person's name and, when the server sent one, their portrait. */
+export interface Face { name: string; src?: string }
+
+/** Faces for a list of names, with the portraits the meeting's people carry (by name; a name without one draws initials). */
+export function facesFor(names: readonly string[], people: ReadonlyArray<{ name: string; avatarUrl?: string | null }>): Face[] {
+  const src = new Map(people.filter((p) => p.avatarUrl).map((p) => [p.name, p.avatarUrl as string]));
+  return names.map((name) => (src.has(name) ? { name, src: src.get(name)! } : { name }));
+}
+
+const TOOL_DONE: Record<string, string> = {
+  create: 'Created a record', update: 'Updated a record', message: 'Sent a message', search: 'Looked something up', comment: 'Added a comment',
+};
+
+/**
+ * An action item's words for a person. Something done in the call is stored by the minutes service as "Created work item: X" or, when
+ * it had no title, "Ran <tool>" (minutes-service.ts `doneActionText`); neither form reaches a person: "Created work item "X"", or a
+ * plain sentence for the tool. Any other text is shown as written.
+ */
+export function actionText(text: string): string {
+  const created = /^Created ([^:]+): (.+)$/.exec(text);
+  if (created) return `Created ${created[1]!.replace(/^a /, '')} "${created[2]!}"`;
+  const ran = /^Ran ([a-z_-]+)$/i.exec(text.trim());
+  if (ran) return TOOL_DONE[ran[1]!.toLowerCase()] ?? 'Nova carried out a request';
+  return text;
+}
+
+/**
+ * The Proposals table's short "What it does": the kind and the target, "Decision · Observability Platform" or "Work item · Observability
+ * Platform". The full sentence stays in the proposal's detail. `target` is the initiative's name, or null while unknown.
+ */
+export function outcomeShort(outcome: { kind: 'decision' | 'tool'; name?: string; summary?: string }, target: string | null): string {
+  let kind = 'Decision';
+  if (outcome.kind === 'tool') {
+    const made = /^Create an? (.+?) titled\b/i.exec(outcome.summary ?? '');
+    kind = made ? made[1]!.charAt(0).toUpperCase() + made[1]!.slice(1)
+      : outcome.name === 'update' ? 'Update' : outcome.name === 'message' ? 'Message' : outcome.name === 'create' ? 'New record' : 'Action';
+  }
+  return target ? `${kind} · ${target}` : kind;
 }

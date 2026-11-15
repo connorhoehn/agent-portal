@@ -10,8 +10,8 @@
 import { useCallback, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
-  AvatarGroup, Button, ChevronIcon, DataTable, DetailPage, DetailSection, Disclosure, Drawer, DropdownMenu, EmptyState, Inline, Link, LoadingState, MetaLine,
-  IconButton, MoreIcon, Prose, Stack, StatusPill, T, Tooltip, UserChip, VisuallyHidden,
+  Button, ChevronIcon, DataTable, DetailPage, DetailSection, Disclosure, Drawer, DropdownMenu, EmptyState, Inline, Link, LoadingState, MetaLine,
+  IconButton, MoreIcon, Prose, Stack, StatusPill, T,
   type DataTableColumn, type DropdownMenuItem,
 } from '@connorhoehn/ui-components/shared';
 import type { ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
@@ -32,10 +32,11 @@ import {
 } from '../../lib/meetingProposals';
 import {
   actionStatus, actionWaitsOn, canCreateFor, decisionRows, goneCopy, headerMeta, minutesWritten, orderProposals, proposalClosed, proposalPill,
-  quietMeta, summaryOf, transcriptSegments, minutesUrl, proposalsLive, proposalsUrl, rewriteUrl,
+  quietMeta, summaryOf, actionText, facesFor, outcomeShort, transcriptSegments, minutesUrl, proposalsLive, proposalsUrl, rewriteUrl,
   MINUTES_UNAVAILABLE, type DecisionRow, type MinutesActionItem, type MinutesView,
 } from './meetingsModel';
 import { useMeetingTranscript } from './useMeetingTranscript';
+import { Faces, PersonName } from './Faces';
 
 /** A link inside the portal that navigates in place on a plain click, at the size of the text it sits in. */
 function PortalLink({ href, children, testId }: { href: string; children: ReactNode; testId?: string }) {
@@ -44,31 +45,22 @@ function PortalLink({ href, children, testId }: { href: string; children: ReactN
   return <T size="sm"><Link href={href} onClick={onClick} {...(testId ? { 'data-testid': testId } : {})}>{children}</Link></T>;
 }
 
-/** The people as an avatar group; their names on hover or focus (Tooltip) and for screen readers. */
-function People({ names, label, testId }: { names: readonly string[]; label?: string; testId?: string }) {
-  if (!names.length) return null;
-  const words = label ?? names.join(', ');
-  return (
-    <Tooltip content={words} triggerClassName="inline-flex items-center">
-      <Inline as="span" gap="none" wrap={false} tabIndex={0} aria-label={words} {...(testId ? { 'data-testid': testId } : {})}>
-        <AvatarGroup names={[...names]} size={22} maxVisible={5} />
-        <VisuallyHidden>{words}</VisuallyHidden>
-      </Inline>
-    </Tooltip>
-  );
-}
-
 /** The initiative's name, read once per id; "—" until known or when there is none. */
 function InitiativeName({ id }: { id: string | null }) {
   const named = useFetch<{ name?: string }>(id ? `/api/graph/projects/${encodeURIComponent(id)}` : null);
   return <T size="sm" tone="secondary" truncate>{named.data?.name?.trim() || '—'}</T>;
 }
 
-/** What a proposal does, in plain words ("Record as a decision on Observability Platform"). */
-function OutcomeWords({ p }: { p: ProposalView }) {
-  const id = p.outcome.kind === 'decision' ? p.outcome.initiativeId : null;
+/**
+ * What a proposal does: in the table, short ("Decision · Observability Platform"); in its detail, the full sentence ("Record as a
+ * decision on Observability Platform"). The target is the decision's initiative, else the meeting's.
+ */
+function OutcomeWords({ p, full = false, meetingInitiativeId = null }: { p: ProposalView; full?: boolean; meetingInitiativeId?: string | null }) {
+  const id = (p.outcome.kind === 'decision' ? p.outcome.initiativeId : null) ?? meetingInitiativeId;
   const named = useFetch<{ name?: string }>(id ? `/api/graph/projects/${encodeURIComponent(id)}` : null);
-  return <T size="sm" tone="secondary">{outcomeLine(p.outcome, named.data?.name?.trim() || null)}</T>;
+  const name = named.data?.name?.trim() || null;
+  if (full) return <T size="sm" tone="secondary" wrap>{outcomeLine(p.outcome, p.outcome.kind === 'decision' ? name : null)}</T>;
+  return <T size="sm" tone="secondary">{outcomeShort(p.outcome, name)}</T>;
 }
 
 /** The empty line of an outcome table: "No … were recorded.", or for failed minutes the rule that they are not available. */
@@ -151,17 +143,19 @@ export default function MeetingPage() {
   const prompts = [...(deletePrompt ? [deletePrompt] : []), ...(proposalAsk ? [proposalAsk] : [])];
   const runner = callId && mayRunHere ? <MeetingTurnRunner afterCall={{ callId, initiativeId: m?.initiativeId ?? null, active: true }} /> : null;
   const detail = detailId ? proposals.find((p) => p.id === detailId) ?? null : null;
-  const drawer = <ProposalDrawer p={detail} onClose={() => setDetailId(null)} onAsk={(p) => { setDetailId(null); ask(p); }} afterAct={refreshProposals} />;
+  // Portraits come with the meeting's people from the server; anyone else draws initials.
+  const people = m?.attendees ?? [];
+  const drawer = <ProposalDrawer people={people} meetingInitiativeId={m?.initiativeId ?? null} p={detail} onClose={() => setDetailId(null)} onAsk={(p) => { setDetailId(null); ask(p); }} afterAct={refreshProposals} />;
 
   // The proposals table: statement · what it does · status · people with their answers · the row's one action. Open ones first.
   const proposalColumns: DataTableColumn<ProposalView>[] = [
     { key: 'statement', header: 'Proposal', truncate: true, wrap: 'two-lines', getFilterText: (p) => p.statement,
       render: (p) => <T size="sm" tone={proposalClosed(p.state) ? 'secondary' : 'primary'}>{p.statement}</T> },
-    { key: 'does', header: 'What it does', width: '28%', priority: 2, truncate: true, wrap: 'two-lines', render: (p) => <OutcomeWords p={p} /> },
+    { key: 'does', header: 'What it does', width: '28%', priority: 2, truncate: true, wrap: 'two-lines', render: (p) => <OutcomeWords p={p} meetingInitiativeId={m?.initiativeId ?? null} /> },
     { key: 'status', header: 'Status', width: '168px', render: (p) => { const pill = proposalPill(p); return <StatusPill tone={pill.tone} label={pill.label} size="sm" data-testid="meeting-proposal-status" />; } },
     { key: 'people', header: 'People', width: '120px', priority: 1, render: (p) => {
       const chips = personChips(p);
-      return <People names={chips.map((c) => c.name)} label={chips.map((c) => (c.runsIt ? `${c.label} · runs it` : c.label)).join(', ')} />;
+      return <Faces faces={facesFor(chips.map((c) => c.name), people)} max={3} label={chips.map((c) => (c.runsIt ? `${c.label} · runs it` : c.label)).join(', ')} />;
     } },
     // The row opens its detail (Answer, Run it now, Undo and Raise it again are there and under "Needs you"): a cell holds one icon control.
     { key: 'act', header: '', width: '56px', align: 'right', render: (p) => (
@@ -219,12 +213,12 @@ export default function MeetingPage() {
   const decisionColumns: DataTableColumn<DecisionRow>[] = [
     { key: 'text', header: 'Decision', truncate: true, wrap: 'two-lines', render: (d) => <T size="sm">{d.text}</T> },
     { key: 'initiative', header: 'Initiative', width: '200px', priority: 2, render: (d) => <InitiativeName id={d.initiativeId} /> },
-    { key: 'agreed', header: 'Agreed by', width: '120px', priority: 1, render: (d) => (d.agreedBy.length ? <People names={d.agreedBy} label={`Agreed by ${d.agreedBy.join(', ')}`} /> : null) },
+    { key: 'agreed', header: 'Agreed by', width: '120px', priority: 1, render: (d) => (d.agreedBy.length ? <Faces faces={facesFor(d.agreedBy, people)} max={3} label={`Agreed by ${d.agreedBy.join(', ')}`} /> : null) },
     { key: 'open', header: '', width: '120px', render: (d) => (d.href ? <PortalLink href={d.href} testId="meeting-decision-link">Open</PortalLink> : null) },
   ];
   const actionColumns: DataTableColumn<MinutesActionItem>[] = [
-    { key: 'text', header: 'Action', truncate: true, wrap: 'two-lines', render: (i) => <T size="sm">{i.text}</T> },
-    { key: 'owner', header: 'Owner', width: '200px', render: (i) => (i.ownerName ? <UserChip name={i.ownerName} avatarSize={22} /> : <T size="sm" tone="secondary">Nobody named</T>) },
+    { key: 'text', header: 'Action', truncate: true, wrap: 'two-lines', render: (i) => <T size="sm">{actionText(i.text)}</T> },
+    { key: 'owner', header: 'Owner', width: '200px', render: (i) => (i.ownerName ? <PersonName face={facesFor([i.ownerName], people)[0]!} /> : <T size="sm" tone="secondary">Nobody named</T>) },
     { key: 'status', header: 'Status', width: '168px', render: (i) => { const s = actionStatus(i); return <StatusPill tone={s.tone} label={s.label} size="sm" data-testid="meeting-action-status" />; } },
     { key: 'create', header: '', width: '160px', render: (i) => (m.initiativeId && canCreateFor(i, viewer) && !i.workItemCreated
       ? <PortalLink href={newWorkItemHref(m.initiativeId, i.text)} testId="meeting-create-work-item">Create work item</PortalLink> : null) },
@@ -239,7 +233,7 @@ export default function MeetingPage() {
           <Stack gap="xs">
             <MetaLine size="sm" data-testid="meeting-meta" items={[
               meta.when, ...(meta.listened ? [meta.listened] : []),
-              <People key="people" names={m.attendees.map((a) => a.name)} testId="meeting-people" />,
+              <Faces key="people" faces={facesFor(m.attendees.map((a) => a.name), people)} testId="meeting-people" />,
               meta.invitedBy,
             ]} />
             {quiet.length > 0 && <MetaLine size="sm" tone="tertiary" data-testid="meeting-kept" items={quiet} />}
@@ -261,7 +255,7 @@ export default function MeetingPage() {
                 ))}
                 {waitingItems.map((i) => (
                   <Inline key={`${i.text}|${i.ownerUserId ?? ''}`} gap="sm" justify="between" wrap={false} data-testid="meeting-needs-row">
-                    <T size="sm" truncate className="min-w-0" title={i.text}>{i.text}</T>
+                    <T size="sm" truncate className="min-w-0" title={actionText(i.text)}>{actionText(i.text)}</T>
                     <PortalLink href={newWorkItemHref(m.initiativeId!, i.text)} testId="meeting-needs-create">Create work item</PortalLink>
                   </Inline>
                 ))}
@@ -330,7 +324,10 @@ function ProposalRowAction({ p, onAsk, onOpen }: { p: ProposalView; onAsk: (p: P
  * A proposal's detail, opened from its row: the lines Nova heard (the server sends them only to people who were in the call), what it
  * does, who it needs and what they answered (objection reasons included), how it ended with its link, and the quiet actions.
  */
-function ProposalDrawer({ p, onClose, onAsk, afterAct }: { p: ProposalView | null; onClose: () => void; onAsk: (p: ProposalView) => void; afterAct: () => void }) {
+function ProposalDrawer({ p, people, meetingInitiativeId, onClose, onAsk, afterAct }: {
+  p: ProposalView | null; people: ReadonlyArray<{ name: string; avatarUrl?: string | null }>; meetingInitiativeId: string | null;
+  onClose: () => void; onAsk: (p: ProposalView) => void; afterAct: () => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const act = (run: (callId: string) => Promise<string | null>) => {
@@ -348,7 +345,7 @@ function ProposalDrawer({ p, onClose, onAsk, afterAct }: { p: ProposalView | nul
       {p && pill && (
         <Stack gap="md">
           <Inline gap="sm" align="center" wrap><StatusPill tone={pill.tone} label={pill.label} size="sm" /></Inline>
-          <DetailSection title="What it does" first><OutcomeWords p={p} />{lines.map((l, i) => <T key={i} size="sm" tone="secondary" wrap>{l}</T>)}</DetailSection>
+          <DetailSection title="What it does" first><OutcomeWords p={p} full meetingInitiativeId={meetingInitiativeId} />{lines.map((l, i) => <T key={i} size="sm" tone="secondary" wrap>{l}</T>)}</DetailSection>
           {p.heard.length > 0 && (
             <DetailSection title="What Nova heard">
               <Stack gap="xs" data-testid="meeting-proposal-heard">{p.heard.map((line, i) => <T key={i} size="sm" tone="secondary" wrap>{heardText(line)}</T>)}</Stack>
@@ -358,7 +355,7 @@ function ProposalDrawer({ p, onClose, onAsk, afterAct }: { p: ProposalView | nul
             <Stack gap="xs">
               {personChips(p).map((c) => (
                 <Inline key={c.userId} gap="sm" align="center" wrap={false}>
-                  <UserChip name={c.name} avatarSize={22} />
+                  <PersonName face={facesFor([c.name], people)[0]!} />
                   <T size="sm" tone={c.state === 'objected' ? 'danger' : 'secondary'} wrap>{`${c.label.slice(c.name.length + 3)}${c.runsIt ? ' · runs it' : ''}`}</T>
                 </Inline>
               ))}

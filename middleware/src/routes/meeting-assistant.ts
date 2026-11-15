@@ -49,6 +49,7 @@ import { AppError, asyncHandler, NotFoundError, ValidationError } from '../lib/a
 import { requireAction, requireTenant, resolveSession } from '../lib/authz.js';
 import { callChatRuntime, onCallChatFinished } from '../lib/call-chat.js';
 import type { Session } from '../lib/session.js'; import { getUser } from '../providers/identity.js';
+import { userAvatars } from '../providers/user-avatars.js';
 import {
   assistantIntake, assistantStore, initiativeOfLobby, meetingAssistantEnabled, TranscriptSourceNotConfigured,
   type AssistantRecord,
@@ -816,6 +817,17 @@ async function namesOf(ids: readonly string[]): Promise<Array<{ userId: string; 
 }
 
 /**
+ * The people of a meeting with their portraits, read the way the people directory reads them (`userAvatars`: the user's own picture,
+ * else their linked person's). Best effort: a failed read leaves `avatarUrl` null and the portal draws initials.
+ */
+async function facesOf(ids: readonly string[]): Promise<Array<{ userId: string; name: string; avatarUrl: string | null }>> {
+  const named = await namesOf(ids);
+  const users = await Promise.all(ids.map(async (id) => ({ id, personId: (await getUser(id).catch(() => null))?.personId ?? null })));
+  const avatars = await userAvatars(users).catch(() => new Map<string, string | null>());
+  return named.map((p) => ({ ...p, avatarUrl: avatars.get(p.userId) ?? null }));
+}
+
+/**
  * The call's proposals as the minutes list them, read live (a consent on the meeting page after the call shows): the statement, its
  * state, and who consented or objected by NAME only. Reasons stay on the proposal itself, where the people it concerns read them.
  */
@@ -862,7 +874,7 @@ meetingAssistantRouter.get('/minutes', refuseMasqueradeRead, asyncHandler(async 
     if (minutesWriting(callId)) { res.status(404).json({ code: 'MINUTES_WRITING', error: 'Nova is writing the minutes.' }); return; }
     throw new NotFoundError('No minutes');
   }
-  const attendees = await namesOf(m.attendees);
+  const attendees = await facesOf(m.attendees);
   const attempts = m.attempts ?? (m.writer === 'none' ? 0 : 1);
   // An action item whose "Create a work item" card was carried out (or that was done in the call) has its work item.
   const doneTurns = new Set((await assistantStore().listTurns(callId, { statuses: ['done'] }).catch(() => [])).map((t) => t.turnId));
@@ -947,7 +959,8 @@ meetingsRouter.get('/', asyncHandler(async (req, res) => {
   const rows = await assistantStore().listMinutes({ tenant: session.tenant, userId: session.sub, limit, ...(initiative ? { initiativeId: initiative } : {}), ...(before ? { before } : {}) });
   const store = assistantStore(); const now = Date.now();
   const meetings = await Promise.all(rows.map(async (m) => {
-    const attendees = (await namesOf(m.attendees)).map((a) => a.name);
+    const faces = await facesOf(m.attendees);
+    const attendees = faces.map((a) => a.name);
     // Proposals from this meeting that wait on the caller's answer, read for the caller alone.
     const proposals = await listProposalsFor(store, m.callId, now, m.endedAt).catch(() => []);
     const waitingOnYou = proposals.filter((p) => ANSWERABLE.includes(p.state) && owedBy(p).includes(session.sub)).length;
@@ -958,7 +971,7 @@ meetingsRouter.get('/', asyncHandler(async (req, res) => {
     const counts = minutesCounts(m, proposals);
     return {
       callId: m.callId, callName: meetingNameOf(m, attendees), lobby: m.lobby, initiativeId: m.initiativeId, startedAt: m.startedAt, endedAt: m.endedAt,
-      attendees, summary: m.summary, summaryLead: summaryParts(m.summary).lead, decisionCount: m.decisions.length, actionItemCount: m.actionItems.length, waitingOnYou,
+      attendees, people: faces.map((f) => ({ name: f.name, avatarUrl: f.avatarUrl })), summary: m.summary, summaryLead: summaryParts(m.summary).lead, decisionCount: m.decisions.length, actionItemCount: m.actionItems.length, waitingOnYou,
       listenedSeconds, outcomes: { decisions: counts.decisions, actionItems: counts.actionItems, open: proposals.filter((p) => ANSWERABLE.includes(p.state)).length },
     };
   }));

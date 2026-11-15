@@ -1353,7 +1353,13 @@ async function main() {
         check(await veraM.page.getByTestId('meeting-actions').count() === 1, 'the inviter has no header menu');
         // The people as faces in the meta line.
         check(await veraM.page.getByTestId('meeting-meta').getByTestId('meeting-people').count() === 1, 'the meta line does not show the people as avatars');
+        // Faces are portraits where the directory has one (the walk's people all do), not initials.
+        check(await veraM.page.getByTestId('meeting-people').locator('img').count() >= 2, 'the people in the header are initials, not portraits');
+        // A done action never reads as its tool ("Ran create"); the full outcome sentence lives in the proposal's detail.
+        const does = await veraM.page.getByTestId('meeting-proposals').innerText();
+        check(!does.includes('Record as a decision on') && /Decision · /.test(does), 'the proposals table repeats the full outcome sentence');
         const items = (await veraM.page.getByTestId('meeting-action-items').innerText()).replace(/\s+/g, ' ');
+        check(!/\bRan [a-z]+\b/.test(items), `an action item reads as a tool run: "${items}"`);
         check(/login cookie bug/i.test(items), `the action items do not hold the work item created in the call (by its title): "${items}"`);
         check((await itemsTitled(vera, 'login cookie bug')).length === 1, 'the work item the action item names does not exist exactly once');
         // Speaker names, not ids: the transcript lines were injected for u-nora and u-vera.
@@ -1513,6 +1519,7 @@ async function main() {
       // Faces, length and outcomes on the row; the second line is the summary's lead, never a "said:" echo.
       const table = veraM.page.getByTestId('iq-meetings-table');
       check(await table.getByTestId('iq-meetings-people').count() >= 1, 'the list shows no avatars for the people');
+      check(await table.getByTestId('iq-meetings-people').first().locator('img').count() >= 2, 'the list shows initials, not portraits');
       const outcomes = (await table.getByTestId('iq-meetings-outcomes').first().innerText().catch(() => '')).trim();
       check(/^(\d+ decisions?|\d+ actions?|\d+ open|Nothing recorded)( · .+)*$/.test(outcomes), `the outcomes cell reads "${outcomes}"`);
       check(own.outcomes && Number.isInteger(own.outcomes.decisions) && typeof own.listenedSeconds === 'number', `the API row has no outcomes or length: ${JSON.stringify(own).slice(0, 300)}`);

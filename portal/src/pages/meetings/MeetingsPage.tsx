@@ -3,12 +3,13 @@
 // follow the server's `next` cursor with "Load older meetings" under the table (the library table pages only on the client).
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { AvatarGroup, Button, Chip, DataTable, Inline, T, Tooltip, VisuallyHidden, type DataTableColumn } from '@connorhoehn/ui-components/shared';
+import { Button, Chip, DataTable, Inline, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
+import { Faces } from './Faces';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
 import { useFetch } from '../../hooks/useFetch';
 import { responseFailure } from '../../lib/apiFailure';
 import { relativeTime } from '../../lib/relativeTime';
-import { MEETINGS_URL, listenedLabel, listLead, meetingHref, meetingsUrl, mergeMeetings, outcomesLabel, peopleLabel, waitingLabel, type MeetingListRow } from './meetingsModel';
+import { MEETINGS_URL, facesFor, listenedLabel, listLead, meetingHref, meetingsUrl, mergeMeetings, outcomesLabel, peopleLabel, waitingLabel, type MeetingListRow } from './meetingsModel';
 
 interface MeetingsPage { meetings: MeetingListRow[]; next: number | null }
 
@@ -47,14 +48,9 @@ export default function MeetingsPage() {
     } },
     { key: 'when', header: 'When', width: '112px', render: (r) => <T size="sm" title={new Date(r.endedAt).toLocaleString()}>{relativeTime(new Date(r.endedAt).toISOString())}</T> },
     { key: 'length', header: 'Length', width: '96px', priority: 2, render: (r) => <T size="sm" tone="secondary" tabular>{listenedLabel(r.listenedSeconds) ?? '—'}</T> },
-    { key: 'people', header: 'People', width: '128px', priority: 1, render: (r) => (r.attendees.length ? (
-      <Tooltip content={r.attendees.join(', ')} triggerClassName="inline-flex items-center">
-        <Inline as="span" gap="none" wrap={false} tabIndex={0} aria-label={peopleLabel(r.attendees)} data-testid="iq-meetings-people">
-          <AvatarGroup names={r.attendees} size={22} maxVisible={4} />
-          <VisuallyHidden>{peopleLabel(r.attendees)}</VisuallyHidden>
-        </Inline>
-      </Tooltip>
-    ) : null) },
+    { key: 'people', header: 'People', width: '136px', priority: 1, render: (r) => (
+      <Faces faces={facesFor(r.attendees, r.people ?? [])} max={4} label={peopleLabel(r.attendees)} testId="iq-meetings-people" />
+    ) },
     { key: 'outcomes', header: 'Outcomes', width: '320px', render: (r) => {
       const waiting = waitingLabel(r.waitingOnYou);
       const outcomes = outcomesLabel(r.outcomes);

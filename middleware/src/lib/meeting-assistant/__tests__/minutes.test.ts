@@ -43,6 +43,8 @@ describe('the scripted writer', () => {
     expect(points).toEqual(['Agreed: Freeze schema changes.', '3 proposals still wait for answers: Keep tenants read-only; Page the on-call; and 1 more.']);
     const done = await write([line('u-vera', 'Fine.')], [{ text: 'Created work item: Fix the login cookie', ownerUserId: 'u-nora' }]);
     expect(summaryParts(done.summary).points).toEqual(['Done in the call: created work item "Fix the login cookie".']);
+    const ran = await write([line('u-vera', 'Fine.')], [{ text: 'Ran create', ownerUserId: 'u-nora' }]);
+    expect(summaryParts(ran.summary).points).toEqual(['Done in the call: Nova carried out a request.']);
     const nothing = await write([line('u-vera', 'Chatter.')]);
     expect(summaryParts(nothing.summary).points).toEqual(['No decisions or next steps were recorded.']);
   });

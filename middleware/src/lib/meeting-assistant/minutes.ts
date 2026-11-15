@@ -214,7 +214,9 @@ export function scriptedSummary(input: { people: number; spanMs: number; callNam
     const said = open.map((i) => (i.ownerName ? `${i.ownerName} to ${i.text.charAt(0).toLowerCase()}${i.text.slice(1)}` : i.text));
     points.push(`${open.length === 1 ? 'Next step' : `${open.length} next steps`}: ${listWords(said, 2)}.`);
   }
-  if (done.length) points.push(`Done in the call: ${listWords(done.map((i) => i.text.replace(/^Created ([^:]+): (.+)$/, (_m, kind: string, title: string) => `created ${kind.replace(/^a /, '')} "${title}"`)), 2)}.`);
+  // "Ran <tool>" (an action with no title) never reaches a person as is.
+  const doneWords = (t: string): string => (/^Ran \S+$/.test(t) ? 'Nova carried out a request' : t.replace(/^Created ([^:]+): (.+)$/, (_m, kind: string, title: string) => `created ${kind.replace(/^a /, '')} "${title}"`));
+  if (done.length) points.push(`Done in the call: ${listWords(done.map((i) => doneWords(i.text)), 2)}.`);
   if (input.open.length) points.push(`${input.open.length === 1 ? 'Still waiting for answers' : `${input.open.length} proposals still wait for answers`}: ${listWords(input.open, 2)}.`);
   if (!points.length) points.push('No decisions or next steps were recorded.');
   return { lead, points };

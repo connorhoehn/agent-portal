@@ -281,6 +281,9 @@ describe('who can read them', () => {
     expect(mine.meetings[0]).toMatchObject({ callId: CALL, callName: expect.stringMatching(/^Call with Alice and Bob, /), waitingOnYou: 0, initiativeId: null, lobby: LOBBY, attendees: ['Alice Archer', 'Bob Baker'], decisionCount: 1, actionItemCount: 2 });
     expect(mine.meetings[0]).toMatchObject({ summaryLead: 'Two people met for under a minute.', outcomes: { decisions: 1, actionItems: 2, open: 0 } });
     expect(typeof mine.meetings[0].listenedSeconds).toBe('number');
+    // The people with their portraits (the directory's; null draws initials), in the order of the names.
+    expect(mine.meetings[0].people.map((p: { name: string }) => p.name)).toEqual(['Alice Archer', 'Bob Baker']);
+    expect(mine.meetings[0].people.every((p: { avatarUrl: unknown }) => p.avatarUrl === null || typeof p.avatarUrl === 'string')).toBe(true);
     for (const user of ['carol', 'dave', 'root']) expect((await meetings(user)).body.meetings).toEqual([]);
     expect((await meetings('alice', '?initiative=p-other')).body.meetings).toEqual([]);
     expect((await meetings('alice', `?before=${mine.meetings[0].endedAt}`)).body.meetings).toEqual([]);
