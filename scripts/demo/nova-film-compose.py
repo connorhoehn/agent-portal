@@ -12,11 +12,13 @@ drawtext, so every caption, label and ring is a PNG drawn with Pillow and overla
 scene to <dir>/check/.
 """
 import argparse
+import base64
 import json
 import os
 import shutil
 import subprocess
 import sys
+import wave
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -46,6 +48,7 @@ CROPS = {
     'notfound': (420, 44, 1020, 400),    # the meeting page's not-found message
     'lower': (0, 330, 1440, 570),        # the call card, the deck prompt and the footer
     'meeting': (60, 60, 980, 515),       # the meeting page's content, above the call card
+    'callcard': (96, 572, 848, 144),     # the page's call card: the viewer's own camera tile, the people count and the call controls
 }
 
 # Cells of the picture area per layout (x, y, w, h).
@@ -230,13 +233,52 @@ def encode_shot(tl, out_dir, shot, scene, idx, tmp):
     return out, n_frames
 
 
+def nova_voice(out_dir):
+    """The live take's Nova voice: <out>/nova-audio.jsonl holds each 100 ms frame (24 kHz PCM16, base64) with the wall-clock time
+    Vera's browser received it. Frames run together into one utterance until one says it is the last (or the run or the count
+    breaks); each utterance is written as a WAV and placed at its first frame's arrival, as the browser starts playing it then."""
+    src = os.path.join(out_dir, 'nova-audio.jsonl')
+    if not os.path.exists(src):
+        return []
+    frames = [json.loads(line) for line in open(src) if line.strip()]
+    utterances, cur = [], None
+    for f in frames:
+        if cur and (f['runId'] != cur['runId'] or f['seq'] != cur['seq'] + 1):
+            utterances.append(cur)
+            cur = None
+        if cur is None:
+            cur = {'runId': f['runId'], 'at': f['atMs'], 'rate': f.get('sampleRate') or 24000, 'pcm': bytearray(), 'seq': f['seq']}
+        cur['pcm'] += base64.b64decode(f['pcm'])
+        cur['seq'] = f['seq']
+        if f.get('last'):
+            utterances.append(cur)
+            cur = None
+    if cur:
+        utterances.append(cur)
+    out = []
+    os.makedirs(os.path.join(out_dir, 'audio'), exist_ok=True)
+    for i, u in enumerate(utterances):
+        rel = os.path.join('audio', f'nova-{i + 1:03d}.wav')
+        with wave.open(os.path.join(out_dir, rel), 'wb') as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(u['rate'])
+            w.writeframes(bytes(u['pcm']))
+        out.append({'who': 'nova', 'text': '(Nova, live)', 'file': rel, 'atMs': u['at'], 'durMs': round(len(u['pcm']) / 2 / u['rate'] * 1000), 'heard': False})
+    print(f'  Nova\'s voice: {len(frames)} frames in {len(utterances)} utterances')
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--out', required=True)
     ap.add_argument('--check', action='store_true')
+    ap.add_argument('--final', help='the film file (default <out>/nova-in-the-meeting.mp4)')
     a = ap.parse_args()
     out_dir = os.path.abspath(a.out)
     tl = json.load(open(os.path.join(out_dir, 'timeline.json')))
+    cards = tl.get('cards', {})
+    tl['speech'] = tl['speech'] + nova_voice(out_dir)
     tmp = os.path.join(out_dir, 'parts')
     shutil.rmtree(tmp, ignore_errors=True)
     os.makedirs(tmp)
@@ -244,7 +286,8 @@ def main():
     parts, t = [], 0.0  # film time in seconds, kept in whole frames
     shot_map = []  # (wall from, wall to, film start) for placing speech
     opening = os.path.join(tmp, 'card-open.png')
-    card_png(opening, None, 'Nova in the meeting', 'A meeting assistant that hears everyone in a call, answers when asked, acts only with consent, and leaves minutes behind.', eyebrow='Observability Platform · a call with Vera, Nora and Eli')
+    c = cards.get('open', {})
+    card_png(opening, None, c.get('title', 'Nova in the meeting'), c.get('text', 'A meeting assistant that hears everyone in a call, answers when asked, acts only with consent, and leaves minutes behind.'), eyebrow=c.get('eyebrow', 'Observability Platform · a call with Vera, Nora and Eli'))
     n = frames(OPEN_SECS)
     encode_card(opening, n, os.path.join(tmp, 'card-open.mp4'))
     parts.append(os.path.join(tmp, 'card-open.mp4'))
@@ -272,7 +315,8 @@ def main():
             check_points.append((scene['n'], longest[0] + longest[1] / FPS * 0.7))
         print(f'scene {scene["n"]:2d} {scene["title"]}: ends at {t:6.1f}s', flush=True)
     closing = os.path.join(tmp, 'card-close.png')
-    card_png(closing, None, 'Nova', 'Hears the call, answers in the chat or aloud, asks before it writes, notices what the team agrees, and leaves minutes only the people in the call can read.', eyebrow='Recorded on the mock world: fictional people and data')
+    c = cards.get('close', {})
+    card_png(closing, None, c.get('title', 'Nova'), c.get('text', 'Hears the call, answers in the chat or aloud, asks before it writes, notices what the team agrees, and leaves minutes only the people in the call can read.'), eyebrow=c.get('eyebrow', 'Recorded on the mock world: fictional people and data'))
     n = frames(OPEN_SECS)
     encode_card(closing, n, os.path.join(tmp, 'card-close.mp4'))
     parts.append(os.path.join(tmp, 'card-close.mp4'))
@@ -312,7 +356,7 @@ def main():
     else:
         run(['ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', f'anullsrc=r=48000:cl=stereo', '-t', f'{total:.3f}', '-c:a', 'aac', audio])
 
-    final = os.path.join(out_dir, 'nova-in-the-meeting.mp4')
+    final = os.path.abspath(a.final) if a.final else os.path.join(out_dir, 'nova-in-the-meeting.mp4')
     run(['ffmpeg', '-y', '-v', 'error', '-i', video, '-i', audio, '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-c:a', 'copy',
          '-t', f'{total:.3f}', '-movflags', '+faststart', final])
     size = os.path.getsize(final) / 1e6
