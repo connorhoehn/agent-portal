@@ -1,7 +1,12 @@
 // What sits under a Nova message in the call chat (docs/meeting-assistant-design.md, decisions 5 and 6).
-// The thread draws Nova's message through three slots:
-//   assistant-notice  a system line (`renderSystemMessage`): no avatar, author or bubble
-//   assistant-reply   an ordinary bubble, with "Asked by <name>" under it (`renderMessageReferences`)
+// Every Nova message reads as one voice: the thread marks it (`isAssistantChatMessage` as ChatPanel's `isAssistantMessage`), so its
+// row wears Nova's mark and the accent author ink, its text sits on the accent-tinted surface, and its cards use `Card tone="assistant"`.
+// The thread draws Nova's message through these slots:
+//   assistant-notice  a state notice (paused, resumed, extended, left...) is a system line (`renderSystemMessage`): one compact row
+//                     under Nova's mark in a muted tinted pill. The minutes notice (it carries counts) is a card instead (below).
+//   assistant-minutes the minutes notice as a card (`renderMessageBody`): "Meeting minutes", the summary's first lines, the counts
+//                     of decisions, action items and proposals, and the link to the meeting page.
+//   assistant-reply   the tinted bubble, with "Asked by <name>" under it (`renderMessageReferences`)
 //   assistant-action  a card that stands in for the bubble's text (`renderMessageBody`): detail lines, a status, and Confirm and Decline for the asker only; everyone else
 //                     reads it with "Waiting for <name>". A decision updates the same message (the server edits it),
 //                     so the card changes in place for every reader.
@@ -19,7 +24,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { meetingHref } from '../../pages/meetings/meetingsModel';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import { needsLine, outcomeLine, personChips, resultHref, stateLine, type ProposalState, type ProposalView } from '../../lib/meetingProposals';
-import { actionCardView, askedByLine, namesNoInitiative, decideAssistantAction, readAssistantMessage, type ActionDecision, type AssistantAction, type AssistantProposalCard } from '../../lib/assistantMessages';
+import { actionCardView, askedByLine, minutesCountLabels, namesNoInitiative, decideAssistantAction, readAssistantMessage, type ActionDecision, type AssistantAction, type AssistantProposalCard, type MinutesCounts } from '../../lib/assistantMessages';
 
 export interface AssistantActionCardProps {
   action: AssistantAction;
@@ -50,7 +55,7 @@ export function AssistantActionCard({ action, viewerId, callId, decide = decideA
       .finally(() => setBusy(null));
   };
   return (
-    <Card padding="sm" className="mt-1 max-w-md" data-testid="assistant-action-card" data-status={action.status}>
+    <Card tone="assistant" padding="sm" className="mt-1 max-w-md" data-testid="assistant-action-card" data-status={action.status}>
       <Stack gap="sm">
         <T size="sm" weight="medium" wrap data-testid="assistant-action-summary">{action.summary}</T>
         {action.detail.length > 0 && (
@@ -95,14 +100,18 @@ export function AssistantProposalCardView({ card, statement, callId }: { card: A
   const nova = useMeetingAssistant(callId);
   const view = nova.proposals.find((p) => p.id === card.proposalId) ?? null;
   // The message's state moves with every change; the route's view may lag a poll behind, so the pill follows the message.
-  return <ProposalCard proposalId={card.proposalId} state={card.state} statement={statement} view={view} />;
+  return <ProposalCard proposalId={card.proposalId} state={card.state} statement={statement} view={view} surface="assistant" />;
 }
 
 /**
  * One proposal, read-only: the statement, what it will do, who it needs, a chip per person and how it ended, with a link to what
  * was made once done. The call chat's card and the meeting page's Proposals section draw this same card; answers are given in a deck.
  */
-export function ProposalCard({ proposalId, state, statement, view }: { proposalId: string; state: ProposalState; statement: string; view: ProposalView | null }) {
+export function ProposalCard({ proposalId, state, statement, view, surface = 'default' }: {
+  proposalId: string; state: ProposalState; statement: string; view: ProposalView | null;
+  /** `assistant` in the call chat, where it is one of Nova's messages; the meeting page lists it on the plain surface. */
+  surface?: 'default' | 'assistant';
+}) {
   const navigate = useNavigate();
   const initiativeName = useInitiativeName(view?.outcome.kind === 'decision' ? view.outcome.initiativeId : null);
   const [label, tone] = PROPOSAL_PILL[state];
@@ -111,7 +120,7 @@ export function ProposalCard({ proposalId, state, statement, view }: { proposalI
   const closing = live ? stateLine(live) : null;
   const href = live ? resultHref(live) : null;
   return (
-    <Card padding="sm" className="mt-1 max-w-md" data-testid="assistant-proposal-card" data-proposal-id={proposalId} data-state={state}>
+    <Card tone={surface} padding="sm" className="mt-1 max-w-md" data-testid="assistant-proposal-card" data-proposal-id={proposalId} data-state={state}>
       <Stack gap="sm">
         <Inline gap="sm" align="center" wrap>
           <T size="xs" weight="medium" tone="secondary">Proposal</T>
@@ -155,33 +164,62 @@ export function AssistantMessageExtras({ metadata }: Pick<AssistantMessageExtras
 }
 
 /**
- * A closing notice names its meeting in the message's metadata, never in its text: the link under the sentence is built
+ * "Open the meeting page". A closing notice names its meeting in the message's metadata, never in its text: the link is built
  * from that field (the portal's own meeting path), so nothing in the chat becomes a link because of what a message says.
  */
-function NoticeLine({ content, callId }: { content: string; callId: string | undefined }) {
+function MeetingLink({ callId }: { callId: string }) {
   const navigate = useNavigate();
-  const href = callId ? meetingHref(callId) : null;
+  const href = meetingHref(callId);
   return (
-    <Stack gap="xs">
-      <T size="xs" tone="secondary" wrap data-testid="assistant-notice-line">{content}</T>
-      {href && (
-        <Link href={href} data-testid="assistant-notice-meeting-link" onClick={(e) => { if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); navigate(href); } }}>
-          Open the meeting page
-        </Link>
-      )}
-    </Stack>
+    <Link href={href} data-testid="assistant-notice-meeting-link" onClick={(e) => { if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); navigate(href); } }}>
+      Open the meeting page
+    </Link>
   );
 }
 
-/** A Nova notice as a system line (the message's own sentence, and the meeting link when it carries one); null for any other message, so the thread draws it as usual. */
-export function assistantSystemLine(message: { content: string; metadata?: Record<string, unknown> }): ReactNode | null {
-  const read = readAssistantMessage(message.metadata);
-  return read?.kind === 'assistant-notice' ? <NoticeLine content={message.content} callId={read.meetingCallId} /> : null;
+/** A state notice's line inside the thread's tinted pill, with the meeting link when it carries one. */
+function NoticeLine({ content, callId }: { content: string; callId: string | undefined }) {
+  return (
+    <Inline gap="sm" align="center" wrap>
+      <T size="xs" tone="secondary" wrap data-testid="assistant-notice-line">{content}</T>
+      {callId && <MeetingLink callId={callId} />}
+    </Inline>
+  );
 }
 
-/** The action or proposal card standing in for the bubble's text; null for any other message. */
+/**
+ * The minutes notice as a card: the title, the summary's first lines (the message's text, clamped to three lines with an
+ * ellipsis), the counts the server attached, and the link to the meeting page. The counts name decisions consented through
+ * the call's proposals too.
+ */
+export function MinutesCard({ summary, counts, callId }: { summary: string; counts: MinutesCounts; callId: string | undefined }) {
+  const labels = minutesCountLabels(counts);
+  return (
+    <Card tone="assistant" padding="sm" className="mt-1 max-w-md" data-testid="assistant-minutes-card">
+      <Stack gap="sm">
+        <T size="sm" weight="semibold" data-testid="assistant-minutes-title">Meeting minutes</T>
+        {summary && <T size="sm" tone="secondary" clamp={3} data-testid="assistant-minutes-summary">{summary}</T>}
+        <Inline gap="xs" align="center" wrap data-testid="assistant-minutes-counts">
+          <Chip size="xs" tone="neutral" data-testid="assistant-minutes-decisions">{labels.decisions}</Chip>
+          <Chip size="xs" tone="neutral" data-testid="assistant-minutes-action-items">{labels.actionItems}</Chip>
+          <Chip size="xs" tone="neutral" data-testid="assistant-minutes-proposals">{labels.proposals}</Chip>
+        </Inline>
+        {callId && <MeetingLink callId={callId} />}
+      </Stack>
+    </Card>
+  );
+}
+
+/** A Nova state notice as a system line; null for any other message (and for the minutes notice, which is a card), so the thread draws it as usual. */
+export function assistantSystemLine(message: { content: string; metadata?: Record<string, unknown> }): ReactNode | null {
+  const read = readAssistantMessage(message.metadata);
+  return read?.kind === 'assistant-notice' && !read.minutes ? <NoticeLine content={message.content} callId={read.meetingCallId} /> : null;
+}
+
+/** The action, proposal or minutes card standing in for the bubble's text; null for any other message. */
 export function assistantBody(message: { content?: string; metadata?: Record<string, unknown> }, viewerId: string | null, callId: string | null, decide?: typeof decideAssistantAction): ReactNode | null {
   const read = readAssistantMessage(message.metadata);
+  if (read?.kind === 'assistant-notice' && read.minutes) return <MinutesCard summary={message.content ?? ''} counts={read.minutes} callId={read.meetingCallId} />;
   if (read?.kind === 'assistant-proposal') return <AssistantProposalCardView card={read} statement={message.content ?? ''} callId={callId} />;
   return read?.kind === 'assistant-action' ? <AssistantActionCard action={read} viewerId={viewerId} callId={callId} decide={decide} /> : null;
 }

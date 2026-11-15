@@ -182,6 +182,8 @@ export interface ConversationThreadProps {
   renderSystemMessage?: WrappedChatPanelProps['renderSystemMessage'];
   /** A host-drawn body that stands in for a message's text (Nova's action card). */
   renderMessageBody?: WrappedChatPanelProps['renderMessageBody'];
+  /** The messages an assistant wrote (Nova's): their rows take the assistant look. */
+  isAssistantMessage?: WrappedChatPanelProps['isAssistantMessage'];
   /** Who else is composing; default the chat's. */
   typingUsers?: string[];
   /** Fill the parent's height (default); false lays the thread out inline. */
@@ -204,7 +206,7 @@ export interface ConversationThreadProps {
   'data-testid'?: string;
 }
 
-export function ConversationThread({ conversation, title, readOnlyReason = null, pins, attachments = false, includeFiles = true, reactions = false, editable = true, renderMessageReferences, renderSystemMessage, renderMessageBody, typingUsers, fill = true, input = 'own', composer, placeholder, notices = false, emptyState, dock, transformMessages, postRhythm, 'data-testid': testId }: ConversationThreadProps) {
+export function ConversationThread({ conversation, title, readOnlyReason = null, pins, attachments = false, includeFiles = true, reactions = false, editable = true, renderMessageReferences, renderSystemMessage, renderMessageBody, isAssistantMessage, typingUsers, fill = true, input = 'own', composer, placeholder, notices = false, emptyState, dock, transformMessages, postRhythm, 'data-testid': testId }: ConversationThreadProps) {
   const { channel, chat: originalChat, receipts, quote, connected, readState, maySend, userId, displayName, summarize } = conversation;
   const navigate = useNavigate();
   const messages = useMessagePortraits(originalChat.messages);
@@ -274,7 +276,7 @@ export function ConversationThread({ conversation, title, readOnlyReason = null,
       {...(fill ? { fill: true } : {})} showHeader={false} contentAlign={input === 'below' || elsewhere ? 'start' : 'end'} {...(summarize.localMessages.length ? { localMessages: summarize.localMessages } : {})}
       threaded {...(postRhythm ? { postRhythm } : {})} {...(unreadFrom ? { unreadFrom } : {})} readReceipts={receipts.receipts} readReceiptsEnabled={receipts.enabled} disabled={!connected}
       onReply={input === 'below' ? undefined : elsewhere ? (elsewhere.replies ? message => { quote.start(message); owner.focus(true); } : undefined) : quote.start}
-      {...(renderMessageReferences ? { renderMessageReferences } : {})} {...(renderSystemMessage ? { renderSystemMessage } : {})} {...(renderMessageBody ? { renderMessageBody } : {})} typingUsers={typingUsers ?? chat.typingUsers}
+      {...(renderMessageReferences ? { renderMessageReferences } : {})} {...(renderSystemMessage ? { renderSystemMessage } : {})} {...(renderMessageBody ? { renderMessageBody } : {})} {...(isAssistantMessage ? { isAssistantMessage } : {})} typingUsers={typingUsers ?? chat.typingUsers}
       flushComposer={input !== 'below' && !elsewhere} composer={field}
       {...(dock ? { dock } : {})} {...(transformMessages ? { transformMessages } : {})} />
   );

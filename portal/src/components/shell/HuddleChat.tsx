@@ -20,6 +20,7 @@ import { useGatewayOptional, type useReactions } from '@connorhoehn/realtime-mod
 import { composerDraftOf, useComposerFocus, useComposerFocusReveal, useThreadInput, type MentionCandidate, type RichChatComposerHandle, type RichChatDraft } from '@connorhoehn/ui-components/social/rich-composer';
 import { PageReferenceCard } from '../chat/PageReferenceCard';
 import { AssistantMessageExtras, assistantBody, assistantSystemLine } from '../chat/AssistantMessageExtras';
+import { isAssistantChatMessage } from '../../lib/assistantMessages';
 import { ConversationThread, useConversation, type ConversationRuntime } from '../chat/ConversationThread';
 import { ChatSidePanelFrame, ReactionOverlay, ReactionPicker, SidePaneSplit, useSidePaneHost } from '@connorhoehn/ui-components';
 import { AtIcon, Button, DocumentAddIcon, FloatingPanel, IconButton, Inline, InlineAlert, InlinePopover, Stack, T } from '@connorhoehn/ui-components/shared';
@@ -544,7 +545,7 @@ export function HuddleChatBody({ showCall = true }: { showCall?: boolean } = {})
       // A room's chat is gateway-only: pins and files (REST on the call's channel) stay with the main huddle.
       reactions={!chat.unavailableReason} {...(inRoom ? {} : { pins: { canPin: !chat.unavailableReason } })} attachments={!chat.unavailableReason && !inRoom}
       readOnlyReason={chat.unavailableReason} placeholder={announcing ? 'Announce to every room…' : 'Message this huddle…'} typingUsers={runtime.conversation.chat.typingUsers}
-      renderSystemMessage={assistantSystemLine} renderMessageBody={assistantCard}
+      renderSystemMessage={assistantSystemLine} renderMessageBody={assistantCard} isAssistantMessage={isAssistantChatMessage}
       renderMessageReferences={meetingChat ? (message => meetingChat.renderMessageReferences(message) ?? references(message)) : references}
       {...(meetingChat ? { transformMessages: meetingChat.withAnnouncements, ...(meetingChat.dock ? { dock: meetingChat.dock } : {}) } : {})}
       composer={{

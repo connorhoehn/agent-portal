@@ -80,3 +80,16 @@ test('the card names the call initiative only for a new work item that names non
   assert.equal(namesNoInitiative({ tool, detail: ['kind: initiative', 'name: Atlas'] }), false);
   assert.equal(namesNoInitiative({ tool: { name: 'update', argsDigest: '' }, detail: ['kind: work-item'] }), false);
 });
+
+test('a minutes notice carries well-formed counts only, and every Nova message is told apart from a person\'s', async () => {
+  const { readAssistantMessage, isAssistantChatMessage, minutesCountLabels } = await import('../assistantMessages.ts');
+  const minutes = { decisions: 2, actionItems: 1, proposals: 0 };
+  assert.deepEqual(readAssistantMessage({ assistant: true, kind: 'assistant-notice', meetingCallId: 'c-1', minutes }), { kind: 'assistant-notice', meetingCallId: 'c-1', minutes });
+  assert.deepEqual(readAssistantMessage({ assistant: true, kind: 'assistant-notice', minutes: { decisions: -1, actionItems: 1, proposals: 0 } }), { kind: 'assistant-notice' });
+  assert.deepEqual(readAssistantMessage({ assistant: true, kind: 'assistant-notice', minutes: { decisions: 1.5, actionItems: 1 } }), { kind: 'assistant-notice' });
+  assert.deepEqual(minutesCountLabels(minutes), { decisions: '2 decisions', actionItems: '1 action item', proposals: '0 proposals' });
+  assert.equal(isAssistantChatMessage({ metadata: { assistant: true, kind: 'assistant-reply', askedBy: 'u-1', askedByName: 'Vera' } }), true);
+  assert.equal(isAssistantChatMessage({ metadata: { assistant: true, kind: 'assistant-notice' } }), true);
+  assert.equal(isAssistantChatMessage({ metadata: { kind: 'assistant-reply' } }), false);
+  assert.equal(isAssistantChatMessage({}), false);
+});

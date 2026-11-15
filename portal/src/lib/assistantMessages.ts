@@ -11,7 +11,15 @@ import { PROPOSAL_STATES, type ProposalState } from './meetingProposals.ts';
 export type AssistantActionStatus = 'waiting' | 'confirmed' | 'declined' | 'expired' | 'done' | 'failed';
 const STATUSES: readonly AssistantActionStatus[] = ['waiting', 'confirmed', 'declined', 'expired', 'done', 'failed'];
 
-export interface AssistantNotice { kind: 'assistant-notice'; /** The meeting this notice closes; the chat links to its page. */ meetingCallId?: string }
+/** What a minutes notice counts; `decisions` includes those consented through the call's proposals (the server counts them). */
+export interface MinutesCounts { decisions: number; actionItems: number; proposals: number }
+export interface AssistantNotice {
+  kind: 'assistant-notice';
+  /** The meeting this notice closes; the chat links to its page. */
+  meetingCallId?: string;
+  /** Only on the minutes notice: its text is the summary's first sentences, and the chat draws it as a card with these counts. */
+  minutes?: MinutesCounts;
+}
 export interface AssistantReply { kind: 'assistant-reply'; askedBy: string; askedByName: string }
 export interface AssistantAction {
   kind: 'assistant-action';
@@ -29,11 +37,22 @@ export interface AssistantProposalCard { kind: 'assistant-proposal'; proposalId:
 export type AssistantMessage = AssistantNotice | AssistantReply | AssistantAction | AssistantProposalCard;
 
 const text = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
+const count = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
+
+function readCounts(v: unknown): MinutesCounts | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const c = v as Record<string, unknown>;
+  return count(c['decisions']) && count(c['actionItems']) && count(c['proposals'])
+    ? { decisions: c['decisions'], actionItems: c['actionItems'], proposals: c['proposals'] } : null;
+}
 
 /** The assistant message a chat message's metadata describes, or null for anything else. */
 export function readAssistantMessage(metadata: Record<string, unknown> | undefined): AssistantMessage | null {
   if (!metadata || metadata['assistant'] !== true) return null;
-  if (metadata['kind'] === 'assistant-notice') return { kind: 'assistant-notice', ...(text(metadata['meetingCallId']) ? { meetingCallId: metadata['meetingCallId'] } : {}) };
+  if (metadata['kind'] === 'assistant-notice') {
+    const minutes = readCounts(metadata['minutes']);
+    return { kind: 'assistant-notice', ...(text(metadata['meetingCallId']) ? { meetingCallId: metadata['meetingCallId'] } : {}), ...(minutes ? { minutes } : {}) };
+  }
   if (metadata['kind'] === 'assistant-reply') {
     return text(metadata['askedBy']) && text(metadata['askedByName'])
       ? { kind: 'assistant-reply', askedBy: metadata['askedBy'], askedByName: metadata['askedByName'] } : null;
@@ -55,6 +74,15 @@ export function readAssistantMessage(metadata: Record<string, unknown> | undefin
       ? { kind: 'assistant-proposal', proposalId: metadata['proposalId'], state: metadata['state'] as ProposalState } : null;
   }
   return null;
+}
+
+/** Is this chat message Nova's? The same gate as the cards: well-formed assistant metadata, which only Nova's stored messages carry. */
+export const isAssistantChatMessage = (message: { metadata?: Record<string, unknown> }): boolean => readAssistantMessage(message.metadata) !== null;
+
+/** The minutes card's counts, each as its own short label: "2 decisions", "1 action item", "0 proposals". */
+export function minutesCountLabels(counts: MinutesCounts): { decisions: string; actionItems: string; proposals: string } {
+  const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
+  return { decisions: n(counts.decisions, 'decision', 'decisions'), actionItems: n(counts.actionItems, 'action item', 'action items'), proposals: n(counts.proposals, 'proposal', 'proposals') };
 }
 
 /** The line under a reply: who asked. */
