@@ -22,7 +22,7 @@ import { MockTranscriptSource } from '../transcript-source.js';
 import { AssistantRuntime, classifyCall, setAssistantRuntime } from '../orchestrator.js';
 import { respondToProposal } from '../proposals.js';
 import { forgetProposalNotices } from '../proposal-notify.js';
-import { PERSON_ARGUMENTS, peopleSaid, resolvePeople } from '../named-people.js';
+import { consentStatus, PERSON_ARGUMENTS, peopleSaid, resolvePeople, updateStatement } from '../named-people.js';
 import { meetingTools } from '../instructions.js';
 import { ScriptedSession } from '../scripted-session.js';
 import { setAssistantStore } from '../store-select.js';
@@ -187,5 +187,18 @@ describe('which arguments name a person', () => {
     expect(await resolvePeople([{ said: 'bob', role: 'owner' }, { said: ALICE, role: 'participant' }, { said: 'Dana Reyes', role: 'participant' }], ALICE, roster, dir))
       .toEqual({ ok: true, others: [{ userId: BOB, name: 'Bob Ito', role: 'owner' }, { userId: DANA, name: 'Dana Reyes', role: 'participant' }] });
     expect(await resolvePeople([{ said: 'Zed', role: 'owner' }], ALICE, roster, dir)).toEqual({ ok: false, why: 'unknown person' });
+  });
+});
+
+describe('the words of an asked write', () => {
+  it('an update says what changes and never shows a typed record reference', () => {
+    expect(updateStatement({ ref: 'work-item:wi-12', fields: { assignee: 'Bob' } })).toBe('Reassign a work item');
+    expect(updateStatement({ ref: 'Cutover runbook', fields: { status: 'done', dueDate: 'x' } })).toBe('Change status, due date on the record "Cutover runbook"');
+    expect(updateStatement({ ref: 'work-item:wi-12', fields: {} })).toBe('Update a work item');
+    expect(updateStatement({})).toBe('Update a record');
+  });
+  it('Nova tells the asker their own consent is needed too, and where to answer', () => {
+    expect(consentStatus(['Priya'])).toBe("This needs your consent and Priya's. Answer in the prompt above the call controls.");
+    expect(consentStatus(['Priya', 'Sam'])).toBe("This needs your consent, Priya's and Sam's. Answer in the prompt above the call controls.");
   });
 });
