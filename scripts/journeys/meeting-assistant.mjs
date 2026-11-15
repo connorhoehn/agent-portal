@@ -1303,7 +1303,10 @@ async function main() {
       return `entries ${JSON.stringify(ids)}`;
     });
 
+    // People's own messages in the call chat before the delete, so 17b can check the delete left them alone.
+    let peopleBeforeDelete = null;
     await step('17: only the inviter sees Delete; deleting (after the confirm step) tells the people who were there it was deleted, makes the transcript 404, and leaves the outsider a plain 404', async () => {
+      peopleBeforeDelete = (await chatMessages(vera)).filter((m) => m.userId !== 'agent:nova' && m.metadata?.assistant !== true).map((m) => m.id);
       await noraM.page.goto(MEETING(), { waitUntil: 'domcontentloaded', timeout: 40000 });
       await seen(noraM.page, 'meeting-page', 30000);
       check(await noraM.page.getByTestId('meeting-delete').count() === 0, 'a person who did not invite Nova is offered Delete');
@@ -1338,7 +1341,8 @@ async function main() {
       check(nova.length === 1, `Nova has ${nova.length} messages in the chat after the delete: ${JSON.stringify(nova.map((m) => m.message)).slice(0, 300)}`);
       check(nova[0].message === 'This record was deleted by the person who invited Nova.', `Nova's line reads "${nova[0].message}"`);
       check(!['assistant-action', 'assistant-proposal'].includes(nova[0].metadata?.kind) && nova[0].metadata?.askedBy === undefined, `the line is still a card: ${JSON.stringify(nova[0].metadata)}`);
-      check(all.some((m) => m.userId !== 'agent:nova' && m.metadata?.assistant !== true), 'people\'s messages are gone from the chat');
+      const peopleAfter = all.filter((m) => m.userId !== 'agent:nova' && m.metadata?.assistant !== true).map((m) => m.id);
+      check(peopleBeforeDelete !== null && JSON.stringify(peopleAfter) === JSON.stringify(peopleBeforeDelete), `people's messages changed with the delete: ${JSON.stringify(peopleBeforeDelete)} before, ${JSON.stringify(peopleAfter)} after`);
       const blob = JSON.stringify(nova);
       for (const word of ['login cookie bug', 'two tab audit', 'expiry audit', 'nightly export', 'meetingCallId']) check(!blob.toLowerCase().includes(word.toLowerCase()), `"${word}" is still in Nova's messages`);
       await sleep(3500); // the page's own refresh
@@ -1346,7 +1350,7 @@ async function main() {
       const shownLines = await vera.page.getByText('This record was deleted by the person who invited Nova.', { exact: true }).count();
       check(shownLines === 1, `the open chat shows the deleted line ${shownLines} times`);
       check(await vera.page.getByTestId('assistant-action-card').count() === 0 && await vera.page.getByTestId('assistant-proposal-card').count() === 0, 'the open chat still draws Nova\'s cards');
-      return `one line "${nova[0].message}", shown once; ${all.length - 1} other messages kept`;
+      return `one line "${nova[0].message}", shown once; ${peopleAfter.length} people's messages kept`;
     });
     // ── 18. Both people leave; the footer renders on; no page error in the whole walk ──
     await step('18: both people leave the call: the footer still renders with the call gone, and no page error happened in the whole walk', async () => {
