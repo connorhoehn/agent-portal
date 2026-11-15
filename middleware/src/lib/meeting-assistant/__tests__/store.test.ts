@@ -396,6 +396,23 @@ describe('inviting Nova back (rejoin) and adding to the minutes', () => {
     expect((await s.appendMinutes('call-1', null, addition()))!.throughSeq).toBe(7);
   });
 
+  it('a delete and an invitation back, in either order: the erased record is never joined again, and a record Nova is back in is not erased', async () => {
+    // The delete first: the invitation back finds the tombstone in its own step and moves nothing.
+    const a = new MemoryAssistantStore(); await a.create(left()); await a.putMinutes(minutes());
+    expect(await a.tombstoneMinutes('call-1', 'u-vera', 30_000)).toBe(0);
+    expect(sessionOf((await a.get('call-1'))!).erasedAt).toBe(30_000);
+    expect(await a.rejoin('call-1', change())).toBeNull();
+    expect((await a.get('call-1'))!.state).toBe('left');
+    // The invitation back first: the erase finds Nova in the call and touches nothing (lines, minutes, record).
+    const b = new MemoryAssistantStore(); await b.create(left()); await b.putMinutes(minutes());
+    expect(await b.rejoin('call-1', change())).not.toBeNull();
+    await b.appendLine(line());
+    expect(await b.tombstoneMinutes('call-1', 'u-vera', 30_000)).toBeNull();
+    expect((await b.getMinutes('call-1'))!.deleted).toBeUndefined();
+    expect(await b.lines('call-1', 0, 10)).toHaveLength(1);
+    expect(sessionOf((await b.get('call-1'))!).erasedAt).toBeUndefined();
+  });
+
   it('a deleted record takes no addition', async () => {
     const s = new MemoryAssistantStore(); await s.create(left()); await s.putMinutes(minutes());
     await s.tombstoneMinutes('call-1', 'u-vera', 30_000);
@@ -422,6 +439,25 @@ describe('inviting Nova back (rejoin) and adding to the minutes', () => {
       expect(JSON.parse((param('session') as { stringValue: string }).stringValue)).toMatchObject({ ledgerPart: 1 });
       rows = [{ call_id: 'call-1', tenant: 'orgiq', lobby: 'l', state: 'listening', invited_by: 'u-raj', invited_at: '2026-11-13 10:00:00', session: '{"periods":[{"invitedBy":"u-vera","from":1,"leftAt":2,"leftBy":null}]}' }];
       expect(sessionOf((await store().rejoin('call-1', change()))!).periods).toHaveLength(1);
+    });
+
+    it('rejoin refuses an erased record in the same statement: the mark on the row and the minutes tombstone', async () => {
+      await store().rejoin('call-1', change());
+      const sql = norm(calls[0]!.sql);
+      expect(sql).toContain("WHERE call_id = :call AND state = 'left' AND left_at = :left::timestamptz AND (session->>'erasedAt') IS NULL AND NOT EXISTS (SELECT 1 FROM meeting_minutes m WHERE m.call_id = :call AND m.deleted_at IS NOT NULL)");
+    });
+
+    it('the erase locks the record and touches nothing while Nova is back in the call; it marks the record erased in the same statement', async () => {
+      rows = [{ removed: 3, go: false }];
+      expect(await store().tombstoneMinutes('call-1', 'u-vera', 30_000)).toBeNull();
+      const sql = norm(calls[0]!.sql);
+      expect(sql).toContain('WITH rec AS (SELECT state FROM meeting_assistants WHERE call_id = :call FOR UPDATE)');
+      expect(sql).toContain("ok AS (SELECT NOT EXISTS (SELECT 1 FROM rec WHERE state IN ('listening', 'paused')) AS go)");
+      expect(sql.match(/WHERE call_id = :call AND \(SELECT go FROM ok\)/g)).toHaveLength(6);   // the lines, the record, turns, actions, proposals, the tombstone
+      expect(sql).toContain("session = session || jsonb_build_object('erasedAt', :erasedAt::bigint)");
+      expect(param('erasedAt')).toEqual({ longValue: 30_000 });
+      rows = [{ removed: 3, go: true }];
+      expect(await store().tombstoneMinutes('call-1', 'u-vera', 30_000)).toBe(3);
     });
 
     it('a session patch for a period is one conditional update on the number of earlier periods; without one it is unconditional', async () => {

@@ -52,7 +52,7 @@ export async function sweepTranscripts(store: AssistantStore, nowMs: number = Da
     try {
       // The stored words (lines, requests, tool arguments, result text) go first and for certain; only then the chat step, which may be down.
       // A call whose chat step fails keeps its record, emptied, and the next sweep tries the chat again.
-      await store.tombstoneMinutes(call.callId, 'system', nowMs);
+      if ((await store.tombstoneMinutes(call.callId, 'system', nowMs)) === null) continue; // Nova was invited back meanwhile: not expired
       await eraseChat(call.callId);
       await store.purgeCall(call.callId);
     } catch (e) { console.warn('[meeting-assistant] retention could not remove a call', (e as Error).message); }

@@ -161,7 +161,8 @@ export class SqlAssistantStore implements AssistantStore {
          attendees = attendees || COALESCE((SELECT jsonb_agg(to_jsonb(p.u)) FROM jsonb_array_elements_text(:present::jsonb) AS p(u)
                                             WHERE NOT (meeting_assistants.attendees @> to_jsonb(p.u))), '[]'::jsonb),
          voice = false, session = session || :session::jsonb, updated_at = now()
-       WHERE call_id = :call AND state = 'left' AND left_at = :left::timestamptz
+       WHERE call_id = :call AND state = 'left' AND left_at = :left::timestamptz AND (session->>'erasedAt') IS NULL
+         AND NOT EXISTS (SELECT 1 FROM meeting_minutes m WHERE m.call_id = :call AND m.deleted_at IS NOT NULL)
        RETURNING ${COLUMNS}`,
       [s('call', callId), s('by', change.by), s('present', JSON.stringify([...new Set(change.present)])), s('session', JSON.stringify(change.session)), s('left', iso(change.leftAt))],
     );
@@ -441,23 +442,31 @@ export class SqlAssistantStore implements AssistantStore {
     // One statement, so it is all or nothing and safe to repeat: the lines go, the minutes row is written or blanked as a tombstone, and the
     // other tables that hold words are blanked in the same step (audit M2): the record's pending requests, each turn's tool arguments and
     // each action's result text; the proposals (statements, reasons, arguments) are deleted. Open turns and cards are expired in the same step, so a late result is refused. A call with no assistant record has nothing to hold the tombstone row.
+    // The record's row is locked first and read as it is after any invitation back that committed meanwhile: while Nova is in the call
+    // again nothing is touched (go is false). The record is marked erased in the same step, so an invitation back waiting on the lock
+    // finds the mark when it re-reads the row and does not move it.
     const rows = await this.exec(
-      `WITH gone AS (DELETE FROM meeting_transcript_lines WHERE call_id = :call RETURNING 1),
-            requests AS (UPDATE meeting_assistants SET pending_requests = '[]'::jsonb WHERE call_id = :call RETURNING 1),
-            turns AS (UPDATE meeting_assistant_turns SET tool_args = to_jsonb(:removed::text), status = CASE WHEN status IN ('pending', 'running') THEN 'expired' ELSE status END WHERE call_id = :call RETURNING 1),
+      `WITH rec AS (SELECT state FROM meeting_assistants WHERE call_id = :call FOR UPDATE),
+            ok AS (SELECT NOT EXISTS (SELECT 1 FROM rec WHERE state IN ('listening', 'paused')) AS go),
+            gone AS (DELETE FROM meeting_transcript_lines WHERE call_id = :call AND (SELECT go FROM ok) RETURNING 1),
+            requests AS (UPDATE meeting_assistants SET pending_requests = '[]'::jsonb, session = session || jsonb_build_object('erasedAt', :erasedAt::bigint)
+                           WHERE call_id = :call AND (SELECT go FROM ok) RETURNING 1),
+            turns AS (UPDATE meeting_assistant_turns SET tool_args = to_jsonb(:removed::text), status = CASE WHEN status IN ('pending', 'running') THEN 'expired' ELSE status END WHERE call_id = :call AND (SELECT go FROM ok) RETURNING 1),
             actions AS (UPDATE meeting_assistant_actions SET args_digest = '', result_text = CASE WHEN result_text IS NULL THEN NULL ELSE :removed END,
-                          status = CASE WHEN status IN ('waiting', 'confirmed') THEN 'expired' ELSE status END WHERE call_id = :call RETURNING 1),
-            proposals AS (DELETE FROM meeting_assistant_proposals WHERE call_id = :call RETURNING 1),
+                          status = CASE WHEN status IN ('waiting', 'confirmed') THEN 'expired' ELSE status END WHERE call_id = :call AND (SELECT go FROM ok) RETURNING 1),
+            proposals AS (DELETE FROM meeting_assistant_proposals WHERE call_id = :call AND (SELECT go FROM ok) RETURNING 1),
             marked AS (
               INSERT INTO meeting_minutes (call_id, tenant, lobby, initiative_id, started_at, ended_at, invited_by, writer, created_at, deleted_at, deleted_by)
               SELECT call_id, tenant, lobby, initiative_id, invited_at, COALESCE(left_at, invited_at), invited_by, 'none', :at::timestamptz, :at::timestamptz, :by
-              FROM meeting_assistants WHERE call_id = :call
+              FROM meeting_assistants WHERE call_id = :call AND (SELECT go FROM ok)
               ON CONFLICT (call_id) DO UPDATE SET call_name = '', attendees = '[]'::jsonb, summary = '', decisions = '[]'::jsonb, action_items = '[]'::jsonb, topics = '[]'::jsonb,
                 line_count = 0, truncated = false, writer = 'none', retryable = false, addition_owed = false, deleted_at = :at::timestamptz, deleted_by = :by
               RETURNING 1)
-       SELECT (SELECT count(*) FROM gone) AS removed`,
-      [s('call', callId), s('at', iso(at)), s('by', by), s('removed', REMOVED_BY_INVITER)],
+       SELECT (SELECT count(*) FROM gone) AS removed, (SELECT go FROM ok) AS go`,
+      [s('call', callId), s('at', iso(at)), s('by', by), s('removed', REMOVED_BY_INVITER), n('erasedAt', at)],
     );
+    const go = rows[0]?.['go'];
+    if (go === false || go === 'f' || go === 'false') return null;
     return Number(rows[0]?.['removed'] ?? 0);
   }
 

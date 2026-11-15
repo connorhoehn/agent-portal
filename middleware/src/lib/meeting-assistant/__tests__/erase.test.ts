@@ -68,6 +68,7 @@ describe('the inviter delete (memory store)', () => {
     await live.appendLine({ callId: CALL, userId: 'u-vera', participantId: 'p', speakerName: 'Vera', text: `Let us talk about the ${WORDS[0]}`, at: 100, captionId: 'c1' });
     expect(JSON.stringify(await live.lines(CALL, 0, 10))).toContain(WORDS[0]);
     expect(await everything()).toEqual(expect.stringContaining(WORDS[3]));
+    await live.transition(CALL, { from: ['listening'], to: 'left', by: 'u-vera', at: 9000 });   // the delete comes after Nova left
     await eraseCall(live, CALL, 'u-vera', 9500);
     expect(await live.lines(CALL, 0, 10)).toEqual([]);
 
@@ -136,6 +137,17 @@ describe('the inviter delete (memory store)', () => {
     expect((await store.getAction(CALL, 'a2'))!.status).toBe('expired');
     expect((await store.getAction(CALL, 'a1'))!.status).toBe('done');
     expect(await store.moveTurn(CALL, 't3', { from: ['pending'], to: 'running' })).toBeNull();
+  });
+
+  it('erases nothing while Nova is back in the call (invited back after the delete looked): not the record, the minutes or the chat', async () => {
+    const before = await everything();
+    await store.rejoin(CALL, { leftAt: 9000, by: 'u-nora', at: 9400, present: ['u-nora'], session: { periods: [{ invitedBy: 'u-vera', from: 1000, leftAt: 9000, leftBy: 'u-vera' }] } });
+    const back = await everything();
+    expect(await eraseCall(store, CALL, 'u-vera', 9500)).toBeNull();
+    expect(await everything()).toEqual(back);
+    expect(updates).toEqual([]);
+    for (const w of WORDS.slice(1, 4)) expect(before).toContain(w);
+    expect((await store.getMinutes(CALL))!.deleted).toBeUndefined();
   });
 
   it('is safe to repeat: a second erase changes no chat message and keeps the tombstone', async () => {

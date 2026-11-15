@@ -31,7 +31,7 @@ import { ScriptedSession } from '../../lib/meeting-assistant/scripted-session.js
 import { settleFinished, setAssistantSpend, realSpend } from '../../lib/meeting-assistant/spend.js';
 import { setSessionFactory } from '../../lib/meeting-assistant/session-select.js';
 import { sessionOf } from '../../lib/meeting-assistant/types.js';
-import { coverageOf, REJOIN_DELETED, REJOIN_LIMIT, REJOIN_STILL_LEAVING, setRejoinWaitMs } from '../meeting-assistant.js';
+import { coverageOf, DELETE_WHILE_BACK, REJOIN_DELETED, REJOIN_LIMIT, REJOIN_STILL_LEAVING, setRejoinWaitMs } from '../meeting-assistant.js';
 import { settleFromRecord } from '../../lib/meeting-assistant/reconcile.js';
 import { newAssistantSession } from '../../lib/meeting-assistant/types.js';
 import { userBudgets } from '../../mock/user-budgets.js';
@@ -342,6 +342,44 @@ describe('inviting Nova back while its earlier period is still stopping', () => 
     expect(await runtime.settled(CALL, 20)).toBe(false);
     open(); await stopping;
     expect(await runtime.settled(CALL, 20)).toBe(true);
+  });
+});
+
+describe('a delete racing an invitation back', () => {
+  it('the delete first: the invitation back in flight gives its hold back, starts nothing and says the record was deleted', async () => {
+    budget('alice'); budget('bob');
+    await post('invite', 'alice'); clock += 60_000; await post('dismiss', 'alice'); await flush();
+    let open!: () => void; const gate = new Promise<void>((r) => { open = r; });
+    setAssistantSpend({ ...realSpend, reserve: async (i) => { await gate; return realSpend.reserve(i); } });
+    const back = post('invite', 'bob').then((r) => r);
+    await flush();
+    expect((await del('transcript', 'alice')).status).toBe(200);           // the record was still left: it is erased
+    open();
+    const refused = await back;
+    setAssistantSpend(null);
+    expect([refused.status, refused.body.error]).toEqual([409, REJOIN_DELETED]);
+    expect((await record()).state).toBe('left');
+    expect(holds().map((h) => [h.sourceId, h.status])).toEqual([['ma:call-1', 'settled'], ['ma:call-1:x1', 'released']]);
+    expect(runtime.isRunning(CALL)).toBe(false);
+    expect(assistantIntake().isListening(CALL)).toBe(false);
+    expect(entries().map((e) => e.sourceId)).toEqual(['ma:call-1']);
+  });
+
+  it('the invitation back first (between the delete\'s check and its erase): nothing is erased and the delete says Nova is back', async () => {
+    budget('alice'); budget('bob');
+    await post('invite', 'alice'); clock += 60_000; await post('dismiss', 'alice'); await flush();
+    const store = assistantStore() as MemoryAssistantStore;
+    const getMinutes = store.getMinutes.bind(store); let armed = true;
+    // The delete reads the record (left), then its minutes: at that moment someone invites Nova back.
+    store.getMinutes = async (id: string) => { if (armed) { armed = false; expect((await post('invite', 'bob')).status).toBe(200); } return getMinutes(id); };
+    const refused = await del('transcript', 'alice');
+    store.getMinutes = getMinutes;
+    expect([refused.status, refused.body.error]).toEqual([409, DELETE_WHILE_BACK]);
+    expect((await record()).state).toBe('listening');
+    expect((await store.getMinutes(CALL))?.deleted).toBeUndefined();
+    expect(sessionOf(await record()).erasedAt).toBeUndefined();
+    expect((await texts()).some((t) => t.startsWith('Nova is back in this call'))).toBe(true);   // the chat was not erased either
+    expect(runtime.isRunning(CALL)).toBe(true);
   });
 });
 

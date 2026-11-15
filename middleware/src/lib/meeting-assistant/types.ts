@@ -116,6 +116,8 @@ export interface AssistantSession {
   periodFrom?: number;
   /** The earlier periods of this call, oldest first: who invited Nova, when it came and when it left, and who dismissed it ('system' for its own leaving). */
   periods?: AssistantPeriod[];
+  /** When the call's words were erased (the inviter's delete, or retention): the record is never joined again. Written in the erase's own step. */
+  erasedAt?: number;
 }
 
 /** One closed period of Nova in a call, kept when it is invited back (the record's own fields then describe the new period). */

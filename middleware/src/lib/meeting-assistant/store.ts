@@ -88,7 +88,9 @@ export interface AssistantStore {
   /**
    * left -> listening, only while the record is `left` from `change.leftAt`: `invitedBy` becomes `by`, the leave and the pause are
    * cleared, `acked` is just `by`, `presentAtInvite` is `present`, `attendees` gains them, the voice goes off, and `session` is merged
-   * in. `invitedAt` stays (the meeting's start). Null when the record moved on (another rejoin won, or it is gone).
+   * in. `invitedAt` stays (the meeting's start). Null when the record moved on (another rejoin won, or it is gone), and when the call's
+   * words were erased (its minutes are a tombstone): checked in the same step, so a delete racing an invitation back never leaves a
+   * deleted record listening.
    */
   rejoin(callId: string, change: RejoinChange): Promise<AssistantRecord | null>;
   /** Record that `userId` acknowledged the transcription notice (idempotent); null when there is no record. */
@@ -142,8 +144,12 @@ export interface AssistantStore {
   putMinutes(minutes: MinutesRecord): Promise<{ minutes: MinutesRecord; created: boolean }>;
   /** Live minutes (not tombstones) for calls `userId` attended in `tenant`, newest `endedAt` first, strictly before `before` when given. */
   listMinutes(filter: MinutesFilter): Promise<MinutesRecord[]>;
-  /** Delete the call's lines and replace its minutes with a tombstone (created when none exist), so they are not written again. Returns the lines removed. */
-  tombstoneMinutes(callId: string, by: string, at: number): Promise<number>;
+  /**
+   * Delete the call's lines and replace its minutes with a tombstone (created when none exist), so they are not written again; the record
+   * is marked (`session.erasedAt`) so it is never joined again. Returns the lines removed, or null, with nothing touched, while Nova is in
+   * the call (`listening` or `paused`: it was invited back): the check is part of the same step.
+   */
+  tombstoneMinutes(callId: string, by: string, at: number): Promise<number | null>;
   /** Count one more writer run for minutes that have no draft yet, only when `attempts` is still `expect` and below `max` (one run at a time, a hard cap). True when counted. */
   claimMinutesAttempt(callId: string, expect: number, max: number): Promise<boolean>;
   /** Replace the content of minutes that have no draft (writer 'none', not deleted) with a new write; `attempts` and `notifiedAt` are kept. True when replaced. */
@@ -227,6 +233,7 @@ export class MemoryAssistantStore implements AssistantStore {
     // Read, compare and write in one synchronous step: of two rejoins at once only the first finds the leave it read.
     const r = this.records.get(callId);
     if (!r || r.state !== 'left' || r.leftAt !== change.leftAt) return null;
+    if (this.minutes.get(callId)?.deleted || sessionOf(r).erasedAt != null) return null; // the call's words were erased: never joined again
     r.state = 'listening'; r.invitedBy = change.by; r.leftAt = null; r.leftBy = null; r.pausedBy = null;
     r.acked = [change.by]; r.presentAtInvite = [...new Set(change.present)];
     for (const u of change.present) addTo(r.attendees, u);
@@ -398,9 +405,11 @@ export class MemoryAssistantStore implements AssistantStore {
   }
 
   async tombstoneMinutes(callId: string, by: string, at: number) {
+    const r = this.records.get(callId);
+    if (r && (r.state === 'listening' || r.state === 'paused')) return null; // Nova is in the call again: nothing is erased
     const rows = this.transcript.get(callId) ?? [];
     this.transcript.delete(callId);
-    const r = this.records.get(callId);
+    if (r) r.session = { ...sessionOf(r), erasedAt: at };
     // Every other place that holds the call's words (audit M2): the detector's pending requests, each turn's tool arguments and
     // each action's result text. Ids, statuses and times stay so the cards and the counters remain consistent.
     if (r) r.pendingRequests = [];

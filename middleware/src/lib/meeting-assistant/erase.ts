@@ -3,9 +3,14 @@
 import { eraseAssistantMessages } from './chat.js';
 import type { AssistantStore } from './store.js';
 
-/** Delete the call's transcript and tombstone its minutes, blank the pending requests, tool arguments and result text, and replace Nova's chat text. Returns the lines removed. */
-export async function eraseCall(store: AssistantStore, callId: string, by: string, at: number): Promise<number> {
+/**
+ * Delete the call's transcript and tombstone its minutes, blank the pending requests, tool arguments and result text, and replace Nova's
+ * chat text. Returns the lines removed, or null when Nova is in the call again (it was invited back after the caller looked): then
+ * nothing is erased, the chat included; the store's check is part of its erase step.
+ */
+export async function eraseCall(store: AssistantStore, callId: string, by: string, at: number): Promise<number | null> {
   const lines = await store.tombstoneMinutes(callId, by, at);
+  if (lines === null) return null;
   await eraseAssistantMessages(callId);
   return lines;
 }

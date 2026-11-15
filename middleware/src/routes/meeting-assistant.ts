@@ -427,11 +427,13 @@ async function rejoin(req: Request, res: Response, session: Session, read: Assis
     throw e;
   }
   if (!moved) {
-    // Another invitation back won (or the record moved on): this hold goes back and the caller sees the record as it stands. A run this
-    // request started for a record that is still left is stopped; one the winner uses is left alone.
+    // Another invitation back won (or the record moved on, or its words were erased meanwhile): this hold goes back. A run this request
+    // started for a record that is still left is stopped; one the winner uses is left alone. A deleted record answers why; otherwise the
+    // caller sees the record as it stands.
     await giveBack();
     const current = await store.get(callId);
     if (!current || current.state === 'left') { assistantIntake().stop(callId); await runtime.stop(callId).catch(() => undefined); }
+    if ((await store.getMinutes(callId).catch(() => null))?.deleted) throw new AppError(409, REJOIN_DELETED);
     res.json(await view(current, callId, session));
     return;
   }
@@ -1096,6 +1098,9 @@ meetingAssistantRouter.post('/minutes/rewrite', refuseMasqueradeRead, asyncHandl
   res.status(409).json({ code: 'MINUTES_WRITTEN', error: 'These minutes do not need writing again.' });
 }));
 
+/** The delete found Nova back in the call: someone invited it back between the delete's check and its erase. */
+export const DELETE_WHILE_BACK = `${NOVA} is back in this call. Delete the meeting after it leaves.`;
+
 /** The person invited Nova into this call, in this period or an earlier one: they may delete its record (after Nova has left). */
 export const invitedNovaHere = (record: AssistantRecord, userId: string): boolean =>
   record.invitedBy === userId || (recordSession(record).periods ?? []).some((p) => p.invitedBy === userId);
@@ -1112,7 +1117,9 @@ const deleteRecord = asyncHandler(async (req, res) => {
   if (deleted && !inviter) throw new NotFoundError('Not found');
   if (!inviter) throw new AppError(403, 'Only the person who invited Nova can delete this meeting.');
   if (record.state !== 'left') throw new AppError(409, 'Nova is still in this call. Dismiss Nova before deleting this meeting.');
+  // The erase itself is conditional on Nova being out of the call: one invited back since the check above keeps everything.
   const lines = await eraseCall(assistantStore(), callId, session.sub, Date.now());
+  if (lines === null) throw new AppError(409, DELETE_WHILE_BACK);
   res.json({ callId, deleted: true, linesRemoved: lines });
 });
 meetingAssistantRouter.delete('/minutes', refuseMasqueradeRead, deleteRecord);
