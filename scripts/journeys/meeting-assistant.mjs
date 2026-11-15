@@ -4,7 +4,7 @@
 //   1 Invite Nova is offered to a person in a call    2 inviting: "Nova is listening" for both, Nova in the roster
 //   3 the notice shows to the second person only      4 nothing stored before the acknowledgement, lines after it
 //   5 pause and resume from the second person         7 nothing clipped or scrolling in the call bar at 1280 (run before 6)
-//   6 dismiss: the mark goes, Invite does not return, "Nova has left this call"
+//   6 dismiss: the mark goes, the chip says why, "Invite Nova again" beside it (Nova can be invited back)
 //   8 to 11 (package 4a, API level: the scripted session answers, no model): a spoken read lands in the call chat labelled with
 //     the asker; a write is a card only the asker confirms and shows as a running turn only after that; a tool call from someone
 //     who never said the name is refused and counted; after dismissal the inviter's spend has a meeting_assistant entry.
@@ -20,6 +20,9 @@
 //   12 to 17 (package 5, the minutes; the scripted writer): the leaving message in the call chat, the meeting page at 1440 and 1280,
 //     what Nova covered and how long the meeting is kept (13a), written minutes cannot be written again (13a2), the bell (13a3),
 //     a person who was not there gets 404 and a neutral not-found page, the Meetings list, the :minutes ledger entry, the inviter's delete.
+//   R1 to R4 (Nova invited back, run after 13b): a third person joins again; "Invite Nova again" beside the left chip on one footer line
+//     with three people; the inviter uses it, the chat says Nova is back, the others owe the acknowledgement again and their words are
+//     not kept until they give it; something is said; Nova is dismissed; the minutes hold both periods, the earlier items in place.
 //
 // Two people share one call without media the way portal/e2e/work-huddle-navigation.spec.ts does: one starts a call on an
 // initiative page, the other accepts the ring, and the SFU session metadata is the only thing stubbed (the realtime token
@@ -1398,12 +1401,12 @@ async function main() {
       return 'open, waiting for the executor';
     });
 
-    await step('6: dismiss: asked once and kept on Cancel; then the mark goes, Invite does not return, the bar says who dismissed Nova and that it cannot rejoin, re-invite is refused', async () => {
+    await step('6: dismiss: asked once and kept on Cancel; then the mark goes, the bar says who dismissed Nova and offers "Invite Nova again" beside it (Nova can be invited back)', async () => {
       // In-call 3: the dismissal is asked once, naming its effect; keeping Nova changes nothing.
       await novaMenu(nora, 'Dismiss Nova for everyone');
       await seen(nora.page, 'nova-dismiss-ask');
       const question = (await nora.page.getByTestId('nova-dismiss-ask').innerText()).replace(/\s+/g, ' ');
-      check(/Nova leaves for everyone and cannot be invited again in this call\./.test(question), `the dismissal question does not name its effect: "${question}"`);
+      check(/Nova leaves the call for everyone\. Anyone who can invite Nova can invite it back later\./.test(question), `the dismissal question does not name its effect: "${question}"`);
       check((await stateOf(nora)).state === 'listening', 'choosing Dismiss in the menu dismissed Nova before the question was answered');
       await shot(nora.page, '6-dismiss-ask');
       await nora.page.getByTestId('nova-dismiss-ask').getByRole('button', { name: /Keep Nova/ }).click();
@@ -1414,17 +1417,18 @@ async function main() {
       await seen(nora.page, 'nova-left');
       await seen(vera.page, 'nova-left');
       for (const p of [vera, nora]) {
-        // Around 1: the chip says who dismissed Nova and that it cannot come back to this call.
+        // Around 1: the chip says who dismissed Nova (and no longer that it cannot come back); beside it, the way back.
         const why = (await p.page.getByTestId('nova-left').innerText()).trim();
-        check(/^.+ dismissed Nova\. It cannot rejoin this call\.$/.test(why) && !why.startsWith('Someone'), `the left chip does not say who dismissed Nova and that it cannot rejoin: "${why}"`);
+        check(/^.+ dismissed Nova\.$/.test(why) && !why.startsWith('Someone'), `the left chip does not say who dismissed Nova: "${why}"`);
         check(await p.page.getByTestId('nova-mark').count() === 0, 'the listening mark stayed');
-        check(await p.page.getByTestId('nova-invite').count() === 0, 'Invite Nova came back');
+        check(await p.page.getByTestId('nova-invite').count() === 0, 'the first "Invite Nova" came back');
         check(await p.page.getByTestId('nova-menu').count() === 0, 'Nova controls stayed');
+        await seen(p.page, 'nova-invite-again');
+        check((await p.page.getByTestId('nova-invite-again').innerText()).trim() === 'Invite Nova again', 'the button does not read "Invite Nova again"');
       }
-      const again = await vera.api.post(`${PORTAL}/api/calls/${encodeURIComponent(callId)}/assistant/invite`, { data: {} });
-      check(again.status() === 409, `a re-invite answered ${again.status()}, not 409`);
-      const againError = (await again.json().catch(() => ({}))).error;
-      check(againError === 'Nova has already left this call and cannot rejoin it.', `the re-invite refusal reads "${againError}"`);
+      // The server says Nova may be invited back (it is not used here: the minutes steps below read the first period's minutes; R1 to R4 do it).
+      const standing = (await stateOf(vera)).rejoin;
+      check(standing === 'allowed', `the state says rejoin ${standing}, not allowed`);
       check(await vera.page.getByTestId('nova-roster-entry').count() === 0, 'Nova stayed in the roster');
       await barFits(vera.page, 'the bar after dismissal', 1280);
       await shot(vera.page, '6-left');
@@ -1432,7 +1436,7 @@ async function main() {
       await gone(vera.page, 'nova-proposal-ask');
       const open = (await proposalsOf(vera)).find((p) => p.id === p3);
       check(open?.state === 'open' && typeof open.expiresAt === 'number' && open.expiresAt - Date.now() > 71 * 3600_000, `the open proposal after the dismissal: ${JSON.stringify({ state: open?.state, expiresAt: open?.expiresAt })}`);
-      return 'left; re-invite 409; the open proposal expires in 72 h';
+      return 'left; "Invite Nova again" offered; the open proposal expires in 72 h';
     });
 
     await step('6b: with Nova dismissed the unconfirmed card reads Expired for both, says Nova was dismissed (not that its asker failed to confirm), and nothing was created', async () => {
@@ -1743,6 +1747,96 @@ async function main() {
       await shot(veraM.page, '13b-meeting-proposal-recorded', 1280);
       await veraM.page.getByTestId('meeting-proposal-detail-close').click();
       return `recorded on the meeting page; minutes: ${listed.state}, consented by ${listed.consentedBy.join(' and ')}; end clear of the prompt (${clear.join('; ')})`;
+    });
+
+    // ── R. Nova invited back into the call it left (after the first period's minutes steps, which read the first period) ──
+    let rejoinBefore = null;
+    await step('R1: a third person joins again; each person sees why Nova left and "Invite Nova again" beside it, and the footer is one line at 1440 and 1280 with three people (screenshots)', async () => {
+      eli = await person({ userId: 'u-eli', role: 'sme' });
+      await eli.page.getByTestId('shell-footer-context').getByRole('button', { name: 'Huddle' }).click({ timeout: 30000 });
+      await eli.page.getByTestId('shell-call-dock').waitFor({ timeout: 30000 });
+      for (const p of [vera, nora, eli]) {
+        await seen(p.page, 'nova-left', 20000);
+        await seen(p.page, 'nova-invite-again', 20000);
+        const why = (await p.page.getByTestId('nova-left').innerText()).trim();
+        check(/^.+ dismissed Nova\.$/.test(why) && !/cannot rejoin/.test(why), `${p.who.userId}'s chip reads "${why}"`);
+      }
+      for (const width of [1440, 1280]) {
+        const r = await barFits(vera.page, 'the bar after the dismissal with three people', width);
+        await shot(vera.page, 'R1-left-invite-again', width);
+        check(r.novaWidth > 0, `Nova's controls are not on the footer row at ${width}`);
+      }
+      const m = await (await vera.api.get(asApi(vera, 'minutes'))).json();
+      rejoinBefore = m.actionItems.map((i) => ({ text: i.text, workItemCreated: i.workItemCreated === true, workItemHref: i.workItemHref ?? null }));
+      check(rejoinBefore.length >= 1, 'the first minutes hold no action items to keep in place');
+      return `three people; ${rejoinBefore.length} earlier action items`;
+    });
+
+    await step('R2: the inviter uses "Invite Nova again": Nova listens again for everyone, the chat has one notice that it is back at her invitation, and the others owe the acknowledgement again (the notice shows again, saying Nova was invited back)', async () => {
+      await vera.page.getByTestId('nova-invite-again').click();
+      await waitMark(vera.page, /^Nova is listening$/, 20000);
+      await gone(vera.page, 'nova-invite-again');
+      const st = await stateOf(vera);
+      check(st.state === 'listening' && st.invitedBy === VERA.userId && st.period === 2, `the state after inviting Nova back: ${JSON.stringify({ state: st.state, invitedBy: st.invitedBy, period: st.period })}`);
+      check(st.mustAck.includes(NORA.userId) && st.mustAck.includes('u-eli') && !st.mustAck.includes(VERA.userId), `who owes the acknowledgement: ${JSON.stringify(st.mustAck)}`);
+      check(st.voice === false, 'the voice did not reset to off');
+      const back = await waitFor(async () => (await novaOf(vera, 'assistant-notice')).filter((m) => /^Nova is back in this call at .+'s invitation and is listening again\./.test(m.message)), 15000, 'the notice that Nova is back');
+      check(back.length === 1, `${back.length} notices say Nova is back`);
+      // Nora had closed the first notice in 3b: a new period shows it again.
+      await seen(nora.page, 'nova-notice', 20000);
+      const title = (await nora.page.getByTestId('nova-notice').innerText()).replace(/\s+/g, ' ');
+      check(/invited Nova back into this call/.test(title), `the notice does not say Nova was invited back: "${title.slice(0, 160)}"`);
+      check((await stateOf(nora)).youMustAck === true, 'the second person does not owe a new acknowledgement');
+      await shot(nora.page, 'R2-notice-again');
+      return `"${back[0].message.slice(0, 120)}"`;
+    });
+
+    await step('R3: the second person\'s words are not kept before she acknowledges again; after she does, they are; the meeting page says Nova is back and what it hears is added', async () => {
+      const before = 'Before acknowledging again: the rejoin draft is private.';
+      await inject(NORA.userId, before);
+      check(!(await stored(vera, before, 3500)), 'a line from a person who had not acknowledged again was stored');
+      await nora.page.getByTestId('nova-notice-acknowledge').click();
+      await gone(nora.page, 'nova-notice');
+      check((await stateOf(nora)).youMustAck === false, 'the acknowledgement did not take');
+      const said = 'Nora will draft the rejoin summary.';
+      await inject(NORA.userId, said);
+      check(await stored(vera, said, 10000), 'a line after the new acknowledgement was not stored');
+      check(!(await transcript(vera)).includes(before), 'the line from before the acknowledgement appeared later');
+      // The third person leaves again (a third face on the initiative's presence would widen the footer the later steps measure).
+      await eli.page.getByTestId('call-dock-leave').first().click({ timeout: 10000 });
+      await gone(eli.page, 'call-dock-leave', 20000);
+      await eli.context.close();
+      await veraM.page.goto(MEETING(), { waitUntil: 'domcontentloaded', timeout: 40000 });
+      await seen(veraM.page, 'meeting-addition-note', 30000);
+      const note = (await veraM.page.getByTestId('meeting-addition-note').innerText()).trim();
+      check(note === 'Nova is back in this call. What it hears now is added to these minutes when it leaves.', `the meeting page says "${note}"`);
+      for (const width of [1440, 1280]) await shot(veraM.page, 'R3-meeting-back', width);
+      return 'before: absent; after: stored; page note shown';
+    });
+
+    await step('R4: Nova is dismissed again; the minutes hold both periods: the earlier action items at their places (the work item made in the call still linked), the new one after them, one more minutes card saying Nova added to them', async () => {
+      await novaMenu(vera, 'Dismiss Nova for everyone');
+      await vera.page.getByTestId('nova-dismiss-ask').getByRole('button', { name: /Dismiss Nova for everyone/ }).click();
+      await seen(vera.page, 'nova-left', 20000);
+      const m = await waitFor(async () => { const r = await (await vera.api.get(asApi(vera, 'minutes'))).json(); return r.additions === 1 ? r : null; }, 30000, 'the minutes being added to');
+      const items = m.actionItems.map((i) => ({ text: i.text, workItemCreated: i.workItemCreated === true, workItemHref: i.workItemHref ?? null }));
+      check(JSON.stringify(items.slice(0, rejoinBefore.length)) === JSON.stringify(rejoinBefore), `the earlier action items moved or changed: ${JSON.stringify(rejoinBefore)} then ${JSON.stringify(items.slice(0, rejoinBefore.length))}`);
+      const done = rejoinBefore.findIndex((i) => /login cookie bug/i.test(i.text));
+      check(done >= 0 && items[done].workItemCreated, `the work item made in the call is not linked at its place: ${JSON.stringify(items)}`);
+      check(items.slice(rejoinBefore.length).some((i) => /draft the rejoin summary/i.test(i.text)), `the new action item is not after the earlier ones: ${JSON.stringify(items.slice(rejoinBefore.length))}`);
+      check(m.backInCall === false && m.additionOwed === false, `the minutes say ${JSON.stringify({ backInCall: m.backInCall, additionOwed: m.additionOwed })}`);
+      check(/After Nova was invited back/.test(m.summaryLead), `the summary does not cover both periods: "${m.summaryLead}"`);
+      const cards = (await chatMessages(vera)).filter((x) => x.metadata?.kind === 'assistant-notice' && x.metadata?.minutes);
+      check(cards.length === 2 && cards[1].metadata.minutes.added === true, `the minutes cards in the chat: ${JSON.stringify(cards.map((c) => c.metadata.minutes))}`);
+      const card = vera.page.getByTestId('assistant-minutes-card').last();
+      await waitFor(async () => (await card.getByTestId('assistant-minutes-title').innerText().catch(() => '')).trim() === 'Nova added to the minutes', 20000, 'the chat card saying Nova added to the minutes');
+      check((await card.getByTestId('assistant-minutes-status').innerText()).trim() === 'Updated', 'the added card is not marked Updated');
+      await veraM.page.goto(MEETING(), { waitUntil: 'domcontentloaded', timeout: 40000 });
+      await seen(veraM.page, 'meeting-action-items', 30000);
+      check(/draft the rejoin summary/i.test(await veraM.page.getByTestId('meeting-action-items').innerText()), 'the meeting page does not show the new action item');
+      check(await veraM.page.getByTestId('meeting-addition-note').count() === 0, 'the meeting page still says Nova is back');
+      for (const width of [1440, 1280]) await shot(veraM.page, 'R4-meeting-both-periods', width);
+      return `${rejoinBefore.length} earlier items in place, ${items.length - rejoinBefore.length} added; "${m.summaryLead.slice(0, 120)}"`;
     });
 
     await step('14: a person who was not in the call gets a not-found page and a 404 from both API routes', async () => {
