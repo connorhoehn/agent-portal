@@ -186,7 +186,8 @@ export class FakeProvider {
         const entry = st.calls.get(ev.item?.call_id);
         const f = entry?.dry?.followup;
         const r = typeof f === 'function' ? f(out) : typeof f === 'string' ? { text: f, frames: 25 } : null;
-        if (r) later(300, () => speakText(r.text, r.frames ?? 25, entry.dry.id ? `${entry.dry.id}:followup` : undefined));
+        // As the real one: the second model writes the words about the result (a message item), then the voice speaks them.
+        if (r) later(300, () => { send({ type: 'response.event', event: { type: 'response.output_item.added', item: { type: 'message' } } }); later(400, () => speakText(r.text, r.frames ?? 25, entry.dry.id ? `${entry.dry.id}:followup` : undefined)); });
       } else if (ev.type === 'session.thinking.append') {
         // Context the server appends (a write done, declined or expired): the call's `afterContext` says what Nova says about it.
         const f = st.lastCall?.dry?.afterContext;
