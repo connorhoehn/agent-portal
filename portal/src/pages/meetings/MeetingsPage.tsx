@@ -1,19 +1,47 @@
-// /iq/meetings — the meetings the signed-in person attended with the meeting assistant present, newest first, one table.
-// Read from GET /api/meetings, which only ever returns the caller's own.
+// /iq/meetings — the meetings the signed-in person attended with Nova present, newest first, one table.
+// Read from GET /api/meetings, which only ever returns the caller's own. The first page refreshes every minute; older meetings
+// follow the server's `next` cursor with "Load older meetings" under the table (the library table pages only on the client).
+import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { DataTable, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
+import { Button, Chip, DataTable, Inline, T, type DataTableColumn } from '@connorhoehn/ui-components/shared';
 import { CollectionCommandPage } from '../../components/collections/CollectionCommandPage';
 import { useFetch } from '../../hooks/useFetch';
+import { responseFailure } from '../../lib/apiFailure';
 import { relativeTime } from '../../lib/relativeTime';
-import { MEETINGS_URL, meetingHref, peopleLabel, summaryLine, type MeetingListRow } from './meetingsModel';
+import { MEETINGS_URL, meetingHref, meetingsUrl, mergeMeetings, peopleLabel, summaryLine, waitingLabel, type MeetingListRow } from './meetingsModel';
+
+interface MeetingsPage { meetings: MeetingListRow[]; next: number | null }
 
 export default function MeetingsPage() {
   const navigate = useNavigate();
-  const feed = useFetch<{ meetings: MeetingListRow[] }>(MEETINGS_URL, 60_000);
-  const rows = feed.data?.meetings ?? [];
+  const feed = useFetch<MeetingsPage>(MEETINGS_URL, 60_000);
+  // Older pages, loaded on request; `older.next` is the cursor for the page after them (undefined until one was loaded).
+  const [older, setOlder] = useState<{ rows: MeetingListRow[]; next: number | null | undefined; loading: boolean; error: string | null }>({ rows: [], next: undefined, loading: false, error: null });
+  const rows = mergeMeetings(feed.data?.meetings ?? [], older.rows);
+  const next = older.next === undefined ? feed.data?.next ?? null : older.next;
+  const loadOlder = useCallback(async () => {
+    if (!next) return;
+    setOlder((o) => ({ ...o, loading: true, error: null }));
+    try {
+      const res = await fetch(meetingsUrl(next), { credentials: 'include' });
+      if (!res.ok) throw new Error((await responseFailure(res)).message);
+      const page = await res.json() as MeetingsPage;
+      setOlder((o) => ({ rows: [...o.rows, ...page.meetings], next: page.next, loading: false, error: null }));
+    } catch (err) {
+      setOlder((o) => ({ ...o, loading: false, error: `Could not load older meetings: ${err instanceof Error ? err.message : String(err)}` }));
+    }
+  }, [next]);
 
   const columns: DataTableColumn<MeetingListRow>[] = [
-    { key: 'name', header: 'Meeting', width: '208px', render: (r) => <T size="sm" className="block max-w-[14rem] truncate" title={r.callName}>{r.callName}</T> },
+    { key: 'name', header: 'Meeting', width: '288px', render: (r) => {
+      const waiting = waitingLabel(r.waitingOnYou);
+      return (
+        <Inline gap="xs" wrap={false} className="min-w-0">
+          <T size="sm" className="block min-w-0 max-w-[14rem] truncate" title={r.callName}>{r.callName}</T>
+          {waiting && <Chip size="xs" tone="warning" data-testid="iq-meetings-waiting">{waiting}</Chip>}
+        </Inline>
+      );
+    } },
     { key: 'when', header: 'When', width: '112px', numeric: true, render: (r) => <T size="sm" title={new Date(r.endedAt).toLocaleString()}>{relativeTime(new Date(r.endedAt).toISOString())}</T> },
     { key: 'people', header: 'People', width: '192px', priority: 1, render: (r) => <T size="sm" className="block max-w-[12rem] truncate" title={r.attendees.join(', ')}>{peopleLabel(r.attendees)}</T> },
     { key: 'summary', header: 'Summary', render: (r) => <T size="sm" className="block max-w-[40rem] truncate" title={r.summary}>{summaryLine(r.summary)}</T> },
@@ -23,11 +51,11 @@ export default function MeetingsPage() {
     <CollectionCommandPage
       data-testid="iq-meetings"
       title="Meetings"
-      description="Calls where Nova listened, with their minutes and transcript. Only the people who were in a call see it here."
+      description="Meetings where Nova listened, with their minutes and transcript. Only the people who were in the call see them here."
       toolbar={{
         label: 'Meetings',
         filters: [],
-        summary: feed.data ? `${rows.length} ${rows.length === 1 ? 'meeting' : 'meetings'}` : undefined,
+        summary: feed.data ? `${rows.length} ${next ? 'newest ' : ''}${rows.length === 1 ? 'meeting' : 'meetings'}` : undefined,
         onRefresh: feed.refresh,
         refreshing: feed.isLoading,
       }}
@@ -42,11 +70,19 @@ export default function MeetingsPage() {
         columns={columns}
         keyField={(r) => r.callId}
         loading={feed.isLoading && !feed.data}
-        pageSize={25}
+        pageSize={1000}
         onRowClick={(r) => navigate(meetingHref(r.callId))}
         data-testid="iq-meetings-table"
         emptyMessage="No meetings yet. When Nova leaves a call you were in, its minutes are kept here."
       />
+      {(next || older.error) && (
+        <Inline justify="center" gap="sm" className="pt-2">
+          {next && <Button size="sm" variant="secondary" data-testid="iq-meetings-older" disabled={older.loading} onClick={() => { void loadOlder(); }}>
+            {older.loading ? 'Loading older meetings…' : 'Load older meetings'}
+          </Button>}
+          {older.error && <T size="sm" tone="danger">{older.error}</T>}
+        </Inline>
+      )}
     </CollectionCommandPage>
   );
 }

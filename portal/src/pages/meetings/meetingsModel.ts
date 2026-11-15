@@ -13,6 +13,8 @@ export interface MeetingListRow {
   summary: string;
   decisionCount: number;
   actionItemCount: number;
+  /** Proposals from this meeting waiting on the viewer's answer; absent from an older server. */
+  waitingOnYou?: number;
 }
 
 export interface MinutesActionItem { text: string; ownerUserId?: string; ownerName?: string; done?: boolean }
@@ -42,7 +44,15 @@ export interface MinutesView {
   youAreInviter: boolean;
   /** Absent from an older server. */
   proposals?: MinutesProposal[];
+  /** When the retention sweep removes the meeting (epoch ms), from the server's retention. Absent from an older server. */
+  keptUntil?: number;
+  /** What Nova covered: its listening seconds, the rest of its time in the call, and how many people were not transcribed (a count). */
+  coverage?: MinutesCoverage;
+  /** No draft: whether an attendee may ask Nova to write the minutes again. */
+  rewrite?: { writing: boolean; possible: boolean; attemptsLeft: number };
 }
+
+export interface MinutesCoverage { listenedSeconds: number; pausedSeconds: number; untranscribed: number }
 
 export interface TranscriptLineView {
   seq: number;
@@ -54,7 +64,11 @@ export interface TranscriptLineView {
   endMs?: number;
 }
 
-export const MEETINGS_URL = '/api/meetings?limit=100';
+/** One page of the Meetings list; older pages follow the server's `next` cursor (`before`). */
+export const MEETINGS_PAGE = 50;
+export const meetingsUrl = (before?: number | null): string => `/api/meetings?limit=${MEETINGS_PAGE}${before ? `&before=${before}` : ''}`;
+export const MEETINGS_URL = meetingsUrl();
+export const rewriteUrl = (callId: string): string => `/api/calls/${encodeURIComponent(callId)}/assistant/minutes/rewrite`;
 export const minutesUrl = (callId: string): string => `/api/calls/${encodeURIComponent(callId)}/assistant/minutes`;
 export const transcriptUrl = (callId: string, after: number, limit: number): string => `/api/calls/${encodeURIComponent(callId)}/assistant/transcript?after=${after}&limit=${limit}`;
 export const proposalsUrl = (callId: string): string => `/api/calls/${encodeURIComponent(callId)}/assistant/proposals`;
@@ -108,3 +122,43 @@ export function canCreateFor(item: MinutesActionItem, viewerUserId: string | nul
 
 /** The meeting page asks again while something can still change: an answer is possible, or a run is under way. */
 export const proposalsLive = (states: readonly string[]): boolean => states.some((s) => s === 'open' || s === 'objected' || s === 'consented' || s === 'running');
+
+/** The first page and the older pages loaded after it, once each, newest first (a refresh of the first page can overlap them). */
+export function mergeMeetings(first: readonly MeetingListRow[], older: readonly MeetingListRow[]): MeetingListRow[] {
+  const seen = new Set<string>(); const out: MeetingListRow[] = [];
+  for (const row of [...first, ...older]) if (!seen.has(row.callId)) { seen.add(row.callId); out.push(row); }
+  return out;
+}
+
+/** The Meetings row's pill: "1 waiting on you", or null when nothing waits on the viewer. */
+export const waitingLabel = (n: number | undefined): string | null => (n && n > 0 ? `${n} waiting on you` : null);
+
+/** "14 Dec 2026", in the viewer's zone. */
+export const dayLabel = (ms: number): string => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+/** How long the meeting is kept and who can remove it sooner: "Kept until 14 Dec 2026. Vera Green can delete it sooner." */
+export function keptLine(m: Pick<MinutesView, 'keptUntil' | 'invitedByName' | 'youAreInviter'>): string | null {
+  if (!m.keptUntil) return null;
+  return `Kept until ${dayLabel(m.keptUntil)}. ${m.youAreInviter ? 'You' : m.invitedByName || 'The person who invited Nova'} can delete it sooner.`;
+}
+
+/** What Nova covered, for the page's meta line: its listening time (not the meeting's length), its paused time, and a COUNT of people not transcribed. */
+export function coverageItems(c: MinutesCoverage | undefined): string[] {
+  if (!c) return [];
+  const items = [`Nova listened for ${durationLabel(0, c.listenedSeconds * 1000)}`];
+  if (c.pausedSeconds >= 60) items.push(`paused for ${durationLabel(0, c.pausedSeconds * 1000)}`);
+  if (c.untranscribed > 0) items.push(c.untranscribed === 1 ? '1 person was not transcribed' : `${c.untranscribed} people were not transcribed`);
+  return items;
+}
+
+/** The Decisions and Action items sections when no minutes were written: never "No … were recorded", which reads as "there were none". */
+export const MINUTES_UNAVAILABLE = 'Not available because the minutes could not be written.';
+export const minutesWritten = (m: Pick<MinutesView, 'writer'>): boolean => m.writer !== 'none';
+
+/** The page for a meeting the viewer cannot read, by the server's answer: only someone who was in the call is told why it is gone. */
+export function goneCopy(failure: { status: number | null; code: string | null } | null): { title: string; description: string; writing: boolean } {
+  if (failure?.code === 'MEETING_DELETED') return { title: 'Meeting deleted', description: 'This meeting\'s record was deleted.', writing: false };
+  if (failure?.code === 'MEETING_EXPIRED') return { title: 'Meeting removed', description: 'This meeting\'s record was removed after the retention period.', writing: false };
+  if (failure?.code === 'MINUTES_WRITING') return { title: 'Nova is writing the minutes', description: 'They appear here when they are ready.', writing: true };
+  return { title: 'Meeting not found', description: 'There is no meeting record here. It may have been deleted, removed after the retention period, or you were not in that call.', writing: false };
+}

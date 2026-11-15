@@ -39,6 +39,7 @@ import { CallReactionPlayback } from '../../lib/callReactionPlayback';
 import { settleHuddleDraft } from '../../lib/huddleDraft';
 import { HuddleDraftMemory, type SavedHuddleDraft } from '../../lib/huddleDraftMemory';
 import { useNovaRosterEntry } from './MeetingAssistantBar';
+import { useMeetingAssistant } from '../../lib/meetingAssistant';
 
 export type RetiredHuddleDraft = SavedHuddleDraft<RichChatDraft, CallPageDescriptor>;
 export interface HuddlePaneControl { visible: boolean; hide(): void }
@@ -274,7 +275,11 @@ export function HuddleChatProvider({ children }: { children: ReactNode }) {
   const channelName = useCallback(() => store.get()?.channel ?? null, [store]);
   const joinedChannel = useSyncExternalStore(store.subscribe, channelName, channelName);
   const ready = mounted && joinedChannel === channel;
-  const unavailableReason = !current ? 'Join a huddle to message its participants.' : rosterState.ended ? 'This huddle has ended.'
+  // Once the call is over the chat is closed to everyone: when Nova was in it and listened, say where its minutes are.
+  const nova = useMeetingAssistant(callId);
+  const minutesFollow = nova.enabled && nova.view.phase !== 'none' && (nova.view.listeningSeconds ?? 0) > 0;
+  const unavailableReason = !current ? 'Join a huddle to message its participants.'
+    : rosterState.ended ? (minutesFollow ? 'This call has ended. Its minutes are in Meetings.' : 'This call has ended.')
     : !connected ? 'Reconnect to send huddle messages.'
     : !rosterState.loaded ? 'Loading the huddle conversation…'
     : rosterState.denied || !rosterState.canSend ? 'You cannot send messages to this huddle.'

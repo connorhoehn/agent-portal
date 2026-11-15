@@ -1,6 +1,7 @@
 // /iq/meetings/:callId — what the meeting assistant left behind: who was there, the summary, decisions, action items
 // and the transcript. Only the people who were in the call can read it; everyone else, admins included, gets the
-// same "not found" the server gives them. The inviter can delete the record (minutes and transcript together).
+// same "not found" the server gives them; someone who was there is told when it was deleted or expired. The inviter can delete the
+// meeting (minutes and transcript together). Failed minutes can be written again from here, within the server's cap.
 // Proposals (docs/meeting-consent-design.md, package 6): each one is drawn with the call chat's own read-only card; someone who
 // still owes an answer is asked with the call's own deck prompt in the page's composer deck. A person a proposal names who was
 // not in the call sees only that section. A consent that completes one runs it in the executor's browser here (MeetingTurnRunner).
@@ -23,8 +24,8 @@ import { proposalPrompt } from '../../components/shell/NovaProposalAsk';
 import { MeetingTurnRunner } from '../../components/shell/MeetingTurnRunner';
 import { deckQueue, parseProposals } from '../../lib/meetingProposals';
 import {
-  canCreateFor, durationLabel, peopleLabel, transcriptSegments, whenLabel, minutesUrl, proposalsLive, proposalsUrl,
-  type MinutesActionItem, type MinutesView,
+  canCreateFor, coverageItems, goneCopy, keptLine, minutesWritten, peopleLabel, transcriptSegments, whenLabel, minutesUrl, proposalsLive, proposalsUrl, rewriteUrl,
+  MINUTES_UNAVAILABLE, type MinutesActionItem, type MinutesView,
 } from './meetingsModel';
 import { useMeetingTranscript } from './useMeetingTranscript';
 
@@ -32,7 +33,18 @@ export default function MeetingPage() {
   const { callId = '' } = useParams();
   const navigate = useNavigate();
   const { session } = useSession();
-  const minutes = useFetch<MinutesView>(callId ? minutesUrl(callId) : null);
+  // Asked again every few seconds while Nova writes the minutes (the first write, or "Write the minutes again").
+  const [writing, setWriting] = useState(false);
+  const minutes = useFetch<MinutesView>(callId ? minutesUrl(callId) : null, writing ? 3000 : undefined);
+  const nowWriting = minutes.data ? minutes.data.rewrite?.writing === true : goneCopy(minutes.failure).writing;
+  if (nowWriting !== writing && !minutes.isLoading) setWriting(nowWriting);
+  const [rewriteError, setRewriteError] = useState<string | null>(null);
+  const writeAgain = useCallback(async () => {
+    setRewriteError(null);
+    try { await sendJson(rewriteUrl(callId), 'POST'); setWriting(true); minutes.refresh(); } catch (err) {
+      setRewriteError(err instanceof Error ? err.message : String(err));
+    }
+  }, [callId, minutes.refresh]); // eslint-disable-line react-hooks/exhaustive-deps
   const transcript = useMeetingTranscript(minutes.data ? callId : null);
   // The call's proposals this person may see; asked again every few seconds while an answer or a run can still change one.
   const [live, setLive] = useState(false);
@@ -60,16 +72,16 @@ export default function MeetingPage() {
     id: 'meeting-commands', label: 'Meeting', placeholder: 'Refresh this meeting…',
     setQuery: () => { throw new Error('This page has nothing to search. No changes were made.'); },
     refresh: () => minutes.refresh(),
-    scopeNote: 'Refresh reloads the minutes. Deleting the record is asked here and never done by a typed command.',
+    scopeNote: 'Refresh reloads the minutes. Deleting the meeting is asked here and never done by a typed command.',
   }), [minutes.refresh]);
   const deletePrompt = useMemo<ComposerPrompt | null>(() => asked > answered && minutes.data ? {
-    id: `meeting-delete:${callId}:${asked}`, scope: `meeting-delete:${callId}`, kind: 'choice', eyebrow: 'Delete the record', title: minutes.data.callName,
-    question: 'Delete the minutes and the transcript for everyone who was in the call? Nova will not write them again, and this cannot be undone. Work items created from them stay.',
-    options: [{ id: 'delete', label: 'Delete the record', emphasis: 'danger' }, { id: 'keep', label: 'Keep it' }],
+    id: `meeting-delete:${callId}:${asked}`, scope: `meeting-delete:${callId}`, kind: 'choice', eyebrow: 'Delete the meeting', title: minutes.data.callName,
+    question: 'Delete this meeting\'s minutes and transcript for everyone who was in the call? Nova will not write them again, and this cannot be undone. Work items created from them stay.',
+    options: [{ id: 'delete', label: 'Delete the meeting', emphasis: 'danger' }, { id: 'keep', label: 'Keep it' }],
     onAnswer: async (a) => {
       if (!('optionId' in a) || a.optionId !== 'delete') { setAnswered(asked); return; }
       try { await sendJson(`/api/calls/${encodeURIComponent(callId)}/assistant/minutes`, 'DELETE'); navigate('/iq/meetings'); } catch (err) {
-        return { error: `Could not delete this record: ${err instanceof Error ? err.message : String(err)}` };
+        return { error: `Could not delete this meeting: ${err instanceof Error ? err.message : String(err)}` };
       }
     },
   } : null, [asked, answered, callId, minutes.data?.callName, navigate]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -90,7 +102,7 @@ export default function MeetingPage() {
     return (
       <>
         <DetailPage data-testid="meeting-page" title="Proposals from a meeting"
-          meta={<MetaLine size="sm" items={['You were named in a proposal from a call you were not in', 'Only the proposals that need you are shown']} />}>
+          meta={<MetaLine size="sm" items={['You were named in a proposal from this meeting, or asked to run it', 'Only the proposals that need you are shown']} />}>
           <Stack gap="md" className="pb-6">{proposalSection(true)}</Stack>
         </DetailPage>
         {runner}
@@ -98,17 +110,21 @@ export default function MeetingPage() {
       </>
     );
   }
-  if (!m && minutes.failure && minutes.failure.status !== 404) {
+  if (!m && minutes.failure && minutes.failure.status !== 404 && minutes.failure.status !== 410) {
     return <EmptyState testId="meeting-error" title="This meeting could not be loaded"
       description={minutes.failure.message} action={<Button size="sm" variant="secondary" data-testid="meeting-retry" onClick={minutes.refresh}>Try again</Button>} />;
   }
   if (!m) {
-    return <EmptyState testId="meeting-not-found" title="Meeting not found"
-      description="There is no meeting record here, or you were not in that call. Only the people who were in a call can read its minutes." />;
+    // Only someone who was in the call hears that it was deleted or expired; everyone else gets the same neutral sentence.
+    const gone = goneCopy(minutes.failure);
+    return <EmptyState testId={gone.writing ? 'meeting-writing' : 'meeting-not-found'} title={gone.title} description={gone.description} />;
   }
 
   const viewer = session?.sub ?? null;
   const names = m.attendees.map((a) => a.name);
+  const written = minutesWritten(m);
+  const keptUntil = keptLine(m);
+  const rewrite = m.rewrite;
   const columns: DataTableColumn<MinutesActionItem>[] = [
     { key: 'text', header: 'Action item', render: (i) => <T size="sm">{i.text}</T> },
     { key: 'owner', header: 'Owner', width: '208px', render: (i) => <T size="sm">{i.ownerName ?? 'Nobody named'}</T> },
@@ -122,24 +138,39 @@ export default function MeetingPage() {
       <DetailPage
         data-testid="meeting-page"
         title={m.callName}
-        meta={<MetaLine size="sm" items={[whenLabel(m.startedAt), durationLabel(m.startedAt, m.endedAt), peopleLabel(names), `Nova invited by ${m.invitedByName}`]} />}
+        meta={(
+          <Stack gap="xs">
+            <MetaLine size="sm" data-testid="meeting-meta" items={[whenLabel(m.startedAt), ...coverageItems(m.coverage), peopleLabel(names), `Nova invited by ${m.invitedByName}`]} />
+            {keptUntil && <T size="sm" tone="secondary" data-testid="meeting-kept">{keptUntil}</T>}
+          </Stack>
+        )}
         actions={m.youAreInviter
-          ? <Button variant="danger" size="sm" data-testid="meeting-delete" onClick={() => setAsked((n) => Math.max(n, answered) + 1)}>Delete this record</Button> : undefined}
+          ? <Button variant="danger" size="sm" data-testid="meeting-delete" onClick={() => setAsked((n) => Math.max(n, answered) + 1)}>Delete this meeting</Button> : undefined}
       >
         <Stack gap="md" className="pb-6">
           <DetailSection title="Summary" as="h2" first>
             <T size="sm" data-testid="meeting-summary">{m.summary}</T>
+            {!written && rewrite?.possible && (
+              <Inline gap="sm" wrap className="pt-2" data-testid="meeting-rewrite">
+                {rewrite.writing
+                  ? <T size="sm" tone="secondary" data-testid="meeting-rewrite-status">Nova is writing the minutes…</T>
+                  : rewrite.attemptsLeft > 0
+                    ? <Button size="sm" variant="secondary" data-testid="meeting-rewrite-button" onClick={() => { void writeAgain(); }}>Write the minutes again</Button>
+                    : <T size="sm" tone="secondary" data-testid="meeting-rewrite-status">Nova has tried to write these minutes five times and will not try again. The transcript is below.</T>}
+                {rewriteError && <T size="sm" tone="danger" data-testid="meeting-rewrite-error">{rewriteError}</T>}
+              </Inline>
+            )}
           </DetailSection>
-          <DetailSection title="Decisions" as="h2" hint={String(m.decisions.length)}>
+          <DetailSection title="Decisions" as="h2" {...(written ? { hint: String(m.decisions.length) } : {})}>
             {m.decisions.length
               ? <Stack gap="xs" data-testid="meeting-decisions">{m.decisions.map((d, i) => <T key={i} size="sm">{d}</T>)}</Stack>
-              : <T size="sm" tone="secondary">No decisions were recorded.</T>}
+              : <T size="sm" tone="secondary" data-testid="meeting-decisions-empty">{written ? 'No decisions were recorded.' : MINUTES_UNAVAILABLE}</T>}
           </DetailSection>
           {proposalSection(false)}
-          <DetailSection title="Action items" as="h2" hint={String(m.actionItems.length)}>
+          <DetailSection title="Action items" as="h2" {...(written ? { hint: String(m.actionItems.length) } : {})}>
             {m.actionItems.length
               ? <DataTable data={m.actionItems} columns={columns} keyField={(i) => `${i.text}|${i.ownerUserId ?? ''}`} narrow data-testid="meeting-action-items" />
-              : <T size="sm" tone="secondary">No action items were recorded.</T>}
+              : <T size="sm" tone="secondary" data-testid="meeting-action-items-empty">{written ? 'No action items were recorded.' : MINUTES_UNAVAILABLE}</T>}
           </DetailSection>
           <DetailSection title="Transcript" as="h2" hint={`${m.lineCount} ${m.lineCount === 1 ? 'line' : 'lines'}`}>
             <TranscriptPanel

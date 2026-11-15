@@ -14,7 +14,8 @@
 //     "Agreed in a call by"; an objection with a shared reason, its withdrawal, "Not a decision"; a proposal left open when Nova
 //     leaves is answered on the meeting page (13b), runs there and ends recorded.
 //   12 to 17 (package 5, the minutes; the scripted writer): the leaving message in the call chat, the meeting page at 1440 and 1280,
-//     a person who was not there gets 404 and a not-found page, the Meetings list, the :minutes ledger entry, the inviter's delete.
+//     what Nova covered and how long the meeting is kept (13a), written minutes cannot be written again (13a2), the bell (13a3),
+//     a person who was not there gets 404 and a neutral not-found page, the Meetings list, the :minutes ledger entry, the inviter's delete.
 //
 // Two people share one call without media the way portal/e2e/work-huddle-navigation.spec.ts does: one starts a call on an
 // initiative page, the other accepts the ring, and the SFU session metadata is the only thing stubbed (the realtime token
@@ -1174,6 +1175,57 @@ async function main() {
       return out.join(', ');
     });
 
+    await step('13a: the meeting page says what Nova covered (its listening time, a pause, a count of people not transcribed, never their names) and how long the meeting is kept and who can delete it sooner', async () => {
+      const api = await (await vera.api.get(asApi(vera, 'minutes'))).json();
+      check(api.coverage && typeof api.coverage.listenedSeconds === 'number', `the minutes carry no coverage: ${JSON.stringify(api.coverage)}`);
+      const meta = (await veraM.page.getByTestId('meeting-meta').innerText()).replace(/\s+/g, ' ');
+      check(/Nova listened for (under a minute|\d+ min|\d+ h)/.test(meta), `the meta line does not say how long Nova listened: "${meta}"`);
+      if (api.coverage.pausedSeconds >= 60) check(/paused for \d/.test(meta), `Nova paused ${api.coverage.pausedSeconds}s but the meta line says "${meta}"`);
+      const n = api.coverage.untranscribed;
+      check(n > 0 ? meta.includes(n === 1 ? '1 person was not transcribed' : `${n} people were not transcribed`) : !/not transcribed/.test(meta), `${n} not transcribed, the meta line says "${meta}"`);
+      check(!/\bu-[a-z]+\b/.test(meta), 'an id shows in the meta line');
+      // The retention the server knows, from the end time; the inviter reads "You can delete it sooner".
+      check(typeof api.keptUntil === 'number' && api.keptUntil > api.endedAt + 86_400_000, `keptUntil is ${api.keptUntil} for a meeting that ended ${api.endedAt}`);
+      const kept = (await veraM.page.getByTestId('meeting-kept').innerText()).trim();
+      check(/^Kept until \d{1,2} [A-Z][a-z]{2,3} \d{4}\. You can delete it sooner\.$/.test(kept), `the inviter reads "${kept}"`);
+      return `"${meta}"; "${kept}"`;
+    });
+
+    await step('13a2: written minutes cannot be written again: no "Write the minutes again" on the page, the API refuses, and the empty-section wording stays for minutes that were written', async () => {
+      const api = await (await vera.api.get(asApi(vera, 'minutes'))).json();
+      check(api.writer !== 'none' && api.rewrite && api.rewrite.possible === false, `the minutes say ${JSON.stringify({ writer: api.writer, rewrite: api.rewrite })}`);
+      check(await veraM.page.getByTestId('meeting-rewrite-button').count() === 0, 'written minutes offer "Write the minutes again"');
+      check(!(await bodyText(veraM.page)).includes('Not available because the minutes could not be written'), 'written minutes say they could not be written');
+      const again = await vera.api.post(asApi(vera, 'minutes/rewrite'), { data: {} });
+      const body = await again.json().catch(() => ({}));
+      check(again.status() === 409 && body.code === 'MINUTES_WRITTEN', `asking for written minutes again answered ${again.status()} ${JSON.stringify(body)}`);
+      return 'no button; API 409 MINUTES_WRITTEN';
+    });
+
+    await step('13a3: each attendee\'s bell holds one "Minutes from <meeting> are ready" that opens the meeting page', async () => {
+      const api = await (await nora.api.get(asApi(nora, 'minutes'))).json();
+      const title = `Minutes from ${api.callName} are ready`;
+      await noraM.page.goto(`${PORTAL}/iq/meetings`, { waitUntil: 'domcontentloaded', timeout: 40000 });
+      await seen(noraM.page, 'activity-bell', 30000);
+      let lines = [];
+      const end = Date.now() + 25000;
+      while (Date.now() < end) {
+        await noraM.page.getByTestId('activity-bell').first().click();
+        const panel = noraM.page.locator('[role="dialog"]').last();
+        await panel.waitFor({ state: 'visible', timeout: 5000 }).catch(() => undefined);
+        const all = panel.getByRole('tab', { name: /^All/ });
+        if (await all.count()) await all.first().click().catch(() => undefined);
+        lines = (await panel.innerText().catch(() => '')).split('\n').map((l) => l.trim()).filter((l) => l.startsWith('Minutes from '));
+        if (lines.length) break;
+        await noraM.page.keyboard.press('Escape');
+        await sleep(1500);
+      }
+      check(lines.filter((l) => l === title).length === 1, `the bell holds ${JSON.stringify(lines)}, not one "${title}"`);
+      check(!lines.some((l) => /login cookie|canary|rollout/i.test(l)), 'the notification carries words of the meeting');
+      await noraM.page.keyboard.press('Escape');
+      return `"${title}"`;
+    });
+
     await step('13b: the meeting page lists the proposals with the call\'s card; the executor is asked there, consents (1), it runs in her browser on that page and the card ends recorded with its link', async () => {
       await seen(veraM.page, 'meeting-proposals', 20000);
       const cardM = card(veraM, p3);
@@ -1209,6 +1261,8 @@ async function main() {
       await seen(layla.page, 'meeting-not-found', 30000);
       const text = await bodyText(layla.page);
       check(!/login cookie|canary|rollout|resumes/i.test(text), 'the not-found page shows meeting words');
+      // Someone who was not in the call is never told that a record existed: the same neutral sentence as for a meeting that never was.
+      check(text.includes('There is no meeting record here. It may have been deleted, removed after the retention period, or you were not in that call.'), `the not-found page reads "${text.slice(0, 300)}"`);
       return 'API 404 x2; "Meeting not found" page';
     });
 
@@ -1249,27 +1303,34 @@ async function main() {
       return `entries ${JSON.stringify(ids)}`;
     });
 
-    await step('17: only the inviter sees Delete; deleting (after the confirm step) makes the page and the transcript route 404 for everyone', async () => {
+    await step('17: only the inviter sees Delete; deleting (after the confirm step) tells the people who were there it was deleted, makes the transcript 404, and leaves the outsider a plain 404', async () => {
       await noraM.page.goto(MEETING(), { waitUntil: 'domcontentloaded', timeout: 40000 });
       await seen(noraM.page, 'meeting-page', 30000);
       check(await noraM.page.getByTestId('meeting-delete').count() === 0, 'a person who did not invite Nova is offered Delete');
+      const keptForNora = (await noraM.page.getByTestId('meeting-kept').innerText()).trim();
+      check(/^Kept until .+\. .+ can delete it sooner\.$/.test(keptForNora) && !keptForNora.includes('You can'), `an attendee who did not invite Nova reads "${keptForNora}"`);
       const refused = await nora.api.delete(asApi(nora, 'minutes'));
       check(refused.status() === 403, `a non-inviter deleting answered ${refused.status()}`);
       await veraM.page.goto(MEETING(), { waitUntil: 'domcontentloaded', timeout: 40000 });
       await seen(veraM.page, 'meeting-delete', 30000);
       await veraM.page.getByTestId('meeting-delete').click();
       await shot(veraM.page, '17-delete-prompt');
-      await veraM.page.getByRole('button', { name: /Delete the record/ }).click();
+      await veraM.page.getByRole('button', { name: /Delete the meeting/ }).click();
       await veraM.page.waitForURL(/\/iq\/meetings$/, { timeout: 20000 }).catch(() => { throw new StepFailure('deleting did not return to the Meetings list'); });
+      // The people who were there are told it was deleted (410); the transcript is gone (404); the outsider still gets the plain 404.
       for (const p of [vera, nora]) {
         const a = await p.api.get(asApi(p, 'minutes')); const b = await p.api.get(asApi(p, 'transcript'));
-        check(a.status() === 404 && b.status() === 404, `${p.who.userId}: minutes ${a.status()}, transcript ${b.status()} after the delete`);
+        const code = (await a.json().catch(() => ({}))).code;
+        check(a.status() === 410 && code === 'MEETING_DELETED' && b.status() === 404, `${p.who.userId}: minutes ${a.status()} ${code}, transcript ${b.status()} after the delete`);
       }
+      const outsiderAfter = await layla.api.get(asApi(layla, 'minutes'));
+      check(outsiderAfter.status() === 404, `the outsider's minutes answered ${outsiderAfter.status()} after the delete`);
       await veraM.page.goto(MEETING(), { waitUntil: 'domcontentloaded', timeout: 40000 });
       await seen(veraM.page, 'meeting-not-found', 30000);
+      check((await bodyText(veraM.page)).includes('This meeting\'s record was deleted.'), 'the inviter\'s page does not say the record was deleted');
       const list = await (await vera.api.get(`${PORTAL}/api/meetings`)).json();
       check(!list.meetings.some((m) => m.callId === callId), 'the deleted meeting is still listed');
-      return 'non-inviter: no button, 403; inviter: confirm, then 404 on the page and both routes, gone from the list';
+      return 'non-inviter: no button, 403; inviter: confirm, then "deleted" on the page, 410 minutes and 404 transcript for attendees, 404 for the outsider, gone from the list';
     });
     await step('17b: after the delete every message Nova left in the call chat is the one fixed line: no words of the meeting, no card detail, no link to the page', async () => {
       const nova = (await chatMessages(vera)).filter((m) => m.userId === 'agent:nova' || m.metadata?.assistant === true);
