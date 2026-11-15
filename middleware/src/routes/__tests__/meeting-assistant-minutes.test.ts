@@ -31,12 +31,13 @@ import { MemoryCallChatStateStore } from '../../lib/call-chat-state.js';
 import { observeCallPageLifecycle } from '../../lib/call-pages.js';
 import { assistantStore, setAssistantStore, setAssistantIntake, LineIntake, MemoryAssistantStore, setTranscriptSource, MockTranscriptSource } from '../../lib/meeting-assistant/index.js';
 import { minutesIdle, setMinutesWriterFactory } from '../../lib/meeting-assistant/minutes-service.js';
-import { MinutesWriterError, ScriptedMinutesWriter } from '../../lib/meeting-assistant/minutes.js';
+import { chatSummary, MinutesWriterError, ScriptedMinutesWriter } from '../../lib/meeting-assistant/minutes.js';
 import { setMinutesSpend } from '../../lib/meeting-assistant/spend.js';
 import { DELETED_RECORD_LINE } from '../../lib/meeting-assistant/chat-types.js';
 import { getUser } from '../../providers/identity.js';
 import { getProject } from '../../providers/projects.js';
 import type { Session } from '../../lib/session.js';
+import type { Proposal } from '../../lib/meeting-assistant/types.js';
 
 const CALL = 'call-m1'; const LOBBY = 'orgiq:dm:alice:bob:carol';
 const mk = (sub: string, over: Partial<Session> = {}): Session => ({ sub, name: sub, tenant: 'orgiq', role: 'member', epoch: 0, grants: { orgiq: ['member'], social: ['participant'] }, iat: 100, ...over });
@@ -54,7 +55,13 @@ const get = (path: string, user = 'alice') => request(app).get(url(path)).set('x
 const del = (path: string, user = 'alice') => request(app).delete(url(path)).set('x-user', user);
 const meetings = (user: string, q = '') => request(app).get(`/api/meetings${q}`).set('x-user', user);
 const inject = (body: object | object[]) => request(app).post(`/api/dev/calls/${CALL}/transcript-lines`).send(body);
-const chat = async () => (await chatStore.listMessages(callChatChannel(CALL), 100)).map((m) => ({ text: m.message, kind: (m.metadata as { kind?: string } | undefined)?.kind, meetingCallId: (m.metadata as { meetingCallId?: string } | undefined)?.meetingCallId }));
+const chat = async () => (await chatStore.listMessages(callChatChannel(CALL), 100)).map((m) => ({ text: m.message, kind: (m.metadata as { kind?: string } | undefined)?.kind, meetingCallId: (m.metadata as { meetingCallId?: string } | undefined)?.meetingCallId,
+  minutes: (m.metadata as { minutes?: { decisions: number; actionItems: number; proposals: number } } | undefined)?.minutes }));
+const minutesNotices = async () => (await chat()).filter((c) => c.kind === 'assistant-notice' && c.minutes);
+const proposal = (id: string, over: Partial<Proposal>): Proposal => ({
+  id, callId: CALL, tenant: 'orgiq', statement: `Proposal ${id}`, outcome: { kind: 'decision', initiativeId: null }, argsDigest: 'd', named: [], executor: 'alice',
+  source: 'dev', evidence: [], state: 'open', responses: [], dismissedBy: null, createdAt: clock, updatedAt: clock, expiresAt: null, run: null, version: 1, ...over,
+});
 
 async function holdCall(lobby = LOBBY): Promise<void> {
   const observed = observeCallPageLifecycle(calls, () => null, () => runtime);
@@ -102,17 +109,44 @@ describe('writing the minutes', () => {
     expect(m).toMatchObject({ callId: CALL, callName: 'Call', writer: 'scripted', lineCount: 3, youAreInviter: true });
     expect(m.decisions).toEqual(['Thanks for joining. We decided to cut over on Thursday.'].map((d) => d));
     expect(m.actionItems).toEqual(expect.arrayContaining([{ text: 'rehearse the rollback', ownerUserId: 'bob', ownerName: 'Bob Baker' }, { text: 'update the runbook' }]));
-    const leaving = (await chat()).filter((c) => c.text.includes("Nova's minutes"));
+    const leaving = await minutesNotices();
     expect(leaving).toHaveLength(1);
-    expect(leaving[0]!.text).toContain('1 decision and 2 action items');
-    // The page is a metadata field the portal links from, never a path in the sentence.
+    // The text is the summary's first sentences; the counts ride on the message for the chat's minutes card.
+    expect(leaving[0]!.text).toBe(chatSummary(m.summary));
+    expect(leaving[0]!.minutes).toEqual({ decisions: 1, actionItems: 2, proposals: 0 });
+    // The page is a metadata field the portal links from, never a path in the text.
     expect(leaving[0]!.text).not.toContain('/iq/meetings');
     expect(leaving[0]!.meetingCallId).toBe(CALL);
     // A second finish (the call ending after the dismissal) writes nothing more.
     await runtime.finish(CALL); await minutesIdle();
-    expect((await chat()).filter((c) => c.text.includes("Nova's minutes"))).toHaveLength(1);
+    expect(await minutesNotices()).toHaveLength(1);
     expect(ledger.filter((e) => e['sourceId'] === `ma:${CALL}:minutes`)).toHaveLength(1);
     expect(ledger.find((e) => e['sourceId'] === `ma:${CALL}:minutes`)).toMatchObject({ source: 'meeting_assistant', actorId: 'alice', initiativeId: null, costBasis: 'estimated' });
+  });
+
+  it('the decisions count includes the decisions people consented to through the call\'s proposals, and the proposals are counted', async () => {
+    await talk();
+    const store = assistantStore();
+    await store.createProposal(proposal('p-done', { statement: 'Ship the dashboard on Friday.', state: 'done' }));
+    await store.createProposal(proposal('p-consented', { statement: 'Freeze the schema until March.', state: 'consented' }));
+    await store.createProposal(proposal('p-objected', { statement: 'Drop the legacy importer.', state: 'objected' }));
+    await store.createProposal(proposal('p-open', { statement: 'Move standup to ten.', state: 'open' }));
+    await store.createProposal(proposal('p-tool', { statement: 'Create the audit work item.', state: 'done', outcome: { kind: 'tool', name: 'create', args: {} } }));
+    await finish();
+    const m = (await get('minutes')).body;
+    // The minutes' own decision line stays one; the two consented decision proposals are added to it, nothing else is.
+    expect(m.decisions).toHaveLength(1);
+    expect((await minutesNotices())[0]!.minutes).toEqual({ decisions: 3, actionItems: 2, proposals: 5 });
+  });
+
+  it('a summary longer than the chat allows ends at a whole word with an ellipsis', () => {
+    const long = `${'Vera Green said the migration plan holds and the rollback rehearsal is booked '.repeat(8)}.`;
+    const head = chatSummary(long, 120);
+    expect(head.length).toBeLessThanOrEqual(121);
+    expect(head.endsWith('…')).toBe(true);
+    expect(long).toContain(head.slice(0, -1));
+    expect(long.charAt(head.length - 1)).toBe(' ');
+    expect(chatSummary('One. Two. Three. Four.')).toBe('One. Two. Three.');
   });
 
   it('an action item whose owner is still in the call is offered to that owner as a "Create a work item" card they alone can decide', async () => {

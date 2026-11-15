@@ -9,7 +9,8 @@
 // anything else stays unowned text. The key is read only in lib/voice/openai.ts; it never reaches this file.
 import { voiceConfig } from '../voice/config.js';
 import { postTextResponse, TextRequestError, VoiceProviderError } from '../voice/openai.js';
-import type { MinutesActionItem, TranscriptLine } from './types.js';
+import type { MinutesActionItem, MinutesRecord, Proposal, ProposalState, TranscriptLine } from './types.js';
+import type { MinutesCounts } from './chat-types.js';
 
 export interface RosterEntry { userId: string; name: string }
 
@@ -132,6 +133,35 @@ export function heldByProposal(decision: string, statements: readonly string[]):
 /** The draft's decisions without those the proposals hold (whichever writer wrote them). */
 export function withoutHeld(decisions: readonly string[], held: MinutesInput['held']): string[] {
   return held?.statements.length ? decisions.filter((d) => !heldByProposal(d, held.statements)) : [...decisions];
+}
+
+/** Proposal states every person it needed has consented to: a decision proposal in one of them is a decision of the meeting. */
+const AGREED: readonly ProposalState[] = ['consented', 'running', 'done'];
+
+/**
+ * What the minutes notice counts. The minutes' own decision lines leave out what a proposal already holds (`withoutHeld`), so a
+ * decision people consented to through one of the call's proposals is counted from the proposal: once, whether or not its record
+ * has been written yet. Objected, dismissed, expired and still-open proposals decided nothing.
+ */
+export function minutesCounts(minutes: Pick<MinutesRecord, 'decisions' | 'actionItems'>, proposals: readonly Pick<Proposal, 'outcome' | 'state'>[]): MinutesCounts {
+  const agreed = proposals.filter((p) => p.outcome.kind === 'decision' && AGREED.includes(p.state)).length;
+  return { decisions: minutes.decisions.length + agreed, actionItems: minutes.actionItems.length, proposals: proposals.length };
+}
+
+/** At most this many characters of the summary go into the chat; the meeting page holds the rest. */
+export const CHAT_SUMMARY_CHARS = 400;
+
+/**
+ * The summary's first sentences for the chat (up to three). Past `max` characters it ends at the last whole word with an
+ * ellipsis, never mid-word.
+ */
+export function chatSummary(summary: string, max = CHAT_SUMMARY_CHARS): string {
+  const sentences = summary.replace(/\s+/g, ' ').trim().match(/[^.!?]+[.!?]+(\s|$)|[^.!?]+$/g) ?? [];
+  const head = sentences.slice(0, 3).join('').trim();
+  if (head.length <= max) return head;
+  const cut = head.slice(0, max + 1);
+  const space = cut.lastIndexOf(' ');
+  return `${(space > max / 2 ? cut.slice(0, space) : head.slice(0, max)).replace(/[\s,;:.!?-]+$/, '')}…`;
 }
 
 export class ScriptedMinutesWriter implements MinutesWriter {

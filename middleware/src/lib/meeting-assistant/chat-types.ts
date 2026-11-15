@@ -26,7 +26,12 @@ export interface AssistantNoticeMetadata extends AssistantBase {
   kind: 'assistant-notice';
   /** The closing notice names the meeting it is about; the portal links to that meeting's page from it. */
   meetingCallId?: string;
+  /** The minutes notice only: what the minutes hold, so the chat draws them as a card. The text is the summary's first sentences. */
+  minutes?: MinutesCounts;
 }
+
+/** The counts a minutes notice carries. `decisions` includes the decisions people consented to through the call's proposals. */
+export interface MinutesCounts { decisions: number; actionItems: number; proposals: number }
 
 export interface AssistantReplyMetadata extends AssistantBase {
   kind: 'assistant-reply';
@@ -78,6 +83,14 @@ export function claimsAssistant(metadata: Record<string, unknown> | undefined | 
 }
 
 const str = (v: unknown, max = 2000): v is string => typeof v === 'string' && v.length > 0 && v.length <= max;
+const count = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 10_000;
+
+function minutesCounts(raw: unknown): MinutesCounts | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const c = raw as Record<string, unknown>;
+  return count(c['decisions']) && count(c['actionItems']) && count(c['proposals'])
+    ? { decisions: c['decisions'], actionItems: c['actionItems'], proposals: c['proposals'] } : null;
+}
 
 /** Parse stored metadata back into a typed shape; null when it is not a well-formed Nova message. */
 export function parseAssistantMetadata(raw: unknown): AssistantMetadata | null {
@@ -85,7 +98,10 @@ export function parseAssistantMetadata(raw: unknown): AssistantMetadata | null {
   const m = raw as Record<string, unknown>;
   if (m['assistant'] !== true) return null;
   const base = { assistant: true as const, displayName: NOVA_NAME };
-  if (m['kind'] === 'assistant-notice') return { ...base, kind: 'assistant-notice', ...(str(m['meetingCallId'], 200) ? { meetingCallId: m['meetingCallId'] } : {}) };
+  if (m['kind'] === 'assistant-notice') {
+    const minutes = minutesCounts(m['minutes']);
+    return { ...base, kind: 'assistant-notice', ...(str(m['meetingCallId'], 200) ? { meetingCallId: m['meetingCallId'] } : {}), ...(minutes ? { minutes } : {}) };
+  }
   if (m['kind'] === 'assistant-reply') {
     if (!str(m['askedBy'], 128) || !str(m['askedByName'], 128)) return null;
     return { ...base, kind: 'assistant-reply', askedBy: m['askedBy'], askedByName: m['askedByName'], ...(m['private'] === false ? { private: false as const } : {}) };

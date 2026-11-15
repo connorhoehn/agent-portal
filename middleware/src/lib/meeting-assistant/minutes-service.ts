@@ -19,7 +19,7 @@ import { nameOf, postAction, postAsAssistant, postNoticeQuietly, noticeText } fr
 import { NOVA_NAME } from './chat-types.js';
 import { meetingTools } from './instructions.js';
 import {
-  capTranscript, withoutHeld, MINUTES_TIMEOUT_MS, MinutesWriterError, OpenAiMinutesWriter, ScriptedMinutesWriter, type MinutesDraft, type MinutesWriter, type RosterEntry,
+  capTranscript, chatSummary, minutesCounts, withoutHeld, MINUTES_TIMEOUT_MS, MinutesWriterError, OpenAiMinutesWriter, ScriptedMinutesWriter, type MinutesDraft, type MinutesWriter, type RosterEntry,
 } from './minutes.js';
 import { assistantStore } from './store-select.js';
 import { minutesSpend, SCRIPTED_MINUTES_USD } from './spend.js';
@@ -42,6 +42,7 @@ const NOTES = {
   budget: 'Minutes could not be written because the inviter\'s budget did not allow it. The transcript is kept; the people who were in the call can read it.',
   failed: 'Minutes could not be written this time. The transcript is kept; the people who were in the call can read it.',
   noWriter: 'Minutes are not available in this deployment. The transcript is kept; the people who were in the call can read it.',
+  onPage: 'The minutes are on the meeting page.',
 } as const;
 
 /** Writes in flight, so a test (and a shutdown) can wait for them. */
@@ -87,11 +88,6 @@ export function createWorkItemArgs(title: string, initiativeName: string | null)
 const WRITE_CARD_TTL_MS = 10 * 60_000;
 const MAX_CARDS = 8;
 
-/** The first sentences of the summary for the chat (two or three). */
-function chatSummary(summary: string): string {
-  const sentences = summary.replace(/\s+/g, ' ').trim().match(/[^.!?]+[.!?]+(\s|$)|[^.!?]+$/g) ?? [];
-  return sentences.slice(0, 3).join('').trim().slice(0, 500);
-}
 
 async function writeDraft(record: AssistantRecord, writer: MinutesWriter, input: Parameters<MinutesWriter['write']>[0]): Promise<{ draft: MinutesDraft | null; note: string | null; writer: MinutesWriterKind }> {
   const spend = minutesSpend();
@@ -215,11 +211,13 @@ async function writeMinutesOnce(callId: string): Promise<MinutesRecord | null> {
   const stored = await store.putMinutes(minutes);
   if (!stored.created || stored.minutes.deleted) return null;
 
-  const words = `${stored.minutes.decisions.length} ${stored.minutes.decisions.length === 1 ? 'decision' : 'decisions'} and ${stored.minutes.actionItems.length} ${stored.minutes.actionItems.length === 1 ? 'action item' : 'action items'}`;
-  const head = draft ? chatSummary(stored.minutes.summary) : stored.minutes.summary;
-  // The page is a metadata field the chat renders as a link; the sentence carries no path.
-  const sentence = (draft ? `${NOVA_NAME}'s minutes: ${head} ${words}.` : head).replace(/\s+/g, ' ');
-  await postAsAssistant(callId, { text: sentence, metadata: { assistant: true, displayName: NOVA_NAME, kind: 'assistant-notice', meetingCallId: callId } }, { minutes: true })
+  // Written minutes post as a card: the text is the summary's first sentences and the counts ride on the message; the chat draws
+  // the title, the counts and the link. Without a draft the note alone is the notice. Either way the page is a metadata field the
+  // chat renders as a link; the text carries no path.
+  // Proposals are read again: one consented while the writer ran is counted.
+  const counts = draft ? minutesCounts(stored.minutes, await store.listProposals(callId).catch(() => proposals)) : null;
+  const text = (draft ? chatSummary(stored.minutes.summary) : stored.minutes.summary).replace(/\s+/g, ' ').trim() || NOTES.onPage;
+  await postAsAssistant(callId, { text, metadata: { assistant: true, displayName: NOVA_NAME, kind: 'assistant-notice', meetingCallId: callId, ...(counts ? { minutes: counts } : {}) } }, { minutes: true })
     .catch((error: unknown) => console.warn('[meeting-assistant] notice not posted', (error as Error).message));
   if (draft) await offerCards(record, stored.minutes, initiativeName).catch((e: unknown) => console.warn('[meeting-assistant] action cards not offered', (e as Error).message));
   return stored.minutes;

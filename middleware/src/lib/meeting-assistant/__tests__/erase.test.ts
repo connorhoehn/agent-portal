@@ -45,7 +45,7 @@ async function seed(store: MemoryAssistantStore) {
   await store.createTurn({ turnId: 't1', callId: CALL, askedBy: 'u-vera', tool: { name: 'create_work_item', args: { title: `Fix the ${WORDS[3]}`, body: WORDS[4] } }, kind: 'write', status: 'done', actionId: 'a1', createdAt: 100, expiresAt: 900 });
   await store.createTurn({ turnId: 't2', callId: CALL, askedBy: 'u-vera', tool: { name: 'search', args: { q: WORDS[3] } }, kind: 'read', status: 'expired', createdAt: 100, expiresAt: 900 });
   // Lines are stored only while listening; seed one through a second record is not needed: the contract is the same.
-  await postAsAssistant(CALL, { text: `Nova joined; the ${WORDS[1]} topic`, metadata: { assistant: true, displayName: 'Nova', kind: 'assistant-notice', meetingCallId: CALL } }, { minutes: true });
+  await postAsAssistant(CALL, { text: `Nova joined; the ${WORDS[1]} topic`, metadata: { assistant: true, displayName: 'Nova', kind: 'assistant-notice', meetingCallId: CALL, minutes: { decisions: 1, actionItems: 2, proposals: 0 } } }, { minutes: true });
   // The call is over, so the reply goes in as the minutes message does (the one exception postAsAssistant allows after leaving).
   await postAsAssistant(CALL, { text: `The ${WORDS[2]} is ready`, metadata: { assistant: true, displayName: 'Nova', kind: 'assistant-reply', askedBy: 'u-vera', askedByName: 'Vera', private: false } }, { minutes: true });
   await postAction(CALL, { actionId: 'a1', askedBy: 'u-vera', askedByName: 'Vera', summary: `Create work item: ${WORDS[3]}`, detail: [`Title: ${WORDS[3]}`, `Body: ${WORDS[4]}`], tool: { name: 'create_work_item', argsDigest: 'abc123' } }, { minutes: true });
@@ -98,6 +98,7 @@ describe('the inviter delete (memory store)', () => {
     expect(card.metadata).toMatchObject({ summary: DELETED_RECORD_LINE, status: 'waiting', actionId: 'a1' });
     expect(card.metadata?.['detail']).toBeUndefined(); expect(card.metadata?.['resultText']).toBeUndefined();
     expect(nova.find((m) => m.metadata?.['kind'] === 'assistant-notice')!.metadata?.['meetingCallId']).toBeUndefined(); // the link goes with the page
+    expect(nova.find((m) => m.metadata?.['kind'] === 'assistant-notice')!.metadata?.['minutes']).toBeUndefined(); // and so do the minutes' counts
     expect(rows.find((m) => m.id === 'h1')!.message).toBe(`I like the ${WORDS[2]} idea`);
   });
 
