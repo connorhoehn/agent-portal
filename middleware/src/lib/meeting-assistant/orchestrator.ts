@@ -220,6 +220,8 @@ interface CallRun {
   lineInput: Map<number, number>;
   /** Recent measures of how late the provider's transcript times run behind the voiced timeline (ms); see `transcriptLag`. */
   lagSamples: number[];
+  /** When the second model's messages became ready (epoch ms), not yet spoken: the next utterance after one speaks it. */
+  readyMessages: number[];
   delegationSeq: number;
   timeline: VoicedTimeline;
   calls: Map<string, CallState>;
@@ -387,7 +389,7 @@ export class AssistantRuntime {
     if (this.runs.has(ctx.callId)) return;
     this.watchIntake();
     const run: CallRun = {
-      ctx, session: null, unsubscribers: [], sessionStartedAt: 0, sessionNo: 0, pieceNo: 0, lastLineAt: 0, lastLineSeq: 0, delegationSeq: 0, inputNo: 0, inputEndAt: new Map(), lineInput: new Map(), lagSamples: [], timeline: new VoicedTimeline(),
+      ctx, session: null, unsubscribers: [], sessionStartedAt: 0, sessionNo: 0, pieceNo: 0, lastLineAt: 0, lastLineSeq: 0, delegationSeq: 0, inputNo: 0, inputEndAt: new Map(), lineInput: new Map(), lagSamples: [], readyMessages: [], timeline: new VoicedTimeline(),
       calls: new Map(), turnCalls: new Map(), requestCalls: new Map(), typedNoticed: new Set(), holding: new Set(), reply: null, replyById: new Map(), callTimes: new Map(), answeredLines: new Set(), claimedLines: new Map(), delegations: [], lastUnaskedNoticeAt: -Infinity, attendanceAt: -Infinity, heartbeatAt: -Infinity,
       intentionalClose: false, usageSeconds: 0, tokens: { input: 0, output: 0, cached: 0 },
       totals: { seconds: 0, input: 0, output: 0, cached: 0 }, replacements: 0, voice: false, voiceHeld: false,
@@ -513,7 +515,7 @@ export class AssistantRuntime {
   private async openSession(run: CallRun, recent: Awaited<ReturnType<AssistantRuntime['recentLines']>>): Promise<void> {
     const session = this.deps.makeSession(this.deps.clock);
     if (!session) throw new Error('no live session is available in this process');
-    run.sessionNo += 1; run.pieceNo = 0; run.lastLineAt = 0; run.lastLineSeq = 0; run.delegationSeq = 0; run.inputNo = 0; run.inputEndAt = new Map(); run.lineInput = new Map(); run.lagSamples = []; run.timeline = new VoicedTimeline();
+    run.sessionNo += 1; run.pieceNo = 0; run.lastLineAt = 0; run.lastLineSeq = 0; run.delegationSeq = 0; run.inputNo = 0; run.inputEndAt = new Map(); run.lineInput = new Map(); run.lagSamples = []; run.readyMessages = []; run.timeline = new VoicedTimeline();
     run.usageSeconds = 0; run.tokens = { input: 0, output: 0, cached: 0 };
     run.calls = new Map(); run.turnCalls = new Map(); run.holding = new Set(); run.reply = null; run.replyById = new Map(); run.callTimes = new Map(); run.answeredLines = new Set(); run.claimedLines = new Map(); run.delegations = []; run.intentionalClose = false;
     run.expiresAt = null;
@@ -588,6 +590,11 @@ export class AssistantRuntime {
         run.delegations.push(d);
         trace('delegation', { at });
         if (run.delegations.length > MAX_DELEGATIONS) run.delegations.shift();
+      }),
+      session.on('messageReady', (e) => {
+        if (session.kind === 'scripted') return;
+        run.readyMessages.push(run.sessionStartedAt + e.atMs);
+        if (run.readyMessages.length > MAX_DELEGATIONS) run.readyMessages.shift();
       }),
       session.on('delegationReady', (e) => {
         if (session.kind === 'scripted') return;
@@ -935,9 +942,20 @@ export class AssistantRuntime {
       // emitted before Nova's first word counts as before it, up to DELEGATION_LINE_SKEW_MS later than its wall-clock start.
       const bound = e.inputsBefore ? run.inputEndAt.get(e.inputsBefore) : undefined;
       const tLines = bound !== undefined ? Math.max(t, Math.min(bound, t + DELEGATION_LINE_SKEW_MS)) : t;
-      if (this.takeAcknowledgement(run, t, tEnd, await this.addressingLines(run), tLines)) { decide('acknowledgement'); return; }
+      // An utterance that begins after a message of the second model became ready speaks that message: it is no acknowledgement
+      // (paid run: the voice spoke a read's result just after it had delegated the next person's question).
+      run.readyMessages = run.readyMessages.filter((m) => t - m < ASKER_WINDOW_MS);
+      const speaks = run.readyMessages.findIndex((m) => m <= t);
+      if (speaks >= 0) run.readyMessages.splice(speaks, 1);
+      if (speaks < 0 && this.takeAcknowledgement(run, t, tEnd, await this.addressingLines(run), tLines)) { decide('acknowledgement'); return; }
       const c = run.reply;
-      if (c && this.contextLive(c, t) && !(await this.contextEnded(run, c))) {
+      // A plain answer to work begun AFTER the current context's answer is that work's, not the context's.
+      const fresh = c !== null && run.delegations.some((x) => !x.answered && x.item === 'message' && x.readyAt !== null && x.readyAt <= t && t - x.at < ASKER_WINDOW_MS && x.at > c.answeredAt);
+      const newer = fresh ? await this.takeDelegatedAnswer(run, t) : undefined;
+      if (newer) {
+        asker = newer.asker;
+        decide('owner.delegated', { asker, context: 'newer-work' });
+      } else if (c && this.contextLive(c, t) && !(await this.contextEnded(run, c))) {
         if (c.visibility === 'muted' || !c.asker) { decide('drop.mutedContext', { call: c.modelCallId }); return; }
         asker = c.asker;
         decide('owner.context', { asker, call: c.modelCallId });

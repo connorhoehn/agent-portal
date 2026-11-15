@@ -33,6 +33,8 @@ export interface SessionEvents {
   delegation: { atMs: number };
   /** The work begun at the latest delegation produced its first item: a spoken message or a function call. Speech that began before this moment is the acknowledgement. */
   delegationReady: { atMs: number; item: 'message' | 'function_call' };
+  /** The second model produced a message for the voice to speak (any response: a delegated answer, or the words after a tool result). */
+  messageReady: { atMs: number };
   /** Cumulative seconds the session has run, and the backend tokens so far when the provider reported them. */
   usage: { seconds: number; backendTokens?: BackendTokens; /** True when `seconds` is the server's own wall-clock estimate (an unexpected close). */ estimated?: boolean };
   /** What Nova said aloud: PCM16 mono 24 kHz, at most 100 ms, VOICED frames only (silence is dropped at the source). `seq` counts frames from 1 per session. Never stored or logged. */

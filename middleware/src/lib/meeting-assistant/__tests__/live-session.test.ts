@@ -50,7 +50,7 @@ beforeEach(() => {
 
 function make(over: Partial<ConstructorParameters<typeof OpenAiLiveSession>[0]> = {}) {
   const s = new OpenAiLiveSession({ model: 'gpt-live-1', voice: 'marin', delegationModel: 'gpt-6-luna', idleFlushMs: 40, closeTimeoutMs: 120, ...over });
-  const seen: { [K in keyof SessionEvents]: SessionEvents[K][] } = { inputTranscript: [], outputTranscript: [], toolCall: [], delegation: [], delegationReady: [], usage: [], outputAudio: [], expires: [], closed: [], error: [] };
+  const seen: { [K in keyof SessionEvents]: SessionEvents[K][] } = { inputTranscript: [], outputTranscript: [], toolCall: [], delegation: [], delegationReady: [], messageReady: [], usage: [], outputAudio: [], expires: [], closed: [], error: [] };
   (Object.keys(seen) as Array<keyof SessionEvents>).forEach((k) => s.on(k, ((e: never) => { (seen[k] as unknown[]).push(e); }) as never));
   return { s, seen };
 }

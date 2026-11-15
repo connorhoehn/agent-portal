@@ -1522,6 +1522,28 @@ describe('the real provider\'s event order (paid runs, 14 November)', () => {
     expect(mockPosts.replies).toEqual([{ text: 'Lisbon.', askedBy: ALICE, askedByName: 'Alice' }]);
   });
 
+  it('after a read\'s result the voice speaks it, then answers the question another person asked meanwhile, each labelled for its asker', async () => {
+    const base = now;
+    const s = await realRuntime();
+    await line(ALICE, 'Nova, find the Kubernetes experts.', base + 46_800);
+    now = base + 47_646; s.fire('delegation', { atMs: 47_646 });
+    now = base + 48_374; s.fire('delegationReady', { atMs: 48_374, item: 'function_call' });
+    now = base + 48_502; s.call('call_r', 'search', { query: 'Kubernetes experts' }, 48_502); await flush();
+    now = base + 49_000; s.sayAt('One moment.', 48_784, 49_598); await flush();
+    await line(BOB, 'Nova, what is seven times eight?', base + 52_600);
+    const [turn] = await runtime.turnsFor(CALL, ALICE);
+    now = base + 66_900; await submitClaimed(CALL, turn!.turnId, ALICE, { ok: true, output: { say: 'two experts' } });
+    now = base + 67_798; s.fire('messageReady', { atMs: 67_798 });
+    now = base + 68_331; s.fire('delegation', { atMs: 68_331 }); await flush();
+    now = base + 70_571; s.fire('delegationReady', { atMs: 70_571, item: 'message' }); s.fire('messageReady', { atMs: 70_571 });
+    now = base + 70_624; s.sayAt('Two experts found.', 68_778, 69_721); await flush();
+    now = base + 74_250; s.sayAt('Fifty six.', 71_574, 73_350); await flush();
+    expect(mockPosts.replies).toEqual([
+      { text: 'Two experts found.', askedBy: ALICE, askedByName: 'Alice' },
+      { text: 'Fifty six.', askedBy: BOB, askedByName: 'Bob' },
+    ]);
+  });
+
   it('one heard turn holding two people (a request spoken right after someone else\'s sentence) is stored as one line each', async () => {
     const s = await realRuntime();
     audioTap.sink!.placed(BOB, loud(1_500), 0);

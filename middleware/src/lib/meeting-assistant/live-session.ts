@@ -386,9 +386,11 @@ export class OpenAiLiveSession extends SessionEmitter implements LiveMeetingSess
   private onResponseEvent(raw: unknown): void {
     if (!raw || typeof raw !== 'object') return;
     const e = raw as Record<string, unknown>;
-    if (e['type'] === 'response.output_item.added' && this.awaitingItem) {
+    if (e['type'] === 'response.output_item.added') {
       const kind = (e['item'] as Record<string, unknown> | undefined)?.['type'];
-      if (kind === 'message' || kind === 'function_call') { this.awaitingItem = false; this.emit('delegationReady', { atMs: this.sinceStart(), item: kind }); }
+      if (this.awaitingItem && (kind === 'message' || kind === 'function_call')) { this.awaitingItem = false; this.emit('delegationReady', { atMs: this.sinceStart(), item: kind }); }
+      // Every message the second model writes is then spoken by the voice (a delegated answer, or what follows a tool result).
+      if (kind === 'message') this.emit('messageReady', { atMs: this.sinceStart() });
       return;
     }
     if (e['type'] === 'response.output_item.done') {
