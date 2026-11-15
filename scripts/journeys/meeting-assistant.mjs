@@ -1367,9 +1367,14 @@ async function main() {
         check(await veraM.page.getByTestId('assistant-proposal-card').count() === 0, 'the meeting page still draws proposal cards');
         await transcriptBox.locator('summary').click(); // closed again, to measure the page without the transcript
         // The page scrolls inside the shell's column: measure that scroller (the nearest scrolling ancestor), not the document.
-        const tall = await veraM.page.getByTestId('meeting-page').evaluate((el) => {
-          let n = el; while (n && n !== document.body && !(n.scrollHeight > n.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(n).overflowY))) n = n.parentElement;
-          return (n && n !== document.body ? n : document.documentElement).scrollHeight;
+        // The height of the page's content, from its title to the end of the collapsed transcript, whatever scrolls it.
+        const tall = await veraM.page.evaluate(() => {
+          // Every scroller above the page back to its top (the header is sticky, so scrolling the title into view is not enough).
+          for (let n = document.querySelector('[data-testid="meeting-summary"]'); n; n = n.parentElement) n.scrollTop = 0;
+          window.scrollTo(0, 0);
+          const top = document.querySelector('[data-testid="meeting-page"] h1')?.getBoundingClientRect().top ?? 0;
+          const end = document.querySelector('[data-testid="meeting-transcript"]')?.getBoundingClientRect().bottom ?? 0;
+          return Math.round(end - top);
         });
         check(tall <= 2200, `the page is ${tall}px tall with ${api.proposals.length} proposals (eight rows should fit in about two screens)`);
         await transcriptBox.locator('summary').click();
@@ -1379,15 +1384,13 @@ async function main() {
       for (const width of [1440, 1280]) {
         await veraM.page.setViewportSize({ width, height: 900 });
         // Back to the top of the page's own scroller, then a second shot one screen further down.
-        const toTop = (by) => veraM.page.getByTestId('meeting-page').evaluate((el, dy) => {
-          let n = el; while (n && n !== document.body && !(n.scrollHeight > n.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(n).overflowY))) n = n.parentElement;
-          (n && n !== document.body ? n : document.scrollingElement).scrollTop = dy;
-        }, by);
-        await toTop(0); await sleep(400);
+        // Set every scroller above the summary to `dy` (0 is the top; the header is sticky, so scrolling the title into view is not enough).
+        const scrollTo = (dy) => veraM.page.evaluate((y) => { for (let n = document.querySelector('[data-testid="meeting-summary"]'); n; n = n.parentElement) if (n.scrollHeight > n.clientHeight) n.scrollTop = y; window.scrollTo(0, 0); }, dy);
+        await scrollTo(0); await sleep(400);
         await veraM.page.screenshot({ path: path.join(SHOTS, `13-meeting-page-${width}.png`), fullPage: false });
-        await toTop(700); await sleep(400);
+        await scrollTo(600); await sleep(400);
         await veraM.page.screenshot({ path: path.join(SHOTS, `13-meeting-page-${width}-lower.png`), fullPage: false });
-        await toTop(0);
+        await scrollTo(0);
       }
       return out.join(', ');
     });

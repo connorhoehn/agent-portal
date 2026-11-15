@@ -41,6 +41,8 @@ describe('the scripted writer', () => {
     const { lead, points } = summaryParts(out.summary);
     expect(lead).toBe('Two people met for under a minute.');
     expect(points).toEqual(['Agreed: Freeze schema changes.', '3 proposals still wait for answers: Keep tenants read-only; Page the on-call; and 1 more.']);
+    const done = await write([line('u-vera', 'Fine.')], [{ text: 'Created work item: Fix the login cookie', ownerUserId: 'u-nora' }]);
+    expect(summaryParts(done.summary).points).toEqual(['Done in the call: created work item "Fix the login cookie".']);
     const nothing = await write([line('u-vera', 'Chatter.')]);
     expect(summaryParts(nothing.summary).points).toEqual(['No decisions or next steps were recorded.']);
   });

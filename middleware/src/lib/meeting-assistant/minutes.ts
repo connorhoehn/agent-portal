@@ -207,10 +207,14 @@ export function scriptedSummary(input: { people: number; spanMs: number; callNam
   const points: string[] = [];
   const decided = [...input.agreed, ...input.decisions];
   if (decided.length) points.push(`${decided.length === 1 ? 'Agreed' : `Agreed ${decided.length} things`}: ${listWords(decided, 2)}.`);
-  if (input.items.length) {
-    const said = input.items.map((i) => (i.ownerName ? `${i.ownerName} to ${i.text.charAt(0).toLowerCase()}${i.text.slice(1)}` : i.text));
-    points.push(`${input.items.length === 1 ? 'Next step' : `${input.items.length} next steps`}: ${listWords(said, 2)}.`);
+  // Open items read as who will do them; things already done in the call read as what happened ("Created work item: X").
+  const open = input.items.filter((i) => !i.done);
+  const done = input.items.filter((i) => i.done);
+  if (open.length) {
+    const said = open.map((i) => (i.ownerName ? `${i.ownerName} to ${i.text.charAt(0).toLowerCase()}${i.text.slice(1)}` : i.text));
+    points.push(`${open.length === 1 ? 'Next step' : `${open.length} next steps`}: ${listWords(said, 2)}.`);
   }
+  if (done.length) points.push(`Done in the call: ${listWords(done.map((i) => i.text.replace(/^Created ([^:]+): (.+)$/, (_m, kind: string, title: string) => `created ${kind.replace(/^a /, '')} "${title}"`)), 2)}.`);
   if (input.open.length) points.push(`${input.open.length === 1 ? 'Still waiting for answers' : `${input.open.length} proposals still wait for answers`}: ${listWords(input.open, 2)}.`);
   if (!points.length) points.push('No decisions or next steps were recorded.');
   return { lead, points };
