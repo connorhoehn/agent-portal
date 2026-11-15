@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { useSidePane, useSidePaneHost } from '@connorhoehn/ui-components';
-import { Button, Inline, Stack, T } from '@connorhoehn/ui-components/shared';
+import { AmbientSurface, Button, Inline, Stack, T } from '@connorhoehn/ui-components/shared';
 import { useComposerFocus, useComposerFocusReveal } from '@connorhoehn/ui-components/social/rich-composer';
 import { HuddleChatBody, useHuddleChat } from './HuddleChat';
 import { useNovaRosterEntry } from './MeetingAssistantBar';
@@ -44,16 +44,22 @@ export function ConversationPaneBody({ pane, pageLabel, children }: {
   pane: ReturnType<typeof useConversationPane>; pageLabel: string; children: ReactNode;
 }) {
   const nova = useNovaRosterEntry(pane.huddle?.callId ?? null);
+  const destination = pane.huddle?.callId && <Inline gap="sm" align="center" justify="between" className="shrink-0 border-b border-border px-4 py-2" data-testid="conversation-pane-destination">
+    <T size="xs" tone="secondary">{pane.inHuddle ? 'Current huddle' : pageLabel}</T>
+    {/* Nova is not a media participant, so the call's tiles never list it; the pane's destination row does. */}
+    {nova && <T size="xs" tone="secondary" className="min-w-0 flex-1 truncate" data-testid="nova-roster-entry">{nova}</T>}
+    <Button size="sm" variant="ghost" onClick={pane.inHuddle ? pane.showDiscussion : pane.showHuddle}>
+      {pane.inHuddle ? pageLabel : 'Huddle chat'}
+    </Button>
+  </Inline>;
+  // The huddle dialogue reads as its own place, apart from the page: the muted surface with its slow dot field behind the
+  // messages. The page thread keeps its position among the children, so it stays mounted while the call holds the pane.
   return <Stack gap="none" className="min-h-0 flex-1">
-    {pane.huddle?.callId && <Inline gap="sm" align="center" justify="between" className="shrink-0 border-b border-border px-4 py-2" data-testid="conversation-pane-destination">
-      <T size="xs" tone="secondary">{pane.inHuddle ? 'Current huddle' : pageLabel}</T>
-      {/* Nova is not a media participant, so the call's tiles never list it; the pane's destination row does. */}
-      {nova && <T size="xs" tone="secondary" className="min-w-0 flex-1 truncate" data-testid="nova-roster-entry">{nova}</T>}
-      <Button size="sm" variant="ghost" onClick={pane.inHuddle ? pane.showDiscussion : pane.showHuddle}>
-        {pane.inHuddle ? pageLabel : 'Huddle chat'}
-      </Button>
-    </Inline>}
+    {!pane.inHuddle && destination}
     <Stack gap="none" className="min-h-0 flex-1" hidden={pane.inHuddle}>{children}</Stack>
-    {pane.inHuddle && <HuddleChatBody />}
+    {pane.inHuddle && <AmbientSurface tone="muted" effect="drift" className="flex min-h-0 flex-1 flex-col" data-testid="huddle-dialogue-surface">
+      {destination}
+      <HuddleChatBody />
+    </AmbientSurface>}
   </Stack>;
 }
