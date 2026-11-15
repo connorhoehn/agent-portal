@@ -34,7 +34,7 @@ import {
 import { bumpProposalPrompt, setProposalDeckHidden } from '../../lib/proposalDeckState';
 import {
   actionCardView, actionDoesLine, actionHeader, actionLayout, actionNeedsLine, actionRowText, actionTitle, askedByLine, decideAssistantAction, isLongNotice,
-  minutesCountLabels, readAssistantMessage, splitNotice, type ActionDecision, type AssistantAction, type AssistantProposalCard, type CardLayout, type MinutesCounts,
+  minutesCountLine, readAssistantMessage, splitNotice, type ActionDecision, type AssistantAction, type AssistantProposalCard, type CardLayout, type MinutesCounts,
 } from '../../lib/assistantMessages';
 
 type PillTone = 'info' | 'success' | 'warning' | 'error' | 'neutral' | 'pending';
@@ -120,7 +120,7 @@ function CardRow({ layout, testId, attrs, pill, text, textTestId, trailing, onEx
     <Card tone={look.tone} padding="none" className={look.className} data-testid={testId} data-layout={layout} data-collapsed="true" {...attrs}>
       <Inline gap="sm" align="center" justify="between" wrap={false}>
         <Inline gap="sm" align="center" wrap={false} className="min-w-0">
-          {pill}
+          <Inline gap="none" align="center" wrap={false} className="shrink-0">{pill}</Inline>
           <T size="xs" tone={layout === 'done' ? 'secondary' : 'tertiary'} truncate title={text} data-testid={textTestId}>{text}</T>
         </Inline>
         <Inline gap="xs" align="center" wrap={false}>
@@ -443,7 +443,6 @@ function NoticeBlock({ content, callId }: { content: string; callId: string | un
  */
 export function MinutesCard({ summary, counts, callId }: { summary: string; counts: MinutesCounts; callId: string | undefined }) {
   const navigate = useNavigate();
-  const labels = minutesCountLabels(counts);
   return (
     <Card tone="default" padding="none" className="mt-1 max-w-md px-3 py-2.5" data-testid="assistant-minutes-card" data-layout="others">
       <Stack gap="xs">
@@ -452,11 +451,7 @@ export function MinutesCard({ summary, counts, callId }: { summary: string; coun
           <StatusPill tone="success" label="Ready" size="sm" data-testid="assistant-minutes-status" />
         </Inline>
         {summary && <T size="sm" clamp={2} data-testid="assistant-minutes-summary">{summary}</T>}
-        <T size="xs" tone="secondary" wrap data-testid="assistant-minutes-counts">
-          <T as="span" size="xs" tone="inherit" data-testid="assistant-minutes-decisions">{labels.decisions}</T>{' · '}
-          <T as="span" size="xs" tone="inherit" data-testid="assistant-minutes-action-items">{labels.actionItems}</T>{' · '}
-          <T as="span" size="xs" tone="inherit" data-testid="assistant-minutes-proposals">{labels.proposals}</T>
-        </T>
+        <T size="xs" tone="secondary" wrap data-testid="assistant-minutes-counts">{minutesCountLine(counts)}</T>
         {callId && (
           <Inline gap="sm" align="center">
             <Button variant="secondary" size="sm" onClick={() => navigate(meetingHref(callId))} data-testid="assistant-notice-meeting-link">Open the meeting</Button>

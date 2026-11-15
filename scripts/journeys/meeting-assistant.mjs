@@ -926,6 +926,7 @@ async function main() {
       check(recLook.layout === 'done' && recLook.height <= 48, `the recorded card is not one row: ${JSON.stringify(recLook)}`);
       await card(eli, p1).getByTestId('assistant-proposal-expand').click();
       await waitFor(async () => (await chipsOf()).filter((t) => t.includes('· consented')).length === 2, 15000, 'two consented chips');
+      const chipsSeen = (await chipsOf()).join(', ');
       await card(eli, p1).getByTestId('assistant-proposal-collapse').click();
       for (const p of [vera, nora, eli]) {
         await waitFor(async () => recorded(PROPOSAL_1).test(await card(p, p1).innerText()), 15000, `${p.who.userId}: the card's closing line`);
@@ -934,7 +935,7 @@ async function main() {
         await gone(p.page, 'nova-proposal-count');
       }
       await card(vera, p1).scrollIntoViewIfNeeded(); await shot(vera.page, 'P5-proposal-recorded', 1440);
-      return `run by ${done.run.by.name}; ${done.run.href}; chips ${(await chipsOf()).join(', ')}`;
+      return `run by ${done.run.by.name}; ${done.run.href}; chips ${chipsSeen}`;
     });
 
     await step('P5b: the card\'s link names the decision page, which says "Agreed in a call by" the two who consented', async () => {
