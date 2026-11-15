@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-11-14T21:59:58.111Z",
-  "serverHandlerSha": "8d109d71477c469f0a67055441f7d71da088c221c01f3ec0e3164adf2ca1d3a2",
+  "capturedAt": "2026-11-15T01:46:48.199Z",
+  "serverHandlerSha": "a2a7f7ca8dff0f274fa62f11922979a68eee189ce5d65a7124de55c7d52a60ca",
   "baseUrl": "http://127.0.0.1:3961",
   "personas": [
     "orgiq/admin",
@@ -3962,8 +3962,8 @@
           "ORG-DSAPI-4",
           "ORG-FS-1",
           "ORG-FS-3",
-          "ORG-FS-4",
           "ORG-INF-1",
+          "ORG-INF-3",
           "ORG-LAKE-2",
           "ORG-LAKE-3",
           "ORG-LAKE-4",
@@ -6076,7 +6076,7 @@
         "points[].bucketStart": "string",
         "points[].count": "number",
         "points[].driftP95": "number",
-        "points[].judgeP50": "null|number",
+        "points[].judgeP50": "number",
         "windowHours": "number"
       },
       "values": {}
