@@ -20,6 +20,9 @@ export const PIPELINE_MS = 300;
  * saw a turn's start 0.5 to 1.4 s after its speaker's voice began, about 1 s typically. The fake reports its spans this much late.
  */
 export const REPORT_LAG_MS = 1000;
+/** And its clock gains on the audio it was sent: about 1.3 s every 100 s of call in the same runs. */
+export const REPORT_GAIN = 0.013;
+const reported = (ms) => Math.round(ms * (1 + REPORT_GAIN) + REPORT_LAG_MS);
 /** Quietest mixed-audio level (rms) the fake provider counts as speech heard. */
 const HEARD_RMS = 150;
 
@@ -115,7 +118,7 @@ export class FakeProvider {
         if (!delta) continue;
         // As the real provider sends it (paid run, 14 November): a word or two per delta, each with its own span, and no delta ever
         // ends a sentence, so a turn ends only at a gap, a delegation or Nova's own speech (or the server's idle flush).
-        for (const w of wordDeltas(delta, Math.max(0, Math.round(start + REPORT_LAG_MS)), Math.max(1, Math.round(end + REPORT_LAG_MS)))) { send({ type: 'session.input_transcript.delta', ...w }); this.seen.deltas += 1; }
+        for (const w of wordDeltas(delta, Math.max(0, reported(start)), Math.max(1, reported(end)))) { send({ type: 'session.input_transcript.delta', ...w }); this.seen.deltas += 1; }
         const delegateWork = (callId) => {
           send({ type: 'session.delegation.created', offset_ms: st.audioMs, delegation: { id: `item_${callId}`, type: 'delegation', target: 'responses' } });
           // The voice acknowledges at once, before the work has produced anything (the real one within about 350 ms).

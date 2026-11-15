@@ -2,7 +2,7 @@
 // lines include the word without a request (a story about asking Nova, a place called Nova Scotia at the start of a sentence, the word
 // "innovation", a colleague named Nora being asked a question). Voice is on. Nova must say nothing, call no tool and relay no voice;
 // attribution is measured line by line; one addressed request at the end is answered.
-import { synth, msOf } from '../lib/harness.mjs';
+import { synth, msOf, findAllSaid, PEOPLE } from '../lib/harness.mjs';
 
 const TOPICS = ['the reminder emails', 'the calendar sync', 'the onboarding checklist', 'the invite links', 'the time zone picker', 'the mobile layout', 'the sign-in page', 'the weekly digest', 'the search filters', 'the export to spreadsheets', 'the dark theme', 'the release notes'];
 const TEMPLATES = [
@@ -46,10 +46,13 @@ export default {
   async run(ctx) {
     const { r } = ctx;
     const minutes = ctx.minutes ?? 10;
+    // Speech is made BEFORE Nova is invited: making eighty lines takes minutes, and Nova's listening ceiling (the scenario's limit)
+    // runs from the invite, so making them after it left Nova at its ceiling before the final request (paid run, 14 November).
+    const plan = lines(Math.max(4, Math.round(8 * minutes)));
+    const synthed = plan.map((l) => ({ ...l, ms: msOf(synth(l.text, { voice: PEOPLE[l.who].voice, dir: ctx.world.dir }).pcm) }));
+    synth('Nova, what is two plus two?', { voice: PEOPLE.vera.voice, dir: ctx.world.dir });
     const { p, call } = await ctx.setup({ people: ['vera', 'nora', 'mia'], voice: true });
     for (const k of WHO) ctx.lane(k);
-    const plan = lines(Math.max(4, Math.round(8 * minutes)));
-    const synthed = plan.map((l) => ({ ...l, ms: msOf(synth(l.text, { voice: ctx.world.people.get(`u-${l.who}`)?.p.voice, dir: ctx.world.dir }).pcm) }));
     const talk = synthed.reduce((n, l) => n + l.ms, 0);
     const budgetMs = Math.max(0, minutes * 60_000 - 20_000 - talk);
     const gap = Math.max(1300, Math.round(budgetMs / synthed.length));
@@ -79,7 +82,7 @@ export default {
     const stored = await call.transcript();
     let right = 0, missing = 0, two = 0, wrong = 0;
     for (const l of placed.slice(0, placed.length)) {
-      const hit = stored.filter((s) => s.text.includes(l.text.slice(0, 24)));
+      const hit = findAllSaid(stored, l.text);
       if (!hit.length) { missing += 1; continue; }
       if (hit.some((s) => (s.speakers?.length ?? 0) > 1)) { two += 1; continue; }
       if (hit.every((s) => s.userId === `u-${l.who}`)) right += 1; else wrong += 1;

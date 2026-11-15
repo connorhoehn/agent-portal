@@ -1,7 +1,7 @@
 // crosstalk: three people talk over each other the way a real call does: pairs overlapping by a third to a half of a line, short
 // interjections under a long line, and an addressed request that begins while someone else is finishing a line (40 percent of it overlapped). Attribution is measured for
 // every line (right, wrong, missing, split between two people); the asker of the request must be the person who spoke it.
-import { synth, msOf, PEOPLE } from '../lib/harness.mjs';
+import { synth, msOf, PEOPLE, findAllSaid } from '../lib/harness.mjs';
 
 export default {
   order: 5, id: 'crosstalk', limitSeconds: 120, title: 'overlapping speech: attribution per line, and the request\'s asker is its speaker',
@@ -43,7 +43,7 @@ export default {
     let right = 0, wrong = 0, missing = 0, split = 0;
     const detail = [];
     for (const l of lines) {
-      const hit = stored.filter((s) => s.text.trim() === l.text);
+      const hit = findAllSaid(stored, l.text);
       let verdict;
       if (!hit.length) { missing += 1; verdict = 'missing'; }
       else if (hit.some((s) => (s.speakers?.length ?? 0) > 1)) { split += 1; verdict = 'split'; }

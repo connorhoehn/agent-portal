@@ -79,3 +79,26 @@ export function attachEcho({ clock, person, lane, delayMs, gainDb = -12 }) {
 }
 
 export { PEOPLE, Call, World, Reporter, sleep, billingOf, synth, msOf, concat, silence };
+
+// ── Finding a spoken line among the stored ones ───────────────────────────────────────────────────────────────
+// A real provider's transcript is not the script word for word ("2 plus 2", other punctuation, a word misheard), so a planned line
+// is found by its words: the stored line holding the largest share of them, at least `min` of them.
+const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+export function saidWords(text) {
+  return String(text).toLowerCase().replace(/\+/g, ' plus ').replace(/\b(\d{1,2})\b/g, (_, n) => NUMBER_WORDS[Number(n)] ?? n)
+    .replace(/[^a-z0-9' ]+/g, ' ').split(/\s+/).filter(Boolean);
+}
+export function findSaid(stored, text, min = 0.7) {
+  const want = [...new Set(saidWords(text))];
+  let best = null, bestShare = 0;
+  for (const s of stored) {
+    const have = new Set(saidWords(s.text));
+    const share = want.filter((w) => have.has(w)).length / Math.max(1, want.length);
+    if (share > bestShare) { best = s; bestShare = share; }
+  }
+  return bestShare >= min ? best : null;
+}
+export function findAllSaid(stored, text, min = 0.7) {
+  const want = [...new Set(saidWords(text))];
+  return stored.filter((s) => { const have = new Set(saidWords(s.text)); return want.filter((w) => have.has(w)).length / Math.max(1, want.length) >= min; });
+}

@@ -2,7 +2,7 @@
 //  pass 1: Nora's lane carries keyboard clicks at four times Vera's level while Vera asks
 //  pass 2: Nora speaks at four times Vera's gain just before and just after Vera's request
 // In both, the asker must be Vera and the request must be stored under Vera.
-import { synth, msOf, rms, gained, PEOPLE } from '../lib/harness.mjs';
+import { synth, msOf, rms, gained, PEOPLE, findSaid } from '../lib/harness.mjs';
 
 export default {
   order: 6, id: 'loud-neighbour', limitSeconds: 90, title: 'a quiet request next to a loud neighbour is still Vera\'s',
@@ -31,9 +31,9 @@ export default {
     await ctx.debug();
 
     const stored = await call.transcript();
-    const line = (text) => stored.find((s) => s.text.includes(text));
+    const line = (text) => findSaid(stored, text);
     for (const [label, q] of [['pass 1 (clicks)', q1], ['pass 2 (loud speech either side)', q2]]) {
-      const l = line(q.slice(6, 24));
+      const l = line(q);
       r.expect(`${label}: the request is stored under Vera alone`, !!l && l.userId === 'u-vera' && (l.speakers?.length ?? 0) <= 1, l ? `${l.userId} ${JSON.stringify(l.speakers ?? [])}` : 'no such line');
     }
     const chat = await call.chatMessages(p.vera);
