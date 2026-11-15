@@ -74,8 +74,35 @@ export interface MinutesView {
   keptUntil?: number;
   /** What Nova covered: its listening seconds, the rest of its time in the call, and how many people were not transcribed (a count). */
   coverage?: MinutesCoverage;
-  /** No draft: whether an attendee may ask Nova to write the minutes again. */
+  /** No draft (or an addition that could not be written): whether an attendee may ask Nova to try again. */
   rewrite?: { writing: boolean; possible: boolean; attemptsLeft: number };
+  /** Nova was invited back and is in the call now. Absent from an older server. */
+  backInCall?: boolean;
+  /** A later part of the call could not be added to these minutes yet. Absent from an older server. */
+  additionOwed?: boolean;
+  /** How many times a later part of the call was added. Absent from an older server. */
+  additions?: number;
+}
+
+/**
+ * The one quiet sentence under the summary about a later part of the call: Nova is back in the call (what it hears is added when it
+ * leaves), it is adding it now, or it could not yet. Null when there is nothing to say.
+ */
+export function additionNote(m: Pick<MinutesView, 'backInCall' | 'additionOwed' | 'rewrite'>): string | null {
+  if (m.backInCall) return 'Nova is back in this call. What it hears now is added to these minutes when it leaves.';
+  if (!m.additionOwed) return null;
+  if (m.rewrite?.writing) return 'Nova is adding the later part of this call to these minutes.';
+  return m.rewrite && m.rewrite.attemptsLeft === 0
+    ? 'Nova could not add the later part of this call to these minutes and will not try again. The transcript below has all of it.'
+    : 'Nova could not add the later part of this call to these minutes yet. These minutes cover the earlier part, and Nova will try again.';
+}
+
+/** The page menu's retry, when one is possible: write failed minutes again, or add the later part again. Null when none. */
+export function retryLabel(m: Pick<MinutesView, 'writer' | 'additionOwed' | 'rewrite'>, written: boolean): string | null {
+  const r = m.rewrite;
+  if (!r?.possible || r.writing || r.attemptsLeft <= 0) return null;
+  if (m.additionOwed) return 'Add the later part again';
+  return written ? null : 'Write the minutes again';
 }
 
 export interface MinutesCoverage { listenedSeconds: number; pausedSeconds: number; untranscribed: number }

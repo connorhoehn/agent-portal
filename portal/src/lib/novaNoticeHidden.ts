@@ -6,6 +6,9 @@ const hidden = new Set<string>();
 const listeners = new Set<() => void>();
 const subscribe = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
 
+/** The notice is closed per period of Nova in the call: after Nova is invited back everyone acknowledges again, so it shows again. */
+export const noticeKey = (callId: string | null, period: number): string | null => (callId ? `${callId}#${period}` : null);
+
 export function hideNovaNotice(callId: string): void {
   if (hidden.has(callId)) return;
   hidden.add(callId);

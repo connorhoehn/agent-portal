@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { canCreateFor, durationLabel, peopleLabel, summaryLine, transcriptSegments, minutesUrl, transcriptUrl, meetingHref, proposalsLive, proposalsUrl,
   goneCopy, meetingsUrl, headerMeta, quietMeta, summaryOf, listLead, listenedLabel, outcomesLabel, orderProposals, proposalClosed, proposalPill,
-  actionStatus, actionWaitsOn, createWorkItemUrl, workItemLink, decisionRows, actionText, outcomeShort, facesFor, mergeMeetings, minutesWritten, rewriteUrl, waitingLabel, MINUTES_UNAVAILABLE, type MeetingListRow } from '../meetingsModel.ts';
+  actionStatus, actionWaitsOn, createWorkItemUrl, workItemLink, decisionRows, actionText, outcomeShort, facesFor, mergeMeetings, minutesWritten, rewriteUrl, waitingLabel, MINUTES_UNAVAILABLE, additionNote, retryLabel, type MeetingListRow } from '../meetingsModel.ts';
 
 test('duration reads in minutes and hours', () => {
   assert.equal(durationLabel(0, 20_000), 'under a minute');
@@ -168,4 +168,17 @@ test('an action item made into a work item from the meeting page reads created, 
   }
   assert.equal(actionStatus({ text: 'a' }).label, 'Not created');
   assert.equal(createWorkItemUrl('call 1', 2), '/api/calls/call%201/assistant/minutes/action-items/2/work-item');
+});
+
+test('a later part of the call: Nova back in the call, adding it, or not yet; and the retry the menu offers', () => {
+  assert.equal(additionNote({ backInCall: true }), 'Nova is back in this call. What it hears now is added to these minutes when it leaves.');
+  assert.equal(additionNote({}), null);
+  assert.equal(additionNote({ additionOwed: true, rewrite: { writing: true, possible: true, attemptsLeft: 4 } }), 'Nova is adding the later part of this call to these minutes.');
+  assert.match(additionNote({ additionOwed: true, rewrite: { writing: false, possible: true, attemptsLeft: 4 } })!, /could not add the later part of this call to these minutes yet/);
+  assert.match(additionNote({ additionOwed: true, rewrite: { writing: false, possible: true, attemptsLeft: 0 } })!, /will not try again/);
+  assert.equal(retryLabel({ writer: 'scripted', additionOwed: true, rewrite: { writing: false, possible: true, attemptsLeft: 2 } }, true), 'Add the later part again');
+  assert.equal(retryLabel({ writer: 'none', rewrite: { writing: false, possible: true, attemptsLeft: 2 } }, false), 'Write the minutes again');
+  assert.equal(retryLabel({ writer: 'scripted', rewrite: { writing: false, possible: false, attemptsLeft: 5 } }, true), null);
+  assert.equal(retryLabel({ writer: 'scripted', additionOwed: true, rewrite: { writing: true, possible: true, attemptsLeft: 2 } }, true), null);
+  assert.equal(retryLabel({ writer: 'scripted', additionOwed: true, rewrite: { writing: false, possible: true, attemptsLeft: 0 } }, true), null);
 });

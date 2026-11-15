@@ -12,7 +12,7 @@ export type AssistantActionStatus = 'waiting' | 'confirmed' | 'declined' | 'expi
 const STATUSES: readonly AssistantActionStatus[] = ['waiting', 'confirmed', 'declined', 'expired', 'done', 'failed'];
 
 /** What a minutes notice counts; `decisions` includes those consented through the call's proposals (the server counts them). */
-export interface MinutesCounts { decisions: number; actionItems: number; proposals: number }
+export interface MinutesCounts { decisions: number; actionItems: number; proposals: number; /** Nova added a later part of the call to minutes that existed. */ added?: boolean }
 export interface AssistantNotice {
   kind: 'assistant-notice';
   /** The meeting this notice closes; the chat links to its page. */
@@ -47,7 +47,7 @@ function readCounts(v: unknown): MinutesCounts | null {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
   const c = v as Record<string, unknown>;
   return count(c['decisions']) && count(c['actionItems']) && count(c['proposals'])
-    ? { decisions: c['decisions'], actionItems: c['actionItems'], proposals: c['proposals'] } : null;
+    ? { decisions: c['decisions'], actionItems: c['actionItems'], proposals: c['proposals'], ...(c['added'] === true ? { added: true } : {}) } : null;
 }
 
 /** The assistant message a chat message's metadata describes, or null for anything else. */

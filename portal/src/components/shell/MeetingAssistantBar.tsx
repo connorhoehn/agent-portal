@@ -14,8 +14,8 @@ import { useNovaVoice } from '../../lib/novaVoice';
 import { soundPromptShown } from '../../lib/novaVoiceModel';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import {
-  assistantPresent, assistantStateWords, leftWords, markWords, myWaitingActions, standingFacts, timeLeftWords, noticeText, noticeVisible, rosterEntry, voiceWords,
-  ASSISTANT_LABEL, ASSISTANT_NAME, DISMISS_LABEL, DISMISS_QUESTION,
+  assistantPresent, assistantStateWords, leftWords, markWords, myWaitingActions, rejoinRefusedWords, standingFacts, timeLeftWords, noticeText, noticeVisible, rosterEntry, voiceWords,
+  ASSISTANT_LABEL, ASSISTANT_NAME, DISMISS_LABEL, DISMISS_QUESTION, INVITE_AGAIN_LABEL, INVITE_HINT,
 } from '../../lib/meetingAssistantModel';
 import { proposalCountWords, waitingCount } from '../../lib/meetingProposals';
 import { useHuddleChat, useHuddleChatToggle } from './HuddleChat';
@@ -25,7 +25,7 @@ import { LIVE_HIDE_LABEL, LIVE_SHOW_DESCRIPTION, LIVE_SHOW_LABEL } from '../../l
 import { useLiveCallId } from '../../lib/liveCallId';
 import { useProposalQueue } from './NovaProposalAsk';
 import { setProposalDeckHidden } from '../../lib/proposalDeckState';
-import { hideNovaNotice, useNovaNoticeHidden } from '../../lib/novaNoticeHidden';
+import { hideNovaNotice, noticeKey, useNovaNoticeHidden } from '../../lib/novaNoticeHidden';
 
 export { useLiveCallId };
 
@@ -51,7 +51,7 @@ export function NovaBarControls() {
   const callId = useLiveCallId();
   const nova = useMeetingAssistant(callId);
   const { controls, view, busy } = nova;
-  const noticeClosed = useNovaNoticeHidden(callId);
+  const noticeClosed = useNovaNoticeHidden(noticeKey(callId, view.period));
   const voice = useNovaVoice(callId, nova.view);
   const errorRef = useRef<HTMLButtonElement | null>(null);
   const [errorOpen, setErrorOpen] = useState(false);
@@ -77,14 +77,19 @@ export function NovaBarControls() {
   // Someone who cannot invite, with no Nova in the call, gets no bar at all (not an empty ruled slot).
   if (!controls.invite && !(state && controls.left) && !(words && !controls.left) && !soundPrompt && !nova.error && !waiting) return null;
   const why = controls.left ? `${leftWords(view)}.` : null;
+  // A standing reason Nova can never come back to this call (its record was deleted, the call's listening time is used up) goes in the tooltip.
+  const refused = controls.left ? rejoinRefusedWords(view) : null;
   return <Inline gap="xs" align="center" wrap={false} className="shrink-0 border-l border-border pl-2" data-testid="nova-bar">
-    {controls.invite && <Tooltip content="Nova listens to this call and answers when asked by name" placement="top">
+    {controls.invite && <Tooltip content={INVITE_HINT} placement="top">
       <Button variant="secondary" size="sm" disabled={busy} onClick={() => void nova.invite()} data-testid="nova-invite">Invite Nova</Button>
     </Tooltip>}
     {/* One compact control keeps the dense bar on a line: the state in words is the trigger; acknowledge, pause or resume, extend and dismiss are its menu. */}
-    {/* After Nova left: why (who dismissed it, its time limit, a lost connection), and that it cannot come back to this call. */}
-    {state && controls.left && why && <Tooltip content={why} placement="top">
-      <Chip size="xs" tone="neutral" className="whitespace-nowrap" aria-label={why} data-testid="nova-left" data-left-by={view.leftBy === 'system' ? 'system' : view.leftBy ? 'person' : ''}>{why}</Chip>
+    {/* After Nova left: why (who dismissed it, its time limit, a lost connection); beside it, for people who may invite, the way back. */}
+    {state && controls.left && why && <Tooltip content={refused ? `${why} ${refused}` : why} placement="top">
+      <Chip size="xs" tone="neutral" className="whitespace-nowrap" aria-label={refused ? `${why} ${refused}` : why} data-testid="nova-left" data-left-by={view.leftBy === 'system' ? 'system' : view.leftBy ? 'person' : ''} data-rejoin={view.rejoin ?? ''}>{why}</Chip>
+    </Tooltip>}
+    {controls.inviteAgain && <Tooltip content={INVITE_HINT} placement="top">
+      <Button variant="secondary" size="sm" className="whitespace-nowrap" disabled={busy} onClick={() => void nova.invite()} data-testid="nova-invite-again">{INVITE_AGAIN_LABEL}</Button>
     </Tooltip>}
     {words && !controls.left && <DropdownMenu align="end" triggerVariant="secondary" triggerClassName="px-2" triggerLabel={`${words}${left ? `, ${left}` : ''}${view.voice ? `, Nova's voice is on${voice.muted ? ', muted for you' : ''}` : ''}. Acknowledge, pause, extend or dismiss Nova`} triggerTestId="nova-mark"
       triggerAttributes={{ 'data-phase': view.phase, 'data-hearing': view.hearing, 'data-working': String(view.openRequests.length), 'data-voice': String(view.voice), 'data-voice-muted': String(voice.muted), 'data-voice-speaking': String(voice.speaking), 'data-voice-frames': String(voice.framesPlayed), 'data-voice-ignored': String(voice.framesIgnored), 'data-voice-last-seq': String(voice.lastSeq), 'data-must-ack': String(controls.acknowledge), ...(left ? { 'data-time-left': left } : {}) }} disabled={busy} data-testid="nova-menu"
@@ -137,7 +142,7 @@ export function NovaBudgetAsk() {
     options: [{ id: 'go', label: 'Go ahead', emphasis: 'primary' }, { id: 'cancel', label: 'Cancel' }],
     onAnswer: async (a) => { await answerAsk('optionId' in a && a.optionId === 'go'); },
   }] : [], [ask, callId, answerAsk]);
-  // Dismissing is for everyone and final for the call, so it is asked once, naming that effect. Esc or Cancel keeps Nova.
+  // Dismissing is for everyone, so it is asked once, naming that effect. Esc or Cancel keeps Nova.
   const dismissPrompts = useMemo<ComposerPrompt[]>(() => confirmingDismiss ? [{
     id: `nova-dismiss:${callId}`, scope: `nova-dismiss:${callId}`, kind: 'choice', eyebrow: 'Nova', title: `${DISMISS_LABEL}?`,
     question: DISMISS_QUESTION,
@@ -155,14 +160,15 @@ export function NovaBudgetAsk() {
 export function NovaNotice() {
   const callId = useLiveCallId();
   const nova = useMeetingAssistant(callId);
-  const hidden = useNovaNoticeHidden(callId);
+  const key = noticeKey(callId, nova.view.period);
+  const hidden = useNovaNoticeHidden(key);
   if (hidden || !noticeVisible(nova.enabled, nova.view)) return null;
   const text = noticeText(nova.view);
   return <RecordingConsentNotice open kind="transcription" placement="inline" className="mx-4 my-1" data-testid="nova-notice"
     title={text.title} description={text.body}
     acknowledgeLabel="I understand" onAcknowledge={nova.busy ? () => {} : () => void nova.acknowledge()}
     secondaryLabel={DISMISS_LABEL} onSecondary={nova.busy ? () => {} : () => nova.askDismiss()}
-    onDismiss={() => { if (callId) hideNovaNotice(callId); }} />;
+    onDismiss={() => { if (key) hideNovaNotice(key); }} />;
 }
 
 /** Nova as a non-media entry for the call's people lists; null when it is not in this call. */

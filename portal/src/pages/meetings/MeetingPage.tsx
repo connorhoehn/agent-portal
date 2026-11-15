@@ -31,7 +31,7 @@ import {
 } from '../../lib/meetingProposals';
 import {
   actionStatus, actionWaitsOn, canCreateFor, decisionRows, goneCopy, headerMeta, minutesWritten, orderProposals, proposalClosed, proposalPill,
-  quietMeta, summaryOf, actionText, facesFor, outcomeShort, transcriptSegments, minutesUrl, proposalsLive, proposalsUrl, rewriteUrl, createWorkItemUrl, workItemLink,
+  quietMeta, summaryOf, actionText, additionNote, retryLabel, facesFor, outcomeShort, transcriptSegments, minutesUrl, proposalsLive, proposalsUrl, rewriteUrl, createWorkItemUrl, workItemLink,
   MINUTES_UNAVAILABLE, type DecisionRow, type MinutesActionItem, type MinutesView,
 } from './meetingsModel';
 import { useMeetingTranscript } from './useMeetingTranscript';
@@ -94,9 +94,13 @@ export default function MeetingPage() {
   const { session } = useSession();
   // Asked again every few seconds while Nova writes the minutes (the first write, or "Write the minutes again").
   const [writing, setWriting] = useState(false);
-  const minutes = useFetch<MinutesView>(callId ? minutesUrl(callId) : null, writing ? 3000 : undefined);
+  // While Nova is back in the call the page reads again now and then, so the later part shows once Nova leaves and adds it.
+  const [back, setBack] = useState(false);
+  const minutes = useFetch<MinutesView>(callId ? minutesUrl(callId) : null, writing ? 3000 : back ? 15000 : undefined);
   const nowWriting = minutes.data ? minutes.data.rewrite?.writing === true : goneCopy(minutes.failure).writing;
   if (nowWriting !== writing && !minutes.isLoading) setWriting(nowWriting);
+  const nowBack = minutes.data?.backInCall === true;
+  if (nowBack !== back && !minutes.isLoading) setBack(nowBack);
   const [rewriteError, setRewriteError] = useState<string | null>(null);
   const writeAgain = useCallback(async () => {
     setRewriteError(null);
@@ -224,9 +228,10 @@ export default function MeetingPage() {
   const waitingProposals = proposals.filter(waitingOnYou);
   const waitingItems = m.initiativeId ? m.actionItems.filter((i) => actionWaitsOn(i, viewer)) : [];
 
+  const retry = retryLabel(m, written);
+  const later = additionNote(m);
   const menu: DropdownMenuItem[] = [
-    ...(!written && rewrite?.possible && !rewrite.writing && rewrite.attemptsLeft > 0
-      ? [{ label: 'Write the minutes again', onSelect: () => { void writeAgain(); }, 'data-testid': 'meeting-rewrite-button' }] : []),
+    ...(retry ? [{ label: retry, onSelect: () => { void writeAgain(); }, 'data-testid': 'meeting-rewrite-button' }] : []),
     ...(m.youAreInviter ? [{ label: 'Delete this meeting', danger: true, onSelect: () => setAsked((n) => Math.max(n, answered) + 1), 'data-testid': 'meeting-delete' }] : []),
   ];
 
@@ -298,6 +303,9 @@ export default function MeetingPage() {
                 {rewriteError && <T size="sm" tone="danger" data-testid="meeting-rewrite-error">{rewriteError}</T>}
               </Inline>
             )}
+            {/* Nova was invited back into the call: what it hears is added here when it leaves (or could not be yet). */}
+            {written && later && <T size="sm" tone="secondary" wrap className="pt-2" data-testid="meeting-addition-note">{later}</T>}
+            {written && m.additionOwed && rewriteError && <T size="sm" tone="danger" className="pt-2" data-testid="meeting-rewrite-error">{rewriteError}</T>}
           </DetailSection>
           <DetailSection title="Decisions" as="h2" {...(written || decisions.length ? { hint: String(decisions.length) } : {})}>
             {decisions.length

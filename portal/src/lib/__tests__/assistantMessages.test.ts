@@ -137,3 +137,10 @@ test('the minutes counts read as one line; a long notice splits at its first sen
   assert.equal(isLongNotice('Nora DaSilva paused Nova. Nothing is being heard or stored.'), false);
   assert.deepEqual(splitNotice('One sentence only'), { first: 'One sentence only', rest: '' });
 });
+
+test('a minutes notice that adds to earlier minutes says so; anything else is not an addition', () => {
+  const added = readAssistantMessage({ assistant: true, kind: 'assistant-notice', meetingCallId: 'c1', minutes: { decisions: 1, actionItems: 2, proposals: 0, added: true } });
+  assert.deepEqual(added, { kind: 'assistant-notice', meetingCallId: 'c1', minutes: { decisions: 1, actionItems: 2, proposals: 0, added: true } });
+  const first = readAssistantMessage({ assistant: true, kind: 'assistant-notice', minutes: { decisions: 1, actionItems: 2, proposals: 0, added: 'yes' } });
+  assert.deepEqual(first, { kind: 'assistant-notice', minutes: { decisions: 1, actionItems: 2, proposals: 0 } });
+});

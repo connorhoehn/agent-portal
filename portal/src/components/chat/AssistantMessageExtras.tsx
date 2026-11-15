@@ -447,8 +447,9 @@ export function MinutesCard({ summary, counts, callId }: { summary: string; coun
     <Card tone="default" padding="none" className="mt-1 max-w-md px-3 py-2.5" data-testid="assistant-minutes-card" data-layout="others">
       <Stack gap="xs">
         <Inline gap="sm" align="center" justify="between" wrap={false}>
-          <T size="xs" weight="medium" tone="secondary" data-testid="assistant-minutes-title">Minutes</T>
-          <StatusPill tone="success" label="Ready" size="sm" data-testid="assistant-minutes-status" />
+          {/* An addition (Nova was invited back and heard more) says so; the card is otherwise the same. */}
+          <T size="xs" weight="medium" tone="secondary" data-testid="assistant-minutes-title">{counts.added ? 'Nova added to the minutes' : 'Minutes'}</T>
+          <StatusPill tone="success" label={counts.added ? 'Updated' : 'Ready'} size="sm" data-testid="assistant-minutes-status" />
         </Inline>
         {summary && <T size="sm" clamp={2} data-testid="assistant-minutes-summary">{summary}</T>}
         <T size="xs" tone="secondary" wrap data-testid="assistant-minutes-counts">{minutesCountLine(counts)}</T>

@@ -36,7 +36,16 @@ export interface AssistantView {
   hearing: AssistantHearing;
   openRequests: OpenRequest[];
   waitingActions: WaitingAction[];
+  /**
+   * After Nova left: whether it can be invited back ('allowed'), or why never in this call: its record was deleted, or the call used all
+   * the listening time it may have. Null while Nova is in the call (or none).
+   */
+  rejoin: RejoinStanding | null;
+  /** Which period of Nova in this call this is (1 for the first, 2 after it was invited back once, ...). */
+  period: number;
 }
+
+export type RejoinStanding = 'allowed' | 'deleted' | 'limit';
 
 /** The state is refreshed this often while a call is live (docs: keep any poll at 5 s or slower). */
 export const ASSISTANT_POLL_MS = 5000;
@@ -49,6 +58,7 @@ export const ASSISTANT_LABEL = 'Assistant';
 
 const PHASES: readonly AssistantPhase[] = ['none', 'invited', 'listening', 'paused', 'left'];
 const HEARING: readonly AssistantHearing[] = ['ok', 'connecting', 'no-audio'];
+const REJOIN: readonly RejoinStanding[] = ['allowed', 'deleted', 'limit'];
 const record = (v: unknown): Record<string, unknown> | null => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null);
 const list = <T>(v: unknown, read: (r: Record<string, unknown>) => T | null): T[] =>
   Array.isArray(v) ? v.map((x) => { const r = record(x); return r ? read(r) : null; }).filter((x): x is T => x !== null) : [];
@@ -67,6 +77,8 @@ export function parseAssistantState(callId: string, body: unknown): AssistantVie
     listeningSeconds: seconds(b['listeningSeconds']), ceilingSeconds: seconds(b['ceilingSeconds']),
     voice: phase !== 'none' && phase !== 'left' && b['voice'] === true,
     hearing: HEARING.find((h) => h === b['hearing']) ?? 'ok',
+    rejoin: phase === 'left' ? REJOIN.find((r) => r === b['rejoin']) ?? null : null,
+    period: typeof b['period'] === 'number' && Number.isInteger(b['period']) && b['period'] >= 1 ? b['period'] : 1,
     openRequests: present(phase) ? list(b['openRequests'], (r) => {
       const name = text(r['askerName']);
       return name && (r['kind'] === 'lookup' || r['kind'] === 'change') ? { askerName: name, kind: r['kind'] } : null;
@@ -91,12 +103,23 @@ export const assistantPresent = (v: AssistantView): boolean => present(v.phase);
 /** Nova's time limit is reached (it left on its own at the ceiling). */
 const atLimit = (v: AssistantView): boolean => v.listeningSeconds !== null && v.ceilingSeconds !== null && v.listeningSeconds >= v.ceilingSeconds;
 
-/** Why Nova left, for the chip: who dismissed it, its time limit or a lost connection, and that it cannot come back to this call. */
+/** Why Nova left, for the chip: who dismissed it, its time limit or a lost connection. */
 export function leftWords(v: AssistantView): string {
-  const why = v.leftBy && v.leftBy !== 'system' ? `${v.leftByName ?? 'Someone'} dismissed ${ASSISTANT_NAME}`
+  return v.leftBy && v.leftBy !== 'system' ? `${v.leftByName ?? 'Someone'} dismissed ${ASSISTANT_NAME}`
     : atLimit(v) ? `${ASSISTANT_NAME} reached its time limit` : `${ASSISTANT_NAME} lost its connection`;
-  return `${why}. It cannot rejoin this call`;
 }
+
+/** Why Nova can never be invited back into this call, for the left chip's tooltip; null when it can be. The server's sentences. */
+export function rejoinRefusedWords(v: AssistantView): string | null {
+  if (v.rejoin === 'deleted') return `This call's record was deleted, so ${ASSISTANT_NAME} cannot join it again.`;
+  if (v.rejoin === 'limit') return `${ASSISTANT_NAME} has already listened to this call for as long as it can.`;
+  return null;
+}
+
+/** The button that brings Nova back into a call it left. */
+export const INVITE_AGAIN_LABEL = `Invite ${ASSISTANT_NAME} again`;
+/** The invite buttons' tooltip, the same for the first invitation and an invitation back. */
+export const INVITE_HINT = `${ASSISTANT_NAME} listens to this call and answers when asked by name`;
 
 /** The state in words, for the call bar and the roster line. Null when there is nothing to say. */
 export function assistantStateWords(v: AssistantView): string | null {
@@ -144,9 +167,9 @@ export function standingFacts(v: AssistantView): string[] {
   ];
 }
 
-/** The one question asked before a dismissal: it is for everyone and final for this call. */
+/** The one question asked before a dismissal: it is for everyone. */
 export const DISMISS_LABEL = `Dismiss ${ASSISTANT_NAME} for everyone`;
-export const DISMISS_QUESTION = `${ASSISTANT_NAME} leaves for everyone and cannot be invited again in this call.`;
+export const DISMISS_QUESTION = `${ASSISTANT_NAME} leaves the call for everyone. Anyone who can invite ${ASSISTANT_NAME} can invite it back later.`;
 
 /** A bar error stays until a refresh shows the phase moved on since it was raised, or this long. */
 export const ERROR_CLEAR_MS = 20_000;
@@ -164,13 +187,15 @@ export interface AssistantControls {
   acknowledge: boolean;
   /** Add time to the ceiling: people who may invite Nova, while it is in the call. */
   extend: boolean;
-  /** Nova left this call; the server refuses a re-invite, so the bar says so instead of offering Invite. */
+  /** Nova left this call: the bar says why. */
   left: boolean;
+  /** Nova left and may be invited back: people who may invite get "Invite Nova again" beside the chip. */
+  inviteAgain: boolean;
 }
 
 /** What the call bar offers. Invite needs the capability; pause, resume and dismiss are for everyone in the call. */
 export function assistantControls(input: { enabled: boolean; inCall: boolean; canInvite: boolean; view: AssistantView }): AssistantControls {
-  const off: AssistantControls = { hidden: true, invite: false, pause: false, resume: false, dismiss: false, acknowledge: false, extend: false, left: false };
+  const off: AssistantControls = { hidden: true, invite: false, pause: false, resume: false, dismiss: false, acknowledge: false, extend: false, left: false, inviteAgain: false };
   if (!input.enabled || !input.inCall) return off;
   const { phase } = input.view;
   if (phase === 'loading') return { ...off, hidden: false };
@@ -183,6 +208,7 @@ export function assistantControls(input: { enabled: boolean; inCall: boolean; ca
     acknowledge: assistantPresent(input.view) && input.view.youMustAck,
     extend: (phase === 'listening' || phase === 'paused') && input.canInvite,
     left: phase === 'left',
+    inviteAgain: phase === 'left' && input.canInvite && input.view.rejoin === 'allowed',
   };
 }
 
@@ -193,7 +219,7 @@ export const noticeVisible = (enabled: boolean, v: AssistantView): boolean => en
 export function noticeText(v: AssistantView): { title: string; body: string } {
   const who = v.invitedByName ?? 'A participant';
   return {
-    title: `${who} invited ${ASSISTANT_NAME} to listen to this call`,
+    title: v.period > 1 ? `${who} invited ${ASSISTANT_NAME} back into this call` : `${who} invited ${ASSISTANT_NAME} to listen to this call`,
     body: `${ASSISTANT_NAME} is listening to this call. Nothing you say is kept until you acknowledge. After that your words are sent to the speech provider and kept as text for the retention period set by your organisation. ${ASSISTANT_NAME} writes minutes for the people in the call.`,
   };
 }

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   ASSISTANT_POLL_MS, assistantControls, assistantPresent, assistantStateWords, noticeText, noticeVisible, NO_ASSISTANT, parseAssistantState, rosterEntry, markWords, timeLeftWords,
   DISMISS_LABEL, DISMISS_QUESTION, ERROR_CLEAR_MS, errorStale, expiresWords, leftWords, LOADING_ASSISTANT, myWaitingActions, standingFacts, voiceWords, workingWords,
+  INVITE_AGAIN_LABEL, INVITE_HINT, rejoinRefusedWords,
 } from '../meetingAssistantModel.ts';
 
 const view = (state: string, extra: Record<string, unknown> = {}) => parseAssistantState('c1', { state, invitedBy: 'u-a', invitedByName: 'Vera Lindqvist', youMustAck: false, ...extra });
@@ -31,9 +32,31 @@ test('Invite needs the capability and an empty call; pause, resume and dismiss a
   assert.deepEqual([paused.pause, paused.resume, paused.dismiss], [false, true, true]);
 });
 
-test('after dismissal Invite does not return and the bar says Nova left', () => {
-  const left = assistantControls({ enabled: true, inCall: true, canInvite: true, view: view('left') });
-  assert.deepEqual([left.invite, left.pause, left.resume, left.dismiss, left.left], [false, false, false, false, true]);
+test('after dismissal the bar says Nova left, and a person who may invite gets "Invite Nova again" only when the server allows it', () => {
+  const left = assistantControls({ enabled: true, inCall: true, canInvite: true, view: view('left', { rejoin: 'allowed' }) });
+  assert.deepEqual([left.invite, left.pause, left.resume, left.dismiss, left.left, left.inviteAgain], [false, false, false, false, true, true]);
+  assert.equal(INVITE_AGAIN_LABEL, 'Invite Nova again');
+  assert.equal(INVITE_HINT, 'Nova listens to this call and answers when asked by name');
+  // Someone without the right to invite sees the chip and no button.
+  assert.equal(assistantControls({ enabled: true, inCall: true, canInvite: false, view: view('left', { rejoin: 'allowed' }) }).inviteAgain, false);
+  // A standing refusal: no button, and the chip's tooltip says why.
+  for (const rejoin of ['deleted', 'limit']) assert.equal(assistantControls({ enabled: true, inCall: true, canInvite: true, view: view('left', { rejoin }) }).inviteAgain, false);
+  // An older server that does not say: no button (the invite would have been refused).
+  assert.equal(assistantControls({ enabled: true, inCall: true, canInvite: true, view: view('left') }).inviteAgain, false);
+  assert.equal(rejoinRefusedWords(view('left', { rejoin: 'deleted' })), "This call's record was deleted, so Nova cannot join it again.");
+  assert.equal(rejoinRefusedWords(view('left', { rejoin: 'limit' })), 'Nova has already listened to this call for as long as it can.');
+  assert.equal(rejoinRefusedWords(view('left', { rejoin: 'allowed' })), null);
+  assert.equal(rejoinRefusedWords(view('left', { rejoin: 'bogus' })), null);
+  // The standing only means something once Nova has left.
+  assert.equal(view('listening', { rejoin: 'allowed' }).rejoin, null);
+});
+
+test('the period: 1 unless the server says Nova was invited back, and the notice says "back" then', () => {
+  assert.equal(view('listening').period, 1);
+  assert.equal(view('listening', { period: 2 }).period, 2);
+  assert.equal(view('listening', { period: 0 }).period, 1);
+  assert.equal(noticeText(view('listening', { period: 2, invitedByName: 'Bo Berg' })).title, 'Bo Berg invited Nova back into this call');
+  assert.equal(noticeText(view('listening')).title, 'Vera Lindqvist invited Nova to listen to this call');
 });
 
 test('with the flag off, or outside a call, everything is hidden', () => {
@@ -128,12 +151,12 @@ test('in-call 6: invited reads as joining, and the bar says when Nova cannot hea
   assert.equal(markWords(view('listening', { hearing: 'bogus' }), false), 'Nova is listening');
 });
 
-test('in-call 3 / around 1: dismissing names its effect, and the left chip says why and that Nova cannot rejoin', () => {
+test('in-call 3 / around 1: dismissing names its effect, and the left chip says why (Nova can be invited back)', () => {
   assert.equal(DISMISS_LABEL, 'Dismiss Nova for everyone');
-  assert.equal(DISMISS_QUESTION, 'Nova leaves for everyone and cannot be invited again in this call.');
-  assert.equal(leftWords(view('left', { leftBy: 'u-b', leftByName: 'Bo Berg' })), 'Bo Berg dismissed Nova. It cannot rejoin this call');
-  assert.equal(leftWords(view('left', { leftBy: 'system', listeningSeconds: 3600, ceilingSeconds: 3600 })), 'Nova reached its time limit. It cannot rejoin this call');
-  assert.equal(leftWords(view('left', { leftBy: 'system', listeningSeconds: 60, ceilingSeconds: 3600 })), 'Nova lost its connection. It cannot rejoin this call');
+  assert.equal(DISMISS_QUESTION, 'Nova leaves the call for everyone. Anyone who can invite Nova can invite it back later.');
+  assert.equal(leftWords(view('left', { leftBy: 'u-b', leftByName: 'Bo Berg' })), 'Bo Berg dismissed Nova');
+  assert.equal(leftWords(view('left', { leftBy: 'system', listeningSeconds: 3600, ceilingSeconds: 3600 })), 'Nova reached its time limit');
+  assert.equal(leftWords(view('left', { leftBy: 'system', listeningSeconds: 60, ceilingSeconds: 3600 })), 'Nova lost its connection');
 });
 
 test('in-call 4: the cards waiting on this viewer, soonest first, and how long until each expires', () => {
