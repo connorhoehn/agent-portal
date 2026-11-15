@@ -31,8 +31,9 @@ import { ScriptedSession } from '../../lib/meeting-assistant/scripted-session.js
 import { settleFinished, setAssistantSpend, realSpend } from '../../lib/meeting-assistant/spend.js';
 import { setSessionFactory } from '../../lib/meeting-assistant/session-select.js';
 import { sessionOf } from '../../lib/meeting-assistant/types.js';
-import { coverageOf, DELETE_WHILE_BACK, REJOIN_DELETED, REJOIN_LIMIT, REJOIN_STILL_LEAVING, setRejoinWaitMs } from '../meeting-assistant.js';
+import { CALL_ENDED, coverageOf, DELETE_WHILE_BACK, REJOIN_DELETED, REJOIN_LIMIT, REJOIN_STILL_LEAVING, setRejoinWaitMs } from '../meeting-assistant.js';
 import { settleFromRecord } from '../../lib/meeting-assistant/reconcile.js';
+import { minutesIdle, onCallEnded } from '../../lib/meeting-assistant/minutes-service.js';
 import { newAssistantSession } from '../../lib/meeting-assistant/types.js';
 import { userBudgets } from '../../mock/user-budgets.js';
 import { spendHolds } from '../../mock/spend-holds.js';
@@ -380,6 +381,31 @@ describe('a delete racing an invitation back', () => {
     expect(sessionOf(await record()).erasedAt).toBeUndefined();
     expect((await texts()).some((t) => t.startsWith('Nova is back in this call'))).toBe(true);   // the chat was not erased either
     expect(runtime.isRunning(CALL)).toBe(true);
+  });
+});
+
+describe('the call ending during an invitation back', () => {
+  it('Nova leaves with the call at once: the new period is closed and settled, nothing stays held or running, and the person is told', async () => {
+    budget('alice'); budget('bob');
+    await post('invite', 'alice'); clock += 60_000; await post('dismiss', 'alice'); await flush();
+    let open!: () => void; const gate = new Promise<void>((r) => { open = r; });
+    setAssistantSpend({ ...realSpend, reserve: async (i) => { await gate; return realSpend.reserve(i); } });
+    const back = post('invite', 'bob').then((r) => r);
+    await flush();
+    // The call ends while the invitation back is past its seat check: the end finds Nova still out and has nothing to stop.
+    jest.spyOn(rt, 'lobbyOf').mockResolvedValue(null);
+    await onCallEnded(CALL, { stop: (id) => runtime.stop(id), stopIntake: (id) => assistantIntake().stop(id) });
+    open();
+    const ended = await back;
+    setAssistantSpend(null); await minutesIdle();
+    expect([ended.status, ended.body.error]).toEqual([409, CALL_ENDED]);
+    const r = await record();
+    expect([r.state, r.leftBy, r.invitedBy]).toEqual(['left', 'system', 'bob']);
+    expect(sessionOf(r)).toMatchObject({ settled: true, listeningSince: null, ledgerPart: 1 });
+    expect(holds().map((h) => [h.sourceId, h.status])).toEqual([['ma:call-1', 'settled'], ['ma:call-1:x1', 'settled']]);
+    expect(entries().map((e) => e.sourceId)).toEqual(['ma:call-1', 'ma:call-1:x1']);
+    expect(runtime.isRunning(CALL)).toBe(false);
+    expect(assistantIntake().isListening(CALL)).toBe(false);
   });
 });
 

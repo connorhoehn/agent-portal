@@ -287,7 +287,7 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
 
   const runtime = callChatRuntime();
   const lobby = await runtime.lobbyOf(callId);
-  if (!lobby) throw new NotFoundError('This call has ended.');
+  if (!lobby) throw new NotFoundError(CALL_ENDED);
   const present = (await runtime.seatedUsers(callId)).filter((u) => u.active).map((u) => u.userId);
   if (!present.includes(session.sub)) present.push(session.sub);
   // Real audio: the three media settings and the call's channel, found by the server from the call, or a 503 here and nothing started.
@@ -436,6 +436,13 @@ async function rejoin(req: Request, res: Response, session: Session, read: Assis
     if ((await store.getMinutes(callId).catch(() => null))?.deleted) throw new AppError(409, REJOIN_DELETED);
     res.json(await view(current, callId, session));
     return;
+  }
+  // The call may have ended while Nova was being invited back: its end found Nova still out and did nothing for this period. Nova then
+  // leaves with the call now, the way a call end takes it out (the new period closed and settled, its hold settled with it), and the
+  // person is told. A lookup that fails is not an end.
+  if ((await callChatRuntime().lobbyOf(callId).catch(() => prior.lobby)) === null) {
+    await endWithCall(callId);
+    throw new AppError(409, CALL_ENDED);
   }
   runtime.setVoice(callId, false);
   await armAudio(callId, pre);
@@ -1125,6 +1132,18 @@ const deleteRecord = asyncHandler(async (req, res) => {
 meetingAssistantRouter.delete('/minutes', refuseMasqueradeRead, deleteRecord);
 meetingAssistantRouter.delete('/transcript', refuseMasqueradeRead, deleteRecord);
 
+/** The call ended with Nova in it: Nova leaves with the call (settled, minutes written), and its open proposals move to the meeting page. */
+async function endWithCall(callId: string): Promise<void> {
+  const store = assistantStore();
+  await onCallEnded(callId, { stop: (id) => assistantRuntime().stop(id), stopIntake: (id) => assistantIntake().stop(id) });
+  const ended = await store.get(callId);
+  if (ended?.state === 'left') {
+    await closeProposals(store, callId, ended.leftAt ?? Date.now()).catch(() => 0);
+    await notifyOpenProposals(store, callId);
+  }
+}
+export const CALL_ENDED = 'This call has ended.';
+
 // The call ended with the assistant still in it: it leaves with the call and the minutes are written. One subscription per process.
 let watchingCallEnd = false;
 function watchCallEnd(): void {
@@ -1136,12 +1155,7 @@ function watchCallEnd(): void {
     // With the feature off a call that ends still settles its spend and leaves; no run or minutes are started for it.
     if (!meetingAssistantEnabled()) { await endAbandonedCall(callId, Date.now()); return; }
     for (const userId of seated) await attendOnce(callId, userId);
-    await onCallEnded(callId, { stop: (id) => assistantRuntime().stop(id), stopIntake: (id) => assistantIntake().stop(id) });
-    const ended = await store.get(callId);
-    if (ended?.state === 'left') {
-      await closeProposals(store, callId, ended.leftAt ?? Date.now()).catch(() => 0);
-      await notifyOpenProposals(store, callId);
-    }
+    await endWithCall(callId);
   })()));
 }
 watchCallEnd();
