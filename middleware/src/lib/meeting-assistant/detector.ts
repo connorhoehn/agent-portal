@@ -104,7 +104,15 @@ export function looksCut(text: string): boolean {
  * Capitalised words that, straight after the assistant's name with only a space between, make a known place or product name
  * ("Nova Scotia"), not an address. A small explicit list: an address has a comma, a pause or a request after the name.
  */
-const NAME_PHRASE_SECOND_WORDS: ReadonlySet<string> = new Set(['Scotia', 'Scotian', 'Lima', 'Gorica', 'Friburgo', 'Poshta', 'Launcher']);
+const NAME_PHRASE_SECOND_WORDS: ReadonlySet<string> = new Set(['scotia', 'scotian', 'lima', 'gorica', 'friburgo', 'poshta', 'launcher']);
+/**
+ * Is the text right after the name the second word of a place or product named with it ("Nova Scotia")? Judged however the
+ * transcript writes it: any case, or a possessive ("Nova Scotia's"). A comma between them is an address ("Nova, Scotia is next").
+ */
+const namePhraseFollows = (after: string): boolean => {
+  const m = /^\s+([\p{L}'’]+)/u.exec(after);
+  return !!m && NAME_PHRASE_SECOND_WORDS.has(m[1]!.toLowerCase().replace(/['’]s$/, '').replace(/[^\p{L}]+$/u, ''));
+};
 
 interface NameHit { addressed: boolean; rest: string }
 
@@ -116,7 +124,7 @@ export function findAddress(text: string): NameHit | null {
     const before = text.slice(0, start).trim();
     const after = text.slice(end);
     const rest = after.replace(/^[\s,:;.\-–—!?…]+/, '').trim();
-    if (/^ +\S/.test(after) && NAME_PHRASE_SECOND_WORDS.has(after.trim().split(/\s+/)[0]!.replace(/[^\p{L}]+$/u, ''))) continue;
+    if (namePhraseFollows(after)) continue;
     const initial = before === '' || /[.!?;…]["')\]]*$/.test(before) || GREETING_ONLY.test(before);
     let addressed = initial;
     // Name as the very last word: the request is coming in the speaker's next caption, unless it is a thank-you.

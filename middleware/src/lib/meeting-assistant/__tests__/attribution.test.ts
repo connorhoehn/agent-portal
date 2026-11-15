@@ -30,12 +30,14 @@ describe('attribute', () => {
     expect(attribute(a, { startMs: 30_200, endMs: 33_800 })).toEqual({ userId: 'dave', speakers: ['dave'] });
   });
 
-  it('allows for the transcript running up to 600 ms late, and no more', () => {
+  it('allows for the transcript running up to 2 s late, and no more', () => {
     const a = [iv('alice', 1000, 3000)];
     // Stamped 600 ms late: the audio was 1000-3000, the piece says 1600-3600.
     expect(attribute(a, { startMs: 1600, endMs: 3600 }).userId).toBe('alice');
-    // 1 s late: only the tail overlaps the window, and the 3600+ part has nothing, so the overlap is under the share of the piece.
-    expect(attribute(a, { startMs: 3800, endMs: 4000 }).userId).toBeNull();
+    // A short piece 800 ms past the voice: found by widening the window 2 s back.
+    expect(attribute(a, { startMs: 3800, endMs: 4000 }).userId).toBe('alice');
+    // 2.5 s past it: nothing.
+    expect(attribute(a, { startMs: 5500, endMs: 5700 }).userId).toBeNull();
   });
 
   it('silence is unattributed: no user, no speakers', () => {
@@ -182,7 +184,7 @@ describe('the provider\'s transcript lag', () => {
     expect(lagSample([iv('vera', 37_544, 40_264)], 'vera', { startMs: 38_800, endMs: 41_400 }, 4_000)).toBeNull(); // strays from the estimate
     expect(lagSample([iv('mia', 25_389, 25_849)], 'mia', { startMs: 26_600, endMs: 26_800 })).toBeNull(); // too short to measure
     expect(transcriptLag([])).toBe(0);
-    expect(transcriptLag([1_256])).toBe(0);
+    expect(transcriptLag([1_256])).toBe(1_256);
     expect(transcriptLag([1_256, 973, 1_331])).toBe(1_256);
   });
   it('follows a lag that grows by 1.3 s a minute over ten minutes, as the paid runs saw', () => {
@@ -206,9 +208,14 @@ describe('the provider\'s transcript lag', () => {
 
   it('moved back by it, a one-word "Nova?" lands on the person who said it', () => {
     const intervals = [iv('mia', 25_389, 25_849), iv('vera', 37_544, 40_264)];
-    expect(attribute(intervals, { startMs: 26_600, endMs: 26_800 }).userId).toBeNull();
     expect(attribute(intervals, { startMs: 26_600 - 1_200, endMs: 26_800 - 1_200 }).userId).toBe('mia');
   });
+  it('a word or two at the edge of a turn that the word times put on the neighbouring voice does not split it off', () => {
+    const intervals = [iv('nora', 40_595, 42_995), iv('vera', 43_507, 45_287)];
+    const parts = [{ text: ' Nova, what', startMs: 42_800, endMs: 43_100 }, { text: ' is', startMs: 43_100, endMs: 43_400 }, { text: ' three plus', startMs: 43_400, endMs: 44_400 }, { text: ' three', startMs: 44_400, endMs: 45_400 }];
+    expect(splitBySpeaker(intervals, parts)).toEqual([{ text: 'Nova, what is three plus three', startMs: 42_800, endMs: 45_400 }]);
+  });
+
   it('a turn holding two voices splits where the voice changes', () => {
     const intervals = [iv('vera', 21_584, 24_664), iv('nora', 25_065, 27_585)];
     const parts = [{ text: ' Nova, create', startMs: 21_600, endMs: 23_000 }, { text: ' a work item', startMs: 23_000, endMs: 24_600 }, { text: '. Nova, how is', startMs: 25_200, endMs: 26_400 }, { text: ' the weather', startMs: 26_400, endMs: 27_500 }];

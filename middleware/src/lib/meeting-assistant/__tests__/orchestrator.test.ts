@@ -1524,11 +1524,11 @@ describe('the real provider\'s event order (paid runs, 14 November)', () => {
 
   it('one heard turn holding two people (a request spoken right after someone else\'s sentence) is stored as one line each', async () => {
     const s = await realRuntime();
-    audioTap.sink!.placed(BOB, loud(1_000), 0);
-    audioTap.sink!.placed(ALICE, loud(1_000), 1_300);
-    s.fire('inputTranscript', { text: 'The cookie is late. Nova, find the experts', startMs: 0, endMs: 2_300, parts: [
-      { text: ' The cookie', startMs: 0, endMs: 500 }, { text: ' is late', startMs: 500, endMs: 1_000 },
-      { text: '. Nova, find', startMs: 1_300, endMs: 1_800 }, { text: ' the experts', startMs: 1_800, endMs: 2_300 },
+    audioTap.sink!.placed(BOB, loud(1_500), 0);
+    audioTap.sink!.placed(ALICE, loud(1_500), 1_800);
+    s.fire('inputTranscript', { text: 'The cookie is late. Nova, find the experts', startMs: 0, endMs: 3_300, parts: [
+      { text: ' The cookie', startMs: 0, endMs: 750 }, { text: ' is late', startMs: 750, endMs: 1_500 },
+      { text: '. Nova, find', startMs: 1_800, endMs: 2_550 }, { text: ' the experts', startMs: 2_550, endMs: 3_300 },
     ] });
     await flush();
     const lines = await store.lines(CALL, 0, 10);

@@ -24,8 +24,11 @@ export interface Attribution {
   speakers: string[];
 }
 
-/** The probe measured `end_ms` lagging real speech by up to about 600 ms in 200 ms steps (design doc, probe result). */
-export const LAG_TOLERANCE_MS = 600;
+/**
+ * When nobody's voice lies inside a span, how far back it is widened. The probe measured `end_ms` lagging real speech by up to about
+ * 600 ms; the paid scenario runs of 14 November saw single lines 1 to 2 s off the lag estimate (the provider's word times are noisy).
+ */
+export const LAG_TOLERANCE_MS = 2_000;
 export const SPEAKER_SHARE = 0.3;
 export const SPEAKER_MIN_MS = 400;
 /** A participant whose voiced energy in the span is under this share of the loudest participant's is not a speaker. */
@@ -118,12 +121,14 @@ export function attribute(intervals: readonly VoicedInterval[], piece: Transcrip
  * current estimate; the lag used is the median of the latest few, so it follows the drift. Spans are moved back by it before they
  * are attributed, so short lines ("Nova?") and the edges of a split land on the right voice.
  */
-export const LAG_SAMPLES = 5;
+export const LAG_SAMPLES = 3;
+/** A sample may be this much negative: in one paid session the provider's times ran slightly EARLY of the voices. */
+export const LAG_MIN_MS = -1_000;
 /** Before any estimate: the most a first sample may be. After it: how far a sample may stray from the estimate. */
 export const LAG_FIRST_MAX_MS = 3_000;
 export const LAG_STEP_MAX_MS = 2_000;
 export function transcriptLag(samples: readonly number[]): number {
-  if (samples.length < 2) return 0;
+  if (samples.length === 0) return 0;
   const s = [...samples].sort((a, b) => a - b);
   const mid = Math.floor(s.length / 2);
   return s.length % 2 ? s[mid]! : Math.round((s[mid - 1]! + s[mid]!) / 2);
@@ -144,7 +149,7 @@ export function lagSample(intervals: readonly VoicedInterval[], userId: string, 
   }
   if (!best) return null;
   const d = span.startMs - best.startMs;
-  return d >= 0 && Math.abs(d - current) <= reach ? d : null;
+  return d >= LAG_MIN_MS && Math.abs(d - current) <= reach ? d : null;
 }
 
 /** One of the provider's pieces of a heard turn, with its times on the audio timeline. */
@@ -156,6 +161,7 @@ export interface TranscriptPart { text: string; startMs: number; endMs: number }
  * part is attributed on its own; a part one person alone voiced that is not the current group's person starts a new group, and a
  * part nobody (or several people) voiced stays with the group it follows. Text is joined as the provider sent it.
  */
+export const SPLIT_MIN_MS = 1_200;
 export function splitBySpeaker(intervals: readonly VoicedInterval[], parts: readonly TranscriptPart[]): TranscriptPart[] {
   const groups: Array<{ owner: string | null; parts: TranscriptPart[] }> = [];
   for (const p of parts) {
@@ -167,6 +173,17 @@ export function splitBySpeaker(intervals: readonly VoicedInterval[], parts: read
     if (g.owner === null) g.owner = single;
   }
   // A sentence mark the provider put at the head of the next piece belongs to the line before; it is dropped from the new one.
+  // A group shorter than SPLIT_MIN_MS is a word or two at the edge of someone's turn that the noisy word times put on the neighbouring
+  // voice (paid run: "Nova, what is" went to the person who had just stopped); it stays with the group before it (or after, first).
+  for (let i = 0; i < groups.length && groups.length > 1;) {
+    const g = groups[i]!;
+    if (g.parts[g.parts.length - 1]!.endMs - g.parts[0]!.startMs >= SPLIT_MIN_MS) { i += 1; continue; }
+    const into = i > 0 ? groups[i - 1]! : groups[i + 1]!;
+    if (i > 0) into.parts.push(...g.parts); else into.parts.unshift(...g.parts);
+    groups.splice(i, 1);
+    if (i > 0) i -= 1;
+  }
+  for (let i = 1; i < groups.length;) { if (groups[i]!.owner === groups[i - 1]!.owner) { groups[i - 1]!.parts.push(...groups[i]!.parts); groups.splice(i, 1); } else i += 1; }
   return groups.map((g, i) => ({ text: g.parts.map((p) => p.text).join('').replace(/\s+/g, ' ').trim().replace(i > 0 ? /^[.!?…]+\s*/ : /^$/, ''), startMs: g.parts[0]!.startMs, endMs: g.parts[g.parts.length - 1]!.endMs })).filter((g) => g.text);
 }
 

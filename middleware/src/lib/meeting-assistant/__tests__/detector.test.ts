@@ -295,6 +295,9 @@ describe('a place or product name that begins with the assistant\'s name', () =>
   it('is not an address, even at the start of a sentence', () => {
     expect(findAddress('Nova Scotia is lovely in the autumn.')).toBeNull();
     expect(findAddress('We flew out. Nova Scotia was next.')).toBeNull();
+    // However a real transcriber writes it (paid run, 14 November: the place at the head of a line was counted as a request).
+    expect(findAddress('Nova scotia has the best lobster I have ever eaten')).toBeNull();
+    expect(findAddress("Nova Scotia's lobster is the best")).toBeNull();
   });
   it('the real address forms still address', () => {
     expect(findAddress('Nova, what is on the list?')?.rest).toBe('what is on the list?');
