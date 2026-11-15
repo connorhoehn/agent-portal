@@ -11,6 +11,7 @@ import { RecordingConsentNotice, SpeakerIcon, type RosterExtraEntry } from '@con
 import { ComposerPromptDeck, type ComposerPrompt } from '@connorhoehn/ui-components/social/rich-composer';
 import { useMemo, useRef, useState } from 'react';
 import { useNovaVoice } from '../../lib/novaVoice';
+import { soundPromptShown } from '../../lib/novaVoiceModel';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
 import {
   assistantPresent, assistantStateWords, leftWords, markWords, myWaitingActions, standingFacts, timeLeftWords, noticeText, noticeVisible, rosterEntry, voiceWords,
@@ -65,7 +66,8 @@ export function NovaBarControls() {
   const voiceChip = voiceWords(view, voice.muted);
   const facts = standingFacts(view);
   const left = timeLeftWords(view);
-  const soundPrompt = !!words && voice.needsGesture && (voice.framesPlayed > 0 || voice.framesIgnored > 0);
+  // Before any reply: as soon as the voice is on and the browser still waits for a click (unless this person muted Nova).
+  const soundPrompt = soundPromptShown({ present: !!words && !controls.left, voiceOn: view.voice, muted: voice.muted, needsGesture: voice.needsGesture });
   // Someone who cannot invite, with no Nova in the call, gets no bar at all (not an empty ruled slot).
   if (!controls.invite && !(state && controls.left) && !(words && !controls.left) && !soundPrompt && !nova.error && !waiting) return null;
   const why = controls.left ? `${leftWords(view)}.` : null;

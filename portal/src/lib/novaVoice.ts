@@ -16,7 +16,7 @@ export interface NovaVoiceSnapshot {
   muted: boolean;
   /** Frames are arriving now (back to false SPEAKING_HOLD_MS after the last one). */
   speaking: boolean;
-  /** Frames arrived but the browser has not allowed sound yet (no click on the page). */
+  /** The browser has not allowed sound yet (no click on the page): known as soon as the voice is on, before any frame. */
   needsGesture: boolean;
   framesPlayed: number;
   framesIgnored: number;
@@ -55,7 +55,31 @@ class NovaPlayer {
   /** The browser only lets sound start after a click; this is that click. */
   async resume() {
     try { await this.ctx?.resume(); } catch { /* still suspended */ }
-    this.set({ needsGesture: this.ctx?.state === 'suspended' });
+    this.noteState();
+  }
+
+  private gestureWatch: (() => void) | null = null;
+  private noteState() {
+    const suspended = this.ctx?.state === 'suspended';
+    if (!suspended && this.gestureWatch) { this.gestureWatch(); this.gestureWatch = null; }
+    if (suspended !== this.snap.needsGesture) this.set({ needsGesture: suspended });
+  }
+
+  /**
+   * The voice is on for this person: make the audio context now, before any reply, so a browser that holds sound until a click is
+   * known at once (`needsGesture`) and the first reply is not dropped. Any click or key on the page then lets sound start.
+   */
+  prime() {
+    this.context();
+    const ctx = this.ctx;
+    if (!ctx) return;
+    ctx.onstatechange = () => this.noteState();
+    if (ctx.state === 'suspended' && !this.gestureWatch && typeof document !== 'undefined') {
+      const onGesture = () => { void this.resume(); };
+      document.addEventListener('pointerdown', onGesture, true); document.addEventListener('keydown', onGesture, true);
+      this.gestureWatch = () => { document.removeEventListener('pointerdown', onGesture, true); document.removeEventListener('keydown', onGesture, true); };
+    }
+    this.noteState();
   }
 
   ignored() { this.set({ framesIgnored: this.snap.framesIgnored + 1 }); }
@@ -96,7 +120,8 @@ class NovaPlayer {
     this.sources.clear();
     this.utterance = false; this.nextStart = 0;
     if (this.hold) { clearTimeout(this.hold); this.hold = null; }
-    if (this.snap.speaking || this.snap.needsGesture) this.set({ speaking: false, needsGesture: false });
+    // `needsGesture` is the browser's state, not the playback's: it stays (the prompt itself hides when the voice is off or muted).
+    if (this.snap.speaking) this.set({ speaking: false });
   }
 
   /** The server started a new run (a restart): its `seq` begins again at 1, so the last sequence seen is forgotten. */
@@ -140,6 +165,9 @@ export function useNovaVoice(callId: string | null, view: AssistantView) {
 
   // Pause, leave, voice off, mute, call end: nothing more is played and what is scheduled is cancelled.
   useEffect(() => { if (!shouldSound) player.stop(); }, [shouldSound]);
+  // Voice on and not muted: learn now whether the browser holds sound until a click, before Nova's first reply.
+  const wantsSound = !!callId && view.voice && !snap.muted;
+  useEffect(() => { if (wantsSound) player.prime(); }, [wantsSound, callId]);
   useEffect(() => () => player.stop(), []);
 
   return {

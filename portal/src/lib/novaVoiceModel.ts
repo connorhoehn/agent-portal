@@ -54,6 +54,13 @@ export function shouldPlay(g: PlayGate): boolean {
   return g.frameCallId === g.callId && g.seq > g.lastSeq && !g.muted && g.voice && g.listening;
 }
 
+/**
+ * "Click to hear Nova": shown as soon as Nova's voice is on for the call and this browser has not allowed sound yet (it waits for a
+ * click), before any reply, unless this person muted Nova; gone once sound is allowed, the voice is off, or Nova is not in the call.
+ */
+export interface SoundPromptInput { present: boolean; voiceOn: boolean; muted: boolean; needsGesture: boolean }
+export const soundPromptShown = (i: SoundPromptInput): boolean => i.present && i.voiceOn && !i.muted && i.needsGesture;
+
 export interface ScheduleInput {
   currentTime: number; nextStartTime: number; frameSeconds: number; utteranceStarted: boolean;
   /** Whether the audio context is running; a suspended one plays nothing, and a frame is dropped rather than queued behind it. Default true. */

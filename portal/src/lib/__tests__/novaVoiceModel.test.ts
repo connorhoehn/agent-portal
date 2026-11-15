@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { JITTER_BUFFER_S, MAX_LATE_S, SCHEDULE_LEAD_S, parseAudioFrame, pcm16ToFloat32, runChanged, scheduleFrame, shouldPlay } from '../novaVoiceModel.ts';
+import { JITTER_BUFFER_S, MAX_LATE_S, SCHEDULE_LEAD_S, parseAudioFrame, pcm16ToFloat32, runChanged, scheduleFrame, shouldPlay, soundPromptShown } from '../novaVoiceModel.ts';
 
 const b64 = (vals: number[]) => { const buf = Buffer.alloc(vals.length * 2); vals.forEach((v, i) => buf.writeInt16LE(v, i * 2)); return buf.toString('base64'); };
 
@@ -52,4 +52,14 @@ test('a frame behind the clock starts just ahead of it, and one more than 500 ms
   assert.ok(late.play && Math.abs(late.startAt - (11 + JITTER_BUFFER_S)) < 1e-9, 'a late frame is re-buffered, not dropped');
   assert.ok(MAX_LATE_S === 0.5);
   assert.equal(scheduleFrame({ currentTime: 10, nextStartTime: 0, frameSeconds: 0.1, utteranceStarted: false, running: false }).play, false, 'nothing is scheduled while the context is suspended');
+});
+
+test('"Click to hear Nova" shows as soon as the voice is on and the browser waits for a click, before any reply; not muted, not off, not once allowed', () => {
+  const on = { present: true, voiceOn: true, muted: false, needsGesture: true };
+  // No frame count in the condition at all: it is shown before Nova's first reply.
+  assert.equal(soundPromptShown(on), true);
+  assert.equal(soundPromptShown({ ...on, needsGesture: false }), false); // sound allowed (a click, or a browser that never blocks)
+  assert.equal(soundPromptShown({ ...on, voiceOn: false }), false); // the voice turned off
+  assert.equal(soundPromptShown({ ...on, muted: true }), false); // this person muted Nova
+  assert.equal(soundPromptShown({ ...on, present: false }), false); // Nova not in the call (left, or not invited)
 });

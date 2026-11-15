@@ -1193,6 +1193,10 @@ async function main() {
         check(/Nova's voice is on/.test(label ?? ''), `the mark does not say voice is on: "${label}"`);
         // In-call 8: the voice is seen on the bar without opening the menu.
         await waitFor(async () => (await p.page.getByTestId('nova-voice-chip').innerText().catch(() => '')).trim() === 'Voice on', 10000, `${p.who.userId} seeing "Voice on" on the bar`);
+        // "Click to hear Nova" is decided before any reply: shown exactly when this browser holds sound until a click. Headless
+        // Chromium after the walk's clicks lets sound start, so it is absent here; a browser that blocks would show it now.
+        const blocks = await p.page.evaluate(async () => { const c = new AudioContext(); const s = c.state; await c.close(); return s === 'suspended'; });
+        await waitFor(async () => (await p.page.getByTestId('nova-enable-sound').count()) === (blocks ? 1 : 0), 5000, `${p.who.userId}: "Click to hear Nova" ${blocks ? 'missing' : 'shown'} before any reply, with sound ${blocks ? 'blocked' : 'allowed'}`);
       }
       await vera.page.getByTestId('nova-mark').click();
       check(await vera.page.getByRole('menuitem', { name: "Turn Nova's voice off" }).isVisible(), 'no "Turn Nova\'s voice off" item');
