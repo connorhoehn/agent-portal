@@ -1064,6 +1064,22 @@ Decided during the repairs (14 November): a write asked for in a call must name 
 
 **Second sweep, 14 November.** Four read-only audit passes at `7cde1944` found one high finding (reads about the asker alone, such as unread messages, are answered to the whole call), fifteen medium and a list of low ones; nothing that stores audio, exposes a secret or runs a write without the card. The findings, in order of repair, are in `docs/meeting-assistant-audit.md` under "Second sweep". Do not hold the real call below before the first group is repaired. A scenario suite for the paid simulator is being built to reproduce the findings against the real provider and to prove the repairs.
 
+*Status, 15 November.* The second sweep's findings S1 to S16 are repaired and merged, and the scenario suite exists: thirteen scripted calls in `scripts/meeting-assistant/scenarios.mjs`, free against the stand-ins (`--dry`) and paid against the real provider (`--yes`, capped by `--budget-usd`). The dry run is thirteen of thirteen on main.
+
+**Consent workflow (14 November).** Design and decisions in `docs/meeting-consent-design.md`. A decision heard in a call, or a write that names another person, becomes a proposal: a card in the call chat and a prompt above the call controls, which needs two people including everyone named and the person who will run it, with no open objection. Nothing runs until then, and the conversation is never interrupted. A watcher on a small Bedrock model raises proposals from what it hears, at most eight per call. Proposals appear in the minutes and on the meeting page and expire after 72 hours.
+
+**Paid runs (14 November).** One suite run against the real provider cost $0.89 and was poor: replies went to the wrong asker and acknowledgements were posted as answers. A diagnosis with a paid budget ($3.23) traced that to four rules, now fixed and merged: what counts as an acknowledgement, who a delegated answer belongs to, ordering by arrival and not by the provider's clock (it drifts by more than a second per hundred), and the measured transcript lag in attribution. About $4.30 of the $10 allowed has been spent.
+
+**First real call (14 November).** A three-person call on the local chain (media server, platform API, gateway) with Nova on the real provider: the call connected, the taps delivered audio for every speaker with nothing late or unmapped, and the transcript was accurate. Attribution drifted from about 3 to about 8 seconds over the take; that fix is merged and has not yet been seen on a live call.
+
+**Third sweep and the experience run (14 and 15 November).** Three read-only passes on the experience found 44 things (`docs/meeting-assistant-audit.md`, "Third sweep"); all were repaired in the same run, and the chat cards, the meeting page, the Meetings list and the call block were redesigned (ui-components 2.528.0 and 2.529.0). The walk has 56 steps.
+
+Next package, decided: let Nova be invited again after it leaves a call. It needs a second listening period on the same record and a way to add to minutes that are already written, so it is its own piece of work.
+
+Open after this run, in order of use to a real call: Nova still voices speech nobody asked for when its voice is on; no live transcript is shown during the call; the echo guard is unproven on a long call; the watcher's one-cent Bedrock check (`scripts/meeting-assistant/watcher-check.mjs --yes`) has not run because the AWS credentials on this machine had expired; the smaller items are listed under "Still open" in the audit's third sweep.
+
+A demo film of Nova in a call can be re-recorded with `scripts/demo/nova-meeting-film.mjs` (scripted or `--live`). Asked for next: a film of document collaboration, the whiteboard and the access tenant with live cursors, and livelier voices than the first take.
+
 What needs the owner:
 
 1. A real call. Set `MEETING_ASSISTANT_ENABLED=true`, `MEETING_ASSISTANT_LIVE=1` (in the mock world the session is scripted and no tap is armed without it), the three media variables and `MEETING_ASSISTANT_SINK_SECRET` (and the matching `LIVE_CAPTIONS_SHARED_SECRET` and `LIVE_CAPTIONS_ORIGIN` on the media server), then hold a call with two people, invite Nova, and check: quiet until addressed over ten minutes, the right name on each line, an answer and a card, and, with the voice on, whether Nova's own speech comes back through a microphone.

@@ -4,6 +4,8 @@
 
 **Status, 14 November.** The nine blocking findings and the medium ones are repaired and merged; a second audit found the blockers closed (see "After the repairs" at the end). The verdict below is the first audit's and is kept as written. A second full sweep on 14 November at `7cde1944` found one new high finding and fifteen medium ones (see "Second sweep" at the end); the feature stays off for real calls until those are repaired.
 
+**Status, 15 November.** The second sweep's findings are repaired and merged. A third sweep on 14 and 15 November looked only at the experience: what a person in the call sees and hears, the consent workflow, and what is left after the call. It found 44 things, none of them a leak; they are repaired (see "Third sweep" at the end), and the chat cards and the meeting page were redesigned in the same run.
+
 ## Verdict
 
 The feature must not be turned on for a real call yet. Nine defects are serious enough to block that: four can show one person's words or data to others, two can attribute or run an action wrongly, and three break the feature in normal use. None has touched real data. The flag is off by default, and the product code has only run on the mock world.
@@ -163,3 +165,63 @@ No step at all: a turn run in a hidden tab; a reload during a turn; an expired o
 5. The documents.
 
 A scenario suite for the paid simulator is being built alongside: twelve scripted calls against the real provider (personal and private reads, two askers, ten quiet minutes, crosstalk, a loud neighbour, echo, forms of address, a late joiner, pause and dismiss, confirm and decline, a dropped connection). Its results will be recorded in `docs/meeting-assistant-design.md`.
+
+## Third sweep (14 and 15 November): the experience
+
+Audited at `50bc577a`, after the second sweep's repairs and the consent workflow. Three read-only passes, each from a person's seat and not from the code's: the middle of a call; the consent workflow from the seat of the asker, a named person, the executor, a bystander, a late joiner and someone who was not there; and everything around the call (bringing Nova in, each way it can fail, the call ending, the meeting record afterwards). Every finding was checked against the lines; a few are marked as inferred in the working notes.
+
+### Verdict
+
+44 findings: 15 in the call, 15 in the consent workflow, 14 around it. None stores or exposes anything it should not. They are the kind of defect a walk with fixed strings does not see: a state with no sign, a message that blames the wrong person, a dead end, a control that does more than its label says.
+
+### What was found and repaired
+
+**Nova's state was not always visible.** Nothing said Nova was working on a request; the bar read "listening" while Nova was still joining or could not hear; an error stayed on the bar for the rest of the call; whether Nova's voice was on could only be seen inside a menu; the bar offered "Invite" for a moment after a reload. Repaired: the bar says who Nova is working for, "joining", "connecting" or "cannot hear the call"; errors clear when the state changes or after 20 seconds; a chip shows the voice state; the mute is kept per call; nothing is drawn until the first state read. A late joiner finds who invited Nova, whether its voice is on and who can pause it in the bar's menu (the chat's history floor was left as it is).
+
+**One click removed Nova for everyone, for good.** Dismiss sat next to "I understand" with no confirmation, and a dismissed Nova cannot rejoin. Repaired: the control reads "Dismiss Nova for everyone" and asks once, naming the effect; afterwards the bar says who dismissed it, or that it reached its time limit or lost its connection, and that it cannot rejoin this call.
+
+**Spoken commands and endings were silent or blamed the asker.** A spoken "pause" or "leave" changed the state with no chat line and skipped the steps the button takes; a request cut short when Nova left got no reply, and its card said the asker "did not confirm in time". Repaired: the spoken path and the button share one function; a request cut short says why (left, dismissed, time limit, lost connection, restarted). The walk then caught a real defect: after a spoken pause, the next answer was labelled for the person who said "pause". Fixed.
+
+**Messages read like machine output.** Refusals showed setting names, file names and state names, said "the assistant", and did not say whether to try again. Repaired: plain sentences with a next step; the detail goes to the server log; status codes and machine fields are unchanged. A permission refusal is told to the asker privately, not to the call under their name.
+
+**Limits were announced only when they hit.** Repaired: the join notice states the time limit and that a dismissal is final; the five-minute warning names who can extend, or says the call cannot be extended further; a warning comes when five requests are left. The two disclosures no longer contradict each other.
+
+**Consent: dead ends and accidents.** The executor was told to "consent again" and never offered it; the run could start in the executor's browser on someone else's click; one keypress by anyone ended a proposal for good; a new proposal moved keyboard focus onto Consent; one objector could hold a proposal with no way out; the card showed a tool name, not what would be written; nobody could tell a proposal Nova raised from one a person asked for. Repaired:
+- The executor's own click is the last step. They are offered "Run it now"; if nobody who consented can run it, people who have not answered are asked.
+- A proposal arriving never takes focus (library 2.528.0), and digits act only inside the prompt.
+- "Not a decision" is offered only on proposals Nova raised; on an asked one only the asker can drop it; both have Undo.
+- An objected proposal says what clears it, names every objector and can be raised again.
+- The card says in plain words what will be written, whether it will be recorded as decided or as waiting, who asked or that Nova heard it, and when it expires. The lines Nova heard are shown only to people who were in the call; the server enforces that.
+- The footer count shows only what waits on the viewer. The asker and the executor are told when a proposal ends or is handed back.
+
+**After the call there was nothing to find.** Minutes went into a chat nobody could open, with no notification; a failed minutes write was final and the page then said nothing was decided; the list stopped at 25 meetings; a deleted record read as "you were not in that call"; the page said neither how long the record is kept nor what Nova covered. Repaired: one bell notification per attendee when minutes are ready, with nothing from the meeting in it; a failed write is tried again (three times by the sweep, five by an attendee's press, enforced in the store); the list loads older meetings; an attendee is told a record was deleted or expired, and everyone else gets a neutral sentence; the page says "Kept until", who can delete it sooner, how long Nova listened and how many people were not transcribed (a count, never names).
+
+**Deleting a record filled the chat with one sentence per message** (reported by the owner). Repaired: the sentence appears once per call as a plain line, and Nova's other messages and cards are removed from view.
+
+### Redesigned in the same run
+
+- **The chat cards.** One compact layout for action, proposal and minutes cards: what it is and its status on one row, a one-line title, one plain line of what will happen, faces for the people, then the actions and the expiry. A card that waits on the viewer is toned; a finished, declined, expired or dropped one is a single row that can be opened. Raw `key: value` rows are gone (every field Nova will send stays readable behind "Details", as the first audit requires), the line "I have asked … to confirm" is no longer posted beside the card that says it, and the join notice is a block, not a paragraph in a pill.
+- **The meeting page and the Meetings list.** Delete moved into a menu; "Needs you" comes first when something waits on the viewer; the summary is a lead sentence and up to four bullets, never a retelling by speaker; decisions, action items and proposals are tables with portraits; a proposal opens in a drawer; the transcript is collapsed. The list shows length, people and outcomes.
+- **The call block** (library 2.529.0). Everyone in the call has a tile side by side, with "+N" only past what fits, and the recording notice is an indicator with a tooltip on the meta line instead of a banner on its own line.
+
+### Decided
+
+- Nova cannot rejoin a call it left. A second listening period needs a way to add to minutes that were already written; it is the next package, not a patch.
+- The chat's history floor stays: a late joiner does not get Nova's earlier answers.
+- A tombstone tells only attendees that a record was deleted or expired. Once the sweep has removed the call, nobody can be told apart, so everyone gets the neutral sentence.
+- The minutes page counts the people who were not transcribed and does not name them.
+- Evidence lines are for people who were in the call. A named person who was not sees the statement and who raised it.
+
+### Still open
+
+- Re-inviting Nova after it leaves (above).
+- The cap of eight proposals per call is silent until it is reached.
+- "Paused for" on the meeting page is all the time Nova was in the call and not listening; pauses are not tracked on their own.
+- A finished action row has no link to what it created; the card carries no link the browser can trust.
+- An action item whose work item was made through the plain "Create work item" link still reads "Not created".
+- On the meeting page the docked answer prompt can cover the last table rows.
+- In a browser that blocks sound, "Click to hear Nova" still appears only after the first spoken answer was lost.
+- Covered by unit tests only, because the walk cannot produce them: the "working for" mark (a lookup finishes too fast to catch) and the failed-minutes path (the scripted writer cannot fail).
+- The meeting page is not in the DOM geometry audit's route list.
+- From the real-provider runs, unchanged by this sweep: Nova still voices speech nobody asked for when its voice is on; the two-askers case was relaxed and not re-run against the provider; the echo guard is unproven on a long call; the attribution fix has not yet been seen on a live call.
+
