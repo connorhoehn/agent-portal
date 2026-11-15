@@ -9,7 +9,7 @@ import {
   buildDecisionRequest, DECISION_SYSTEM_PROMPT, parseDecisionAnswer, type DecisionCheckInput,
 } from '../decision-prompt.js';
 import { BedrockDecisionModel, ScriptedDecisionModel, scriptedAnswer, type DecisionModel, type ModelCheckResult } from '../decision-model.js';
-import { DecisionWatcher, MAX_PER_CALL, MAX_WAIT_MS, QUIET_MS, TRIGGER, similarity, type WatcherDeps } from '../decision-watcher.js';
+import { DecisionWatcher, MAX_PER_CALL, MAX_WAIT_MS, MIN_GAP_MS, QUIET_MS, TRIGGER, capNotice, noticeIfCapReached, similarity, type WatcherDeps } from '../decision-watcher.js';
 import { LineIntake } from '../intake.js';
 import { MockTranscriptSource } from '../transcript-source.js';
 import { watcherBudgetLeft, type WatcherSpend } from '../spend.js';
@@ -283,6 +283,48 @@ describe('the watcher', () => {
     await advance(QUIET_MS);
     expect(watcher.stats('call-1')['cap']).toBe(1);
     expect(modelCalls).toBe(0);
+  });
+
+  it('the proposal that reaches the cap is followed by one notice to the call; a later candidate raises nothing and says nothing', async () => {
+    const notices: Array<{ callId: string; text: string }> = [];
+    watcher.dispose();
+    watcher = makeWatcher({ notice: async (callId, text) => { notices.push({ callId, text }); } });
+    watcher.start('call-1');
+    for (let i = 0; i < MAX_PER_CALL - 1; i += 1) {
+      await createProposal(store, { callId: 'call-1', tenant: 'orgiq', statement: `Earlier decision ${i}`, outcome: { kind: 'decision', initiativeId: 'p-auth' }, named: [], executor: 'u-priya', source: 'watcher', at: T0 - 3_600_000 });
+    }
+    await say('u-sam', "Let's cut over the smallest tenants first."); await say('u-priya', 'Agreed.');
+    await advance(QUIET_MS);
+    expect(await proposals()).toHaveLength(MAX_PER_CALL);
+    expect(notices).toEqual([{ callId: 'call-1', text: capNotice() }]);
+    expect(capNotice()).toBe('Nova has raised 8 proposals in this call and will not raise more. You can still ask Nova to record a decision.');
+    // A ninth candidate, past the gap: no proposal, no second notice.
+    await advance(MIN_GAP_MS);
+    await say('u-lee', "So we'll freeze the schema."); await say('u-sam', 'Agreed.');
+    await advance(QUIET_MS);
+    expect(await proposals()).toHaveLength(MAX_PER_CALL);
+    expect(watcher.stats('call-1')['cap']).toBe(1);
+    expect(notices).toHaveLength(1);
+    // After a restart (a new watcher over the same store) the cap is read from the stored proposals: still silent.
+    watcher.dispose();
+    watcher = makeWatcher({ notice: async (callId, text) => { notices.push({ callId, text }); } });
+    watcher.start('call-1');
+    await advance(MIN_GAP_MS);
+    await say('u-lee', "Let's move the standup to Tuesday."); await say('u-priya', 'Agreed.');
+    await advance(QUIET_MS);
+    expect(await proposals()).toHaveLength(MAX_PER_CALL);
+    expect(notices).toHaveLength(1);
+  });
+
+  it('the cap notice counts the watcher\'s proposals only, and only the one that reaches the cap', async () => {
+    const post = jest.fn(async () => undefined);
+    await createProposal(store, { callId: 'call-1', tenant: 'orgiq', statement: 'Asked for', outcome: { kind: 'decision', initiativeId: 'p-auth' }, named: [], executor: 'u-priya', source: 'asked', at: T0 });
+    expect(await noticeIfCapReached(store, 'call-1', 'asked', post)).toBe(false);
+    for (let i = 0; i < MAX_PER_CALL; i += 1) {
+      await createProposal(store, { callId: 'call-1', tenant: 'orgiq', statement: `Watched ${i}`, outcome: { kind: 'decision', initiativeId: 'p-auth' }, named: [], executor: 'u-priya', source: 'watcher', at: T0 });
+      expect(await noticeIfCapReached(store, 'call-1', 'watcher', post)).toBe(i === MAX_PER_CALL - 1);
+    }
+    expect(post).toHaveBeenCalledTimes(1);
   });
 
   it('a duplicate by normalised statement is dropped', async () => {

@@ -75,7 +75,7 @@ import {
   ANSWERABLE, cleanReason, closeProposals, isDue, listProposalsFor, mayDismiss, mayRaiseAgain, mayReopen, ProposalInputError, raiseAgain, respondToProposal, whatIsMissing, type ResponseKind,
 } from '../lib/meeting-assistant/proposals.js';
 import { decisionRecordedAs, mayRunProposal } from '../lib/meeting-assistant/proposal-run.js';
-import { MAX_PER_CALL } from '../lib/meeting-assistant/decision-watcher.js';
+import { MAX_PER_CALL, noticeIfCapReached } from '../lib/meeting-assistant/decision-watcher.js';
 import { updateStatement } from '../lib/meeting-assistant/named-people.js';
 import type { Proposal } from '../lib/meeting-assistant/types.js';
 import { getProject } from '../providers/projects.js';
@@ -761,6 +761,8 @@ meetingAssistantRouter.post('/proposals/:proposalId/raise-again', asyncHandler(a
   }
   // A copy raised after the call ended keeps the call's deadline on the meeting page.
   if (endedAt(v.record) !== null) await closeProposals(store, v.callId, endedAt(v.record)!);
+  // A watcher proposal raised again during the call can be the one that reaches the cap: the call is told once, as when Nova raises it.
+  else await noticeIfCapReached(store, v.callId, out.proposal.source, postNoticeQuietly).catch(() => false);
   res.json(await proposalView((await store.getProposal(v.callId, out.proposal.id)) ?? out.proposal, v.session.sub, v));
 }));
 

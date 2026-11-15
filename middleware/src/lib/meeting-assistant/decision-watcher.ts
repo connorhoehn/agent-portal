@@ -11,7 +11,8 @@
 //      the window and come from two or more people; no watcher proposal of this call was posted in the last MIN_GAP_MS and fewer
 //      than MAX_PER_CALL were; no proposal of the call has the same normalised statement; and no dismissed ("Not a decision")
 //      proposal of the call is near it (word overlap >= NEAR_DISMISSED). The caps and the suppression are read from the stored
-//      proposals, so a restart keeps them.
+//      proposals, so a restart keeps them. The proposal that reaches MAX_PER_CALL is followed by one notice to the call
+//      (capNotice): the count is read from the stored proposals, so it is said once, also across a restart.
 //   5. The server builds the outcome: a decision on the call's initiative, or the "create" work-item arguments the minutes use.
 //      The model's statement is shown, never executed. `named` keeps roster names only, mapped to user ids here.
 //   6. The executor: the first named person who is seated now; else the initiative's owner when seated; else the person who spoke
@@ -41,6 +42,20 @@ export const MIN_CONFIDENCE = 0.8;
 export const MIN_GAP_MS = 2 * 60_000;
 export const MAX_PER_CALL = 8;
 export const NEAR_DISMISSED = 0.6;
+/** Said once in a call, by the proposal that reaches the cap (the watcher's own, or one raised again). */
+export const capNotice = (): string => `Nova has raised ${MAX_PER_CALL} proposals in this call and will not raise more. You can still ask Nova to record a decision.`;
+
+/**
+ * After a proposal of `source` was stored: when it is the one that brought the call's count to exactly MAX_PER_CALL, post the cap
+ * notice. Read from the stored proposals, so a restart neither repeats it nor forgets it.
+ */
+export async function noticeIfCapReached(store: AssistantStore, callId: string, source: Proposal['source'], post: (callId: string, text: string) => Promise<void>): Promise<boolean> {
+  if (source !== 'watcher') return false;
+  const count = (await store.listProposals(callId)).filter((p) => p.source === 'watcher').length;
+  if (count !== MAX_PER_CALL) return false;
+  await post(callId, capNotice());
+  return true;
+}
 
 export type CheckCode =
   | 'posted' | 'gone' | 'not-listening' | 'alone' | 'cap' | 'too-soon' | 'budget' | 'one-speaker' | 'model-timeout' | 'model-error'
@@ -61,6 +76,8 @@ export interface WatcherDeps {
   novaAnswering?: (callId: string) => boolean;
   /** Is this stored line Nova's own voice heard back? */
   isEcho?: (callId: string, line: TranscriptLine) => boolean;
+  /** Posts one of Nova's notices to the call (never throws). Default: the call chat. */
+  notice?: (callId: string, text: string) => Promise<void>;
   /** A one-shot timer; returns its canceller. Default: an unref'd setTimeout. */
   schedule?: (fn: () => void, ms: number) => () => void;
 }
@@ -234,6 +251,7 @@ export class DecisionWatcher {
       this.finish(w, 'invalid', window.length); return;
     }
     this.finish(w, 'posted', window.length);
+    await noticeIfCapReached(store, w.callId, 'watcher', this.deps.notice ?? (async () => undefined)).catch(() => false);
   }
 
   /** The window: the last WINDOW_MS of stored lines, at most WINDOW_LINES, attributed and not Nova's echo. */
@@ -312,6 +330,7 @@ export function defaultWatcherDeps(over: Partial<WatcherDeps> & Pick<WatcherDeps
       return userForPerson((await getProject(initiativeId))?.ownerId ?? null);
     },
     initiativeName: async (initiativeId) => (await (await import('../../providers/projects.js')).getProject(initiativeId))?.name ?? null,
+    notice: async (callId, text) => (await import('./chat.js')).postNoticeQuietly(callId, text),
     ...over,
   };
 }
