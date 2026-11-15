@@ -297,7 +297,55 @@ describe('lines, acknowledgement and the transcript', () => {
 
   it('rejects odd paging values', async () => {
     await post('invite');
-    for (const q of ['after=-1', 'after=x', 'limit=0', 'limit=501', 'limit=1e3']) expect((await get(`transcript?${q}`)).status).toBe(400);
+    for (const q of ['after=-1', 'after=x', 'limit=0', 'limit=501', 'limit=1e3', 'tail=0', 'tail=501', 'tail=x', 'tail=5&after=1', 'tail=5&limit=5', 'before=3', 'tail=5&before=0']) expect((await get(`transcript?${q}`)).status).toBe(400);
+  });
+
+  describe('the live view reads (tail, before, speakers)', () => {
+    const texts = (b: { lines: Array<{ text: string }> }) => b.lines.map((l) => l.text);
+    const seed = async (n: number) => {
+      await post('invite'); await post('ack', 'bob');
+      for (let i = 1; i <= n; i += 1) await inject({ userId: i % 2 ? 'alice' : 'bob', text: `line ${i}` });
+    };
+
+    it('tail answers the newest lines oldest first and says whether earlier ones exist', async () => {
+      await seed(5);
+      const t = (await get('transcript?tail=2')).body;
+      expect(texts(t)).toEqual(['line 4', 'line 5']);
+      expect(t.earlier).toBe(true);
+      expect(t.next).toBe(5);
+      const all = (await get('transcript?tail=10')).body;
+      expect(texts(all)).toHaveLength(5);
+      expect(all.earlier).toBe(false);
+      expect((await get('transcript')).body.earlier).toBeUndefined();
+    });
+
+    it('tail with before pages back from the oldest line a view holds', async () => {
+      await seed(5);
+      const t = (await get('transcript?tail=2&before=4')).body;
+      expect(texts(t)).toEqual(['line 2', 'line 3']);
+      expect(t.earlier).toBe(true);
+      const first = (await get('transcript?tail=2&before=2')).body;
+      expect(texts(first)).toEqual(['line 1']);
+      expect(first.earlier).toBe(false);
+    });
+
+    it('every answer names the speakers of its lines once, with portraits', async () => {
+      await seed(3);
+      const t = (await get('transcript?tail=10')).body;
+      expect(t.speakers).toEqual([{ userId: 'alice', name: expect.any(String), avatarUrl: null }, { userId: 'bob', name: expect.any(String), avatarUrl: null }]);
+      expect((await get('transcript?after=2', 'bob')).body.speakers.map((p: { userId: string }) => p.userId)).toEqual(['alice']);
+      expect((await get('transcript?after=3')).body.speakers).toEqual([]);
+    });
+
+    it('tail keeps the same access rule: a stranger, an admin, a later joiner and another tenant read nothing', async () => {
+      await seed(1);
+      for (const user of ['dave', 'root', 'nobody', 'carol']) {
+        const r = await get('transcript?tail=10', user);
+        expect(r.status).toBeGreaterThanOrEqual(401);
+        expect(JSON.stringify(r.body)).not.toContain('line 1');
+      }
+      expect((await get('transcript?tail=10', 'bob')).status).toBe(200);
+    });
   });
 });
 

@@ -80,7 +80,7 @@ import {
 import { decisionRecordedAs, mayRunProposal } from '../lib/meeting-assistant/proposal-run.js';
 import { MAX_PER_CALL, noticeIfCapReached } from '../lib/meeting-assistant/decision-watcher.js';
 import { updateStatement } from '../lib/meeting-assistant/named-people.js';
-import type { Proposal } from '../lib/meeting-assistant/types.js';
+import type { Proposal, TranscriptLine } from '../lib/meeting-assistant/types.js';
 import { getProject } from '../providers/projects.js';
 import { config } from '../config.js';
 
@@ -802,13 +802,31 @@ async function liveRecordOf(session: Session, callId: string): Promise<Assistant
   return record;
 }
 
+/**
+ * The stored lines, oldest first, for the people who were there (`liveRecordOf`), during the call and after it. Two ways to page:
+ * `after`/`limit` (forward from a seq, as the meeting page and the live view's polling read), or `tail` (the newest `tail` lines,
+ * optionally those before the seq `before`, with `earlier` saying whether older lines exist: the live view's first read and its
+ * "Load earlier lines"). Every answer names the speakers of the lines it carries, with their portraits, so a view needs no second read.
+ */
 meetingAssistantRouter.get('/transcript', asyncHandler(async (req, res) => {
   const session = sessionOf(req); const callId = callIdOf(req);
-  const after = intParam(req.query['after'], 'after', 0, 1_000_000_000, 0);
-  const limit = intParam(req.query['limit'], 'limit', 1, 500, 100);
-  await liveRecordOf(session, callId);
-  const lines = await assistantStore().lines(callId, after, limit);
-  res.json({ callId, after, lines, next: lines.length ? lines[lines.length - 1]!.seq : after });
+  const tail = req.query['tail'] === undefined ? null : intParam(req.query['tail'], 'tail', 1, 500, 100);
+  if (tail === null && req.query['before'] !== undefined) throw new ValidationError('before needs tail');
+  if (tail !== null && (req.query['after'] !== undefined || req.query['limit'] !== undefined)) throw new ValidationError('tail cannot be combined with after or limit');
+  const record = await liveRecordOf(session, callId);
+  const store = assistantStore();
+  let after: number; let lines: TranscriptLine[]; let earlier: boolean | undefined;
+  if (tail !== null) {
+    const before = intParam(req.query['before'], 'before', 1, 1_000_000_000, record.nextSeq);
+    after = Math.max(0, Math.min(before, record.nextSeq) - 1 - tail);
+    lines = (await store.lines(callId, after, tail)).filter((l) => l.seq < before);
+    earlier = after > 0 && (await store.lines(callId, 0, 1)).some((l) => l.seq <= after);
+  } else {
+    after = intParam(req.query['after'], 'after', 0, 1_000_000_000, 0);
+    lines = await store.lines(callId, after, intParam(req.query['limit'], 'limit', 1, 500, 100));
+  }
+  const speakers = await facesOf([...new Set(lines.flatMap((l) => (l.userId ? [l.userId] : [])))]);
+  res.json({ callId, after, lines, next: lines.length ? lines[lines.length - 1]!.seq : after, speakers, ...(earlier === undefined ? {} : { earlier }) });
 }));
 
 /** Notes and transcript are personal data: reading them is attributed to the person who was there, so no masquerade. */
