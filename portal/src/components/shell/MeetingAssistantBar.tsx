@@ -16,7 +16,7 @@ import {
   assistantPresent, assistantStateWords, leftWords, markWords, myWaitingActions, standingFacts, timeLeftWords, noticeText, noticeVisible, rosterEntry, voiceWords,
   ASSISTANT_LABEL, ASSISTANT_NAME, DISMISS_LABEL, DISMISS_QUESTION,
 } from '../../lib/meetingAssistantModel';
-import { proposalCountWords } from '../../lib/meetingProposals';
+import { proposalCountWords, waitingCount } from '../../lib/meetingProposals';
 import { useHuddleChatToggle } from './HuddleChat';
 import { useLiveCallId } from '../../lib/liveCallId';
 import { useProposalQueue } from './NovaProposalAsk';
@@ -51,12 +51,13 @@ export function NovaBarControls() {
   const voice = useNovaVoice(callId, nova.view);
   const errorRef = useRef<HTMLButtonElement | null>(null);
   const [errorOpen, setErrorOpen] = useState(false);
-  const queue = useProposalQueue().queue;
+  // Only proposals that wait on this person count; a bystander's optional prompt is in the deck but not in the badge.
+  const owed = waitingCount(useProposalQueue().queue);
   const chat = useHuddleChatToggle({ behavior: 'focus' });
   // Nothing is drawn until the first state read answers: no "Invite Nova" while Nova may already be here.
   if (controls.hidden || view.phase === 'loading') return null;
   const cards = myWaitingActions(view);
-  const waiting = waitingWords(cards.length, queue.length);
+  const waiting = waitingWords(cards.length, owed);
   const state = assistantStateWords(view);
   const markBase = markWords(view, noticeClosed);
   const words = markBase === `${ASSISTANT_NAME} is listening` && voice.speaking ? `${ASSISTANT_NAME} is speaking` : markBase;
@@ -95,9 +96,9 @@ export function NovaBarControls() {
         jumps to the soonest-expiring one; with none, it reopens the proposal deck that Esc hid. A count badge, with the words as its
         name and tooltip, keeps the footer on one line at 1280 with three people in the call. */}
     {waiting && callId && <Tooltip content={waiting} placement="top">
-      <Button variant="ghost" size="sm" className="px-1" aria-label={waiting} data-cards={cards.length} data-proposals={queue.length}
+      <Button variant="ghost" size="sm" className="px-1" aria-label={waiting} data-cards={cards.length} data-proposals={owed}
         onClick={() => { if (cards[0]) jumpToCard(cards[0].actionId, chat?.toggle ?? null); else setProposalDeckHidden(callId, false); }} data-testid="nova-proposal-count">
-        <Badge variant="count" value={cards.length + queue.length} color="accent" aria-label={waiting} />
+        <Badge variant="count" value={cards.length + owed} color="accent" aria-label={waiting} />
       </Button>
     </Tooltip>}
     {soundPrompt && <Button variant="ghost" size="sm" onClick={() => void voice.enableSound()} data-testid="nova-enable-sound">Click to hear Nova</Button>}
