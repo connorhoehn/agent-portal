@@ -121,7 +121,9 @@ export function ProposalCard({ proposalId, state, statement, view, surface = 'de
 }) {
   const navigate = useNavigate();
   const initiativeName = useInitiativeName(view?.outcome.kind === 'decision' ? view.outcome.initiativeId : null);
-  const [label, tone] = PROPOSAL_PILL[state];
+  const [pill, tone] = PROPOSAL_PILL[state];
+  // A dismissed one reads for what happened to it: raised again, dropped by its asker, or not needed / not a decision.
+  const label = state !== 'dismissed' || !view ? pill : view.run?.raisedAs ? 'Raised again' : view.source === 'asked' ? 'Dropped' : view.outcome.kind === 'tool' ? 'Not needed' : pill;
   const live = view ? { ...view, state } : null;
   const needs = live && state === 'open' ? needsLine(live) : null;
   const blocked = live ? blockedLine(live) : null;
