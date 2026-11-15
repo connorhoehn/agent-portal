@@ -1,5 +1,5 @@
 // write-confirm-decline: a write goes through a card the asker decides.
-//  Vera asks for a work item, gets the card, confirms; her browser claims the turn and posts success; Nova's follow-up is labelled Vera.
+//  Vera asks for a work item, gets the card, confirms; her browser claims the turn and posts success; Milo's follow-up is labelled Vera.
 //  Nora asks for one and declines the card: no turn runs.
 //  The refusal of a person whose role may not create one: every OrgIQ role in the mock world holds the create tool (checked from the
 //  catalogue), so that case cannot be staged with the mock people; it is reported as a note, not a check.
@@ -12,13 +12,13 @@ export default {
     const { p, call } = await ctx.setup({ people: ['vera', 'nora', 'mia'] });
     for (const k of ['vera', 'nora', 'mia']) ctx.lane(k);
     const create = (title, who) => ({ call: { name: 'create', args: { kind: 'work-item', fields: { title } } }, followup: `I have asked ${who} to confirm that.`, afterContext: (c) => ({ text: /was done/i.test(c) ? `I created the work item for ${who}.` : `Understood, ${who} said no.`, frames: 12 }) });
-    ctx.say('vera', 1000, 'Nova, create a work item for the calendar sync bug.', { dry: create('Calendar sync bug', 'Vera') });
+    ctx.say('vera', 1000, 'Milo, create a work item for the calendar sync bug.', { dry: create('Calendar sync bug', 'Vera') });
     const noraAt = 26_000;
-    ctx.say('nora', noraAt, 'Nova, create a work item for the login cookie bug.', { dry: create('Login cookie bug', 'Nora') });
+    ctx.say('nora', noraAt, 'Milo, create a work item for the login cookie bug.', { dry: create('Login cookie bug', 'Nora') });
     const veraRuns = ctx.turns('vera', (t) => (t.kind === 'write' ? { ok: true, say: 'Created the work item.', delayMs: 300 } : { withhold: true }));
     const noraRuns = ctx.turns('nora', () => ({ ok: true, say: 'Created the work item.' }));
     ctx.begin();
-    const cardOf = (title, who) => waitFor(async () => (await call.novaMessages(p.vera)).find((m) => m.metadata?.kind === 'assistant-action' && m.metadata?.askedBy === who && new RegExp(title, "i").test(String(m.message ?? ""))), 25_000, 400);
+    const cardOf = (title, who) => waitFor(async () => (await call.assistantRows(p.vera)).find((m) => m.metadata?.kind === 'assistant-action' && m.metadata?.askedBy === who && new RegExp(title, "i").test(String(m.message ?? ""))), 25_000, 400);
     // Vera
     const c1 = await cardOf('calendar sync', 'u-vera');
     r.expect('Vera\'s request is a card waiting for Vera', !!c1 && c1.metadata.status === 'waiting', c1 ? `${c1.metadata.status}: ${c1.metadata.summary}` : 'no card');
@@ -29,17 +29,17 @@ export default {
       before = new Set((await call.chatMessages(p.vera)).map((m) => m.id ?? JSON.stringify(m)));
       const ok = await p.vera.call('POST', `${call.A}/actions/${encodeURIComponent(c1.metadata.actionId)}/decision`, { decision: 'confirm' });
       r.harness('Vera confirms the card', ok.status === 200, `HTTP ${ok.status}`);
-      const done = await waitFor(async () => { const m = (await call.novaMessages(p.vera)).find((x) => x.metadata?.actionId === c1.metadata.actionId); return m?.metadata?.status === 'done' ? m : null; }, 15_000, 400);
+      const done = await waitFor(async () => { const m = (await call.assistantRows(p.vera)).find((x) => x.metadata?.actionId === c1.metadata.actionId); return m?.metadata?.status === 'done' ? m : null; }, 15_000, 400);
       r.expect('the stand-in ran Vera\'s write once and the card says done', !!done && veraRuns.log.filter((x) => x.kind === 'write' && x.posted === 200).length === 1, `${done?.metadata?.status ?? 'not done'}; ${veraRuns.log.length} turn(s)`);
     }
     await sleep(3500);
     const chat1 = await call.chatMessages(p.vera);
     // The server tells the model the write was done as silent context (session.thinking.append); the fake speaks after it, a real
-    // model may or may not. So whether Nova says anything is measured, and what it does say must be labelled Vera, never anyone else.
+    // model may or may not. So whether Milo says anything is measured, and what it does say must be labelled Vera, never anyone else.
     const after = c1 ? chat1.filter((m) => m.metadata?.kind === 'assistant-reply' && !before.has(m.id ?? JSON.stringify(m))) : [];
     const follow = after.find((m) => /created|done|work item/i.test(String(m.message)));
-    r.measure('Nova spoke after the write was done', after.length);
-    r.expect('anything Nova says after the write is labelled Vera (and the fake\'s follow-up is)', after.every((m) => m.metadata.askedBy === 'u-vera') && (!ctx.dry || !!follow), follow ? `labelled ${follow.metadata.askedBy}` : `${after.length} reply(ies)`);
+    r.measure('Milo spoke after the write was done', after.length);
+    r.expect('anything Milo says after the write is labelled Vera (and the fake\'s follow-up is)', after.every((m) => m.metadata.askedBy === 'u-vera') && (!ctx.dry || !!follow), follow ? `labelled ${follow.metadata.askedBy}` : `${after.length} reply(ies)`);
     // Nora
     await ctx.until(noraAt);
     const c2 = await cardOf('login cookie', 'u-nora');
@@ -48,7 +48,7 @@ export default {
       const no = await p.nora.call('POST', `${call.A}/actions/${encodeURIComponent(c2.metadata.actionId)}/decision`, { decision: 'decline' });
       r.harness('Nora declines the card', no.status === 200, `HTTP ${no.status}`);
       await sleep(4000);
-      const after = (await call.novaMessages(p.vera)).find((m) => m.metadata?.actionId === c2.metadata.actionId);
+      const after = (await call.assistantRows(p.vera)).find((m) => m.metadata?.actionId === c2.metadata.actionId);
       r.expect('the declined card says declined', after?.metadata?.status === 'declined', `status ${after?.metadata?.status}`);
       r.expect('no turn ran for the declined write', noraRuns.log.length === 0, `${noraRuns.log.length} turn(s) on Nora's stand-in`);
     }

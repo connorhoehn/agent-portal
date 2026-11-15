@@ -1,7 +1,7 @@
 // Synthetic audio for the meeting-assistant scenarios, and the real-time lane that posts it the way a media-server tap does.
 //
 // Everything audible here is synthetic test speech (macOS `say`, or tones where there is no `say`) kept in a temp folder the caller
-// removes on every exit path, plus noise made in memory. Call audio and Nova's voice are never written.
+// removes on every exit path, plus noise made in memory. Call audio and Milo's voice are never written.
 //
 // A tap (live-video-streaming TapManager `_createPerParticipantPcmTap`) runs one ffmpeg per participant and posts every 200 ms of what
 // ffmpeg writes, with no silence gate, so a live microphone posts continuously, quiet stretches included. A lane does the same from

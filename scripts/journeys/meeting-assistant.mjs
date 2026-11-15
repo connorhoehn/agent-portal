@@ -1,31 +1,31 @@
 #!/usr/bin/env node
 // The call assistant's call UI (docs/meeting-assistant-design.md, package 3), walked in a browser on the default mock
 // world with no media, no microphone and no paid session:
-//   1 Invite Nova is offered to a person in a call    2 inviting: "Nova is listening" for both, Nova in the roster
+//   1 Invite Milo is offered to a person in a call    2 inviting: "Milo is listening" for both, Milo in the roster
 //   3 the notice shows to the second person only      4 nothing stored before the acknowledgement, lines after it
 //   5 pause and resume from the second person         7 nothing clipped or scrolling in the call bar at 1280 (run before 6)
-//   6 dismiss: the mark goes, the chip says why, "Invite Nova again" beside it (Nova can be invited back)
+//   6 dismiss: the mark goes, the chip says why, "Invite Milo again" beside it (Milo can be invited back)
 //   8 to 11 (package 4a, API level: the scripted session answers, no model): a spoken read lands in the call chat labelled with
 //     the asker; a write is a card only the asker confirms and shows as a running turn only after that; a tool call from someone
 //     who never said the name is refused and counted; after dismissal the inviter's spend has a meeting_assistant entry.
-//   P1 to P9 (meeting consent, packages 2, 3 and 6): a third person joins; a proposal Nova heard shows its lines only to people who
+//   P1 to P9 (meeting consent, packages 2, 3 and 6): a third person joins; a proposal Milo heard shows its lines only to people who
 //     were in the call (a named person who was not sees the statement only); a proposal from the dev creator is one card for all
-//     three ("Nova heard a decision", how it will be recorded, Answer only) and a deck prompt for each that arrives without moving
+//     three ("Milo heard a decision", how it will be recorded, Answer only) and a deck prompt for each that arrives without moving
 //     focus and ignores digits outside the deck; the executor's Consent says it runs only when hers is the last; Esc and the
 //     footer count (only what waits on you), the card's Answer; two consents with the executor's last run it in her browser and
 //     the card ends with the decision's title and link, whose page says "Agreed in a call by"; another consent last stops at
 //     consented until her "Run it now"; an objection with a shared reason, what clears it, its withdrawal from the card, "Not a
-//     decision" with Undo, "Raise it again"; an asked write only its asker may drop; a proposal left open when Nova leaves is
+//     decision" with Undo, "Raise it again"; an asked write only its asker may drop; a proposal left open when Milo leaves is
 //     answered on the meeting page (13b), runs there and ends recorded.
 //   12 to 17 (package 5, the minutes; the scripted writer): the leaving message in the call chat, the meeting page at 1440 and 1280,
-//     what Nova covered and how long the meeting is kept (13a), written minutes cannot be written again (13a2), the bell (13a3),
+//     what Milo covered and how long the meeting is kept (13a), written minutes cannot be written again (13a2), the bell (13a3),
 //     a person who was not there gets 404 and a neutral not-found page, the Meetings list, the :minutes ledger entry, the inviter's delete.
-//   R1 to R4 (Nova invited back, run after 13b): a third person joins again; "Invite Nova again" beside the left chip on one footer line
-//     with three people; the inviter uses it, the chat says Nova is back, the others owe the acknowledgement again and their words are
-//     not kept until they give it; something is said; Nova is dismissed; the minutes hold both periods, the earlier items in place;
+//   R1 to R4 (Milo invited back, run after 13b): a third person joins again; "Invite Milo again" beside the left chip on one footer line
+//     with three people; the inviter uses it, the chat says Milo is back, the others owe the acknowledgement again and their words are
+//     not kept until they give it; something is said; Milo is dismissed; the minutes hold both periods, the earlier items in place;
 //     16b: the second period and the minutes addition are each billed once under entries of their own.
-//   R3b, R5: the second person's live transcript stays open across that dismissal; Nova is invited back a third time, the view listens
-//     again, and when Nova leaves again the line said just before is read into it (one more read after every leave, not only the first).
+//   R3b, R5: the second person's live transcript stays open across that dismissal; Milo is invited back a third time, the view listens
+//     again, and when Milo leaves again the line said just before is read into it (one more read after every leave, not only the first).
 //
 // Two people share one call without media the way portal/e2e/work-huddle-navigation.spec.ts does: one starts a call on an
 // initiative page, the other accepts the ring, and the SFU session metadata is the only thing stubbed (the realtime token
@@ -82,7 +82,7 @@ async function gone(page, id, ms = 15000) {
 async function markText(page, ms = 15000) {
   const end = Date.now() + ms;
   while (Date.now() < end) {
-    const t = (await page.getByTestId('nova-mark').first().innerText().catch(() => '')).trim();
+    const t = (await page.getByTestId('assistant-status-mark').first().innerText().catch(() => '')).trim();
     if (t) return t;
     await sleep(300);
   }
@@ -95,7 +95,7 @@ async function waitMark(page, re, ms = 15000) {
   throw new StepFailure(`the call bar never read ${re}: "${t}"`);
 }
 
-/** The bar: no sideways page scroll, Nova's controls inside the call dock, the dock inside the footer row, no control cut off. */
+/** The bar: no sideways page scroll, Milo's controls inside the call dock, the dock inside the footer row, no control cut off. */
 async function barFits(page, label, width) {
   await page.setViewportSize({ width, height: 900 });
   await sleep(700);
@@ -103,7 +103,7 @@ async function barFits(page, label, width) {
     const rect = (el) => el.getBoundingClientRect();
     const dock = document.querySelector('[data-testid="shell-call-dock"]');
     const row = document.querySelector('[data-testid="shell-footer-row"]');
-    const nova = document.querySelector('[data-testid="nova-bar"]');
+    const assistant = document.querySelector('[data-testid="assistant-bar"]');
     if (!dock || !row) return { missing: !dock ? 'shell-call-dock' : 'shell-footer-row' };
     const bad = [];
     const scrollX = document.documentElement.scrollWidth - document.documentElement.clientWidth;
@@ -114,15 +114,15 @@ async function barFits(page, label, width) {
       const b = rect(el);
       if (b.width > 0 && (b.right > dr.right + 1 || b.left < dr.left - 1)) bad.push(`${el.getAttribute('data-testid') ?? el.textContent?.trim().slice(0, 18)} outside the dock`);
     }
-    if (nova) {
-      const nr = rect(nova);
-      if (nr.right > rr.right + 1 || nr.left < rr.left - 1) bad.push(`Nova's controls run outside the footer row (${Math.round(nr.left)}..${Math.round(nr.right)} in ${Math.round(rr.left)}..${Math.round(rr.right)})`);
-      if (nr.height > 40) bad.push(`Nova's controls wrapped (${Math.round(nr.height)}px tall)`);
-      for (const el of nova.querySelectorAll('[data-testid]')) {
+    if (assistant) {
+      const nr = rect(assistant);
+      if (nr.right > rr.right + 1 || nr.left < rr.left - 1) bad.push(`Milo's controls run outside the footer row (${Math.round(nr.left)}..${Math.round(nr.right)} in ${Math.round(rr.left)}..${Math.round(rr.right)})`);
+      if (nr.height > 40) bad.push(`Milo's controls wrapped (${Math.round(nr.height)}px tall)`);
+      for (const el of assistant.querySelectorAll('[data-testid]')) {
         if (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflow !== 'visible') bad.push(`${el.getAttribute('data-testid')} is cut off`);
       }
     }
-    return { scrollX, bad, barHeight: Math.round(rr.height), rowHeight: Math.round(rr.height), novaWidth: nova ? Math.round(rect(nova).width) : 0 };
+    return { scrollX, bad, barHeight: Math.round(rr.height), rowHeight: Math.round(rr.height), assistantWidth: assistant ? Math.round(rect(assistant).width) : 0 };
   });
   check(!r.missing, `${label}: ${r.missing} is not on the page`);
   check(r.scrollX <= 1, `${label} scrolls sideways at ${width} by ${r.scrollX}px`);
@@ -210,8 +210,8 @@ async function main() {
     }
   };
   /** Pause, Resume or Dismiss live in the mark's menu (one compact control keeps the footer on a line). */
-  const novaMenu = async (p, name) => {
-    await p.page.getByTestId('nova-mark').click();
+  const assistantMenu = async (p, name) => {
+    await p.page.getByTestId('assistant-status-mark').click();
     await p.page.getByRole('menuitem', { name }).click();
   };
   const transcript = async (p) => {
@@ -237,8 +237,8 @@ async function main() {
     check(res.status() === 200, `GET the call chat answered ${res.status()}`);
     return (await res.json()).messages;
   };
-  const novaOf = async (p, kind) => (await chatMessages(p)).filter((m) => m.metadata?.kind === kind);
-  // A Nova card's look: its layout (you / others / done / muted), whether it is one row, its height, and whether its surface is opaque.
+  const assistantOf = async (p, kind) => (await chatMessages(p)).filter((m) => m.metadata?.kind === kind);
+  // A Milo card's look: its layout (you / others / done / muted), whether it is one row, its height, and whether its surface is opaque.
   const cardLook = (loc) => loc.evaluate((el) => {
     const bg = getComputedStyle(el).backgroundColor;
     const alpha = /rgba?\(([^)]+)\)/.exec(bg)?.[1].split(',').map((x) => x.trim())[3];
@@ -293,90 +293,90 @@ async function main() {
     if (!callId) throw new StepFailure('no call to walk');
 
     // ── 1. Invite is offered ──
-    await step('1: the feature is advertised; a person in the call sees Invite Nova (every orgiq role holds the capability, so the "without it" half is skipped here and unit-tested in meetingAssistantModel)', async () => {
-      await seen(vera.page, 'nova-invite');
-      await seen(nora.page, 'nova-invite');
+    await step('1: the feature is advertised; a person in the call sees Invite Milo (every orgiq role holds the capability, so the "without it" half is skipped here and unit-tested in meetingAssistantModel)', async () => {
+      await seen(vera.page, 'assistant-invite');
+      await seen(nora.page, 'assistant-invite');
       const heights = [];
-      for (const width of [1440, 1280]) heights.push(`${width}: ${(await barFits(vera.page, 'the bar with Invite Nova', width)).barHeight}px`);
+      for (const width of [1440, 1280]) heights.push(`${width}: ${(await barFits(vera.page, 'the bar with Invite Milo', width)).barHeight}px`);
       await shot(vera.page, '1-invite');
-      return `Invite Nova on both bars; no mark yet; bar height ${heights.join(', ')}`;
+      return `Invite Milo on both bars; no mark yet; bar height ${heights.join(', ')}`;
     });
 
     // ── 2. Invite ──
-    await step('2: inviting shows "Nova is listening" to both people and Nova in the roster; Invite goes', async () => {
-      await vera.page.getByTestId('nova-invite').click();
-      const a = await waitMark(vera.page, /^Nova is listening$/);
-      const b = await waitMark(nora.page, /^Nova is listening$/);
-      await gone(vera.page, 'nova-invite');
-      await gone(nora.page, 'nova-invite');
+    await step('2: inviting shows "Milo is listening" to both people and Milo in the roster; Invite goes', async () => {
+      await vera.page.getByTestId('assistant-invite').click();
+      const a = await waitMark(vera.page, /^Milo is listening$/);
+      const b = await waitMark(nora.page, /^Milo is listening$/);
+      await gone(vera.page, 'assistant-invite');
+      await gone(nora.page, 'assistant-invite');
       // The roster: the conversation pane's destination row (the call's tiles never list a non-media entry).
       const chat = vera.page.getByTestId('shell-call-dock-chat');
       if (!(await vera.page.getByTestId('conversation-pane-destination').isVisible().catch(() => false))) await chat.click();
-      await seen(vera.page, 'nova-roster-entry');
-      const line = (await vera.page.getByTestId('nova-roster-entry').innerText()).trim();
-      check(/Nova \(Assistant, listening\)/.test(line), `the roster line does not name Nova: "${line}"`);
-      check(!(await vera.page.locator('[data-call-stream], video').filter({ hasText: /Nova/ }).count()), 'Nova took a media tile');
-      for (const width of [1440, 1280]) await barFits(vera.page, 'the bar with Nova listening', width);
+      await seen(vera.page, 'assistant-roster-entry');
+      const line = (await vera.page.getByTestId('assistant-roster-entry').innerText()).trim();
+      check(/Milo \(Assistant, listening\)/.test(line), `the roster line does not name Milo: "${line}"`);
+      check(!(await vera.page.locator('[data-call-stream], video').filter({ hasText: /Milo/ }).count()), 'Milo took a media tile');
+      for (const width of [1440, 1280]) await barFits(vera.page, 'the bar with Milo listening', width);
       await shot(vera.page, '2-listening-roster');
       // In-call 9: a late joiner reads the standing facts in the menu instead of the chat history they missed.
-      await nora.page.getByTestId('nova-mark').click();
-      const facts = (await nora.page.getByTestId('nova-facts').innerText().catch(() => '')).replace(/\s+/g, ' ');
+      await nora.page.getByTestId('assistant-status-mark').click();
+      const facts = (await nora.page.getByTestId('assistant-facts').innerText().catch(() => '')).replace(/\s+/g, ' ');
       await nora.page.keyboard.press('Escape');
-      check(/Invited by .+/.test(facts) && /voice is off/.test(facts) && /Anyone here can pause or dismiss Nova/.test(facts), `the menu does not state who invited, the voice and who may pause or dismiss: "${facts}"`);
+      check(/Invited by .+/.test(facts) && /voice is off/.test(facts) && /Anyone here can pause or dismiss Milo/.test(facts), `the menu does not state who invited, the voice and who may pause or dismiss: "${facts}"`);
       return `marks "${a}" and "${b}"; roster "${line.trim().slice(0, 120)}"`;
     });
 
     // ── 3. The notice ──
     await step('3: the second person sees the notice (the inviter named, speech provider, the retention period set by the organisation, nothing kept until acknowledged); the inviter does not', async () => {
-      await seen(nora.page, 'nova-notice');
-      const text = (await nora.page.getByTestId('nova-notice').innerText()).replace(/\s+/g, ' ');
+      await seen(nora.page, 'assistant-consent-notice');
+      const text = (await nora.page.getByTestId('assistant-consent-notice').innerText()).replace(/\s+/g, ' ');
       const inviterName = (await (await vera.api.get(`${PORTAL}/api/session/me`)).json()).name;
       check(typeof inviterName === 'string' && inviterName.length > 0, `the inviter has no display name: ${inviterName}`);
-      check(text.includes(`${inviterName} invited Nova`), `the notice does not name the inviter "${inviterName}": "${text}"`);
+      check(text.includes(`${inviterName} invited Milo`), `the notice does not name the inviter "${inviterName}": "${text}"`);
       check(/speech provider/.test(text), `the notice does not say speech goes to a provider: "${text}"`);
       check(/retention period set by your organisation/.test(text) && !/30 days/.test(text), `the notice does not say how long it is kept, or promises a fixed period: "${text}"`);
       check(/Nothing you say is kept until you acknowledge/.test(text), `the notice does not say nothing is kept before acknowledging: "${text}"`);
-      check(await nora.page.getByTestId('nova-notice-acknowledge').isVisible(), 'no acknowledge control');
-      check(await nora.page.getByTestId('nova-notice-secondary').isVisible(), 'no way to dismiss Nova from the notice');
-      const secondary = (await nora.page.getByTestId('nova-notice-secondary').innerText()).trim();
-      check(secondary === 'Dismiss Nova for everyone', `the notice's dismissal does not say it is for everyone: "${secondary}"`);
-      check(/Nova writes minutes for the people in the call/.test(text) && /^.*Nova is listening to this call\./.test(text), `the notice is not the agreed banner copy: "${text}"`);
-      check(await vera.page.getByTestId('nova-notice').count() === 0, 'the inviter sees the notice');
+      check(await nora.page.getByTestId('assistant-consent-notice-acknowledge').isVisible(), 'no acknowledge control');
+      check(await nora.page.getByTestId('assistant-consent-notice-secondary').isVisible(), 'no way to dismiss Milo from the notice');
+      const secondary = (await nora.page.getByTestId('assistant-consent-notice-secondary').innerText()).trim();
+      check(secondary === 'Dismiss Milo for everyone', `the notice's dismissal does not say it is for everyone: "${secondary}"`);
+      check(/Milo writes minutes for the people in the call/.test(text) && /^.*Milo is listening to this call\./.test(text), `the notice is not the agreed banner copy: "${text}"`);
+      check(await vera.page.getByTestId('assistant-consent-notice').count() === 0, 'the inviter sees the notice');
       await barFits(nora.page, 'the bar under the notice', 1280);
       await shot(nora.page, '3-notice');
       return `"${text.slice(0, 200)}"`;
     });
 
     // ── 3b. Hiding the notice does not acknowledge; the mark keeps offering it ──
-    await step('3b: the second person closes the notice with its own mark: nothing is acknowledged, and the Nova mark says Nova cannot hear them with Acknowledge one click away', async () => {
-      await nora.page.getByTestId('nova-notice-dismiss').click();
-      await gone(nora.page, 'nova-notice');
-      await waitMark(nora.page, /^Nova cannot hear you yet$/);
+    await step('3b: the second person closes the notice with its own mark: nothing is acknowledged, and the Milo mark says Milo cannot hear them with Acknowledge one click away', async () => {
+      await nora.page.getByTestId('assistant-consent-notice-dismiss').click();
+      await gone(nora.page, 'assistant-consent-notice');
+      await waitMark(nora.page, /^Milo cannot hear you yet$/);
       check((await stateOf(nora)).youMustAck === true, 'closing the notice acknowledged for the person');
-      check(await vera.page.getByTestId('nova-mark').innerText().then((t) => /Nova is listening/.test(t)), 'the inviter\'s mark changed');
-      await nora.page.getByTestId('nova-mark').click();
+      check(await vera.page.getByTestId('assistant-status-mark').innerText().then((t) => /Milo is listening/.test(t)), 'the inviter\'s mark changed');
+      await nora.page.getByTestId('assistant-status-mark').click();
       const item = nora.page.getByRole('menuitem', { name: /Acknowledge/ });
-      check(await item.isVisible(), 'no Acknowledge in the Nova menu');
+      check(await item.isVisible(), 'no Acknowledge in the Milo menu');
       check(/cannot hear you until you do/i.test(await item.innerText()), 'the Acknowledge item does not say why');
       await barFits(nora.page, 'the bar with the mark prompting', 1280);
       await shot(nora.page, '3b-notice-hidden-mark-menu');
       await barFits(nora.page, 'the bar with the mark prompting', 1440);
       await nora.page.keyboard.press('Escape');
-      return 'notice hidden; mark "Nova cannot hear you yet"; menu offers Acknowledge';
+      return 'notice hidden; mark "Milo cannot hear you yet"; menu offers Acknowledge';
     });
 
     // ── L0. The live transcript for someone who has not acknowledged: other people's lines, and why their own are missing ──
-    await step('L0: someone who has not acknowledged opens "Show transcript" from Nova\'s menu: the pane opens on the live transcript, which says their own words are not transcribed until they acknowledge; Back to chat returns to the thread', async () => {
-      await nora.page.getByTestId('nova-mark').click();
+    await step('L0: someone who has not acknowledged opens "Show transcript" from Milo\'s menu: the pane opens on the live transcript, which says their own words are not transcribed until they acknowledge; Back to chat returns to the thread', async () => {
+      await nora.page.getByTestId('assistant-status-mark').click();
       const item = nora.page.getByRole('menuitem', { name: /Show transcript/ });
-      check(await item.isVisible(), 'no Show transcript in Nova\'s menu');
-      check(/What Nova is hearing, as it hears it/.test(await item.innerText()), `Show transcript does not say what it shows: "${await item.innerText()}"`);
+      check(await item.isVisible(), 'no Show transcript in Milo\'s menu');
+      check(/What Milo is hearing, as it hears it/.test(await item.innerText()), `Show transcript does not say what it shows: "${await item.innerText()}"`);
       await item.click();
       await seen(nora.page, 'live-transcript');
       const note = (await nora.page.getByTestId('live-transcript-not-acked').innerText()).trim();
-      check(note === 'Your own words are not transcribed until you acknowledge Nova\'s notice.', `the not-acknowledged sentence reads "${note}"`);
+      check(note === 'Your own words are not transcribed until you acknowledge Milo\'s notice.', `the not-acknowledged sentence reads "${note}"`);
       const state = (await nora.page.getByTestId('live-transcript-state').innerText()).trim();
-      check(state === 'Nova is listening', `the transcript's state reads "${state}"`);
+      check(state === 'Milo is listening', `the transcript's state reads "${state}"`);
       await nora.page.getByTestId('live-transcript-back').click();
       await gone(nora.page, 'live-transcript');
       await seen(nora.page, 'huddle-thread');
@@ -389,8 +389,8 @@ async function main() {
       const after = 'After ack: the canary rollout resumes on Friday.';
       await inject(NORA.userId, before);
       check(!(await stored(vera, before, 3500)), 'a line from a person who had not acknowledged was stored');
-      await novaMenu(nora, /Acknowledge/);
-      await waitMark(nora.page, /^Nova is listening$/);
+      await assistantMenu(nora, /Acknowledge/);
+      await waitMark(nora.page, /^Milo is listening$/);
       check((await stateOf(nora)).youMustAck === false, 'the menu\'s Acknowledge did not acknowledge');
       await inject(NORA.userId, after);
       check(await stored(vera, after, 10000), 'a line after the acknowledgement was not stored');
@@ -399,25 +399,25 @@ async function main() {
     });
 
     // ── 5. Pause and resume ──
-    await step('5: the second person pauses Nova: both see "paused" and a line is not stored; resume brings listening back', async () => {
-      await novaMenu(nora, 'Pause Nova');
-      await waitMark(nora.page, /^Nova is paused$/);
-      await waitMark(vera.page, /^Nova is paused$/);
-      await vera.page.getByTestId('nova-mark').click();
-      check(await vera.page.getByRole('menuitem', { name: 'Resume Nova' }).isVisible(), 'no Resume Nova while paused');
-      check(await vera.page.getByRole('menuitem', { name: 'Pause Nova' }).count() === 0, 'Pause Nova is offered while paused');
+    await step('5: the second person pauses Milo: both see "paused" and a line is not stored; resume brings listening back', async () => {
+      await assistantMenu(nora, 'Pause Milo');
+      await waitMark(nora.page, /^Milo is paused$/);
+      await waitMark(vera.page, /^Milo is paused$/);
+      await vera.page.getByTestId('assistant-status-mark').click();
+      check(await vera.page.getByRole('menuitem', { name: 'Resume Milo' }).isVisible(), 'no Resume Milo while paused');
+      check(await vera.page.getByRole('menuitem', { name: 'Pause Milo' }).count() === 0, 'Pause Milo is offered while paused');
       await vera.page.keyboard.press('Escape');
       const heldBack = 'While paused: this must not be kept.';
       await inject(NORA.userId, heldBack);
-      check(!(await stored(vera, heldBack, 3500)), 'a line was stored while Nova was paused');
+      check(!(await stored(vera, heldBack, 3500)), 'a line was stored while Milo was paused');
       await barFits(vera.page, 'the bar while paused', 1280);
-      // The pause notice is Nova speaking quietly: one row at the start under Nova's mark, its sentence in a tinted pill, not centred grey text.
+      // The pause notice is Milo speaking quietly: one row at the start under Milo's mark, its sentence in a tinted pill, not centred grey text.
       await seen(vera.page, 'huddle-thread');
-      const pausedLine = vera.page.locator('[data-testid="chat-system-line"]').filter({ hasText: /paused Nova\. Nothing is being heard or stored\./ }).last();
+      const pausedLine = vera.page.locator('[data-testid="chat-system-line"]').filter({ hasText: /paused Milo\. Nothing is being heard or stored\./ }).last();
       await pausedLine.waitFor({ state: 'visible', timeout: 20000 }).catch(() => { throw new StepFailure('the chat shows no pause notice'); });
       const lineLook = await pausedLine.evaluate((el) => ({ voice: el.getAttribute('data-voice'), mark: !!el.querySelector('[data-testid="assistant-mark"]'),
         pill: !!el.querySelector('[data-testid="chat-assistant-notice"]'), justify: getComputedStyle(el).justifyContent }));
-      check(lineLook.voice === 'assistant' && lineLook.mark && lineLook.pill, `the pause notice is not in Nova's voice: ${JSON.stringify(lineLook)}`);
+      check(lineLook.voice === 'assistant' && lineLook.mark && lineLook.pill, `the pause notice is not in Milo's voice: ${JSON.stringify(lineLook)}`);
       check(lineLook.justify !== 'center', 'the pause notice is still centred');
       // The long join notice is a quiet notice block, not a paragraph squeezed into a pill: its first sentence, the rest behind "More".
       const joinBlock = vera.page.getByTestId('assistant-notice-block').filter({ hasText: /joined at .+ invitation\./ }).first();
@@ -425,13 +425,13 @@ async function main() {
       const joinLook = await joinBlock.evaluate((el) => ({ inPill: !!el.closest('[data-testid="chat-assistant-notice"]'), open: !!el.querySelector('details[open]') }));
       check(!joinLook.inPill, 'the join notice is still inside a pill');
       check(!joinLook.open && !(await joinBlock.getByTestId('assistant-notice-rest').isVisible()), 'the join notice shows its whole paragraph before "More"');
-      check(/^Nova joined at .+ invitation\.$/.test((await joinBlock.getByTestId('assistant-notice-line').innerText()).trim()), 'the join notice does not lead with its first sentence');
+      check(/^Milo joined at .+ invitation\.$/.test((await joinBlock.getByTestId('assistant-notice-line').innerText()).trim()), 'the join notice does not lead with its first sentence');
       await joinBlock.scrollIntoViewIfNeeded();
       for (const width of [1440, 1280]) await shot(vera.page, 'C7-join-notice', width);
       await shot(vera.page, '5-paused');
-      await novaMenu(vera, 'Resume Nova');
-      await waitMark(vera.page, /^Nova is listening$/);
-      await waitMark(nora.page, /^Nova is listening$/);
+      await assistantMenu(vera, 'Resume Milo');
+      await waitMark(vera.page, /^Milo is listening$/);
+      await waitMark(nora.page, /^Milo is listening$/);
       const resumed = 'After resume: kept again.';
       await inject(NORA.userId, resumed);
       check(await stored(vera, resumed, 10000), 'a line after resume was not stored');
@@ -439,24 +439,24 @@ async function main() {
     });
 
     // ── 5b. A spoken pause does what the button does: the same named notice, seen by both ──
-    await step('5b: "Nova, pause" said by the second person pauses Nova for both and posts the same named notice as the button; resume brings listening back', async () => {
-      const before = (await novaOf(vera, 'assistant-notice')).filter((m) => /paused Nova\. Nothing is being heard or stored\./.test(m.message)).length;
-      await inject(NORA.userId, 'Nova, pause.');
-      await waitMark(vera.page, /^Nova is paused$/);
-      await waitMark(nora.page, /^Nova is paused$/);
+    await step('5b: "Milo, pause" said by the second person pauses Milo for both and posts the same named notice as the button; resume brings listening back', async () => {
+      const before = (await assistantOf(vera, 'assistant-notice')).filter((m) => /paused Milo\. Nothing is being heard or stored\./.test(m.message)).length;
+      await inject(NORA.userId, 'Milo, pause.');
+      await waitMark(vera.page, /^Milo is paused$/);
+      await waitMark(nora.page, /^Milo is paused$/);
       const notices = await waitFor(async () => {
-        const all = (await novaOf(vera, 'assistant-notice')).filter((m) => /paused Nova\. Nothing is being heard or stored\./.test(m.message));
+        const all = (await assistantOf(vera, 'assistant-notice')).filter((m) => /paused Milo\. Nothing is being heard or stored\./.test(m.message));
         return all.length > before ? all : null;
       }, 20000, 'the spoken pause notice');
       check(!notices.at(-1).message.startsWith(NORA.userId), `the spoken pause notice names an id, not a person: "${notices.at(-1).message}"`);
       check((await stateOf(vera)).pausedBy === NORA.userId, 'the pause is not recorded as the speaker\'s');
-      await novaMenu(vera, 'Resume Nova');
-      await waitMark(vera.page, /^Nova is listening$/);
+      await assistantMenu(vera, 'Resume Milo');
+      await waitMark(vera.page, /^Milo is listening$/);
       return `paused by voice; notice "${notices.at(-1).message}"`;
     });
 
     // ── L1. The live transcript: lines appear as they are said, follow the newest, stop following when scrolled up ──
-    await step('L1: the inviter opens the live transcript from Nova\'s menu: the thread gives way to "Live transcript · Nova is listening", a line just said appears without a reload under its speaker, scrolling up stops following and offers "Jump to latest", and Back to chat returns to the same thread and composer (screenshots at 1440 and 1280)', async () => {
+    await step('L1: the inviter opens the live transcript from Milo\'s menu: the thread gives way to "Live transcript · Milo is listening", a line just said appears without a reload under its speaker, scrolling up stops following and offers "Jump to latest", and Back to chat returns to the same thread and composer (screenshots at 1440 and 1280)', async () => {
       const noraName = (await (await nora.api.get(`${PORTAL}/api/session/me`)).json()).name;
       const panel = vera.page.getByTestId('live-transcript-panel');
       const geo = () => vera.page.evaluate(() => {
@@ -468,11 +468,11 @@ async function main() {
       const composer = vera.page.getByRole('textbox', { name: 'Huddle message' });
       const hadComposer = (await composer.count()) > 0;
       if (hadComposer) await composer.first().evaluate((el) => el.setAttribute('data-live-transcript-marker', 'kept'));
-      await novaMenu(vera, /Show transcript/);
+      await assistantMenu(vera, /Show transcript/);
       await seen(vera.page, 'live-transcript');
       check(!(await chatPanel(vera).isVisible()), 'the chat thread still shows under the transcript');
       const head = (await panel.locator('header').first().innerText()).replace(/\s+/g, ' ').trim();
-      check(/^Live transcript/.test(head) && /Nova is listening/.test(head) && /Back to chat/.test(head), `the transcript's header reads "${head}"`);
+      check(/^Live transcript/.test(head) && /Milo is listening/.test(head) && /Back to chat/.test(head), `the transcript's header reads "${head}"`);
       await waitFor(async () => (await linesShown()) > 0, 10000, 'the stored lines in the transcript');
       const said = `Live check: the staging cutover moves to the ${Date.now() % 100000}th build.`;
       await inject(NORA.userId, said);
@@ -504,7 +504,7 @@ async function main() {
       const back = await geo();
       check(back && back.max - back.top <= 24, `Jump to latest did not reach the newest line: ${JSON.stringify(back)}`);
       for (const width of [1440, 1280]) await shot(vera.page, 'L1-live-transcript', width);
-      await vera.page.getByTestId('nova-mark').click();
+      await vera.page.getByTestId('assistant-status-mark').click();
       check(await vera.page.getByRole('menuitem', { name: 'Hide transcript' }).isVisible(), 'the menu does not offer Hide transcript while the view is on');
       await vera.page.keyboard.press('Escape');
       await vera.page.getByTestId('live-transcript-back').click();
@@ -515,24 +515,29 @@ async function main() {
     });
 
     // ── 8. A spoken read is answered in the call chat, labelled with who asked (the scripted session: no model) ──
-    await step('8: "Nova, what is two plus two?" from the inviter lands in the call chat as Nova\'s reply to that person; nothing else was asked of the browser', async () => {
-      await inject(VERA.userId, 'Nova, what is two plus two?');
-      const reply = await waitFor(async () => (await novaOf(vera, 'assistant-reply')).find((m) => m.message === 'Four.'), 20000, 'the reply "Four."');
+    await step('8: "Milo, what is two plus two?" from the inviter lands in the call chat as Milo\'s reply to that person; nothing else was asked of the browser', async () => {
+      await inject(VERA.userId, 'Milo, what is two plus two?');
+      const reply = await waitFor(async () => (await assistantOf(vera, 'assistant-reply')).find((m) => m.message === 'Four.'), 20000, 'the reply "Four."');
       check(reply.metadata.askedBy === VERA.userId, `the reply is labelled for ${reply.metadata.askedBy}, not ${VERA.userId}`);
       check(typeof reply.metadata.askedByName === 'string' && reply.metadata.askedByName.length > 0 && reply.metadata.askedByName !== VERA.userId, `the label has no display name: ${reply.metadata.askedByName}`);
       check((await myTurns(vera)).length === 0, 'a plain answer left a turn for the browser');
       check((await myTurns(nora)).length === 0, 'a plain answer left a turn for the other person');
-      // In the chat the reply is Nova's to look at: its mark, the author "Nova" and "Asked by" under the text, as an ordinary row (no
-      // tint: the tint belongs to Nova's cards, which stand out against its replies).
+      // In the chat the reply is Milo's to look at: its mark, the author "Milo" and "Asked by" under the text, as an ordinary row (no
+      // tint: the tint belongs to Milo's cards, which stand out against its replies).
       await seen(vera.page, 'huddle-thread');
       const row = vera.page.locator('[data-testid="chat-message"][data-voice="assistant"]').filter({ hasText: 'Four.' }).last();
-      await row.waitFor({ state: 'visible', timeout: 20000 }).catch(() => { throw new StepFailure('the chat shows no reply row in Nova\'s voice'); });
+      await row.waitFor({ state: 'visible', timeout: 20000 }).catch(() => { throw new StepFailure('the chat shows no reply row in Milo\'s voice'); });
       const look = await row.evaluate((el) => ({ mark: !!el.querySelector('[data-testid="assistant-mark"]'), author: el.querySelector('[data-testid="message-row-author"]')?.textContent?.trim() ?? null,
         askedBy: el.querySelector('[data-testid="assistant-reply-asked-by"]')?.textContent?.trim() ?? null,
         tinted: getComputedStyle(el.querySelector('[data-testid="message-row-content"]')).backgroundColor }));
-      check(look.mark && look.author === 'Nova', `the reply row shows mark ${look.mark}, author ${look.author}`);
+      check(look.mark && look.author === 'Milo', `the reply row shows mark ${look.mark}, author ${look.author}`);
       check(look.askedBy === `Asked by ${reply.metadata.askedByName}`, `the reply's caption reads ${look.askedBy}`);
-      check(/^(rgba\(0, 0, 0, 0\)|transparent)$/.test(look.tinted), `the reply text is tinted (${look.tinted}); only Nova's cards are`);
+      check(/^(rgba\(0, 0, 0, 0\)|transparent)$/.test(look.tinted), `the reply text is tinted (${look.tinted}); only Milo's cards are`);
+      // The rename: the assistant is Milo everywhere a person reads it in the call; the old name is gone from the footer and the chat.
+      for (const p of [vera, nora]) {
+        const where = await p.page.evaluate(() => ['assistant-bar', 'huddle-thread'].map((id) => document.querySelector(`[data-testid="${id}"]`)?.textContent ?? '').join(' '));
+        check(/\bMilo\b/.test(where) && !/\bNova\b/.test(where), `${p.who.userId}: the footer and chat do not read Milo only: "${where.slice(0, 160)}"`);
+      }
       // The huddle dialogue is its own place: the muted surface behind the messages, its dot field under them, taking no pointer
       // events, and still when the reader asks for reduced motion.
       const surface = vera.page.getByTestId('huddle-dialogue-surface');
@@ -555,11 +560,11 @@ async function main() {
     });
 
     // ── 8a. A spoken read runs in the asker's own browser ──
-    await step('8a: "Nova, search for login" from the inviter: the inviter\'s browser runs the read and posts the result, and Nova\'s reply appears in the chat labelled with the asker', async () => {
-      const beforeReplies = (await novaOf(vera, 'assistant-reply')).length;
+    await step('8a: "Milo, search for login" from the inviter: the inviter\'s browser runs the read and posts the result, and Milo\'s reply appears in the chat labelled with the asker', async () => {
+      const beforeReplies = (await assistantOf(vera, 'assistant-reply')).length;
       const refusedBefore = (await stateOf(vera)).refusedCalls ?? 0;
-      await inject(VERA.userId, 'Nova, search for login');
-      const reply = await waitFor(async () => (await novaOf(vera, 'assistant-reply')).slice(beforeReplies).find((m) => m.message === 'Here is the result.'), 25000, 'the reply to the search');
+      await inject(VERA.userId, 'Milo, search for login');
+      const reply = await waitFor(async () => (await assistantOf(vera, 'assistant-reply')).slice(beforeReplies).find((m) => m.message === 'Here is the result.'), 25000, 'the reply to the search');
       check(reply.metadata.askedBy === VERA.userId, `the reply is labelled for ${reply.metadata.askedBy}`);
       check((await myTurns(vera)).length === 0, 'the read is still waiting for the browser');
       const posted = results_.filter((r) => r.by === VERA.userId && r.ok && r.answered === 'done');
@@ -573,9 +578,9 @@ async function main() {
     });
 
     // ── 9. A write is a card; only the asker confirms; the asker's browser then runs it ──
-    await step('9: "Nova, create a work item ..." is a card both people see, controls for the asker only; the asker confirms in the chat, the browser creates it, the card reads done, and it exists', async () => {
-      await inject(VERA.userId, 'Nova, create a work item for the login cookie bug.');
-      const card = await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.tool?.name === 'create' && /login cookie bug/.test(m.metadata.summary)), 20000, 'the action card');
+    await step('9: "Milo, create a work item ..." is a card both people see, controls for the asker only; the asker confirms in the chat, the browser creates it, the card reads done, and it exists', async () => {
+      await inject(VERA.userId, 'Milo, create a work item for the login cookie bug.');
+      const card = await waitFor(async () => (await assistantOf(vera, 'assistant-action')).find((m) => m.metadata.tool?.name === 'create' && /login cookie bug/.test(m.metadata.summary)), 20000, 'the action card');
       check(card.metadata.askedBy === VERA.userId && card.metadata.status === 'waiting', `the card is ${card.metadata.status} for ${card.metadata.askedBy}`);
       check((await myTurns(vera)).length === 0, 'a turn reached the asker\'s browser before they confirmed');
       check((await itemsTitled(vera, 'login cookie bug')).length === 0, 'the work item existed before the card was confirmed');
@@ -595,11 +600,11 @@ async function main() {
       check(!/\bkind:|\btitle:|Initiative:/.test(await veraCard.innerText()), `the card shows raw fields: "${(await veraCard.innerText()).replace(/\s+/g, ' ')}"`);
       check(!(await veraCard.getByTestId('assistant-action-detail').isVisible().catch(() => false)), 'the exact fields are not behind the closed "Details"');
       check(/Waiting for Vera/.test(await noraCard.innerText()), `the other person's card does not say who it waits for: "${await noraCard.innerText()}"`);
-      // State decides the look: the asker's card stands out in Nova's accent; the other person's sits on the plain surface; both opaque.
+      // State decides the look: the asker's card stands out in Milo's accent; the other person's sits on the plain surface; both opaque.
       const [lookV, lookN] = [await cardLook(veraCard), await cardLook(noraCard)];
       check(lookV.layout === 'you' && lookN.layout === 'others', `the waiting card's layouts: asker ${lookV.layout}, other ${lookN.layout}`);
       check(lookV.opaque && lookN.opaque, `a card lets the dot field through: ${lookV.bg} / ${lookN.bg}`);
-      // The card already says who it waits for: Nova's "I have asked Vera Green to confirm." is not posted to the chat as well.
+      // The card already says who it waits for: Milo's "I have asked Vera Green to confirm." is not posted to the chat as well.
       await sleep(2500);
       const asked = (await chatMessages(vera)).filter((m) => /I have asked .+ to confirm/.test(String(m.message)));
       check(asked.length === 0, `the chat repeats the card: ${JSON.stringify(asked.map((m) => m.message))}`);
@@ -610,7 +615,7 @@ async function main() {
       check(stranger.status() === 403, `another person confirming answered ${stranger.status()}, not 403`);
       check((await myTurns(vera)).length === 0, 'another person\'s confirm made a turn');
       await veraCard.getByTestId('assistant-action-confirm').click();
-      await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === card.metadata.actionId && m.metadata.status === 'done'), 25000, 'the card going to done');
+      await waitFor(async () => (await assistantOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === card.metadata.actionId && m.metadata.status === 'done'), 25000, 'the card going to done');
       const made = await itemsTitled(vera, 'login cookie bug');
       check(made.length === 1, `${made.length} work items titled "login cookie bug" exist after one confirm, not one: ${JSON.stringify(made)}`);
       check(made[0].projectId === callInitiative, `the work item is on ${made[0].projectId}, the call's initiative is ${callInitiative}`);
@@ -635,12 +640,12 @@ async function main() {
 
     // ── 9c. A declined card creates nothing ──
     await step('9c: a second card is declined by the asker: it reads declined for both, nothing is created, no turn reaches the browser', async () => {
-      await inject(VERA.userId, 'Nova, create a work item for the nightly export audit.');
-      const card = await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => /nightly export audit/.test(m.metadata.summary)), 20000, 'the second card');
+      await inject(VERA.userId, 'Milo, create a work item for the nightly export audit.');
+      const card = await waitFor(async () => (await assistantOf(vera, 'assistant-action')).find((m) => /nightly export audit/.test(m.metadata.summary)), 20000, 'the second card');
       const veraCard = vera.page.getByTestId('assistant-action-card').filter({ hasText: /nightly export audit/ }).last();
       await veraCard.waitFor({ timeout: 20000 });
       await veraCard.getByTestId('assistant-action-decline').click();
-      await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === card.metadata.actionId && m.metadata.status === 'declined'), 15000, 'the card going to declined');
+      await waitFor(async () => (await assistantOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === card.metadata.actionId && m.metadata.status === 'declined'), 15000, 'the card going to declined');
       const noraCard = nora.page.getByTestId('assistant-action-card').filter({ hasText: /nightly export audit/ }).last();
       await waitFor(async () => /Declined/.test(await noraCard.getByTestId('assistant-action-status').innerText()), 15000, 'the other person seeing declined');
       // Declined, the card is one muted row with the reason.
@@ -657,11 +662,11 @@ async function main() {
     });
 
     // ── 9d. A private answer reaches only the asker ──
-    await step('9d: "Nova, how much budget do I have" is answered privately: the asker\'s toast reads the answer itself, the call chat shows only "Answered privately for Vera.", and the other person sees nothing', async () => {
+    await step('9d: "Milo, how much budget do I have" is answered privately: the asker\'s toast reads the answer itself, the call chat shows only "Answered privately for Vera.", and the other person sees nothing', async () => {
       const noraBefore = (await chatMessages(nora)).length;
-      const asks = (await novaOf(vera, 'assistant-reply')).length;
+      const asks = (await assistantOf(vera, 'assistant-reply')).length;
       const sentBefore = results_.length;
-      await inject(VERA.userId, 'Nova, how much budget do I have?');
+      await inject(VERA.userId, 'Milo, how much budget do I have?');
       const toast = vera.page.getByText(/only you can see this/i).first();
       await toast.waitFor({ timeout: 25000 });
       const sent = await waitFor(() => results_.slice(sentBefore).find((r) => r.by === VERA.userId && r.ok && typeof r.say === 'string' && r.say.length > 0), 15000, 'the private result post with a say sentence');
@@ -669,8 +674,8 @@ async function main() {
       await shot(vera.page, '9d-private-toast');
       const toastBox = await toast.evaluate((el) => (el.closest('[role="status"],[role="alert"],[data-testid*="toast"]') ?? el.parentElement).innerText.replace(/\s+/g, ' '));
       check(toastBox.includes(sent.say.replace(/\s+/g, ' ').trim()), `the toast "${toastBox}" does not carry the say sentence "${sent.say}"`);
-      await waitFor(async () => (await novaOf(vera, 'assistant-reply')).length === asks + 1, 15000, 'the one public line');
-      const line = (await novaOf(vera, 'assistant-reply')).slice(asks);
+      await waitFor(async () => (await assistantOf(vera, 'assistant-reply')).length === asks + 1, 15000, 'the one public line');
+      const line = (await assistantOf(vera, 'assistant-reply')).slice(asks);
       check(line.length === 1 && /^Answered privately for Vera/.test(line[0].message), `the call chat got: ${JSON.stringify(line.map((m) => m.message))}`);
       const noraChat = (await chatMessages(nora)).slice(noraBefore).filter((m) => m.metadata?.assistant || m.metadata?.kind);
       check(noraChat.every((m) => /^Answered privately for Vera/.test(m.message)), `the other person's chat carries more than the fixed line: ${JSON.stringify(noraChat.map((m) => m.message))}`);
@@ -735,12 +740,12 @@ async function main() {
       const holdTab1 = /\/assistant\/turns\?mine=1/;
       await vera.page.route(holdTab1, (route) => route.fulfill({ json: { turns: [] } }));
       try {
-        await inject(VERA.userId, `Nova, create a work item for the ${title}.`);
-        const card = await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.tool?.name === 'create' && m.metadata.summary.includes(title)), 20000, 'the action card');
+        await inject(VERA.userId, `Milo, create a work item for the ${title}.`);
+        const card = await waitFor(async () => (await assistantOf(vera, 'assistant-action')).find((m) => m.metadata.tool?.name === 'create' && m.metadata.summary.includes(title)), 20000, 'the action card');
         const cardOnTab1 = vera.page.getByTestId('assistant-action-card').filter({ hasText: title }).last();
         await cardOnTab1.waitFor({ timeout: 20000 });
         await cardOnTab1.getByTestId('assistant-action-confirm').click(); // confirmed once
-        await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === card.metadata.actionId && m.metadata.status === 'done'), 25000, 'the card going to done');
+        await waitFor(async () => (await assistantOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === card.metadata.actionId && m.metadata.status === 'done'), 25000, 'the card going to done');
       } finally { await vera.page.unroute(holdTab1); }
       await sleep(6000); // long enough for tab 1 to have polled again, with its list back
       const made = await itemsTitled(vera, title);
@@ -772,18 +777,18 @@ async function main() {
 
     // ── 9g. A write whose record is not named exactly fails on its card, and nothing changes ──
     await step('9g: a card for a write that names its record by position is confirmed, the runner refuses it ("Say the record\'s full name."), and the card reads Failed for both', async () => {
-      await inject(VERA.userId, 'Nova, I need a hand with something else.');
+      await inject(VERA.userId, 'Milo, I need a hand with something else.');
       await sleep(1500);
       const before = (await itemsTitled(vera, 'login cookie bug'))[0];
       const res = await fetch(`${MIDDLEWARE}/api/dev/calls/${encodeURIComponent(callId)}/assistant-tool-call`, {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ askedBy: VERA.userId, name: 'update', args: { ref: '1', fields: { status: 'cancelled' } } }),
       });
       check(res.status === 202, `the dev tool call answered ${res.status}`);
-      const card = await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.tool?.name === 'update' && m.metadata.status === 'waiting'), 20000, 'the update card');
+      const card = await waitFor(async () => (await assistantOf(vera, 'assistant-action')).find((m) => m.metadata.tool?.name === 'update' && m.metadata.status === 'waiting'), 20000, 'the update card');
       const veraCard = vera.page.getByTestId('assistant-action-card').filter({ hasText: card.metadata.summary }).last();
       await veraCard.waitFor({ timeout: 20000 });
       await veraCard.getByTestId('assistant-action-confirm').click();
-      const failed = await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === card.metadata.actionId && m.metadata.status === 'failed'), 25000, 'the card going to failed');
+      const failed = await waitFor(async () => (await assistantOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === card.metadata.actionId && m.metadata.status === 'failed'), 25000, 'the card going to failed');
       check(/full name/i.test(failed.metadata.resultText ?? ''), `the failed card says "${failed.metadata.resultText}", not the exact-name sentence`);
       await waitFor(async () => /Failed/.test(await nora.page.getByTestId('assistant-action-card').filter({ hasText: card.metadata.summary }).last().getByTestId('assistant-action-status').innerText().catch(() => '')), 15000, 'the other person seeing Failed');
       const after = (await itemsTitled(vera, 'login cookie bug'))[0];
@@ -810,7 +815,7 @@ async function main() {
 
     // ── 9e. At most three tool calls per addressed request ──
     await step('9e: the fourth tool call inside one addressed request is refused ("too many steps") and counted; the first three ran', async () => {
-      await inject(VERA.userId, 'Nova, I need a hand with something.');
+      await inject(VERA.userId, 'Milo, I need a hand with something.');
       await sleep(1500);
       const before = (await stateOf(vera)).refusedCalls ?? 0;
       for (const n of [1, 2, 3, 4]) {
@@ -846,14 +851,14 @@ async function main() {
     };
     const card = (p, id) => p.page.locator(`[data-testid="assistant-proposal-card"][data-proposal-id="${id}"]`).last();
     const cardState = (p, id, state) => waitFor(async () => (await card(p, id).getAttribute('data-state').catch(() => null)) === state, 20000, `${p.who.userId}: the card reading ${state}`);
-    const deckOf = (p) => p.page.getByTestId('nova-proposal-ask');
+    const deckOf = (p) => p.page.getByTestId('assistant-proposal-ask');
     const askFor = async (p, statement) => {
       await deckOf(p).filter({ hasText: statement }).waitFor({ timeout: 20000 }).catch(async () => {
         // Say what this person's proposals route holds, so a missing prompt can be told from a stale or refused read.
         const res = await p.api.get(asApi(p, 'proposals')).catch(() => null);
         const list = res && res.ok() ? (await res.json()).proposals.map((x) => `${x.id}:${x.state}:${x.you?.response ?? '-'}:${(x.missing?.people ?? []).join('+')}+${x.missing?.more}`).join(', ') : `HTTP ${res?.status()}`;
         const deck = await deckOf(p).innerText({ timeout: 2000 }).catch(() => '(no deck)');
-        const page = await p.page.evaluate(() => ({ decks: document.querySelectorAll('[data-composer-prompt-deck]').length, store: JSON.stringify(Object.fromEntries(Object.entries(sessionStorage).filter(([k]) => k.startsWith('nova-proposal')))), count: document.querySelector('[data-testid="nova-proposal-count"]')?.getAttribute('aria-label') ?? null })).catch((e) => ({ err: String(e) }));
+        const page = await p.page.evaluate(() => ({ decks: document.querySelectorAll('[data-composer-prompt-deck]').length, store: JSON.stringify(Object.fromEntries(Object.entries(sessionStorage).filter(([k]) => k.startsWith('assistant-proposal')))), count: document.querySelector('[data-testid="assistant-proposal-count"]')?.getAttribute('aria-label') ?? null })).catch((e) => ({ err: String(e) }));
         const cardText = await p.page.locator('[data-testid="assistant-proposal-card"]').filter({ hasText: statement }).last().innerText({ timeout: 2000 }).catch(() => '(no card)');
         page.card = cardText.replace(/\s+/g, ' ').slice(0, 300);
         throw new StepFailure(`${p.who.userId}: no deck prompt for "${statement}"; route: ${list}; deck: ${deck.replace(/\s+/g, ' ').slice(0, 160)}; page: ${JSON.stringify(page)}`);
@@ -863,7 +868,7 @@ async function main() {
     const digit = async (p, key, deck = deckOf(p)) => { await deck.locator('[data-composer-prompt-option]').first().focus(); await p.page.keyboard.press(key); };
     /** A digit pressed with focus nowhere in particular (the page body), as a stray key on the call would be. */
     const strayDigit = async (p, key) => { await p.page.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined)); await p.page.keyboard.press(key); };
-    const inDeck = (p) => p.page.evaluate(() => !!document.activeElement?.closest('[data-testid="nova-proposal-ask"]'));
+    const inDeck = (p) => p.page.evaluate(() => !!document.activeElement?.closest('[data-testid="assistant-proposal-ask"]'));
     const proposalsOf = async (p) => (await (await p.api.get(asApi(p, 'proposals'))).json()).proposals;
 
     await step('P1: a third person joins the running call from the footer Huddle on the initiative page', async () => {
@@ -871,7 +876,7 @@ async function main() {
       const huddle = eli.page.getByTestId('shell-footer-context').getByRole('button', { name: 'Huddle' });
       await huddle.click({ timeout: 30000 });
       await eli.page.getByTestId('shell-call-dock').waitFor({ timeout: 30000 });
-      await waitFor(async () => (await stateOf(eli)).state === 'listening', 20000, 'the third person seeing Nova listening');
+      await waitFor(async () => (await stateOf(eli)).state === 'listening', 20000, 'the third person seeing Milo listening');
       return 'three people in the call';
     });
 
@@ -933,17 +938,17 @@ async function main() {
       return seenAt.join('; ');
     });
 
-    await step('P2a: the lines Nova heard are shown to people who were in the call; a named person who was never in it sees the statement and who raised it, never the lines', async () => {
+    await step('P2a: the lines Milo heard are shown to people who were in the call; a named person who was never in it sees the statement and who raised it, never the lines', async () => {
       const lines = (await (await vera.api.get(asApi(vera, 'transcript?limit=500'))).json()).lines ?? [];
       check(lines.length >= 2, `only ${lines.length} transcript lines to rest on`);
       const evidence = lines.slice(-2).map((l) => l.seq);
       const id = await propose({ id: 'walk-proposal-heard', statement: PROPOSAL_H, outcome: { kind: 'decision' }, executor: VERA.userId, named: ['u-theo'], evidence });
       const mine = (await proposalsOf(vera)).find((p) => p.id === id);
       check(mine?.heard?.length === 2 && mine.heard.every((h) => typeof h.text === 'string' && h.text.length > 0), `the attendee's heard lines: ${JSON.stringify(mine?.heard)}`);
-      // The heard lines sit behind "What Nova heard", closed by default.
-      await card(vera, id).getByTestId('assistant-proposal-more').waitFor({ timeout: 20000 }).catch(() => { throw new StepFailure('the card has no "What Nova heard" for an attendee'); });
-      check(!(await card(vera, id).getByTestId('assistant-proposal-heard').isVisible()), 'the heard lines show before "What Nova heard" is opened');
-      check((await card(vera, id).getByTestId('assistant-proposal-more').locator('summary').innerText()).includes('What Nova heard'), 'the disclosure is not "What Nova heard"');
+      // The heard lines sit behind "What Milo heard", closed by default.
+      await card(vera, id).getByTestId('assistant-proposal-more').waitFor({ timeout: 20000 }).catch(() => { throw new StepFailure('the card has no "What Milo heard" for an attendee'); });
+      check(!(await card(vera, id).getByTestId('assistant-proposal-heard').isVisible()), 'the heard lines show before "What Milo heard" is opened');
+      check((await card(vera, id).getByTestId('assistant-proposal-more').locator('summary').innerText()).includes('What Milo heard'), 'the disclosure is not "What Milo heard"');
       await card(vera, id).getByTestId('assistant-proposal-more').locator('summary').click();
       await card(vera, id).getByTestId('assistant-proposal-heard').waitFor({ timeout: 5000 }).catch(() => { throw new StepFailure('the card shows no heard lines to an attendee'); });
       const away = await browser.newContext(); contexts.push(away);
@@ -956,7 +961,7 @@ async function main() {
       check(theirs[0].heard.length === 0 && theirs[0].evidence.length === 0, `the absent person was sent the lines: ${JSON.stringify(theirs[0].heard)}`);
       check(!lines.slice(-2).some((l) => JSON.stringify(theirs[0]).includes(l.text)), 'a heard line reached the absent person');
       check(theirs[0].source === 'dev' && theirs[0].askedBy === null, `who raised it: ${theirs[0].source}, ${JSON.stringify(theirs[0].askedBy)}`);
-      // Out of the way for the steps that follow (Nova raised it, so anyone seated may).
+      // Out of the way for the steps that follow (Milo raised it, so anyone seated may).
       const gone_ = await vera.api.post(asApi(vera, `proposals/${id}/response`), { data: { response: 'not-a-decision' } });
       check(gone_.status() === 200, `dismissing it answered ${gone_.status()}`);
       await cardState(vera, id, 'dismissed');
@@ -966,7 +971,7 @@ async function main() {
     let p1 = null;
     await step('P2: a decision proposal from the dev creator: one card in the call chat for all three (Proposal, the statement, record as a decision, who it needs, the executor waiting), no buttons', async () => {
       p1 = await propose({ id: 'walk-proposal-1', statement: PROPOSAL_1, outcome: { kind: 'decision' }, executor: VERA.userId });
-      const msgs = await novaOf(vera, 'assistant-proposal');
+      const msgs = await assistantOf(vera, 'assistant-proposal');
       check(msgs.filter((m) => m.metadata.proposalId === p1).length === 1, `${msgs.length} cards for the proposal`);
       for (const p of [vera, nora, eli]) {
         await card(p, p1).waitFor({ timeout: 20000 }).catch(() => { throw new StepFailure(`${p.who.userId}: no proposal card`); });
@@ -975,8 +980,8 @@ async function main() {
       // The names and the outcome come from the proposals route, read on the state poll (5 s).
       await waitFor(async () => (await card(vera, p1).innerText()).includes('Record as a decision on'), 15000, 'the card filled from the proposals route');
       const text = await card(vera, p1).innerText();
-      for (const want of ['Nova heard a decision', PROPOSAL_1, 'Record as a decision', 'Needs you (runs it) and one more person.', 'runs it', 'waiting']) check(text.includes(want), `the card lacks "${want}": ${text.replace(/\s+/g, ' ')}`);
-      // People are faces: one avatar per person, each named with their answer; the card waits on Vera, so it is the full card in Nova's accent.
+      for (const want of ['Milo heard a decision', PROPOSAL_1, 'Record as a decision', 'Needs you (runs it) and one more person.', 'runs it', 'waiting']) check(text.includes(want), `the card lacks "${want}": ${text.replace(/\s+/g, ' ')}`);
+      // People are faces: one avatar per person, each named with their answer; the card waits on Vera, so it is the full card in Milo's accent.
       const people = card(vera, p1).getByTestId('assistant-proposal-person');
       check(await people.count() >= 1 && await card(vera, p1).getByTestId('assistant-proposal-people').locator('[data-testid="assistant-proposal-person"] > *').count() >= 1, 'the proposal card has no avatars');
       check((await people.allInnerTexts()).some((t) => /Vera Green · waiting · runs it/.test(t)), `the avatars' names: ${JSON.stringify(await people.allInnerTexts())}`);
@@ -999,11 +1004,11 @@ async function main() {
       return text.replace(/\s+/g, ' ').slice(0, 200);
     });
 
-    await step('P3: the deck prompt shows for each person without taking focus: "Nova heard a decision"; the executor\'s option is Consent (hers is not the last one needed), the others are told their answer is optional; Object… and Not a decision', async () => {
+    await step('P3: the deck prompt shows for each person without taking focus: "Milo heard a decision"; the executor\'s option is Consent (hers is not the last one needed), the others are told their answer is optional; Object… and Not a decision', async () => {
       for (const p of [vera, nora, eli]) {
         await askFor(p, PROPOSAL_1);
         const text = await deckOf(p).innerText();
-        check(text.includes('Nova heard a decision'), `${p.who.userId}: no eyebrow: ${text}`);
+        check(text.includes('Milo heard a decision'), `${p.who.userId}: no eyebrow: ${text}`);
         check(!(await inDeck(p)), `${p.who.userId}: the arriving prompt took keyboard focus`);
         check(await deckOf(p).getByRole('button', { name: /^\s*1?\s*Consent\s*$/ }).count() === 1, `${p.who.userId}: no plain "Consent" option: ${text.replace(/\s+/g, ' ')}`);
         check(!text.includes('Consent and record'), `${p.who.userId}: "Consent and record" while another consent is still needed`);
@@ -1015,17 +1020,17 @@ async function main() {
       return 'prompted all three';
     });
 
-    await step('P4: Esc hides the prompt; the count on Nova\'s footer mark counts only what waits on you ("1 proposal" for the executor, none for a bystander) and reopens it; a bystander reopens it from the card\'s Answer; with three people and the count the footer row is one line at 1440 and 1280', async () => {
-      check(await eli.page.getByTestId('nova-proposal-count').count() === 0, 'a bystander is counted a proposal that does not need them');
+    await step('P4: Esc hides the prompt; the count on Milo\'s footer mark counts only what waits on you ("1 proposal" for the executor, none for a bystander) and reopens it; a bystander reopens it from the card\'s Answer; with three people and the count the footer row is one line at 1440 and 1280', async () => {
+      check(await eli.page.getByTestId('assistant-proposal-count').count() === 0, 'a bystander is counted a proposal that does not need them');
       await deckOf(eli).getByRole('button').first().focus();
       await eli.page.keyboard.press('Escape');
-      await gone(eli.page, 'nova-proposal-ask');
+      await gone(eli.page, 'assistant-proposal-ask');
       await card(eli, p1).getByTestId('assistant-proposal-answer').click();
       await askFor(eli, PROPOSAL_1);
       await deckOf(vera).getByRole('button').first().focus();
       await vera.page.keyboard.press('Escape');
-      await gone(vera.page, 'nova-proposal-ask');
-      const count = vera.page.getByTestId('nova-proposal-count');
+      await gone(vera.page, 'assistant-proposal-ask');
+      const count = vera.page.getByTestId('assistant-proposal-count');
       check((await count.getAttribute('aria-label')) === '1 proposal', `the count is named "${await count.getAttribute('aria-label')}"`);
       check((await count.innerText()).trim() === '1', `the badge reads "${await count.innerText()}"`);
       const lines = [];
@@ -1073,8 +1078,8 @@ async function main() {
       for (const p of [vera, nora, eli]) {
         await waitFor(async () => recorded(PROPOSAL_1).test(await card(p, p1).innerText()), 15000, `${p.who.userId}: the card's closing line`);
         await card(p, p1).getByTestId('assistant-proposal-result-link').waitFor({ timeout: 15000 }).catch(() => { throw new StepFailure(`${p.who.userId}: no link to the decision`); });
-        await gone(p.page, 'nova-proposal-ask');
-        await gone(p.page, 'nova-proposal-count');
+        await gone(p.page, 'assistant-proposal-ask');
+        await gone(p.page, 'assistant-proposal-count');
       }
       await card(vera, p1).scrollIntoViewIfNeeded(); await shot(vera.page, 'P5-proposal-recorded', 1440);
       return `run by ${done.run.by.name}; ${done.run.href}; chips ${chipsSeen}`;
@@ -1109,8 +1114,8 @@ async function main() {
       check((await proposalsOf(vera)).find((p) => p.id === p4)?.you?.canRun === true && (await proposalsOf(nora)).find((p) => p.id === p4)?.you?.canRun === false, 'the run offer is not the executor\'s alone');
       await deckOf(vera).filter({ hasText: 'Ready: run it now' }).waitFor({ timeout: 20000 }).catch(() => { throw new StepFailure('the executor is not asked to run it'); });
       check(await deckOf(vera).getByRole('button', { name: /Run it now/ }).count() === 1, 'no "Run it now" for the executor');
-      check(await vera.page.getByTestId('nova-proposal-count').getAttribute('aria-label') === '1 proposal', 'the run offer is not counted as waiting on her');
-      await gone(nora.page, 'nova-proposal-ask');
+      check(await vera.page.getByTestId('assistant-proposal-count').getAttribute('aria-label') === '1 proposal', 'the run offer is not counted as waiting on her');
+      await gone(nora.page, 'assistant-proposal-ask');
       await shot(vera.page, 'P5c-ready-run-it-now', 1440);
       await digit(vera, '1');
       for (const p of [vera, nora]) await cardState(p, p4, 'done');
@@ -1182,9 +1187,9 @@ async function main() {
 
     // ── P10. An asked write that names another person (package 7) is a proposal needing them, not the asker's card ──
     await step('P10: "create a work item ... assigned to Nora" asked by the inviter is a proposal card "Asked by" her needing Nora with her as executor, its outcome in words, and no action card; Nora may not drop it, the asker does', async () => {
-      await inject(VERA.userId, 'Nova, I need a hand with one more thing.');
+      await inject(VERA.userId, 'Milo, I need a hand with one more thing.');
       await sleep(1500);
-      const actionsBefore = (await novaOf(vera, 'assistant-action')).length;
+      const actionsBefore = (await assistantOf(vera, 'assistant-action')).length;
       const res = await fetch(`${MIDDLEWARE}/api/dev/calls/${encodeURIComponent(callId)}/assistant-tool-call`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ askedBy: VERA.userId, name: 'create', args: { kind: 'work-item', fields: { title: 'Walk named runbook', assignee: 'Nora' } } }),
@@ -1193,7 +1198,7 @@ async function main() {
       const asked = await waitFor(async () => (await proposalsOf(vera)).find((p) => p.source === 'asked' && /Walk named runbook/.test(p.statement)), 15000, 'the asked proposal');
       check(asked.executor?.userId === VERA.userId && asked.named.map((x) => x.userId).join() === NORA.userId, `executor ${asked.executor?.userId}, named ${asked.named.map((x) => x.userId).join()}`);
       for (const p of [vera, nora]) await card(p, asked.id).waitFor({ timeout: 20000 });
-      check((await novaOf(vera, 'assistant-action')).length === actionsBefore, 'an action card was posted for a write naming another person');
+      check((await assistantOf(vera, 'assistant-action')).length === actionsBefore, 'an action card was posted for a write naming another person');
       // Who asked, and what will be written, in words.
       check(asked.askedBy?.userId === VERA.userId && /^Create a work item titled "Walk named runbook", owned by /.test(asked.outcome?.summary ?? ''), `asked by ${asked.askedBy?.userId}; "${asked.outcome?.summary}"`);
       await waitFor(async () => /Asked by Vera/.test(await card(nora, asked.id).getByTestId('assistant-proposal-eyebrow').innerText()), 15000, 'the card naming who asked');
@@ -1207,52 +1212,52 @@ async function main() {
       return `proposal ${asked.state} -> dismissed; "${asked.statement}"`;
     });
 
-    // ── 7. The bar at both widths with Nova's controls present ──
-    await step('7: with Nova listening and its controls present the call bar and Nova controls neither scroll sideways nor clip at 1440 and 1280, and the footer keeps its height', async () => {
+    // ── 7. The bar at both widths with Milo's controls present ──
+    await step('7: with Milo listening and its controls present the call bar and Milo controls neither scroll sideways nor clip at 1440 and 1280, and the footer keeps its height', async () => {
       const out = [];
       for (const p of [vera, nora]) for (const width of [1440, 1280]) {
         const m = await barFits(p.page, `${p.who.userId}'s bar`, width);
-        out.push(`${p.who.userId}@${width}: dock ${m.barHeight}px, Nova ${m.novaWidth}px`);
+        out.push(`${p.who.userId}@${width}: dock ${m.barHeight}px, Milo ${m.assistantWidth}px`);
       }
-      // Nova must not make the bar taller: the dock measures the same with Nova's controls taken out of the layout.
+      // Milo must not make the bar taller: the dock measures the same with Milo's controls taken out of the layout.
       for (const p of [vera, nora]) for (const width of [1440, 1280]) {
         await p.page.setViewportSize({ width, height: 900 });
         await sleep(600);
-        const [withNova, without] = await p.page.evaluate(async () => {
+        const [withAssistant, without] = await p.page.evaluate(async () => {
           const row = document.querySelector('[data-testid="shell-footer-row"]');
-          const nova = document.querySelector('[data-testid="nova-bar"]');
+          const assistant = document.querySelector('[data-testid="assistant-bar"]');
           const a = row.getBoundingClientRect().height;
-          nova.style.display = 'none';
+          assistant.style.display = 'none';
           await new Promise((r) => setTimeout(r, 300));
           const b = row.getBoundingClientRect().height;
-          nova.style.display = '';
+          assistant.style.display = '';
           return [Math.round(a), Math.round(b)];
         });
-        check(withNova <= without + 1, `${p.who.userId}@${width}: Nova's controls grow the footer row from ${without}px to ${withNova}px`);
-        out.push(`${p.who.userId}@${width}: ${withNova}px with Nova, ${without}px without`);
+        check(withAssistant <= without + 1, `${p.who.userId}@${width}: Milo's controls grow the footer row from ${without}px to ${withAssistant}px`);
+        out.push(`${p.who.userId}@${width}: ${withAssistant}px with Milo, ${without}px without`);
       }
       return out.join('; ');
     });
 
-    // ── 7b. Nova's voice (package 7b): off by default, on by an inviter, played in both browsers, muted per person ──
+    // ── 7b. Milo's voice (package 7b): off by default, on by an inviter, played in both browsers, muted per person ──
     // The page counts what it scheduled in data-voice-* attributes on the mark; headless sound is not asserted.
     const voiceOf = async (p) => {
-      const a = await p.page.getByTestId('nova-mark').first().evaluate((el) => ({
+      const a = await p.page.getByTestId('assistant-status-mark').first().evaluate((el) => ({
         on: el.getAttribute('data-voice') === 'true', muted: el.getAttribute('data-voice-muted') === 'true',
         frames: Number(el.getAttribute('data-voice-frames')), ignored: Number(el.getAttribute('data-voice-ignored')), lastSeq: Number(el.getAttribute('data-voice-last-seq')),
       }));
       return a;
     };
     const watchSpeaking = (p) => p.page.evaluate(() => {
-      const el = document.querySelector('[data-testid="nova-mark"]');
-      window.__novaSeen = { speaking: false, listeningAfter: false };
+      const el = document.querySelector('[data-testid="assistant-status-mark"]');
+      window.__assistantSeen = { speaking: false, listeningAfter: false };
       new MutationObserver(() => {
         const t = (el.innerText || '').trim();
-        if (/Nova is speaking/.test(t)) window.__novaSeen.speaking = true;
-        else if (window.__novaSeen.speaking && /Nova is listening/.test(t)) window.__novaSeen.listeningAfter = true;
+        if (/Milo is speaking/.test(t)) window.__assistantSeen.speaking = true;
+        else if (window.__assistantSeen.speaking && /Milo is listening/.test(t)) window.__assistantSeen.listeningAfter = true;
       }).observe(document.body, { subtree: true, childList: true, characterData: true });
     });
-    const ask = async () => { await inject(VERA.userId, 'Nova, what is two plus two?'); };
+    const ask = async () => { await inject(VERA.userId, 'Milo, what is two plus two?'); };
     const voiceWords = async (p) => (await (await p.api.get(asApi(p, 'state'))).json());
 
     await step('7b-a: voice is off by default: after a spoken request the asker\'s page scheduled no frames and the server relayed none', async () => {
@@ -1268,28 +1273,28 @@ async function main() {
     });
 
     await step('7b-b: the inviter turns the voice on: both see the notice in the chat and the mark says so', async () => {
-      await novaMenu(vera, "Turn Nova's voice on");
+      await assistantMenu(vera, "Turn Milo's voice on");
       for (const p of [vera, nora]) {
         await waitFor(async () => (await voiceOf(p)).on, 15000, `${p.who.userId} seeing voice on`);
-        await waitFor(async () => /turned Nova's voice on/.test(await bodyText(p.page)), 15000, `${p.who.userId} seeing the notice`);
-        const label = await p.page.getByTestId('nova-mark').first().getAttribute('aria-label');
-        check(/Nova's voice is on/.test(label ?? ''), `the mark does not say voice is on: "${label}"`);
+        await waitFor(async () => /turned Milo's voice on/.test(await bodyText(p.page)), 15000, `${p.who.userId} seeing the notice`);
+        const label = await p.page.getByTestId('assistant-status-mark').first().getAttribute('aria-label');
+        check(/Milo's voice is on/.test(label ?? ''), `the mark does not say voice is on: "${label}"`);
         // In-call 8: the voice is seen on the bar without opening the menu.
-        await waitFor(async () => (await p.page.getByTestId('nova-voice-chip').innerText().catch(() => '')).trim() === 'Voice on', 10000, `${p.who.userId} seeing "Voice on" on the bar`);
-        // "Click to hear Nova" is decided before any reply: shown exactly when this browser holds sound until a click. Headless
+        await waitFor(async () => (await p.page.getByTestId('assistant-voice-chip').innerText().catch(() => '')).trim() === 'Voice on', 10000, `${p.who.userId} seeing "Voice on" on the bar`);
+        // "Click to hear Milo" is decided before any reply: shown exactly when this browser holds sound until a click. Headless
         // Chromium after the walk's clicks lets sound start, so it is absent here; a browser that blocks would show it now.
         const blocks = await p.page.evaluate(async () => { const c = new AudioContext(); const s = c.state; await c.close(); return s === 'suspended'; });
-        await waitFor(async () => (await p.page.getByTestId('nova-enable-sound').count()) === (blocks ? 1 : 0), 5000, `${p.who.userId}: "Click to hear Nova" ${blocks ? 'missing' : 'shown'} before any reply, with sound ${blocks ? 'blocked' : 'allowed'}`);
+        await waitFor(async () => (await p.page.getByTestId('assistant-enable-sound').count()) === (blocks ? 1 : 0), 5000, `${p.who.userId}: "Click to hear Milo" ${blocks ? 'missing' : 'shown'} before any reply, with sound ${blocks ? 'blocked' : 'allowed'}`);
       }
-      await vera.page.getByTestId('nova-mark').click();
-      check(await vera.page.getByRole('menuitem', { name: "Turn Nova's voice off" }).isVisible(), 'no "Turn Nova\'s voice off" item');
-      check(await vera.page.getByRole('menuitem', { name: 'Mute Nova for me' }).isVisible(), 'no "Mute Nova for me" item');
+      await vera.page.getByTestId('assistant-status-mark').click();
+      check(await vera.page.getByRole('menuitem', { name: "Turn Milo's voice off" }).isVisible(), 'no "Turn Milo\'s voice off" item');
+      check(await vera.page.getByRole('menuitem', { name: 'Mute Milo for me' }).isVisible(), 'no "Mute Milo for me" item');
       await shot(vera.page, '7b-voice-menu');
       await vera.page.keyboard.press('Escape');
       return 'voice on: notice and mark in both pages';
     });
 
-    await step('7b-c: a spoken request: both pages schedule frames with increasing seq, the mark reads "Nova is speaking" and goes back to listening', async () => {
+    await step('7b-c: a spoken request: both pages schedule frames with increasing seq, the mark reads "Milo is speaking" and goes back to listening', async () => {
       await watchSpeaking(vera); await watchSpeaking(nora);
       const v0 = await voiceOf(vera); const n0 = await voiceOf(nora);
       await ask();
@@ -1301,63 +1306,63 @@ async function main() {
         const a = await voiceOf(p);
         check(a.frames - b.frames >= 5, `${p.who.userId} scheduled only ${a.frames - b.frames} frames`);
         check(a.lastSeq > b.lastSeq, `${p.who.userId}: seq did not rise (${b.lastSeq} -> ${a.lastSeq})`);
-        const seen = await p.page.evaluate(() => window.__novaSeen);
-        check(seen.speaking, `${p.who.userId}: the mark never read "Nova is speaking"`);
-        check(seen.listeningAfter, `${p.who.userId}: the mark did not return to "Nova is listening"`);
-        await waitMark(p.page, /^Nova is listening$/);
+        const seen = await p.page.evaluate(() => window.__assistantSeen);
+        check(seen.speaking, `${p.who.userId}: the mark never read "Milo is speaking"`);
+        check(seen.listeningAfter, `${p.who.userId}: the mark did not return to "Milo is listening"`);
+        await waitMark(p.page, /^Milo is listening$/);
       }
       return `frames in both pages, seq ${(await voiceOf(vera)).lastSeq}`;
     });
 
-    await step('7b-c2: while frames play the mark reads "Nova is speaking" (screenshot)', async () => {
+    await step('7b-c2: while frames play the mark reads "Milo is speaking" (screenshot)', async () => {
       const v0 = await voiceOf(vera);
       await ask();
-      await waitMark(vera.page, /^Nova is speaking$/, 20000);
+      await waitMark(vera.page, /^Milo is speaking$/, 20000);
       // At once: the mark holds "speaking" only 400 ms after the last frame, so `shot`'s settle delay would miss it.
       await vera.page.screenshot({ path: path.join(SHOTS, '7b-speaking-1280.png') });
       await waitFor(async () => (await voiceOf(vera)).frames > v0.frames, 5000, 'frames');
-      await waitMark(vera.page, /^Nova is listening$/);
+      await waitMark(vera.page, /^Milo is listening$/);
       return 'speaking mark captured';
     });
 
-    await step('7b-d: the second person mutes Nova: on the next request their page plays nothing and the asker\'s still does; unmute brings it back', async () => {
-      await novaMenu(nora, 'Mute Nova for me');
+    await step('7b-d: the second person mutes Milo: on the next request their page plays nothing and the asker\'s still does; unmute brings it back', async () => {
+      await assistantMenu(nora, 'Mute Milo for me');
       await waitFor(async () => (await voiceOf(nora)).muted, 5000, 'the mute');
       // In-call 8: the mute shows on the bar, and is kept for this call only (not for every later call).
-      await waitFor(async () => (await nora.page.getByTestId('nova-voice-chip').innerText().catch(() => '')).trim() === 'Muted for you', 5000, '"Muted for you" on the bar');
-      check((await vera.page.getByTestId('nova-voice-chip').innerText()).trim() === 'Voice on', 'the mute showed for the other person');
-      const keys = await nora.page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('orgiq.novaMuted')));
-      check(keys.length === 1 && keys[0] === `orgiq.novaMuted:${callId}`, `the mute is not kept per call: ${JSON.stringify(keys)}`);
+      await waitFor(async () => (await nora.page.getByTestId('assistant-voice-chip').innerText().catch(() => '')).trim() === 'Muted for you', 5000, '"Muted for you" on the bar');
+      check((await vera.page.getByTestId('assistant-voice-chip').innerText()).trim() === 'Voice on', 'the mute showed for the other person');
+      const keys = await nora.page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('orgiq.assistantMuted')));
+      check(keys.length === 1 && keys[0] === `orgiq.assistantMuted:${callId}`, `the mute is not kept per call: ${JSON.stringify(keys)}`);
       const v0 = await voiceOf(vera); const n0 = await voiceOf(nora);
       await ask();
       await waitFor(async () => (await voiceOf(vera)).frames > v0.frames, 20000, 'the asker\'s frames');
       await sleep(3000);
       check((await voiceOf(nora)).frames === n0.frames, 'a muted page scheduled frames');
-      await novaMenu(nora, 'Unmute Nova for me');
+      await assistantMenu(nora, 'Unmute Milo for me');
       await waitFor(async () => !(await voiceOf(nora)).muted, 5000, 'the unmute');
       const n1 = await voiceOf(nora); const v1 = await voiceOf(vera);
       await sleep(1500);
       await ask();
       await waitFor(async () => (await voiceOf(nora)).frames > n1.frames, 20000, 'frames after unmute');
-      check((await voiceOf(vera)).frames > v1.frames, 'the asker stopped hearing Nova');
+      check((await voiceOf(vera)).frames > v1.frames, 'the asker stopped hearing Milo');
       return 'muted page silent, others unaffected, unmute restores';
     });
 
     await step('7b-e: paused: a request plays nothing on either page; resume brings it back', async () => {
       await sleep(2500);
-      await novaMenu(vera, 'Pause Nova');
-      await waitMark(vera.page, /^Nova is paused$/); await waitMark(nora.page, /^Nova is paused$/);
+      await assistantMenu(vera, 'Pause Milo');
+      await waitMark(vera.page, /^Milo is paused$/); await waitMark(nora.page, /^Milo is paused$/);
       const v0 = await voiceOf(vera); const n0 = await voiceOf(nora);
       await ask();
       await sleep(4000);
-      check((await voiceOf(vera)).frames === v0.frames && (await voiceOf(nora)).frames === n0.frames, 'frames were scheduled while Nova was paused');
-      await novaMenu(vera, 'Resume Nova');
-      await waitMark(vera.page, /^Nova is listening$/); await waitMark(nora.page, /^Nova is listening$/);
+      check((await voiceOf(vera)).frames === v0.frames && (await voiceOf(nora)).frames === n0.frames, 'frames were scheduled while Milo was paused');
+      await assistantMenu(vera, 'Resume Milo');
+      await waitMark(vera.page, /^Milo is listening$/); await waitMark(nora.page, /^Milo is listening$/);
       return 'nothing scheduled while paused';
     });
 
     await step('7b-f: voice off: a request plays nothing and both pages say so', async () => {
-      await novaMenu(vera, "Turn Nova's voice off");
+      await assistantMenu(vera, "Turn Milo's voice off");
       for (const p of [vera, nora]) await waitFor(async () => !(await voiceOf(p)).on, 15000, `${p.who.userId} seeing voice off`);
       await sleep(1500);
       const v0 = await voiceOf(vera); const n0 = await voiceOf(nora);
@@ -1371,8 +1376,8 @@ async function main() {
     // ── 6. Dismiss ──
     let expiryCard = null;
     await step('6a: a write card nobody confirms stays waiting for both people', async () => {
-      await inject(VERA.userId, 'Nova, create a work item for the expiry audit.');
-      expiryCard = await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.tool?.name === 'create' && m.metadata.summary.includes('expiry audit')), 20000, 'the card');
+      await inject(VERA.userId, 'Milo, create a work item for the expiry audit.');
+      expiryCard = await waitFor(async () => (await assistantOf(vera, 'assistant-action')).find((m) => m.metadata.tool?.name === 'create' && m.metadata.summary.includes('expiry audit')), 20000, 'the card');
       check(expiryCard.metadata.status === 'waiting', `the card is ${expiryCard.metadata.status}`);
       for (const p of [vera, nora]) await p.page.getByTestId('assistant-action-card').filter({ hasText: 'expiry audit' }).last().waitFor({ timeout: 20000 });
       // In-call 4: the card says when it expires, and the asker's footer count includes it and jumps to it.
@@ -1381,10 +1386,10 @@ async function main() {
         const t = await waitFor(async () => (await card.getByTestId('assistant-action-expires').innerText().catch(() => '')).trim() || null, 15000, `${p.who.userId} seeing the card's expiry`);
         check(/^expires in (9|10) min$/.test(t), `${p.who.userId}: the card's expiry reads "${t}"`);
       }
-      const badge = vera.page.getByTestId('nova-proposal-count');
+      const badge = vera.page.getByTestId('assistant-proposal-count');
       await waitFor(async () => (await badge.getAttribute('data-cards').catch(() => null)) === '1', 15000, 'the asker\'s footer count including the card');
       check(/1 card waiting for your confirmation/.test((await badge.getAttribute('aria-label')) ?? ''), `the count does not say a card waits: "${await badge.getAttribute('aria-label')}"`);
-      check((await nora.page.getByTestId('nova-proposal-count').getAttribute('data-cards').catch(() => '0')) !== '1', 'the other person\'s count includes a card that waits on the asker');
+      check((await nora.page.getByTestId('assistant-proposal-count').getAttribute('data-cards').catch(() => '0')) !== '1', 'the other person\'s count includes a card that waits on the asker');
       await badge.click();
       const veraCard = vera.page.getByTestId('assistant-action-card').filter({ hasText: 'expiry audit' }).last();
       await waitFor(async () => veraCard.getByTestId('assistant-action-confirm').evaluate((el) => el === document.activeElement).catch(() => false), 5000, 'the count jumping to the card\'s Confirm');
@@ -1404,47 +1409,47 @@ async function main() {
       return 'open, waiting for the executor';
     });
 
-    await step('6: dismiss: asked once and kept on Cancel; then the mark goes, the bar says who dismissed Nova and offers "Invite Nova again" beside it (Nova can be invited back)', async () => {
-      // In-call 3: the dismissal is asked once, naming its effect; keeping Nova changes nothing.
-      await novaMenu(nora, 'Dismiss Nova for everyone');
-      await seen(nora.page, 'nova-dismiss-ask');
-      const question = (await nora.page.getByTestId('nova-dismiss-ask').innerText()).replace(/\s+/g, ' ');
-      check(/Nova leaves the call for everyone\. Anyone who can invite Nova can invite it back later\./.test(question), `the dismissal question does not name its effect: "${question}"`);
-      check((await stateOf(nora)).state === 'listening', 'choosing Dismiss in the menu dismissed Nova before the question was answered');
+    await step('6: dismiss: asked once and kept on Cancel; then the mark goes, the bar says who dismissed Milo and offers "Invite Milo again" beside it (Milo can be invited back)', async () => {
+      // In-call 3: the dismissal is asked once, naming its effect; keeping Milo changes nothing.
+      await assistantMenu(nora, 'Dismiss Milo for everyone');
+      await seen(nora.page, 'assistant-dismiss-ask');
+      const question = (await nora.page.getByTestId('assistant-dismiss-ask').innerText()).replace(/\s+/g, ' ');
+      check(/Milo leaves the call for everyone\. Anyone who can invite Milo can invite it back later\./.test(question), `the dismissal question does not name its effect: "${question}"`);
+      check((await stateOf(nora)).state === 'listening', 'choosing Dismiss in the menu dismissed Milo before the question was answered');
       await shot(nora.page, '6-dismiss-ask');
-      await nora.page.getByTestId('nova-dismiss-ask').getByRole('button', { name: /Keep Nova/ }).click();
-      await gone(nora.page, 'nova-dismiss-ask');
-      check((await stateOf(nora)).state === 'listening', 'keeping Nova dismissed it');
-      await novaMenu(nora, 'Dismiss Nova for everyone');
-      await nora.page.getByTestId('nova-dismiss-ask').getByRole('button', { name: /Dismiss Nova for everyone/ }).click();
-      await seen(nora.page, 'nova-left');
-      await seen(vera.page, 'nova-left');
+      await nora.page.getByTestId('assistant-dismiss-ask').getByRole('button', { name: /Keep Milo/ }).click();
+      await gone(nora.page, 'assistant-dismiss-ask');
+      check((await stateOf(nora)).state === 'listening', 'keeping Milo dismissed it');
+      await assistantMenu(nora, 'Dismiss Milo for everyone');
+      await nora.page.getByTestId('assistant-dismiss-ask').getByRole('button', { name: /Dismiss Milo for everyone/ }).click();
+      await seen(nora.page, 'assistant-left');
+      await seen(vera.page, 'assistant-left');
       for (const p of [vera, nora]) {
-        // Around 1: the chip says who dismissed Nova (and no longer that it cannot come back); beside it, the way back.
-        const why = (await p.page.getByTestId('nova-left').innerText()).trim();
-        check(/^.+ dismissed Nova\.$/.test(why) && !why.startsWith('Someone'), `the left chip does not say who dismissed Nova: "${why}"`);
-        check(await p.page.getByTestId('nova-mark').count() === 0, 'the listening mark stayed');
-        check(await p.page.getByTestId('nova-invite').count() === 0, 'the first "Invite Nova" came back');
-        check(await p.page.getByTestId('nova-menu').count() === 0, 'Nova controls stayed');
-        await seen(p.page, 'nova-invite-again');
-        check((await p.page.getByTestId('nova-invite-again').innerText()).trim() === 'Invite Nova again', 'the button does not read "Invite Nova again"');
+        // Around 1: the chip says who dismissed Milo (and no longer that it cannot come back); beside it, the way back.
+        const why = (await p.page.getByTestId('assistant-left').innerText()).trim();
+        check(/^.+ dismissed Milo\.$/.test(why) && !why.startsWith('Someone'), `the left chip does not say who dismissed Milo: "${why}"`);
+        check(await p.page.getByTestId('assistant-status-mark').count() === 0, 'the listening mark stayed');
+        check(await p.page.getByTestId('assistant-invite').count() === 0, 'the first "Invite Milo" came back');
+        check(await p.page.getByTestId('assistant-menu').count() === 0, 'Milo controls stayed');
+        await seen(p.page, 'assistant-invite-again');
+        check((await p.page.getByTestId('assistant-invite-again').innerText()).trim() === 'Invite Milo again', 'the button does not read "Invite Milo again"');
       }
-      // The server says Nova may be invited back (it is not used here: the minutes steps below read the first period's minutes; R1 to R4 do it).
+      // The server says Milo may be invited back (it is not used here: the minutes steps below read the first period's minutes; R1 to R4 do it).
       const standing = (await stateOf(vera)).rejoin;
       check(standing === 'allowed', `the state says rejoin ${standing}, not allowed`);
-      check(await vera.page.getByTestId('nova-roster-entry').count() === 0, 'Nova stayed in the roster');
+      check(await vera.page.getByTestId('assistant-roster-entry').count() === 0, 'Milo stayed in the roster');
       await barFits(vera.page, 'the bar after dismissal', 1280);
       await shot(vera.page, '6-left');
       // An unfinished proposal moves to the meeting page: the footer asks no more, and it waits 72 hours.
-      await gone(vera.page, 'nova-proposal-ask');
+      await gone(vera.page, 'assistant-proposal-ask');
       const open = (await proposalsOf(vera)).find((p) => p.id === p3);
       check(open?.state === 'open' && typeof open.expiresAt === 'number' && open.expiresAt - Date.now() > 71 * 3600_000, `the open proposal after the dismissal: ${JSON.stringify({ state: open?.state, expiresAt: open?.expiresAt })}`);
-      return 'left; "Invite Nova again" offered; the open proposal expires in 72 h';
+      return 'left; "Invite Milo again" offered; the open proposal expires in 72 h';
     });
 
-    await step('6b: with Nova dismissed the unconfirmed card reads Expired for both, says Nova was dismissed (not that its asker failed to confirm), and nothing was created', async () => {
-      const expired = await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === expiryCard.metadata.actionId && m.metadata.status === 'expired'), 20000, 'the card going to expired');
-      check(expired.metadata.resultText === 'Nova was dismissed before this was done.', `the expired card says "${expired.metadata.resultText}"`);
+    await step('6b: with Milo dismissed the unconfirmed card reads Expired for both, says Milo was dismissed (not that its asker failed to confirm), and nothing was created', async () => {
+      const expired = await waitFor(async () => (await assistantOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === expiryCard.metadata.actionId && m.metadata.status === 'expired'), 20000, 'the card going to expired');
+      check(expired.metadata.resultText === 'Milo was dismissed before this was done.', `the expired card says "${expired.metadata.resultText}"`);
       for (const p of [vera, nora]) {
         const card = p.page.getByTestId('assistant-action-card').filter({ hasText: 'expiry audit' }).last();
         await waitFor(async () => /Expired/.test(await card.getByTestId('assistant-action-status').innerText().catch(() => '')), 15000, `${p.who.userId} seeing Expired`);
@@ -1454,7 +1459,7 @@ async function main() {
       const expiredCard = vera.page.getByTestId('assistant-action-card').filter({ hasText: 'expiry audit' }).last();
       const expLook = await cardLook(expiredCard);
       check(expLook.collapsed && expLook.layout === 'muted', `the expired card is not one muted row: ${JSON.stringify(expLook)}`);
-      check(/Nova was dismissed before this was done\./.test(await expiredCard.getByTestId('assistant-action-row-text').innerText()), 'the expired row gives no reason');
+      check(/Milo was dismissed before this was done\./.test(await expiredCard.getByTestId('assistant-action-row-text').innerText()), 'the expired row gives no reason');
       await expiredCard.scrollIntoViewIfNeeded();
       for (const width of [1440, 1280]) await shot(vera.page, 'C4-card-expired-row', width);
       await shot(vera.page, '6b-card-expired');
@@ -1502,9 +1507,9 @@ async function main() {
     };
     let layla;
 
-    await step('12: after the dismissal Nova leaves one minutes card in the call chat, in its own voice: "Meeting minutes", the summary, the counts of decisions (the decision consented through a proposal included), action items and proposals, no path in its text, and a link element "Open the meeting page" that goes to the meeting page', async () => {
+    await step('12: after the dismissal Milo leaves one minutes card in the call chat, in its own voice: "Meeting minutes", the summary, the counts of decisions (the decision consented through a proposal included), action items and proposals, no path in its text, and a link element "Open the meeting page" that goes to the meeting page', async () => {
       const msg = await waitFor(async () => (await chatMessages(vera)).find((m) => m.metadata?.kind === 'assistant-notice' && m.metadata?.minutes), 20000, 'the minutes message in the call chat');
-      check(msg.userId === 'agent:nova' || msg.metadata?.assistant === true, 'the minutes message is not Nova\'s');
+      check(msg.userId === 'agent:meeting-assistant' || msg.metadata?.assistant === true, 'the minutes message is not Milo\'s');
       const counts = msg.metadata.minutes;
       check(['decisions', 'actionItems', 'proposals'].every((k) => Number.isInteger(counts[k])), `no counts on the message: ${JSON.stringify(counts)}`);
       // P5 recorded a decision through a consented proposal before the dismissal: the count holds it, on top of the minutes' own decision lines.
@@ -1527,16 +1532,16 @@ async function main() {
       const shown = (await card.getByTestId('assistant-minutes-counts').innerText()).replace(/\s+/g, ' ');
       check(/^\d+ decisions? · \d+ action items? · \d+ proposals?$/.test(shown.trim()), `the counts are not one readable line: "${shown}"`);
       check(shown.includes(`${counts.decisions} decision`) && shown.includes(`${counts.actionItems} action item`) && shown.includes(`${counts.proposals} proposal`), `the card shows "${shown}" for ${JSON.stringify(counts)}`);
-      check(await card.evaluate((el) => el.closest('[data-testid="chat-message"]')?.getAttribute('data-voice') === 'assistant'), 'the minutes card is not in a row in Nova\'s voice');
-      // Every Nova card is opaque (the dialogue's dot field never shows through); finished and closed ones are single rows; Nova's
+      check(await card.evaluate((el) => el.closest('[data-testid="chat-message"]')?.getAttribute('data-voice') === 'assistant'), 'the minutes card is not in a row in Milo\'s voice');
+      // Every Milo card is opaque (the dialogue's dot field never shows through); finished and closed ones are single rows; Milo's
       // accent is kept for the one that waits on the viewer.
       const looks = await vera.page.locator('[data-testid="assistant-minutes-card"], [data-testid="assistant-action-card"], [data-testid="assistant-proposal-card"]')
         .evaluateAll((els) => els.map((el) => ({ layout: el.getAttribute('data-layout'), collapsed: el.getAttribute('data-collapsed'), tone: el.getAttribute('data-tone'), bg: getComputedStyle(el).backgroundColor })));
       const alphaOf = (bg) => { const rgba = /rgba?\(([^)]+)\)/.exec(bg)?.[1].split(',').map((x) => x.trim())[3]; const slash = /\/\s*([\d.]+%?)\s*\)$/.exec(bg)?.[1];
         return rgba !== undefined ? Number(rgba) : slash !== undefined ? (slash.endsWith('%') ? Number(slash.slice(0, -1)) / 100 : Number(slash)) : 1; };
       const seeThrough = looks.filter((l) => alphaOf(l.bg) < 0.99);
-      check(looks.length >= 3 && seeThrough.length === 0, `Nova's cards let the dot field through: ${JSON.stringify(seeThrough)}`);
-      check(looks.every((l) => (l.tone === 'assistant') === (l.layout === 'you')), `Nova's accent is not kept for the cards waiting on the viewer: ${JSON.stringify(looks)}`);
+      check(looks.length >= 3 && seeThrough.length === 0, `Milo's cards let the dot field through: ${JSON.stringify(seeThrough)}`);
+      check(looks.every((l) => (l.tone === 'assistant') === (l.layout === 'you')), `Milo's accent is not kept for the cards waiting on the viewer: ${JSON.stringify(looks)}`);
       check(looks.filter((l) => l.layout === 'done' || l.layout === 'muted').every((l) => l.collapsed === 'true'), `a finished or closed card is not a row: ${JSON.stringify(looks)}`);
       await card.scrollIntoViewIfNeeded();
       for (const width of [1440, 1280]) await shot(vera.page, '12-chat-minutes', width);
@@ -1571,7 +1576,8 @@ async function main() {
       for (const width of [1440, 1280]) {
         await fitsWidth(veraM.page, 'the meeting page', width);
         const text = await bodyText(veraM.page);
-        check(/invited by Vera/.test(text), 'the header does not say who invited Nova');
+        check(/invited by Vera/.test(text), 'the header does not say who invited Milo');
+        check(/\bMilo\b/.test(text) && !/\bNova\b/.test(text), `the meeting page still names the assistant Nova at ${width}`);
         check(/summary/i.test(text) && /decisions/i.test(text) && /action items/i.test(text) && /transcript/i.test(text), `a section is missing at ${width}: ${text.slice(0, 300)}`);
         const summary = (await veraM.page.getByTestId('meeting-summary').innerText()).trim();
         check(summary.length > 10, 'the summary is empty');
@@ -1631,13 +1637,13 @@ async function main() {
       return out.join(', ');
     });
 
-    await step('13a: the meeting page says what Nova covered (its listening time, a pause, a count of people not transcribed, never their names) and how long the meeting is kept and who can delete it sooner', async () => {
+    await step('13a: the meeting page says what Milo covered (its listening time, a pause, a count of people not transcribed, never their names) and how long the meeting is kept and who can delete it sooner', async () => {
       const api = await (await vera.api.get(asApi(vera, 'minutes'))).json();
       check(api.coverage && typeof api.coverage.listenedSeconds === 'number', `the minutes carry no coverage: ${JSON.stringify(api.coverage)}`);
       const meta = (await veraM.page.getByTestId('meeting-meta').innerText()).replace(/\s+/g, ' ');
-      check(/Nova listened (under a minute|\d+ min|\d+ h)/.test(meta), `the meta line does not say how long Nova listened: "${meta}"`);
+      check(/Milo listened (under a minute|\d+ min|\d+ h)/.test(meta), `the meta line does not say how long Milo listened: "${meta}"`);
       const quiet = (await veraM.page.getByTestId('meeting-kept').innerText()).replace(/\s+/g, ' ');
-      if (api.coverage.pausedSeconds >= 60) check(/Nova paused for \d/.test(quiet), `Nova paused ${api.coverage.pausedSeconds}s but the quiet line says "${quiet}"`);
+      if (api.coverage.pausedSeconds >= 60) check(/Milo paused for \d/.test(quiet), `Milo paused ${api.coverage.pausedSeconds}s but the quiet line says "${quiet}"`);
       const n = api.coverage.untranscribed;
       check(n > 0 ? quiet.includes(n === 1 ? '1 person was not transcribed' : `${n} people were not transcribed`) : !/not transcribed/.test(quiet), `${n} not transcribed, the quiet line says "${quiet}"`);
       check(!/not transcribed/.test(meta), 'the coverage count is on the main meta line, not the quiet one');
@@ -1752,22 +1758,22 @@ async function main() {
       return `recorded on the meeting page; minutes: ${listed.state}, consented by ${listed.consentedBy.join(' and ')}; end clear of the prompt (${clear.join('; ')})`;
     });
 
-    // ── R. Nova invited back into the call it left (after the first period's minutes steps, which read the first period) ──
+    // ── R. Milo invited back into the call it left (after the first period's minutes steps, which read the first period) ──
     let rejoinBefore = null;
-    await step('R1: a third person joins again; each person sees why Nova left and "Invite Nova again" beside it, and the footer is one line at 1440 and 1280 with three people (screenshots)', async () => {
+    await step('R1: a third person joins again; each person sees why Milo left and "Invite Milo again" beside it, and the footer is one line at 1440 and 1280 with three people (screenshots)', async () => {
       eli = await person({ userId: 'u-eli', role: 'sme' });
       await eli.page.getByTestId('shell-footer-context').getByRole('button', { name: 'Huddle' }).click({ timeout: 30000 });
       await eli.page.getByTestId('shell-call-dock').waitFor({ timeout: 30000 });
       for (const p of [vera, nora, eli]) {
-        await seen(p.page, 'nova-left', 20000);
-        await seen(p.page, 'nova-invite-again', 20000);
-        const why = (await p.page.getByTestId('nova-left').innerText()).trim();
-        check(/^.+ dismissed Nova\.$/.test(why) && !/cannot rejoin/.test(why), `${p.who.userId}'s chip reads "${why}"`);
+        await seen(p.page, 'assistant-left', 20000);
+        await seen(p.page, 'assistant-invite-again', 20000);
+        const why = (await p.page.getByTestId('assistant-left').innerText()).trim();
+        check(/^.+ dismissed Milo\.$/.test(why) && !/cannot rejoin/.test(why), `${p.who.userId}'s chip reads "${why}"`);
       }
       for (const width of [1440, 1280]) {
         const r = await barFits(vera.page, 'the bar after the dismissal with three people', width);
         await shot(vera.page, 'R1-left-invite-again', width);
-        check(r.novaWidth > 0, `Nova's controls are not on the footer row at ${width}`);
+        check(r.assistantWidth > 0, `Milo's controls are not on the footer row at ${width}`);
       }
       const m = await (await vera.api.get(asApi(vera, 'minutes'))).json();
       rejoinBefore = m.actionItems.map((i) => ({ text: i.text, workItemCreated: i.workItemCreated === true, workItemHref: i.workItemHref ?? null }));
@@ -1775,31 +1781,31 @@ async function main() {
       return `three people; ${rejoinBefore.length} earlier action items`;
     });
 
-    await step('R2: the inviter uses "Invite Nova again": Nova listens again for everyone, the chat has one notice that it is back at her invitation, and the others owe the acknowledgement again (the notice shows again, saying Nova was invited back)', async () => {
-      await vera.page.getByTestId('nova-invite-again').click();
-      await waitMark(vera.page, /^Nova is listening$/, 20000);
-      await gone(vera.page, 'nova-invite-again');
+    await step('R2: the inviter uses "Invite Milo again": Milo listens again for everyone, the chat has one notice that it is back at her invitation, and the others owe the acknowledgement again (the notice shows again, saying Milo was invited back)', async () => {
+      await vera.page.getByTestId('assistant-invite-again').click();
+      await waitMark(vera.page, /^Milo is listening$/, 20000);
+      await gone(vera.page, 'assistant-invite-again');
       const st = await stateOf(vera);
-      check(st.state === 'listening' && st.invitedBy === VERA.userId && st.period === 2, `the state after inviting Nova back: ${JSON.stringify({ state: st.state, invitedBy: st.invitedBy, period: st.period })}`);
+      check(st.state === 'listening' && st.invitedBy === VERA.userId && st.period === 2, `the state after inviting Milo back: ${JSON.stringify({ state: st.state, invitedBy: st.invitedBy, period: st.period })}`);
       check(st.mustAck.includes(NORA.userId) && st.mustAck.includes('u-eli') && !st.mustAck.includes(VERA.userId), `who owes the acknowledgement: ${JSON.stringify(st.mustAck)}`);
       check(st.voice === false, 'the voice did not reset to off');
-      const back = await waitFor(async () => (await novaOf(vera, 'assistant-notice')).filter((m) => /^Nova is back in this call at .+'s invitation and is listening again\./.test(m.message)), 15000, 'the notice that Nova is back');
-      check(back.length === 1, `${back.length} notices say Nova is back`);
+      const back = await waitFor(async () => (await assistantOf(vera, 'assistant-notice')).filter((m) => /^Milo is back in this call at .+'s invitation and is listening again\./.test(m.message)), 15000, 'the notice that Milo is back');
+      check(back.length === 1, `${back.length} notices say Milo is back`);
       // Nora had closed the first notice in 3b: a new period shows it again.
-      await seen(nora.page, 'nova-notice', 20000);
-      const title = (await nora.page.getByTestId('nova-notice').innerText()).replace(/\s+/g, ' ');
-      check(/invited Nova back into this call/.test(title), `the notice does not say Nova was invited back: "${title.slice(0, 160)}"`);
+      await seen(nora.page, 'assistant-consent-notice', 20000);
+      const title = (await nora.page.getByTestId('assistant-consent-notice').innerText()).replace(/\s+/g, ' ');
+      check(/invited Milo back into this call/.test(title), `the notice does not say Milo was invited back: "${title.slice(0, 160)}"`);
       check((await stateOf(nora)).youMustAck === true, 'the second person does not owe a new acknowledgement');
       await shot(nora.page, 'R2-notice-again');
       return `"${back[0].message.slice(0, 120)}"`;
     });
 
-    await step('R3: the second person\'s words are not kept before she acknowledges again; after she does, they are; the meeting page says Nova is back and what it hears is added', async () => {
+    await step('R3: the second person\'s words are not kept before she acknowledges again; after she does, they are; the meeting page says Milo is back and what it hears is added', async () => {
       const before = 'Before acknowledging again: the rejoin draft is private.';
       await inject(NORA.userId, before);
       check(!(await stored(vera, before, 3500)), 'a line from a person who had not acknowledged again was stored');
-      await nora.page.getByTestId('nova-notice-acknowledge').click();
-      await gone(nora.page, 'nova-notice');
+      await nora.page.getByTestId('assistant-consent-notice-acknowledge').click();
+      await gone(nora.page, 'assistant-consent-notice');
       check((await stateOf(nora)).youMustAck === false, 'the acknowledgement did not take');
       const said = 'Nora will draft the rejoin summary.';
       await inject(NORA.userId, said);
@@ -1812,24 +1818,24 @@ async function main() {
       await veraM.page.goto(MEETING(), { waitUntil: 'domcontentloaded', timeout: 40000 });
       await seen(veraM.page, 'meeting-addition-note', 30000);
       const note = (await veraM.page.getByTestId('meeting-addition-note').innerText()).trim();
-      check(note === 'Nova is back in this call. What it hears now is added to these minutes when it leaves.', `the meeting page says "${note}"`);
+      check(note === 'Milo is back in this call. What it hears now is added to these minutes when it leaves.', `the meeting page says "${note}"`);
       for (const width of [1440, 1280]) await shot(veraM.page, 'R3-meeting-back', width);
       return 'before: absent; after: stored; page note shown';
     });
 
-    await step('R3b: the second person opens the live transcript from Nova\'s menu in the second period; it stays open through R4 and R5', async () => {
-      await novaMenu(nora, /Show transcript/);
+    await step('R3b: the second person opens the live transcript from Milo\'s menu in the second period; it stays open through R4 and R5', async () => {
+      await assistantMenu(nora, /Show transcript/);
       await seen(nora.page, 'live-transcript');
       const head = (await nora.page.getByTestId('live-transcript-panel').locator('header').first().innerText()).replace(/\s+/g, ' ').trim();
-      check(/^Live transcript/.test(head) && /Nova is listening/.test(head), `the transcript's header reads "${head}"`);
+      check(/^Live transcript/.test(head) && /Milo is listening/.test(head), `the transcript's header reads "${head}"`);
       await waitFor(async () => Number(await nora.page.getByTestId('live-transcript').getAttribute('data-lines')) > 0, 10000, 'the stored lines in the second person\'s transcript');
       return `"${head}"`;
     });
 
-    await step('R4: Nova is dismissed again; the minutes hold both periods: the earlier action items at their places (the work item made in the call still linked), the new one after them, one more minutes card saying Nova added to them', async () => {
-      await novaMenu(vera, 'Dismiss Nova for everyone');
-      await vera.page.getByTestId('nova-dismiss-ask').getByRole('button', { name: /Dismiss Nova for everyone/ }).click();
-      await seen(vera.page, 'nova-left', 20000);
+    await step('R4: Milo is dismissed again; the minutes hold both periods: the earlier action items at their places (the work item made in the call still linked), the new one after them, one more minutes card saying Milo added to them', async () => {
+      await assistantMenu(vera, 'Dismiss Milo for everyone');
+      await vera.page.getByTestId('assistant-dismiss-ask').getByRole('button', { name: /Dismiss Milo for everyone/ }).click();
+      await seen(vera.page, 'assistant-left', 20000);
       const m = await waitFor(async () => { const r = await (await vera.api.get(asApi(vera, 'minutes'))).json(); return r.additions === 1 ? r : null; }, 30000, 'the minutes being added to');
       const items = m.actionItems.map((i) => ({ text: i.text, workItemCreated: i.workItemCreated === true, workItemHref: i.workItemHref ?? null }));
       check(JSON.stringify(items.slice(0, rejoinBefore.length)) === JSON.stringify(rejoinBefore), `the earlier action items moved or changed: ${JSON.stringify(rejoinBefore)} then ${JSON.stringify(items.slice(0, rejoinBefore.length))}`);
@@ -1837,41 +1843,41 @@ async function main() {
       check(done >= 0 && items[done].workItemCreated, `the work item made in the call is not linked at its place: ${JSON.stringify(items)}`);
       check(items.slice(rejoinBefore.length).some((i) => /draft the rejoin summary/i.test(i.text)), `the new action item is not after the earlier ones: ${JSON.stringify(items.slice(rejoinBefore.length))}`);
       check(m.backInCall === false && m.additionOwed === false, `the minutes say ${JSON.stringify({ backInCall: m.backInCall, additionOwed: m.additionOwed })}`);
-      check(/After Nova was invited back/.test(m.summaryLead), `the summary does not cover both periods: "${m.summaryLead}"`);
+      check(/After Milo was invited back/.test(m.summaryLead), `the summary does not cover both periods: "${m.summaryLead}"`);
       const cards = (await chatMessages(vera)).filter((x) => x.metadata?.kind === 'assistant-notice' && x.metadata?.minutes);
       check(cards.length === 2 && cards[1].metadata.minutes.added === true, `the minutes cards in the chat: ${JSON.stringify(cards.map((c) => c.metadata.minutes))}`);
       const card = vera.page.getByTestId('assistant-minutes-card').last();
-      await waitFor(async () => (await card.getByTestId('assistant-minutes-title').innerText().catch(() => '')).trim() === 'Nova added to the minutes', 20000, 'the chat card saying Nova added to the minutes');
+      await waitFor(async () => (await card.getByTestId('assistant-minutes-title').innerText().catch(() => '')).trim() === 'Milo added to the minutes', 20000, 'the chat card saying Milo added to the minutes');
       check((await card.getByTestId('assistant-minutes-status').innerText()).trim() === 'Updated', 'the added card is not marked Updated');
       await veraM.page.goto(MEETING(), { waitUntil: 'domcontentloaded', timeout: 40000 });
       await seen(veraM.page, 'meeting-action-items', 30000);
       check(/draft the rejoin summary/i.test(await veraM.page.getByTestId('meeting-action-items').innerText()), 'the meeting page does not show the new action item');
-      check(await veraM.page.getByTestId('meeting-addition-note').count() === 0, 'the meeting page still says Nova is back');
+      check(await veraM.page.getByTestId('meeting-addition-note').count() === 0, 'the meeting page still says Milo is back');
       for (const width of [1440, 1280]) await shot(veraM.page, 'R4-meeting-both-periods', width);
       return `${rejoinBefore.length} earlier items in place, ${items.length - rejoinBefore.length} added; "${m.summaryLead.slice(0, 120)}"`;
     });
 
-    await step('R5: the second person\'s transcript, open since the second period, says Nova left; Nova invited back a third time, it listens again; she acknowledges, says a line and dismisses Nova at once: after Nova has left the view shows that line (the read after a leave is made again in a later period)', async () => {
+    await step('R5: the second person\'s transcript, open since the second period, says Milo left; Milo invited back a third time, it listens again; she acknowledges, says a line and dismisses Milo at once: after Milo has left the view shows that line (the read after a leave is made again in a later period)', async () => {
       const panel = nora.page.getByTestId('live-transcript-panel');
       const head = async () => (await panel.locator('header').first().innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
       check(await nora.page.getByTestId('live-transcript').isVisible(), 'the second person\'s live transcript closed with the dismissal');
-      await waitFor(async () => /Nova has left; this is what it heard/.test(await head()), 20000, 'the open transcript saying Nova has left');
-      await vera.page.getByTestId('nova-invite-again').click();
-      await waitMark(vera.page, /^Nova is listening$/, 20000);
-      await waitFor(async () => /Nova is listening/.test(await head()), 20000, 'the open transcript listening again');
-      await seen(nora.page, 'nova-notice', 20000);
-      await nora.page.getByTestId('nova-notice-acknowledge').click();
-      await gone(nora.page, 'nova-notice');
+      await waitFor(async () => /Milo has left; this is what it heard/.test(await head()), 20000, 'the open transcript saying Milo has left');
+      await vera.page.getByTestId('assistant-invite-again').click();
+      await waitMark(vera.page, /^Milo is listening$/, 20000);
+      await waitFor(async () => /Milo is listening/.test(await head()), 20000, 'the open transcript listening again');
+      await seen(nora.page, 'assistant-consent-notice', 20000);
+      await nora.page.getByTestId('assistant-consent-notice-acknowledge').click();
+      await gone(nora.page, 'assistant-consent-notice');
       const last = `Third period: the rollout note goes out with build ${Date.now() % 100000}.`;
       await inject(NORA.userId, last);
       check(await stored(vera, last, 10000), 'the line before the third dismissal was not stored');
-      await novaMenu(nora, 'Dismiss Nova for everyone');
-      await nora.page.getByTestId('nova-dismiss-ask').getByRole('button', { name: /Dismiss Nova for everyone/ }).click();
-      await seen(nora.page, 'nova-left', 20000);
+      await assistantMenu(nora, 'Dismiss Milo for everyone');
+      await nora.page.getByTestId('assistant-dismiss-ask').getByRole('button', { name: /Dismiss Milo for everyone/ }).click();
+      await seen(nora.page, 'assistant-left', 20000);
       await panel.locator('[data-seg-index]').filter({ hasText: last }).waitFor({ state: 'visible', timeout: 10000 })
-        .catch(() => { throw new StepFailure('after Nova left again the open transcript never showed the last line said before'); });
+        .catch(() => { throw new StepFailure('after Milo left again the open transcript never showed the last line said before'); });
       const after = await head();
-      check(/Nova has left; this is what it heard/.test(after), `after the third dismissal the transcript's header reads "${after}"`);
+      check(/Milo has left; this is what it heard/.test(after), `after the third dismissal the transcript's header reads "${after}"`);
       await waitFor(async () => { const r = await (await vera.api.get(asApi(vera, 'minutes'))).json(); return r.additions === 2 ? r : null; }, 30000, 'the minutes being added to for the third period');
       await nora.page.getByTestId('live-transcript-back').click();
       await gone(nora.page, 'live-transcript');
@@ -1942,7 +1948,7 @@ async function main() {
       return `entries ${JSON.stringify(ids)}`;
     });
 
-    await step('16b: Nova invited back is billed on its own: the second period under its own part (:x1), the minutes addition under its own entry (:minutes:1:1), each once', async () => {
+    await step('16b: Milo invited back is billed on its own: the second period under its own part (:x1), the minutes addition under its own entry (:minutes:1:1), each once', async () => {
       const res = await vera.api.get(`${PORTAL}/api/spend/entries?groupBy=source&key=meeting_assistant&period=month&limit=50`);
       check(res.status() === 200, `the spend entries answered ${res.status()}`);
       const ids = ((await res.json()).entries ?? []).map((e) => e.sourceId).filter((id) => String(id).startsWith(`ma:${callId}`));
@@ -1955,12 +1961,12 @@ async function main() {
     // People's own messages in the call chat before the delete, so 17b can check the delete left them alone.
     let peopleBeforeDelete = null;
     await step('17: only the inviter sees Delete; deleting (after the confirm step) tells the people who were there it was deleted, makes the transcript 404, and leaves the outsider a plain 404', async () => {
-      peopleBeforeDelete = (await chatMessages(vera)).filter((m) => m.userId !== 'agent:nova' && m.metadata?.assistant !== true).map((m) => m.id);
+      peopleBeforeDelete = (await chatMessages(vera)).filter((m) => m.userId !== 'agent:meeting-assistant' && m.metadata?.assistant !== true).map((m) => m.id);
       await noraM.page.goto(MEETING(), { waitUntil: 'domcontentloaded', timeout: 40000 });
       await seen(noraM.page, 'meeting-page', 30000);
-      check(await noraM.page.getByTestId('meeting-delete').count() === 0 && await noraM.page.getByTestId('meeting-actions').count() === 0, 'a person who did not invite Nova is offered Delete');
+      check(await noraM.page.getByTestId('meeting-delete').count() === 0 && await noraM.page.getByTestId('meeting-actions').count() === 0, 'a person who did not invite Milo is offered Delete');
       const keptForNora = (await noraM.page.getByTestId('meeting-kept').innerText()).replace(/\s+/g, ' ').trim();
-      check(/^Kept until .+ · .+ can delete it sooner\b/.test(keptForNora) && !keptForNora.includes('You can'), `an attendee who did not invite Nova reads "${keptForNora}"`);
+      check(/^Kept until .+ · .+ can delete it sooner\b/.test(keptForNora) && !keptForNora.includes('You can'), `an attendee who did not invite Milo reads "${keptForNora}"`);
       const refused = await nora.api.delete(asApi(nora, 'minutes'));
       check(refused.status() === 403, `a non-inviter deleting answered ${refused.status()}`);
       await veraM.page.goto(MEETING(), { waitUntil: 'domcontentloaded', timeout: 40000 });
@@ -1986,22 +1992,22 @@ async function main() {
       check(!list.meetings.some((m) => m.callId === callId), 'the deleted meeting is still listed');
       return 'non-inviter: no button, 403; inviter: confirm, then "deleted" on the page, 410 minutes and 404 transcript for attendees, 404 for the outsider, gone from the list';
     });
-    await step('17b: after the delete the call chat says it once: one plain line from Nova ("This record was deleted…"), no card, no words of the meeting, no link to the page, and people\'s messages stay', async () => {
+    await step('17b: after the delete the call chat says it once: one plain line from Milo ("This record was deleted…"), no card, no words of the meeting, no link to the page, and people\'s messages stay', async () => {
       const all = await chatMessages(vera);
-      const nova = all.filter((m) => m.userId === 'agent:nova' || m.metadata?.assistant === true);
-      check(nova.length === 1, `Nova has ${nova.length} messages in the chat after the delete: ${JSON.stringify(nova.map((m) => m.message)).slice(0, 300)}`);
-      check(nova[0].message === 'This record was deleted by the person who invited Nova.', `Nova's line reads "${nova[0].message}"`);
-      check(!['assistant-action', 'assistant-proposal'].includes(nova[0].metadata?.kind) && nova[0].metadata?.askedBy === undefined, `the line is still a card: ${JSON.stringify(nova[0].metadata)}`);
-      const peopleAfter = all.filter((m) => m.userId !== 'agent:nova' && m.metadata?.assistant !== true).map((m) => m.id);
+      const assistant = all.filter((m) => m.userId === 'agent:meeting-assistant' || m.metadata?.assistant === true);
+      check(assistant.length === 1, `Milo has ${assistant.length} messages in the chat after the delete: ${JSON.stringify(assistant.map((m) => m.message)).slice(0, 300)}`);
+      check(assistant[0].message === 'This record was deleted by the person who invited Milo.', `Milo's line reads "${assistant[0].message}"`);
+      check(!['assistant-action', 'assistant-proposal'].includes(assistant[0].metadata?.kind) && assistant[0].metadata?.askedBy === undefined, `the line is still a card: ${JSON.stringify(assistant[0].metadata)}`);
+      const peopleAfter = all.filter((m) => m.userId !== 'agent:meeting-assistant' && m.metadata?.assistant !== true).map((m) => m.id);
       check(peopleBeforeDelete !== null && JSON.stringify(peopleAfter) === JSON.stringify(peopleBeforeDelete), `people's messages changed with the delete: ${JSON.stringify(peopleBeforeDelete)} before, ${JSON.stringify(peopleAfter)} after`);
-      const blob = JSON.stringify(nova);
-      for (const word of ['login cookie bug', 'two tab audit', 'expiry audit', 'nightly export', 'meetingCallId']) check(!blob.toLowerCase().includes(word.toLowerCase()), `"${word}" is still in Nova's messages`);
+      const blob = JSON.stringify(assistant);
+      for (const word of ['login cookie bug', 'two tab audit', 'expiry audit', 'nightly export', 'meetingCallId']) check(!blob.toLowerCase().includes(word.toLowerCase()), `"${word}" is still in Milo's messages`);
       await sleep(3500); // the page's own refresh
       check(await vera.page.getByTestId('assistant-notice-meeting-link').count() === 0, 'the chat still shows a link to the deleted meeting page');
-      const shownLines = await vera.page.getByText('This record was deleted by the person who invited Nova.', { exact: true }).count();
+      const shownLines = await vera.page.getByText('This record was deleted by the person who invited Milo.', { exact: true }).count();
       check(shownLines === 1, `the open chat shows the deleted line ${shownLines} times`);
-      check(await vera.page.getByTestId('assistant-action-card').count() === 0 && await vera.page.getByTestId('assistant-proposal-card').count() === 0, 'the open chat still draws Nova\'s cards');
-      return `one line "${nova[0].message}", shown once; ${peopleAfter.length} people's messages kept`;
+      check(await vera.page.getByTestId('assistant-action-card').count() === 0 && await vera.page.getByTestId('assistant-proposal-card').count() === 0, 'the open chat still draws Milo\'s cards');
+      return `one line "${assistant[0].message}", shown once; ${peopleAfter.length} people's messages kept`;
     });
     // ── 18. Both people leave; the footer renders on; no page error in the whole walk ──
     await step('18: both people leave the call: the footer still renders with the call gone, and no page error happened in the whole walk', async () => {
@@ -2015,7 +2021,7 @@ async function main() {
         await p.page.getByRole('button', { name: 'Leave', exact: true }).waitFor({ state: 'detached', timeout: 20000 }).catch(() => { throw new StepFailure(`${p.who.userId}: the page still shows Leave after leaving`); });
         await sleep(2500); // long enough for a state poll to run with the call gone
         check(await p.page.getByTestId('shell-footer-row').isVisible(), `${p.who.userId}: the footer row is gone after leaving`);
-        check(await p.page.getByTestId('nova-bar').count() === 0, `${p.who.userId}: Nova's controls are still drawn after leaving`);
+        check(await p.page.getByTestId('assistant-bar').count() === 0, `${p.who.userId}: Milo's controls are still drawn after leaving`);
         await shot(p.page, `18-after-leave-${p.who.userId}`);
       }
       check(allErrors.length === 0, `page errors in the walk: ${allErrors.join(' | ')}`);

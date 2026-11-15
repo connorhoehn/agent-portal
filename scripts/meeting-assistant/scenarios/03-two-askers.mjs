@@ -1,6 +1,6 @@
-// two-askers: more than one person talks to Nova close together, and each answer, card and turn must belong to the person who asked.
+// two-askers: more than one person talks to Milo close together, and each answer, card and turn must belong to the person who asked.
 //  (a) two plain questions with 1.5 s between them: two replies, each labelled with its asker and holding its own answer
-//  (b) Vera asks for a work item; while it is being worked on, Nora addresses Nova with something else: the card and the turn are Vera's
+//  (b) Vera asks for a work item; while it is being worked on, Nora addresses Milo with something else: the card and the turn are Vera's
 //  (c) Vera's read waits 20 s on her own browser; meanwhile Nora asks a plain question, which must still be answered in the call
 export default {
   order: 3, id: 'two-askers', limitSeconds: 120, title: 'overlapping askers: each answer, card and turn is its asker\'s',
@@ -11,16 +11,16 @@ export default {
     // (a)
     ctx.at(500);
     ctx.next('mia', 'We should look at the reminder emails before the release.', { gap: 300 });
-    const a1 = ctx.next('vera', 'Nova, what is two plus two?', { gap: 1500, dry: { reply: { text: 'Two plus two is four.', frames: 12 } } });
-    const a2 = ctx.next('nora', 'Nova, what is the capital of France?', { gap: 1500, dry: { reply: { text: 'The capital of France is Paris.', frames: 12 } } });
+    const a1 = ctx.next('vera', 'Milo, what is two plus two?', { gap: 1500, dry: { reply: { text: 'Two plus two is four.', frames: 12 } } });
+    const a2 = ctx.next('nora', 'Milo, what is the capital of France?', { gap: 1500, dry: { reply: { text: 'The capital of France is Paris.', frames: 12 } } });
     // (b)
-    const b1 = ctx.next('vera', 'Nova, create a work item for the calendar sync bug.', { gap: 6000, dry: { delayMs: 3500, call: { name: 'create', args: { kind: 'work-item', fields: { title: 'Calendar sync bug' } } }, followup: 'I have asked Vera to confirm that.' } });
-    const b2 = ctx.next('nora', 'Nova, how is the weather in Lisbon today?', { gap: 300, dry: { reply: { text: 'It is sunny in Lisbon today.', frames: 12 } } });
+    const b1 = ctx.next('vera', 'Milo, create a work item for the calendar sync bug.', { gap: 6000, dry: { delayMs: 3500, call: { name: 'create', args: { kind: 'work-item', fields: { title: 'Calendar sync bug' } } }, followup: 'I have asked Vera to confirm that.' } });
+    const b2 = ctx.next('nora', 'Milo, how is the weather in Lisbon today?', { gap: 300, dry: { reply: { text: 'It is sunny in Lisbon today.', frames: 12 } } });
     // (c)
     // Fourteen seconds after (b): a real model is still speaking its follow-up to the card nine seconds after, and a request spoken
-    // over Nova's own voice was not acted on in one paid run (a person would ask again); this part is about the read waiting.
-    const c1 = ctx.next('vera', 'Nova, who is online right now?', { gap: 14_000, dry: { call: { name: 'activity', args: { scope: 'online' } }, followup: (out) => ({ text: `Right now: ${JSON.parse(out)?.say ?? 'nobody'}`, frames: 15 }) } });
-    const c2 = ctx.next('nora', 'Nova, what is seven times eight?', { gap: 3500, dry: { reply: { text: 'Seven times eight is fifty six.', frames: 12 } } });
+    // over Milo's own voice was not acted on in one paid run (a person would ask again); this part is about the read waiting.
+    const c1 = ctx.next('vera', 'Milo, who is online right now?', { gap: 14_000, dry: { call: { name: 'activity', args: { scope: 'online' } }, followup: (out) => ({ text: `Right now: ${JSON.parse(out)?.say ?? 'nobody'}`, frames: 15 }) } });
+    const c2 = ctx.next('nora', 'Milo, what is seven times eight?', { gap: 3500, dry: { reply: { text: 'Seven times eight is fifty six.', frames: 12 } } });
     const veraRuns = ctx.turns('vera', (t) => (t.tool.name === 'activity' ? { ok: true, say: 'Vera and Nora are online.', delayMs: 20_000 } : { withhold: true }));
     const noraRuns = ctx.turns('nora', () => ({ withhold: true }));
     ctx.begin();

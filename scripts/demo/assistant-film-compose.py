@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Compose the Nova demo film from the recorder's timeline (scripts/demo/nova-meeting-film.mjs runs this at the end).
+"""Compose the Milo demo film from the recorder's timeline (scripts/demo/assistant-meeting-film.mjs runs this at the end).
 
-    python3 scripts/demo/nova-film-compose.py --out <dir> [--check]
+    python3 scripts/demo/assistant-film-compose.py --out <dir> [--check]
 
-Reads <dir>/timeline.json and the raw videos and speech clips it names, and writes <dir>/nova-in-the-meeting.mp4:
+Reads <dir>/timeline.json and the raw videos and speech clips it names, and writes <dir>/assistant-in-the-meeting.mp4:
 a title card per scene, then each shot cut from the right recordings, laid out on a 1920x1080 frame (one view, two side
 by side, or strips stacked), a caption bar (chapter, title, one sentence), a name label on each view and a ring around
 each element just before it is clicked. The audio track places every spoken clip at the moment it was spoken in the
 recording (adelay), mixes them (amix, normalize=0), evens the level (loudnorm) and is muxed as AAC. This ffmpeg has no
 drawtext, so every caption, label and ring is a PNG drawn with Pillow and overlaid. --check also writes one frame per
 scene to <dir>/check/. --final names the film file. For the live take, the timeline may carry its own title cards
-(`cards`), and <dir>/nova-audio.jsonl (Nova's voice frames as Vera's browser received them) is decoded and placed too.
+(`cards`), and <dir>/assistant-voice.jsonl (Milo's voice frames as Vera's browser received them) is decoded and placed too.
 """
 import argparse
 import base64
@@ -52,8 +52,8 @@ CROPS = {
     'chat-deck': (960, 190, 480, 490),   # the newest messages while a deck prompt shortens the pane
     'deck': (0, 646, 1440, 254),         # the deck prompt above the footer row
     'bottom': (0, 580, 1440, 320),       # the transcription notice and the footer row
-    'corner': (560, 520, 880, 380),      # Nova's mark, its menu (it opens above the mark), and the lower call chat
-    'mark-chat': (690, 560, 750, 340),   # Nova's mark and the newest call chat messages, for two people stacked
+    'corner': (560, 520, 880, 380),      # Milo's mark, its menu (it opens above the mark), and the lower call chat
+    'mark-chat': (690, 560, 750, 340),   # Milo's mark and the newest call chat messages, for two people stacked
     'notfound': (420, 44, 1020, 400),    # the meeting page's not-found message
     'lower': (0, 330, 1440, 570),        # the call card, the deck prompt and the footer
     'meeting': (60, 60, 980, 515),       # the meeting page's content, above the call card
@@ -316,11 +316,11 @@ def local_to_film(segs, x):
     return t
 
 
-def nova_voice(out_dir):
-    """The live take's Nova voice: <out>/nova-audio.jsonl holds each 100 ms frame (24 kHz PCM16, base64) with the wall-clock time
+def assistant_voice(out_dir):
+    """The live take's Milo voice: <out>/assistant-voice.jsonl holds each 100 ms frame (24 kHz PCM16, base64) with the wall-clock time
     Vera's browser received it. Frames run together into one utterance until one says it is the last (or the run or the count
     breaks); each utterance is written as a WAV and placed at its first frame's arrival, as the browser starts playing it then."""
-    src = os.path.join(out_dir, 'nova-audio.jsonl')
+    src = os.path.join(out_dir, 'assistant-voice.jsonl')
     if not os.path.exists(src):
         return []
     frames = [json.loads(line) for line in open(src) if line.strip()]
@@ -341,14 +341,14 @@ def nova_voice(out_dir):
     out = []
     os.makedirs(os.path.join(out_dir, 'audio'), exist_ok=True)
     for i, u in enumerate(utterances):
-        rel = os.path.join('audio', f'nova-{i + 1:03d}.wav')
+        rel = os.path.join('audio', f'assistant-{i + 1:03d}.wav')
         with wave.open(os.path.join(out_dir, rel), 'wb') as w:
             w.setnchannels(1)
             w.setsampwidth(2)
             w.setframerate(u['rate'])
             w.writeframes(bytes(u['pcm']))
-        out.append({'who': 'nova', 'text': '(Nova, live)', 'file': rel, 'atMs': u['at'], 'durMs': round(len(u['pcm']) / 2 / u['rate'] * 1000), 'heard': False})
-    print(f'  Nova\'s voice: {len(frames)} frames in {len(utterances)} utterances')
+        out.append({'who': 'assistant', 'text': '(Milo, live)', 'file': rel, 'atMs': u['at'], 'durMs': round(len(u['pcm']) / 2 / u['rate'] * 1000), 'heard': False})
+    print(f'  Milo\'s voice: {len(frames)} frames in {len(utterances)} utterances')
     return out
 
 
@@ -356,13 +356,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--out', required=True)
     ap.add_argument('--check', action='store_true')
-    ap.add_argument('--final', help='the film file (default <out>/nova-in-the-meeting.mp4)')
+    ap.add_argument('--final', help='the film file (default <out>/assistant-in-the-meeting.mp4)')
     ap.add_argument('--no-squeeze', action='store_true', help='keep unchanged stretches at normal speed')
     a = ap.parse_args()
     out_dir = os.path.abspath(a.out)
     tl = json.load(open(os.path.join(out_dir, 'timeline.json')))
     cards = tl.get('cards', {})
-    tl['speech'] = tl['speech'] + nova_voice(out_dir)
+    tl['speech'] = tl['speech'] + assistant_voice(out_dir)
     tmp = os.path.join(out_dir, 'parts')
     shutil.rmtree(tmp, ignore_errors=True)
     os.makedirs(tmp)
@@ -371,7 +371,7 @@ def main():
     shot_map = []  # (wall from, wall to, film start) for placing speech
     opening = os.path.join(tmp, 'card-open.png')
     c = cards.get('open', {})
-    card_png(opening, None, c.get('title', 'Nova in the meeting'), c.get('text', 'A meeting assistant that hears everyone in a call, answers when asked, acts only with consent, and leaves minutes behind.'), eyebrow=c.get('eyebrow', 'Observability Platform · a call with Vera, Nora and Eli'))
+    card_png(opening, None, c.get('title', 'Milo in the meeting'), c.get('text', 'A meeting assistant that hears everyone in a call, answers when asked, acts only with consent, and leaves minutes behind.'), eyebrow=c.get('eyebrow', 'Observability Platform · a call with Vera, Nora and Eli'))
     n = frames(OPEN_SECS)
     encode_card(opening, n, os.path.join(tmp, 'card-open.mp4'))
     parts.append(os.path.join(tmp, 'card-open.mp4'))
@@ -410,7 +410,7 @@ def main():
         print(f'scene {scene["n"]:2d} {scene["title"]}: ends at {t:6.1f}s', flush=True)
     closing = os.path.join(tmp, 'card-close.png')
     c = cards.get('close', {})
-    card_png(closing, None, c.get('title', 'Nova'), c.get('text', 'Hears the call, answers in the chat or aloud, asks before it writes, notices what the team agrees, and leaves minutes only the people in the call can read.'), eyebrow=c.get('eyebrow', 'Recorded on the mock world: fictional people and data'))
+    card_png(closing, None, c.get('title', 'Milo'), c.get('text', 'Hears the call, answers in the chat or aloud, asks before it writes, notices what the team agrees, and leaves minutes only the people in the call can read.'), eyebrow=c.get('eyebrow', 'Recorded on the mock world: fictional people and data'))
     n = frames(OPEN_SECS)
     encode_card(closing, n, os.path.join(tmp, 'card-close.mp4'))
     parts.append(os.path.join(tmp, 'card-close.mp4'))
@@ -450,7 +450,7 @@ def main():
     else:
         run(['ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', f'anullsrc=r=48000:cl=stereo', '-t', f'{total:.3f}', '-c:a', 'aac', audio])
 
-    final = os.path.abspath(a.final) if a.final else os.path.join(out_dir, 'nova-in-the-meeting.mp4')
+    final = os.path.abspath(a.final) if a.final else os.path.join(out_dir, 'assistant-in-the-meeting.mp4')
     run(['ffmpeg', '-y', '-v', 'error', '-i', video, '-i', audio, '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-c:a', 'copy',
          '-t', f'{total:.3f}', '-movflags', '+faststart', final])
     size = os.path.getsize(final) / 1e6

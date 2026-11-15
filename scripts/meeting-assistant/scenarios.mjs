@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The meeting assistant's scenario suite: scripted calls of a fictional product team, each judged on what Nova does and does not do.
+// The meeting assistant's scenario suite: scripted calls of a fictional product team, each judged on what Milo does and does not do.
 // docs/meeting-assistant-design.md is the plan; scenarios/*.mjs are the calls, one file each.
 //
 //   node scripts/meeting-assistant/scenarios.mjs --list
@@ -16,7 +16,7 @@
 //
 // Safety (lib/safety.mjs): paid mode needs --yes (without it the plan and the worst-case cost are printed and nothing starts); every
 // scenario runs in a fresh middleware that ends the session by itself a minute after the scenario's limit and carries a dead-man
-// preload; SIGINT, SIGTERM and any uncaught error dismiss Nova (3 s time box), stop the middleware and remove the temp folder.
+// preload; SIGINT, SIGTERM and any uncaught error dismiss Milo (3 s time box), stop the middleware and remove the temp folder.
 // Audio is synthetic speech in a temp folder removed on every exit path; no key, token or header is printed.
 import fs from 'node:fs';
 import path from 'node:path';

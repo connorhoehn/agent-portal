@@ -2,7 +2,7 @@
 // proxy's tunnel, which forwards to the real provider and is cut by destroying both sockets).
 // What the plan promises (docs/meeting-assistant-design.md decision 11; orchestrator.ts onClosed/reopen/giveUp): an unexpected close is
 // answered by a replacement session started with the last minutes of the call as context (up to three, retried after 1, 3 and 9 seconds),
-// and only when none can be opened does Nova leave with a notice. Checked here: Nova is still listening afterwards and said nothing
+// and only when none can be opened does Milo leave with a notice. Checked here: Milo is still listening afterwards and said nothing
 // about leaving; the new session knows what was said before the drop (dry only: the paid run cannot see the session's instructions);
 // the dead session is hung up and not billed past its death; a request after the recovery is answered, labelled with its asker.
 import { sleep, waitFor } from '../lib/harness.mjs';
@@ -15,7 +15,7 @@ export default {
     for (const k of ['vera', 'nora', 'mia']) ctx.lane(k);
     const before = 'The launch checklist has three items left, and the first is the reminder wording.';
     ctx.say('vera', 800, before);
-    const ask = ctx.say('nora', 24_000, 'Nova, what is two plus two?', { dry: { reply: { text: 'Two plus two is four.', frames: 12 } } });
+    const ask = ctx.say('nora', 24_000, 'Milo, what is two plus two?', { dry: { reply: { text: 'Two plus two is four.', frames: 12 } } });
     ctx.begin();
     await ctx.until(9000);
     const startsBefore = ctx.world.provider?.seen.started ?? null;
@@ -35,8 +35,8 @@ export default {
       await sleep(8000);
     }
     const mid = await call.state();
-    r.expect('Nova is still listening after the drop', mid?.state === 'listening', `state ${mid?.state}`);
-    const noticeBad = (await call.novaMessages(p.vera)).find((m) => /lost its connection|has left/i.test(String(m.message)));
+    r.expect('Milo is still listening after the drop', mid?.state === 'listening', `state ${mid?.state}`);
+    const noticeBad = (await call.assistantRows(p.vera)).find((m) => /lost its connection|has left/i.test(String(m.message)));
     r.expect('no "lost its connection" notice was posted', !noticeBad, noticeBad ? String(noticeBad.message).slice(0, 80) : '');
     r.measure('provider errors counted', mid?.providerErrors ?? -1);
     await ctx.until(ask.endMs + 9000);
@@ -51,7 +51,7 @@ export default {
     // Billing: dismiss now and compare what was billed with the wall time, less the time with no session.
     const wallSeconds = Math.round((Date.now() - call.invitedAt) / 1000);
     const d = await call.dismiss();
-    r.harness('Vera dismisses Nova', d.status === 200, `HTTP ${d.status}`);
+    r.harness('Vera dismisses Milo', d.status === 200, `HTTP ${d.status}`);
     const { billingOf } = await import('../lib/harness.mjs');
     const bill = await billingOf(p.vera, call);
     const outage = recoveredAt ? Math.round((recoveredAt - cutAt) / 1000) : 0;

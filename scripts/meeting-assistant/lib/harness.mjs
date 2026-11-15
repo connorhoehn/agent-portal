@@ -25,7 +25,7 @@ export async function waitFor(fn, ms = 15_000, step = 250) {
 
 /**
  * What a scenario's body gets as `ctx`: the world, the check classes, and helpers that bind them.
- *   ctx.setup({ people: ['vera','nora'], inviter, ack, voice, late })  seat people, invite Nova, bind, acknowledge, find the sink;
+ *   ctx.setup({ people: ['vera','nora'], inviter, ack, voice, late })  seat people, invite Milo, bind, acknowledge, find the sink;
  *                                                                      returns { p: { vera, ... }, call }
  *   ctx.say(key, atMs, text, { gain, rate, dry, voice })              place an utterance on that person's lane (made on first use)
  *   ctx.until(ms)                                                      wait for the scenario clock
@@ -56,7 +56,7 @@ export function makeContext({ world, reporter, minutes = null, dry }) {
   ctx.run = async (ms) => { ctx.begin(); await ctx.until(ms); await world.stopLanes(); };
   ctx.turns = (key, decide) => { const t = ctx.p[key].runTurns(ctx.call.callId, decide); ctx.runners.push(t); return t; };
   ctx.debug = async () => { if (!process.env.MA_DEBUG) return; const raw = await ctx.p[ctx.inviterKey].call('GET', `/api/calls/${encodeURIComponent(ctx.call.callId)}/chat?limit=100`); console.log(`     [debug] chat http ${raw.status} ${JSON.stringify(raw.json)?.slice(0, 300)}`); const m = raw.json?.messages ?? []; for (const x of m) console.log(`     [debug] chat ${x.userId} ${x.metadata?.kind ?? ''} ${String(x.message).slice(0, 110)}`); const tl = await ctx.call.transcript(); for (const l of tl) console.log(`     [debug] line ${l.userId} ${JSON.stringify(l.speakers ?? [])} ${l.startMs}-${l.endMs} at=${l.at} ${l.text.slice(0, 60)}`); console.log(`     [debug] provider ${JSON.stringify(world.provider?.seen)}`); const st = await ctx.call.state(); console.log(`     [debug] state ${JSON.stringify(st)}`); };
-  ctx.novaMessages = () => ctx.call.novaMessages(ctx.p[ctx.inviterKey]);
+  ctx.assistantRows = () => ctx.call.assistantRows(ctx.p[ctx.inviterKey]);
   return ctx;
 }
 

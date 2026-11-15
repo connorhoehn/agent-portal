@@ -9,15 +9,15 @@
 //
 // What it does. It starts its OWN middleware on port 3953 in the mock world with the meeting assistant on and MEETING_ASSISTANT_LIVE=1
 // (the mock world uses the provider's real session class; in --dry it is pointed at the fake provider with a dummy key, so the real key
-// is never read). It seats two demo personas in one call over the in-process gateway, binds their media participant ids, invites Nova,
+// is never read). It seats two demo personas in one call over the in-process gateway, binds their media participant ids, invites Milo,
 // and plays the part of the media server's taps (tap-sim.mjs) with synthetic speech made by macOS `say` in two voices:
-//   chatter with no name, "Nova, what is two plus two?", more chatter including the name without a request, then
-//   "Nova, create a work item for the login cookie bug."
+//   chatter with no name, "Milo, what is two plus two?", more chatter including the name without a request, then
+//   "Milo, create a work item for the login cookie bug."
 // and asserts: each utterance stored with the right speaker; no reply during chatter; a reply to the first request in the call chat
 // labelled with the right asker; an action card waiting for the right asker for the second; refusedCalls 0. Then it dismisses and
 // prints the billed seconds.
 //
-// Nova's voice (package 7a). The fake provider sends one SILENT output frame (100 ms, all zero) for every input frame, as the real one does,
+// Milo's voice (package 7a). The fake provider sends one SILENT output frame (100 ms, all zero) for every input frame, as the real one does,
 // and voiced frames (a sine) for each spoken reply. Both people join the call chat channel with their gateway sockets, which is how the
 // browser will receive `assistant-audio` frames. In --dry the gateway runs in the script's own middleware process, so the script acts as
 // the members' sockets (no dev read is needed) and asserts: with the voice off (the default) the first spoken reply relays NOTHING; the
@@ -87,10 +87,10 @@ const pid = (p) => `${p.userId}-${stamp()}`; // the media server's per-join id: 
 const SCRIPT = [
   { who: VERA, text: 'Okay, I went through the dashboard this morning, and the numbers look fairly steady.', keyword: /dashboard|numbers look/i, gap: 1800 },
   { who: NORA, text: 'Right, but the login page still feels slow for a few people.', keyword: /login page|feels slow|slow for a few/i, gap: 2500 },
-  { who: VERA, text: 'Nova, what is two plus two?', keyword: /two plus two|2 ?(\+|plus) ?2/i, gap: 8000, request: 'answer' },
-  { who: NORA, text: 'I think Nova could help with that later, but lets move on to the roadmap.', keyword: /help with that later|move on to the roadmap/i, gap: 3000 },
+  { who: VERA, text: 'Milo, what is two plus two?', keyword: /two plus two|2 ?(\+|plus) ?2/i, gap: 8000, request: 'answer' },
+  { who: NORA, text: 'I think Milo could help with that later, but lets move on to the roadmap.', keyword: /help with that later|move on to the roadmap/i, gap: 3000 },
   { who: VERA, text: 'Agreed, we should plan the roadmap review for next week.', keyword: /review for next week|plan the roadmap review/i, gap: 2500 },
-  { who: NORA, text: 'Nova, create a work item for the login cookie bug.', keyword: /cookie bug|work item for the login/i, gap: 0, request: 'tool' },
+  { who: NORA, text: 'Milo, create a work item for the login cookie bug.', keyword: /cookie bug|work item for the login/i, gap: 0, request: 'tool' },
 ];
 
 // ── A fake provider (dry run): replays a canned session, driven by the audio it is sent ──────────────────
@@ -192,7 +192,7 @@ async function main() {
     }
     await vera.waitFrame((f) => f.type === 'call-chat' && f.action === 'members' && f.participants?.length === 2, 20_000);
     check('two people hold seats in one call', true, callId);
-    // Each person joins the call chat channel, as the browser does for the chat; Nova's voice frames go to the sockets that did.
+    // Each person joins the call chat channel, as the browser does for the chat; Milo's voice frames go to the sockets that did.
     const CHAT = `orgiq:huddle:${callId}`;
     for (const person of [vera, nora]) {
       person.send({ service: 'chat', action: 'join', channel: CHAT });
@@ -200,15 +200,15 @@ async function main() {
     }
     const voiceFrames = (person) => person.frames.filter((f) => f.type === 'assistant-audio' && f.channel === CHAT);
 
-    // 3. Vera invites Nova; then each person binds their own participant id (the portal does this once it knows the assistant is there); Nora acknowledges.
+    // 3. Vera invites Milo; then each person binds their own participant id (the portal does this once it knows the assistant is there); Nora acknowledges.
     const A = `/api/calls/${encodeURIComponent(callId)}/assistant`;
     const invite = await vera.call('POST', `${A}/invite`, {});
-    if (invite.status !== 201) { check('Vera invites Nova', false, `HTTP ${invite.status} ${JSON.stringify(invite.json)?.slice(0, 160)}`); throw new Error('the invite was refused; nothing was started'); }
+    if (invite.status !== 201) { check('Vera invites Milo', false, `HTTP ${invite.status} ${JSON.stringify(invite.json)?.slice(0, 160)}`); throw new Error('the invite was refused; nothing was started'); }
     invited = true;
     guard.onDismiss(async () => { const d = await vera.call('POST', `/api/calls/${encodeURIComponent(callId)}/assistant/dismiss`); return { status: d.status, state: d.json?.state }; });
     watchdog = setTimeout(hardStop, HARD_STOP_MS); watchdog.unref?.();
     const inviteAt = Date.now();
-    check('Vera invites Nova', true, 'listening');
+    check('Vera invites Milo', true, 'listening');
     for (const [person, who] of [[vera, VERA], [nora, NORA]]) {
       const bound = await person.call('POST', `${A}/participant`, { participantId: participantIds[who.userId] });
       check(`${who.name} binds ${who.name}'s own participant id`, bound.status === 200, `HTTP ${bound.status}`);
@@ -216,8 +216,8 @@ async function main() {
     const stolen = await nora.call('POST', `${A}/participant`, { participantId: participantIds[VERA.userId] });
     check('a person cannot bind another person\'s participant id', stolen.status === 403, `HTTP ${stolen.status}`);
     check('Nora acknowledges the notice', (await nora.call('POST', `${A}/ack`)).status === 200);
-    check('Nova\'s voice is off by default', (await vera.call('GET', `${A}/state`)).json?.voice === false);
-    if (!DRY) check('Vera turns Nova\'s voice on (paid run)', (await vera.call('POST', `${A}/voice`, { on: true })).json?.voice === true);
+    check('Milo\'s voice is off by default', (await vera.call('GET', `${A}/state`)).json?.voice === false);
+    if (!DRY) check('Vera turns Milo\'s voice on (paid run)', (await vera.call('POST', `${A}/voice`, { on: true })).json?.voice === true);
 
     // 4. Where the taps would post: the mock world's dev route says (the real media server is told by the arming).
     let sink = null;
@@ -245,30 +245,30 @@ async function main() {
 
     // 5. The call, as the taps would carry it, while the chat is watched.
     const plan = timeline.map((t) => ({ ...t, participantId: participantIds[t.who.userId] }));
-    const novaSeen = new Map(); // message id -> { elapsed, msg }
+    const assistantSeen = new Map(); // message id -> { elapsed, msg }
     const t0 = Date.now();
     let polling = true;
     let offCheck = null, voiceOnAt = 0;
     const poll = (async () => {
       while (polling) {
         // Dry: once the first spoken reply is in the chat and its voiced frames have gone through the provider, the voice was off for all of it.
-        if (DRY && !voiceOnAt && [...novaSeen.values()].some((v) => v.msg.metadata.kind === 'assistant-reply') && provider.seen.voicedSent >= 6) {
+        if (DRY && !voiceOnAt && [...assistantSeen.values()].some((v) => v.msg.metadata.kind === 'assistant-reply') && provider.seen.voicedSent >= 6) {
           await sleep(800);
           offCheck = { relayed: voiceFrames(vera).length + voiceFrames(nora).length, voicedSent: provider.seen.voicedSent, state: (await vera.call('GET', `${A}/state`)).json };
           const on = await vera.call('POST', `${A}/voice`, { on: true });
           voiceOnAt = Date.now() - t0;
-          check('Vera turns Nova\'s voice on after the first reply', on.status === 200 && on.json?.voice === true, `HTTP ${on.status}`);
+          check('Vera turns Milo\'s voice on after the first reply', on.status === 200 && on.json?.voice === true, `HTTP ${on.status}`);
         }
         const r = await vera.call('GET', `/api/calls/${encodeURIComponent(callId)}/chat?limit=100`);
-        for (const m of r.json?.messages ?? []) if (m.metadata?.assistant === true && !novaSeen.has(m.id)) novaSeen.set(m.id, { elapsed: Date.now() - t0, msg: m });
+        for (const m of r.json?.messages ?? []) if (m.metadata?.assistant === true && !assistantSeen.has(m.id)) assistantSeen.set(m.id, { elapsed: Date.now() - t0, msg: m });
         // Replies and cards can change (a card's status): keep the latest of each.
-        for (const m of r.json?.messages ?? []) if (novaSeen.has(m.id)) novaSeen.get(m.id).msg = m;
+        for (const m of r.json?.messages ?? []) if (assistantSeen.has(m.id)) assistantSeen.get(m.id).msg = m;
         await sleep(500);
       }
     })();
     const sim = await runTapSim({ base: BASE, token: sink.token, channel: sink.channelArn, timeline: plan, dir: OUT, ...(DRY ? { secret: SINK_SECRET } : {}) });
     const waitUntil = Date.now() + 14_000;
-    while (Date.now() < waitUntil && ![...novaSeen.values()].some((v) => v.msg.metadata.kind === 'assistant-action' && v.msg.metadata.tool?.name === 'create')) await sleep(500);
+    while (Date.now() < waitUntil && ![...assistantSeen.values()].some((v) => v.msg.metadata.kind === 'assistant-action' && v.msg.metadata.tool?.name === 'create')) await sleep(500);
     if (DRY) { const until = Date.now() + 8000; while (Date.now() < until && voiceFrames(vera).length < 9) await sleep(200); }
     await sleep(1500);
     polling = false; await poll;
@@ -288,15 +288,15 @@ async function main() {
       check(`${s.who.name}'s "${s.text.slice(0, 34)}..." is stored with ${s.who.name} as the speaker`, mine.length > 0 && wrong.length === 0, mine.length ? mine.map((l) => `${l.userId ?? 'nobody'}`).join(',') : 'no such line');
     }
 
-    // 7. What Nova did.
-    const nova = [...novaSeen.values()];
-    const replies = nova.filter((v) => v.msg.metadata.kind === 'assistant-reply'), cards = nova.filter((v) => v.msg.metadata.kind === 'assistant-action');
+    // 7. What Milo did.
+    const assistant = [...assistantSeen.values()];
+    const replies = assistant.filter((v) => v.msg.metadata.kind === 'assistant-reply'), cards = assistant.filter((v) => v.msg.metadata.kind === 'assistant-action');
     const req1 = spans.find((s) => s.request === 'answer'), req2 = spans.find((s) => s.request === 'tool');
     const chatter2 = spans[SCRIPT.findIndex((s) => /could help with that later/.test(s.text))];
-    const before = nova.filter((v) => v.msg.metadata.kind !== 'assistant-notice' && v.elapsed < req1.endMs);
-    check('Nova says nothing in chat during the first chatter', before.length === 0, `${before.length} message(s) before ${req1.endMs} ms`);
-    const quiet = nova.filter((v) => v.msg.metadata.kind !== 'assistant-notice' && v.elapsed > chatter2.startMs + 2500 && v.elapsed < req2.startMs);
-    check('Nova says nothing when its name is used without a request', quiet.length === 0, `${quiet.length} message(s) between ${chatter2.startMs + 2500} and ${req2.startMs} ms`);
+    const before = assistant.filter((v) => v.msg.metadata.kind !== 'assistant-notice' && v.elapsed < req1.endMs);
+    check('Milo says nothing in chat during the first chatter', before.length === 0, `${before.length} message(s) before ${req1.endMs} ms`);
+    const quiet = assistant.filter((v) => v.msg.metadata.kind !== 'assistant-notice' && v.elapsed > chatter2.startMs + 2500 && v.elapsed < req2.startMs);
+    check('Milo says nothing when its name is used without a request', quiet.length === 0, `${quiet.length} message(s) between ${chatter2.startMs + 2500} and ${req2.startMs} ms`);
     const answer = replies.find((v) => v.msg.metadata.askedBy === VERA.userId);
     check('the first request is answered in the call chat, labelled with Vera', !!answer, answer ? `"${String(answer.msg.message ?? answer.msg.text ?? '').slice(0, 60)}" asked by ${answer.msg.metadata.askedByName}` : 'no reply');
     const card = cards.find((v) => v.msg.metadata.tool?.name === 'create');
@@ -336,7 +336,7 @@ async function main() {
         const seqs = got.map((f) => f.data?.seq);
         const bytes = got.map((f) => Buffer.from(String(f.data?.pcm ?? ''), 'base64'));
         const energy = bytes.map((b) => { let m = 0; for (let i = 0; i + 1 < b.length; i += 2) m = Math.max(m, Math.abs(b.readInt16LE(i))); return m; });
-        check(`${who.name}'s socket received Nova's second reply: 6 voiced frames and a 300 ms tail, in order, no silence in between, the last marked`,
+        check(`${who.name}'s socket received Milo's second reply: 6 voiced frames and a 300 ms tail, in order, no silence in between, the last marked`,
           got.length === 9 && seqs.every((q, i) => i === 0 || q === seqs[i - 1] + 1) && energy.slice(0, 6).every((m) => m > 100) && energy.slice(6).every((m) => m === 0)
             && got.every((f, i) => (f.data?.last === true) === (i === 8) && f.data?.callId === callId && f.data?.sampleRate === 24000) && bytes.every((b) => b.length === 4800),
           `${got.length} frames, seq ${seqs.join(',')}`);
@@ -345,7 +345,7 @@ async function main() {
         provider.seen.silentSent > 20 && (stateNow?.voiceFramesRelayed ?? -1) === 9 && stateNow?.voiceFramesDropped === 0,
         `${provider.seen.silentSent} silent frames sent, relayed ${stateNow?.voiceFramesRelayed}, dropped ${stateNow?.voiceFramesDropped}`);
     } else {
-      console.log(`voice: the middleware relayed ${stateNow?.voiceFramesRelayed ?? '?'} frame(s) of Nova's voice to the call chat (dropped ${stateNow?.voiceFramesDropped ?? '?'})`);
+      console.log(`voice: the middleware relayed ${stateNow?.voiceFramesRelayed ?? '?'} frame(s) of Milo's voice to the call chat (dropped ${stateNow?.voiceFramesDropped ?? '?'})`);
     }
     if (provider) {
       const s = provider.seen;
@@ -357,7 +357,7 @@ async function main() {
     // 8. Dismiss, and what it cost.
     clearTimeout(watchdog);
     const left = await vera.call('POST', `${A}/dismiss`); guard.onDismiss(null);
-    check('Vera dismisses Nova', left.status === 200 && left.json?.state === 'left', `HTTP ${left.status}`);
+    check('Vera dismisses Milo', left.status === 200 && left.json?.state === 'left', `HTTP ${left.status}`);
     const after = (await vera.call('GET', `${A}/state`)).json;
     let ledger = '';
     for (let i = 0; i < 20 && !ledger; i += 1) {
@@ -369,9 +369,9 @@ async function main() {
     console.log(`billed: listened ${after?.listeningSeconds} s of the call (session ${Math.round((Date.now() - inviteAt) / 1000)} s since the invite); ledger ${ledger || 'no entry yet'}`);
     if (media) {
       await sleep(300);
-      check('the tap was deleted when Nova left', media.log.some((l) => l.method === 'DELETE' && /\/taps\/tap-dry-1$/.test(l.url)));
+      check('the tap was deleted when Milo left', media.log.some((l) => l.method === 'DELETE' && /\/taps\/tap-dry-1$/.test(l.url)));
       const dead = await runTapSim({ base: BASE, token: sink.token, channel: sink.channelArn, timeline: [{ participantId: participantIds[VERA.userId], wav: 'u1.wav', atMs: 0 }], dir: OUT, speed: 50, secret: SINK_SECRET });
-      check('the sink token is dead after Nova left', dead.answers['404'] === dead.sent, `answers ${JSON.stringify(dead.answers)}`);
+      check('the sink token is dead after Milo left', dead.answers['404'] === dead.sent, `answers ${JSON.stringify(dead.answers)}`);
     }
   } catch (e) {
     check('the run completed', false, e.message);

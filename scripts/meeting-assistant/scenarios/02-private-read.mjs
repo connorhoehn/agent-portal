@@ -9,8 +9,8 @@ export default {
     const { p, call } = await ctx.setup({ people: ['vera', 'nora', 'mia'] });
     for (const k of ['vera', 'nora', 'mia']) ctx.lane(k);
     ctx.say('mia', 300, 'The release notes for the scheduling app are almost done.');
-    ctx.say('vera', 6000, 'Nova, how much budget do I have left this month?', { dry: { call: { name: 'budget', args: { scope: 'me' } }, followup: 'I sent that to you privately.', id: 'budget' } });
-    ctx.say('nora', 13_000, 'Nova, what is two plus two?', { dry: { reply: { text: 'Two plus two is four.', frames: 15 } } });
+    ctx.say('vera', 6000, 'Milo, how much budget do I have left this month?', { dry: { call: { name: 'budget', args: { scope: 'me' } }, followup: 'I sent that to you privately.', id: 'budget' } });
+    ctx.say('nora', 13_000, 'Milo, what is two plus two?', { dry: { reply: { text: 'Two plus two is four.', frames: 15 } } });
     const runner = ctx.turns('vera', () => ({ ok: true, say: `You have ${FIGURE} left this month.`, delayMs: 300 }));
     await ctx.run(30_000);
     await new Promise((res) => setTimeout(res, 2500));

@@ -1,8 +1,8 @@
-// pause-resume-dismiss: Nova's whole life cycle in one call.
+// pause-resume-dismiss: Milo's whole life cycle in one call.
 //  talk -> pause -> a request during the pause is neither stored nor answered, and no audio reaches the provider (judged from the sink's
 //  own counters and answers, and from the fake provider's frame count in --dry) -> resume -> the same request is answered ->
 //  dismiss -> a chunk after the dismissal is a 404 -> the spend is settled and billed seconds are compared with listening and wall time ->
-//  Nora invites Nova back (a second period on the same record: everyone else acknowledges again, a fresh sink) -> a request is answered ->
+//  Nora invites Milo back (a second period on the same record: everyone else acknowledges again, a fresh sink) -> a request is answered ->
 //  dismiss again -> the minutes hold both periods (added to, not written twice) and the second period is billed under its own part.
 import { sleep, waitFor } from '../lib/harness.mjs';
 
@@ -14,12 +14,12 @@ async function waitMinutes(person, call, ok) {
 }
 
 export default {
-  order: 10, id: 'pause-resume-dismiss', limitSeconds: 180, title: 'a pause hears nothing and bills nothing; resume answers; dismiss kills the sink and settles; Nova invited back answers and adds to the minutes',
+  order: 10, id: 'pause-resume-dismiss', limitSeconds: 180, title: 'a pause hears nothing and bills nothing; resume answers; dismiss kills the sink and settles; Milo invited back answers and adds to the minutes',
   async run(ctx) {
     const { r } = ctx;
     const { p, call } = await ctx.setup({ people: ['vera', 'nora', 'mia'] });
     for (const k of ['vera', 'nora', 'mia']) ctx.lane(k);
-    const q = 'Nova, what is two plus two?';
+    const q = 'Milo, what is two plus two?';
     ctx.say('vera', 500, 'We should finalise the launch checklist today.');
     const during = ctx.say('nora', 9000, q, { dry: { reply: { text: 'Two plus two is four.', frames: 12 } } });
     const after = ctx.say('nora', 27_000, q, { dry: { reply: { text: 'Two plus two is four.', frames: 12 } } });
@@ -29,7 +29,7 @@ export default {
     const framesBefore = ctx.world.provider?.seen.frames ?? null;
     const pausedAt = Date.now();
     const pause = await p.vera.call('POST', `${call.A}/pause`);
-    r.harness('Vera pauses Nova', pause.status === 200 && pause.json?.state === 'paused', `HTTP ${pause.status}, ${pause.json?.state}`);
+    r.harness('Vera pauses Milo', pause.status === 200 && pause.json?.state === 'paused', `HTTP ${pause.status}, ${pause.json?.state}`);
     await ctx.until(during.endMs + 4000);
     const stPaused = await call.state();
     const audioPaused = await call.audio();
@@ -38,7 +38,7 @@ export default {
     const framesAtPause = ctx.world.provider?.seen.frames ?? null;
     r.expect('the request during the pause was not stored', !linesPaused.some((l) => /two plus two/i.test(l.text)), `${linesPaused.length} line(s) stored`);
     r.expect('the request during the pause was not answered', !chatPaused.some((m) => m.metadata?.kind === 'assistant-reply'));
-    r.expect('the pause posted the named notice (the path a spoken pause shares)', chatPaused.some((m) => m.metadata?.kind === 'assistant-notice' && /paused Nova\. Nothing is being heard or stored\./.test(String(m.message))));
+    r.expect('the pause posted the named notice (the path a spoken pause shares)', chatPaused.some((m) => m.metadata?.kind === 'assistant-notice' && /paused Milo\. Nothing is being heard or stored\./.test(String(m.message))));
     const lane = ctx.lanes.nora;
     r.expect('the sink refused the audio during the pause (a dead token answers 404)', (lane.answers['404'] ?? 0) > 0, `answers ${JSON.stringify(lane.answers)}; counters ${JSON.stringify(audioPaused?.counters ?? null)}`);
     if (framesBefore !== null) r.expect('no audio reached the provider during the pause', framesAtPause - framesBefore <= 12, `${framesAtPause - framesBefore} frames between the pause and ${Math.round((Date.now() - pausedAt) / 1000)} s later (a few can be in flight)`);
@@ -47,7 +47,7 @@ export default {
     await ctx.until(15_000);
     const resumedAt = Date.now();
     const resume = await p.vera.call('POST', `${call.A}/resume`);
-    r.harness('Vera resumes Nova', resume.status === 200 && resume.json?.state === 'listening', `HTTP ${resume.status}, ${resume.json?.state}`);
+    r.harness('Vera resumes Milo', resume.status === 200 && resume.json?.state === 'listening', `HTTP ${resume.status}, ${resume.json?.state}`);
     const oldToken = call.sink.token;
     await call.discoverSink();
     r.harness('the resumed call has a fresh sink token', call.sink.token !== oldToken);
@@ -62,7 +62,7 @@ export default {
     const listeningBefore = (await call.state())?.listeningSeconds ?? 0;
     const lastToken = call.sink.token;
     const dismiss = await call.dismiss();
-    r.harness('Vera dismisses Nova', dismiss.status === 200 && dismiss.json?.state === 'left', `HTTP ${dismiss.status}`);
+    r.harness('Vera dismisses Milo', dismiss.status === 200 && dismiss.json?.state === 'left', `HTTP ${dismiss.status}`);
     await sleep(500);
     const post = await fetch(`${ctx.world.base}/api/internal/meeting-assistant/pcm/${encodeURIComponent(lastToken)}`, {
       method: 'POST', body: Buffer.alloc(6400),
@@ -86,20 +86,20 @@ export default {
     const first = await waitMinutes(p.vera, call, (m) => m.writer !== 'none');
     r.expect('the first period left minutes', !!first, first ? `${first.lineCount} line(s)` : 'none');
     const back = await p.nora.call('POST', `${call.A}/invite`, {});
-    r.expect('Nora invites Nova back into the call it left: a new period with her as the inviter', back.status === 200 && back.json?.state === 'listening' && back.json?.invitedBy === 'u-nora' && back.json?.period === 2,
+    r.expect('Nora invites Milo back into the call it left: a new period with her as the inviter', back.status === 200 && back.json?.state === 'listening' && back.json?.invitedBy === 'u-nora' && back.json?.period === 2,
       `HTTP ${back.status}, ${back.json?.state}, invited by ${back.json?.invitedBy}, period ${back.json?.period}`);
-    // The safety net dismisses Nova again if the run stops early (a paid run must never leave it listening).
+    // The safety net dismisses Milo again if the run stops early (a paid run must never leave it listening).
     if (back.status === 200) ctx.world.guard.onDismiss(async () => { const d = await p.nora.call('POST', `${call.A}/dismiss`); return { status: d.status, state: d.json?.state }; });
     r.expect('everyone else owes the acknowledgement again', JSON.stringify([...(back.json?.mustAck ?? [])].sort()) === JSON.stringify(['u-mia', 'u-vera']), JSON.stringify(back.json?.mustAck));
-    r.expect('the chat says Nova is back at Nora\'s invitation', (await call.chatMessages(p.vera)).some((m) => /^Nova is back in this call at .+'s invitation and is listening again\./.test(String(m.message))));
-    // Who was who was forgotten when Nova left: each person binds their media id again, and the others acknowledge again.
+    r.expect('the chat says Milo is back at Nora\'s invitation', (await call.chatMessages(p.vera)).some((m) => /^Milo is back in this call at .+'s invitation and is listening again\./.test(String(m.message))));
+    // Who was who was forgotten when Milo left: each person binds their media id again, and the others acknowledge again.
     for (const k of ['vera', 'nora', 'mia']) await call.bind(p[k]);
     for (const k of ['vera', 'mia']) await call.ack(p[k]);
     const leftToken = call.sink.token;
     await call.discoverSink();
     r.harness('the period after the invitation back has a fresh sink token', call.sink.token !== leftToken);
     const t0 = ctx.world.clock.now();
-    const again = ctx.say('vera', t0 + 1500, 'Nova, what is three plus three?', { dry: { reply: { text: 'Three plus three is six.', frames: 12 } } });
+    const again = ctx.say('vera', t0 + 1500, 'Milo, what is three plus three?', { dry: { reply: { text: 'Three plus three is six.', frames: 12 } } });
     for (const l of Object.values(ctx.lanes)) { l.sink = call.sink; l.startAt = t0; l.stopAt = Infinity; l.start(); }
     await ctx.until(again.endMs + 9000);
     await ctx.world.stopLanes();
@@ -109,7 +109,7 @@ export default {
     r.expect('after the invitation back a request is answered, labelled with Vera', !!six && six.metadata.askedBy === 'u-vera', six ? `labelled ${six.metadata.askedBy}` : 'no reply');
     const dismiss2 = await p.nora.call('POST', `${call.A}/dismiss`);
     ctx.world.guard.onDismiss(null);
-    r.harness('Nora dismisses Nova again', dismiss2.status === 200 && dismiss2.json?.state === 'left', `HTTP ${dismiss2.status}`);
+    r.harness('Nora dismisses Milo again', dismiss2.status === 200 && dismiss2.json?.state === 'left', `HTTP ${dismiss2.status}`);
     const both = await waitMinutes(p.vera, call, (m) => (m.additions ?? 0) >= 1);
     r.expect('the minutes were added to, not written twice: the earlier action items first, the line count covers both periods', !!both && !!first
       && JSON.stringify(both.actionItems.slice(0, first.actionItems.length).map((i) => i.text)) === JSON.stringify(first.actionItems.map((i) => i.text)) && both.lineCount > first.lineCount,

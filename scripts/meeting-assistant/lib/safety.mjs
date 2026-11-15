@@ -1,6 +1,6 @@
 // The safety shared by every meeting-assistant script that can spend money (live-e2e.mjs and scenarios.mjs).
 //
-//  * A `Guard` knows the middleware child, the temp folder and how to dismiss Nova. Every way out (normal end, SIGINT, SIGTERM, an
+//  * A `Guard` knows the middleware child, the temp folder and how to dismiss Milo. Every way out (normal end, SIGINT, SIGTERM, an
 //    uncaught error, a rejected promise, a scenario's hard stop) goes through `guard.shutdown()`: dismiss with a 3 second time box,
 //    then SIGTERM the child (SIGKILL after 2 seconds), then remove the temp folder. Dismissal is reported from the real answer.
 //  * The child also carries two limits of its own, so it ends the session by itself even if this process is gone:

@@ -1,4 +1,4 @@
-// late-joiner: Mia takes a seat after Nova was invited and has not acknowledged the notice. Her audio must not reach Nova: nothing she
+// late-joiner: Mia takes a seat after Milo was invited and has not acknowledged the notice. Her audio must not reach Milo: nothing she
 // says is stored, nothing answers it, and the unacknowledged counter rises. Once she acknowledges, her request is answered, labelled
 // with her.
 export default {
@@ -11,7 +11,7 @@ export default {
     for (const k of ['vera', 'nora', 'mia']) ctx.lane(k);
     ctx.at(500);
     ctx.next('vera', 'Mia just joined us, so let me recap the plan for the launch.', { gap: 500 });
-    const m1 = ctx.next('mia', 'Nova, what is two plus two?', { gap: 2500, dry: { reply: { text: 'Two plus two is four.', frames: 12 } } });
+    const m1 = ctx.next('mia', 'Milo, what is two plus two?', { gap: 2500, dry: { reply: { text: 'Two plus two is four.', frames: 12 } } });
     ctx.begin();
     await ctx.until(m1.endMs + 7000);
     const mid = await call.state(p.mia);
@@ -27,7 +27,7 @@ export default {
     const ack = await call.ack(p.mia);
     r.harness('Mia acknowledges the notice', ack.status === 200, `HTTP ${ack.status}`);
     await ctx.until(ctx.world.clock.now() + 2500);
-    const m2 = ctx.say('mia', ctx.world.clock.now() + 1200, 'Nova, what is the capital of Portugal?', { dry: { reply: { text: 'The capital of Portugal is Lisbon.', frames: 15 } } });
+    const m2 = ctx.say('mia', ctx.world.clock.now() + 1200, 'Milo, what is the capital of Portugal?', { dry: { reply: { text: 'The capital of Portugal is Lisbon.', frames: 15 } } });
     await ctx.until(m2.endMs + 8000);
     await ctx.world.stopLanes();
     await ctx.debug();

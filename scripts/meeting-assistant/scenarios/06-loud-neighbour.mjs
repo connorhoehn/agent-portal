@@ -1,4 +1,4 @@
-// loud-neighbour: Vera makes a short, quiet request to Nova while Nora's microphone is much louder than hers.
+// loud-neighbour: Vera makes a short, quiet request to Milo while Nora's microphone is much louder than hers.
 //  pass 1: Nora's lane carries keyboard clicks at four times Vera's level while Vera asks
 //  pass 2: Nora speaks at four times Vera's gain just before and just after Vera's request
 // In both, the asker must be Vera and the request must be stored under Vera.
@@ -10,7 +10,7 @@ export default {
     const { r } = ctx;
     const { p, call } = await ctx.setup({ people: ['vera', 'nora', 'mia'] });
     const veraGain = 0.25, noraGain = 1.0;
-    const q1 = 'Nova, what is two plus two?', q2 = 'Nova, what is three plus three?';
+    const q1 = 'Milo, what is two plus two?', q2 = 'Milo, what is three plus three?';
     const veraLevel = rms(gained(synth(q1, { voice: PEOPLE.vera.voice, dir: ctx.world.dir }).pcm, veraGain));
     // Click bursts: their peak is four times Vera's speech level (RMS), so their energy is well above hers in the mixed signal.
     ctx.lane('nora', { noise: { kind: 'clicks', level: Math.round(veraLevel * 4), fromMs: 3000, toMs: 11_000 } });

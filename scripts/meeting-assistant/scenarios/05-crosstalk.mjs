@@ -33,7 +33,7 @@ export default {
     place('mia', 'Agreed.', { prev: c1, inside: 5500 });
     // A request that starts while someone else is still talking: the first 40 percent of the request overlaps the end of that line.
     const d1 = place('vera', 'While we are on the launch, I also checked the release notes from last week and they still mention the old sign in page, so those need a pass before anything goes out to customers.', { gap: 2800 });
-    const req = place('mia', 'Nova, what is two plus two?', { prev: d1, overlap: 0.4, dry: { reply: { text: 'Two plus two is four.', frames: 12 } } });
+    const req = place('mia', 'Milo, what is two plus two?', { prev: d1, overlap: 0.4, dry: { reply: { text: 'Two plus two is four.', frames: 12 } } });
     ctx.begin();
     await ctx.until(Math.max(d1.endMs, req.endMs) + 9000);
     await ctx.world.stopLanes();

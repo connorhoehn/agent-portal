@@ -1,4 +1,4 @@
-// Demo-only preload for the live take of the Nova demo film (scripts/demo/nova-meeting-film.mjs --live), loaded through NODE_OPTIONS
+// Demo-only preload for the live take of the Milo demo film (scripts/demo/assistant-meeting-film.mjs --live), loaded through NODE_OPTIONS
 // into the film's own middleware and nowhere else. With MEETING_ASSISTANT_LIVE=1 the decision watcher's model check goes to
 // Bedrock; the film keeps that one check on its scripted stand-in (ScriptedDecisionModel) through the module's own injection seam
 // (setDecisionModelFactory), so the watcher still runs on the real transcript and only the yes/no judgement is scripted.

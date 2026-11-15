@@ -42,7 +42,7 @@ const HEARD_RMS = 150;
  *   dry.followup    string | (output) => { text, frames }  what is said once the call's output arrives
  *   dry.afterContext string | (content) => { text, frames }  what is said when the server appends context about that call (a write done or declined)
  *   dry.id          a name other entries can point at (`echoOf`)
- *   dry.remark      { text, frames }  an UNPROMPTED remark, as the real provider sometimes made one: once the line is heard Nova starts
+ *   dry.remark      { text, frames }  an UNPROMPTED remark, as the real provider sometimes made one: once the line is heard Milo starts
  *                   speaking (voiced audio first, its output transcript 300 ms later) though nobody addressed her
  *   dry.audioFirstMs  N  the real ordering for a request: `dry.reply` starts voicing at once, and the request's input transcript (and
  *                   then the reply's output transcript) follow N ms later. The wall time of each such reply's first voiced frame is
@@ -146,7 +146,7 @@ export class FakeProvider {
         const delta = typeof dry.transcript === 'string' ? dry.transcript : e.text;
         if (!delta) continue;
         // As the real provider sends it (paid run, 14 November): a word or two per delta, each with its own span, and no delta ever
-        // ends a sentence, so a turn ends only at a gap, a delegation or Nova's own speech (or the server's idle flush).
+        // ends a sentence, so a turn ends only at a gap, a delegation or Milo's own speech (or the server's idle flush).
         const heard = () => { for (const w of wordDeltas(delta, Math.max(0, reported(start)), Math.max(1, reported(end)))) { send({ type: 'session.input_transcript.delta', ...w }); this.seen.deltas += 1; } };
         if (dry.reply && dry.audioFirstMs) {
           // The answer is voiced before the request's own transcript has even arrived; its words come after that.
@@ -236,7 +236,7 @@ export class FakeProvider {
         // As the real one: the second model writes the words about the result (a message item), then the voice speaks them.
         if (r) later(300, () => { send({ type: 'response.event', event: { type: 'response.output_item.added', item: { type: 'message' } } }); later(400, () => speakText(r.text, r.frames ?? 25, entry.dry.id ? `${entry.dry.id}:followup` : undefined)); });
       } else if (ev.type === 'session.thinking.append') {
-        // Context the server appends (a write done, declined or expired): the call's `afterContext` says what Nova says about it.
+        // Context the server appends (a write done, declined or expired): the call's `afterContext` says what Milo says about it.
         const f = st.lastCall?.dry?.afterContext;
         const r = typeof f === 'function' ? f(String(ev.content ?? '')) : typeof f === 'string' ? { text: f, frames: 12 } : null;
         if (r) later(300, () => speakText(r.text, r.frames ?? 12, undefined));

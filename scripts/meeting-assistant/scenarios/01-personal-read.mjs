@@ -1,4 +1,4 @@
-// personal-read: a person asks Nova aloud for something about themselves that is not the budget (their unread messages). Nova runs the
+// personal-read: a person asks Milo aloud for something about themselves that is not the budget (their unread messages). Milo runs the
 // read in the asker's own browser. The marker sentence the stand-in returns stands for private content: it must reach only the asker.
 // Today the plan keeps only the budget and access-request status private (instructions.ts PRIVATE_TOOLS), so this is expected to FAIL:
 // any other read is answered to the whole call.
@@ -12,7 +12,7 @@ export default {
     for (const k of ['vera', 'nora', 'mia']) ctx.lane(k);
     const answer = (out) => { let say = ''; try { say = JSON.parse(out)?.say ?? ''; } catch { say = ''; } return { text: `Here is what I found. ${say}`, frames: 20 }; };
     ctx.say('nora', 800, 'I looked at the calendar sync ticket this morning and it seems fine.');
-    ctx.say('vera', 5000, 'Nova, what is in my unread messages?', { dry: { transcript: true, call: { name: 'summary', args: { kind: 'unread' } }, followup: answer, id: 'read' } });
+    ctx.say('vera', 5000, 'Milo, what is in my unread messages?', { dry: { transcript: true, call: { name: 'summary', args: { kind: 'unread' } }, followup: answer, id: 'read' } });
     const runner = ctx.turns('vera', (t) => ({ ok: true, say: `You have two unread messages and the note says ${MARKER}.`, delayMs: 300 }));
     await ctx.run(26_000);
     const turns = runner.log.filter((x) => x.tool === 'summary');

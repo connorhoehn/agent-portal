@@ -1,5 +1,5 @@
 // The world a scenario runs in: a fresh middleware (mock world, meeting assistant on) with its safety limits, the fake provider and
-// media server (or the pass-through proxy for the paid drop scenario), the people with their browser stand-ins, one call with Nova in it,
+// media server (or the pass-through proxy for the paid drop scenario), the people with their browser stand-ins, one call with Milo in it,
 // and the check classes. See safety.mjs for how a run always ends.
 //
 //   harness(name, ok, detail)  plumbing that must hold: a failure means the harness is wrong
@@ -132,7 +132,7 @@ export class Person {
   close() { try { this.ws?.close(); } catch { /* closed */ } this.stopTurns?.(); }
 
   /**
-   * The private answers this person received: what the browser's toast (NovaPrivateAnswers.tsx) shows is the notification
+   * The private answers this person received: what the browser's toast (AssistantPrivateAnswers.tsx) shows is the notification
    * of type `assistant-private-reply` for the call, delivered on this person's own gateway socket. Texts only.
    */
   privateAnswers(callId) {
@@ -227,7 +227,7 @@ export class World {
   async close() { try { await this.stopLanes(); } catch { /* ending */ } await this.guard.shutdown(); }
 }
 
-// ── One call with Nova in it ──────────────────────────────────────────────────────────────────────────────
+// ── One call with Milo in it ──────────────────────────────────────────────────────────────────────────────
 export class Call {
   /** Seat `inviter` and `others` in one call (the gateway's call verbs, as the portal sends them), join the call chat channel. */
   static async open(world, inviter, others) {
@@ -260,7 +260,7 @@ export class Call {
     p.send({ service: 'chat', action: 'join', channel: this.chat });
     await p.waitFrame((f) => f.type === 'chat' && f.action === 'joined' && f.channel === this.chat, 15_000).catch(() => { throw new Error(`${p.name} could not join ${this.chat}; saw ${p.frames.map((f) => `${f.type}/${f.action ?? ''}/${String(f.message ?? f.error ?? '').slice(0, 50)}`).slice(-6).join(' ')}`); });
   }
-  async inviteNova() {
+  async inviteAssistant() {
     const r = await this.inviter.call('POST', `${this.A}/invite`, {});
     if (r.status !== 201) throw new Error(`the invite was refused: HTTP ${r.status} ${JSON.stringify(r.json)?.slice(0, 120)}`);
     this.invitedAt = Date.now();
@@ -296,17 +296,17 @@ export class Call {
   audio() { return this.inviter.call('GET', `/api/dev/calls/${encodeURIComponent(this.callId)}/assistant-audio`).then((r) => r.json); }
   async transcript() { return (await this.inviter.call('GET', `${this.A}/transcript?limit=500`)).json?.lines ?? []; }
   async chatMessages(p = this.inviter) { return (await p.call('GET', `/api/calls/${encodeURIComponent(this.callId)}/chat?limit=100`)).json?.messages ?? []; }
-  /** Nova's messages in the call chat (replies, cards, notices). */
-  async novaMessages(p = this.inviter) { return (await this.chatMessages(p)).filter((m) => m.metadata?.assistant === true); }
+  /** Milo's messages in the call chat (replies, cards, notices). */
+  async assistantRows(p = this.inviter) { return (await this.chatMessages(p)).filter((m) => m.metadata?.assistant === true); }
   async dismiss() { const r = await this.inviter.call('POST', `${this.A}/dismiss`); this.world.guard.onDismiss(null); return r; }
 
   /**
-   * The ordinary start of a call: seat everyone, invite Nova, bind every participant id, acknowledge everyone named in `ack`
+   * The ordinary start of a call: seat everyone, invite Milo, bind every participant id, acknowledge everyone named in `ack`
    * (default: everybody but the inviter), optionally turn the voice on, find the sink and arm the scenario clock.
    */
   static async start(world, { inviter, others = [], ack = others, voice = false }) {
     const c = await Call.open(world, inviter, others);
-    await c.inviteNova();
+    await c.inviteAssistant();
     for (const p of c.seated) await c.bind(p);
     for (const p of ack) await c.ack(p);
     if (voice) await inviter.call('POST', `${c.A}/voice`, { on: true });

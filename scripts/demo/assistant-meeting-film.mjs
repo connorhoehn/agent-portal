@@ -1,40 +1,40 @@
 #!/usr/bin/env node
-// "Nova in the meeting": a demo film of the meeting assistant inside a call, recorded headless on the default mock world and
+// "Milo in the meeting": a demo film of the meeting assistant inside a call, recorded headless on the default mock world and
 // edited with ffmpeg. One command records and composes:
 //
-//   node scripts/demo/nova-meeting-film.mjs --out <dir>
+//   node scripts/demo/assistant-meeting-film.mjs --out <dir>
 //
 // It starts its own mock middleware (:3945) and portal (:5145), refuses ports already in use, signs three fictional people
 // into one call on the Observability Platform initiative (the media server is stubbed exactly as
 // scripts/journeys/meeting-assistant.mjs does, or, with --real-call, the call joins the local social profile's platform-api
 // and media server and each camera is the person's portrait, as in --live below), records each person's browser at 1440x900
 // with Playwright, and drives thirteen scenes at a brisk pace (waits where nothing changes play faster in the film). Every
-// spoken line is synthesised with the provider's text-to-speech (one voice per person, one for Nova; the key from
+// spoken line is synthesised with the provider's text-to-speech (one voice per person, one for Milo; the key from
 // middleware/.env, each line cached in <dir>/tts-cache) before it is "heard": the line is handed to the mock transcript
 // injector when the speech ends. It writes
 // <dir>/timeline.json (scenes, shots, which views, speech and click times, each in wall-clock ms and in ms on each
-// person's video), stops what it started, then runs scripts/demo/nova-film-compose.py to cut, caption and mix
-// <dir>/nova-in-the-meeting.mp4. Nothing is injected into the product pages: captions, labels and click rings exist
+// person's video), stops what it started, then runs scripts/demo/assistant-film-compose.py to cut, caption and mix
+// <dir>/assistant-in-the-meeting.mp4. Nothing is injected into the product pages: captions, labels and click rings exist
 // only in the edited video.
 //
-// Options: --record-only (no compose), --compose-only (reuse <dir>/timeline.json), --check (one frame per scene in <dir>/check), --max-minutes <n> (Nova's ceiling, so
+// Options: --record-only (no compose), --compose-only (reuse <dir>/timeline.json), --check (one frame per scene in <dir>/check), --max-minutes <n> (Milo's ceiling, so
 // the "min left" mark shows by scene 11; default 14.5), --real-call (needs FILM_SOCIAL_SETTINGS, below). Env: FILM_OUT may stand in
 // for --out; FILM_ENV_IS_COPY=1 says middleware/.env is a copy made for the run, removed once it has been read.
 //
 // What the mock world cannot say for itself: the scripted stand-in for the live model answers only fixed phrases
 // (middleware/src/lib/meeting-assistant/scripted-session.ts). So the one spoken question with a free answer (scene 4)
-// ends with the name ("..., Nova?"), which the detector treats as addressed with the request still to come; nothing
+// ends with the name ("..., Milo?"), which the detector treats as addressed with the request still to come; nothing
 // follows, so the stand-in answers nothing, and the story's answer is posted through the mock-only assistant-message
 // route, the same posting function the live session uses. Everything else is the product's own path: the budget read,
 // the action cards, the named write, the decision watcher, voice, pause, extend, dismiss, minutes and delete.
 //
-// --live records a real call instead (it costs money: Nova is the provider's live model). The call joins the platform-api and
+// --live records a real call instead (it costs money: Milo is the provider's live model). The call joins the platform-api and
 // media server of the local `social` compose profile; each person is a separate Chromium whose fake camera is their portrait
 // (a still y4m) and whose fake microphone is a WAV of their lines, laid out on one schedule from the moment the three
-// microphones are switched on together. Nova hears the call through the media server's taps; the people say the lines on
-// time and the script waits for what Nova does. The decision check alone stays scripted (film-scripted-decisions.mjs, a
-// preload of the film's own middleware). Nova's voice frames are kept from Vera's call socket with their arrival times, and
-// the compose step places them. Work files go to <dir>/live; the film is <dir>/nova-in-the-meeting-live.mp4. --until <n>
+// microphones are switched on together. Milo hears the call through the media server's taps; the people say the lines on
+// time and the script waits for what Milo does. The decision check alone stays scripted (film-scripted-decisions.mjs, a
+// preload of the film's own middleware). Milo's voice frames are kept from Vera's call socket with their arrival times, and
+// the compose step places them. Work files go to <dir>/live; the film is <dir>/assistant-in-the-meeting-live.mp4. --until <n>
 // stops after scene n (a short check). It needs, in the environment: FILM_SOCIAL_SETTINGS (the social profile's
 // .scratch/social-documents/settings.json), FILM_MEDIA_ADMIN_TOKEN and FILM_SINK_SECRET (the media node's ADMIN_TOKEN and
 // LIVE_CAPTIONS_SHARED_SECRET), the provider key in middleware/.env, and optionally FILM_MEDIA_URL (http://127.0.0.1:3901),
@@ -52,16 +52,16 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const args = process.argv.slice(2);
 const flag = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
 const OUT = flag('--out') ?? process.env.FILM_OUT;
-if (!OUT) { console.error('usage: nova-meeting-film.mjs --out <dir> [--live [--until <n>]] [--record-only | --compose-only] [--max-minutes <n>]'); process.exit(2); }
+if (!OUT) { console.error('usage: assistant-meeting-film.mjs --out <dir> [--live [--until <n>]] [--record-only | --compose-only] [--max-minutes <n>]'); process.exit(2); }
 const LIVE = args.includes('--live');
-/** The call joins the local social profile's platform-api and media server (portraits as cameras) instead of a stub: --live, or --real-call with the scripted Nova. */
+/** The call joins the local social profile's platform-api and media server (portraits as cameras) instead of a stub: --live, or --real-call with the scripted Milo. */
 const REAL_CALL = LIVE || args.includes('--real-call');
 const UNTIL = Number(flag('--until') ?? 99);
 /** Where this mode's work files go (the scripted film keeps its own in <dir>). */
 const DIR = LIVE ? path.join(OUT, 'live') : OUT;
-const FINAL = path.join(OUT, LIVE ? 'nova-in-the-meeting-live.mp4' : 'nova-in-the-meeting.mp4');
+const FINAL = path.join(OUT, LIVE ? 'assistant-in-the-meeting-live.mp4' : 'assistant-in-the-meeting.mp4');
 fs.mkdirSync(DIR, { recursive: true });
-const COMPOSE = path.join(ROOT, 'scripts', 'demo', 'nova-film-compose.py');
+const COMPOSE = path.join(ROOT, 'scripts', 'demo', 'assistant-film-compose.py');
 
 function compose() {
   const r = spawn('python3', [COMPOSE, '--out', DIR, '--final', FINAL, ...(args.includes('--check') ? ['--check'] : [])], { stdio: 'inherit' });
@@ -73,7 +73,7 @@ const MW_PORT = 3945;
 const PORTAL_PORT = 5145;
 const PORTAL = `http://localhost:${PORTAL_PORT}`;
 const MIDDLEWARE = `http://127.0.0.1:${MW_PORT}`;
-// Live: about the take's listening plus two minutes (the server's own ceiling on what Nova can cost).
+// Live: about the take's listening plus two minutes (the server's own ceiling on what Milo can cost).
 const MAX_MINUTES = Number(flag('--max-minutes') ?? (LIVE ? 8 : 14.5));
 const INITIATIVE = '/iq/projects/p-observability';
 const PRE_JOIN_KEY = 'orgiq.call-prejoin.v1';
@@ -85,34 +85,34 @@ const CAST = {
   nora: { userId: 'u-nora', role: 'sme', name: 'Nora DaSilva', label: 'Nora DaSilva · initiative owner', voice: 'Karen', personId: 'p-004' },
   eli: { userId: 'u-eli', role: 'sme', name: 'Eli Garcia', label: 'Eli Garcia · subject expert', voice: 'Daniel', personId: 'p-011' },
   layla: { userId: 'u-layla', role: 'sme', name: 'Layla Hassan', label: 'Layla Hassan · not in the call', voice: 'Tessa' },
-  nova: { name: 'Nova', voice: 'Moira' },
+  assistant: { name: 'Milo', voice: 'Moira' },
 };
 
 // ── The story's words. The first line each person says becomes their sentence in the minutes' summary, so those come
 // first and carry the topic. No "agreed", "let's go with", "I'll take" or "can you own" outside scenes 8 and 9 (the decision
 // watcher's trigger), and "I'll" only where an action item is meant. ──
 const SAY = {
-  greet: ['vera', 'Thanks, both of you. I am bringing Nova in, so we get minutes out of this.'],
+  greet: ['vera', 'Thanks, both of you. I am bringing Milo in, so we get minutes out of this.'],
   s3a: ['vera', 'The ingest launch is on the twenty-first, and on-call is drowning in alerts.'],
   s3b: ['nora', 'Most of last week\'s pages came from two checks: disk space and deploy latency.'],
   s3c: ['eli', 'The deploy latency alert fires on every rollout, so people have learned to ignore it.'],
   s3d: ['vera', 'That is what worries me. A real page could get lost in that noise.'],
-  s4q: ['vera', 'Before we change anything, how many of last week\'s pages were noise, Nova?'],
+  s4q: ['vera', 'Before we change anything, how many of last week\'s pages were noise, Milo?'],
   s4r: ['nora', 'Two thirds. That matches what the night shift told me.'],
-  s5q: ['nora', 'Nova, how much budget do I have left?'],
+  s5q: ['nora', 'Milo, how much budget do I have left?'],
   s5r: ['nora', 'Good, there is room for the extra dashboards.'],
-  s6q: ['vera', 'Nova, create a work item for raising the deploy latency alert threshold to five minutes.'],
-  s7q: ['vera', 'Nova, create a work item for rewriting the paging runbook and assign it to Nora.'],
+  s6q: ['vera', 'Milo, create a work item for raising the deploy latency alert threshold to five minutes.'],
+  s7q: ['vera', 'Milo, create a work item for rewriting the paging runbook and assign it to Nora.'],
   s7r: ['nora', 'Happy to own that one.'],
   s8a: ['nora', 'Let\'s go with paging only on customer facing alerts until the launch.'],
   s8b: ['eli', 'Agreed. Everything else can wait for the morning review.'],
   s9a: ['vera', 'And let\'s go with muting the disk space alerts for all of launch week.'],
   s9b: ['nora', 'Sounds good to me.'],
   s9c: ['eli', 'I have to object to that one.'],
-  s10q: ['vera', 'Nova, create a work item for a launch week on-call rota.'],
+  s10q: ['vera', 'Milo, create a work item for a launch week on-call rota.'],
   s11a: ['eli', 'While it is paused: the vendor quote came in high, and I would rather keep that out of the minutes.'],
   s11b: ['eli', 'I\'ll draft the new paging thresholds by Thursday.'],
-  s12a: ['vera', 'That is everything. Thanks, Nova.'],
+  s12a: ['vera', 'That is everything. Thanks, Milo.'],
 };
 const ANSWER_4 = 'Last week on-call got 64 pages. 41 of them were disk space or deploy latency alerts that cleared on their own within ten minutes.';
 const OBJECTION_9 = 'Disk alerts caught the March outage. Mute them for a day, not a week.';
@@ -122,21 +122,21 @@ class FilmFailure extends Error {}
 const must = (cond, msg) => { if (!cond) throw new FilmFailure(msg); };
 
 // ── The live take's words, on one schedule from the moment the three microphones open. Each line is [who, text, when], where
-// `when` is the silence before it after the previous line ends, or [line id, seconds] after that line ends. The gaps leave Nova
-// time to answer and the script time to click; the people never wait for Nova, so the gaps are generous and the edit cuts them.
+// `when` is the silence before it after the previous line ends, or [line id, seconds] after that line ends. The gaps leave Milo
+// time to answer and the script time to click; the people never wait for Milo, so the gaps are generous and the edit cuts them.
 // The scene 4 question is one the mock world can answer; the reactions fit any answer. No trigger words outside scenes 9 and 11. ──
 const LIVE_SAY = {
-  greet: ['vera', 'Thanks, both of you. I am bringing Nova in, so we get minutes out of this.', 3],
+  greet: ['vera', 'Thanks, both of you. I am bringing Milo in, so we get minutes out of this.', 3],
   s3a: ['vera', 'The ingest launch is on the twenty-first, and on-call is drowning in alerts.', 34],
   s3b: ['nora', 'Most of last week\'s pages came from two checks: disk space and deploy latency.', 1.6],
   s3c: ['eli', 'The deploy latency alert fires on every rollout, so people have learned to ignore it.', 1.6],
   s3d: ['vera', 'That is what worries me. A real page could get lost in that noise.', 1.6],
-  s4q: ['vera', 'Nova, what is the status of the Observability Platform initiative?', 3],
+  s4q: ['vera', 'Milo, what is the status of the Observability Platform initiative?', 3],
   s4r: ['nora', 'Thanks, that helps.', 24],
-  s5q: ['nora', 'Nova, how much budget do I have left this month?', 3],
+  s5q: ['nora', 'Milo, how much budget do I have left this month?', 3],
   s5r: ['nora', 'Good to know.', 18],
-  s6q: ['vera', 'Nova, create a work item for raising the deploy latency alert threshold to five minutes.', 4],
-  s7q: ['vera', 'Nova, create a work item for rewriting the paging runbook and assign it to Nora.', 24],
+  s6q: ['vera', 'Milo, create a work item for raising the deploy latency alert threshold to five minutes.', 4],
+  s7q: ['vera', 'Milo, create a work item for rewriting the paging runbook and assign it to Nora.', 24],
   s7r: ['nora', 'Happy to own that one.', 14],
   s8a: ['nora', 'Let\'s go with paging only on customer facing alerts until the launch.', 20],
   s8b: ['eli', 'Agreed. Everything else can wait for the morning review.', 1.6],
@@ -146,15 +146,15 @@ const LIVE_SAY = {
   s9a: ['vera', 'And let\'s go with muting the disk space alerts for all of launch week.', 4],
   s9b: ['nora', 'Sounds good to me.', 1.6],
   s9c: ['eli', 'I have to object to that one.', 16],
-  s12a: ['vera', 'That is everything. Thanks, Nova.', 28],
+  s12a: ['vera', 'That is everything. Thanks, Milo.', 28],
 };
 
 // ── Speech: every line synthesised once, before the recording starts, so its length paces the scene. The voices are the
-// provider's text-to-speech (one voice per person, and one for the scripted Nova); the key is read from middleware/.env and never
+// provider's text-to-speech (one voice per person, and one for the scripted Milo); the key is read from middleware/.env and never
 // printed. Each line is kept in <out>/tts-cache by a hash of its voice and words, so a retake costs nothing; the cost of new lines
 // (an estimate from the audio's length) is added to <out>/tts-cache/cost.json. Every clip is 48 kHz mono PCM WAV with its
 // leading and trailing silence trimmed, so it can be laid into a microphone file and the lines follow each other briskly. ──
-const TTS_VOICE = { vera: 'shimmer', nora: 'coral', eli: 'ash', layla: 'ballad', nova: 'sage' };
+const TTS_VOICE = { vera: 'shimmer', nora: 'coral', eli: 'ash', layla: 'ballad', assistant: 'sage' };
 const TTS_MODELS = ['gpt-4o-mini-tts', 'tts-1-hd'];
 const TTS_STYLE = 'Speak naturally and briskly, like a colleague in a work meeting: conversational, clear, not theatrical.';
 const TTS_CACHE = path.join(OUT, 'tts-cache');
@@ -264,7 +264,7 @@ if (REAL_CALL) {
   if (LIVE) console.log(`film --live: ${Object.keys(LINE).length} lines over ${(prevEnd / 1000).toFixed(0)} s from the microphones opening`);
 }
 console.log(`film: speech ready (new lines so far cost about $${ttsCost.usd.toFixed(3)} in all, ${ttsCost.lines} lines)`);
-// The scripted Nova needs no provider key: a copy made only for the speech goes before the server starts.
+// The scripted Milo needs no provider key: a copy made only for the speech goes before the server starts.
 if (!LIVE && process.env.FILM_ENV_IS_COPY === '1') { providerKey(); fs.rmSync(path.join(ROOT, 'middleware', '.env'), { force: true }); }
 
 // ── The stack: its own mock middleware and portal, as scripts/journeys/run-demo-moments.mjs starts them ──
@@ -301,7 +301,7 @@ for (const [port, what] of [[MW_PORT, 'middleware'], [PORTAL_PORT, 'portal']]) {
   if (!(await portFree(port))) { console.error(`port ${port} (${what}) is in use; nothing was started.`); process.exit(2); }
 }
 /**
- * Live: the social profile's middleware settings (scripts/social-documents.mjs `middlewareEnv`, with this middleware's port), Nova
+ * Live: the social profile's middleware settings (scripts/social-documents.mjs `middlewareEnv`, with this middleware's port), Milo
  * on the provider's live session hearing the media server's taps, the dead-man preload and the film's scripted decision check.
  */
 const need = (k) => { const v = process.env[k]; if (!v) { console.error(`film: set ${k} for a real call (see the header)`); process.exit(2); } return v; };
@@ -403,16 +403,16 @@ fs.rmSync(RAW, { recursive: true, force: true });
 let callId = null;
 const pageErrors = [];
 
-// ── Live: Nova's voice as Vera's browser receives it, each 100 ms frame with its arrival time (the compose step places it) ──
-const novaAudio = LIVE ? fs.createWriteStream(path.join(DIR, 'nova-audio.jsonl')) : null;
-const live = { events: [], late: [], audio: null, novaFrames: 0, spend: null, transcript: null, microphones: {} };
-function keepNovaVoice(page) {
+// ── Live: Milo's voice as Vera's browser receives it, each 100 ms frame with its arrival time (the compose step places it) ──
+const assistantAudioLog = LIVE ? fs.createWriteStream(path.join(DIR, 'assistant-voice.jsonl')) : null;
+const live = { events: [], late: [], audio: null, assistantFrames: 0, spend: null, transcript: null, microphones: {} };
+function keepAssistantVoice(page) {
   page.on('websocket', (ws) => ws.on('framereceived', ({ payload }) => {
     if (typeof payload !== 'string' || !payload.includes('assistant-audio')) return;
     let f; try { f = JSON.parse(payload); } catch { return; }
     if (f?.type !== 'assistant-audio' || typeof f.data?.pcm !== 'string') return;
-    live.novaFrames += 1;
-    novaAudio.write(`${JSON.stringify({ atMs: Date.now(), runId: f.data.runId, seq: f.data.seq, sampleRate: f.data.sampleRate, last: f.data.last === true, pcm: f.data.pcm })}\n`);
+    live.assistantFrames += 1;
+    assistantAudioLog.write(`${JSON.stringify({ atMs: Date.now(), runId: f.data.runId, seq: f.data.seq, sampleRate: f.data.sampleRate, last: f.data.last === true, pcm: f.data.pcm })}\n`);
   }));
 }
 
@@ -436,7 +436,7 @@ async function person(key, { call = true, video = key, nav = null } = {}) {
   must(role.status() === 200, `role ${who.role}: ${role.status()}`);
   if (call && REAL_CALL) {
     // Camera on at the join, microphone off: live, the three microphones open together later, so the three files share one clock;
-    // with the scripted Nova they stay off (the lines reach it through the mock transcript, and the soundtrack carries them).
+    // with the scripted Milo they stay off (the lines reach it through the mock transcript, and the soundtrack carries them).
     await context.addInitScript(([k]) => localStorage.setItem(k, JSON.stringify({ micOn: false, cameraOn: true, remember: true })), [PRE_JOIN_KEY]);
     // Notes when each capture opens (the microphone file plays from its first sample then); it changes nothing else.
     await context.addInitScript(() => {
@@ -467,7 +467,7 @@ async function person(key, { call = true, video = key, nav = null } = {}) {
   timeline.videos[video] = { who: key, startMs: Date.now(), file: null };
   page.on('pageerror', (e) => pageErrors.push(`${video}: ${e.message}`));
   page.on('request', (rq) => { const m = /\/api\/calls\/([^/]+)\/chat(?:\?|$)/.exec(new URL(rq.url()).pathname + new URL(rq.url()).search); if (m && !callId) callId = decodeURIComponent(m[1]); });
-  if (LIVE && key === 'vera') keepNovaVoice(page);
+  if (LIVE && key === 'vera') keepAssistantVoice(page);
   const p = { key, who, video, context, page, api: context.request };
   p.videoPath = page.video()?.path();
   if (nav) await page.goto(`${PORTAL}${nav}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -481,10 +481,10 @@ const waitFor = async (fn, ms, what) => {
 };
 const asApi = (rest) => `${PORTAL}/api/calls/${encodeURIComponent(callId)}/assistant/${rest}`;
 const chatMessages = async (p) => (await (await p.api.get(`${PORTAL}/api/calls/${encodeURIComponent(callId)}/chat?limit=100`)).json()).messages ?? [];
-const novaOf = async (p, kind) => (await chatMessages(p)).filter((m) => m.metadata?.kind === kind);
+const assistantOf = async (p, kind) => (await chatMessages(p)).filter((m) => m.metadata?.kind === kind);
 const stateOf = async (p) => (await (await p.api.get(asApi('state'))).json());
 const proposalsOf = async (p) => (await (await p.api.get(asApi('proposals'))).json()).proposals ?? [];
-const markText = async (p) => (await p.page.getByTestId('nova-mark').first().innerText().catch(() => '')).trim();
+const markText = async (p) => (await p.page.getByTestId('assistant-status-mark').first().innerText().catch(() => '')).trim();
 const waitMark = (p, re, ms = 20000) => waitFor(async () => re.test(await markText(p)), ms, `${p.key}'s mark reading ${re}`);
 async function devPost(route, body) {
   const res = await fetch(`${MIDDLEWARE}/api/dev/calls/${encodeURIComponent(callId)}/${route}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -502,10 +502,10 @@ async function speak(p, id, { heard = true, after = 250 } = {}) {
   if (heard) await inject(p.who.userId, c.text);
   await sleep(Math.min(after, 600));
 }
-/** Nova speaks aloud (only once its voice is on in the product): the clip starts when the words reach the chat. */
-async function novaSpeaks(text, atMs) {
-  const c = await synth('nova', text);
-  timeline.speech.push({ who: 'nova', text, file: c.file, atMs, durMs: c.durMs, heard: false });
+/** Milo speaks aloud (only once its voice is on in the product): the clip starts when the words reach the chat. */
+async function assistantSpeaks(text, atMs) {
+  const c = await synth('assistant', text);
+  timeline.speech.push({ who: 'assistant', text, file: c.file, atMs, durMs: c.durMs, heard: false });
   return c.durMs;
 }
 /** Shows the viewer what is about to be clicked: scroll into view, hover, a ring in the edited video, then the click. */
@@ -519,18 +519,18 @@ async function press(p, locator, { lead = 700, click = true } = {}) {
   await sleep(lead);
   if (click) await el.click();
 }
-/** Notes in the page the moment its Nova mark first reads "Nova is speaking" (the browser and this script share one clock). */
+/** Notes in the page the moment its Milo mark first reads "Milo is speaking" (the browser and this script share one clock). */
 async function watchSpeaking(p) {
   await p.page.evaluate(() => {
-    window.__novaSpeakingAt = null;
+    window.__assistantSpeakingAt = null;
     new MutationObserver(() => {
-      const el = document.querySelector('[data-testid="nova-mark"]');
-      if (el && window.__novaSpeakingAt === null && /Nova is speaking/.test(el.innerText || '')) window.__novaSpeakingAt = Date.now();
+      const el = document.querySelector('[data-testid="assistant-status-mark"]');
+      if (el && window.__assistantSpeakingAt === null && /Milo is speaking/.test(el.innerText || '')) window.__assistantSpeakingAt = Date.now();
     }).observe(document.body, { subtree: true, childList: true, characterData: true });
   });
 }
 async function menu(p, item) {
-  await press(p, p.page.getByTestId('nova-mark'), { lead: 550 });
+  await press(p, p.page.getByTestId('assistant-status-mark'), { lead: 550 });
   await press(p, p.page.getByRole('menuitem', { name: item }), { lead: 650 });
 }
 async function openChat(p) {
@@ -540,7 +540,7 @@ async function openChat(p) {
 }
 const proposalCard = (p, id) => p.page.locator(`[data-testid="assistant-proposal-card"][data-proposal-id="${id}"]`).last();
 const cardState = (p, id, state) => waitFor(async () => (await proposalCard(p, id).getAttribute('data-state')) === state, 25000, `${p.key}: the proposal card reading ${state}`);
-const deckOf = (p) => p.page.getByTestId('nova-proposal-ask');
+const deckOf = (p) => p.page.getByTestId('assistant-proposal-ask');
 const deckButton = (p, re) => deckOf(p).getByRole('button', { name: re });
 /** Scrolls the call chat to its newest message, as a person following the conversation would. */
 async function scrollChatToEnd(p) {
@@ -560,7 +560,7 @@ const follower = setInterval(() => { for (const p of following) void scrollChatT
 async function hidePrompt(p) {
   const hide = p.page.getByRole('button', { name: /^Hide$/ }).first();
   if (await hide.isVisible().catch(() => false)) { await hide.click().catch(() => undefined); await sleep(600); return; }
-  const deck = p.page.getByTestId('nova-proposal-ask');
+  const deck = p.page.getByTestId('assistant-proposal-ask');
   if (await deck.isVisible().catch(() => false)) { await deck.getByRole('button').first().focus().catch(() => undefined); await p.page.keyboard.press('Escape'); await sleep(600); }
 }
 /** Moves within the app as a link does, without a reload: a reload takes the person out of the call. */
@@ -588,7 +588,7 @@ async function scriptedFilm() {
   await sleep(2500);
 
   // ── 1. The call ──
-  beginScene(1, 'The call', 'Vera, Nora and Eli meet in a call on the Observability Platform initiative. Vera invites Nova from the call bar.');
+  beginScene(1, 'The call', 'Vera, Nora and Eli meet in a call on the Observability Platform initiative. Vera invites Milo from the call bar.');
   cut('full', [V('vera')]);
   await hold(2500);
   await press(vera, vera.page.getByTestId('initiative-start-call'));
@@ -607,28 +607,28 @@ async function scriptedFilm() {
   // On the real call each call card shows its viewer's own camera (the others fold into a count at this width): three portraits.
   if (REAL_CALL) { cut('rows3', [V('vera', 'callcard'), V('nora', 'callcard'), V('eli', 'callcard')]); await hold(4000); cut('full', [V('vera')]); }
   await speak(vera, 'greet', { heard: false, after: 500 });
-  await press(vera, vera.page.getByTestId('nova-invite'));
-  await waitMark(vera, /^Nova is listening/);
+  await press(vera, vera.page.getByTestId('assistant-invite'));
+  await waitMark(vera, /^Milo is listening/);
   await hold(3500);
   await shotPng(vera, 's01');
   endScene();
 
   // ── 2. Everyone is told ──
-  beginScene(2, 'Everyone is told', 'Nora and Eli see the transcription notice. Nova cannot hear them until each of them acknowledges it.');
-  await nora.page.getByTestId('nova-notice').waitFor({ timeout: 20000 });
-  await eli.page.getByTestId('nova-notice').waitFor({ timeout: 20000 });
+  beginScene(2, 'Everyone is told', 'Nora and Eli see the transcription notice. Milo cannot hear them until each of them acknowledges it.');
+  await nora.page.getByTestId('assistant-consent-notice').waitFor({ timeout: 20000 });
+  await eli.page.getByTestId('assistant-consent-notice').waitFor({ timeout: 20000 });
   cut('rows2', [V('nora', 'bottom'), V('eli', 'bottom')]);
   await hold(4500);
-  await press(nora, nora.page.getByTestId('nova-notice-acknowledge'));
-  await waitMark(nora, /^Nova is listening/);
+  await press(nora, nora.page.getByTestId('assistant-consent-notice-acknowledge'));
+  await waitMark(nora, /^Milo is listening/);
   await hold(1200);
-  await press(eli, eli.page.getByTestId('nova-notice-acknowledge'));
-  await waitMark(eli, /^Nova is listening/);
+  await press(eli, eli.page.getByTestId('assistant-consent-notice-acknowledge'));
+  await waitMark(eli, /^Milo is listening/);
   await hold(3000);
   endScene();
 
-  // ── 3. Nova listens ──
-  beginScene(3, 'Nova listens', 'The team talks. Nova keeps a transcript with each speaker\'s name (it shows on the meeting page afterwards) and stays quiet: nobody has asked it anything.');
+  // ── 3. Milo listens ──
+  beginScene(3, 'Milo listens', 'The team talks. Milo keeps a transcript with each speaker\'s name (it shows on the meeting page afterwards) and stays quiet: nobody has asked it anything.');
   cut(REAL_CALL ? 'rows3' : 'full', REAL_CALL ? [V('vera', 'callcard'), V('nora', 'callcard'), V('eli', 'callcard')] : [V('eli')]);
   await hold(800);
   await speak(vera, 's3a');
@@ -638,7 +638,7 @@ async function scriptedFilm() {
   endScene();
 
   // ── 4. A question, answered in the call chat ──
-  beginScene(4, 'Ask Nova', 'Vera asks Nova a question aloud. The answer appears in the call chat for everyone, labelled with who asked.');
+  beginScene(4, 'Ask Milo', 'Vera asks Milo a question aloud. The answer appears in the call chat for everyone, labelled with who asked.');
   cut('split', [V('vera', 'chat-top'), V('nora', 'chat-top')]);
   await hold(800);
   await speak(vera, 's4q', { after: 0 });
@@ -670,12 +670,12 @@ async function scriptedFilm() {
   endScene();
 
   // ── 6. An action only the asker confirms ──
-  beginScene(6, 'An action card', 'Vera asks for a work item. Nova shows a card that only Vera can confirm; Nora sees it waiting, with no buttons.');
+  beginScene(6, 'An action card', 'Vera asks for a work item. Milo shows a card that only Vera can confirm; Nora sees it waiting, with no buttons.');
   cut('split', [V('vera', 'chat-pane'), V('nora', 'chat-pane')]);
   await hold(600);
   await speak(vera, 's6q', { after: 0 });
   brisk();
-  const card6 = await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => /deploy latency/.test(m.metadata.summary ?? '')), 25000, 'the action card');
+  const card6 = await waitFor(async () => (await assistantOf(vera, 'assistant-action')).find((m) => /deploy latency/.test(m.metadata.summary ?? '')), 25000, 'the action card');
   const veraCard6 = vera.page.getByTestId('assistant-action-card').filter({ hasText: /deploy latency/ }).last();
   const noraCard6 = nora.page.getByTestId('assistant-action-card').filter({ hasText: /deploy latency/ }).last();
   await veraCard6.waitFor({ timeout: 20000 }); await noraCard6.waitFor({ timeout: 20000 });
@@ -684,7 +684,7 @@ async function scriptedFilm() {
   await shotPng(vera, 's06a');
   await press(vera, veraCard6.getByTestId('assistant-action-confirm'));
   brisk();
-  await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === card6.metadata.actionId && m.metadata.status === 'done'), 30000, 'the card going to done');
+  await waitFor(async () => (await assistantOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === card6.metadata.actionId && m.metadata.status === 'done'), 30000, 'the card going to done');
   await waitFor(async () => /Done/.test(await noraCard6.getByTestId('assistant-action-status').innerText()), 15000, 'Nora\'s card reading done');
   normal();
   await hold(4000);
@@ -722,8 +722,8 @@ async function scriptedFilm() {
   await shotPng(vera, 's07c');
   endScene();
 
-  // ── 8. Nova notices a decision ──
-  beginScene(8, 'A decision, noticed', 'Nobody asks Nova anything. When the team agrees, a silent proposal appears at the next pause, and each person is asked in their own prompt.');
+  // ── 8. Milo notices a decision ──
+  beginScene(8, 'A decision, noticed', 'Nobody asks Milo anything. When the team agrees, a silent proposal appears at the next pause, and each person is asked in their own prompt.');
   cut('split', [V('vera', 'chat-end'), V('eli', 'chat-end')]);
   await hold(600);
   await speak(nora, 's8a');
@@ -797,39 +797,39 @@ async function scriptedFilm() {
   }
   await sleep(1000);
 
-  // ── 10. Nova's voice ──
-  beginScene(10, 'Nova\'s voice', 'Vera turns Nova\'s voice on for the call. Nora mutes it for herself; for everyone else, Nova now answers aloud.');
+  // ── 10. Milo's voice ──
+  beginScene(10, 'Milo\'s voice', 'Vera turns Milo\'s voice on for the call. Nora mutes it for herself; for everyone else, Milo now answers aloud.');
   cut('full', [V('vera', 'corner')]);
   await hold(1200);
-  await menu(vera, "Turn Nova's voice on");
-  await waitFor(async () => (await vera.page.getByTestId('nova-mark').first().getAttribute('data-voice')) === 'true', 15000, 'voice on');
+  await menu(vera, "Turn Milo's voice on");
+  await waitFor(async () => (await vera.page.getByTestId('assistant-status-mark').first().getAttribute('data-voice')) === 'true', 15000, 'voice on');
   await hold(3000);
-  await waitFor(async () => (await nora.page.getByTestId('nova-mark').first().getAttribute('data-voice')) === 'true', 15000, 'voice on for Nora');
+  await waitFor(async () => (await nora.page.getByTestId('assistant-status-mark').first().getAttribute('data-voice')) === 'true', 15000, 'voice on for Nora');
   cut('full', [V('nora', 'corner')]);
   await hold(800);
-  await menu(nora, 'Mute Nova for me');
-  await waitFor(async () => (await nora.page.getByTestId('nova-mark').first().getAttribute('data-voice-muted')) === 'true', 8000, 'Nora\'s mute');
+  await menu(nora, 'Mute Milo for me');
+  await waitFor(async () => (await nora.page.getByTestId('assistant-status-mark').first().getAttribute('data-voice-muted')) === 'true', 8000, 'Nora\'s mute');
   await hold(1500);
   // The mute is per browser and changes no words on the mark: her menu now offers to unmute.
-  await press(nora, nora.page.getByTestId('nova-mark'), { lead: 700 });
-  await press(nora, nora.page.getByRole('menuitem', { name: 'Unmute Nova for me' }), { lead: 2200, click: false });
+  await press(nora, nora.page.getByTestId('assistant-status-mark'), { lead: 700 });
+  await press(nora, nora.page.getByRole('menuitem', { name: 'Unmute Milo for me' }), { lead: 2200, click: false });
   await nora.page.keyboard.press('Escape');
   await nora.page.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
   await hold(800);
   await shotPng(nora, 's10a');
   cut('rows2', [V('vera', 'mark-chat'), V('nora', 'mark-chat')]);
   await hold(800);
-  const repliesBefore = (await novaOf(vera, 'assistant-reply')).length;
+  const repliesBefore = (await assistantOf(vera, 'assistant-reply')).length;
   await watchSpeaking(vera);
   await speak(vera, 's10q', { after: 0 });
-  const reply10 = await waitFor(async () => (await novaOf(vera, 'assistant-reply')).slice(repliesBefore).find((m) => /confirm/i.test(m.message)), 25000, 'Nova\'s spoken reply');
-  // Nova's voice starts when the mark says it is speaking (the mock voice is a short tone, so the mark holds about a second);
+  const reply10 = await waitFor(async () => (await assistantOf(vera, 'assistant-reply')).slice(repliesBefore).find((m) => /confirm/i.test(m.message)), 25000, 'Milo\'s spoken reply');
+  // Milo's voice starts when the mark says it is speaking (the mock voice is a short tone, so the mark holds about a second);
   // a ring in the edit draws the eye to the mark for that moment.
-  const speakingAt = await waitFor(() => vera.page.evaluate(() => window.__novaSpeakingAt), 5000, 'the speaking mark').catch(() => null);
-  if (!speakingAt) console.log('  WARN: the mark never read "Nova is speaking"');
-  const markBox = await vera.page.getByTestId('nova-mark').first().boundingBox();
+  const speakingAt = await waitFor(() => vera.page.evaluate(() => window.__assistantSpeakingAt), 5000, 'the speaking mark').catch(() => null);
+  if (!speakingAt) console.log('  WARN: the mark never read "Milo is speaking"');
+  const markBox = await vera.page.getByTestId('assistant-status-mark').first().boundingBox();
   if (speakingAt && markBox) timeline.clicks.push({ video: 'vera', atMs: speakingAt - 150, leadMs: 1600, box: [markBox.x, markBox.y, markBox.width, markBox.height].map(Math.round) });
-  const spoken = await novaSpeaks(reply10.message, speakingAt ?? Date.now());
+  const spoken = await assistantSpeaks(reply10.message, speakingAt ?? Date.now());
   await shotPng(vera, 's10b');
   await sleep(Math.max(1500, spoken + 500));
   const card10 = vera.page.getByTestId('assistant-action-card').filter({ hasText: /on-call rota/ }).last();
@@ -839,16 +839,16 @@ async function scriptedFilm() {
   endScene();
 
   // ── 11. Pause, resume, time left ──
-  beginScene(11, 'Pause and time left', 'Anyone can pause Nova; nothing is heard or kept while it is paused. Near its time limit the mark shows the time left, and Vera extends it.');
+  beginScene(11, 'Pause and time left', 'Anyone can pause Milo; nothing is heard or kept while it is paused. Near its time limit the mark shows the time left, and Vera extends it.');
   cut('full', [V('eli', 'corner')]);
   await hold(1000);
-  await menu(eli, 'Pause Nova');
-  await waitMark(eli, /^Nova is paused/); await waitMark(vera, /^Nova is paused/);
+  await menu(eli, 'Pause Milo');
+  await waitMark(eli, /^Milo is paused/); await waitMark(vera, /^Milo is paused/);
   await hold(2000);
   await speak(eli, 's11a', { after: 1200 });
   await shotPng(eli, 's11a');
-  await menu(eli, 'Resume Nova');
-  await waitMark(eli, /^Nova is listening/); await waitMark(vera, /^Nova is listening/);
+  await menu(eli, 'Resume Milo');
+  await waitMark(eli, /^Milo is listening/); await waitMark(vera, /^Milo is listening/);
   await hold(1000);
   await speak(eli, 's11b', { after: 1200 });
   const state11 = await stateOf(vera);
@@ -864,13 +864,13 @@ async function scriptedFilm() {
   endScene();
 
   // ── 12. The minutes ──
-  beginScene(12, 'The minutes', 'Vera dismisses Nova. Nova leaves its minutes: a summary, the proposals, the action items, and the transcript by speaker.');
+  beginScene(12, 'The minutes', 'Vera dismisses Milo. Milo leaves its minutes: a summary, the proposals, the action items, and the transcript by speaker.');
   cut('full', [V('vera')]);
   await hold(800);
   await speak(vera, 's12a', { after: 400 });
-  await menu(vera, 'Dismiss Nova');
+  await menu(vera, 'Dismiss Milo');
   brisk();
-  await vera.page.getByTestId('nova-left').waitFor({ timeout: 20000 });
+  await vera.page.getByTestId('assistant-left').waitFor({ timeout: 20000 });
   const link = vera.page.getByTestId('assistant-notice-meeting-link').last();
   await link.waitFor({ state: 'visible', timeout: 30000 });
   normal();
@@ -908,7 +908,7 @@ async function scriptedFilm() {
 
   // ── 13. Who can see it, and deleting it ──
   layla = await person('layla', { call: false });
-  beginScene(13, 'Who can see it', 'Layla was not in the call, so the meeting is not there for her. Vera deletes the record, and Nova\'s messages in the call chat are blanked.');
+  beginScene(13, 'Who can see it', 'Layla was not in the call, so the meeting is not there for her. Vera deletes the record, and Milo\'s messages in the call chat are blanked.');
   cut('full', [V('layla', 'notfound')]);
   await layla.page.goto(`${PORTAL}/iq/meetings/${encodeURIComponent(callId)}`, { waitUntil: 'domcontentloaded', timeout: 40000 });
   await layla.page.getByTestId('meeting-not-found').waitFor({ timeout: 30000 });
@@ -927,13 +927,13 @@ async function scriptedFilm() {
   await hold(3000);
   await shotPng(vera, 's13b');
   await press(vera, confirmDelete);
-  // Nova's messages are blanked one by one before the page moves on (about 20 s on the real call's chat store): played fast.
+  // Milo's messages are blanked one by one before the page moves on (about 20 s on the real call's chat store): played fast.
   brisk(4);
   await vera.page.waitForURL(/\/iq\/meetings$/, { timeout: 90000 });
   normal();
   await hold(3000);
   skip();
-  await waitFor(async () => !/Answered privately|deploy latency/.test(await nora.page.getByTestId('huddle-thread').innerText()), 60000, 'Nova\'s words leaving Nora\'s chat');
+  await waitFor(async () => !/Answered privately|deploy latency/.test(await nora.page.getByTestId('huddle-thread').innerText()), 60000, 'Milo\'s words leaving Nora\'s chat');
   cut('full', [V('nora', 'chat-end')]);
   await hold(6000);
   await shotPng(nora, 's13c');
@@ -944,7 +944,7 @@ async function scriptedFilm() {
   await sleep(1500);
 }
 
-// ── The live take: the same story on a real call, with the provider's live model as Nova ──
+// ── The live take: the same story on a real call, with the provider's live model as Milo ──
 const micAt = {};
 const lineStart = (id) => micAt[LINE[id].who] + LINE[id].startMs;
 const lineEnd = (id) => lineStart(id) + LINE[id].durMs;
@@ -973,14 +973,14 @@ async function accept(p) {
 async function sinkCounters() {
   try { const j = await (await fetch(`${MIDDLEWARE}/api/dev/calls/${encodeURIComponent(callId)}/assistant-audio`)).json(); delete j.token; return j; } catch { return null; }
 }
-/** A ring in the edit on Nova's mark from the moment it read "Nova is speaking" (watchSpeaking must have been called first). */
+/** A ring in the edit on Milo's mark from the moment it read "Milo is speaking" (watchSpeaking must have been called first). */
 async function ringSpeaking(p) {
-  const at = await p.page.evaluate(() => { const t = window.__novaSpeakingAt; window.__novaSpeakingAt = null; return t; }).catch(() => null);
-  const box = await p.page.getByTestId('nova-mark').first().boundingBox().catch(() => null);
+  const at = await p.page.evaluate(() => { const t = window.__assistantSpeakingAt; window.__assistantSpeakingAt = null; return t; }).catch(() => null);
+  const box = await p.page.getByTestId('assistant-status-mark').first().boundingBox().catch(() => null);
   if (at && box) timeline.clicks.push({ video: p.video, atMs: at - 150, leadMs: 1600, box: [box.x, box.y, box.width, box.height].map(Math.round) });
   return at;
 }
-let novaIn = false;
+let assistantIn = false;
 async function readSpend() {
   const st = await stateOf(vera).catch(() => null);
   let mine = [];
@@ -1011,7 +1011,7 @@ async function liveFilm() {
   await sleep(2500);
 
   // ── 1. The call, through the media server ──
-  beginScene(1, 'The call', 'Vera, Nora and Eli meet in a call on the Observability Platform initiative, through the local media server; each camera shows the person\'s portrait. They switch their microphones on, and Vera invites Nova.');
+  beginScene(1, 'The call', 'Vera, Nora and Eli meet in a call on the Observability Platform initiative, through the local media server; each camera shows the person\'s portrait. They switch their microphones on, and Vera invites Milo.');
   cut('full', [V('vera')]);
   await hold(2500);
   await press(vera, vera.page.getByTestId('initiative-start-call'));
@@ -1046,14 +1046,14 @@ async function liveFilm() {
   for (const [id, l] of Object.entries(LINE)) {
     timeline.speech.push({ who: l.who, text: l.text, file: l.file, atMs: micAt[l.who] + l.startMs, durMs: l.durMs, heard: !['greet', 's10a'].includes(id), line: id });
   }
-  if (UNTIL <= 0) { await hold(3000); await shotPng(vera, 's01-mics'); endScene(); return; } // --until 0: the call alone, no Nova, no cost
+  if (UNTIL <= 0) { await hold(3000); await shotPng(vera, 's01-mics'); endScene(); return; } // --until 0: the call alone, no Milo, no cost
   const poll = setInterval(async () => { const c = await sinkCounters(); if (c) live.audio = c; }, 10_000);
   try {
     await until(lineEnd('greet') + 500, 'the invite');
-    await press(vera, vera.page.getByTestId('nova-invite'));
-    novaIn = true;
-    await waitMark(vera, /^Nova is listening/, 30000);
-    note('Nova is listening');
+    await press(vera, vera.page.getByTestId('assistant-invite'));
+    assistantIn = true;
+    await waitMark(vera, /^Milo is listening/, 30000);
+    note('Milo is listening');
     await hold(2000);
     await shotPng(vera, 's01b');
     endScene();
@@ -1066,58 +1066,58 @@ async function liveFilm() {
 
 async function liveScenes() {
   // ── 2. Everyone is told ──
-  beginScene(2, 'Everyone is told', 'Nora and Eli see the transcription notice. Nova cannot hear them until each of them acknowledges it.');
-  await nora.page.getByTestId('nova-notice').waitFor({ timeout: 20000 });
-  await eli.page.getByTestId('nova-notice').waitFor({ timeout: 20000 });
+  beginScene(2, 'Everyone is told', 'Nora and Eli see the transcription notice. Milo cannot hear them until each of them acknowledges it.');
+  await nora.page.getByTestId('assistant-consent-notice').waitFor({ timeout: 20000 });
+  await eli.page.getByTestId('assistant-consent-notice').waitFor({ timeout: 20000 });
   cut('rows2', [V('nora', 'bottom'), V('eli', 'bottom')]);
   await hold(3000);
-  await press(nora, nora.page.getByTestId('nova-notice-acknowledge'));
-  await waitMark(nora, /^Nova is listening/);
+  await press(nora, nora.page.getByTestId('assistant-consent-notice-acknowledge'));
+  await waitMark(nora, /^Milo is listening/);
   await hold(1000);
-  await press(eli, eli.page.getByTestId('nova-notice-acknowledge'));
-  await waitMark(eli, /^Nova is listening/);
+  await press(eli, eli.page.getByTestId('assistant-consent-notice-acknowledge'));
+  await waitMark(eli, /^Milo is listening/);
   await hold(2000);
   endScene();
   if (UNTIL <= 2) return;
 
-  // ── 3. Nova's voice, on early so it is heard from here on ──
-  beginScene(3, 'Nova\'s voice', 'Vera turns Nova\'s voice on for the call. Nora mutes it for herself; for everyone else, Nova now answers aloud as well as in the chat.');
+  // ── 3. Milo's voice, on early so it is heard from here on ──
+  beginScene(3, 'Milo\'s voice', 'Vera turns Milo\'s voice on for the call. Nora mutes it for herself; for everyone else, Milo now answers aloud as well as in the chat.');
   cut('full', [V('vera', 'corner')]);
   await hold(800);
-  await menu(vera, "Turn Nova's voice on");
-  await waitFor(async () => (await vera.page.getByTestId('nova-mark').first().getAttribute('data-voice')) === 'true', 15000, 'voice on');
+  await menu(vera, "Turn Milo's voice on");
+  await waitFor(async () => (await vera.page.getByTestId('assistant-status-mark').first().getAttribute('data-voice')) === 'true', 15000, 'voice on');
   await hold(1800);
-  await waitFor(async () => (await nora.page.getByTestId('nova-mark').first().getAttribute('data-voice')) === 'true', 15000, 'voice on for Nora');
+  await waitFor(async () => (await nora.page.getByTestId('assistant-status-mark').first().getAttribute('data-voice')) === 'true', 15000, 'voice on for Nora');
   cut('full', [V('nora', 'corner')]);
   await hold(600);
-  await menu(nora, 'Mute Nova for me');
-  await waitFor(async () => (await nora.page.getByTestId('nova-mark').first().getAttribute('data-voice-muted')) === 'true', 8000, 'Nora\'s mute');
+  await menu(nora, 'Mute Milo for me');
+  await waitFor(async () => (await nora.page.getByTestId('assistant-status-mark').first().getAttribute('data-voice-muted')) === 'true', 8000, 'Nora\'s mute');
   await hold(1000);
-  await press(nora, nora.page.getByTestId('nova-mark'), { lead: 600 });
-  await press(nora, nora.page.getByRole('menuitem', { name: 'Unmute Nova for me' }), { lead: 1800, click: false });
+  await press(nora, nora.page.getByTestId('assistant-status-mark'), { lead: 600 });
+  await press(nora, nora.page.getByRole('menuitem', { name: 'Unmute Milo for me' }), { lead: 1800, click: false });
   await nora.page.keyboard.press('Escape');
   await nora.page.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
   await hold(600);
   endScene();
   if (UNTIL <= 3) return;
 
-  // ── 4. Nova listens ──
-  beginScene(4, 'Nova listens', 'The team talks. Nova hears each person through the media server and keeps a transcript with each speaker\'s name (it shows on the meeting page afterwards). Nobody has asked it anything, so it stays quiet.');
+  // ── 4. Milo listens ──
+  beginScene(4, 'Milo listens', 'The team talks. Milo hears each person through the media server and keeps a transcript with each speaker\'s name (it shows on the meeting page afterwards). Nobody has asked it anything, so it stays quiet.');
   const quietBefore = (await chatMessages(vera)).filter((m) => m.metadata?.kind?.startsWith('assistant-')).length;
   await until(lineStart('s3a') - 1200, 'the talk');
   cut('full', [V('vera')]);
   await until(lineEnd('s3d') + 2000, 'the end of the talk');
-  note('scene 4 quiet', { novaMessages: (await chatMessages(vera)).filter((m) => m.metadata?.kind?.startsWith('assistant-')).length - quietBefore });
+  note('scene 4 quiet', { assistantRows: (await chatMessages(vera)).filter((m) => m.metadata?.kind?.startsWith('assistant-')).length - quietBefore });
   endScene();
   if (UNTIL <= 4) return;
 
   // ── 5. A question, answered aloud and in the call chat ──
-  beginScene(5, 'Ask Nova', 'Vera asks Nova a question aloud. Nova looks it up and answers aloud and in the call chat, labelled with who asked.');
-  const replies5 = (await novaOf(vera, 'assistant-reply')).length;
+  beginScene(5, 'Ask Milo', 'Vera asks Milo a question aloud. Milo looks it up and answers aloud and in the call chat, labelled with who asked.');
+  const replies5 = (await assistantOf(vera, 'assistant-reply')).length;
   await watchSpeaking(vera);
   await until(lineStart('s4q') - 800, 'the question');
   cut('split', [V('vera', 'chat-top'), V('nora', 'chat-top')]);
-  const reply5 = await waitFor(async () => (await novaOf(vera, 'assistant-reply')).slice(replies5).find((m) => m.metadata?.askedBy === CAST.vera.userId), msUntil(lineStart('s4r') + 6000), 'Nova\'s answer to Vera').catch(() => null);
+  const reply5 = await waitFor(async () => (await assistantOf(vera, 'assistant-reply')).slice(replies5).find((m) => m.metadata?.askedBy === CAST.vera.userId), msUntil(lineStart('s4r') + 6000), 'Milo\'s answer to Vera').catch(() => null);
   note('scene 5 answer', { text: reply5?.message ?? null });
   await sleep(1500);
   note('scene 5 spoke', { at: await ringSpeaking(vera) });
@@ -1141,11 +1141,11 @@ async function liveScenes() {
   if (UNTIL <= 6) return;
 
   // ── 7. An action only the asker confirms ──
-  beginScene(7, 'An action card', 'Vera asks for a work item. Nova shows a card that only Vera can confirm; Nora sees it waiting, with no buttons.');
-  const actions7 = (await novaOf(vera, 'assistant-action')).map((m) => m.metadata.actionId);
+  beginScene(7, 'An action card', 'Vera asks for a work item. Milo shows a card that only Vera can confirm; Nora sees it waiting, with no buttons.');
+  const actions7 = (await assistantOf(vera, 'assistant-action')).map((m) => m.metadata.actionId);
   await until(lineStart('s6q') - 800, 'the work item request');
   cut('split', [V('vera', 'chat-mid'), V('nora', 'chat-mid')]);
-  const card7 = await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => !actions7.includes(m.metadata.actionId)), msUntil(lineEnd('s6q') + 20000), 'the action card').catch(() => null);
+  const card7 = await waitFor(async () => (await assistantOf(vera, 'assistant-action')).find((m) => !actions7.includes(m.metadata.actionId)), msUntil(lineEnd('s6q') + 20000), 'the action card').catch(() => null);
   note('scene 7 card', card7 ? { summary: card7.metadata.summary, askedBy: card7.metadata.askedBy } : { none: true });
   if (card7) {
     const word = /latency|threshold|deploy/i;
@@ -1155,7 +1155,7 @@ async function liveScenes() {
     await hold(3000);
     await shotPng(vera, 's07a');
     await press(vera, veraCard.getByTestId('assistant-action-confirm'));
-    await waitFor(async () => (await novaOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === card7.metadata.actionId && m.metadata.status === 'done'), 30000, 'the card going to done');
+    await waitFor(async () => (await assistantOf(vera, 'assistant-action')).find((m) => m.metadata.actionId === card7.metadata.actionId && m.metadata.status === 'done'), 30000, 'the card going to done');
     await waitFor(async () => /Done/.test(await noraCard.getByTestId('assistant-action-status').innerText()), 15000, 'Nora\'s card reading done').catch(() => undefined);
     note('scene 7 done');
     await hold(2500);
@@ -1166,13 +1166,13 @@ async function liveScenes() {
   // ── 8. A write that names someone else ──
   beginScene(8, 'A write that needs Nora', 'Vera asks for a work item assigned to Nora. It becomes a proposal that needs Nora\'s consent; once she gives it, Vera\'s browser runs it.');
   const proposals8 = (await proposalsOf(vera)).map((p) => p.id);
-  const actions8 = (await novaOf(vera, 'assistant-action')).map((m) => m.metadata.actionId);
+  const actions8 = (await assistantOf(vera, 'assistant-action')).map((m) => m.metadata.actionId);
   await until(lineStart('s7q') - 800, 'the runbook request');
   cut('split', [V('vera', 'chat-end'), V('nora', 'chat-end')]);
   const got8 = await waitFor(async () => {
     const pr = (await proposalsOf(vera)).find((p) => !proposals8.includes(p.id) && p.source === 'asked');
     if (pr) return { proposal: pr };
-    const ac = (await novaOf(vera, 'assistant-action')).find((m) => !actions8.includes(m.metadata.actionId));
+    const ac = (await assistantOf(vera, 'assistant-action')).find((m) => !actions8.includes(m.metadata.actionId));
     return ac ? { action: ac } : null;
   }, msUntil(lineEnd('s7q') + 22000), 'the runbook request\'s outcome').catch(() => null);
   note('scene 8', got8?.proposal ? { proposal: got8.proposal.statement, named: got8.proposal.named } : got8?.action ? { action: got8.action.metadata.summary } : { none: true });
@@ -1207,8 +1207,8 @@ async function liveScenes() {
   endScene();
   if (UNTIL <= 8) return;
 
-  // ── 9. Nova notices a decision ──
-  beginScene(9, 'A decision, noticed', 'Nobody asks Nova anything. When the team agrees, a silent proposal appears at the next pause, and each person is asked in their own prompt.');
+  // ── 9. Milo notices a decision ──
+  beginScene(9, 'A decision, noticed', 'Nobody asks Milo anything. When the team agrees, a silent proposal appears at the next pause, and each person is asked in their own prompt.');
   const before9 = (await proposalsOf(vera)).map((p) => p.id);
   await until(lineStart('s8a') - 800, 'the decision talk');
   cut('split', [V('vera', 'chat-end'), V('eli', 'chat-end')]);
@@ -1255,20 +1255,20 @@ async function liveScenes() {
   if (UNTIL <= 9) return;
 
   // ── 10. Pause (it also covers the watcher's two minutes between proposals) ──
-  beginScene(10, 'Pause', 'Eli pauses Nova. Nothing is heard or kept while it is paused, so his aside about the vendor quote never reaches Nova or the minutes. Then he resumes it.');
+  beginScene(10, 'Pause', 'Eli pauses Milo. Nothing is heard or kept while it is paused, so his aside about the vendor quote never reaches Milo or the minutes. Then he resumes it.');
   cut('full', [V('eli', 'corner')]);
   await hold(800);
-  await menu(eli, 'Pause Nova');
-  await waitMark(eli, /^Nova is paused/); await waitMark(vera, /^Nova is paused/);
+  await menu(eli, 'Pause Milo');
+  await waitMark(eli, /^Milo is paused/); await waitMark(vera, /^Milo is paused/);
   note('paused', { beforeAsideMs: lineStart('s10a') - Date.now() });
-  if (Date.now() > lineStart('s10a') - 300) console.log('  WARN: paused after the aside began: Nova may have heard it');
+  if (Date.now() > lineStart('s10a') - 300) console.log('  WARN: paused after the aside began: Milo may have heard it');
   await until(lineEnd('s10a') + 1200, 'the end of the aside');
   await shotPng(eli, 's10a');
   skip();
   await until(Math.max(lineStart('s10b') - 6500, p8At + 95_000), 'the resume');
   cut('full', [V('eli', 'corner')]);
-  await menu(eli, 'Resume Nova');
-  await waitMark(eli, /^Nova is listening/, 30000); await waitMark(vera, /^Nova is listening/, 30000);
+  await menu(eli, 'Resume Milo');
+  await waitMark(eli, /^Milo is listening/, 30000); await waitMark(vera, /^Milo is listening/, 30000);
   note('resumed', { beforeLineMs: lineStart('s10b') - Date.now(), sinceProposalMs: Date.now() - p8At });
   await until(lineEnd('s10b') + 1200, 'the end of Eli\'s action item');
   endScene();
@@ -1314,7 +1314,7 @@ async function liveScenes() {
   if (UNTIL <= 11) return;
 
   // ── 12. Time left ──
-  beginScene(12, 'Time left', 'Nova\'s mark shows the time left on its listening limit. Vera extends it.');
+  beginScene(12, 'Time left', 'Milo\'s mark shows the time left on its listening limit. Vera extends it.');
   cut('full', [V('vera', 'corner')]);
   await waitFor(async () => /min left/.test(await markText(vera)), 6000, 'the time-left mark').catch(() => undefined);
   note('time left', { mark: await markText(vera) });
@@ -1327,20 +1327,20 @@ async function liveScenes() {
   if (UNTIL <= 12) return;
 
   // ── 13. The minutes ──
-  beginScene(13, 'The minutes', 'Vera thanks Nova and dismisses it. Nova leaves its minutes: a summary, the proposals, the action items, and the transcript by speaker.');
-  const replies13 = (await novaOf(vera, 'assistant-reply')).length;
+  beginScene(13, 'The minutes', 'Vera thanks Milo and dismisses it. Milo leaves its minutes: a summary, the proposals, the action items, and the transcript by speaker.');
+  const replies13 = (await assistantOf(vera, 'assistant-reply')).length;
   await until(lineStart('s12a') - 800, 'the goodbye');
   cut('full', [V('vera')]);
   await until(lineEnd('s12a'), 'the end of the goodbye');
-  const thanks = await waitFor(async () => (await novaOf(vera, 'assistant-reply')).slice(replies13)[0], 7000, 'a reply to the thanks').catch(() => null);
+  const thanks = await waitFor(async () => (await assistantOf(vera, 'assistant-reply')).slice(replies13)[0], 7000, 'a reply to the thanks').catch(() => null);
   note('scene 13 reply', { text: thanks?.message ?? null });
   await hold(thanks ? 3500 : 800);
   live.audio = (await sinkCounters()) ?? live.audio;
   note('sink counters', live.audio);
   await keepTranscript();
-  await menu(vera, 'Dismiss Nova');
-  novaIn = false;
-  await vera.page.getByTestId('nova-left').waitFor({ timeout: 20000 });
+  await menu(vera, 'Dismiss Milo');
+  assistantIn = false;
+  await vera.page.getByTestId('assistant-left').waitFor({ timeout: 20000 });
   await readSpend();
   const link = vera.page.getByTestId('assistant-notice-meeting-link').last();
   await link.waitFor({ state: 'visible', timeout: 30000 });
@@ -1371,7 +1371,7 @@ async function liveScenes() {
 
   // ── 14. Who can see it, and deleting it ──
   layla = await person('layla', { call: false });
-  beginScene(14, 'Who can see it', 'Layla was not in the call, so the meeting is not there for her. Vera deletes the record, and Nova\'s messages in the call chat are blanked.');
+  beginScene(14, 'Who can see it', 'Layla was not in the call, so the meeting is not there for her. Vera deletes the record, and Milo\'s messages in the call chat are blanked.');
   cut('full', [V('layla', 'notfound')]);
   await layla.page.goto(`${PORTAL}/iq/meetings/${encodeURIComponent(callId)}`, { waitUntil: 'domcontentloaded', timeout: 40000 });
   await layla.page.getByTestId('meeting-not-found').waitFor({ timeout: 30000 });
@@ -1391,7 +1391,7 @@ async function liveScenes() {
   await press(vera, confirmDelete);
   await vera.page.waitForURL(/\/iq\/meetings$/, { timeout: 20000 });
   await hold(3000);
-  await waitFor(async () => !/Answered privately/.test(await nora.page.getByTestId('huddle-thread').innerText()), 30000, 'Nova\'s words leaving Nora\'s chat').catch(() => undefined);
+  await waitFor(async () => !/Answered privately/.test(await nora.page.getByTestId('huddle-thread').innerText()), 30000, 'Milo\'s words leaving Nora\'s chat').catch(() => undefined);
   cut('full', [V('nora', 'chat-end')]);
   await hold(6000);
   await shotPng(nora, 's14b');
@@ -1410,13 +1410,13 @@ try {
   clearInterval(follower);
   if (REAL_CALL && !LIVE) {
     timeline.cards = {
-      close: { title: 'Nova', eyebrow: 'A real call through the local media server; Nova\'s side scripted on the mock world: fictional people and data, synthetic voices', text: 'Hears the call, answers in the chat or aloud, asks before it writes, notices what the team agrees, and leaves minutes only the people in the call can read.' },
+      close: { title: 'Milo', eyebrow: 'A real call through the local media server; Milo\'s side scripted on the mock world: fictional people and data, synthetic voices', text: 'Hears the call, answers in the chat or aloud, asks before it writes, notices what the team agrees, and leaves minutes only the people in the call can read.' },
     };
   }
   if (LIVE) {
-    // Nova still in the call (a failure, or --until): dismissed, so nothing more is billed, and what it cost read back.
-    if (novaIn && vera && callId) {
-      novaIn = false;
+    // Milo still in the call (a failure, or --until): dismissed, so nothing more is billed, and what it cost read back.
+    if (assistantIn && vera && callId) {
+      assistantIn = false;
       await keepTranscript().catch(() => undefined);
       live.audio = (await sinkCounters()) ?? live.audio;
       const r = await vera.api.post(asApi('dismiss')).catch(() => null);
@@ -1427,11 +1427,11 @@ try {
     for (const p of [vera, nora, eli].filter(Boolean)) {
       live.microphones[`${p.key}Captures`] = await p.page.evaluate(() => (window.__filmCaptures ?? []).map((c) => `${c.audio ? 'a' : ''}${c.video ? 'v' : ''}@${c.openedAt}`)).catch(() => null);
     }
-    await new Promise((r) => novaAudio.end(r));
+    await new Promise((r) => assistantAudioLog.end(r));
     timeline.live = live;
     timeline.cards = {
-      open: { title: 'Nova in the meeting', eyebrow: 'Observability Platform · a live call with Vera, Nora and Eli', text: 'A real call through the local media server, with the live model as Nova: it hears everyone, answers when asked, acts only with consent, and leaves minutes behind.' },
-      close: { title: 'Nova', eyebrow: 'Recorded live on the mock world: fictional people and data, synthetic voices', text: 'Hears the call, answers in the chat or aloud, asks before it writes, notices what the team agrees, and leaves minutes only the people in the call can read.' },
+      open: { title: 'Milo in the meeting', eyebrow: 'Observability Platform · a live call with Vera, Nora and Eli', text: 'A real call through the local media server, with the live model as Milo: it hears everyone, answers when asked, acts only with consent, and leaves minutes behind.' },
+      close: { title: 'Milo', eyebrow: 'Recorded live on the mock world: fictional people and data, synthetic voices', text: 'Hears the call, answers in the chat or aloud, asks before it writes, notices what the team agrees, and leaves minutes only the people in the call can read.' },
     };
   }
   // Each video's clock: its recorder writes frames until its page has finished closing, so its first frame was `duration` before
