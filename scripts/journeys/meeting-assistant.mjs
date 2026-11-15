@@ -178,7 +178,8 @@ async function main() {
     });
     await context.route(`${STAND_IN_SFU}/**`, (route) => {
       const p = new URL(route.request().url()).pathname;
-      return route.fulfill({ json: p.endsWith('/join') ? { participantId: `participant-${who.userId}`, token: null } : p.endsWith('/end') ? { ok: true } : { sessionId: 'meeting-assistant-signalling-only' } });
+      // The session records (as the platform API's default does), so the call block shows its recording indicator.
+      return route.fulfill({ json: p.endsWith('/join') ? { participantId: `participant-${who.userId}`, token: null } : p.endsWith('/end') ? { ok: true } : { sessionId: 'meeting-assistant-signalling-only', recording: { enabled: true, reason: 'default' } } });
     });
     const page = await context.newPage();
     watch(page, who.userId);
@@ -789,6 +790,61 @@ async function main() {
       await eli.page.getByTestId('shell-call-dock').waitFor({ timeout: 30000 });
       await waitFor(async () => (await stateOf(eli)).state === 'listening', 20000, 'the third person seeing Nova listening');
       return 'three people in the call';
+    });
+
+    await step('G1: with three people the call block is a gallery of three tiles side by side (You first, names, no "+2"), no recording banner on a line of its own, and the recording dot on its meta line named with the whole warning (screenshots at 1440 and 1280)', async () => {
+      const blockSel = '[data-testid="shell-call-media"][data-expanded="true"] section[data-call-dock]';
+      if (!(await vera.page.locator(blockSel).first().isVisible().catch(() => false))) await vera.page.getByTestId('shell-call-dock-chat').click();
+      await vera.page.locator(blockSel).first().waitFor({ timeout: 20000 });
+      const tilesNow = async () => vera.page.evaluate((sel) => [...document.querySelectorAll(sel)].map((b) => `${b.getAttribute('data-layout')}:${b.querySelectorAll('[data-peer-id]').length} tiles "${b.querySelector('[data-testid="call-dock-meta"]')?.textContent ?? ''}" ${b.querySelector('[data-variant]')?.getAttribute('data-variant') ?? ''}`).join(' | '), blockSel);
+      await waitFor(async () => (await vera.page.locator(`${blockSel} [data-peer-id]`).count()) === 3, 20000, 'three tiles in the call block')
+        .catch(async (e) => { throw new StepFailure(`${e.message}: ${await tilesNow()}`); });
+      const seenAt = [];
+      for (const width of [1440, 1280]) {
+        await vera.page.setViewportSize({ width, height: 900 }); await sleep(700);
+        const r = await vera.page.evaluate((sel) => {
+          const block = document.querySelector(sel);
+          const tiles = [...block.querySelectorAll('[data-peer-id]')];
+          const rects = tiles.map((t) => t.getBoundingClientRect());
+          const media = block.closest('[data-testid="shell-call-media"]');
+          const dot = block.querySelector('[data-testid="call-recording-indicator-dot"]');
+          return {
+            layout: block.getAttribute('data-layout'),
+            count: tiles.length,
+            first: tiles[0]?.getAttribute('aria-label') ?? '',
+            names: tiles.map((t) => t.querySelector('[data-tile-label] span')?.textContent ?? ''),
+            sizes: [...new Set(rects.map((b) => `${Math.round(b.width)}x${Math.round(b.height)}`))],
+            tops: [...new Set(rects.map((b) => Math.round(b.top)))],
+            overlap: rects.some((b, i) => i > 0 && b.left < rects[i - 1].right - 1 && Math.round(b.top) === Math.round(rects[i - 1].top)),
+            plus: block.querySelectorAll('[data-testid$="-wrapped"], [data-testid$="-overflow"]').length,
+            banner: [...document.querySelectorAll('[data-testid="recording-consent"], [data-placement="line"]')].length
+              + [...(media?.querySelectorAll('[role="alert"], [data-testid$="-notice"]') ?? [])].filter((el) => /record/i.test(el.textContent ?? '')).length,
+            dotName: dot?.getAttribute('aria-label') ?? null,
+            dotFocusable: dot?.getAttribute('tabindex') === '0',
+            dotInMeta: !!dot?.closest('[data-testid="call-dock-meta-line"]'),
+            meta: block.querySelector('[data-testid="call-dock-meta"]')?.textContent ?? '',
+            height: Math.round(block.getBoundingClientRect().height),
+          };
+        }, blockSel);
+        check(r.layout === 'compact', `the block's layout is ${r.layout} at ${width}`);
+        check(r.count === 3, `${r.count} tiles for three people at ${width}`);
+        check(r.first === 'You' || r.first.startsWith('You,'), `the first tile is "${r.first}" at ${width}`);
+        check(r.names.every((n) => n.trim().length > 0) && r.names[0] === 'You', `tile names ${JSON.stringify(r.names)} at ${width}`);
+        check(r.sizes.length === 1, `the tiles differ in size at ${width}: ${r.sizes.join(', ')}`);
+        check(r.tops.length === 1 && !r.overlap, `the three tiles are not side by side on one line at ${width} (tops ${r.tops.join(', ')})`);
+        check(r.plus === 0, `a +N shows for three people at ${width}`);
+        check(r.banner === 0, `a recording banner takes a line of its own at ${width}`);
+        check(r.dotName === 'Recording. By attending you agree to be included.', `the recording dot is named "${r.dotName}" at ${width}`);
+        check(r.dotFocusable && r.dotInMeta, `the recording dot is ${r.dotFocusable ? '' : 'not focusable'}${r.dotInMeta ? '' : ' not on the meta line'} at ${width}`);
+        // The stand-in SFU never connects media, so the meta line may still read "Connecting…"; the tiles are the seats.
+        check(/^3 people · |^Connecting/.test(r.meta), `the meta line reads "${r.meta}" at ${width}`);
+        check(r.height <= 120, `the call block is ${r.height}px tall at ${width}`);
+        seenAt.push(`${width}: ${r.count} tiles ${r.sizes[0]} (${r.names.join(', ')}), block ${r.height}px, "${r.meta}" + dot`);
+        await shot(vera.page, 'G1-call-block-three', width);
+        await vera.page.locator(blockSel).first().screenshot({ path: path.join(SHOTS, `G1-call-block-only-${width}.png`) });
+      }
+      await vera.page.setViewportSize({ width: 1440, height: 900 });
+      return seenAt.join('; ');
     });
 
     await step('P2a: the lines Nova heard are shown to people who were in the call; a named person who was never in it sees the statement and who raised it, never the lines', async () => {
