@@ -87,19 +87,30 @@ describe('the inviter delete (memory store)', () => {
     expect(await store.getMinutes(CALL)).toMatchObject({ deleted: { at: 9500, by: 'u-vera' } });
   });
 
-  it("replaces Nova's chat text through updateThreadMessage and leaves people's messages alone", async () => {
-    await eraseCall(store, CALL, 'u-vera', 9500);
-    const rows = await chat.listMessages(`orgiq:huddle:${CALL}`, 100);
-    const nova = rows.filter((m) => m.userId === NOVA_USER_ID);
-    expect(nova).toHaveLength(3);
-    for (const m of nova) expect(m.message).toBe(DELETED_RECORD_LINE);
-    expect(updates).toHaveLength(3);
-    const card = nova.find((m) => m.metadata?.['kind'] === 'assistant-action')!;
-    expect(card.metadata).toMatchObject({ summary: DELETED_RECORD_LINE, status: 'waiting', actionId: 'a1' });
-    expect(card.metadata?.['detail']).toBeUndefined(); expect(card.metadata?.['resultText']).toBeUndefined();
-    expect(nova.find((m) => m.metadata?.['kind'] === 'assistant-notice')!.metadata?.['meetingCallId']).toBeUndefined(); // the link goes with the page
-    expect(nova.find((m) => m.metadata?.['kind'] === 'assistant-notice')!.metadata?.['minutes']).toBeUndefined(); // and so do the minutes' counts
-    expect(rows.find((m) => m.id === 'h1')!.message).toBe(`I like the ${WORDS[2]} idea`);
+  // What a reader sees: the call chat's history drops soft-deleted messages (call-chat.ts `visible`).
+  const shown = async (channel = `orgiq:huddle:${CALL}`) => (await chat.listMessages(channel, 5000)).filter((m) => !m.deletedAt && m.metadata?.['deleted'] !== true);
+
+  it("leaves the fixed line ONCE as a plain notice, hides Nova's other messages and cards, and leaves people's messages alone; a second erase changes nothing", async () => {
+    // More of Nova's notices and a second card, with people's messages in between.
+    await chat.putMessage({ id: 'h2', clientId: 'c', userId: 'u-vera', channel: `orgiq:huddle:${CALL}`, message: 'Sounds good', timestamp: new Date(3000).toISOString() });
+    await postAsAssistant(CALL, { text: 'Vera paused Nova.', metadata: { assistant: true, displayName: 'Nova', kind: 'assistant-notice' } }, { minutes: true });
+    await postAction(CALL, { actionId: 'a9', askedBy: 'u-vera', askedByName: 'Vera', summary: `Create work item: ${WORDS[4]}`, detail: [`Title: ${WORDS[4]}`], tool: { name: 'create_work_item', argsDigest: 'def' } }, { minutes: true });
+    for (let round = 0; round < 2; round += 1) {
+      await eraseCall(store, CALL, 'u-vera', 9500 + round);
+      const rows = await shown();
+      const nova = rows.filter((m) => m.userId === NOVA_USER_ID);
+      expect(nova).toHaveLength(1);
+      expect(nova[0]!.message).toBe(DELETED_RECORD_LINE);
+      expect(nova[0]!.metadata).toEqual({ assistant: true, displayName: 'Nova', kind: 'assistant-notice' });
+      expect(rows.filter((m) => m.metadata?.['kind'] === 'assistant-action' || m.metadata?.['kind'] === 'assistant-proposal')).toEqual([]);
+      expect(rows.filter((m) => m.userId !== NOVA_USER_ID).map((m) => [m.id, m.message])).toEqual([['h1', `I like the ${WORDS[2]} idea`], ['h2', 'Sounds good']]);
+      // The hidden ones keep nothing of the meeting or the card's shape either.
+      const hidden = (await chat.listMessages(`orgiq:huddle:${CALL}`, 100)).filter((m) => m.userId === NOVA_USER_ID && m.metadata?.['deleted'] === true);
+      expect(hidden).toHaveLength(4);
+      for (const m of hidden) { expect(m.message).toBe(DELETED_RECORD_LINE); expect(m.metadata).toEqual({ deleted: true }); }
+      if (round === 0) updates.length = 0;
+    }
+    expect(updates).toEqual([]);
   });
 
   it("reaches Nova's messages that are the oldest of a 1,500-message chat", async () => {
@@ -111,6 +122,7 @@ describe('the inviter delete (memory store)', () => {
     expect(rows.indexOf(nova[nova.length - 1]!)).toBeLessThan(10);
     await eraseCall(store, CALL, 'u-vera', 9500);
     for (const m of (await chat.listMessages(channel, 5000)).filter((x) => x.userId === NOVA_USER_ID)) expect(m.message).toBe(DELETED_RECORD_LINE);
+    expect((await shown(channel)).filter((x) => x.userId === NOVA_USER_ID)).toHaveLength(1);
     expect(updates).toHaveLength(3);
   });
 

@@ -1332,19 +1332,21 @@ async function main() {
       check(!list.meetings.some((m) => m.callId === callId), 'the deleted meeting is still listed');
       return 'non-inviter: no button, 403; inviter: confirm, then "deleted" on the page, 410 minutes and 404 transcript for attendees, 404 for the outsider, gone from the list';
     });
-    await step('17b: after the delete every message Nova left in the call chat is the one fixed line: no words of the meeting, no card detail, no link to the page', async () => {
-      const nova = (await chatMessages(vera)).filter((m) => m.userId === 'agent:nova' || m.metadata?.assistant === true);
-      check(nova.length >= 3, `only ${nova.length} Nova messages remain in the chat`);
-      const lines = new Set(nova.map((m) => m.message));
-      check(lines.size === 1, `Nova's messages read ${JSON.stringify([...lines]).slice(0, 300)}, not one fixed line`);
+    await step('17b: after the delete the call chat says it once: one plain line from Nova ("This record was deleted…"), no card, no words of the meeting, no link to the page, and people\'s messages stay', async () => {
+      const all = await chatMessages(vera);
+      const nova = all.filter((m) => m.userId === 'agent:nova' || m.metadata?.assistant === true);
+      check(nova.length === 1, `Nova has ${nova.length} messages in the chat after the delete: ${JSON.stringify(nova.map((m) => m.message)).slice(0, 300)}`);
+      check(nova[0].message === 'This record was deleted by the person who invited Nova.', `Nova's line reads "${nova[0].message}"`);
+      check(!['assistant-action', 'assistant-proposal'].includes(nova[0].metadata?.kind) && nova[0].metadata?.askedBy === undefined, `the line is still a card: ${JSON.stringify(nova[0].metadata)}`);
+      check(all.some((m) => m.userId !== 'agent:nova' && m.metadata?.assistant !== true), 'people\'s messages are gone from the chat');
       const blob = JSON.stringify(nova);
       for (const word of ['login cookie bug', 'two tab audit', 'expiry audit', 'nightly export', 'meetingCallId']) check(!blob.toLowerCase().includes(word.toLowerCase()), `"${word}" is still in Nova's messages`);
-      for (const card of nova.filter((m) => m.metadata?.kind === 'assistant-action')) {
-        check(card.metadata.detail === undefined && card.metadata.resultText === undefined, 'a card kept its detail or result');
-      }
       await sleep(3500); // the page's own refresh
       check(await vera.page.getByTestId('assistant-notice-meeting-link').count() === 0, 'the chat still shows a link to the deleted meeting page');
-      return `${nova.length} messages, all "${[...lines][0]}"`;
+      const shownLines = await vera.page.getByText('This record was deleted by the person who invited Nova.', { exact: true }).count();
+      check(shownLines === 1, `the open chat shows the deleted line ${shownLines} times`);
+      check(await vera.page.getByTestId('assistant-action-card').count() === 0 && await vera.page.getByTestId('assistant-proposal-card').count() === 0, 'the open chat still draws Nova\'s cards');
+      return `one line "${nova[0].message}", shown once; ${all.length - 1} other messages kept`;
     });
     // ── 18. Both people leave; the footer renders on; no page error in the whole walk ──
     await step('18: both people leave the call: the footer still renders with the call gone, and no page error happened in the whole walk', async () => {

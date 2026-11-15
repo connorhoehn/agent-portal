@@ -76,12 +76,13 @@ describe('proposal cards', () => {
     expect(await cards()).toHaveLength(0);
   });
 
-  it('the erase blanks the card text', async () => {
+  it('the erase leaves no card: the call chat holds the fixed line once, as a plain notice', async () => {
     await make(store);
     await eraseAssistantMessages(CALL);
-    const [card] = await cards();
-    expect(card!.message).toBe(DELETED_RECORD_LINE);
-    expect(JSON.stringify(card)).not.toContain('smallest tenants');
+    expect(await cards()).toEqual([]);
+    const nova = (await chat.listMessages(CHANNEL, 100)).filter((m) => m.userId === NOVA_USER_ID && m.metadata?.['deleted'] !== true);
+    expect(nova.map((m) => m.message)).toEqual([DELETED_RECORD_LINE]);
+    expect(JSON.stringify(await chat.listMessages(CHANNEL, 100))).not.toContain('smallest tenants');
   });
 
   it('parses the card metadata and refuses a bad state or a missing id', () => {

@@ -40,6 +40,7 @@ import { settleHuddleDraft } from '../../lib/huddleDraft';
 import { HuddleDraftMemory, type SavedHuddleDraft } from '../../lib/huddleDraftMemory';
 import { useNovaRosterEntry } from './MeetingAssistantBar';
 import { useMeetingAssistant } from '../../lib/meetingAssistant';
+import { oneErasedLine } from './erasedLines';
 
 export type RetiredHuddleDraft = SavedHuddleDraft<RichChatDraft, CallPageDescriptor>;
 export interface HuddlePaneControl { visible: boolean; hide(): void }
@@ -552,7 +553,9 @@ export function HuddleChatBody({ showCall = true }: { showCall?: boolean } = {})
       readOnlyReason={chat.unavailableReason} placeholder={announcing ? 'Announce to every room…' : 'Message this huddle…'} typingUsers={runtime.conversation.chat.typingUsers}
       renderSystemMessage={assistantSystemLine} renderMessageBody={assistantCard} isAssistantMessage={isAssistantChatMessage}
       renderMessageReferences={meetingChat ? (message => meetingChat.renderMessageReferences(message) ?? references(message)) : references}
-      {...(meetingChat ? { transformMessages: meetingChat.withAnnouncements, ...(meetingChat.dock ? { dock: meetingChat.dock } : {}) } : {})}
+      // A deleted meeting's line once, however many of Nova's messages the open chat still holds (erasedLines.ts).
+      transformMessages={meetingChat ? (messages => meetingChat.withAnnouncements(oneErasedLine(messages))) : oneErasedLine}
+      {...(meetingChat?.dock ? { dock: meetingChat.dock } : {})}
       composer={{
         ...(showCall ? {} : { callBlock: null }),
         // The huddle's confirmed send: one in flight, the delivery id, the page the draft carries.

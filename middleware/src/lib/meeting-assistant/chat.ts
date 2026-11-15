@@ -205,21 +205,31 @@ export async function postPrivately(callId: string, userId: string, input: { tex
 /** The most messages of one call chat an erase reads; the update itself is by message id and has no window. */
 export const ERASE_SCAN_MAX = 20_000;
 
-/** Replace the text of every message Nova authored in the call's chat with the fixed line; cards lose summary, detail and result. Safe to repeat. Returns how many changed. */
+/**
+ * After a record's delete (or its expiry) the call chat says so ONCE: one of Nova's messages stays as a plain notice with the fixed line
+ * (no card, no status, no asker, no tool, no link to the page), and every other message Nova left is hidden with the chat's soft-delete
+ * mark (`metadata.deleted`; the call chat's history read drops it), its text the same fixed line and every other key gone, so nothing of
+ * the meeting's words or the cards' shape is left. People's messages are never touched. Safe to repeat: a second erase changes nothing.
+ * Returns how many messages changed.
+ */
 export async function eraseAssistantMessages(callId: string): Promise<number> {
   const channel = callChatChannel(callId);
   const rows = await chatStore().listMessages(channel, ERASE_SCAN_MAX);
   if (rows.length >= ERASE_SCAN_MAX) console.warn(`[meeting-assistant] erase read the ${ERASE_SCAN_MAX} newest messages of a call chat; older ones were not looked at`);
+  const nova = rows.filter((m) => m.userId === NOVA_USER_ID && !m.deletedAt && m.metadata?.['deleted'] !== true);
+  const KEPT: Record<string, unknown> = { assistant: true, displayName: NOVA_NAME, kind: 'assistant-notice' };
+  const isKept = (m: ChatMessage): boolean => m.message === DELETED_RECORD_LINE
+    && Object.keys(m.metadata ?? {}).length === Object.keys(KEPT).length && Object.entries(KEPT).every(([k, v]) => m.metadata?.[k] === v);
+  // The one that stays: a message already erased to the plain line (a repeat), else Nova's newest.
+  const keep = nova.find(isKept) ?? nova[nova.length - 1];
+  const without = (m: ChatMessage, extra: Record<string, unknown>): Record<string, unknown> =>
+    ({ ...Object.fromEntries(Object.keys(m.metadata ?? {}).map((k) => [k, undefined])), ...extra });
   let changed = 0;
-  for (const m of rows) {
-    if (m.userId !== NOVA_USER_ID || m.deletedAt) continue;
-    const isCard = m.metadata?.['kind'] === 'assistant-action';
-    const already = m.message === DELETED_RECORD_LINE && (isCard ? (m.metadata?.['summary'] === DELETED_RECORD_LINE && m.metadata?.['detail'] === undefined && m.metadata?.['resultText'] === undefined) : m.metadata?.['meetingCallId'] === undefined && m.metadata?.['minutes'] === undefined);
-    if (already) continue;
-    const patch = isCard
-      ? { message: DELETED_RECORD_LINE, metadata: { summary: DELETED_RECORD_LINE, detail: undefined, resultText: undefined, tool: { name: String((m.metadata?.['tool'] as { name?: unknown } | undefined)?.name ?? ''), argsDigest: '' } } }
-      // A closing notice also loses its link to the meeting page and its counts: the page is gone with the record.
-      : { message: DELETED_RECORD_LINE, metadata: { meetingCallId: undefined, minutes: undefined } };
+  for (const m of nova) {
+    if (m === keep && isKept(m)) continue;
+    const patch = m === keep
+      ? { message: DELETED_RECORD_LINE, metadata: without(m, KEPT) }
+      : { message: DELETED_RECORD_LINE, metadata: without(m, { deleted: true }) };
     if (await updateThreadMessage(channel, m.id, patch, chatStore())) changed += 1;
   }
   return changed;
