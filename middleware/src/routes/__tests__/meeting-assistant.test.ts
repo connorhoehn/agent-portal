@@ -161,7 +161,7 @@ describe('invite, pause, resume, dismiss', () => {
     expect((await post('pause', 'alice')).status).toBe(200);
     expect((await post('resume', 'bob')).body).toMatchObject({ state: 'listening', pausedBy: null });
     expect((await post('resume', 'alice')).status).toBe(200);
-    expect((await post('dismiss', 'bob')).body).toMatchObject({ state: 'left', leftBy: 'bob' });
+    expect((await post('dismiss', 'bob')).body).toMatchObject({ state: 'left', leftBy: 'bob', leftByName: expect.any(String), openRequests: [], waitingActions: [] });
     expect((await post('dismiss', 'alice')).status).toBe(200);
     expect((await post('resume')).status).toBe(409);
     expect((await post('invite')).status).toBe(409);

@@ -270,6 +270,16 @@ export class TapArmer {
     this.inFlight.add(job);
   }
 
+  /**
+   * Read-only, for the state view: whether the call's audio reaches Nova. `ok` once a tap exists, or when no media server is in the
+   * picture (the mock world); `connecting` while the tap is being made; `no-audio` after the give-up notice was said.
+   */
+  hearing(callId: string): 'ok' | 'connecting' | 'no-audio' {
+    const state = this.calls.get(callId);
+    if (!state || state.tapIds.size > 0) return 'ok';
+    return state.noticed ? 'no-audio' : 'connecting';
+  }
+
   private current(callId: string, state: ArmedTaps): boolean { return this.calls.get(callId) === state; }
 
   private async createWithRetry(callId: string, state: ArmedTaps): Promise<void> {

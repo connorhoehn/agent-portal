@@ -20,7 +20,7 @@ import request from '../../test-support/http.js';
 import { InMemoryCallStateStore } from '@connorhoehn/realtime-modules/call';
 import { InMemoryChatStore } from '@connorhoehn/realtime-modules/chat';
 import type { RealtimeRouter } from '@connorhoehn/realtime-modules/server';
-import { meetingAssistantRouter } from '../meeting-assistant.js';
+import { hearingOf, meetingAssistantRouter } from '../meeting-assistant.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { CallChatRuntime, callChatChannel, setCallChatRuntime } from '../../lib/call-chat.js';
 import { MemoryCallChatStateStore } from '../../lib/call-chat-state.js';
@@ -158,6 +158,14 @@ describe('a restart leaves a listening record behind', () => {
     expect((await novaTexts()).some((t) => /reached its 60-minute limit/.test(t))).toBe(true);
   });
 
+  it('the state says when Nova cannot hear: joining while invited, connecting between sessions, ok otherwise', () => {
+    expect(hearingOf('invited', null, 'ok')).toBe('connecting');
+    expect(hearingOf('listening', false, 'ok')).toBe('connecting');
+    expect(hearingOf('listening', true, 'no-audio')).toBe('no-audio');
+    expect(hearingOf('listening', true, 'ok')).toBe('ok');
+    expect(hearingOf('paused', null, 'no-audio')).toBe('ok');
+  });
+
   it('a resume the budget refuses leaves the record paused and holds nothing new', async () => {
     budget('alice');
     await post('invite'); freshRuntime(); clock += 120_000; // the old process is gone and its heartbeat is stale
@@ -167,6 +175,25 @@ describe('a restart leaves a listening record behind', () => {
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect((await assistantStore().get(CALL))!.state).toBe('paused');
     expect(holds().filter((h) => h.status === 'held')).toEqual([]);
+  });
+
+  it('a resume over the inviter\'s soft budget asks the inviter by name once; only the inviter\'s confirmation resumes', async () => {
+    budget('alice');
+    await post('invite'); freshRuntime(); clock += 120_000;
+    await reconcileAfterRestart({ clock: () => clock, ...noTaps });
+    userBudgets.reset(); budget('alice', 1, 100);            // a soft brake: confirmable, by the budget's owner only
+    const byBob = await post('resume', 'bob', { confirmOverUserBudget: true });
+    expect(byBob.status).toBe(409);
+    expect(byBob.body).toMatchObject({ reason: 'budget' });
+    await post('resume', 'carol');                           // a second refusal in the window asks nobody again
+    const asks = (await novaTexts()).filter((t) => /alice, you can resume Nova/.test(t));
+    expect(asks).toEqual(["bob could not resume Nova because it would go past alice's budget. alice, you can resume Nova and confirm the cost."]);
+    expect((await assistantStore().get(CALL))!.state).toBe('paused');
+    const refusedAlice = await post('resume', 'alice');
+    expect(refusedAlice.status).toBe(409);
+    expect((await novaTexts()).filter((t) => /you can resume Nova/.test(t))).toHaveLength(1); // the inviter is asked by the deck, not the chat
+    expect((await post('resume', 'alice', { confirmOverUserBudget: true })).status).toBe(200);
+    expect((await assistantStore().get(CALL))!.state).toBe('listening');
   });
 });
 

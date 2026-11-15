@@ -758,6 +758,13 @@ export class AssistantRuntime {
     return { providerErrors: run?.providerErrorCount ?? 0, echoLinesDropped: run?.echoLinesDropped ?? 0 };
   }
 
+  /** Read-only, for the state view: true while this call's run has an open session, false while it is between sessions (a reconnect), null with no run here. */
+  sessionOpen(callId: string): boolean | null {
+    const run = this.runs.get(callId);
+    if (!run || run.finished) return null;
+    return run.session !== null;
+  }
+
   voiceStats(callId: string): { voiceFramesRelayed: number; voiceFramesDropped: number } {
     const run = this.runs.get(callId);
     return { voiceFramesRelayed: run?.relay.relayed ?? 0, voiceFramesDropped: run?.relay.dropped ?? 0 };

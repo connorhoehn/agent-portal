@@ -101,6 +101,9 @@ describe('a read in the call chat', () => {
     expect(mine[0]).toMatchObject({ kind: 'read', status: 'pending', tool: { name: 'search', args: { query: 'the Kubernetes experts' } } });
     expect((await get('turns?mine=1', 'alice')).body.turns).toEqual([]);
     expect((await get('turns', 'alice')).body.turns).toEqual([]);
+    // Everyone sees that Nova is looking something up for Bob, and nothing of what (the working mark).
+    expect((await get('state', 'alice')).body).toMatchObject({ openRequests: [{ askerName: 'Bob Baker', kind: 'lookup' }], waitingActions: [], hearing: 'ok' });
+    expect(JSON.stringify((await get('state', 'alice')).body.openRequests)).not.toContain('Kubernetes');
     const id = mine[0].turnId;
     expect((await post(`turns/${id}/claim`, 'alice')).status).toBe(404);
     expect((await post(`turns/${id}/claim`, 'carol')).status).toBe(404);
@@ -112,6 +115,7 @@ describe('a read in the call chat', () => {
     const claimId = claimed.body.claimId;
     expect((await post(`turns/${id}/claim`, 'bob')).status).toBe(409);               // one claim per turn
     expect((await get('turns?mine=1', 'bob')).body.turns).toEqual([]);                // a claimed turn is not listed again
+    expect((await get('state', 'alice')).body.openRequests).toEqual([{ askerName: 'Bob Baker', kind: 'lookup' }]); // claimed, still working
     expect((await post(`turns/${id}/result`, 'bob', { ok: true, output: {} })).status).toBe(400);                           // no claim id
     expect((await post(`turns/${id}/result`, 'bob', { claimId: 'bbbbbbbbbbbbbbbb', ok: true, output: {} })).status).toBe(409); // not the claim
     expect((await post(`turns/${id}/result`, 'bob', { claimId, ok: 'yes' })).status).toBe(400);
@@ -122,6 +126,7 @@ describe('a read in the call chat', () => {
     expect((await post(`turns/${id}/result`, 'bob', { claimId, ok: true, output: {} })).status).toBe(409);
     expect((await chat()).map((m) => m.message).join('\n')).not.toContain('RAW-DATA-ROW');
     expect((await novaMessages('assistant-reply')).map((m) => m.message)).toEqual(['Here is the result.']);
+    expect((await get('state', 'alice')).body.openRequests).toEqual([]);
   });
 
   it('a private tool is answered to the asker alone: only the fixed line in the chat, one private notification', async () => {
@@ -147,6 +152,11 @@ describe('a write in the call chat', () => {
     const meta = cards[0]!.metadata as { actionId: string; askedBy: string; status: string; summary: string };
     expect(meta).toMatchObject({ askedBy: 'alice', status: 'waiting', summary: 'Create a work item titled "the login cookie bug"' });
     expect((await get('turns?mine=1', 'alice')).body.turns).toEqual([]);
+    // A card waiting for its decision is not "working"; it is counted, with its expiry, as waiting on Alice only.
+    const waitingForAlice = (await get('state', 'alice')).body;
+    expect(waitingForAlice.openRequests).toEqual([]);
+    expect(waitingForAlice.waitingActions).toEqual([{ actionId: meta.actionId, expiresAt: expect.any(Number), mine: true }]);
+    expect((await get('state', 'bob')).body.waitingActions).toEqual([{ actionId: meta.actionId, expiresAt: expect.any(Number), mine: false }]);
     expect((await post(`actions/${meta.actionId}/decision`, 'bob', { decision: 'confirm' })).status).toBe(403);
     expect((await get('turns?mine=1', 'alice')).body.turns).toEqual([]);
     const pendingWrite = (await assistantStore().listTurns(CALL))[0]!;
@@ -155,6 +165,7 @@ describe('a write in the call chat', () => {
     const turns = (await get('turns?mine=1', 'alice')).body.turns;
     expect(turns).toHaveLength(1);
     expect(turns[0]).toMatchObject({ kind: 'write', status: 'running', actionId: meta.actionId, tool: { name: 'create' } });
+    expect((await get('state', 'bob')).body).toMatchObject({ openRequests: [{ askerName: 'Alice Ames', kind: 'change' }], waitingActions: [] });
     expect((await get('turns?mine=1', 'bob')).body.turns).toEqual([]);
     expect((await post(`turns/${turns[0].turnId}/claim`, 'bob')).status).toBe(404);
     expect((await post(`turns/${turns[0].turnId}/result`, 'bob', { claimId: 'aaaaaaaaaaaaaaaa', ok: true })).status).toBe(404);

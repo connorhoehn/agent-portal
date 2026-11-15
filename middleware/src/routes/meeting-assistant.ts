@@ -2,7 +2,7 @@
 //
 //   POST invite      InviteMeetingAssistant + a seat. Creates the record and starts listening.
 //   POST pause       a seat. Anyone in the call can pause (decision 8).
-//   POST resume      a seat.
+//   POST resume      a seat. { confirmOverUserBudget? }: after a restart a resume holds money again; only the inviter's confirmation counts.
 //   POST dismiss     a seat. Final: the assistant leaves.
 //   POST ack         a seat. Acknowledges the transcription notice; until then your lines are not stored.
 //   POST voice       InviteMeetingAssistant + a seat. { on: boolean }: Nova speaks aloud in this call (off by default) or stops. One notice in the call chat.
@@ -136,12 +136,44 @@ async function mustAck(record: AssistantRecord, callId: string): Promise<string[
   return [...everyone].filter((u) => u !== record.invitedBy && !record.acked.includes(u)).sort();
 }
 
+/** Whether the call's audio reaches Nova: `connecting` while it joins or between live sessions, `no-audio` once the tap gave up. */
+export function hearingOf(state: AssistantRecord['state'], sessionOpen: boolean | null, tap: 'ok' | 'connecting' | 'no-audio'): 'ok' | 'connecting' | 'no-audio' {
+  if (state === 'invited') return 'connecting';
+  if (state !== 'listening') return 'ok';
+  if (sessionOpen === false) return 'connecting';
+  return tap;
+}
+
+/**
+ * What Nova is working on right now, for everyone in the call: the asker's name and whether it is a lookup or a change, never what
+ * was asked. A read waiting on (or running in) the asker's browser, and a confirmed change being made. A change still waiting for
+ * its confirmation is not "working": its card says it waits. Proposal runs are left out (their own card shows them).
+ * Also, without content, the change cards still waiting for a decision: their expiry, and whether they wait on this viewer.
+ */
+async function turnsView(callId: string, viewer: string, now: number) {
+  const turns = (await assistantStore().listTurns(callId, { statuses: ['pending', 'running'] }).catch(() => []))
+    .filter((t) => !t.proposalId && t.expiresAt > now);
+  const working = turns.filter((t) => t.kind !== 'write' || t.status === 'running');
+  const names = new Map<string, string>();
+  for (const id of new Set(working.map((t) => t.askedBy))) names.set(id, await nameOf(id).catch(() => 'Someone'));
+  return {
+    openRequests: working.map((t) => ({ askerName: names.get(t.askedBy) ?? 'Someone', kind: t.kind === 'write' ? 'change' as const : 'lookup' as const })),
+    waitingActions: turns.filter((t) => t.kind === 'write' && t.status === 'pending' && t.actionId)
+      .map((t) => ({ actionId: t.actionId!, expiresAt: t.expiresAt, mine: t.askedBy === viewer })),
+  };
+}
+
 async function view(record: AssistantRecord | null, callId: string, session: Session) {
   if (!record) return { callId, state: 'none' as const };
+  const runtime = assistantRuntime();
+  const present = record.state === 'invited' || record.state === 'listening' || record.state === 'paused';
+  const turns = present ? await turnsView(callId, session.sub, runtime.deps.clock()) : { openRequests: [], waitingActions: [] };
   const owing = await mustAck(record, callId); const invitedByName = (await getUser(record.invitedBy).catch(() => null))?.displayName ?? null; // null: the directory lost them, the notice says "A participant"
   return {
     callId, state: record.state, lobby: record.lobby, initiativeId: record.initiativeId,
     invitedBy: record.invitedBy, invitedByName, invitedAt: record.invitedAt, pausedBy: record.pausedBy, leftAt: record.leftAt, leftBy: record.leftBy,
+    // Who dismissed Nova, by name, so the bar can say why it left ('system' is Nova itself leaving: its time limit or a lost connection).
+    leftByName: record.leftBy && record.leftBy !== 'system' ? await nameOf(record.leftBy).catch(() => null) : null,
     mustAck: owing, youMustAck: owing.includes(session.sub),
     counters: { requests: record.requests, linesStored: record.linesStored },
     refusedCalls: recordSession(record).refusedCalls,
@@ -149,8 +181,10 @@ async function view(record: AssistantRecord | null, callId: string, session: Ses
     ceilingSeconds: recordSession(record, assistantLimits().maxSeconds).ceilingSeconds,
     pendingRequests: record.pendingRequests,
     voice: record.voice === true,
-    ...assistantRuntime().voiceStats(callId),
-    ...assistantRuntime().callStats(callId),
+    hearing: hearingOf(record.state, runtime.sessionOpen(callId), tapArmer().hearing(callId)),
+    ...turns,
+    ...runtime.voiceStats(callId),
+    ...runtime.callStats(callId),
   };
 }
 
@@ -294,6 +328,30 @@ meetingAssistantRouter.post('/invite', requireAction('InviteMeetingAssistant'), 
   res.status(201).json(await view(listening ?? record, callId, session));
 }));
 
+const confirmOverBudget = (req: Request): boolean => (req.body as { confirmOverUserBudget?: unknown } | undefined)?.confirmOverUserBudget === true;
+
+/** A call is asked at most this often to have the inviter step in, however many times a refused resume or extend is clicked. */
+export const INVITER_ASK_EVERY_MS = 2 * 60_000;
+/** Per runtime (one per process; a test's fresh runtime starts clean): when each call last asked its inviter. */
+const inviterAsked = new WeakMap<object, Map<string, number>>();
+export const inviterAskLine = (inviter: string, asker: string, what: 'resume' | 'extend'): string =>
+  `${asker} could not ${what === 'resume' ? 'resume Nova' : "extend Nova's time"} because it would go past ${inviter}'s budget. ${inviter}, you can ${what === 'resume' ? 'resume Nova' : "extend Nova's time"} and confirm the cost.`;
+
+/**
+ * A resume or an extend was refused over the inviter's budget, by someone who is not the inviter: they cannot confirm past it, so one
+ * chat line asks the inviter, by name, to do it. Never for the inviter (they get the confirmation ask), and once per call per window.
+ */
+async function askInviterQuietly(callId: string, inviterId: string, session: Session, what: 'resume' | 'extend'): Promise<void> {
+  if (session.sub === inviterId) return;
+  const runtime = assistantRuntime(); const now = runtime.deps.clock();
+  let asked = inviterAsked.get(runtime);
+  if (!asked) { asked = new Map(); inviterAsked.set(runtime, asked); }
+  const last = asked.get(callId);
+  if (last !== undefined && now - last < INVITER_ASK_EVERY_MS) return;
+  asked.set(callId, now);
+  await postNoticeQuietly(callId, inviterAskLine(await nameOf(inviterId), await nameOf(session.sub, session.name), what)).catch(() => undefined);
+}
+
 /** Shared by pause, resume and dismiss: do the move, or say why not. A repeat of the state you are already in is a success. */
 function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'][]) {
   return asyncHandler(async (req, res) => {
@@ -312,8 +370,15 @@ function move(to: 'paused' | 'listening' | 'left', from: AssistantRecord['state'
     if (to === 'listening' && before?.state === 'paused' && recordSession(before).settled) {
       const prior = recordSession(before); const limits = assistantLimits();
       const part = Math.max(prior.extensions, prior.ledgerPart ?? 0) + 1;
-      const held = await assistantSpend().reserve({ callId, tenant: before.tenant, inviterId: before.invitedBy, initiativeId: before.initiativeId, seconds: limits.maxSeconds, part });
-      if (!held.ok) { sendRefusal(res, held.refusal, 'resume'); return; }
+      const held = await assistantSpend().reserve({
+        callId, tenant: before.tenant, inviterId: before.invitedBy, initiativeId: before.initiativeId, seconds: limits.maxSeconds, part,
+        // As on invite and extend: going past a budget is the budget owner's choice, so only the inviter's confirmation counts.
+        ...(confirmOverBudget(req) && session.sub === before.invitedBy ? { confirmOverUserBudget: true } : {}),
+      });
+      if (!held.ok) {
+        await askInviterQuietly(callId, before.invitedBy, session, 'resume');
+        sendRefusal(res, held.refusal, 'resume'); return;
+      }
       fresh = { holdId: held.holdId, patch: {
         settled: false, ledgerPart: part, extensions: part, holds: [], listeningSeconds: 0, listeningSince: null, limitNoticed: false,
         // The ceiling counts the whole call: what was settled stays on the clock, so a restart does not buy a second full period.
@@ -415,9 +480,13 @@ meetingAssistantRouter.post('/participant', asyncHandler(async (req, res) => {
 meetingAssistantRouter.post('/extend', requireAction('InviteMeetingAssistant'), asyncHandler(async (req, res) => {
   const { session, callId } = await seatOf(req);
   await noteSeat(callId, session);
-  const out = await assistantRuntime().extend(callId, session, (req.body as { confirmOverUserBudget?: unknown } | undefined)?.confirmOverUserBudget === true);
+  const out = await assistantRuntime().extend(callId, session, confirmOverBudget(req));
   if (out.ok) { res.json(await view(await assistantStore().get(callId), callId, session)); return; }
-  if (out.why === 'refused') { sendRefusal(res, out.refusal, 'extend'); return; }
+  if (out.why === 'refused') {
+    const record = await assistantStore().get(callId);
+    if (record) await askInviterQuietly(callId, record.invitedBy, session, 'extend');
+    sendRefusal(res, out.refusal, 'extend'); return;
+  }
   if (out.why === 'no-assistant') throw new NotFoundError(NOT_HERE);
   if (out.why === 'left') throw new AppError(409, ALREADY_LEFT);
   throw new AppError(409, `${NOVA} is already at its longest time for this call (${Math.round(assistantLimits().hardMaxSeconds / 60)} minutes), so it cannot be extended further.`);
